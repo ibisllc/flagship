@@ -51,12 +51,15 @@ const toHex = (b: Uint8Array) =>
   Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
 
 describe("webapp isValidUsername — bare account handle rule", () => {
-  it("accepts lowercase letters/digits, rejects dots/hyphens/specials/empty/uppercase", async () => {
+  it("accepts lowercase letters/digits + interior dashes; rejects dots/specials/empty/uppercase/`--`", async () => {
     const { isValidUsername } = await loadLib();
     expect(isValidUsername("alice")).toBe(true);
     expect(isValidUsername("alice42")).toBe(true);
+    expect(isValidUsername("demo-alice")).toBe(true); // interior single dash now allowed
     expect(isValidUsername("alice.reviewer")).toBe(false);
-    expect(isValidUsername("demo-alice")).toBe(false);
+    expect(isValidUsername("demo--alice")).toBe(false); // `--` is the slug-creator delimiter
+    expect(isValidUsername("-alice")).toBe(false); // leading dash
+    expect(isValidUsername("alice-")).toBe(false); // trailing dash
     expect(isValidUsername("Alice")).toBe(false);
     expect(isValidUsername("")).toBe(false);
     expect(isValidUsername(undefined as any)).toBe(false);
@@ -85,7 +88,7 @@ describe("webapp claimUsername — standalone idempotent claim", () => {
 
     expect(out).toEqual({ status: 200, alreadyClaimed: false });
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe("/api/username/claim");
+    expect(url).toMatch(/^https:\/\/[^/]+\/api\/username\/claim$/);
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body);
     expect(body.request.username).toBe("alice");
@@ -145,7 +148,7 @@ describe("webapp openAccount — open without provisioning a server", () => {
     // Exactly ONE network call — the standalone claim. No auth-code, no
     // RCK, no server registration: server provisioning is decoupled.
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]![0]).toBe("/api/username/claim");
+    expect(fetchMock.mock.calls[0]![0]).toMatch(/^https:\/\/[^/]+\/api\/username\/claim$/);
 
     // Identity bound locally.
     expect(calls.username).toBe("alice");

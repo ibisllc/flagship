@@ -27,9 +27,40 @@ public struct ServerDetailScreen: View {
     /// box is definitely waiting for a boot-unlock approval, so the approval
     /// card must be offered REGARDLESS of whether the daemon BFF detail loaded.
     let awaitingUnlock: Bool
+    /// The directory's cheap `awaitingEntitlement` flag — the box has posted an
+    /// entitlement (serve-auth) request and is waiting for the owner to authorize
+    /// it to serve. Surfaces a second approval card, same as `awaitingUnlock`.
+    let awaitingEntitlement: Bool
+    /// True when the BFF load failed specifically because this device has no
+    /// paired-session token. Distinct from the transient "Connecting…" failure:
+    /// retrying never helps until the owner pairs, so the failed state shows the
+    /// one-tap "Pair this server" affordance instead.
+    let notPaired: Bool
+    /// HONEST LIVENESS (Fix B) — the box is `unreachable`: it checked in before
+    /// but its heartbeat is now stale. Distinct from a transient connect failure
+    /// and from `deadServer` (never came online). Renders "offline — last seen
+    /// <…>" instead of a perpetual "Connecting…".
+    let offline: Bool
+    /// Humanized "last seen <…>" for the offline state, from the pod's
+    /// `lastSeenMsAgo`. nil ⇒ unknown age.
+    let lastSeen: String?
+    /// HONEST LIVENESS (Fix B) — the box is `never`: registered but awaiting its
+    /// first heartbeat. Renders "still coming up" rather than "Connecting…" or
+    /// the decommission path. NOT terminal (unlike `deadServer`).
+    let comingUp: Bool
+    /// True while a pairing attempt is in flight (Face ID → sign → POST), so the
+    /// button shows progress and can't be double-fired.
+    let pairing: Bool
     var onOpenSessions: () -> Void = {}
     var onOpenTier: () -> Void = {}
     var onRefresh: () async -> Void = {}
+    /// Run once per tap from the "Pair this server" button. NEVER fired
+    /// automatically on appearance — a biometric must be user-initiated.
+    var onPair: () -> Void = {}
+    /// Fired after the decommission/free-the-name card succeeds, so the
+    /// container can pop the nav stack (this page now points at a server
+    /// that no longer exists).
+    var onDeleted: () -> Void = {}
 
     public init(
         state: LoadingState<ServerDetailResponse>,
@@ -38,9 +69,17 @@ public struct ServerDetailScreen: View {
         serverName: String? = nil,
         deadServerFqdn: String? = nil,
         awaitingUnlock: Bool = false,
+        awaitingEntitlement: Bool = false,
+        notPaired: Bool = false,
+        offline: Bool = false,
+        lastSeen: String? = nil,
+        comingUp: Bool = false,
+        pairing: Bool = false,
         onOpenSessions: @escaping () -> Void = {},
         onOpenTier: @escaping () -> Void = {},
-        onRefresh: @escaping () async -> Void = {}
+        onRefresh: @escaping () async -> Void = {},
+        onPair: @escaping () -> Void = {},
+        onDeleted: @escaping () -> Void = {}
     ) {
         self.state = state
         self.metrics = metrics
@@ -48,9 +87,17 @@ public struct ServerDetailScreen: View {
         self.serverName = serverName
         self.deadServerFqdn = deadServerFqdn
         self.awaitingUnlock = awaitingUnlock
+        self.awaitingEntitlement = awaitingEntitlement
+        self.notPaired = notPaired
+        self.offline = offline
+        self.lastSeen = lastSeen
+        self.comingUp = comingUp
+        self.pairing = pairing
         self.onOpenSessions = onOpenSessions
         self.onOpenTier = onOpenTier
         self.onRefresh = onRefresh
+        self.onPair = onPair
+        self.onDeleted = onDeleted
     }
 
     /// FQDN for the boot-unlock approval card: the loaded detail's own FQDN,
@@ -86,10 +133,25 @@ public struct ServerDetailScreen: View {
                         serverDomain: fqdn,
                         awaitingUnlock: awaitingUnlock
                     )
+                    // The Box Request Inbox's serve-authorization lane: a box that
+                    // posted an entitlement request (no deposit, or an unencrypted
+                    // box) is now actionable here too, not silently stuck.
+                    BootUnlockApprovalCard(
+                        serverDomain: fqdn,
+                        awaitingUnlock: awaitingEntitlement,
+                        purpose: .entitlement
+                    )
                 }
                 switch state {
                 case .idle, .loading:
-                    ServerCardSkeleton()
+                    // HONEST LIVENESS (Fix B) — an unreachable/coming-up box won't
+                    // answer its BFF, so show its honest state straight away rather
+                    // than a skeleton that resolves into "Connecting…".
+                    if offline || comingUp {
+                        livenessPlaceholder(c: c)
+                    } else {
+                        ServerCardSkeleton()
+                    }
                 case .failed:
                     if deadServer {
                         // This box registered during install but never came
@@ -97,7 +159,18 @@ public struct ServerDetailScreen: View {
                         // dead-server explanation + the decommission card
                         // instead of the transient "Connecting…" placeholder.
                         neverCameOnline(c: c)
-                        DecommissionDeadServerCard(serverDomain: deadServerFqdn ?? "", displayName: serverName)
+                        DecommissionDeadServerCard(serverDomain: deadServerFqdn ?? "", displayName: serverName, onDeleted: onDeleted)
+                    } else if offline || comingUp {
+                        // The box is server-authoritatively unreachable (`offline`)
+                        // or hasn't sent its first heartbeat (`comingUp`). Honest
+                        // copy — NOT a perpetual "Connecting…".
+                        livenessPlaceholder(c: c)
+                    } else if notPaired {
+                        // The box IS reachable, but this device never minted a
+                        // paired-session token for it (its per-pod token slot is
+                        // empty), so the BFF 401s. Retrying won't help — offer the
+                        // one-tap pairing affordance (Face ID fires only on the tap).
+                        notPairedCard(c: c)
                     } else {
                         // A BFF load failure here is transient (the box is online —
                         // that's why we opened its page — but its daemon hasn't
@@ -116,6 +189,7 @@ public struct ServerDetailScreen: View {
                     cert(d: d, c: c)
                     deviceRow(d: d, c: c)
                     BootUnlockCard(serverDomain: d.serverFqdn)
+                    PreferredServerCard(serverDomain: d.serverFqdn)
                     FrontPageCard(serverDomain: d.serverFqdn)
                     LockPowerCard(serverDomain: d.serverFqdn)
                     DeadManCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn)
@@ -125,8 +199,12 @@ public struct ServerDetailScreen: View {
                         // Registered but never came online: offer the
                         // decommission/free-the-name action with its FQDN
                         // (the release path) ALONGSIDE the lost/stolen Revoke.
-                        DecommissionDeadServerCard(serverDomain: d.serverFqdn.isEmpty ? (deadServerFqdn ?? "") : d.serverFqdn, displayName: serverName)
+                        DecommissionDeadServerCard(serverDomain: d.serverFqdn.isEmpty ? (deadServerFqdn ?? "") : d.serverFqdn, displayName: serverName, onDeleted: onDeleted)
                     }
+                    MigrateServerCard(serverDomain: d.serverFqdn)
+                    ReplaceServerCard(serverDomain: d.serverFqdn, onReplaced: onDeleted)
+                    UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit)
+                    TransferCard(serverDomain: d.serverFqdn)
                     DangerZoneCard(serverDomain: d.serverFqdn)
                 }
                 Spacer().frame(height: FS.space.s12)
@@ -138,6 +216,37 @@ public struct ServerDetailScreen: View {
         .navigationTitle("Server")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await onRefresh() }
+    }
+
+    /// Shown when the BFF load failed because this device has no paired-session
+    /// token. The box is online; it just doesn't trust this device yet. One tap
+    /// signs an `add-paired-session` order (Face ID) and reloads. The biometric
+    /// fires ONLY on the tap — never on appearance.
+    private func notPairedCard(c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                HStack(alignment: .top, spacing: FS.space.s3) {
+                    Image(systemName: "link.badge.plus")
+                        .imageScale(.large)
+                        .foregroundColor(c.primary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("This server isn't paired with this device yet")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(c.text)
+                        Text("Pair it to manage this server here. Your phone will ask for Face ID once to approve.")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                FSPrimaryButton(pairing ? "Pairing…" : "Pair this server", block: true, large: true) {
+                    onPair()
+                }
+                .disabled(pairing)
+                .accessibilityIdentifier("sd-pair-server")
+            }
+        }
+        .accessibilityIdentifier("server-detail-not-paired")
     }
 
     /// Graceful placeholder shown when the daemon BFF load fails. The server
@@ -190,6 +299,62 @@ public struct ServerDetailScreen: View {
         .accessibilityIdentifier("server-detail-never-online")
     }
 
+    /// HONEST LIVENESS (Fix B) — the honest copy for an `offline` (was live,
+    /// now stale) or `comingUp` (registered, awaiting first heartbeat) box.
+    /// Neither is the transient "Connecting…" nor the terminal "never came
+    /// online" decommission path. Pull-to-refresh re-checks.
+    @ViewBuilder
+    private func livenessPlaceholder(c: FSColors) -> some View {
+        if offline {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    HStack(alignment: .top, spacing: FS.space.s3) {
+                        Image(systemName: "wifi.slash")
+                            .imageScale(.large)
+                            .foregroundColor(c.textMuted)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(lastSeen.map { "Offline — last seen \($0)" } ?? "Offline")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundColor(c.text)
+                            Text("This server has gone offline — its software isn't checking in right now. Its data is safe; it'll reconnect when the box is back online. Pull down to re-check.")
+                                .font(FS.font.bodySm())
+                                .foregroundColor(c.textMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+            .accessibilityIdentifier("server-detail-offline")
+        } else {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    HStack(alignment: .top, spacing: FS.space.s3) {
+                        ProgressView()
+                            .padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Still coming up…")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundColor(c.text)
+                            Text("This server is registered and powering on, but hasn't checked in for the first time yet. This can take a few minutes after a fresh install. Pull down to re-check.")
+                                .font(FS.font.bodySm())
+                                .foregroundColor(c.textMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+            .accessibilityIdentifier("server-detail-coming-up")
+        }
+    }
+
+    /// Short display form of the box-reported HEAD, or nil while unknown
+    /// (e.g. an un-reburned box whose daemon predates the field).
+    static func shortCommit(_ sha: String?) -> String? {
+        guard let sha, sha.count == 40,
+              sha.allSatisfy({ $0.isHexDigit && !$0.isUppercase }) else { return nil }
+        return String(sha.prefix(8))
+    }
+
     private func overview(d: ServerDetailResponse, c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -201,6 +366,11 @@ public struct ServerDetailScreen: View {
                     stat("Apps", "\(d.serviceCount)", c: c)
                     stat("Sessions", "\(d.pairedSessionCount)", c: c)
                     stat("Daemon", d.daemonVersion, c: c)
+                    // The box-reported running commit (short) — the version the
+                    // update card orders away from. Hidden until the box reports.
+                    if let short = Self.shortCommit(d.currentCommit) {
+                        stat("Version", short, c: c)
+                    }
                 }
                 Text("Up for \(uptime(ms: d.uptimeMs))")
                     .font(FS.font.bodySm())
@@ -327,10 +497,7 @@ public struct ServerDetailScreen: View {
     }
 
     private func relative(ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = RelativeDateTimeFormatter()
-        fmt.unitsStyle = .full
-        return fmt.localizedString(for: date, relativeTo: Date())
+        Date.flagshipFormatted(epochMs: ms)
     }
 
     private func verb(_ kind: String) -> String {
@@ -458,8 +625,28 @@ struct BootUnlockApprovalCard: View {
     /// The directory poll refreshes it on a timer + on foreground, so the
     /// prompt appears on its own the moment a box starts waiting.
     var awaitingUnlock: Bool = false
+    /// Which Box Request Inbox lane this card approves: `.unlockKey` (release the
+    /// disk key) or `.entitlement` (authorize the box to serve). The detection
+    /// flag passed in as `awaitingUnlock` is just "is this lane waiting?".
+    var purpose: SecretPurpose = .unlockKey
 
     @State private var vm: BootUnlockApprovalViewModel?
+
+    private var isEntitlement: Bool { purpose == .entitlement }
+    private var headline: String {
+        isEntitlement ? "Your box is waiting for authorization to serve"
+                      : "Your box is waiting for your approval to unlock"
+    }
+    private var bodyCopy: String {
+        isEntitlement
+            ? "Authorize this box to serve your account so it can come online. Your phone will ask for Face ID once to approve."
+            : "If you just powered it on, release its disk key to bring it online. Your phone will ask for Face ID once to approve."
+    }
+    private var ctaLabel: String { isEntitlement ? "Authorize" : "Approve unlock" }
+    private var approvedCopy: String {
+        isEntitlement ? "Authorized — your box should come online shortly."
+                      : "Unlock approved — your box should come online shortly."
+    }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -469,7 +656,9 @@ struct BootUnlockApprovalCard: View {
         // Face ID fires only when the owner taps Approve.
         let model = vm ?? BootUnlockApprovalViewModel(
             serverDomain: serverDomain,
-            makeCoordinator: makeCoordinator
+            purpose: purpose,
+            makeCoordinator: makeCoordinator,
+            initialAwaiting: awaitingUnlock
         )
         return content(vm: model, c: c)
             .onAppear {
@@ -498,7 +687,7 @@ struct BootUnlockApprovalCard: View {
             }
         case .approved:
             statusCard(c: c) {
-                Label("Unlock approved — your box should come online shortly.", systemImage: "checkmark.seal.fill")
+                Label(approvedCopy, systemImage: "checkmark.seal.fill")
                     .font(FS.font.body())
                     .foregroundColor(c.text)
             }
@@ -520,15 +709,15 @@ struct BootUnlockApprovalCard: View {
         sectionWrap("BOX WAITING", c: c) {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("Your box is waiting for your approval to unlock")
+                    Text(headline)
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(c.text)
-                    Text("If you just powered it on, release its disk key to bring it online. Your phone will ask for Face ID once to approve.")
+                    Text(bodyCopy)
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, FS.space.s1)
-                    FSPrimaryButton("Approve unlock", block: true, large: true) {
+                    FSPrimaryButton(ctaLabel, block: true, large: true) {
                         Task { await vm.approve() }
                     }
                     .accessibilityIdentifier("sd-approve-unlock")
@@ -568,6 +757,11 @@ struct BootUnlockApprovalCard: View {
             username: username,
             irkProvider: { try await keys.irk() },
             unsealSeedProvider: { _ in try await keys.unsealSeeds() },
+            // Slice D — the RootEntitlement this approval mints signs under the
+            // admin master root when present (an admin-pinned box requires it),
+            // resolved from the SAME memoized cache as the IRK so the whole
+            // ceremony stays a single Face ID. nil ⇒ legacy ⇒ IRK-signed.
+            orderKeyProvider: { try await keys.adminRoot() },
             watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
         )
     }
@@ -580,11 +774,14 @@ struct BootUnlockApprovalCard: View {
 /// header, lease) then resolves from this cache without re-prompting.
 private actor ApprovalKeyCache {
     private let serverDomain: String
-    private var cached: (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey)?
+    private var cached: (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey, adminRoot: Curve25519.Signing.PrivateKey?)?
     init(serverDomain: String) { self.serverDomain = serverDomain }
-    private func keys() async throws -> (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey) {
+    private func keys() async throws -> (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey, adminRoot: Curve25519.Signing.PrivateKey?) {
         if let cached { return cached }
-        let k = try await Keystore.deriveApprovalKeys(
+        // Slice D — derive the IRK + BAK + admin master root in ONE biometric
+        // (all seal under the same SE wrapping key), so the entitlement mint's
+        // admin-root signature adds no second Face ID to the approve ceremony.
+        let k = try await Keystore.deriveApprovalKeysWithAdminRoot(
             serverId: serverDomain,
             reason: "Approve your box's boot unlock"
         )
@@ -592,6 +789,9 @@ private actor ApprovalKeyCache {
         return k
     }
     func irk() async throws -> Curve25519.Signing.PrivateKey { try await keys().irk }
+    /// The admin master root when this device holds one, else nil (⇒ the
+    /// coordinator signs the RootEntitlement under the IRK). Same memoized pass.
+    func adminRoot() async throws -> Curve25519.Signing.PrivateKey? { try await keys().adminRoot }
     func unsealSeeds() async throws -> [Data] {
         let k = try await keys()
         return [k.bak.rawRepresentation, k.irk.rawRepresentation]
@@ -614,6 +814,9 @@ struct DecommissionDeadServerCard: View {
 
     let serverDomain: String
     let displayName: String?
+    /// Pop back to Home after a successful delete — the pod is gone, so this
+    /// page now points at a server that no longer exists.
+    var onDeleted: () -> Void = {}
 
     @State private var confirming = false
     @State private var working = false
@@ -661,7 +864,338 @@ struct DecommissionDeadServerCard: View {
             status: .online,
             cameOnline: false
         )
-        await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts)
+        // On success the helper releases the name + removes the pod, so pop
+        // back to Home. On failure it keeps the pod + shows a toast, so we
+        // stay on this page for a retry.
+        let ok = await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts)
+        if ok { onDeleted() }
+    }
+}
+
+/// Transfer-a-box entry on server-detail (docs/account-deletion-and-name-reclaim.md §4).
+/// Owner-only — the offer is IRK-signed behind the biometric inside
+/// `TransferGiverViewModel`, so only the box's owner can complete it. Opens the
+/// existing `TransferGiverScreen` (type-to-confirm → QR → disk-key hand-off) in
+/// a sheet. Lives just above the danger zone as an irreversible management action.
+struct TransferCard: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.serverTransferClient) private var transfer
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(AppState.self) private var app
+
+    let serverDomain: String
+
+    @State private var showSheet = false
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("TRANSFER")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Hand this box and everything on it to another account. The new owner scans a QR; your phone hands off the disk key. You'll lose control of it — this cannot be undone.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    FSDangerButton("Transfer to another account", block: true) {
+                        showSheet = true
+                    }
+                    .accessibilityIdentifier("sd-transfer-server")
+                }
+            }
+        }
+        .sheet(isPresented: $showSheet) {
+            NavigationStack {
+                TransferGiverScreen(
+                    vm: TransferGiverViewModel(
+                        client: transfer,
+                        mailbox: mailbox,
+                        serverDomain: serverDomain,
+                        username: app.currentUser ?? ""
+                    ),
+                    serverDomain: serverDomain
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showSheet = false }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// "Migrate to new hardware" entry on server-detail (docs/server-migration.md).
+/// Same owner, same address, NEW box: the guided flow provisions a replacement,
+/// pre-seeds it from backup, and hands the name over — the old box is wiped only
+/// after a confirmed take-over. Owner-only; the migration order is admin-signed
+/// behind the biometric inside `MigrationViewModel`. Distinct from Replace
+/// (retire-first, then re-create) — migration keeps the old box serving until
+/// the new one is ready.
+struct MigrateServerCard: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.serverMigrationClient) private var migration
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(\.screensClient) private var screens
+    @Environment(AppState.self) private var app
+
+    let serverDomain: String
+
+    @State private var showSheet = false
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("MIGRATE")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Move this server to new hardware — same address, same data. A new box restores from backup and takes over the name; the old box is wiped only after the hand-off is confirmed.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    FSPrimaryButton("Migrate to new hardware", block: true) {
+                        showSheet = true
+                    }
+                    .accessibilityIdentifier("sd-migrate-server")
+                }
+            }
+        }
+        .sheet(isPresented: $showSheet) {
+            NavigationStack {
+                MigrateServerScreen(
+                    vm: MigrationViewModel(
+                        migration: migration,
+                        mailbox: mailbox,
+                        screens: screens,
+                        serverFqdn: serverDomain,
+                        username: app.currentUser ?? ""
+                    )
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showSheet = false }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// "Replace this server" entry on server-detail (docs/server-replacement-
+/// graceful-decommission.md). Owner-only — the decommission order is IRK-signed
+/// behind the biometric inside `ReplaceServerViewModel`. Opens the
+/// `ReplaceServerScreen` (backup pre-flight gate → disposition picker → mint +
+/// deposit) in a sheet. Lives just above transfer/danger as a graceful retire
+/// (distinct from Revoke, which bricks; this hands the FQDN to a replacement).
+struct ReplaceServerCard: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(\.screensClient) private var screens
+    @Environment(AppState.self) private var app
+
+    let serverDomain: String
+    /// Pops the nav stack after the replacement is ordered (this page now points
+    /// at a retired box that's been removed from the fleet).
+    var onReplaced: () -> Void = {}
+
+    @State private var showSheet = false
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("REPLACE")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Swap this box for a new one on the same address. It flushes a final backup, releases routing, and powers off so a replacement can take over cleanly. Needs a backup, or you'll lose its data.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    FSDangerButton("Replace this server", block: true) {
+                        showSheet = true
+                    }
+                    .accessibilityIdentifier("sd-replace-server")
+                }
+            }
+        }
+        .sheet(isPresented: $showSheet) {
+            NavigationStack {
+                ReplaceServerScreen(
+                    vm: ReplaceServerViewModel(
+                        mailbox: mailbox,
+                        screens: screens,
+                        serverFqdn: serverDomain,
+                        username: app.currentUser ?? "",
+                        // L3 — retire the box instance locally so a rebooting
+                        // encrypted zombie is never re-surfaced for unlock approval.
+                        onRetired: {
+                            app.removePod(PodInfo.podId(forFqdn: serverDomain))
+                        }
+                    ),
+                    serverFqdn: serverDomain
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {
+                            showSheet = false
+                            // If the pod was retired, pop back to Home.
+                            if !app.pods.contains(where: { $0.podId == PodInfo.podId(forFqdn: serverDomain) }) {
+                                onReplaced()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// "Update this server" entry on server-detail (docs/server-update-mechanism.md).
+/// Admin-only — the update order is signed with the admin master root (when
+/// pinned) behind the biometric inside `UpdateServerViewModel`, and it is only
+/// HALF the gate: the box also requires the target commit to be maintainer-
+/// endorsed, and rolls back automatically if the new version fails to boot.
+/// Disabled (with a hint) until the box reports its running commit — the
+/// order's `fromCommit` must be truth, never a guess.
+struct UpdateServerCard: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(AppState.self) private var app
+
+    let serverDomain: String
+    /// The box-reported running commit from server-detail, or nil.
+    let currentCommit: String?
+
+    @State private var showSheet = false
+
+    private var reported: Bool { ServerDetailScreen.shortCommit(currentCommit) != nil }
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("UPDATE")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Move this server to a different blessed release in place — no reburn, keys and data untouched. Two signatures are required: Flagship's maintainers must have blessed the release, and you must authorize applying it here. The box verifies both, and rolls back automatically if the new version fails to boot.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    if let short = ServerDetailScreen.shortCommit(currentCommit) {
+                        HStack {
+                            Text("Running").font(FS.font.caption()).foregroundColor(c.textMuted)
+                            Spacer()
+                            Text(short).font(FS.font.mono()).foregroundColor(c.text)
+                        }
+                    }
+                    FSDangerButton("Update this server", block: true) {
+                        showSheet = true
+                    }
+                    .disabled(!reported)
+                    .opacity(reported ? 1 : 0.4)
+                    .accessibilityIdentifier("sd-update-server")
+                    if !reported {
+                        Text("Waiting for this server to report its current version — it can't be updated in place until it does.")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.textMuted)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showSheet) {
+            NavigationStack {
+                UpdateServerSheet(
+                    vm: UpdateServerViewModel(
+                        username: app.currentUser ?? "",
+                        serverFqdn: serverDomain,
+                        currentCommit: currentCommit,
+                        mailbox: mailbox
+                    ),
+                    serverFqdn: serverDomain
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showSheet = false }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Sheet body for the update order: running version + target-commit field +
+/// the confirm CTA. The biometric fires ONCE, on the tap (inside the VM's
+/// signer) — never on appearance.
+struct UpdateServerSheet: View {
+    @Environment(\.colorScheme) private var scheme
+
+    @State var vm: UpdateServerViewModel
+    let serverFqdn: String
+
+    @State private var target = ""
+
+    private var working: Bool {
+        if case .signing = vm.phase { return true }
+        if case .posting = vm.phase { return true }
+        return false
+    }
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                Text("Update \(serverFqdn)?")
+                    .font(FS.font.h2()).foregroundColor(c.text)
+                Text("The server moves to the release you name below — only if Flagship's maintainers have blessed it. It restarts into the new version and rolls back automatically if that version fails to boot.")
+                    .font(FS.font.body()).foregroundColor(c.textMuted)
+                if let short = vm.runningShort {
+                    HStack {
+                        Text("Running").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                        Spacer()
+                        Text(short).font(FS.font.mono()).foregroundColor(c.text)
+                    }
+                }
+                if case .done = vm.phase {
+                    Text("Update ordered — the server picks it up on its next check-in, verifies the release is maintainer-blessed, applies it, and rolls back if the new version fails to boot.")
+                        .font(FS.font.body()).foregroundColor(c.text)
+                } else {
+                    Text("Target release (full commit)")
+                        .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                    TextField("40-character commit hash", text: $target)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(FS.font.mono())
+                        .padding(FS.space.s3)
+                        .background(c.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                        .accessibilityIdentifier("update-target-field")
+                    if let problem = vm.targetProblem(target) {
+                        Text(problem).font(FS.font.caption()).foregroundColor(c.textMuted)
+                    }
+                    if case .failed(let msg) = vm.phase {
+                        Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
+                    }
+                    FSDangerButton(working ? "Working…" : "Order update", block: true) {
+                        if vm.canOrder(target) && !working {
+                            Task { await vm.update(targetCommit: target) }
+                        }
+                    }
+                    .disabled(!vm.canOrder(target) || working)
+                    .opacity(vm.canOrder(target) && !working ? 1 : 0.4)
+                    .accessibilityIdentifier("update-order-btn")
+                }
+            }
+            .padding(FS.space.s6)
+        }
+        .background(c.bg.ignoresSafeArea())
+        .navigationTitle("Update server")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

@@ -3,11 +3,17 @@ import { createServer as createTlsServer, type Server as TlsServer, type TLSSock
 import acme from "acme-client";
 import { readFile } from "node:fs/promises";
 import { ed, type Bytes, type Keypair } from "@flagship/protocol";
+import type { BoxSigner, SwkOps } from "./keyCustodian.js";
 import { ServicePlatform, buildServiceHttpHandlers } from "./servicePlatform.js";
 import { AliasReconciler } from "./aliasReconciler.js";
 import { handleAppRequest } from "./serviceProxy.js";
 import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
-import { AppRunner } from "./serviceRunner.js";
+import {
+  AppRunner,
+  DEFAULT_DOCKER_BUILD_LIMITS,
+  ensureDockerNetwork,
+  realCommandRunner,
+} from "./serviceRunner.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import {
   DataProvisioner,
@@ -31,17 +37,30 @@ import { RelayTrustVerifier } from "./relayTrustVerifier.js";
 import {
   RelayLockdownController,
   relayTrustEnforceFromEnv,
+  type RelaySosEvent,
 } from "./relayLockdown.js";
 import type { ServiceBlessing } from "@flagship/protocol";
 import { buildOrdersHandler, type OrderExecutor } from "./orders.js";
+import { corsPreflight, withCors } from "./cors.js";
 import { acceptSiblingUpgrade } from "./sibling/wsServer.js";
 import type { UpdateServer } from "./updateServer.js";
 
 export interface DaemonRuntimeOptions {
   /** Server FQDN, e.g. "home.alice.flagship.services". */
   serverFqdn: string;
-  /** 32-byte server identity private key. The pubkey must already be registered. */
+  /**
+   * 32-byte server identity private key. The pubkey must already be registered.
+   * Still consumed for the peer sibling-handshake (`myStk` needs the raw
+   * keypair). Every OTHER identity use goes through `custodian` — the proxy and
+   * tunnel client never see this seed.
+   */
   identityPrivKey: Uint8Array;
+  /**
+   * The box's KeyCustodian (BoxSigner slice). The internet-facing app-proxy
+   * signs injected identity headers and the tunnel client signs its HELLO
+   * through this, so neither closure holds the raw identity `Keypair`.
+   */
+  custodian: BoxSigner;
   /** WebSocket URL of the .services tunnel hub. */
   tunnelHubUrl: string;
   /** Base URL of the .com control plane (for DNS-01 publish/delete). */
@@ -158,6 +177,25 @@ export interface DaemonRuntimeOptions {
    */
   tunnelSupervisor?: import("./tunnel/tunnelClient.js").SupervisorOptions;
   /**
+   * Resolve the owner-signed relay TrustExceptions that may cover a failing
+   * relay cert-hash, verified against the IRK-anchored device set (never a
+   * `.com`-asserted roster). Built by the daemon entry from the box's config
+   * (owner IRK + username); see `makeRelayTrustExceptionResolver`. Wired into
+   * the RelayLockdownController so ONE phone-signed override, fanned out via
+   * `.com`, satisfies this box too. Absent ⇒ no exceptions resolvable (under
+   * ENFORCE a failing verdict then locks down; OBSERVE just propagates it).
+   */
+  resolveRelayTrustExceptions?: (certHash: string) => Promise<{
+    exceptions: import("@flagship/protocol").TrustException[];
+    allowedDevicePubs: string[];
+  }>;
+  /**
+   * Emit an owner SOS when the box enters relay-lockdown (ENFORCE only). The
+   * daemon entry supplies the real STK-signed `flagship/push-relay/v1`
+   * trust-alert fan-out; absent ⇒ the controller's log-only default.
+   */
+  onRelaySos?: (e: RelaySosEvent) => void;
+  /**
    * Called when a fresh ACME account key is generated. Fires AFTER
    * persistence. Useful for tests / observability.
    */
@@ -197,6 +235,12 @@ export interface DaemonRuntimeOptions {
   orders?: {
     pskPub: Uint8Array;
     executor: OrderExecutor;
+    /** Slice D — the pinned admin master root (`ServerConfig.adminRootPub`);
+     *  present ⇒ the destructive order types are gated by `requireMasterAdmin`,
+     *  absent ⇒ legacy pskPub verification (a strict no-op on pre-wipe boxes). */
+    adminRootPub?: Uint8Array;
+    /** This box's owner account (cfg.userId) — for the delegated-grant check. */
+    username?: string;
   };
   /**
    * App-platform plumbing.
@@ -225,8 +269,13 @@ export interface DaemonRuntimeOptions {
     dataServicesEnvFile?: string;
     hostUsername?: string;
     hostIrkPub?: Bytes;
+    /** Slice D (D-2) — the pinned admin master root (`ServerConfig.adminRootPub`);
+     *  present ⇒ service-membership invite/mutation are admin-gated. */
+    hostAdminRootPub?: Bytes;
     hostIrk?: Keypair | null;
-    swk?: Bytes;
+    /** The custodian's SwkOps slice (per-app secret derivation + env sealing);
+     *  presence gates the ServicePlatform on. Never the raw SWK. */
+    swk?: SwkOps;
     /**
      * Optional browser-feature wiring. The caller builds + starts
      * BrowserManager / TabRegistry / DomainGate / PhonePipe externally
@@ -270,6 +319,14 @@ export interface DaemonRuntimeOptions {
      * runtime environment. Tests inject an `InMemoryAppEnvStore`.
      */
     envStore?: import("./serviceEnvStore.js").AppEnvStore;
+    /**
+     * Fired after a service is successfully uninstalled — the per-service
+     * leadership gossip wires this to release the box's `<slug>.<user>` route at
+     * the hub + re-announce. Plumbed straight through to ServicePlatform. The
+     * caller passes a late-binding thunk because the gossip loop is wired AFTER
+     * the runtime (and thus ServicePlatform) is up.
+     */
+    onServiceRemoved?: (slug: string) => void | Promise<void>;
   };
 }
 
@@ -285,6 +342,20 @@ export interface HttpResponse {
   headers?: Record<string, string>;
   body: string | Buffer;
 }
+
+/**
+ * A gate fronting the per-app proxy path. It receives the request AND the
+ * serviceId the SNI-router already resolved to select the app container
+ * (`null` on the daemon's own fallback surface). Service-access enforcement
+ * MUST key off `appServiceRef` — the trusted, SNI-selected service — not the
+ * client-supplied `Host`, or a tier-2 leader-routed share URL (whose Host is
+ * `<svc>.<user>.flagship.services`, not under the box wildcard) or a spoofed
+ * `curl --resolve` Host would skip the gate entirely (v1-sec GAP 1).
+ */
+export type AppGate = (
+  req: HttpRequest,
+  appServiceRef: string | null,
+) => Promise<HttpResponse | null>;
 
 export interface DaemonRuntime {
   /** Wait until the daemon is reachable end-to-end (cert installed). */
@@ -346,6 +417,22 @@ export interface DaemonRuntime {
    */
   addHandler(h: (req: HttpRequest) => Promise<HttpResponse | null>): void;
   /**
+   * Append a gate that fronts the PER-APP reverse proxy (the SNI-routed
+   * `<urlLabel>.<serverFqdn>` path). Gates are tried in registration order;
+   * the first non-null response is returned INSTEAD of proxying to the
+   * app's container.
+   *
+   * This is a separate chain from `addHandler` on purpose: the app path
+   * must NOT fall through the daemon's whole `/api/*` surface (an app owns
+   * its own URL space), but service-access enforcement (restricted-mode
+   * knock page / 403) and the knock-status poll (the knock page polls
+   * same-origin on the SERVICE subdomain) have to run there. Without this
+   * chain the enforcement only fronted the daemon's own surface and a
+   * `restricted` service still served on a real box (caught by the live
+   * gating e2e).
+   */
+  addAppGate(h: AppGate): void;
+  /**
    * Append a WebSocket upgrade handler. Handlers are tried in
    * registration order until one returns true (accepted + detached
    * the socket); if none accept, the inbound request falls back to
@@ -371,6 +458,14 @@ export interface DaemonRuntime {
    * key lives on every box serving that service.
    */
   revokeCurrentCert(reason?: number): Promise<void>;
+  /**
+   * The persisted ACME cert store (or null when running store-less, e.g. a
+   * dataDir-less test/cert-only profile). Exposed so the per-service leadership
+   * gossip can PRE-WARM an already-provisioned tier-2 `<service>.<user>` cert
+   * into the CertManager the moment this box becomes the route lead — the lead
+   * must not first discover it needs a cert at request time.
+   */
+  certStore: PersistentAcmeStore | null;
 }
 
 export interface UpgradeRequest {
@@ -399,6 +494,8 @@ function buildDefaultHandler(
         serverFqdn: opts.serverFqdn,
         pskPub: opts.orders.pskPub,
         executor: opts.orders.executor,
+        ...(opts.orders.adminRootPub ? { adminRootPub: opts.orders.adminRootPub } : {}),
+        ...(opts.orders.username ? { username: opts.orders.username } : {}),
       })
     : null;
 
@@ -579,7 +676,7 @@ export function defaultApexPage(serverFqdn: string): string {
     text-decoration: none;
     border-bottom: 1px solid transparent;
   }
-  .wordmark:hover { color: var(--teal-bright); }
+  .wordmark .gy { color: var(--code-ink); }
   .reveal { opacity: 0; transform: translateY(10px); animation: reveal 600ms var(--ease-out) forwards; }
   .reveal:nth-child(2) { animation-delay: 70ms; }
   .reveal:nth-child(3) { animation-delay: 140ms; }
@@ -605,8 +702,8 @@ export function defaultApexPage(serverFqdn: string): string {
   <p class="reveal">If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.</p>
   <div class="reveal">
     <hr>
-    <p class="colophon"><svg class="lock" aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> TLS terminates on this server. flagship.services relays ciphertext it cannot read.</p>
-    <a class="wordmark" href="https://flagshipserver.com" rel="noopener">FLAGSHIP&nbsp;&rarr;</a>
+    <p class="colophon"><svg class="lock" aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> TLS terminates on this server. Flagship relays ciphertext it cannot read.</p>
+    <div class="wordmark">Get yours at <span class="gy">flagshipserver.com</span></div>
   </div>
 </main>
 </body>
@@ -645,6 +742,9 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const extras: Array<(req: HttpRequest) => Promise<HttpResponse | null>> = [
     ...(opts.additionalHandlers ?? []),
   ];
+  // Gates fronting the per-app proxy path (service-access enforcement +
+  // knock endpoints). See DaemonRuntime.addAppGate.
+  const appGates: Array<AppGate> = [];
   // Same idea for WebSocket upgrade handlers — `addUpgradeHandler`
   // pushes here, the onUpgrade closure consults this list before
   // falling through to the built-in sibling-handshake path.
@@ -679,17 +779,30 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     // app, forward the request to its container (gated by membership);
     // otherwise fall back to the daemon's own HTTP surface.
     const sni = ((typeof socket.servername === "string" ? socket.servername : null) ?? opts.serverFqdn).toLowerCase();
-    const leftmost = leftmostLabel(sni, opts.serverFqdn);
+    // TIER-1 per-box name `<svc>.<server>.<user>` (under the box wildcard) OR
+    // TIER-2 leader-routed short name `<svc>.<user>` (the hub routes its SNI to
+    // whichever box holds the slot; the box terminates TLS with the tier-2 cert
+    // and must serve the SAME app). Both forms put the app's urlLabel in the
+    // leftmost label, so resolve either and look the app up by it.
+    const leftmost =
+      leftmostLabel(sni, opts.serverFqdn) ?? tier2ServiceLabel(sni, opts.serverFqdn);
     const app = leftmost && servicePlatformRef.current
       ? servicePlatformRef.current.byLabel(leftmost)
       : undefined;
     if (app) {
-      handleHttpConnection(socket, async (req) => {
-        return handleAppRequest(app, req, {
-          injectorKey: identityKeypairForInjection,
-          updateServer: opts.updateServer,
-        });
-      });
+      handleHttpConnection(
+        socket,
+        buildGatedAppHandler(
+          appGates,
+          (req) =>
+            handleAppRequest(app, req, {
+              injector: opts.custodian,
+              updateServer: opts.updateServer,
+            }),
+          // Enforce on the SAME service the SNI selected, never the client Host.
+          app.serviceId,
+        ),
+      );
       return;
     }
     // SNI doesn't match an installed app. If the SNI is the pod's
@@ -706,7 +819,13 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       const isOwnHost = sni === ownFqdn;
       const inBoxZone = sni.endsWith(`.${ownFqdn}`);
       if (!isOwnHost && inBoxZone) return disambiguationResponse(sni);
-      return handleHttp(req);
+      // CORS for the daemon's own /api/* surface only (NOT the app-proxy
+      // path above, which serves the user's own apps). The browser webapp
+      // is a different origin (web.<control-apex>) and calls the box's API
+      // directly, so it needs ACAO. Preflight short-circuits before auth.
+      const preflight = corsPreflight(req);
+      if (preflight) return preflight;
+      return withCors(req, await handleHttp(req));
     }, {
       onUpgrade: (args) => {
         // Try registered upgrade handlers first (post-startup wiring
@@ -750,17 +869,14 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
 
   // The same Ed25519 keypair the daemon uses for its server-identity
   // (signing tunnel HELLO, etc.) doubles as the X-Flagship-Signature
-  // injector key — apps that want to verify the signature fetch the
-  // pubkey from `GET /.flagship/runtime-pubkey`. (Future: derive a
-  // separate injection-only key from SWK so the identity-key blast
-  // radius stays minimal.)
-  // (Defined below; built once we have the keypair.)
-  // Identity keypair derived from the priv key.
+  // injector key — but the proxy + tunnel now sign through `opts.custodian`,
+  // NOT this raw keypair. `identity` remains ONLY for the peer sibling-
+  // handshake (`myStk`), which needs the actual keypair; every internet-facing
+  // signer is custodian-backed.
   const identity: Keypair = {
     privateKey: opts.identityPrivKey,
     publicKey: ed.getPublicKey(opts.identityPrivKey),
   };
-  const identityKeypairForInjection = identity;
 
   // Tunnel client: forwards FRAME_OPEN(SNI) → 127.0.0.1:tlsPort.
   // PER-BOX addressing (cert model A′): the box claims its apex
@@ -798,11 +914,16 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   });
   const relayLockdown = new RelayLockdownController({
     enforce: relayTrustEnforceFromEnv(),
-    // TODO(exception-sync): resolveTrustExceptions reads the owner-signed
-    // relay exceptions from `.com`'s directory + the IRK-anchored device
-    // roster. Left unwired here (no roster accessor on the box yet, same
-    // gap noted in control-plane/serviceBlessing.ts); under ENFORCE a
-    // failing verdict locks down with no exception. OBSERVE is unaffected.
+    // Owner-override resolution: reads the owner-signed relay exceptions from
+    // `.com`'s directory + verifies them against the box's IRK-anchored roster
+    // (built by the daemon entry from cfg — owner IRK + username). ONE
+    // phone-signed exception, fanned out via `.com`, thereby satisfies this box
+    // too. Absent in cert-only/test profiles ⇒ no exceptions resolvable.
+    ...(opts.resolveRelayTrustExceptions
+      ? { resolveTrustExceptions: opts.resolveRelayTrustExceptions }
+      : {}),
+    // Real STK-signed push-relay SOS when supplied; else the log-only default.
+    ...(opts.onRelaySos ? { sos: opts.onRelaySos } : {}),
   });
   const onHelloAckTrust = (e: {
     serviceBlessing: unknown;
@@ -825,7 +946,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // us) gets force-closed and reconnected within ~90s.
   const tunnel: SupervisedTunnelClient = superviseTunnelClient({
     hubUrl: opts.tunnelHubUrl,
-    signingKey: identity,
+    sign: (msg) => opts.custodian.signAsBox(msg),
     getEntitlements: opts.entitlements,
     // Under ENFORCE a locked-down box refuses NEW streams (returns null →
     // the hub gets FRAME_CLOSE_REMOTE) while the WS itself stays up for
@@ -974,6 +1095,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       store,
       certManager,
       serverFqdn: opts.serverFqdn,
+      ...(apexFromBoxFqdn(opts.serverFqdn) ? { apex: apexFromBoxFqdn(opts.serverFqdn)! } : {}),
     });
     for (const fqdn of rehydrated) {
       console.log(`[runtime] rehydrated tier-2 service cert for ${fqdn}`);
@@ -989,6 +1111,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         certManager,
         store,
         dnsWriterWithAuthority: (grant) => dns.withServiceCertAuthority(grant),
+        ...(apexFromBoxFqdn(opts.serverFqdn) ? { apex: apexFromBoxFqdn(opts.serverFqdn)! } : {}),
       }),
     );
     console.log(`[runtime] mounted /api/service-certs/* handlers`);
@@ -1001,6 +1124,11 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const appRunner = new AppRunner();
   await appRunner.ensureNetwork().catch((e) => {
     console.warn(`[runtime] could not ensure app bridge network: ${(e as Error).message}`);
+  });
+  // Dedicated, non-default bridge for the sandboxed `docker build` (see
+  // DockerBuildLimits). Best-effort; a build simply fails clearly if absent.
+  await ensureDockerNetwork(realCommandRunner, DEFAULT_DOCKER_BUILD_LIMITS.network).catch((e) => {
+    console.warn(`[runtime] could not ensure build bridge network: ${(e as Error).message}`);
   });
   const dataProvisioner = await maybeBuildDataProvisioner(
     opts.servicePlatform?.dataServicesEnvFile,
@@ -1025,7 +1153,17 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       envStore = fileStore;
     }
     servicePlatformRef.current = new ServicePlatform({
-      host: { username: apOpts.hostUsername, irkPub: apOpts.hostIrkPub },
+      host: {
+        username: apOpts.hostUsername,
+        irkPub: apOpts.hostIrkPub,
+        ...(apOpts.hostAdminRootPub ? { adminRootPub: apOpts.hostAdminRootPub } : {}),
+      },
+      // The box's own daemon identity is an additive accepted signer for
+      // host-authority mutations, so a BOX-ORIGINATED build-modes deploy
+      // (which signs with the daemon identity — the box can't reach the
+      // phone-held owner IRK) is accepted. Phone-signed installs still
+      // verify against the owner IRK. Only set when a hostIrk is wired.
+      ...(apOpts.hostIrk ? { hostIdentityPub: apOpts.hostIrk.publicKey } : {}),
       swk: apOpts.swk,
       appRunner,
       dataProvisioner,
@@ -1035,6 +1173,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       pullStateStore: apOpts.pullStateStore ?? null,
       cloneService: apOpts.cloneService ?? null,
       envStore,
+      onServiceRemoved: apOpts.onServiceRemoved ?? null,
     });
     const extras: string[] = [];
     if (apOpts.appAuthTokens) extras.push("app-tokens");
@@ -1187,10 +1326,44 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     addHandler(h) {
       extras.push(h);
     },
+    addAppGate(h) {
+      appGates.push(h);
+    },
     addUpgradeHandler(h) {
       extraUpgrades.push(h);
     },
     revokeCurrentCert: (reason = 1) => revokeCurrentCert({ issuer, certManager, reason }),
+    certStore: store,
+  };
+}
+
+/**
+ * Compose the per-app request handler: try each registered app gate in
+ * order (service-access enforcement, knock endpoints); the first non-null
+ * response wins, otherwise proxy to the app. The `gates` array is captured
+ * by reference so gates registered after startup (index.ts wires them once
+ * the access stores exist) apply to subsequent requests.
+ *
+ * Exported for tests: the live bug this closes (restricted mode not
+ * enforced on a real box) was exactly this composition missing from the
+ * SNI-routed app path.
+ */
+export function buildGatedAppHandler(
+  gates: ReadonlyArray<AppGate>,
+  proxyToApp: (req: HttpRequest) => Promise<HttpResponse>,
+  /**
+   * The serviceId the SNI-router resolved to select this app container. Passed
+   * through to every gate so enforcement keys off the trusted, SNI-selected
+   * service — NOT the client `Host` (v1-sec GAP 1). `null` when unknown.
+   */
+  appServiceRef: string | null = null,
+): (req: HttpRequest) => Promise<HttpResponse> {
+  return async (req) => {
+    for (const g of gates) {
+      const r = await g(req, appServiceRef);
+      if (r) return r;
+    }
+    return proxyToApp(req);
   };
 }
 
@@ -1818,14 +1991,30 @@ export function disambiguationResponse(sni: string): HttpResponse {
  * kept as the canonical parser for user-zone (tier-2) name handling.
  */
 export function userZoneOf(serverFqdn: string): string | null {
+  const apex = apexFromBoxFqdn(serverFqdn);
+  if (!apex) return null;
   const lower = serverFqdn.toLowerCase();
-  if (!lower.endsWith(".flagship.services")) return null;
-  const head = lower.slice(0, -".flagship.services".length);
+  const head = lower.slice(0, -(apex.length + 1));
   const parts = head.split(".");
   if (parts.length < 2) return null;
   const user = parts[parts.length - 1]!;
   if (!/^[a-z0-9]{3,30}$/.test(user)) return null;
-  return `${user}.flagship.services`;
+  return `${user}.${apex}`;
+}
+
+/**
+ * The data-plane apex this box lives under, derived from its own FQDN.
+ * A box FQDN is `<server>.<user>.<apex>`, so the apex is everything after
+ * the first two labels — `flagship.services` in prod, `gym.flagship.services`
+ * in the test env. Returns null for a malformed FQDN (fewer than 3 labels).
+ * This is the single apex source for the tier-2 service-cert handlers so they
+ * are NOT hardcoded to the prod apex (which 403'd every tier-2 mint under the
+ * gym apex).
+ */
+export function apexFromBoxFqdn(serverFqdn: string): string | null {
+  const parts = serverFqdn.toLowerCase().split(".");
+  if (parts.length < 4) return null; // <server>.<user>.<≥2-label apex>
+  return parts.slice(2).join(".");
 }
 
 /**
@@ -1852,6 +2041,29 @@ export function tunnelDomainsFor(serverFqdn: string, wantWildcard: boolean): str
 function leftmostLabel(sni: string, serverFqdn: string): string | null {
   const suffix = `.${serverFqdn.toLowerCase()}`;
   const lower = sni.toLowerCase();
+  if (!lower.endsWith(suffix)) return null;
+  const head = lower.slice(0, lower.length - suffix.length);
+  if (head.length === 0 || head.includes(".")) return null;
+  return head;
+}
+
+/**
+ * The service label of a TIER-2 leader-routed SNI `<svc>.<user>.<apex>` for
+ * THIS box's own user zone — i.e. one label short of the box's per-box wildcard
+ * (`leftmostLabel` covers `<svc>.<server>.<user>`). The hub routes a tier-2
+ * SNI's traffic to whichever box holds the `<svc>.<user>` slot; that box
+ * terminates TLS and must serve the same app, so map `<svc>.<userZone>` → `<svc>`
+ * for the app lookup. Returns null for anything that isn't exactly
+ * `<label>.<this-box's-user-zone>`.
+ */
+function tier2ServiceLabel(sni: string, serverFqdn: string): string | null {
+  const lower = sni.toLowerCase();
+  // The box's own FQDN (`<server>.<user>`) is ALSO `<label>.<userZone>`; it is
+  // the daemon's own surface, never an app — let leftmostLabel/own-host handle it.
+  if (lower === serverFqdn.toLowerCase()) return null;
+  const userZone = userZoneOf(serverFqdn);
+  if (!userZone) return null;
+  const suffix = `.${userZone.toLowerCase()}`;
   if (!lower.endsWith(suffix)) return null;
   const head = lower.slice(0, lower.length - suffix.length);
   if (head.length === 0 || head.includes(".")) return null;

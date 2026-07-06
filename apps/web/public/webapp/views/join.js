@@ -28,6 +28,7 @@ import {
   deriveIrkFromSeed,
   signWithIrk,
   persistSeedForProfile,
+  persistAdminRootSeed,
   setActiveKeystoreProfile,
   verifyWithEd25519Pub,
 } from "../keystore.js";
@@ -157,6 +158,7 @@ async function startJoin() {
       deviceIrkPubHex: device.pubHex,
       setActiveKeystoreProfile,
       persistSeedForProfile,
+      persistAdminRootSeed,
       unlockSession,
       verifyEd25519: verifyWithEd25519Pub,
       registerPush: makeRegisterPush(device.seed),
@@ -167,7 +169,7 @@ async function startJoin() {
     });
     relay.close?.();
     renderQuarantine(result);
-    toast(`joined ${result.username} — device under review`, "ok");
+    toast(`Joined ${result.username} — device under review`, "ok");
   } catch (e) {
     setStatus("error", `couldn't join: ${String(e?.message || e)}`);
   } finally {

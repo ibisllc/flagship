@@ -2,13 +2,14 @@ import SwiftUI
 import FlagshipAPI
 import FlagshipCore
 
-/// Settings tab. Sections:
-///   - ACCOUNT — username
-///   - BROWSER SESSIONS — computers you've docked a browser from to
-///                        manage this account (temporary, NOT pods).
-///                        Hidden entirely when none are active.
-///   - RECOVERY + ABOUT — recovery setup, version/license
-///   - Sign out
+/// Settings tab, organised into the spec S1 six-group taxonomy:
+///   - ACCOUNT — account security · AI keys · Recovery · Back up account key · Profiles
+///   - DEVICES — trusted devices · browser sessions · companions (dock / requests)
+///   - WEB ACCESS — open secured sessions · process URL
+///   - BACKUP & PEERS — peer-backup
+///   - APP — appearance · privacy · about
+///   - DANGER ZONE — remove this device · delete account
+///   - DEVELOPER — hidden behind the mock/live toggle
 ///
 /// The server list intentionally lives only on Home — having it here
 /// too was redundant.
@@ -22,6 +23,10 @@ public struct SettingsScreen: View {
     @Environment(PrivacySettings.self) private var privacy
     @State private var disconnectTarget: TrustedDevice?
     @State private var disconnectMessage: String?
+    /// Browser-session revoke awaiting its confirm step. A revoke is
+    /// destructive (the docked computer loses access), so it gates behind
+    /// a grey Cancel / red Revoke dialog like every other destructive action.
+    @State private var revokeSessionTarget: PairedSessionSummary?
     /// Drives the v1 "Wipe & restart — coming soon" info sheet. The
     /// menu entry stays visible (rather than hidden) so users
     /// understand the option exists and is being designed; tapping
@@ -91,6 +96,12 @@ public struct SettingsScreen: View {
     var onOpenPeerBackup: () -> Void = {}
     /// P14 — open the "Dock a browser" companion-pairing screen.
     var onOpenCompanionDock: () -> Void = {}
+    /// Web-experience gating — open "Open secured sessions" (browser QR-login
+    /// sessions this phone has authorized).
+    var onOpenSecuredSessions: () -> Void = {}
+    /// Web-experience gating — open "Process URL" (paste a `flagship://access`
+    /// link / "Get link" string to authorize a site).
+    var onOpenProcessUrl: () -> Void = {}
     /// P14 Phase 2 — open the Companion-requests inbox. The badge count
     /// next to the row reflects `pendingCompanionWritesCount`.
     var onOpenCompanionRequests: () -> Void = {}
@@ -135,6 +146,13 @@ public struct SettingsScreen: View {
     /// "Set up account recovery to use this." — rather than running the
     /// destructive path.
     var onRecoveryRequired: () -> Void = {}
+    /// Fired when the action is account DEATH (`signOutPolicy ==
+    /// .deletionCeremony` — no cloud recovery AND this is the last device).
+    /// Both the tier-2 "Lock with passkey" and the danger-zone "Remove this
+    /// device" confirm into the SAME ceremony: this routes the container to
+    /// push the full-page irreversible warning (typed-username + biometric →
+    /// owner-IRK self-delete bundle → local wipe → Welcome).
+    var onDeleteAccount: () -> Void = {}
 
     public init(
         username: String,
@@ -157,6 +175,8 @@ public struct SettingsScreen: View {
         onOpenProfiles: @escaping () -> Void = {},
         onOpenPeerBackup: @escaping () -> Void = {},
         onOpenCompanionDock: @escaping () -> Void = {},
+        onOpenSecuredSessions: @escaping () -> Void = {},
+        onOpenProcessUrl: @escaping () -> Void = {},
         onOpenCompanionRequests: @escaping () -> Void = {},
         pendingCompanionWritesCount: Int = 0,
         onOpenAbout: @escaping () -> Void = {},
@@ -169,7 +189,8 @@ public struct SettingsScreen: View {
         onWipeRestart: @escaping () async -> Void = {},
         hasCloudRecovery: Bool = true,
         signOutPolicy: SignOutPolicy = .allowed,
-        onRecoveryRequired: @escaping () -> Void = {}
+        onRecoveryRequired: @escaping () -> Void = {},
+        onDeleteAccount: @escaping () -> Void = {}
     ) {
         self.username = username
         self.controlDevices = controlDevices
@@ -191,6 +212,8 @@ public struct SettingsScreen: View {
         self.onOpenProfiles = onOpenProfiles
         self.onOpenPeerBackup = onOpenPeerBackup
         self.onOpenCompanionDock = onOpenCompanionDock
+        self.onOpenSecuredSessions = onOpenSecuredSessions
+        self.onOpenProcessUrl = onOpenProcessUrl
         self.onOpenCompanionRequests = onOpenCompanionRequests
         self.pendingCompanionWritesCount = pendingCompanionWritesCount
         self.onOpenAbout = onOpenAbout
@@ -204,6 +227,7 @@ public struct SettingsScreen: View {
         self.hasCloudRecovery = hasCloudRecovery
         self.signOutPolicy = signOutPolicy
         self.onRecoveryRequired = onRecoveryRequired
+        self.onDeleteAccount = onDeleteAccount
     }
 
     /// Optional promo announcement at the top of Settings. Wired but empty by
@@ -235,17 +259,19 @@ public struct SettingsScreen: View {
                     )
                 }
 
-                // v1.2 Phase 4 — account-security badge + entry. Placed
-                // immediately after Account so the "Single-device" /
-                // "Multi-device + 2FA" state is one of the first
-                // things the user sees.
-                accountSecuritySection(c: c)
+                // Settings taxonomy (spec S1): Account · Devices · Web access ·
+                // Backup & peers · App · Danger zone · Developer (hidden). One
+                // tap to any row; account security leads the Account group.
+                accountGroup(c: c)
                 trustedDevicesSection(c: c)
                 browserSessionsSection(c: c)
-                links(c: c)
-                appearanceSection(c: c)
+                deviceExtrasGroup(c: c)
+                webAccessGroup(c: c)
+                backupPeersGroup(c: c)
+                appSection(c: c)
                 sessionActions(c: c)
                 dangerZone(c: c)
+                developerGroup(c: c)
                 about(c: c)
 
                 Spacer().frame(height: FS.space.s12)
@@ -303,6 +329,23 @@ public struct SettingsScreen: View {
             WipeComingSoonSheet { showWipeComingSoon = false }
         }
         .confirmationDialog(
+            revokeSessionTarget.map { "Revoke \($0.label)?" } ?? "Revoke this session?",
+            isPresented: Binding(
+                get: { revokeSessionTarget != nil },
+                set: { if !$0 { revokeSessionTarget = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: revokeSessionTarget
+        ) { target in
+            Button("Revoke", role: .destructive) {
+                onRevokeDevice(target)
+                revokeSessionTarget = nil
+            }
+            Button("Cancel", role: .cancel) { revokeSessionTarget = nil }
+        } message: { target in
+            Text("The browser docked from \(target.label) loses access to this account.")
+        }
+        .confirmationDialog(
             "Replace this device?",
             isPresented: $replaceConfirm,
             titleVisibility: .visible,
@@ -352,22 +395,27 @@ public struct SettingsScreen: View {
         }
     }
 
-    /// v1.2 Phase 4 — Account-security entry. Badge surfaces the
-    /// current account type ("Single-device" / "Multi-device + 2FA");
-    /// the row drills into AccountSecurityScreen for enroll / disable.
-    private func accountSecuritySection(c: FSColors) -> some View {
-        FSSettingsGroup("ACCOUNT SECURITY", rows: [
+    /// The ACCOUNT group (spec S1 group 1): account security, AI keys,
+    /// recovery, key backup, profiles. The lead row still surfaces the
+    /// account-type state (single-device vs multi-device + 2FA) in its
+    /// subtitle and drills into AccountSecurityScreen.
+    private func accountGroup(c: FSColors) -> some View {
+        FSSettingsGroup("ACCOUNT", rows: [
             FSSettingsRow(
                 icon: accountType == "multi" ? "checkmark.shield.fill" : "shield.lefthalf.filled",
                 iconTint: accountType == "multi" ? c.success : c.primary,
-                title: accountType == "multi" ? "Multi-device + 2FA" : "Single-device account",
+                title: "Account security",
                 subtitle: accountType == "multi"
-                    ? "Recovery requires a 6-digit code + 24-hour grace."
-                    : "Recovery is a 3-day waiting period.",
+                    ? "Multi-device + 2FA — recovery needs a code."
+                    : "Single-device — recovery is a 3-day wait.",
+                accessibilityId: "settings-open-account-security",
                 action: onOpenAccountSecurity
-            )
+            ),
+            FSSettingsRow(icon: "sparkles", title: "AI keys", subtitle: "Bring-your-own keys for building apps", action: onOpenAiKeys),
+            FSSettingsRow(icon: "key.horizontal.fill", title: "Recovery", subtitle: "Recover on a new device", action: onOpenRecovery),
+            FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: "Back up account key", subtitle: "Save an encrypted key file", action: onOpenKeyfileBackup),
+            FSSettingsRow(icon: "person.2.circle.fill", title: "Profiles", subtitle: "Switch between your clouds", action: onOpenProfiles),
         ])
-        .accessibilityIdentifier("settings-open-account-security")
     }
 
     private func trustedDevicesSection(c: FSColors) -> some View {
@@ -646,20 +694,19 @@ public struct SettingsScreen: View {
                 if s.current {
                     FSPill("This device", kind: .online)
                 } else {
-                    Button("Revoke") { onRevokeDevice(s) }
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(c.danger)
+                    FSDangerButton("Revoke") { revokeSessionTarget = s }
+                        .accessibilityIdentifier("settings-revoke-browser-\(s.tokenPrefix)")
                 }
             }
         }
     }
 
-    private func links(c: FSColors) -> some View {
-        var rows: [FSSettingsRow] = [
-            FSSettingsRow(icon: "sparkles", title: "AI keys", subtitle: "Bring-your-own keys for building apps", action: onOpenAiKeys),
-            FSSettingsRow(icon: "key.horizontal.fill", title: "Recovery setup", subtitle: "Recover on a new device", action: onOpenRecovery),
-            FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: "Back up your account key", subtitle: "Save an encrypted key file", action: onOpenKeyfileBackup),
-            FSSettingsRow(icon: "person.2.circle.fill", title: "Profiles", subtitle: "Switch between your clouds", action: onOpenProfiles),
+    /// Devices continuation (spec S1 group 2): the browser/companion device
+    /// ops that aren't the trusted-device list or browser sessions. Rendered
+    /// right after those two sections so all device management reads as one
+    /// area.
+    private func deviceExtrasGroup(c: FSColors) -> some View {
+        FSSettingsGroup("COMPANIONS", rows: [
             FSSettingsRow(icon: "laptopcomputer", title: "Dock a browser", subtitle: "Read-only desktop companion (4h)", action: onOpenCompanionDock),
             FSSettingsRow(
                 icon: "tray.full",
@@ -668,14 +715,33 @@ public struct SettingsScreen: View {
                 badge: pendingCompanionWritesCount > 0 ? pendingCompanionWritesCount : nil,
                 action: onOpenCompanionRequests
             ),
+        ])
+    }
+
+    /// Web-access group (spec S1 group 3).
+    private func webAccessGroup(c: FSColors) -> some View {
+        FSSettingsGroup("WEB ACCESS", rows: [
+            FSSettingsRow(icon: "lock.open.laptopcomputer", title: "Open secured sessions", subtitle: "Sites you've signed a browser into", accessibilityId: "settings-open-secured-sessions", action: onOpenSecuredSessions),
+            FSSettingsRow(icon: "link", title: "Process URL", subtitle: "Open a sign-in link you copied", action: onOpenProcessUrl),
+        ])
+    }
+
+    /// Backup-&-peers group (spec S1 group 4).
+    private func backupPeersGroup(c: FSColors) -> some View {
+        FSSettingsGroup("BACKUP & PEERS", rows: [
             FSSettingsRow(icon: "externaldrive.connected.to.line.below.fill", title: "Peer-backup", subtitle: "Shard health across peers", action: onOpenPeerBackup),
-            FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "Face ID lock, app-level gating", action: onOpenPrivacy),
-            FSSettingsRow(icon: "info.circle.fill", title: "About Flagship", subtitle: "Version, license, source", action: onOpenAbout),
-        ]
+        ])
+    }
+
+    /// Developer group (spec S1 group 7) — hidden behind the 3-tap / mock
+    /// toggle. The one place technical terms are allowed to stay.
+    @ViewBuilder
+    private func developerGroup(c: FSColors) -> some View {
         if showDeveloper {
-            rows.append(FSSettingsRow(icon: "hammer.fill", title: "Developer", subtitle: "Mock/live toggle, latency knob", action: onOpenDeveloper))
+            FSSettingsGroup("DEVELOPER", rows: [
+                FSSettingsRow(icon: "hammer.fill", title: "Developer", subtitle: "Mock/live toggle, latency knob", action: onOpenDeveloper),
+            ])
         }
-        return FSSettingsGroup("RECOVERY", rows: rows)
     }
 
     /// The three-tier "leave the app" cluster, ordered by increasing
@@ -707,7 +773,9 @@ public struct SettingsScreen: View {
                 Text("Erases account key and deletes data. Sign back in with your recovery passkey.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                 FSDangerButton("Lock with passkey", muted: gated, block: true, large: true) {
-                    if gated { onRecoveryRequired() } else { signOutConfirm = true }
+                    if gated { onRecoveryRequired() }
+                    else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
+                    else { signOutConfirm = true }
                 }
                 .accessibilityIdentifier("settings-sign-out-btn")
             }
@@ -729,9 +797,17 @@ public struct SettingsScreen: View {
                 Text("Remove this device from your account. You may need account recovery to resume.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                 FSDangerButton("Remove this device from account", muted: gated, block: true) {
-                    if gated { onRecoveryRequired() } else { showRemoveConfirm = true }
+                    if gated { onRecoveryRequired() }
+                    else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
+                    else { showRemoveConfirm = true }
                 }
                 .accessibilityIdentifier("remove-from-account-btn")
+
+                Text("Permanently delete your account, its username, and every server's data. This cannot be undone.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    .padding(.top, FS.space.s2)
+                FSDangerButton("Delete account", block: true, action: onDeleteAccount)
+                    .accessibilityIdentifier("settings-delete-account-btn")
             }
         }
         .confirmationDialog(
@@ -752,15 +828,21 @@ public struct SettingsScreen: View {
         }
     }
 
-    /// Light / Dark / Auto appearance — one horizontal segmented control:
-    /// a sun for Light, a moon for Dark, and a small "AUTO" for system-derived.
-    /// Writes straight to PrivacySettings; RootShell applies it app-wide.
-    private func appearanceSection(c: FSColors) -> some View {
-        section("APPEARANCE", c: c) {
-            HStack(spacing: FS.space.s2) {
-                appearanceOption(.light, systemImage: "sun.max.fill", text: nil, c: c)
-                appearanceOption(.dark, systemImage: "moon.fill", text: nil, c: c)
-                appearanceOption(.auto, systemImage: nil, text: "AUTO", c: c)
+    /// APP group (spec S1 group 5): appearance (Light / Dark / Auto segmented
+    /// control), Privacy, and About under one header. Appearance writes
+    /// straight to PrivacySettings; RootShell applies it app-wide.
+    private func appSection(c: FSColors) -> some View {
+        section("APP", c: c) {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                HStack(spacing: FS.space.s2) {
+                    appearanceOption(.light, systemImage: "sun.max.fill", text: nil, c: c)
+                    appearanceOption(.dark, systemImage: "moon.fill", text: nil, c: c)
+                    appearanceOption(.auto, systemImage: nil, text: "AUTO", c: c)
+                }
+                FSSettingsGroup(rows: [
+                    FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "Face ID lock, app-level gating", action: onOpenPrivacy),
+                    FSSettingsRow(icon: "info.circle.fill", title: "About Flagship", subtitle: "Version, license, source", action: onOpenAbout),
+                ])
             }
         }
     }
@@ -817,20 +899,13 @@ public struct SettingsScreen: View {
     }
 
     private func relative(ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = RelativeDateTimeFormatter()
-        fmt.unitsStyle = .abbreviated
-        return fmt.localizedString(for: date, relativeTo: Date())
+        Date.flagshipFormatted(epochMs: ms)
     }
 
     /// M4 — absolute locale timestamp for the pending-re-pair banner's
     /// unlock time (mirrors the webapp's `formatCompletesAt`).
     private func absolute(ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = DateFormatter()
-        fmt.dateStyle = .medium
-        fmt.timeStyle = .short
-        return fmt.string(from: date)
+        Date.flagshipFormatted(epochMs: ms, includeTime: true)
     }
 }
 
@@ -858,7 +933,7 @@ struct WipeComingSoonSheet: View {
                 .foregroundColor(c.textMuted)
             Text("This rotates your account's identity and recovery passkey in one shot — every other device gets disconnected and you re-pair each one fresh. Pods stay running, services stay installed.")
                 .foregroundColor(c.text)
-            Text("For v1 you can still Disconnect a single device, and Replace device will land alongside the Keystore-rotation primitives. The full Wipe ceremony needs the new-IRK + new-UMK + new-passkey generation paths exercised end-to-end before we ship it.")
+            Text("For v1 you can still Disconnect a single device, and Replace device will land alongside the account-key rotation tools. The full Wipe ceremony needs more testing before we ship it.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
             FSPrimaryButton("Got it", block: true, action: onClose)

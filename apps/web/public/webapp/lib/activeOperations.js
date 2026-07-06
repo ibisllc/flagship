@@ -15,15 +15,40 @@
 //   - Build operations are REGISTERED imperatively (`upsertBuild` /
 //     `removeBuild`) by the vibe-code build lifecycle, which has no global
 //     signal today.
+//
+// A deploy op is only emitted once a box has GENUINELY started provisioning
+// (it has a real install phase, or it has registered): a freshly-created
+// server that is merely AWAITING A BURN is not yet doing anything, so it must
+// NOT show a spinning op (the Home status pill already shows "Pending"). The
+// label is "preparing <name>" — the box is preparing itself, not a remote
+// "deploy". (NOTE: this diverges from the iOS "deploying server <name>" copy;
+// the webapp gates + relabels here only — keep in mind for cross-surface copy.)
+
+import { PROVISION_LADDER } from "./provisionProgress.js";
+
+/**
+ * Whether a pending pod has genuinely started provisioning (so it deserves a
+ * spinning sliver op) vs. merely awaiting a burn. Started when it carries a
+ * real install-ladder `phase`, or when the caller flags it `started` (a
+ * registered-but-not-yet-live server has already booted + registered). A pod
+ * with no phase (recipe minted, USB not yet burned/booted) is NOT started.
+ * @param {{phase?:string|null, started?:boolean}} pod
+ */
+function deployStarted(pod) {
+  if (pod && pod.started === true) return true;
+  const phase = pod && pod.phase;
+  return phase != null && PROVISION_LADDER.includes(phase) && phase !== "live";
+}
 
 /**
  * The sentence shown in the sliver. The two canonical shapes are
- * "deploying server <name>" and "building <service> on <server>"; a build
- * with no known server collapses to "building <service>".
+ * "preparing <name>" (a server provisioning itself) and
+ * "building <service> on <server>"; a build with no known server collapses to
+ * "building <service>".
  * @param {{kind:"deploy"|"build", subject:string, onServer?:string|null}} op
  */
 export function operationLabel(op) {
-  if (op.kind === "deploy") return `deploying server ${op.subject}`;
+  if (op.kind === "deploy") return `preparing ${op.subject}`;
   if (op.onServer) return `building ${op.subject} on ${op.onServer}`;
   return `building ${op.subject}`;
 }
@@ -179,17 +204,20 @@ export class ActiveOperationsCenter {
 
   /**
    * Reconcile deploy operations against the current pods. A pod whose
-   * `status === "pending"` gets (or keeps) a deploy op; a pod that has left
-   * pending — went live, was cancelled, was removed — drops its op. Existing
-   * ops keep their `seq` so a steady re-sync never reorders the sliver, and
-   * the whole list is only reassigned when something actually changed (so
-   * calling this on every pod-list tick is free). Build operations are
-   * untouched.
+   * `status === "pending"` AND which has genuinely started provisioning (see
+   * {@link deployStarted}) gets (or keeps) a deploy op; a pod that has left
+   * pending — went live, was cancelled, was removed — OR is merely awaiting a
+   * burn drops/never-gets its op. Existing ops keep their `seq` so a steady
+   * re-sync never reorders the sliver, and the whole list is only reassigned
+   * when something actually changed (so calling this on every pod-list tick is
+   * free). Build operations are untouched.
    *
-   * @param {Array<{podId:string, name:string, status:string}>} pods
+   * @param {Array<{podId:string, name:string, status:string, phase?:string|null, started?:boolean}>} pods
    */
   syncDeployOperations(pods) {
-    const pending = (pods ?? []).filter((p) => p && p.status === "pending");
+    const pending = (pods ?? []).filter(
+      (p) => p && p.status === "pending" && deployStarted(p),
+    );
     const desiredIds = new Set(pending.map((p) => deployId(p.podId)));
 
     // Start from everything that isn't a now-defunct deploy op (keeps all

@@ -13,8 +13,9 @@
 import { bytesToHex, hexToBytes, signWithIrk } from "../keystore.js";
 import { getSession } from "./state.js";
 import { get as profileGet, set as profileSet, remove as profileRemove } from "./profilesStore.js";
+import { controlApex } from "./apex.js";
 
-const APEX = "https://flagshipserver.com";
+const APEX = controlApex();
 
 /**
  * Returns the VAPID public key (base64url) the webapp uses to call

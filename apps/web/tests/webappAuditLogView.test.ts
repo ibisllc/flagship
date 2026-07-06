@@ -68,7 +68,7 @@ describe("webapp /views/audit-log.js — Activity-tab audit log (task #34)", () 
     expect(r.body).toContain("signatureHex");
     expect(r.body).toContain("signerPubkeyHex");
     expect(r.body).toContain("canonicalBytes");
-    expect(r.body).toContain("Signed envelope");
+    expect(r.body).toContain("Signed request");
     expect(r.body).toContain("verify");
   });
 

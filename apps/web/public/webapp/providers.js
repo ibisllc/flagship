@@ -20,13 +20,20 @@ const PROMO_PROVIDER_ID = "flagship-promo";
 
 /* ---------- IndexedDB helpers (same DB the keystore uses) ---------- */
 
+// Shared `flagship-webapp` DB — see keystore.js: schema version is 2 and every
+// opener must open at the SAME version (a lower-version open throws
+// VersionError once a v2 store exists). Open at v2 + create every known store
+// so the first creator provisions them all.
+const DB_VERSION = 2;
 function openDb() {
   return new Promise((resolve, reject) => {
-    const r = indexedDB.open(DB_NAME, 1);
+    const r = indexedDB.open(DB_NAME, DB_VERSION);
     r.onupgradeneeded = () => {
       const db = r.result;
-      if (!db.objectStoreNames.contains(DB_STORE)) {
-        db.createObjectStore(DB_STORE);
+      if (!db.objectStoreNames.contains("keystore")) db.createObjectStore("keystore");
+      if (!db.objectStoreNames.contains("labelBook")) db.createObjectStore("labelBook");
+      if (!db.objectStoreNames.contains("buildDrafts")) {
+        db.createObjectStore("buildDrafts", { keyPath: "id" });
       }
     };
     r.onsuccess = () => resolve(r.result);
@@ -96,7 +103,12 @@ async function unwrapList(umkSeed, blob) {
 
 /* ---------- entry validation ---------- */
 
-const VALID_PROVIDERS = new Set(["anthropic", "openai", "google", "openrouter", "ollama"]);
+const VALID_PROVIDERS = new Set(["anthropic", "openai", "google", "openrouter", "ollama", "flagship"]);
+
+// Optional per-entry provenance. "promo" marks a Flagship-minted free-credits
+// key (scoped .com token → our blessed inference endpoint); the daemon pins a
+// promo credential's baseUrl to the RunPod host. Absent ⇒ a BYOK key.
+const VALID_SOURCES = new Set(["byok", "promo"]);
 
 function isValidEntry(e) {
   if (!e || typeof e !== "object") return false;
@@ -108,6 +120,7 @@ function isValidEntry(e) {
   if (e.defaultModel !== undefined && (typeof e.defaultModel !== "string" || e.defaultModel.length > 128)) {
     return false;
   }
+  if (e.source !== undefined && (typeof e.source !== "string" || !VALID_SOURCES.has(e.source))) return false;
   return true;
 }
 
@@ -150,6 +163,7 @@ export async function addProvider(umkSeed, partial) {
     apiKey: partial.apiKey,
     baseUrl: partial.baseUrl || undefined,
     defaultModel: partial.defaultModel || undefined,
+    source: partial.source || undefined,
   };
   if (!isValidEntry(entry)) throw new Error("invalid provider entry");
   list.entries.push(entry);

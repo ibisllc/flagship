@@ -19,6 +19,18 @@
  * Ported from apps/web/src/routes/serverRevocation.ts (Fly app) — same
  * validation rules + replay window; deps shape matches the .com handler
  * conventions (see {@link handleServerReleaseName}).
+ *
+ * Authorization is one of two paths, selected by whether the body carries an
+ * optional `signerPubHex`:
+ *   - ABSENT  → legacy owner path: the envelope is verified under the
+ *               username's currently-registered IRK.
+ *   - PRESENT → device path: the envelope is verified under `signerPubHex`,
+ *               which must then hold a `revoke-others` (or superset `admin`)
+ *               DeviceCapabilityGrant for the user (re-verified incl. expiry +
+ *               revocation by `requireDeviceScope`). This is the ONLY
+ *               production consumer of `requireDeviceScope` — it makes a
+ *               granted 2nd device able to perform a real admin action and a
+ *               revoked/expired grant immediately stop authorizing.
  */
 
 import {
@@ -34,7 +46,12 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
-import { hexToBytes } from "./hex.js";
+import type { DnsDeleteClient } from "./cloudflareDns.js";
+import {
+  requireDeviceScope,
+  type DeviceCapabilityGrantsDeps,
+} from "./deviceCapabilityGrants.js";
+import { HEX64, hexToBytes } from "./hex.js";
 import {
   forbidden,
   malformed,
@@ -57,6 +74,31 @@ export interface ServerRevocationDeps {
    */
   autoUnlockLeases?: AutoUnlockLeaseStorage;
   boxSealedLeases?: BoxSealedLeaseStorage;
+  /**
+   * Optional. When wired, the revoked server's per-box DNS records
+   * (A/AAAA at `<serverDomain>` and `*.<serverDomain>`) are deleted so the
+   * `flagship.services` zone doesn't accumulate orphan records and exhaust
+   * its record quota. Best-effort — a DNS failure never undoes the
+   * revocation that already landed. The user-zone CAA is deliberately NOT
+   * touched here: it's shared across all of the user's servers.
+   */
+  dns?: DnsDeleteClient;
+  /**
+   * Optional. When wired, the revocation request body may carry an explicit
+   * `signerPubHex` to authorize the action under a per-device
+   * {@link DeviceCapabilityGrant} (the `revoke-others` admin capability)
+   * instead of the owner IRK — a granted 2nd device performing a real admin
+   * action. Omit `signerPubHex` from the body and this dep is never consulted:
+   * the legacy owner-IRK path runs exactly as before. When `signerPubHex` is
+   * present in the body but this dep is NOT wired, the request is rejected
+   * (fail-closed — we never silently fall back to owner-only verification for
+   * a request that asked to be authorized as a device).
+   *
+   * Uses the SAME `device_capability_grants` storage the grant mint/list/revoke
+   * handlers use, so a grant revoked via `handleRevokeDeviceGrant` immediately
+   * stops authorizing here.
+   */
+  grants?: DeviceCapabilityGrantsDeps;
   /** Replay-window in ms. Default 5 min, matching the Fly precedent. */
   maxAgeMs?: number;
   now?: () => number;
@@ -70,6 +112,17 @@ interface RevokeBody {
     issuedAt?: number;
   };
   signature?: string;
+  /**
+   * Optional. When present, the envelope signature is verified under THIS
+   * pubkey (a per-device key) and the device must hold a `revoke-others`
+   * (or superset `admin`) DeviceCapabilityGrant. When absent, the legacy
+   * owner-IRK path runs. It is NOT part of the signed canonical bytes —
+   * that's intentional: verifying the signature under it proves the caller
+   * controls the private key, and `requireDeviceScope` independently
+   * re-verifies the grant (so a forged `signerPubHex` → the sig check fails;
+   * a real key with no grant → denied).
+   */
+  signerPubHex?: string;
 }
 
 const VALID_REASONS: ReadonlySet<RevocationReason> = new Set([
@@ -98,6 +151,11 @@ export async function handleRevokeServer(
   }
   if (!VALID_REASONS.has(r.reason as RevocationReason)) {
     return malformed("invalid reason");
+  }
+  // Optional device-authorized path: `signerPubHex` must be a 32-byte hex
+  // pubkey when present. (Absent → legacy owner-IRK path; see below.)
+  if (body.signerPubHex !== undefined && !HEX64.test(body.signerPubHex)) {
+    return malformed("invalid signerPubHex");
   }
 
   // Freshness window mirrors `handleServerReleaseName` (±maxAgeMs).
@@ -133,23 +191,79 @@ export async function handleRevokeServer(
     });
   }
 
-  let sig: Uint8Array;
-  let irkPub: Uint8Array;
-  try {
-    sig = hexToBytes(body.signature);
-    irkPub = hexToBytes(userRec.irkPubHex);
-  } catch {
-    return malformed("invalid hex");
-  }
-
   const revocation: ServerRevocation = {
     userId: r.userId,
     revokedServerId: r.revokedServerId,
     reason: r.reason as RevocationReason,
     issuedAt: r.issuedAt,
   };
-  if (!verifyRevocation(revocation, sig, irkPub)) {
-    return forbidden("invalid signature");
+
+  let sig: Uint8Array;
+  try {
+    sig = hexToBytes(body.signature);
+  } catch {
+    return malformed("invalid hex");
+  }
+
+  if (body.signerPubHex === undefined) {
+    // ── Legacy owner-IRK path (unchanged) ────────────────────────────────
+    // The envelope must verify under the username's currently-registered IRK.
+    let irkPub: Uint8Array;
+    try {
+      irkPub = hexToBytes(userRec.irkPubHex);
+    } catch {
+      return malformed("invalid hex");
+    }
+    if (!verifyRevocation(revocation, sig, irkPub)) {
+      return forbidden("invalid signature");
+    }
+  } else {
+    // ── Device-authorized path ───────────────────────────────────────────
+    // 1. The envelope must verify under the presented signer pubkey (proves
+    //    key control — a forged signerPubHex makes this fail).
+    // 2. The signer must then hold a `revoke-others` (or superset `admin`)
+    //    DeviceCapabilityGrant for this user, re-verified incl. expiry +
+    //    revocation by `requireDeviceScope` against the SAME grant storage
+    //    the grant handlers use. The owner IRK ALSO satisfies this (it's the
+    //    user-IRK fast path in `requireDeviceScope`), so passing the owner's
+    //    own pubkey as `signerPubHex` works identically to the legacy path.
+    if (!deps.grants) {
+      // Fail-closed: a request that asked to be device-authorized cannot be
+      // silently downgraded to owner-only verification.
+      return forbidden("device-authorized revocation not supported");
+    }
+    let signerPub: Uint8Array;
+    try {
+      signerPub = hexToBytes(body.signerPubHex);
+    } catch {
+      return malformed("invalid hex");
+    }
+    if (!verifyRevocation(revocation, sig, signerPub)) {
+      return forbidden("invalid signature");
+    }
+    // "admin" is a documented superset of every account security operation
+    // (see DeviceScope: it holds the sealed ACME account key, i.e. the
+    // strongest device authority). `requireDeviceScope` matches scopes by
+    // EXACT set membership, so we accept EITHER the specific `revoke-others`
+    // capability OR the `admin` superset — checked in that order so the
+    // common, least-privileged grant short-circuits.
+    const viaRevokeOthers = await requireDeviceScope(
+      deps.grants,
+      body.signerPubHex,
+      r.userId,
+      "revoke-others",
+    );
+    if (!viaRevokeOthers.ok) {
+      const viaAdmin = await requireDeviceScope(
+        deps.grants,
+        body.signerPubHex,
+        r.userId,
+        "admin",
+      );
+      if (!viaAdmin.ok) {
+        return forbidden("device not authorized to revoke servers");
+      }
+    }
   }
 
   // Mark the server record revoked. `revoke` returns false iff the row
@@ -224,11 +338,34 @@ export async function handleRevokeServer(
     // swallow.
   }
 
+  // DNS cleanup: delete the per-box A/AAAA records published at
+  // registration so the zone doesn't accumulate orphans. Best-effort —
+  // the server record IS revoked; a DNS hiccup must not undo it. The
+  // box's serverDomain comes from the (just-revoked) target row.
+  let dnsRecordsDeleted = 0;
+  if (deps.dns) {
+    const serverDomain = target.serverDomain;
+    const targets: Array<[string, string]> = [
+      [serverDomain, "A"],
+      [serverDomain, "AAAA"],
+      [`*.${serverDomain}`, "A"],
+      [`*.${serverDomain}`, "AAAA"],
+    ];
+    for (const [name, type] of targets) {
+      try {
+        dnsRecordsDeleted += await deps.dns.deleteByName(name, type);
+      } catch {
+        // swallow — see comment above.
+      }
+    }
+  }
+
   return ok({
     ok: true,
     revokedAt: now,
     reason: r.reason,
     autoLeasesRevoked,
     boxSealedLeasesRevoked,
+    dnsRecordsDeleted,
   });
 }

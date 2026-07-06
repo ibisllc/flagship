@@ -61,10 +61,14 @@ public enum Remaster {
     /// Mirrors remasterIso.ts editGrubCfgForPreseed.
     public static func editGrubCfgForPreseed(_ cfg: String) -> String {
         let linuxLine = try! NSRegularExpression(pattern: "^\\s*linux\\b")
+        // The installer dir is arch-tagged: `/install.amd/` on amd64,
+        // `/install.a64/` on arm64 (the Apple-silicon VM path), etc. Match any
+        // `.<arch>` suffix (or none) so the preseed cmdline is injected on every
+        // architecture, not just amd64.
         let kTok = try! NSRegularExpression(
-            pattern: "linux\\s+/install(?:\\.amd)?/(?:gtk/)?(?:vmlinuz|linux)\\S*")
+            pattern: "linux\\s+/install(?:\\.[a-z0-9]+)?/(?:gtk/)?(?:vmlinuz|linux)\\S*")
         let isInstaller = try! NSRegularExpression(
-            pattern: "/install(\\.amd)?/(gtk/)?(vmlinuz|linux)")
+            pattern: "/install(\\.[a-z0-9]+)?/(gtk/)?(vmlinuz|linux)")
 
         let patched = cfg.components(separatedBy: "\n").map { line -> String in
             let full = NSRange(line.startIndex..., in: line)

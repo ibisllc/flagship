@@ -35,6 +35,7 @@
  * register is a boot-time optimisation we can't safely copy here).
  */
 import type { InstallBlob } from "@flagship/protocol";
+import { utf8ToBase64 } from "./base64.js";
 
 /**
  * Build the autoinstall user-data YAML.
@@ -79,13 +80,6 @@ export interface UserDataOptions {
    */
   debugSshAuthorizedKey?: string;
   /**
-   * DEBUG build toggle (the burner's "Debug mode" checkbox, default OFF). When
-   * true the image keeps the known-password `debug` sudo console account + the
-   * "DEBUG BUILD" /etc/issue banner. Default/false ⇒ a PRODUCTION image with
-   * neither. This is the ONLY way to get those debug features.
-   */
-  debugMode?: boolean;
-  /**
    * The dedicated boot worker the box's boot-stage talks to for its LUKS
    * unlock (lease GET / approval request POST / response poll), baked to
    * /boot/flagship-boot-host so the initramfs unlock hook reads it on every
@@ -107,6 +101,40 @@ export interface UserDataOptions {
    */
   wifiSSID?: string;
   wifiPassword?: string;
+  /**
+   * OFFLINE secret-free pairing (advanced/embed mode): the owner-IRK-signed
+   * `add-paired-session` order embedded in PLAINTEXT (`{request, signature}`
+   * JSON). The daemon reads it at first boot, verifies the owner-IRK signature,
+   * and adds the paired session LOCALLY — no `.com` call — so the box comes
+   * online ALREADY paired with NO secret in the recipe. An UNSIGNED recipe
+   * sibling — NOT part of the signed InstallBlob — so it never affects the recipe
+   * signature; absent ⇒ the on-disk blob is byte-identical to before (and the
+   * default online recipe leaves it absent: the phone deposits the order sealed
+   * to the box identity into `.com` AFTER registration instead).
+   * Carried from the recipe via {@link LoadedBlob.pairingOrder}.
+   */
+  pairingOrder?: string;
+  /**
+   * SWK provisioning: the Service Workload Key (32-byte hex, = `deriveSWK(umk,
+   * serverId)`). The daemon reads it at first boot, persists it to
+   * /var/flagship/swk.hex, and turns on the service/build platform (and
+   * peer-backup participation, which stays inert until the owner toggles it).
+   * An UNSIGNED recipe sibling — NOT part of the signed InstallBlob — so it never
+   * affects the recipe signature; absent ⇒ the on-disk blob is byte-identical to
+   * before. Carried from the recipe via {@link LoadedBlob.swkHex}.
+   */
+  swkHex?: string;
+  /**
+   * Owner-authorized debug-access grant (`flagship/debug-access/v1`) as the JSON
+   * string `{grant,signatureHex}` — the consent artifact the phone signs behind
+   * Face ID when the user approves the burner's "Debug mode" toggle. Embedded
+   * into install-blob.json as the UNSIGNED `debugGrant` sibling so the box-side
+   * gate (server-daemon `debugAccessGate`) can verify it under the config-pinned
+   * owner IRK before enabling the debug console user / SSH — no valid grant ⇒ a
+   * production image. NOT part of the signed InstallBlob; absent ⇒ byte-identical
+   * to before. Carried from the recipe via {@link LoadedBlob.debugGrant}.
+   */
+  debugGrant?: string;
 }
 
 /**
@@ -169,7 +197,17 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
     throw new Error("bootHost must be https://");
   }
   return {
-    blobB64: utf8ToBase64(JSON.stringify(installBlobToJson(opts.blob, opts.blobSignatureHex))),
+    blobB64: utf8ToBase64(
+      JSON.stringify(
+        installBlobToJson(
+          opts.blob,
+          opts.blobSignatureHex,
+          opts.pairingOrder,
+          opts.swkHex,
+          opts.debugGrant,
+        ),
+      ),
+    ),
     ref,
     repo,
     bootHost,
@@ -194,7 +232,10 @@ export function buildAutoinstallUserData(opts: UserDataOptions): string {
     bootHost,
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
-    debugMode: opts.debugMode,
+    // Thread the debug SSH key so the Ubuntu path honors a debug grant too (the
+    // Debian preseed already passes it). Absent ⇒ undefined ⇒ the normal
+    // provisioning bootstrap, byte-identical to before.
+    debugSshAuthorizedKey: opts.debugSshAuthorizedKey,
   });
   const bootstrapB64 = utf8ToBase64(bootstrap);
   // The LUKS storage block is emitted ONLY when encryptRoot is on. When off,
@@ -251,7 +292,15 @@ autoinstall:
 ${networkBlock}${earlyCommandsBlock}  identity:
     hostname: flagship-pod
     username: flagship
-    password: "$6$saltsaltsaltsaltsalt$Fz2j0/yjeyqQsRGfQ2DGRrXyMz9.6CljgPwQ3UlqOPLqo4kVZk.zhztOQS9rdshOMu7w5WL9.bjvKR7vCs71y0"
+    # LOCKED password (no committed crypt). "*" is the conventional /etc/shadow
+    # "no valid password — login disabled" marker (no hashed input can match it),
+    # so the flagship admin account exists (for its sudo membership + the dev SSH
+    # stub) but CANNOT be logged into by password. Production installs no
+    # authorized_keys for it either ⇒ no interactive login by any path. The
+    # sanctioned debug path is 100% runtime + owner-grant-gated (the daemon's
+    # debugAccessGate creates + passwords its OWN 'debug' user on a verified
+    # owner-IRK grant); it is unaffected by this lock.
+    password: "*"
   ssh:
     install-server: true
     allow-pw: false
@@ -489,47 +538,6 @@ export interface BootstrapTemplateArgs {
   wifiPassword?: string;
   /** DEBUG-ONLY: replace the bootstrap with a minimal sshd+key remote-access stub. */
   debugSshAuthorizedKey?: string;
-  /**
-   * When true the burned image is a DEBUG build: it keeps the known-password
-   * `debug` sudo console account + the "DEBUG BUILD" /etc/issue banner. Default
-   * FALSE ⇒ a PRODUCTION image with neither (the `debug:flagship` backdoor is
-   * stripped). This flag is the ONLY way to get those debug features — see
-   * `stripDebugFeatures`, which also fails loud if the markers ever survive a
-   * strip so a refactor can't silently re-ship the backdoor.
-   */
-  debugMode?: boolean;
-}
-
-/** The /etc/issue "DEBUG BUILD" banner block (appended after the brand banner). */
-const DEBUG_BANNER_BLOCK =
-  "cat >> /etc/issue <<'FLAGSHIP_ISSUE'\n\n" +
-  "  !! DEBUG BUILD - console login 'debug' / password 'flagship' (sudo).\n" +
-  "  !! CHANGE OR REMOVE this user before production.\n\n" +
-  "FLAGSHIP_ISSUE\n";
-
-/**
- * Strip every DEBUG-only feature from an assembled bootstrap, leaving a
- * production image: removes the "DEBUG BUILD" /etc/issue banner and the
- * known-password `debug` sudo account (comment + useradd + chpasswd). The
- * account block carries non-ASCII box-drawing/em-dash chars in its comment, so
- * it's matched by a regex anchored on stable ASCII rather than a literal. FAILS
- * LOUD if either backdoor marker survives — a moved block must never silently
- * ship the `debug:flagship` account.
- */
-export function stripDebugFeatures(script: string): string {
-  const stripped = script
-    .replace(DEBUG_BANNER_BLOCK, "")
-    .replace(
-      /# .{0,4}DEBUG-ONLY console login[\s\S]*?echo 'debug:flagship' \| chpasswd 2>\/dev\/null \|\| true\n\n/,
-      "",
-    );
-  if (stripped.includes("debug:flagship") || stripped.includes("DEBUG BUILD")) {
-    throw new Error(
-      "stripDebugFeatures: a debug marker survived the strip — the debug block " +
-        "moved; refusing to ship a production image that still carries the backdoor",
-    );
-  }
-  return stripped;
 }
 
 /**
@@ -539,15 +547,17 @@ export function stripDebugFeatures(script: string): string {
  * same script (no drift between the two installers' downstream setup).
  */
 export function buildBootstrapScript(args: BootstrapTemplateArgs): string {
-  // The sshd remote-access stub is its own debug mechanism (dev-only, never
-  // CLI/GUI) and is unaffected by debugMode.
+  // The sshd remote-access stub is its own dev-only debug mechanism (never
+  // CLI/GUI), separate from the runtime owner-grant-gated debug-access path.
   if (args.debugSshAuthorizedKey) return buildBootstrapScriptDebug(args);
-  const script = args.encryptRoot
+  // PRODUCTION ONLY: the bootstrap no longer bakes any console-login account or
+  // banner. Debug access is 100% runtime + owner-grant-gated (the daemon's
+  // debugAccessGate creates + passwords its own `debug` user only on a verified
+  // owner-IRK `flagship/debug-access/v1` grant), so there is no inline backdoor
+  // to keep or strip — and the `flagship` admin ships with a LOCKED password.
+  return args.encryptRoot
     ? buildBootstrapScriptEncrypted(args)
     : buildBootstrapScriptPlain(args);
-  // Production by default: strip the debug account + banner unless this is an
-  // explicit debug build. This is the ONLY switch that keeps them.
-  return args.debugMode ? script : stripDebugFeatures(script);
 }
 
 /**
@@ -664,15 +674,9 @@ cat > /etc/issue <<'FLAGSHIP_ISSUE'
   ##     ##     ##  ## ##  ##     ## ##  ##   ##   ##
   ##     ###### ##  ## ###### ###### ##  ## ###### ##
 
-  This is a Flagship box - your personal cloud. You hold the keys.
+  This is a Flagship server - your personal cloud. You hold the keys.
 FLAGSHIP_ISSUE
 printf '  Get yours at \\033[96mflagshipserver.com\\033[0m\\n' >> /etc/issue
-cat >> /etc/issue <<'FLAGSHIP_ISSUE'
-
-  !! DEBUG BUILD - console login 'debug' / password 'flagship' (sudo).
-  !! CHANGE OR REMOVE this user before production.
-
-FLAGSHIP_ISSUE
 # MOTD (post-login) names this specific box. Unquoted heredoc ⇒ vars expand.
 cat > /etc/motd <<FLAGSHIP_MOTD
 
@@ -681,15 +685,6 @@ cat > /etc/motd <<FLAGSHIP_MOTD
   flagship.services is a blind pipe; it never sees your data.
 
 FLAGSHIP_MOTD
-
-# ── DEBUG-ONLY console login. The 'flagship' user is SSH-key-only (no usable
-#    password by design), which makes on-box debugging (read /boot/flagship-wifi.log,
-#    journalctl, etc.) impossible at the console. 'debug' is a sudo user with a
-#    KNOWN password so the owner can log in during bring-up. SECURITY: this is a
-#    backdoor — the /etc/issue banner warns loudly; REMOVE before production
-#    (tracked in CLAUDE.md open work).
-useradd -m -s /bin/bash -G sudo debug 2>/dev/null || true
-echo 'debug:flagship' | chpasswd 2>/dev/null || true
 
 # Provisioning-status → .com so the phone renders a live install timeline.
 # Best-effort: a failed report NEVER fails the install. (The Alpine live
@@ -760,35 +755,17 @@ chmod 600 /var/flagship/identity/identity.priv.hex /boot/identity.pem
 SERVER_IDENTITY_PRIV_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.priv.hex)"
 SERVER_IDENTITY_PUB_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.pub.hex)"
 
-# Mint the entitlement bundle the daemon hard-requires on every tunnel
-# HELLO. The RootEntitlement binds this box's STK (the identity pubkey
-# just generated) to its canonical FQDN.
-#
-# INTERIM SELF-SIGN — read this before touching it. The demo path signs
-# the RootEntitlement with the deterministic demo *User IRK*. The real
-# (Burner) path has NO user IRK on the box — the phone holds it — so we
-# SELF-SIGN with the box's own identity key (pass the identity priv as
-# the signer; --pod-pub is that same identity pubkey). This is SAFE today
-# ONLY because the production tunnel hub does NOT verify the RootEntitle-
-# ment's IRK signature: apps/web/src/server.ts wires startTunnelHub with
-# authLookup but no irkLookup, and tunnelHub.ts skips the signature check
-# when irkLookup is absent.
-#
-# FOLLOW-UP REQUIRED before irkLookup is enabled in production: replace
-# this self-signed bundle with a phone-signed one. The proper flow is
-# that after first boot the phone signs an EntitlementBundle for THIS
-# box's STK (identity pubkey) with the user's real IRK and delivers it to
-# /var/flagship/entitlements.json (process restart picks it up). Until
-# then a self-signed bundle would be rejected the moment irkLookup goes
-# live, so this MUST be cut over first.
-npx tsx scripts/install-helper.ts mint-entitlements \\
-    --irk-priv "$SERVER_IDENTITY_PRIV_HEX" \\
-    --pod-pub "$SERVER_IDENTITY_PUB_HEX" \\
-    --username "$USERNAME" \\
-    --pod-canonical "$SERVER_DOMAIN" \\
-    --out /var/flagship/entitlements.json \\
-    || echo "[flagship-bootstrap] WARNING: mint-entitlements failed; daemon will not serve"
-chmod 600 /var/flagship/entitlements.json 2>/dev/null || true
+# Entitlement bundle: deliberately NOT minted here. The daemon hard-
+# requires an IRK-signed RootEntitlement on every tunnel HELLO, and the
+# production hub verifies that signature against the owner IRK (irkLookup,
+# live since 2026-06-16), so a box-self-signed bundle is REJECTED at the
+# hub ("rootEntitlement signature failed verification"). The real (Burner)
+# path has no user IRK on the box (the phone holds it), so we write NOTHING
+# here and let the daemon fetch an IRK-signed entitlement from the phone on
+# first boot via .com's blind mailbox (server-daemon entitlementRelay.ts,
+# which fires only when no bundle is on disk). The phone signs an
+# EntitlementBundle for THIS box's STK and the daemon persists it to
+# /var/flagship/entitlements.json.
 
 # Daemon environment. server-daemon reads its two REQUIRED inputs
 # (FLAGSHIP_SUBDOMAIN + FLAGSHIP_IDENTITY_PRIV_HEX) from the process env
@@ -926,6 +903,25 @@ systemctl enable docker.service containerd.service 2>/dev/null || \\
     echo "[flagship-bootstrap] WARNING: could not enable docker (daemon will retry network setup on boot)"
 systemctl enable flagship-daemon.service flagship-first-boot-register.service flagship-data-services.service || \\
     echo "[flagship-bootstrap] WARNING: systemctl enable failed (will retry would be needed on real boot)"
+# ── FIRST-BOOT AUTOSTART: enable the units DETERMINISTICALLY. ────────────────
+# ROOT CAUSE of the "installed but DEAD at the login prompt" box (live-proven on
+# the Windows VM e2e): this bootstrap runs in the installer's in-target CHROOT,
+# where \`systemctl enable\` is unreliable — with no running systemd/D-Bus it can
+# return without creating the [Install] WantedBy symlinks, and the \`|| echo\`
+# above SWALLOWS that failure, so first-boot-register + the daemon never fire,
+# no phone-home beacon is sent, and .com never publishes DNS. The WORKING
+# cloud-init path (demoUsersAdminCloudInit.ts) never hits this: it runs at REAL
+# boot under a live systemd AND starts register + daemon INLINE, so its enable
+# always takes. We can't \`systemctl start\` in the chroot, so instead we make the
+# enable itself chroot-proof: drop the multi-user.target.wants symlinks BY HAND
+# (exactly what \`systemctl enable\` does, and precisely the pattern the Wi-Fi
+# setup already relies on). This needs no running systemd and can't be a no-op,
+# so the units are GUARANTEED enabled for the first real boot.
+mkdir -p /etc/systemd/system/multi-user.target.wants
+for _u in flagship-daemon flagship-first-boot-register flagship-data-services; do
+    ln -sf "/etc/systemd/system/\${_u}.service" \\
+        "/etc/systemd/system/multi-user.target.wants/\${_u}.service"
+done
 echo "[flagship-bootstrap] systemd units installed + enabled (start deferred to first real boot)"
 ${wifiSafetyNet}
 # Reached the end cleanly — disarm the error trap so the EXIT handler doesn't
@@ -2065,6 +2061,9 @@ echo "[flagship-bootstrap] LUKS unlock hook installed; initramfs rebuilt"
 export function installBlobToJson(
   b: InstallBlob,
   blobSignatureHex: string,
+  pairingOrder?: string,
+  swkHex?: string,
+  debugGrant?: string,
 ): Record<string, unknown> {
   return {
     version: b.version,
@@ -2088,6 +2087,28 @@ export function installBlobToJson(
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
     blobSignatureHex,
+    // OFFLINE secret-free pairing (advanced/embed): the owner-IRK-signed
+    // `add-paired-session` order in PLAINTEXT (`{request, signature}` JSON),
+    // which the daemon verifies + adds LOCALLY at first boot (no `.com`). An
+    // UNSIGNED recipe sibling (never part of the signed InstallBlob's canonical
+    // bytes), appended only when the recipe carries it — a recipe WITHOUT it
+    // serializes byte-identically to before (existing burns + sha pins
+    // unchanged). The default online recipe leaves it absent.
+    ...(pairingOrder ? { pairingOrder } : {}),
+    // SWK provisioning: the phone-derived Service Workload Key. Like
+    // pairingOrder, an UNSIGNED recipe sibling (never part of the signed
+    // InstallBlob's canonical bytes), appended only when the recipe carries it —
+    // a recipe WITHOUT it serializes byte-identically to before (existing burns +
+    // sha pins unchanged). The daemon reads it from install-blob.json at first
+    // boot and persists it to /var/flagship/swk.hex.
+    ...(swkHex ? { swkHex } : {}),
+    // Owner-authorized debug-access grant (`{grant,signatureHex}` JSON). Like
+    // pairingOrder/swkHex, an UNSIGNED recipe sibling (never part of the signed
+    // InstallBlob's canonical bytes), appended only when the recipe carries it —
+    // a recipe WITHOUT it serializes byte-identically to before. The box-side
+    // debug-access gate reads it from install-blob.json and verifies it under the
+    // owner IRK before enabling the debug user/SSH.
+    ...(debugGrant ? { debugGrant } : {}),
   };
 }
 
@@ -2095,8 +2116,4 @@ function bytesToHex(b: Uint8Array): string {
   return Array.from(b)
     .map((x) => x.toString(16).padStart(2, "0"))
     .join("");
-}
-
-function utf8ToBase64(s: string): string {
-  return Buffer.from(s, "utf-8").toString("base64");
 }

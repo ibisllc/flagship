@@ -70,6 +70,14 @@ interface ScreensClient {
     suspend fun vibeCodeSessionState(sessionId: String): VibeCodeSessionPublicState
     suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse
 
+    /** Deploy a `ready-to-deploy` scratch (vibe-code) session: builds the
+     *  emitted manifest + files into a container and installs it on the box.
+     *  Hits the daemon's legacy `POST /api/llm/sessions/<id>/deploy` — the only
+     *  deploy trigger for scratch sessions (the WS stream is a pure relay and
+     *  never auto-deploys). Returns `{ok, serviceId, url}` (same shape as the
+     *  build-modes deploy). Mirror of iOS ScreensClient.vibeCodeDeploy. */
+    suspend fun vibeCodeDeploy(sessionId: String): BuildDeployResponse
+
     // P9 — peer-backup management.
     suspend fun peerBackupStatus(): PeerBackupStatusResponse
     suspend fun peerBackupToggle(participate: Boolean): PeerBackupStatusResponse
@@ -116,4 +124,16 @@ sealed class ScreensError(message: String) : Throwable(message) {
     }
     data class Decoding(val reason: String) : ScreensError("Could not parse response: $reason")
     data class NotImplemented(val feature: String) : ScreensError("Not implemented yet: $feature")
+}
+
+/**
+ * Plain-language copy for a thrown error, mirroring iOS `ScreensClientError.userFacing`.
+ * A typed [ScreensError] already carries user-safe wording; anything else (raw
+ * network/IO exceptions, JSON parse throwables) must NOT reach the UI verbatim —
+ * a user should never see "noSessionToken" or a stack message. Surfaces that show
+ * an error to the user route it through this instead of a raw `t.message`.
+ */
+fun Throwable.userFacing(): String = when (this) {
+    is ScreensError -> message ?: "Something went wrong. Try again."
+    else -> "Couldn't reach the server. Check your connection and try again."
 }

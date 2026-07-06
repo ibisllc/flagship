@@ -8,6 +8,8 @@
 
 package com.flagshipserver.app.core
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -89,7 +91,13 @@ class OkHttpJsonTransport(
         contentType: String?,
         extraHeaders: Map<String, String>,
         accept: Set<Int>,
-    ): HttpResponse {
+    ): HttpResponse = withContext(Dispatchers.IO) {
+        // Dispatchers.IO: enqueue() resumes the continuation on the CALLER's
+        // dispatcher, and the blocking body read (resp.body.bytes()) must never
+        // run on Main (Android's BlockGuard throws NetworkOnMainThreadException
+        // unconditionally — not just under StrictMode). Card-level callers use
+        // rememberCoroutineScope() (Main), so pinning the read to IO here makes
+        // every caller safe regardless of its launch dispatcher.
         val req = Request.Builder().url(url).apply {
             val mt = (contentType ?: "application/octet-stream").toMediaType()
             if (body != null) method(method, body.toRequestBody(mt)) else method(method, null)
@@ -108,7 +116,7 @@ class OkHttpJsonTransport(
         if (status !in accept) {
             throw HttpException(status, String(bodyBytes, Charsets.UTF_8))
         }
-        return HttpResponse(status, bodyBytes, headers)
+        HttpResponse(status, bodyBytes, headers)
     }
 
     override suspend fun <T> postJson(

@@ -162,6 +162,18 @@ export async function handleUploadWebauthnRecovery(
       : existing?.wrappedAcmeAccountKeyB64
         ? { wrappedAcmeAccountKeyB64: existing.wrappedAcmeAccountKeyB64 }
         : {}),
+    // Slice D (D-3) — the ADMIN MASTER ROOT, escrowed as opaque ciphertext
+    // alongside the UMK. Same accept-if-present + preserve-on-replace pattern
+    // as the ACME field above (not in the signed canonical — it's ciphertext,
+    // so tampering breaks recovery of the admin root, never forges authority;
+    // the box only trusts the rotation proof chain). A NEW value on re-upload
+    // is the post-rotation re-escrow; an omitting re-upload (UMK-only refresh)
+    // preserves the escrow.
+    ...(typeof r.wrappedAdminRoot === "string" && r.wrappedAdminRoot.length > 0
+      ? { wrappedAdminRootB64: r.wrappedAdminRoot }
+      : existing?.wrappedAdminRootB64
+        ? { wrappedAdminRootB64: existing.wrappedAdminRootB64 }
+        : {}),
     createdAt: existing?.createdAt ?? t,
     updatedAt: t,
   });
@@ -274,6 +286,12 @@ export async function handleFetchWrappedUmkWithToken(
       // absent when the account never minted an account key.
       ...(rec.wrappedAcmeAccountKeyB64
         ? { wrappedAcmeAccountKey: rec.wrappedAcmeAccountKeyB64 }
+        : {}),
+      // Slice D (D-3) — release the escrowed admin master root alongside the
+      // UMK so credential recovery can re-establish (and rotate) admin
+      // authority. Ciphertext only; absent when no admin root was escrowed.
+      ...(rec.wrappedAdminRootB64
+        ? { wrappedAdminRoot: rec.wrappedAdminRootB64 }
         : {}),
       // The PRF salt hash is returned so the client can verify it
       // re-derives the same value from the passphrase locally — a

@@ -31,6 +31,10 @@ android {
         vectorDrawables { useSupportLibrary = true }
         // Keep APK lean (English only); reproducible-build prerequisite.
         resourceConfigurations += setOf("en")
+        // GYM (§10 Phase-5) — the on-device instrumentation runner the UI gym
+        // drives via `connectedDebugAndroidTest`. AndroidJUnitRunner hosts the
+        // Compose UI Test + Espresso `androidTest` suite (app/src/androidTest).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -140,6 +144,32 @@ dependencies {
     // unit tests too.
     implementation("com.google.zxing:core:3.5.3")
 
+    // Mozilla Rhino — runs the SINGLE canonical preseed/user-data generator
+    // (packages/flagship-burner/engine/preseed-engine.js, shipped as an Android
+    // asset) on-device, byte-identical to Node + the macOS/iOS JSC burner. Driven
+    // in interpreted mode on ART (optimizationLevel = -1) — see PreseedEngine.kt.
+    //
+    // Version notes (the Android-clean artifact is `rhino-runtime` — no AWT/tools;
+    // from 1.8.0 the tools split into a separate `rhino-tools` artifact so the core
+    // `org.mozilla:rhino` jar is ALSO runtime-only: verified zero `tools/` classes,
+    // no Swing/AWT):
+    //   * `rhino-runtime` stops at 1.7.15.1, whose parser predates ES2015 default
+    //     function parameters (`function f(a, b = "")`) → "missing ) after formal
+    //     parameters" on the current bundle.
+    //   * `rhino:1.8.0..1.9.1` PARSE the bundle but mis-execute it: Rhino reads a
+    //     `for`-loop variable as its INITIAL value inside any loop body that has a
+    //     block-scoped (`let`/`const`) declaration (reproduced standalone; affects
+    //     interpreted AND compiled mode), corrupting e.g. the base64 encoder.
+    //
+    // RESOLVED: the canonical bundle is now lowered to es5 (Babel — esbuild refuses
+    //   const→es5; see packages/flagship-burner engine.babel.json + bundle:engine),
+    //   which removes both the default params AND the block scoping that tripped
+    //   Rhino. The es5 bundle is PROVEN byte-identical to Node + JSC on Rhino across
+    //   all 6 golden vectors (PreseedEngineTest, green). We stay on `rhino:1.9.1`
+    //   (newer, proven green here); the leaner `rhino-runtime:1.7.15` also runs the
+    //   es5 bundle if a smaller artifact is ever wanted.
+    implementation("org.mozilla:rhino:1.9.1")
+
     // Image loading (avatars, app screenshots)
     implementation("io.coil-kt:coil-compose:2.7.0")
 
@@ -173,6 +203,14 @@ dependencies {
     testImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    // GYM (§10 Phase-5) on-device harness deps: AndroidJUnitRunner +
+    // ActivityScenario (androidx.test:core) + Espresso for the instrumentation
+    // suite that launches MainActivity on an AVD.
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

@@ -359,6 +359,34 @@ describe("requireDeviceScope", () => {
     expect(r).toEqual({ ok: true });
   });
 
+  // Slice D fence (docs/device-admin-tier-spec.md §3.2): the membership-IRK
+  // fast path must NEVER satisfy a SENSITIVE scope. A sensitive scope is
+  // satisfiable ONLY through requireMasterAdmin (the admin master root).
+  it("FENCES the user-IRK fast path off from the sensitive `admin` scope", async () => {
+    const h = await mkHarness();
+    const r = await requireDeviceScope(
+      h.deps,
+      hex(h.userIrk.publicKey),
+      USER,
+      "admin",
+    );
+    expect(r).toEqual({
+      ok: false,
+      reason: "sensitive scope requires master-admin authority",
+    });
+  });
+
+  it("still allows the user-IRK fast path for a NON-sensitive scope", async () => {
+    const h = await mkHarness();
+    const r = await requireDeviceScope(
+      h.deps,
+      hex(h.userIrk.publicKey),
+      USER,
+      "revoke-others",
+    );
+    expect(r).toEqual({ ok: true });
+  });
+
   it("rejects when username is not registered", async () => {
     const h = await mkHarness();
     const r = await requireDeviceScope(
@@ -502,21 +530,26 @@ describe("requireDeviceScope", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────
-// task #39 — pin the latent grant-authorization gap.
+// task #39 — pin the KNOWN set of grant-authorization consumers.
 //
 // `requireDeviceScope` is the only function that turns a
 // DeviceCapabilityGrant (and therefore its revocation) into an
-// operationally meaningful authorization decision. Today it is exercised
-// ONLY by tests — no production handler calls it — which means revoking a
-// grant currently changes nothing an attacker could exploit. We don't
-// want to wire it into anything new here, but we DO want a guard: if
-// someone later adds a grant-accepting handler, they must consciously
-// either consume `requireDeviceScope` (so revocation bites) or update
-// this pin. The test scans control-plane source for production callers.
+// operationally meaningful authorization decision. It now has exactly ONE
+// production consumer: `serverRevocation.ts` (the device-authorized
+// server-revoke path — a 2nd device with the `revoke-others`/`admin`
+// scope). That wiring is what makes `handleRevokeDeviceGrant` bite: a
+// revoked grant immediately stops authorizing a revocation. The test below
+// keeps its original spirit — it asserts the EXACT known-consumer set, so a
+// NEW handler that starts authorizing via device grants without conscious
+// review still fails the pin (forcing the author to either prove the
+// revocation/expiry path is covered for the new consumer, or update this
+// list).
 // ──────────────────────────────────────────────────────────────────────
 
-describe("requireDeviceScope has no production consumers (latent grant gap)", () => {
-  it("is not called by any control-plane src/*.ts handler today", async () => {
+const KNOWN_REQUIRE_DEVICE_SCOPE_CONSUMERS = ["serverRevocation.ts"];
+
+describe("requireDeviceScope production consumers (grant-authorization pin)", () => {
+  it("is called only by the known-consumer set of control-plane src/*.ts handlers", async () => {
     const { readdirSync, readFileSync } = await import("node:fs");
     const { fileURLToPath } = await import("node:url");
     const { dirname, join } = await import("node:path");
@@ -544,10 +577,13 @@ describe("requireDeviceScope has no production consumers (latent grant gap)", ()
       }
     }
 
-    // If this fails, a new handler started authorizing via device grants.
-    // Either that's intended (grants now bite — update this pin and make
-    // sure handleRevokeDeviceGrant's effect is covered for that path), or
-    // it's a half-wired hole. Do NOT just delete the assertion.
-    expect(callers).toEqual([]);
+    // If this fails, the set of grant-authorizing handlers changed.
+    // Either a new handler started authorizing via device grants (intended —
+    // grants now bite there; add it to KNOWN_REQUIRE_DEVICE_SCOPE_CONSUMERS
+    // and make sure handleRevokeDeviceGrant's effect is covered for that
+    // path), or it's a half-wired hole. Do NOT just delete the assertion.
+    expect(callers.sort()).toEqual(
+      [...KNOWN_REQUIRE_DEVICE_SCOPE_CONSUMERS].sort(),
+    );
   });
 });

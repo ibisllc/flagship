@@ -1,5 +1,6 @@
 import type { ChatRequest, ChatResponse, FetchLike, LLMProvider, ProviderConfig } from "../types.js";
 import { ProviderError } from "../types.js";
+import { toOpenAiMessages } from "./openai.js";
 
 const DEFAULT_BASE = "https://openrouter.ai/api";
 
@@ -10,7 +11,7 @@ export const openrouter: LLMProvider = {
     const base = cfg.baseUrl ?? DEFAULT_BASE;
     const body: Record<string, unknown> = {
       model: req.model,
-      messages: req.messages,
+      messages: toOpenAiMessages(req.messages),
       max_tokens: req.maxTokens,
       temperature: req.temperature,
     };

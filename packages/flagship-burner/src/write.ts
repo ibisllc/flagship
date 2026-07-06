@@ -31,7 +31,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { createHash } from "node:crypto";
 import { tmpdir, platform } from "node:os";
 import { join } from "node:path";
-import { loadBlobFromFile } from "./loadBlob.js";
+import { loadBlobFromFile, debugSshKeyFromGrant } from "./loadBlob.js";
 import { buildAutoinstallUserData } from "./userdata.js";
 import { buildDebianPreseed } from "./preseed.js";
 import {
@@ -144,6 +144,17 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
     encryptRoot: opts.encryptRoot !== false,
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
+    // Carry the UNSIGNED recipe siblings into install-blob.json — the direct
+    // `write` path dropped these (the GUI's prepare path threads them). Absent
+    // ⇒ byte-identical.
+    pairingOrder: loaded.pairingOrder,
+    swkHex: loaded.swkHex,
+    debugGrant: loaded.debugGrant,
+    // Bake the owner's SSH key at install time when the recipe carries a debug
+    // grant with a real key (owner Face-ID-signed consent) so a debug-friendly
+    // box can be SSH-diagnosed pre-daemon. Absent/empty ⇒ undefined ⇒ the normal
+    // provisioning bootstrap.
+    debugSshAuthorizedKey: debugSshKeyFromGrant(loaded.debugGrant),
   };
   const yaml = buildAutoinstallUserData(genOpts);
   const preseedCfg = buildDebianPreseed(genOpts);

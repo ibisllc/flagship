@@ -11,7 +11,8 @@
     "apps/web/e2e",
     "apps/com",
     "apps/boot",
-    "apps/dns-broker"
+    "apps/dns-broker",
+    "tools/gym"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
@@ -21,7 +22,16 @@
     "daemon": "npm --workspace=@flagship/server-daemon run start",
     "build-image": "npm --workspace=@flagship/bootkey-builder run start --",
     "web": "npm --workspace=@flagship/web run dev",
-    "predeploy:check": "bash scripts/predeploy-com.sh"
+    "predeploy:check": "bash scripts/predeploy-com.sh",
+    "gym": "npm --workspace=@flagship/gym run gym --",
+    "gym:every-merge": "npm --workspace=@flagship/gym run gym -- every-merge",
+    "gym:locked": "npm --workspace=@flagship/gym run gym -- total --mock-only",
+    "gym:total": "bash scripts/gym-total.sh",
+    "gym:weekly": "bash scripts/gym-weekly.sh",
+    "gym:live": "npm --workspace=@flagship/gym run gym -- live",
+    "live-e2e": "tsx tools/live-e2e/run.ts",
+    "live-e2e:web": "playwright test --config apps/web/e2e/live/playwright.live.config.ts",
+    "judge-smoke": "tsx tools/gym/judge-smoke.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

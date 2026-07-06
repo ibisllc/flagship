@@ -35,6 +35,14 @@ public struct ServicesTab: View {
         }
         .onChange(of: linker.pending) { _, link in consume(link) }
         .task(id: linker.pending) { consume(linker.pending) }
+        .onChange(of: path) { old, new in
+            // Returning to the list root after a child action (e.g. an
+            // uninstall popped the detail) — refresh so a removed service
+            // disappears without a manual pull-to-refresh.
+            if !old.isEmpty && new.isEmpty {
+                Task { await vm?.load() }
+            }
+        }
     }
 
     private func consume(_ link: DeepLink?) {
@@ -79,8 +87,10 @@ public struct ServicesTab: View {
                 .navigationTitle("Services")
                 .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
                 .searchable(text: searchBinding(vm: vm), placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search services")
+                // Server filter: top-right, above the large title. The
+                // PodSwitcher presents its panel as a popover, so it is not
+                // clipped by the nav bar (the earlier in-hierarchy overlay was).
                 .toolbar {
-                    // V8 — server filter stays as the top-right PodSwitcher.
                     if app.pods.count > 1 {
                         ToolbarItem(placement: .topBarTrailing) {
                             PodSwitcher(
@@ -142,7 +152,7 @@ public struct ServicesTab: View {
         case .vibeCodeDescribe:
             VibeCodeDescribeContainer(path: $path, holder: buildCred)
         case .vibeCodeGenerating(let sessionId):
-            VibeCodeGeneratingContainer(sessionId: sessionId)
+            VibeCodeGeneratingContainer(sessionId: sessionId, path: $path)
         case .vibeCodeChat(let sessionId):
             VibeCodeChatContainer(sessionId: sessionId)
         case .serviceEnv(let appId, let creator, let slug):
@@ -155,6 +165,8 @@ public struct ServicesTab: View {
             InviteManageContainer(serviceId: serviceId, path: $path)
         case .inviteIssue(let serviceId):
             InviteIssueContainer(serviceId: serviceId, path: $path)
+        case .serviceAccess(let serviceId):
+            ServiceAccessContainer(serviceId: serviceId)
         }
     }
 
@@ -219,7 +231,7 @@ public struct ServicesTab: View {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
                         Text("Build your first service").font(FS.font.h3()).foregroundColor(c.text)
-                        Text("Describe it in plain English. The AI writes it, the daemon runs it.")
+                        Text("Describe it in plain English. The AI writes it, your server runs it.")
                             .font(FS.font.body()).foregroundColor(c.textMuted)
                         FSPrimaryButton("Build a service", block: true) {
                             path.append(.buildSource)
@@ -349,10 +361,20 @@ struct ServiceDetailContainer: View {
     @Binding var path: [AppsRoute]
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
+    @Environment(\.serviceUninstallClient) private var uninstallClient
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
     @State private var vm: ServiceDetailViewModel?
+    /// Drives the destructive "Remove service" confirm dialog.
+    @State private var confirmRemove = false
+
+    /// The box this service runs on — the daemon there pins the owner IRK as
+    /// `serverId`, so the signed uninstall must target it (same resolution as
+    /// the env editor / vibe-code containers).
+    private var serverDomain: String {
+        app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown"
+    }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -365,24 +387,38 @@ struct ServiceDetailContainer: View {
                     pods: app.pods,
                     globalLeaderPodId: app.leaderPodId,
                     onSave: { Task { await save(vm: vm) } },
-                    onRemove: { toasts.warning("Remove flow not wired yet.") },
+                    onRemove: { confirmRemove = true },
                     onOpenBrowserTabs: { path.append(.browserTabs(serviceId: serviceId)) },
-                    onOpenCollaborators: { path.append(.inviteManage(serviceId: serviceId)) }
+                    onOpenCollaborators: { path.append(.inviteManage(serviceId: serviceId)) },
+                    onOpenAccess: { path.append(.serviceAccess(serviceId: serviceId)) }
                 )
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+        }
+        .confirmationDialog(
+            "Remove this service?",
+            isPresented: $confirmRemove,
+            titleVisibility: .visible
+        ) {
+            Button("Remove service", role: .destructive) {
+                if let vm { Task { await remove(vm: vm) } }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This uninstalls the service from \(serverDomain) and deletes its data. This can't be undone.")
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
                         // W10 — open the per-app env-var KV editor.
-                        // serviceId = "<creator>-<slug>"; split at the
-                        // first '-' (creator is hyphen-free).
-                        if let dashIdx = serviceId.firstIndex(of: "-") {
-                            let creator = String(serviceId[..<dashIdx])
-                            let slug = String(serviceId[serviceId.index(after: dashIdx)...])
+                        // serviceId = "<creator>--<slug>"; split on the `--`
+                        // delimiter (both halves may carry single dashes —
+                        // docs/service-addressing-double-dash.md).
+                        if let delim = serviceId.range(of: "--") {
+                            let creator = String(serviceId[..<delim.lowerBound])
+                            let slug = String(serviceId[delim.upperBound...])
                             path.append(.serviceEnv(appId: serviceId, creator: creator, slug: slug))
                         }
                     } label: {
@@ -402,7 +438,9 @@ struct ServiceDetailContainer: View {
                     allPods: app.pods,
                     globalLeaderPodId: app.leaderPodId,
                     server: server,
-                    username: { [app] in app.currentUser }
+                    username: { [app] in app.currentUser },
+                    uninstallClient: uninstallClient,
+                    serverDomain: serverDomain
                 )
             }
             await vm?.load()
@@ -416,6 +454,23 @@ struct ServiceDetailContainer: View {
             toasts.success("Saved \(vm.serviceId).")
         } catch {
             toasts.error("Save failed. \(HumanError.humanize(error))")
+        }
+    }
+
+    /// Sign + send the box-direct uninstall. On success, pop back to the
+    /// services list (which reloads on path-empty) + toast; on failure, stay
+    /// put and surface the humanized error.
+    private func remove(vm: ServiceDetailViewModel) async {
+        let slug = vm.detail.value?.app.slug ?? vm.serviceId
+        let ok = await vm.uninstall()
+        if ok {
+            toasts.success("Removed \(slug).")
+            // Pop straight back to the list root; ServicesTab reloads it.
+            path.removeAll()
+        } else if case .failed(let msg) = vm.removePhase {
+            toasts.error(msg)
+        } else {
+            toasts.error("Couldn't remove the service. Try again in a moment.")
         }
     }
 }
@@ -466,16 +521,21 @@ struct VibeCodeDescribeContainer: View {
     @Binding var path: [AppsRoute]
     let holder: BuildCredentialHolder
     @Environment(\.screensClient) private var client
+    @Environment(ToastCenter.self) private var toasts
     var body: some View {
-        VibeCodeDescribeScreen(onBuild: { prompt in
+        VibeCodeDescribeScreen(onBuild: { prompt, name, visibility in
             Task {
                 do {
                     // Seed the box's model with the credential chosen at the
                     // AI-key step (kept on the holder so the describe screen
-                    // could re-render without losing it).
+                    // could re-render without losing it). Name + visibility are
+                    // the owner's choices on the form (no longer fixed).
                     let cred = holder.credential
                     let resp = try await client.vibeCodeStart(
-                        VibeCodeStartRequest(prompt: prompt, model: nil, credential: cred)
+                        VibeCodeStartRequest(
+                            prompt: prompt, model: nil, credential: cred,
+                            name: name, visibility: visibility
+                        )
                     )
                     if resp.needsCredential == true {
                         // The box still has no usable model — route BACK into
@@ -485,7 +545,10 @@ struct VibeCodeDescribeContainer: View {
                     }
                     path.append(.vibeCodeGenerating(sessionId: resp.sessionId))
                 } catch {
-                    // surface error toast later
+                    // Don't swallow — a tap that does nothing with no feedback
+                    // is a dead control. Surface the failure so the owner knows
+                    // the build didn't start (and a test can see why).
+                    toasts.error("Couldn't start the build: \(HumanError.humanize(error))")
                 }
             }
         })
@@ -494,10 +557,13 @@ struct VibeCodeDescribeContainer: View {
 
 struct VibeCodeGeneratingContainer: View {
     let sessionId: String
+    @Binding var path: [AppsRoute]
     @Environment(\.screensClient) private var client
     @Environment(ActiveOperationsCenter.self) private var operations
     @Environment(AppState.self) private var app
     @State private var vm: VibeCodeStreamViewModel?
+    @State private var routeTask: Task<Void, Never>?
+    @State private var routed = false
 
     var body: some View {
         ZStack {
@@ -518,6 +584,39 @@ struct VibeCodeGeneratingContainer: View {
                     operations: operations,
                     serverLabel: app.currentPod?.name
                 )
+            }
+            startStatusRouter()
+        }
+        .onDisappear {
+            routeTask?.cancel()
+            routeTask = nil
+        }
+    }
+
+    /// The WS stream is display-only and carries NO `talkToUser` frame and NO
+    /// deploy trigger. So we poll the session status here and hand off to the
+    /// chat surface the moment the AI needs the owner (`awaiting-tool-response`)
+    /// or the build is finished and shippable (`ready-to-deploy`/`deploying`/
+    /// `deployed`). The chat screen is where the owner replies to the AI AND
+    /// taps Deploy — making it the single interaction+deploy surface for a
+    /// scratch build.
+    private func startStatusRouter() {
+        routeTask?.cancel()
+        routeTask = Task { @MainActor in
+            while !Task.isCancelled && !routed {
+                do {
+                    let st = try await client.vibeCodeStatus(sessionId: sessionId)
+                    if ["awaiting-tool-response", "ready-to-deploy", "deploying", "deployed"].contains(st.status) {
+                        routed = true
+                        if path.last != .vibeCodeChat(sessionId: sessionId) {
+                            path.append(.vibeCodeChat(sessionId: sessionId))
+                        }
+                        break
+                    }
+                } catch {
+                    // transient — keep polling
+                }
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
             }
         }
     }
@@ -743,10 +842,39 @@ struct InviteManageContainer: View {
     }
 
     private func appLabel(for serviceId: String) -> String {
-        if let dashIdx = serviceId.firstIndex(of: "-") {
-            return String(serviceId[serviceId.index(after: dashIdx)...]).capitalized
+        if let delim = serviceId.range(of: "--") {
+            return String(serviceId[delim.upperBound...]).capitalized
         }
         return serviceId
+    }
+}
+
+/// #92 — host for the per-service access-gating ("Who can open this") admin
+/// surface. Resolves the box this service runs on (the daemon there pins the
+/// owner IRK as `serverId`, so the set-mode + redeem envelopes target it,
+/// matching the env-editor / uninstall resolution) + the current username.
+struct ServiceAccessContainer: View {
+    let serviceId: String
+    @Environment(AppState.self) private var app
+
+    private var serverDomain: String {
+        app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown"
+    }
+
+    private var serviceLabel: String {
+        if let delim = serviceId.range(of: "--") {
+            return String(serviceId[delim.upperBound...]).capitalized
+        }
+        return serviceId
+    }
+
+    var body: some View {
+        ServiceAccessScreen(
+            serverDomain: serverDomain,
+            serviceRef: serviceId,
+            serviceLabel: serviceLabel,
+            username: app.currentUser ?? "you"
+        )
     }
 }
 
@@ -761,7 +889,7 @@ private func resolveAppShareUrl(serviceId: String, client: any ScreensClient) as
     if let url = try? await client.appDetail(serviceId: serviceId).app.url {
         return url
     }
-    return "https://\(serviceId).flagship.services"
+    return "https://\(serviceId).\(Endpoints.dataApex)"
 }
 
 // P6 — Issue container. Owns the issue ViewModel; on success the
@@ -799,8 +927,8 @@ struct InviteIssueContainer: View {
     }
 
     private func appLabel(for serviceId: String) -> String {
-        if let dashIdx = serviceId.firstIndex(of: "-") {
-            return String(serviceId[serviceId.index(after: dashIdx)...]).capitalized
+        if let delim = serviceId.range(of: "--") {
+            return String(serviceId[delim.upperBound...]).capitalized
         }
         return serviceId
     }

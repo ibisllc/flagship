@@ -15,19 +15,19 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  signInstallService,
   verifyInstallService,
   type InstallServiceRequest,
-  type Keypair,
 } from "@flagship/protocol";
-import type { CommandRunner } from "../serviceRunner.js";
+import { runDockerBuild, type CommandRunner } from "../serviceRunner.js";
 import type { ServicePlatform } from "../servicePlatform.js";
+import type { BoxSigner } from "../keyCustodian.js";
 import type { ForgejoAppAdmin } from "../forgejoServiceAdmin.js";
 import type { BuildJournal, BuildMode } from "./buildJournal.js";
 
 export interface DeployArtifactDeps {
   servicePlatform: ServicePlatform;
-  hostIrk: Keypair;
+  /** Box-identity signer (custodian slice) for the InstallServiceRequest. */
+  signer: Pick<BoxSigner, "signInstallService">;
   hostUsername: string;
   workingDir: string;
   cmd: CommandRunner;
@@ -88,7 +88,7 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
 
     const creator = deps.hostUsername;
     const slug = manifest.name;
-    const serviceId = `${creator}-${slug}`;
+    const serviceId = `${creator}--${slug}`; // docs/service-addressing-double-dash.md
     const appDir = join(deps.workingDir, serviceId);
 
     await note(buildId, mode, "build-started", `building ${slug}`);
@@ -128,7 +128,7 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
     const image = `flagship-vibe-${serviceId}:${revision}`.toLowerCase();
     await note(buildId, mode, "build-phase", "docker build");
     try {
-      await deps.cmd.run("docker", ["build", "-t", image, appDir]);
+      await runDockerBuild(deps.cmd, image, appDir);
     } catch (e) {
       await note(buildId, mode, "error", `docker build failed`);
       return { ok: false, reason: `docker build failed: ${(e as Error).message}` };
@@ -149,7 +149,7 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
       addOwnerToMembership: true,
       issuedAt: now(),
     };
-    const signature = signInstallService(request, deps.hostIrk);
+    const signature = deps.signer.signInstallService(request);
     const installResult = await deps.servicePlatform.install({ request, signature, verify: verifyInstallService });
     if (!installResult.ok) {
       await note(buildId, mode, "error", `install rejected: ${installResult.reason}`);

@@ -26,21 +26,21 @@
     <main>
       <!-- View 1: First run — passphrase to wrap a fresh UMK -->
       <section id="view-bootstrap" class="hidden">
-        <h2>Set up this device</h2>
+        <h2>Get started</h2>
         <div class="card warning">
           <p class="note">The webapp stores your master key in this browser. Native iOS / Android apps use Secure Enclave or StrongBox and are stronger.</p>
           <a class="pill" href="https://flagshipserver.com/security.html">Read the trade-offs →</a>
         </div>
         <div class="card">
-          <p class="note">Pick a passphrase. We use it to encrypt your local key — flagshipserver.com never sees it.</p>
-          <input id="bootstrap-passphrase" type="password" placeholder="Passphrase" autocomplete="new-password" />
-          <input id="bootstrap-passphrase-2" type="password" placeholder="Confirm" autocomplete="new-password" class="mt-2" />
-          <button id="bootstrap-go" class="full-width mt-3">Generate device key</button>
+          <p class="note">New here? You'll get a free, random handle — you can change it later.</p>
+          <button id="bootstrap-create" class="full-width">Create a new account</button>
         </div>
         <div class="card mt-2">
-          <p class="note">Already have an account on another browser? Recover with your passkey.</p>
-          <button class="secondary full-width" id="bootstrap-recover">Recover from passkey</button>
+          <p class="note">Already have an account? Enter your username to sign in.</p>
+          <input id="bootstrap-username" type="text" placeholder="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" />
+          <button id="bootstrap-continue" class="secondary full-width mt-2">Sign in</button>
         </div>
+        <div id="bootstrap-access" class="card mt-2 hidden"></div>
       </section>
 
       <!-- View 2: Locked — passphrase to unwrap UMK -->
@@ -92,10 +92,18 @@
             <span class="label">Status</span>
             <span class="pill" id="session-status">unpaired</span>
           </div>
-          <div class="row-2">
-            <button class="secondary" id="pair-with-server">Pair to a server</button>
-            <button class="secondary" id="open-pod-pair">Pod pairing</button>
-          </div>
+          <details class="advanced-disclosure mt-2">
+            <summary>Advanced — connect to an existing server manually</summary>
+            <p class="note mt-2">
+              Most people just tap <strong>Add a server</strong> above — new
+              servers pair automatically. Use these only to connect this
+              browser to a server you already run.
+            </p>
+            <div class="row-2 mt-2">
+              <button class="secondary" id="pair-with-server">Scan a server QR</button>
+              <button class="secondary" id="open-pod-pair">Enter a server URL</button>
+            </div>
+          </details>
         </div>
 
         <h2 class="mt-5">Identity</h2>
@@ -109,12 +117,12 @@
                (fully-scoped or legacy single-IRK) session. -->
           <div id="home-device-capability" class="hidden mt-1"></div>
           <div class="row">
-            <span class="label">IRK pubkey</span>
+            <span class="label">Account key</span>
             <span class="value" id="home-irkpub">…</span>
           </div>
         </div>
 
-        <h2 class="mt-5">AI providers</h2>
+        <h2 class="mt-5">AI keys</h2>
         <div class="card" id="home-active-provider">
           <p class="note">loading…</p>
         </div>
@@ -197,27 +205,59 @@
         <div class="fs-group-section">
           <div class="fs-group-header">ACCOUNT</div>
           <div class="fs-group">
-            <button class="fs-row" id="settings-tab-providers"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI providers</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-account-security"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Account security</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-push"><span class="fs-row-icon icon" data-row-icon="push"></span><span class="fs-row-body"><span class="fs-row-title">Browser notifications</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-          </div>
-        </div>
-
-        <div class="fs-group-section">
-          <div class="fs-group-header">RECOVERY &amp; DEVICES</div>
-          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-providers"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI keys</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-trusted-devices"><span class="fs-row-icon icon" data-row-icon="devices"></span><span class="fs-row-body"><span class="fs-row-title">Trusted devices</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-sessions"><span class="fs-row-icon icon" data-row-icon="sessions"></span><span class="fs-row-body"><span class="fs-row-title">Browser sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-peer-backup"><span class="fs-row-icon icon" data-row-icon="backup"></span><span class="fs-row-body"><span class="fs-row-title">Peer-backup</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-companion-dock"><span class="fs-row-icon icon" data-row-icon="dock"></span><span class="fs-row-body"><span class="fs-row-title">Dock a browser</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-companion-requests"><span class="fs-row-icon icon" data-row-icon="requests"></span><span class="fs-row-body"><span class="fs-row-title">Companion requests</span></span><span id="companion-requests-badge" class="fs-row-badge hidden" aria-label="pending companion requests">0</span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-backup-key"><span class="fs-row-icon icon" data-row-icon="backupkey"></span><span class="fs-row-body"><span class="fs-row-title">Back up account key</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-profiles"><span class="fs-row-icon icon" data-row-icon="profiles"></span><span class="fs-row-body"><span class="fs-row-title">Profiles</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>
         </div>
 
         <div class="fs-group-section">
-          <div class="fs-group-header">ADVANCED</div>
+          <div class="fs-group-header">DEVICES</div>
+          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-trusted-devices"><span class="fs-row-icon icon" data-row-icon="devices"></span><span class="fs-row-body"><span class="fs-row-title">Trusted devices</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-sessions"><span class="fs-row-icon icon" data-row-icon="sessions"></span><span class="fs-row-body"><span class="fs-row-title">Browser sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-companion-dock"><span class="fs-row-icon icon" data-row-icon="dock"></span><span class="fs-row-body"><span class="fs-row-title">Dock a browser</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-companion-requests"><span class="fs-row-icon icon" data-row-icon="requests"></span><span class="fs-row-body"><span class="fs-row-title">Companion requests</span></span><span id="companion-requests-badge" class="fs-row-badge hidden" aria-label="pending companion requests">0</span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+          </div>
+        </div>
+
+        <div class="fs-group-section">
+          <div class="fs-group-header">WEB ACCESS</div>
+          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-secured-sessions"><span class="fs-row-icon icon" data-row-icon="secured"></span><span class="fs-row-body"><span class="fs-row-title">Open secured sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-process-url"><span class="fs-row-icon icon" data-row-icon="processurl"></span><span class="fs-row-body"><span class="fs-row-title">Process URL</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+          </div>
+        </div>
+
+        <div class="fs-group-section">
+          <div class="fs-group-header">BACKUP &amp; PEERS</div>
+          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-peer-backup"><span class="fs-row-icon icon" data-row-icon="backup"></span><span class="fs-row-body"><span class="fs-row-title">Peer-backup</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+          </div>
+        </div>
+
+        <div class="fs-group-section">
+          <div class="fs-group-header">APP</div>
+          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-appearance"><span class="fs-row-icon icon" data-row-icon="appearance"></span><span class="fs-row-body"><span class="fs-row-title">Appearance</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-push"><span class="fs-row-icon icon" data-row-icon="push"></span><span class="fs-row-body"><span class="fs-row-title">Notifications</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-privacy"><span class="fs-row-icon icon" data-row-icon="privacy"></span><span class="fs-row-body"><span class="fs-row-title">Privacy</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-about"><span class="fs-row-icon icon" data-row-icon="about"></span><span class="fs-row-body"><span class="fs-row-title">About</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+          </div>
+        </div>
+
+        <div class="fs-group-section">
+          <div class="fs-group-header">DANGER ZONE</div>
+          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-reset"><span class="fs-row-icon fs-row-icon--danger icon" data-row-icon="reset"></span><span class="fs-row-body"><span class="fs-row-title">Remove this device</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-account-delete"><span class="fs-row-icon fs-row-icon--danger icon" data-row-icon="accountdelete"></span><span class="fs-row-body"><span class="fs-row-title">Delete account</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+          </div>
+        </div>
+
+        <div class="fs-group-section">
+          <div class="fs-group-header">DEVELOPER</div>
           <div class="card stack-md">
             <label class="inline-check">
               <input type="checkbox" id="settings-debug-toggle" /> Show developer tools
@@ -227,17 +267,61 @@
             </p>
             <div id="settings-developer-row" class="hidden">
               <button class="secondary full-width" id="settings-tab-orders-debug">Send order (debug)</button>
-              <button class="secondary full-width mt-2" id="settings-tab-create-server">Create a server (draft composer)</button>
+              <button class="secondary full-width mt-2" id="settings-tab-create-server">Create a server</button>
             </div>
           </div>
         </div>
+      </section>
 
-        <div class="fs-group-section">
-          <div class="fs-group-header">DANGER ZONE</div>
-          <div class="fs-group">
-            <button class="fs-row" id="settings-tab-reset"><span class="fs-row-icon fs-row-icon--danger icon" data-row-icon="reset"></span><span class="fs-row-body"><span class="fs-row-title">Reset device</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-          </div>
+      <!-- Settings → App → Appearance. Static: the webapp keeps a fixed
+           dark surface by design so server screens read the same anywhere. -->
+      <section id="view-appearance" class="hidden">
+        <h2>Appearance</h2>
+        <div class="card">
+          <p class="note">
+            The Flagship app uses a single dark theme so your server screens
+            read the same on every device. There's nothing to configure here
+            yet — theme options are coming in a later release.
+          </p>
         </div>
+        <button class="secondary full-width mt-2" id="appearance-back">← Back</button>
+      </section>
+
+      <!-- Settings → App → Privacy. Static: restate the core privacy model. -->
+      <section id="view-privacy" class="hidden">
+        <h2>Privacy</h2>
+        <div class="card">
+          <p class="note">
+            Your server runs on your own hardware and terminates its own TLS,
+            so flagshipserver.com cannot read your content — it only relays
+            encrypted traffic and holds your account identity. Your account key
+            never leaves your devices.
+          </p>
+        </div>
+        <div class="card mt-2">
+          <a class="pill" href="https://flagshipserver.com/security/disclosure.html" target="_blank" rel="noopener">
+            Read the security disclosure →
+          </a>
+        </div>
+        <button class="secondary full-width mt-2" id="privacy-back">← Back</button>
+      </section>
+
+      <!-- Settings → App → About. Static: what Flagship is + links. -->
+      <section id="view-about" class="hidden">
+        <h2>About Flagship</h2>
+        <div class="card">
+          <p class="note">
+            Flagship is a personal cloud you own end to end: your phone is the
+            trust root, your server runs on commodity hardware you control, and
+            flagshipserver.com literally can't read your content.
+          </p>
+        </div>
+        <div class="card mt-2">
+          <div class="row"><span class="label">License</span><span class="value">BUSL-1.1</span></div>
+          <div class="row"><span class="label">Home</span><span class="value"><a href="https://flagshipserver.com/" target="_blank" rel="noopener">flagshipserver.com</a></span></div>
+          <div class="row"><span class="label">Report an issue</span><span class="value"><a href="https://flagshipserver.com/security/report.html" target="_blank" rel="noopener">Security report</a></span></div>
+        </div>
+        <button class="secondary full-width mt-2" id="about-back">← Back</button>
       </section>
 
       <!-- View 6: Pod pairing — sign an add-paired-session order, persist token -->
@@ -315,6 +399,45 @@
         </div>
       </section>
 
+      <!-- Service access gating: admin allow-list (docs/service-access-gating.md) -->
+      <section id="view-service-access" class="hidden">
+        <h2>Access</h2>
+        <div id="service-access-content"></div>
+        <div class="row-2">
+          <button class="secondary" id="service-access-refresh">Refresh</button>
+          <button class="secondary" id="service-access-back">← Back</button>
+        </div>
+      </section>
+
+      <!-- Service access gating: friend redeem deep-link (/invite#<secret>) -->
+      <section id="view-invite-redeem" class="hidden">
+        <h2>Invite</h2>
+        <div id="invite-redeem-content"></div>
+      </section>
+
+      <!-- Web-experience gating: "Process URL" authorize (paste a flagship://access link) -->
+      <section id="view-access-authorize" class="hidden">
+        <h2>Authorize a site</h2>
+        <div id="access-authorize-content"></div>
+        <div class="row-2">
+          <button class="secondary" id="access-authorize-back">← Back</button>
+        </div>
+      </section>
+
+      <!-- Web-experience gating: held secured sessions (status / stop) -->
+      <section id="view-secured-sessions" class="hidden">
+        <h2>Secured sessions</h2>
+        <p class="note">
+          Browsers you let into restricted sites with "Process URL". Refresh to
+          check if one's still in, or Stop to sign it out.
+        </p>
+        <div id="secured-sessions-content"></div>
+        <div class="row-2">
+          <button class="secondary" id="secured-sessions-refresh">Refresh</button>
+          <button class="secondary" id="secured-sessions-back">← Back</button>
+        </div>
+      </section>
+
       <!-- View 10: Browser sessions (P2.8) -->
       <section id="view-paired-sessions" class="hidden">
         <h2>Browser sessions</h2>
@@ -386,6 +509,25 @@
 
         <div id="vc-messages" class="vc-chat-log" aria-live="polite">
           <div class="card placeholder">Say what you'd like to build to get started.</div>
+        </div>
+
+        <!-- First-turn settings: YOU name it + choose who can see it. (The AI
+             was chosen on the previous step — not asked again.) Hidden once the
+             session has started. -->
+        <div class="vc-first-turn" id="vc-first-turn">
+          <label class="field">
+            <span class="field-label">Name</span>
+            <input id="vc-name" type="text" autocapitalize="none" autocorrect="off"
+                   spellcheck="false" placeholder="plant-tracker">
+            <span class="note">Lowercase letters, digits, and dashes — this is its web address.</span>
+          </label>
+          <label class="field">
+            <span class="field-label">Visible to</span>
+            <select id="vc-visibility">
+              <option value="just-me">Just me</option>
+              <option value="link">Anyone with the link</option>
+            </select>
+          </label>
         </div>
 
         <!-- Composer: textarea + attach affordance + attachment chips -->
@@ -666,6 +808,21 @@
           </label>
           <p id="cs-encrypt-disk-hint" class="faint-sm">On by default: the disk is encrypted and unlocks over the network at boot, so your data is unreadable if the box is stolen. Turn this off only for a box that <strong>can't keep a network connection at boot</strong> (e.g. Wi-Fi-only) — it'll boot without needing the network, but the disk is then <strong>not encrypted</strong>, which is less safe.</p>
 
+          <label class="inline-check mt-3">
+            <input type="checkbox" id="cs-advanced" /> Advanced mode
+          </label>
+          <p class="faint-sm">For people who know what they're doing.</p>
+          <div id="cs-advanced-options" class="hidden">
+            <label class="inline-check mt-2">
+              <input type="checkbox" id="cs-embed-secrets" /> Embed secrets for offline install
+            </label>
+            <p id="cs-embed-secrets-hint" class="faint-sm">This embeds security keys directly in the recipe. Hence, the server will be able to boot even if the phone is offline.</p>
+            <label class="inline-check mt-2">
+              <input type="checkbox" id="cs-debug-friendly" /> Debug-friendly server
+            </label>
+            <p id="cs-debug-friendly-hint" class="faint-sm">Anyone with physical access to this server can log into its console. Only turn this on for a server you're actively debugging.</p>
+          </div>
+
           <div class="row-2 mt-2">
             <button class="secondary" id="cs-save-draft">Save draft</button>
             <button class="secondary" id="cs-new">New</button>
@@ -722,6 +879,19 @@
       </section>
 
       <!-- View 20: Post-recovery reattach progress (J.4) -->
+      <!-- Post-recovery device-disposition choice (L4) — shown right
+           after a cloud-passkey recovery, BEFORE deciding whether to
+           rotate the account identity. Parity with iOS
+           PostRecoveryChoiceScreen. Options are rendered by
+           views/post-recovery-choice.js from the pure copy model. -->
+      <section id="view-post-recovery-choice" class="hidden">
+        <h2>Welcome back</h2>
+        <p class="note">How should this device relate to your other trusted devices?</p>
+        <div id="post-recovery-choice-options"></div>
+        <button class="primary full-width mt-3" id="post-recovery-choice-continue">Continue</button>
+        <button class="secondary full-width mt-2" id="post-recovery-choice-back">← Back</button>
+      </section>
+
       <section id="view-post-recovery" class="hidden">
         <h2>Reattach progress</h2>
         <div class="card warning">
@@ -830,6 +1000,7 @@
       <!-- View 5: Settings — providers, identity, reset. -->
       <section id="view-settings" class="hidden">
         <h2>AI providers</h2>
+        <div id="promo-balance" class="hidden"></div>
         <div id="providers-list"></div>
         <button id="add-provider-go" class="full-width mt-2">+ Add provider</button>
 
@@ -922,6 +1093,34 @@
           <button class="secondary full-width mt-2" id="settings-reset">Remove this device from account</button>
         </div>
         <button class="secondary full-width mt-2" id="settings-back">← Back</button>
+      </section>
+
+      <!-- Account-deletion ceremony — last-device, no-recovery account DEATH.
+           Reached from the recovery-gated Session/Danger-zone buttons when there
+           is no other device + no cloud recovery. -->
+      <section id="view-account-delete" class="hidden">
+        <h2>Delete your account</h2>
+        <div class="card danger-zone">
+          <p class="weight-600">This permanently deletes <span id="account-delete-username"></span>.</p>
+          <p class="note mt-2">This is the last device on this account and there is no cloud recovery, so removing it ends the account. There is no undo — no passkey, no other device, no reset.</p>
+          <ul class="note mt-2">
+            <li>Your username is <strong>permanently lost</strong> and may be claimed by someone else.</li>
+            <li>Your servers stop being reachable and manageable. If you want to keep one, <strong>transfer it first</strong> from its server page, then come back.</li>
+            <li>The account key on this device is erased.</li>
+          </ul>
+        </div>
+        <div class="card mt-2">
+          <label class="row">
+            <input type="checkbox" id="account-delete-wipe-content" />
+            <span class="note">Ask all my servers to delete their content. Offline servers act on next boot. Leave off to just orphan them — their sealed data stays on disk but goes dark.</span>
+          </label>
+        </div>
+        <div class="card mt-2">
+          <p class="note">To confirm, type your username <strong id="account-delete-confirm-prompt"></strong>:</p>
+          <input id="account-delete-confirm-input" type="text" placeholder="username" autocomplete="off" autocapitalize="off" spellcheck="false" />
+          <button id="account-delete-go" class="full-width mt-3" disabled>Delete my account</button>
+        </div>
+        <button class="secondary full-width mt-2" id="account-delete-back">← Cancel</button>
       </section>
 
       <!-- View 4: Pairing — webapp scans a server's QR to take on the "phone" role -->

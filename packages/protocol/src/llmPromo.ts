@@ -20,7 +20,16 @@ import type { Bytes, Keypair } from "./types.js";
 // Worker storing the plaintext.
 // ──────────────────────────────────────────────────────────────────────
 
-export type LlmProvider = "anthropic" | "openai" | "google";
+/**
+ * `"flagship"` is the in-house inference posture: a Flagship-hosted,
+ * OpenAI-compatible coding model (vLLM on RunPod). It is minted the same
+ * way as the upstream providers (a signed promo-issue request), but the
+ * key is a `.com`-scoped short-lived token and the box talks to our
+ * blessed endpoint — the box-side adapter is the OpenAI one (RunPod/vLLM
+ * serves `/v1/chat/completions`). Adding a value here does NOT change the
+ * canonical-bytes field order, so pinned signature vectors stay valid.
+ */
+export type LlmProvider = "anthropic" | "openai" | "google" | "flagship";
 
 export interface LlmPromoIssueRequest {
   username: string;

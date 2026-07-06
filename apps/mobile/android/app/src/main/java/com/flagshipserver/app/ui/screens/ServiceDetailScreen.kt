@@ -204,7 +204,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
 
                 Spacer(Modifier.height(FS.space.s3))
                 SetCustomDomainSection(
-                    rootDomain = "${appState.currentUser.value ?: "you"}.flagship.services",
+                    rootDomain = com.flagshipserver.app.core.Endpoints.userZoneHost(appState.currentUser.value ?: "you"),
                     cooldownUntilMs = renameVm.customDomainCooldownUntilMs.collectAsState().value,
                     onSubmit = { draft -> scope.launch { renameVm.submitCustomDomain(draft) } },
                 )
@@ -261,6 +261,29 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                             Text("Manage collaborators", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
                             Text(
                                 "Issue invites + revoke active access",
+                                color = FS.colors.textMuted,
+                                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                            )
+                        }
+                        Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
+                    }
+                }
+
+                // ── Who can open this (#92) ────────────────────────────
+                Spacer(Modifier.height(FS.space.s4))
+                SectionHeader("Who can open this")
+                FSCard(
+                    padding = PaddingValues(FS.space.s4),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { testTag = "service-detail-access-row" }
+                        .clickable { nav.navigate("service-access/$serviceId") },
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Manage access", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
+                            Text(
+                                "Open to anyone, or restrict to people you invite",
                                 color = FS.colors.textMuted,
                                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
                             )
@@ -439,7 +462,7 @@ private fun Header(app: AppSummary) {
         color = FS.colors.textMuted,
         style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
     )
-    // `id:` is the IMMUTABLE composite package id (`<creator>-<slug>`, single
+    // `id:` is the IMMUTABLE composite package id (`<creator>--<slug>`, double
     // dash). It never changes — Replace only rotates the user-facing URL stem.
     Text(
         text = buildString {
@@ -597,13 +620,13 @@ private fun WebDomainsSection(
             HorizontalRule()
 
             UrlGroupLabel("CANONICAL (SHARED BY ALL INSTANCES)")
-            UrlRowNormal(url = links?.canonicalUrl ?: "https://$stem.$user.flagship.services")
+            UrlRowNormal(url = links?.canonicalUrl ?: "https://$stem.$user.${com.flagshipserver.app.core.Endpoints.dataApex}")
 
             if (selectedPods.isNotEmpty()) {
                 HorizontalRule()
                 UrlGroupLabel("INDIVIDUAL INSTANCES")
                 selectedPods.forEach { pod ->
-                    UrlRowMuted(url = "https://$stem.${SlugUtil.slugify(pod.name)}.$user.flagship.services")
+                    UrlRowMuted(url = "https://$stem.${SlugUtil.slugify(pod.name)}.$user.${com.flagshipserver.app.core.Endpoints.dataApex}")
                 }
             }
         }

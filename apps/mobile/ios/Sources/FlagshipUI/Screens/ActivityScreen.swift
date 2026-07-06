@@ -12,6 +12,8 @@ public struct ActivityScreen: View {
     let currentPodId: String?
     let leaderPodId: String?
     var onPickPod: (PodInfo) -> Void = { _ in }
+    /// "All servers" filter selection — clears the per-server scoping.
+    var onPickAll: () -> Void = {}
     var onOpenApprovals: () -> Void = {}
     var onOpenPostRecovery: () -> Void = {}
     /// P5 — push the dedicated full-page audit-log viewer.
@@ -24,6 +26,7 @@ public struct ActivityScreen: View {
         currentPodId: String? = nil,
         leaderPodId: String? = nil,
         onPickPod: @escaping (PodInfo) -> Void = { _ in },
+        onPickAll: @escaping () -> Void = {},
         onOpenApprovals: @escaping () -> Void = {},
         onOpenPostRecovery: @escaping () -> Void = {},
         onOpenAuditLog: @escaping () -> Void = {},
@@ -34,6 +37,7 @@ public struct ActivityScreen: View {
         self.currentPodId = currentPodId
         self.leaderPodId = leaderPodId
         self.onPickPod = onPickPod
+        self.onPickAll = onPickAll
         self.onOpenApprovals = onOpenApprovals
         self.onOpenPostRecovery = onOpenPostRecovery
         self.onOpenAuditLog = onOpenAuditLog
@@ -42,7 +46,14 @@ public struct ActivityScreen: View {
 
     @ViewBuilder private var podSwitcherIfMulti: some View {
         if pods.count > 1 {
-            PodSwitcher(pods: pods, currentPodId: currentPodId, leaderPodId: leaderPodId, onPick: onPickPod)
+            PodSwitcher(
+                pods: pods,
+                currentPodId: currentPodId,
+                leaderPodId: leaderPodId,
+                onPick: onPickPod,
+                allLabel: "All servers",
+                onPickAll: onPickAll
+            )
         }
     }
 
@@ -50,15 +61,19 @@ public struct ActivityScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
+                // ALWAYS reachable, OUTSIDE the state switch: a box waiting for
+                // an unlock/entitlement approval is exactly the case where the
+                // daemon BFF (and thus this feed) can't load, so gating the
+                // approvals entry behind `.loaded` hid it precisely when needed.
+                section("BOX APPROVALS", c: c) {
+                    approvalsEntryCard(c: c)
+                }
                 switch state {
                 case .idle, .loading:
                     skeletons
                 case .failed(let msg):
                     ErrorCard(message: msg)
                 case .loaded(let feed):
-                    section("BOX APPROVALS", c: c) {
-                        approvalsEntryCard(c: c)
-                    }
                     if let snap = feed.postRecovery {
                         section("POST-RECOVERY", c: c) {
                             postRecoveryCard(snap, c: c)
@@ -111,6 +126,8 @@ public struct ActivityScreen: View {
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Activity")
         .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
+        // Top-right, above the large title. The PodSwitcher now presents its
+        // panel as a popover, so it is no longer clipped by the nav bar here.
         .toolbar {
             if pods.count > 1 {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -299,9 +316,6 @@ public struct ActivityScreen: View {
         }
     }
     private func relative(ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = RelativeDateTimeFormatter()
-        fmt.unitsStyle = .abbreviated
-        return fmt.localizedString(for: date, relativeTo: Date())
+        Date.flagshipFormatted(epochMs: ms)
     }
 }

@@ -146,4 +146,40 @@ describe("InMemoryAlertInbox", () => {
     });
     expect(id3).toBe(3);
   });
+
+  it("#91 ai-chat-needs-you dedupes by (sessionId, toolUseId) but a new tool re-alerts", () => {
+    const inbox = new InMemoryAlertInbox();
+    const id1 = inbox.emit({
+      kind: "ai-chat-needs-you",
+      serviceId: "sess-abc",
+      request: "talkToUser",
+      toolUseId: "tool-1",
+    });
+    expect(id1).toBe(1);
+    // The SAME pending tool re-firing (notify hook re-emit) must not flood.
+    const dup = inbox.emit({
+      kind: "ai-chat-needs-you",
+      serviceId: "sess-abc",
+      request: "talkToUser",
+      toolUseId: "tool-1",
+    });
+    expect(dup).toBeNull();
+    // The AI emits its NEXT tool in the same session — a genuinely new event.
+    const id2 = inbox.emit({
+      kind: "ai-chat-needs-you",
+      serviceId: "sess-abc",
+      request: "requestEnvVar",
+      toolUseId: "tool-2",
+    });
+    expect(id2).toBe(2);
+    // A different session is independent.
+    const id3 = inbox.emit({
+      kind: "ai-chat-needs-you",
+      serviceId: "sess-xyz",
+      request: "talkToUser",
+      toolUseId: "tool-1",
+    });
+    expect(id3).toBe(3);
+    expect(inbox.size()).toBe(3);
+  });
 });

@@ -80,10 +80,11 @@
                   ui-sans-serif, system-ui, sans-serif;
   --font-mono:    "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  --radius-sm: 8px;
-  --radius:    12px;
-  --radius-lg: 18px;
-  --radius-xl: 22px;
+  /* Radii unified to the cross-surface scale {6,10,16} (S4). */
+  --radius-sm: 6px;
+  --radius:    10px;
+  --radius-lg: 16px;
+  --radius-xl: 16px;
   --radius-pill: 999px;
 
   --shadow-flat:    0 1px 0 rgba(0,0,0,0.5);
@@ -135,6 +136,18 @@ body {
     env(safe-area-inset-right)
     env(safe-area-inset-bottom)
     env(safe-area-inset-left);
+  /* Reserve REAL space for the fixed top slivers (teal ops bar + red trust
+     bar) on the root app container, not just the sticky header. The whole app
+     viewport shrinks by the bar heights, so EVERY view's content — and any
+     non-header chrome above the fold — shifts down and nothing is ever covered
+     (the header-only offset left modal/overlay/view content under the bars).
+     Mirrors the iOS/Android push-down. `box-sizing:border-box` (global reset)
+     means this padding lives inside the 100dvh min-height — no spurious scroll.
+     The transition animates the shrink in lockstep with the bars' slide. */
+  padding-top: calc(
+    env(safe-area-inset-top) + var(--ops-bar-h, 0px) + var(--trust-bar-h, 0px)
+  );
+  transition: padding-top 220ms cubic-bezier(0.22, 1, 0.36, 1);
   background:
     radial-gradient(circle at 80% -10%, var(--accent-soft), transparent 38%),
     radial-gradient(circle at 0% 100%, color-mix(in srgb, var(--accent) 4%, transparent), transparent 50%),
@@ -161,7 +174,7 @@ body {
   gap: var(--space-2);
   height: 0;
   overflow: hidden;
-  padding: 0 22px;
+  padding: 0 24px;
   background: linear-gradient(180deg, var(--teal-bright), var(--teal));
   color: #fff;
   cursor: pointer;
@@ -250,7 +263,7 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 0 22px;
+  padding: 0 24px;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -287,10 +300,15 @@ body {
 header {
   position: sticky;
   /* Tuck below the operations sliver + the trust sliver when shown (each var
-     is 0 when its bar is collapsed). */
-  top: calc(var(--ops-bar-h, 0px) + var(--trust-bar-h, 0px));
+     is 0 when its bar is collapsed). The safe-area inset matches the bars'
+     own padding-top so the header pins exactly flush beneath them while
+     scrolling on notched devices (the body padding already reserves the
+     initial space). */
+  top: calc(
+    env(safe-area-inset-top, 0px) + var(--ops-bar-h, 0px) + var(--trust-bar-h, 0px)
+  );
   z-index: 10;
-  padding: 18px 22px 14px;
+  padding: 16px 24px 12px;
   background: color-mix(in srgb, var(--canvas) 78%, transparent);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
@@ -330,7 +348,7 @@ header .subtitle {
 }
 
 main {
-  padding: var(--space-5) 22px calc(var(--space-8) + env(safe-area-inset-bottom, 0px));
+  padding: var(--space-5) var(--space-6) calc(var(--space-8) + env(safe-area-inset-bottom, 0px));
   /* Tab bar fixed at the bottom of the viewport on ≤768px — pad main
    * so the last card of every view never sits under it. The 80px figure
    * is tab-bar height (64) + a 16px optical breathing room. */
@@ -376,7 +394,7 @@ section h3 {
 .card {
   background: var(--surface);
   border: 1px solid var(--border-soft);
-  padding: 16px 18px;
+  padding: 16px 20px;
   border-radius: var(--radius);
   margin-bottom: 10px;
   box-shadow: var(--shadow-flat);
@@ -435,7 +453,8 @@ button, .btn {
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 14px;
-  padding: 11px 18px;
+  min-height: 44px;
+  padding: 12px 20px;
   border-radius: var(--radius-pill);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -463,8 +482,8 @@ button.gated, .btn.gated { opacity: 0.45; }
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.72rem;
   line-height: 1.45;
-  background: var(--ink-soft, #f3f3f5);
-  border-radius: 8px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
   padding: 0.6rem 0.7rem;
 }
 
@@ -492,6 +511,43 @@ button.danger, .btn.danger {
   border-color: var(--err);
   color: var(--accent-on);
 }
+
+/* A quiet inline text-link button (e.g. the "Take over a box" affordance) —
+   no fill/border so it reads as a secondary link, not a primary action. */
+button.linklike, .btn.linklike {
+  display: inline-block;
+  width: auto;
+  min-height: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+button.linklike:hover, .btn.linklike:hover {
+  text-decoration: underline;
+}
+
+/* Advanced disclosure (Home session card): demotes the manual-pair paths
+   below the primary "Add a server" affordance without hiding them. */
+.advanced-disclosure > summary {
+  cursor: pointer;
+  color: var(--ink-muted);
+  font-size: 13px;
+  list-style: none;
+}
+.advanced-disclosure > summary::-webkit-details-marker { display: none; }
+.advanced-disclosure > summary::before {
+  content: "▸ ";
+  color: var(--ink-faint);
+}
+.advanced-disclosure[open] > summary::before { content: "▾ "; }
+
+/* A home server card is tappable to open its detail screen (the inner
+   action buttons still handle their own clicks). */
+.server-card.is-tappable { cursor: pointer; }
 
 /* ── Pill / status ──────────────────────────────────────────────── */
 .pill {
@@ -547,8 +603,8 @@ input[type="tel"], input[type="url"], input[type="number"], select, textarea {
   background: var(--canvas-tinted);
   color: var(--ink);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 11px 14px;
+  border-radius: var(--radius);
+  padding: 12px 14px;
   font: inherit;
   font-family: var(--font-sans);
   font-size: 14px;
@@ -618,7 +674,7 @@ select {
   gap: 8px;
 }
 #view-home .card button.secondary {
-  padding: 11px 12px;
+  padding: 12px 12px;
   font-size: 13px;
 }
 
@@ -648,7 +704,7 @@ code {
 /* Live frame in browser viewer */
 #bv-frame {
   background: #000 !important;
-  border-radius: 8px !important;
+  border-radius: var(--radius-sm) !important;
   border: 1px solid var(--border);
 }
 
@@ -746,7 +802,7 @@ section:not(.hidden) {
   gap: var(--space-3);
   padding: var(--space-3);
   border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
-  border-radius: var(--radius-2, 10px);
+  border-radius: var(--radius);
   cursor: pointer;
 }
 .secure-option input[type="radio"] { margin-top: 2px; flex: 0 0 auto; }
@@ -847,7 +903,7 @@ section:not(.hidden) {
   width: 100%;
   max-width: 320px;
   aspect-ratio: 1;
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: #000;
   display: block;
   margin: 0 auto;
@@ -894,10 +950,11 @@ section:not(.hidden) {
 /* Tighter button-row used inside list-card actions. */
 .btn-row-sm { display: flex; gap: var(--space-1); }
 
-/* Extra-small button (revoke-lease, tab actions). */
+/* Extra-small button (revoke-lease, tab actions) — compact width but still
+   a 44px touch target (inherits min-height from the base button rule). */
 .btn-xs {
   font-size: 12px;
-  padding: 5px 10px;
+  padding: 8px 12px;
 }
 
 /* Compact card (file rows, etc.) with tighter padding. */
@@ -1127,7 +1184,7 @@ body.no-tabs .tab-bar { display: none; }
   background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  padding: 16px 18px;
+  padding: 16px 20px;
   margin-bottom: 10px;
 }
 @keyframes skeleton-shimmer {
@@ -1208,21 +1265,20 @@ body.no-tabs .tab-bar { display: none; }
 
 /* ── Empty state (#36) ──────────────────────────────────────────
  *
- * Used when the user has zero servers. Stacks an inline-SVG pennant
- * illustration over the headline + CTA. The illustration is 140px
- * tall on mobile so it reads as "empty space turned into a moment"
- * rather than just a missing-data state.
+ * Used when the user has zero servers. Stacks the brand mark (the
+ * pennant is retired) over the headline + CTA — sized as a calm ~112px
+ * glyph so it reads as "a moment", not a missing-data state.
  */
 .empty-state {
   text-align: center;
   padding: var(--space-6) var(--space-5);
 }
-.empty-pennant {
+.empty-mark {
   display: block;
-  width: 200px;
-  max-width: 80%;
-  height: 140px;
-  margin: 0 auto var(--space-3);
+  width: 112px;
+  max-width: 60%;
+  height: auto;
+  margin: 0 auto var(--space-4);
 }
 .empty-headline {
   font-family: var(--font-display);
@@ -1264,7 +1320,7 @@ body.no-tabs .tab-bar { display: none; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 22px 22px 20px;
+  padding: 24px 24px 20px;
   box-shadow: var(--shadow-resting);
 }
 .modal-title {
@@ -1284,6 +1340,18 @@ body.no-tabs .tab-bar { display: none; }
 .modal-input {
   width: 100%;
   margin-top: 4px;
+}
+.modal-suggest-name {
+  font-size: 26px;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 0.01em;
+  margin: 8px 0 14px;
+  word-break: break-all;
+}
+.modal-suggest-note {
+  text-align: center;
+  margin-top: 10px;
 }
 .modal-error {
   margin: 8px 0 0;
@@ -1395,7 +1463,7 @@ button[data-device-restricted] {
   margin-top: 12px;
   padding: 10px 12px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   color: var(--ink-muted);
   display: flex;
@@ -1421,7 +1489,7 @@ button[data-device-restricted] {
   align-items: start;
   padding: 10px 12px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .boot-unlock-option:hover { border-color: var(--border); }
@@ -1542,6 +1610,22 @@ button[data-device-restricted] {
 }
 .fs-chip.is-selected .fs-chip-count { color: color-mix(in srgb, var(--accent-on) 88%, transparent); }
 .fs-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Pod-switcher leader marker: a small teal flag next to the main server's
+   chip. Tinted with the accent so it reads as "leader" distinctly from the
+   teal `is-selected` background (which is the current-selection cue). On a
+   selected chip the accent-on ink keeps it visible against the teal fill. */
+.pod-switcher-leader {
+  display: inline-flex;
+  align-items: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 5px;
+  color: var(--accent);
+  vertical-align: middle;
+}
+.pod-switcher-leader svg { width: 14px; height: 14px; }
+.fs-chip.is-selected .pod-switcher-leader { color: var(--accent-on); }
 
 /* ── Search field ──────────────────────────────────────────────────── */
 .fs-search {
@@ -1819,9 +1903,9 @@ button[data-device-restricted] {
 .build-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; cursor: pointer; }
 .build-tile strong { font-size: 1rem; }
 .build-tile .note { margin: 0; }
-.badge { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 6px; background: var(--surface-2, #1c2530); font-size: 0.72rem; font-family: var(--font-mono); }
+.badge { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: var(--radius-sm); background: var(--surface-elev); font-size: 0.72rem; font-family: var(--font-mono); }
 .build-journal-timeline { list-style: none; padding: 0; margin: 0; }
-.build-journal-timeline li { padding: 8px 0; border-bottom: 1px solid var(--border, #243); }
+.build-journal-timeline li { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .build-journal-timeline li:last-child { border-bottom: none; }
 
 /* Build-from-scratch chat (vibe-code) */
@@ -1847,7 +1931,7 @@ button[data-device-restricted] {
 .vc-msg-user {
   align-self: flex-end;
   background: var(--accent-soft);
-  border-color: rgba(20, 184, 166, 0.3);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
   border-bottom-right-radius: var(--radius-sm);
 }
 .vc-msg-attachments { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }

@@ -72,6 +72,44 @@ data class ActivityFeed(
     val items: List<ActivityItem>,
 )
 
+/**
+ * Pure, Compose-free server-filter logic for the Activity feed, kept testable
+ * on the JVM (the same split as [PodSwitcherModel]). The feed mixes
+ * pod-attributable rows (install events, whose serviceId/detail can carry a
+ * `.<pod>.` subdomain segment) with account-wide rows (audit, recovery) that
+ * belong to no single server. So a server filter keeps account-wide rows
+ * ALWAYS visible and narrows only the attributable rows to those that mention
+ * the selected pod; "All servers" (podName == null) shows everything.
+ */
+object ActivityFeedFilter {
+    /** True if [item] should be shown when filtering to the pod named
+     *  [podName]. A null [podName] is "All servers" → everything passes. */
+    fun matches(item: ActivityItem, podName: String?): Boolean {
+        if (podName.isNullOrEmpty()) return true
+        return when (item) {
+            // Account-wide — never hidden by a server filter.
+            is ActivityItem.AuditEntry -> true
+            is ActivityItem.RecoverySnapshot -> true
+            // Pod-attributable: keep only when the event text names the pod as
+            // a complete dot-delimited LABEL — a segment boundary before it
+            // (start-of-text OR any non-[a-z0-9-] char, e.g. '.'/space) and a
+            // '.' immediately after. So a serviceId like "blog.home.harry…" AND
+            // a detail string naming "…to home.harry…" both match the pod
+            // "home", but "homestead.harry…" does NOT (home is not a full
+            // label). A bare ".pod." needle missed the boundary case (a pod
+            // that is the leftmost FQDN label, e.g. "home.harry…").
+            is ActivityItem.InstallEvent -> {
+                val pod = podName.lowercase()
+                val hay = ("${item.event.serviceId} ${item.event.detail ?: ""}").lowercase()
+                Regex("(^|[^a-z0-9-])" + Regex.escape(pod) + "\\.").containsMatchIn(hay)
+            }
+        }
+    }
+
+    fun apply(items: List<ActivityItem>, podName: String?): List<ActivityItem> =
+        items.filter { matches(it, podName) }
+}
+
 class ActivityViewModel(
     private val client: ScreensClient,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),

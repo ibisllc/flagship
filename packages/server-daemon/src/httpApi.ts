@@ -18,6 +18,11 @@ import { DataProvisioner, credentialsToEnv, type AppDataCredentials } from "./da
 import { buildLlmAppContext } from "./llmServiceContext.js";
 import { ForgejoAppAdmin } from "./forgejoServiceAdmin.js";
 import { BackupLoop } from "./backupLoop.js";
+import {
+  PB_FRAMES_PATH,
+  type PbFramesRequestBody,
+  type PbFramesResult,
+} from "./peerBackup/httpPeerLink.js";
 
 /**
  * The HTTP API surface that the Flagship server-daemon exposes for the phone
@@ -65,6 +70,12 @@ export interface DaemonContext {
    * mutation that doesn't go through the existing membership flow).
    */
   irkPubKey?: Bytes;
+  /**
+   * Optional peer-backup frames endpoint (box↔box shard transport). When
+   * set, POST /api/peer-backup/frames is live. The handler owns the STK
+   * envelope verification + owner-scoping (see peerBackup/httpPeerLink.ts).
+   */
+  peerBackupFrames?: (body: PbFramesRequestBody) => Promise<PbFramesResult>;
 }
 
 interface HexBytesField {
@@ -664,6 +675,24 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       return reply.status(500).send({ error: "revert failed", message: errMsg(e) });
     }
   });
+
+  // ---- Peer-backup shard transport (box↔box, STK-signed envelope) -------
+  //
+  // One POST per frame burst; hex-in-JSON like every other daemon body.
+  // The default Fastify bodyLimit (1 MiB) would cap shards at ~½ MiB after
+  // hex doubling, so this route gets its own limit. All authentication +
+  // owner-scoping lives in handlePbFramesRequest — this is a thin shim.
+  app.post<{ Body: PbFramesRequestBody }>(
+    PB_FRAMES_PATH,
+    { bodyLimit: 64 * 1024 * 1024 },
+    async (req, reply) => {
+      if (!ctx.peerBackupFrames) {
+        return reply.status(503).send({ error: "peer backup not configured" });
+      }
+      const r = await ctx.peerBackupFrames(req.body ?? {});
+      return reply.status(r.status).send(r.body);
+    },
+  );
 
   // ---- Per-server backup toggle (IRK-signed; runs the BackupLoop) -------
 

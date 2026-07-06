@@ -1,0 +1,76 @@
+name: Release guard (dev-mode backdoors)
+
+# Bucket-C item 4 (CLAUDE.md → "GA close-out TODO"): a forgotten dev-mode
+# bring-up backdoor must never silently ship. This gate FAILS a *release* build
+# while the burn-time-LUKS passphrase or the `debug:flagship` console-user
+# backdoor is still present in source. The normal dev/PR path stays GREEN with
+# the constants present — they are intentionally LEFT ENABLED for hardware
+# bring-up until GA, when the owner disarms Bucket-C items 2+3 and this gate goes
+# green under release enforcement.
+#
+# HOW THE RELEASE PATH IS TRIGGERED (two ways, both set RELEASE=1):
+#   1. Push a tag matching `release-*` or `v*` (e.g. `v1.0.0`, `release-2026-07`).
+#   2. Manually run this workflow (Actions → "Release guard" → Run workflow) with
+#      the `release` input set to `true`.
+# On any OTHER event (a normal PR, or a manual run with release=false) the guard
+# runs in ADVISORY mode: it reports any backdoors it finds but does NOT fail — so
+# the dev gate is never blocked while we are still pre-GA.
+#
+# The guard logic + its self-test live at scripts/release-guard.sh and
+# scripts/release-guard.test.ts (the unit test runs in the main CI suite).
+
+on:
+  push:
+    tags:
+      - "release-*"
+      - "v*"
+  pull_request:
+    paths:
+      - "scripts/release-guard.sh"
+      - "scripts/release-guard.test.ts"
+      - ".github/workflows/release-guard.yml"
+      - "packages/flagship-burner/src/userdata.ts"
+      - "apps/burner-mac/Sources/FlagshipBurnerCore/UserData.swift"
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Enforce as a RELEASE build (fail if a backdoor is present)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  release-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # A tag push is treated as a release. A manual dispatch honours the
+      # `release` input. Everything else (PRs) is advisory. We export RELEASE=1
+      # only for the enforcing cases; the script fails closed on RELEASE=1.
+      - name: Decide enforcement mode
+        id: mode
+        run: |
+          enforce=0
+          case "${{ github.ref }}" in
+            refs/tags/release-*|refs/tags/v*) enforce=1 ;;
+          esac
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
+             [ "${{ github.event.inputs.release }}" = "true" ]; then
+            enforce=1
+          fi
+          echo "enforce=$enforce" >> "$GITHUB_OUTPUT"
+          if [ "$enforce" = "1" ]; then
+            echo "Enforcing as a RELEASE build (a present backdoor FAILS this job)."
+          else
+            echo "Advisory run (PR / non-release): reports backdoors but does not fail."
+          fi
+
+      - name: Run the release guard
+        env:
+          RELEASE: ${{ steps.mode.outputs.enforce }}
+        run: bash scripts/release-guard.sh

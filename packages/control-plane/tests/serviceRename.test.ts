@@ -12,7 +12,7 @@ import {
 } from "../src/serviceRename.js";
 
 const USER = "alice";
-const APP = "meta-scratchpad"; // serviceId; default label: "scratchpad-meta"
+const APP = "meta--scratchpad"; // serviceId; default label: "scratchpad--meta"
 
 function makeKey(): Keypair {
   const priv = new Uint8Array(32);
@@ -145,12 +145,12 @@ describe("handleServiceRename — happy path", () => {
     const deps = makeDeps(s, {
       publishDns: async (_u, oldL, newL, app) => { captured = { oldL, newL, app }; },
     });
-    // First rename → records the default oldLabel ("scratchpad-meta").
+    // First rename → records the default oldLabel ("scratchpad--meta").
     await handleServiceRename(deps, USER, APP, signedBody({ irk, newDisplayLabel: "renamed" }));
     expect(captured).not.toBeNull();
     if (captured) {
       const c = captured as { oldL: string; newL: string; app: string };
-      expect(c.oldL).toBe("scratchpad-meta");
+      expect(c.oldL).toBe("scratchpad--meta");
       expect(c.newL).toBe("renamed");
       expect(c.app).toBe(APP);
     }
@@ -164,7 +164,7 @@ describe("handleServiceRename — happy path", () => {
     const audit = await s.auditEvents.list(USER, 0, 5);
     expect(audit.length).toBe(1);
     expect(audit[0]?.eventKind).toBe("app-renamed");
-    expect(audit[0]?.detail).toContain("scratchpad-meta");
+    expect(audit[0]?.detail).toContain("scratchpad--meta");
     expect(audit[0]?.detail).toContain("newname");
   });
 });
@@ -274,23 +274,23 @@ describe("handleGetAppLinks", () => {
     const res = await handleGetAppLinks(makeDeps(s), USER, APP);
     expect(res.status).toBe(200);
     const b = res.body as { displayLabel: string; canonicalUrl: string };
-    expect(b.displayLabel).toBe("scratchpad-meta");
-    expect(b.canonicalUrl).toBe("https://scratchpad-meta.home.alice.flagship.services");
+    expect(b.displayLabel).toBe("scratchpad--meta");
+    expect(b.canonicalUrl).toBe("https://scratchpad--meta.home.alice.flagship.services");
   });
 
-  it("parses a HYPHENATED slug correctly (split at first dash only)", async () => {
-    // serviceId `meta-notes-app`: creator=meta (hyphen-free username),
+  it("parses a HYPHENATED slug correctly (split at the -- delimiter)", async () => {
+    // serviceId `meta--notes-app`: creator=meta (hyphen-free username),
     // slug=notes-app (slug may contain hyphens). The default URL
-    // label flips the order → `notes-app-meta`. This is the case
+    // label flips the order → `notes-app--meta`. This is the case
     // single-dash + the no-hyphen-username rule exists to make
     // unambiguous; the old `--` form is gone.
     const s = new InMemoryStorage();
     const irk = makeKey();
     await seed(s, irk);
-    const res = await handleGetAppLinks(makeDeps(s), USER, "meta-notes-app");
+    const res = await handleGetAppLinks(makeDeps(s), USER, "meta--notes-app");
     const b = res.body as { displayLabel: string; canonicalUrl: string };
-    expect(b.displayLabel).toBe("notes-app-meta");
-    expect(b.canonicalUrl).toBe("https://notes-app-meta.home.alice.flagship.services");
+    expect(b.displayLabel).toBe("notes-app--meta");
+    expect(b.canonicalUrl).toBe("https://notes-app--meta.home.alice.flagship.services");
   });
 
   it("lazy-mints a short link on first call (V4 denormalization)", async () => {

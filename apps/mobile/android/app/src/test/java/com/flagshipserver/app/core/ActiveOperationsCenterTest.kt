@@ -35,16 +35,17 @@ class ActiveOperationsCenterTest {
         assertTrue(ops(c).isEmpty())
     }
 
-    // ── Deploy operations (derived from pods) ──────────────────────
+    // ── Deploy operations (Bug-3: SUPPRESSED for pending pods) ──────
 
-    @Test fun pendingPod_becomesDeployOperation_withCanonicalLabelAndTarget() {
+    @Test fun pendingPod_doesNotShowDeployOperation() {
+        // Bug 3: a freshly-created server is PENDING while it is merely AWAITING
+        // A BURN — there is no reliable on-model signal distinguishing that from
+        // "actually installing", so we never emit a spinning "deploying server
+        // <name>" op for a pending pod.
         val c = ActiveOperationsCenter()
         c.syncDeployOperations(listOf(pendingPod("p1", "Home")))
-        val op = c.primary!!
-        assertEquals(ActiveOperation.Kind.DEPLOY, op.kind)
-        assertEquals("deploying server Home", op.label)
-        assertEquals(DeepLink.ServerDetail("p1"), op.target)
-        assertEquals(1, ops(c).size)
+        assertTrue(ops(c).isEmpty())
+        assertNull(c.primary)
         assertEquals(0, c.additionalCount)
     }
 
@@ -55,34 +56,13 @@ class ActiveOperationsCenterTest {
         assertNull(c.primary)
     }
 
-    @Test fun syncDeploy_isIdempotent_andDoesNotReorder() {
-        val c = ActiveOperationsCenter()
-        val pods = listOf(pendingPod("p1", "Home"), pendingPod("p2", "Work"))
-        c.syncDeployOperations(pods)
-        val first = ops(c)
-        // A steady re-sync with the same pods must not churn the list (same
-        // ids AND same seq) so the sliver never flickers or reorders.
-        c.syncDeployOperations(pods)
-        assertEquals(first, ops(c))
-    }
-
-    @Test fun podLeavingPending_dropsItsDeployOperation() {
-        val c = ActiveOperationsCenter()
-        c.syncDeployOperations(listOf(pendingPod("p1", "Home")))
-        assertEquals(1, ops(c).size)
-        // The box came online → the deploy op disappears.
-        c.syncDeployOperations(listOf(onlinePod("p1", "Home")))
-        assertTrue(ops(c).isEmpty())
-    }
-
-    @Test fun deployRename_updatesLabel_butKeepsOrder() {
+    @Test fun manyPendingPods_stillEmitNoDeployOps() {
         val c = ActiveOperationsCenter()
         c.syncDeployOperations(listOf(pendingPod("p1", "Home"), pendingPod("p2", "Work")))
-        val seqBefore = ops(c).first { it.id == "deploy:p2" }.seq
-        c.syncDeployOperations(listOf(pendingPod("p1", "Home"), pendingPod("p2", "Workstation")))
-        val renamed = ops(c).first { it.id == "deploy:p2" }
-        assertEquals("deploying server Workstation", renamed.label)
-        assertEquals("a rename must not jump the op's position", seqBefore, renamed.seq)
+        assertTrue(ops(c).isEmpty())
+        // Idempotent: a steady re-sync stays empty.
+        c.syncDeployOperations(listOf(pendingPod("p1", "Home"), pendingPod("p2", "Work")))
+        assertTrue(ops(c).isEmpty())
     }
 
     // ── Build operations (imperative) ──────────────────────────────
@@ -116,44 +96,31 @@ class ActiveOperationsCenterTest {
         assertNull(c.primary)
     }
 
-    // ── Ordering & mixing the two feeders ──────────────────────────
+    // ── Mixing: builds survive deploy reconciliation, pending stays hidden ──
 
-    @Test fun primaryIsMostRecentlyStarted() {
+    @Test fun buildIsPrimary_andDeploySyncNeverAddsPending() {
         val c = ActiveOperationsCenter()
-        c.syncDeployOperations(listOf(pendingPod("p1", "Home"))) // seq 1
-        c.upsertBuild("s1", "blog", "Home", DeepLink.VibeCodeChat("s1")) // seq 2
-        assertEquals("the newest op is the one the sliver shows", ActiveOperation.Kind.BUILD, c.primary?.kind)
-        assertEquals(1, c.additionalCount)
-
-        // When the build finishes the deploy is primary again.
-        c.removeBuild("s1")
-        assertEquals(ActiveOperation.Kind.DEPLOY, c.primary?.kind)
+        c.upsertBuild("s1", "blog", "Home", DeepLink.VibeCodeChat("s1"))
+        assertEquals("build ops still drive the sliver", ActiveOperation.Kind.BUILD, c.primary?.kind)
         assertEquals(0, c.additionalCount)
     }
 
-    @Test fun deploySync_preservesBuildOperations() {
+    @Test fun deploySync_preservesBuildOperations_andAddsNothingForPending() {
         val c = ActiveOperationsCenter()
         c.upsertBuild("s1", "blog", "Home", DeepLink.VibeCodeChat("s1"))
         c.syncDeployOperations(listOf(pendingPod("p1", "Home")))
-        assertEquals("reconciling deploys must not wipe build ops", 2, ops(c).size)
-        assertTrue(ops(c).any { it.kind == ActiveOperation.Kind.BUILD })
-        assertTrue(ops(c).any { it.kind == ActiveOperation.Kind.DEPLOY })
+        assertEquals(
+            "reconciling deploys must not wipe build ops nor add pending ops",
+            1, ops(c).size,
+        )
+        assertTrue(ops(c).all { it.kind == ActiveOperation.Kind.BUILD })
     }
 
-    @Test fun mixedOperations_countAndAdditional() {
+    @Test fun mixedOperations_onlyBuildsCount() {
         val c = ActiveOperationsCenter()
         c.syncDeployOperations(listOf(pendingPod("p1", "Home"), pendingPod("p2", "Work")))
         c.upsertBuild("s1", "blog", "Home", DeepLink.VibeCodeChat("s1"))
-        assertEquals(3, ops(c).size)
-        assertEquals(2, c.additionalCount)
-    }
-
-    @Test fun deployAndBuildIds_neverCollide() {
-        // A pod and a build session could share a raw id; the center
-        // namespaces them so both ops coexist.
-        val c = ActiveOperationsCenter()
-        c.syncDeployOperations(listOf(pendingPod("x", "Home")))
-        c.upsertBuild("x", "blog", "Home", DeepLink.VibeCodeChat("x"))
-        assertEquals(2, ops(c).size)
+        assertEquals(1, ops(c).size)
+        assertEquals(0, c.additionalCount)
     }
 }

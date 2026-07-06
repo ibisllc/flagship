@@ -7,6 +7,12 @@
     <uses-permission android:name="android.permission.NFC" />
 
     <uses-feature android:name="android.hardware.strongbox_keystore" android:required="false" />
+    <!-- On-device USB-OTG burner: write a bootable installer to a USB stick via
+         the USB Host API (no root). The flow is launched in-app from the
+         create-server delivery chooser and requests device permission at
+         runtime, so no USB_DEVICE_ATTACHED launch intent-filter is declared
+         (that would offer the app for every attached mass-storage device). -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
     <!-- C3 — NFC retail-tier pairing. Required=false so the app still
@@ -42,12 +48,46 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:pathPrefix="/app/" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/join" />
+                <!-- Transfer-a-box take-over offer. /transfer?o=<b64url> opens the
+                     acquirer claim flow in-app; when the app isn't installed the
+                     control apex redirects the browser to the webapp claim view. -->
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/transfer" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="flagship" android:host="join" />
+            </intent-filter>
+            <!-- flagship://transfer?o=<b64url> — the custom-scheme twin of the
+                 /transfer take-over universal link (no App-Links verification
+                 needed; the in-app fallback for pasted / non-https offers). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="flagship" android:host="transfer" />
+            </intent-filter>
+            <!-- #92 — service-access invite "open in app" hand-off
+                 (flagship://invite?server=<host>&k=<secret>). The box's
+                 /invite page offers this; Android drops the URL fragment from
+                 App-Links so the secret rides a query param. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="flagship" android:host="invite" />
+            </intent-filter>
+            <!-- Web-experience gating — the visitor authorizes a browser's
+                 QR-login for a restricted service's WEBSITE
+                 (flagship://access?server=…&svc=…&ref=…&page=…). The box's
+                 knock page offers this as the same-device "Access site"
+                 button (and a QR for cross-device). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="flagship" android:host="access" />
             </intent-filter>
         </activity>
 
@@ -64,6 +104,19 @@
         <receiver
             android:name=".push.DeadManReminderReceiver"
             android:exported="false" />
+
+        <!-- Share a minted recipe file from the create-server delivery chooser
+             (Save / share). Authority "<applicationId>.fileprovider"; paths in
+             res/xml/file_paths.xml (cache/recipes only). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- Google Fonts provider declaration -->
         <meta-data

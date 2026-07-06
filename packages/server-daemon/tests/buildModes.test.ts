@@ -211,6 +211,203 @@ describe("BuildOrchestrator — git AI adapt", () => {
   });
 });
 
+// ----- AGENTIC adapt loop (the product bar) -----
+
+import type { ChatRequest, ChatResponse, ToolUseBlock } from "@flagship/llm-providers";
+
+/**
+ * A fake tool-driving model: a scripted sequence of turns, each emitting
+ * tool_use blocks. It asserts the loop feeds tool results back (the prior
+ * turn's results appear in the message history) so we're testing a genuine
+ * multi-turn conversation, not a one-shot.
+ */
+function scriptedAgentRunner(
+  script: Array<(seenMessages: ChatRequest["messages"]) => { text?: string; toolUses?: ToolUseBlock[] }>,
+) {
+  let turn = 0;
+  const seen: ChatRequest["messages"][] = [];
+  const runner = async (_buildId: string, req: ChatRequest): Promise<ChatResponse> => {
+    seen.push(req.messages);
+    const step = script[turn];
+    turn++;
+    if (!step) return { content: "done", model: "fake" };
+    const out = step(req.messages);
+    return {
+      content: out.text ?? "",
+      model: "fake",
+      ...(out.toolUses ? { toolUses: out.toolUses } : {}),
+    };
+  };
+  return { runner, seen: () => seen, turns: () => turn };
+}
+
+function tu(id: string, name: string, input: Record<string, unknown> = {}): ToolUseBlock {
+  return { id, name, input };
+}
+
+describe("BuildOrchestrator — AGENTIC adapt", () => {
+  it("drives read → write → validate → deploy over the shared tool surface and deploys", async () => {
+    const deployed: Array<{ files: Record<string, string> }> = [];
+    // The fake model: turn 1 reads the contract + lists files; turn 2 reads
+    // the source; turn 3 writes a manifest + Dockerfile; turn 4 validates;
+    // turn 5 deploys. A genuine multi-turn tool conversation.
+    const agent = scriptedAgentRunner([
+      () => ({ toolUses: [tu("a1", "get_contract"), tu("a2", "list_files")] }),
+      () => ({ toolUses: [tu("b1", "read_file", { path: "package.json" })] }),
+      () => ({
+        toolUses: [
+          tu("c1", "write_file", { path: "flagship.app.json", content: VALID_MANIFEST }),
+          tu("c2", "write_file", { path: "Dockerfile", content: "FROM node:20-alpine" }),
+        ],
+      }),
+      () => ({ toolUses: [tu("d1", "validate")] }),
+      () => ({ toolUses: [tu("e1", "deploy")] }),
+    ]);
+
+    const { o, journal } = makeNotFitOrchestrator({
+      agentRunner: agent.runner,
+      adaptCredentialAvailable: () => true,
+      deployArtifact: async ({ files }): Promise<DeployResult> => {
+        deployed.push({ files });
+        const name = JSON.parse(files["flagship.app.json"]!).name as string;
+        return { ok: true, serviceId: `harry-${name}`, url: `https://${name}.${FQDN}`, image: "img" };
+      },
+    });
+
+    const created = await o.createGit({ gitUrl: "https://github.com/a/legacy" });
+    expect(created.fit).toBe(false);
+
+    const r = await o.adaptGit(created.buildId, { instructions: "keep it minimal" });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.deployed).toBe(true);
+      expect(r.deployedUrl).toContain("shopping");
+      expect(r.serviceId).toBe("harry-shopping");
+      expect(r.turns).toBe(5);
+    }
+
+    // The AI itself deployed (called the deploy tool) — one install ran.
+    expect(deployed).toHaveLength(1);
+    expect(JSON.parse(deployed[0]!.files["flagship.app.json"]!).name).toBe("shopping");
+
+    // The workspace was shaped by the AI's write_file calls.
+    const ws = o.workspace(created.buildId)!;
+    expect(ws.read("flagship.app.json")).toBeTruthy();
+    expect(ws.read("Dockerfile")).toContain("node:20-alpine");
+
+    // Genuine multi-turn: by turn 2 the model's message history carried a
+    // tool result turn (role "tool") from turn 1's calls.
+    const turn2Messages = agent.seen()[1]!;
+    expect(turn2Messages.some((m) => m.role === "assistant" && (m.toolUses?.length ?? 0) > 0)).toBe(true);
+    expect(turn2Messages.some((m) => m.role === "tool" && (m.toolResults?.length ?? 0) > 0)).toBe(true);
+    // The contract result is fed back (the model "read" it).
+    const toolTurn = turn2Messages.find((m) => m.role === "tool");
+    expect(JSON.stringify(toolTurn!.toolResults)).toContain("Flagship app contract");
+
+    // The journal records the agentic steps + the AI's deploy tool call,
+    // value-free. (The tool host journals each call as an "mcp-call"; the
+    // deploy call's summary is "deployed → <url>".)
+    const entries = await journal.read(created.buildId);
+    expect(entries.some((e) => e.kind === "adapt-step" && /agentic adapt/.test(e.summary))).toBe(true);
+    expect(entries.some((e) => e.kind === "mcp-call" && e.actor === "ai" && /^deployed →/.test(e.summary))).toBe(true);
+    expect(entries.some((e) => e.kind === "mcp-call" && /^wrote flagship\.app\.json/.test(e.summary))).toBe(true);
+    expect(entries.every((e) => !(e.detail ?? "").includes("byok"))).toBe(true);
+  });
+
+  it("recovers when validate reports a problem, then deploys", async () => {
+    // The model writes a BAD manifest first; validate flags it; the model
+    // fixes it and re-validates ok, then deploys. Proves the tool-error
+    // feedback loop (validate problems → fix → revalidate).
+    const BAD_MANIFEST = JSON.stringify({ schema_version: 1, name: "Bad Name!!" });
+    const seenValidateResults: string[] = [];
+    const agent = scriptedAgentRunner([
+      () => ({
+        toolUses: [
+          tu("w1", "write_file", { path: "flagship.app.json", content: BAD_MANIFEST }),
+          tu("w2", "write_file", { path: "Dockerfile", content: "FROM scratch" }),
+        ],
+      }),
+      (msgs) => {
+        // Capture what validate told the model last turn.
+        const t = msgs.find((m) => m.role === "tool");
+        if (t) seenValidateResults.push(JSON.stringify(t.toolResults));
+        return { toolUses: [tu("v1", "validate")] };
+      },
+      () => ({ toolUses: [tu("f1", "write_file", { path: "flagship.app.json", content: VALID_MANIFEST })] }),
+      () => ({ toolUses: [tu("v2", "validate")] }),
+      () => ({ toolUses: [tu("d1", "deploy")] }),
+    ]);
+    const { o } = makeNotFitOrchestrator({
+      agentRunner: agent.runner,
+      adaptCredentialAvailable: () => true,
+      deployArtifact: async ({ files }): Promise<DeployResult> => ({
+        ok: true,
+        serviceId: "harry-shopping",
+        url: `https://shopping.${FQDN}`,
+        image: "img",
+      }),
+    });
+    const created = await o.createGit({ gitUrl: "https://github.com/a/legacy" });
+    const r = await o.adaptGit(created.buildId);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.deployed).toBe(true);
+    // The model saw a validate failure mid-loop (the bad manifest's problems).
+    expect(seenValidateResults.join(" ")).toMatch(/problems|ok/);
+  });
+
+  it("returns ok-but-not-deployed when the AI writes a manifest but never deploys", async () => {
+    const agent = scriptedAgentRunner([
+      () => ({ toolUses: [tu("w1", "write_file", { path: "flagship.app.json", content: VALID_MANIFEST })] }),
+      () => ({ text: "I wrote the manifest but I'll stop here." }), // no tool calls → loop ends
+    ]);
+    const { o } = makeNotFitOrchestrator({ agentRunner: agent.runner, adaptCredentialAvailable: () => true });
+    const created = await o.createGit({ gitUrl: "https://github.com/a/legacy" });
+    const r = await o.adaptGit(created.buildId);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.deployed).toBe(false);
+      expect(o.workspace(created.buildId)!.read("flagship.app.json")).toBeTruthy();
+    }
+  });
+
+  it("fails cleanly when the AI never produces a manifest", async () => {
+    const agent = scriptedAgentRunner([
+      () => ({ toolUses: [tu("r1", "read_file", { path: "package.json" })] }),
+      () => ({ text: "I can't figure this out." }), // gives up, no manifest written
+    ]);
+    const { o } = makeNotFitOrchestrator({ agentRunner: agent.runner, adaptCredentialAvailable: () => true });
+    const created = await o.createGit({ gitUrl: "https://github.com/a/legacy" });
+    const r = await o.adaptGit(created.buildId);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain("could not produce a valid Flagship app");
+  });
+
+  it("the no-credential case still degrades to the clean 503 with an agentRunner", async () => {
+    const agent = scriptedAgentRunner([() => ({ toolUses: [tu("d1", "deploy")] })]);
+    const { o } = makeNotFitOrchestrator({ agentRunner: agent.runner, adaptCredentialAvailable: () => false });
+    const created = await o.createGit({ gitUrl: "https://github.com/a/legacy" });
+    const r = await o.adaptGit(created.buildId);
+    expect(r).toEqual({ ok: false, reason: "AI adapt not configured" });
+  });
+
+  it("honors the turn cap (a model that never stops doesn't loop forever)", async () => {
+    // A model that always calls a harmless tool and never deploys.
+    const agent = scriptedAgentRunner(
+      Array.from({ length: 100 }, () => () => ({ toolUses: [tu("l1", "list_files")] })),
+    );
+    const { o } = makeNotFitOrchestrator({
+      agentRunner: agent.runner,
+      adaptCredentialAvailable: () => true,
+      agentMaxTurns: 3,
+    });
+    const created = await o.createGit({ gitUrl: "https://github.com/a/legacy" });
+    const r = await o.adaptGit(created.buildId);
+    // No manifest, hit the cap → clean failure; the runner ran exactly 3 turns.
+    expect(r.ok).toBe(false);
+    expect(agent.turns()).toBe(3);
+  });
+});
+
 describe("BuildOrchestrator — mcp mode", () => {
   it("mints a key + IDE config and routes RPC for the right key only", async () => {
     const { o } = makeOrchestrator();

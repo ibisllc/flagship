@@ -85,6 +85,7 @@ const HKDF_DEVICE_IRK_SALT = "flagship-demo-device-irk-v1";
 const HKDF_DEVICE_IRK_INFO = "device-irk";
 const HKDF_DELEGATED_INFO = "delegated";
 const HKDF_RCK_INFO = "rck";
+const HKDF_USER_AID_INFO = "user-aid";
 
 /**
  * HKDF-SHA256 wrapper. Returns the requested L bytes.
@@ -150,6 +151,23 @@ export function deriveDemoUserIrk(
   return seedToKeypair(seed);
 }
 
+/**
+ * Derive the deterministic demo account **AID** (the stable, non-rotating
+ * account identity) for a demo username. A real account derives its AID from the
+ * UMK (`deriveAccountId`); the demo path has no UMK (only KEK-derived keys), so
+ * the gating v2 box-as-authority flow gets a deterministic demo AID here —
+ * registered with `.com` + pinned on the box so it can verify AID-signed
+ * create/revoke. Distinct `info` so it never collides with the demo IRK.
+ */
+export function deriveDemoUserAid(
+  kek: Uint8Array,
+  username: string,
+): Keypair {
+  const ikm = deriveUserIkm(kek, username);
+  const seed = hkdfSha256(HKDF_USER_IRK_SALT, ikm, HKDF_USER_AID_INFO, 32);
+  return seedToKeypair(seed);
+}
+
 /** Derive the deterministic Device IRK for (username, deviceLabel). */
 export function deriveDemoDeviceIrk(
   kek: Uint8Array,
@@ -192,6 +210,10 @@ export function deriveDemoRckKey(
 // ──────────────────────────────────────────────────────────────────────
 
 export interface DemoAdminDeps extends DemoUsersDeps {
+  /** The services apex (default "flagship.services"); a test env (e.g. the gym)
+   *  sets it to "gym.flagship.services" so demo boxes land in ITS namespace,
+   *  not prod's. */
+  apex?: string;
   /** Real `usernames` table — admin-claim-and-issue inserts the demo
    *  row here so subsequent auth-code / server-register flows resolve
    *  the IRK pub the way they would for a real claim. */
@@ -309,6 +331,7 @@ export async function handleAdminClaimAndIssue(
   }
 
   const userIrk = deriveDemoUserIrk(deps.demoIrkKek, username);
+  const userAid = deriveDemoUserAid(deps.demoIrkKek, username);
   const delegated = deriveDemoDelegatedKey(deps.demoIrkKek, username);
   const rck = deriveDemoRckKey(deps.demoIrkKek, username);
   const userIrkHex = bytesToHex(userIrk.publicKey);
@@ -316,12 +339,15 @@ export async function handleAdminClaimAndIssue(
   // Claim the username under the derived IRK. The username storage's
   // put rejects on conflicting IRK (different hex for the same name);
   // that's an explicit 409 to keep a bad-key-rotation from silently
-  // overwriting a real account's claim.
+  // overwriting a real account's claim. gating v2 — also record the demo
+  // account's stable AID (deterministic-from-KEK) so .com can verify
+  // AID-signed service-invite create/revoke against it.
   const claimResult = await deps.usernames.put({
     username,
     irkPubHex: userIrkHex,
     claimedAt: nowOf(deps),
     isDemo: true,
+    aidPubHex: bytesToHex(userAid.publicKey),
   });
   if (!claimResult.ok) {
     return conflict("username claimed under different IRK; cannot re-issue");
@@ -333,7 +359,7 @@ export async function handleAdminClaimAndIssue(
   const expiresAt = now + 24 * 3_600_000;
 
   const serial = bytesToHex(rand(16));
-  const serverDomain = `${serverName}.${username}.flagship.services`;
+  const serverDomain = `${serverName}.${username}.${deps.apex ?? "flagship.services"}`;
 
   const authCode: AuthCode = {
     version: 1,

@@ -56,14 +56,21 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.api.ServerMetricsResponse
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
+import com.flagshipserver.app.core.LocalServerTransferClient
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.viewmodels.TransferGiverViewModel
+import com.flagshipserver.app.viewmodels.UpdateServerViewModel
+import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.DeadManReminders
 import com.flagshipserver.app.core.JournalUnits
 import com.flagshipserver.app.core.PowerMode
+import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
 import com.flagshipserver.app.core.ServerSettingsStore
 import com.flagshipserver.app.keystore.Keystore
@@ -87,15 +94,18 @@ import com.flagshipserver.app.viewmodels.FrontPageViewModel
 import com.flagshipserver.app.viewmodels.DeadManWindow
 import com.flagshipserver.app.viewmodels.HomeViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
+import com.flagshipserver.app.viewmodels.MigrationViewModel
 import com.flagshipserver.app.viewmodels.JournalPhase
 import com.flagshipserver.app.viewmodels.JournalViewModel
 import com.flagshipserver.app.viewmodels.PowerOffPhase
 import com.flagshipserver.app.viewmodels.PowerOffViewModel
 import com.flagshipserver.app.viewmodels.RevokeServerPhase
 import com.flagshipserver.app.viewmodels.RevokeServerReason
+import com.flagshipserver.app.viewmodels.ReplaceServerViewModel
 import com.flagshipserver.app.viewmodels.RevokeServerViewModel
 import com.flagshipserver.app.viewmodels.ServerMetricsViewModel
-import java.text.SimpleDateFormat
+import com.flagshipserver.app.viewmodels.SetPreferredServerViewModel
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -108,6 +118,10 @@ fun ServerDetailScreen(
     // approval card must be offered REGARDLESS of whether the daemon BFF loaded
     // (a locked box never answers its BFF — that's the whole point).
     awaitingUnlock: Boolean = false,
+    // The directory's `awaitingEntitlement` flag — the box posted a serve-auth
+    // request and is waiting to be authorized to serve. Surfaces a second
+    // approval card, same pattern as `awaitingUnlock` (Box Request Inbox).
+    awaitingEntitlement: Boolean = false,
     // The pod's FQDN, available even when the daemon BFF load fails — drives the
     // approval card. The loaded detail path prefers its own serverFqdn.
     serverFqdn: String? = null,
@@ -153,6 +167,14 @@ fun ServerDetailScreen(
             ?: serverFqdn?.takeIf { it.isNotEmpty() }
         approvalFqdn?.let { fqdn ->
             BootUnlockApprovalCard(serverDomain = fqdn, awaitingUnlock = awaitingUnlock)
+            // The Box Request Inbox's serve-authorization lane: a box that posted
+            // an entitlement request (no deposit, or an unencrypted box) is now
+            // actionable here too, not silently stuck.
+            BootUnlockApprovalCard(
+                serverDomain = fqdn,
+                awaitingUnlock = awaitingEntitlement,
+                purpose = SecretPurpose.ENTITLEMENT,
+            )
             Spacer(Modifier.height(FS.space.s6))
         }
 
@@ -179,6 +201,8 @@ fun ServerDetailScreen(
             Spacer(Modifier.height(FS.space.s6))
             BootUnlockCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
+            PreferredServerCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
             FrontPageCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             PowerCard(serverDomain = d.value.serverFqdn)
@@ -186,6 +210,17 @@ fun ServerDetailScreen(
             DeadManCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             JournalCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
+            ReplaceServerCard(serverDomain = d.value.serverFqdn, onReplaced = onBack)
+            Spacer(Modifier.height(FS.space.s6))
+            UpdateServerCard(
+                serverDomain = d.value.serverFqdn,
+                currentCommit = d.value.currentCommit,
+            )
+            Spacer(Modifier.height(FS.space.s6))
+            TransferCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
+            MigrateCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             DangerZoneCard(serverDomain = d.value.serverFqdn)
         }
@@ -292,15 +327,29 @@ private fun BootUnlockCard(serverDomain: String) {
 // whole ceremony — mailbox fetch, unseal, response, lease — runs behind it).
 // Mirror of iOS ServerDetailScreen.BootUnlockApprovalCard.
 @Composable
-private fun BootUnlockApprovalCard(serverDomain: String, awaitingUnlock: Boolean) {
+private fun BootUnlockApprovalCard(
+    serverDomain: String,
+    awaitingUnlock: Boolean,
+    purpose: SecretPurpose = SecretPurpose.UNLOCK_KEY,
+) {
     val mailbox = LocalSecretMailboxClient.current
     val app = LocalAppState.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val username by app.currentUser.collectAsState()
     val store = remember { ServerSettingsStore.from(context) }
+    val isEntitlement = purpose == SecretPurpose.ENTITLEMENT
+    val headline = if (isEntitlement) "Your box is waiting for authorization to serve"
+                   else "Your box is waiting for your approval to unlock"
+    val bodyCopy = if (isEntitlement)
+        "Authorize this box to serve your account so it can come online. Your phone will ask for your fingerprint once to approve."
+    else
+        "If you just powered it on, release its disk key to bring it online. Your phone will ask for your fingerprint once to approve."
+    val ctaLabel = if (isEntitlement) "Authorize" else "Approve unlock"
+    val approvedCopy = if (isEntitlement) "Authorized — your box should come online shortly."
+                       else "Unlock approved — your box should come online shortly."
 
-    val vm = remember(serverDomain) {
+    val vm = remember(serverDomain, purpose) {
         BootUnlockApprovalViewModel(
             serverDomain = serverDomain,
             makeSource = {
@@ -310,6 +359,15 @@ private fun BootUnlockApprovalCard(serverDomain: String, awaitingUnlock: Boolean
                             mailbox = mailbox,
                             username = user,
                             irk = KeystoreIrkAccess(),
+                            // Slice D — the boot-approval ceremony mints the
+                            // RootEntitlement (owner decision: ADMIN-ROOT — a
+                            // reburned admin-pinned box rejects an IRK-signed one)
+                            // + the box-sealed auto-unlock lease; both sign with
+                            // the admin master root when held. Transport envelopes
+                            // stay IRK.
+                            adminSigner = { r ->
+                                if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null
+                            },
                         ),
                     )
                 }
@@ -319,13 +377,19 @@ private fun BootUnlockApprovalCard(serverDomain: String, awaitingUnlock: Boolean
             depositAutoLease = {
                 store.effectiveMode(serverDomain) == ServerSettingsStore.Mode.AUTO
             },
+            purpose = purpose,
         )
     }
     val state by vm.state.collectAsState()
 
     // Directory-driven surfacing — no biometric, no network. Arms/clears the
-    // prompt on entry + whenever the flag changes.
-    LaunchedEffect(awaitingUnlock) { vm.setAwaitingUnlock(awaitingUnlock) }
+    // prompt on entry + whenever the flag changes. ALSO keyed on the VM
+    // instance: `remember(serverDomain, …)` re-creates the VM when the loaded
+    // BFF detail supplies its own FQDN, and the fresh (Idle) VM must re-arm or
+    // the card silently vanishes the moment the detail loads. On a real box
+    // the BFF FQDN equals the pod FQDN so the key never changes — this only
+    // matters when the two strings differ (the mock client's canned detail).
+    LaunchedEffect(vm, awaitingUnlock) { vm.setAwaitingUnlock(awaitingUnlock) }
 
     when (val s = state) {
         is BootUnlockApprovalViewModel.State.Idle -> Unit
@@ -334,17 +398,17 @@ private fun BootUnlockApprovalCard(serverDomain: String, awaitingUnlock: Boolean
             FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     Text(
-                        "Your box is waiting for your approval to unlock",
+                        headline,
                         color = FS.colors.text,
                         style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
                     )
                     Text(
-                        "If you just powered it on, release its disk key to bring it online. Your phone will ask for your fingerprint once to approve.",
+                        bodyCopy,
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
                     )
                     FSPrimaryButton(
-                        label = "Approve unlock",
+                        label = ctaLabel,
                         onClick = { scope.launch { vm.approve() } },
                         block = true,
                         large = true,
@@ -375,7 +439,7 @@ private fun BootUnlockApprovalCard(serverDomain: String, awaitingUnlock: Boolean
             SectionLabel("Boot unlock")
             FSCard(padding = PaddingValues(FS.space.s4)) {
                 Text(
-                    "Unlock approved — your box should come online shortly.",
+                    approvedCopy,
                     color = FS.colors.text,
                     style = TextStyle(fontSize = 14.sp),
                 )
@@ -418,13 +482,17 @@ private fun ServerInfoCard(detail: com.flagshipserver.app.api.ServerDetailRespon
                 style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                FSPill("Daemon ${detail.daemonVersion}", kind = FSPillKind.Idle)
+                FSPill("Server ${detail.daemonVersion}", kind = FSPillKind.Idle)
+                // The box-reported running commit (short) — the version the
+                // update card orders away from. Hidden until the box reports.
+                shortCommit(detail.currentCommit)?.let { short ->
+                    FSPill("Version $short", kind = FSPillKind.Idle)
+                }
                 FSPill("${detail.serviceCount} apps", kind = FSPillKind.Idle)
                 FSPill("${detail.pairedSessionCount} devices", kind = FSPillKind.Idle)
             }
-            val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
             val certText = detail.certNotAfter
-                ?.let { "Cert valid until ${fmt.format(Date(it))}" }
+                ?.let { "Cert valid until ${FlagshipDateFormat.format(it, includeTime = true)}" }
                 ?: "Cert details unavailable"
             Text(certText, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
         }
@@ -544,7 +612,9 @@ private fun FrontPageCard(serverDomain: String) {
     val vm = remember(serverDomain) {
         FrontPageViewModel(
             serverDomain = serverDomain,
-            signer = { reason -> Keystore.deriveIRK(reason) },
+            // Slice D — set-front-page is SENSITIVE: sign with the admin master
+            // root when this device holds one (else the owner IRK).
+            signer = { reason -> Keystore.adminSigningKey(reason) },
         )
     }
     val phase by vm.phase.collectAsState()
@@ -649,6 +719,94 @@ private fun FrontPageCard(serverDomain: String) {
     }
 }
 
+// "Set as preferred server" — the owner's per-service-leadership default vote
+// (Phase 6, docs/multi-pod-liveness-session-leadership.md). Mirror of the iOS
+// PreferredServerCard. Reads the mailbox + AppState from the composition;
+// behind the standard biometric (via SetPreferredServerViewModel) it signs the
+// existing set-leader vote for THIS box's STK and deposits it, then marks the
+// pod preferred IMMEDIATELY (app.setLeader) independent of gossip catch-up.
+//
+// Only meaningful with more than one server (a preferred default among peers),
+// and only once the box has a registered identity to vote for.
+@Composable
+private fun PreferredServerCard(serverDomain: String) {
+    val mailbox = LocalSecretMailboxClient.current
+    val app = LocalAppState.current
+    val toasts = LocalToastCenter.current
+    val scope = rememberCoroutineScope()
+
+    val pods by app.pods.collectAsState()
+    val leaderPodId by app.leaderPodId.collectAsState()
+    val username by app.currentUser.collectAsState()
+
+    val pod = pods.firstOrNull { it.fqdn.lowercase() == serverDomain.lowercase() }
+    val isPreferred = pod != null && leaderPodId == pod.podId
+    val hasStk = (com.flagshipserver.app.core.HexUtil.decode(pod?.identityPubKeyHex ?: "")?.size ?: 0) == 32
+    val multiPod = pods.count { it.status != com.flagshipserver.app.core.PodInfo.Status.PENDING } > 1
+
+    // Gate: >1 non-pending server AND this box has a registered STK to vote for.
+    if (!multiPod || !hasStk || pod == null) return
+
+    var working by remember(serverDomain) { mutableStateOf(false) }
+
+    Text(
+        "Preferred server",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            if (isPreferred) {
+                Text(
+                    "This is your preferred server",
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                )
+                Text(
+                    "New service routes default here when it's the highest-clout live server. You can pick a different one from another server's page.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp),
+                )
+            } else {
+                Text(
+                    "Make this the default target for your cloud — votes for it across your boxes so the highest-clout live server leading a service prefers it.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp),
+                )
+                FSPrimaryButton(
+                    label = if (working) "Setting…" else "Set as preferred server",
+                    onClick = {
+                        if (working) return@FSPrimaryButton
+                        working = true
+                        scope.launch {
+                            val vm = SetPreferredServerViewModel(
+                                username = username ?: "",
+                                serverDomain = serverDomain,
+                                preferredStkPubHex = pod.identityPubKeyHex,
+                                mailbox = mailbox,
+                            )
+                            val ok = vm.setPreferred()
+                            if (ok) {
+                                // Reflect the choice immediately, independent of
+                                // gossip catch-up.
+                                app.setLeader(pod.podId)
+                                toasts.success("Preferred server set.")
+                            } else {
+                                toasts.warning("Couldn't set the preferred server — try again.")
+                            }
+                            working = false
+                        }
+                    },
+                    enabled = !working,
+                    block = true,
+                    modifier = Modifier.semantics { contentDescription = "sd-set-preferred" },
+                )
+            }
+        }
+    }
+}
+
 // Manual lock-&-power buttons. "Lock and turn off" / "Lock and restart"
 // drop "Lock and " when the box is non-LUKS. Confirm dialog → owner-IRK-signed
 // `power-off` order (the deriveIRK signer fires the biometric) → POST to the
@@ -669,9 +827,10 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
     val vm = remember(serverDomain) {
         PowerOffViewModel(
             serverDomain = serverDomain,
-            // deriveIRK runs the biometric gate, then signs with the owner IRK
-            // — the SAME key the daemon's /api/power pins. Never silent.
-            signer = { reason -> Keystore.deriveIRK(reason) },
+            // Slice D — power-off is SENSITIVE: the biometric gate signs with the
+            // admin master root when this device holds one (else the owner IRK,
+            // the key the daemon's /api/power pins on a legacy box). Never silent.
+            signer = { reason -> Keystore.adminSigningKey(reason) },
         )
     }
     val phase by vm.phase.collectAsState()
@@ -854,8 +1013,10 @@ private fun DeadManCard(serverDomain: String) {
         DeadManViewModel(
             serverDomain = serverDomain,
             username = { username },
-            // deriveIRK runs the biometric gate — never a silent renew.
-            signer = { reason -> Keystore.deriveIRK(reason) },
+            // Slice D — dead-man policy/affirm is SENSITIVE: sign with the admin
+            // master root when this device holds one (else the owner IRK). The
+            // biometric gate is never silent.
+            signer = { reason -> Keystore.adminSigningKey(reason) },
         )
     }
     val phase by vm.phase.collectAsState()
@@ -1023,6 +1184,346 @@ private fun DeadManCard(serverDomain: String) {
                     block = true,
                     modifier = Modifier.semantics { contentDescription = "sd-deadman-affirm" },
                 )
+            }
+        }
+    }
+}
+
+// "Replace this server" entry on server-detail (docs/server-replacement-graceful-
+// decommission.md). Owner-only — the decommission order is IRK-signed behind the
+// biometric inside ReplaceServerViewModel. Opens ReplaceServerScreen (backup
+// pre-flight gate → disposition picker → mint + deposit) in a full-screen dialog.
+// A graceful retire distinct from Revoke (which bricks); this hands the FQDN to a
+// replacement. Mirror of iOS ReplaceServerCard.
+@Composable
+private fun ReplaceServerCard(serverDomain: String, onReplaced: () -> Unit) {
+    val app = LocalAppState.current
+    val mailbox = LocalSecretMailboxClient.current
+    val screens = LocalScreensClient.current
+    val username by app.currentUser.collectAsState()
+    var showSheet by remember { mutableStateOf(false) }
+
+    Text(
+        "Replace",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Swap this box for a new one on the same address. It flushes a final backup, releases routing, and powers off so a replacement can take over cleanly. Needs a backup, or you'll lose its data.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            )
+            FSDangerButton(
+                label = "Replace this server",
+                onClick = { showSheet = true },
+                block = true,
+                modifier = Modifier.semantics { contentDescription = "sd-replace-server" },
+            )
+        }
+    }
+
+    if (showSheet) {
+        val podId = com.flagshipserver.app.core.PodInfo.podId(serverDomain)
+        val vm = remember(serverDomain) {
+            ReplaceServerViewModel(
+                serverFqdn = serverDomain,
+                username = username ?: "",
+                mailbox = mailbox,
+                screens = screens,
+                // L3 — retire the box instance locally so a rebooting encrypted
+                // zombie is never re-surfaced for unlock approval.
+                onRetired = { app.removePod(podId) },
+            )
+        }
+        Dialog(
+            onDismissRequest = { showSheet = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Column(Modifier.fillMaxSize().background(FS.colors.bg)) {
+                Row(Modifier.fillMaxWidth().padding(FS.space.s4)) {
+                    FSGhostButton(label = "Done", onClick = {
+                        showSheet = false
+                        // If the pod was retired, pop back to Home.
+                        if (app.pods.value.none { it.podId == podId }) onReplaced()
+                    })
+                }
+                ReplaceServerScreen(vm = vm, serverFqdn = serverDomain)
+            }
+        }
+    }
+}
+
+/** Short display form of the box-reported HEAD, or null while unknown
+ *  (e.g. an un-reburned box whose daemon predates the field). */
+private fun shortCommit(sha: String?): String? =
+    sha?.takeIf { it.length == 40 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } }?.take(8)
+
+// "Update this server" entry on server-detail (docs/server-update-mechanism.md).
+// Admin-only — the update order is signed with the admin master root (when
+// pinned) behind the biometric inside UpdateServerViewModel, and it is only
+// HALF the gate: the box also requires the target commit to be maintainer-
+// endorsed, and rolls back automatically if the new version fails to boot.
+// Disabled (with a hint) until the box reports its running commit — the
+// order's `fromCommit` must be truth, never a guess. Mirror of iOS
+// UpdateServerCard.
+@Composable
+private fun UpdateServerCard(serverDomain: String, currentCommit: String?) {
+    val app = LocalAppState.current
+    val mailbox = LocalSecretMailboxClient.current
+    val toasts = LocalToastCenter.current
+    val username by app.currentUser.collectAsState()
+    val scope = rememberCoroutineScope()
+    var showSheet by remember { mutableStateOf(false) }
+    val reported = shortCommit(currentCommit) != null
+
+    Text(
+        "Update",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Move this server to a different blessed release in place — no reburn, keys and data untouched. Two signatures are required: Flagship's maintainers must have blessed the release, and you must authorize applying it here. The box verifies both, and rolls back automatically if the new version fails to boot.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            )
+            shortCommit(currentCommit)?.let { short ->
+                Text(
+                    "Running $short",
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
+                )
+            }
+            FSDangerButton(
+                label = "Update this server",
+                onClick = { showSheet = true },
+                block = true,
+                enabled = reported,
+                modifier = Modifier.semantics { contentDescription = "sd-update-server" },
+            )
+            if (!reported) {
+                Text(
+                    "Waiting for this server to report its current version — it can't be updated in place until it does.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                )
+            }
+        }
+    }
+
+    if (showSheet) {
+        val vm = remember(serverDomain) {
+            UpdateServerViewModel(
+                username = username ?: "",
+                serverFqdn = serverDomain,
+                currentCommit = currentCommit,
+                mailbox = mailbox,
+            )
+        }
+        val phase by vm.phase.collectAsState()
+        var target by remember { mutableStateOf("") }
+        val working = phase is UpdateServerViewModel.Phase.Signing ||
+            phase is UpdateServerViewModel.Phase.Posting
+        Dialog(
+            onDismissRequest = { showSheet = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Column(Modifier.fillMaxSize().background(FS.colors.bg)) {
+                Row(Modifier.fillMaxWidth().padding(FS.space.s4)) {
+                    FSGhostButton(label = "Done", onClick = { showSheet = false })
+                }
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = FS.space.s4)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+                ) {
+                    Text(
+                        "Update $serverDomain?",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    Text(
+                        "The server moves to the release you name below — only if Flagship's maintainers have blessed it. It restarts into the new version and rolls back automatically if that version fails to boot.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                    )
+                    vm.runningShort?.let { short ->
+                        Text(
+                            "Running $short",
+                            color = FS.colors.text,
+                            style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
+                        )
+                    }
+                    if (phase is UpdateServerViewModel.Phase.Done) {
+                        Text(
+                            "Update ordered — the server picks it up on its next check-in, verifies the release is maintainer-blessed, applies it, and rolls back if the new version fails to boot.",
+                            color = FS.colors.text,
+                            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                        )
+                    } else {
+                        FSField(
+                            value = target,
+                            onValueChange = { target = it },
+                            label = "Target release (full commit)",
+                            placeholder = "40-character commit hash",
+                            fieldTag = "update-target-field",
+                        )
+                        vm.targetProblem(target)?.let { problem ->
+                            Text(
+                                problem,
+                                color = FS.colors.textMuted,
+                                style = TextStyle(fontSize = 13.sp),
+                            )
+                        }
+                        (phase as? UpdateServerViewModel.Phase.Failed)?.let { f ->
+                            Text(
+                                f.message,
+                                color = FS.colors.danger,
+                                style = TextStyle(fontSize = 13.sp),
+                            )
+                        }
+                        FSDangerButton(
+                            label = if (working) "Working…" else "Order update",
+                            onClick = onClick@{
+                                if (!vm.canOrder(target) || working) return@onClick
+                                scope.launch {
+                                    if (vm.update(target)) toasts.success("Update ordered")
+                                }
+                            },
+                            block = true,
+                            enabled = vm.canOrder(target) && !working,
+                            modifier = Modifier.semantics { contentDescription = "update-order-btn" },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Transfer-a-box entry on server-detail (docs/account-deletion-and-name-reclaim.md §4).
+// Owner-only — the offer is IRK-signed behind the biometric inside
+// TransferGiverViewModel, so only the box's owner can complete it. Opens the
+// existing TransferGiverScreen (type-to-confirm → QR → disk-key hand-off) in a
+// full-screen dialog. Lives just above the danger zone as an irreversible
+// management action. Mirror of iOS TransferCard.
+@Composable
+private fun TransferCard(serverDomain: String) {
+    val app = LocalAppState.current
+    val transfer = LocalServerTransferClient.current
+    val mailbox = LocalSecretMailboxClient.current
+    val username by app.currentUser.collectAsState()
+    var showSheet by remember { mutableStateOf(false) }
+
+    Text(
+        "Transfer",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Hand this box and everything on it to another account. The new owner scans a QR; your phone hands off the disk key. You'll lose control of it — this cannot be undone.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            )
+            FSDangerButton(
+                label = "Transfer to another account",
+                onClick = { showSheet = true },
+                block = true,
+                modifier = Modifier.semantics { contentDescription = "sd-transfer-server" },
+            )
+        }
+    }
+
+    if (showSheet) {
+        val vm = remember(serverDomain) {
+            TransferGiverViewModel(
+                serverDomain = serverDomain,
+                username = username ?: "",
+                client = transfer,
+                mailbox = mailbox,
+            )
+        }
+        Dialog(
+            onDismissRequest = { showSheet = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Column(Modifier.fillMaxSize().background(FS.colors.bg)) {
+                Row(Modifier.fillMaxWidth().padding(FS.space.s4)) {
+                    FSGhostButton(label = "Done", onClick = { showSheet = false })
+                }
+                TransferGiverScreen(vm = vm, serverDomain = serverDomain)
+            }
+        }
+    }
+}
+
+// "Migrate to new hardware" entry on server-detail (docs/server-migration.md).
+// Same owner, same address, NEW box: the guided flow provisions a replacement,
+// pre-seeds it from backup, and hands the name over — the old box is wiped
+// only after a confirmed take-over. Owner-only; the migration order is
+// admin-signed behind the biometric inside MigrationViewModel. Distinct from
+// Replace (retire-first, then re-create) — migration keeps the old box serving
+// until the new one is ready. Mirror of iOS MigrateServerCard.
+@Composable
+private fun MigrateCard(serverDomain: String) {
+    val app = LocalAppState.current
+    val mailbox = LocalSecretMailboxClient.current
+    val screens = LocalScreensClient.current
+    val context = LocalContext.current
+    val username by app.currentUser.collectAsState()
+    var showSheet by remember { mutableStateOf(false) }
+
+    Text(
+        "Migrate",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Move this server to new hardware — same address, same data. A new box restores from backup and takes over the name; the old box is wiped only after the hand-off is confirmed.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            )
+            FSPrimaryButton(
+                label = "Migrate to new hardware",
+                onClick = { showSheet = true },
+                block = true,
+                modifier = Modifier.semantics { contentDescription = "sd-migrate-server" },
+            )
+        }
+    }
+
+    if (showSheet) {
+        val vm = remember(serverDomain) {
+            MigrationViewModel(
+                serverFqdn = serverDomain,
+                username = username ?: "",
+                mailbox = mailbox,
+                screens = screens,
+                holdStore = com.flagshipserver.app.core.MigrationHoldStore.from(context),
+            )
+        }
+        Dialog(
+            onDismissRequest = { showSheet = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Column(Modifier.fillMaxSize().background(FS.colors.bg)) {
+                Row(Modifier.fillMaxWidth().padding(FS.space.s4)) {
+                    FSGhostButton(label = "Done", onClick = { showSheet = false })
+                }
+                MigrateServerScreen(vm = vm)
             }
         }
     }

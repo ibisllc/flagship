@@ -220,6 +220,129 @@ public struct Keystore {
         return (irk, stkPub)
     }
 
+    /// The box's Service Workload Key (SWK) as lowercase hex — the deterministic
+    /// `HKDF-SHA256(UMK seed, info="flagship.swk.v1|<serverId>")` the daemon
+    /// re-derives nowhere (the box can't: it has no UMK), so the phone provisions
+    /// it at create-time as an UNSIGNED `swkHex` recipe sibling. This is the BOX
+    /// SWK via `ServerKeys.deriveSwk` (DOTS) — the protocol/daemon derivation —
+    /// NOT the app-backup `Keystore.deriveSWK` (SLASHES, `flagship/swk/v1|…`),
+    /// which is a deliberately different key. The unambiguous name guards against
+    /// confusing the two.
+    public static func deriveBoxServiceWorkloadKey(serverId: String, reason: String) async throws -> String {
+        let umk = try await unwrappedUMK(reason: reason)
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let swk = ServerKeys.deriveSwk(umkSeed: umkData, serverId: serverId) else {
+            throw KeystoreError.derivationFailed("box SWK for \(serverId)")
+        }
+        return HexUtil.encode(swk)
+    }
+
+    /// A′ cert pinning + SWK provisioning in ONE biometric: the IRK, the new
+    /// box's STK PUBLIC key, AND the box's deterministic SWK (hex), all derived
+    /// from a single UMK unwrap (a separate SWK call would re-prompt Face ID
+    /// during server creation). The SWK is the box-side `ServerKeys.deriveSwk`
+    /// (DOTS) key — NOT the app-backup `deriveSWK` (slashes).
+    public static func deriveIRKBoxStkAndSwk(
+        serverId: String,
+        reason: String
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, boxStkPub: Data, boxSwkHex: String) {
+        let umk = try await unwrappedUMK(reason: reason)
+        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let irk = try Curve25519.Signing.PrivateKey(
+            rawRepresentation: irkSeed.withUnsafeBytes { Data($0) }
+        )
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let stkPub = ServerKeys.deriveStkPub(umkSeed: umkData, serverId: serverId) else {
+            throw KeystoreError.derivationFailed("box STK pubkey for \(serverId)")
+        }
+        guard let swk = ServerKeys.deriveSwk(umkSeed: umkData, serverId: serverId) else {
+            throw KeystoreError.derivationFailed("box SWK for \(serverId)")
+        }
+        return (irk, stkPub, HexUtil.encode(swk))
+    }
+
+    /// CGK provisioning twin of `deriveIRKBoxStkAndSwk` for per-service
+    /// leadership (Phase 6): the IRK plus the per-CLOUD Cloud Gossip Key (hex) in
+    /// ONE biometric. The CGK is `CloudGossip.deriveCGK(umk.seed)` — per cloud,
+    /// NOT per server (no serverId), so it is the same key for every box of the
+    /// account. The phone seals it to a box's REGISTERED identity at deposit time.
+    public static func deriveIRKAndCgk(
+        reason: String
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, cgkHex: String) {
+        let umk = try await unwrappedUMK(reason: reason)
+        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let irk = try Curve25519.Signing.PrivateKey(
+            rawRepresentation: irkSeed.withUnsafeBytes { Data($0) }
+        )
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let cgk = CloudGossip.deriveCGK(umkSeed: umkData) else {
+            throw KeystoreError.derivationFailed("cloud gossip key (CGK)")
+        }
+        return (irk, HexUtil.encode(cgk))
+    }
+
+    /// Stable Account Identity Key (AID) — the NON-rotating account identity
+    /// (`HKDF(umk, "flagship/account-id/v1")`, via `ServiceInvite`), used for
+    /// service-access gating: the friend signs the redeem/visit with it, and an
+    /// author's recorded identity in invites. Distinct from the versioned IRK
+    /// (which signs active orders). Behind one biometric. See
+    /// docs/service-access-gating.md.
+    public static func deriveAccountId(reason: String) async throws -> Curve25519.Signing.PrivateKey {
+        let umk = try await unwrappedUMK(reason: reason)
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let aid = ServiceInvite.deriveAccountId(umkSeed: umkData) else {
+            throw KeystoreError.derivationFailed("account identity key (AID)")
+        }
+        return aid
+    }
+
+    /// The household AEAD key (`HKDF(umk, "flagship/household-key/v1")`, via
+    /// `ServiceInvite`) that seals the `{name, photo?}` invite bundle. Every
+    /// device of the account derives the same key (so a sibling can open it);
+    /// `.com` never holds the UMK → stores ciphertext only.
+    public static func deriveHouseholdKey(reason: String) async throws -> Data {
+        let umk = try await unwrappedUMK(reason: reason)
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let key = ServiceInvite.deriveHouseholdKey(umkSeed: umkData) else {
+            throw KeystoreError.derivationFailed("household key")
+        }
+        return key
+    }
+
+    /// Gating v2 (Wave 3) author path: unwrap the UMK ONCE and return the author's
+    /// stable AID PRIVATE key + the household key in one biometric. v2 SIGNS the
+    /// create / revoke / list-query with the AID (not the rotating IRK), so the
+    /// box-as-authority can verify against the stable owner key after an IRK
+    /// rotation. The AID is also the listed/recorded inviter identity.
+    public static func deriveInviteAuthorAidKeys(
+        reason: String
+    ) async throws -> (aid: Curve25519.Signing.PrivateKey, household: Data) {
+        let umk = try await unwrappedUMK(reason: reason)
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let aid = ServiceInvite.deriveAccountId(umkSeed: umkData),
+              let household = ServiceInvite.deriveHouseholdKey(umkSeed: umkData)
+        else {
+            throw KeystoreError.derivationFailed("invite author AID keys")
+        }
+        return (aid, household)
+    }
+
+    /// Gating v2 consumer path: the friend's PER-AUTHOR contact AID
+    /// (`deriveContactAccountId(UMK, authorAID)`) for a given author — the
+    /// redeem/visit/knock/accept signer they present (NOT the global AID). One
+    /// biometric. `authorAidPub` comes from the invite link.
+    public static func deriveContactAccountId(
+        authorAidPub: Data,
+        reason: String
+    ) async throws -> Curve25519.Signing.PrivateKey {
+        let umk = try await unwrappedUMK(reason: reason)
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let contact = ServiceInvite.deriveContactAccountId(umkSeed: umkData, authorAidPub: authorAidPub) else {
+            throw KeystoreError.derivationFailed("contact account identity key")
+        }
+        return contact
+    }
+
     /// Account-level Ed25519 IRK keypair. Signs identity-rotation orders.
     ///
     /// Reads `currentIrkVersion()` from Keychain (defaulting to v1 on
@@ -258,6 +381,202 @@ public struct Keystore {
         return try Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
     }
 
+    // MARK: - Admin master root (Slice D — device authority root)
+
+    /// HKDF info string for the AES-GCM key that wraps the admin-root seed. A
+    /// DIFFERENT info than the UMK wrap (`flagship/umk-wrap/v1`) so, even when
+    /// both secrets ride the SAME Secure-Enclave ECDH secret (the single-Face-ID
+    /// account-open path), they seal under distinct keys.
+    private static let adminRootWrapInfo = "flagship/adminroot-wrap/v1"
+
+    /// Is a sealed admin master root present for the active profile? Cheap +
+    /// biometric-free (checks the sealed-seed slot AND the public-key slot).
+    /// The signing gate (§8.3) keys off this: present ⇒ this device is an admin,
+    /// sensitive orders sign under the admin root; absent ⇒ legacy owner-IRK.
+    public static var hasAdminRoot: Bool {
+        keychainRead(account: account(KCKey.adminRootWrapped)) != nil
+            && keychainRead(account: account(KCKey.adminRootPub)) != nil
+    }
+
+    /// The active profile's admin-root PUBLIC key as lowercase hex, or nil if no
+    /// admin root is sealed. Biometric-free (the pub is stored device-local but
+    /// NOT secret) so account-claim / recipe-mint can pin it without a prompt.
+    public static func adminRootPubHex() -> String? {
+        guard let raw = keychainRead(account: account(KCKey.adminRootPub)) else { return nil }
+        return HexUtil.encode(raw)
+    }
+
+    /// Account-open fast path (§1.2) — in ONE Secure-Enclave ECDH (a single Face
+    /// ID) generate + install the UMK, derive the account IRK from the same
+    /// in-memory seed, AND mint + seal a FRESH RANDOM admin master root.
+    ///
+    /// The admin root is a brand-new Ed25519 keypair, NOT derived from the UMK:
+    /// the first device holds it ⇒ it is admin by default. Both secrets seal
+    /// under keys derived from the ONE ECDH secret (distinct HKDF infos), so the
+    /// wrap costs no extra biometric. The UMK/ephemeral land `.cloudRoot`
+    /// (iCloud-synced identity); the admin root's three slots land `.deviceLocal`
+    /// (never synced — the authority root stays on admin devices only).
+    ///
+    /// Returns the IRK (for the username claim + recipe signing) and the admin
+    /// root's pubkey hex (published to `.com` at claim + pinned into the recipe
+    /// AuthCode).
+    public static func openAccountRoots(
+        reason: String = "Open your Flagship account"
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, adminRootPubHex: String) {
+        let umkSeed = SymmetricKey(size: .bits256)
+        let umkBytes = umkSeed.withUnsafeBytes { Data($0) }
+        let ephemeral = P256.KeyAgreement.PrivateKey()
+        let wrapper = try await WrappingKeypair.createOrLoad(reason: reason)
+        let ecdhBytes = try wrapper.ecdh(ephemeralPublic: ephemeral.publicKey)  // single biometric
+        do {
+            // 1. UMK — sealed + persisted exactly as installUMK does (cloudRoot).
+            let umkWrapKey = hkdf(from: ecdhBytes, info: "flagship/umk-wrap/v1")
+            let umkSealed = try AES.GCM.seal(umkBytes, using: umkWrapKey)
+            guard let umkCombined = umkSealed.combined else {
+                throw KeystoreError.wrapFailed("no combined representation")
+            }
+            try keychainWrite(account: account(KCKey.wrappedUmk), data: umkCombined)
+            try keychainWrite(account: account(KCKey.ephemeralPub), data: ephemeral.publicKey.x963Representation)
+            try setCurrentIrkVersion(1)
+            try setPendingIrkRotationVersion(nil)
+
+            // 2. Admin master root — fresh random Ed25519, sealed device-local
+            //    under the SAME ECDH secret (distinct HKDF info) + its ephemeral.
+            let adminKey = Curve25519.Signing.PrivateKey()
+            let adminWrapKey = hkdf(from: ecdhBytes, info: adminRootWrapInfo)
+            let adminSealed = try AES.GCM.seal(adminKey.rawRepresentation, using: adminWrapKey)
+            guard let adminCombined = adminSealed.combined else {
+                throw KeystoreError.wrapFailed("admin-root: no combined representation")
+            }
+            try keychainWrite(account: account(KCKey.adminRootWrapped), data: adminCombined, sync: .deviceLocal)
+            try keychainWrite(account: account(KCKey.adminRootEphemeralPub), data: ephemeral.publicKey.x963Representation, sync: .deviceLocal)
+            try keychainWrite(account: account(KCKey.adminRootPub), data: adminKey.publicKey.rawRepresentation, sync: .deviceLocal)
+
+            let irkSeed = derive(umk: umkSeed, info: "flagship/irk/v\(currentIrkVersion())")
+            let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
+            return (irk, HexUtil.encode(adminKey.publicKey.rawRepresentation))
+        } catch let e as KeystoreError {
+            throw e
+        } catch {
+            throw KeystoreError.wrapFailed(String(describing: error))
+        }
+    }
+
+    /// Mint + seal a FRESH admin master root for the active profile (§1.2),
+    /// returning its pubkey hex. Standalone twin of `openAccountRoots` for flows
+    /// that already have a UMK (e.g. a retry after a partial open, or promoting
+    /// this very device). One biometric (its own SE ECDH). Overwrites any
+    /// existing admin-root slots — callers gate on `hasAdminRoot`.
+    @discardableResult
+    public static func generateAdminRoot(
+        reason: String = "Create your Flagship admin key"
+    ) async throws -> String {
+        let ephemeral = P256.KeyAgreement.PrivateKey()
+        let wrapper = try await WrappingKeypair.createOrLoad(reason: reason)
+        let ecdhBytes = try wrapper.ecdh(ephemeralPublic: ephemeral.publicKey)
+        do {
+            let adminKey = Curve25519.Signing.PrivateKey()
+            let adminWrapKey = hkdf(from: ecdhBytes, info: adminRootWrapInfo)
+            let sealed = try AES.GCM.seal(adminKey.rawRepresentation, using: adminWrapKey)
+            guard let combined = sealed.combined else {
+                throw KeystoreError.wrapFailed("admin-root: no combined representation")
+            }
+            try keychainWrite(account: account(KCKey.adminRootWrapped), data: combined, sync: .deviceLocal)
+            try keychainWrite(account: account(KCKey.adminRootEphemeralPub), data: ephemeral.publicKey.x963Representation, sync: .deviceLocal)
+            try keychainWrite(account: account(KCKey.adminRootPub), data: adminKey.publicKey.rawRepresentation, sync: .deviceLocal)
+            return HexUtil.encode(adminKey.publicKey.rawRepresentation)
+        } catch let e as KeystoreError {
+            throw e
+        } catch {
+            throw KeystoreError.wrapFailed(String(describing: error))
+        }
+    }
+
+    /// Seal an EXISTING admin master root seed (32 raw Ed25519 bytes) into the
+    /// active profile's device-local slots. Slice D §4.2 (promote via sealed
+    /// root) + §5.2 (recovery re-establishes the escrowed root) + the rotate
+    /// action (re-seal the freshly-minted root). Twin of `generateAdminRoot`,
+    /// but instead of minting a random key it wraps the PROVIDED seed — the
+    /// promote-a-device bundle and the WebAuthn-PRF escrow both deliver the
+    /// SAME root byte-for-byte, so an admitted / recovered / rotated device
+    /// becomes a bare-master-root admin. Device-local (NO `kSecAttrSynchronizable`)
+    /// so authority never rides iCloud sync (residual-risk #6). One biometric
+    /// (its own SE ECDH). Overwrites any existing admin-root slots.
+    @discardableResult
+    public static func importAdminRoot(
+        seed: Data,
+        reason: String = "Set up your admin key on this device"
+    ) async throws -> String {
+        // Round-trips through CryptoKit so a malformed seed throws here rather
+        // than silently persisting an unusable authority root.
+        let adminKey = try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
+        let ephemeral = P256.KeyAgreement.PrivateKey()
+        let wrapper = try await WrappingKeypair.createOrLoad(reason: reason)
+        let ecdhBytes = try wrapper.ecdh(ephemeralPublic: ephemeral.publicKey)
+        do {
+            let adminWrapKey = hkdf(from: ecdhBytes, info: adminRootWrapInfo)
+            let sealed = try AES.GCM.seal(adminKey.rawRepresentation, using: adminWrapKey)
+            guard let combined = sealed.combined else {
+                throw KeystoreError.wrapFailed("admin-root: no combined representation")
+            }
+            try keychainWrite(account: account(KCKey.adminRootWrapped), data: combined, sync: .deviceLocal)
+            try keychainWrite(account: account(KCKey.adminRootEphemeralPub), data: ephemeral.publicKey.x963Representation, sync: .deviceLocal)
+            try keychainWrite(account: account(KCKey.adminRootPub), data: adminKey.publicKey.rawRepresentation, sync: .deviceLocal)
+            return HexUtil.encode(adminKey.publicKey.rawRepresentation)
+        } catch let e as KeystoreError {
+            throw e
+        } catch {
+            throw KeystoreError.wrapFailed(String(describing: error))
+        }
+    }
+
+    /// The admin master root's Ed25519 signing key, biometric-gated (like
+    /// `deriveIRK`): unseal the device-local seed under the Secure-Enclave
+    /// wrapping key. Signs sensitive/destructive orders (§8.3). Throws
+    /// `.keyNotFound` if this device holds no admin root.
+    public static func adminRootKey(
+        reason: String = "Authorize an admin action"
+    ) async throws -> Curve25519.Signing.PrivateKey {
+        guard
+            let wrapped = keychainRead(account: account(KCKey.adminRootWrapped)),
+            let ephemeralRaw = keychainRead(account: account(KCKey.adminRootEphemeralPub))
+        else {
+            throw KeystoreError.keyNotFound
+        }
+        let ephemeralPub: P256.KeyAgreement.PublicKey
+        do {
+            ephemeralPub = try P256.KeyAgreement.PublicKey(x963Representation: ephemeralRaw)
+        } catch {
+            throw KeystoreError.unwrapFailed("admin-root: bad ephemeral pubkey: \(error)")
+        }
+        let wrapper = try await WrappingKeypair.createOrLoad(reason: reason)
+        let ecdhBytes = try wrapper.ecdh(ephemeralPublic: ephemeralPub)
+        let unwrapKey = hkdf(from: ecdhBytes, info: adminRootWrapInfo)
+        do {
+            let box = try AES.GCM.SealedBox(combined: wrapped)
+            let seed = try AES.GCM.open(box, using: unwrapKey)
+            return try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
+        } catch {
+            throw KeystoreError.unwrapFailed(String(describing: error))
+        }
+    }
+
+    /// The signing key for a SENSITIVE/destructive order (§8.3), GATED: if this
+    /// device holds an admin master root, sign with it (the authority root);
+    /// else fall back to the owner IRK (legacy, for pre-wipe accounts that have
+    /// no admin root — the box/.com transition gate still accepts the IRK when
+    /// no admin root is pinned). Canonical bytes are IDENTICAL either way — only
+    /// the signing key changes. Non-sensitive orders (pairing, deposits) keep
+    /// calling `deriveIRK` directly and are unaffected.
+    public static func sensitiveOrderSigningKey(
+        reason: String = "Authorize this action"
+    ) async throws -> Curve25519.Signing.PrivateKey {
+        if hasAdminRoot {
+            return try await adminRootKey(reason: reason)
+        }
+        return try await deriveIRK(reason: reason)
+    }
+
     /// Boot-unlock approval fast path — unwrap the UMK ONCE and derive every
     /// key the approve ceremony needs (account IRK + this server's BAK) from
     /// the same in-memory seed. Behind a memoizing provider this collapses the
@@ -274,6 +593,71 @@ public struct Keystore {
         let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
         let bak = try Curve25519.Signing.PrivateKey(rawRepresentation: bakSeed.withUnsafeBytes { Data($0) })
         return (irk, bak)
+    }
+
+    /// Slice D boot-approval fast path — `deriveApprovalKeys` PLUS the admin
+    /// master root, all under ONE biometric. The first-boot approval both
+    /// releases the disk key (IRK/BAK) AND mints the RootEntitlement that
+    /// authorizes the box to serve (admin-root-signed on a reburned admin-pinned
+    /// box), so the ceremony needs both keys. Both the UMK and the admin-root
+    /// seed seal under the SAME Secure-Enclave wrapping key (distinct HKDF
+    /// infos), so a SINGLE `LAContext`/wrapper authenticates both ECDH unwraps —
+    /// the admin root costs no second Face ID. `adminRoot` is nil when this
+    /// device holds none (legacy / pre-wipe) ⇒ the caller signs the entitlement
+    /// under the IRK. The IRK/BAK are byte-identical to `deriveApprovalKeys`.
+    public static func deriveApprovalKeysWithAdminRoot(
+        serverId: String,
+        reason: String
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey, adminRoot: Curve25519.Signing.PrivateKey?) {
+        guard
+            let wrappedUmk = keychainRead(account: account(KCKey.wrappedUmk)),
+            let umkEphRaw = keychainRead(account: account(KCKey.ephemeralPub))
+        else {
+            throw KeystoreError.keyNotFound
+        }
+        let umkEph: P256.KeyAgreement.PublicKey
+        do {
+            umkEph = try P256.KeyAgreement.PublicKey(x963Representation: umkEphRaw)
+        } catch {
+            throw KeystoreError.unwrapFailed("bad ephemeral pubkey: \(error)")
+        }
+
+        // ONE wrapper / LAContext ⇒ ONE biometric covers every ECDH below.
+        let wrapper = try await WrappingKeypair.createOrLoad(reason: reason)
+
+        // UMK → IRK + BAK (byte-identical to deriveApprovalKeys).
+        let umkEcdh = try wrapper.ecdh(ephemeralPublic: umkEph)
+        let umkKey = hkdf(from: umkEcdh, info: "flagship/umk-wrap/v1")
+        let umk: SymmetricKey
+        do {
+            let plaintext = try AES.GCM.open(try AES.GCM.SealedBox(combined: wrappedUmk), using: umkKey)
+            umk = SymmetricKey(data: plaintext)
+        } catch {
+            throw KeystoreError.unwrapFailed(String(describing: error))
+        }
+        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let bakSeed = derive(umk: umk, info: "flagship/bak/v1|\(serverId)")
+        let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
+        let bak = try Curve25519.Signing.PrivateKey(rawRepresentation: bakSeed.withUnsafeBytes { Data($0) })
+
+        // Admin master root (Slice D) — SAME wrapper, so no second prompt.
+        // Absent slots ⇒ nil (legacy / pre-wipe): the caller signs under the IRK.
+        var adminRoot: Curve25519.Signing.PrivateKey? = nil
+        if
+            let wrappedAdmin = keychainRead(account: account(KCKey.adminRootWrapped)),
+            let adminEphRaw = keychainRead(account: account(KCKey.adminRootEphemeralPub)),
+            let adminEph = try? P256.KeyAgreement.PublicKey(x963Representation: adminEphRaw)
+        {
+            let adminEcdh = try wrapper.ecdh(ephemeralPublic: adminEph)
+            let adminKey = hkdf(from: adminEcdh, info: adminRootWrapInfo)
+            do {
+                let seed = try AES.GCM.open(try AES.GCM.SealedBox(combined: wrappedAdmin), using: adminKey)
+                adminRoot = try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
+            } catch {
+                throw KeystoreError.unwrapFailed("admin-root: \(error)")
+            }
+        }
+        return (irk, bak, adminRoot)
     }
 
     /// Current IRK HKDF version. Defaults to 1 if the slot is absent
@@ -476,7 +860,10 @@ public struct Keystore {
                         account(KCKey.irkPendingVersion, profile: id),
                         account(KCKey.watchDelegateSeed, profile: id),
                         account(KCKey.watchDelegateGrantId, profile: id),
-                        account(KCKey.acmeAccountKeyScalar, profile: id)]
+                        account(KCKey.acmeAccountKeyScalar, profile: id),
+                        account(KCKey.adminRootWrapped, profile: id),
+                        account(KCKey.adminRootEphemeralPub, profile: id),
+                        account(KCKey.adminRootPub, profile: id)]
         if id == defaultProfileId {
             // Legacy parity: the default install owned the device push channel.
             accounts.append(KCKey.pushX25519Priv)
@@ -506,7 +893,9 @@ public struct Keystore {
             for base in [KCKey.wrappedUmk, KCKey.ephemeralPub, KCKey.simWrapPriv,
                          KCKey.irkVersion, KCKey.irkPendingVersion,
                          KCKey.watchDelegateSeed, KCKey.watchDelegateGrantId,
-                         KCKey.acmeAccountKeyScalar] {
+                         KCKey.acmeAccountKeyScalar,
+                         KCKey.adminRootWrapped, KCKey.adminRootEphemeralPub,
+                         KCKey.adminRootPub] {
                 keychainDelete(account: account(base, profile: id))
             }
             WrappingKeypair.deleteSEKeyIfExists(profile: id)
@@ -523,8 +912,18 @@ public struct Keystore {
         // class — generic passwords (wrapped UMK / ephemeral / sim-wrap / push /
         // irk-version / watch-delegate / acme) AND keys (the SE wrapping keys) —
         // scoped to this app's Keychain access group. Leaves nothing behind.
+        //
+        // kSecAttrSynchronizableAny is REQUIRED: the UMK / ephemeral / sim-wrap
+        // are written `.cloudRoot` (kSecAttrSynchronizable=true), and a
+        // SecItemDelete WITHOUT this attribute matches ONLY non-synced items —
+        // so without it the wrapped UMK survived sign-out AND an app
+        // delete+reinstall (iCloud Keychain restored it), letting Face ID
+        // re-derive the supposedly-erased identity.
         for cls in [kSecClassGenericPassword, kSecClassKey] {
-            SecItemDelete([kSecClass as String: cls] as CFDictionary)
+            SecItemDelete([
+                kSecClass as String: cls,
+                kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+            ] as CFDictionary)
         }
         activeProfileLock.lock()
         _activeProfileId = defaultProfileId
@@ -612,6 +1011,20 @@ public struct Keystore {
         /// WebAuthn-PRF recovery envelope so losing every device doesn't
         /// brick issuance. Profile-scoped like the UMK slots. */
         static let acmeAccountKeyScalar = "com.flagship.acme-account-key.scalar"
+        /// Slice D (docs/device-admin-tier-spec.md §1.2) — the ADMIN MASTER
+        /// ROOT: a fresh RANDOM Ed25519 seed (NOT UMK-derived) the first device
+        /// mints at account creation, sealed AES-GCM under the profile's
+        /// Secure-Enclave wrapping key (biometric, exactly like the UMK) and
+        /// stored `.deviceLocal` (NON-synced, ThisDeviceOnly). This is the
+        /// membership-vs-authority custody line: the UMK/IRK sync across the
+        /// user's Apple-ID devices, the admin root does NOT — only devices
+        /// explicitly promoted to admin hold it. Three slots mirror the UMK
+        /// layout: the sealed seed, the ephemeral pubkey used to derive its wrap
+        /// key, and the (non-secret) admin-root PUBLIC key for cheap presence +
+        /// pubHex reads without a biometric. */
+        static let adminRootWrapped      = "com.flagship.adminroot.wrapped"
+        static let adminRootEphemeralPub = "com.flagship.adminroot.ephemeralpub"
+        static let adminRootPub          = "com.flagship.adminroot.pub"
     }
 
     /// The active profile's sim-wrap Keychain account (default → legacy).
@@ -681,12 +1094,16 @@ public struct Keystore {
     }
 
     /// Delete a Generic-Password Keychain item + its in-memory mirror.
-    /// Matches the legacy ad-hoc delete query (no Synchronizable filter)
-    /// so the default-profile on-disk behavior is unchanged.
+    /// kSecAttrSynchronizableAny is REQUIRED: our writes are `.cloudRoot`
+    /// (kSecAttrSynchronizable=true) and a SecItemDelete WITHOUT this
+    /// attribute matches ONLY non-synced items — so omitting it left the
+    /// synced wrapped UMK behind on sign-out (and it came back from iCloud
+    /// Keychain after a reinstall). Reads already use SynchronizableAny.
     fileprivate static func keychainDelete(account: String) {
         let q: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: account,
+            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
         ]
         SecItemDelete(q as CFDictionary)
         InMemoryStore.shared.remove(account: account)

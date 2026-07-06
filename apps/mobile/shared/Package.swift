@@ -37,6 +37,11 @@ let package = Package(
             name: "FlagshipCore",
             dependencies: ["FlagshipAPI"],
             path: "Sources/FlagshipCore"
+        ),
+        .testTarget(
+            name: "FlagshipSharedTests",
+            dependencies: ["FlagshipAPI", "FlagshipCore"],
+            path: "Tests/FlagshipSharedTests"
         )
     ]
 )

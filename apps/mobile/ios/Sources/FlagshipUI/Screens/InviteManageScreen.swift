@@ -14,6 +14,16 @@ public struct InviteManageScreen: View {
     private let appUrlForShare: String
     private let appLabel: String
     private let onIssueTapped: () -> Void
+    @State private var pendingRevoke: PendingRevoke?
+
+    /// A revoke awaiting the confirm step. Carries the copy to show and the
+    /// closure to run so both list rows share one confirmation dialog.
+    private struct PendingRevoke: Identifiable {
+        let id = UUID()
+        let title: String
+        let message: String
+        let run: () async -> Void
+    }
 
     public init(
         vm: InviteManageViewModel,
@@ -59,6 +69,19 @@ public struct InviteManageScreen: View {
         .refreshable { await vm.load() }
         .task {
             if case .idle = vm.state { await vm.load() }
+        }
+        .confirmationDialog(
+            pendingRevoke?.title ?? "",
+            isPresented: Binding(get: { pendingRevoke != nil }, set: { if !$0 { pendingRevoke = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Revoke", role: .destructive) {
+                if let pr = pendingRevoke { Task { await pr.run() } }
+                pendingRevoke = nil
+            }
+            Button("Cancel", role: .cancel) { pendingRevoke = nil }
+        } message: {
+            Text(pendingRevoke?.message ?? "")
         }
     }
 
@@ -138,10 +161,15 @@ public struct InviteManageScreen: View {
                         .foregroundColor(c.textMuted)
                 }
                 Spacer()
-                Button("Revoke") {
-                    Task { await vm.revokeInvite(inviteId: inv.inviteId, opaqueTagHex: inv.opaqueTag) }
+                FSDangerButton("Revoke") {
+                    let inviteId = inv.inviteId
+                    let tag = inv.opaqueTag
+                    pendingRevoke = PendingRevoke(
+                        title: "Revoke this invite?",
+                        message: "The invite link stops working immediately.",
+                        run: { await vm.revokeInvite(inviteId: inviteId, opaqueTagHex: tag) }
+                    )
                 }
-                .buttonStyle(.bordered)
                 .disabled(vm.revokePending)
                 .accessibilityIdentifier("invite-manage-revoke-invite-\(inv.inviteId)")
             }
@@ -163,15 +191,20 @@ public struct InviteManageScreen: View {
                     }
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
-                    Text("IRK \(String(row.irkPubHex.prefix(12)))…")
+                    Text("Account key \(String(row.irkPubHex.prefix(12)))…")
                         .font(FS.font.mono())
                         .foregroundColor(c.textMuted)
                 }
                 Spacer()
-                Button("Revoke") {
-                    Task { await vm.revokeAccess(irkPubKey: row.irkPubHex, opaqueTagHex: row.opaqueTag) }
+                FSDangerButton("Revoke") {
+                    let irk = row.irkPubHex
+                    let tag = row.opaqueTag
+                    pendingRevoke = PendingRevoke(
+                        title: "Revoke this access?",
+                        message: "This collaborator loses access immediately.",
+                        run: { await vm.revokeAccess(irkPubKey: irk, opaqueTagHex: tag) }
+                    )
                 }
-                .buttonStyle(.bordered)
                 .disabled(vm.revokePending)
                 .accessibilityIdentifier("invite-manage-revoke-access-\(row.irkPubHex.prefix(12))")
             }
@@ -190,11 +223,7 @@ public struct InviteManageScreen: View {
     }
 
     private func fmtDate(_ ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = DateFormatter()
-        fmt.dateStyle = .short
-        fmt.timeStyle = .short
-        return fmt.string(from: date)
+        Date.flagshipFormatted(epochMs: ms, includeTime: true)
     }
 
     /// Pass-through for the share URL the issue screen builds.

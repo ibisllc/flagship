@@ -77,6 +77,60 @@ describe("flagshipserver.com Worker — routing", () => {
     expect(await r3.text()).toBe("asset:/deck/");
   });
 
+  it("a missing .css/.js 404s instead of falling through to the SPA HTML", async () => {
+    // The assets binding runs `not_found_handling = single-page-application`,
+    // so a MISSING file resolves to index.html (200 + text/html). For a
+    // stylesheet/script that must read as a real 404 — otherwise the browser
+    // parses marketing HTML as CSS/JS and flashes the page unstyled mid-deploy.
+    const cookie = { cookie: "flagship_preview=1" };
+    const spaFallbackEnv = makeEnv({
+      ASSETS: {
+        async fetch(req) {
+          const path = new URL(req.url).pathname;
+          // A real asset the binding can resolve.
+          if (path === "/site.css") {
+            return new Response("body{color:red}", {
+              status: 200,
+              headers: { "content-type": "text/css" },
+            });
+          }
+          // Everything else "misses" → the SPA fallback (index.html).
+          return new Response("<!doctype html><title>Flagship</title>", {
+            status: 200,
+            headers: { "content-type": "text/html; charset=utf-8" },
+          });
+        },
+      },
+    });
+    // A missing stylesheet → real 404, NOT the 200-with-HTML fallback.
+    const missing = await route(
+      new Request("https://flagshipserver.com/theme-ui.css", { headers: cookie }),
+      spaFallbackEnv,
+    );
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get("content-type")).toContain("text/plain");
+    expect(await missing.text()).not.toContain("<!doctype");
+    const missingJs = await route(
+      new Request("https://flagshipserver.com/theme.js", { headers: cookie }),
+      spaFallbackEnv,
+    );
+    expect(missingJs.status).toBe(404);
+    // A real asset is still served untouched.
+    const realCss = await route(
+      new Request("https://flagshipserver.com/site.css", { headers: cookie }),
+      spaFallbackEnv,
+    );
+    expect(realCss.status).toBe(200);
+    expect(realCss.headers.get("content-type")).toContain("text/css");
+    // An SPA route (no file extension) still gets the HTML fallback.
+    const spaRoute = await route(
+      new Request("https://flagshipserver.com/ready/"),
+      spaFallbackEnv,
+    );
+    expect(spaRoute.status).toBe(200);
+    expect((spaRoute.headers.get("content-type") ?? "")).toContain("text/html");
+  });
+
   it("/api/* is forwarded to SERVICES_BASE_URL preserving method + path + query", async () => {
     await route(
       new Request("https://flagshipserver.com/api/me/servers?sessionId=abc"),
@@ -798,6 +852,21 @@ describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
     expect(await r.text()).toBe("asset:/webapp/views/home.js");
   });
 
+  it("/qrEncoder.js (shared root asset) is served from the SITE ROOT, not /webapp/", async () => {
+    // qrEncoder.js lives at apps/web/public/qrEncoder.js (shared with the
+    // marketing landing page) and is imported by the webapp's add-device +
+    // companion-dock views via `import("/qrEncoder.js")`. There is NO copy
+    // under webapp/, so a /webapp/ rewrite would hit the SPA index.html
+    // fallback (content-type text/html) and the dynamic import would fail —
+    // breaking the pairing QR. It must resolve from root.
+    const r = await route(
+      new Request("https://web.flagshipserver.com/qrEncoder.js"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/qrEncoder.js");
+  });
+
   it("/api/* on web. host is NOT proxied — it's rewritten under /webapp/ (not exposed here)", async () => {
     // The webapp talks to the user's pod for /api/screens/*, never to
     // web.flagshipserver.com. Anything that lands on /api/* here is a
@@ -831,6 +900,188 @@ describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
       makeEnv(),
     );
     expect(r.status).toBe(200);
+  });
+});
+
+describe("webapp host — client-route SPA fallback (the /join pairing bug)", () => {
+  // The cross-device pairing QR encodes <controlApex>/join?sid=…&pk=…. On the
+  // webapp host that path must boot the webapp's index.html so the in-app
+  // router runs enterJoin({sid,pk}); a naive /join → /webapp/join rewrite
+  // misses on disk and the assets binding's site-root SPA fallback serves the
+  // MARKETING page instead. Every webapp client route (extensionless path)
+  // serves the webapp's OWN index.html.
+
+  it("/join on web. host serves the webapp index.html (PWA boots → enterJoin)", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/join"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/index.html");
+  });
+
+  it("/join?sid=x&pk=y on web. host serves the webapp index.html (query carried by browser)", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/join?sid=relay123&pk=abc"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    // The router reads sid/pk from window.location in the browser — the
+    // server just needs to hand back the webapp shell, not the asset /join.
+    expect(await r.text()).toBe("asset:/webapp/index.html");
+  });
+
+  it("a generic extensionless route (/home) also serves the webapp index.html", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/home"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/index.html");
+  });
+
+  it("real asset files (with an extension) still rewrite to /webapp/<file>, NOT index.html", async () => {
+    // Regression guard: the SPA fallback must not swallow actual files.
+    const css = await route(
+      new Request("https://web.flagshipserver.com/style.css"),
+      makeEnv(),
+    );
+    expect(await css.text()).toBe("asset:/webapp/style.css");
+    const js = await route(
+      new Request("https://web.flagshipserver.com/lib/api.js"),
+      makeEnv(),
+    );
+    expect(await js.text()).toBe("asset:/webapp/lib/api.js");
+  });
+
+  it("/ on web. host still serves /webapp/ (binding serves index.html) — unchanged", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/"),
+      makeEnv(),
+    );
+    expect(await r.text()).toBe("asset:/webapp/");
+  });
+
+  // Apex-aware: the gym webapp host is web.<CONTROL_APEX>.
+  it("/join on the GYM webapp host (web.gym.flagshipserver.com) serves the webapp index.html", async () => {
+    const env = makeEnv({ CONTROL_APEX: "gym.flagshipserver.com" });
+    const r = await route(
+      new Request("https://web.gym.flagshipserver.com/join?sid=x&pk=y"),
+      env,
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/index.html");
+  });
+
+  it("a gym webapp asset file still rewrites to /webapp/<file>", async () => {
+    const env = makeEnv({ CONTROL_APEX: "gym.flagshipserver.com" });
+    const r = await route(
+      new Request("https://web.gym.flagshipserver.com/manifest.json"),
+      env,
+    );
+    expect(await r.text()).toBe("asset:/webapp/manifest.json");
+  });
+
+  // The CONTROL apex must be UNCHANGED: there /join is the native universal
+  // link and the web fallback is the marketing surface — it must NEVER route
+  // into serveWebapp / the webapp index.html.
+  it("/join on the CONTROL apex (flagshipserver.com) is NOT the webapp — coming-soon without the preview cookie", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/join"),
+      makeEnv(),
+    );
+    // Pre-launch gate: an un-cookied visitor sees the coming-soon page, not
+    // the webapp shell.
+    expect(await r.text()).toBe("asset:/coming-soon.html");
+  });
+
+  it("/join on the CONTROL apex with the preview cookie falls through to the marketing asset, NOT /webapp/index.html", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/join", {
+        headers: { cookie: "flagship_preview=1" },
+      }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    // The marketing SPA fallback (asset binding) — explicitly NOT the webapp.
+    const body = await r.text();
+    expect(body).toBe("asset:/join");
+    expect(body).not.toBe("asset:/webapp/index.html");
+  });
+
+  it("/join on the GYM control apex (gym.flagshipserver.com) is also NOT the webapp", async () => {
+    const env = makeEnv({ CONTROL_APEX: "gym.flagshipserver.com" });
+    const r = await route(
+      new Request("https://gym.flagshipserver.com/join", {
+        headers: { cookie: "flagship_preview=1" },
+      }),
+      env,
+    );
+    const body = await r.text();
+    expect(body).toBe("asset:/join");
+    expect(body).not.toBe("asset:/webapp/index.html");
+  });
+});
+
+describe("/transfer — take-over universal-link browser fallback", () => {
+  // On the CONTROL apex the app (when installed) intercepts /transfer?o=… as a
+  // universal link / App-Link and never hits the Worker. When it's NOT installed
+  // the browser lands here; the Worker 308-redirects to the webapp's own origin,
+  // preserving ?o= so the PWA boots into the claim view. Placed before the
+  // coming-soon gate → works with no preview cookie (a real acquirer's case).
+
+  it("308-redirects /transfer?o=… to the webapp origin, preserving the offer payload", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/transfer?o=eyJhIjoxfQ"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe(
+      "https://web.flagshipserver.com/transfer?o=eyJhIjoxfQ",
+    );
+  });
+
+  it("redirects the trailing-slash variant too", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/transfer/?o=abc"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe(
+      "https://web.flagshipserver.com/transfer?o=abc",
+    );
+  });
+
+  it("fires WITHOUT the preview cookie (ungated — before the coming-soon gate)", async () => {
+    // A real acquirer opening the link has no preview cookie; the fallback
+    // must still reach the webapp, not the coming-soon page.
+    const r = await route(
+      new Request("https://flagshipserver.com/transfer?o=xyz"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe(
+      "https://web.flagshipserver.com/transfer?o=xyz",
+    );
+  });
+
+  it("does not hit the proxy fall-through (no upstream fetch)", async () => {
+    await route(
+      new Request("https://flagshipserver.com/transfer?o=xyz"),
+      makeEnv(),
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it("/transfer on the web. host serves the webapp index.html (client route → SPA boots)", async () => {
+    // The redirect target: an extensionless client route on the webapp host
+    // hands back the webapp shell so dispatchInitialView() can read ?o=.
+    const r = await route(
+      new Request("https://web.flagshipserver.com/transfer?o=xyz"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/index.html");
   });
 });
 

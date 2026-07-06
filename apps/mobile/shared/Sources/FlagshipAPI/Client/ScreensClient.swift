@@ -78,6 +78,13 @@ public protocol ScreensClient: Sendable {
     // awaiting a tool response (talkToUser or requestEnvVar ack).
     func vibeCodeSessionState(sessionId: String) async throws -> VibeCodeSessionPublicState
     func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse
+    /// Deploy a `ready-to-deploy` scratch (vibe-code) session: builds the
+    /// emitted manifest + files into a container and installs it on the box.
+    /// Hits the daemon's legacy `POST /api/llm/sessions/<id>/deploy` (the only
+    /// deploy trigger for scratch sessions — the WS stream is a pure relay and
+    /// never auto-deploys). Returns `{ok, serviceId, url}` (same shape as the
+    /// build-modes deploy).
+    func vibeCodeDeploy(sessionId: String) async throws -> BuildDeployResponse
 
     // P9 — peer-backup management.
     func peerBackupStatus() async throws -> PeerBackupStatusResponse
@@ -200,6 +207,22 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
             return d
         }
         return "Couldn't reach the server. Check your connection and try again."
+    }
+
+    /// The build-a-service `/api/build/*` surface is mounted only when the box
+    /// has its service platform wired. When it isn't, the ENTIRE prefix 404s —
+    /// so a 404 on a build ENTRY call (git "Check repo", MCP create, the build
+    /// list) unambiguously means "this box can't build services", not "that
+    /// thing was removed". Surfaces should route those entry-call failures
+    /// through here so the user sees the truth instead of the generic
+    /// "couldn't find that" copy. Returns nil for anything but a 404 so the
+    /// caller falls back to the normal plain-language mapping.
+    public static func buildPlatformAbsent(_ error: Error) -> String? {
+        if case let ScreensClientError.http(status, _) = error, status == 404 {
+            return "This server isn't set up to build services yet. "
+                + "Building services needs the services feature enabled on this box."
+        }
+        return nil
     }
 
     /// UX-B — map a raw HTTP status to plain language. Centralised here so no

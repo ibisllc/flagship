@@ -248,7 +248,7 @@ describe("tunnel hub — A′ per-box wildcard claims (end-to-end)", () => {
       resolveBackend: () => null,
     });
     clients.push(c);
-    await expect(c.ready()).rejects.toThrow(/not a valid flagship.services pod name/);
+    await expect(c.ready()).rejects.toThrow(/not a valid pod name under the data-plane apex/);
     expect(registry.size()).toBe(0);
   });
 

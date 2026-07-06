@@ -43,4 +43,29 @@ describe("parseConfig", () => {
       }),
     ).toThrow(/bakPublicKey/);
   });
+
+  it("gating v2 — parses an optional ownerAidPubHex", () => {
+    const aid = "ab".repeat(32);
+    const cfg = parseConfig({
+      serverId: "srv-1",
+      userId: "u1",
+      bakPublicKey: validHex,
+      irkPublicKey: validHex,
+      ownerAidPubHex: aid,
+    });
+    expect(cfg.ownerAidPub).toBeDefined();
+    expect(cfg.ownerAidPub!.length).toBe(32);
+  });
+
+  it("gating v2 — a malformed ownerAidPubHex is IGNORED (non-blocking), not thrown", () => {
+    const cfg = parseConfig({
+      serverId: "srv-1",
+      userId: "u1",
+      bakPublicKey: validHex,
+      irkPublicKey: validHex,
+      ownerAidPubHex: "nothex",
+    });
+    expect(cfg.ownerAidPub).toBeUndefined(); // dropped, but the config still loads
+    expect(cfg.serverId).toBe("srv-1");
+  });
 });

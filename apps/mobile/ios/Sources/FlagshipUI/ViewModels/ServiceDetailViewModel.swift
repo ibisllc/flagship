@@ -31,6 +31,26 @@ public final class ServiceDetailViewModel {
         case failed(String)
     }
 
+    /// Phase machine for the destructive Remove-service ceremony. The button
+    /// shows a spinner + disables while `.signing`/`.posting`; the container
+    /// pops back + refreshes the list on `.completed`, toasts on `.failed`.
+    public private(set) var removePhase: RemovePhase = .idle
+
+    public enum RemovePhase: Equatable, Sendable {
+        case idle
+        case signing
+        case posting
+        case completed
+        case failed(String)
+    }
+
+    public var isRemoving: Bool {
+        switch removePhase {
+        case .signing, .posting: return true
+        default: return false
+        }
+    }
+
     /// Pods the service should run on (server-set). Edited locally; reset
     /// by `cancelEdits()` and persisted by `save()`.
     public var runOnPodIds: Set<String> = []
@@ -60,6 +80,16 @@ public final class ServiceDetailViewModel {
     private let username: () -> String?
     private let allPods: [PodInfo]
     private let globalLeaderPodId: String?
+    /// Box-direct client for `DELETE /api/services/:id`. Optional + defaulted
+    /// to the in-process Mock so existing test/preview construction (and the
+    /// WEB-DOMAINS-only call sites) keep compiling unchanged.
+    private let uninstallClient: any ServiceUninstallClient
+    /// Box FQDN the service runs on — the daemon pins its owner IRK as this
+    /// `serverId`. Resolved by the container from the selected/leader pod.
+    private let serverDomain: String?
+    /// Derives the owner IRK behind the biometric prompt. Injected so tests
+    /// can supply a deterministic key; production uses `Keystore.deriveIRK`.
+    private let irkSigner: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
 
     public init(
         serviceId: String,
@@ -67,7 +97,10 @@ public final class ServiceDetailViewModel {
         allPods: [PodInfo],
         globalLeaderPodId: String?,
         server: (any FlagshipServerClient)? = nil,
-        username: @escaping () -> String? = { nil }
+        username: @escaping () -> String? = { nil },
+        uninstallClient: (any ServiceUninstallClient)? = nil,
+        serverDomain: String? = nil,
+        irkSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil
     ) {
         self.serviceId = serviceId
         self.client = client
@@ -75,6 +108,9 @@ public final class ServiceDetailViewModel {
         self.globalLeaderPodId = globalLeaderPodId
         self.server = server
         self.username = username
+        self.uninstallClient = uninstallClient ?? MockServiceUninstallClient()
+        self.serverDomain = serverDomain
+        self.irkSigner = irkSigner ?? { reason in try await Keystore.deriveIRK(reason: reason) }
     }
 
     public var availablePods: [PodInfo] { allPods }
@@ -197,13 +233,14 @@ public final class ServiceDetailViewModel {
 
     private func bindCustomDomain(_ fqdn: String) async {
         guard let server, let user = username(), !user.isEmpty else { return }
-        // IRK-sign the canonical attach bytes (mirrors renameApp). The
-        // Keystore.deriveIRK call triggers the Face ID prompt that is
-        // the second-factor confirmation; the .com verifier checks this
-        // signature against the account IRK before recording the order.
+        // Slice D — set-custom-domain is a SENSITIVE order. Sign with the admin
+        // master root when this device holds one (else the legacy owner IRK); the
+        // Face ID prompt is the second-factor confirmation, and `.com`'s
+        // authority gate verifies this signature against the admin root (or IRK,
+        // pre-D) before recording the order. Canonical bytes are unchanged.
         let irk: Curve25519.Signing.PrivateKey
         do {
-            irk = try await Keystore.deriveIRK(reason: "Attach a custom domain")
+            irk = try await Keystore.sensitiveOrderSigningKey(reason: "Attach a custom domain")
         } catch {
             customDomainPrompt = CustomDomainPrompt(
                 title: "Couldn't request custom domain",
@@ -397,6 +434,80 @@ public final class ServiceDetailViewModel {
             return false
         } catch {
             renamePhase = .failed("Couldn't rename: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// Destructive uninstall. Mirrors the env-Save / front-page ceremony: derive
+    /// the owner IRK behind the biometric prompt, sign the canonical
+    /// `UninstallServiceRequest` bytes, and DELETE box-direct over the pinned
+    /// pipe (`DELETE /api/services/:id`) — flagshipserver.com is never in the
+    /// path. Returns `true` on a 200 so the container can pop back + refresh.
+    ///
+    /// The caller is expected to have just shown a confirm dialog; the IRK
+    /// derivation here triggers the Face ID prompt (the second-factor
+    /// confirmation), so no extra re-prompt is needed.
+    @discardableResult
+    public func uninstall() async -> Bool {
+        // The owner IRK is pinned to a SPECIFIC box (`serverId`); without
+        // knowing which box runs this service we can't sign a verifiable order.
+        guard let domain = serverDomain, !domain.isEmpty else {
+            removePhase = .failed("No server to remove this from.")
+            return false
+        }
+        // Prefer the authoritative creator/slug from the loaded detail; fall
+        // back to splitting the serviceId on the `--` delimiter (both halves
+        // may carry single dashes — mirrors composeServiceId / parseServiceId,
+        // docs/service-addressing-double-dash.md).
+        let creator: String
+        let slug: String
+        if let app = detail.value?.app {
+            creator = app.creator
+            slug = app.slug
+        } else if let delim = serviceId.range(of: "--") {
+            creator = String(serviceId[..<delim.lowerBound])
+            slug = String(serviceId[delim.upperBound...])
+        } else {
+            removePhase = .failed("Couldn't identify the service to remove.")
+            return false
+        }
+
+        removePhase = .signing
+        let irk: Curve25519.Signing.PrivateKey
+        do {
+            irk = try await irkSigner("Remove \(slug)")
+        } catch {
+            removePhase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            return false
+        }
+        let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        let order = UninstallServiceOrder(
+            serverId: domain, creator: creator, slug: slug, issuedAt: issuedAt,
+        )
+        let signature: Data
+        do {
+            signature = try order.sign(with: irk)
+        } catch {
+            removePhase = .failed("Couldn't sign the request: \(error.localizedDescription)")
+            return false
+        }
+
+        removePhase = .posting
+        do {
+            let env = order.envelope(signatureHex: HexUtil.encode(signature))
+            try await uninstallClient.uninstallService(
+                serverDomain: domain,
+                serviceId: serviceId,
+                request: env["request"] as! [String: Any],
+                signatureHex: env["signature"] as! String,
+            )
+            removePhase = .completed
+            return true
+        } catch let e as ScreensClientError {
+            removePhase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+            return false
+        } catch {
+            removePhase = .failed("Couldn't reach the box. Check your connection and try again.")
             return false
         }
     }

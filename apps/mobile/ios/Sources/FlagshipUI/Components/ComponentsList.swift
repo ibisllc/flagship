@@ -404,6 +404,10 @@ public struct FSSettingsRow: View {
     /// When false the chevron is hidden (a row that toggles in place / is a
     /// value display, not a drill-down).
     var showsChevron: Bool
+    /// Optional stable a11y id for the row's tap target. Defaults to nil so
+    /// every existing call site is byte-identical; set it where the gym (or any
+    /// caller) needs to address a specific row by handle rather than its label.
+    var accessibilityId: String?
     let action: () -> Void
 
     public init(
@@ -414,6 +418,7 @@ public struct FSSettingsRow: View {
         value: String? = nil,
         badge: Int? = nil,
         showsChevron: Bool = true,
+        accessibilityId: String? = nil,
         action: @escaping () -> Void = {}
     ) {
         self.icon = icon
@@ -423,6 +428,7 @@ public struct FSSettingsRow: View {
         self.value = value
         self.badge = badge
         self.showsChevron = showsChevron
+        self.accessibilityId = accessibilityId
         self.action = action
     }
 
@@ -470,7 +476,7 @@ public struct FSSettingsRow: View {
                 if showsChevron {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(c.textMuted.opacity(0.7))
+                        .foregroundColor(c.textMuted)
                 }
             }
             .padding(.horizontal, FS.space.s4)
@@ -478,6 +484,16 @@ public struct FSSettingsRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .modifier(OptionalAccessibilityId(id: accessibilityId))
+    }
+}
+
+/// Applies `.accessibilityIdentifier` only when an id is present, so a row
+/// without one keeps the framework's default (label-based) identity.
+private struct OptionalAccessibilityId: ViewModifier {
+    let id: String?
+    func body(content: Content) -> some View {
+        if let id { content.accessibilityIdentifier(id) } else { content }
     }
 }
 

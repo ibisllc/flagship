@@ -53,6 +53,13 @@ export interface VibeCodeHttpDeps {
    */
   deploySession?: (session: VibeCodeSession) => Promise<{ ok: true; serviceId: string; url: string } | { ok: false; reason: string }>;
   /**
+   * Re-invoke the model after a `user-reply` / `tool-ack` so a chat-guided
+   * build continues (the reply alone only flips the session back to
+   * `streaming`). Optional — when omitted, replies are recorded but the model
+   * is not resumed (the pre-existing behaviour).
+   */
+  resumeStreaming?: (sessionId: string, model?: string) => Promise<void>;
+  /**
    * Per-app env store — used by the tool-ack endpoint to compute
    * `currentlySet` for `requestEnvVar` acks. Names ONLY; values never
    * leave the store. Optional: in-tests we inject an InMemory; in
@@ -194,6 +201,11 @@ export function buildVibeCodeHttpHandlers(deps: VibeCodeHttpDeps) {
         text: body.text,
         attachmentSummaries: attach.attachments.map(summarizeAttachment),
       });
+      if (deps.resumeStreaming) {
+        void deps.resumeStreaming(session.meta.sessionId).catch(
+          (e: Error) => session.fail(e.message ?? "resume failed", true),
+        );
+      }
       return jok({ ok: true });
     }
     if (verb === "tool-ack" && req.method === "POST") {
@@ -240,6 +252,11 @@ export function buildVibeCodeHttpHandlers(deps: VibeCodeHttpDeps) {
       };
       const r = session.pushEnvVarAck({ toolUseId: body.toolUseId, ack });
       if (!r.ok) return jerr(409, r.reason ?? "tool-ack rejected");
+      if (deps.resumeStreaming) {
+        void deps.resumeStreaming(session.meta.sessionId).catch(
+          (e: Error) => session.fail(e.message ?? "resume failed", true),
+        );
+      }
       return jok({ ok: true, ack });
     }
     if (verb === "deploy" && req.method === "POST") {

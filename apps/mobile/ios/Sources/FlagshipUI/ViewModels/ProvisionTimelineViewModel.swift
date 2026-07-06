@@ -123,18 +123,30 @@ public final class ProvisionTimelineViewModel {
         case .directory(let username, let fqdn, let fetch):
             guard let directory = await fetch(username) else { return false }
             let target = fqdn.lowercased()
-            // A registered fqdn is the terminal good outcome — the box made
-            // it all the way; the reconciler flips the list pod online.
-            if directory.pods.contains(where: {
+            // Registered is NOT the same as serving. A box appears in `pods` the
+            // moment its daemon registers — but it may still be sealing, rebooting
+            // into its encrypted root, or waiting for a boot-unlock approval, with
+            // no cert yet. Only `cameOnline` (a cert landed OR it heartbeats) is
+            // the terminal `live` rung. A registered-but-not-yet-serving box must
+            // stay on a non-terminal "coming online" rung, so the ladder never
+            // reads "complete" while the box is still at preseed / locked (the
+            // live office.harry2 bug: registered, no cert, awaitingUnlock).
+            if let reg = directory.pods.first(where: {
                 $0.serverDomain.lowercased() == target && $0.revokedAt == nil
             }) {
-                return apply(ProvisionStatus(
-                    serial: "",
-                    serverDomain: fqdn,
-                    phase: .live,
-                    updatedAt: Int64(Date().timeIntervalSince1970 * 1000),
-                    history: []
-                ))
+                if reg.cameOnline {
+                    return apply(ProvisionStatus(
+                        serial: "",
+                        serverDomain: fqdn,
+                        phase: .live,
+                        updatedAt: Int64(Date().timeIntervalSince1970 * 1000),
+                        history: []
+                    ))
+                }
+                // Registered but not serving yet → don't force `.live`. Keep
+                // polling; it flips to `.live` only when a cert lands. (It won't
+                // be in `pending` anymore, so we fall through to `return false`
+                // and the ladder holds its last in-progress rung.)
             }
             guard
                 let entry = directory.pending.first(where: { $0.fqdn.lowercased() == target }),

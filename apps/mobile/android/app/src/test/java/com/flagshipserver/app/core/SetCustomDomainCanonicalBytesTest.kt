@@ -15,13 +15,13 @@ class SetCustomDomainCanonicalBytesTest {
     @Test fun matchesDocumentedFieldOrder() {
         val bytes = SetCustomDomainClaim.canonicalBytes(
             username = "alice",
-            serviceId = "meta-scratchpad",
+            serviceId = "meta--scratchpad",
             fqdn = "shop.example.com",
             issuedAt = 1700000000000L,
         )
         // tag | username | serviceId | fqdn(lowercased) | issuedAt
         assertEquals(
-            "flagship/custom-domain/v1|alice|meta-scratchpad|shop.example.com|1700000000000",
+            "flagship/custom-domain/v1|alice|meta--scratchpad|shop.example.com|1700000000000",
             String(bytes, Charsets.UTF_8),
         )
     }

@@ -105,6 +105,13 @@ export interface WritableR2Bucket {
 // ──────────────────────────────────────────────────────────────────────
 
 export interface DemoProvisionDeps {
+  /** The services apex (default "flagship.services"); a test env sets it to
+   *  e.g. "gym.flagship.services" so demo boxes land in ITS namespace. */
+  apex?: string;
+  /** The control-plane apex (default "flagshipserver.com"); a test env sets it
+   *  to e.g. "gym.flagshipserver.com" so the box's blob registrationUrl points
+   *  at IT, not prod. */
+  controlApex?: string;
   storage: DemoUsersStorage;
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
@@ -354,7 +361,7 @@ export async function handleAdminSnapshotNow(
   }
 
   const serial = bytesToHex(rand(16));
-  const serverDomain = `${serverName}.${u}.flagship.services`;
+  const serverDomain = `${serverName}.${u}.${deps.apex ?? "flagship.services"}`;
   const issuedAt = now;
   const expiresAt = now + 24 * 3_600_000;
 
@@ -393,7 +400,7 @@ export async function handleAdminSnapshotNow(
     username: u,
     serverName,
     phoneDelegatedPubKey: delegated.publicKey,
-    registrationUrl: "https://flagshipserver.com/api/server/register",
+    registrationUrl: `https://${deps.controlApex ?? "flagshipserver.com"}/api/server/register`,
     authCode,
     authCodeUserSignature: authCodeSig,
     installerGitRef: "main",

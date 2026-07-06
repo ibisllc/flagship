@@ -53,7 +53,7 @@ public enum QrRelayError: Error, LocalizedError, Sendable {
 // MARK: - Live (URLSessionWebSocketTask)
 
 public final class LiveQrRelayClient: QrRelayClient, @unchecked Sendable {
-    public static let defaultHost = "flagshipserver.com"
+    public static var defaultHost: String { Endpoints.controlHost }
 
     private let urlSession: URLSession
     private let host: String

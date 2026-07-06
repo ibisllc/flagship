@@ -5,12 +5,13 @@
 // these and wires the click handler to `completeReplaceDeviceCeremony`.
 
 import { escapeHtml } from "./util.js";
+import { formatWhen } from "./dateFormat.js";
 
-/** Format a completesAt millis epoch as a locale string; "soon" if
+/** Format a completesAt millis epoch per the shared S2 rules; "soon" if
  *  the value is missing / non-numeric. */
-export function formatCompletesAt(ms) {
+export function formatCompletesAt(ms, nowMs = Date.now()) {
   if (typeof ms !== "number" || !ms) return "soon";
-  return new Date(ms).toLocaleString();
+  return formatWhen(ms, nowMs);
 }
 
 /** Should the banner render? Honors the unavailable-endpoint fallback
@@ -31,7 +32,7 @@ export function renderPendingBanner(snapshot, nowMs = Date.now()) {
   if (!shouldRenderBanner(snapshot)) return "";
   const p = snapshot.pending;
   const elapsed = typeof p.completesAt === "number" && p.completesAt <= nowMs;
-  const when = formatCompletesAt(p.completesAt);
+  const when = formatCompletesAt(p.completesAt, nowMs);
   const body = elapsed
     ? `The grace window has elapsed — finalize the device replacement now.`
     : `Replace pending — finalize when the 3-day grace elapses (${escapeHtml(when)}).`;

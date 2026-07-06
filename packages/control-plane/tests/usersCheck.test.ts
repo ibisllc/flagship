@@ -65,21 +65,15 @@ describe("handleUsersCheck", () => {
     expect((r.body as UsersCheckResponse).available).toBe(true);
   });
 
-  it("rejects usernames containing a hyphen (no-hyphen rule) — REAL accounts only", async () => {
-    // Hyphens are banned from REAL usernames so the composite app id
-    // `<creator>-<slug>` parses unambiguously. A hyphenated handle
-    // with NO demo/test-account row backing it must come back
-    // available=false with a clear reason.
-    //
-    // NOTE: hyphenated usernames that ARE registered as demo accounts
-    // get a separate, demo-aware response — see the test below
-    // "hyphenated DEMO username returns demoServer block before
-    // validateUserLabel rejection."
+  it("accepts a hyphenated REAL username (interior dashes are valid now)", async () => {
+    // Usernames now allow interior single dashes (the composite app id uses the
+    // `--` delimiter — docs/service-addressing-double-dash.md), so a hyphenated
+    // handle with no backing row is simply AVAILABLE, not a shape rejection.
     const r = await handleUsersCheck({ storage: fakeStorage() }, { username: "maria-jose" });
     expect(r.status).toBe(200);
     const body = r.body as UsersCheckResponse;
-    expect(body.available).toBe(false);
-    expect(body.reason).toMatch(/no hyphens/i);
+    expect(body.available).toBe(true);
+    expect(body.reason ?? "").not.toMatch(/no hyphens/i);
   });
 
   it("hyphenated DEMO username returns demoServer block before validateUserLabel rejection", async () => {

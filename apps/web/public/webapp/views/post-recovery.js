@@ -16,6 +16,7 @@ import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 
 registerView("view-post-recovery");
 
@@ -50,12 +51,12 @@ function renderReport(report) {
   }
   const statusPill =
     report.status === "complete"
-      ? '<span class="pill" style="background:#1f3a1f;color:#6ee7a8">done</span>'
+      ? '<span class="pill ok">Done</span>'
       : report.status === "failed"
-      ? '<span class="pill" style="background:#3a1f1f;color:#f87171">failed</span>'
-      : '<span class="pill">running…</span>';
+      ? '<span class="pill err">Failed</span>'
+      : '<span class="pill">Running…</span>';
   const undoText = report.undoWindowExpiresAt
-    ? new Date(report.undoWindowExpiresAt).toLocaleString()
+    ? formatWhen(report.undoWindowExpiresAt)
     : "—";
   root.innerHTML = `
     <div class="card">
@@ -63,8 +64,8 @@ function renderReport(report) {
       <div class="row"><span class="label">apps reattached</span><span class="value">${report.reattachedCount}</span></div>
       <div class="row"><span class="label">apps unchanged</span><span class="value">${report.unchangedCount}</span></div>
       <div class="row"><span class="label">total rows rewritten</span><span class="value">${report.totalRewritten}</span></div>
-      <div class="row"><span class="label">old IRK prefix</span><span class="value text-xs">${escapeHtml(report.oldIrkPrefix ?? "")}…</span></div>
-      <div class="row"><span class="label">new IRK prefix</span><span class="value text-xs">${escapeHtml(report.newIrkPrefix ?? "")}…</span></div>
+      <div class="row"><span class="label">old account key</span><span class="value text-xs">${escapeHtml(report.oldIrkPrefix ?? "")}…</span></div>
+      <div class="row"><span class="label">new account key</span><span class="value text-xs">${escapeHtml(report.newIrkPrefix ?? "")}…</span></div>
       <div class="row"><span class="label">undo available until</span><span class="value text-xs">${escapeHtml(undoText)}</span></div>
     </div>
     <h3 class="mt-4">Per-app</h3>

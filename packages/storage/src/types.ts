@@ -84,6 +84,38 @@ export interface UsernameRecord {
    * RecoveryWipePolicy on read.
    */
   recoveryWipePolicy?: RecoveryWipePolicy;
+  /**
+   * Service-access gating v2 — the account's STABLE Account Identity Key
+   * (AID) pubkey, hex (`deriveAccountId(UMK)`; demo: `deriveDemoUserAid`).
+   * Registered alongside the IRK so `.com` can verify AID-signed
+   * service-invite create/revoke against it (dual-accept with the IRK
+   * during the client transition — docs/service-access-gating.md v2). The
+   * AID never rotates (unlike the versioned IRK), so it is the right
+   * principal for the box-as-authority create signature. Absent on pre-v2
+   * rows ⇒ `.com` falls back to IRK-verify only.
+   */
+  aidPubHex?: string;
+  /**
+   * Account-deletion / name-reclaim (migration 0058) — coarse "account
+   * last seen" epoch-ms, bumped (idempotently, ~once/day) on any
+   * authenticated/owner-IRK-signed read path. Drives the sysadmin
+   * username-reclaim tool (free a name inactive ≥ 90 days;
+   * docs/account-deletion-and-name-reclaim.md §3). Absent on pre-0058
+   * rows; readers treat undefined as "no recorded activity" and fall
+   * back to `claimedAt`.
+   */
+  lastActive?: number;
+  /**
+   * Slice D — device admin tier (migration 0064). The account's pinned ADMIN
+   * MASTER ROOT pubkey (hex). Distinct from `irkPubHex` (the UMK-derived
+   * MEMBERSHIP root): the admin root is a fresh RANDOM Ed25519 keypair minted
+   * at account creation, held only by admin devices, NOT UMK-derived — the
+   * AUTHORITY root that gates every sensitive/destructive op. Recorded next to
+   * `irkPubHex` at claim when the client supplies it. Absent on pre-0064 rows
+   * (and on any account that hasn't sent one yet); readers treat undefined as
+   * "no admin root" and deny sensitive ops. See docs/device-admin-tier-spec.md.
+   */
+  adminRootPubHex?: string;
 }
 
 export type AuthCodeStatus = "active" | "used" | "revoked";
@@ -102,6 +134,18 @@ export interface AuthCodeRecord {
   recordedAt: number;
   usedAt?: number;
   revokedAt?: number;
+  /**
+   * Slice D (docs/device-admin-tier-spec.md §D-1 / spine deviation #5) — the
+   * account's pinned ADMIN MASTER ROOT pubkey (hex) that the phone folded into
+   * the signed `AuthCode` (`AuthCode.adminRootPubKey`, signature-covered). Persist
+   * it so `/api/server/register` can reconstruct the EXACT signed AuthCode (incl.
+   * the admin anchor) for signature re-verification, and so the box receives the
+   * anchor it pins as `ServerConfig.adminRootPub`. Optional + backward-compatible:
+   * a pre-0065 row / an AuthCode minted WITHOUT it decodes as undefined, and the
+   * canonical bytes are byte-identical when it is absent (old signatures verify).
+   * Migration 0065.
+   */
+  adminRootPubKeyHex?: string;
 }
 
 export interface ServerRecord {
@@ -168,6 +212,22 @@ export interface UsernameStorage {
     at: number,
   ): Promise<boolean>;
   /**
+   * Slice D — recovery admin-root rotation (docs/device-admin-tier-spec.md §5).
+   * Atomically compare-and-set the account's pinned ADMIN MASTER ROOT
+   * (`admin_root_pub_hex`): swaps to `newAdminRootPubHex` ONLY when the current
+   * value equals `expectedOldAdminRootPubHex` (case-insensitive). Returns false
+   * when the username doesn't exist, has no admin root pinned, or the expected
+   * old value doesn't match the stored one (concurrent-rotation / stale-proof
+   * defense). The apply handler pairs this with an append to the served rotation
+   * lane. Distinct from `swapIrkPub` (the UMK-derived MEMBERSHIP root) — this
+   * moves only the AUTHORITY anchor.
+   */
+  swapAdminRootPub(
+    username: string,
+    expectedOldAdminRootPubHex: string,
+    newAdminRootPubHex: string,
+  ): Promise<boolean>;
+  /**
    * Flip the demo flag on an existing claim (task #84). Returns false
    * if the username doesn't exist. The claim flow never calls this;
    * only the operator-gated provision/decommission tooling does. The
@@ -220,6 +280,23 @@ export interface UsernameStorage {
     expectedJson: string,
     newJson: string,
   ): Promise<boolean>;
+  /**
+   * Account-deletion / name-reclaim (migration 0058) — coarse, idempotent
+   * "account last seen" bump. Sets `last_active = atMs`. Returns false on
+   * unknown username. Callers should rate-limit (only bump when the stored
+   * value is older than ~1 day) so an authenticated read path doesn't
+   * hot-write the row on every call.
+   */
+  touchLastActive(username: string, atMs: number): Promise<boolean>;
+  /**
+   * Account-deletion (§1) — HARD-DELETE the username row so the name
+   * becomes immediately claimable again (no grace; the deliberate
+   * deletion ceremony already gated it behind typed-username + biometric +
+   * last-device enforcement). Idempotent: deleting an absent row returns
+   * false. The caller (handleAccountSelfDelete) tears down the account's
+   * servers + purges related records around this call.
+   */
+  delete(username: string): Promise<boolean>;
 }
 
 export interface AuthCodeStorage {
@@ -386,6 +463,24 @@ export type AuditEventKind =
   // decommissioned}. Cascades through every active boot-unlock lease
   // on the server so the box bricks on the next reboot.
   | "server-revoked"
+  // Account deletion / username reclaim
+  // (docs/account-deletion-and-name-reclaim.md). `account-deleted` logs
+  // the owner-IRK last-device self-delete (the username row is hard-
+  // deleted right after). `servers-self-delete-issued` logs the opt-in
+  // content-wipe order being recorded/forwarded to the account's boxes
+  // (only ever bundled with account-deleted — §5 invariant).
+  // `username-reclaimed` logs the admin-gated reclaim of a ≥90-day-
+  // inactive name.
+  | "account-deleted"
+  | "servers-self-delete-issued"
+  | "username-reclaimed"
+  // Transfer-a-box (docs/account-deletion-and-name-reclaim.md §4) — a
+  // cross-account ownership handoff. `server-transfer-offered` logs the
+  // giver depositing the one-time offer; `server-transfer-claimed` logs
+  // the acquirer claiming it + the namespace migration (logged on BOTH the
+  // giver's and the acquirer's account feed).
+  | "server-transfer-offered"
+  | "server-transfer-claimed"
   // CT monitoring (server-side, defense-in-depth). Logged for EVERY
   // CT-observed cert under the user's names that isn't accounted for
   // by a daemon-reported baseline cert. When a baseline exists and the
@@ -503,6 +598,17 @@ export interface WebauthnRecoveryRecord {
    * without a minted account key leave it unset.
    */
   wrappedAcmeAccountKeyB64?: string;
+  /**
+   * Slice D (D-3, docs/device-admin-tier-spec.md §5.3): the ADMIN MASTER ROOT,
+   * escrowed as opaque ciphertext (base64) wrapped to the SAME recovery
+   * credential as the UMK. The admin root is admin-held (NOT UMK-derived), so
+   * losing every admin device would otherwise make admin authority
+   * unrecoverable — escrowing it here lets credential recovery unwrap the old
+   * root, mint a new one, and sign the rotation proof boxes re-pin on. `.com`
+   * only ever sees ciphertext. Optional + backward-compatible: legacy rows /
+   * accounts without an admin root leave it unset.
+   */
+  wrappedAdminRootB64?: string;
   irkPubHex: string;
   /**
    * Task #74 — passphrase-derived fetch-token gate (hex SHA-256).
@@ -665,7 +771,44 @@ export interface AutoUnlockLeaseStorage {
 // phone seals only for the user-confirmed box (I2/I3).
 // ──────────────────────────────────────────────────────────────────────
 
-export type SecretMailboxPurpose = "unlock-key" | "entitlement";
+export type SecretMailboxPurpose =
+  | "unlock-key"
+  | "entitlement"
+  | "pairing"
+  | "entitlement-deposit"
+  | "self-delete"
+  | "swk"
+  | "cgk"
+  | "set-leader"
+  | "update";
+
+/**
+ * Deposit-on-unlock pairing — a phone-deposited, box-sealed blob carrying an
+ * `add-paired-session` order so the box comes online ALREADY paired (no
+ * separate "Pair this server" tap). Reuses the `secret_mailbox` table as a
+ * dedicated `purpose:"pairing"` lane: the PHONE writes the row directly (no
+ * box request first), the box does ONE public, domain-scoped, consume-once
+ * read at startup. The blob is sealed FOR the box STK, so a public read leaks
+ * nothing (mirrors the box-sealed-lease release posture). The sealed payload is
+ * the `{request,signature}` envelope of an owner-IRK-signed `add-paired-session`
+ * order — `.com` never sees the token (I1); the daemon unseals + verifies it.
+ */
+export interface PairingDepositRecord {
+  /** Box FQDN the deposit is for. */
+  serverDomain: string;
+  /** Account that owns the box (the box's registered username). */
+  username: string;
+  /** 32-byte deposit nonce, hex — the row key the phone picks. */
+  requestNonceHex: string;
+  /** Box STK pubkey, hex — the seal recipient (the directory-bound STK). */
+  stkPubHex: string;
+  /** The sealed `add-paired-session` envelope, hex. NEVER plaintext (I1). */
+  sealedHex: string;
+  /** issuedAt from the phone's deposit (ms). */
+  issuedAt: number;
+  /** Row TTL — `.com` refuses to serve / GCs past this (ms). */
+  expiresAt: number;
+}
 
 export interface SecretMailboxRecord {
   /** Box FQDN the request is for. */
@@ -760,6 +903,126 @@ export interface SecretMailboxStorage {
    * ready yet OR it was already consumed. Expired rows are GC'd when seen.
    */
   consumeResponse(serverDomain: string, requestNonceHex: string, now: number): Promise<SecretMailboxRecord | undefined>;
+  /**
+   * Deposit-on-unlock pairing — the PHONE writes a box-sealed pairing blob
+   * directly (no box request first). Stored as a `purpose:"pairing"` row whose
+   * response is the sealed blob, so it never surfaces in `listPendingForUser`
+   * (that lane is for un-answered unlock requests). Keyed by (serverDomain,
+   * requestNonceHex); a duplicate nonce returns `ok:false`. The caller has
+   * already verified the phone owns the mailbox (IRK mailbox-auth).
+   */
+  putPairingDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Box-side: atomically consume the freshest un-expired pairing deposit for
+   * `serverDomain` (consume-once; mirrors the box-sealed-lease release). Public
+   * read at the handler — the blob is sealed for the box STK, so disclosure is
+   * harmless. Returns undefined when none is pending. Expired rows are GC'd.
+   */
+  consumePairingDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
+  /**
+   * Entitlement deposit-on-unlock — the PHONE pre-deposits an IRK-signed
+   * RootEntitlement carrier for the box's STK when it approves the first-boot
+   * unlock, so the box claims it WITHOUT a separate "authorize to serve" tap.
+   * Stored like a pairing deposit (a `purpose:"entitlement-deposit"` row whose
+   * `sealedHex` holds the carrier), EXCEPT the blob is the PUBLIC, IRK-signed
+   * entitlement — not an encrypted secret (it's what the box presents at HELLO),
+   * so a public consume-once read is harmless. Caller has IRK-mailbox-auth'd.
+   */
+  putEntitlementDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /** Box first-boot: atomically consume the freshest un-expired entitlement
+   *  deposit for `serverDomain` (consume-once), or undefined. Expired GC'd. */
+  consumeEntitlementDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
+  /**
+   * Account-death content-wipe deposit — `.com` writes the owner-IRK-signed
+   * `servers-self-delete` order into a `purpose:"self-delete"` lane DURING the
+   * last-device account-deletion bundle commit (before teardown), one row per
+   * owned server, keyed by server domain. The box polls + consumes it on its
+   * heartbeat cadence, owner-IRK-verifies it, then wipes its content. Like the
+   * entitlement deposit the `sealedHex` carries a PUBLIC, IRK-signed order (not a
+   * secret) — the box re-verifies under the owner IRK, so a public consume-once
+   * read is harmless. Caller is `handleAccountDeletionBundle` (server-side write,
+   * post the §5 bundle validation — there is no phone POST endpoint for it).
+   */
+  putSelfDeleteDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Box-side: atomically consume the freshest un-expired self-delete deposit for
+   * `serverDomain` (consume-once), or undefined. Expired rows GC'd. The consume
+   * endpoint that wraps this is deliberately REVOKE-TOLERANT — the deletion
+   * ceremony revokes the server during teardown, so a revoked-guard would make
+   * the order undeliverable; it is safe because the order is owner-IRK-signed.
+   */
+  consumeSelfDeleteDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
+  /**
+   * Secret-free-recipe SWK delivery (docs/recipe-delivery-and-remote-install.md)
+   * — the PHONE seals the box's Service Workload Key to the box's OWN identity
+   * (generated at first boot) and IRK-signs the wrapper, then deposits it here so
+   * the box claims it on boot and turns on its service platform with NO secret in
+   * the recipe. Stored like a pairing deposit (a `purpose:"swk"` row whose
+   * `sealedHex` holds the SWK-delivery carrier). UNLIKE the entitlement/self-delete
+   * deposits, the carrier wraps a SEALED secret — `.com` holds ciphertext only
+   * (I1/I3); the box unseals it with its identity key. Caller has IRK-mailbox-auth'd.
+   */
+  putSwkDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Box first-boot: atomically consume the freshest un-expired SWK deposit for
+   * `serverDomain` (consume-once), or undefined. Expired rows GC'd. Public read
+   * at the handler — the carrier is SEALED for the box identity, so disclosure is
+   * harmless (mirrors the pairing-deposit release posture).
+   */
+  consumeSwkDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
+  /**
+   * Cloud Gossip Key (CGK) delivery (Phase 6) — the PHONE seals the per-cloud CGK
+   * to the box's identity (generated at first boot) and IRK-signs the wrapper, then
+   * deposits it here so the box claims it post-boot and turns on per-service
+   * leadership gossip with NO secret in the recipe. Stored like the SWK deposit (a
+   * `purpose:"cgk"` row whose `sealedHex` holds the CGK-delivery carrier). The
+   * carrier wraps a SEALED secret — `.com` holds ciphertext only (I1/I3); the box
+   * unseals it with its identity key. Caller has IRK-mailbox-auth'd.
+   */
+  putCgkDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Box: atomically consume the freshest un-expired CGK deposit for `serverDomain`
+   * (consume-once), or undefined. Expired rows GC'd. Public read at the handler —
+   * the carrier is SEALED for the box identity, so disclosure is harmless.
+   */
+  consumeCgkDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
+  /**
+   * Owner preferred-server vote delivery (Phase 6) — the PHONE deposits an owner-
+   * IRK-signed `set-leader` vote (the PUBLIC envelope, not an encrypted secret —
+   * it carries only `{user, preferredStkPubHex, issuedAt, nonce}` + signature) so
+   * a box can fetch the vote addressed to it and ride it on its gossip frame.
+   * Stored like a deposit in a `purpose:"set-leader"` row whose `sealedHex` holds
+   * the vote carrier; the box re-verifies under the owner IRK, so a public
+   * consume-once read is harmless. Caller has IRK-mailbox-auth'd + has verified the
+   * set-leader signature before storing.
+   */
+  putSetLeaderDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Box: atomically consume the freshest un-expired set-leader vote deposit for
+   * `serverDomain` (consume-once), or undefined. Expired rows GC'd. Public read at
+   * the handler — the vote is owner-IRK-signed, so a public consume-once read is
+   * harmless; the box re-verifies under the owner IRK.
+   */
+  consumeSetLeaderDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
+  /**
+   * Admin-authorized in-place server-update order delivery
+   * (docs/server-update-mechanism.md) — the PHONE deposits an admin-signed
+   * `UpdateOrder` (the PUBLIC envelope, not an encrypted secret — it carries only
+   * `{serverDomain, targetCommit, fromCommit, nonce, issuedAt}` + signature) so a
+   * box can fetch the order addressed to it and apply the blessed update. Stored
+   * like a deposit in a `purpose:"update"` row whose `sealedHex` holds the order
+   * carrier; the box re-verifies under the pinned admin master root (and confirms
+   * maintainer endorsement of the commit), so a public consume-once read is
+   * harmless. Caller has admin-gate-authorized + verified the order before storing.
+   */
+  putUpdateDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Box: atomically consume the freshest un-expired update-order deposit for
+   * `serverDomain` (consume-once), or undefined. Expired rows GC'd. Public read at
+   * the handler — the order is admin-signed, so a public consume-once read is
+   * harmless; the box re-verifies under the pinned admin authority.
+   */
+  consumeUpdateDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -811,6 +1074,292 @@ export interface BoxSealedLeaseStorage {
   revoke(serverDomain: string, leaseId: string): Promise<boolean>;
   /** Snapshot of active (non-expired) leases for a server (UI listing). */
   list(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord[]>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Server transfer-a-box (docs/account-deletion-and-name-reclaim.md §4)
+//
+// A cross-account ownership handoff brokered by `.com`. The GIVER's phone
+// deposits a `ServerTransferOffer` (giver-IRK-signed, names the box + a
+// one-time short-TTL nonce, NOT the acquirer) keyed by server domain — one
+// live offer per box, a new offer replaces. The ACQUIRER's phone POSTs a
+// `ServerTransferClaim` (acquirer-IRK-signed, binds their username + IRK
+// pub to the offer's nonce). On a valid claim `.com` re-homes the box's
+// namespace (servers + routing + DNS) to the acquirer, marks the offer
+// claimed (one-time), and records the acquirer IRK so the GIVER's phone can
+// discover it on its next poll and re-seal the LUKS disk key for the new
+// owner (the box never holds the giver IRK, so the re-seal is a giver-phone
+// step deposited via the existing box-sealed-lease lane).
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * A pending transfer offer + (once claimed) the acquirer's binding. One row
+ * per `serverDomain`; a new offer REPLACES any prior unclaimed row for the
+ * same box (the giver can re-issue). Once `claimedAt` is set the row is
+ * one-time spent — a second claim is rejected.
+ */
+export interface ServerTransferRecord {
+  /** Box FQDN the offer is for (the current canonical domain). */
+  serverDomain: string;
+  /** The giver-account username at offer time (the CURRENT owner). */
+  giverUsername: string;
+  /** 32-byte one-time nonce, hex — binds offer↔claim. */
+  transferNonce: string;
+  /** The giver's owner-IRK pubkey, hex — the offer was verified against this. */
+  giverIrkPubHex: string;
+  /** issuedAt from the signed offer (ms). */
+  issuedAt: number;
+  /** Absolute offer expiry (ms) — a captured QR is inert past this. */
+  expiresAt: number;
+  /** The giver's offer signature over the canonical bytes, hex. Stored so a
+   *  re-verify is possible against the giver IRK independent of `.com`. */
+  offerSignatureHex: string;
+  /** Set when a valid claim lands — the offer is one-time spent after this. */
+  claimedAt: number | null;
+  /** Acquirer account name from the claim (null until claimed). */
+  acquirerUsername: string | null;
+  /** Acquirer owner-IRK pubkey, hex — ownership re-binds to this (null until
+   *  claimed). The giver's phone reads this to re-seal the disk key. */
+  acquirerIrkPubHex: string | null;
+  /** issuedAt from the acquirer's claim (ms), or null. */
+  claimIssuedAt: number | null;
+  /** The acquirer's claim signature, hex, or null. */
+  claimSignatureHex: string | null;
+  /** Slice D §9.8 — the acquirer's ADMIN MASTER ROOT pubkey from the claim
+   *  (claim canonical v2, signature-covered). "" when the acquirer account has
+   *  no admin root; null until claimed (and on pre-0068 legacy claims). The
+   *  giver's phone reads this back to build the admin-root handoff proof. */
+  acquirerAdminRootPubHex: string | null;
+  /** Slice D §9.8 — the GIVER-admin-root-signed `flagship/admin-root-transfer/v1`
+   *  proof (old giver root → new acquirer root, bound to this box + nonce).
+   *  Deposited by the giver's phone post-claim; the box re-verifies it against
+   *  its PINNED root before re-pinning — `.com` relays but cannot forge. The
+   *  giver/acquirer usernames + nonce live on the row itself; only the proof's
+   *  root pair + issuedAt + signature need columns. Null until deposited. */
+  adminHandoffOldRootHex: string | null;
+  /** "" = the acquirer has no admin root (the box UNPINS); null until deposited. */
+  adminHandoffNewRootHex: string | null;
+  adminHandoffIssuedAt: number | null;
+  adminHandoffSigHex: string | null;
+  /** Layer B — the box's LUKS disk key, RE-SEALED to the ACQUIRER IRK by the
+   *  giver's phone after the claim (the giver holds the giver IRK to unseal the
+   *  current blob; the box never does). Hex of a `sealForEd25519Recipient` blob;
+   *  `.com` is content-blind (only the acquirer's IRK can open it). Null until
+   *  the giver completes the re-seal. Consume-once on the acquirer read. */
+  diskKeyHandoffHex: string | null;
+  /** When the giver deposited the re-sealed disk key (ms), or null. */
+  diskKeyHandoffAt: number | null;
+  /** v1-sec GAP 3 — the GIVER-owner-IRK-signed `flagship/server-rehome-auth/v1`
+   *  re-home authorization (the LEGACY, no-admin-root path). `issuedAt` from the
+   *  signed `RehomeAuthorization`; the signature covers (oldServerDomain,
+   *  newServerDomain, acquirerIrkPub, issuedAt) — all reconstructible from this
+   *  row. Deposited by the giver's phone post-claim; a box with no pinned admin
+   *  root re-verifies it against its pinned owner IRK before re-homing (`.com`
+   *  relays but cannot forge). Null until deposited. */
+  rehomeAuthIssuedAt: number | null;
+  rehomeAuthSigHex: string | null;
+}
+
+export interface ServerTransferStorage {
+  /**
+   * Giver deposits (or re-issues) an offer for a box. Keyed by serverDomain —
+   * INSERT-OR-REPLACE: a new offer overwrites any prior unclaimed row for the
+   * same box. The caller has already verified the offer signature under the
+   * box's CURRENT owner IRK (offer-deposit is IRK mailbox-auth).
+   */
+  putOffer(rec: ServerTransferRecord): Promise<void>;
+  /** Read the offer row for a box (claimed or not), or undefined when none
+   *  or expired-and-unclaimed (an expired-but-claimed row is still returned
+   *  so the giver's phone can complete the re-seal). */
+  getOffer(serverDomain: string, now: number): Promise<ServerTransferRecord | undefined>;
+  /**
+   * Acquirer claim: atomically bind the acquirer to a LIVE (unexpired,
+   * unclaimed) offer whose nonce matches. Returns the updated record on
+   * success. Returns `ok:false` with a reason when the offer is absent
+   * (`no offer`), expired (`expired`), already claimed (`already claimed`),
+   * or the nonce doesn't match (`nonce mismatch`). One-time: a second claim
+   * after success returns `already claimed`. The caller has already verified
+   * the claim signature under the acquirer's REGISTERED IRK.
+   */
+  claim(
+    serverDomain: string,
+    transferNonce: string,
+    acquirerUsername: string,
+    acquirerIrkPubHex: string,
+    acquirerAdminRootPubHex: string,
+    claimIssuedAt: number,
+    claimSignatureHex: string,
+    now: number,
+  ): Promise<{ ok: true; record: ServerTransferRecord } | { ok: false; reason: string }>;
+  /** Slice D §9.8 — the giver's phone deposits the giver-admin-root-signed
+   *  handoff proof on the CLAIMED transfer row. Idempotent — a re-deposit
+   *  replaces. No-op (false) if there is no claimed row for the box. */
+  putAdminHandoff(
+    serverDomain: string,
+    handoff: {
+      oldRootHex: string;
+      newRootHex: string;
+      issuedAt: number;
+      sigHex: string;
+    },
+  ): Promise<boolean>;
+  /** Layer B — the giver's phone deposits the disk key re-sealed to the
+   *  acquirer IRK on the CLAIMED transfer row. No-op (false) if there is no
+   *  claimed row for the box. */
+  putDiskKeyHandoff(
+    serverDomain: string,
+    diskKeyHandoffHex: string,
+    now: number,
+  ): Promise<boolean>;
+  /** v1-sec GAP 3 — the giver's phone deposits the giver-owner-IRK-signed
+   *  re-home authorization on the CLAIMED transfer row. Idempotent — a
+   *  re-deposit replaces. No-op (false) if there is no claimed row for the box. */
+  putRehomeAuth(
+    serverDomain: string,
+    auth: { issuedAt: number; sigHex: string },
+  ): Promise<boolean>;
+  /** Delete the offer row for a box (cleanup after a completed transfer). */
+  remove(serverDomain: string): Promise<void>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// server_evictions — the graceful-decommission lane (migration 0063)
+// (docs/server-replacement-graceful-decommission.md §8b).
+//
+// One row per RETIRED box instance, keyed by (podCanonical, retiredStkPubHex).
+// Each row is the owner-IRK-signed decommission order for that retired
+// instance. The SAME table serves three readers: the RETIRING box fetches its
+// own order by its STK (to consume + wind down), the SUCCESSOR fetches the
+// full chain (every retired instance for the FQDN, to hold the revoked set),
+// and the hub derives its revoked-set from the chain. GC'd after both sides
+// ack (the §9 epoch barrier is recorded but does not gate GC).
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * The owner-IRK-signed decommission order for one retired box instance under
+ * a pod FQDN. The chain of these (every retired instance for a `podCanonical`)
+ * is the revoked-set the successor + hub consult. One row per
+ * (podCanonical, retiredStkPubHex) — re-issuing the same order upserts.
+ */
+export interface ServerEvictionRecord {
+  podCanonical: string;          // FQDN, lowercased
+  retiredStkPubHex: string;      // the retired instance STK pubkey, hex lowercased
+  orderJson: string;             // JSON.stringify of the ServerDecommission order
+  orderSignatureHex: string;     // owner-IRK signature over the order's canonical bytes
+  issuedAt: number;
+  oldAckedAt: number | null;     // retiring box confirmed it consumed the order
+  newAckedAt: number | null;     // successor confirmed it holds the chain
+  epochCompleteAt: number | null;// retiring box reported final-backup epoch complete (the §9 barrier)
+}
+
+export interface ServerEvictionStorage {
+  recordEviction(rec: ServerEvictionRecord): Promise<void>;                 // upsert on (podCanonical, retiredStkPubHex)
+  getEviction(podCanonical: string, retiredStkPubHex: string): Promise<ServerEvictionRecord | undefined>;
+  listEvictions(podCanonical: string): Promise<ServerEvictionRecord[]>;     // the full chain, ordered by issuedAt asc
+  markOldAcked(podCanonical: string, retiredStkPubHex: string, now: number): Promise<boolean>;
+  markNewAcked(podCanonical: string, now: number): Promise<number>;          // marks all rows for the pod; returns count
+  markEpochComplete(podCanonical: string, retiredStkPubHex: string, now: number): Promise<boolean>;
+  gcEvictions(now: number, ttlMs: number): Promise<number>;                  // delete rows where newAckedAt IS NOT NULL AND newAckedAt <= now - ttlMs; returns count
+  /**
+   * Server-migration abort: neutralize a deposited-but-not-yet-honored
+   * eviction so an aborted migration's decommission order is never served to
+   * (or re-served after) the old box — the old box stays authoritative.
+   * Returns true iff a row was deleted.
+   */
+  deleteEviction(podCanonical: string, retiredStkPubHex: string): Promise<boolean>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Server migration — same owner, same <server>.<user> name, NEW hardware
+// (docs/server-migration.md). One tracked session per migrating FQDN.
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * The migration session's phase cursor. Transitions (enforced by the
+ * control-plane handlers, mirrored box-side):
+ *   initiated   — admin order deposited; awaiting the new box
+ *   provisioned — new box registered as a same-account pod + attached
+ *   pre-seeded  — new box restored the latest peer-backup
+ *   ready       — admin confirmed "ready to take over"
+ *   freezing    — decommission (finalBackup) deposited for the old box
+ *   taken-over  — new box restored the final delta + acked; directory rebound;
+ *                 the POINT OF NO RETURN (abort is rejected from here on)
+ *   aborted     — terminal escape; the old box stays authoritative
+ * "done" is derived, not stored: taken-over + the eviction row's oldAckedAt.
+ */
+export type ServerMigrationPhase =
+  | "initiated"
+  | "provisioned"
+  | "pre-seeded"
+  | "ready"
+  | "freezing"
+  | "taken-over"
+  | "aborted";
+
+export interface ServerMigrationRecord {
+  serverDomain: string;          // the migrating pod FQDN, lowercased
+  username: string;              // owning account, lowercased
+  oldStkPubHex: string;          // the current (old) instance STK, hex lowercased
+  orderJson: string;             // JSON.stringify of the admin-signed ServerMigrationOrder
+  orderSignatureHex: string;     // signature over the order's canonical bytes
+  disposition: string;           // "keep" | "wipe-after-handoff" (validated at the handler)
+  phase: ServerMigrationPhase;
+  initiatedAt: number;
+  newServerDomain: string | null; // the new box's provisional pod FQDN (attach)
+  newStkPubHex: string | null;    // the new box's registered STK (attach)
+  attachedAt: number | null;
+  preSeededAt: number | null;
+  readyAt: number | null;
+  freezeAt: number | null;
+  takenOverAt: number | null;
+  abortedAt: number | null;
+}
+
+export interface ServerMigrationStorage {
+  /** Upsert on serverDomain (the handler gates WHEN replacing is legal). */
+  putSession(rec: ServerMigrationRecord): Promise<void>;
+  getSession(serverDomain: string): Promise<ServerMigrationRecord | undefined>;
+  /** Every session for the account (the new box's assignment lookup filters). */
+  listForUser(username: string): Promise<ServerMigrationRecord[]>;
+  /** Attach the new box: stamps newServerDomain/newStkPubHex/attachedAt + phase=provisioned. */
+  attachNewBox(serverDomain: string, newServerDomain: string, newStkPubHex: string, at: number): Promise<boolean>;
+  markPreSeeded(serverDomain: string, at: number): Promise<boolean>;   // phase=pre-seeded
+  markReady(serverDomain: string, at: number): Promise<boolean>;       // phase=ready
+  markFreeze(serverDomain: string, at: number): Promise<boolean>;      // phase=freezing
+  markTakenOver(serverDomain: string, at: number): Promise<boolean>;   // phase=taken-over
+  markAborted(serverDomain: string, at: number): Promise<boolean>;     // phase=aborted
+}
+
+/**
+ * Slice D — one signed admin-master-root rotation proof
+ * (docs/device-admin-tier-spec.md §5). The account's admin authority root
+ * rotated `oldAdminRootPubHex → newAdminRootPubHex`; `signatureHex` is the
+ * `flagship/admin-root-rotation/v1` Ed25519 signature by the OLD root over the
+ * canonical bytes. Appended to a per-account served lane on a valid apply so a
+ * box that was offline across several rotations can REPLAY the chain
+ * (old→…→new), verifying each hop against its pinned anchor — never trusting
+ * `.com`'s reported current root. `seq` is the 1-based position in that ordered
+ * chain.
+ */
+export interface AdminRootRotationRecord {
+  username: string;              // account, lowercased
+  seq: number;                   // 1-based chain position (append order)
+  oldAdminRootPubHex: string;    // the root replaced, hex lowercased
+  newAdminRootPubHex: string;    // the root adopted, hex lowercased
+  issuedAt: number;              // ms since epoch, from the signed proof
+  signatureHex: string;          // OLD-root Ed25519 sig over canonical bytes, hex lowercased
+}
+
+export interface AdminRootRotationStorage {
+  /**
+   * Append a rotation proof to the account's chain, assigning the next `seq`
+   * (max existing + 1, or 1 for the first). Returns the assigned seq. The
+   * caller is responsible for having verified the proof + swapped
+   * `admin_root_pub_hex` first (the apply handler does both).
+   */
+  append(rec: Omit<AdminRootRotationRecord, "seq">): Promise<number>;
+  /** The full ordered chain for an account (seq asc). Empty if none. */
+  list(username: string): Promise<AdminRootRotationRecord[]>;
 }
 
 export interface DaemonStatusRecord {
@@ -929,9 +1478,110 @@ export interface SchemaVersionStorage {
   has(version: string): Promise<boolean>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Random username suggestion — queue + escalating per-device throttle
+// (docs/username-suggestion-queue.md)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * A pool of pre-validated, available random usernames (grammar + not-claimed +
+ * not a `.com` property), kept warm by the replenish cron. A suggestion POPS the
+ * oldest — so a name handed out (and then refused) is gone, defeating the
+ * reject-then-predict attack. Advisory only; the authoritative reservation is
+ * still `handleUsernameClaim`.
+ */
+export interface SuggestionQueueStorage {
+  /** Insert candidates, idempotent on `name`. Returns how many NEW rows added. */
+  enqueue(names: string[], at: number): Promise<number>;
+  /** Remove + return the oldest queued name (FIFO, name-tiebroken), or null. */
+  popOldest(): Promise<string | null>;
+  /** Current queue size. */
+  count(): Promise<number>;
+  /** Queued names in pop order (oldest first). For diagnostics/tests. */
+  list(): Promise<string[]>;
+}
+
+export interface SuggestThrottleRecord {
+  deviceKey: string;
+  /** Suggests in the current window (drives the escalating cooldown). */
+  count: number;
+  windowStart: number;
+  lastAt: number;
+  /** ms-epoch before which the next suggest is refused. */
+  nextAllowedAt: number;
+}
+
+/**
+ * Per-device regenerate throttle. Dumb CRUD — the escalating-cooldown POLICY
+ * lives in control-plane (`checkSuggestThrottle`). `device_key` is a
+ * client-generated ephemeral id (NOT the account IRK; that doesn't exist yet at
+ * the suggestion screen).
+ */
+export interface SuggestThrottleStorage {
+  get(deviceKey: string): Promise<SuggestThrottleRecord | undefined>;
+  upsert(rec: SuggestThrottleRecord): Promise<void>;
+  /** Delete rows with `lastAt < olderThan`. Returns rows removed. */
+  prune(olderThan: number): Promise<number>;
+}
+
+/**
+ * The "recently-offered handles" roster (docs/username-suggestion-queue.md). A
+ * username is claimable ONLY if the server recently SUGGESTED it — so the
+ * generator (which vets not-claimed + not-`.com` before a name can be offered)
+ * is the gatekeeper for what's claimable. One row per name handed out; consumed
+ * on claim, pruned on expiry.
+ */
+export interface UsernameOfferStorage {
+  /** Upsert that `name` was offered to `deviceKey` at `at`. */
+  record(name: string, deviceKey: string, at: number): Promise<void>;
+  /** True iff `name` has an offer with `offeredAt >= notBefore`. */
+  isOffered(name: string, notBefore: number): Promise<boolean>;
+  /** Delete the offer for `name` (on a successful claim). */
+  consume(name: string): Promise<void>;
+  /** Delete offers with `offeredAt < olderThan`. Returns rows removed. */
+  prune(olderThan: number): Promise<number>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Peer-backup manifests (server-migration Layer 0)
+//
+// One row per server — the SWK-sealed shard-placement manifest a fresh
+// replacement box needs before it can restore (docs/server-migration.md
+// invariant 4: the SWK is deterministic, so the new box re-derives it
+// and opens the blob). `.com` holds ciphertext only (content-blind);
+// the deposit was STK-verified at the handler boundary. Latest-wins by
+// `generation` (monotonic, signed by the box) so a replayed older
+// deposit can never roll the recovery root back. Reads are non-
+// consuming: the manifest is a recovery ROOT — a restore that crashes
+// mid-way must be able to fetch it again.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface PeerBackupManifestRecord {
+  serverDomain: string;
+  username: string;
+  /** Box-signed monotonic counter — put() rejects generation <= stored. */
+  generation: number;
+  updatedAt: number;
+  /** Sealed manifest bytes, hex. NEVER plaintext (content-blind). */
+  ciphertextHex: string;
+  /** Seal GCM nonce, hex. */
+  nonceHex: string;
+}
+
+export interface PeerBackupManifestStorage {
+  /** Upsert, latest-wins by generation. `{ok:false}` on a stale generation. */
+  put(rec: PeerBackupManifestRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(serverDomain: string): Promise<PeerBackupManifestRecord | undefined>;
+  /** Account teardown / server delete. Returns true iff a row existed. */
+  delete(serverDomain: string): Promise<boolean>;
+}
+
 export interface Storage {
   usernames: UsernameStorage;
   schemaVersion: SchemaVersionStorage;
+  suggestionQueue: SuggestionQueueStorage;
+  suggestThrottle: SuggestThrottleStorage;
+  usernameOffers: UsernameOfferStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;
@@ -943,6 +1593,10 @@ export interface Storage {
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
   secretMailbox: SecretMailboxStorage;
+  serverTransfers: ServerTransferStorage;
+  serverEvictions: ServerEvictionStorage;
+  serverMigrations: ServerMigrationStorage;
+  adminRootRotations: AdminRootRotationStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
@@ -966,7 +1620,9 @@ export interface Storage {
   acmeAccountKeyDelivery: AcmeAccountKeyDeliveryStorage;
   ctAlerts: CtAlertStorage;
   trustExceptions: TrustExceptionStorage;
+  serviceInvites: ServiceInviteStorage;
   namespace: NamespaceStorage;
+  peerBackupManifests: PeerBackupManifestStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1046,6 +1702,168 @@ export interface TrustExceptionStorage {
   listForUser(username: string): Promise<TrustExceptionRecord[]>;
   /** A single exception by (username, certHash), or undefined. */
   get(username: string, certHash: string): Promise<TrustExceptionRecord | undefined>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Service-access capability invites (docs/service-access-gating.md)
+//
+// A bearer-link invite that gates access to a pod-resident service to a
+// specific person, binding (on first redeem) to the redeemer's STABLE
+// account identity (AID = deriveAccountId(UMK)), NOT the rotatable IRK. The
+// row is keyed by `inviteId` (= hash(AID_author)·hash(devicePub)·counter).
+//
+// `.com` stores ONLY:
+//   - `secretHash` (SHA-256 of the link's 32-byte secret; the secret never
+//     reaches `.com`),
+//   - `encryptedBundle` (AEAD `{name, photo?}` under the author's UMK-derived
+//     household key — `.com` holds no UMK, so it cannot read the name/photo),
+//   - the stable AID pubkeys (author + bound friend) for attribution.
+// The create envelope is IRK-signed by the author; redeem is AID-signed by
+// the friend; revoke is IRK-signed by the author (verified at the handler).
+// ──────────────────────────────────────────────────────────────────────
+
+/** Invite approval tier (docs/service-access-gating.md v2 §Phase 3). */
+export type ServiceInviteApprovalMode = "auto" | "manual";
+
+export interface ServiceInviteRecord {
+  /** hash(AID_author)·hash(devicePub_author)·counter — the row key + revoke key. */
+  inviteId: string;
+  /** Author's STABLE account identity (AID) pubkey, hex. */
+  authorAID: string;
+  /** The gated service — `<creator>-<slug>` or canonical FQDN. */
+  serviceRef: string;
+  /** Hex of the household-key-sealed `{name, photo?}` bundle (ciphertext only). */
+  encryptedBundle: string;
+  /** SHA-256 hex of the link secret (redeem lookup key; the secret is never stored). */
+  secretHash: string;
+  /** Friend's AID pubkey (hex), bound on FIRST redeem. NULL until redeemed. */
+  boundAID: string | null;
+  /** ms since epoch of the first redeem, or NULL. */
+  boundAt: number | null;
+  createdAt: number;
+  /** ms since epoch when revoked, or NULL. A revoked invite denies access. */
+  revokedAt: number | null;
+  // ── v2 hardening (migration 0057; all backward-compatible) ──────────
+  /**
+   * The author's create-envelope signature, hex (IRK- OR AID-signed). v2
+   * box-as-authority: released to the box on redeem so the box verifies the
+   * owner's create ITSELF (demoting `.com` to a blind store). NULL on a v1
+   * row created before the signature was persisted.
+   */
+  createSig: string | null;
+  /**
+   * The create envelope's signed `issuedAt` (epoch-ms) — distinct from
+   * `createdAt` (`.com`'s receive time). Persisted so the box can reconstruct
+   * the EXACT signed `CreateServiceInvite` to verify `createSig`. NULL on a v1
+   * row (no signature stored).
+   */
+  createIssuedAt: number | null;
+  /**
+   * GROUP / multi-use cap: NULL ⇒ personal single-use (v1); 0 ⇒ unlimited;
+   * N ⇒ at most N distinct AIDs may bind.
+   */
+  maxRedemptions: number | null;
+  /** Optional invite expiry (epoch-ms); NULL ⇒ never. */
+  expiresAt: number | null;
+  /** Count of distinct AIDs bound (group accounting). 0 until first redeem. */
+  redemptions: number;
+  /** 'auto' (first-bind) | 'manual' (author-confirmed loop). Defaults 'auto'. */
+  approvalMode: ServiceInviteApprovalMode;
+  /**
+   * Every AID bound to this invite (lower-hex), in bind order — `[boundAID]`
+   * for a personal invite, the full set for a GROUP invite. Drives the
+   * revoked-since list + the box-side group-prune. Empty until first bind.
+   */
+  boundAIDs: string[];
+}
+
+/** Result of a redeem attempt against `.com`. */
+export type ServiceInviteRedeemResult =
+  | {
+      ok: true;
+      /** True only when THIS redeem newly bound the AID; false on an idempotent re-redeem. */
+      firstBind: boolean;
+      record: ServiceInviteRecord;
+    }
+  | {
+      ok: false;
+      /**
+       * "unknown secret" | "revoked" | "already bound" (different AID on a
+       * single-use invite) | "max redemptions reached" | "expired".
+       */
+      reason: string;
+    };
+
+/** One revoked invite + its bound AIDs, for the box revocation poller. */
+export interface RevokedInviteRecord {
+  inviteId: string;
+  serviceRef: string;
+  /** Every AID that was bound (lower-hex) — the box prunes ALL of these. */
+  boundAIDs: string[];
+  revokedAt: number;
+}
+
+export interface ServiceInviteStorage {
+  /**
+   * Create an invite. Keyed by `inviteId`. Returns ok=false `'duplicate
+   * inviteId'` if one already exists (the creating device must mint a fresh
+   * monotonic counter / random id per invite). Idempotent on a byte-identical
+   * re-create of the SAME inviteId (same author/service/secretHash). The v2
+   * fields (createSig / maxRedemptions / expiresAt / approvalMode) are
+   * optional — absent ⇒ the v1 defaults (no sig, single-use, never-expires,
+   * auto-approve).
+   */
+  create(rec: {
+    inviteId: string;
+    authorAID: string;
+    serviceRef: string;
+    encryptedBundle: string;
+    secretHash: string;
+    createdAt: number;
+    createSig?: string;
+    createIssuedAt?: number;
+    maxRedemptions?: number;
+    expiresAt?: number;
+    approvalMode?: ServiceInviteApprovalMode;
+  }): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Atomically redeem by `secretHash`, binding to `visitorAID`:
+   *   - unknown secretHash                 → ok=false 'unknown secret'
+   *   - revoked invite                     → ok=false 'revoked'
+   *   - past expiresAt                     → ok=false 'expired'
+   *   - personal invite, first redeem      → binds, ok+firstBind:true
+   *   - personal, re-redeem SAME AID       → idempotent, ok+firstBind:false
+   *   - personal, re-redeem DIFFERENT AID  → ok=false 'already bound'
+   *   - GROUP (maxN), new AID under cap    → binds, ok+firstBind:true
+   *   - GROUP, re-redeem an already-bound  → idempotent, ok+firstBind:false
+   *   - GROUP, new AID over cap            → ok=false 'max redemptions reached'
+   * The caller has already verified the friend's AID signature over the redeem.
+   * `now` stamps the bind + is the expiry comparison point.
+   */
+  redeem(
+    secretHash: string,
+    visitorAID: string,
+    now: number,
+  ): Promise<ServiceInviteRedeemResult>;
+  /**
+   * Revoke by `inviteId`. Sets revokedAt (idempotent — re-revoke keeps the
+   * first revokedAt). Returns whether a row existed. The caller has verified
+   * the author's IRK/AID signature over the revoke.
+   */
+  revoke(inviteId: string, now: number): Promise<boolean>;
+  /** A single invite by id, or undefined. */
+  get(inviteId: string): Promise<ServiceInviteRecord | undefined>;
+  /** Lookup by secretHash (redeem-path read), or undefined. */
+  getBySecretHash(secretHash: string): Promise<ServiceInviteRecord | undefined>;
+  /** Every invite an author created, createdAt DESC. */
+  listForAuthor(authorAID: string): Promise<ServiceInviteRecord[]>;
+  /**
+   * v2 — every invite the author REVOKED strictly after `cursor` (epoch-ms),
+   * with the AIDs that were bound to it, revokedAt ASC. The box polls this on
+   * a heartbeat cadence and prunes the returned AIDs so a `.com` revoke is
+   * SUFFICIENT (multi-box self-heals). Pass 0 to read from the start.
+   */
+  revokedSince(authorAID: string, cursor: number): Promise<RevokedInviteRecord[]>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1187,6 +2005,20 @@ export interface LlmPromoStorage {
   bumpDaily(username: string, day: number, inputTokens: number, outputTokens: number): Promise<LlmPromoUsageRecord>;
   getLifetime(username: string): Promise<LlmPromoLifetimeRecord | undefined>;
   bumpLifetime(username: string, inputTokens: number, outputTokens: number, now: number): Promise<LlmPromoLifetimeRecord>;
+  /**
+   * Record TRUE token usage reported by the in-house inference metering
+   * shim (metering model (b)). Unlike `bumpDaily`/`bumpLifetime` this
+   * adds only to the token columns and does NOT increment the call
+   * counters — a usage report is not a new issuance. Adds to BOTH the
+   * daily (for the given day) and lifetime token totals atomically.
+   */
+  recordMeteredUsage(
+    username: string,
+    day: number,
+    inputTokens: number,
+    outputTokens: number,
+    now: number,
+  ): Promise<void>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1520,6 +2352,17 @@ export interface DeviceCapabilityGrantRecord {
   expiresAt: number;
   signatureHex: string;
   revokedAt: number | null;
+  /**
+   * Slice D — grant-signer discriminator (migration 0064, §3.3). Which root
+   * signed this grant: `'membership'` (the DEFAULT — the UMK-derived IRK, as
+   * every pre-D grant) or `'admin-root'` (the admin master root). An
+   * `admin`-scope grant is only load-bearing for a SENSITIVE op when it is
+   * `'admin-root'`-signed; `requireMasterAdmin` rejects a `'membership'`-signed
+   * grant for a sensitive scope so a UMK holder can't forge admin authority.
+   * Optional at the record level: absent (legacy row / pre-migration read) is
+   * treated as `'membership'`.
+   */
+  signerRoot?: "membership" | "admin-root";
 }
 
 /**

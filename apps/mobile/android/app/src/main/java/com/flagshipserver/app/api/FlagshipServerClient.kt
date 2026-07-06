@@ -10,6 +10,7 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.JsonHttpTransport
@@ -18,6 +19,12 @@ import kotlinx.serialization.Serializable
 
 interface FlagshipServerClient {
     suspend fun claimUsername(req: UsernameClaimRequest)
+    /** POST /api/account/self-delete — the last-device account-death bundle.
+     *  accountSelfDelete is always sent; serversSelfDelete rides only for the
+     *  opt-in content-wipe (atomic §5 bundle, never standalone). A 200 means
+     *  the username row is hard-deleted on .com and the name is free; a 403
+     *  ("not the last device …") / 404 throws so the caller never wipes. */
+    suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest)
     suspend fun issueAuthCode(req: AuthCodeIssueRequest)
     suspend fun registerRck(req: RckRegisterRequest)
     /** Revoke an outstanding auth-code so a never-booted server can't
@@ -36,6 +43,11 @@ interface FlagshipServerClient {
      *  `revokeServer` + the iOS `revokeServer` shape. */
     suspend fun revokeServer(req: ServerRevocationRequest)
     suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse
+    /** Sign-up handle suggestion. POST /api/username/suggest with a throwaway
+     *  `deviceKey` (the per-device regenerate throttle, NOT the account IRK). A
+     *  200 carries a name + retryAfterMs cooldown; a 429 carries throttled + the
+     *  cooldown remaining. See docs/username-suggestion-queue.md. */
+    suspend fun suggestUsername(deviceKey: String): UsernameSuggestion
 
     /** Canonical provisioning-progress poll — GET /api/order/<serial>/status
      *  on flagshipserver.com (the control plane; NOT session-gated — the
@@ -213,6 +225,15 @@ interface FlagshipServerClient {
     suspend fun listWatchDelegates(username: String): WatchDelegatesListResponse
     /** POST /api/users/:u/watch-delegates/revoke */
     suspend fun revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest)
+
+    /** Slice D (docs/device-admin-tier-spec.md §5) — submit an admin master-root
+     *  rotation proof. The OLD admin root signed `{old → new}`; `.com` records
+     *  the new `admin_root_pub_hex` (advisory) + relays the signed proof to each
+     *  box, which re-pins ONLY after verifying it against its pinned old root
+     *  (never `.com`'s word). Rotation EXCLUDES other admin devices holding the
+     *  old bare root (the revoke semantic).
+     *    POST /api/users/:username/admin-root-rotation */
+    suspend fun rotateAdminRoot(username: String, req: AdminRootRotationRequest)
 }
 
 /** Phase 3b — POST /api/users/:u/devices/admit body. Mirrors the Worker
@@ -491,6 +512,24 @@ data class RePairInitiateResponse(
     val graceMs: Long,
 )
 
+/** Slice D (§5) — POST /api/users/:username/admin-root-rotation body. Mirrors
+ *  the TS/iOS/webapp contract: the rotation payload + the OLD-root signature
+ *  over its canonical bytes (`AdminRootRotationClaim`). The pubkeys are
+ *  lowercased hex; `signatureHex` is the 64-byte Ed25519 sig, lowercased hex. */
+@Serializable
+data class AdminRootRotationRequest(
+    val rotation: Rotation,
+    val signatureHex: String,
+) {
+    @Serializable
+    data class Rotation(
+        val username: String,
+        val oldAdminRootPub: String,
+        val newAdminRootPub: String,
+        val issuedAt: Long,
+    )
+}
+
 @Serializable
 data class RePairCompleteResponse(
     val ok: Boolean,
@@ -663,11 +702,40 @@ private data class TrustedDevicesWireBody(val devices: List<TrustedDevice>)
 data class UsernameClaimRequest(
     val request: Inner,
     val signature: String,           // hex, IRK over canonical bytes
+    /** Slice D — the account's ADMIN MASTER ROOT pubkey (hex), a top-level
+     *  sibling `.com` stores at `usernames.admin_root_pub_hex` (usernameClaim.ts).
+     *  NOT signature-covered (the claim sig is over username|irkPub|issuedAt);
+     *  the admin root's authority is anchored on the box via the signed AuthCode.
+     *  Omitted (null) on a legacy claim ⇒ `.com` stores no admin root. */
+    val adminRootPub: String? = null,
 ) {
     @Serializable
     data class Inner(
         val username: String,
         val irkPub: String,          // hex
+        val issuedAt: Long,
+    )
+}
+
+/** Body for POST /api/account/self-delete. `accountSelfDelete` is always
+ *  present; `serversSelfDelete` is included ONLY for the opt-in content-wipe
+ *  (the atomic §5 bundle — `.com` rejects the whole request if a serversSelfDelete
+ *  arrives without a valid last-device accountSelfDelete). Both orders carry the
+ *  same lowercased username + issuedAt; signatures are IRK over the
+ *  account-self-delete / servers-self-delete canonical bytes. */
+@Serializable
+data class AccountSelfDeleteBundleRequest(
+    val accountSelfDelete: Order,
+    val serversSelfDelete: Order? = null,
+) {
+    @Serializable
+    data class Order(
+        val request: Inner,
+        val signature: String,       // hex, IRK over canonical bytes
+    )
+    @Serializable
+    data class Inner(
+        val username: String,
         val issuedAt: Long,
     )
 }
@@ -689,6 +757,13 @@ data class AuthCodeWire(
     val userPubKey: String,          // hex
     val issuedAt: Long,
     val expiresAt: Long,
+    /** Slice D (D-1) — the account's ADMIN MASTER ROOT pubkey (hex). Rides
+     *  INSIDE the AuthCode so it is signature-covered by `authCodeUserSignature`
+     *  and `.com`'s registration gate (a compromised network can't swap the
+     *  admin anchor). The box pins it at first boot into
+     *  `ServerConfig.adminRootPub`. Backward-compatible: null ⇒ the canonical
+     *  bytes are byte-identical to a pre-D AuthCode (no `ar=` segment). */
+    val adminRootPubKey: String? = null,
 )
 
 @Serializable
@@ -756,6 +831,16 @@ data class RckRegisterRequest(
         val issuedAt: Long,
     )
 }
+
+/** One sign-up handle suggestion. On a 200 `name` is set + `throttled` is false;
+ *  on a 429 `name` is null + `throttled` is true. `retryAfterMs` is the cooldown
+ *  until the next regenerate is allowed either way. */
+@Serializable
+data class UsernameSuggestion(
+    val name: String? = null,
+    val retryAfterMs: Int = 0,
+    val throttled: Boolean = false,
+)
 
 @Serializable
 data class UsernameAvailabilityResponse(
@@ -941,6 +1026,12 @@ data class RecoveryEnvelopeRequest(
         // ciphertext only — never in the signed canonical, so tampering
         // breaks recovery of the account key but can never forge it.
         val wrappedAcmeAccountKey: String? = null,
+        // Slice D (D-3) — the ADMIN MASTER ROOT escrowed alongside the UMK.
+        // Single self-contained base64 blob (nonce‖ct‖tag) from
+        // AdminRootEscrow.wrapForEscrow, read verbatim by the Worker. Optional +
+        // ciphertext-only (never in the signed canonical), so tampering can
+        // break admin recovery but never forge the root.
+        val wrappedAdminRoot: String? = null,
         // Task #74 — passphrase-gate hashes. Both are lowercase SHA-256 hex
         // of the Argon2id-derived fetchToken / prfSalt (see
         // RecoveryDerivation). Optional on the wire (NOT in the signed
@@ -967,6 +1058,8 @@ data class RecoveryEnvelope(
     // Decoded by the recovery-restore path (LoginViewModel) and imported via
     // Keystore.importAcmeAccountKeyScalar.
     val wrappedAcmeAccountKey: String? = null,
+    // Slice D (D-3) — present when the account escrowed its admin master root.
+    val wrappedAdminRoot: String? = null,
 )
 
 /** `POST /api/recovery/by-username/<u>/fetch` — the body the passphrase-
@@ -990,6 +1083,9 @@ data class GatedRecoveryEnvelope(
     val credentialId: String,
     val wrappedUmk: String,
     val wrappedAcmeAccountKey: String? = null,
+    // Slice D (D-3) — the escrowed admin master root, unwrapped on restore and
+    // re-established via Keystore.importAdminRoot.
+    val wrappedAdminRoot: String? = null,
     val prfSaltHash: String? = null,
     val updatedAt: Long? = null,
 )
@@ -1083,6 +1179,7 @@ class MockFlagshipServerClient(
         val credentialId: String,
         val wrappedUmk: String,
         val wrappedAcmeAccountKey: String?,
+        val wrappedAdminRoot: String?,
         val fetchTokenHashHex: String?,
         val prfSaltHashHex: String?,
         val updatedAt: Long,
@@ -1124,6 +1221,12 @@ class MockFlagshipServerClient(
         _claimedUsernames[u] = req.request.irkPub
     }
 
+    override suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest) {
+        tick()
+        // Mock: hard-delete frees the name (mirrors .com dropping the row).
+        _claimedUsernames.remove(req.accountSelfDelete.request.username.lowercase())
+    }
+
     override suspend fun issueAuthCode(req: AuthCodeIssueRequest) {
         tick()
         _issuedAuthCodes[req.code.serial] = req.code
@@ -1147,6 +1250,15 @@ class MockFlagshipServerClient(
     override suspend fun revokeServer(req: ServerRevocationRequest) {
         tick()
         _revokedServers += req
+    }
+
+    /** Mock suggestion — a fresh random `<adjective>-<noun>` each call, fixed
+     *  2 s cooldown, never throttled (offline/dev convenience; no DNS). */
+    override suspend fun suggestUsername(deviceKey: String): UsernameSuggestion {
+        tick()
+        val adj = listOf("happy", "brave", "calm", "clever", "lucky", "swift", "sunny", "witty", "golden", "jolly").random()
+        val noun = listOf("otter", "panda", "fox", "heron", "robin", "finch", "badger", "beaver", "gecko", "comet").random()
+        return UsernameSuggestion(name = "$adj-$noun", retryAfterMs = 2000, throttled = false)
     }
 
     override suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse {
@@ -1192,16 +1304,17 @@ class MockFlagshipServerClient(
                 demoServer = demoBlock,
             )
         }
-        // Mirrors the Worker's USERNAME_RE in labels.ts: 3–30 lowercase
-        // alphanumerics, no hyphens. Keep in sync.
+        // Mirrors the Worker's USERNAME_RE in labels.ts: 3–30 lowercase chars,
+        // interior single dashes OK, no leading/trailing dash, and no `--` (the
+        // `<slug>--<creator>` delimiter — docs/service-addressing-double-dash.md).
         if (lower.length < 3 || lower.length > 30) {
             return UsernameAvailabilityResponse(lower, false, "Must be 3–30 chars.", demoServer = demoBlock)
         }
         if (lower in reservedUsernames) {
             return UsernameAvailabilityResponse(lower, false, "Reserved.", demoServer = demoBlock)
         }
-        if (!lower.matches(Regex("^[a-z0-9]+$"))) {
-            return UsernameAvailabilityResponse(lower, false, "Letters and digits only.", demoServer = demoBlock)
+        if (!lower.matches(Regex("^[a-z0-9][a-z0-9-]*[a-z0-9]$")) || lower.contains("--")) {
+            return UsernameAvailabilityResponse(lower, false, "Letters, digits, and interior dashes only (no double dash).", demoServer = demoBlock)
         }
         val prior = _claimedUsernames[lower]
         if (prior != null && prior != "_self") {
@@ -1223,20 +1336,24 @@ class MockFlagshipServerClient(
         // omits it, mirroring the control-plane upsert (#28).
         val priorAcme = recoveryStore[r.credentialId]?.wrappedAcmeAccountKey
         val resolvedAcme = r.wrappedAcmeAccountKey ?: priorAcme
+        val priorAdminRoot = recoveryStore[r.credentialId]?.wrappedAdminRoot
+        val resolvedAdminRoot = r.wrappedAdminRoot ?: priorAdminRoot
         recoveryStore[r.credentialId] = RecoveryEnvelope(
             credentialId = r.credentialId,
             wrappedUmk = r.wrappedUmk,
             wrappedAcmeAccountKey = resolvedAcme,
+            wrappedAdminRoot = resolvedAdminRoot,
         )
         // Also mirror the by-username row the gated /fetch endpoint reads,
         // carrying the passphrase-gate hashes (Task #74). Preserve a prior
-        // ACME escrow / hashes the same way the Worker's upsert does.
+        // ACME / admin-root escrow / hashes the same way the Worker's upsert does.
         val key = r.username.lowercase()
         val prior = recoveryByUsername[key]
         recoveryByUsername[key] = MockRecoveryRecord(
             credentialId = r.credentialId,
             wrappedUmk = r.wrappedUmk,
             wrappedAcmeAccountKey = resolvedAcme ?: prior?.wrappedAcmeAccountKey,
+            wrappedAdminRoot = resolvedAdminRoot ?: prior?.wrappedAdminRoot,
             fetchTokenHashHex = r.fetchTokenHash?.lowercase() ?: prior?.fetchTokenHashHex,
             prfSaltHashHex = r.prfSaltHash?.lowercase() ?: prior?.prfSaltHashHex,
             updatedAt = nowMs(),
@@ -1270,6 +1387,7 @@ class MockFlagshipServerClient(
             credentialId = rec.credentialId,
             wrappedUmk = rec.wrappedUmk,
             wrappedAcmeAccountKey = rec.wrappedAcmeAccountKey,
+            wrappedAdminRoot = rec.wrappedAdminRoot,
             prfSaltHash = rec.prfSaltHashHex,
             updatedAt = rec.updatedAt,
         )
@@ -1462,7 +1580,7 @@ class MockFlagshipServerClient(
             AppRenameBehavior.StaleSignature -> throw IllegalStateException("403 bad signature")
             AppRenameBehavior.Ok -> {
                 val newLabel = body.request.newDisplayLabel
-                val canonical = "https://$newLabel.${username.lowercase()}.flagship.services"
+                val canonical = "https://${Endpoints.serverFqdn(newLabel, username.lowercase())}"
                 appAliasByUser.getOrPut(username.lowercase()) { mutableMapOf() }[serviceId] = newLabel to canonical
                 AppRenameResponse(
                     ok = true,
@@ -1483,21 +1601,22 @@ class MockFlagshipServerClient(
         tick()
         val alias = appAliasByUser[username.lowercase()]?.get(serviceId)
         // Mirrors @flagship/protocol deriveUrlFragment: serviceId is
-        // `<creator>-<slug>` (FIRST hyphen splits — usernames are
-        // hyphen-free). Fragment is CONDITIONAL: `<slug>` when the
-        // running user authored it, else `<slug>-<creator>`.
+        // `<creator>--<slug>` (the `--` delimiter splits — both halves may
+        // carry single dashes; docs/service-addressing-double-dash.md).
+        // Fragment is CONDITIONAL: `<slug>` when the running user authored
+        // it, else `<slug>--<creator>`.
         val defaultLabel = run {
-            val i = serviceId.indexOf('-')
-            if (i > 0 && i < serviceId.length - 1) {
+            val i = serviceId.indexOf("--")
+            if (i > 0 && i < serviceId.length - 2) {
                 val creator = serviceId.substring(0, i).lowercase()
-                val slug = serviceId.substring(i + 1).lowercase()
-                if (creator == username.lowercase()) slug else "$slug-$creator"
+                val slug = serviceId.substring(i + 2).lowercase()
+                if (creator == username.lowercase()) slug else "$slug--$creator"
             } else {
                 serviceId.lowercase()
             }
         }
         val label = alias?.first ?: defaultLabel
-        val host = "${username.lowercase()}.flagship.services"
+        val host = Endpoints.userZoneHost(username.lowercase())
         val canonical = alias?.second ?: "https://$label.$host"
         val u = username.lowercase()
         val lastChanged = customDomainLastChangedByUser[u]?.get(serviceId)
@@ -1828,6 +1947,29 @@ class MockFlagshipServerClient(
         watchDelegatesByUser[u]?.removeAll { it.grantId == body.request.grantId }
     }
 
+    /** Slice D (§5) — record the rotated admin root against the mock account so
+     *  a subsequent getUsernameRecord could reflect it. Verifies the carried
+     *  proof against the old root byte-for-byte so a test can't pass a bogus
+     *  signature. */
+    val rotatedAdminRootByUser = mutableMapOf<String, String>()
+    override suspend fun rotateAdminRoot(username: String, req: AdminRootRotationRequest) {
+        tick()
+        val r = com.flagshipserver.app.core.AdminRootRotation(
+            username = req.rotation.username,
+            oldAdminRootPub = req.rotation.oldAdminRootPub,
+            newAdminRootPub = req.rotation.newAdminRootPub,
+            issuedAt = req.rotation.issuedAt,
+        )
+        val sig = com.flagshipserver.app.core.HexUtil.decode(req.signatureHex)
+            ?: throw IllegalArgumentException("bad signature hex")
+        val oldPub = com.flagshipserver.app.core.HexUtil.decode(req.rotation.oldAdminRootPub)
+            ?: throw IllegalArgumentException("bad old admin root pub hex")
+        if (!com.flagshipserver.app.core.AdminRootRotationClaim.verify(r, sig, oldPub)) {
+            throw IllegalArgumentException("admin-root-rotation proof does not verify")
+        }
+        rotatedAdminRootByUser[username.lowercase()] = req.rotation.newAdminRootPub.lowercase()
+    }
+
     private fun etagFor(devices: List<TrustedDevice>): String {
         // Identity-significant subset only; lastSeenAt deliberately
         // excluded so test push-delivery doesn't flutter the ETag.
@@ -1866,7 +2008,8 @@ class LiveFlagshipServerClient(
     private val base = baseUrl.trimEnd('/')
 
     companion object {
-        const val DEFAULT_BASE_URL = "https://flagshipserver.com"
+        /** Control-plane apex, via [Endpoints] (prod-default + test override). */
+        val DEFAULT_BASE_URL: String get() = Endpoints.controlBaseUrl
     }
 
     override suspend fun claimUsername(req: UsernameClaimRequest) {
@@ -1875,6 +2018,16 @@ class LiveFlagshipServerClient(
             "$base/api/username/claim", req,
             serializer = UsernameClaimRequest.serializer(),
             accept = setOf(200, 201, 204, 409),
+        )
+    }
+
+    override suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest) {
+        // Only 200 is success; 403 (not last device / bad sig) + 404 throw
+        // HttpException so the caller surfaces it and never wipes locally.
+        transport.postJson(
+            "$base/api/account/self-delete", req,
+            serializer = AccountSelfDeleteBundleRequest.serializer(),
+            accept = setOf(200),
         )
     }
 
@@ -1926,6 +2079,28 @@ class LiveFlagshipServerClient(
             serializer = UsernameAvailabilityCheckBody.serializer(),
             responseSerializer = UsernameAvailabilityResponse.serializer(),
         )
+
+    override suspend fun suggestUsername(deviceKey: String): UsernameSuggestion {
+        val bodyBytes = transport.json
+            .encodeToString(SuggestUsernameBody.serializer(), SuggestUsernameBody(deviceKey))
+            .encodeToByteArray()
+        // accept 429 so the throttle is a normal outcome, not an exception.
+        val resp = transport.execute(
+            method = "POST",
+            url = "$base/api/username/suggest",
+            body = bodyBytes,
+            contentType = "application/json",
+            accept = setOf(200, 429),
+        )
+        val wire = transport.json.decodeFromString(
+            SuggestUsernameWire.serializer(), resp.body.decodeToString(),
+        )
+        return if (resp.status == 429) {
+            UsernameSuggestion(name = null, retryAfterMs = wire.retryAfterMs ?: 3000, throttled = true)
+        } else {
+            UsernameSuggestion(name = wire.name, retryAfterMs = wire.retryAfterMs ?: 2000, throttled = false)
+        }
+    }
 
     override suspend fun fetchProvisionStatus(serial: String): ProvisionStatusRecord? {
         // GET /api/order/<serial>/status — 200 carries the record; 404
@@ -2244,7 +2419,25 @@ class LiveFlagshipServerClient(
             serializer = WatchDelegateRevokeRequest.serializer(),
         )
     }
+
+    override suspend fun rotateAdminRoot(username: String, req: AdminRootRotationRequest) {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        transport.postJson(
+            url = "$base/api/users/$encoded/admin-root-rotation",
+            body = req,
+            serializer = AdminRootRotationRequest.serializer(),
+        )
+    }
 }
 
 @Serializable
 private data class UsernameAvailabilityCheckBody(@SerialName("username") val username: String)
+
+@Serializable
+private data class SuggestUsernameBody(@SerialName("deviceKey") val deviceKey: String)
+
+@Serializable
+private data class SuggestUsernameWire(
+    val name: String? = null,
+    val retryAfterMs: Int? = null,
+)

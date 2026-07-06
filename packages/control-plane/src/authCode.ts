@@ -15,6 +15,13 @@ import {
 export interface AuthCodeDeps {
   storage: AuthCodeStorage;
   usernames: UsernameStorage;
+  /**
+   * The data-plane apex serverDomains are validated against —
+   * `flagship.services` in prod, `gym.flagship.services` in the test env
+   * (docs/ui-test-gym.md §6.5). Defaults to the prod literal so prod
+   * behavior (and the serverDomain validation) is byte-identical.
+   */
+  apex?: string;
   freshnessMs?: number;
   maxExpiryMs?: number;
   now?: () => number;
@@ -33,6 +40,15 @@ interface IssueBody {
     userPubKey?: string;
     issuedAt?: number;
     expiresAt?: number;
+    /**
+     * Slice D (docs/device-admin-tier-spec.md §D-1) — the account's pinned ADMIN
+     * MASTER ROOT pubkey (hex). OPTIONAL + backward-compatible: when present it
+     * is part of the AuthCode's SIGNED canonical bytes (`ar=<hex>`), so it must
+     * be reconstructed here for the signature to verify. Absent ⇒ byte-identical
+     * canonical bytes (legacy AuthCodes verify unchanged). Persisted so
+     * `/api/server/register` re-verifies the same signed bytes + the box pins it.
+     */
+    adminRootPubKey?: string;
   };
   signature?: string;
 }
@@ -66,11 +82,12 @@ export async function handleAuthCodeIssue(
     return malformed("malformed body");
   }
 
+  const apex = deps.apex ?? "flagship.services";
   const userV = validateUserLabel(c.username);
   if (!userV.ok) return malformed(userV.reason);
   const serverV = validateServerLabel(c.serverName);
   if (!serverV.ok) return malformed(serverV.reason);
-  const expectedDomain = `${serverV.label}.${userV.label}.flagship.services`;
+  const expectedDomain = `${serverV.label}.${userV.label}.${apex}`;
   if (c.serverDomain !== expectedDomain) {
     return malformed(`serverDomain must equal ${expectedDomain}`);
   }
@@ -86,6 +103,15 @@ export async function handleAuthCodeIssue(
     return forbidden("userPubKey does not match registered IRK");
   }
 
+  // Slice D — an OPTIONAL, well-formed admin master root is folded into the
+  // signed AuthCode (so the phone's signature covers it) + persisted. A
+  // malformed value is ignored (never present in the canonical bytes), so it
+  // can't block a legacy client whose signature omits it.
+  const adminRootPubKeyHex =
+    typeof c.adminRootPubKey === "string" && HEX64.test(c.adminRootPubKey)
+      ? c.adminRootPubKey.toLowerCase()
+      : undefined;
+
   const userPubKey = hexToBytes(c.userPubKey);
   const code: AuthCode = {
     version: 1,
@@ -97,6 +123,7 @@ export async function handleAuthCodeIssue(
     userPubKey,
     issuedAt: c.issuedAt,
     expiresAt: c.expiresAt,
+    ...(adminRootPubKeyHex ? { adminRootPubKey: hexToBytes(adminRootPubKeyHex) } : {}),
   };
   const sig = hexToBytes(body.signature);
   if (!verifyAuthCode(code, sig, userPubKey)) return forbidden("invalid signature");
@@ -113,6 +140,7 @@ export async function handleAuthCodeIssue(
     expiresAt: c.expiresAt,
     status: "active",
     recordedAt: now,
+    ...(adminRootPubKeyHex ? { adminRootPubKeyHex } : {}),
   });
   if (!out.ok) return conflict(out.reason);
   return ok({ ok: true, serial: code.serial, expiresAt: code.expiresAt });
@@ -253,6 +281,11 @@ export async function validateAndUseAuthCode(
       userPubKey: hexToBytes(r.userPubKeyHex),
       issuedAt: r.issuedAt,
       expiresAt: r.expiresAt,
+      // Slice D — carry the persisted admin master root back onto the
+      // reconstructed AuthCode (byte-identical to what the phone signed).
+      ...(r.adminRootPubKeyHex
+        ? { adminRootPubKey: hexToBytes(r.adminRootPubKeyHex) }
+        : {}),
     },
   };
 }

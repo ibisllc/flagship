@@ -53,7 +53,7 @@ import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.JoinDevicePhase
 import com.flagshipserver.app.viewmodels.JoinDeviceViewModel
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -252,7 +252,7 @@ internal fun quarantineCopy(quarantineUntil: Long?, now: Long = System.currentTi
         return "This device is now on the account. It starts as a non-admin device."
     }
     val days = ((quarantineUntil - now) + 86_399_999) / 86_400_000  // ceil to days
-    val until = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(quarantineUntil))
+    val until = FlagshipDateFormat.format(quarantineUntil, nowMs = now)
     return "This device is a non-admin device for about $days more day" +
         (if (days == 1L) "" else "s") +
         " (until $until). The account owner is being reminded to review trusted devices."

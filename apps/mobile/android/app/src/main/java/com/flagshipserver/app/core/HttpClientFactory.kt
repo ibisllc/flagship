@@ -37,18 +37,34 @@ object HttpClientFactory {
      *     openssl dgst -sha256 -binary | base64
      * and add the resulting "sha256/…" line to the builder below.
      */
-    private val pinner: CertificatePinner = CertificatePinner.Builder()
-        // Cloudflare's "Cloudflare Inc ECC CA-3" intermediate.
-        .add("flagshipserver.com",
-            "sha256/3GwlKvsefAVKRfQGB9ZRSXIXX7TmlXMrcdfQyId3wl0=")
-        // Cloudflare's "Cloudflare Inc RSA CA-2" intermediate (fallback).
-        .add("flagshipserver.com",
-            "sha256/V8/g9SnyOPS7vRZAGwL+y/Mht8GFkrqHHNQYTcCStvE=")
-        .build()
+    /**
+     * Static SPKI pins for the PROD control apex (`flagshipserver.com`) only.
+     * A gym test build points [Endpoints] at a non-prod apex
+     * (gym.flagshipserver.com) served behind a different LE chain — these
+     * Cloudflare-intermediate pins would HARD-FAIL TLS there — so the pinner
+     * is built against the CONFIGURED control host and is EMPTY (a no-op)
+     * unless that host is the prod apex. Prod is byte-identical: with no
+     * override the host is `flagshipserver.com`, so both pins apply exactly as
+     * before. (The dynamic box-cert interceptor below is unaffected — it is
+     * host-gated by the registry and covers `*.flagship.services` either way.)
+     */
+    private fun pinner(): CertificatePinner {
+        val builder = CertificatePinner.Builder()
+        if (Endpoints.isProdControlApex) {
+            builder
+                // Cloudflare's "Cloudflare Inc ECC CA-3" intermediate.
+                .add(Endpoints.controlHost,
+                    "sha256/3GwlKvsefAVKRfQGB9ZRSXIXX7TmlXMrcdfQyId3wl0=")
+                // Cloudflare's "Cloudflare Inc RSA CA-2" intermediate (fallback).
+                .add(Endpoints.controlHost,
+                    "sha256/V8/g9SnyOPS7vRZAGwL+y/Mht8GFkrqHHNQYTcCStvE=")
+        }
+        return builder.build()
+    }
 
     fun build(): OkHttpClient =
         OkHttpClient.Builder()
-            .certificatePinner(pinner)
+            .certificatePinner(pinner())
             // Box cert-fingerprint pinning (A′ phase 4, hard-fail), two
             // seams: the hostname verifier runs on every TLS handshake
             // (WebSocket upgrades included — OkHttp skips network

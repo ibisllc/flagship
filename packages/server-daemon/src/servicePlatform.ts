@@ -28,6 +28,7 @@ import {
   type UninstallServiceRequest,
 } from "@flagship/protocol";
 import type { AppEnv } from "./serviceEnvStore.js";
+import type { SwkOps } from "./keyCustodian.js";
 import { AppRunner, type AppSpec } from "./serviceRunner.js";
 import { AppMembership } from "./membership.js";
 import {
@@ -59,16 +60,29 @@ export interface InstalledService {
 }
 
 export interface ServicePlatformDeps {
-  /** Whose box this is — used for the host-vs-creator URL collapse + as IRK-mutation owner. */
-  host: { username: string; irkPub: Bytes };
+  /** Whose box this is — used for the host-vs-creator URL collapse + as IRK-mutation owner.
+   *  `adminRootPub` (Slice D, D-2): when present, service-collaborator membership
+   *  invite-create + mutation are admin-gated; absent ⇒ legacy owner-IRK. */
+  host: { username: string; irkPub: Bytes; adminRootPub?: Bytes };
   /**
-   * Server Working Key — derives per-app secrets for member stable-id
-   * derivation. Per `key_hierarchy.md` this is provisioned by the
-   * phone at first boot. Until that's wired, callers pass an env-
-   * derived placeholder; per-app derivation still works (the values
-   * just rotate when SWK rotates).
+   * The box's OWN daemon identity pubkey — an ADDITIONAL accepted signer for
+   * host-authority mutations (install / setEnv / uninstall). The owner IRK
+   * (`host.irkPub`) is phone-held, so a BOX-ORIGINATED deploy (a build-modes
+   * deploy: scratch / git-import / mcp, all gated upstream by the paired
+   * session) cannot sign with it — the box only holds its own identity key.
+   * Accepting the daemon identity here lets those box-internal deploys sign
+   * with a key the box actually has, WITHOUT weakening the phone path (the
+   * owner IRK still verifies). Omit ⇒ owner-IRK-only (unchanged behavior).
    */
-  swk: Bytes;
+  hostIdentityPub?: Bytes;
+  /**
+   * SWK-derived operations (the KeyCustodian's `SwkOps` slice) used to derive
+   * per-app secrets for member stable-id derivation. The platform holds only
+   * the operation surface, never the raw SWK. Per `key_hierarchy.md` the SWK
+   * is provisioned by the phone at first boot; per-app derivation rotates when
+   * the SWK rotates.
+   */
+  swk: SwkOps;
   appRunner: AppRunner;
   dataProvisioner: DataProvisioner | null;
   /**
@@ -116,6 +130,17 @@ export interface ServicePlatformDeps {
    * owner-set env vars (just the FLAGSHIP_* / data-layer ones).
    */
   envStore?: import("./serviceEnvStore.js").AppEnvStore | null;
+  /**
+   * Fired after a service is successfully uninstalled (the container is stopped
+   * + the data/env/token/route state is torn down locally). The per-service
+   * leadership gossip wires this to RELEASE the box's `<slug>.<user>` route at
+   * the hub (so a stale claim doesn't outlive the service + the next request
+   * re-resolves) and to trigger a gossip re-announce (so siblings recompute
+   * leads without this service). Best-effort — invoked only on a real removal
+   * (NOT on the idempotent already-gone path), awaited, never allowed to fail
+   * the uninstall.
+   */
+  onServiceRemoved?: ((slug: string) => void | Promise<void>) | null;
   /** Reject mutations whose `issuedAt` is more than this old (ms). Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -130,6 +155,23 @@ export class ServicePlatform {
   constructor(private readonly deps: ServicePlatformDeps) {
     this.maxAgeMs = deps.maxAgeMs ?? 5 * 60_000;
     this.now = deps.now ?? (() => Date.now());
+  }
+
+  /**
+   * Verify a host-authority mutation (install / setEnv / uninstall) against
+   * EITHER the owner IRK (phone-signed) OR the box's own daemon identity key
+   * (box-originated build-modes deploys, which can't reach the phone-held
+   * IRK). The owner IRK is always tried first; the daemon identity is an
+   * additive box-internal signer, only when configured.
+   */
+  private verifyHostAuthority<T>(
+    req: T,
+    sig: Bytes,
+    verify: (req: T, sig: Bytes, pub: Bytes) => boolean,
+  ): boolean {
+    if (verify(req, sig, this.deps.host.irkPub)) return true;
+    if (this.deps.hostIdentityPub && verify(req, sig, this.deps.hostIdentityPub)) return true;
+    return false;
   }
 
   /** Composite app id used as the container name + registry key.
@@ -209,7 +251,7 @@ export class ServicePlatform {
     if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
       return { ok: false, reason: "stale request" };
     }
-    if (!verify(r, signature, this.deps.host.irkPub)) {
+    if (!this.verifyHostAuthority(r, signature, verify)) {
       return { ok: false, reason: "invalid signature (must be host's IRK)" };
     }
     if (r.serverId.split(".")[1] !== this.deps.host.username && !r.serverId.startsWith(this.deps.host.username + ".")) {
@@ -279,6 +321,7 @@ export class ServicePlatform {
     const ownerEnv = this.deps.envStore
       ? sanitizeOwnerEnv(await this.deps.envStore.get(serviceId).catch(() => null))
       : {};
+    const containerPort = parsed.manifest.runtime.port;
     const env: Record<string, string> = {
       ...ownerEnv,
       ...(parsed.manifest.runtime.env ?? {}),
@@ -287,13 +330,22 @@ export class ServicePlatform {
       FLAGSHIP_CREATOR: r.creator,
       FLAGSHIP_SLUG: r.slug,
       FLAGSHIP_HOST: this.deps.host.username,
+      // 12-factor: tell the app the port it should bind. It equals the
+      // manifest runtime.port the publish maps to, so a contract app that
+      // reads $PORT and an image that hardcodes its declared port both end up
+      // reachable by the proxy. (Set ABOVE the FLAGSHIP_* block? No — after
+      // runtime.env so the manifest can't override the platform's PORT.)
+      PORT: String(containerPort),
       ...(apiToken ? { FLAGSHIP_APP_TOKEN: apiToken } : {}),
     };
     const spec: AppSpec = {
       serviceId,
       image: parsed.manifest.runtime.image,
       env,
+      // `port` = allocated host-loopback port the proxy dials; `containerPort`
+      // = the app's manifest listen port. Publish maps host→container.
       port,
+      containerPort,
     };
     try {
       await this.deps.appRunner.deploy(spec);
@@ -318,6 +370,8 @@ export class ServicePlatform {
       this.deps.host.username,
       this.deps.host.irkPub,
       this.deps.swk,
+      {},
+      this.deps.host.adminRootPub,
     );
 
     const installed: InstalledService = {
@@ -401,7 +455,7 @@ export class ServicePlatform {
     if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
       return { ok: false, reason: "stale request" };
     }
-    if (!verify(r, signature, this.deps.host.irkPub)) {
+    if (!this.verifyHostAuthority(r, signature, verify)) {
       return { ok: false, reason: "invalid signature (must be host's IRK)" };
     }
     if (!this.deps.envStore) {
@@ -465,7 +519,7 @@ export class ServicePlatform {
     if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
       return { ok: false, reason: "stale request" };
     }
-    if (!verify(r, signature, this.deps.host.irkPub)) {
+    if (!this.verifyHostAuthority(r, signature, verify)) {
       return { ok: false, reason: "invalid signature (must be host's IRK)" };
     }
     const serviceId = ServicePlatform.serviceId(r.creator, r.slug);
@@ -517,6 +571,17 @@ export class ServicePlatform {
     }
     this.apps.delete(serviceId);
     this.byUrlLabel.delete(app.urlLabel.toLowerCase());
+    // Per-service leadership teardown: release the box's `<slug>.<user>` route
+    // at the hub + re-announce so the claim doesn't outlive the service. The
+    // route is keyed by the bare slug (the gossip claimer maps slug → the tier-2
+    // FQDN), so pass the slug. Best-effort — never fail the uninstall.
+    if (this.deps.onServiceRemoved) {
+      try {
+        await this.deps.onServiceRemoved(r.slug);
+      } catch {
+        // gossip release/re-announce is advisory; the local removal already succeeded.
+      }
+    }
     return { ok: true };
   }
 

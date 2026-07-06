@@ -58,8 +58,7 @@ import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.CompanionDockViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
 import kotlinx.coroutines.delay
-import java.text.DateFormat
-import java.util.Date
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Locale
 
 @Composable
@@ -332,12 +331,5 @@ private fun formatRemaining(ms: Long): String {
 
 private fun fmtRelative(at: Long, now: Long): String {
     if (at <= 0L) return "—"
-    val delta = (now - at).coerceAtLeast(0L)
-    val sec = delta / 1000
-    return when {
-        sec < 60 -> "${sec}s ago"
-        sec < 3600 -> "${sec / 60}m ago"
-        sec < 86_400 -> "${sec / 3600}h ago"
-        else -> DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.US).format(Date(at))
-    }
+    return FlagshipDateFormat.format(at, nowMs = now)
 }

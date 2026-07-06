@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -94,13 +95,13 @@ fun FSChip(
     ) {
         Text(
             text = label,
-            color = if (selected) Color.White else FS.colors.text,
+            color = if (selected) FS.colors.onAccent else FS.colors.text,
             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
         )
         if (count != null) {
             Text(
                 text = count.toString(),
-                color = if (selected) Color.White.copy(alpha = 0.9f) else FS.colors.textMuted,
+                color = if (selected) FS.colors.onAccent.copy(alpha = 0.9f) else FS.colors.textMuted,
                 style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
             )
         }
@@ -312,14 +313,14 @@ fun FSAnnouncementCard(
         if (ctaLabel != null) {
             Box(
                 modifier = Modifier
-                    .heightIn(min = 40.dp)
+                    .heightIn(min = 44.dp)
                     .clip(RoundedCornerShape(FS.radius.md))
                     .background(accent)
                     .clickable(onClick = onCta)
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = FS.space.s5),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(ctaLabel, color = Color.White, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
+                Text(ctaLabel, color = FS.colors.onAccent, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
             }
         }
     }
@@ -337,6 +338,10 @@ data class FSSettingsRowData(
     val badge: Int? = null,
     val showsChevron: Boolean = true,
     val onClick: () -> Unit = {},
+    /** Optional stable element handle for the UI gym (§10 Phase-5). When set,
+     *  the rendered row carries `Modifier.testTag(testTag)` so an instrumentation
+     *  test can tap/assert this row deterministically. Null ⇒ untagged. */
+    val testTag: String? = null,
 )
 
 /**
@@ -370,7 +375,10 @@ fun FSSettingsGroup(
                 .border(1.dp, FS.colors.border, RoundedCornerShape(FS.radius.lg)),
         ) {
             rows.forEachIndexed { idx, row ->
-                FSSettingsRow(row)
+                FSSettingsRow(
+                    row,
+                    modifier = if (row.testTag != null) Modifier.testTag(row.testTag) else Modifier,
+                )
                 if (idx < rows.size - 1) {
                     Box(
                         modifier = Modifier

@@ -19,6 +19,12 @@
 
 package com.flagshipserver.app.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -35,8 +41,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +64,10 @@ import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RckRegisterRequest
 import com.flagshipserver.app.core.AuthCode as AuthCodeBytes
 import com.flagshipserver.app.core.Base64URL
+import com.flagshipserver.app.core.BurnerPairController
+import com.flagshipserver.app.core.DebugAccess
+import com.flagshipserver.app.core.LiveBurnerPairClient
+import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.CreateServerDraftStore
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.InstallBlob as InstallBlobBytes
@@ -62,18 +75,26 @@ import com.flagshipserver.app.core.InstallBlobBundle
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalQrRelayClient
+import com.flagshipserver.app.core.LocalSecretMailboxClient
+import com.flagshipserver.app.core.LocalSessionStore
+import com.flagshipserver.app.core.CreateTimePairing
 import com.flagshipserver.app.core.clampedServerDescription
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.NetworkErrorHumanizer
+import com.flagshipserver.app.core.PendingSwkDepositStore
+import com.flagshipserver.app.core.PendingPairingDepositStore
 import com.flagshipserver.app.core.QrRelay
 import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.core.RckRegister
 import com.flagshipserver.app.core.SerialGen
+import com.flagshipserver.app.core.ServerKeys
 import com.flagshipserver.app.core.ServerSettingsStore
+import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.SlugUtil
 import com.flagshipserver.app.core.WireAuthCode
 import com.flagshipserver.app.core.WireBlob
 import com.flagshipserver.app.keystore.Keystore
+import androidx.compose.ui.platform.testTag
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -83,17 +104,31 @@ import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
-private enum class Phase { Design, Scan, Match }
+// Design → DeliveryChooser fans into the delivery methods: Pair (burner app),
+// Burn (on-device USB-OTG), or the website-QR relay (Scan→Match, the demo path).
+// Save/Copy mint inline and route straight to onDelivered.
+private enum class Phase { Design, DeliveryChooser, Scan, Match, Pair, Burn }
 
 @Composable
 fun CreateServerScreen(
     onDelivered: (serverDomain: String, serial: String, name: String, description: String) -> Unit,
     onCancel: () -> Unit,
+    // Fired the moment a recipe is out (share/copy/burner-pair delivered) so the
+    // host can surface the pending pod on Home WITHOUT navigating away — used by
+    // the burner-pair flow, which keeps its screen open to answer consent
+    // prompts. Mirrors iOS CreateServerStubScreen.onDeliveredVisible.
+    onDeliveredVisible: (serverDomain: String, serial: String, name: String, description: String) -> Unit = { _, _, _, _ -> },
 ) {
     val app = LocalAppState.current
     val flagshipServer = LocalFlagshipServerClient.current
     val qrRelay = LocalQrRelayClient.current
+    val mailbox = LocalSecretMailboxClient.current
+    val sessionStore = LocalSessionStore.current
     val toasts = LocalToastCenter.current
+    val dev = LocalDeveloperSettings.current
+    // Mock mode (Developer toggle OFF) has no real burner — surface a demo
+    // affordance to reach the website-QR relay path. Absent dev ⇒ live (prod).
+    val useLive = dev?.useLiveClient?.collectAsState()?.value ?: true
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     // Draft-only metadata store (backup policy) — device-local, NOT signed
@@ -117,10 +152,115 @@ fun CreateServerScreen(
     // Disk encryption — ON (default) = "luks" (omitted from the wire). OFF =
     // "none": plaintext disk, for boxes that can't keep network at boot.
     var encryptDisk by remember { mutableStateOf(true) }
+    // ADVANCED MODE — one toggle, OFF by default ("for people who know what
+    // they're doing"). On mobile it gates the offline path: embed-secrets (the
+    // box SWK in the recipe), so a box installs fully offline with no
+    // post-registration phone step. (Choose-your-own-ISO + debug/local-CLI have
+    // no mobile analogue — they live on the website/webapp.) When OFF, the
+    // offline sub-options snap back to the secret-free default.
+    var advancedMode by remember { mutableStateOf(false) }
+    // Whether the recipe EMBEDS the box's SWK (the offline path). Default OFF:
+    // the recipe is secret-free of the SWK and the phone DEPOSITS it once the box
+    // registers (docs/recipe-delivery-and-remote-install.md).
+    var embedSecrets by remember { mutableStateOf(false) }
+    // ADVANCED — make this a debug-friendly server. Default OFF (a production box
+    // with no console login). ON (only reachable under Advanced mode) bakes an
+    // owner-IRK-signed `flagship/debug-access/v1` grant into the recipe as the
+    // UNSIGNED `debugGrant` sibling; the box-side gate verifies it under the
+    // config-pinned owner IRK + this box's FQDN before enabling the debug console
+    // user. Signed at MINT behind the SAME create biometric. Snaps back when
+    // Advanced mode is turned off.
+    var debugFriendly by remember { mutableStateOf(false) }
+    val swkDepositStore = remember { PendingSwkDepositStore.from(context) }
+    val pairingDepositStore = remember { PendingPairingDepositStore.from(context) }
+    // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
+    // recipe, so it is owed on EVERY created server and deposited post-registration.
+    val cgkDepositStore = remember { com.flagshipserver.app.core.PendingCgkDepositStore.from(context) }
     // Backup policy — draft-only metadata (phone-only default). Hydrated from
     // the draft store so flipping away mid-fill doesn't lose the pick; NOT on
     // the wire (applied later via an owner-signed set-backup-policy order).
     var backupPolicy by remember { mutableStateOf(draftStore.backupPolicy()) }
+    // Burner-pairing controller (built when the user picks "Pair with the
+    // burner app") + on-device-burn recipe (minted before showing the burn UI).
+    var pairController by remember { mutableStateOf<BurnerPairController?>(null) }
+    var burnRecipeJson by remember { mutableStateOf<String?>(null) }
+    var burnMinted by remember { mutableStateOf<MintedBundle?>(null) }
+
+    // Mint the recipe + pre-publish the auth-code/RCK on .com (the box needs them
+    // to register when it phones home, regardless of delivery channel), reusing
+    // the shared minter so the recipe is byte-identical across delivery methods.
+    suspend fun mintAndRegister(): MintedBundle {
+        val username = app.currentUser.value ?: throw IllegalStateException("not paired yet")
+        val minted = mintRecipeBundle(
+            username = username,
+            serverName = name,
+            recipeTtlMs = recipeTtlMs,
+            // Only "approve" rides the wire; "auto" stays absent (legacy bytes).
+            bootUnlockMode = bootUnlockMode.takeIf { it == ServerSettingsStore.Mode.APPROVE }?.wire,
+            // Only "none" rides the wire; "luks" (default) stays absent.
+            diskEncryption = if (encryptDisk) null else "none",
+            embedSecrets = embedSecrets,
+            debugFriendly = debugFriendly,
+            swkDepositStore = swkDepositStore,
+            cgkDepositStore = cgkDepositStore,
+            pairingDepositStore = pairingDepositStore,
+            sessionStore = sessionStore,
+        )
+        registerControlPlane(
+            flagshipServer = flagshipServer,
+            bundle = minted.bundle,
+            authCodeUserSig = minted.bundle.blob.authCodeUserSignature,
+        )
+        return minted
+    }
+
+    // Per-server bookkeeping every delivery path runs once the recipe is out:
+    // remember the boot-unlock choice + clear the draft-only metadata. Mirrors
+    // iOS recordDeliveredBookkeeping + the QR path's Match step.
+    fun recordDelivered(serverDomain: String) {
+        ServerSettingsStore.from(context).setMode(serverDomain, bootUnlockMode)
+        draftStore.reset()
+    }
+
+    // Pair + Burn are full-screen flows with their OWN scroll containers, so they
+    // render OUTSIDE the design/chooser scroll Column (nesting same-direction
+    // scrollables would crash). iOS presents the pair sheet the same way.
+    if (phase == Phase.Pair) {
+        val pc = pairController
+        if (pc != null) {
+            BurnerPairScreen(
+                controller = pc,
+                onDeliveredVisible = { domain, serial ->
+                    onDeliveredVisible(domain, serial, name, description)
+                },
+                onClose = { domain, serial -> onDelivered(domain, serial, name, description) },
+                onCancel = {
+                    pc.cancel()
+                    pairController = null
+                    phase = Phase.DeliveryChooser
+                },
+            )
+        } else {
+            LaunchedEffect(Unit) { phase = Phase.DeliveryChooser }
+        }
+        return
+    }
+    if (phase == Phase.Burn) {
+        val json = burnRecipeJson
+        if (json != null) {
+            BurnerOnDeviceScreen(
+                recipeJson = json,
+                onDone = {
+                    val minted = burnMinted
+                    if (minted != null) onDelivered(minted.serverDomain, minted.serial, name, description)
+                    else phase = Phase.DeliveryChooser
+                },
+            )
+        } else {
+            LaunchedEffect(Unit) { phase = Phase.DeliveryChooser }
+        }
+        return
+    }
 
     val scroll = rememberScrollState()
     Column(
@@ -152,6 +292,15 @@ fun CreateServerScreen(
                 onBootUnlockMode = { bootUnlockMode = it },
                 encryptDisk = encryptDisk,
                 onEncryptDisk = { encryptDisk = it },
+                advancedMode = advancedMode,
+                onAdvancedMode = {
+                    advancedMode = it
+                    if (!it) { embedSecrets = false; debugFriendly = false }
+                },
+                embedSecrets = embedSecrets,
+                onEmbedSecrets = { embedSecrets = it },
+                debugFriendly = debugFriendly,
+                onDebugFriendly = { debugFriendly = it },
                 backupPolicy = backupPolicy,
                 onBackupPolicy = {
                     backupPolicy = it
@@ -161,10 +310,93 @@ fun CreateServerScreen(
                 onContinue = {
                     if (name.isBlank()) { error = "Name required."; return@DesignPhase }
                     error = null
-                    phase = Phase.Scan
+                    phase = Phase.DeliveryChooser
                 },
                 onCancel = onCancel,
             )
+            Phase.DeliveryChooser -> DeliveryChooserPhase(
+                busy = working,
+                showDemo = !useLive,
+                onPair = {
+                    // The burner pairing is a LIVE relay session always (mock
+                    // mode has no real burner — it uses the demo QR below).
+                    val controller = BurnerPairController(
+                        client = LiveBurnerPairClient(),
+                        scope = scope,
+                        // ONE-SHOT: mint the recipe (with the Advanced toggles —
+                        // embed-secrets, debug-friendly — baked in behind the
+                        // SAME create biometric) + deliver it. No resume, no
+                        // debug-consent round-trip (the debug grant rides the
+                        // recipe). Byte-identical recipe to share/copy/burn.
+                        mint = {
+                            val minted = mintAndRegister()
+                            val json = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
+                            BurnerPairController.MintedRecipe(json, minted.serverDomain, minted.serial)
+                        },
+                    )
+                    pairController = controller
+                    phase = Phase.Pair
+                },
+                onShare = {
+                    if (working) return@DeliveryChooserPhase
+                    scope.launch {
+                        working = true
+                        try {
+                            val minted = mintAndRegister()
+                            val json = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
+                            shareRecipeFile(context, name, json)
+                            recordDelivered(minted.serverDomain)
+                            onDelivered(minted.serverDomain, minted.serial, name, description)
+                        } catch (t: Throwable) {
+                            error = NetworkErrorHumanizer.humanize(t)
+                        } finally {
+                            working = false
+                        }
+                    }
+                },
+                onCopy = {
+                    if (working) return@DeliveryChooserPhase
+                    scope.launch {
+                        working = true
+                        try {
+                            val minted = mintAndRegister()
+                            val json = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
+                            copyRecipeToClipboard(context, json)
+                            toasts.success("Recipe copied.")
+                            recordDelivered(minted.serverDomain)
+                            onDelivered(minted.serverDomain, minted.serial, name, description)
+                        } catch (t: Throwable) {
+                            error = NetworkErrorHumanizer.humanize(t)
+                        } finally {
+                            working = false
+                        }
+                    }
+                },
+                onBurn = {
+                    if (working) return@DeliveryChooserPhase
+                    scope.launch {
+                        working = true
+                        try {
+                            val minted = mintAndRegister()
+                            burnRecipeJson = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
+                            burnMinted = minted
+                            recordDelivered(minted.serverDomain)
+                            phase = Phase.Burn
+                        } catch (t: Throwable) {
+                            error = NetworkErrorHumanizer.humanize(t)
+                        } finally {
+                            working = false
+                        }
+                    }
+                },
+                onDemo = {
+                    error = null
+                    phase = Phase.Scan
+                },
+                error = error,
+                onCancel = onCancel,
+            )
+            Phase.Pair, Phase.Burn -> Unit // handled by an early return above
             Phase.Scan -> ScanPhase(
                 qrText = qrText,
                 onQrText = { qrText = it },
@@ -189,6 +421,20 @@ fun CreateServerScreen(
                                 // Only "none" rides the wire; "luks" (default)
                                 // stays absent (legacy bytes + webapp parity).
                                 diskEncryption = if (encryptDisk) null else "none",
+                                // Secret-free recipe: embed the SWK in the recipe
+                                // ONLY when Advanced + embed-secrets is on; OFF
+                                // (default) keeps the recipe secret-free and the
+                                // phone deposits the SWK after registration.
+                                embedSecrets = embedSecrets,
+                                debugFriendly = debugFriendly,
+                                swkDepositStore = swkDepositStore,
+                                pairingDepositStore = pairingDepositStore,
+                                cgkDepositStore = cgkDepositStore,
+                                // Secret-free pairing: build the order + persist the
+                                // session token now; the order is sealed + deposited
+                                // post-registration so the box comes online paired.
+                                mailbox = mailbox,
+                                sessionStore = sessionStore,
                             )
                             qrRelay.openAndHello(
                                 sid = delivery.sid,
@@ -281,6 +527,12 @@ private fun DesignPhase(
     onBootUnlockMode: (ServerSettingsStore.Mode) -> Unit,
     encryptDisk: Boolean,
     onEncryptDisk: (Boolean) -> Unit,
+    advancedMode: Boolean,
+    onAdvancedMode: (Boolean) -> Unit,
+    embedSecrets: Boolean,
+    onEmbedSecrets: (Boolean) -> Unit,
+    debugFriendly: Boolean,
+    onDebugFriendly: (Boolean) -> Unit,
     backupPolicy: CreateServerDraftStore.BackupPolicy,
     onBackupPolicy: (CreateServerDraftStore.BackupPolicy) -> Unit,
     error: String?,
@@ -295,12 +547,17 @@ private fun DesignPhase(
     Spacer(Modifier.height(FS.space.s4))
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column {
-            FSField(value = name, onValueChange = onName, label = "Name")
+            FSField(
+                value = name,
+                onValueChange = onName,
+                label = "Name",
+                modifier = Modifier.testTag("cs-name-field"),
+            )
             Spacer(Modifier.height(FS.space.s2))
             FSField(value = description, onValueChange = onDescription, label = "Description")
             Spacer(Modifier.height(FS.space.s2))
             Text(
-                "Subdomain preview: ${SlugUtil.slugify(name).ifEmpty { "name" }}.$username.flagship.services",
+                "Subdomain preview: ${SlugUtil.slugify(name).ifEmpty { "name" }}.$username.${Endpoints.dataApex}",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 12.sp),
             )
@@ -311,6 +568,15 @@ private fun DesignPhase(
             Spacer(Modifier.height(FS.space.s4))
             DiskEncryptionPicker(encryptDisk = encryptDisk, onEncryptDisk = onEncryptDisk)
             Spacer(Modifier.height(FS.space.s4))
+            AdvancedModePicker(
+                advancedMode = advancedMode,
+                onAdvancedMode = onAdvancedMode,
+                embedSecrets = embedSecrets,
+                onEmbedSecrets = onEmbedSecrets,
+                debugFriendly = debugFriendly,
+                onDebugFriendly = onDebugFriendly,
+            )
+            Spacer(Modifier.height(FS.space.s4))
             BackupPolicyPicker(policy = backupPolicy, onPolicy = onBackupPolicy)
 }
     }
@@ -319,7 +585,12 @@ private fun DesignPhase(
         Text(error, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
     }
     Spacer(Modifier.height(FS.space.s4))
-    FSPrimaryButton(label = "Continue", onClick = onContinue, block = true)
+    FSPrimaryButton(
+        label = "Continue",
+        onClick = onContinue,
+        block = true,
+        modifier = Modifier.testTag("cs-continue-button"),
+    )
     FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
 }
 
@@ -404,6 +675,7 @@ private fun DiskEncryptionPicker(
         "Encrypt disk",
         color = FS.colors.text,
         style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+        modifier = Modifier.testTag("cs-encrypt-disk-toggle"),
     )
     Spacer(Modifier.height(FS.space.s2))
     BootUnlockOption(
@@ -419,6 +691,82 @@ private fun DiskEncryptionPicker(
         subtitle = "Less safe — anyone with the disk can read it. Choose this only for a box that can't keep network at boot (Wi-Fi-only): it boots with no connection.",
         onClick = { onEncryptDisk(false) },
     )
+}
+
+// Advanced mode — ONE toggle, OFF by default, "for people who know what they're
+// doing". It gates the offline path: embed-secrets (the box SWK in the recipe),
+// so a box installs fully offline with no post-registration phone step. The
+// DEFAULT (Advanced off) is the secret-free recipe — the phone deposits the SWK
+// after the box registers. (Choose-your-own-ISO + debug/local-CLI have no mobile
+// analogue; they live on the website/webapp.)
+@Composable
+private fun AdvancedModePicker(
+    advancedMode: Boolean,
+    onAdvancedMode: (Boolean) -> Unit,
+    embedSecrets: Boolean,
+    onEmbedSecrets: (Boolean) -> Unit,
+    debugFriendly: Boolean,
+    onDebugFriendly: (Boolean) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                "Advanced mode",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+            )
+            Text(
+                "For people who know what they're doing.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 12.sp),
+            )
+        }
+        Switch(
+            checked = advancedMode,
+            onCheckedChange = onAdvancedMode,
+            modifier = Modifier.testTag("cs-advanced-toggle"),
+        )
+    }
+    if (advancedMode) {
+        Spacer(Modifier.height(FS.space.s2))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Embed secrets for offline install",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = embedSecrets,
+                onCheckedChange = onEmbedSecrets,
+                modifier = Modifier.testTag("cs-embed-secrets-toggle"),
+            )
+        }
+        Text(
+            "This embeds security keys directly in the recipe. Hence, the server will be able to boot even if the phone is offline.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp),
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Debug-friendly server",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = debugFriendly,
+                onCheckedChange = onDebugFriendly,
+                modifier = Modifier.testTag("cs-debug-friendly-toggle"),
+            )
+        }
+        Text(
+            "Anyone with physical access to this server can log into its console. Only turn this on for a server you're actively debugging.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp),
+        )
+    }
 }
 
 // Backup policy — draft-only metadata, three tiers, default "phone-only".
@@ -553,6 +901,127 @@ private fun MatchPhase(
     FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
 }
 
+// Delivery-method chooser shown after the design step. Mirrors iOS
+// CreateServerStubScreen.deliveryChooserPage: pair-with-burner / save-share /
+// copy / burn-on-device, plus a mock-only demo affordance.
+@Composable
+private fun DeliveryChooserPhase(
+    busy: Boolean,
+    showDemo: Boolean,
+    onPair: () -> Unit,
+    onShare: () -> Unit,
+    onCopy: () -> Unit,
+    onBurn: () -> Unit,
+    onDemo: () -> Unit,
+    error: String?,
+    onCancel: () -> Unit,
+) {
+    Text(
+        "Your recipe is ready. Pick how to get it to the Flagship burner that writes your USB stick.",
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+    )
+    Spacer(Modifier.height(FS.space.s4))
+    DeliveryCard(
+        title = "Pair with the burner app",
+        body = "Scan the burner's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the burner is open in front of you.",
+        enabled = !busy,
+        testTag = "cs-delivery-pair",
+        onClick = onPair,
+    )
+    Spacer(Modifier.height(FS.space.s3))
+    DeliveryCard(
+        title = "Save / share recipe file",
+        body = "Save the recipe as a file or send it. Whoever builds the box opens it in the burner. No secrets in the file.",
+        enabled = !busy,
+        testTag = "cs-delivery-share",
+        onClick = onShare,
+    )
+    Spacer(Modifier.height(FS.space.s3))
+    DeliveryCard(
+        title = "Copy recipe to clipboard",
+        body = "Copy the recipe text, then paste it into the burner's \"I have a recipe\" box.",
+        enabled = !busy,
+        testTag = "cs-delivery-copy",
+        onClick = onCopy,
+    )
+    Spacer(Modifier.height(FS.space.s3))
+    DeliveryCard(
+        title = "Burn to USB on this device",
+        body = "Connect a USB drive with an OTG adapter and write the bootable installer right here — no computer needed.",
+        enabled = !busy,
+        testTag = "cs-delivery-burn",
+        onClick = onBurn,
+    )
+    if (showDemo) {
+        Spacer(Modifier.height(FS.space.s3))
+        // MOCK mode only: reach the website-QR relay path (Scan→Match) so the
+        // create flow stays exercisable without a real burner/desktop.
+        FSGhostButton(
+            label = "Use a demo QR (mock)",
+            onClick = onDemo,
+            block = true,
+            modifier = Modifier.testTag("cs-demo-qr-button"),
+        )
+    }
+    if (busy) {
+        Spacer(Modifier.height(FS.space.s4))
+        Text("Working…", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+    }
+    if (error != null) {
+        Spacer(Modifier.height(FS.space.s2))
+        Text(error, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+    }
+    Spacer(Modifier.height(FS.space.s4))
+    FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+}
+
+@Composable
+private fun DeliveryCard(
+    title: String,
+    body: String,
+    enabled: Boolean,
+    testTag: String,
+    onClick: () -> Unit,
+) {
+    FSCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .testTag(testTag),
+    ) {
+        Column {
+            Text(title, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+            Spacer(Modifier.height(FS.space.s1))
+            Text(body, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+        }
+    }
+}
+
+// Write the recipe JSON to a cache file + offer the system share sheet. The
+// FileProvider authority is "<applicationId>.fileprovider" (AndroidManifest +
+// res/xml/file_paths.xml). Mirrors InviteIssueScreen.shareViaSystemSheet.
+private fun shareRecipeFile(ctx: Context, serverName: String, json: String) {
+    val dir = File(ctx.cacheDir, "recipes").apply { mkdirs() }
+    val slug = SlugUtil.slugify(serverName).ifEmpty { "server" }
+    val file = File(dir, "$slug.flagship-recipe.json")
+    file.writeText(json)
+    val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "application/json"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    val chooser = Intent.createChooser(send, "Share recipe")
+    chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    ctx.startActivity(chooser)
+}
+
+private fun copyRecipeToClipboard(ctx: Context, json: String) {
+    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    cm.setPrimaryClip(ClipData.newPlainText("Flagship recipe", json))
+}
+
 // ── Plumbing ──────────────────────────────────────────────────────
 
 private data class PendingDelivery(
@@ -579,26 +1048,111 @@ private suspend fun prepareDelivery(
     // default (omitted from the signed canonical bytes + the wire, like
     // bootUnlockMode's "auto").
     diskEncryption: String? = null,
+    // Secret-free recipe: when true (advanced/offline) the SWK is embedded in the
+    // recipe and NO deposit is owed; when false (the DEFAULT) the recipe is
+    // secret-free of the SWK and a deposit is recorded as owed.
+    embedSecrets: Boolean = false,
+    // Debug-friendly server (Advanced): when true, bake an owner-IRK-signed
+    // debug-access grant into the recipe as the UNSIGNED `debugGrant` sibling.
+    debugFriendly: Boolean = false,
+    swkDepositStore: PendingSwkDepositStore? = null,
+    // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
+    // recipe; it is owed on EVERY created server (independent of embed-secrets) and
+    // sealed + deposited post-registration on the SWK biometric pass.
+    cgkDepositStore: com.flagshipserver.app.core.PendingCgkDepositStore? = null,
+    // Secret-free pairing: stashes the create-time order owed when embed-secrets
+    // is OFF, so the Home reconcile seals + deposits it post-registration.
+    pairingDepositStore: PendingPairingDepositStore? = null,
+    // Create-time pairing: optional so the unit tests' direct calls stay simple;
+    // production passes the session store so the token-persist runs.
+    mailbox: com.flagshipserver.app.api.SecretMailboxClient? = null,
+    sessionStore: com.flagshipserver.app.api.SessionStoring? = null,
 ): PendingDelivery {
     val parsed = QrRelay.parseQrUrl(rawQr)
     val session = QrSession.fresh()
     val matchCode = session.pair(parsed.browserPublicKey)
 
+    val minted = mintRecipeBundle(
+        username = username,
+        serverName = serverName,
+        recipeTtlMs = recipeTtlMs,
+        bootUnlockMode = bootUnlockMode,
+        diskEncryption = diskEncryption,
+        embedSecrets = embedSecrets,
+        debugFriendly = debugFriendly,
+        swkDepositStore = swkDepositStore,
+        cgkDepositStore = cgkDepositStore,
+        pairingDepositStore = pairingDepositStore,
+        sessionStore = sessionStore,
+    )
+
+    return PendingDelivery(
+        sid = parsed.sid,
+        phonePubKeyB64u = Base64URL.encode(session.phonePubKey),
+        matchCode = matchCode,
+        session = session,
+        bundle = minted.bundle,
+        irkPubHex = minted.irkPubHex,
+    )
+}
+
+/** The signed install-blob bundle + the bits a caller needs to surface a
+ *  pending pod, independent of the delivery channel (QR relay, burner pairing,
+ *  share file, clipboard, on-device burn). */
+internal data class MintedBundle(
+    val bundle: InstallBlobBundle,
+    val serverDomain: String,
+    val serial: String,
+    val irkPubHex: String,
+)
+
+/**
+ * The DELIVERY-AGNOSTIC half of minting: issue the IRK-signed AuthCode, build +
+ * sign the InstallBlob, run create-time pairing, and record the deposit-store
+ * bookkeeping — WITHOUT any QR-session seal/deliver. Extracted from
+ * [prepareDelivery] (which keeps the QR seal on top) so the burner-pair /
+ * save-share / copy / burn-on-device delivery paths reuse the EXACT same mint
+ * (a byte-identical recipe). Side effects + ordering are preserved verbatim.
+ *
+ * NOTE: this does NOT pre-publish the auth-code/RCK on .com — that is
+ * [registerControlPlane], which each delivery path calls separately (the QR
+ * path in its deliver step; the new paths right after minting).
+ */
+internal suspend fun mintRecipeBundle(
+    username: String,
+    serverName: String,
+    recipeTtlMs: Long = DEFAULT_RECIPE_TTL_MS,
+    bootUnlockMode: String? = null,
+    diskEncryption: String? = null,
+    embedSecrets: Boolean = false,
+    // Debug-friendly server (Advanced): bake an owner-IRK-signed debug-access
+    // grant into the recipe as the UNSIGNED `debugGrant` sibling.
+    debugFriendly: Boolean = false,
+    swkDepositStore: PendingSwkDepositStore? = null,
+    cgkDepositStore: com.flagshipserver.app.core.PendingCgkDepositStore? = null,
+    pairingDepositStore: PendingPairingDepositStore? = null,
+    sessionStore: com.flagshipserver.app.api.SessionStoring? = null,
+): MintedBundle {
     val slug = SlugUtil.slugify(serverName)
-    val serverDomain = "$slug.$username.flagship.services"
+    val serverDomain = Endpoints.serverFqdn(server = slug, user = username)
     val serial = SerialGen.random()
     val now = System.currentTimeMillis()
     val expiresAt = now + recipeTtlMs.coerceIn(MIN_RECIPE_TTL_MS, MAX_RECIPE_TTL_MS)
 
     val irk = Keystore.deriveIRK("Create server $serverName")
     val irkPubHex = Keystore.irkPubHex()
-    val irkPubBytes = HexUtil.decode(irkPubHex) ?: error("corrupt IRK pub")
+    val irkPubBytes = HexUtil.decode(irkPubHex) ?: error("corrupt account key")
 
     val delegated = Ed25519Sign.KeyPair.newKeyPair()
     val delegatedPubHex = HexUtil.encode(delegated.publicKey)
 
     val rck = Ed25519Sign.KeyPair.newKeyPair()
     val rckPubHex = HexUtil.encode(rck.publicKey)
+
+    // Slice D (D-1) — pin the account's ADMIN MASTER ROOT into the AuthCode so a
+    // fresh box anchors it (signature-covered by the IRK below). Null on a legacy
+    // account with no admin root ⇒ byte-identical pre-D canonical bytes.
+    val adminRootPubBytes = Keystore.adminRootPubHex()?.let { HexUtil.decode(it) }
 
     val authCodeBytesObj = AuthCodeBytes(
         version = 1,
@@ -610,6 +1164,7 @@ private suspend fun prepareDelivery(
         userPubKey = irkPubBytes,
         issuedAt = now,
         expiresAt = expiresAt,
+        adminRootPubKey = adminRootPubBytes,
     )
     val authCodeUserSig = irk.sign(authCodeBytesObj.canonicalBytes())
     val authCodeUserSigHex = HexUtil.encode(authCodeUserSig)
@@ -627,6 +1182,70 @@ private suspend fun prepareDelivery(
     )
     val blobSigHex = HexUtil.encode(irk.sign(installBlobBytesObj.canonicalBytes()))
 
+    // SWK provisioning: derive the box's deterministic SWK from the SAME UMK seed
+    // + serverId (serverDomain) used for the STK/BAK above, via ServerKeys.deriveSwk
+    // (DOTS info "flagship.swk.v1|<serverId>" — the protocol/daemon derivation),
+    // and embed it as an UNSIGNED `swkHex` recipe sibling the daemon persists at
+    // first boot. The box can't derive it (no UMK). Reuses the in-hand UMK seed —
+    // no extra biometric.
+    val derivedSwkHex = HexUtil.encode(ServerKeys.deriveSwk(Keystore.currentUmkSeed(), serverDomain))
+
+    // Secret-free pairing: build the owner-IRK-signed `add-paired-session` order
+    // at create time (the FIRST recipe carries ZERO pairing secret — no pairing
+    // keypair, no `pairingKeyPrivHex`). Reuses the IRK above (no extra biometric).
+    // Persist the token as this device's session token so the BFF auths once the
+    // box claims the order. The order JSON is routed by mode below. Best-effort: a
+    // build failure leaves the manual pairing path as the fallback.
+    var pairingOrderJson: String? = null
+    try {
+        val pairing = CreateTimePairing.build(
+            serverDomain = serverDomain,
+            label = "Android",
+            irk = irk,
+        )
+        // MULTI-POD (Fix B): persist under THIS pod's id (`pod-<lowercased-fqdn>`)
+        // so creating a 2nd box never clobbers the 1st box's token; also keep the
+        // single active slot pointed at the box being created.
+        sessionStore?.setSessionToken(pairing.token, forPodId = com.flagshipserver.app.core.PodInfo.podId(serverDomain))
+        sessionStore?.setSessionToken(pairing.token)
+        pairingOrderJson = pairing.pairingOrderJson
+    } catch (_: Throwable) {
+        // non-fatal — fall back to manual pairing when the box is up
+    }
+
+    // Secret-free recipe (docs/recipe-delivery-and-remote-install.md).
+    //   embed-secrets ON (advanced/offline): bake BOTH the SWK and the plaintext
+    //     `pairingOrder` into the recipe; the box self-configures + self-pairs
+    //     fully offline with NO post-registration deposit.
+    //   embed-secrets OFF (the DEFAULT): the recipe is secret-free; stash the SWK
+    //     + the pairing order so the Home reconcile seals + deposits each once the
+    //     box registers (one tap then, not now).
+    val embeddedSwkHex: String?
+    val embeddedPairingOrder: String?
+    if (embedSecrets) {
+        embeddedSwkHex = derivedSwkHex
+        swkDepositStore?.clear(serverDomain)
+        embeddedPairingOrder = pairingOrderJson
+        pairingDepositStore?.clear(serverDomain)
+    } else {
+        embeddedSwkHex = null
+        swkDepositStore?.markPending(serverDomain)
+        embeddedPairingOrder = null
+        pairingOrderJson?.let { pairingDepositStore?.markPending(serverDomain, it) }
+    }
+    // The CGK is NEVER embedded in the recipe (the per-cloud gossip secret is
+    // always post-boot delivered), so it is owed on EVERY created server,
+    // independent of the embed-secrets choice.
+    cgkDepositStore?.markPending(serverDomain)
+
+    // Debug-friendly server (Advanced): bake an owner-IRK-signed debug-access
+    // grant into the recipe as the UNSIGNED `debugGrant` sibling. Signed here
+    // behind the SAME create biometric (the IRK is already in hand) — no extra
+    // Face ID, no over-the-session consent round-trip. The box-side gate
+    // (debugAccessGate.ts) verifies it under the config-pinned owner IRK + this
+    // box's FQDN. nil for the production default (no debug grant).
+    val debugGrantSibling = if (debugFriendly) debugGrantEnvelope(serverDomain, irk, now) else null
+
     val bundle = InstallBlobBundle(
         blob = WireBlob(
             serverDomain = serverDomain,
@@ -642,6 +1261,7 @@ private suspend fun prepareDelivery(
                 userPubKey = irkPubHex,
                 issuedAt = now,
                 expiresAt = expiresAt,
+                adminRootPubKey = adminRootPubBytes?.let { HexUtil.encode(it) },
             ),
             authCodeUserSignature = authCodeUserSigHex,
             rckPubKey = rckPubHex,
@@ -649,16 +1269,36 @@ private suspend fun prepareDelivery(
             diskEncryption = diskEncryption,
         ),
         blobSignature = blobSigHex,
+        pairingOrder = embeddedPairingOrder,
+        swkHex = embeddedSwkHex,
+        debugGrant = debugGrantSibling,
     )
 
-    return PendingDelivery(
-        sid = parsed.sid,
-        phonePubKeyB64u = Base64URL.encode(session.phonePubKey),
-        matchCode = matchCode,
-        session = session,
+    return MintedBundle(
         bundle = bundle,
+        serverDomain = serverDomain,
+        serial = serial,
         irkPubHex = irkPubHex,
     )
+}
+
+/**
+ * Build the recipe's `debugGrant` sibling: an owner-IRK-signed
+ * `flagship/debug-access/v1` grant (console-only — empty `sshAuthorizedKey`)
+ * serialized to the EXACT `{grant:{serverDomain,sshAuthorizedKey,issuedAt},
+ * signatureHex}` JSON the box-side gate consumes (`debugAccessGate.ts`). No box
+ * STK in the canonical bytes, so it's signable at mint. Mirror of iOS
+ * CreateServerViewModel.debugGrantEnvelope. `internal` so a unit test can pin
+ * the byte-identical canonical + verify under the owner IRK.
+ */
+internal fun debugGrantEnvelope(
+    serverDomain: String,
+    irk: Ed25519Sign,
+    now: Long = System.currentTimeMillis(),
+): String {
+    val grant = DebugAccess.Grant(serverDomain = serverDomain, sshAuthorizedKey = "", issuedAt = now)
+    val sig = try { DebugAccess.sign(grant, irk) } catch (_: Throwable) { "" }
+    return DebugAccess.envelopeJson(grant, sig)
 }
 
 /**
@@ -717,6 +1357,7 @@ internal suspend fun registerControlPlane(
                 userPubKey = bundle.blob.authCode.userPubKey,
                 issuedAt = bundle.blob.authCode.issuedAt,
                 expiresAt = bundle.blob.authCode.expiresAt,
+                adminRootPubKey = bundle.blob.authCode.adminRootPubKey,
             ),
             signature = authCodeUserSig,
         ),

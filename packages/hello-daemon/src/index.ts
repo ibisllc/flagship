@@ -11,6 +11,7 @@
 import { ed } from "@flagship/protocol";
 import {
   startDaemonRuntime,
+  KeyCustodian,
   type DaemonHttpRequest,
   type DaemonHttpResponse,
 } from "@flagship/server-daemon";
@@ -85,6 +86,7 @@ async function main(): Promise<void> {
   await startDaemonRuntime({
     serverFqdn: subdomain,
     identityPrivKey,
+    custodian: new KeyCustodian({ identityPriv: identityPrivKey }),
     tunnelHubUrl: hubUrl,
     controlPlaneBaseUrl,
     acmeEmail,

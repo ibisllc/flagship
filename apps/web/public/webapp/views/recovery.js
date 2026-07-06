@@ -50,7 +50,7 @@ async function exportWrapped() {
     const tx = db.transaction("keystore", "readonly");
     const store = tx.objectStore("keystore");
     const wrapped = await reqToPromise(store.get(WRAPPED_UMK_KEY));
-    if (!wrapped) return toast("no wrapped UMK on this device yet", "err");
+    if (!wrapped) return toast("No wrapped UMK on this device yet", "err");
     const json = JSON.stringify(wrapped, (_, v) => {
       if (v instanceof ArrayBuffer) {
         return { __ab: Array.from(new Uint8Array(v)) };
@@ -67,9 +67,9 @@ async function exportWrapped() {
     a.download = `flagship-wrapped-umk-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast("downloaded wrapped UMK — store it like a passport");
+    toast("Downloaded wrapped UMK — store it like a passport");
   } catch (e) {
-    toast(`export failed: ${e.message}`, "err");
+    toast(`Export failed: ${e.message}`, "err");
   }
 }
 
@@ -89,21 +89,27 @@ async function importWrapped(file) {
     const tx = db.transaction("keystore", "readwrite");
     tx.objectStore("keystore").put(parsed, WRAPPED_UMK_KEY);
     await txDone(tx);
-    toast("imported — refresh, then unlock with your passphrase");
+    toast("Imported — refresh, then unlock with your passphrase");
   } catch (e) {
-    toast(`import failed: ${e.message}`, "err");
+    toast(`Import failed: ${e.message}`, "err");
   }
 }
 
 function openDb() {
-  // Must match keystore.js's DB_NAME exactly. Bootstrap writes the
-  // wrapped UMK into "flagship-webapp", so export/import has to open
-  // the same database.
+  // Must match keystore.js's DB_NAME + VERSION exactly. The shared
+  // `flagship-webapp` DB is at version 2 (keystore.js / providers.js /
+  // labelBook.js / buildDraft.js); opening at a lower version throws
+  // VersionError once a v2 store exists. Create every known store so the
+  // first creator provisions them all.
   return new Promise((resolve, reject) => {
-    const r = indexedDB.open("flagship-webapp", 1);
+    const r = indexedDB.open("flagship-webapp", 2);
     r.onupgradeneeded = () => {
       const db = r.result;
       if (!db.objectStoreNames.contains("keystore")) db.createObjectStore("keystore");
+      if (!db.objectStoreNames.contains("labelBook")) db.createObjectStore("labelBook");
+      if (!db.objectStoreNames.contains("buildDrafts")) {
+        db.createObjectStore("buildDrafts", { keyPath: "id" });
+      }
     };
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);
@@ -151,9 +157,9 @@ async function runSetupCloud() {
   try {
     const username = await ensureUsername();
     await setupCloudRecovery(username);
-    toast(`cloud recovery on for ${username}`, "ok");
+    toast(`Cloud recovery on for ${username}`, "ok");
   } catch (e) {
-    toast(`setup failed: ${e.message ?? e}`, "err");
+    toast(`Setup failed: ${e.message ?? e}`, "err");
   } finally {
     if (btn) btn.disabled = false;
     void refreshCloudStatus();
@@ -178,9 +184,9 @@ async function runRemoveCloud() {
   }
   try {
     await deleteCloudRecovery(username);
-    toast("cloud recovery removed", "ok");
+    toast("Cloud recovery removed", "ok");
   } catch (e) {
-    toast(`remove failed: ${e.message ?? e}`, "err");
+    toast(`Remove failed: ${e.message ?? e}`, "err");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -297,7 +303,7 @@ function openExportCeremony() {
 export async function runKeyfileExportCeremony() {
   const session = getSession();
   if (!session.umk) {
-    toast("unlock first", "err");
+    toast("Unlock first", "err");
     return false;
   }
   const username =
@@ -315,7 +321,7 @@ export async function runKeyfileExportCeremony() {
     toast(KEYFILE_COPY.afterSave, "ok");
     return true;
   } catch (e) {
-    toast(`backup failed: ${e?.message ?? e}`, "err");
+    toast(`Backup failed: ${e?.message ?? e}`, "err");
     return false;
   }
 }
@@ -366,18 +372,22 @@ async function runKeyfileImport(file) {
       // skip the takeover (the bug this fix closes).
       throw new Error("account key wasn't available after restore");
     }
-    const { signWithIrk, deriveIrkFromSeed, bytesToHex } = keystore;
+    const { deriveIrkFromSeed, deriveIrkVersioned, signWithIrkVersioned, bytesToHex } = keystore;
     const { runKeyfileImportTakeover, SecondFactorRequiredError } = await import(
       "../lib/keyfileImportTakeover.js"
     );
     const { addProfile } = await import("../lib/profiles.js");
     let takeover;
     try {
+      // ROTATE the IRK on import: old = the registered (v1) key, new = a fresh
+      // rotated device key. The re-pair handler rejects old==new, so inject the
+      // versioned derivers (mirrors Android + loginTakeover).
       takeover = await runKeyfileImportTakeover({
         username,
         seed: session.umk,
         deriveIrkFromSeed,
-        signWithIrk,
+        deriveIrkVersioned,
+        signWithIrkVersioned,
         bytesToHex,
         addProfile: (profile) => addProfile(profile),
       });
@@ -392,7 +402,7 @@ async function runKeyfileImport(file) {
       throw e;
     }
 
-    toast(`bringing this device into ${username}`, "ok");
+    toast(`Bringing this device into ${username}`, "ok");
     await runImportGraceCountdown(takeover);
   } catch (e) {
     toast(importErrorMessage(e), "err");
@@ -460,7 +470,18 @@ async function runImportGraceCountdown(takeover) {
     finishBtn.textContent = "Finishing…";
     try {
       const result = await finishTakeover(takeover, {
-        finalizeV2Irk: () => {},
+        // The re-pair ROTATED to takeover.newIrkVersion; once the swap
+        // completes server-side, persist that version locally so subsequent
+        // signing (push, orders, …) uses the rotated device key — mirrors
+        // Android's setPendingIrkRotationVersion + finalize.
+        finalizeV2Irk: async () => {
+          if (takeover?.newIrkVersion) {
+            try {
+              const { setCurrentIrkVersion } = await import("../keystore.js");
+              setCurrentIrkVersion(takeover.newIrkVersion);
+            } catch { /* best-effort — the swap already succeeded server-side */ }
+          }
+        },
         openAccount: async () => {
           close();
           await dispatchInitialView();

@@ -6,7 +6,7 @@
 // own card and the rest as a merged time-sorted "Recent" list.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError } from "../lib/api.js";
+import { screensFetch, ScreensError, getPodBaseUrl, setPodBaseUrl } from "../lib/api.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { get as profileGet } from "../lib/profilesStore.js";
 import {
@@ -14,15 +14,67 @@ import {
   auditKindIcon as auditIcon,
 } from "../lib/auditLog.js";
 import { enterAccountAudit } from "./account-audit.js";
+import { controlApex } from "../lib/apex.js";
+import { buildPodSwitcherModel } from "../lib/podSwitcher.js";
+import { flagIcon } from "../lib/icons.js";
+import { fetchPodInventory } from "./home.js";
+import { toast } from "../lib/toast.js";
+import { formatDateTime } from "../lib/dateFormat.js";
 
 registerView("view-activity", { tab: "activity" });
 
-function fmtDate(unixMs) {
-  if (typeof unixMs !== "number") return "—";
-  return new Date(unixMs).toLocaleString();
+// The user's online pods (statusByDomain map values), fetched alongside the
+// feed so the multi-pod switcher can render. Empty until the first load.
+let activityPods = [];
+
+/** Render the multi-pod switcher for the Activity feed (parity with the
+ *  Services switcher). "All servers" (first option) = the default, combined
+ *  feed; a specific server scopes the per-pod parts (install events +
+ *  post-recovery). Account-wide audit (.com) is always shown regardless.
+ *  Hidden with ≤1 pod. Leader flag + teal-only selection, same as Services. */
+function activityPodSwitcherHtml() {
+  const model = buildPodSwitcherModel(activityPods, getPodBaseUrl());
+  if (!model.show) return "";
+  const buttons = model.options
+    .map((o) => {
+      const flag = o.isLeader
+        ? `<span class="icon pod-switcher-leader" aria-label="Main server" title="Main server">${flagIcon}</span>`
+        : "";
+      return (
+        `<button type="button" class="fs-chip pod-switcher-chip${o.selected ? " is-selected" : ""}" ` +
+        `data-pod-switch="${escapeHtml(o.baseUrl)}" ` +
+        `aria-pressed="${o.selected ? "true" : "false"}" title="${escapeHtml(o.isAll ? o.name : o.fqdn)}">` +
+        `${escapeHtml(o.name)}${flag}</button>`
+      );
+    })
+    .join("");
+  return `
+    <div class="fs-chip-row pod-switcher mt-1" role="group" aria-label="Switch server">
+      ${buttons}
+    </div>
+  `;
 }
 
-const COM_BASE = "https://flagshipserver.com";
+/** Delegate the activity pod-switch chips. "" = "All servers" (clears the
+ *  active-pod scope → the per-pod feed parts fall back to the default pod /
+ *  combined view); a specific URL scopes to that pod. */
+function wireActivityPodSwitcher(root) {
+  root.querySelectorAll("[data-pod-switch]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.getAttribute("data-pod-switch") ?? "";
+      if (next === getPodBaseUrl()) return;
+      setPodBaseUrl(next);
+      renderActivity().catch(() => { toast("Couldn't switch server.", "err"); });
+    });
+  });
+}
+
+function fmtDate(unixMs) {
+  if (typeof unixMs !== "number") return "—";
+  return formatDateTime(unixMs);
+}
+
+const COM_BASE = controlApex();
 
 async function fanOut() {
   // The fetch helpers throw ScreensError on non-2xx; recovery + detail
@@ -63,6 +115,21 @@ export async function renderActivity() {
   const root = $("activity-feed");
   if (!root) return;  // shell renders the static section without the feed slot
   root.innerHTML = skeletonCards(2);
+  // Refresh the online-pod set so the multi-pod switcher reflects the current
+  // fleet (parity with the Services switcher). Best-effort + non-blocking: a
+  // failure leaves the switcher hidden, never blocks the feed.
+  const switcherUsername = (() => {
+    try {
+      const raw = profileGet("sessionV1");
+      return raw ? JSON.parse(raw).username ?? "" : "";
+    } catch { return ""; }
+  })();
+  try {
+    const { statusByDomain } = await fetchPodInventory(switcherUsername);
+    activityPods = [...statusByDomain.values()];
+  } catch {
+    activityPods = [];
+  }
   try {
     const { detail, recovery, audit } = await fanOut();
 
@@ -117,11 +184,13 @@ export async function renderActivity() {
       `;
 
     root.innerHTML = `
+      ${activityPodSwitcherHtml()}
       ${recoveryCard}
       ${auditCard}
       <h2 class="mt-4">Recent</h2>
       ${recentRows}
     `;
+    wireActivityPodSwitcher(root);
     $("activity-feed-open-recovery")?.addEventListener("click", () => show("view-post-recovery"));
     $("activity-see-all-audit")?.addEventListener("click", () => {
       enterAccountAudit().catch(() => { /* silent — toast on the view itself */ });

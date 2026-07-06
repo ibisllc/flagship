@@ -1,0 +1,189 @@
+# flagship-com-GYM — the isolated TEST control plane (docs/ui-test-gym.md §6.5,
+# §12-G6). This is a SEPARATE Worker from prod (`wrangler.toml`), served at the
+# `gym.flagshipserver.com` custom domain, with its OWN D1 / R2 / Durable Object /
+# rate-limit namespaces — zero shared state with prod. Isolation is by ZEROING
+# (its own DB, wiped between runs), not by secrecy (§4): the `gym.` apex is
+# public/knowable and that is fine.
+#
+# DEPLOY (turnkey runbook): docs/runbooks/gym-test-env.md.
+#   cd apps/com && npx wrangler deploy --config wrangler.gym.toml
+# (Prod is `npx tsc -b && npx wrangler deploy` against the DEFAULT wrangler.toml,
+#  which this file does NOT touch.)
+#
+# WHY a separate FILE (not `[env.gym]`): wrangler's `[env.<name>]` blocks do NOT
+# inherit top-level `[[d1_databases]]` / `[[r2_buckets]]` / `[[durable_objects]]`
+# / `[triggers]` — every binding must be redeclared inside the env block anyway,
+# and a single misedit there silently mutates the PROD default env. A standalone
+# `--config` file keeps prod byte-identical by construction (the prod file is
+# never opened on a gym deploy) and keeps the gym surface readable in one place.
+#
+# Same source, same migrations, same Dockerfile-less Worker bundle as prod — only
+# the apex `[vars]` + the resource NAMES differ. The apex-var refactor (§12-G1/G2,
+# already on main) is what makes "set the var to gym. + deploy" run the SAME code.
+
+name = "flagship-com-gym"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+workers_dev = true
+
+# Routes / custom domains under the `gym.` label of the EXISTING zones (no new
+# zone — rev4). Custom domains let wrangler self-provision the proxied DNS record
+# + edge cert (the boot./recovery. mechanism we already use), so the hostnames
+# resolve to flagship-com-gym with no manual DNS step / no dns:write token.
+#   - gym.flagshipserver.com — the test control plane apex.
+#   - web.gym.flagshipserver.com — the test webapp host (Worker host-rewrite).
+#   - recovery.gym. / boot.gym. — the test sub-origins (mirror prod's recovery./boot.).
+# These are namespaced under `gym.` so they never shadow a prod record.
+routes = [
+  { pattern = "gym.flagshipserver.com",          custom_domain = true },
+  { pattern = "web.gym.flagshipserver.com",       custom_domain = true },
+  { pattern = "recovery.gym.flagshipserver.com",  custom_domain = true },
+  { pattern = "boot.gym.flagshipserver.com",      custom_domain = true },
+]
+
+# Static assets — identical to prod (the same ../web/public tree, same SPA
+# fallback + run-worker-first host-rewrite). The test webapp served from
+# web.gym.flagshipserver.com derives its apex from window.location.origin
+# (§12-G2) so it "just works" against the gym apex with no per-build edit.
+[assets]
+directory = "../web/public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/*"]
+
+# --- R2: three test buckets (`-gym` suffix), mirroring prod's three -----------
+# Create once (see the runbook): wrangler r2 bucket create flagship-iso-gym, etc.
+[[r2_buckets]]
+binding = "ISO_BUCKET"
+bucket_name = "flagship-iso-gym"
+
+# Re-enable the temp bucket's PUBLIC dev-url for the gym bucket and re-pin
+# FLAGSHIP_R2_TEMP_PUBLIC_BASE below (the `pub-…r2.dev` host is PER-BUCKET, so it
+# differs from prod's). The cloud-init user_data wgets `${BASE}/${R2_KEY}`.
+[[r2_buckets]]
+binding = "ISO_TEMP_BUCKET"
+bucket_name = "flagship-iso-temp-gym"
+
+[[r2_buckets]]
+binding = "BACKUPS_BUCKET"
+bucket_name = "flagship-backups-gym"
+
+# Cron triggers — same cadence/handlers as prod (D1→R2 backup + CT scan; the
+# demo-user reaper + provisioning poller). The reaper no-ops without HCLOUD_TOKEN,
+# so this is safe before the test Hetzner token is wired.
+[triggers]
+crons = ["0 */6 * * *", "*/10 * * * *"]
+
+# --- Rate-limit namespaces: DISTINCT ids from prod (1001/1002) ----------------
+# Different namespace_id keeps the gym's counters from sharing prod's buckets.
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "2001"
+simple = { limit = 3, period = 60 }
+
+[[unsafe.bindings]]
+name = "RATE_LIMITER_QR_PIPE"
+type = "ratelimit"
+namespace_id = "2002"
+simple = { limit = 30, period = 60 }
+
+# --- D1: the gym's OWN database (wiped between runs) ---------------------------
+# PLACEHOLDER database_id — create the real DB once and paste its id here:
+#   cd apps/com && npx wrangler d1 create flagship-state-gym
+# then apply the SAME migrations dir prod uses (idempotent):
+#   npx wrangler d1 migrations apply flagship-state-gym --config wrangler.gym.toml --remote
+# Wipe between runs: scripts/wipe-all-users.sh after pointing it at this DB
+# (see the runbook's "wipe-between-runs" section).
+[[d1_databases]]
+binding = "DB"
+database_name = "flagship-state-gym"
+database_id = "b017db24-3be4-40c7-8690-a91f0964c2ff"
+migrations_dir = "../../packages/storage/migrations"
+
+# --- Durable Object: same class, auto-created in THIS Worker (no shared state) -
+[[durable_objects.bindings]]
+name = "BUILD_RELAY"
+class_name = "BuildRelaySession"
+
+[[durable_objects.bindings]]
+name = "BURNER_RELAY"
+class_name = "BurnerRelaySession"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BuildRelaySession"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["BurnerRelaySession"]
+
+[vars]
+# ⭐ THE FLIP (§6.5 / §12-G1): point the apex vars at the `gym.` apex. These are
+# the SAME vars prod's wrangler.toml defaults to the literals — here we override
+# them so this Worker serves the isolated test env on the SAME zones. SERVICES_APEX
+# threads into serverDomain validation, the user-zone CAA anchor, the DNS-01
+# own-name fence, and apex cleanup (apps/com/src/controlPlaneRoutes.ts reads
+# env.SERVICES_APEX); CONTROL_APEX is the identity apex. Test boxes are
+# `<server>.<user>.gym.flagship.services`.
+SERVICES_APEX = "gym.flagship.services"
+CONTROL_APEX = "gym.flagshipserver.com"
+
+# Worker → Fly wiring: REPOINTED at the gym Fly app (flagship-services-gym) +
+# its own anycast IPs. The :443 listener does SNI passthrough; the Worker proxies
+# unhandled /api/* to the :8443 TLS-term endpoint.
+SERVICES_BASE_URL = "https://flagship-services-gym.fly.dev:8443"
+TUNNEL_HUB_URL = "wss://flagship-services-gym.fly.dev:8443/tunnel"
+# Anycast IPs of the gym Fly app's SNI passthrough listener. PLACEHOLDERS —
+# fill in after `flyctl ips allocate-v4/-v6 -a flagship-services-gym`
+# (see the runbook). The Worker writes A/AAAA for each registered
+# `<server>.<user>.gym.flagship.services` pointing at these.
+SERVICES_PASSTHROUGH_IPV4 = "137.66.62.214"
+SERVICES_PASSTHROUGH_IPV6 = "2a09:8280:1::12d:5999:0"
+
+# Base-ISO + manifest vars — REUSE prod's values verbatim (the base OS is the
+# same Debian/Alpine; the gym personalizes the same bytes). Only the temp-bucket
+# public base differs (per-bucket host). Re-pin on a Debian point release exactly
+# as prod does.
+BASE_ISO_URL = "https://flagshipserver.com/build/iso/flagship-base-alpine-3.21.0-x86_64-apkovl3-debug3.iso"
+BASE_ISO_VERSION = "flagship-alpine-3.21.0-x86_64-apkovl3-debug"
+BASE_ISO_SHA256 = "52bbb7432dade2b6a86be483d00edd95df02a34b84bb4d9ca9a8dfddd71cc653"
+FLAGSHIP_NETBOOT_ISO_URL = "https://flagshipserver.com/build/iso/flagship-netboot-trixie-amd64-v5.iso"
+FLAGSHIP_NETBOOT_ISO_KEY = "flagship-netboot-trixie-amd64-v5.iso"
+FLAGSHIP_ISO_MANIFEST = '{"version":"debian-13.5.0","url":"https://cdimage.debian.org/debian-cd/13.5.0/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso","sha256":"95838884f5ea6c82421dfe6baaa5a639dbbe6756c1e380f9fe7a7cb0c1949d2a","sizeBytes":791674880,"attestation":"https://cdimage.debian.org/debian-cd/13.5.0/amd64/iso-cd/SHA256SUMS"}'
+FLAGSHIP_BASE_ISO_KEY = "flagship-base-alpine-3.21.0-x86_64-apkovl3-debug3.iso"
+# PLACEHOLDER — the gym temp bucket's public dev-url host (PER-BUCKET, differs
+# from prod). After `wrangler r2 bucket dev-url enable flagship-iso-temp-gym`,
+# paste the resulting `pub-…r2.dev` host here.
+FLAGSHIP_R2_TEMP_PUBLIC_BASE = "https://pub-023a8bc99ad045939af943fd4663ce76.r2.dev"
+
+# Cloudflare zone ID for flagship.services (the SAME zone — the gym lives under
+# its `gym.` label, no new zone). Per-box `<server>.<user>.gym.flagship.services`
+# A/AAAA + DNS-01 `_acme-challenge.<…>.gym.flagship.services` are published by
+# THIS Worker into this zone via the gym's own CLOUDFLARE_DNS_API_TOKEN secret.
+CLOUDFLARE_SERVICES_ZONE_ID = "51f3bfe11a729db57effd70ed3cf9c77"
+
+# ⭐ CA chokepoint OFF in the gym (§6.5): leave CA_ENDORSEMENT_ENFORCE UNSET so the
+# #30 maintainer→CA gate runs in OBSERVE (logs the verdict, signs anyway) and a
+# lapsed/absent prod CaEndorsement never gates the TEST directory. (To instead
+# enforce against a TEST CA, set it to "true" AND wire a gym-only FLAGSHIP_CA_PRIV_HEX
+# + a gym CaEndorsement bundle.) DELIBERATELY ABSENT here.
+# CA_ENDORSEMENT_ENFORCE = "true"
+
+# ── SECRETS — set against THIS Worker before the first gym deploy ─────────────
+# (NOT in this file — `wrangler secret put <NAME> --config wrangler.gym.toml`.)
+# The gym needs its OWN copies so it never reuses a prod secret:
+#   FLAGSHIP_ADMIN_SECRET          gates /api/dev/sample-user/* + the D5 test hooks
+#   HCLOUD_TOKEN                   a SEPARATE test Hetzner project token (own budget/cap)
+#   DEMO_PUBLIC_SSH_KEY            the test project's SSH pubkey (+ _KEY_ID once uploaded)
+#   DEMO_PUBLIC_SSH_KEY_ID
+#   DEMO_IRK_KEK                   32-byte hex (openssl rand -hex 32) — deterministic demo IRKs
+#   SERVICES_HMAC_KEY             Worker↔Fly shared secret (match the gym Fly app's)
+#   CLOUDFLARE_DNS_API_TOKEN      Zone:DNS:Edit on flagship.services (for the gym `gym.` records)
+#   WEBPUSH_VAPID_PRIVATE_KEY_PEM  test VAPID pair (mint fresh; do NOT reuse prod's)
+#   WEBPUSH_VAPID_PUBLIC_KEY_B64URL
+#   WEBPUSH_CONTACT
+# Optional (only if the gym enforces a test CA): FLAGSHIP_CA_PRIV_HEX.
+# APNS_*/FCM_* push: optional — set only if exercising real device push in the gym.

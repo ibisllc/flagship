@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -169,16 +170,19 @@ fun BuildSourceChooserScreen(nav: NavController) {
                 body = "Describe what you want. The AI writes it and the box runs it.",
                 // The box's model drives this build, so confirm an AI key first.
                 onClick = { nav.navigate("vibe/key") },
+                testTag = "build-src-scratch",
             )
             SourceTile(
                 title = "Import from a Git repo",
                 body = "Paste a repo URL. If it's Flagship-ready we install it as-is; if not, the AI can adapt it.",
                 onClick = { nav.navigate("build/git") },
+                testTag = "build-src-git",
             )
             SourceTile(
                 title = "Connect your IDE (Cursor/Cline)",
                 body = "Build from your editor using your own AI. No model key lives on the box.",
                 onClick = { nav.navigate("build/mcp") },
+                testTag = "build-src-mcp",
             )
         }
         Spacer(Modifier.height(FS.space.s4))
@@ -191,9 +195,12 @@ fun BuildSourceChooserScreen(nav: NavController) {
 }
 
 @Composable
-private fun SourceTile(title: String, body: String, onClick: () -> Unit) {
+private fun SourceTile(title: String, body: String, onClick: () -> Unit, testTag: String? = null) {
     FSCard(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
         padding = PaddingValues(FS.space.s5),
     ) {
         Text(
@@ -283,6 +290,7 @@ fun BuildGitScreen(nav: NavController) {
             onClick = { if (url.isBlank()) toasts.error("Paste a repo URL first.") else vm.checkRepo(url, ref) },
             enabled = !checking,
             block = true,
+            modifier = Modifier.testTag("build-git-check"),
         )
 
         Spacer(Modifier.height(FS.space.s4))
@@ -313,7 +321,7 @@ private fun VerdictCard(p: BuildGitViewModel.GitPhase.Verdict, vm: BuildGitViewM
             Text(p.reason, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
             Spacer(Modifier.height(FS.space.s3))
             Text(
-                "The AI rewrites this repo into a Flagship app — adds the manifest, removes its own login, and wires it to your box's data layer.",
+                "The AI rewrites this repo into a Flagship app — adds the app config, removes its own login, and wires it to your box's data layer.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
             )
@@ -381,6 +389,7 @@ fun BuildMcpScreen(nav: NavController) {
                 onClick = { vm.create() },
                 enabled = !creating,
                 block = true,
+                modifier = Modifier.testTag("build-mcp-create"),
             )
             (phase as? BuildMcpViewModel.McpPhase.Failed)?.let {
                 Spacer(Modifier.height(FS.space.s4))
@@ -617,12 +626,7 @@ private fun Badge(text: String) {
 
 private fun fmtTimestamp(ms: Long): String {
     if (ms <= 0) return ""
-    val fmt = java.text.DateFormat.getDateTimeInstance(
-        java.text.DateFormat.SHORT,
-        java.text.DateFormat.SHORT,
-        java.util.Locale.US,
-    )
-    return fmt.format(java.util.Date(ms))
+    return com.flagshipserver.app.core.FlagshipDateFormat.format(ms, includeTime = true)
 }
 
 // ── small shared cards ──────────────────────────────────────────

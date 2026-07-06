@@ -10,6 +10,13 @@ public struct ActivityTab: View {
     @Environment(DeepLinker.self) private var linker
     @State private var path: [ActivityRoute] = []
     @State private var vm: ActivityViewModel?
+    /// Server filter for the switcher. `nil` = "All servers" (the default and
+    /// the entry the dropdown starts on). Picking a concrete server also
+    /// repoints the active pod so its per-server install events load; "All
+    /// servers" leaves the active pod untouched and shows the unfiltered feed
+    /// (account-wide events are always all-servers; true cross-pod aggregation
+    /// of install events is a follow-up).
+    @State private var serverFilter: String?
 
     public init() {}
 
@@ -59,9 +66,13 @@ public struct ActivityTab: View {
                 ActivityScreen(
                     state: vm.state,
                     pods: app.pods,
-                    currentPodId: app.currentPodId,
+                    currentPodId: serverFilter,
                     leaderPodId: app.leaderPodId,
-                    onPickPod: { pod in app.setCurrentPod(pod.podId) },
+                    onPickPod: { pod in
+                        serverFilter = pod.podId
+                        app.setCurrentPod(pod.podId)
+                    },
+                    onPickAll: { serverFilter = nil },
                     onOpenApprovals: { path.append(.secretRequests) },
                     onOpenPostRecovery: { path.append(.postRecovery) },
                     onOpenAuditLog: { path.append(.auditLog) },

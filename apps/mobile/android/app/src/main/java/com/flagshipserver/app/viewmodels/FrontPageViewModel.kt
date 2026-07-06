@@ -33,7 +33,10 @@ sealed interface FrontPagePhase {
 
 class FrontPageViewModel(
     private val serverDomain: String,
-    private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
+    // Slice D — set-front-page is a SENSITIVE op (frontPage.ts gates it on the
+    // admin master root): sign with the admin root when this device holds one,
+    // else the owner IRK (legacy accounts). Canonical bytes are unchanged.
+    private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
     private val client: FrontPageClient = FrontPageClient(),
     private val now: () -> Long = { System.currentTimeMillis() },
 ) : ViewModel() {

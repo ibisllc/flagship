@@ -185,6 +185,7 @@ final class RevokeServerTests: XCTestCase {
         func releaseServerName(_ req: ReleaseServerNameRequest) async throws { throw error }
         func revokeServer(_ req: ServerRevocationRequest) async throws { throw error }
         func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse { throw error }
+        func suggestUsername(deviceKey: String) async throws -> UsernameSuggestion { throw error }
         func resolveAccount(username: String) async throws -> AccountResolution { throw error }
         func registerRecoveryEnvelope(_ req: RecoveryUploadRequest) async throws -> RecoveryEnvelopeResponse { throw error }
         func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope { throw error }
@@ -212,6 +213,8 @@ final class RevokeServerTests: XCTestCase {
         func totpDisable(username: String, body: TotpDisableRequest) async throws -> TotpDisableResponse { throw error }
         func fetchProvisionStatus(serial: String) async throws -> ProvisionStatus? { throw error }
         func listOutstandingOrders(_ req: OutstandingOrdersRequest) async throws -> OutstandingOrdersResponse { throw error }
+        func selfDeleteAccount(_ req: AccountSelfDeleteBundleRequest) async throws -> AccountSelfDeleteResponse { throw error }
+        func postAdminRootRotation(username: String, body: AdminRootRotationRequest) async throws -> AdminRootRotationResponse { throw error }
     }
 
     @MainActor

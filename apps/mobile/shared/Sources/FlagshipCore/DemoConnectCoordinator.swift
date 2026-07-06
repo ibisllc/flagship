@@ -160,7 +160,7 @@ public final class DemoConnectCoordinator {
         }
         // Remove the demo pod(s) — matched on the synthetic podId prefix
         // OR the home FQDN, since cancel tears the box down entirely.
-        let fqdn = "home.\(username.lowercased()).flagship.services"
+        let fqdn = Endpoints.serverFqdn(server: "home", user: username.lowercased())
         appState.pods.removeAll { $0.fqdn == fqdn || $0.podId == "demo-server-\(username.lowercased())" }
         state = .idle
         return true

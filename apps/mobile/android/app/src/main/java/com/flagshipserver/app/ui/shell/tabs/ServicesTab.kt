@@ -6,9 +6,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.screens.ServiceDetailScreen
@@ -28,6 +30,9 @@ import com.flagshipserver.app.ui.screens.BrowserTabsScreen
 import com.flagshipserver.app.ui.screens.BrowserViewerScreen
 import com.flagshipserver.app.ui.screens.InviteIssueScreen
 import com.flagshipserver.app.ui.screens.InviteManageScreen
+import com.flagshipserver.app.ui.screens.InviteRedeemScreen
+import com.flagshipserver.app.ui.screens.KnockAuthorizeScreen
+import com.flagshipserver.app.ui.screens.ServiceAccessScreen
 
 @Composable
 fun ServicesTab() {
@@ -56,6 +61,30 @@ fun ServicesTab() {
                 deepLinker.consume()
                 nav.navigate("build/journal/${link.buildId}")
             }
+            // #92 — friend redeem of a service-access invite. server + secret
+            // are URL-encoded into the route (the secret is 64-hex; the host is
+            // DNS-safe, but encode both for safety).
+            is DeepLink.RedeemInvite -> {
+                deepLinker.consume()
+                val s = java.net.URLEncoder.encode(link.serverDomain, "UTF-8")
+                val k = java.net.URLEncoder.encode(link.secretHex, "UTF-8")
+                val a = java.net.URLEncoder.encode(link.authorAidHex.orEmpty(), "UTF-8")
+                val i = java.net.URLEncoder.encode(link.inviteIdHex.orEmpty(), "UTF-8")
+                nav.navigate("invite-redeem/$s/$k?a=$a&i=$i")
+            }
+            // Web-experience gating — authorize a browser's QR-login for a
+            // restricted service's website. All four params URL-encoded into
+            // the route (svc may be empty).
+            is DeepLink.AuthorizeKnock -> {
+                deepLinker.consume()
+                val srv = java.net.URLEncoder.encode(link.serverId, "UTF-8")
+                // svc may be empty (apex service); an empty path segment breaks
+                // route matching, so carry it as a query arg instead.
+                val svc = java.net.URLEncoder.encode(link.svc, "UTF-8")
+                val ref = java.net.URLEncoder.encode(link.serviceRef, "UTF-8")
+                val pg = java.net.URLEncoder.encode(link.pageId, "UTF-8")
+                nav.navigate("knock-authorize/$srv/$ref/$pg?svc=$svc")
+            }
             else -> { /* not for this tab */ }
         }
     }
@@ -66,13 +95,14 @@ fun ServicesTab() {
             ServiceDetailScreen(nav, serviceId = id)
         }
         // W10 — per-app env-var KV editor, reachable from the detail screen's
-        // "Configure environment" row. serviceId = "<creator>-<slug>"; split at
-        // the FIRST '-' (creator is hyphen-free) for the ServiceEnvScreen args.
+        // "Configure environment" row. serviceId = "<creator>--<slug>"; split on
+        // the `--` delimiter (both halves may carry single dashes —
+        // docs/service-addressing-double-dash.md) for the ServiceEnvScreen args.
         composable("service-env/{serviceId}") { entry ->
             val id = entry.arguments?.getString("serviceId") ?: return@composable
-            val dashIdx = id.indexOf('-')
-            val creator = if (dashIdx > 0) id.substring(0, dashIdx) else ""
-            val slug = if (dashIdx > 0) id.substring(dashIdx + 1) else id
+            val delimIdx = id.indexOf("--")
+            val creator = if (delimIdx > 0) id.substring(0, delimIdx) else ""
+            val slug = if (delimIdx > 0) id.substring(delimIdx + 2) else id
             ServiceEnvScreen(nav, appId = id, creator = creator, slug = slug)
         }
         composable("build/source") { BuildSourceChooserScreen(nav) }
@@ -138,6 +168,60 @@ fun ServicesTab() {
         composable("invite-issue/{serviceId}") { entry ->
             val sid = entry.arguments?.getString("serviceId") ?: return@composable
             InviteIssueScreen(nav, serviceId = sid)
+        }
+        // #92 — per-service access gating ("Who can open this"): open/restricted
+        // toggle + the bearer-invite allow-list manager.
+        composable("service-access/{serviceId}") { entry ->
+            val sid = entry.arguments?.getString("serviceId") ?: return@composable
+            ServiceAccessScreen(nav, serviceId = sid)
+        }
+        // #92 — friend redeem of a service-access invite (deep-link target). v2:
+        // the optional `a` query carries the author AID so the friend redeems with
+        // a per-author contact AID (empty ⇒ legacy global-AID fallback).
+        composable(
+            route = "invite-redeem/{server}/{secret}?a={a}&i={i}",
+            arguments = listOf(
+                navArgument("server") { type = NavType.StringType },
+                navArgument("secret") { type = NavType.StringType },
+                navArgument("a") { type = NavType.StringType; defaultValue = "" },
+                navArgument("i") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
+            val server = java.net.URLDecoder.decode(entry.arguments?.getString("server") ?: "", "UTF-8")
+            val secret = java.net.URLDecoder.decode(entry.arguments?.getString("secret") ?: "", "UTF-8")
+            val authorAid = java.net.URLDecoder.decode(entry.arguments?.getString("a") ?: "", "UTF-8").ifEmpty { null }
+            val inviteId = java.net.URLDecoder.decode(entry.arguments?.getString("i") ?: "", "UTF-8").ifEmpty { null }
+            InviteRedeemScreen(
+                serverDomain = server,
+                secretHex = secret,
+                authorAidHex = authorAid,
+                inviteIdHex = inviteId,
+                onOpenService = { nav.popBackStack() },
+                onDone = { nav.popBackStack() },
+            )
+        }
+        // Web-experience gating — authorize a browser's QR-login (deep-link +
+        // "Process URL" target). svc is an optional query arg (empty = apex).
+        composable(
+            route = "knock-authorize/{server}/{ref}/{page}?svc={svc}",
+            arguments = listOf(
+                navArgument("server") { type = NavType.StringType },
+                navArgument("ref") { type = NavType.StringType },
+                navArgument("page") { type = NavType.StringType },
+                navArgument("svc") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
+            val server = java.net.URLDecoder.decode(entry.arguments?.getString("server") ?: "", "UTF-8")
+            val ref = java.net.URLDecoder.decode(entry.arguments?.getString("ref") ?: "", "UTF-8")
+            val page = java.net.URLDecoder.decode(entry.arguments?.getString("page") ?: "", "UTF-8")
+            val svc = java.net.URLDecoder.decode(entry.arguments?.getString("svc") ?: "", "UTF-8")
+            KnockAuthorizeScreen(
+                serverId = server,
+                svc = svc,
+                serviceRef = ref,
+                pageId = page,
+                onDone = { nav.popBackStack() },
+            )
         }
     }
 }

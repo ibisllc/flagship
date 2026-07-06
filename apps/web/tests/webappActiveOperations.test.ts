@@ -25,7 +25,17 @@ async function freshCenter() {
   return new ActiveOperationsCenter();
 }
 
+// A pending pod that has GENUINELY started provisioning (registered, or an
+// install beacon arrived) — the only kind that earns a spinning sliver op.
 function pendingPod(id: string, name: string) {
+  return { podId: id, name, status: "pending", started: true };
+}
+// A pending pod that has started via a concrete install phase.
+function bootingPod(id: string, name: string) {
+  return { podId: id, name, status: "pending", phase: "installing" };
+}
+// A freshly-created order merely AWAITING A BURN — no phase, not started.
+function awaitingBurnPod(id: string, name: string) {
   return { podId: id, name, status: "pending" };
 }
 function onlinePod(id: string, name: string) {
@@ -43,7 +53,7 @@ describe("activeOperations — label shapes", () => {
   it("derives the canonical deploy + build sentences", async () => {
     const { operationLabel } = await load();
     expect(operationLabel({ kind: "deploy", subject: "Home" })).toBe(
-      "deploying server Home",
+      "preparing Home",
     );
     expect(
       operationLabel({ kind: "build", subject: "blog", onServer: "Home" }),
@@ -67,17 +77,43 @@ describe("activeOperations — empty", () => {
 });
 
 describe("activeOperations — deploy (derived from pods)", () => {
-  it("a pending pod becomes a deploy op with the canonical label + target", async () => {
+  it("a started pending pod becomes a deploy op with the canonical label + target", async () => {
     const { operationLabel } = await load();
     const c = await freshCenter();
     c.syncDeployOperations([pendingPod("p1", "Home")]);
     const op = c.primary;
     expect(op).not.toBeNull();
     expect(op.kind).toBe("deploy");
-    expect(operationLabel(op)).toBe("deploying server Home");
+    expect(operationLabel(op)).toBe("preparing Home");
     expect(op.target).toEqual(deployTarget("p1"));
     expect(c.operations).toHaveLength(1);
     expect(c.additionalCount).toBe(0);
+  });
+
+  it("a pending pod with a concrete install phase is also a deploy op", async () => {
+    const { operationLabel } = await load();
+    const c = await freshCenter();
+    c.syncDeployOperations([bootingPod("p1", "Home")]);
+    expect(c.operations).toHaveLength(1);
+    expect(operationLabel(c.primary)).toBe("preparing Home");
+  });
+
+  it("a pending order merely AWAITING A BURN produces NO deploy op (Bug 3)", async () => {
+    const c = await freshCenter();
+    // No phase + no started flag = recipe minted, USB not yet burned/booted.
+    c.syncDeployOperations([awaitingBurnPod("p1", "Home")]);
+    expect(c.operations).toHaveLength(0);
+    expect(c.primary).toBeNull();
+  });
+
+  it("an awaiting-burn order that later starts booting surfaces the op then", async () => {
+    const c = await freshCenter();
+    c.syncDeployOperations([awaitingBurnPod("p1", "Home")]);
+    expect(c.operations).toHaveLength(0);
+    // The install beacon arrives → real phase → op appears.
+    c.syncDeployOperations([bootingPod("p1", "Home")]);
+    expect(c.operations).toHaveLength(1);
+    expect(c.primary.kind).toBe("deploy");
   });
 
   it("non-pending pods produce no deploy ops", async () => {
@@ -115,7 +151,7 @@ describe("activeOperations — deploy (derived from pods)", () => {
       pendingPod("p2", "Workstation"),
     ]);
     const renamed = c.operations.find((o: any) => o.id === "deploy:p2");
-    expect(operationLabel(renamed)).toBe("deploying server Workstation");
+    expect(operationLabel(renamed)).toBe("preparing Workstation");
     expect(renamed.seq).toBe(seqBefore);
   });
 });

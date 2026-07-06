@@ -26,6 +26,7 @@
 
 import {
   DEVICE_SCOPES,
+  isSensitiveScope,
   verifyDeviceCapabilityGrant,
   verifyRevokeDeviceCapabilityGrant,
   type DeviceCapabilityGrant,
@@ -166,11 +167,24 @@ export async function handleMintDeviceGrant(
   const userRec = await deps.usernames.get(usernameNorm);
   if (!userRec) return notFound("username not registered");
 
-  let irkPub: Uint8Array;
+  // Slice D §3.3 — the grant-signer discriminator, GATED by the clean-slate
+  // transition. When the account has pinned an ADMIN MASTER ROOT, an
+  // `admin`-scope (SENSITIVE) grant MUST be signed by that admin root (not the
+  // membership IRK — otherwise a UMK holder or a compromised `.com` could forge
+  // admin authority); it is verified under `admin_root_pub_hex` and stamped
+  // `signer_root='admin-root'`. A legacy account with NO admin root keeps the
+  // pre-D behavior unchanged (IRK-verified, stamped `'membership'`) so existing
+  // flows don't break — the authority split only exists once a root is pinned.
+  const wantsSensitive = scopes.some((s) => isSensitiveScope(s));
+  const useAdminRoot = wantsSensitive && userRec.adminRootPubHex != null;
+  const signerRoot: "membership" | "admin-root" = useAdminRoot ? "admin-root" : "membership";
+  const authorityHex = useAdminRoot ? userRec.adminRootPubHex! : userRec.irkPubHex;
+
+  let authorityPub: Uint8Array;
   let devicePub: Uint8Array;
   let sig: Uint8Array;
   try {
-    irkPub = hexToBytes(userRec.irkPubHex);
+    authorityPub = hexToBytes(authorityHex);
     devicePub = hexToBytes(g.devicePubKey);
     sig = hexToBytes(body.signature);
   } catch {
@@ -191,8 +205,9 @@ export async function handleMintDeviceGrant(
   // out-of-range expiry) by throwing inside the canonical-bytes pass;
   // the public `verifyDeviceCapabilityGrant` catches that into `false`.
   // We surface a single 403 either way (the caller doesn't get to
-  // distinguish "bad signature" from "bad envelope").
-  if (!verifyDeviceCapabilityGrant(grant, sig, irkPub)) {
+  // distinguish "bad signature" from "bad envelope"). An `admin`-scope grant
+  // is verified under the ADMIN MASTER ROOT here (§3.3).
+  if (!verifyDeviceCapabilityGrant(grant, sig, authorityPub)) {
     return forbidden("invalid signature");
   }
 
@@ -208,6 +223,7 @@ export async function handleMintDeviceGrant(
     expiresAt: grant.expiresAt,
     signatureHex: bytesToHex(sig),
     revokedAt: null,
+    signerRoot,
   });
   if (!putResult.ok) {
     return conflict(putResult.reason);
@@ -248,17 +264,16 @@ export async function handleListDeviceGrants(
 // POST /api/users/:u/device-grants/revoke
 // ──────────────────────────────────────────────────────────────────────
 
-// NOTE (task #39): revoking a grant only becomes operationally
-// meaningful once a production mutation actually authorizes via
-// `requireDeviceScope`. As of this writing NO production handler calls
-// `requireDeviceScope` (it's exercised only in tests), so flipping a
-// grant's `revokedAt` here changes nothing an attacker could exploit —
-// there is no grant-accepting code path to lock out. The pinning test
-// in `deviceCapabilityGrants.test.ts` ("requireDeviceScope has no
-// production consumers") guards this assumption: if someone adds a
-// grant-accepting handler without wiring `requireDeviceScope`, that
-// test fails and forces the author to either consume it (so revocation
-// bites) or consciously update the pin.
+// NOTE (task #39): revoking a grant is now operationally meaningful —
+// `serverRevocation.ts` authorizes the device-signed server-revoke path
+// via `requireDeviceScope`, which re-checks `revokedAt` (and expiry) on
+// every call. Flipping a grant's `revokedAt` here therefore immediately
+// stops that device from revoking servers. The pinning test in
+// `deviceCapabilityGrants.test.ts` ("requireDeviceScope production
+// consumers") asserts the EXACT known-consumer set, so a NEW
+// grant-accepting handler still fails the pin and forces the author to
+// either prove the revocation path is covered or consciously update the
+// list.
 export async function handleRevokeDeviceGrant(
   deps: DeviceCapabilityGrantsDeps,
   body: RevokeBody | undefined,
@@ -357,6 +372,19 @@ export async function requireDeviceScope(
   // Legacy single-IRK fast path. The phone signs every operation
   // directly with the user's IRK until a per-device grant is in play.
   if (equalHex(signerPubHex, userRec.irkPubHex)) {
+    // Slice D fence (docs/device-admin-tier-spec.md §3.2): the membership IRK
+    // is UMK-derived and recomputable by EVERY device, so it must NEVER
+    // satisfy a SENSITIVE/authority scope via this fast path. A sensitive
+    // scope is satisfiable ONLY through `requireMasterAdmin` (the admin master
+    // root, or an admin-root-signed `admin` grant). Non-sensitive scopes keep
+    // the existing fast-path behavior — the fast path is not loosened, it is
+    // fenced off from sensitive scopes.
+    if (isSensitiveScope(scope)) {
+      return {
+        ok: false,
+        reason: "sensitive scope requires master-admin authority",
+      };
+    }
     return { ok: true };
   }
 

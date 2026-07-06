@@ -29,9 +29,27 @@
 import {
   relayCertHash,
   verifyTrustException,
+  type RelayVerdict,
   type TrustException,
 } from "@flagship/protocol";
 import type { RelayTrustVerdict } from "./relayTrustVerifier.js";
+
+/**
+ * The propagatable per-box relay-trust snapshot — the four fields the daemon
+ * heartbeat signs into a `flagship/box-trust-status/v1` envelope so both ends
+ * reflect "talking normally but this server appears unauthorized; an admin
+ * approved an override to continue." Computed on EVERY verdict, independent of
+ * the enforce flag — detection + propagation always run; only the data-plane
+ * lockdown is gated.
+ */
+export interface RelayTrustSnapshot {
+  relayVerdict: RelayVerdict;
+  lockedDown: boolean;
+  /** relay-class cert-hash of the failing hub key (only when untrusted). */
+  failingCertHash: string | null;
+  /** relay-class cert-hash an owner TrustException lifted (override active). */
+  coveringExceptionCertHash: string | null;
+}
 
 export interface RelaySosEvent {
   certClass: "relay";
@@ -98,6 +116,11 @@ export class RelayLockdownController {
     reason: null,
     since: null,
   };
+  // The propagatable trust snapshot, maintained on EVERY verdict regardless of
+  // the enforce flag (detect+propagate always runs; only lockdown is gated).
+  private lastRelayVerdict: RelayVerdict = "unknown";
+  private lastFailingCertHash: string | null = null;
+  private lastCoveringExceptionCertHash: string | null = null;
 
   constructor(opts: RelayLockdownOptions = {}) {
     this.enforce = opts.enforce ?? false;
@@ -124,6 +147,22 @@ export class RelayLockdownController {
   }
 
   /**
+   * The propagatable per-box relay-trust snapshot for the signed
+   * box-trust-status heartbeat. Maintained on every verdict, NOT gated by
+   * enforce — so a box in OBSERVE still surfaces "untrusted" (and any covering
+   * owner override) to the phone; only whether it stops relaying is gated.
+   */
+  trustStatus(): RelayTrustSnapshot {
+    return {
+      relayVerdict: this.lastRelayVerdict,
+      lockedDown: this.state.lockedDown,
+      failingCertHash:
+        this.lastRelayVerdict === "untrusted" ? this.lastFailingCertHash : null,
+      coveringExceptionCertHash: this.lastCoveringExceptionCertHash,
+    };
+  }
+
+  /**
    * Whether the box may relay user traffic right now. Wire this into the
    * tunnel data path; under OBSERVE it is ALWAYS true.
    */
@@ -146,56 +185,55 @@ export class RelayLockdownController {
       if (this.state.lockedDown) {
         this.log("[relay-trust] fresh valid blessing — lifting lockdown");
       }
+      // A good blessing recovers the box AND clears the propagated warning.
+      this.lastRelayVerdict = "trusted";
+      this.lastFailingCertHash = null;
+      this.lastCoveringExceptionCertHash = null;
       this.state = { lockedDown: false, certHash: null, reason: null, since: null };
       return this.current();
     }
     if (verdict.verified === undefined) {
-      // No verdict (no blessing / chain unreachable). Never locks down.
+      // No verdict reachable (no blessing presented / chain unreachable). A
+      // network blip must stay fail-open — it never locks down AND never flips
+      // a prior verdict, so the last known trust snapshot is preserved.
       return this.current();
     }
 
-    // verified === false.
+    // verified === false: a concrete failure. Record it for propagation FIRST
+    // (independent of enforce), then resolve any covering owner exception, then
+    // — only under enforce — decide the data-plane lockdown.
+    const certHash = verdict.hubKeyPub ? relayCertHash(verdict.hubKeyPub) : "unknown";
+    this.lastRelayVerdict = "untrusted";
+    this.lastFailingCertHash = certHash;
+
+    // Owner exception check: a valid, device-key-signed TrustException for THIS
+    // relay cert-hash lets the owner keep using the degraded relay. Run ALWAYS
+    // (even under OBSERVE) so a covering override propagates as the
+    // "unauthorized but admin-overridden, continuing" state on both ends. The
+    // ONE phone-signed exception for certHash X, fanned out to every box via
+    // `.com`, is what satisfies all affected servers at once.
+    const covered = await this.exceptionCovers(certHash, verdict.hubKeyPub, verdict.reason);
+    this.lastCoveringExceptionCertHash = covered ? certHash : null;
+    if (covered) {
+      // Honor the exception: do NOT lock down (under either flag).
+      if (this.state.lockedDown) {
+        this.log("[relay-trust] owner exception now covers the failing cert — lifting lockdown");
+      }
+      this.state = { lockedDown: false, certHash: null, reason: null, since: null };
+      return this.current();
+    }
+
     if (!this.enforce) {
+      // OBSERVE: still detected + propagated (snapshot is now untrusted,
+      // uncovered) but the data plane keeps relaying.
       this.log(
         `[relay-trust] verdict FAILED reason=${verdict.reason} mode=observe ` +
-          "(enforce off — NOT locking down)",
+          "(enforce off — NOT locking down; propagating untrusted)",
       );
       return this.current();
     }
 
-    const certHash = verdict.hubKeyPub ? relayCertHash(verdict.hubKeyPub) : "unknown";
-
-    // Owner exception check: a valid, device-key-signed TrustException for
-    // THIS relay cert-hash lets the owner keep using the degraded relay.
-    if (verdict.hubKeyPub && this.resolveExceptions) {
-      try {
-        const { exceptions, allowedDevicePubs } = await this.resolveExceptions(certHash);
-        for (const exc of exceptions) {
-          if (exc.certClass !== "relay" || exc.certHash !== certHash) continue;
-          if (verifyTrustException(exc, allowedDevicePubs).ok) {
-            this.log(
-              `[relay-trust] verdict FAILED reason=${verdict.reason} but owner ` +
-                `TrustException covers certHash=${certHash.slice(0, 16)}… — relaying allowed`,
-            );
-            // Honor the exception: do NOT lock down.
-            this.state = {
-              lockedDown: false,
-              certHash: null,
-              reason: null,
-              since: null,
-            };
-            return this.current();
-          }
-        }
-      } catch (e) {
-        this.log(
-          `[relay-trust] exception lookup error=${e instanceof Error ? e.message : String(e)} ` +
-            "— proceeding to lockdown (fail-closed under enforce)",
-        );
-      }
-    }
-
-    // Lock down + SOS.
+    // ENFORCE + uncovered: lock down + SOS.
     if (!this.state.lockedDown) {
       this.state = {
         lockedDown: true,
@@ -216,6 +254,40 @@ export class RelayLockdownController {
       });
     }
     return this.current();
+  }
+
+  /**
+   * Whether a valid owner TrustException covers the failing relay cert-hash.
+   * Verified against the IRK-anchored device set (never a `.com`-asserted
+   * roster). A lookup error is fail-CLOSED for coverage (returns false) so a
+   * `.com` outage cannot manufacture an override — under ENFORCE this proceeds
+   * to lockdown; under OBSERVE it merely propagates the uncovered failure.
+   */
+  private async exceptionCovers(
+    certHash: string,
+    hubKeyPub: string | undefined,
+    reason: string,
+  ): Promise<boolean> {
+    if (!hubKeyPub || !this.resolveExceptions) return false;
+    try {
+      const { exceptions, allowedDevicePubs } = await this.resolveExceptions(certHash);
+      for (const exc of exceptions) {
+        if (exc.certClass !== "relay" || exc.certHash !== certHash) continue;
+        if (verifyTrustException(exc, allowedDevicePubs).ok) {
+          this.log(
+            `[relay-trust] verdict FAILED reason=${reason} but owner ` +
+              `TrustException covers certHash=${certHash.slice(0, 16)}… — relaying allowed`,
+          );
+          return true;
+        }
+      }
+    } catch (e) {
+      this.log(
+        `[relay-trust] exception lookup error=${e instanceof Error ? e.message : String(e)} ` +
+          "— treating as UNCOVERED (fail-closed)",
+      );
+    }
+    return false;
   }
 
   /**

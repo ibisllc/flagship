@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Flagship
 import FlagshipCore
 import FlagshipAPI
@@ -8,6 +9,7 @@ public struct HomeTab: View {
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
     @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(\.leadsClient) private var leads
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
     @Environment(ToastCenter.self) private var toasts
@@ -20,7 +22,7 @@ public struct HomeTab: View {
     /// to-refresh always re-runs it.
     @State private var didReconcileServerTruth = false
     /// Account-level "which boxes are waiting for my unlock approval?" poller.
-    /// Populates `app.serversAwaitingApproval` so the list / detail / checklist
+    /// Populates `app.boxRequestInbox` so the list / detail / checklist
     /// can read a per-server waiting state from ONE fetch (no N pollers).
     @State private var approvalWatcher: BootApprovalWatcher?
     /// Persistent dismiss for the post-creation backup-reminder banner
@@ -60,8 +62,20 @@ public struct HomeTab: View {
             }
             _ = linker.consume()
         case .createServer:
-            if !path.contains(.addServer) {
-                path.append(.addServer)
+            // A `createServer` deep-link and the Home "add server" button both go
+            // straight to the create flow — there's no chooser.
+            if !path.contains(.provisionServer) {
+                path.append(.provisionServer)
+            }
+            _ = linker.consume()
+        case .transferOffer(let offerJSON):
+            // Slice C — a scanned / deep-linked (IRK-signed) transfer offer.
+            // Push the take-over route with the offer pre-ingested; the screen
+            // verifies the signature + expiry and gates the claim on a severe
+            // type-to-confirm + biometric.
+            let route = HomeRoute.transferAcquirer(offerText: offerJSON)
+            if path.last != route {
+                path.append(route)
             }
             _ = linker.consume()
         default:
@@ -86,7 +100,8 @@ public struct HomeTab: View {
                     ),
                     accountWasReset: app.accountWasReset,
                     deviceCapability: app.deviceCapability,
-                    awaitingApproval: app.serversAwaitingApproval,
+                    awaitingApproval: app.serversAwaiting(.unlockKey),
+                    awaitingEntitlement: app.serversAwaiting(.entitlement),
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
                     onCancelServer: { pod in
                         Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }
@@ -96,7 +111,7 @@ public struct HomeTab: View {
                         // The IRK biometric fires when signing the release.
                         pendingDeleteDeadPod = pod
                     },
-                    onAddServer: { path.append(.addServer) },
+                    onAddServer: { path.append(.provisionServer) },
                     onSetLeader: { pod in app.setLeader(pod.podId) },
                     onVibeCode: {
                         // Building a service needs a server to build + run
@@ -115,6 +130,9 @@ public struct HomeTab: View {
                         // the screen reload + a fresh approval poll (so a box
                         // that just started waiting surfaces its Approve card).
                         await reconcileServerTruth()
+                        // Prefer a fresher box-direct leadership read over the
+                        // relay value the reconcile just applied (best-effort).
+                        await preferDirectLeads()
                         await approvalWatcher?.pollOnce()
                         await vm.load()
                     },
@@ -158,19 +176,24 @@ public struct HomeTab: View {
             if !didReconcileServerTruth {
                 didReconcileServerTruth = true
                 await reconcileServerTruth()
+                // Prefer a live box-direct leadership read over the relay value
+                // the reconcile applied — best-effort, on-demand (no new poller).
+                await preferDirectLeads()
             }
             // Refresh cloud-recovery enrollment status when the tab
             // first appears. A failed lookup is silent — better to
             // suppress the nudge for one session than to surface a
             // network blip on the landing screen.
             await refreshRecoveryStatus()
-            // Start the account-level approval poll so a box waiting for its
-            // unlock surfaces an Approve affordance on the list/checklist
-            // without waiting for a push or a per-card poller.
+            // The account-level "which boxes are waiting for approval?" feed now
+            // rides the app-scope LiveSync canal (the `/stream` long-poll feeds
+            // `app.boxRequestInbox` directly), so HomeTab no longer starts the
+            // BootApprovalWatcher's own 5s `/pods` timer — that would be a
+            // redundant second poll of the same data. The watcher is still built
+            // so pull-to-refresh (`onRefresh` below) can force ONE immediate
+            // directory read via `pollOnce()`; it just doesn't run on a timer.
             if approvalWatcher == nil {
-                let w = BootApprovalWatcher(app: app, pollAwaiting: pollAwaitingUnlock)
-                approvalWatcher = w
-                w.start()
+                approvalWatcher = BootApprovalWatcher(app: app, pollAwaiting: pollPendingApprovals)
             }
         }
         .onDisappear { approvalWatcher?.stop() }
@@ -260,11 +283,9 @@ public struct HomeTab: View {
                     }
                 }
             } else {
-                ServerDetailContainer(podId: podId)
+                ServerDetailContainer(podId: podId, onDeleted: { path.removeAll() })
             }
-        case .addServer:
-            // In-app add-server only ever means "provision a new box."
-            // Pairing an existing server is an onboarding-only path.
+        case .provisionServer:
             CreateServerContainer(
                 onDeliveredVisible: { serverDomain, serial, name, description in
                     // QR-relay delivered and the "boot disk is on the way"
@@ -307,6 +328,8 @@ public struct HomeTab: View {
             ) {
                 path.removeAll()
             }
+        case .transferAcquirer(let offerText):
+            TransferAcquirerContainer(offerText: offerText)
         }
     }
 
@@ -348,20 +371,36 @@ public struct HomeTab: View {
         if navigateHome { path.removeAll() }
     }
 
-    /// Account-level "which boxes are waiting to unlock?" poll for the watcher.
-    /// Reads the cheap `awaitingUnlock` flag straight from the unauthenticated
+    /// Account-level "what is each box asking me to approve?" poll for the
+    /// watcher — builds the unified Box Request Inbox (docs/box-request-inbox.md)
+    /// from the cheap `pendingRequests` digest straight off the unauthenticated
     /// `/pods` directory — NO biometric. (The old path derived the IRK to read
     /// the mailbox, which fired Face ID every 5s on device.) Best-effort: a blip
-    /// returns the prior set so the UI never thrashes.
-    private func pollAwaitingUnlock() async -> Set<String> {
+    /// returns the prior inbox so the UI never thrashes. Unknown/future purposes
+    /// a not-yet-updated client can't satisfy are dropped here (they need no
+    /// affordance), so the inbox only ever holds requests this app can act on.
+    private func pollPendingApprovals() async -> [String: [BoxRequest]] {
         guard let user = app.currentUser, !user.isEmpty,
               let dir = try? await mailbox.fetchPods(username: user)
-        else { return app.serversAwaitingApproval }
-        return Set(
-            dir.pods
-                .filter { $0.awaitingUnlock }
-                .map { $0.serverDomain.lowercased() }
-        )
+        else {
+            return app.boxRequestInbox
+        }
+        var inbox: [String: [BoxRequest]] = [:]
+        for pod in dir.pods {
+            let key = pod.serverDomain.lowercased()
+            let reqs: [BoxRequest] = pod.pendingRequests.compactMap { r in
+                guard let purpose = SecretPurpose(rawValue: r.type) else { return nil }
+                return BoxRequest(
+                    nonceHex: r.id,
+                    serverDomain: pod.serverDomain,
+                    type: purpose,
+                    issuedAt: r.issuedAt,
+                    expiresAt: r.expiresAt
+                )
+            }
+            if !reqs.isEmpty { inbox[key] = reqs }
+        }
+        return inbox
     }
 
     /// #43 + #56 — reconcile the pod list against server truth from ONE
@@ -374,6 +413,10 @@ public struct HomeTab: View {
     private func reconcileServerTruth() async {
         guard let user = app.currentUser, !user.isEmpty else { return }
         let mailbox = self.mailbox
+        // Secret-free recipe: deposit the SWK once a box registered without it
+        // embedded. The coordinator no-ops unless a deposit is owed (idempotent
+        // via PendingSwkDepositStore), so this is safe on every reconcile.
+        let swkDeposit = SwkDepositCoordinator(username: user, mailbox: mailbox)
         let reconciler = PendingServerReconciler(
             app: app,
             fetchPods: { username in
@@ -386,9 +429,40 @@ public struct HomeTab: View {
                 } catch {
                     return nil
                 }
+            },
+            onRegistered: { fqdn, identityPubKeyHex in
+                await swkDeposit.depositIfNeeded(serverDomain: fqdn, identityPubKeyHex: identityPubKeyHex)
             }
         )
         await reconciler.reconcile()
+    }
+
+    /// PREFER a live, box-direct leadership read over the `.com` `/pods`
+    /// `leadsServices` relay (which is ~5 min stale + `.com`-dependent). For
+    /// each ONLINE box, fetch `GET /api/leads` over the box-pinned pipe; the
+    /// FIRST box that answers gives a GLOBAL (slug → leaderFqdn) view of the
+    /// whole account's leadership, so one successful read covers every pod.
+    /// Invert it into the per-pod ("fqdn → slugs") model the badge renders and
+    /// apply it, overriding the relay value for matched pods. Best-effort +
+    /// on-demand (called from the appearance reconcile + pull-to-refresh, NOT a
+    /// new always-on poller): any failure / 404 / gossip-off yields nil and the
+    /// relay value stands — never a regression. Runs AFTER the relay reconcile
+    /// so the direct view wins.
+    private func preferDirectLeads() async {
+        // Online boxes are the only ones reachable on their pinned pipe. Their
+        // fqdns are also the match set for the inversion (we only badge a pod we
+        // actually show).
+        let onlineFqdns = app.pods.filter { $0.status == .online }.map { $0.fqdn }
+        guard !onlineFqdns.isEmpty else { return }
+        let knownFqdns = app.pods.map { $0.fqdn }
+        for fqdn in onlineFqdns {
+            guard let map = await leads.fetchLeads(podFqdn: fqdn) else { continue }
+            // A successful read is a complete account-wide view — invert + apply
+            // and we're done (no need to poll the other boxes this pass).
+            let byFqdn = DirectLeadsInversion.invert(leads: map.leads, knownFqdns: knownFqdns)
+            app.applyDirectLeads(byFqdn)
+            return
+        }
     }
 
     /// Re-add persisted pending servers on launch, and drop any that have since
@@ -417,12 +491,47 @@ public struct HomeTab: View {
     }
 }
 
+/// Slice C — mounts `TransferAcquirerScreen` with a transfer offer PRE-INGESTED
+/// (from a scanned/deep-linked `flagship://transfer?o=` or universal link). The
+/// VM verifies the giver-IRK signature + expiry on ingest; an invalid/expired
+/// offer lands on the screen's `.failed` state (no confirm ever shown). The
+/// claim itself rides a severe type-to-confirm + biometric inside the screen.
+struct TransferAcquirerContainer: View {
+    let offerText: String
+    @Environment(\.serverTransferClient) private var transfer
+    @Environment(AppState.self) private var app
+    @State private var vm: TransferAcquirerViewModel?
+
+    var body: some View {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                TransferAcquirerScreen(vm: vm)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            if vm == nil {
+                let model = TransferAcquirerViewModel(
+                    client: transfer,
+                    username: app.currentUser ?? ""
+                )
+                model.ingest(offerText)
+                vm = model
+            }
+        }
+    }
+}
+
 struct CreateServerContainer: View {
     let onDeliveredVisible: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
     let onDelivered: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
     let onCancel: () -> Void
     @Environment(\.flagshipServerClient) private var serverClient
     @Environment(\.qrRelayClient) private var qrRelay
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(\.sessionStore) private var sessionStore
     @Environment(AppState.self) private var app
     @State private var vm: CreateServerViewModel?
 
@@ -464,7 +573,9 @@ struct CreateServerContainer: View {
                 vm = CreateServerViewModel(
                     username: app.currentUser ?? "you",
                     server: serverClient,
-                    relay: qrRelay
+                    relay: qrRelay,
+                    mailbox: mailbox,
+                    sessionStore: sessionStore
                 )
             }
         }
@@ -483,7 +594,7 @@ struct PendingPodContainer: View {
     @State private var cancelling: Bool = false
 
     var body: some View {
-        PendingServerScreen(pod: pod, username: app.currentUser) {
+        PendingServerScreen(pod: pod, username: app.currentUser, awaitingUnlock: app.isAwaitingUnlock(pod)) {
             Task { await cancelOrder() }
         }
     }
@@ -513,34 +624,42 @@ struct PendingPodContainer: View {
 /// (PendingPodContainer) and the Home list's "Cancel server" context action.
 /// Mirrors webapp `cancelServer`. On a release failure the pod is KEPT (the
 /// name is still reserved) with a warning toast.
+@discardableResult
 @MainActor
 func cancelPendingServer(
     pod: PodInfo,
     server: any FlagshipServerClient,
     app: AppState,
     toasts: ToastCenter
-) async {
+) async -> Bool {
     guard let username = app.currentUser else {
         app.removePod(pod.podId)
-        return
+        return true
     }
     do {
-        let irk = try await Keystore.deriveIRK(reason: "Cancel server \(pod.name)")
+        // Slice D — release-server-name is a SENSITIVE order: sign with the admin
+        // master root when this device holds one, else the legacy owner IRK.
+        let orderKey = try await Keystore.sensitiveOrderSigningKey(reason: "Cancel server \(pod.name)")
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         // 1. Release the name (the real free-the-name mechanism).
         let releaseBytes = ReleaseServerName.canonicalBytes(
             username: username, serverDomain: pod.fqdn, issuedAt: now
         )
-        let releaseSig = try irk.signature(for: releaseBytes)
+        let releaseSig = try orderKey.signature(for: releaseBytes)
         try await server.releaseServerName(.init(
             request: .init(username: username, serverDomain: pod.fqdn, issuedAt: now),
             signature: HexUtil.encode(releaseSig)
         ))
         // 2. Belt-and-braces auth-code revoke (the release already revoked
-        // active codes server-side; 403/404 is treated as success).
+        // active codes server-side; 403/404 is treated as success). This is a
+        // NON-sensitive owner-IRK op, so it must be IRK-signed: reuse orderKey
+        // when it IS the IRK (no admin root), else derive the IRK.
         if let serial = pod.pendingAuthCodeSerial {
+            let revokeKey = Keystore.hasAdminRoot
+                ? ((try? await Keystore.deriveIRK(reason: "Cancel server \(pod.name)")) ?? orderKey)
+                : orderKey
             let revokeBytes = AuthCodeRevoke.canonicalBytes(serial: serial, username: username, issuedAt: now)
-            let revokeSig = try irk.signature(for: revokeBytes)
+            let revokeSig = try revokeKey.signature(for: revokeBytes)
             try? await server.revokeAuthCode(.init(
                 request: .init(serial: serial, username: username, issuedAt: now),
                 signature: HexUtil.encode(revokeSig)
@@ -549,10 +668,12 @@ func cancelPendingServer(
         toasts.success("Server \"\(pod.name)\" cancelled — the name is free again.")
         app.removePod(pod.podId)
         PendingServerStore().remove(username: username, podId: pod.podId)
+        return true
     } catch {
         // Keep the pod: the name is still reserved, so dropping it locally
         // would just hide a name the user can't re-use.
         toasts.warning("Couldn't cancel — the name is still reserved. Check your connection and try again.")
+        return false
     }
 }
 
@@ -617,13 +738,34 @@ struct DemoInstallProgressContainer: View {
 /// (the latter polls every 15s while the screen is on stage).
 struct ServerDetailContainer: View {
     let podId: String
+    /// Pop the nav stack back to Home — fired after the decommission/free-the-name
+    /// action succeeds (the pod is gone, so this page now points at nothing).
+    var onDeleted: () -> Void = {}
     @Environment(\.screensClient) private var client
+    @Environment(\.lockPowerClient) private var lockPower
+    @Environment(\.sessionStore) private var sessionStore
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
+    @Environment(ToastCenter.self) private var toasts
     @State private var detailVm: HomeViewModel?
     @State private var metricsVm: ServerMetricsViewModel?
+    @State private var pairVm: PodPairViewModel?
 
     private var pod: PodInfo? { app.pods.first(where: { $0.podId == podId }) }
+
+    /// FQDN to pair against — the current pod's. The session store's base URL
+    /// is already pointed here by `PodSessionSync`; the pairing order's
+    /// `serverId` must equal the box's FQDN (the daemon enforces it).
+    private var pairFqdn: String? {
+        guard let fqdn = pod?.fqdn, !fqdn.isEmpty else { return nil }
+        return fqdn
+    }
+
+    private var isPairing: Bool {
+        if case .signing = pairVm?.phase { return true }
+        if case .posting = pairVm?.phase { return true }
+        return false
+    }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -641,12 +783,33 @@ struct ServerDetailContainer: View {
                     deadServer: pod.map { app.liveness(for: $0) == .dead } ?? false,
                     serverName: pod?.name,
                     deadServerFqdn: pod?.fqdn,
-                    awaitingUnlock: pod?.awaitingUnlock ?? false,
+                    // Use the LIVE awaiting-unlock signal (per-pod flag OR the
+                    // 5s watcher set), not the per-pod flag alone — otherwise a
+                    // box that starts waiting AFTER the last /pods reconcile shows
+                    // "waiting for approval" on Home but no Approve card here.
+                    awaitingUnlock: pod.map { app.isAwaitingUnlock($0) } ?? false,
+                    awaitingEntitlement: pod.map { app.isAwaitingEntitlement($0) } ?? false,
+                    // The BFF said "no session token" → this device isn't paired.
+                    // Surface the one-tap pairing affordance (but only for a box
+                    // that's actually reachable — a dead box never paired and
+                    // never will, so it stays on the decommission path).
+                    notPaired: detailVm.needsPairing && pairFqdn != nil,
+                    // HONEST LIVENESS (Fix B) — surface the box's real reachability
+                    // rather than a catch-all "Connecting…". `.offline` =
+                    // server-authoritative unreachable (was live, now stale);
+                    // `.comingOnline` for a non-pending box = `never` (awaiting
+                    // first heartbeat). Pending pods are handled by their own route.
+                    offline: pod.map { app.liveness(for: $0) == .offline } ?? false,
+                    lastSeen: pod?.humanizedLastSeen(),
+                    comingUp: pod.map { app.liveness(for: $0) == .comingOnline && $0.status != .pending } ?? false,
+                    pairing: isPairing,
                     onRefresh: {
                         async let a: Void = detailVm.load()
                         async let b: Void = metricsVm.load()
                         _ = await (a, b)
-                    }
+                    },
+                    onPair: { Task { await pairThenReload(detailVm: detailVm) } },
+                    onDeleted: onDeleted
                 )
             } else {
                 ProgressView()
@@ -658,6 +821,16 @@ struct ServerDetailContainer: View {
         // which catches the case where `.onDisappear` doesn't fire
         // reliably during navigation churn on iPad.
         .task {
+            // Point the box session at THIS pod so per-pod detail targets the
+            // tapped pod — not the global leader/sessionPod. Without this,
+            // opening pod B while pod A is the session anchor loads A's data.
+            // Sync for any registered (non-pending) pod with an fqdn — including
+            // an offline/coming-up one — so its honest state renders from a real
+            // load attempt against ITS base URL + ITS per-pod token (Fix B),
+            // never the global anchor's.
+            if let p = pod, p.status != .pending, !p.fqdn.isEmpty {
+                await PodSessionSync.sync(currentPod: p, store: sessionStore)
+            }
             if detailVm == nil {
                 detailVm = HomeViewModel(client: client, podContext: podId)
             }
@@ -671,11 +844,21 @@ struct ServerDetailContainer: View {
             // on "Connecting to your server…" until the user manually pulled to
             // refresh (the bug). Backoff 2s→15s. The loop exits when the view
             // goes away (`.task` cancels) — so it doubles as the keep-alive
-            // park that stops metrics polling on disappear.
+            // park that stops metrics polling on disappear. It ALSO stops once
+            // the BFF reports "not paired": retrying that never helps (it needs
+            // the owner to tap Pair), so we park and let the pairing card drive.
+            // A server-authoritatively offline / coming-up box (HONEST LIVENESS,
+            // Fix B) won't answer its BFF — don't hammer it. One attempt, then
+            // park and let the honest placeholder + pull-to-refresh drive.
+            let livenessState = pod.map { app.liveness(for: $0) }
+            let wontAnswer = livenessState == .offline
+                || (livenessState == .comingOnline && pod?.status != .pending)
             var delay: UInt64 = 2_000_000_000
             while !Task.isCancelled {
                 await detailVm?.load()
                 if let d = detailVm?.detail, case .loaded = d { break }
+                if detailVm?.needsPairing == true { break }
+                if wontAnswer { break }
                 try? await Task.sleep(nanoseconds: delay)
                 delay = min(delay * 2, 15_000_000_000)
             }
@@ -685,7 +868,40 @@ struct ServerDetailContainer: View {
             let parkUntilCancelled = AsyncStream<Never> { _ in }
             for await _ in parkUntilCancelled { }
         }
-        .onDisappear { metricsVm?.stopPolling() }
+        .onDisappear {
+            metricsVm?.stopPolling()
+            // Revert the box session to the global live anchor when leaving the
+            // per-pod detail, so Home/Services talk to a live pod again.
+            let store = sessionStore
+            let anchor = app.sessionPod
+            Task { await PodSessionSync.sync(currentPod: anchor, store: store) }
+        }
+    }
+
+    /// One pairing attempt (Face ID → sign `add-paired-session` → POST →
+    /// persist token), then reload the BFF so the page fills in. Fired once per
+    /// tap from the "Pair this server" button — never auto-fired. Idempotent in
+    /// the VM (a present token no-ops without a biometric).
+    @MainActor
+    private func pairThenReload(detailVm: HomeViewModel) async {
+        guard let fqdn = pairFqdn else { return }
+        guard !isPairing else { return }
+        let vm = PodPairViewModel(
+            client: lockPower,
+            store: sessionStore,
+            serverDomain: fqdn,
+            label: UIDevice.current.name
+        )
+        pairVm = vm
+        await vm.pair()
+        switch vm.phase {
+        case .paired, .alreadyPaired:
+            await detailVm.load()
+        case .failed(let msg):
+            toasts.error(msg)
+        default:
+            break
+        }
     }
 }
 

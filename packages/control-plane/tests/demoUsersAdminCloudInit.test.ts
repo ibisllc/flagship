@@ -163,6 +163,44 @@ describe("buildCloudConfigUserData", () => {
     ).toThrow(/32-byte hex/);
   });
 
+  it("gating v2 — pins ownerAidPubHex into the box config.json when supplied", () => {
+    const aid = "cd".repeat(32);
+    const yaml = buildCloudConfigUserData({
+      installBlobJson: "{}",
+      installerGitRef: "main",
+      demoUserIrkPrivHex: DEMO_IRK_PRIV,
+      ownerAidPubHex: aid,
+    });
+    const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
+    const bootstrap = Buffer.from(all[1]![1]!, "base64").toString("utf8");
+    // The config heredoc carries the AID field.
+    const m = bootstrap.match(/\{"serverId":[^\n]*"ownerAidPubHex":"([0-9a-f]{64})"\}/);
+    expect(m).not.toBeNull();
+    expect(m![1]).toBe(aid);
+  });
+
+  it("omits ownerAidPubHex from config.json when not supplied (IRK fallback)", () => {
+    const yaml = buildCloudConfigUserData({
+      installBlobJson: "{}",
+      installerGitRef: "main",
+      demoUserIrkPrivHex: DEMO_IRK_PRIV,
+    });
+    const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
+    const bootstrap = Buffer.from(all[1]![1]!, "base64").toString("utf8");
+    expect(bootstrap).not.toContain("ownerAidPubHex");
+  });
+
+  it("rejects an ownerAidPubHex that is not 32-byte hex", () => {
+    expect(() =>
+      buildCloudConfigUserData({
+        installBlobJson: "{}",
+        installerGitRef: "main",
+        demoUserIrkPrivHex: DEMO_IRK_PRIV,
+        ownerAidPubHex: "nothex",
+      }),
+    ).toThrow(/ownerAidPubHex must be 32-byte hex/);
+  });
+
   it("inlines the install-blob.json as decodable base64", () => {
     const blobJson = JSON.stringify({
       version: 1,
@@ -233,6 +271,21 @@ describe("buildCloudConfigUserData", () => {
     expect(bootstrap).toContain("EnvironmentFile=/etc/flagship/daemon.env");
     expect(bootstrap).toContain("FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN");
     expect(bootstrap).toContain("FLAGSHIP_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX");
+    // The daemon must be pinned to the SAME control plane that provisioned
+    // it (CTRL_BASE = blob registrationUrl minus /api/server/register), so
+    // hub-discovery, ACME DNS-01, and the status heartbeat target this env.
+    // Without it the daemon defaults to flagshipserver.com — a gym/test box
+    // would then vanish into prod's hub + DNS zone. Regression: gym e2e.
+    expect(bootstrap).toContain("FLAGSHIP_CONTROL_PLANE_BASE_URL=$CTRL_BASE");
+    // Full-platform enablement: the SWK + config make the daemon construct the
+    // ServicePlatform (services / build / deploy / screens / vibe); the PSK pub
+    // enables paired-session minting; docker + the data-services unit run apps.
+    expect(bootstrap).toContain("/var/flagship/swk.hex");
+    expect(bootstrap).toContain("FLAGSHIP_SWK_HEX=");
+    expect(bootstrap).toContain("FLAGSHIP_PSK_PUB_HEX=$PHONE_DELEGATED_PUBKEY");
+    expect(bootstrap).toContain("docker.io docker-compose");
+    expect(bootstrap).not.toContain("docker.io docker-cli"); // docker-cli aborts apt on Debian
+    expect(bootstrap).toContain("flagship-data-services.service");
     expect(bootstrap).toContain("flagship-first-boot-register.service");
     expect(bootstrap).toContain("/api/server/register");
     expect(bootstrap).toContain("/sealed-luks-key");

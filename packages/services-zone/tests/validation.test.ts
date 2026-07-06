@@ -25,11 +25,12 @@ describe("validateUserLabel", () => {
     else throw new Error(r.reason);
   });
 
-  it("rejects dashes (the dash is reserved as the slug-creator separator in app URLs)", () => {
-    expect(validateUserLabel("h-a-r-r-y").ok).toBe(false);
-    expect(validateUserLabel("john-doe").ok).toBe(false);
-    expect(validateUserLabel("-harry").ok).toBe(false);
-    expect(validateUserLabel("harry-").ok).toBe(false);
+  it("accepts interior single dashes; rejects leading/trailing and `--`", () => {
+    expect(validateUserLabel("john-doe").ok).toBe(true);
+    expect(validateUserLabel("happy-otter-4821").ok).toBe(true);
+    expect(validateUserLabel("-harry").ok).toBe(false); // leading dash
+    expect(validateUserLabel("harry-").ok).toBe(false); // trailing dash
+    expect(validateUserLabel("ha--rry").ok).toBe(false); // `--` is the reserved delimiter
   });
 
   it("rejects names with other disallowed characters", () => {
@@ -48,6 +49,22 @@ describe("validateUserLabel", () => {
   it("rejects reserved usernames so users can't shadow control-plane endpoints", () => {
     for (const reserved of ["api", "www", "admin", "git", "tunnel", "support"]) {
       expect(validateUserLabel(reserved).ok).toBe(false);
+    }
+  });
+
+  it("bans the test-environment apex labels in lock-step with control-plane labels.ts (docs/ui-test-gym.md §6.5)", () => {
+    for (const reserved of ["gym", "test", "e2e", "qa", "ci", "staging"]) {
+      expect(validateUserLabel(reserved).ok).toBe(false);
+      expect(_internal.RESERVED_USER_LABELS.has(reserved)).toBe(true);
+    }
+  });
+
+  it("bans the gossip fan-out reserved names broadcast/servers/all (Phase 4)", () => {
+    for (const reserved of ["broadcast", "servers", "all"]) {
+      const r = validateUserLabel(reserved);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toMatch(/reserved/);
+      expect(_internal.RESERVED_USER_LABELS.has(reserved)).toBe(true);
     }
   });
 });
@@ -179,36 +196,32 @@ describe("validateAppSlug", () => {
 });
 
 describe("parseAppLabel", () => {
-  it("splits `<slug>-<creator>` on the LAST dash so multi-word slugs survive", () => {
-    expect(parseAppLabel("game1-john")).toEqual({ slug: "game1", creator: "john" });
-    expect(parseAppLabel("habit-tracker-john")).toEqual({
+  it("splits `<slug>--<creator>` on `--`; dashed slugs AND dashed creators survive", () => {
+    expect(parseAppLabel("game1--john")).toEqual({ slug: "game1", creator: "john" });
+    expect(parseAppLabel("habit-tracker--john")).toEqual({
       slug: "habit-tracker",
       creator: "john",
     });
-    expect(parseAppLabel("password-manager-alice")).toEqual({
+    // The whole point of `--`: the creator (a username) may now carry dashes too.
+    expect(parseAppLabel("password-manager--happy-otter")).toEqual({
       slug: "password-manager",
-      creator: "alice",
+      creator: "happy-otter",
     });
   });
 
-  it("rejects labels without a dash (no creator)", () => {
-    const r = parseAppLabel("game1");
-    expect("ok" in r && r.ok === false).toBe(true);
+  it("rejects a label with no `--` (a bare slug has no creator)", () => {
+    expect("ok" in parseAppLabel("game1")).toBe(true);
+    // single dashes are NOT the delimiter, so an all-single-dash label is not qualified
+    expect("ok" in parseAppLabel("game1-john-doe")).toBe(true);
   });
 
-  it("rejects labels whose slug part fails slug validation", () => {
-    const r = parseAppLabel("--john"); // slug = "-" → invalid
-    expect("ok" in r && r.ok === false).toBe(true);
+  it("rejects an empty slug or creator half", () => {
+    expect("ok" in parseAppLabel("--john")).toBe(true); // empty slug
+    expect("ok" in parseAppLabel("game1--")).toBe(true); // empty creator
   });
 
-  it("rejects labels whose creator part contains a dash (would be a username with a dash)", () => {
-    // "game1-john-doe" — split on last dash gives slug="game1-john", creator="doe".
-    // That's the right interpretation: john-doe can't be a creator (usernames are dashless),
-    // but "game1-john" IS a valid slug, so this DOES parse — to (game1-john, doe).
-    expect(parseAppLabel("game1-john-doe")).toEqual({
-      slug: "game1-john",
-      creator: "doe",
-    });
+  it("rejects an ambiguous label with more than one `--`", () => {
+    expect("ok" in parseAppLabel("a--b--c")).toBe(true);
   });
 });
 

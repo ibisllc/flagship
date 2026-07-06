@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.flagshipserver.app.core.RootDestination
 import com.flagshipserver.app.ui.shell.tabs.ActivityTab
@@ -51,8 +52,14 @@ enum class WindowWidthSizeClass { COMPACT, MEDIUM, EXPANDED }
  *  DeepLinker queue and rebalances tab selection so an incoming push
  *  or app-link lands on the right surface. */
 @Composable
-fun RootShell(widthSizeClass: WindowWidthSizeClass = WindowWidthSizeClass.COMPACT) {
-    var selected by remember { mutableStateOf(RootDestination.HOME) }
+fun RootShell(
+    widthSizeClass: WindowWidthSizeClass = WindowWidthSizeClass.COMPACT,
+    /** GYM smoke-mode (§10 Phase-5) — open the shell on this tab on first paint
+     *  (the `flagship.smokeTab` selector, mirror of iOS `-smoke-tab`). Null ⇒
+     *  Home, the production default. */
+    initialTab: RootDestination? = null,
+) {
+    var selected by remember { mutableStateOf(initialTab ?: RootDestination.HOME) }
     val deepLinker = com.flagshipserver.app.core.LocalDeepLinker.current
     val pending by deepLinker.pending.collectAsState()
 
@@ -65,11 +72,20 @@ fun RootShell(widthSizeClass: WindowWidthSizeClass = WindowWidthSizeClass.COMPAC
             is com.flagshipserver.app.core.DeepLink.VibeCodeChat -> RootDestination.APPS
             is com.flagshipserver.app.core.DeepLink.BuildJournal -> RootDestination.APPS
             com.flagshipserver.app.core.DeepLink.CreateServer -> RootDestination.HOME
+            // Slice C — a `/transfer?o=…` take-over link opens the acquirer flow
+            // on the Home tab (adding/receiving a server is a Home concern).
+            is com.flagshipserver.app.core.DeepLink.TransferOffer -> RootDestination.HOME
             com.flagshipserver.app.core.DeepLink.RecoverySetup -> RootDestination.SETTINGS
             // Phase 3b — a JoinDevice deeplink while ALREADY paired means
             // adding a SECOND profile to this phone. Route to Settings,
             // which hosts the join-device-link surface.
             is com.flagshipserver.app.core.DeepLink.JoinDevice -> RootDestination.SETTINGS
+            // #92 — a friend-redeem invite routes to the Apps tab, whose
+            // NavHost pushes the redeem screen (account-agnostic entry).
+            is com.flagshipserver.app.core.DeepLink.RedeemInvite -> RootDestination.APPS
+            // Web-experience gating — authorize a browser's QR-login. Routes
+            // to the Apps tab, whose NavHost pushes the authorize screen.
+            is com.flagshipserver.app.core.DeepLink.AuthorizeKnock -> RootDestination.APPS
         }
         // The tab's NavHost picks the link up via its own LaunchedEffect
         // on LocalDeepLinker.pending. We leave the queue populated so
@@ -97,6 +113,7 @@ private fun CompactShell(
                         onClick = { onSelect(dest) },
                         icon = { Icon(iconFor(dest), contentDescription = dest.label) },
                         label = { Text(dest.label) },
+                        modifier = Modifier.testTag("tab-${dest.key}"),
                     )
                 }
             }
@@ -119,6 +136,7 @@ private fun ExpandedShell(
                     onClick = { onSelect(dest) },
                     icon = { Icon(iconFor(dest), contentDescription = dest.label) },
                     label = { Text(dest.label) },
+                    modifier = Modifier.testTag("tab-${dest.key}"),
                 )
             }
         }

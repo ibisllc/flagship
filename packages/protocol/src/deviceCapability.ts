@@ -67,6 +67,33 @@ const DEVICE_SCOPE_INDEX: ReadonlyMap<DeviceScope, number> = new Map(
   DEVICE_SCOPES.map((s, i) => [s, i] as const),
 );
 
+/**
+ * Slice D — grant-signer discriminator (docs/device-admin-tier-spec.md §3.3).
+ * Which root signed a DeviceCapabilityGrant: the UMK-derived MEMBERSHIP IRK
+ * (`'membership'`, the default for every pre-D grant) or the ADMIN MASTER ROOT
+ * (`'admin-root'`). Only an `'admin-root'`-signed `admin`-scope grant carries
+ * authority for a SENSITIVE op — the byte shape of the grant is identical
+ * either way, only the signing key + this tag differ.
+ */
+export type AdminSignerRoot = "membership" | "admin-root";
+
+/**
+ * Slice D — the SENSITIVE scope set (docs/device-admin-tier-spec.md §3.2).
+ * A sensitive scope may NEVER be satisfied by the membership-IRK fast path;
+ * it is satisfiable ONLY through `requireMasterAdmin` (the bare admin master
+ * root, or an admin-root-signed `admin` grant). `admin` is the sole member
+ * today — it is the account's authority scope. APPEND if more authority
+ * scopes are minted; never remove (removing loosens the fence).
+ */
+export const SENSITIVE_SCOPES: ReadonlySet<DeviceScope> = new Set<DeviceScope>([
+  "admin",
+]);
+
+/** True iff `s` is a sensitive/authority scope (see {@link SENSITIVE_SCOPES}). */
+export function isSensitiveScope(s: DeviceScope): boolean {
+  return SENSITIVE_SCOPES.has(s);
+}
+
 const DEVICE_LABEL_RE = /^[a-z0-9-]{1,24}$/;
 const RESERVED_DEVICE_LABELS: ReadonlySet<string> = new Set([
   "admin",

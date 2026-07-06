@@ -184,7 +184,7 @@ function bridgeVibeCodeSession(ws: WsSocket, session: VibeCodeSession): void {
     });
     send({ kind: "done" });
   } else if (session.meta.status === "failed") {
-    send({ kind: "error", message: "session failed" });
+    send({ kind: "error", message: session.meta.failureReason ?? "session failed" });
   }
 
   ws.on("close", () => {

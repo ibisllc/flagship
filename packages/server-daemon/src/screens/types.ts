@@ -53,6 +53,14 @@ export interface ServerDetailResponse {
   serverFqdn: string;
   username: string;
   daemonVersion: string;
+  /**
+   * The box's own code-checkout HEAD (full git SHA, lowercase), or null
+   * when the daemon isn't running from a git checkout / can't read it.
+   * This is the applied-commit truth the self-update consumer enforces
+   * `fromCommit` against — clients display it as the current version and
+   * seed `fromCommit` in an UpdateOrder from it instead of guessing.
+   */
+  currentCommit: string | null;
   /** Unix-ms; when this daemon process started. */
   startedAt: number;
   uptimeMs: number;
@@ -117,6 +125,20 @@ export interface VibeCodeStartRequest {
    * and at most the provider NAME).
    */
   credential?: LlmProviderCredential;
+  /**
+   * Owner-chosen service name/slug — the web-address label of the deployed
+   * service. Decided on the Describe form (not fixed). A HINT: the daemon
+   * sanitizes it and uses it as the deployed service's slug when the build
+   * doesn't dictate one. Lowercased `[a-z0-9-]`. Absent ⇒ the build/manifest
+   * names it.
+   */
+  name?: string;
+  /**
+   * Owner-chosen reach for the built service: "just-me" (gated to the owner)
+   * or "link" (anyone with the link). Applied at install time. Absent ⇒ the
+   * box default (owner-only).
+   */
+  visibility?: "just-me" | "link";
 }
 
 /**

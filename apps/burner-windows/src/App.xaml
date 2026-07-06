@@ -4,22 +4,27 @@
              xmlns:local="clr-namespace:Flagship.Burner">
     <Application.Resources>
         <ResourceDictionary>
-            <!-- Flagship design tokens, mirrored from apps/burner-mac Theme.swift.
-                 Cool neutral surfaces, warm primary, no AI-template gradients. -->
-            <SolidColorBrush x:Key="FB.Bg"               Color="#F7F8FA"/>
+            <!-- Flagship design tokens, mirrored from apps/burner-mac
+                 Theme.swift (light scheme, post teal-brand-migration): warm
+                 off-white canvas, warm-neutral inks + rules, teal #14B8A6
+                 accent. No AI-template gradients. -->
+            <SolidColorBrush x:Key="FB.Bg"               Color="#F7F6F2"/>
             <SolidColorBrush x:Key="FB.Surface"          Color="#FFFFFF"/>
-            <SolidColorBrush x:Key="FB.SurfaceElevated"  Color="#F0F2F5"/>
-            <SolidColorBrush x:Key="FB.Border"           Color="#D9DDE3"/>
-            <SolidColorBrush x:Key="FB.Text"             Color="#1A1D22"/>
-            <SolidColorBrush x:Key="FB.TextMuted"        Color="#6B7280"/>
-            <SolidColorBrush x:Key="FB.Primary"          Color="#D97742"/>
-            <SolidColorBrush x:Key="FB.PrimaryFaded"     Color="#FAEDE5"/>
-            <SolidColorBrush x:Key="FB.Success"          Color="#2F8F5E"/>
-            <SolidColorBrush x:Key="FB.SuccessFaded"     Color="#E5F4EC"/>
-            <SolidColorBrush x:Key="FB.Warning"          Color="#C28A1F"/>
-            <SolidColorBrush x:Key="FB.WarningFaded"     Color="#F8EFD7"/>
-            <SolidColorBrush x:Key="FB.Danger"           Color="#B23A3A"/>
-            <SolidColorBrush x:Key="FB.DangerFaded"      Color="#F5E0E0"/>
+            <SolidColorBrush x:Key="FB.SurfaceElevated"  Color="#EFEDE7"/>
+            <SolidColorBrush x:Key="FB.Border"           Color="#E5E3DC"/>
+            <SolidColorBrush x:Key="FB.BorderStrong"     Color="#C8C5BB"/>
+            <SolidColorBrush x:Key="FB.Text"             Color="#1F1E1A"/>
+            <SolidColorBrush x:Key="FB.Ink"              Color="#000000"/>
+            <SolidColorBrush x:Key="FB.TextMuted"        Color="#555149"/>
+            <SolidColorBrush x:Key="FB.Primary"          Color="#14B8A6"/>
+            <SolidColorBrush x:Key="FB.PrimaryDeep"      Color="#0F8B7E"/>
+            <SolidColorBrush x:Key="FB.PrimaryFaded"     Color="#E7F8F6"/>
+            <SolidColorBrush x:Key="FB.Success"          Color="#16A34A"/>
+            <SolidColorBrush x:Key="FB.SuccessFaded"     Color="#E8F6EE"/>
+            <SolidColorBrush x:Key="FB.Warning"          Color="#CA8A04"/>
+            <SolidColorBrush x:Key="FB.WarningFaded"     Color="#F9F1DC"/>
+            <SolidColorBrush x:Key="FB.Danger"           Color="#DC2626"/>
+            <SolidColorBrush x:Key="FB.DangerFaded"      Color="#FBE9E9"/>
 
             <!-- Native Segoe stack: Segoe UI Variable on 11, Semibold for the
                  title, Cascadia for monospaced log. -->
@@ -188,6 +193,97 @@
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
+            </Style>
+
+            <!-- Destination-chooser card (Burn to USB / Host on this PC). -->
+            <Style x:Key="DestinationCard" TargetType="Button">
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Card"
+                                    Background="{StaticResource FB.Surface}"
+                                    BorderBrush="{StaticResource FB.Border}"
+                                    BorderThickness="1"
+                                    CornerRadius="10"
+                                    Padding="14">
+                                <ContentPresenter/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource FB.Primary}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Card" Property="Opacity" Value="0.6"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Sidebar server rows: selection ring + faded-teal fill, matching
+                 the Mac HostedServersSidebar. -->
+            <Style x:Key="ServerRowItem" TargetType="ListBoxItem">
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Margin" Value="0,0,0,6"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListBoxItem">
+                            <Border x:Name="Row"
+                                    Background="Transparent"
+                                    BorderBrush="{StaticResource FB.Border}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="8">
+                                <ContentPresenter/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Row" Property="Background" Value="{StaticResource FB.PrimaryFaded}"/>
+                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource FB.Primary}"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource FB.BorderStrong}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Bordered secondary action (Stop / Retry), sibling of BakeButton. -->
+            <Style x:Key="SecondaryButton" TargetType="Button">
+                <Setter Property="MinWidth" Value="90"/>
+                <Setter Property="Height" Value="32"/>
+                <Setter Property="FontFamily" Value="{StaticResource FB.Font.Title}"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="Background" Value="{StaticResource FB.Surface}"/>
+                <Setter Property="Foreground" Value="{StaticResource FB.Text}"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{StaticResource FB.BorderStrong}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="12,0">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Opacity" Value="0.45"/>
+                    </Trigger>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{StaticResource FB.SurfaceElevated}"/>
+                    </Trigger>
+                </Style.Triggers>
             </Style>
         </ResourceDictionary>
     </Application.Resources>

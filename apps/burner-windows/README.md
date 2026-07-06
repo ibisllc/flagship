@@ -1,7 +1,33 @@
-# Flagship Burner — Windows GUI
+# Flagship for Desktop — Windows app
 
-WPF + .NET 8. UX matches `apps/burner-mac/` and `apps/burner-linux/` 1:1:
-one window, drop-rows, big Bake button, collapsed log drawer.
+WPF + .NET 8. The Windows sibling of `apps/burner-mac`, sharing the design
+language (teal `#14B8A6`, the mark, the same information architecture). It has
+grown from the USB burner into the full desktop appliance app; it now spans the
+whole flow:
+
+- **Pair with your phone** — the QR + short-code cover; the phone scans, both
+  confirm a SAS, and the recipe is delivered over the live relay. Drives the
+  shared `flagship-burn pair` CLI (`--emit-events`); the drop-a-recipe-file
+  path remains as a manual fallback.
+- **Burn to USB** — write the recipe's unattended installer to a USB drive
+  (the original burner; see the two modes below).
+- **Host on this PC** — run the recipe as a phone-gated, encrypted Linux VM
+  appliance under **QEMU + WHPX** (`src/VM/`): the pure VM core (mirrors the
+  Mac slice, pinned by `apps/desktop-shared/golden/vm-core-vectors.json`), the
+  QEMU+WHPX backend, a hosted-servers sidebar, and per-server start/stop.
+- **SSH / console into a debug VM** — a VM created from a debug-grant recipe
+  exposes a serial console and an "Open in SSH" affordance (a loopback
+  hostfwd to the guest's `:22`). Reachable straight from the **sidebar**:
+  right-click or the ⋯ menu on a hosted server → *Open in SSH* / *Open
+  console*, or double-click the row to SSH in. This only ever wires up SSH to
+  a VM this app is **hosting locally** (`127.0.0.1:<fwd>`) — it never relays
+  SSH to a box deployed elsewhere. A production VM gets neither console nor SSH
+  — the guardrail is the phone-signed grant, enforced in `QemuCommandLine`.
+
+See `docs/desktop-vm-appliance.md` for the design and `e2e/README.md` for the
+end-to-end VM-boot harness + what's proven vs. open.
+
+## Burn-to-USB modes
 
 Two modes, switchable via the link in the header:
 

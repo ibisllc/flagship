@@ -23,11 +23,18 @@ class BootUnlockApprovalViewModelTest {
         var approveError: Throwable? = null
         var leaseId: String? = "lease-1"
         val approveCalls = mutableListOf<Pair<String, Boolean>>()
+        val entitlementCalls = mutableListOf<String>()
 
         override suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean): String? {
             approveError?.let { throw it }
             approveCalls.add(serverDomain to depositAutoLease)
             return leaseId
+        }
+
+        override suspend fun approvePendingEntitlement(serverDomain: String): String? {
+            approveError?.let { throw it }
+            entitlementCalls.add(serverDomain)
+            return null
         }
     }
 
@@ -35,10 +42,12 @@ class BootUnlockApprovalViewModelTest {
         source: FakeSource,
         sourceOrNull: Boolean = true,
         autoLease: Boolean = true,
+        purpose: com.flagshipserver.app.core.SecretPurpose = com.flagshipserver.app.core.SecretPurpose.UNLOCK_KEY,
     ) = BootUnlockApprovalViewModel(
         serverDomain = domain,
         makeSource = { if (sourceOrNull) source else null },
         depositAutoLease = { autoLease },
+        purpose = purpose,
     )
 
     // ---- Directory-driven surfacing (NO biometric) ----------------------
@@ -54,6 +63,19 @@ class BootUnlockApprovalViewModelTest {
         m.setAwaitingUnlock(true)
         m.setAwaitingUnlock(false)
         assertEquals(BootUnlockApprovalViewModel.State.Idle, m.state.value)
+    }
+
+    /** Box Request Inbox parity: an ENTITLEMENT card dispatches to
+     *  approvePendingEntitlement (NOT the unlock path), so a box stuck on
+     *  serve-authorization is approvable from the same card. Closes the
+     *  silent-box hole (mobile had no entitlement surfacing). */
+    @Test fun entitlementPurpose_dispatchesToEntitlementApproval() = runTest {
+        val source = FakeSource()
+        val m = vm(source, purpose = com.flagshipserver.app.core.SecretPurpose.ENTITLEMENT)
+        m.approve()
+        assertEquals(BootUnlockApprovalViewModel.State.Approved, m.state.value)
+        assertEquals(listOf(domain), source.entitlementCalls)
+        assertTrue("entitlement must NOT take the unlock path", source.approveCalls.isEmpty())
     }
 
     // ---- approve() — one ceremony ---------------------------------------

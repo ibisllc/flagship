@@ -1,14 +1,16 @@
+import type { SwkOps } from "./keyCustodian.js";
 import {
   deriveServiceMemberStableId,
-  deriveServiceSecret,
   verifyInvite,
   verifyInviteAcceptance,
   verifyMembershipMutation,
+  type AdminGrantView,
   type Bytes,
   type InviteAcceptance,
   type InviteToken,
   type MembershipMutation,
 } from "@flagship/protocol";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 
 export interface MembershipEntry {
   /** Hex of the member's IRK pubkey. */
@@ -41,6 +43,19 @@ export interface MembershipStoreOptions {
   maxAgeMs?: number;
   /** Clock for testing. */
   now?: () => number;
+  /**
+   * Slice D (D-2) — service-collaborator membership is SENSITIVE (admin-only).
+   * When the box has a pinned admin master root, invite-create + membership
+   * mutation are gated by `requireMasterAdmin` against THIS; absent ⇒ legacy
+   * owner-IRK verification (a strict no-op on pre-wipe boxes). Only ADMIN ops
+   * (create/mutate) are gated — reading membership + an accepter's acceptance
+   * signature stay membership-IRK.
+   */
+  adminRootPub?: Bytes;
+  /** The account name (for the delegated-grant username check). */
+  ownerUsername?: string;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
 }
 
 /**
@@ -50,6 +65,9 @@ export class InviteStore {
   private readonly redeemed = new Map<string, { redeemedAt: number; accepterIrkPubHex: string }>();
   private readonly maxAgeMs: number;
   private readonly now: () => number;
+  private readonly adminRootPub: Bytes | undefined;
+  private readonly ownerUsername: string;
+  private readonly activeGrants: readonly AdminGrantView[];
 
   constructor(
     public readonly serviceId: string,
@@ -58,6 +76,9 @@ export class InviteStore {
   ) {
     this.maxAgeMs = opts.maxAgeMs ?? 5 * 60_000;
     this.now = opts.now ?? (() => Date.now());
+    this.adminRootPub = opts.adminRootPub;
+    this.ownerUsername = opts.ownerUsername ?? "";
+    this.activeGrants = opts.activeGrants ?? [];
   }
 
   redeem(
@@ -69,7 +90,17 @@ export class InviteStore {
     if (token.serviceId !== this.serviceId) {
       return { ok: false, reason: "app-mismatch" };
     }
-    if (!verifyInvite(token, inviteSig, this.ownerIrkPub)) {
+    if (
+      !authorizeSensitiveOrder({
+        order: token,
+        signature: inviteSig,
+        verify: verifyInvite,
+        ownerIrkPub: this.ownerIrkPub,
+        adminRootPub: this.adminRootPub,
+        username: this.ownerUsername,
+        activeGrants: this.activeGrants,
+      })
+    ) {
       return { ok: false, reason: "invalid-invite-signature" };
     }
     const t = this.now();
@@ -124,6 +155,9 @@ export class MembershipStore {
   private readonly lastSeen = new Map<string, number>();
   private readonly maxAgeMs: number;
   private readonly now: () => number;
+  private readonly adminRootPub: Bytes | undefined;
+  private readonly ownerUsername: string;
+  private readonly activeGrants: readonly AdminGrantView[];
 
   constructor(
     public readonly serviceId: string,
@@ -133,11 +167,25 @@ export class MembershipStore {
   ) {
     this.maxAgeMs = opts.maxAgeMs ?? 5 * 60_000;
     this.now = opts.now ?? (() => Date.now());
+    this.adminRootPub = opts.adminRootPub;
+    // The account name for the admin-grant check; default to the owner user id.
+    this.ownerUsername = opts.ownerUsername ?? ownerUserId;
+    this.activeGrants = opts.activeGrants ?? [];
   }
 
   applySignedMutation(m: MembershipMutation, signature: Bytes): ApplyResult {
     if (m.serviceId !== this.serviceId) return { ok: false, reason: "app-mismatch" };
-    if (!verifyMembershipMutation(m, signature, this.ownerIrkPub)) {
+    if (
+      !authorizeSensitiveOrder({
+        order: m,
+        signature,
+        verify: verifyMembershipMutation,
+        ownerIrkPub: this.ownerIrkPub,
+        adminRootPub: this.adminRootPub,
+        username: this.ownerUsername,
+        activeGrants: this.activeGrants,
+      })
+    ) {
       return { ok: false, reason: "invalid-signature" };
     }
     const age = this.now() - m.issuedAt;
@@ -226,12 +274,20 @@ export class AppMembership {
     public readonly serviceId: string,
     ownerUserId: string,
     ownerIrkPub: Bytes,
-    swk: Bytes,
+    swk: SwkOps,
     opts: MembershipStoreOptions = {},
+    /** Slice D (D-2) — the pinned admin master root; when present, invite-create
+     *  + membership mutation are admin-gated. Absent ⇒ legacy owner-IRK. */
+    adminRootPub?: Bytes,
   ) {
-    this.invites = new InviteStore(serviceId, ownerIrkPub, opts);
-    this.members = new MembershipStore(serviceId, ownerUserId, ownerIrkPub, opts);
-    this.appSecret = deriveServiceSecret(swk, serviceId);
+    const storeOpts: MembershipStoreOptions = {
+      ...opts,
+      ownerUsername: opts.ownerUsername ?? ownerUserId,
+      ...(adminRootPub ? { adminRootPub } : {}),
+    };
+    this.invites = new InviteStore(serviceId, ownerIrkPub, storeOpts);
+    this.members = new MembershipStore(serviceId, ownerUserId, ownerIrkPub, storeOpts);
+    this.appSecret = swk.deriveServiceSecret(serviceId);
   }
 
   /** Redeem an invite, atomically marking the nonce used and adding the member. */

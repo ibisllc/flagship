@@ -2,6 +2,7 @@ import { route, type RouteEnv } from "./route.js";
 import { scheduled, type ScheduledEnv } from "./scheduled.js";
 
 export { BuildRelaySession } from "./buildRelay.js";
+export { BurnerRelaySession } from "./burnerRelay.js";
 
 /**
  * flagshipserver.com — Cloudflare Worker.

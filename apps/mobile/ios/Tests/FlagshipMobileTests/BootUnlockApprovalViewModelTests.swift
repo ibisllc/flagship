@@ -21,6 +21,7 @@ final class BootUnlockApprovalViewModelTests: XCTestCase {
         var approveError: Error?
         var leaseId: String? = "lease-1"
         private(set) var approveCalls: [(serverDomain: String, depositAutoLease: Bool)] = []
+        private(set) var entitlementCalls: [String] = []
 
         func verifiedRequests() async throws -> [SecretRequestCoordinator.VerifiedRequest] { [] }
         @discardableResult
@@ -30,6 +31,12 @@ final class BootUnlockApprovalViewModelTests: XCTestCase {
             if let approveError { throw approveError }
             approveCalls.append((serverDomain, depositAutoLease))
             return leaseId
+        }
+        @discardableResult
+        func approvePendingEntitlement(serverDomain: String) async throws -> String? {
+            if let approveError { throw approveError }
+            entitlementCalls.append(serverDomain)
+            return nil
         }
     }
 
@@ -42,6 +49,40 @@ final class BootUnlockApprovalViewModelTests: XCTestCase {
         store: BootUnlockStore = BootUnlockStore(defaults: BootUnlockApprovalViewModelTests.freshDefaults())
     ) -> BootUnlockApprovalViewModel {
         BootUnlockApprovalViewModel(serverDomain: domain, makeCoordinator: { source }, store: store)
+    }
+
+    /// Regression: a box already waiting when the card is constructed must show
+    /// the request prompt on the FIRST render — the seed, not a deferred
+    /// `.onAppear` flip (a zero-size EmptyView's onAppear can miss in a
+    /// ScrollView, which left the card permanently blank). The live office.harry2
+    /// bug: directory awaitingUnlock=true, yet no Approve card surfaced.
+    func test_initialAwaiting_seedsRequestPending_onFirstRender() {
+        let vm = BootUnlockApprovalViewModel(
+            serverDomain: domain, makeCoordinator: { nil }, initialAwaiting: true
+        )
+        XCTAssertEqual(vm.state, .requestPending)
+    }
+
+    func test_initialAwaiting_false_staysIdle() {
+        let vm = BootUnlockApprovalViewModel(
+            serverDomain: domain, makeCoordinator: { nil }, initialAwaiting: false
+        )
+        XCTAssertEqual(vm.state, .idle)
+    }
+
+    /// The Box Request Inbox parity fix: an `.entitlement` card dispatches to
+    /// approvePendingEntitlement (NOT the unlock path), so a box stuck on
+    /// serve-authorization is approvable from the same card. Regression guard on
+    /// the silent-box hole (mobile had no entitlement surfacing at all).
+    func test_entitlementPurpose_dispatchesToEntitlementApproval() async {
+        let source = FakeSource()
+        let vm = BootUnlockApprovalViewModel(
+            serverDomain: domain, purpose: .entitlement, makeCoordinator: { source }
+        )
+        await vm.approve()
+        XCTAssertEqual(vm.state, .approved)
+        XCTAssertEqual(source.entitlementCalls, [domain])
+        XCTAssertTrue(source.approveCalls.isEmpty, "entitlement must NOT take the unlock path")
     }
 
     // MARK: - Directory-driven surfacing (NO biometric)

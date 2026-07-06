@@ -56,6 +56,7 @@ import { bytesToHex } from "./hex.js";
 import {
   deriveDemoDelegatedKey,
   deriveDemoRckKey,
+  deriveDemoUserAid,
   deriveDemoUserIrk,
   parseDiskEncryption,
   _internalDefaultDemoPrimaryScopes,
@@ -73,6 +74,13 @@ import type { ProvisioningHetznerClient } from "./demoUsersAdminProvision.js";
 // ──────────────────────────────────────────────────────────────────────
 
 export interface DemoCloudInitDeps {
+  /** The services apex (default "flagship.services"); a test env sets it to
+   *  e.g. "gym.flagship.services" so demo boxes land in ITS namespace. */
+  apex?: string;
+  /** The control-plane apex (default "flagshipserver.com"); a test env sets it
+   *  to e.g. "gym.flagshipserver.com" so the box's blob registrationUrl points
+   *  at IT, not prod. (The ISO-baked beacon/boot URLs still need a gym ISO.) */
+  controlApex?: string;
   storage: DemoUsersStorage;
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
@@ -186,11 +194,27 @@ export function buildCloudConfigUserData(args: {
    * never ship the IRK priv.
    */
   demoUserIrkPrivHex: string;
+  /**
+   * gating v2 — the owner's STABLE AID pubkey (hex). Pinned into the box config
+   * (ownerAidPubHex) so the daemon verifies AID-signed service-invite create/
+   * revoke + the box-as-authority redeem. Deterministic-from-KEK for demo; a
+   * real install would carry it from the signed blob. OPTIONAL: absent ⇒ the
+   * config omits it and the box falls back to owner-IRK verification.
+   */
+  ownerAidPubHex?: string;
 }): string {
   const blobB64 = b64Utf8(args.installBlobJson);
   if (!/^[0-9a-f]{64}$/i.test(args.demoUserIrkPrivHex)) {
     throw new Error("buildCloudConfigUserData: demoUserIrkPrivHex must be 32-byte hex");
   }
+  if (args.ownerAidPubHex !== undefined && !/^[0-9a-f]{64}$/i.test(args.ownerAidPubHex)) {
+    throw new Error("buildCloudConfigUserData: ownerAidPubHex must be 32-byte hex");
+  }
+  // Pinned at TEMPLATE time (deterministic-from-KEK, like the git-ref) — it is
+  // NOT in the install blob the bootstrap reads on the VPS.
+  const ownerAidConfigField = args.ownerAidPubHex
+    ? `,"ownerAidPubHex":"${args.ownerAidPubHex}"`
+    : "";
   // Validate git-ref shape inline (defense in depth — the operator
   // could only have set this via the Worker's wrangler.toml or
   // env-coded default, but the ref still gets shell-substituted in the
@@ -236,8 +260,18 @@ GIT_REF="${args.installerGitRef}"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \\
-    git curl jq ca-certificates xxd cryptsetup lvm2 gnupg \\
+    git curl jq ca-certificates xxd cryptsetup lvm2 gnupg openssl \\
     || echo "[flagship-bootstrap] WARNING: some apt packages failed; check above"
+# Docker on a SEPARATE line so a docker failure can never break the core
+# packages (git/curl/jq) the bootstrap depends on — a single bad name aborts the
+# whole apt invocation. On Debian, docker.io bundles the CLI (there is NO
+# docker-cli package — listing it aborts the install).
+apt-get install -y --no-install-recommends docker.io docker-compose apparmor \\
+    || echo "[flagship-bootstrap] WARNING: docker install failed; apps won't run"
+# apparmor provides apparmor_parser — Debian enables AppArmor, and without the
+# parser \`docker run\` fails to load the docker-default profile (exit 127), so
+# NO container ever starts. (Surfaced installing a real service on a gym box.)
+systemctl enable --now docker.service 2>/dev/null || echo "[flagship-bootstrap] WARNING: docker enable failed"
 
 # NodeSource Node 20 — official upstream Node.js apt repo. Idempotent
 # even if rerun. Uses the setup script's keyring + sources.list.d entry.
@@ -254,6 +288,10 @@ SERVER_NAME="$(jq -r .serverName "$BLOB_JSON")"
 REGISTRATION_URL="$(jq -r .registrationUrl "$BLOB_JSON")"
 PHONE_DELEGATED_PUBKEY="$(jq -r .phoneDelegatedPubKey "$BLOB_JSON")"
 AUTH_CODE_SERIAL="$(jq -r .authCode.serial "$BLOB_JSON")"
+# The account (owner) IRK pubkey. The box pins this as the verifier for every
+# owner-signed request (front-page / journal / power / dead-man). On the demo
+# path it's the deterministic demo User IRK the admin minted into the blob.
+USER_IRK_PUB="$(jq -r .authCode.userPubKey "$BLOB_JSON")"
 echo "[flagship-bootstrap] domain=$SERVER_DOMAIN user=$USERNAME ref=$GIT_REF"
 
 # Provisioning observability — POST a canonical ProvisionStatusPhase to the
@@ -393,10 +431,43 @@ shred -u "$LUKS_KEY" 2>/dev/null || rm -f "$LUKS_KEY"
 #     (FLAGSHIP_SUBDOMAIN + FLAGSHIP_IDENTITY_PRIV_HEX) from the process
 #     env only; without them it logs "Missing required inputs" and exits
 #     2. systemd loads this file via EnvironmentFile= in the unit below.
+#     FLAGSHIP_CONTROL_PLANE_BASE_URL pins the daemon to the SAME control
+#     plane that provisioned it (CTRL_BASE, derived from the blob's
+#     registrationUrl), so hub-discovery (/api/services/endpoints), ACME
+#     DNS-01, and the status heartbeat all target this env. Prod boxes get
+#     the default flagshipserver.com; a test env (gym) gets
+#     gym.flagshipserver.com → the box lands in the gym's hub + DNS zone
+#     instead of contaminating (or vanishing into) prod.
 mkdir -p /etc/flagship
+# Server config (FLAGSHIP_CONFIG). Gives the daemon the owner IRK so
+# wireOwnerHandlers() mounts the owner-signed API — front-page (owner-assignable
+# apex), journal (IRK-signed diagnostics), power, dead-man. WITHOUT a config the
+# daemon logs "FLAGSHIP_CONFIG not provided; skipping local HTTP API" and every
+# one of those endpoints 404s (the cfg===null short-circuit). bakPublicKey reuses
+# the phone-delegated key — a valid 32-byte pub, and it's NOT on the owner-verify
+# path (that's irkPublicKey). A malformed config fails closed (daemon falls back
+# to no-cfg), so this never blocks the cert/serving bring-up.
+cat > /etc/flagship/config.json <<CFGEOF
+{"serverId":"$SERVER_DOMAIN","userId":"$USERNAME","bakPublicKey":"$PHONE_DELEGATED_PUBKEY","irkPublicKey":"$USER_IRK_PUB"${ownerAidConfigField}}
+CFGEOF
+chmod 600 /etc/flagship/config.json
+# Sealing key (SWK). The daemon constructs the ServicePlatform — i.e. the whole
+# services / build / deploy / screens / vibe surface — ONLY when it has
+# host{username,irkPub} (the config above) AND an SWK. Nothing else mints one, so
+# generate a random 32-byte SWK here: this is what flips a demo box from
+# "cert+serve only" (GET /api/services → 503) to a full app-hosting box. (The
+# demo root is plaintext, so this is a TEST sealing key, not a real at-rest key.)
+openssl rand -hex 32 > /var/flagship/swk.hex 2>/dev/null \\
+    || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \\n' > /var/flagship/swk.hex
+chmod 600 /var/flagship/swk.hex
 cat > /etc/flagship/daemon.env <<ENVEOF
 FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN
 FLAGSHIP_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX
+FLAGSHIP_CONTROL_PLANE_BASE_URL=$CTRL_BASE
+FLAGSHIP_CONFIG=/etc/flagship/config.json
+FLAGSHIP_SWK_HEX=$(cat /var/flagship/swk.hex)
+FLAGSHIP_PSK_PUB_HEX=$PHONE_DELEGATED_PUBKEY
+FLAGSHIP_LLM_DEFAULT_MODEL=gpt-4o-mini
 ENVEOF
 chmod 600 /etc/flagship/daemon.env
 
@@ -488,8 +559,31 @@ SEALED_LUKS_KEY_HEX=$SEALED_LUKS_KEY_HEX
 ENV
 chmod 600 /etc/flagship-bootstrap.env
 
+# Data-services oneshot — brings up the docker stack (postgres/minio/redis/
+# forgejo/chromium) that data-backed apps + the git/vibe BUILD path need. Gated
+# on the env file NOT existing (init.sh writes it), so it's idempotent. The
+# daemon degrades gracefully if it's not up yet (data layer disabled) and picks
+# up the creds on its next restart, so this never blocks the cert/serve bring-up.
+cat > /etc/systemd/system/flagship-data-services.service <<'DSUNIT'
+[Unit]
+Description=Flagship data-services (docker stack)
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+ConditionPathExists=!/var/flagship/data-services.env
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/flagship
+ExecStart=/bin/bash /opt/flagship/installer/data-services/init.sh
+RemainAfterExit=yes
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
+DSUNIT
+
 systemctl daemon-reload
-systemctl enable flagship-daemon.service flagship-first-boot-register.service
+systemctl enable flagship-daemon.service flagship-first-boot-register.service flagship-data-services.service
 echo "[flagship-bootstrap] systemd units installed + enabled"
 
 # 9. Run registration INLINE here (don't wait for systemd to pick it
@@ -596,6 +690,7 @@ export async function handleAdminCloudInitNow(
   // path as handleAdminSnapshotNow, so trailer-free and ISO-based runs
   // sign with the exact same IRK.
   const userIrk = deriveDemoUserIrk(deps.demoIrkKek, u);
+  const userAid = deriveDemoUserAid(deps.demoIrkKek, u);
   const delegated = deriveDemoDelegatedKey(deps.demoIrkKek, u);
   const rck = deriveDemoRckKey(deps.demoIrkKek, u);
   const userIrkHex = bytesToHex(userIrk.publicKey);
@@ -606,7 +701,7 @@ export async function handleAdminCloudInitNow(
   }
 
   const serial = bytesToHex(rand(16));
-  const serverDomain = `${serverName}.${u}.flagship.services`;
+  const serverDomain = `${serverName}.${u}.${deps.apex ?? "flagship.services"}`;
   const issuedAt = now;
   const expiresAt = now + 24 * 3_600_000;
 
@@ -645,7 +740,7 @@ export async function handleAdminCloudInitNow(
     username: u,
     serverName,
     phoneDelegatedPubKey: delegated.publicKey,
-    registrationUrl: "https://flagshipserver.com/api/server/register",
+    registrationUrl: `https://${deps.controlApex ?? "flagshipserver.com"}/api/server/register`,
     authCode,
     authCodeUserSignature: authCodeSig,
     installerGitRef,
@@ -700,6 +795,10 @@ export async function handleAdminCloudInitNow(
     installBlobJson: blobJson,
     installerGitRef,
     demoUserIrkPrivHex: bytesToHex(userIrk.privateKey),
+    // gating v2 — the box pins the owner AID (deterministic-from-KEK for demo)
+    // so it can verify AID-signed service-invite create/revoke + the box-as-
+    // authority redeem. A real install would carry this from the signed blob.
+    ownerAidPubHex: bytesToHex(userAid.publicKey),
   });
 
   let prov: { serverId: string; ipv4: string | null };

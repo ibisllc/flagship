@@ -128,30 +128,87 @@ public final class AppState {
     /// (the watcher keeps its legacy keep-waiting behaviour).
     public var lastKnownOutstandingOrderRefs: Set<String>?
 
-    /// Lowercased fqdns of servers that currently have a LIVE pending boot-
-    /// unlock request in the identity-plane mailbox (a box waiting for the
-    /// owner's approval). Populated by ONE account-level poll
-    /// (`BootApprovalWatcher`) so the list / card / detail can read a per-server
-    /// "is it waiting for me?" without N pollers. Empty ⇒ none waiting (or not
-    /// polled yet this session).
-    public var serversAwaitingApproval: Set<String> = []
+    /// The Box Request Inbox (docs/box-request-inbox.md): ONE typed object,
+    /// keyed by lowercased fqdn → the list of approvals that box is currently
+    /// asking its owner for. Mirrors the backend's `/pods` `pendingRequests`
+    /// digest (`[{id,type,issuedAt,expiresAt}]`) — `unlock-key` and `entitlement`
+    /// are two `type` values in ONE inbox, not two parallel sets. Populated by
+    /// ONE account-level poll (`BootApprovalWatcher`) so the list / card / detail
+    /// read a per-server "what is it asking me?" without N pollers. Empty ⇒
+    /// nothing waiting (or not polled yet this session). The legacy
+    /// `hasLiveUnlockRequest` / `hasLiveEntitlementRequest` accessors are now
+    /// DERIVED from this by filtering on `type`.
+    public var boxRequestInbox: [String: [BoxRequest]] = [:]
 
-    /// True iff [fqdn] has a live pending unlock request right now. Case-folds
-    /// the lookup. The single bridge from the account-level set into the
-    /// per-server liveness classifier.
+    /// Every pending request across all of the owner's boxes, newest first —
+    /// the flat inbox the inbox view renders from.
+    public var boxRequests: [BoxRequest] {
+        boxRequestInbox.values.flatMap { $0 }.sorted { $0.issuedAt > $1.issuedAt }
+    }
+
+    /// The pending requests for [fqdn] of a given type (case-folds the lookup).
+    public func boxRequests(forFqdn fqdn: String, type: SecretPurpose) -> [BoxRequest] {
+        (boxRequestInbox[fqdn.lowercased()] ?? []).filter { $0.type == type }
+    }
+
+    /// True iff [fqdn] has a live pending unlock request right now. Derived from
+    /// the unified inbox (`type == .unlockKey`). The single bridge from the
+    /// account-level inbox into the per-server liveness classifier.
     public func hasLiveUnlockRequest(forFqdn fqdn: String) -> Bool {
-        serversAwaitingApproval.contains(fqdn.lowercased())
+        !boxRequests(forFqdn: fqdn, type: .unlockKey).isEmpty
+    }
+
+    /// True iff [fqdn] is waiting for the owner to authorize it to serve.
+    /// Derived from the unified inbox (`type == .entitlement`).
+    public func hasLiveEntitlementRequest(forFqdn fqdn: String) -> Bool {
+        !boxRequests(forFqdn: fqdn, type: .entitlement).isEmpty
+    }
+
+    /// Lowercased fqdns with a live request of [type] — the display set a view
+    /// projects from the unified inbox (mirrors the old `serversAwaiting*`
+    /// shape, now derived).
+    public func serversAwaiting(_ type: SecretPurpose) -> Set<String> {
+        Set(boxRequestInbox.compactMap { key, reqs in
+            reqs.contains { $0.type == type } ? key : nil
+        })
+    }
+
+    /// True when [pod] is actively waiting for an entitlement (serve-auth)
+    /// approval. Mirrors `isAwaitingUnlock`; reads the account-level set.
+    public func isAwaitingEntitlement(_ pod: PodInfo) -> Bool {
+        hasLiveEntitlementRequest(forFqdn: pod.fqdn)
+    }
+
+    /// True when [pod] is actively waiting for a boot-unlock approval. The
+    /// SINGLE source the UI must use — the status badge AND the per-server
+    /// Approve card — so the two never disagree. It ORs two signals of
+    /// different freshness: the per-pod `awaitingUnlock` flag (refreshed only
+    /// by a full `/pods` reconcile) and the account-level Box Request Inbox
+    /// (refreshed every 5s by `BootApprovalWatcher`). A box that STARTS
+    /// waiting after the last full reconcile has a stale-false per-pod flag but
+    /// a fresh set membership — reading the per-pod flag alone hid the Approve
+    /// card on server-detail while Home still showed "waiting for approval".
+    public func isAwaitingUnlock(_ pod: PodInfo) -> Bool {
+        pod.awaitingUnlock || hasLiveUnlockRequest(forFqdn: pod.fqdn)
     }
 
     /// Liveness for [pod] using the account-level waiting set. Convenience over
     /// `PodInfo.livenessState(hasLiveUnlockRequest:)` so callsites don't repeat
     /// the set lookup.
     public func liveness(for pod: PodInfo) -> PodInfo.LivenessState {
-        // The cheap directory `awaitingUnlock` flag OR the biometric-watcher set
-        // — either one means the box is actively waiting, so it must not read as
-        // "never came online" (and the decommission/delete must stay hidden).
-        let waiting = pod.awaitingUnlock || hasLiveUnlockRequest(forFqdn: pod.fqdn)
-        return pod.livenessState(hasLiveUnlockRequest: waiting)
+        // The cheap directory `awaitingUnlock`/`awaitingEntitlement` flags OR the
+        // watcher sets — any one means the box is actively waiting for an owner
+        // approval, so it must not read as "never came online" (and the
+        // decommission/delete must stay hidden). Folding entitlement in here is
+        // what makes a box stuck on serve-authorization show "waiting for
+        // approval" on Home instead of looking dead.
+        return pod.livenessState(hasLiveUnlockRequest: isAwaitingApproval(pod))
+    }
+
+    /// True when [pod] is waiting for ANY owner approval — unlock OR entitlement.
+    /// The single "don't classify this dead, surface the approval" signal.
+    public func isAwaitingApproval(_ pod: PodInfo) -> Bool {
+        isAwaitingUnlock(pod) || isAwaitingEntitlement(pod)
     }
 
     /// W3 — durable list of clouds this phone is a member of. The
@@ -250,14 +307,42 @@ public final class AppState {
         return pods.first(where: { $0.podId == id })
     }
 
+    /// DETERMINISTIC FALLBACK (Fix C) — the OLDEST pod. `.com` returns `/pods`
+    /// oldest-first, so `pods.first` IS the oldest. The UI default pod / leader
+    /// must NEVER silently float to a brand-new box (= whatever appeared first in
+    /// some other ordering); when an explicit anchor is missing or dangling, it
+    /// re-anchors HERE — the stable, oldest pod — so adding a server can't seize
+    /// the default. nil only when there are no pods.
+    private var oldestPod: PodInfo? { pods.first }
+
     public var currentPod: PodInfo? {
         if let id = currentPodId, let p = pods.first(where: { $0.podId == id }) { return p }
-        return leaderPod ?? pods.first
+        // The leader is the UI default. If it resolves, use it; otherwise fall
+        // back to the OLDEST pod (deterministic) — NOT `pods.first` "by accident"
+        // and never the newest box.
+        return leaderPod ?? oldestPod
+    }
+
+    /// The GLOBAL anchor pod for Home/Services (the default box session). Unlike
+    /// `currentPod` — which resolves to the LEADER and thus, by default, the
+    /// OLDEST pod regardless of liveness — this prefers a genuinely-LIVE pod
+    /// (HONEST LIVENESS, Fix A: `.status == .online` now means a real heartbeat,
+    /// not mere registration). A registered-but-dead/unreachable pod that happens
+    /// to be the leader must NOT anchor the global session: the selected pod if
+    /// it's online, else the first online pod; nil when no pod is online (the
+    /// per-pod detail still targets its own box deterministically via the fqdn).
+    public var sessionPod: PodInfo? {
+        if let p = currentPod, p.status == .online { return p }
+        return pods.first(where: { $0.status == .online })
     }
 
     public func completeOnboarding(username: String, pods: [PodInfo]) {
         self.currentUser = username
         self.pods = pods
+        // The genuine first anchor: the OLDEST pod (`pods.first` — `.com` returns
+        // `/pods` oldest-first). This is the only place leadership is seeded from
+        // the list; thereafter it's STICKY (Fix C) — `addPod` never re-seeds it,
+        // so a later box can't seize the default.
         self.leaderPodId = pods.first?.podId
         self.currentPodId = pods.first?.podId
         self.isPaired = true
@@ -335,6 +420,12 @@ public final class AppState {
 
     public func addPod(_ pod: PodInfo) {
         pods.append(pod)
+        // STICKY LEADERSHIP (Fix C) — a newly-added box must NEVER change the
+        // leader / default pod. A new server auto-seizing leadership was the
+        // reported bug ("frank seized leadership"). We seed leader/current ONLY
+        // when none is set yet (the genuine first-pod / cold-restore case); an
+        // existing leader is left exactly as it is, so the new box is just
+        // another selectable pod — not the new default.
         if leaderPodId == nil { leaderPodId = pod.podId }
         if currentPodId == nil { currentPodId = pod.podId }
     }
@@ -402,27 +493,57 @@ public final class AppState {
         description: String? = nil,
         cameOnline: Bool = true,
         registeredAt: Int64 = 0,
-        awaitingUnlock: Bool = false
+        awaitingUnlock: Bool = false,
+        liveness: PodInfo.Liveness? = nil,
+        lastSeenMsAgo: Int64? = nil,
+        lastReported: Int64? = nil,
+        identityPubKeyHex: String = "",
+        leadsServices: [String] = []
     ) -> String {
+        // HONEST LIVENESS (Fix A) — derive the pod's status from the
+        // server-authoritative `liveness` field instead of trusting that a
+        // registered box is `.online`. `.live` → online; `.unreachable` →
+        // offline (a previously-live box now stale); `.never` → unknown
+        // (registered, awaiting its first heartbeat — NOT session-eligible, so
+        // it can't anchor a box session or be picked as a live leader). When
+        // `.com` didn't send the field (pre-field Worker), fall back to the
+        // legacy registration-is-online behavior.
+        let derivedStatus: PodInfo.Status
+        switch liveness {
+        case .live:        derivedStatus = .online
+        case .unreachable: derivedStatus = .offline
+        case .never:       derivedStatus = .unknown
+        case nil:          derivedStatus = .online
+        }
         let target = fqdn.lowercased()
         if let idx = pods.firstIndex(where: { $0.fqdn.lowercased() == target }) {
             let old = pods[idx]
-            // Already online with a confirmed check-in AND not waiting — nothing
-            // to do (don't clobber a richer name). A previously-dead pod that has
-            // since come online, OR one that's now waiting for an unlock approval,
-            // must still be re-flowed below so its pill updates.
-            if old.status == .online && old.cameOnline && !awaitingUnlock { return old.podId }
+            // Already at the derived liveness with a confirmed check-in AND not
+            // waiting AND the liveness signal hasn't changed — nothing to do
+            // (don't clobber a richer name). A box whose reachability changed,
+            // came online, or is now waiting for an approval is re-flowed below.
+            if old.status == derivedStatus && old.cameOnline && !awaitingUnlock
+                && old.liveness == liveness && old.lastSeenMsAgo == lastSeenMsAgo
+                && old.leadsServices == leadsServices {
+                return old.podId
+            }
             pods[idx] = PodInfo(
                 podId: old.podId,
                 name: old.name.isEmpty ? name : old.name,
                 description: old.description ?? description,
                 fqdn: old.fqdn,
-                status: .online,
+                status: derivedStatus,
                 pendingAuthCodeSerial: nil,
                 cameOnline: cameOnline,
                 // Keep a known registration time; never downgrade to 0.
                 registeredAt: registeredAt > 0 ? registeredAt : old.registeredAt,
-                awaitingUnlock: awaitingUnlock
+                awaitingUnlock: awaitingUnlock,
+                liveness: liveness,
+                lastSeenMsAgo: lastSeenMsAgo,
+                lastReported: lastReported ?? old.lastReported,
+                // Keep a known STK; never downgrade to empty on a sparse update.
+                identityPubKeyHex: identityPubKeyHex.isEmpty ? old.identityPubKeyHex : identityPubKeyHex,
+                leadsServices: leadsServices
             )
             return old.podId
         }
@@ -432,10 +553,15 @@ public final class AppState {
             name: name,
             description: description,
             fqdn: fqdn,
-            status: .online,
+            status: derivedStatus,
             cameOnline: cameOnline,
             registeredAt: registeredAt,
-            awaitingUnlock: awaitingUnlock
+            awaitingUnlock: awaitingUnlock,
+            liveness: liveness,
+            lastSeenMsAgo: lastSeenMsAgo,
+            lastReported: lastReported,
+            identityPubKeyHex: identityPubKeyHex,
+            leadsServices: leadsServices
         ))
         return id
     }
@@ -450,10 +576,53 @@ public final class AppState {
         currentPodId = podId
     }
 
+    /// PREFER a fresher, box-direct leadership view over the `.com` `/pods`
+    /// relay (Phase 6). `directByFqdn` is the inverted per-pod model
+    /// (lowercased fqdn → the slugs that box leads) produced from a box's
+    /// `GET /api/leads` (see `DirectLeadsInversion`). For each known pod we
+    /// OVERRIDE its `leadsServices` with the direct value — including an empty
+    /// list, so a box that just YIELDED a service stops showing the stale relay
+    /// badge. A pod absent from the map keeps its relay value untouched (we
+    /// learned nothing fresher about it), so this never regresses and is a
+    /// pure no-op when the map is empty. Best-effort: call it only with the
+    /// result of a SUCCESSFUL direct read; on any fetch failure the caller
+    /// simply doesn't call this and the relay value stands.
+    public func applyDirectLeads(_ directByFqdn: [String: [String]]) {
+        guard !directByFqdn.isEmpty else { return }
+        for idx in pods.indices {
+            let key = pods[idx].fqdn.lowercased()
+            guard let slugs = directByFqdn[key] else { continue }
+            if pods[idx].leadsServices == slugs { continue }
+            let old = pods[idx]
+            pods[idx] = PodInfo(
+                podId: old.podId,
+                name: old.name,
+                description: old.description,
+                fqdn: old.fqdn,
+                status: old.status,
+                pendingAuthCodeSerial: old.pendingAuthCodeSerial,
+                demoServer: old.demoServer,
+                cameOnline: old.cameOnline,
+                registeredAt: old.registeredAt,
+                awaitingUnlock: old.awaitingUnlock,
+                liveness: old.liveness,
+                lastSeenMsAgo: old.lastSeenMsAgo,
+                lastReported: old.lastReported,
+                identityPubKeyHex: old.identityPubKeyHex,
+                leadsServices: slugs
+            )
+        }
+    }
+
     public func removePod(_ podId: String) {
         pods.removeAll { $0.podId == podId }
-        if leaderPodId == podId { leaderPodId = pods.first?.podId }
-        if currentPodId == podId { currentPodId = leaderPodId ?? pods.first?.podId }
+        // DETERMINISTIC RE-ANCHOR (Fix C) — when the removed pod WAS the leader,
+        // the leader dangles. Re-anchor explicitly to the OLDEST remaining pod
+        // (`oldestPod`, = `pods.first` since `.com` returns oldest-first) rather
+        // than letting `currentPod` silently float to whatever happens to be
+        // first. A non-leader removal leaves the leader untouched (sticky).
+        if leaderPodId == podId { leaderPodId = oldestPod?.podId }
+        if currentPodId == podId { currentPodId = leaderPodId ?? oldestPod?.podId }
     }
 
     public func signOut() {
@@ -580,6 +749,44 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
     /// hidden). Defaults false (pending/demo/pre-field-Worker pods).
     public let awaitingUnlock: Bool
 
+    /// HONEST LIVENESS — the server-authoritative reachability classification
+    /// from the `/pods` directory (`liveness: "live" | "unreachable" | "never"`).
+    /// `.com` computes this from the box's daemon-status heartbeat against a
+    /// freshness window — so the phone STOPS trusting mere registration as
+    /// "online". nil ⇒ a pre-field Worker response that didn't carry the field
+    /// (the reconciler falls back to registration-derived `cameOnline`).
+    ///   - `.live`        → the box is reachable (heartbeat within the window).
+    ///   - `.unreachable` → it checked in before but has now gone stale/offline.
+    ///   - `.never`       → registered but never sent a real heartbeat — still
+    ///                      coming up / awaiting first heartbeat, NOT dead.
+    public let liveness: Liveness?
+
+    /// Wall-clock ms since the box's last daemon-status check-in, from `/pods`
+    /// (`lastSeenMsAgo`). Humanized into "offline — last seen <…>" when the box
+    /// is `.unreachable`. nil ⇒ never checked in (or a pre-field Worker).
+    public let lastSeenMsAgo: Int64?
+
+    /// Wall-clock ms of the box's last daemon-status check-in (`lastReported`
+    /// from `/pods`), threaded for completeness. nil ⇒ never reported.
+    public let lastReported: Int64?
+
+    /// The box's registered STK (its identity pubkey, hex) from `/pods`
+    /// (`identityPubKey`). Threaded onto the model so the "Set as preferred
+    /// server" owner vote can name THIS box's STK (`preferredStkPubHex`) without
+    /// a second directory fetch. Empty for pending/demo pods (no registration).
+    public let identityPubKeyHex: String
+
+    /// Per-service leadership (Phase 6) — the service slugs this box currently
+    /// LEADS, relayed verbatim from `/pods` (`leadsServices`). Additive + tolerant
+    /// of absence: empty when `.com` didn't carry it (pre-field Worker) or the box
+    /// leads nothing. Surfaced as a small "lead" indicator on the server card.
+    public let leadsServices: [String]
+
+    /// Server-authoritative reachability, mirroring `.com`'s `/pods` `liveness`.
+    public enum Liveness: String, Sendable, Hashable {
+        case live, unreachable, never
+    }
+
     public init(
         podId: String,
         name: String,
@@ -590,7 +797,12 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         demoServer: DemoServerBlock? = nil,
         cameOnline: Bool = true,
         registeredAt: Int64 = 0,
-        awaitingUnlock: Bool = false
+        awaitingUnlock: Bool = false,
+        liveness: Liveness? = nil,
+        lastSeenMsAgo: Int64? = nil,
+        lastReported: Int64? = nil,
+        identityPubKeyHex: String = "",
+        leadsServices: [String] = []
     ) {
         self.podId = podId
         self.name = name
@@ -602,6 +814,11 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         self.cameOnline = cameOnline
         self.registeredAt = registeredAt
         self.awaitingUnlock = awaitingUnlock
+        self.liveness = liveness
+        self.lastSeenMsAgo = lastSeenMsAgo
+        self.lastReported = lastReported
+        self.identityPubKeyHex = identityPubKeyHex
+        self.leadsServices = leadsServices
     }
 
     /// Derived per-server liveness — the single classifier the list, the
@@ -621,22 +838,68 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         /// Registered, no live request, no check-in, and past the grace window
         /// — the box genuinely never came online. Offer the free-the-name delete.
         case dead
+        /// HONEST LIVENESS — the box HAS checked in before but its heartbeat has
+        /// gone stale (server-authoritative `liveness == "unreachable"`). Unlike
+        /// `.dead` (never came online) this is a previously-live box that's now
+        /// offline; the UI shows "offline — last seen <…>", NOT the decommission
+        /// path. Reachable again on the next live heartbeat.
+        case offline
     }
 
-    /// Classify a registered/pending pod. `online` short-circuits on
-    /// `cameOnline`. Otherwise a live unlock request wins (waitingForApproval);
-    /// failing that, a recent registration is `comingOnline` and an old one is
-    /// `dead`. Pending (pre-registration) pods are reported `comingOnline` so
-    /// they never read as dead — the list keeps its own Pending pill for them.
+    /// Classify a registered/pending pod. When the server-authoritative
+    /// `liveness` field is present (Fix A) it is TRUSTED — the phone no longer
+    /// infers "online" from mere registration:
+    ///   - `.live`        → `.online`.
+    ///   - `.unreachable` → `.offline` (a real heartbeat existed but went stale).
+    ///   - `.never`       → a live request wins (waitingForApproval); else still
+    ///                      `.comingOnline` (awaiting first heartbeat, NOT dead).
+    /// When `liveness` is absent (pre-field Worker / pending / demo), the legacy
+    /// registration-derived path holds: `online` short-circuits on `cameOnline`;
+    /// a live unlock request wins; a recent registration is `comingOnline`, an
+    /// old one `dead`; pending (pre-registration) pods read `comingOnline`.
     public func livenessState(
         hasLiveUnlockRequest: Bool,
         now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
     ) -> LivenessState {
+        if let liveness {
+            switch liveness {
+            case .live: return .online
+            case .unreachable:
+                // A box stuck waiting for an owner approval (boot-unlock /
+                // entitlement) is actively trying to come up — surface the
+                // approval rather than reading it as merely offline.
+                if hasLiveUnlockRequest { return .waitingForApproval }
+                return .offline
+            case .never:
+                if hasLiveUnlockRequest { return .waitingForApproval }
+                return .comingOnline
+            }
+        }
         if status == .online && cameOnline { return .online }
         if hasLiveUnlockRequest { return .waitingForApproval }
         if status == .pending { return .comingOnline }
         let age = now - registeredAt
         if registeredAt > 0 && age <= PodInfo.comingOnlineGraceMs { return .comingOnline }
         return .dead
+    }
+
+    /// Humanized "last seen" for an `.unreachable` box, e.g. "2 hours" or
+    /// "just now" — feeds the "offline — last seen <…>" copy. nil ⇒ no
+    /// reachability age available.
+    public func humanizedLastSeen() -> String? {
+        guard let ms = lastSeenMsAgo, ms >= 0 else { return nil }
+        return PodInfo.humanizeAge(ms)
+    }
+
+    /// Shared, locale-free age humanizer (mirrors the webapp `formatAge`).
+    public static func humanizeAge(_ ms: Int64) -> String {
+        let sec = ms / 1000
+        if sec < 60 { return "just now" }
+        let min = sec / 60
+        if min < 60 { return "\(min) minute\(min == 1 ? "" : "s") ago" }
+        let hr = min / 60
+        if hr < 24 { return "\(hr) hour\(hr == 1 ? "" : "s") ago" }
+        let day = hr / 24
+        return "\(day) day\(day == 1 ? "" : "s") ago"
     }
 }

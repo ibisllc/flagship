@@ -27,6 +27,7 @@ package com.flagshipserver.app.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flagshipserver.app.core.AdminPairingRelay
+import com.flagshipserver.app.core.GymSeams
 import com.flagshipserver.app.core.DeviceAdmit
 import com.flagshipserver.app.core.DeviceAdmitClaim
 import com.flagshipserver.app.core.HexUtil
@@ -94,12 +95,39 @@ class AddDeviceViewModel(
     /** Anti-double-tap window (ms) before Confirm un-gates. Injectable so
      *  tests can drive the gate without a real 600ms wait. */
     private val confirmGateMs: Long = SAS_CONFIRM_GATE_MS,
+    /** Slice D (D-4) — true iff THIS device holds the admin master root, so it
+     *  can seal it to the joining device. Only then is the "Also make this
+     *  device an admin" toggle offered. Defaults to the live Keystore. */
+    private val canPromote: () -> Boolean = { GymSeams.forceAdminRoot || Keystore.hasAdminRoot() },
+    /** Slice D (D-4) — reads the 32-byte admin master-root seed to seal into the
+     *  bundle when promote is ON. Null when this device holds no root. */
+    private val adminRootSeed: () -> ByteArray? = { Keystore.adminRootSeed() },
 ) : ViewModel() {
 
     private val _phase = MutableStateFlow<AddDevicePhase>(
         AddDevicePhase.Failed("not started"),
     )
     val phase: StateFlow<AddDevicePhase> = _phase.asStateFlow()
+
+    /** Slice D (D-4) — whether this device CAN offer the promote-to-admin
+     *  toggle (it holds the admin master root). Read once at construction so
+     *  the UI can gate the toggle's visibility. */
+    val canOfferPromote: Boolean = canPromote()
+
+    /** Slice D (D-4) — the promote-to-admin toggle state. DEFAULT OFF. Only
+     *  honored in THIS synchronous, admin-initiated, SAS-confirmed ceremony
+     *  (never on an async approve-a-request join). When ON at seal time the
+     *  admin master root is sealed into the bundle → the joining device becomes
+     *  a bare-root admin. */
+    private val _promoteToAdmin = MutableStateFlow(false)
+    val promoteToAdmin: StateFlow<Boolean> = _promoteToAdmin.asStateFlow()
+
+    /** Toggle the promote-to-admin choice. A no-op when this device can't
+     *  offer it (holds no admin root). */
+    fun setPromoteToAdmin(on: Boolean) {
+        if (!canOfferPromote) return
+        _promoteToAdmin.value = on
+    }
 
     /** The relay session id (for the deliver leg). */
     private lateinit var sid: String
@@ -176,10 +204,26 @@ class AddDeviceViewModel(
             val sig = signAdmit(admit)
             val seed = umkSeed()
             require(seed.size == 32) { "account UMK seed must be 32 bytes" }
+            // Slice D (D-4) — seal the admin master root into the bundle ONLY
+            // when the admin explicitly toggled promote ON in this ceremony AND
+            // this device actually holds the root. Off ⇒ the joining device is a
+            // plain non-admin member (the default). Sealed the same way the UMK
+            // is (rides inside the AEAD-sealed bundle).
+            val wrappedAdminRoot: String? =
+                if (_promoteToAdmin.value && canOfferPromote) {
+                    val rootSeed = adminRootSeed()
+                    require(rootSeed != null && rootSeed.size == 32) {
+                        "admin root seed must be 32 bytes to promote"
+                    }
+                    HexUtil.encode(rootSeed)
+                } else {
+                    null
+                }
             val bundle = PairingBundle(
                 umkSeedHex = HexUtil.encode(seed),
                 admit = admit,
                 admitSig = HexUtil.encode(sig),
+                wrappedAdminRoot = wrappedAdminRoot,
             )
             val sealed = session.seal(bundle.toJsonBytes())
             relay.deliver(sealed.ciphertextB64u, sealed.nonceB64u)

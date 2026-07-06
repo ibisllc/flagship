@@ -48,10 +48,29 @@ export class TunnelRegistry {
    * wildcard lookups, so it can never shadow first-party routing.
    */
   private readonly redirections = new Map<string, string>();
+  /**
+   * Box-canonical roster, RAM-only. A pod canonical (`<server>.<user>.<apex>`)
+   * is recorded on every `register` and never deleted on `unregister` — so it
+   * remembers boxes that are CURRENTLY OR RECENTLY connected. The nudge logic
+   * (`isNudgeableSni`) uses it to NOT nudge for a box's own apex/canonical that
+   * is simply offline: a `<server>.<user>` that the user once ran is a box
+   * canonical, not a leader-routed `<service>.<user>` meta-URL, so re-electing a
+   * leader for it is meaningless. Tier-2 service names never enter this roster
+   * (they are slot allocations, not pod canonicals), so they stay nudge-eligible.
+   */
+  private readonly knownBoxCanonicals = new Set<string>();
   private readonly allocator: AppUserAllocator;
+  /**
+   * The data-plane apex these pod canonicals live under — `flagship.services`
+   * in prod, `gym.flagship.services` in the test env. Held here (not only in
+   * the allocator) so the registry can do its own apex-RELATIVE user-zone
+   * extraction for account-scoped lookups (the gossip fan-out).
+   */
+  private readonly apex: string;
 
-  constructor(opts: { allocator?: AppUserAllocator } = {}) {
-    this.allocator = opts.allocator ?? new AppUserAllocator();
+  constructor(opts: { allocator?: AppUserAllocator; apex?: string } = {}) {
+    this.apex = (opts.apex ?? "flagship.services").toLowerCase();
+    this.allocator = opts.allocator ?? new AppUserAllocator({ apex: opts.apex });
   }
 
   /**
@@ -72,6 +91,9 @@ export class TunnelRegistry {
       this.tunnels.delete(pc);
     }
     this.tunnels.set(pc, args.tunnel);
+    // Remember this pod canonical forever (RAM-only) so a later miss on it is
+    // recognized as a box's own offline apex, NOT a nudge-able leader-route.
+    this.knownBoxCanonicals.add(pc);
     return this.allocator.addPod({
       podCanonical: pc,
       canonicals: args.canonicals,
@@ -175,6 +197,104 @@ export class TunnelRegistry {
       if (t) out.push(t);
     }
     return out;
+  }
+
+  /**
+   * Every connected tunnel whose pod canonical lives in `<username>`'s zone —
+   * i.e. the user-zone label immediately left of the apex suffix equals
+   * `username`. This is the account-scoped membership the gossip fan-out
+   * (`broadcast--<user>.flagship.services`) delivers to: a box POSTs an opaque
+   * blob and the hub mirrors it to every OTHER box of the same account.
+   *
+   * Apex-RELATIVE (the user is the last label after the apex suffix is
+   * stripped, never a fixed offset from the right) so the `gym.` test apex
+   * parses correctly. A pod canonical is `<server>.<user>.<apex>`, so the
+   * user label is the LAST label of the apex-stripped head.
+   */
+  tunnelsForUser(username: string): RegisteredTunnel[] {
+    const user = username.trim().toLowerCase();
+    if (!user) return [];
+    const out: RegisteredTunnel[] = [];
+    for (const [pc, t] of this.tunnels) {
+      if (this.userOfPod(pc) === user) out.push(t);
+    }
+    return out;
+  }
+
+  /** The user-zone label of a pod canonical, apex-relative, or null. */
+  private userOfPod(podCanonical: string): string | null {
+    const suffix = "." + this.apex;
+    const lower = podCanonical.toLowerCase();
+    if (!lower.endsWith(suffix)) return null;
+    const head = lower.slice(0, -suffix.length);
+    if (head.length === 0) return null;
+    const parts = head.split(".");
+    if (parts.length < 2) return null; // need at least <server>.<user>
+    const user = parts[parts.length - 1]!;
+    return /^[a-z0-9][a-z0-9-]{0,62}$/.test(user) ? user : null;
+  }
+
+  /**
+   * The user-zone label for an arbitrary inbound SNI, apex-relative, or null
+   * if the SNI is not a flagship.services name under this apex (e.g. a custom
+   * domain). A leader-routed meta-URL `<service>.<user>.<apex>` and a pod
+   * canonical `<server>.<user>.<apex>` both yield `<user>` — the user is always
+   * the last label of the apex-stripped head.
+   */
+  userOfSni(sni: string): string | null {
+    const suffix = "." + this.apex;
+    const lower = sni.toLowerCase();
+    if (lower.includes("*")) return null;
+    if (!lower.endsWith(suffix)) return null;
+    const head = lower.slice(0, -suffix.length);
+    if (head.length === 0) return null;
+    const parts = head.split(".");
+    if (parts.length < 2) return null; // need at least <something>.<user>
+    const user = parts[parts.length - 1]!;
+    return /^[a-z0-9][a-z0-9-]{0,62}$/.test(user) ? user : null;
+  }
+
+  /**
+   * Has this account at least one CURRENTLY-CONNECTED tunnel? Cheaper than
+   * materializing `tunnelsForUser` — used by the SNI router's nudge gate.
+   */
+  hasOnlineTunnelsForUser(username: string): boolean {
+    const user = username.trim().toLowerCase();
+    if (!user) return false;
+    for (const pc of this.tunnels.keys()) {
+      if (this.userOfPod(pc) === user) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Decide whether an inbound-SNI MISS is eligible for the park→nudge→wait
+   * resolution path (vs. today's immediate drop).
+   *
+   * The rule (documented precisely):
+   *   nudge iff ALL of —
+   *     (a) the SNI is a first-party `<...>.<user>.<apex>` name under this apex
+   *         (NOT a custom domain — `userOfSni(sni)` is non-null), AND
+   *     (b) that `<user>` has ≥1 currently-connected tunnel
+   *         (`hasOnlineTunnelsForUser`), AND
+   *     (c) the exact SNI is NOT a known (currently-or-recently registered) box
+   *         canonical — a box's own apex/canonical that is simply offline is NOT
+   *         a leader-routed meta-URL, so re-electing for it is meaningless.
+   *
+   * Caller has already confirmed `findBySni(sni)` is a miss. We deliberately do
+   * NOT additionally require an exact tier-2 `<service>.<user>` two-label shape:
+   * a `<service>.<server>.<user>` (tier-1) name whose box is momentarily absent
+   * is ALSO a plausible leader-route to nudge for, and the box that elects
+   * itself will register a name that lands in the registry (or it won't, and we
+   * time out and drop). The box-canonical exclusion (c) is the safe floor that
+   * keeps an offline box's apex out.
+   */
+  isNudgeableSni(sni: string): boolean {
+    const lower = sni.toLowerCase();
+    const user = this.userOfSni(lower);
+    if (!user) return false;
+    if (this.knownBoxCanonicals.has(lower)) return false;
+    return this.hasOnlineTunnelsForUser(user);
   }
 
   size(): number {

@@ -42,6 +42,7 @@ import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RePairInitiateRequest
 import com.flagshipserver.app.core.AcmeAccountKey
+import com.flagshipserver.app.core.AdminRootEscrow
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
@@ -153,6 +154,12 @@ class LoginViewModel(
      *  profile's Keystore slot. Null when the account never escrowed one. */
     private var recoveredAcmeScalar: ByteArray? = null
 
+    /** Slice D (D-3) — recovered admin master root seed (32 bytes), unwrapped
+     *  from the envelope's escrowed `wrappedAdminRoot` if present. Held in
+     *  memory until [confirmTakeover] imports it, re-establishing admin on the
+     *  recovered device. Null when the account never escrowed one. */
+    private var recoveredAdminRootSeed: ByteArray? = null
+
     /** MULTI second factor captured by [submitSecondFactor], threaded
      *  into the re-pair `totpProof`. */
     private var secondFactor: RePairInitiateRequest.TotpProof? = null
@@ -208,6 +215,7 @@ class LoginViewModel(
             require(result.umkSeed.size == 32) { "recovered UMK isn't 32 bytes" }
             recoveredSeed = result.umkSeed
             recoveredAcmeScalar = result.acmeScalar
+            recoveredAdminRootSeed = result.adminRootSeed
             _phase.value = if (isMulti) {
                 LoginPhase.AwaitingSecondFactor
             } else {
@@ -269,6 +277,14 @@ class LoginViewModel(
         recoveredAcmeScalar = envelope.wrappedAcmeAccountKey?.let { wrapped ->
             try {
                 AcmeAccountKey.unwrapFromEscrow(wrapped, prfSecret)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+        // Slice D (D-3) — same treatment for the escrowed admin master root.
+        recoveredAdminRootSeed = envelope.wrappedAdminRoot?.let { wrapped ->
+            try {
+                AdminRootEscrow.unwrapFromEscrow(wrapped, prfSecret)
             } catch (_: Throwable) {
                 null
             }
@@ -349,6 +365,17 @@ class LoginViewModel(
             recoveredAcmeScalar?.let { scalar ->
                 try {
                     Keystore.importAcmeAccountKeyScalar(scalar)
+                } catch (_: Throwable) { /* recoverable via a surviving admin device */ }
+            }
+
+            // 1c. Slice D (D-3) — re-establish admin authority from the escrowed
+            //     admin master root (credential recovery is the remedy for
+            //     losing every admin device). Non-fatal. The rotation-proof
+            //     re-pinning of boxes (old-root-signs-new-root) is a deferred
+            //     follow-up; this restores the root itself.
+            recoveredAdminRootSeed?.let { seed ->
+                try {
+                    Keystore.importAdminRoot(seed)
                 } catch (_: Throwable) { /* recoverable via a surviving admin device */ }
             }
 

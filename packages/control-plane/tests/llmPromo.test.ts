@@ -10,7 +10,8 @@ import {
   InMemoryTierStorage,
   InMemoryUsernameStorage,
 } from "@flagship/storage";
-import { handleLlmPromoIssue, handleLlmPromoStatus } from "../src/llmPromo.js";
+import { handleLlmPromoIssue, handleLlmPromoStatus, handleLlmPromoUsage } from "../src/llmPromo.js";
+import { verifyScopedInferenceToken, mintScopedInferenceToken } from "../src/inferenceToken.js";
 
 function makeIrk(): Keypair {
   const priv = new Uint8Array(32);
@@ -28,7 +29,7 @@ const stubMint = async (args: { provider: string; expiresAt: number }) => ({
   providerKeyId: `pkid-${args.expiresAt}`,
 });
 
-function makeRequest(overrides: Partial<{ provider: "anthropic" | "openai" | "google"; desiredDailyInputTokenCap: number; desiredDailyOutputTokenCap: number; issuedAt: number }> = {}) {
+function makeRequest(overrides: Partial<{ provider: "anthropic" | "openai" | "google" | "flagship"; desiredDailyInputTokenCap: number; desiredDailyOutputTokenCap: number; issuedAt: number }> = {}) {
   return {
     username: "alice",
     serverFqdn: "home.alice.flagship.services",
@@ -163,6 +164,82 @@ describe("/api/llm-promo/issue", () => {
   });
 });
 
+describe("/api/llm-promo/issue — in-house flagship provider", () => {
+  const endpoint = { baseUrl: "https://coder.runpod.example.com", model: "flagship-coder-v1" };
+  const SECRET = "test-inference-secret";
+  // Mirror the Worker's real minter so the test exercises the true token.
+  const flagshipMint = async (args: {
+    provider: string; username: string; serverFqdn: string;
+    dailyInputTokenCap: number; dailyOutputTokenCap: number; expiresAt: number;
+  }) => {
+    if (args.provider !== "flagship") {
+      return { key: `fk-${args.provider}-${args.expiresAt}`, providerKeyId: `pkid-${args.expiresAt}` };
+    }
+    const keyId = "fp-test-1";
+    const key = await mintScopedInferenceToken(
+      { username: args.username, keyId, iat: Date.now(), exp: args.expiresAt,
+        dailyInputTokenCap: args.dailyInputTokenCap, dailyOutputTokenCap: args.dailyOutputTokenCap,
+        serverFqdn: args.serverFqdn },
+      SECRET,
+    );
+    return { key, providerKeyId: keyId };
+  };
+
+  it("mints a scoped token + surfaces baseUrl/model/source when the endpoint is configured", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    const claim = makeRequest({ provider: "flagship" });
+    const sig = signLlmPromoIssue(claim, irk);
+    const r = await handleLlmPromoIssue(
+      { llmPromo: new InMemoryLlmPromoStorage(), tiers: new InMemoryTierStorage(), usernames,
+        inferenceEndpoint: endpoint, mintProviderKey: flagshipMint },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(200);
+    const body = r.body as { apiKey: string; baseUrl: string; model: string; source: string };
+    expect(body.baseUrl).toBe(endpoint.baseUrl);
+    expect(body.model).toBe(endpoint.model);
+    expect(body.source).toBe("promo");
+    // The minted key verifies under the shared secret and carries the scope.
+    const v = await verifyScopedInferenceToken(body.apiKey, SECRET);
+    expect(v.ok).toBe(true);
+    if (v.ok) {
+      expect(v.claims.username).toBe("alice");
+      expect(v.claims.dailyInputTokenCap).toBe(1000);
+    }
+  });
+
+  it("refuses (503) a flagship issue when the endpoint is unconfigured", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    const claim = makeRequest({ provider: "flagship" });
+    const sig = signLlmPromoIssue(claim, irk);
+    const r = await handleLlmPromoIssue(
+      { llmPromo: new InMemoryLlmPromoStorage(), tiers: new InMemoryTierStorage(), usernames,
+        inferenceEndpoint: null, mintProviderKey: flagshipMint },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(503);
+    expect((r.body as { error: string }).error).toContain("inference not configured");
+  });
+
+  it("does not leak baseUrl/model on an upstream-provider issue", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    const claim = makeRequest({ provider: "openai" });
+    const sig = signLlmPromoIssue(claim, irk);
+    const r = await handleLlmPromoIssue(
+      { llmPromo: new InMemoryLlmPromoStorage(), tiers: new InMemoryTierStorage(), usernames,
+        inferenceEndpoint: endpoint, mintProviderKey: flagshipMint },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(200);
+    const body = r.body as Record<string, unknown>;
+    expect(body.baseUrl).toBeUndefined();
+    expect(body.source).toBeUndefined();
+  });
+});
+
 describe("/api/llm-promo/issue — demo cap (#85)", () => {
   const NOW = 1_700_000_000_000;
   async function seedDemo(usernames: InMemoryUsernameStorage, irk: Keypair) {
@@ -241,6 +318,52 @@ describe("/api/llm-promo/issue — demo cap (#85)", () => {
     );
     expect(r.status).toBe(200); // cap of 1 would block a demo user; ignored here
     expect(await demoLlmLedger.sumSince("alice", 0)).toBe(0);
+  });
+});
+
+describe("/api/llm-promo/usage — metering webhook (model b)", () => {
+  const SECRET = "shim-secret";
+  async function tokenFor(username: string): Promise<string> {
+    return mintScopedInferenceToken(
+      { username, keyId: "fp-x", iat: Date.now(), exp: Date.now() + 3_600_000, dailyInputTokenCap: 100_000, dailyOutputTokenCap: 100_000 },
+      SECRET,
+    );
+  }
+  const verifyToken = async (token: string) => {
+    const v = await verifyScopedInferenceToken(token, SECRET);
+    return v.ok ? { ok: true as const, username: v.claims.username } : { ok: false as const };
+  };
+
+  it("records TRUE token usage against the token's account WITHOUT bumping call counts", async () => {
+    const llmPromo = new InMemoryLlmPromoStorage();
+    const token = await tokenFor("alice");
+    const r = await handleLlmPromoUsage({ llmPromo, verifyToken }, { token, inputTokens: 1234, outputTokens: 567 });
+    expect(r.status).toBe(200);
+    const today = Math.floor(Date.now() / 86_400_000);
+    const daily = await llmPromo.getDaily("alice", today);
+    expect(daily?.dailyInputTokens).toBe(1234);
+    expect(daily?.dailyOutputTokens).toBe(567);
+    expect(daily?.dailyCount).toBe(0); // a usage report is NOT a new issuance
+    const life = await llmPromo.getLifetime("alice");
+    expect(life?.lifetimeInputTokens).toBe(1234);
+    expect(life?.lifetimeCount).toBe(0);
+  });
+
+  it("rejects a report with an invalid/forged token", async () => {
+    const llmPromo = new InMemoryLlmPromoStorage();
+    const bad = await mintScopedInferenceToken(
+      { username: "alice", keyId: "x", iat: Date.now(), exp: Date.now() + 1000, dailyInputTokenCap: 1, dailyOutputTokenCap: 1 },
+      "WRONG-SECRET",
+    );
+    const r = await handleLlmPromoUsage({ llmPromo, verifyToken }, { token: bad, inputTokens: 10, outputTokens: 10 });
+    expect(r.status).toBe(403);
+  });
+
+  it("rejects a malformed report", async () => {
+    const llmPromo = new InMemoryLlmPromoStorage();
+    const token = await tokenFor("alice");
+    expect((await handleLlmPromoUsage({ llmPromo, verifyToken }, { token, inputTokens: -1, outputTokens: 0 })).status).toBe(400);
+    expect((await handleLlmPromoUsage({ llmPromo, verifyToken }, { inputTokens: 1, outputTokens: 1 })).status).toBe(400);
   });
 });
 

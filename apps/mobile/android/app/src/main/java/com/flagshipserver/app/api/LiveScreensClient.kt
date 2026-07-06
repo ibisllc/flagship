@@ -74,15 +74,19 @@ class LiveScreensClient(
                 }
             }
             .build()
-        val resp = suspendCoroutine<okhttp3.Response> { cont ->
-            client.newCall(req).enqueue(object : okhttp3.Callback {
-                override fun onFailure(call: okhttp3.Call, e: IOException) { cont.resumeWithException(e) }
-                override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) { cont.resume(response) }
-            })
+        // Run the blocking call + body read on IO and RETURN to the caller's
+        // dispatcher. The old enqueue()+suspendCoroutine resumed the
+        // continuation on OkHttp's background thread, so anything the caller did
+        // next on the main thread (nav.navigate / Lifecycle addObserver / a
+        // Compose state write) threw "must be called on the main thread". With
+        // withContext(IO) the suspend point returns on the caller's dispatcher
+        // (Main, from a Compose scope.launch) — main-thread work after the call
+        // is safe again.
+        val (status, bytes) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            client.newCall(req).execute().use { resp ->
+                resp.code to (resp.body?.bytes() ?: ByteArray(0))
+            }
         }
-        val status = resp.code
-        val bytes = resp.body?.bytes() ?: ByteArray(0)
-        resp.close()
         if (status !in 200..299) throw ScreensError.Http(status, String(bytes, Charsets.UTF_8))
         // Empty-body responses (DELETE / approve / etc) map to Unit.
         @Suppress("UNCHECKED_CAST")
@@ -169,6 +173,17 @@ class LiveScreensClient(
     override suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse {
         val body = json.encodeToString(VibeCodeReplyRequest.serializer(), req).toByteArray()
         return request("/api/screens/llm/sessions/$sessionId/reply", VibeCodeReplyResponse.serializer(), "POST", body)
+    }
+
+    override suspend fun vibeCodeDeploy(sessionId: String): BuildDeployResponse {
+        // The scratch deploy trigger is the daemon's legacy
+        // `/api/llm/sessions/<id>/deploy` (paired-session gated, same
+        // `x-flagship-session` auth the `request` helper applies) — the screens
+        // BFF has no deploy route, and the WS stream is a pure relay. The vibe
+        // session registry is shared between the screens-BFF start and this
+        // legacy handler, so a session started via /api/screens/vibe-code/start
+        // is deployable here.
+        return request("/api/llm/sessions/$sessionId/deploy", BuildDeployResponse.serializer(), "POST", "{}".toByteArray())
     }
 
     override suspend fun peerBackupStatus(): PeerBackupStatusResponse =

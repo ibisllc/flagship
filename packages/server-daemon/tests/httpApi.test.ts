@@ -1,3 +1,4 @@
+import { swkOps, boxSigner } from "./helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import {
   deriveIRK,
@@ -18,7 +19,7 @@ const ownerUmk = { seed: new Uint8Array(32).fill(11) };
 const sarahUmk = { seed: new Uint8Array(32).fill(33) };
 const ownerIrk = deriveIRK(ownerUmk);
 const sarahIrk = deriveIRK(sarahUmk);
-const swk = deriveSWK(ownerUmk, "srv-1");
+const swk = swkOps(deriveSWK(ownerUmk, "srv-1"));
 
 function bytesToHex(b: Uint8Array): string {
   let s = "";
@@ -38,7 +39,7 @@ function makeContext(): { ctx: DaemonContext; runtimeKey: ReturnType<typeof deri
     new IdentityInjector({
       app: apps.get("habit-tracker")!,
       resolveSession: (t) => (t ? sessions.get(t) ?? null : null),
-      signer: { privateKey: runtimeKey.privateKey, publicKey: runtimeKey.publicKey },
+      signer: boxSigner(runtimeKey),
     }),
   );
   const ctx: DaemonContext = {

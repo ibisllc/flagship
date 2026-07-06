@@ -43,7 +43,10 @@
 //   3. Explicit risk warning on both screens (the QR shares your account
 //      keys; anyone who scans it can join).
 
-const APEX = "https://flagshipserver.com";
+import { controlApex } from "./apex.js";
+import { persistAdminRootSeed as ksPersistAdminRootSeed } from "../keystore.js";
+
+const APEX = controlApex();
 
 /** Canonical-bytes tag for the device-admit envelope. MUST match
  *  packages/protocol/src/auth.ts TAG_DEVICE_ADMIT and the Worker. */
@@ -373,6 +376,8 @@ export function formatRemaining(ms) {
  *    username: string,
  *    seed: Uint8Array,                 the account UMK seed (admin holds it)
  *    signWithIrk: (seed: Uint8Array, bytes: Uint8Array) => Promise<Uint8Array>,
+ *    promoteAdmin?: boolean,           Slice D (D-4): ALSO make the new device an admin
+ *    adminRootSeed?: Uint8Array|null,  this admin device's 32-byte admin-root seed (required when promoteAdmin)
  *    relay: {
  *      open: () => Promise<{ sid: string, pkB64u: string }>,   open session, return its QR fields
  *      onSas: (cb: (sas: string) => void) => void,             SAS derived on peer connect
@@ -386,13 +391,23 @@ export function formatRemaining(ms) {
  *    now?: () => number,
  *    baseUrl?: string,
  *  }} deps
- *  @returns {Promise<{ outcome: "sealed"|"cancelled", admit?: object, admitSigHex?: string }>}
+ *  @returns {Promise<{ outcome: "sealed"|"cancelled", admit?: object, admitSigHex?: string, promotedAdmin?: boolean }>}
  */
 export async function runAdminAddDevice(deps) {
   const { username, seed } = deps;
   if (!username) throw new Error("runAdminAddDevice: username required");
   if (!(seed instanceof Uint8Array) || seed.length !== 32) {
     throw new Error("runAdminAddDevice: account seed unavailable");
+  }
+  // Slice D (D-4): promote-at-add-time seals the admin master root INTO the
+  // bundle so the new device becomes a bare-root admin. Only meaningful when
+  // the caller opts in (default OFF) AND this admin device actually holds the
+  // 32-byte admin root. A malformed/absent root with promote ON is a hard
+  // error — never silently drop the admin the operator asked to grant.
+  const promoteAdmin = deps.promoteAdmin === true;
+  const adminRootSeed = deps.adminRootSeed ?? null;
+  if (promoteAdmin && (!(adminRootSeed instanceof Uint8Array) || adminRootSeed.length !== 32)) {
+    throw new Error("runAdminAddDevice: promote requested but this device holds no admin root");
   }
   const toHex = deps.bytesToHex || defaultBytesToHex;
   const now = deps.now ?? (() => Date.now());
@@ -423,15 +438,19 @@ export async function runAdminAddDevice(deps) {
   });
 
   // Seal { umkSeed, admit, admitSig } over the relay's AEAD channel. The
-  // umkSeed is the key material iCloud would otherwise sync.
+  // umkSeed is the key material iCloud would otherwise sync. When promoting,
+  // `wrappedAdminRoot` (the admin-root seed hex) rides in the SAME bundle,
+  // protected by the SAME relay AEAD seal as the UMK — the new device unwraps
+  // it and stores it device-local to become a bare-root admin.
   const bundle = {
     umkSeedHex: toHex(seed),
     admit,
     admitSig: admitSigHex,
+    ...(promoteAdmin && adminRootSeed ? { wrappedAdminRoot: toHex(adminRootSeed) } : {}),
   };
   await relay.seal(new TextEncoder().encode(JSON.stringify(bundle)));
   relay.close?.();
-  return { outcome: "sealed", admit, admitSigHex };
+  return { outcome: "sealed", admit, admitSigHex, promotedAdmin: promoteAdmin };
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -440,10 +459,12 @@ export async function runAdminAddDevice(deps) {
  * ───────────────────────────────────────────────────────────────────── */
 
 /** Parse + validate a sealed bundle's plaintext. Returns the structured
- *  `{ seed, admit, admitSigHex }` or throws on a malformed bundle.
+ *  `{ seed, admit, admitSigHex, adminRootSeed }`. `adminRootSeed` is a 32-byte
+ *  Uint8Array ONLY when the admin promoted the device (`wrappedAdminRoot`
+ *  present, Slice D D-4), else null. Throws on a malformed bundle.
  *  @param {string|Uint8Array} plaintext
  *  @param {{ hexToBytes?: (hex: string) => Uint8Array }} [opts]
- *  @returns {{ seed: Uint8Array, admit: object, admitSigHex: string }}
+ *  @returns {{ seed: Uint8Array, admit: object, admitSigHex: string, adminRootSeed: Uint8Array|null }}
  */
 export function parseSealedBundle(plaintext, opts = {}) {
   const hexToBytes = opts.hexToBytes || defaultHexToBytes;
@@ -465,7 +486,21 @@ export function parseSealedBundle(plaintext, opts = {}) {
   }
   const seed = hexToBytes(parsed.umkSeedHex.toLowerCase());
   if (seed.length !== 32) throw new Error("sealed bundle umkSeed must be 32 bytes");
-  return { seed, admit: parsed.admit, admitSigHex: parsed.admitSig };
+  // Slice D (D-4): the OPTIONAL sealed admin root. Absent on a normal (non-admin)
+  // join. When present it MUST be a well-formed 32-byte hex — a malformed one is
+  // a corrupt/hostile bundle, not a silent non-admin fallback.
+  let adminRootSeed = null;
+  if (parsed.wrappedAdminRoot != null) {
+    if (typeof parsed.wrappedAdminRoot !== "string" ||
+        !/^[0-9a-f]{64}$/i.test(parsed.wrappedAdminRoot)) {
+      throw new Error("sealed bundle wrappedAdminRoot malformed");
+    }
+    adminRootSeed = hexToBytes(parsed.wrappedAdminRoot.toLowerCase());
+    if (adminRootSeed.length !== 32) {
+      throw new Error("sealed bundle wrappedAdminRoot must be 32 bytes");
+    }
+  }
+  return { seed, admit: parsed.admit, admitSigHex: parsed.admitSig, adminRootSeed };
 }
 
 /** Run the incoming side end-to-end once the relay has delivered the
@@ -491,6 +526,7 @@ export function parseSealedBundle(plaintext, opts = {}) {
  *    deviceIrkPubHex: string,                    THIS profile's fresh device IRK pub hex
  *    setActiveKeystoreProfile?: (cloudName: string) => unknown,
  *    persistSeedForProfile: (seed: Uint8Array, cloudName: string, passphrase: string) => Promise<unknown>,
+ *    persistAdminRootSeed?: (umkSeed: Uint8Array, adminSeed: Uint8Array) => Promise<void>,
  *    unlockSession: (seed: Uint8Array, username?: string) => Promise<void>|void,
  *    fetchAccountIrkPubHex?: (args: object) => Promise<string>,
  *    verifyAdmit?: (args: object) => Promise<boolean>,
@@ -517,8 +553,9 @@ export async function runIncomingJoin(deps) {
   const verify = deps.verifyAdmit || verifyAdmit;
   const post = deps.postDeviceAdmit || postDeviceAdmit;
 
-  // 1 — parse the sealed bundle.
-  const { seed, admit, admitSigHex } = parseSealedBundle(deps.bundlePlaintext, { hexToBytes });
+  // 1 — parse the sealed bundle (carries the OPTIONAL sealed admin root when
+  // the admin promoted this device, Slice D D-4).
+  const { seed, admit, admitSigHex, adminRootSeed } = parseSealedBundle(deps.bundlePlaintext, { hexToBytes });
   const username = admit?.username;
   if (!username) throw new Error("admit missing username");
 
@@ -556,6 +593,14 @@ export async function runIncomingJoin(deps) {
   }
   await deps.persistSeedForProfile(seed, username, makePassphrase());
   if (typeof deps.setUsername === "function") deps.setUsername(username);
+  // Slice D (D-4): if the admin sealed the admin root into the bundle, store it
+  // device-local (under THIS profile — active profile is now `username`) BEFORE
+  // unlockSession, so unlockSession's loadAdminRootSeed picks it up and this
+  // device is admin from the moment it opens. Absent → a plain non-admin join.
+  if (adminRootSeed) {
+    const persistAdminRoot = deps.persistAdminRootSeed || ksPersistAdminRootSeed;
+    await persistAdminRoot(seed, adminRootSeed);
+  }
   await deps.unlockSession(seed, username);
 
   // 5 — register THIS device's push token, then POST the admit (server
@@ -591,7 +636,7 @@ export async function runIncomingJoin(deps) {
     : now() + QUARANTINE_MS;
   const quarantine = quarantineTimeline({ quarantineUntil }, now());
 
-  return { username, quarantine, admitResponse };
+  return { username, quarantine, admitResponse, promotedAdmin: !!adminRootSeed };
 }
 
 /** Random URL-safe local at-rest wrap passphrase. Like the demo /

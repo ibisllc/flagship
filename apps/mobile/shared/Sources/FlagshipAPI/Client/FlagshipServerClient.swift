@@ -39,6 +39,11 @@ public protocol FlagshipServerClient: Sendable {
     /// the webapp `revokeServer` + the Android `revokeServer` shape.
     func revokeServer(_ req: ServerRevocationRequest) async throws
     func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse
+    /// Sign-up handle suggestion. POST /api/username/suggest with a throwaway
+    /// `deviceKey` (the per-device regenerate throttle, NOT the account IRK). A
+    /// 200 carries a name + `retryAfterMs` cooldown; a 429 carries
+    /// `throttled` + the cooldown remaining. See docs/username-suggestion-queue.md.
+    func suggestUsername(deviceKey: String) async throws -> UsernameSuggestion
     /// Login/join preflight. GET /api/account/resolve/<username>. The
     /// sign-in space is access-control evaluation, not a fetch: this
     /// reads what credentials + factors exist for the named account and
@@ -242,6 +247,129 @@ public protocol FlagshipServerClient: Sendable {
     /// inventory is a ghost (drop it). Mirrors handleListOutstandingOrders
     /// in packages/control-plane/src/outstandingOrders.ts.
     func listOutstandingOrders(_ req: OutstandingOrdersRequest) async throws -> OutstandingOrdersResponse
+
+    /// Last-device account deletion ceremony (docs/account-deletion-and-name-
+    /// reclaim.md §2/§5). POSTs the atomic `{ accountSelfDelete, serversSelfDelete? }`
+    /// bundle to `POST /api/account/self-delete`. The account-self-delete order
+    /// is ALWAYS present (owner-IRK-signed, last-device); the servers-self-delete
+    /// content-wipe is included ONLY when the user opted in — and `.com` accepts
+    /// it solely as an inseparable side effect of the account death (a standalone
+    /// servers order, or a non-last-device caller, rejects the WHOLE bundle).
+    /// On 200 `.com` has hard-deleted the username row (the name frees at once);
+    /// the caller then wipes its local key material + drops to Welcome. A 403
+    /// "not the last device" / "stale request" / "invalid … signature" is the
+    /// failure the UI surfaces via the humanized-error path.
+    func selfDeleteAccount(_ req: AccountSelfDeleteBundleRequest) async throws -> AccountSelfDeleteResponse
+
+    /// Slice D §5 — publish an admin master-root rotation proof to
+    /// `POST /api/users/:username/admin-root-rotation`. The OLD admin root
+    /// signs an `AdminRootRotation{ old → new }` (the spine's canonical bytes);
+    /// `.com` records the new `admin_root_pub_hex` (advisory) and relays the
+    /// SIGNED proof to each box, which verifies it against its pinned OLD root
+    /// before re-pinning — `.com` can never forge one. Rotation is also the
+    /// revoke-an-admin remedy: OTHER admin devices still hold the OLD root, so
+    /// after boxes re-pin their orders stop verifying.
+    func postAdminRootRotation(
+        username: String,
+        body: AdminRootRotationRequest
+    ) async throws -> AdminRootRotationResponse
+}
+
+/// Slice D §5 — the `POST /api/users/:username/admin-root-rotation` body:
+/// `{ rotation: { username, oldAdminRootPub, newAdminRootPub, issuedAt },
+/// signatureHex }`. `signatureHex` is the OLD admin root's Ed25519 signature
+/// over the spine canonical bytes (`AdminRootRotation.canonicalBytes`).
+public struct AdminRootRotationRequest: Codable, Equatable, Sendable {
+    public struct Rotation: Codable, Equatable, Sendable {
+        public let username: String
+        /// The box's currently-pinned admin root, lowercased hex.
+        public let oldAdminRootPub: String
+        /// The freshly-minted admin master root, lowercased hex.
+        public let newAdminRootPub: String
+        public let issuedAt: Int64
+        public init(username: String, oldAdminRootPub: String, newAdminRootPub: String, issuedAt: Int64) {
+            self.username = username
+            self.oldAdminRootPub = oldAdminRootPub
+            self.newAdminRootPub = newAdminRootPub
+            self.issuedAt = issuedAt
+        }
+    }
+    public let rotation: Rotation
+    public let signatureHex: String
+    public init(rotation: Rotation, signatureHex: String) {
+        self.rotation = rotation
+        self.signatureHex = signatureHex
+    }
+}
+
+/// Response for `POST /api/users/:username/admin-root-rotation`. Lenient:
+/// `.com` may return `{ ok, newAdminRootPubHex }` — both optional so a bare
+/// 200 still decodes.
+public struct AdminRootRotationResponse: Codable, Equatable, Sendable {
+    public let ok: Bool?
+    public let newAdminRootPubHex: String?
+    public init(ok: Bool? = nil, newAdminRootPubHex: String? = nil) {
+        self.ok = ok
+        self.newAdminRootPubHex = newAdminRootPubHex
+    }
+}
+
+/// The atomic deletion bundle body for `POST /api/account/self-delete`. Mirrors
+/// the Worker's `BundleBody` (packages/control-plane/src/accountDeletion.ts):
+/// `accountSelfDelete` is required; `serversSelfDelete` is omitted entirely
+/// unless the user opted into the content-wipe. Each order is a
+/// `{ request: { username, issuedAt }, signature }` envelope signed by the
+/// owner IRK over the canonical bytes (FlagshipCore.AccountSelfDeleteOrder /
+/// ServersSelfDeleteOrder).
+public struct AccountSelfDeleteBundleRequest: Encodable, Sendable {
+    public struct Order: Encodable, Sendable {
+        public struct Inner: Encodable, Sendable {
+            public let username: String
+            public let issuedAt: Int64
+            public init(username: String, issuedAt: Int64) {
+                self.username = username; self.issuedAt = issuedAt
+            }
+        }
+        public let request: Inner
+        public let signature: String   // hex; Ed25519 by the owner IRK
+        public init(request: Inner, signature: String) {
+            self.request = request; self.signature = signature
+        }
+    }
+    public let accountSelfDelete: Order
+    /// Present ONLY when the user opted into "ask all my servers to delete
+    /// their content". Encoded as an absent key when nil (the §5 bundling
+    /// invariant: a standalone servers order is never sent).
+    public let serversSelfDelete: Order?
+    public init(accountSelfDelete: Order, serversSelfDelete: Order? = nil) {
+        self.accountSelfDelete = accountSelfDelete
+        self.serversSelfDelete = serversSelfDelete
+    }
+}
+
+/// `POST /api/account/self-delete` success body. Mirrors the Worker's `ok({…})`.
+public struct AccountSelfDeleteResponse: Decodable, Equatable, Sendable {
+    public let ok: Bool
+    public let username: String
+    public let deletedAt: Int64
+    public let serversTornDown: Int
+    public let serversSelfDeleteForwarded: Int
+    public let contentWipeRequested: Bool
+    public init(
+        ok: Bool,
+        username: String,
+        deletedAt: Int64,
+        serversTornDown: Int,
+        serversSelfDeleteForwarded: Int,
+        contentWipeRequested: Bool
+    ) {
+        self.ok = ok
+        self.username = username
+        self.deletedAt = deletedAt
+        self.serversTornDown = serversTornDown
+        self.serversSelfDeleteForwarded = serversSelfDeleteForwarded
+        self.contentWipeRequested = contentWipeRequested
+    }
 }
 
 public struct AppRenameRequest: Encodable, Sendable {
@@ -1240,8 +1368,16 @@ public struct UsernameClaimRequest: Codable, Equatable, Sendable {
     }
     public let request: Inner
     public let signature: String        // hex, IRK over canonical bytes
-    public init(request: Inner, signature: String) {
+    /// Slice D (docs/device-admin-tier-spec.md §1.2) — the account's pinned
+    /// ADMIN MASTER ROOT pubkey (hex). A TOP-LEVEL sibling of `request` +
+    /// `signature` (NOT inside `request`, NOT covered by the IRK claim
+    /// signature) — the Worker records it next to the IRK, exactly like
+    /// `aidPub`. Optional + additive: a malformed/absent value is ignored, never
+    /// rejected, so pre-D clients + the claim canonical bytes are unchanged.
+    public let adminRootPub: String?
+    public init(request: Inner, signature: String, adminRootPub: String? = nil) {
         self.request = request; self.signature = signature
+        self.adminRootPub = adminRootPub
     }
 }
 
@@ -1265,15 +1401,23 @@ public struct AuthCodeWire: Codable, Equatable, Sendable {
     public let userPubKey: String        // hex (the IRK's public key)
     public let issuedAt: Int64
     public let expiresAt: Int64
+    /// Slice D (docs/device-admin-tier-spec.md §1.3, D-1) — the account's pinned
+    /// ADMIN MASTER ROOT pubkey (hex). Rides INSIDE the AuthCode so it is
+    /// signature-covered by `authCodeUserSignature` and `.com`'s register gate;
+    /// the box reads it at first boot into `ServerConfig.adminRootPub`. Optional
+    /// + backward-compatible (absent ⇒ AuthCode canonical bytes are byte-identical
+    /// to pre-D; present ⇒ appended `ar=<hex>` — see `AuthCode.canonicalBytes`).
+    public let adminRootPubKey: String?
     public init(
         version: Int, serial: String, username: String, serverName: String,
         serverDomain: String, delegatedPubKey: String, userPubKey: String,
-        issuedAt: Int64, expiresAt: Int64
+        issuedAt: Int64, expiresAt: Int64, adminRootPubKey: String? = nil
     ) {
         self.version = version; self.serial = serial; self.username = username
         self.serverName = serverName; self.serverDomain = serverDomain
         self.delegatedPubKey = delegatedPubKey; self.userPubKey = userPubKey
         self.issuedAt = issuedAt; self.expiresAt = expiresAt
+        self.adminRootPubKey = adminRootPubKey
     }
 }
 
@@ -1294,6 +1438,31 @@ public struct RckRegisterRequest: Codable, Equatable, Sendable {
     public let signature: String         // hex, IRK
     public init(request: Inner, signature: String) {
         self.request = request; self.signature = signature
+    }
+}
+
+/// One sign-up handle suggestion. On a 200 `name` is set + `throttled` is false;
+/// on a 429 `name` is nil + `throttled` is true. `retryAfterMs` is the cooldown
+/// until the next regenerate is allowed either way.
+public struct UsernameSuggestion: Codable, Equatable, Sendable {
+    public let name: String?
+    public let retryAfterMs: Int
+    public let throttled: Bool
+    public init(name: String?, retryAfterMs: Int, throttled: Bool) {
+        self.name = name
+        self.retryAfterMs = retryAfterMs
+        self.throttled = throttled
+    }
+}
+
+/// Small curated word pairs for the Mock suggestion (no DNS/queue offline).
+enum MockSuggestWords {
+    static let adjectives = ["happy", "brave", "calm", "clever", "lucky", "swift", "sunny", "witty", "golden", "jolly"]
+    static let nouns = ["otter", "panda", "fox", "heron", "robin", "finch", "badger", "beaver", "gecko", "comet"]
+    static func random() -> String {
+        let a = adjectives.randomElement() ?? "happy"
+        let n = nouns.randomElement() ?? "otter"
+        return "\(a)-\(n)"
     }
 }
 
@@ -1655,6 +1824,14 @@ public struct RecoveryUploadRequest: Codable, Equatable, Sendable {
         /// Not in the signed canonical bytes — it's opaque ciphertext, so
         /// tampering breaks account-key recovery, never forges it.
         public let wrappedAcmeAccountKey: String?
+        /// Slice D (docs/device-admin-tier-spec.md §5.3, D-3) — the escrow-wrapped
+        /// ADMIN MASTER ROOT seed (base64 of nonce‖ct‖tag), shipped INSIDE
+        /// `request`. Wrapped under the SAME PRF secret as the UMK/ACME escrow
+        /// (distinct HKDF salt, see `AdminRootEscrow`) so credential recovery can
+        /// later re-establish the root. Optional: absent for pre-D accounts /
+        /// devices with no admin root. Not in the signed canonical bytes —
+        /// opaque ciphertext, so tampering breaks recovery, never forges it.
+        public let wrappedAdminRoot: String?
         /// Task #74 — SHA-256 hex (64 chars) of the passphrase-derived
         /// `fetchToken`. The Worker stores it and later compares it to
         /// `SHA-256(presented fetchToken)` to gate the wrapped-UMK fetch.
@@ -1673,6 +1850,7 @@ public struct RecoveryUploadRequest: Codable, Equatable, Sendable {
             wrappedUmk: String,
             issuedAt: Int64,
             wrappedAcmeAccountKey: String? = nil,
+            wrappedAdminRoot: String? = nil,
             fetchTokenHash: String? = nil,
             prfSaltHash: String? = nil
         ) {
@@ -1681,6 +1859,7 @@ public struct RecoveryUploadRequest: Codable, Equatable, Sendable {
             self.wrappedUmk = wrappedUmk
             self.issuedAt = issuedAt
             self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
+            self.wrappedAdminRoot = wrappedAdminRoot
             self.fetchTokenHash = fetchTokenHash
             self.prfSaltHash = prfSaltHash
         }
@@ -1713,14 +1892,20 @@ public struct RecoveryEnvelope: Codable, Equatable, Sendable {
     /// recovering device unwraps this with the same PRF secret and imports
     /// it via `Keystore.importAcmeAccountKey`.
     public let wrappedAcmeAccountKey: String?
+    /// Slice D (D-3) — the escrow-wrapped admin master root the Worker releases
+    /// on fetch. Absent for accounts with no escrowed admin root. The deferred
+    /// recovery-rotation path unwraps it with the same PRF secret.
+    public let wrappedAdminRoot: String?
     public init(
         credentialId: String,
         wrappedUmk: String,
-        wrappedAcmeAccountKey: String? = nil
+        wrappedAcmeAccountKey: String? = nil,
+        wrappedAdminRoot: String? = nil
     ) {
         self.credentialId = credentialId
         self.wrappedUmk = wrappedUmk
         self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
+        self.wrappedAdminRoot = wrappedAdminRoot
     }
 }
 
@@ -1751,6 +1936,9 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
     public let credentialId: String
     public let wrappedUmk: String
     public let wrappedAcmeAccountKey: String?
+    /// Slice D (D-3) — the escrow-wrapped admin master root (base64), released on
+    /// the gated fetch. Absent for accounts with no escrowed admin root.
+    public let wrappedAdminRoot: String?
     public let prfSaltHash: String?
     public let updatedAt: Int64?
     /// Recovery Phase B — the account's CURRENTLY registered IRK pubkey (hex).
@@ -1765,6 +1953,7 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
         credentialId: String,
         wrappedUmk: String,
         wrappedAcmeAccountKey: String? = nil,
+        wrappedAdminRoot: String? = nil,
         prfSaltHash: String? = nil,
         updatedAt: Int64? = nil,
         registeredIrkPubHex: String? = nil
@@ -1773,6 +1962,7 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
         self.credentialId = credentialId
         self.wrappedUmk = wrappedUmk
         self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
+        self.wrappedAdminRoot = wrappedAdminRoot
         self.prfSaltHash = prfSaltHash
         self.updatedAt = updatedAt
         self.registeredIrkPubHex = registeredIrkPubHex
@@ -1813,6 +2003,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         var credentialId: String
         var wrappedUmk: String
         var wrappedAcmeAccountKey: String?
+        var wrappedAdminRoot: String?  // Slice D (D-3) escrow-wrapped admin root
         var fetchTokenHash: String?   // SHA-256 hex of the fetchToken
         var prfSaltHash: String?      // SHA-256 hex of the prfSalt
         var updatedAt: Int64
@@ -1830,6 +2021,11 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public private(set) var revokedAuthCodes: Set<String> = []        // serial set
     public private(set) var releasedServerNames: [ReleaseServerNameRequest] = [] // recorded releases
     public private(set) var revokedServers: [ServerRevocationRequest] = [] // recorded P13 kill-switch calls
+    public private(set) var selfDeleteBundles: [AccountSelfDeleteBundleRequest] = [] // recorded deletion-ceremony bundles
+    public private(set) var adminRootRotations: [AdminRootRotationRequest] = [] // Slice D — recorded rotation proofs
+    /// When set, `selfDeleteAccount` throws this instead of recording — lets a
+    /// test exercise the 403 "not the last device" failure branch.
+    public var selfDeleteError: Error? = nil
     public private(set) var registeredRcks: [String: String] = [:]    // serverDomain → rckPubKey
     public private(set) var registeredPushTokens: [String: PushTokenRegisterRequest.Inner] = [:] // tokenId → inner
     private var nextPushTokenId = 1
@@ -1879,6 +2075,13 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         revokedServers.append(req)
     }
 
+    /// Mock suggestion — a fresh random `<adjective>-<noun>` each call, fixed
+    /// 2 s cooldown, never throttled (offline/dev convenience; no DNS).
+    public func suggestUsername(deviceKey _: String) async throws -> UsernameSuggestion {
+        try await tick()
+        return .init(name: MockSuggestWords.random(), retryAfterMs: 2000, throttled: false)
+    }
+
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
         try await tick()
         let lower = username.lowercased()
@@ -1926,14 +2129,16 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         }
         // Username rules. Mirrors the Worker's USERNAME_RE in
         // labels.ts so the Mock's wire shape (reason strings +
-        // ordering) matches what a real Worker would return — keep
-        // these in sync. 3–30 chars, NO hyphens (alphanumerics only).
-        let usernameRe = "^[a-z0-9]{3,30}$"
-        if lower.range(of: usernameRe, options: .regularExpression) == nil {
+        // ordering) matches what a real Worker would return — keep these in
+        // sync with control-plane labels.ts. 3–30 chars, interior single dashes
+        // OK, no leading/trailing dash, no `--` (the slug-creator delimiter —
+        // docs/service-addressing-double-dash.md).
+        let usernameRe = "^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$"
+        if lower.range(of: usernameRe, options: .regularExpression) == nil || lower.contains("--") {
             return .init(
                 username: lower,
                 available: false,
-                reason: "username must be 3–30 lowercase letters or digits (no hyphens)",
+                reason: "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
                 demoServer: demoBlock
             )
         }
@@ -2016,16 +2221,22 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func registerRecoveryEnvelope(_ req: RecoveryUploadRequest) async throws -> RecoveryEnvelopeResponse {
         try await tick()
         let updated = recoveryStore[req.request.credentialId] != nil
+        // Mirror the Worker: preserve an existing escrowed admin root on a
+        // UMK-only re-upload (same as the ACME key).
+        let u = req.request.username.lowercased()
+        let existing = recoveryRowsByUser[u]
+        let adminRoot = (req.request.wrappedAdminRoot?.isEmpty == false)
+            ? req.request.wrappedAdminRoot
+            : existing?.wrappedAdminRoot
         recoveryStore[req.request.credentialId] = RecoveryEnvelope(
             credentialId: req.request.credentialId,
             wrappedUmk: req.request.wrappedUmk,
-            wrappedAcmeAccountKey: req.request.wrappedAcmeAccountKey
+            wrappedAcmeAccountKey: req.request.wrappedAcmeAccountKey,
+            wrappedAdminRoot: adminRoot
         )
         // Mirror the Worker's username-keyed row + Task #74 gate hashes so
         // the gated fetch round-trips. Preserve an existing escrowed ACME
         // key on a UMK-only re-upload, matching handleUploadWebauthnRecovery.
-        let u = req.request.username.lowercased()
-        let existing = recoveryRowsByUser[u]
         let acme = (req.request.wrappedAcmeAccountKey?.isEmpty == false)
             ? req.request.wrappedAcmeAccountKey
             : existing?.wrappedAcmeAccountKey
@@ -2033,6 +2244,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             credentialId: req.request.credentialId,
             wrappedUmk: req.request.wrappedUmk,
             wrappedAcmeAccountKey: acme,
+            wrappedAdminRoot: adminRoot,
             fetchTokenHash: req.request.fetchTokenHash?.lowercased() ?? existing?.fetchTokenHash,
             prfSaltHash: req.request.prfSaltHash?.lowercased() ?? existing?.prfSaltHash,
             updatedAt: Int64(Date().timeIntervalSince1970 * 1000)
@@ -2068,6 +2280,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             credentialId: row.credentialId,
             wrappedUmk: row.wrappedUmk,
             wrappedAcmeAccountKey: row.wrappedAcmeAccountKey,
+            wrappedAdminRoot: row.wrappedAdminRoot,
             prfSaltHash: tamperedPrfSaltHashOnFetch ?? row.prfSaltHash,
             updatedAt: row.updatedAt,
             // Recovery Phase B — mirror the Worker, which returns the currently
@@ -2386,7 +2599,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: 403, message: "bad signature")
         case .ok:
             let newLabel = body.request.newDisplayLabel
-            let canonical = "https://\(newLabel).\(username.lowercased()).flagship.services"
+            let canonical = "https://\(Endpoints.serverFqdn(server: newLabel, user: username.lowercased()))"
             appAliasByUser[username.lowercased(), default: [:]][serviceId] = (newLabel, canonical)
             return AppRenameResponse(
                 ok: true,
@@ -2406,22 +2619,22 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         let alias = appAliasByUser[username.lowercased()]?[serviceId]
         // Mirrors @flagship/protocol deriveUrlFragment: serviceId is
-        // `<creator>-<slug>` (single dash; FIRST hyphen splits, since
-        // usernames are hyphen-free). The fragment is CONDITIONAL on
-        // who runs it: just `<slug>` when the running user authored
-        // it, else `<slug>-<creator>`.
+        // `<creator>--<slug>` (DOUBLE dash splits — both halves may carry single
+        // dashes; docs/service-addressing-double-dash.md). The fragment is
+        // CONDITIONAL on who runs it: just `<slug>` when the running user
+        // authored it, else `<slug>--<creator>`.
         let defaultLabel: String = {
-            if let i = serviceId.firstIndex(of: "-"),
-               i != serviceId.startIndex,
-               serviceId.index(after: i) != serviceId.endIndex {
-                let creator = serviceId[serviceId.startIndex..<i].lowercased()
-                let slug = String(serviceId[serviceId.index(after: i)...]).lowercased()
-                return creator == username.lowercased() ? slug : "\(slug)-\(creator)"
+            if let r = serviceId.range(of: "--"),
+               r.lowerBound != serviceId.startIndex,
+               r.upperBound != serviceId.endIndex {
+                let creator = serviceId[serviceId.startIndex..<r.lowerBound].lowercased()
+                let slug = String(serviceId[r.upperBound...]).lowercased()
+                return creator == username.lowercased() ? slug : "\(slug)--\(creator)"
             }
             return serviceId.lowercased()
         }()
         let label = alias?.displayLabel ?? defaultLabel
-        let host = "\(username.lowercased()).flagship.services"
+        let host = Endpoints.userZoneHost(username.lowercased())
         let canonical = alias?.canonicalUrl ?? "https://\(label).\(host)"
         // V6 — Mock now mirrors the Worker's lazy-mint contract:
         // /links always returns a populated shortUrl. The code is a
@@ -2746,12 +2959,49 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let u = req.request.username.lowercased()
         return OutstandingOrdersResponse(username: u, orders: outstandingOrdersByUser[u] ?? [])
     }
+
+    public func selfDeleteAccount(_ req: AccountSelfDeleteBundleRequest) async throws -> AccountSelfDeleteResponse {
+        try await tick()
+        if let err = selfDeleteError { throw err }
+        selfDeleteBundles.append(req)
+        let u = req.accountSelfDelete.request.username.lowercased()
+        // Mirror the Worker's hard-delete side effects for the in-memory mock so
+        // a follow-on resolveAccount/usernameAvailable reflects the freed name.
+        claimedUsernames[u] = nil
+        return AccountSelfDeleteResponse(
+            ok: true,
+            username: u,
+            deletedAt: Int64(Date().timeIntervalSince1970 * 1000),
+            serversTornDown: 0,
+            serversSelfDeleteForwarded: req.serversSelfDelete != nil ? 1 : 0,
+            contentWipeRequested: req.serversSelfDelete != nil
+        )
+    }
+
+    public func postAdminRootRotation(
+        username: String,
+        body: AdminRootRotationRequest
+    ) async throws -> AdminRootRotationResponse {
+        try await tick()
+        adminRootRotations.append(body)
+        // Mirror the Worker: record the new admin root as the account's current
+        // one so a follow-on read reflects the rotation.
+        let u = username.lowercased()
+        if claimedUsernames[u] != nil {
+            // (claimedUsernames stores the IRK; the admin root has its own home
+            // in a real backend — for the mock we simply acknowledge.)
+        }
+        return AdminRootRotationResponse(ok: true, newAdminRootPubHex: body.rotation.newAdminRootPub)
+    }
 }
 
 // MARK: - Live
 
 public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Sendable {
-    public static let defaultBaseUrl = URL(string: "https://flagshipserver.com")!
+    /// The control-plane apex. Derived from `Endpoints` (prod-default, with a
+    /// test-build override) so the gym build retargets with one knob; prod is
+    /// byte-identical.
+    public static var defaultBaseUrl: URL { Endpoints.controlBaseUrl }
 
     private let urlSession: URLSession
     private let baseUrl: URL
@@ -2859,6 +3109,26 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
         let body = try JSONEncoder().encode(["username": username])
         return try await postJsonReturning("/api/users/check", body: body)
+    }
+
+    public func suggestUsername(deviceKey: String) async throws -> UsernameSuggestion {
+        struct Wire: Decodable { let name: String?; let retryAfterMs: Int? }
+        let body = try JSONEncoder().encode(["deviceKey": deviceKey])
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/username/suggest"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = body
+        let (data, resp) = try await send(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 429 {
+            let w = try? JSONDecoder().decode(Wire.self, from: data)
+            return .init(name: nil, retryAfterMs: w?.retryAfterMs ?? 3000, throttled: true)
+        }
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        let w = try JSONDecoder().decode(Wire.self, from: data)
+        return .init(name: w.name, retryAfterMs: w.retryAfterMs ?? 2000, throttled: false)
     }
 
     public func resolveAccount(username: String) async throws -> AccountResolution {
@@ -3279,5 +3549,21 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let encoded = req.request.username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? req.request.username
         let body = try JSONEncoder().encode(req)
         return try await postJsonReturning("/api/users/\(encoded)/outstanding-orders", body: body)
+    }
+
+    public func selfDeleteAccount(_ req: AccountSelfDeleteBundleRequest) async throws -> AccountSelfDeleteResponse {
+        // `serversSelfDelete` is omitted from the JSON entirely when nil — the
+        // §5 bundling invariant means a standalone servers order is never sent.
+        let body = try JSONEncoder().encode(req)
+        return try await postJsonReturning("/api/account/self-delete", body: body)
+    }
+
+    public func postAdminRootRotation(
+        username: String,
+        body: AdminRootRotationRequest
+    ) async throws -> AdminRootRotationResponse {
+        let u = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        let encoded = try JSONEncoder().encode(body)
+        return try await postJsonReturning("/api/users/\(u)/admin-root-rotation", body: encoded)
     }
 }

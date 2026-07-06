@@ -19,12 +19,13 @@
 
 import { CompanionWriteError, requireOwnerProfile } from "./companionGuard.js";
 import { submitWriteRequest } from "./companionWriteRelay.js";
+import { controlApex, dataApex } from "./apex.js";
 
 /** Canonical-bytes tag — MUST match @flagship/protocol
  *  TAG_RELEASE_SERVER_NAME. */
 export const TAG_RELEASE_SERVER_NAME = "flagship/release-server-name/v1";
 
-const ORIGIN = "https://flagshipserver.com";
+const ORIGIN = controlApex();
 
 function canonical(parts) {
   return new TextEncoder().encode(parts.join("|"));
@@ -38,7 +39,7 @@ function defaultBytesToHex(b) {
 
 /** Build the `<server>.<user>.flagship.services` domain from its parts. */
 export function serverDomainOf(serverName, username) {
-  return `${serverName}.${username}.flagship.services`;
+  return `${serverName}.${username}.${dataApex()}`;
 }
 
 /**

@@ -21,10 +21,14 @@
 // All side-effecting collaborators are injected so this is unit-testable
 // without IndexedDB / the DOM / the network.
 
+import { controlApex } from "./apex.js";
+import { ensureAdminRoot as defaultEnsureAdminRoot } from "./adminRoot.js";
+
 /** Login/identity handle is a bare label: 3–30 lowercase letters/digits,
- *  no dots, no hyphens. Mirror of state.js / bootstrap.js / control-plane
- *  labels.ts. */
-const USERNAME_RE = /^[a-z0-9]{3,30}$/;
+ *  3–30, interior single dashes OK (no leading/trailing), no `--` (the
+ *  slug↔creator delimiter). Mirror of control-plane labels.ts
+ *  (docs/service-addressing-double-dash.md). The `--` ban is checked separately. */
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 /** Canonical-bytes tag for the standalone username claim. MUST match
  *  `views/create-server.js` (TAG_CLAIM) and the Worker. */
@@ -38,7 +42,11 @@ function canonical(parts) {
 
 /** True iff `username` is a syntactically valid bare account handle. */
 export function isValidUsername(username) {
-  return typeof username === "string" && USERNAME_RE.test(username);
+  return (
+    typeof username === "string" &&
+    USERNAME_RE.test(username) &&
+    !username.includes("--")
+  );
 }
 
 /** POST the standalone, idempotent username claim. A 409 means the name
@@ -59,12 +67,27 @@ export async function claimUsername(username, irkPub, sign, deps = {}) {
   const irkPubHex = toHex(irkPub);
   const issuedAt = Date.now();
   const sig = await sign(canonical([TAG_CLAIM, username, irkPubHex, issuedAt]));
-  const resp = await f("/api/username/claim", {
+  // Slice D (docs/device-admin-tier-spec.md §8.1) — publish the account's pinned
+  // admin master-root pubkey alongside the claim. `.com` stores it on the
+  // usernames row (`admin_root_pub_hex`); the claim signature covers only the
+  // membership fields (the admin root rides the body like `.com` already
+  // accepts). Omitted → a legacy claim with no admin root (byte-identical body).
+  const adminRootPubHex =
+    typeof deps.adminRootPubHex === "string" && deps.adminRootPubHex
+      ? deps.adminRootPubHex.toLowerCase()
+      : null;
+  // ABSOLUTE control-plane URL (controlApex), not a relative path: the webapp is
+  // served from web.<apex>, whose origin only serves GET/HEAD static assets — a
+  // relative POST 405s there (and never reaches the control plane). Mirrors the
+  // username CHECK (state.js) + the sibling calls in create-server.js. Surfaced
+  // by the live web e2e (the claim was hitting web.gym.flagshipserver.com → 405).
+  const resp = await f(`${controlApex()}/api/username/claim`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       request: { username, irkPub: irkPubHex, issuedAt },
       signature: toHex(sig),
+      ...(adminRootPubHex ? { adminRootPub: adminRootPubHex } : {}),
     }),
   });
   if (!resp.ok && resp.status !== 409) {
@@ -114,11 +137,26 @@ export async function openAccount(username, deps) {
   }
 
   const sign = (bytes) => deps.signWithIrk(session.umk, bytes);
+
+  // Slice D — the first device mints (idempotently) the account's admin master
+  // root at account-open and publishes its pubkey with the claim so `.com` pins
+  // it and fresh boxes can pin it via the recipe AuthCode. Best-effort: a
+  // failure to mint (e.g. no WebCrypto Ed25519) must not block opening the
+  // account — the account then behaves as a legacy no-admin-root account until
+  // the root is established.
+  const ensureAdminRoot = deps.ensureAdminRoot || defaultEnsureAdminRoot;
+  let adminRootPubHex = null;
+  try {
+    adminRootPubHex = await ensureAdminRoot(session);
+  } catch {
+    adminRootPubHex = null;
+  }
+
   const { alreadyClaimed } = await claimUsername(
     username,
     session.irk.publicKey,
     sign,
-    { fetch: deps.fetch, bytesToHex: deps.bytesToHex },
+    { fetch: deps.fetch, bytesToHex: deps.bytesToHex, adminRootPubHex },
   );
 
   // Bind the identity locally: username persisted + a server-less

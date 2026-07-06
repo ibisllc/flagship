@@ -1,4 +1,4 @@
-export type Role = "system" | "user" | "assistant";
+export type Role = "system" | "user" | "assistant" | "tool";
 
 /**
  * An attachment carried by a user message (the vibe-code chat lets the
@@ -17,6 +17,42 @@ export interface ChatMessage {
   content: string;
   /** Optional multimodal attachments (user messages only). */
   attachments?: Attachment[];
+  /**
+   * Tool-use blocks an ASSISTANT turn emitted, carried back into the
+   * conversation so the model has memory of what it called when the loop
+   * resumes. Adapters serialize these into the provider's native
+   * assistant-tool-call shape (Anthropic `tool_use` content blocks, OpenAI
+   * `tool_calls`). Set ONLY on `role: "assistant"` messages an agentic
+   * driver records mid-loop. Carries NO secret values — tool inputs are
+   * the model's own arguments (file paths, manifest JSON), never owner env
+   * values, which never reach the model by contract.
+   */
+  toolUses?: ToolUseBlock[];
+  /**
+   * Results of the tools an assistant turn invoked, fed back so the model
+   * can continue. Each entry echoes a `ToolUseBlock.id` and carries the
+   * tool's textual output. Adapters serialize these into the provider's
+   * native tool-result shape (Anthropic `tool_result` blocks on a USER
+   * turn; OpenAI `role: "tool"` messages). Set ONLY on a `role: "tool"`
+   * message the driver appends after dispatching the calls. Tool output is
+   * value-free by construction (workspace ops report names/sizes/validation
+   * problems, never secret values).
+   */
+  toolResults?: ToolResultBlock[];
+}
+
+/**
+ * One tool result fed back to the model after the driver ran the
+ * corresponding `ToolUseBlock`. `toolUseId` MUST match the id the model
+ * assigned to the call. `isError` lets the model recover (e.g. fix an
+ * invalid manifest) rather than the loop aborting.
+ */
+export interface ToolResultBlock {
+  toolUseId: string;
+  /** The tool's name (some providers want it echoed; harmless otherwise). */
+  name?: string;
+  content: string;
+  isError?: boolean;
 }
 
 export interface ChatRequest {

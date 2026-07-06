@@ -100,6 +100,13 @@ export interface ServerRegisterDeps {
    * either way.
    */
   boxSerials?: BoxSerialsStorage;
+  /**
+   * The data-plane apex these server names live under — `flagship.services`
+   * in prod, `gym.flagship.services` in the test env (docs/ui-test-gym.md
+   * §6.5). Used to derive the user-zone CAA anchor. Defaults to the prod
+   * literal so prod behavior is byte-identical.
+   */
+  apex?: string;
   maxAgeMs?: number;
   now?: () => number;
 }
@@ -116,6 +123,14 @@ interface RegisterBody {
       userPubKey?: string;
       issuedAt?: number;
       expiresAt?: number;
+      /**
+       * Slice D (docs/device-admin-tier-spec.md §D-1) — the account's pinned
+       * ADMIN MASTER ROOT pubkey (hex). Part of the AuthCode's SIGNED canonical
+       * bytes, so it MUST be reconstructed here or a client-signed AuthCode that
+       * carries it fails signature re-verification. Optional + backward-
+       * compatible: absent ⇒ byte-identical bytes (legacy AuthCodes verify).
+       */
+      adminRootPubKey?: string;
     };
     authCodeUserSignature?: string;
     serverIdentityPubKey?: string;
@@ -176,7 +191,9 @@ export async function handleServerRegister(
     typeof ac.userPubKey !== "string" ||
     !HEX64.test(ac.userPubKey) ||
     typeof ac.issuedAt !== "number" ||
-    typeof ac.expiresAt !== "number"
+    typeof ac.expiresAt !== "number" ||
+    (ac.adminRootPubKey !== undefined &&
+      (typeof ac.adminRootPubKey !== "string" || !HEX64.test(ac.adminRootPubKey)))
   ) {
     return malformed("malformed authCode");
   }
@@ -191,6 +208,10 @@ export async function handleServerRegister(
     userPubKey: hexToBytes(ac.userPubKey),
     issuedAt: ac.issuedAt,
     expiresAt: ac.expiresAt,
+    // Slice D — reconstruct the signed admin master root so the AuthCode's
+    // canonical bytes (and thus the signature re-verification below) match what
+    // the phone signed. Absent ⇒ byte-identical to a legacy AuthCode.
+    ...(ac.adminRootPubKey ? { adminRootPubKey: hexToBytes(ac.adminRootPubKey) } : {}),
   };
   const userSig = hexToBytes(r.authCodeUserSignature);
   if (!verifyAuthCode(authCode, userSig, authCode.userPubKey)) {
@@ -357,8 +378,20 @@ export async function handleServerRegister(
   let caaError: string | undefined;
   if (deps.dns) {
     const podApex = authCode.serverDomain;
-    const userZone = userZoneOf(podApex);
+    const userZone = userZoneOf(podApex, deps.apex ?? "flagship.services");
+    // PER-USER wildcard for TIER-2 leader-routed service names: a tier-2
+    // canonical `<svc>.<user>.<apex>` is hardware-agnostic (no per-box wildcard
+    // covers it — `*.<server>.<user>` only covers `<x>.<server>.<user>`). It
+    // must resolve to the same `.services` SNI-passthrough hub IP so the hub can
+    // route it to whichever box currently holds the `<svc>.<user>` leader slot.
+    // One idempotent `*.<user>.<apex>` A/AAAA per user does that for EVERY tier-2
+    // name under the user (RFC 1034 wildcard). The CAA at the user zone already
+    // covers it (tree-climb). A second box under the same user re-asserts the
+    // same record (no-op). The cert for each `<svc>.<user>` is still minted
+    // box-local under phone authority (Phase 5) — this is purely the A-record so
+    // the name resolves; routing + TLS are gated separately by the hub + cert.
     const names = [podApex, `*.${podApex}`];
+    if (userZone) names.push(`*.${userZone}`);
     try {
       for (const name of names) {
         const a = await deps.dns.client.upsert({
@@ -426,19 +459,24 @@ export async function handleServerRegister(
 }
 
 /**
- * For a podApex of the form `<server>.<user>.flagship.services`, return
- * the user zone `<user>.flagship.services` (the CAA record-set anchor —
- * A/AAAA publishing is per-box). Returns null on shape mismatch.
+ * For a podApex of the form `<server>.<user>.<apex>`, return the user zone
+ * `<user>.<apex>` (the CAA record-set anchor — A/AAAA publishing is
+ * per-box). Parses apex-RELATIVE: strip the configured apex suffix, then
+ * the user is the LAST remaining label — so a deeper apex like
+ * `gym.flagship.services` resolves `home.alice.gym.flagship.services` to
+ * `alice.gym.flagship.services`, not the wrong label. `apex` defaults to
+ * the prod literal. Returns null on shape mismatch.
  */
-function userZoneOf(podApex: string): string | null {
+function userZoneOf(podApex: string, apex = "flagship.services"): string | null {
   const lower = podApex.toLowerCase();
-  if (!lower.endsWith(".flagship.services")) return null;
-  const head = lower.slice(0, -".flagship.services".length);
+  const suffix = `.${apex}`;
+  if (!lower.endsWith(suffix)) return null;
+  const head = lower.slice(0, -suffix.length);
   const parts = head.split(".");
   if (parts.length < 2) return null;
   const user = parts[parts.length - 1]!;
-  if (!/^[a-z0-9]{3,30}$/.test(user)) return null;
-  return `${user}.flagship.services`;
+  if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(user)) return null;
+  return `${user}.${apex}`;
 }
 
 export async function handleServerLookup(

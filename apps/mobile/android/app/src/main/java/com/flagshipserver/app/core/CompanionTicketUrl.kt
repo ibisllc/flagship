@@ -26,7 +26,8 @@ data class CompanionTicketPayload(
 )
 
 object CompanionTicketUrl {
-    private const val HOST = "https://web.flagshipserver.com/"
+    /** Webapp receiver origin, via [Endpoints] (prod-default + test override). */
+    private val HOST: String get() = Endpoints.webappOrigin
 
     private val json = Json {
         explicitNulls = false

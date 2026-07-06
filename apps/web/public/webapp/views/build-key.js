@@ -118,7 +118,7 @@ function showForm(visible) {
 
 async function useDifferentKey() {
   const session = getSession();
-  if (!session.umk) return toast("unlock first", "err");
+  if (!session.umk) return toast("Unlock first", "err");
   const provider = $("bk-provider").value;
   const apiKey = $("bk-key").value;
   const baseUrl = $("bk-base").value.trim();
@@ -135,7 +135,7 @@ async function useDifferentKey() {
         apiKey,
         baseUrl: baseUrl || undefined,
       });
-      toast("key saved on this device", "ok");
+      toast("Key saved on this device", "ok");
     } catch (e) {
       return toast(e.message, "err");
     }

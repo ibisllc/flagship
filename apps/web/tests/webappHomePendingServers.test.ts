@@ -179,7 +179,7 @@ describe("webapp renderPendingCard", () => {
       serverName: "wiki",
       phase: "installing",
     });
-    expect(html).toContain("pending");
+    expect(html).toContain("Pending");
     expect(html).toContain("wiki");
     expect(html).toContain("demo-progress-bar");
     expect(html).toContain('role="progressbar"');
@@ -252,6 +252,23 @@ describe("webapp classifyServer — three states of a registered-but-not-online 
     // card (not a dead-end status pill).
     expect(html).toContain("js-approve-unlock");
     expect(html).toContain("Approve unlock");
+  });
+
+  it("waiting-for-approval: a box awaiting ENTITLEMENT is NOT dead either (Box Request Inbox)", () => {
+    // ezra's case: registered long ago, never checked in, but the directory's
+    // cheap `pendingRequests` digest carries a live entitlement request — it's
+    // actively asking to be authorized to serve, so it must read "waiting for
+    // approval", not "never seen". (An entitlement entry, no separate boolean.)
+    const pod = {
+      lastReported: null,
+      registeredAt: now - 60 * 60 * 1000,
+      pendingRequests: [{ id: "n", type: "entitlement", issuedAt: 1, expiresAt: now + 60_000 }],
+    };
+    const c = classifyServer(server, pod, { hasLiveUnlockRequest: false, now });
+    expect(c.kind).toBe("waiting-for-approval");
+    const html = renderServerCard(server, pod, { hasLiveUnlockRequest: false, now });
+    expect(html).not.toContain("js-delete-dead-server"); // decommission suppressed
+    expect(html).toContain("js-approve-unlock"); // actionable entry → boot-approval (handles entitlement)
   });
 
   it("coming-online: registered within the grace window, no live request", () => {

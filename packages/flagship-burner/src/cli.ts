@@ -14,7 +14,7 @@
  * flagshipserver.com — the phone's signature is the trust root and
  * .com's involvement in the burn step is a non-feature.
  */
-import { writeFile, unlink } from "node:fs/promises";
+import { writeFile, unlink, readFile } from "node:fs/promises";
 import {
   loadBlobFromFile,
   loadBlobFromStdin,
@@ -27,8 +27,11 @@ import {
   runWriteImageCommand,
   remasterIsoWithInstaller,
   detectIsoFamily,
+  debugSshKeyFromGrant,
   type IsoFamily,
 } from "./index.js";
+
+import { runPair } from "./pair.js";
 
 const args = process.argv.slice(2);
 const subcommand = args[0];
@@ -54,6 +57,8 @@ async function main(): Promise<void> {
       return cmdWriteImage(args.slice(1));
     case "distros":
       return cmdDistros();
+    case "pair":
+      return cmdPair(args.slice(1));
     case undefined:
     case "--help":
     case "-h":
@@ -128,6 +133,14 @@ async function cmdUserData(rest: string[]): Promise<void> {
   const genOpts = {
     blob: loaded.blob,
     blobSignatureHex: loaded.blobSignatureHex,
+    pairingOrder: loaded.pairingOrder,
+    swkHex: loaded.swkHex,
+    debugGrant: loaded.debugGrant,
+    // The debug SSH key baked at install time (SSH-diagnosable pre-daemon). An
+    // explicit --debug-ssh-key[-file] (dev / e2e diagnosis) OVERRIDES the key
+    // carried in the owner-Face-ID-signed debug grant (the production path).
+    debugSshAuthorizedKey:
+      (await resolveDebugSshKey(rest)) ?? debugSshKeyFromGrant(loaded.debugGrant),
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),
@@ -181,6 +194,14 @@ async function cmdPrepare(rest: string[]): Promise<void> {
   const genOpts = {
     blob: loaded.blob,
     blobSignatureHex: loaded.blobSignatureHex,
+    pairingOrder: loaded.pairingOrder,
+    swkHex: loaded.swkHex,
+    debugGrant: loaded.debugGrant,
+    // The debug SSH key baked at install time (SSH-diagnosable pre-daemon). An
+    // explicit --debug-ssh-key[-file] (dev / e2e diagnosis) OVERRIDES the key
+    // carried in the owner-Face-ID-signed debug grant (the production path).
+    debugSshAuthorizedKey:
+      (await resolveDebugSshKey(rest)) ?? debugSshKeyFromGrant(loaded.debugGrant),
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),
@@ -286,6 +307,26 @@ async function cmdWriteImage(rest: string[]): Promise<void> {
   console.log(`wrote ${result.bytesWritten} bytes to ${result.devicePath}`);
 }
 
+/**
+ * DEBUG-ONLY: resolve the dev SSH public key that turns the image into a
+ * remote-access-only diagnostic box (sshd + this key on the `flagship` user,
+ * NO provisioning, NO LUKS re-key — see userdata.ts buildBootstrapScriptDebug).
+ * `--debug-ssh-key-file <path>` reads the key from a file (the usual case — a
+ * public key has spaces); `--debug-ssh-key "<key>"` takes it inline. Absent ⇒
+ * undefined ⇒ the normal production bootstrap (byte-identical to before). This
+ * is a bring-up/diagnosis mechanism, never a user-facing GUI feature.
+ */
+async function resolveDebugSshKey(rest: string[]): Promise<string | undefined> {
+  const file = extractFlagValue(rest, "--debug-ssh-key-file");
+  if (file) {
+    const key = (await readFile(file, "utf8")).trim();
+    if (!key) throw new Error(`--debug-ssh-key-file ${file} is empty`);
+    return key;
+  }
+  const inline = extractFlagValue(rest, "--debug-ssh-key");
+  return inline && inline.trim() ? inline.trim() : undefined;
+}
+
 /** Extract `--flag value` or `--flag=value` from argv. */
 function extractFlagValue(argv: string[], flag: string): string | undefined {
   for (let i = 0; i < argv.length; i++) {
@@ -299,6 +340,24 @@ function extractFlagValue(argv: string[], flag: string): string | undefined {
     }
   }
   return undefined;
+}
+
+async function cmdPair(rest: string[]): Promise<void> {
+  const host = extractFlagValue(rest, "--host");
+  const out = extractFlagValue(rest, "--out");
+  // GUI hosts (the desktop apps) drive this as a subprocess and render a native
+  // cover. `--emit-events` prints one machine-readable `FLAGSHIP_PAIR <json>`
+  // line per milestone on stdout (alongside the human logs, which they ignore).
+  const emitEvents = rest.includes("--emit-events");
+  await runPair({
+    ...(host ? { host } : {}),
+    ...(out ? { out } : {}),
+    insecure: rest.includes("--insecure"),
+    debug: rest.includes("--debug"),
+    ...(emitEvents
+      ? { emitEvents: (ev) => process.stdout.write(`FLAGSHIP_PAIR ${JSON.stringify(ev)}\n`) }
+      : {}),
+  });
 }
 
 function cmdDistros(): void {
@@ -331,11 +390,24 @@ usage:
   flagship-burn write-image <image.iso>                    raw-write an already-prepared image
                                                            [--device /dev/diskN | auto] [--yes]
                                                            (needs sudo; pairs with prepare)
+  flagship-burn pair                                       pair with your phone (shows a QR + code),
+                                                           receive + verify the recipe over the live relay
+                                                           [--out <recipe.json>] [--host <control-host>] [--debug]
+                                                           [--emit-events: machine-readable milestones for GUI hosts]
+                                                           (--debug = Advanced: request an owner-signed debug-access
+                                                            grant; you approve it on your phone with Face ID, and the
+                                                            box enables a debug console user only after verifying it)
   flagship-burn distros                                    list supported distros
 
 Wi-Fi (for a target box with no Ethernet) — pass to user-data/prepare/write:
   --wifi-ssid <name> --wifi-password <pass>   bake netplan Wi-Fi into the image
   (a burn-time local input; NEVER part of the signed recipe)
+
+Debug remote-access image (bring-up / diagnosis only) — pass to user-data/prepare:
+  --debug-ssh-key-file <path> | --debug-ssh-key "<pubkey>"
+  Bakes sshd + this key on the 'flagship' user and does NOTHING ELSE — no
+  provisioning, no LUKS re-key — so a first-boot that never registers is still
+  reachable to diagnose (ssh flagship@<box>). NOT a production/user feature.
 
 The recipe is the signed JSON the website produces after you scan the
 QR code with your phone. Bring it here — the Burner verifies the

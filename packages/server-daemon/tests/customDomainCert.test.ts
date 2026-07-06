@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { deriveSTK, deriveSWK, type CustomDomainCert } from "@flagship/protocol";
+import { swkOps } from "./helpers/keyCustody.js";
 import {
   CustomDomainCertStore,
   ensureLeadCustomDomainCert,
@@ -79,7 +80,7 @@ describe("ensureLeadCustomDomainCert", () => {
   it("lead issues, installs for the exact SNI, persists, signs, replicates", async () => {
     const pair = await stubPair();
     const cm = new CertManager();
-    const certStore = new EncryptedCertStore(deriveSWK(umk, "home"), "home");
+    const certStore = new EncryptedCertStore(swkOps(deriveSWK(umk, "home")), "home");
     const { sender, sent } = captureSender();
     const notAfter = Date.now() + 80 * 24 * 60 * 60 * 1000;
     const r = await ensureLeadCustomDomainCert({

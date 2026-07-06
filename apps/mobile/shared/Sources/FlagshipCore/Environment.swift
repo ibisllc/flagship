@@ -118,6 +118,84 @@ public extension EnvironmentValues {
     }
 }
 
+/// Direct (box-read) per-service leadership — `GET /api/leads` over the box's
+/// pinned canonical pipe, preferred over the `.com` `/pods` `leadsServices`
+/// relay when a box is reachable. Defaults to the in-process Mock (returns nil =
+/// "no fresher source"), so previews/tests keep the relay value untouched.
+private struct LeadsClientKey: EnvironmentKey {
+    static let defaultValue: any LeadsClient = MockLeadsClient()
+}
+
+public extension EnvironmentValues {
+    var leadsClient: any LeadsClient {
+        get { self[LeadsClientKey.self] }
+        set { self[LeadsClientKey.self] = newValue }
+    }
+}
+
+/// Per-service access gating (docs/service-access-gating.md): the owner-IRK
+/// toggle + allow-list manager (box + `.com`) and the friend AID-signed redeem
+/// (box). Box calls ride the pinned canonical pipe; `.com` calls (invite
+/// create/list/revoke) ride a public-CA session. Defaults to the in-process
+/// Mock so previews/tests are inert.
+private struct ServiceAccessClientKey: EnvironmentKey {
+    static let defaultValue: any ServiceAccessClient = MockServiceAccessClient()
+}
+
+public extension EnvironmentValues {
+    var serviceAccessClient: any ServiceAccessClient {
+        get { self[ServiceAccessClientKey.self] }
+        set { self[ServiceAccessClientKey.self] = newValue }
+    }
+}
+
+/// Box-direct delivery for the owner-signed service uninstall
+/// (`DELETE /api/services/:id`). Same pinned canonical pipe + IRK-signature
+/// trust posture as the front-page / lock-power clients. Defaults to the
+/// in-process Mock so previews/tests are inert (they record sends, never hit a
+/// network).
+private struct ServiceUninstallClientKey: EnvironmentKey {
+    static let defaultValue: any ServiceUninstallClient = MockServiceUninstallClient()
+}
+
+public extension EnvironmentValues {
+    var serviceUninstallClient: any ServiceUninstallClient {
+        get { self[ServiceUninstallClientKey.self] }
+        set { self[ServiceUninstallClientKey.self] = newValue }
+    }
+}
+
+/// Transfer-a-box broker client (`.com`): deposits the giver's offer, polls for
+/// the acquirer's claim, and hands off the re-sealed disk key. Hits `.com`
+/// (the namespace-migration broker), not a box-pinned pipe. Defaults to the
+/// in-process Mock so previews/tests are inert.
+private struct ServerTransferClientKey: EnvironmentKey {
+    static let defaultValue: any ServerTransferClient = MockServerTransferClient()
+}
+
+public extension EnvironmentValues {
+    var serverTransferClient: any ServerTransferClient {
+        get { self[ServerTransferClientKey.self] }
+        set { self[ServerTransferClientKey.self] = newValue }
+    }
+}
+
+/// Server-migration lane client (`.com`): deposits the admin-signed initiate /
+/// confirm-ready / freeze / abort and polls the public phase state
+/// (docs/server-migration.md). Hits `.com` (the migration orchestration lane),
+/// not a box-pinned pipe. Defaults to the in-process Mock so previews/tests
+/// are inert.
+private struct ServerMigrationClientKey: EnvironmentKey {
+    static let defaultValue: any ServerMigrationClient = MockServerMigrationClient()
+}
+
+public extension EnvironmentValues {
+    var serverMigrationClient: any ServerMigrationClient {
+        get { self[ServerMigrationClientKey.self] }
+        set { self[ServerMigrationClientKey.self] = newValue }
+    }
+}
+
 /// P6 — owner-only invite label book. Maps `(serviceId, opaqueTag)`
 /// to a local display name + channel + sent-to memo + notes. NEVER
 /// leaves the device. The default value is the UserDefaults-backed
@@ -130,5 +208,22 @@ public extension EnvironmentValues {
     var inviteLabelBook: any InviteLabelBook {
         get { self[InviteLabelBookKey.self] }
         set { self[InviteLabelBookKey.self] = newValue }
+    }
+}
+
+/// Web-experience gating (docs/service-access-gating.md): the local store of
+/// browser QR-login sessions THIS phone has authorized. Drives Settings →
+/// "Open secured sessions" (list / refresh online-offline / stop). NEVER leaves
+/// the device — the secretId is the box's poll/close handle, nothing more. The
+/// default value is the UserDefaults-backed implementation; tests + previews
+/// inject the in-memory variant.
+private struct SecuredSessionStoreKey: EnvironmentKey {
+    static let defaultValue: any SecuredSessionStoring = UserDefaultsSecuredSessionStore()
+}
+
+public extension EnvironmentValues {
+    var securedSessionStore: any SecuredSessionStoring {
+        get { self[SecuredSessionStoreKey.self] }
+        set { self[SecuredSessionStoreKey.self] = newValue }
     }
 }

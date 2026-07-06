@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.ServiceEnvSetEnvelope
 import com.flagshipserver.app.api.ServiceEnvSetRequest
+import com.flagshipserver.app.api.userFacing
 import com.flagshipserver.app.api.VibeCodePendingRequest
 import com.flagshipserver.app.api.VibeCodeReplyRequest
 import com.flagshipserver.app.api.VibeCodeSessionPublicState
@@ -47,6 +48,7 @@ import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -62,6 +64,12 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
     var replyDraft by remember { mutableStateOf("") }
     var envValueDraft by remember { mutableStateOf("") }
     var submitting by remember { mutableStateOf(false) }
+    // Deploy state. `ready-to-deploy` (the model finished emitting files + no
+    // tool pending) surfaces the Deploy button; on success the deployed URL
+    // renders. The scratch deploy has no other trigger (the WS stream is a pure
+    // relay), so this button IS how a chat-built service ships. Mirror of iOS.
+    var deploying by remember { mutableStateOf(false) }
+    var deployedUrl by remember { mutableStateOf<String?>(null) }
 
     val pods = appState.pods.collectAsState().value
     val leaderId = appState.leaderPodId.collectAsState().value
@@ -73,17 +81,20 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
         try {
             state = client.vibeCodeSessionState(sessionId)
         } catch (t: Throwable) {
-            errorMessage = t.message
+            errorMessage = t.userFacing()
         }
     }
 
     LaunchedEffect(sessionId) {
         reload()
-        // Poll the public state while the session is non-terminal.
+        // Poll the public state while the session is still moving toward a
+        // terminal state. `ready-to-deploy` is included so the screen keeps
+        // refreshing until the owner taps Deploy (and reflects a deploy that
+        // completed out-of-band). Mirror of iOS.
         while (true) {
             delay(1500)
             val s = state ?: continue
-            if (s.status !in listOf("streaming", "awaiting-tool-response", "deploying")) break
+            if (s.status !in listOf("streaming", "awaiting-tool-response", "ready-to-deploy", "deploying")) break
             try {
                 state = client.vibeCodeSessionState(sessionId)
             } catch (_: Throwable) {
@@ -181,7 +192,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                 enabled = !submitting && replyDraft.isNotEmpty(),
                                 modifier = Modifier.semantics { testTag = "vibecode-reply-send-btn" },
                                 onClick = {
-                                    scope.launch {
+                                    scope.launch(Dispatchers.Main) {
                                         submitting = true
                                         try {
                                             client.vibeCodeSessionReply(
@@ -191,7 +202,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                             replyDraft = ""
                                             reload()
                                         } catch (t: Throwable) {
-                                            errorMessage = t.message
+                                            errorMessage = t.userFacing()
                                         } finally {
                                             submitting = false
                                         }
@@ -235,14 +246,16 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                 modifier = Modifier.semantics { testTag = "vibecode-envvar-send-btn" },
                                 onClick = {
                                     val appId = s.appId ?: return@FSPrimaryButton
-                                    val dashIdx = appId.indexOf('-')
-                                    if (dashIdx <= 0) {
+                                    // serviceId = "<creator>--<slug>"; split on `--`
+                                    // (docs/service-addressing-double-dash.md).
+                                    val delimIdx = appId.indexOf("--")
+                                    if (delimIdx <= 0) {
                                         errorMessage = "Invalid app id shape"
                                         return@FSPrimaryButton
                                     }
-                                    val creator = appId.substring(0, dashIdx)
-                                    val slug = appId.substring(dashIdx + 1)
-                                    scope.launch {
+                                    val creator = appId.substring(0, delimIdx)
+                                    val slug = appId.substring(delimIdx + 2)
+                                    scope.launch(Dispatchers.Main) {
                                         submitting = true
                                         try {
                                             val issuedAt = System.currentTimeMillis()
@@ -267,7 +280,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                             envValueDraft = ""
                                             reload()
                                         } catch (t: Throwable) {
-                                            errorMessage = t.message
+                                            errorMessage = t.userFacing()
                                         } finally {
                                             submitting = false
                                         }
@@ -279,7 +292,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                 label = "Decline",
                                 modifier = Modifier.semantics { testTag = "vibecode-envvar-decline-btn" },
                                 onClick = {
-                                    scope.launch {
+                                    scope.launch(Dispatchers.Main) {
                                         try {
                                             client.vibeCodeSessionReply(
                                                 sessionId,
@@ -287,13 +300,81 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                             )
                                             reload()
                                         } catch (t: Throwable) {
-                                            errorMessage = t.message
+                                            errorMessage = t.userFacing()
                                         }
                                     }
                                 },
                             )
                         }
                     }
+                }
+            }
+            Spacer(Modifier.height(FS.space.s3))
+        }
+
+        // Deploy affordance + result. Shown once the model has finished emitting
+        // the app (`ready-to-deploy`) — the only point a scratch session can be
+        // shipped, since the WS stream never auto-deploys. After a successful
+        // deploy the canonical URL renders. Mirror of iOS deploySection.
+        val deployed = deployedUrl
+        if (deployed != null || s.status == "deployed") {
+            FSCard {
+                Column {
+                    Text(
+                        "✓ Deployed",
+                        color = FS.colors.success,
+                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    if (deployed != null) {
+                        Spacer(Modifier.height(FS.space.s1))
+                        Text(
+                            deployed,
+                            color = FS.colors.text,
+                            style = TextStyle(fontSize = 13.sp),
+                            modifier = Modifier.semantics { testTag = "vibecode-deployed-url" },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(FS.space.s3))
+        } else if (s.status == "ready-to-deploy" || s.status == "deploying") {
+            FSCard {
+                Column {
+                    Text(
+                        "Ready to deploy",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    Spacer(Modifier.height(FS.space.s1))
+                    Text(
+                        "The AI finished writing your service. Deploy it to your box.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp),
+                    )
+                    Spacer(Modifier.height(FS.space.s3))
+                    FSPrimaryButton(
+                        label = if (deploying || s.status == "deploying") "Deploying…" else "Deploy",
+                        enabled = !deploying && s.status == "ready-to-deploy",
+                        modifier = Modifier.semantics { testTag = "vibecode-deploy-btn" },
+                        onClick = {
+                            scope.launch(Dispatchers.Main) {
+                                deploying = true
+                                try {
+                                    val r = client.vibeCodeDeploy(sessionId)
+                                    if (r.ok) {
+                                        deployedUrl = r.url
+                                    } else {
+                                        errorMessage = "Deploy was rejected by the box."
+                                    }
+                                    reload()
+                                } catch (t: Throwable) {
+                                    errorMessage = t.userFacing()
+                                } finally {
+                                    deploying = false
+                                }
+                            }
+                        },
+                    )
                 }
             }
             Spacer(Modifier.height(FS.space.s3))

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { ed, signUploadRecoveryRecord, type Keypair } from "@flagship/protocol";
+import {
+  ed,
+  signAdminRootRotation,
+  signUploadRecoveryRecord,
+  type Keypair,
+} from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
+import { handleApplyAdminRootRotation } from "../src/adminRootRotation.js";
 import {
   handleDeleteWebauthnRecovery,
   handleFetchWebauthnRecovery,
@@ -50,6 +56,7 @@ async function upload(opts: {
   fetchTokenHashHex?: string;
   prfSaltHashHex?: string;
   wrappedAcmeAccountKeyB64?: string;
+  wrappedAdminRootB64?: string;
 }) {
   const username = opts.username ?? USERNAME;
   const credentialId = opts.credentialId ?? "deadbeef".repeat(4);
@@ -67,6 +74,7 @@ async function upload(opts: {
   if (opts.fetchTokenHashHex) request.fetchTokenHash = opts.fetchTokenHashHex;
   if (opts.prfSaltHashHex) request.prfSaltHash = opts.prfSaltHashHex;
   if (opts.wrappedAcmeAccountKeyB64) request.wrappedAcmeAccountKey = opts.wrappedAcmeAccountKeyB64;
+  if (opts.wrappedAdminRootB64) request.wrappedAdminRoot = opts.wrappedAdminRootB64;
   return handleUploadWebauthnRecovery(
     {
       usernames: opts.storage.usernames,
@@ -463,6 +471,275 @@ describe("webauthn recovery — Argon2id-gated fetch (Task #74)", () => {
       { fetchToken: bytesToHex(fetchToken), issuedAt: Date.now() - 10 * 60_000 },
     );
     expect(res.status).toBe(403);
+  });
+});
+
+describe("webauthn recovery — admin-root escrow (Slice D D-3)", () => {
+  async function gatedFetch(storage: InMemoryStorage, fetchToken: Uint8Array) {
+    return handleFetchWrappedUmkWithToken(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      USERNAME,
+      { fetchToken: bytesToHex(fetchToken), issuedAt: Date.now() },
+    );
+  }
+
+  it("escrows wrappedAdminRoot on upload and releases it on the gated fetch", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchToken = new Uint8Array(32).fill(6);
+    const fetchTokenHashHex = await sha256Hex(fetchToken);
+    await upload({ storage, irk, fetchTokenHashHex, wrappedAdminRootB64: "QURNSU4tUk9PVC1DVA==" });
+
+    const res = await gatedFetch(storage, fetchToken);
+    expect(res.status).toBe(200);
+    expect((res.body as { wrappedAdminRoot?: string }).wrappedAdminRoot).toBe("QURNSU4tUk9PVC1DVA==");
+  });
+
+  it("preserves the escrowed admin root across a UMK-only re-upload that omits it", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    await upload({ storage, irk, wrappedAdminRootB64: "QURNSU4tUk9PVC1DVA==" });
+    await upload({ storage, irk, wrappedUmk: new Uint8Array([0xcc]) });
+    const after = await storage.webauthnRecovery.get(USERNAME);
+    expect(after?.wrappedAdminRootB64).toBe("QURNSU4tUk9PVC1DVA==");
+  });
+
+  it("REPLACES the escrowed admin root on a re-upload carrying a new value (post-rotation re-escrow)", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchToken = new Uint8Array(32).fill(7);
+    const fetchTokenHashHex = await sha256Hex(fetchToken);
+    await upload({ storage, irk, fetchTokenHashHex, wrappedAdminRootB64: "T0xELVJPT1QtQ1Q=" });
+    // Credential recovery rotated the admin root; the recovering device
+    // re-escrows the NEW root under the same credential.
+    await upload({ storage, irk, fetchTokenHashHex, wrappedAdminRootB64: "TkVXLVJPT1QtQ1Q=" });
+
+    const stored = await storage.webauthnRecovery.get(USERNAME);
+    expect(stored?.wrappedAdminRootB64).toBe("TkVXLVJPT1QtQ1Q=");
+    const res = await gatedFetch(storage, fetchToken);
+    expect((res.body as { wrappedAdminRoot?: string }).wrappedAdminRoot).toBe("TkVXLVJPT1QtQ1Q=");
+  });
+
+  it("omits wrappedAdminRoot from the gated fetch for a legacy upload without it", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchToken = new Uint8Array(32).fill(8);
+    const fetchTokenHashHex = await sha256Hex(fetchToken);
+    await upload({ storage, irk, fetchTokenHashHex });
+
+    const res = await gatedFetch(storage, fetchToken);
+    expect(res.status).toBe(200);
+    expect(res.body).not.toHaveProperty("wrappedAdminRoot");
+  });
+
+  it("does NOT surface the admin-root ciphertext on the public metadata GET", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    await upload({ storage, irk, wrappedAdminRootB64: "QURNSU4tUk9PVC1DVA==" });
+    const res = await handleFetchWebauthnRecovery(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      USERNAME,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).not.toHaveProperty("wrappedAdminRoot");
+  });
+});
+
+describe("webauthn recovery — adversarial rotate→recover chain (2026-07-03 invariant)", () => {
+  // THE INVARIANT (docs device-admin-tier, 2026-07-03): after an admin-root
+  // rotation a later recovery must restore the CURRENT root —
+  //   unwrap(wrapped_admin_root_b64) == usernames.admin_root_pub_hex (post-swap)
+  // — and that recovered root must be the terminus of the old→new proof chain,
+  // so a recovered device can sign the NEXT rotation the boxes accept. This
+  // drives the full offline loop against InMemory: upload → apply rotation →
+  // re-escrow → gated-fetch, asserting the invariant every hop.
+
+  const ADMIN_SALT = "flagship/recovery-admin-root-wrap/v1";
+  const enc = new TextEncoder();
+
+  function randSeed(fill: number): Uint8Array {
+    return new Uint8Array(32).fill(fill);
+  }
+  function adminPubHex(seed: Uint8Array): string {
+    return bytesToHex(ed.getPublicKey(seed));
+  }
+  async function adminWrapKey(prf: Uint8Array, usage: KeyUsage[]): Promise<CryptoKey> {
+    const ikm = await crypto.subtle.importKey("raw", prf, "HKDF", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits(
+      { name: "HKDF", hash: "SHA-256", salt: enc.encode(ADMIN_SALT), info: new Uint8Array() },
+      ikm,
+      256,
+    );
+    return crypto.subtle.importKey("raw", new Uint8Array(bits), { name: "AES-GCM" }, false, usage);
+  }
+  // Wrap/unwrap in the exact mobile escrow format (HKDF admin-root salt +
+  // AES-256-GCM, nonce‖ct‖tag base64) so the blob the test escrows is the same
+  // shape a real client would upload.
+  async function wrapAdminSeed(seed: Uint8Array, prf: Uint8Array): Promise<string> {
+    const key = await adminWrapKey(prf, ["encrypt"]);
+    const nonce = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, seed));
+    const out = new Uint8Array(12 + ct.length);
+    out.set(nonce, 0);
+    out.set(ct, 12);
+    return bytesToB64(out);
+  }
+  async function unwrapAdminSeed(b64: string, prf: Uint8Array): Promise<Uint8Array> {
+    const bin = atob(b64);
+    const blob = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) blob[i] = bin.charCodeAt(i);
+    const key = await adminWrapKey(prf, ["decrypt"]);
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: blob.slice(0, 12) }, key, blob.slice(12));
+    return new Uint8Array(pt);
+  }
+
+  async function setupWithAdminRoot(irk: Keypair, adminRootSeed: Uint8Array): Promise<InMemoryStorage> {
+    const s = new InMemoryStorage();
+    await s.usernames.put({
+      username: USERNAME,
+      irkPubHex: bytesToHex(irk.publicKey),
+      claimedAt: 1,
+      adminRootPubHex: adminPubHex(adminRootSeed),
+    });
+    return s;
+  }
+
+  async function applyRotation(
+    storage: InMemoryStorage,
+    oldSeed: Uint8Array,
+    newSeed: Uint8Array,
+  ) {
+    const oldPub = ed.getPublicKey(oldSeed);
+    const newPub = ed.getPublicKey(newSeed);
+    const issuedAt = Date.now();
+    const sig = signAdminRootRotation(
+      { username: USERNAME, oldAdminRootPub: oldPub, newAdminRootPub: newPub, issuedAt },
+      { privateKey: oldSeed, publicKey: oldPub },
+    );
+    return handleApplyAdminRootRotation(
+      { usernames: storage.usernames, rotations: storage.adminRootRotations },
+      USERNAME,
+      {
+        rotation: {
+          username: USERNAME,
+          oldAdminRootPub: bytesToHex(oldPub),
+          newAdminRootPub: bytesToHex(newPub),
+          issuedAt,
+        },
+        signatureHex: bytesToHex(sig),
+      },
+    );
+  }
+
+  async function reEscrow(
+    storage: InMemoryStorage,
+    irk: Keypair,
+    fetchTokenHashHex: string,
+    adminRootSeed: Uint8Array,
+    prf: Uint8Array,
+  ) {
+    await upload({
+      storage,
+      irk,
+      fetchTokenHashHex,
+      wrappedAdminRootB64: await wrapAdminSeed(adminRootSeed, prf),
+    });
+  }
+
+  async function gatedFetch(storage: InMemoryStorage, fetchToken: Uint8Array) {
+    return handleFetchWrappedUmkWithToken(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      USERNAME,
+      { fetchToken: bytesToHex(fetchToken), issuedAt: Date.now() },
+    );
+  }
+
+  /** unwrap(released wrappedAdminRoot) pub == stored admin_root_pub_hex. */
+  async function assertInvariant(storage: InMemoryStorage, fetchToken: Uint8Array, prf: Uint8Array) {
+    const res = await gatedFetch(storage, fetchToken);
+    expect(res.status).toBe(200);
+    const released = (res.body as { wrappedAdminRoot?: string }).wrappedAdminRoot;
+    expect(typeof released).toBe("string");
+    const recoveredSeed = await unwrapAdminSeed(released!, prf);
+    const recoveredPub = adminPubHex(recoveredSeed);
+    const stored = (await storage.usernames.get(USERNAME))?.adminRootPubHex;
+    expect(recoveredPub).toBe(stored);
+    return recoveredSeed;
+  }
+
+  it("two-hop chain r0→r1→r2: recovery restores the CURRENT root every hop, and it chains", async () => {
+    const irk = makeKey();
+    const prf = new Uint8Array(32).fill(0x5a);
+    const root0 = randSeed(0x10);
+    const root1 = randSeed(0x11);
+    const root2 = randSeed(0x12);
+    const fetchToken = new Uint8Array(32).fill(0x33);
+    const fetchTokenHashHex = await sha256Hex(fetchToken);
+
+    const storage = await setupWithAdminRoot(irk, root0);
+    // Initial escrow carries root0 (the current root at enrolment).
+    await reEscrow(storage, irk, fetchTokenHashHex, root0, prf);
+    const recovered0 = await assertInvariant(storage, fetchToken, prf);
+    expect(adminPubHex(recovered0)).toBe(adminPubHex(root0));
+
+    // Hop 1: r0→r1. The recovered root0 is the terminus that SIGNS the rotation
+    // (proving a recovered device can drive the next rotation the box accepts).
+    const r1 = await applyRotation(storage, recovered0, root1);
+    expect(r1.status).toBe(200);
+    expect((r1.body as { applied: boolean }).applied).toBe(true);
+    expect((await storage.usernames.get(USERNAME))?.adminRootPubHex).toBe(adminPubHex(root1));
+    // Re-escrow the NEW root, then recovery must restore root1 (not root0).
+    await reEscrow(storage, irk, fetchTokenHashHex, root1, prf);
+    const recovered1 = await assertInvariant(storage, fetchToken, prf);
+    expect(adminPubHex(recovered1)).toBe(adminPubHex(root1));
+    expect(adminPubHex(recovered1)).not.toBe(adminPubHex(root0));
+
+    // Hop 2: r1→r2, signed by the recovered root1 → chains to the terminus.
+    const r2 = await applyRotation(storage, recovered1, root2);
+    expect(r2.status).toBe(200);
+    await reEscrow(storage, irk, fetchTokenHashHex, root2, prf);
+    const recovered2 = await assertInvariant(storage, fetchToken, prf);
+    expect(adminPubHex(recovered2)).toBe(adminPubHex(root2));
+
+    // The served rotation lane holds the full replayable chain root0→root1→root2.
+    const lane = await storage.adminRootRotations.list(USERNAME);
+    expect(lane.map((r) => [r.oldAdminRootPubHex, r.newAdminRootPubHex])).toEqual([
+      [adminPubHex(root0), adminPubHex(root1)],
+      [adminPubHex(root1), adminPubHex(root2)],
+    ]);
+  });
+
+  it("HAZARD (skipRecoveryUpdate): rotate but SKIP re-escrow → recovery restores the DEAD root", async () => {
+    const irk = makeKey();
+    const prf = new Uint8Array(32).fill(0x5a);
+    const root0 = randSeed(0x20);
+    const root1 = randSeed(0x21);
+    const fetchToken = new Uint8Array(32).fill(0x44);
+    const fetchTokenHashHex = await sha256Hex(fetchToken);
+
+    const storage = await setupWithAdminRoot(irk, root0);
+    await reEscrow(storage, irk, fetchTokenHashHex, root0, prf);
+
+    // Rotate the pinned root r0→r1 but DO NOT re-escrow (the skipRecoveryUpdate
+    // path). The stored authority is now root1…
+    const rot = await applyRotation(storage, root0, root1);
+    expect(rot.status).toBe(200);
+    expect((await storage.usernames.get(USERNAME))?.adminRootPubHex).toBe(adminPubHex(root1));
+
+    // …but the escrow still wraps root0. Recovery therefore restores a DEAD root
+    // whose pub NO LONGER equals the stored anchor — the documented hazard. We
+    // PIN it so a future "auto re-escrow on rotation" change flips this test.
+    const res = await gatedFetch(storage, fetchToken);
+    const released = (res.body as { wrappedAdminRoot?: string }).wrappedAdminRoot;
+    const recoveredSeed = await unwrapAdminSeed(released!, prf);
+    expect(adminPubHex(recoveredSeed)).toBe(adminPubHex(root0)); // the stale/dead root
+    expect(adminPubHex(recoveredSeed)).not.toBe(
+      (await storage.usernames.get(USERNAME))?.adminRootPubHex,
+    );
+    // And crucially the dead root can't sign a rotation the box accepts: a proof
+    // signed by root0 no longer chains to the current anchor (root1) → 409.
+    const deadRotate = await applyRotation(storage, recoveredSeed, randSeed(0x22));
+    expect(deadRotate.status).toBe(409);
   });
 });
 

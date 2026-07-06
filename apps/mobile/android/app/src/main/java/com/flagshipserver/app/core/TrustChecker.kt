@@ -16,7 +16,7 @@ import kotlinx.serialization.json.Json
 
 class TrustChecker(
     private val transport: JsonHttpTransport,
-    private val baseUrl: String = "https://flagshipserver.com",
+    private val baseUrl: String = Endpoints.controlBaseUrl,
     private val now: () -> Long = { System.currentTimeMillis() },
 ) {
     @Serializable

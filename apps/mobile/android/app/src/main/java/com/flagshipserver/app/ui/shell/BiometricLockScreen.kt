@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,7 +64,10 @@ fun BiometricLockScreen() {
 
     val activity = ctx as? FragmentActivity
     Box(
-        modifier = Modifier.fillMaxSize().padding(horizontal = FS.space.s6),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = FS.space.s6)
+            .testTag("biometric-lock-screen"),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -112,6 +116,7 @@ fun BiometricLockScreen() {
                 enabled = status != Status.Authenticating,
                 block = true,
                 large = true,
+                modifier = Modifier.testTag("biometric-unlock-btn"),
             )
             Spacer(Modifier.height(FS.space.s4))
             // Always-present escape so broken/absent biometrics can never

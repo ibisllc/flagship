@@ -5,12 +5,18 @@ Native SwiftUI wrapper around the `@flagship/burner` Node CLI
 
 ## What it does
 
-A one-window wizard:
+The burner opens **locked**, showing a QR + a short code. You pair it
+from the Flagship phone app (scan the QR or type the code, confirm the
+security code), and the phone sends the signed recipe over a live
+session — the burner stays unlocked only while that session is up. There
+is also an **"I have a recipe"** path for a recipe you received out of
+band (paste it or drop the JSON file).
 
-1. **Recipe** — drag in (or paste) the signed JSON the website produces
-   after the phone scans the QR code. The GUI shells out to
-   `flagship-burn verify` and shows you the server-domain + expiry so
-   you can sanity-check before flashing.
+Once a recipe is in hand:
+
+1. **Recipe** — delivered over the paired session, or pasted/dropped via
+   "I have a recipe". The app verifies the signature and shows you the
+   server-domain + expiry so you can sanity-check before flashing.
 2. **ISO** — drag in a stock Ubuntu Server ISO (see
    `flagship-burn distros` for accepted SHAs).
 3. **Drive** — pick a USB drive from a read-only list. Only removable,

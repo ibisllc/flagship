@@ -36,6 +36,7 @@ import {
   handleAdminClaimAndIssue,
   handleAdminMintDeviceGrant,
   deriveDemoUserIrk,
+  deriveDemoUserAid,
   deriveDemoDeviceIrk,
   _internalDefaultDemoPrimaryScopes,
   type DemoAdminDeps,
@@ -213,6 +214,8 @@ describe("handleAdminClaimAndIssue", () => {
     expect(userRec).toBeDefined();
     expect(userRec!.irkPubHex).toBe(userPubHex);
     expect(userRec!.isDemo).toBe(true);
+    // gating v2 — the stable AID is registered too (deterministic-from-KEK).
+    expect(userRec!.aidPubHex).toBe(hex(deriveDemoUserAid(KEK_BYTES, "demoalice").publicKey));
 
     // 2. Blob signature verifies under the derived User IRK pub.
     const blobJson = body.blob;

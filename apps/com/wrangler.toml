@@ -127,16 +127,22 @@ crons = ["0 */6 * * *", "*/10 * * * *"]
 # endpoints. The Worker composes per-request keys of the form
 # `<endpoint>|<axis>|<id>` (see apps/com/src/rateLimit.ts).
 #
-# The binding's (period, limit) below is set to the tightest threshold
-# (3-per-15min) so that the recovery endpoint's usernameHash axis can
-# actually fire. Endpoints with more generous budgets are protected by
-# the in-Worker LIMITS table — see rateLimit.ts. The dashboard's
-# advanced ratelimits are NOT used; the simple binding suffices.
+# The binding's (period, limit) below is the tightest threshold so that
+# the recovery endpoint's usernameHash axis can actually fire. Endpoints
+# with more generous budgets are protected by the in-Worker LIMITS table
+# — see rateLimit.ts. The dashboard's advanced ratelimits are NOT used;
+# the simple binding suffices.
+#
+# NOTE: Cloudflare's `ratelimit` binding only accepts a `period` of 10 or
+# 60 seconds — those are the sole valid values the platform (and the
+# wrangler/miniflare schema) allow. A longer window (e.g. 15 min) is not
+# expressible here, so we cap at the platform-max 60s with a tight
+# 3-per-minute budget per key.
 [[unsafe.bindings]]
 name = "RATE_LIMITER"
 type = "ratelimit"
 namespace_id = "1001"
-simple = { limit = 3, period = 900 }
+simple = { limit = 3, period = 60 }
 
 # Dedicated namespace for /qr-pipe WebSocket upgrades (task P2). Each
 # upgrade materialises a Durable Object (BUILD_RELAY) that pays the
@@ -168,6 +174,14 @@ migrations_dir = "../../packages/storage/migrations"
 name = "BUILD_RELAY"
 class_name = "BuildRelaySession"
 
+# Phone↔desktop-burner live pairing session (sibling of BUILD_RELAY).
+# Long-lived bidirectional pipe; the live socket gates the burner UI.
+# Like BUILD_RELAY it is a dumb pipe — no keys, no plaintext, no state
+# beyond presence + an idle TTL alarm.
+[[durable_objects.bindings]]
+name = "BURNER_RELAY"
+class_name = "BurnerRelaySession"
+
 [[migrations]]
 tag = "v1"
 # Cloudflare's free plan requires SQLite-backed Durable Objects (not the
@@ -178,7 +192,23 @@ tag = "v1"
 # migration. [code: 10097]".
 new_sqlite_classes = ["BuildRelaySession"]
 
+[[migrations]]
+tag = "v2"
+# Adds the phone↔burner pairing DO. SQLite-backed for the same free-plan
+# reason as v1.
+new_sqlite_classes = ["BurnerRelaySession"]
+
 [vars]
+# Apex roots, as CONFIG (docs/ui-test-gym.md §6.5 / §12-G1). PROD VALUES =
+# today's literals, so this Worker is byte-identical to before. The `gym.`
+# test Worker (a separate wrangler config / --name) overrides these to
+# `gym.flagship.services` / `gym.flagshipserver.com` to serve the isolated
+# test env on the SAME zones. SERVICES_APEX threads into serverDomain
+# validation, the user-zone CAA anchor, the DNS-01 own-name fence, and apex
+# cleanup; unset ⇒ the prod literal everywhere (so signed-domain / canonical
+# vectors never move).
+SERVICES_APEX = "flagship.services"
+CONTROL_APEX = "flagshipserver.com"
 # Fly's TLS-term endpoint (port 8443). The flagship.services apex itself
 # runs SNI passthrough on :443, so https://flagship.services/api/* will
 # always 525. The Worker proxies any /api/* path it doesn't handle to

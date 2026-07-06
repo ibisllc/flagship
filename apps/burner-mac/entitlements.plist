@@ -14,6 +14,13 @@
     <!-- Read removable volumes so we can enumerate USB targets. -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
+    <!-- Host the "Host here" VM appliance via Virtualization.framework
+         (Flagship for Desktop, docs/desktop-vm-appliance.md). NAT networking
+         needs nothing extra; bridged mode would additionally require the
+         restricted com.apple.vm.networking entitlement (Apple-granted) —
+         future work, deliberately NOT added here. -->
+    <key>com.apple.security.virtualization</key>
+    <true/>
     <!-- Run other apps (the bundled Node CLI). -->
     <key>com.apple.security.app-sandbox</key>
     <false/>

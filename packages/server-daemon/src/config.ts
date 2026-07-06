@@ -6,6 +6,24 @@ export interface ServerConfig {
   userId: string;
   bakPublicKey: Bytes;
   irkPublicKey: Bytes;
+  /**
+   * Service-access gating v2 — the owner's STABLE AID pubkey (`ownerAidPubHex`).
+   * Pinned at provision so the box verifies AID-signed service-invite create/
+   * revoke + the box-as-authority redeem against it. OPTIONAL: absent ⇒ the box
+   * falls back to owner-IRK verification (a malformed value is ignored, never
+   * blocking config load).
+   */
+  ownerAidPub?: Bytes;
+  /**
+   * Slice D (docs/device-admin-tier-spec.md §1.3) — the account's pinned ADMIN
+   * MASTER ROOT pubkey (`adminRootPub`). Delivered inside the signed AuthCode
+   * (decision D-1) and pinned here at first boot, mirroring `ownerAidPub`. It
+   * is the AUTHORITY anchor every sensitive/destructive op verifies against
+   * (via `requireMasterAdmin`), distinct from `irkPublicKey` (the UMK-derived
+   * MEMBERSHIP root). OPTIONAL: absent ⇒ the box has no admin anchor yet (a
+   * malformed value is ignored, never blocking config load).
+   */
+  adminRootPub?: Bytes;
 }
 
 export async function loadConfig(path: string): Promise<ServerConfig> {
@@ -24,11 +42,27 @@ export function parseConfig(data: unknown): ServerConfig {
   if (typeof d.irkPublicKey !== "string" || !/^[0-9a-f]{64}$/.test(d.irkPublicKey)) {
     throw new Error("config.irkPublicKey must be 32-byte hex");
   }
+  // gating v2 — ownerAidPub is OPTIONAL + non-blocking: a malformed value is
+  // simply dropped (the box falls back to owner-IRK verification) rather than
+  // failing the whole config load + bricking the owner API.
+  const ownerAidPub =
+    typeof d.ownerAidPubHex === "string" && /^[0-9a-f]{64}$/.test(d.ownerAidPubHex)
+      ? hexToBytes(d.ownerAidPubHex)
+      : undefined;
+  // Slice D — adminRootPub is OPTIONAL + non-blocking, mirroring ownerAidPub:
+  // a malformed value is dropped (no admin anchor) rather than failing the
+  // whole config load.
+  const adminRootPub =
+    typeof d.adminRootPubHex === "string" && /^[0-9a-f]{64}$/.test(d.adminRootPubHex)
+      ? hexToBytes(d.adminRootPubHex)
+      : undefined;
   return {
     serverId: d.serverId,
     userId: d.userId,
     bakPublicKey: hexToBytes(d.bakPublicKey),
     irkPublicKey: hexToBytes(d.irkPublicKey),
+    ...(ownerAidPub ? { ownerAidPub } : {}),
+    ...(adminRootPub ? { adminRootPub } : {}),
   };
 }
 

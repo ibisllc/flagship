@@ -21,17 +21,17 @@ final class MockScreensClientTests: XCTestCase {
     func test_appsList_returnsKnownApps() async throws {
         let c = makeClient()
         let r = try await c.appsList()
-        // serviceId is the immutable composite `<creator>-<slug>`.
+        // serviceId is the immutable composite `<creator>--<slug>`.
         XCTAssertEqual(
             r.apps.map(\.serviceId).sorted(),
-            ["harry-plants", "harry-wiki", "trent-scratchpad"]
+            ["harry--plants", "harry--wiki", "trent--scratchpad"]
         )
     }
 
     func test_appDetail_returnsRequestedApp() async throws {
         let c = makeClient()
-        let r = try await c.appDetail(serviceId: "harry-plants")
-        XCTAssertEqual(r.app.serviceId, "harry-plants")
+        let r = try await c.appDetail(serviceId: "harry--plants")
+        XCTAssertEqual(r.app.serviceId, "harry--plants")
         XCTAssertFalse(r.recentLogs.isEmpty)
     }
 
@@ -125,7 +125,7 @@ final class MockScreensClientTests: XCTestCase {
 
     func test_serviceEnvList_returnsSortedNamesOnly() async throws {
         let c = makeClient()
-        let r = try await c.serviceEnvList(appId: "harry-plants")
+        let r = try await c.serviceEnvList(appId: "harry--plants")
         // The mock seeds WEATHER_API_KEY by default; the response shape
         // is name-only by construction (ServiceEnvListResponse has no
         // `values` field).
@@ -141,13 +141,13 @@ final class MockScreensClientTests: XCTestCase {
             issuedAt: 1
         )
         let _ = try await c.serviceEnvSet(
-            appId: "harry-plants",
+            appId: "harry--plants",
             ServiceEnvSetRequest(
                 name: "FOO", value: "bar-NEVER-LEAKED",
                 request: envelope, signature: "00"
             )
         )
-        let r = try await c.serviceEnvList(appId: "harry-plants")
+        let r = try await c.serviceEnvList(appId: "harry--plants")
         XCTAssertTrue(r.names.contains("FOO"))
     }
 
@@ -159,10 +159,10 @@ final class MockScreensClientTests: XCTestCase {
             env: [:], issuedAt: 1
         )
         let _ = try await c.serviceEnvUnset(
-            appId: "harry-plants",
+            appId: "harry--plants",
             ServiceEnvUnsetRequest(name: "WEATHER_API_KEY", request: envelope, signature: "00")
         )
-        let r = try await c.serviceEnvList(appId: "harry-plants")
+        let r = try await c.serviceEnvList(appId: "harry--plants")
         XCTAssertFalse(r.names.contains("WEATHER_API_KEY"))
     }
 

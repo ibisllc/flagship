@@ -30,11 +30,11 @@ class InviteLabelBookTest {
     @Test fun putGet_roundTripsAnEntry() {
         val book = InMemoryInviteLabelBook()
         book.put(
-            serviceId = "harry-plants",
+            serviceId = "harry--plants",
             opaqueTagHex = "AABBCCDD11223344".repeat(2),
             label = InviteLabel("John (work)", "imessage", "+1 555 0142", "", 1_700_000_000_000),
         )
-        val got = book.get("harry-plants", "aabbccdd11223344".repeat(2))
+        val got = book.get("harry--plants", "aabbccdd11223344".repeat(2))
         assertEquals("John (work)", got?.displayName)
         assertEquals("imessage", got?.channel)
         assertEquals("+1 555 0142", got?.sentTo)
@@ -42,33 +42,33 @@ class InviteLabelBookTest {
 
     @Test fun get_returnsNullForMissingTag() {
         val book = InMemoryInviteLabelBook()
-        assertNull(book.get("harry-plants", "00".repeat(16)))
+        assertNull(book.get("harry--plants", "00".repeat(16)))
     }
 
     @Test fun get_isPerService() {
         val book = InMemoryInviteLabelBook()
-        book.put("harry-plants", "ab".repeat(16), makeLabel("John"))
-        assertNotNull(book.get("harry-plants", "ab".repeat(16)))
-        assertNull(book.get("harry-wiki", "ab".repeat(16)))
+        book.put("harry--plants", "ab".repeat(16), makeLabel("John"))
+        assertNotNull(book.get("harry--plants", "ab".repeat(16)))
+        assertNull(book.get("harry--wiki", "ab".repeat(16)))
     }
 
     @Test fun list_returnsRowsForOneServiceSortedNewestFirst() {
         val book = InMemoryInviteLabelBook()
-        book.put("harry-plants", "01".repeat(16), makeLabel("A", 1))
-        book.put("harry-plants", "02".repeat(16), makeLabel("B", 3))
-        book.put("harry-plants", "03".repeat(16), makeLabel("C", 2))
-        book.put("harry-wiki", "04".repeat(16), makeLabel("Z", 99))
-        val rows = book.list("harry-plants")
+        book.put("harry--plants", "01".repeat(16), makeLabel("A", 1))
+        book.put("harry--plants", "02".repeat(16), makeLabel("B", 3))
+        book.put("harry--plants", "03".repeat(16), makeLabel("C", 2))
+        book.put("harry--wiki", "04".repeat(16), makeLabel("Z", 99))
+        val rows = book.list("harry--plants")
         assertEquals(3, rows.size)
         assertEquals(listOf("B", "C", "A"), rows.map { it.label.displayName })
     }
 
     @Test fun remove_isIdempotent() {
         val book = InMemoryInviteLabelBook()
-        book.put("harry-plants", "ab".repeat(16), makeLabel("x"))
-        book.remove("harry-plants", "ab".repeat(16))
-        book.remove("harry-plants", "ab".repeat(16))
-        assertNull(book.get("harry-plants", "ab".repeat(16)))
+        book.put("harry--plants", "ab".repeat(16), makeLabel("x"))
+        book.remove("harry--plants", "ab".repeat(16))
+        book.remove("harry--plants", "ab".repeat(16))
+        assertNull(book.get("harry--plants", "ab".repeat(16)))
     }
 
     @Test fun sharedPrefsBacked_roundTripsAcrossInstances() {
@@ -80,12 +80,12 @@ class InviteLabelBookTest {
         val key = "test-storage"
         val book1 = SharedPreferencesInviteLabelBook(prefs, key)
         book1.put(
-            "harry-plants",
+            "harry--plants",
             "ab".repeat(16),
             InviteLabel("Persisted", "imessage", "x", "n", 42),
         )
         val book2 = SharedPreferencesInviteLabelBook(prefs, key)
-        val got = book2.get("harry-plants", "ab".repeat(16))
+        val got = book2.get("harry--plants", "ab".repeat(16))
         assertEquals("Persisted", got?.displayName)
         assertEquals(42L, got?.sentAt)
     }
@@ -105,10 +105,10 @@ class InviteLabelBookTest {
         val url = InviteUtil.buildShareUrl(
             appUrl = "https://plants.harry.flagship.services/",
             secretHex = "abc123",
-            serviceId = "harry-plants",
+            serviceId = "harry--plants",
         )
         assertEquals(
-            "https://plants.harry.flagship.services/invite#k=abc123&a=harry-plants",
+            "https://plants.harry.flagship.services/invite#k=abc123&a=harry--plants",
             url,
         )
     }

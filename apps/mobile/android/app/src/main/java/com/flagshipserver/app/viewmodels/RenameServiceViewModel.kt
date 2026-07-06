@@ -177,7 +177,12 @@ class RenameServiceViewModel(
             return
         }
         val signer = try {
-            Keystore.deriveIRK("Attach custom domain")
+            // Slice D — attaching a custom domain is SENSITIVE (customDomain.ts
+            // gates it on the admin master root): sign with the admin root when
+            // this device holds one, else the owner IRK (legacy). Canonical bytes
+            // unchanged. (The service URL-stem rename below stays owner-IRK — not
+            // in the sensitive set.)
+            Keystore.adminSigningKey("Attach custom domain")
         } catch (e: Throwable) {
             _customDomainPrompt.value = CustomDomainPrompt(
                 "Couldn't request custom domain",

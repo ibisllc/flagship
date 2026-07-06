@@ -28,7 +28,8 @@
  */
 
 import { request as httpRequest } from "node:http";
-import { ed, type Bytes, type Keypair } from "@flagship/protocol";
+import type { Bytes } from "@flagship/protocol";
+import type { BoxSigner } from "./keyCustodian.js";
 import type { InstalledService } from "./servicePlatform.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { UpdateServer } from "./updateServer.js";
@@ -46,12 +47,13 @@ export type SessionResolver = (req: HttpRequest, app: InstalledService) => Sessi
 
 export interface AppProxyDeps {
   /**
-   * Daemon-side identity-injector keypair. Apps verify
-   * `X-Flagship-Signature` against the public half of this key,
-   * fetched from `GET /.flagship/runtime-pubkey` (a route the daemon
-   * exposes inside the proxy when the request hits that path).
+   * Narrow box-identity signer (the KeyCustodian's `BoxSigner` slice). Apps
+   * verify `X-Flagship-Signature` against the public half, fetched from
+   * `GET /.flagship/runtime-pubkey`. This is deliberately NOT the raw
+   * `Keypair`: the internet-facing proxy closure must never hold the box's
+   * private seed — it holds only "sign this / here's the pubkey".
    */
-  injectorKey: Keypair;
+  injector: BoxSigner;
   /** Resolves a request to a paired-session member, or null for anonymous. */
   resolveSession?: SessionResolver;
   /** Override fetch implementation for tests. */
@@ -115,7 +117,7 @@ export async function handleAppRequest(
       status: 200,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        injectorPubKeyHex: bytesToHex(deps.injectorKey.publicKey),
+        injectorPubKeyHex: bytesToHex(deps.injector.boxPublicKey()),
       }),
     };
   }
@@ -140,7 +142,7 @@ export async function handleAppRequest(
   const user = session ? session.stableId : "anonymous";
   const role = session ? session.role : "anonymous";
   const canonical = [`flagship/inject/v1`, app.serviceId, user, role, ts].join("|");
-  const sig = ed.sign(new TextEncoder().encode(canonical), deps.injectorKey.privateKey);
+  const sig = deps.injector.signAsBox(new TextEncoder().encode(canonical));
   forwardHeaders["x-flagship-app-id"] = app.serviceId;
   forwardHeaders["x-flagship-user"] = user;
   forwardHeaders["x-flagship-role"] = role;
@@ -198,7 +200,7 @@ export function stripIdentityHeaders(headers: Record<string, string>): Record<st
   return out;
 }
 
-async function defaultForward(host: string, port: number, req: HttpRequest): Promise<HttpResponse> {
+export async function defaultForward(host: string, port: number, req: HttpRequest): Promise<HttpResponse> {
   return new Promise<HttpResponse>((resolve, reject) => {
     const proxyReq = httpRequest(
       {
@@ -219,9 +221,12 @@ async function defaultForward(host: string, port: number, req: HttpRequest): Pro
             else if (Array.isArray(v)) headers[k] = v.join(", ");
           }
           // Strip hop-by-hop response headers (we'll write our own
-          // content-length).
+          // content-length — the container's copy must go too, or every
+          // proxied response carries a duplicate Content-Length and
+          // spec-compliant fetch clients reject it, RFC 9112 §6.3).
           delete headers["transfer-encoding"];
           delete headers["connection"];
+          delete headers["content-length"];
           resolve({ status: res.statusCode ?? 502, headers, body });
         });
         res.on("error", reject);

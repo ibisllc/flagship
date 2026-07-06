@@ -27,7 +27,9 @@ package com.flagshipserver.app.keystore
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RecoveryEnvelopeRequest
 import com.flagshipserver.app.core.AcmeAccountKey
+import com.flagshipserver.app.core.AdminRootEscrow
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.RecoveryUpload
 import com.google.crypto.tink.subtle.Ed25519Sign
 
@@ -73,6 +75,9 @@ object CloudRecoveryEnrollment {
         passphraseConfirm: String,
         acmeScalar: ByteArray?,
         now: Long,
+        /** Slice D (D-3) — the admin master root seed to escrow alongside the
+         *  UMK, or null on a legacy account with no admin root. */
+        adminRootSeed: ByteArray? = null,
     ): EnrollResult {
         if (passphrase.length < MIN_PASSPHRASE) {
             throw ValidationError("Passphrase must be at least $MIN_PASSPHRASE characters.")
@@ -96,6 +101,16 @@ object CloudRecoveryEnrollment {
             }
         }
 
+        // Slice D (D-3) — escrow the admin master root under the same PRF secret
+        // (own HKDF salt). Non-fatal: a failure never blocks the UMK escrow.
+        val wrappedAdminRoot: String? = adminRootSeed?.let { seed ->
+            try {
+                AdminRootEscrow.wrapForEscrow(seed, prfSecret)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
         val wrappedUmkBytes = java.util.Base64.getDecoder().decode(wrappedUmk)
         val wrappedUmkHashHex = RecoveryUpload.wrappedUmkHashHex(wrappedUmkBytes)
         val signature = RecoveryUpload.sign(
@@ -113,6 +128,7 @@ object CloudRecoveryEnrollment {
                     wrappedUmk = wrappedUmk,
                     issuedAt = now,
                     wrappedAcmeAccountKey = wrappedAcme,
+                    wrappedAdminRoot = wrappedAdminRoot,
                     // Task #74 — the passphrase-gate hashes.
                     fetchTokenHash = RecoveryDerivation.sha256Hex(secrets.fetchToken),
                     prfSaltHash = RecoveryDerivation.sha256Hex(secrets.prfSalt),
@@ -128,6 +144,10 @@ object CloudRecoveryEnrollment {
     data class RestoreResult(
         val umkSeed: ByteArray,
         val acmeScalar: ByteArray?,
+        /** Slice D (D-3) — the recovered admin master root seed, or null when
+         *  the account never escrowed one. The caller re-establishes admin via
+         *  Keystore.importAdminRoot. */
+        val adminRootSeed: ByteArray? = null,
     )
 
     /**
@@ -185,6 +205,108 @@ object CloudRecoveryEnrollment {
                 null
             }
         }
-        return RestoreResult(umkSeed = umkSeed, acmeScalar = acmeScalar)
+        // Slice D (D-3) — recover the escrowed admin master root under the same
+        // PRF secret if present. Non-fatal (a surviving admin device can
+        // re-establish); the caller imports it via Keystore.importAdminRoot.
+        val adminRootSeed: ByteArray? = fetched.wrappedAdminRoot?.let { wrapped ->
+            try {
+                AdminRootEscrow.unwrapFromEscrow(wrapped, prfSecret)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+        return RestoreResult(umkSeed = umkSeed, acmeScalar = acmeScalar, adminRootSeed = adminRootSeed)
+    }
+
+    /**
+     * Slice D (D-3) post-rotation re-escrow: re-wrap the ROTATED admin master
+     * root under the EXISTING recovery credential so a later credential
+     * recovery restores the NEW root, not the dead pre-rotation one. No new
+     * passkey is created — the wrap key is the same PRF secret, reached the
+     * same way as restore: passphrase → gated fetch → PRF assert. The fetched
+     * wrappedUmk / wrappedAcmeAccountKey are passed through UNCHANGED and the
+     * envelope is re-posted under the SAME credentialId, so the Worker
+     * replaces the record in place.
+     *
+     * The fetched wrappedUmk MUST unwrap under the asserted PRF secret before
+     * we post — that proves we hold the right wrap key and can't brick the
+     * escrow by overwriting it with a blob wrapped under a different secret.
+     *
+     * @throws ValidationError on a too-short/wrong passphrase or a
+     *   prfSaltHash mismatch; rethrows any wrap/unwrap failure WITHOUT
+     *   posting (the stored record is never touched on any failure path).
+     */
+    suspend fun reEscrowAdminRoot(
+        server: FlagshipServerClient,
+        passkeys: PasskeyCeremony,
+        irk: Ed25519Sign,
+        username: String,
+        passphrase: String,
+        newAdminRootSeed: ByteArray,
+        now: Long,
+    ) {
+        if (passphrase.length < MIN_PASSPHRASE) {
+            throw ValidationError("Passphrase must be at least $MIN_PASSPHRASE characters.")
+        }
+        val secrets = RecoveryDerivation.derivePassphraseSecrets(passphrase, username)
+
+        val fetched = try {
+            server.fetchWrappedUmkWithToken(
+                username = username,
+                fetchTokenHex = HexUtil.encode(secrets.fetchToken),
+                issuedAt = now,
+            )
+        } catch (e: HttpException) {
+            // The gate 403s on a fetchToken derived from the wrong passphrase.
+            if (e.status == 403) throw ValidationError("That passphrase didn't match.")
+            throw e
+        }
+
+        // Same anti-tamper check as restore(): refuse a .com that passed the
+        // fetch gate but returned a prfSaltHash foreign to our passphrase.
+        val serverPrfSaltHash = fetched.prfSaltHash
+        if (serverPrfSaltHash != null) {
+            val localPrfSaltHash = RecoveryDerivation.sha256Hex(secrets.prfSalt)
+            if (localPrfSaltHash != serverPrfSaltHash.lowercase()) {
+                throw ValidationError(
+                    "Server returned a stale prfSaltHash — refusing to proceed.",
+                )
+            }
+        }
+
+        // EXISTING credential — assert, never create.
+        val prfSecret = passkeys.assert(fetched.credentialId, secrets.prfSalt)
+
+        // Sanity gate BEFORE overwriting the stored record: the fetched UMK
+        // blob must unwrap under this PRF secret (AEADBadTagException aborts).
+        Recovery.unwrap(wrappedUmkBase64 = fetched.wrappedUmk, prfSecret = prfSecret)
+
+        val wrappedAdminRoot = AdminRootEscrow.wrapForEscrow(newAdminRootSeed, prfSecret)
+
+        // Sign over the PASSED-THROUGH wrappedUmk bytes (the record content
+        // the protocol hashes is unchanged; only the sibling ciphertext moves).
+        val wrappedUmkBytes = java.util.Base64.getDecoder().decode(fetched.wrappedUmk)
+        val signature = RecoveryUpload.sign(
+            irk = irk,
+            username = username,
+            credentialId = fetched.credentialId,
+            wrappedUmkHashHex = RecoveryUpload.wrappedUmkHashHex(wrappedUmkBytes),
+            issuedAt = now,
+        )
+        server.registerRecoveryEnvelope(
+            RecoveryEnvelopeRequest(
+                request = RecoveryEnvelopeRequest.Inner(
+                    username = username,
+                    credentialId = fetched.credentialId,
+                    wrappedUmk = fetched.wrappedUmk,
+                    issuedAt = now,
+                    wrappedAcmeAccountKey = fetched.wrappedAcmeAccountKey,
+                    wrappedAdminRoot = wrappedAdminRoot,
+                    fetchTokenHash = RecoveryDerivation.sha256Hex(secrets.fetchToken),
+                    prfSaltHash = RecoveryDerivation.sha256Hex(secrets.prfSalt),
+                ),
+                signature = HexUtil.encode(signature),
+            ),
+        )
     }
 }

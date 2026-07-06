@@ -8,6 +8,7 @@ export {
   loadBlobFromFile,
   loadBlobFromStdin,
   loadBlobFromString,
+  debugSshKeyFromGrant,
   BurnerLoadError,
   type LoadedBlob,
 } from "./loadBlob.js";
@@ -20,6 +21,14 @@ export {
   type BootUnlockMode,
 } from "./userdata.js";
 export { buildDebianPreseed } from "./preseed.js";
+export { utf8ToBase64 } from "./base64.js";
+export {
+  buildPreseedFromRecipe,
+  buildUserDataFromRecipe,
+  optionsFromRecipeJson,
+  installAsEngineGlobal,
+  type EngineBurnOptions,
+} from "./preseedEngine.js";
 export { verifyIsoHash, type VerifyIsoResult } from "./verifyIso.js";
 export {
   remasterIsoWithAutoinstall,

@@ -22,8 +22,13 @@
 // affordance) — enforced at the storage layer's upsert.
 
 import { verifySetCustomDomain, type SetCustomDomain } from "@flagship/protocol";
-import type { CustomDomainOrderStorage, UsernameStorage } from "@flagship/storage";
+import type {
+  CustomDomainOrderStorage,
+  DeviceCapabilityGrantStorage,
+  UsernameStorage,
+} from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import {
   forbidden,
   malformed,
@@ -35,6 +40,9 @@ import {
 export interface CustomDomainDeps {
   usernames: UsernameStorage;
   customDomainOrders: CustomDomainOrderStorage;
+  /** Slice D — device-grant store for the master-admin authority gate (§2 row
+   *  20). Optional: absent ⇒ only the bare admin root satisfies the open gate. */
+  grants?: DeviceCapabilityGrantStorage;
   now?: () => number;
   /**
    * Same-shaped helper the Phase-4 verifier uses. Optional: when an
@@ -52,7 +60,7 @@ export interface CustomDomainDeps {
   ) => Promise<void>;
 }
 
-const USERNAME_RE = /^[a-z0-9]{3,30}$/;
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 const DEFAULT_MAX_AGE_MS = 5 * 60_000;
 /** Decided: 300s minimum between custom-domain changes (dual: the
  *  client mirrors a UX cooldown; this is the server backstop). */
@@ -129,7 +137,14 @@ export async function handleSetCustomDomain(
     fqdn,
     issuedAt: r.issuedAt,
   };
-  if (!verifySetCustomDomain(claim, sig, hexToBytes(userRec.irkPubHex))) {
+  // Slice D §2 row 20 — SENSITIVE: gate on master-admin authority (falls back to
+  // the legacy owner-IRK verify when no admin root is pinned yet).
+  const authz = await authorizeSensitiveComOp(deps, {
+    username: u,
+    userRec,
+    verifyWith: (pub) => verifySetCustomDomain(claim, sig, hexToBytes(pub)),
+  });
+  if (!authz.ok) {
     return forbidden("invalid signature");
   }
 

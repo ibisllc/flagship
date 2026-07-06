@@ -124,10 +124,17 @@ Your response:
   },
   "migration": { "verification": "standard" }
 }
+=== package.json ===
+{
+  "name": "shopping",
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": { "pg": "^8.11.0" }
+}
 === Dockerfile ===
 FROM node:20-alpine
 WORKDIR /app
-COPY package.json package-lock.json* ./
+COPY package.json ./
 RUN npm install --omit=dev
 COPY src ./src
 EXPOSE 8080

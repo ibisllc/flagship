@@ -192,7 +192,14 @@ Requires=docker.service
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/opt/flagship/installer/data-services/init.sh
+# ExecStop makes `systemctl stop flagship-data-services` ACTUALLY stop the
+# compose containers. Without it (Type=oneshot + RemainAfterExit) the unit only
+# marks itself inactive while postgres/minio/redis/forgejo keep running — so a
+# migration/decommission "freeze" walked live, torn data. `stop` (not `down`)
+# preserves the data volumes; this is a write-freeze, not a wipe.
+ExecStop=/usr/bin/docker compose -f /opt/flagship/installer/data-services/docker-compose.yml --env-file /var/flagship/data-services.env stop
 TimeoutStartSec=300
+TimeoutStopSec=120
 
 [Install]
 WantedBy=multi-user.target

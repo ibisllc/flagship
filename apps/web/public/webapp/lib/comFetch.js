@@ -15,8 +15,13 @@
 // so it must be reachable even while untrusted).
 
 import { serverTrust } from "./serverTrust.js";
+import { controlApex, controlHost } from "./apex.js";
 
-export const COM_APEX = "https://flagshipserver.com";
+// Back-compat re-export: the control apex used to be a baked literal here.
+// It is now derived (lib/apex.js — origin-driven, prod-default), so this
+// stays the canonical name other modules import while resolving to the same
+// prod value byte-for-byte.
+export const COM_APEX = controlApex();
 
 const BLESSING_PATH = "/api/maintainer-blessing";
 
@@ -68,7 +73,7 @@ export async function comFetch(pathOrUrl, init = {}) {
  *  control server). */
 function isComHost(url) {
   try {
-    return new URL(url, COM_APEX).host === "flagshipserver.com";
+    return new URL(url, COM_APEX).host === controlHost();
   } catch {
     return false;
   }

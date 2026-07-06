@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Phase 3b — the sealed payload the admin sends to the incoming device
 /// over the pairing relay. Carries the account master key seed (so the
@@ -29,6 +30,16 @@ public struct PairingBundle: Codable, Equatable, Sendable {
     /// `/devices/admit` (it verifies under the IRK it stores), so a
     /// forged carried pubkey can't actually admit a device.
     public let irkPubHex: String
+    /// Slice D §4.2 (promote-a-device, "seal the master root"). Present ONLY
+    /// when the admin toggled "Also make this device an admin" in the
+    /// synchronous SAS ceremony (D-4): the account's ADMIN MASTER ROOT private
+    /// seed, lowercased hex (32 bytes → 64 hex chars). Carried inside this
+    /// AEAD-sealed bundle EXACTLY like `umkSeedHex` (the outer QR-derived seal
+    /// is the wrapping), so the incoming device unwraps it and seals it
+    /// device-local ⇒ it becomes a bare-master-root admin, indistinguishable
+    /// from the first device. Absent (nil) ⇒ the new device joins non-admin.
+    /// Optional + defaulted so a pre-D bundle decodes byte-identically.
+    public let wrappedAdminRoot: String?
 
     public struct AdmitFields: Codable, Equatable, Sendable {
         public let username: String
@@ -41,11 +52,18 @@ public struct PairingBundle: Codable, Equatable, Sendable {
         }
     }
 
-    public init(umkSeedHex: String, admit: AdmitFields, admitSig: String, irkPubHex: String) {
+    public init(
+        umkSeedHex: String,
+        admit: AdmitFields,
+        admitSig: String,
+        irkPubHex: String,
+        wrappedAdminRoot: String? = nil
+    ) {
         self.umkSeedHex = umkSeedHex
         self.admit = admit
         self.admitSig = admitSig
         self.irkPubHex = irkPubHex
+        self.wrappedAdminRoot = wrappedAdminRoot
     }
 
     public func encoded() throws -> Data {
@@ -68,7 +86,8 @@ public struct PairingBundle: Codable, Equatable, Sendable {
 /// computes the same shared secret, and both derive the SAS + AEAD key
 /// via the audited `QrRelay.deriveMaterial`.
 public enum PairingQr {
-    public static let joinHost = "flagshipserver.com"
+    /// Control apex host, via `Endpoints` (prod-default + test override).
+    public static var joinHost: String { Endpoints.controlHost }
     public static let joinPath = "/join"
 
     /// Build the universal-link QR string the admin renders.

@@ -1,4 +1,5 @@
 import Foundation
+import FlagshipAPI
 
 /// P14 — builds the `https://web.flagshipserver.com/?companion=...` URL
 /// the phone QR encodes. The desktop browser scans the QR, the webapp's
@@ -12,8 +13,9 @@ import Foundation
 public enum CompanionTicketURL {
     /// Static landing host the webapp lives at. The browser hits this
     /// URL first; the in-page JS parses the `companion` query param and
-    /// redirects + redeems against the user's pod.
-    public static let webappHost: String = "web.flagshipserver.com"
+    /// redirects + redeems against the user's pod. Via `Endpoints`
+    /// (prod-default `web.flagshipserver.com` + test override).
+    public static var webappHost: String { Endpoints.webappHost }
 
     public struct Envelope: Codable, Equatable, Sendable {
         public let ticketId: String

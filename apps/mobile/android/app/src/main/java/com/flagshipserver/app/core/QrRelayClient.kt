@@ -56,7 +56,8 @@ class LiveQrRelayClient(
     secure: Boolean = true,
 ) : QrRelayClient {
     companion object {
-        const val DEFAULT_HOST = "flagshipserver.com"
+        /** Control apex host, via [Endpoints] (prod-default + test override). */
+        val DEFAULT_HOST: String get() = Endpoints.controlHost
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     }
 

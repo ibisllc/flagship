@@ -16,11 +16,12 @@ import {
   PROVISION_PHASE_TITLES,
   renderProgressDetail,
 } from "../lib/provisionProgress.js";
+import { controlApex } from "../lib/apex.js";
 
 registerView("view-install-progress");
 
 const POLL_INTERVAL_MS = 2_000;
-const CONTROL_PLANE_BASE = "https://flagshipserver.com";
+const CONTROL_PLANE_BASE = controlApex();
 // Terminal canonical phases — stop polling once one lands.
 const TERMINAL_PHASES = new Set(["live", "error"]);
 
@@ -137,7 +138,7 @@ async function poll() {
 
 function start() {
   const serial = $("ip-serial").value.trim();
-  if (!serial) return toast("enter the serial first", "err");
+  if (!serial) return toast("Enter the serial first", "err");
   clearPoll();
   activeSerial = serial;
   latest = null;

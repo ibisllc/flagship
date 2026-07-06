@@ -58,6 +58,33 @@ describe("recovery sub-origin static surface", () => {
     expect(r.body).toContain("prf:");
   });
 
+  it("/recovery/recoveryWrap.js is served and wraps with HKDF over the three mobile salts", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/recovery/recoveryWrap.js" });
+    expect(r.statusCode).toBe(200);
+    // The escrow wrap now derives its AES key via HKDF-SHA256 (mobile-identical)
+    // — NOT the raw PRF bytes. Regressing to raw bytes reopens the cross-platform
+    // divergence this KAT-backed module closed.
+    expect(r.body).toContain("HKDF");
+    expect(r.body).toContain("AES-GCM");
+    // The three domain-separation salts must match iOS/Android verbatim.
+    expect(r.body).toContain("flagship/recovery-wrap/v1");
+    expect(r.body).toContain("flagship/recovery-acme-wrap/v1");
+    expect(r.body).toContain("flagship/recovery-admin-root-wrap/v1");
+  });
+
+  it("/recovery/recovery.js delegates the wrap to recoveryWrap.js (no inline raw-PRF key)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/recovery/recovery.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain('from "./recoveryWrap.js"');
+    // The pre-reconciliation code keyed AES-GCM off the raw PRF output
+    // (`prfBytes.slice(0, 32)`). That must be gone — the key is HKDF-derived.
+    expect(r.body).not.toContain("prfBytes.slice(0, 32)");
+    // And it must escrow the admin root as its OWN blob, never a concatenation.
+    expect(r.body).toContain("wrappedAdminRootB64");
+  });
+
   it("/recovery/recovery.css is reachable and self-hosted", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/recovery/recovery.css" });

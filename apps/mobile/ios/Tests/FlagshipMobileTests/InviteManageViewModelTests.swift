@@ -35,7 +35,7 @@ final class InviteManageViewModelTests: XCTestCase {
     func test_load_idleToLoaded_withEmptyDefaults() async {
         let client = makeClient()
         let vm = InviteManageViewModel(
-            serviceId: "harry-plants",
+            serviceId: "harry--plants",
             client: client,
             labelBook: InMemoryInviteLabelBook()
         )
@@ -60,13 +60,13 @@ final class InviteManageViewModelTests: XCTestCase {
         ])
         let book = InMemoryInviteLabelBook()
         book.put(
-            serviceId: "harry-plants",
+            serviceId: "harry--plants",
             opaqueTagHex: "aa".replicated16(),
             label: InviteLabel(displayName: "John (work)", channel: "imessage",
                                sentTo: "x", notes: "", sentAt: 1)
         )
         let vm = InviteManageViewModel(
-            serviceId: "harry-plants",
+            serviceId: "harry--plants",
             client: client,
             labelBook: book
         )
@@ -92,12 +92,12 @@ final class InviteManageViewModelTests: XCTestCase {
         client.appInviteAccessFixture = AppInviteAccessResponse(access: [])
         let book = InMemoryInviteLabelBook()
         book.put(
-            serviceId: "harry-plants",
+            serviceId: "harry--plants",
             opaqueTagHex: tag,
             label: InviteLabel(displayName: "x", channel: "other", sentTo: "", notes: "", sentAt: 1)
         )
         let vm = InviteManageViewModel(
-            serviceId: "harry-plants",
+            serviceId: "harry--plants",
             client: client,
             labelBook: book
         )
@@ -107,11 +107,11 @@ final class InviteManageViewModelTests: XCTestCase {
         XCTAssertEqual(client.appInviteRevokeCalls.count, 1)
         let revoke = client.appInviteRevokeCalls[0]
         XCTAssertEqual(revoke.scope, "invite")
-        XCTAssertEqual(revoke.serviceId, "harry-plants")
+        XCTAssertEqual(revoke.serviceId, "harry--plants")
         XCTAssertEqual(revoke.inviteId, "inv-99")
         XCTAssertNil(revoke.irkPubKey)
 
-        XCTAssertNil(book.get(serviceId: "harry-plants", opaqueTagHex: tag))
+        XCTAssertNil(book.get(serviceId: "harry--plants", opaqueTagHex: tag))
         XCTAssertEqual(vm.lastRevokeOutcome, "revoked")
     }
 
@@ -123,7 +123,7 @@ final class InviteManageViewModelTests: XCTestCase {
             makeAccess(opaqueTag: "cd".replicated16(), irkPubHex: irk),
         ])
         let vm = InviteManageViewModel(
-            serviceId: "harry-plants",
+            serviceId: "harry--plants",
             client: client,
             labelBook: InMemoryInviteLabelBook()
         )
@@ -140,7 +140,7 @@ final class InviteManageViewModelTests: XCTestCase {
     func test_revokeInvite_idempotentReportsAlreadyRevoked() async {
         let client = makeClient()
         let vm = InviteManageViewModel(
-            serviceId: "harry-plants",
+            serviceId: "harry--plants",
             client: client,
             labelBook: InMemoryInviteLabelBook()
         )
@@ -154,7 +154,7 @@ final class InviteManageViewModelTests: XCTestCase {
         let client = makeClient()
         client.shouldFail = true
         let vm = InviteManageViewModel(
-            serviceId: "harry-plants",
+            serviceId: "harry--plants",
             client: client,
             labelBook: InMemoryInviteLabelBook()
         )
@@ -167,7 +167,7 @@ final class InviteManageViewModelTests: XCTestCase {
     }
 
     func test_codableRoundTrip_appInviteRevokeRequest_inviteScope() throws {
-        let req = AppInviteRevokeRequest.invite(serviceId: "harry-plants", inviteId: "inv-7")
+        let req = AppInviteRevokeRequest.invite(serviceId: "harry--plants", inviteId: "inv-7")
         let data = try JSONEncoder().encode(req)
         let json = try XCTUnwrap(String(data: data, encoding: .utf8))
         XCTAssertTrue(json.contains("\"scope\":\"invite\""))

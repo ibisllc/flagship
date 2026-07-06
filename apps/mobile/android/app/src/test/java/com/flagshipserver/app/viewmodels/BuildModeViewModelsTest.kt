@@ -107,6 +107,19 @@ class BuildModeViewModelsTest {
         assertTrue(center.operations.value.isEmpty())
     }
 
+    @Test fun git_check404_showsPlatformAbsentMessage() = runTest {
+        // A 404 on "Check repo" means the box has no service/build platform —
+        // surface the platform-absent copy, not the generic 404 string.
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply { entryFailStatus = 404 }
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/you/app", "").join()
+        val phase = vm.phase.value
+        assertTrue(phase is BuildGitViewModel.GitPhase.Failed)
+        val msg = (phase as BuildGitViewModel.GitPhase.Failed).message
+        assertTrue("expected platform-absent copy, got: $msg",
+            msg.contains("isn't set up to build services"))
+    }
+
     @Test fun git_blankRef_sentAsNull() = runTest {
         val client = MockBuildClient(simulatedLatencyMs = 0)
         val vm = BuildGitViewModel(client, scope = backgroundScope)
@@ -154,6 +167,17 @@ class BuildModeViewModelsTest {
         // env-requests loaded value-free.
         assertTrue(vm.envRequests.value.isNotEmpty())
         assertEquals("WEATHER_API_KEY", vm.envRequests.value.first().name)
+    }
+
+    @Test fun mcp_create404_showsPlatformAbsentMessage() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply { entryFailStatus = 404 }
+        val vm = BuildMcpViewModel(client, scope = backgroundScope)
+        vm.create("android").join()
+        val phase = vm.phase.value
+        assertTrue(phase is BuildMcpViewModel.McpPhase.Failed)
+        val msg = (phase as BuildMcpViewModel.McpPhase.Failed).message
+        assertTrue("expected platform-absent copy, got: $msg",
+            msg.contains("isn't set up to build services"))
     }
 
     @Test fun mcp_rotate_replacesConnection() = runTest {
@@ -207,5 +231,18 @@ class BuildModeViewModelsTest {
         val detail = vm.detail.value
         assertTrue(detail is LoadingState.Loaded)
         assertTrue((detail as LoadingState.Loaded).value.isNotEmpty())
+    }
+
+    @Test fun journal_list404_showsPlatformAbsentMessage() = runTest {
+        // The sessions list is a build-platform ENTRY call — a 404 means the
+        // box can't build services (unlike loadDetail's session-scoped 404).
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply { entryFailStatus = 404 }
+        val vm = BuildJournalViewModel(client, scope = backgroundScope)
+        vm.loadList().join()
+        val list = vm.list.value
+        assertTrue(list is LoadingState.Failed)
+        val msg = (list as LoadingState.Failed).message
+        assertTrue("expected platform-absent copy, got: $msg",
+            msg.contains("isn't set up to build services"))
     }
 }

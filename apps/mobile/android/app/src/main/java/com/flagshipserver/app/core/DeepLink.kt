@@ -43,11 +43,79 @@ sealed interface DeepLink {
      *  join params; the host re-parses them into a [JoinLink]. */
     data class JoinDevice(val sid: String, val pk: String) : DeepLink
 
+    /** #92 — friend redeem of a service-access capability invite
+     *  (docs/service-access-gating.md). Carries the BOX host the `/invite` link
+     *  was served from + the 32-byte capability secret (64-hex). The secret is
+     *  POSTed to that box's OWN redeem endpoint, never to `.com`. Reachable two
+     *  ways: the `flagship://invite?server=<host>&k=<secret>` "open in app"
+     *  hand-off the box's /invite page offers (Android drops the URL fragment
+     *  from App-Links, so the secret rides a query), and — when the fragment
+     *  IS carried — the universal link
+     *  `https://<server>.<user>.flagship.services/invite#<secret>`.
+     *  v2: [authorAidHex] (optional, from `a=<64hex>` in the fragment/query) lets
+     *  the friend derive a PER-AUTHOR contact AID for the redeem; absent ⇒ the
+     *  friend falls back to the global AID (legacy links are grandfathered).
+     *  [inviteIdHex] (optional, from `i=<64hex>`) is required for a manual-approve
+     *  invite — the friend's acceptance is signed over it; harmless for auto/group.
+     *  The canonical fragment is the BARE secret then `&a=`/`&i=` (identical across
+     *  webapp/iOS/Android). */
+    data class RedeemInvite(
+        val serverDomain: String,
+        val secretHex: String,
+        val authorAidHex: String? = null,
+        val inviteIdHex: String? = null,
+    ) : DeepLink
+
+    /** Web-experience gating (docs/service-access-gating.md, "Web-experience
+     *  gating") — the visitor's phone authorizes a SEPARATE browser's QR-login
+     *  for a restricted service's website. Carried by the knock page's
+     *  `flagship://access?server=<serverFqdn>&svc=<urlLabel>&ref=<serviceRef>&page=<pageId>`
+     *  deeplink (also a QR for cross-device, and a copyable "Get link" string).
+     *  All four params are required; a malformed link is NOT routed. */
+    data class AuthorizeKnock(
+        val serverId: String,
+        val svc: String,
+        val serviceRef: String,
+        val pageId: String,
+    ) : DeepLink
+
+    /** Transfer-a-box take-over (docs/device-admin-entitlements.md Slice C). The
+     *  giver's box-detail page renders the IRK-signed transfer offer as a QR /
+     *  universal link: `https://flagshipserver.com/transfer?o=<b64url>` (or the
+     *  `flagship://transfer?o=…` twin) where `<b64url>` = base64url(UTF8(offerJSON)).
+     *  The offer is a SIGNED non-secret, so it rides a QUERY param (Android/webapp
+     *  strip the `#fragment`). [offerJson] is the decoded offer JSON; the acquirer
+     *  VM re-parses it and MUST Ed25519-verify the signature + expiry BEFORE the
+     *  claim biometric (it's attacker-supplied). Keep in sync with iOS + webapp. */
+    data class TransferOffer(val offerJson: String) : DeepLink
+
     companion object {
-        /// Parse a `flagship://...` URI. Keep in sync with iOS
-        /// DeepLink.parse and the webapp's lib/router.js. Returns null
-        /// when the host/scheme is not one we route.
+        /// Parse a `flagship://...` URI OR a box `/invite#<secret>` universal
+        /// link. Keep in sync with iOS DeepLink.parse and the webapp router.
+        /// Returns null when the host/scheme is not one we route.
         fun parse(uri: Uri): DeepLink? {
+            // Universal link: a service-access invite served from a BOX —
+            // `https://<server>.<user>.flagship.services/invite#<secret>`.
+            if (uri.scheme == "https") {
+                val host = uri.host
+                if (host != null && host.endsWith(".${Endpoints.dataApex}") &&
+                    (uri.path == "/invite" || uri.path == "/invite/")
+                ) {
+                    val secret = secretFromFragment(uri.fragment)
+                    val author = InviteLink.authorAidFromFragment(uri.fragment)
+                    val invite = InviteLink.inviteIdFromFragment(uri.fragment)
+                    return if (secret != null) RedeemInvite(host, secret, author, invite) else null
+                }
+                // Transfer take-over universal link served from the control apex:
+                // `https://flagshipserver.com/transfer?o=<b64url>`.
+                if (host == Endpoints.controlHost &&
+                    (uri.path == "/transfer" || uri.path == "/transfer/")
+                ) {
+                    val json = uri.getQueryParameter("o")?.let { ServerTransferFlow.decodeOfferParam(it) }
+                    return if (json != null) TransferOffer(json) else null
+                }
+                return null
+            }
             if (uri.scheme != "flagship") return null
             val host = uri.host ?: return null
             val params = uri.queryParameterNames.associateWith { uri.getQueryParameter(it) ?: "" }
@@ -58,6 +126,26 @@ sealed interface DeepLink {
                 "server" -> params["podId"]?.let { ServerDetail(it) }
                 "app" -> params["appId"]?.let { AppDetail(it) }
                 "create-server" -> CreateServer
+                "transfer" -> {
+                    // flagship://transfer?o=<b64url> — the custom-scheme twin of
+                    // the /transfer universal link (Slice C take-over).
+                    val json = params["o"]?.let { ServerTransferFlow.decodeOfferParam(it) }
+                    if (json != null) TransferOffer(json) else null
+                }
+                "invite" -> {
+                    // flagship://invite?server=<host>&k=<64hex>&a=<authorAID>&i=<inviteId>
+                    // — the "open in app" hand-off from the box's /invite page (a
+                    // custom scheme can't carry the fragment, so the secret is a
+                    // `k` query).
+                    val server = params["server"] ?: params["host"] ?: ""
+                    val pathSecret = uri.path?.trim('/').orEmpty()
+                    val candidate = params["k"] ?: params["secret"] ?: pathSecret
+                    val secret = secretFromFragment(candidate)
+                    val hex64 = Regex("^[0-9a-fA-F]{64}$")
+                    val author = params["a"]?.takeIf { hex64.matches(it) }?.lowercase()
+                    val invite = params["i"]?.takeIf { hex64.matches(it) }?.lowercase()
+                    if (secret != null && server.isNotEmpty()) RedeemInvite(server, secret, author, invite) else null
+                }
                 "join" -> {
                     // flagship://join?sid=<sid>&pk=<pkB64u>. Both params
                     // required; a malformed link is NOT routed (returns
@@ -65,6 +153,19 @@ sealed interface DeepLink {
                     val sid = params["sid"].orEmpty()
                     val pk = params["pk"].orEmpty()
                     if (sid.isEmpty() || pk.isEmpty()) null else JoinDevice(sid, pk)
+                }
+                "access" -> {
+                    // flagship://access?server=<serverFqdn>&svc=<urlLabel>
+                    //   &ref=<serviceRef>&page=<pageId> — the knock page's
+                    // "Access site" hand-off (same-device deeplink + QR + "Get
+                    // link"). server/ref/page are load-bearing (page is IN the
+                    // signature); svc is display-only and may be empty.
+                    val server = params["server"].orEmpty()
+                    val svc = params["svc"].orEmpty()
+                    val ref = params["ref"].orEmpty()
+                    val page = params["page"].orEmpty()
+                    if (server.isEmpty() || ref.isEmpty() || page.isEmpty()) null
+                    else AuthorizeKnock(serverId = server, svc = svc, serviceRef = ref, pageId = page)
                 }
                 "vibecode" -> {
                     // Accept either path form `flagship://vibecode/<id>`
@@ -76,6 +177,20 @@ sealed interface DeepLink {
                 }
                 else -> null
             }
+        }
+
+        /** Pull a 64-hex capability secret from a fragment / candidate string.
+         *  Accepts a bare `<64hex>`, the `k=<64hex>` form, or a LEADING bare
+         *  `<64hex>` followed by other params (v2: `#<secret>&a=<authorAID>`).
+         *  Mirrors the webapp's inviteSecretFromLocation + iOS secretFromFragment. */
+        fun secretFromFragment(raw: String?): String? {
+            var s = raw?.takeIf { it.isNotEmpty() } ?: return null
+            if (s.startsWith("#")) s = s.substring(1)
+            Regex("(?:^|[?&])k=([0-9a-fA-F]{64})").find(s)?.let { return it.groupValues[1].lowercase() }
+            if (Regex("^[0-9a-fA-F]{64}$").matches(s)) return s.lowercase()
+            // Leading bare secret with trailing params (e.g. `<secret>&a=<author>`).
+            Regex("^([0-9a-fA-F]{64})(?:[&?]|$)").find(s)?.let { return it.groupValues[1].lowercase() }
+            return null
         }
     }
 }

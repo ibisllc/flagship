@@ -1,34 +1,32 @@
-// Approve a box's boot — the webapp's phone-as-unlock-endpoint surface.
-//
-// Mirror of the iOS SecretRequestsScreen (SecretRequestsContainer +
-// SecretRequestCard). Opened from the Activity tab. On enter it fetches
-// the account's pending mailbox requests, RE-VERIFIES each against the
-// box's STK resolved from the directory, and shows the box's device-info
-// for a one-tap "Yes, this is my box" confirm. On confirm it unseals the
-// LUKS key, re-seals it for the box STK bound to (nonce, purpose), and
-// posts the reply through the boot worker (owner-IRK signed). All crypto
-// lives in lib/bootApproval.js.
+// The Box Request Inbox surface (docs/box-request-inbox.md) — the webapp's
+// view of "things your boxes are asking you to approve". Generalises the old
+// unlock-only boot-approval screen: it now lists EVERY pending request type
+// (unlock-key AND entitlement) from one registry, satisfies any of them with
+// one dispatch, and auto-refreshes on a foreground poll so there's no
+// drag-to-refresh. Mirror of the iOS/Android inbox.
 
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { getSession } from "../lib/state.js";
-import { fetchVerifiedRequests, approveUnlock } from "../lib/bootApproval.js";
+import {
+  fetchVerifiedRequests,
+  satisfy,
+  BOX_REQUEST_TYPES,
+} from "../lib/bootApproval.js";
+import { fetchFirstBootMap } from "../lib/boxInbox.js";
 
 registerView("view-boot-approval");
 
 let inFlightId = null;
+let pollTimer = null;
+const POLL_MS = 5000;
 
-function purposeLabel(purpose) {
-  switch (purpose) {
-    case "unlock-key":
-      return "Unlock its encrypted disk";
-    case "entitlement":
-      return "Authorize it to serve your account";
-    default:
-      return "Boot secret";
-  }
+function typeTitle(purpose, ctx) {
+  const spec = BOX_REQUEST_TYPES[purpose];
+  if (spec) return spec.title(ctx);
+  return "Approval request";
 }
 
 function infoRow(label, value) {
@@ -41,21 +39,24 @@ function infoRow(label, value) {
   `;
 }
 
-function requestCard(req) {
+function requestCard(req, firstBootMap = {}) {
   const info = req.deviceInfo || {};
-  const isUnlock = req.purpose === "unlock-key";
+  // First boot vs established reboot, derived from the cheap /pods directory:
+  // unknown ⇒ first-boot (the fuller copy, today's wording).
+  const firstBoot = firstBootMap[req.serverDomain] ?? true;
+  // Any type the registry knows how to satisfy is actionable here (the webapp
+  // is now at parity with mobile — it answers unlock-key AND entitlement).
+  const actionable = !!BOX_REQUEST_TYPES[req.purpose];
   const busy = inFlightId === req.id;
-  // The webapp signs `unlock-key` end to end; `entitlement` carriers are
-  // owned by the mobile app, so we surface those read-only with a hint.
-  const action = isUnlock
+  const action = actionable
     ? `<button class="primary full-width mt-2" data-approve-id="${escapeHtml(req.id)}" ${busy ? "disabled" : ""}>
-         ${busy ? "Signing…" : "Yes, this is my box"}
+         ${busy ? "Working…" : "Yes, this is my box"}
        </button>`
-    : `<p class="faint-sm mt-2">Approve this request from your phone — the webapp signs disk-unlock approvals only.</p>`;
+    : `<p class="faint-sm mt-2">Approve this request from your phone.</p>`;
   return `
     <div class="card" data-boot-request-id="${escapeHtml(req.id)}">
       <div class="value server-fqdn">${escapeHtml(req.serverDomain)}</div>
-      <p class="note small">${escapeHtml(purposeLabel(req.purpose))}</p>
+      <p class="note small">${escapeHtml(typeTitle(req.purpose, { firstBoot }))}</p>
       ${
         req.deviceInfo
           ? `<div class="mt-1">
@@ -86,21 +87,30 @@ export async function renderBootApproval() {
     root.innerHTML = `<div class="card placeholder">Unlock the webapp first.</div>`;
     return;
   }
-  root.innerHTML = skeletonCards(2);
+  // Don't blow away the list (and any in-flight button) under the poll — only
+  // show skeletons on the very first paint.
+  if (!root.dataset.painted) root.innerHTML = skeletonCards(2);
   let verified;
   try {
     verified = await fetchVerifiedRequests();
   } catch (e) {
-    root.innerHTML = `<div class="card placeholder err-text">${escapeHtml(
-      e?.message ?? "Couldn't load pending boxes.",
-    )}</div>`;
+    if (!root.dataset.painted) {
+      root.innerHTML = `<div class="card placeholder err-text">${escapeHtml(
+        e?.message ?? "Couldn't load pending boxes.",
+      )}</div>`;
+    }
     return;
   }
+  root.dataset.painted = "1";
   if (!verified.length) {
     root.innerHTML = `<div class="card placeholder">No box is waiting for approval right now.</div>`;
     return;
   }
-  root.innerHTML = verified.map(requestCard).join("");
+  // Cheap, non-biometric: which boxes are on their FIRST boot (so the unlock
+  // copy reads fuller). Best-effort — a blip leaves the map empty ⇒ every card
+  // defaults to first-boot (today's wording), never a worse state.
+  const firstBootMap = await fetchFirstBootMap().catch(() => ({}));
+  root.innerHTML = verified.map((req) => requestCard(req, firstBootMap)).join("");
   bindCards(root, verified);
 }
 
@@ -113,7 +123,7 @@ function bindCards(root, verified) {
       inFlightId = id;
       await renderBootApproval();
       try {
-        await approveUnlock(req);
+        await satisfy(req);
         toast(`Approved ${req.serverDomain}. Your box will pick it up.`);
       } catch (e) {
         toast(`Approval failed: ${e?.message ?? "unknown error"}`, "err");
@@ -125,14 +135,39 @@ function bindCards(root, verified) {
   }
 }
 
+function startPoll() {
+  if (pollTimer) return;
+  pollTimer = setInterval(() => {
+    if (typeof document !== "undefined" && document.hidden) return;
+    if (inFlightId) return; // never refresh over an in-flight approval
+    renderBootApproval().catch(() => {});
+  }, POLL_MS);
+}
+
+function stopPoll() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
 export async function enterBootApproval() {
   show("view-boot-approval");
+  const root = $("boot-approval-content");
+  if (root) delete root.dataset.painted;
   await renderBootApproval();
+  startPoll();
 }
 
 export function initBootApprovalView() {
-  $("boot-approval-back")?.addEventListener("click", () => show("view-activity"));
+  $("boot-approval-back")?.addEventListener("click", () => {
+    stopPoll();
+    show("view-activity");
+  });
   $("boot-approval-refresh")?.addEventListener("click", () => {
-    renderBootApproval().catch((e) => { console.error(e); toast(humanError(e), "err"); });
+    renderBootApproval().catch((e) => {
+      console.error(e);
+      toast(humanError(e), "err");
+    });
   });
 }

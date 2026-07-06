@@ -31,6 +31,9 @@ public struct ServiceDetailScreen: View {
     /// P6 — push the collaborator-invite manage surface onto the nav
     /// stack. Unconditionally surfaced (independent of detail state).
     var onOpenCollaborators: () -> Void = {}
+    /// #92 — push the per-service access-gating ("Who can open this")
+    /// surface onto the nav stack.
+    var onOpenAccess: () -> Void = {}
 
     public init(
         vm: ServiceDetailViewModel,
@@ -40,7 +43,8 @@ public struct ServiceDetailScreen: View {
         onSave: @escaping () -> Void = {},
         onRemove: @escaping () -> Void = {},
         onOpenBrowserTabs: @escaping () -> Void = {},
-        onOpenCollaborators: @escaping () -> Void = {}
+        onOpenCollaborators: @escaping () -> Void = {},
+        onOpenAccess: @escaping () -> Void = {}
     ) {
         self.vm = vm
         self.username = username
@@ -50,6 +54,7 @@ public struct ServiceDetailScreen: View {
         self.onRemove = onRemove
         self.onOpenBrowserTabs = onOpenBrowserTabs
         self.onOpenCollaborators = onOpenCollaborators
+        self.onOpenAccess = onOpenAccess
     }
 
     public var body: some View {
@@ -67,6 +72,7 @@ public struct ServiceDetailScreen: View {
                     webDomains(d: d, c: c)
                     browserTabsRow(d: d, c: c)
                     collaboratorsRow(c: c)
+                    accessRow(c: c)
                     logsAndBackup(d: d, c: c)
                     saveAndRemove(c: c)
                 }
@@ -94,10 +100,10 @@ public struct ServiceDetailScreen: View {
                 // renamed the URL stem (display label hides the
                 // package name elsewhere). `urlLabel` is the canonical
                 // package handle: `scratchpad` if the user is the
-                // creator, `scratchpad-meta` / `scratchpad-harry`
+                // creator, `scratchpad--meta` / `scratchpad--harry`
                 // otherwise.
                 // V9 — `id:` is the IMMUTABLE composite package id
-                // (`<creator>-<slug>`, single dash), NOT the URL
+                // (`<creator>--<slug>`, double dash), NOT the URL
                 // label. urlLabel rotates whenever the user hits
                 // Replace stem; serviceId stays put for the life of
                 // the package — it's what the manifest, the membership
@@ -327,7 +333,7 @@ public struct ServiceDetailScreen: View {
             if let canonical = vm.appLinks.value?.canonicalUrl {
                 urlRow(url: canonical, style: .normal, c: c)
             } else if let user = username {
-                let fallback = "https://\(defaultLabel).\(user).flagship.services"
+                let fallback = "https://\(Endpoints.serverFqdn(server: defaultLabel, user: user))"
                 urlRow(url: fallback, style: .normal, c: c)
             }
         }
@@ -347,7 +353,7 @@ public struct ServiceDetailScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 sectionLabel("INDIVIDUAL INSTANCES", c: c)
                 ForEach(selected) { pod in
-                    let url = "https://\(stem).\(SlugUtil.slugify(pod.name)).\(username ?? "you").flagship.services"
+                    let url = "https://\(stem).\(SlugUtil.slugify(pod.name)).\(username ?? "you").\(Endpoints.dataApex)"
                     urlRow(url: url, style: .muted, c: c)
                 }
             }
@@ -459,7 +465,7 @@ public struct ServiceDetailScreen: View {
         }
     }
 
-    private var customDomainRoot: String { "\(username ?? "you").flagship.services" }
+    private var customDomainRoot: String { Endpoints.userZoneHost(username ?? "you") }
 
     private func cooldownLabel(_ remaining: TimeInterval) -> String {
         let s = max(0, Int(remaining.rounded(.up)))
@@ -565,6 +571,28 @@ public struct ServiceDetailScreen: View {
         }
     }
 
+    private func accessRow(c: FSColors) -> some View {
+        section("WHO CAN OPEN THIS", c: c) {
+            Button(action: onOpenAccess) {
+                FSCard {
+                    HStack(spacing: FS.space.s3) {
+                        Image(systemName: "lock.shield").foregroundColor(c.primary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Manage access").foregroundColor(c.text)
+                            Text("Open to anyone, or restrict to people you invite")
+                                .font(FS.font.caption())
+                                .foregroundColor(c.textMuted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("service-detail-open-access")
+        }
+    }
+
     private func logsAndBackup(d: AppDetailResponse, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             if !d.recentLogs.isEmpty {
@@ -600,7 +628,13 @@ public struct ServiceDetailScreen: View {
     private func saveAndRemove(c: FSColors) -> some View {
         VStack(spacing: FS.space.s3) {
             FSPrimaryButton("Save changes", block: true, large: true, action: onSave)
-            FSDangerButton("Remove service", block: true, action: onRemove)
+            FSDangerButton(
+                vm.isRemoving ? "Removing…" : "Remove service",
+                block: true,
+                action: onRemove
+            )
+            .disabled(vm.isRemoving)
+            .accessibilityIdentifier("service-detail-remove-btn")
         }
         .padding(.top, FS.space.s4)
     }
@@ -614,9 +648,6 @@ public struct ServiceDetailScreen: View {
     }
 
     private func relative(ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = RelativeDateTimeFormatter()
-        fmt.unitsStyle = .abbreviated
-        return fmt.localizedString(for: date, relativeTo: Date())
+        Date.flagshipFormatted(epochMs: ms)
     }
 }

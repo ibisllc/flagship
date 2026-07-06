@@ -39,7 +39,10 @@ class RevokeServerViewModel(
     private val serverDomain: String,
     private val username: () -> String?,
     /** Pluggable for tests. Default uses the real Keystore-backed IRK. */
-    private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
+    // Slice D — releasing/revoking a server name is SENSITIVE (serverRevoke.ts
+    // gates it on the admin master root): sign with the admin root when held,
+    // else the owner IRK (legacy). Canonical bytes unchanged.
+    private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
     private val now: () -> Long = { System.currentTimeMillis() },
 ) : ViewModel() {
     private val _phase = MutableStateFlow<RevokeServerPhase>(RevokeServerPhase.Idle)

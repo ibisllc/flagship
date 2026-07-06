@@ -13,6 +13,7 @@ describe("webapp providers — wrap/unwrap interop with the UMK-derived KEK", ()
     expect(p.PROMO_ID).toBe("flagship-promo");
     expect(p.SUPPORTED_PROVIDERS).toEqual([
       "anthropic",
+      "flagship",
       "google",
       "ollama",
       "openai",
@@ -35,6 +36,9 @@ describe("webapp providers — wrap/unwrap interop with the UMK-derived KEK", ()
     expect(_testing.isValidEntry(valid({ apiKey: "x".repeat(2000) }))).toBe(false);
     expect(_testing.isValidEntry(valid({ baseUrl: "x".repeat(300) }))).toBe(false);
     expect(_testing.isValidEntry(null)).toBe(false);
+    // The flagship (free-credits) provider + its promo source tag are valid.
+    expect(_testing.isValidEntry(valid({ provider: "flagship", source: "promo" }))).toBe(true);
+    expect(_testing.isValidEntry(valid({ source: "bogus" }))).toBe(false);
   });
 
   it("wrap → unwrap roundtrips the providers list under a UMK-derived AES-GCM key", async () => {

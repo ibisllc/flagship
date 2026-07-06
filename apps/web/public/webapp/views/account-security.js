@@ -21,6 +21,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
+import { formatWhen } from "../lib/dateFormat.js";
 import { humanError } from "../lib/humanError.js";
 import {
   fetchAccountType as totpFetchAccountType,
@@ -28,8 +29,34 @@ import {
   totpEnrollConfirm,
   totpDisable,
 } from "../lib/totp.js";
+import { runRotateAdminRoot } from "../lib/adminRootRotation.js";
+import { setupCloudRecovery, hasCloudRecovery } from "../lib/recovery.js";
 
 registerView("view-account-security");
+
+// Slice D (§5) — the type-to-confirm phrase for the destructive "Rotate admin
+// key" action, and the revoke-semantic warning shown on the sheet.
+const ROTATE_CONFIRM_PHRASE = "ROTATE";
+export const ROTATE_ADMIN_WARNING =
+  "Rotating mints a brand-new admin key and REVOKES admin from every OTHER admin device — they keep access as members but can no longer wipe, transfer, or decommission your cloud. Do this if an admin device was lost or you want to cut off the others. Your boxes adopt the change on their next check-in.";
+
+export const ROTATE_REESCROW_FAILED_MESSAGE =
+  "Admin key rotated, but your recovery backup wasn't updated — it still holds your OLD admin key. Run recovery setup again from Settings to fix this.";
+
+/**
+ * The post-rotation re-escrow the rotation lib runs. Not-enrolled resolves
+ * clean (nothing to re-wrap → the lib records "ok"); enrolled-but-failed
+ * (popup blocked, WebAuthn cancelled, network) throws so the lib records
+ * "failed" and the view can warn that the recovery backup still restores the
+ * OLD admin root. Exported for tests.
+ */
+export function makeRotationReEscrow(deps = {}) {
+  const enrolled = deps.hasCloudRecovery ?? hasCloudRecovery;
+  const setup = deps.setupCloudRecovery ?? setupCloudRecovery;
+  return async (username) => {
+    if (await enrolled(username)) await setup(username);
+  };
+}
 
 const state = {
   username: "",
@@ -59,9 +86,7 @@ async function fetchAccountType() {
 
 function fmtDate(ms) {
   if (!ms) return "an unknown date";
-  return new Date(ms).toLocaleDateString(undefined, {
-    year: "numeric", month: "short", day: "numeric",
-  });
+  return formatWhen(ms);
 }
 
 /** Renders the badge + explainer at the top of the screen. */
@@ -196,6 +221,36 @@ function renderActions() {
   `;
 }
 
+/** Slice D — the owner-facing "Rotate admin key" control. Shown only when THIS
+ *  device holds the admin master root (a non-admin device can't rotate); a
+ *  non-admin device sees an explanatory note instead. */
+function renderRotateAdminRoot() {
+  const session = getSession();
+  const isAdmin = !!session.adminRootSeed;
+  if (!isAdmin) {
+    return `
+      <div class="card mt-3" data-account-security-rotate="unavailable">
+        <h3>Admin key</h3>
+        <p class="note small">
+          This device isn't an admin device, so it can't rotate the admin key.
+          Rotate from a device that holds admin authority.
+        </p>
+      </div>
+    `;
+  }
+  return `
+    <div class="card mt-3" data-account-security-rotate="available">
+      <h3>Admin key</h3>
+      <p class="note small">${escapeHtml(ROTATE_ADMIN_WARNING)}</p>
+      <button class="danger" id="account-security-rotate-admin"
+              data-account-security-rotate-btn
+              ${state.busy ? "disabled" : ""}>
+        ${state.busy ? "Working…" : "Rotate admin key"}
+      </button>
+    </div>
+  `;
+}
+
 function renderFailure() {
   if (!state.failureMessage) return "";
   return `
@@ -217,6 +272,7 @@ async function renderAccountSecurity() {
       renderStagedSecret(),
       renderRecoveryCodes(),
       renderActions(),
+      renderRotateAdminRoot(),
       renderFailure(),
     ].join("");
     bindHandlers();
@@ -358,6 +414,60 @@ function bindHandlers() {
   });
   document.getElementById("account-security-print")?.addEventListener("click", () => {
     window.print();
+  });
+  document.getElementById("account-security-rotate-admin")?.addEventListener("click", async () => {
+    const session = getSession();
+    if (!session.umk || !session.adminRootSeed) {
+      state.failureMessage = session.umk
+        ? "This device isn't an admin device."
+        : "Unlock the webapp first.";
+      await renderAccountSecurity();
+      return;
+    }
+    const { inlineConfirm, inlinePrompt } = await import("../lib/modal.js");
+    const ok = await inlineConfirm({
+      title: "Rotate admin key?",
+      message: ROTATE_ADMIN_WARNING,
+      okLabel: "Continue",
+      danger: true,
+    });
+    if (!ok) return;
+    const typed = await inlinePrompt({
+      title: "Type ROTATE to confirm",
+      message: `This revokes admin from your other admin devices and cannot be undone. Type ${ROTATE_CONFIRM_PHRASE} to continue.`,
+      placeholder: ROTATE_CONFIRM_PHRASE,
+    });
+    if (!typed || typed.trim().toUpperCase() !== ROTATE_CONFIRM_PHRASE) {
+      if (typed != null) toast("Rotation cancelled — phrase didn't match.", "err");
+      return;
+    }
+    state.busy = true;
+    state.failureMessage = null;
+    await renderAccountSecurity();
+    try {
+      const result = await runRotateAdminRoot({
+        username: session.username,
+        umkSeed: session.umk,
+        currentAdminRootSeed: session.adminRootSeed,
+        session,
+        // Re-escrow the NEW root under the recovery credential — best-effort +
+        // only when recovery is actually enrolled.
+        reEscrow: makeRotationReEscrow(),
+      });
+      if (result.reEscrow === "failed") {
+        // The rotation itself succeeded — but a stale escrow silently restores
+        // the dead root, so the warning must persist past a toast's lifetime.
+        state.failureMessage = ROTATE_REESCROW_FAILED_MESSAGE;
+      } else {
+        toast("Admin key rotated — your other admin devices are no longer admins.", "ok");
+      }
+    } catch (e) {
+      console.error("admin-root rotation failed", e);
+      state.failureMessage = humanError(e);
+    } finally {
+      state.busy = false;
+      await renderAccountSecurity();
+    }
   });
 }
 

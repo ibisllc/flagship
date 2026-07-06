@@ -31,7 +31,10 @@ import { deriveSWK } from "@flagship/protocol";
 import { InMemoryAppEnvStore, type AppEnvStore } from "../../src/serviceEnvStore.js";
 import { LlmHarness } from "../../src/llmHarness.js";
 import { InMemoryBuildCredentialStore } from "../../src/llm/buildCredentialStore.js";
-import { buildVibeCodeStartStreaming } from "../../src/llm/vibeCodeStartStreaming.js";
+import {
+  buildVibeCodeStartStreaming,
+  ownerChoiceSupplement,
+} from "../../src/llm/vibeCodeStartStreaming.js";
 import {
   VibeCodeSessionRegistry,
 } from "../../src/llm/vibeCodeSession.js";
@@ -91,6 +94,31 @@ const ctx = {
   tier: "free" as const,
   availableProviders: ["fake"],
 };
+
+describe("ownerChoiceSupplement — Describe-form name + visibility steer the prompt", () => {
+  it("is empty when the owner made no explicit choice (legacy clients)", () => {
+    expect(ownerChoiceSupplement(undefined, undefined)).toBe("");
+    expect(ownerChoiceSupplement("", undefined)).toBe("");
+  });
+
+  it("steers the manifest name to the owner's chosen slug", () => {
+    const s = ownerChoiceSupplement("plant-tracker", undefined);
+    expect(s).toContain('"plant-tracker"');
+    expect(s).toContain("manifest `name`");
+  });
+
+  it("encodes the private vs link reach the owner picked", () => {
+    expect(ownerChoiceSupplement(undefined, "just-me")).toMatch(/PRIVATE/);
+    expect(ownerChoiceSupplement(undefined, "just-me")).not.toMatch(/anyone with the link/);
+    expect(ownerChoiceSupplement(undefined, "link")).toMatch(/anyone with the link/);
+  });
+
+  it("combines both choices when both are set", () => {
+    const s = ownerChoiceSupplement("notes", "link");
+    expect(s).toContain('"notes"');
+    expect(s).toMatch(/anyone with the link/);
+  });
+});
 
 describe("buildVibeCodeStartStreaming — live BYOK wiring", () => {
   it("INVARIANT C: assembles system prompt from names() only; values never reach the wire", async () => {

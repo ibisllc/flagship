@@ -1,3 +1,4 @@
+import { swkOps } from "../helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import { ed, deriveIRK, deriveSWK } from "@flagship/protocol";
 import { AppMembership } from "../../src/membership.js";
@@ -79,7 +80,7 @@ function fakeUrlController(initial: string[] = []): UrlControllerLike & { claime
 function makeMembership(): AppMembership {
   const umk = { seed: new Uint8Array(32).fill(7) };
   const irk = deriveIRK(umk);
-  const swk = deriveSWK(umk, "srv-1");
+  const swk = swkOps(deriveSWK(umk, "srv-1"));
   return new AppMembership("habits", USERNAME, irk.publicKey, swk);
 }
 
@@ -169,6 +170,7 @@ describe("screens HTTP — P1.1 server-detail", () => {
         sans: [SERVER_FQDN, `*.${SERVER_FQDN}`],
       }),
       installEventLog,
+      currentCommit: () => "9f2c1ab3de4567890abcdef1234567890abcdef1",
     });
     const r = await handle(req({
       path: "/api/screens/server-detail",
@@ -184,6 +186,7 @@ describe("screens HTTP — P1.1 server-detail", () => {
     expect(body.certNotAfter).toBe(9_000);
     expect(body.certSans).toEqual([SERVER_FQDN, `*.${SERVER_FQDN}`]);
     expect(body.recentInstallEvents).toHaveLength(1);
+    expect(body.currentCommit).toBe("9f2c1ab3de4567890abcdef1234567890abcdef1");
   });
 
   it("degrades cleanly when subsystems are null (no app-platform / no certs / no event log)", async () => {
@@ -201,6 +204,8 @@ describe("screens HTTP — P1.1 server-detail", () => {
     expect(body.pairedSessionCount).toBe(0);
     expect(body.recentInstallEvents).toEqual([]);
     expect(body.certNotAfter).toBeUndefined();
+    // No provider wired (not a git checkout) ⇒ honest null, never a guess.
+    expect(body.currentCommit).toBeNull();
   });
 });
 

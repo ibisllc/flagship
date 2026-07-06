@@ -1,0 +1,98 @@
+{
+  "_comment": "Cross-platform pinned vectors for service-access gating (docs/service-access-gating.md). The webapp keystore/serviceInvite mirror is verified against these; iOS (Swift) + Android (Kotlin) mirrors MUST verify against the SAME bytes. Generated from @flagship/protocol: authorUMK seed = 0x0b repeated 32x, friendUMK seed = 0x16 repeated 32x; the inviteId device key = the author IRK; the capability secret = 0x07 repeated 32x. All signatures are Ed25519 over the canonical pre-image. The bundle seal uses a random 12-byte nonce, so the SEAL ciphertext is NOT pinned — only the plaintext seal->open roundtrip + a cross-implementation open are asserted. The create signature is over a fixed encryptedBundle placeholder ('00') so it is deterministic and does not depend on the random nonce.",
+  "seeds": {
+    "authorUmkSeedHex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "friendUmkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616"
+  },
+  "derived": {
+    "authorAidPubHex": "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+    "authorIrkPubHex": "150faed2621074accb854faca6811def4a7954529785d48d352fcd4ec65c15aa",
+    "authorDevicePubHex": "150faed2621074accb854faca6811def4a7954529785d48d352fcd4ec65c15aa",
+    "friendAidPubHex": "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c",
+    "friendIrkPubHex": "7e046d5cbd758fd48007b69cf8ad4610219720679d0040979cf945cd0918fb26",
+    "householdKeyHex": "347e8005f450b4234dc8eb65b5b3da4edf662e3d84c906592b121915bc6256f8"
+  },
+  "secretHex": "0707070707070707070707070707070707070707070707070707070707070707",
+  "secretHash": "4bb06f8e4e3a7715d201d573d0aa423762e55dabd61a2c02278fa56cc6d294e0",
+  "inviteId": "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890",
+  "inviteIdCounter1": "d598c933945705dbd1889989ceee5f2a50c8a62533ff9a5d9186190c49d00d7b",
+  "serviceRef": "alice-notes",
+  "serverId": "home.alice.flagship.services",
+  "create": {
+    "encryptedBundlePlaceholder": "00",
+    "issuedAt": 1700000000000,
+    "signerKey": "authorIrk",
+    "sigHex": "90359a5a49f1da7272850e991b03e2533b12d42b90dd26cf62cd77a0dcae23464d683d3d92aa4374a476b4029e0639a63864ed10104b4ffd2f0a2f9fba780700"
+  },
+  "redeem": {
+    "redeemedAt": 1700000500000,
+    "signerKey": "friendAid",
+    "sigHex": "d79e8574a430e3fe6d4b5154ceac394d10715347c6fc92569c6a3c9b2b7f082f54e8e58ee6b54e6eb1dc7cb2d1b52abf16b3bcba4121a7063e664412fc5b080d"
+  },
+  "revoke": {
+    "issuedAt": 1700001000000,
+    "signerKey": "authorIrk",
+    "sigHex": "e264e00a748b4079f4076330f507d89440a46ff6ddf50a5f73af09cc8d114ad96b5ea5ebf56b8b22190c092e0920d1e7bf9447d32fe31aee23b806709a9f270c"
+  },
+  "setAccessMode": {
+    "mode": "restricted",
+    "issuedAt": 1700002000000,
+    "signerKey": "authorIrk",
+    "sigHex": "8ec133292d73c932ea401c0f8fec55d26c00bdccf0f888f95f58f231710c66f59f43aae6fad2e3a6435336cb97578be45a8981d1bad3576e759d449fc01fa804"
+  },
+  "visit": {
+    "issuedAt": 1700003000000,
+    "signerKey": "friendAid",
+    "sigHex": "49551d66a1174ea0eb23339c3fd85eed77d50903bb0bc03b63acee1ed60018c9e92a34bdf9c634015a2179a0c0ff3a2fcbda11dd01b6b4c4fb48f92dc3c3100f"
+  },
+  "knock": {
+    "pageId": "cb2421036efeb738c6017d8ee92e7b89",
+    "issuedAt": 1700004000000,
+    "signerKey": "friendAid",
+    "sigHex": "8d01d3ff898993ec736002158dd4f454cfd37cb3ad41aea59aba1b7aafe44b1d04703d611d0d3b15a99e796e33d778a4457cb86209f31b87f8b1b2b26fe59701"
+  },
+  "removeAllow": {
+    "aid": "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c",
+    "issuedAt": 1700005000000,
+    "signerKey": "authorIrk",
+    "sigHex": "8e572f9bbe7b62ea3d6aca2241e902ab0e7628cc1ee948ccb8c8b95786a76e60818bf69db19331ba85ae634b9ef692faf4b1566b7b6a702cfa53024539527406"
+  },
+  "_v2_comment": "Gating v2 (docs §v2 hardening). contactAid = deriveContactAccountId(friendUmk, authorAid.pub) — the friend's PER-AUTHOR pseudonym (unlinkable across authors). accept = the friend's contact-AID-signed manual-approve acceptance. createMaxN = a group/multi-use create (maxRedemptions+expiresAt appended to the canonical bytes), authorIrk-signed; a create WITHOUT maxN/exp must sign byte-identically to the v1 `create` vector above (backward-compat).",
+  "contactAid": {
+    "authorAidPubHex": "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+    "contactAidPubHex": "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a"
+  },
+  "accept": {
+    "inviteId": "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890",
+    "serviceRef": "alice-notes",
+    "acceptedAt": 1700006000000,
+    "signerKey": "friendContactAid",
+    "sigHex": "1c54021039b6698f5d8d9d5b002c0528f5f82d90fb2de05ecde79082a9f5838c445e23907f4826ec53a061cec8581baaf0fc7fb7ee5234873bfe18ebea81f808"
+  },
+  "createMaxN": {
+    "inviteId": "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890",
+    "encryptedBundlePlaceholder": "00",
+    "issuedAt": 1700000000000,
+    "maxRedemptions": 10,
+    "expiresAt": 1700009999999,
+    "signerKey": "authorIrk",
+    "sigHex": "785641620cb5378afa127819a19f4e1ff110c0bea35678da3365327cf539aa3e148e3eab2246245c9ede4270dec85c4e166b88887a9988fa065f5d7ded06ce02"
+  },
+  "_v2_signing_comment": "Gating v2 Wave 3: clients switch create/revoke from IRK-signing to AID-signing (box-as-authority verifies against the owner AID; .com dual-accepts AID|IRK during transition). createAid/revokeAid = the SAME create/revoke pre-images as the v1 `create`/`revoke` vectors but signed by authorAID instead of authorIrk.",
+  "createAid": {
+    "inviteId": "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890",
+    "encryptedBundlePlaceholder": "00",
+    "issuedAt": 1700000000000,
+    "signerKey": "authorAid",
+    "sigHex": "aa47bd89b8ff460c0165505a89fafab99fb36105ac71933756cac5ede0b3b2e2efe1ec5fec0b3e5e863c39655aa6072ec2b8c6b053a7e803c3fb530466261200"
+  },
+  "revokeAid": {
+    "issuedAt": 1700001000000,
+    "signerKey": "authorAid",
+    "sigHex": "2b001e035ffd63035de6d8c9ccf73a26b159f3025e6a82faa211cd59d767525d3ed4a889e2a75f3c7177e06a06cc59b197f9ce301c680a44f026a2e744607a0a"
+  },
+  "bundle": {
+    "name": "Alex",
+    "photo": "data:image/png;base64,AAAA"
+  }
+}

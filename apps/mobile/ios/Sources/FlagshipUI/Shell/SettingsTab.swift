@@ -133,9 +133,12 @@ public struct SettingsTab: View {
                     onOpenAiKeys: { path.append(.aiKeys) },
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
+                    onOpenAccountSecurity: { path.append(.accountSecurity) },
                     onOpenProfiles: { path.append(.profiles) },
                     onOpenPeerBackup: { path.append(.peerBackup) },
                     onOpenCompanionDock: { path.append(.companionDock) },
+                    onOpenSecuredSessions: { path.append(.securedSessions) },
+                    onOpenProcessUrl: { path.append(.processUrl) },
                     onOpenCompanionRequests: { path.append(.companionRequests) },
                     pendingCompanionWritesCount: pendingCompanionCount,
                     onOpenAbout: { path.append(.about) },
@@ -232,11 +235,13 @@ public struct SettingsTab: View {
                     hasCloudRecovery: app.hasCloudRecovery,
                     signOutPolicy: SignOutPolicy.evaluate(
                         hasCloudRecovery: app.hasCloudRecovery,
-                        isDemoAccount: !dev.useLiveClient
+                        isDemoAccount: !dev.useLiveClient,
+                        isLastDevice: isLastDevice
                     ),
                     onRecoveryRequired: {
                         toasts.warning("Set up account recovery to use this.")
-                    }
+                    },
+                    onDeleteAccount: { path.append(.deleteAccount) }
                 )
                 .alert(
                     "Replace device",
@@ -292,15 +297,41 @@ public struct SettingsTab: View {
         }
     }
 
+    /// True when this is the account's last device (the founding device is not
+    /// in the roster — docs §0), so a no-recovery wipe is account DEATH. Unknown
+    /// (devices not yet loaded) ⇒ false: conservatively shows "set up recovery"
+    /// rather than the delete ceremony; the server independently re-enforces
+    /// last-device on the self-delete bundle anyway.
+    private var isLastDevice: Bool {
+        if case .loaded(let devs)? = vm?.trustedDevices { return devs.count <= 1 }
+        return false
+    }
+
     @ViewBuilder
     private func settingsDestination(for route: SettingsRoute) -> some View {
         switch route {
+        case .deleteAccount:
+            // Step 2 of the last-device deletion ceremony: the full-page
+            // irreversible warning. Reached only when SignOutPolicy.evaluate
+            // == .deletionCeremony (no recovery + last device). On confirm the
+            // VM signs the owner-IRK self-delete bundle, POSTs it, wipes every
+            // Keychain profile, then drops to Welcome via signOut.
+            AccountDeletionScreen(
+                vm: AccountDeletionViewModel(
+                    server: server,
+                    username: { [app] in app.currentUser },
+                    onWiped: { app.signOut() }
+                ),
+                username: app.currentUser ?? ""
+            )
         case .providers:
             ProvidersStub()
         case .aiKeys:
             AiKeysScreen(vm: AiKeysViewModel())
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
+        case .accountSecurity:
+            AccountSecurityContainer()
         case .keyfileBackup:
             KeyfileExportScreen(
                 vm: KeyfileExportViewModel(username: app.currentUser ?? "")
@@ -404,6 +435,35 @@ public struct SettingsTab: View {
                 vm: $companionRequestsVm,
                 onPendingCountChanged: { count in pendingCompanionCount = count }
             )
+        case .securedSessions:
+            SecuredSessionsContainer()
+        case .processUrl:
+            ProcessUrlScreen()
+        }
+    }
+}
+
+/// Owns the SecuredSessionsViewModel lifecycle so the SettingsTab can navigate
+/// to "Open secured sessions" without keeping the VM alive after pop. Mirrors
+/// CompanionRequestsContainer; the client + store come from the environment.
+struct SecuredSessionsContainer: View {
+    @Environment(\.serviceAccessClient) private var serviceAccess
+    @Environment(\.securedSessionStore) private var store
+    @State private var vm: SecuredSessionsViewModel?
+
+    var body: some View {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                SecuredSessionsScreen(vm: vm)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            if vm == nil {
+                vm = SecuredSessionsViewModel(client: serviceAccess, store: store)
+            }
         }
     }
 }
@@ -622,6 +682,33 @@ struct RecoveryContainer: View {
                 vm = RecoveryViewModel(
                     client: serverClient,
                     webAuthn: PlatformWebAuthnProvider(),
+                    username: { [app] in app.currentUser }
+                )
+            }
+        }
+    }
+}
+
+/// Account security — TOTP enroll/disable, recovery codes, and the Watch
+/// delegate. A container (mirrors `RecoveryContainer`) so the
+/// `AccountSecurityViewModel` — which holds the in-progress enroll state —
+/// is built ONCE in `.task`, not re-created on each body evaluation.
+struct AccountSecurityContainer: View {
+    @Environment(\.flagshipServerClient) private var server
+    @Environment(AppState.self) private var app
+    @State private var vm: AccountSecurityViewModel?
+
+    var body: some View {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                AccountSecurityScreen(viewModel: vm)
+            } else { ProgressView() }
+        }
+        .task {
+            if vm == nil {
+                vm = AccountSecurityViewModel(
+                    server: server,
                     username: { [app] in app.currentUser }
                 )
             }

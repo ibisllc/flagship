@@ -54,7 +54,7 @@ public struct OnboardingFlow: View {
                     // pushes the Phase-2 Open-account step (NOT
                     // server-mint): account identity is created on its
                     // own, server provisioning is a later, optional act.
-                    ChooseUsernameScreen(
+                    SuggestUsernameScreen(
                         onContinue: { username in
                             path.append(.openAccount(username: username))
                         }
@@ -145,7 +145,7 @@ public struct OnboardingFlow: View {
     /// UNPAIRED and push the incoming join flow.
     private func consumePairingLink(_ link: DeepLink?) {
         guard case .joinAccount(let sid, let pk) = link else { return }
-        let joinUrl = "https://flagshipserver.com/join?sid=\(sid)&pk=\(pk)"
+        let joinUrl = "https://\(Endpoints.controlHost)/join?sid=\(sid)&pk=\(pk)"
         if path.last != .joinByPairing(joinUrl: joinUrl) {
             path.append(.joinByPairing(joinUrl: joinUrl))
         }

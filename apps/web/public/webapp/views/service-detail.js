@@ -7,12 +7,14 @@ import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl } from "../lib/api.js";
 import { getSession } from "../lib/state.js";
 import { signWithIrk } from "../keystore.js";
+import { sensitiveSigner } from "../lib/adminRoot.js";
 import { enterBrowserViewer } from "./browser-viewer.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+import { controlApex, dataApex } from "../lib/apex.js";
 
-const COM_BASE = "https://flagshipserver.com";
+const COM_BASE = controlApex();
 
 /** V3 — cached service-links per serviceId for the current render. Carries
  *  `customDomain` + `customDomainConfirmed` from .com's /links. */
@@ -73,7 +75,7 @@ export async function renderServiceDetail(serviceId) {
 
       ${renderWebDomainsSection(s, currentServiceLinks)}
       <div id="sd-custom-domains">${renderCustomDomainsSection()}</div>
-      <h2 class="mt-4">Manifest</h2>
+      <h2 class="mt-4">App config</h2>
       <div class="card">
         <pre class="json-block">${escapeHtml(JSON.stringify(body.manifest, null, 2))}</pre>
       </div>
@@ -121,6 +123,15 @@ export async function renderServiceDetail(serviceId) {
           <button id="sd-invite-manage" class="secondary">Manage invites</button>
         </div>
       </div>
+      <h2 class="mt-4">Access</h2>
+      <div class="card">
+        <p class="note">
+          Keep this service open to anyone with the link, or restrict it to an
+          allow-list of people you add by name. Their access follows their
+          account, surviving a phone change.
+        </p>
+        <button id="sd-access" class="full-width mt-2">Manage who can open this</button>
+      </div>
       <h2 class="mt-4">Backup</h2>
       <div class="card">
         <p class="note">
@@ -166,6 +177,10 @@ export async function renderServiceDetail(serviceId) {
     $("sd-invite-manage")?.addEventListener("click", async () => {
       const { enterInviteManage } = await import("./invite-manage.js");
       await enterInviteManage(s);
+    });
+    $("sd-access")?.addEventListener("click", async () => {
+      const { enterServiceAccess } = await import("./service-access.js");
+      await enterServiceAccess(s);
     });
     bindWebDomainsHandlers(s);
     bindCustomDomainsHandlers();
@@ -383,7 +398,7 @@ function cooldownLabel(ms) {
 }
 
 function customDomainRoot() {
-  return `${getSession().username || "you"}.flagship.services`;
+  return `${getSession().username || "you"}.${dataApex()}`;
 }
 
 /** SET CUSTOM DOMAIN card: section label + right-floated M:SS
@@ -520,7 +535,9 @@ async function bindCustomDomain(fqdn) {
   );
   let sig;
   try {
-    sig = await signWithIrk(session.umk, canonical);
+    // Slice D: attach-custom-domain is a SENSITIVE order — admin master root
+    // when this account has one, else the owner IRK (legacy).
+    sig = await sensitiveSigner()(session.umk, canonical);
   } catch (e) {
     toast(`Couldn't sign: ${e.message ?? e}`, "err");
     return;

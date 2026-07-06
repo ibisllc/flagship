@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 import FlagshipBurnerCore
 
 /// Wizard controller — drives the CLI, tracks the user's selections,
@@ -46,26 +47,192 @@ final class WizardModel: ObservableObject {
     /// immediately round-trip back through `didSet` into the store.
     private var suppressWifiPersist = false
 
+    // MARK: - Pairing / session gate
+
+    /// Top-level burner state. The live phone session is the gate: `.locked`
+    /// shows the QR + short code; `.pairing` shows the SAS to confirm on the
+    /// phone; `.session` is the unlocked burn UI (Advanced available);
+    /// `.recipeFile` is the out-of-band "I have a recipe" path (Simple only,
+    /// no Advanced — there's no live session to authorize anything).
+    enum BurnerUIStage: Equatable { case locked, pairing, session, recipeFile }
+
+    @Published var burnerStage: BurnerUIStage = .locked
+    /// The QR payload + short code shown on the locked cover (from the engine).
+    @Published var pairQrPayload: String? = nil
+    @Published var pairCodeDisplay: String? = nil
+    /// One-line status under the QR ("Waiting for your phone…", etc.).
+    @Published var pairStatus: String = "Waiting for your phone…"
+    /// The 6-digit SAS to confirm on the phone (set in `.pairing`).
+    @Published var pairMatchCode: String? = nil
+    /// Why the last session ended (shown briefly on the cover after a drop).
+    @Published var lastSessionEndReason: String? = nil
+
+    /// Advanced features (BYO ISO, save-ISO) are only available inside a live
+    /// phone session — the out-of-band recipe path is deliberately Simple-only.
+    var advancedAllowed: Bool { burnerStage == .session }
+
+    private var sessionClient: BurnerSessionClient? = nil
+
+    // MARK: - Destinations (Burn to USB / Host here)
+
+    /// Where the delivered recipe goes. nil ⇒ the chooser is showing. Burn to
+    /// USB is today's flow, unchanged; Host here creates a managed VM
+    /// appliance on this Mac (docs/desktop-vm-appliance.md).
+    @Published var destination: ServerDestination? = nil
+
+    /// Sidebar selection: when set, the main area shows that hosted server's
+    /// detail instead of the wizard stage.
+    @Published var selectedHostedServer: String? = nil
+
+    /// One-shot request from a sidebar row action ("Open console" / double-click
+    /// on a debug VM) to auto-open the detail pane's serial console for the named
+    /// server. The detail view consumes it and clears it. Mirrors the Windows
+    /// ServerRow_OpenConsole path (select the row, then flip the console toggle).
+    @Published var consoleAutoOpenFor: String? = nil
+
+    /// Hosted-VM orchestrator (inventory + lifecycles + VZ hosts).
+    let vmManager = VMManager()
+    private var cancellables = Set<AnyCancellable>()
+
     init() {
         suppressWifiPersist = true
         wifiSSID = WifiCredentialStore.loadSSID()
         wifiPassword = WifiCredentialStore.loadPassword()
         suppressWifiPersist = false
+        // Nested ObservableObject: forward its changes so the sidebar/detail
+        // views observing the WizardModel re-render on VM state changes.
+        vmManager.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        vmManager.log = { [weak self] line in
+            self?.appendLog(stream: .stdout, text: "+ \(line)")
+        }
+        beginPairing()
+    }
+
+    // MARK: - Pairing lifecycle
+
+    /// Spin up a fresh pairing session: new ephemeral keypair, new QR + code,
+    /// connect to the relay, and wait for a phone. Called on launch and after
+    /// a session drops (so the cover always shows a live, joinable code).
+    func beginPairing() {
+        sessionClient?.close()
+        let client = BurnerSessionClient()
+        sessionClient = client
+        pairQrPayload = client.qrPayload
+        pairCodeDisplay = client.humanCodeDisplay
+        pairMatchCode = nil
+        pairStatus = "Waiting for your phone…"
+        burnerStage = .locked
+        client.onStage = { [weak self] stage in Task { @MainActor in self?.applyEngineStage(stage) } }
+        client.onRecipe = { [weak self] data in Task { @MainActor in self?.handleSessionRecipe(data) } }
+        client.onLog = { [weak self] msg in Task { @MainActor in self?.appendLog(stream: .stderr, text: msg) } }
+        client.connect()
+    }
+
+    private func applyEngineStage(_ stage: BurnerPairingEngine.Stage) {
+        switch stage {
+        case .waitingForPhone:
+            // Phone left before pairing — keep the SAME QR live and wait again.
+            pairMatchCode = nil
+            pairStatus = "Waiting for your phone…"
+            burnerStage = .locked
+        case .awaitingConfirm(let code):
+            pairMatchCode = code
+            pairStatus = "Phone connected — confirm the code matches."
+            burnerStage = .pairing
+        case .paired:
+            pairStatus = "Paired."
+            burnerStage = .session
+        case .ended(let reason):
+            // One-shot deposit: a DELIVERED recipe survives a phone disconnect.
+            // The phone's job is done after delivery and it may lock/leave — keep
+            // the recipe + burn UI. Only an undelivered session relocks.
+            switch SessionEndPolicy.onSessionEnded(recipeDelivered: recipe != nil) {
+            case .keepDeliveredRecipe:
+                // Drop the now-dead socket but hold everything we're burning.
+                sessionClient?.close()
+                sessionClient = nil
+            case .relock:
+                wipeAndRelock(reason)
+            }
+        }
+    }
+
+    /// A recipe arrived over the live session. Stage it to a 0600 temp file
+    /// (same as the paste path) and run the existing verify.
+    private func handleSessionRecipe(_ data: Data) {
+        let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
+        let staging = tmpDir.appendingPathComponent("flagship-recipe-\(UUID().uuidString).json")
+        do {
+            try data.write(to: staging, options: [.atomic])
+            try FileManager.default.setAttributes(
+                [.posixPermissions: NSNumber(value: 0o600)], ofItemAtPath: staging.path)
+        } catch {
+            appendLog(stream: .stderr, text: "Couldn't stage the received recipe: \(error.localizedDescription)")
+            return
+        }
+        pastedRecipeStaging = staging
+        recipe = staging
+        Task { await runVerify() }
+    }
+
+    /// The burner-side "Disconnect from phone" button: wipe everything we were
+    /// working on (including a delivered recipe) and return to a fresh locked
+    /// cover. The laptop-user's explicit "I'm done" — clears the desktop and
+    /// retires the QR. The phone has no further role, so nothing to notify.
+    func disconnectFromPhone() {
+        wipeAndRelock("You disconnected this burner.")
+    }
+
+    /// Complete wipe of the in-progress burn + session, then return to the
+    /// locked cover with a FRESH QR (so the old code is retired). Triggered by
+    /// the explicit Disconnect button, or by a session that ended BEFORE a
+    /// recipe was delivered (a delivered recipe is kept instead — see
+    /// `applyEngineStage(.ended)`).
+    func wipeAndRelock(_ reason: String?) {
+        // Don't yank a burn that's mid-write out from under the user.
+        guard !isRunning else { return }
+        lastSessionEndReason = reason
+        // Sensitive session/recipe material.
+        recipe = nil
+        verified = nil
+        recipeError = nil
+        pairMatchCode = nil
+        destination = nil
+        // Reset Advanced selections so a fresh pairing starts clean.
+        mode = .simple
+        useSystemISO = false
+        iso = nil
+        // Drop any staged recipe temp file from the live-session path.
+        if let staging = pastedRecipeStaging {
+            try? FileManager.default.removeItem(at: staging)
+            pastedRecipeStaging = nil
+        }
+        beginPairing()
+    }
+
+    /// "I have a recipe" — the out-of-band path. No live session; Simple-only.
+    func enterRecipeFileMode() {
+        sessionClient?.close()
+        sessionClient = nil
+        mode = .simple
+        useSystemISO = false
+        burnerStage = .recipeFile
+    }
+
+    /// Back from the recipe-file path to the pairing cover.
+    func returnToCover() {
+        recipe = nil
+        verified = nil
+        recipeError = nil
+        destination = nil
+        beginPairing()
     }
     /// Simple = fetch a server-named Debian base ISO + remaster it with the
     /// recipe (default). Advanced = remaster a stock Ubuntu/Debian ISO the user
     /// supplies. Both end in the same remaster+flash path.
     @Published var mode: BurnerMode = .simple
-
-    /// DEBUG build toggle (default OFF). On ⇒ the burned image keeps the
-    /// `debug`/`flagship` sudo console account + the "DEBUG BUILD" banner. Off ⇒
-    /// a production image with neither. The ONLY way to get those debug features.
-    @Published var debugMode: Bool = false
-
-    /// Debug is an ADVANCED-only feature (the checkbox is hidden in Simple), so
-    /// the flag only ever takes effect in Advanced — a Simple burn is always a
-    /// production image even if the flag was left on from an earlier Advanced run.
-    var effectiveDebugMode: Bool { debugMode && mode == .advanced }
 
     /// Advanced-mode only: use the server-named base ISO (fetched/cached) like
     /// Simple does, instead of bringing your own ISO file. Default OFF.
@@ -224,6 +391,11 @@ final class WizardModel: ObservableObject {
     /// picks the right one for the detected ISO family; building both is cheap
     /// (pure string work) and keeps the privilege-split flow simple.
     private func installerConfigs(forRecipe recipe: URL) throws -> (yaml: String, preseed: String) {
+        // The phone delivers the FULL recipe with its Advanced choices already
+        // baked in — including the unsigned `debugGrant` sibling (consent-as-
+        // crypto, verified box-side against the owner IRK). The burner passes the
+        // recipe bytes through UNCHANGED; the preseed engine forwards whatever is
+        // in `data` (debugGrant included). The burner makes no security choices.
         let data = try Data(contentsOf: recipe)
         let parsed = try RecipeLoader.load(data: data)
         // Disk encryption follows the phone-signed recipe: an explicit "none"
@@ -236,15 +408,13 @@ final class WizardModel: ObservableObject {
                                                 encryptRoot: encryptRoot,
                                                 bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                 wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
-                                                wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword,
-                                                debugMode: effectiveDebugMode)
+                                                wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword)
         let preseed = try UserData.debianPreseed(recipeJSON: data,
                                                  installerGitRef: parsed.installerGitRef,
                                                  encryptRoot: encryptRoot,
                                                  bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                  wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
-                                                 wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword,
-                                                 debugMode: effectiveDebugMode)
+                                                 wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword)
         return (yaml, preseed)
     }
 
@@ -425,6 +595,88 @@ final class WizardModel: ObservableObject {
             appendLog(stream: .stderr,
                       text: result.message.isEmpty ? "write failed (code \(result.code))" : result.message)
         }
+    }
+
+    // MARK: - Host here (VM appliance)
+
+    /// "Host here": the SAME recipe → the SAME remastered installer ISO, but
+    /// applied to a managed VM on this Mac instead of a USB stick. The guest
+    /// boot chain (autoinstall → LUKS → phone-home unlock → register) runs
+    /// unmodified inside the VM; this app never holds a key.
+    func runHostHere() async {
+        guard let recipe = recipe else { return }
+        guard !isRunning else { return }
+        isRunning = true
+        progress = nil
+        phase = nil
+        baseDownloadURL = nil
+        defer { isRunning = false; endProgress() }
+
+        let parsed: Recipe
+        let recipeData: Data
+        do {
+            recipeData = try Data(contentsOf: recipe)
+            parsed = try RecipeLoader.load(data: recipeData)
+        } catch {
+            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            return
+        }
+
+        let host = HostResources.current()
+        let cap = VMResourcePlan.maxVMCount(host: host)
+        guard cap > 0 else {
+            appendLog(stream: .stderr, text: "This Mac doesn't have enough free memory to host a server (each server needs ~\(VMResourcePlan.minimumVMMemoryBytes / VMResourcePlan.gib) GiB).")
+            return
+        }
+        guard vmManager.servers.count < cap else {
+            appendLog(stream: .stderr, text: "This Mac is at its hosting limit (\(cap) server\(cap == 1 ? "" : "s")). Remove one first, or burn to USB.")
+            return
+        }
+
+        let config = VMConfig.plan(recipe: parsed, recipeJSON: recipeData, host: host)
+
+        // Same Simple-mode base ISO fetch as the USB path.
+        phase = "download"
+        let srcISO: URL
+        do {
+            srcISO = try await ensureBaseISO()
+        } catch {
+            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            return
+        }
+
+        // Create the bundle, then remaster the installer INTO it — identical
+        // remaster to the USB path (same preseed engine, same recipe bytes).
+        phase = "remaster"
+        baseDownloadURL = nil
+        progress = nil
+        DockProgress.set(nil)
+        do {
+            try vmManager.createServer(config: config)
+        } catch {
+            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            return
+        }
+        do {
+            let cfgs = try installerConfigs(forRecipe: recipe)
+            let outISO = vmManager.installerISOPath(for: config.name)
+            appendLog(stream: .stdout, text: "+ remaster \(srcISO.lastPathComponent) → VM installer")
+            let used = try await Task.detached(priority: .userInitiated) { () -> String in
+                try Remaster.remasterInstaller(srcISO: srcISO, outISO: outISO,
+                                               userDataYAML: cfgs.yaml, preseedCfg: cfgs.preseed)
+            }.value
+            didRemasterForTest = true
+            appendLog(stream: .stdout, text: "+ installer family: \(used)")
+        } catch {
+            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            await vmManager.deleteServer(named: config.name)
+            return
+        }
+
+        // Shred the single-use recipe, exactly like a successful USB burn.
+        try? FileManager.default.removeItem(at: recipe)
+        selectedHostedServer = config.name
+        await vmManager.beginInstall(named: config.name)
     }
 
     private final class Box<T> {

@@ -24,6 +24,9 @@ import {
   signOut as signOutTier,
   signOutConfirmCopy,
 } from "../lib/sessionTiers.js";
+import { resolveAccount } from "../lib/accountResolve.js";
+import { accountDeletePolicy } from "../lib/accountDeletion.js";
+import { enterAccountDelete } from "./account-delete.js";
 
 registerView("view-settings");
 
@@ -106,6 +109,8 @@ export async function renderProviders() {
     list.appendChild(cta);
   }
 
+  if (hasPromoEntry) void refreshPromoBalance();
+
   for (const e of stored.entries) {
     const isActive = stored.activeId === e.id;
     const card = document.createElement("div");
@@ -133,7 +138,7 @@ export async function renderProviders() {
         await setActive(getSession().umk, b.getAttribute("data-id"));
         await renderProviders();
         await renderActiveProviderChip();
-        toast("active provider updated");
+        toast("Active provider updated");
       } catch (e) {
         toast(e.message, "err");
       }
@@ -165,11 +170,62 @@ export async function renderProviders() {
   });
 }
 
+// Credit-balance display for the free-credits (flagship) provider. Reads
+// the already-built GET /api/llm-promo/status/:user (tier + daily/lifetime
+// usage). Best-effort: a fetch failure just hides the card. When the
+// lifetime cap is spent, surface the "switch to your own key" prompt.
+async function refreshPromoBalance() {
+  const el = $("promo-balance");
+  if (!el) return;
+  let username;
+  try {
+    username = await ensureUsername();
+  } catch {
+    el.classList.add("hidden");
+    return;
+  }
+  let status;
+  try {
+    const r = await fetch(`/api/llm-promo/status/${encodeURIComponent(username)}`);
+    if (!r.ok) throw new Error(`status ${r.status}`);
+    status = await r.json();
+  } catch {
+    el.classList.add("hidden");
+    return;
+  }
+  const daily = status.daily ?? { used: 0, cap: 0 };
+  const lifetime = status.lifetime ?? { used: 0, cap: -1 };
+  const lifetimeSpent = lifetime.cap !== -1 && lifetime.used >= lifetime.cap;
+  const lifetimeText =
+    lifetime.cap === -1
+      ? "unlimited"
+      : `${Math.max(0, lifetime.cap - lifetime.used)} of ${lifetime.cap} left`;
+  el.className = "card mt-2";
+  el.innerHTML = `
+    <div class="row row-top">
+      <div class="weight-600">Free credits</div>
+      <span class="pill">${escapeHtml(status.tier ?? "free")}</span>
+    </div>
+    <div class="note mt-2">
+      Today: ${daily.used ?? 0} of ${daily.cap ?? 0} · Lifetime: ${escapeHtml(lifetimeText)}
+    </div>
+    ${
+      lifetimeSpent
+        ? `<div class="note mt-2 warn">You've used all your free credits. Add your own provider key to keep building.</div>
+           <button id="promo-switch-byok" class="full-width mt-2">Add your own key</button>`
+        : ""
+    }
+  `;
+  if (lifetimeSpent) {
+    $("promo-switch-byok")?.addEventListener("click", () => handleAddProvider());
+  }
+}
+
 let promoIssuanceCtx = null;
 
 async function startPromoIssuance() {
   const session = getSession();
-  if (!session.umk) return toast("unlock first", "err");
+  if (!session.umk) return toast("Unlock first", "err");
   const username = await ensureUsername().catch((e) => {
     toast(e.message, "err");
     return null;
@@ -177,7 +233,7 @@ async function startPromoIssuance() {
   if (!username) return;
   const phone = $("promo-phone").value.trim();
   if (!/^\+[1-9][0-9]{6,14}$/.test(phone)) {
-    return toast("phone number must be E.164 (e.g. +15555550100)", "err");
+    return toast("Phone number must be E.164 (e.g. +15555550100)", "err");
   }
   const identityHash = await sha256Bytes(new TextEncoder().encode(phone));
   const issuedAt = Date.now();
@@ -209,7 +265,7 @@ async function startPromoIssuance() {
     promoIssuanceCtx = { ticket: body.ticket, username };
     $("promo-step-phone")?.classList.add("hidden");
     $("promo-step-otp")?.classList.remove("hidden");
-    toast("we sent you a code");
+    toast("We sent you a code");
   } catch (e) {
     console.error("promo issue/start error", e);
     toast(humanError(e), "err");
@@ -249,11 +305,16 @@ async function completePromoIssuance() {
     }
     const { key } = await r.json();
     await addProvider(session.umk, {
-      provider: "openai",
+      // The in-house inference posture: an OpenAI-compatible RunPod/vLLM
+      // endpoint reached with a scoped .com token. `source: "promo"` is
+      // sealed with the credential so the box pins its SSRF guard to the
+      // blessed host (a leaked token can't be redirected elsewhere).
+      provider: "flagship",
       label: `Flagship promo (${key.keyId})`,
       apiKey: key.apiKey,
       baseUrl: key.baseUrl,
       defaultModel: key.model,
+      source: "promo",
     });
     promoIssuanceCtx = null;
     $("promo-issuance-form")?.classList.add("hidden");
@@ -261,7 +322,7 @@ async function completePromoIssuance() {
     $("promo-phone").value = "";
     await renderProviders();
     await renderActiveProviderChip();
-    toast("free credits ready — selected as active provider");
+    toast("Free credits ready — selected as active provider");
   } catch (e) {
     console.error("promo issue/complete error", e);
     toast(humanError(e), "err");
@@ -274,14 +335,14 @@ async function handleAddProvider() {
 
 async function handleSaveProvider() {
   const session = getSession();
-  if (!session.umk) return toast("unlock first", "err");
+  if (!session.umk) return toast("Unlock first", "err");
   const provider = $("np-provider").value;
   const label = $("np-label").value.trim();
   const apiKey = $("np-key").value;
   const baseUrl = $("np-base").value.trim();
   const defaultModel = $("np-model").value.trim();
-  if (!label) return toast("label required", "err");
-  if (!apiKey) return toast("api key required", "err");
+  if (!label) return toast("Label required", "err");
+  if (!apiKey) return toast("Api key required", "err");
   try {
     await addProvider(session.umk, {
       provider,
@@ -299,7 +360,7 @@ async function handleSaveProvider() {
   $("np-model").value = "";
   $("add-provider-form").classList.add("hidden");
   await renderProviders();
-  toast("provider saved");
+  toast("Provider saved");
 }
 
 async function refreshPushStatus() {
@@ -337,9 +398,9 @@ async function runEnablePush() {
   try {
     await ensureUsername();
     await subscribeToWebPush();
-    toast("notifications enabled", "ok");
+    toast("Notifications enabled", "ok");
   } catch (e) {
-    toast(`enable failed: ${e.message ?? e}`, "err");
+    toast(`Enable failed: ${e.message ?? e}`, "err");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -357,9 +418,9 @@ async function runDisablePush() {
   }
   try {
     await unsubscribeFromWebPush();
-    toast("notifications disabled", "ok");
+    toast("Notifications disabled", "ok");
   } catch (e) {
-    toast(`disable failed: ${e.message ?? e}`, "err");
+    toast(`Disable failed: ${e.message ?? e}`, "err");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -411,7 +472,40 @@ async function handleSignOut() {
     setSubtitle,
   });
   if (res?.blocked) return;
-  toast("signed out");
+  toast("Signed out");
+}
+
+/** A recovery-gated session button (Tier-2 sign-out / Tier-3 remove) was
+ *  tapped while greyed (no cloud recovery enrolled). Decide between the two
+ *  no-recovery outcomes:
+ *    - LAST device  → this removal is account DEATH; route into the full
+ *                     deletion ceremony (typed-username + confirm) instead of
+ *                     silently blocking.
+ *    - other device → the key survives elsewhere; nudge the user to set up
+ *                     recovery (the existing guidance), no ceremony.
+ *  Best-effort + fail-closed: any resolve failure (network / unknown count)
+ *  treats it as the last device, so a no-recovery wipe never bypasses the
+ *  ceremony. */
+async function handleNoRecoveryGatedTap() {
+  const username = getSession().username;
+  let resolution = null;
+  try {
+    resolution = await resolveAccount(username);
+  } catch {
+    resolution = null;
+  }
+  const policy = accountDeletePolicy({
+    hasCloudRecovery: false,
+    trustedDeviceCount: resolution?.trustedDeviceCount,
+    isDemoAccount: resolution?.kind === "demo",
+  });
+  if (policy === "ceremony") {
+    enterAccountDelete();
+    return;
+  }
+  // "normal" (another device exists) or "exempt" (demo) — the destructive
+  // wipe still needs recovery to be safe here, so keep the guidance nudge.
+  toast("Set up account recovery to use this.", "warn");
 }
 
 export function initSettingsView() {
@@ -439,7 +533,11 @@ export function initSettingsView() {
   // of running the key wipe.
   $("settings-signout")?.addEventListener("click", () => {
     if (!sessionRecoveryEnrolled) {
-      toast("Set up account recovery to use this.", "warn");
+      // No recovery: a last-device sign-out is account death → ceremony.
+      handleNoRecoveryGatedTap().catch((e) => {
+        console.error("no-recovery sign-out gate failed", e);
+        toast(humanError(e), "err");
+      });
       return;
     }
     handleSignOut().catch((e) => {
@@ -452,7 +550,11 @@ export function initSettingsView() {
   // toasts until recovery is enrolled.
   $("settings-reset")?.addEventListener("click", () => {
     if (!sessionRecoveryEnrolled) {
-      toast("Set up account recovery to use this.", "warn");
+      // No recovery: removing the last device is account death → ceremony.
+      handleNoRecoveryGatedTap().catch((e) => {
+        console.error("no-recovery remove gate failed", e);
+        toast(humanError(e), "err");
+      });
       return;
     }
     handleReset();

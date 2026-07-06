@@ -1,0 +1,25 @@
+{
+  "_comment": "Cross-platform recovery-escrow KAT. The SAME fixed (prfSecret, seeds, nonce) → the SAME pinned ciphertext on webapp / iOS / Android. Wrap = base64(nonce(12) ‖ AES-256-GCM(HKDF-SHA256(prf, <salt>, info='', 32), nonce, plaintext) ‖ tag(16)). The wrappedB64 blobs are asserted byte-identical in apps/web/tests/recoveryWrapKat.test.ts and decrypted verbatim by iOS AdminRootTests.swift + Android RecoveryWrapTest.kt. Any drift in HKDF salts, info, nonce framing, or AES-GCM tag handling breaks one platform's assertion. Regenerate via scripts against apps/web/public/recovery/recoveryWrap.js.",
+  "salts": {
+    "umk": "flagship/recovery-wrap/v1",
+    "acme": "flagship/recovery-acme-wrap/v1",
+    "adminRoot": "flagship/recovery-admin-root-wrap/v1"
+  },
+  "inputs": {
+    "prfSecretHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "umkSeedHex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "acmeScalarHex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+    "adminRootSeedHex": "606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f",
+    "nonceHex": "a0a1a2a3a4a5a6a7a8a9aaab"
+  },
+  "hkdfWrapKeyHex": {
+    "umk": "3460b22032e99bc8fed74f1f69c7e4fc4796064bf35badc000852cffca717f54",
+    "acme": "979aa4579227dcf0f67e54cdd7ec6bec8b7b3db46be454dd2574c9e2d9456afc",
+    "adminRoot": "a877f203d500eb0181c59b93df7103b250cd4063c0672d853db5a894193d8318"
+  },
+  "wrappedB64": {
+    "umk": "oKGio6SlpqeoqaqrhgoulhbK4Hw5GnZ/Eg3p2tE8znE4LEH4VNFNiZqUWTG1AJh5e1ANGjervCj+CdE/",
+    "acme": "oKGio6SlpqeoqaqrYhwcBqIf+sPx7eZDHRsCyYYye+B4JJtN4LoVBzGOndkEPhG4pToPWRTfw7TS+I3I",
+    "adminRoot": "oKGio6SlpqeoqaqrrTVhM+39nuBWm85By/ZoC+0FhIEMWdL4J2aBSr+wcO3RBVAkuZ8NANC3dtXp0j84"
+  }
+}

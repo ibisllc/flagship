@@ -148,7 +148,7 @@ class PasskeyRecoveryManager(private val context: Context) {
         val json = JSONObject().apply {
             put("rp", JSONObject().apply {
                 put("name", "Flagship")
-                put("id", "flagshipserver.com")
+                put("id", com.flagshipserver.app.core.Endpoints.controlHost)
             })
             put("user", JSONObject().apply {
                 put("id", userIdB64u)
@@ -191,7 +191,7 @@ class PasskeyRecoveryManager(private val context: Context) {
         val allowedIdB64u = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(idBytes)
         val json = JSONObject().apply {
             put("challenge", challengeB64u)
-            put("rpId", "flagshipserver.com")
+            put("rpId", com.flagshipserver.app.core.Endpoints.controlHost)
             put("userVerification", "required")
             put("allowCredentials", org.json.JSONArray().apply {
                 put(JSONObject().apply {

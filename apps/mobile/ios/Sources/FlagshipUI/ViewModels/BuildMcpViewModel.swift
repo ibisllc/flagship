@@ -54,7 +54,9 @@ public final class BuildMcpViewModel {
             connection = r.connection
             await refreshEnvRequests()
         } catch {
-            errorMessage = ScreensClientError.userFacing(error)
+            // A 404 on this entry call means the box has no build platform.
+            errorMessage = ScreensClientError.buildPlatformAbsent(error)
+                ?? ScreensClientError.userFacing(error)
         }
     }
 

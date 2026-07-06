@@ -25,6 +25,14 @@ struct FlagshipApp: App {
     private let sessionStore: any SessionStoring
 
     init() {
+        // FIRST: apply a backend-apex override from the launch args, BEFORE
+        // any client is constructed below (the live clients capture their
+        // base URL at init). The gym test build launches with
+        // `-apex-host gym.flagshipserver.com`; a prod launch passes nothing,
+        // so `Endpoints` stays on today's literal. (A persisted
+        // DeveloperSettings.apexHost — applied in its own init — is the
+        // fallback when no launch arg is present.)
+        Self.applyApexHostArgIfPresent()
         // Keychain-backed token persistence: pod base URL stays in
         // UserDefaults (non-secret), the 32-byte session token lives
         // in Keychain with WhenUnlockedThisDeviceOnly access.
@@ -49,6 +57,15 @@ struct FlagshipApp: App {
         // `.com` cert can't intercept a power-off / affirmation either.
         self.liveLockPower = LiveLockPowerClient(urlSession: pinnedSession)
         self.liveFrontPage = LiveFrontPageClient(urlSession: pinnedSession)
+        // Box-direct leadership read (`GET /api/leads`) rides the SAME box-pinned
+        // session so a rogue `.com` cert can't feed a forged direct view.
+        self.liveLeads = LiveLeadsClient(urlSession: pinnedSession)
+        // Owner-signed service uninstall (`DELETE /api/services/:id`) rides the
+        // SAME box-pinned session so a rogue `.com` cert can't intercept it.
+        self.liveServiceUninstall = LiveServiceUninstallClient(urlSession: pinnedSession)
+        // Box calls (set-mode/redeem) over the box-pinned session; `.com` calls
+        // (create/list/revoke) over the default public-CA session.
+        self.liveServiceAccess = LiveServiceAccessClient(boxSession: pinnedSession)
         // Maintainer-trust short-circuit: the live `.com` client refuses to
         // send when the control server is positively untrusted (and the owner
         // hasn't overridden). `.unknown`/`.trusted` + any network-error
@@ -76,12 +93,113 @@ struct FlagshipApp: App {
     /// builds ignore the flag — `ProcessInfo.arguments` is only
     /// populated when the launcher sets it.
     @MainActor
-    private static func applySmokeModeIfRequested(_ app: AppState, linker: DeepLinker) {
+    private static func applySmokeModeIfRequested(
+        _ app: AppState,
+        linker: DeepLinker,
+        operations: ActiveOperationsCenter,
+        trust: TrustCenter,
+        privacy: PrivacySettings
+    ) {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-smoke-mode") else { return }
-        if !app.isPaired {
-            DemoFixtures.activate(app, username: "smoketest")
+        // Determinism: a simulator can carry a persisted `requireBiometricAtLaunch`
+        // from prior manual use, which would drop the gym into the biometric lock
+        // screen on launch (and the Simulator has no enrolled biometric to clear
+        // it). Force the launch-lock OFF + the unlock latch ON for the gym so the
+        // shell is reachable on ANY simulator — UNLESS `-smoke-locked` is passed,
+        // which deliberately lands on the lock screen to test the trap (D4-E1).
+        // Gym-only; production never passes `-smoke-mode`.
+        let wantLocked = args.contains("-smoke-locked")
+        privacy.requireBiometricAtLaunch = wantLocked
+        app.requireBiometricAtLaunch = wantLocked
+        app.isUnlocked = !wantLocked
+        // `-smoke-no-recovery` seeds an account with NO cloud recovery so the
+        // session-tiers grey-out + recovery-required toast (D3-C1) is exercisable.
+        // A demo session is normally recovery-exempt, so we also force the
+        // SignOutPolicy block (the override is gym-only — see SignOutPolicy).
+        if args.contains("-smoke-no-recovery") {
+            app.hasCloudRecovery = false
+            SignOutPolicy.gymForceBlockNoRecovery = true
+        } else {
+            // Default the override off so a same-process re-evaluation can't leak
+            // a prior launch's block into a non-flagged run.
+            SignOutPolicy.gymForceBlockNoRecovery = false
         }
+        if !app.isPaired {
+            // The total-gym D5 seed variants pick a different fixture pod set so
+            // a server-event state (awaiting-unlock / dead) renders
+            // deterministically with no backend. Mutually exclusive; default =
+            // the three legacy sample pods. Gym-only.
+            if args.contains("-smoke-awaiting-unlock") {
+                DemoFixtures.activate(
+                    app,
+                    username: "smoketest",
+                    pods: DemoFixtures.samplePodsWithAwaitingUnlock(username: "smoketest")
+                )
+            } else if args.contains("-smoke-dead") {
+                DemoFixtures.activate(
+                    app,
+                    username: "smoketest",
+                    pods: DemoFixtures.samplePodsWithDeadServer(username: "smoketest")
+                )
+            } else {
+                DemoFixtures.activate(app, username: "smoketest")
+            }
+        }
+        // `-smoke-ops` seeds ONE in-flight build so the global operations
+        // sliver (`global-operations-bar`) renders deterministically for the
+        // gym's sliver scenario. The default DemoFixtures pods are all
+        // online/offline (no pending), so without this the sliver — correctly
+        // — stays hidden. Gym-only; production never passes the arg.
+        if args.contains("-smoke-ops") {
+            operations.upsertBuild(
+                id: "build:gym-smoke",
+                subject: "blog",
+                onServer: "Home",
+                target: .vibeCodeChat(sessionId: "gym-smoke")
+            )
+        }
+        // `-smoke-admin-root` treats this device as holding the admin master
+        // root (GymSeams.forceAdminRoot) so the Slice-D admin-gated surfaces
+        // (Account-security Rotate-admin card; the add-device promote toggle)
+        // render offline. Assigned BOTH ways so a prior same-process launch's
+        // seed can never leak into an unflagged run. Gym-only.
+        GymSeams.forceAdminRoot = args.contains("-smoke-admin-root")
+        // Smoke launches bypass the UI-level Face-ID consent prompts (no
+        // enrolled biometric on a Simulator) — consent-only, no crypto
+        // emitted; see GymSeams. EXCEPT under -smoke-locked: the launch lock
+        // screen AUTO-prompts, and a bypassed prompt would auto-unlock the
+        // very trap that scenario asserts (D4-E1).
+        GymSeams.bypassBiometricGates = !wantLocked
+        // `-smoke-trust-untrusted` seeds a positively-untrusted maintainer-trust
+        // verdict so the red GlobalTrustBar (`global-trust-bar`) renders (D4-E7).
+        // The live path derives this from a real `.com` blessing check
+        // (ContentView.runTrustCheck, live-client only); the gym injects a fixed
+        // failure so the degraded-trust experience is exercisable offline.
+        if args.contains("-smoke-trust-untrusted") {
+            trust.markUntrusted([
+                TrustFailure(
+                    certClass: .control,
+                    // A fixed, obviously-fake 64-hex cert-hash slug; never a real cert.
+                    certHash: String(repeating: "ab", count: 32),
+                    caPubkey: String(repeating: "cd", count: 32)
+                )
+            ])
+        }
+    }
+
+    /// Backend-apex override seam for the gym test build. When launched with
+    /// `-apex-host <host>` (e.g. `gym.flagshipserver.com`), retarget every
+    /// client at that apex via `Endpoints` BEFORE the clients are built.
+    /// Production launches pass nothing, so `Endpoints` keeps today's literal
+    /// and the live app is byte-identical. `-apex-host` is the value form
+    /// (`["-apex-host", "gym.flagshipserver.com"]`); the bare flag is ignored.
+    private static func applyApexHostArgIfPresent() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-apex-host"), i + 1 < args.count else { return }
+        let host = args[i + 1]
+        guard !host.isEmpty, !host.hasPrefix("-") else { return }
+        DeveloperSettings.applyApexOverride(host)
     }
 
     /// Wire the FlagshipUI InstallProgressBridge to the App-target
@@ -208,6 +326,31 @@ struct FlagshipApp: App {
     // session and live/mock split as lock/power.
     private let mockFrontPage = MockFrontPageClient()
     private let liveFrontPage: any FrontPageClient
+    // Direct (box-read) per-service leadership — `GET /api/leads` over the SAME
+    // box-pinned session, preferred over the `.com` `/pods` relay when a box is
+    // reachable. The Mock returns nil ("no fresher source") so dev/preview/demo
+    // keep the relay value untouched.
+    private let mockLeads = MockLeadsClient()
+    private let liveLeads: any LeadsClient
+    // Service-uninstall box-direct client — same pinned session and live/mock
+    // split as lock/power + front-page.
+    private let mockServiceUninstall = MockServiceUninstallClient()
+    private let liveServiceUninstall: any ServiceUninstallClient
+    // Transfer-a-box broker client — hits `.com` (the namespace-migration
+    // broker), not a box-pinned pipe, so it's a plain live client; live/mock
+    // split as the others.
+    private let mockServerTransfer = MockServerTransferClient()
+    private let liveServerTransfer: any ServerTransferClient = LiveServerTransferClient()
+    // Server-migration lane client — hits `.com` (the migration orchestration
+    // lane), not a box-pinned pipe; live/mock split as transfer.
+    private let mockServerMigration = MockServerMigrationClient()
+    private let liveServerMigration: any ServerMigrationClient = LiveServerMigrationClient()
+    // Per-service access gating (#92): box calls ride the SAME box-pinned
+    // session (set-mode + redeem are signature-authed daemon endpoints); the
+    // invite create/list/revoke calls hit `.com` over the default public-CA
+    // session. Live/mock split as the other box-direct clients.
+    private let mockServiceAccess = MockServiceAccessClient()
+    private let liveServiceAccess: any ServiceAccessClient
     // Every LIVE /pods response feeds the cert-pin registry (verify the
     // STK-signed daemon-status per pod → install/clear that box's
     // fingerprint pin). Live-only by construction: the Mock never invokes
@@ -233,6 +376,21 @@ struct FlagshipApp: App {
     private var activeFrontPage: any FrontPageClient {
         dev.useLiveClient ? liveFrontPage : mockFrontPage
     }
+    private var activeLeads: any LeadsClient {
+        dev.useLiveClient ? liveLeads : mockLeads
+    }
+    private var activeServiceUninstall: any ServiceUninstallClient {
+        dev.useLiveClient ? liveServiceUninstall : mockServiceUninstall
+    }
+    private var activeServiceAccess: any ServiceAccessClient {
+        dev.useLiveClient ? liveServiceAccess : mockServiceAccess
+    }
+    private var activeServerTransfer: any ServerTransferClient {
+        dev.useLiveClient ? liveServerTransfer : mockServerTransfer
+    }
+    private var activeServerMigration: any ServerMigrationClient {
+        dev.useLiveClient ? liveServerMigration : mockServerMigration
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -252,9 +410,14 @@ struct FlagshipApp: App {
                 .environment(\.secretMailboxClient, activeMailbox)
                 .environment(\.lockPowerClient, activeLockPower)
                 .environment(\.frontPageClient, activeFrontPage)
+                .environment(\.leadsClient, activeLeads)
+                .environment(\.serviceUninstallClient, activeServiceUninstall)
+                .environment(\.serviceAccessClient, activeServiceAccess)
+                .environment(\.serverTransferClient, activeServerTransfer)
+                .environment(\.serverMigrationClient, activeServerMigration)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
-                    Self.applySmokeModeIfRequested(appState, linker: linker)
+                    Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)
                     // Restore a previously paired session: if the Keystore
                     // still holds a wrapped UMK (a real account that
                     // survives restarts) and we know which cloud was
@@ -295,6 +458,15 @@ struct FlagshipApp: App {
                 }
                 .onOpenURL { url in
                     if let link = DeepLink.parse(url) { linker.enqueue(link) }
+                }
+                // Universal links (AASA) — the native Camera opening a
+                // `https://flagshipserver.com/{join,transfer,…}` link arrives as a
+                // web-browsing user activity, NOT via onOpenURL. Route it through
+                // the same DeepLink parser (Slice C take-over relies on this).
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    if let url = activity.webpageURL, let link = DeepLink.parse(url) {
+                        linker.enqueue(link)
+                    }
                 }
         }
     }

@@ -40,6 +40,28 @@ struct WizardView: View {
     }
 
     var body: some View {
+        HStack(spacing: 0) {
+            wizardColumn
+                .frame(width: 560)
+            // Right sidebar: appears once this Mac hosts at least one server.
+            if !model.vmManager.servers.isEmpty {
+                Divider()
+                HostedServersSidebar(model: model, vmManager: model.vmManager)
+                    .frame(width: 230)
+            }
+        }
+        .frame(height: 700)
+        .background(FB.Colors.bg)
+        .preferredColorScheme(preferredScheme)
+        .task { await model.refreshDisks() }
+        .onChange(of: showLog) { _, shown in
+            // Drop keyboard focus the instant the log opens so AppKit doesn't
+            // leave a stale focus ring painted where the field used to be.
+            if shown { wifiFocus = nil }
+        }
+    }
+
+    private var wizardColumn: some View {
         VStack(spacing: 0) {
             header
                 .padding(.horizontal, FB.Spacing.s5)
@@ -51,7 +73,7 @@ struct WizardView: View {
                 // the text fields entirely while the log is up, so neither the
                 // fields nor any leftover focus ring can float over the log.
                 if !showLog {
-                    panes
+                    stageContent
                         .padding(.horizontal, FB.Spacing.s5)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
@@ -64,27 +86,222 @@ struct WizardView: View {
             .clipped()
             logBar
         }
-        .frame(width: 560, height: 700)
-        .background(FB.Colors.bg)
-        .preferredColorScheme(preferredScheme)
-        .task { await model.refreshDisks() }
-        .onChange(of: showLog) { _, shown in
-            // Drop keyboard focus the instant the log opens so AppKit doesn't
-            // leave a stale focus ring painted where the field used to be.
-            if shown { wifiFocus = nil }
-        }
     }
 
     // MARK: - Body
 
+    /// The live phone session is the gate: locked cover → SAS confirm →
+    /// the destination chooser → the burn form OR the host-here pane. A
+    /// sidebar selection overrides everything with that server's detail.
+    /// "I have a recipe" jumps straight to a Simple-only burn form (no
+    /// Advanced — no session to authorize it).
+    @ViewBuilder private var stageContent: some View {
+        if let selected = model.selectedHostedServer {
+            VMDetailView(model: model, vmManager: model.vmManager, name: selected)
+        } else {
+            switch model.burnerStage {
+            case .locked:    coverView
+            case .pairing:   pairingConfirmView
+            case .session, .recipeFile: destinationOrPanes
+            }
+        }
+    }
+
+    /// Once a recipe is verified the user picks its destination; before that
+    /// (waiting for the phone / loading a file) the existing panes show.
+    @ViewBuilder private var destinationOrPanes: some View {
+        if model.verified != nil && model.destination == nil {
+            destinationChooser
+        } else if model.destination == .hostHere {
+            hostHerePane
+        } else {
+            panes
+        }
+    }
+
+    // MARK: - Destination chooser (Burn to USB / Host here)
+
+    private var destinationChooser: some View {
+        VStack(alignment: .leading, spacing: FB.Spacing.s4) {
+            if model.advancedAllowed { sessionHeader }
+            if let v = model.verified {
+                StatusCard(icon: "checkmark.seal.fill",
+                           tint: FB.Colors.primary,
+                           title: v.serverDomain,
+                           subtitle: "Recipe verified — choose where this server should live.")
+            }
+            destinationCard(
+                icon: "externaldrive.fill",
+                title: "Burn to USB",
+                subtitle: "Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick.",
+                badge: ServerTier.hardware.badgeLabel,
+                disabledReason: nil
+            ) { model.destination = .burnToUSB }
+            destinationCard(
+                icon: "desktopcomputer",
+                title: "Host on this Mac",
+                subtitle: "Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys.",
+                badge: ServerTier.hostedVM.badgeLabel,
+                disabledReason: hostHereDisabledReason
+            ) { model.destination = .hostHere }
+        }
+    }
+
+    private var hostHereDisabledReason: String? {
+        let cap = model.vmManager.maxVMCount
+        if cap == 0 {
+            return "This Mac doesn't have enough free memory to host a server."
+        }
+        if model.vmManager.servers.count >= cap {
+            return "This Mac is at its hosting limit (\(cap))."
+        }
+        return nil
+    }
+
+    private func destinationCard(icon: String, title: String, subtitle: String,
+                                 badge: String, disabledReason: String?,
+                                 action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: FB.Spacing.s3) {
+                ZStack {
+                    Circle().fill(FB.Colors.surfaceElev).frame(width: 36, height: 36)
+                    Image(systemName: icon)
+                        .foregroundStyle(FB.Colors.primary)
+                        .imageScale(.medium)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(title).font(FB.Font.rowTitle()).foregroundStyle(FB.Colors.ink)
+                        Spacer()
+                        Text(badge)
+                            .font(FB.Font.caption())
+                            .foregroundStyle(FB.Colors.textMuted)
+                    }
+                    Text(disabledReason ?? subtitle)
+                        .font(FB.Font.rowHint())
+                        .foregroundStyle(disabledReason != nil ? FB.Colors.warning : FB.Colors.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(FB.Spacing.s3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: FB.Radius.md).fill(FB.Colors.surface))
+            .overlay(RoundedRectangle(cornerRadius: FB.Radius.md)
+                .strokeBorder(FB.Colors.border, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: FB.Radius.md))
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .disabled(disabledReason != nil)
+        .opacity(disabledReason != nil ? 0.6 : 1)
+    }
+
+    // MARK: - Host here pane
+
+    private var hostHerePane: some View {
+        let host = HostResources.current()
+        return VStack(alignment: .leading, spacing: FB.Spacing.s4) {
+            HStack {
+                Button {
+                    model.destination = nil
+                } label: {
+                    Label("Choose destination", systemImage: "chevron.left")
+                        .font(FB.Font.caption())
+                }
+                .buttonStyle(.link)
+                .disabled(model.isRunning)
+                Spacer()
+            }
+            if let v = model.verified {
+                StatusCard(icon: "desktopcomputer",
+                           tint: FB.Colors.primary,
+                           title: v.serverDomain,
+                           subtitle: "Will run as a managed VM on this Mac — \(VMResourcePlan.vmCPUCount(host: host)) vCPU, \(VMResourcePlan.vmMemoryBytes(host: host) / VMResourcePlan.gib) GiB RAM, \(VMResourcePlan.defaultMainDiskSizeBytes / VMResourcePlan.gib) GiB disk.")
+            }
+            Text("The VM installs unattended from the same image a USB burn uses, then boots encrypted and waits for your phone to unlock it. This app never sees the disk key.")
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: FB.Spacing.s2)
+            VStack(spacing: FB.Spacing.s2) {
+                if model.isRunning {
+                    VStack(spacing: FB.Spacing.s2) {
+                        Group {
+                            if let p = model.progress {
+                                ProgressView(value: p)
+                            } else {
+                                ProgressView()
+                            }
+                        }
+                        .progressViewStyle(.linear)
+                        .tint(progressTint)
+                        .frame(width: 260)
+                        Text(progressCaption)
+                            .font(FB.Font.caption())
+                            .foregroundStyle(FB.Colors.textMuted)
+                            .monospacedDigit()
+                        if let url = model.baseDownloadURL {
+                            Text(url)
+                                .font(FB.Font.mono())
+                                .foregroundStyle(FB.Colors.textMuted)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: 300)
+                        }
+                    }
+                } else {
+                    Button {
+                        Task { await model.runHostHere() }
+                    } label: {
+                        Text("Create server on this Mac")
+                            .font(FB.Font.rowTitle())
+                            .frame(minWidth: 200, minHeight: 28)
+                    }
+                    .controlSize(.large)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.verified == nil)
+                    Text("Encrypted disk · unlocked by your phone")
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, FB.Spacing.s2)
+        }
+    }
+
     private var panes: some View {
         VStack(alignment: .leading, spacing: FB.Spacing.s4) {
-            modePicker
-            recipeRow
+            // Advanced (BYO ISO + Debug) only exists inside a live session.
+            if model.advancedAllowed {
+                sessionHeader
+                modePicker
+            } else {
+                recipeFileHeader
+            }
+            // Back to the destination chooser (only shown once a verified
+            // recipe made the chooser meaningful).
+            if model.destination == .burnToUSB && model.verified != nil {
+                Button {
+                    model.destination = nil
+                } label: {
+                    Label("Host on this Mac instead", systemImage: "desktopcomputer")
+                        .font(FB.Font.caption())
+                }
+                .buttonStyle(.link)
+                .pointerCursor()
+                .disabled(model.isRunning)
+            }
+            if model.burnerStage == .recipeFile {
+                recipeRow
+            } else {
+                sessionRecipeRow
+            }
             // Advanced brings its own stock Ubuntu/Debian ISO; Simple fetches a
             // server-named Debian base ISO and shows the download progress. The
             // "Use system-provided ISO" checkbox lets Advanced fetch it too.
-            if model.mode == .advanced {
+            if model.advancedAllowed && model.mode == .advanced {
                 isoRow
             }
             diskRow
@@ -95,17 +312,179 @@ struct WizardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// Live-session header: a "Disconnect from phone" control that wipes the
+    /// burn + retires the QR (usable even without the phone in hand). The
+    /// deposit is one-shot — once the recipe is delivered the phone may leave
+    /// and the burn continues; this is the laptop-user's explicit "I'm done".
+    private var sessionHeader: some View {
+        HStack(spacing: FB.Spacing.s3) {
+            Spacer(minLength: 0)
+            Button {
+                model.disconnectFromPhone()
+            } label: {
+                Label("Disconnect from phone", systemImage: "xmark.circle")
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.danger)
+            }
+            .buttonStyle(.plain)
+            .pointerCursor()
+            .disabled(model.isRunning)
+        }
+    }
+
+    /// Header for the out-of-band recipe path: a back link to the pairing
+    /// cover, so a user who picked "I have a recipe" by mistake can return.
+    private var recipeFileHeader: some View {
+        HStack(spacing: FB.Spacing.s2) {
+            Button {
+                model.returnToCover()
+            } label: {
+                Label("Pair a phone instead", systemImage: "chevron.left")
+                    .font(FB.Font.caption())
+            }
+            .buttonStyle(.link)
+            .disabled(model.isRunning)
+            Spacer()
+        }
+    }
+
+    /// In a live session the recipe is delivered by the phone — show its
+    /// status rather than a drop target.
+    private var sessionRecipeRow: some View {
+        VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+            if let v = model.verified {
+                StatusCard(icon: "checkmark.seal.fill",
+                           tint: FB.Colors.primary,
+                           title: v.serverDomain,
+                           subtitle: "Recipe received from your phone.")
+            } else if let err = model.recipeError {
+                StatusCard(icon: "exclamationmark.triangle.fill",
+                           tint: FB.Colors.warning,
+                           title: "Couldn't read the recipe",
+                           subtitle: err)
+            } else {
+                StatusCard(icon: "iphone.gen3",
+                           tint: FB.Colors.textMuted,
+                           title: "Waiting for your phone…",
+                           subtitle: "Send the server recipe from the Flagship app.")
+            }
+        }
+        .padding(.bottom, FB.Spacing.s2)
+    }
+
+    // MARK: - Locked cover (pair your phone)
+
+    /// The locked cover. The live phone session is the gate into the burner:
+    /// scan the QR (or type the code) in the Flagship app, confirm the
+    /// security code, and the burn UI opens. "I have a recipe" is the
+    /// out-of-band escape hatch for a recipe received elsewhere.
+    private var coverView: some View {
+        VStack(spacing: FB.Spacing.s4) {
+            Spacer(minLength: FB.Spacing.s2)
+            Text("Pair your phone to begin")
+                .font(FB.Font.title())
+                .foregroundStyle(FB.Colors.ink)
+            Text("Open the Flagship app on your phone and scan this code — or type it in. You'll confirm a short security code, then build your server here.")
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, FB.Spacing.s4)
+
+            if let payload = model.pairQrPayload {
+                QRCodeView(payload: payload, size: 200)
+            } else {
+                ProgressView().frame(width: 200, height: 200)
+            }
+
+            if let code = model.pairCodeDisplay {
+                VStack(spacing: FB.Spacing.s1) {
+                    Text("Or enter this code")
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                    Text(code)
+                        .font(.system(.title2, design: .monospaced, weight: .semibold))
+                        .foregroundStyle(FB.Colors.ink)
+                        .textSelection(.enabled)
+                }
+            }
+
+            HStack(spacing: FB.Spacing.s2) {
+                ProgressView().scaleEffect(0.6)
+                Text(model.pairStatus)
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.textMuted)
+            }
+
+            if let reason = model.lastSessionEndReason {
+                Text(reason)
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.warning)
+                    .multilineTextAlignment(.center)
+            }
+
+            Spacer(minLength: FB.Spacing.s2)
+
+            Button {
+                model.enterRecipeFileMode()
+            } label: {
+                Text("I have a recipe")
+                    .font(FB.Font.caption())
+            }
+            .buttonStyle(.link)
+            .help("Already have a recipe file from someone else? Load it directly (basic burn only).")
+            .padding(.bottom, FB.Spacing.s2)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - SAS confirm
+
+    /// Shown once a phone joins: display the 6-digit security code for the
+    /// user to compare with their phone. The phone's tap-to-confirm flips us
+    /// into the session (the burner doesn't have its own confirm button —
+    /// the human comparison happens against the phone).
+    private var pairingConfirmView: some View {
+        VStack(spacing: FB.Spacing.s4) {
+            Spacer()
+            Image(systemName: "lock.shield")
+                .font(.system(size: 40))
+                .foregroundStyle(FB.Colors.primary)
+            Text("Confirm the security code")
+                .font(FB.Font.title())
+                .foregroundStyle(FB.Colors.ink)
+            Text("Check that this code matches the one shown in the Flagship app, then confirm on your phone.")
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, FB.Spacing.s5)
+
+            Text(BurnerPairing.formatMatchCode(model.pairMatchCode ?? "------"))
+                .font(.system(size: 40, design: .monospaced).weight(.bold))
+                .foregroundStyle(FB.Colors.ink)
+                .padding(.vertical, FB.Spacing.s3)
+                .padding(.horizontal, FB.Spacing.s5)
+                .background(RoundedRectangle(cornerRadius: FB.Radius.md).fill(FB.Colors.surfaceSunken))
+
+            HStack(spacing: FB.Spacing.s2) {
+                ProgressView().scaleEffect(0.6)
+                Text("Waiting for you to confirm on your phone…")
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.textMuted)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     /// Simple (default, server-named Debian base) vs Advanced (bring your own
     /// ISO). Disabled while a burn is running so the inputs can't change mid-run.
+    /// Security choices (debug console, embed-secrets) live on the PHONE at mint
+    /// time and are baked into the delivered recipe — the burner just burns it.
     private var modePicker: some View {
         HStack(spacing: FB.Spacing.s3) {
             ModePill(selection: $model.mode)
-            // Debug is an Advanced-only concern — hidden in Simple.
-            if model.mode == .advanced {
-                Spacer(minLength: FB.Spacing.s2)
-                FBCheck(isOn: $model.debugMode, label: "Debug mode", tint: FB.Colors.primary)
-                    .help("Burn a DEBUG image — keeps the 'debug' console login + DEBUG banner. Off = production (the only way to get debug features).")
-            }
         }
         .disabled(model.isRunning)
         .opacity(model.isRunning ? 0.5 : 1)
@@ -217,8 +596,8 @@ struct WizardView: View {
                 .buttonStyle(.link)
                 Spacer()
                 HelpIcon(
-                    title: "Where to get a certificate",
-                    blurb: "Order a server on flagshipserver.com — the /ready page gives you a JSON certificate to copy or download, then paste or drop it here.",
+                    title: "Where to get a recipe",
+                    blurb: "Pairing with the Flagship phone app is the easy path. This screen is for a recipe someone sent you out of band — paste it or drop the JSON file here.",
                     url: FlagshipLinks.certificate
                 )
             }

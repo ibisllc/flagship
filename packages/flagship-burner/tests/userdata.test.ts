@@ -28,6 +28,7 @@ import {
   wifiSetupScript,
   DEFAULT_BOOT_HOST,
 } from "../src/userdata.js";
+import { buildDebianPreseed } from "../src/preseed.js";
 
 function makeKeypair(seedByte: number) {
   const sk = new Uint8Array(32).fill(seedByte);
@@ -88,6 +89,38 @@ function extractBootstrap(yaml: string): string {
   if (!m) throw new Error("bootstrap late-command not found in user-data");
   return Buffer.from(m[1]!, "base64").toString("utf8");
 }
+
+describe("debug SSH key threading — a debug grant with a real key bakes the SSH stub", () => {
+  const KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI owner@laptop";
+
+  it("Ubuntu path bakes the debug SSH stub when debugSshAuthorizedKey is set", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const yaml = buildAutoinstallUserData({ blob, blobSignatureHex, debugSshAuthorizedKey: KEY });
+    const b = extractBootstrap(yaml);
+    // buildBootstrapScriptDebug — remote access only, NO provisioning/LUKS re-key.
+    expect(b).toContain("Flagship DEBUG bootstrap");
+    expect(b).toContain(KEY);
+    expect(b).toContain("openssh-server");
+    expect(b).not.toContain("[flagship-bootstrap] starting"); // not the provisioning bootstrap
+  });
+
+  it("Debian path bakes the same debug SSH stub", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const cfg = buildDebianPreseed({ blob, blobSignatureHex, debugSshAuthorizedKey: KEY });
+    const m = cfg.match(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/usr\/local\/sbin\/flagship-bootstrap\.sh/);
+    const b = Buffer.from(m![1]!, "base64").toString("utf8");
+    expect(b).toContain("Flagship DEBUG bootstrap");
+    expect(b).toContain(KEY);
+  });
+
+  it("no debugSshAuthorizedKey ⇒ the normal provisioning bootstrap (byte-identical)", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const withUndef = buildAutoinstallUserData({ blob, blobSignatureHex, debugSshAuthorizedKey: undefined });
+    const without = buildAutoinstallUserData({ blob, blobSignatureHex });
+    expect(withUndef).toBe(without);
+    expect(extractBootstrap(without)).toContain("[flagship-bootstrap] starting");
+  });
+});
 
 describe("buildAutoinstallUserData", () => {
   it("embeds an auth-code with every field canonicalAuthCode needs", () => {
@@ -153,18 +186,17 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     expect(b).toContain("chmod 600 /etc/flagship/daemon.env");
   });
 
-  it("self-signs the entitlement bundle with the box identity key (no user IRK on box)", () => {
+  it("does NOT self-sign the entitlement bundle — the daemon relay-fetches an IRK-signed one from the phone", () => {
     const b = bootstrap();
-    expect(b).toContain("install-helper.ts mint-entitlements");
-    // The signer (--irk-priv) is the box's OWN identity priv, and --pod-pub
-    // is that same identity pubkey — i.e. a self-signed RootEntitlement.
-    expect(b).toMatch(/--irk-priv "\$SERVER_IDENTITY_PRIV_HEX"/);
-    expect(b).toMatch(/--pod-pub "\$SERVER_IDENTITY_PUB_HEX"/);
-    expect(b).toContain("--out /var/flagship/entitlements.json");
-    // The interim/self-signed nature + the phone-signed follow-up must be
-    // documented in the generated script itself.
-    expect(b).toContain("INTERIM SELF-SIGN");
-    expect(b).toContain("FOLLOW-UP REQUIRED");
+    // The hub enforces owner-IRK signatures (irkLookup, live 2026-06-16), so a
+    // box-self-signed RootEntitlement is rejected at tunnel HELLO. The burner
+    // must NOT mint one; the daemon fetches an IRK-signed entitlement from the
+    // phone on first boot (server-daemon entitlementRelay.ts).
+    expect(b).not.toContain("install-helper.ts mint-entitlements");
+    expect(b).not.toContain("INTERIM SELF-SIGN");
+    // The relay rationale is documented in the generated script itself.
+    expect(b).toContain("fetch an IRK-signed entitlement from the phone");
+    expect(b).toContain("entitlementRelay.ts");
   });
 
   it("installs the flagship-daemon unit with the FIXED ExecStart (npm run, not npx)", () => {
@@ -201,6 +233,27 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     // install chroot). No `systemctl start` of either unit anywhere.
     expect(b).not.toMatch(/systemctl start flagship-daemon\.service/);
     expect(b).not.toMatch(/systemctl start flagship-first-boot-register\.service/);
+  });
+
+  it("enables the units DETERMINISTICALLY (chroot-proof manual .wants symlinks)", () => {
+    // ROOT CAUSE of the live "installed but dead at the login prompt" box:
+    // `systemctl enable` in the installer in-target chroot (no running
+    // systemd/D-Bus) can silently create NO [Install] symlink, and the `|| echo`
+    // swallows the failure ⇒ first-boot-register + daemon never fire on first
+    // boot (zero phone-home beacons). The cloud-init path never hits this (it
+    // enables under a live systemd + starts inline). We can't `systemctl start`
+    // in the chroot, so we drop the multi-user.target.wants symlinks BY HAND —
+    // the same pattern the Wi-Fi setup already trusts — which needs no running
+    // systemd and can't be a no-op.
+    const b = bootstrap();
+    expect(b).toContain("mkdir -p /etc/systemd/system/multi-user.target.wants");
+    expect(b).toContain(
+      "for _u in flagship-daemon flagship-first-boot-register flagship-data-services; do",
+    );
+    expect(b).toContain('ln -sf "/etc/systemd/system/${_u}.service"');
+    expect(b).toContain(
+      '"/etc/systemd/system/multi-user.target.wants/${_u}.service"',
+    );
   });
 
   it("installs docker so the daemon can run app containers + the data layer", () => {
@@ -1109,7 +1162,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootHost: DEFAULT_BOOT_HOST,
     });
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "0ed08629d5cd7751785e2c1b1de8aff8e5fbcad64f9cdef60d40999a165c0b59",
+      "c598afd8fcc1ed17f40976116bfaff7911af13ed67cda3d585ec4eb919be8fec",
     );
   });
 
@@ -1132,11 +1185,11 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "a6ee44f31bee7c7004e8556b6b591cc3c9103958b7931c7b797c4bb2903cf5bf",
+      "32e34919c43aea1ea7a1da524d5d18002c7e6d5c0597498783ef3315e2d4506b",
     );
   });
 
-  it("defaults to a PRODUCTION image — no debug account or banner — and debugMode keeps them", () => {
+  it("the bootstrap is ALWAYS a PRODUCTION image — no inline console-login backdoor", () => {
     const base = {
       ref: "main",
       repoUrl: "https://github.com/ibisllc/flagship.git",
@@ -1144,19 +1197,43 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootUnlockMode: "auto" as const,
       bootHost: DEFAULT_BOOT_HOST,
     };
-    const prod = buildBootstrapScript(base);
-    // Default (no debugMode) ⇒ the backdoor + banner are stripped.
-    expect(prod).not.toContain("debug:flagship");
-    expect(prod).not.toContain("DEBUG BUILD");
-    expect(prod).not.toContain("useradd -m -s /bin/bash -G sudo debug");
-    // The brand banner + prod content stay intact.
-    expect(prod).toContain("Get yours at");
-    expect(prod).toContain("cat > /etc/motd");
+    // The bootstrap NEVER bakes a console-login account or "DEBUG BUILD" banner.
+    // Debug access is 100% runtime + owner-grant-gated (the daemon's
+    // debugAccessGate, NOT in this package). Assert across both families.
+    for (const family of ["ubuntu", "debian"] as const) {
+      const prod = buildBootstrapScript({ ...base, family });
+      expect(prod).not.toContain("debug:flagship");
+      expect(prod).not.toContain("DEBUG BUILD");
+      expect(prod).not.toContain("console login 'debug'");
+      expect(prod).not.toMatch(/useradd[^\n]*\bdebug\b/);
+      // The brand banner + prod content stay intact.
+      expect(prod).toContain("Get yours at");
+      expect(prod).toContain("cat > /etc/motd");
+    }
+  });
 
-    // debugMode:true ⇒ the debug account + banner are present.
-    const dbg = buildBootstrapScript({ ...base, debugMode: true });
-    expect(dbg).toContain("echo 'debug:flagship' | chpasswd");
-    expect(dbg).toContain("!! DEBUG BUILD - console login 'debug'");
+  it("PRODUCTION installer configs cannot be logged into on the command line", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const opts = { blob, blobSignatureHex };
+    // Ubuntu autoinstall: flagship password is LOCKED ("*"), no committed crypt,
+    // SSH password auth is off, and no inline debug account/banner.
+    const yaml = buildAutoinstallUserData(opts);
+    expect(yaml).toContain('password: "*"');
+    expect(yaml).not.toMatch(/\$6\$/); // no committed crypt hash anywhere
+    expect(yaml).toContain("allow-pw: false");
+    expect(yaml).not.toContain("debug:flagship");
+    expect(yaml).not.toContain("DEBUG BUILD");
+    expect(yaml).not.toMatch(/useradd[^\n]*\bdebug\b/);
+
+    // Debian preseed: root login disabled + flagship password LOCKED ("*"),
+    // no committed crypt, no inline debug account/banner.
+    const preseed = buildDebianPreseed(opts);
+    expect(preseed).toContain("d-i passwd/root-login boolean false");
+    expect(preseed).toContain("d-i passwd/user-password-crypted password *");
+    expect(preseed).not.toMatch(/\$6\$/);
+    expect(preseed).not.toContain("debug:flagship");
+    expect(preseed).not.toContain("DEBUG BUILD");
+    expect(preseed).not.toMatch(/useradd[^\n]*\bdebug\b/);
   });
 
   it("the console banner (/etc/issue + motd) is PURE ASCII", () => {

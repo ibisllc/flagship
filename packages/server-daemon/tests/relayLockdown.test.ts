@@ -187,6 +187,111 @@ describe("RelayLockdownController — enforce ON", () => {
   });
 });
 
+describe("RelayLockdownController — trustStatus() propagation (NOT gated by enforce)", () => {
+  it("starts unknown", () => {
+    const c = new RelayLockdownController({ log: () => {} });
+    expect(c.trustStatus()).toEqual({
+      relayVerdict: "unknown",
+      lockedDown: false,
+      failingCertHash: null,
+      coveringExceptionCertHash: null,
+    });
+  });
+
+  it("propagates untrusted under OBSERVE even though it never locks down", async () => {
+    const c = new RelayLockdownController({ log: () => {} });
+    await c.onVerdict(fail);
+    // Data plane keeps relaying...
+    expect(c.isRelayAllowed()).toBe(true);
+    // ...but the verdict is DETECTED + propagated regardless of enforce.
+    expect(c.trustStatus()).toEqual({
+      relayVerdict: "untrusted",
+      lockedDown: false,
+      failingCertHash: CERT_HASH,
+      coveringExceptionCertHash: null,
+    });
+  });
+
+  it("propagates untrusted + lockedDown under ENFORCE", async () => {
+    const c = new RelayLockdownController({ enforce: true, log: () => {} });
+    await c.onVerdict(fail);
+    expect(c.trustStatus()).toEqual({
+      relayVerdict: "untrusted",
+      lockedDown: true,
+      failingCertHash: CERT_HASH,
+      coveringExceptionCertHash: null,
+    });
+  });
+
+  it("a covering owner exception sets coveringExceptionCertHash under OBSERVE (no lockdown)", async () => {
+    const owner = deviceKey(3);
+    const exc = signTrustException(
+      { certClass: "relay", certHash: CERT_HASH, grantedAt: 1000 },
+      owner,
+    );
+    const c = new RelayLockdownController({
+      // enforce OFF — coverage is still resolved so the "admin-overridden,
+      // continuing" state propagates on both ends.
+      resolveTrustExceptions: async () => ({
+        exceptions: [exc],
+        allowedDevicePubs: [Buffer.from(owner.publicKey).toString("hex")],
+      }),
+      log: () => {},
+    });
+    await c.onVerdict(fail);
+    expect(c.trustStatus()).toEqual({
+      relayVerdict: "untrusted",
+      lockedDown: false,
+      failingCertHash: CERT_HASH,
+      coveringExceptionCertHash: CERT_HASH,
+    });
+  });
+
+  it("a covering owner exception under ENFORCE lifts lockdown AND sets covering", async () => {
+    const owner = deviceKey(3);
+    const exc = signTrustException(
+      { certClass: "relay", certHash: CERT_HASH, grantedAt: 1000 },
+      owner,
+    );
+    const c = new RelayLockdownController({
+      enforce: true,
+      resolveTrustExceptions: async () => ({
+        exceptions: [exc],
+        allowedDevicePubs: [Buffer.from(owner.publicKey).toString("hex")],
+      }),
+      log: () => {},
+    });
+    await c.onVerdict(fail);
+    expect(c.isRelayAllowed()).toBe(true);
+    expect(c.trustStatus()).toMatchObject({
+      relayVerdict: "untrusted",
+      lockedDown: false,
+      coveringExceptionCertHash: CERT_HASH,
+    });
+  });
+
+  it("a fresh valid blessing clears the propagated warning", async () => {
+    const c = new RelayLockdownController({ log: () => {} });
+    await c.onVerdict(fail);
+    expect(c.trustStatus().relayVerdict).toBe("untrusted");
+    await c.onVerdict(ok);
+    expect(c.trustStatus()).toEqual({
+      relayVerdict: "trusted",
+      lockedDown: false,
+      failingCertHash: null,
+      coveringExceptionCertHash: null,
+    });
+  });
+
+  it("verified=undefined (network blip) preserves the last known verdict", async () => {
+    const c = new RelayLockdownController({ log: () => {} });
+    await c.onVerdict(fail);
+    await c.onVerdict(noVerdict);
+    // A blip must not flip untrusted→unknown (fail-open, stays as-is).
+    expect(c.trustStatus().relayVerdict).toBe("untrusted");
+  });
+});
+
 describe("relayTrustEnforceFromEnv", () => {
   it("defaults OFF", () => {
     expect(relayTrustEnforceFromEnv({})).toBe(false);

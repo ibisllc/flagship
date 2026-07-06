@@ -9,7 +9,7 @@
  * signatures remain byte-identical. (Imported by `devEntitlements.ts`.)
  */
 import { ed } from "./edSync.js";
-import { hex, legacyFieldGuard } from "./canonicalBase.js";
+import { hex, legacyFieldGuard, resolveMsgSigner, type MsgSigner } from "./canonicalBase.js";
 import type { Bytes, Keypair, ServerId } from "./types.js";
 
 // ──────────────────────────────────────────────────────────────────────
@@ -272,8 +272,12 @@ function canonicalTunnelHelloV2(h: TunnelHelloV2): Bytes {
   );
 }
 
-export function signTunnelHelloV2(h: TunnelHelloV2, stk: Keypair): Bytes {
-  return ed.sign(canonicalTunnelHelloV2(h), stk.privateKey);
+export function signTunnelHelloV2(h: TunnelHelloV2, stk: MsgSigner): Bytes {
+  // Accepts either the STK `Keypair` or a `sign(msg)` closure, so a daemon
+  // whose identity seed lives behind a KeyCustodian can sign the HELLO without
+  // ever holding the raw key. Canonical bytes (and thus the signature) are
+  // identical to the pre-closure form.
+  return resolveMsgSigner(stk)(canonicalTunnelHelloV2(h));
 }
 
 export function verifyTunnelHelloV2(

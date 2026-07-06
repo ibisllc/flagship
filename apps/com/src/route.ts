@@ -25,6 +25,7 @@ import {
 } from "./qrPipeMetrics.js";
 import {
   checkQrPipeUpgrade,
+  checkBurnerPipeUpgrade,
   checkRateLimit,
   clientIp,
   endpointFor,
@@ -37,6 +38,23 @@ import {
 
 const WEBAPP_HOST = "web.flagshipserver.com";
 const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
+
+/** Assets that live at the SITE root (apps/web/public/<file>) and are shared
+ *  with the marketing landing page, yet are imported by the webapp via an
+ *  absolute path. On the webapp host these must be served from root (NOT
+ *  rewritten under /webapp/, where they don't exist → SPA HTML fallback →
+ *  failed dynamic import). Keep this list tight: only genuinely root-shared,
+ *  webapp-imported assets belong here. */
+const WEBAPP_SHARED_ROOT_ASSETS: ReadonlySet<string> = new Set(["/qrEncoder.js"]);
+
+/** The webapp host for THIS env: `web.flagshipserver.com` in prod, or
+ *  `web.<CONTROL_APEX>` under a test env (the gym serves the webapp at
+ *  web.gym.flagshipserver.com). Prod-preserving — equals WEBAPP_HOST when
+ *  CONTROL_APEX is unset. apex.js retargets the app's backend off the served
+ *  origin, so recognising + serving this host is all the gym webapp needs. */
+function webappHost(env: RouteEnv): string {
+  return env.CONTROL_APEX ? `web.${env.CONTROL_APEX}` : WEBAPP_HOST;
+}
 
 /**
  * voi.ci — Flagship's URL shortener (V1).
@@ -157,8 +175,24 @@ export interface RouteEnv {
    * POST /api/iso-manifest. See ControlPlaneEnv.FLAGSHIP_ISO_MANIFEST.
    */
   FLAGSHIP_ISO_MANIFEST?: string;
+  /**
+   * Blessed in-house inference endpoint (JSON `{baseUrl, model}`) that
+   * backs the free-credits `flagship` provider. See
+   * ControlPlaneEnv.FLAGSHIP_INFERENCE_ENDPOINT.
+   */
+  FLAGSHIP_INFERENCE_ENDPOINT?: string;
+  /** HMAC secret the promo minter signs scoped inference tokens with, and
+   *  the metering shim verifies + reports usage under. See ControlPlaneEnv. */
+  FLAGSHIP_INFERENCE_TOKEN_SECRET?: string;
   /** WebSocket URL daemons dial for the tunnel hub (discovery endpoint). */
   TUNNEL_HUB_URL?: string;
+  /** Control-plane apex — a test env (gym) sets "gym.flagshipserver.com"; unset
+   *  in prod. The webapp host is `web.<CONTROL_APEX>`, so this makes the
+   *  webapp-host routing apex-aware (without it the gym webapp host 307s to the
+   *  prod webapp origin). apex.js already retargets the app's backend off the
+   *  served origin, so serving the webapp on web.gym.flagshipserver.com is all
+   *  that's needed for the live web e2e. */
+  CONTROL_APEX?: string;
   /** SNI passthrough anycast IPs (also used by serverRegister to publish DNS). */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
@@ -175,6 +209,12 @@ export interface RouteEnv {
    * lightweight stub; production wiring is in wrangler.toml.
    */
   BUILD_RELAY?: BuildRelayNamespaceLike;
+  /**
+   * Burner-pairing Durable Object namespace — the phone↔desktop-burner
+   * live session (sibling of BUILD_RELAY). Tests pass a stub; production
+   * wiring is in wrangler.toml.
+   */
+  BURNER_RELAY?: BuildRelayNamespaceLike;
 }
 
 export interface BuildRelayNamespaceLike {
@@ -224,6 +264,8 @@ const BUILD_ISO_STREAM_PREFIX = "/build/iso/";
 const BUILD_RELAY_SESSIONS_PATH = "/api/build-relay/sessions";
 /** v2: WebSocket pipe for the QR relay. /qr-pipe/<sid>?role=browser|phone */
 const QR_PIPE_WS_PREFIX = "/qr-pipe/";
+/** Phone↔desktop-burner live session. /burner-pipe/<sid>?role=burner|phone */
+const BURNER_PIPE_WS_PREFIX = "/burner-pipe/";
 
 /**
  * Default tunnel hub URL when TUNNEL_HUB_URL env var isn't set. Matches
@@ -320,7 +362,7 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
   const override = request.headers.get("x-flagship-effective-host");
   if (override) {
     const lowered = override.split(":")[0]?.toLowerCase() ?? "";
-    if (lowered === WEBAPP_HOST ||
+    if (lowered === webappHost(env) ||
         lowered === RECOVERY_HOST ||
         lowered === BOOT_HOST ||
         lowered === "www.flagshipserver.com" ||
@@ -338,7 +380,7 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
     // when the request really came from the SW registration on the
     // webapp origin.
     url = new URL(
-      `https://${WEBAPP_HOST}${requestUrl.pathname}${requestUrl.search}${requestUrl.hash}`,
+      `https://${webappHost(env)}${requestUrl.pathname}${requestUrl.search}${requestUrl.hash}`,
     );
   }
 
@@ -347,11 +389,11 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
   // /api/* on the apex trigger a preflight. Answer it directly so the
   // actual request can proceed.
   if (request.method === "OPTIONS" && url.pathname.startsWith("/api/")) {
-    return corsPreflight(request);
+    return corsPreflight(request, env);
   }
 
   const res = await routeImpl(request, env, url);
-  return applyCors(request, url, res);
+  return applyCors(request, url, res, env);
 }
 
 /** Internal — the actual routing logic. `route` wraps this with CORS. */
@@ -364,7 +406,7 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // /og + control-plane routes are NOT exposed here. The webapp itself
   // talks to the user's pod for /api/screens/* and to the apex for
   // anything .com-resident — never to web. directly.
-  if (url.hostname === WEBAPP_HOST) {
+  if (url.hostname === webappHost(env)) {
     return serveWebapp(request, url, env);
   }
 
@@ -452,6 +494,12 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     return forwardQrPipeUpgrade(request, env, url);
   }
 
+  // Phone↔desktop-burner live session WS upgrade.
+  // /burner-pipe/<sid>?role=burner|phone → the DO addressed by idFromName(sid).
+  if (url.pathname.startsWith(BURNER_PIPE_WS_PREFIX)) {
+    return forwardBurnerPipeUpgrade(request, env, url);
+  }
+
   // P3.6 — /og?title=...&subtitle=...
   // Returns an SVG poster with the title baked in. SVG is acceptable
   // for Twitter / Discord previews; some OG validators want PNG —
@@ -499,6 +547,25 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     return new Response(null, {
       status: 308,
       headers: { location: target },
+    });
+  }
+
+  // `/transfer?o=<b64url>` — the transfer-a-box take-over universal link.
+  // When the native app is installed iOS/Android intercept this URL at the OS
+  // level (AASA `/transfer` component + Android App-Links `/transfer` path) and
+  // open the in-app acquirer claim flow — the request never reaches the Worker.
+  // When the app is NOT installed the browser lands here; we 308-redirect to the
+  // webapp's own origin, preserving the `?o=` offer payload. The webapp boots,
+  // `dispatchInitialView()` reads `?o=` (lib/deepLink.js → serverTransfer.js) and
+  // opens the claim view. Placed with the other webapp redirects — BEFORE the
+  // coming-soon gate — so the fallback works for a real acquirer with no preview
+  // cookie. The webapp is on a different associated domain (web.flagshipserver.com
+  // is not in the app's applinks), so the redirect target won't re-trigger a
+  // universal-link bounce.
+  if (url.pathname === "/transfer" || url.pathname === "/transfer/") {
+    return new Response(null, {
+      status: 308,
+      headers: { location: `${WEBAPP_ORIGIN}/transfer${url.search}` },
     });
   }
 
@@ -619,7 +686,23 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   }
 
   // Static asset path — let the assets binding handle it.
-  return env.ASSETS.fetch(request);
+  const assetResponse = await env.ASSETS.fetch(request);
+  // Deploy-flash guard: the assets binding runs `not_found_handling =
+  // "single-page-application"`, so a MISSING file falls back to index.html
+  // (200 + text/html). For a stylesheet/script that's the wrong answer —
+  // the browser tries to parse the marketing HTML as CSS/JS, flashing the
+  // page unstyled mid-deploy. A `.css`/`.js` miss must read as a real 404
+  // so the browser treats it as a failed asset, not a document, and retries.
+  if (/\.(?:css|js|mjs)$/.test(url.pathname)) {
+    const contentType = assetResponse.headers.get("content-type") ?? "";
+    if (assetResponse.ok && contentType.includes("text/html")) {
+      return new Response("Not found", {
+        status: 404,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
+  }
+  return assetResponse;
 }
 
 interface ProbeResult {
@@ -816,6 +899,38 @@ async function forwardQrPipeUpgrade(
   await recordUpgrade(env.DB);
   const id = env.BUILD_RELAY.idFromName(sid);
   const stub = env.BUILD_RELAY.get(id);
+  return stub.fetch(request);
+}
+
+/**
+ * Phone↔desktop-burner live session: forward a /burner-pipe/<sid>?role=…
+ * upgrade to the BurnerRelaySession DO addressed by idFromName(sid). Same
+ * shape as the QR-relay forwarder (length-bounded URL-safe sid, per-IP
+ * upgrade gate, spawn metric); the DO arbitrates roles + presence.
+ */
+async function forwardBurnerPipeUpgrade(
+  request: Request,
+  env: RouteEnv,
+  url: URL,
+): Promise<Response> {
+  if (!env.BURNER_RELAY) {
+    return jsonResponse({ error: "burner-pipe not configured" }, 503);
+  }
+  if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+    return jsonResponse({ error: "websocket upgrade required" }, 426);
+  }
+  const sid = url.pathname.slice(BURNER_PIPE_WS_PREFIX.length).split("/")[0] ?? "";
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(sid)) {
+    return jsonResponse({ error: "sid must be 16-64 base64url chars" }, 400);
+  }
+  const rl = await checkBurnerPipeUpgrade(env, clientIp(request));
+  if (rl.limited) {
+    await recordRateLimited(env.DB);
+    return rateLimitedResponse(rl);
+  }
+  await recordUpgrade(env.DB);
+  const id = env.BURNER_RELAY.idFromName(sid);
+  const stub = env.BURNER_RELAY.get(id);
   return stub.fetch(request);
 }
 
@@ -1060,10 +1175,21 @@ function originHeader(request: Request): string | null {
  * for those (and for non-/api paths). Sensitive endpoints are signed,
  * so this CORS layer is defense-in-depth, not the primary auth gate.
  */
-function applyCors(request: Request, url: URL, res: Response): Response {
+/** Is this Origin allowed to make cross-origin /api/* calls? The static prod set
+ *  plus, under a test env, the env-derived webapp origin (web.<CONTROL_APEX>) —
+ *  the gym webapp at web.gym.flagshipserver.com calls gym.flagshipserver.com
+ *  cross-origin and the static set can't know it. Prod-preserving: CONTROL_APEX
+ *  unset ⇒ only the static set. Surfaced by the live web e2e (CORS-blocked
+ *  username check / claim). */
+function isCorsAllowed(origin: string, env: RouteEnv): boolean {
+  if (CORS_ALLOWED_ORIGINS.has(origin)) return true;
+  return !!env.CONTROL_APEX && origin === `https://web.${env.CONTROL_APEX}`;
+}
+
+function applyCors(request: Request, url: URL, res: Response, env: RouteEnv): Response {
   if (!url.pathname.startsWith("/api/")) return res;
   const origin = originHeader(request);
-  if (!origin || !CORS_ALLOWED_ORIGINS.has(origin)) return res;
+  if (!origin || !isCorsAllowed(origin, env)) return res;
   // Headers on a Response are immutable when sourced from fetch(); clone
   // into a fresh Response with the merged header set.
   const headers = new Headers(res.headers);
@@ -1077,7 +1203,7 @@ function applyCors(request: Request, url: URL, res: Response): Response {
 }
 
 /** Preflight handler — answers OPTIONS for /api/* without touching downstream. */
-function corsPreflight(request: Request): Response {
+function corsPreflight(request: Request, env: RouteEnv): Response {
   const origin = originHeader(request);
   const headers = new Headers({
     "access-control-allow-methods": "GET, HEAD, POST, DELETE, OPTIONS",
@@ -1085,10 +1211,45 @@ function corsPreflight(request: Request): Response {
     "access-control-max-age": "600",
     vary: "origin",
   });
-  if (origin && CORS_ALLOWED_ORIGINS.has(origin)) {
+  if (origin && isCorsAllowed(origin, env)) {
     headers.set("access-control-allow-origin", origin);
   }
   return new Response(null, { status: 204, headers });
+}
+
+/**
+ * Is this webapp-host path a client-side route the SPA owns (rather than
+ * a real file under apps/web/public/webapp/)?
+ *
+ * The webapp is a single-page app: routes like `/join`, `/home`,
+ * `/settings` have no on-disk file — the router reads `window.location`
+ * after index.html boots and dispatches in-app (e.g. the `/join?sid&pk`
+ * cross-device pairing receiver → `enterJoin`). Every real webapp asset
+ * has a file extension (`/manifest.json`, `/lib/api.js`, `/style.css`),
+ * so an extensionless path is the unambiguous signal for "client route".
+ *
+ * Why this matters: the assets binding's `not_found_handling =
+ * "single-page-application"` falls back to the SITE-ROOT index.html
+ * (`apps/web/public/index.html` — the MARKETING page) on a miss. So a
+ * naive `/join` → `/webapp/join` rewrite misses (no such file) and the
+ * binding serves the marketing page instead of the webapp — the PWA
+ * never boots and `enterJoin` never runs. Mapping client routes to the
+ * webapp's OWN index.html is the per-`/webapp/`-root SPA fallback.
+ *
+ * The last path segment is what's inspected so a route under a directory
+ * (`/x/join`) is still treated as a route; a dotfile asset (`/.well-known/…`)
+ * never reaches here (the webapp serves none).
+ *
+ * `/api/*` is excluded: the webapp talks to the user's POD for data, never to
+ * its own origin, so an /api/* path here is a no-such-thing the binding maps
+ * literally under /webapp/ (preserving the long-standing not-proxied contract)
+ * rather than masquerading as a client route.
+ */
+function isWebappClientRoute(pathname: string): boolean {
+  if (pathname === "/") return true;
+  if (pathname === PROXY_PREFIX || pathname.startsWith(PROXY_PREFIX)) return false;
+  const lastSegment = pathname.split("/").pop() ?? "";
+  return !lastSegment.includes(".");
 }
 
 /**
@@ -1097,6 +1258,20 @@ function corsPreflight(request: Request): Response {
  * tree is unchanged (apps/web/public/webapp/...); the user-visible
  * origin sees those files at root paths so the manifest's start_url
  * and the service-worker scope can both be `/`.
+ *
+ * Client-side routes (extensionless paths like `/join`, plus `/`) have
+ * no on-disk file, so they're served the webapp's OWN index.html — a
+ * per-`/webapp/`-root SPA fallback. Without it the assets binding's
+ * site-root SPA fallback serves the marketing page for `/join`, so the
+ * PWA never boots its cross-device-pairing receiver. Real asset files
+ * (anything with an extension) keep the literal `/webapp<path>` rewrite.
+ *
+ * Apex-aware: this fires for whatever `webappHost(env)` is —
+ * `web.flagshipserver.com` in prod, `web.<CONTROL_APEX>` (e.g.
+ * web.gym.flagshipserver.com) in a test env. The CONTROL apex
+ * (flagshipserver.com / gym.flagshipserver.com) never reaches here:
+ * there `/join` is the native universal link and falls through to the
+ * marketing asset fallback, unchanged.
  *
  * Anything not a GET/HEAD on this host falls through to a 405 — the
  * webapp's data-plane writes (orders, paired-session adds) go to the
@@ -1116,9 +1291,24 @@ async function serveWebapp(
   }
 
   // Disk layout:  apps/web/public/webapp/<file>
-  // Public path:  /<file>     → rewrite to /webapp/<file> for ASSETS
-  // Public root:  /           → ASSETS /webapp/  (binding serves index.html)
-  const rewrittenPath = url.pathname === "/" ? "/webapp/" : `/webapp${url.pathname}`;
+  // Public root:  /                      -> ASSETS /webapp/  (binding serves index.html)
+  // Shared root:  /qrEncoder.js ...       -> SITE ROOT. A few files live at apps/web/public/<file>
+  //   and are imported by BOTH the marketing page AND the webapp (e.g. qrEncoder.js, which the
+  //   add-device + companion views `import("/qrEncoder.js")`). They have no /webapp/ copy, so the
+  //   normal rewrite hits the SPA HTML fallback and the dynamic import() fails (pairing QR never
+  //   renders). Serve from root: one copy, no drift, real JS. (Affected prod too.)
+  // Client route: /join | /home ...       -> ASSETS /webapp/index.html so the PWA boots + its router
+  //   runs. Extensionless paths are client routes, NOT files; else the SPA fallback serves the
+  //   site-root marketing index.html and the receiver never boots.
+  // Asset file:   /style.css | /lib/x.js  -> rewrite to /webapp/<file> for ASSETS
+  const rewrittenPath =
+    url.pathname === "/"
+      ? "/webapp/"
+      : WEBAPP_SHARED_ROOT_ASSETS.has(url.pathname)
+        ? url.pathname
+        : isWebappClientRoute(url.pathname)
+          ? "/webapp/index.html"
+          : `/webapp${url.pathname}`;
   const rewritten = new URL(rewrittenPath + url.search, "https://flagshipserver.com");
   // Preserve method + headers; body is empty for GET/HEAD.
   const assetReq = new Request(rewritten.toString(), {

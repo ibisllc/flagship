@@ -348,7 +348,105 @@ async function verifyPublishTxt(b: PublishTxtChallengeBody, env: PolicyEnv): Pro
   if (auth.type === "userzone-grant") {
     return verifyUserzoneGrantPublish(b, host, auth, env);
   }
+  if (auth.type === "service-cert") {
+    return verifyServiceCertPublish(b, host, auth, env);
+  }
   return deny("malformed");
+}
+
+/**
+ * Tier-2 shared-service-cert DNS-01 publish (cert model A′ Phase 5). Two
+ * signatures must verify: (a) the requesting pod's daemon-identity signature
+ * over the standard {@link Dns01PublishRequest} (proves it's a registered box),
+ * and (b) a forwarded phone-issued (IRK-signed) {@link ServiceCertAuthority}
+ * that names THIS pod (`boxServerId === serverId`) and the ONE
+ * `<service>.<user>` FQDN whose `_acme-challenge` TXT it may write. The
+ * challenge `host` must equal the authorized `serviceFqdn`, which must be a
+ * well-formed tier-2 name under the user's IRK.
+ *
+ * The off-box challenge (`<svc>.<user>` is NOT in the box's own namespace) is
+ * exactly why the standard pod path can't cover it — the IRK grant is the
+ * authority that lets the box write a name outside its own zone-subtree.
+ */
+async function verifyServiceCertPublish(
+  b: PublishTxtChallengeBody,
+  host: string,
+  auth: ServiceCertPodAuthority,
+  env: PolicyEnv,
+): Promise<VerifyOutcome> {
+  if (
+    typeof auth.serverId !== "string" ||
+    typeof auth.recordValueHashHex !== "string" ||
+    typeof auth.issuedAt !== "number" ||
+    typeof auth.signatureHex !== "string" ||
+    !isObj(auth.authority) ||
+    typeof auth.authoritySignatureHex !== "string"
+  ) return deny("malformed");
+  if (!ageOk(env.now, auth.issuedAt, env.replayWindowMs)) return deny("stale");
+  if (!auth.serverId.endsWith(`.${env.apex}`)) return deny("serverId outside apex");
+
+  const a = auth.authority;
+  if (
+    typeof a.username !== "string" ||
+    typeof a.serviceFqdn !== "string" ||
+    typeof a.boxServerId !== "string" ||
+    typeof a.issuedAt !== "number" ||
+    typeof a.expiresAt !== "number"
+  ) return deny("malformed");
+
+  // The grant must name THIS box and the SAME service whose challenge it is.
+  if (a.boxServerId !== auth.serverId) return deny("authority not issued to this server");
+  if (host !== a.serviceFqdn) return deny("recordName does not match authorized serviceFqdn");
+
+  // `serviceFqdn` must be a real tier-2 `<svc>.<user>` under the managed apex,
+  // and never a box's own apex (`<server>.<user>` is also 2 labels — the box
+  // already has a per-box wildcard for that; routing it through the service-cert
+  // path would let a box re-mint its own name under IRK authority needlessly).
+  const parsed = parseTier2ServiceFqdn(a.serviceFqdn, env.apex);
+  if (!parsed || parsed.username !== a.username) return deny("serviceFqdn not a tier-2 name");
+  if (a.serviceFqdn.toLowerCase() === a.boxServerId.toLowerCase()) {
+    return deny("serviceFqdn is the box's own name");
+  }
+
+  const authority: ServiceCertAuthority = {
+    username: a.username,
+    serviceFqdn: a.serviceFqdn,
+    boxServerId: a.boxServerId,
+    issuedAt: a.issuedAt,
+    expiresAt: a.expiresAt,
+  };
+  if (!serviceCertAuthorityValidAt(authority, env.now)) return deny("authority expired or invalid window");
+
+  // Leg (a): the pod's daemon-identity signature over the publish request.
+  const valueHash = decodeHex(auth.recordValueHashHex);
+  const sig = decodeHex(auth.signatureHex);
+  const authoritySig = decodeHex(auth.authoritySignatureHex);
+  if (!valueHash || !sig || !authoritySig) return deny("invalid hex");
+  const expectedValueHash = sha256(new TextEncoder().encode(b.recordValue));
+  if (!equalBytes(expectedValueHash, valueHash)) return deny("value hash mismatch");
+
+  const podPub = await env.resolvePodIdentity(auth.serverId);
+  if (!podPub) return deny("unknown pod");
+  const claim: Dns01PublishRequest = {
+    serverId: auth.serverId,
+    recordName: b.recordName,
+    recordValueHash: valueHash,
+    issuedAt: auth.issuedAt,
+  };
+  if (!verifyDns01Publish(claim, sig, podPub)) return deny("bad signature");
+
+  // Leg (b): the forwarded ServiceCertAuthority signature against the user IRK.
+  const irkPub = await env.resolveUserIrk(a.username);
+  if (!irkPub) return deny("unknown user");
+  if (!verifyServiceCertAuthority(authority, authoritySig, irkPub)) {
+    return deny("bad authority signature");
+  }
+
+  return ok({
+    kind: "createTxt",
+    recordName: b.recordName,
+    recordValue: b.recordValue,
+  });
 }
 
 async function verifyPodAcmePublish(
@@ -597,6 +695,55 @@ async function verifyDelete(b: DeleteRecordBody, env: PolicyEnv): Promise<Verify
       recordId: b.recordId,
       expectedType: "A",
       expectedNameOneOf: [auth.serverId, `*.${auth.serverId}`],
+    });
+  }
+
+  if (auth.type === "service-cert-acme" && b.recordKind === "acme") {
+    // Cleanup leg of the tier-2 service-cert publish — same two-signature gate
+    // (pod daemon-identity over the Dns01DeleteRequest + forwarded IRK-signed
+    // ServiceCertAuthority naming this box + the `<svc>.<user>` FQDN).
+    if (!ageOk(env.now, auth.issuedAt, env.replayWindowMs)) return deny("stale");
+    if (!auth.serverId.endsWith(`.${env.apex}`)) return deny("serverId outside apex");
+    const a = auth.authority;
+    if (
+      typeof a?.username !== "string" ||
+      typeof a?.serviceFqdn !== "string" ||
+      typeof a?.boxServerId !== "string" ||
+      typeof a?.issuedAt !== "number" ||
+      typeof a?.expiresAt !== "number"
+    ) return deny("malformed");
+    if (a.boxServerId !== auth.serverId) return deny("authority not issued to this server");
+    const parsed = parseTier2ServiceFqdn(a.serviceFqdn, env.apex);
+    if (!parsed || parsed.username !== a.username) return deny("serviceFqdn not a tier-2 name");
+    const authority: ServiceCertAuthority = {
+      username: a.username,
+      serviceFqdn: a.serviceFqdn,
+      boxServerId: a.boxServerId,
+      issuedAt: a.issuedAt,
+      expiresAt: a.expiresAt,
+    };
+    if (!serviceCertAuthorityValidAt(authority, env.now)) return deny("authority expired or invalid window");
+    const sig = decodeHex(auth.signatureHex);
+    const authoritySig = decodeHex(auth.authoritySignatureHex);
+    if (!sig || !authoritySig) return deny("invalid hex");
+    const podPub = await env.resolvePodIdentity(auth.serverId);
+    if (!podPub) return deny("unknown pod");
+    const claim: Dns01DeleteRequest = {
+      serverId: auth.serverId,
+      recordId: b.recordId,
+      issuedAt: auth.issuedAt,
+    };
+    if (!verifyDns01Delete(claim, sig, podPub)) return deny("bad signature");
+    const irkPub = await env.resolveUserIrk(a.username);
+    if (!irkPub) return deny("unknown user");
+    if (!verifyServiceCertAuthority(authority, authoritySig, irkPub)) {
+      return deny("bad authority signature");
+    }
+    return ok({
+      kind: "deleteById",
+      recordId: b.recordId,
+      expectedType: "TXT",
+      expectedNameOneOf: [`_acme-challenge.${a.serviceFqdn.toLowerCase()}`],
     });
   }
 

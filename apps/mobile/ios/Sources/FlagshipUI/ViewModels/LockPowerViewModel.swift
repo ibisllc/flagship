@@ -45,7 +45,9 @@ public final class LockPowerViewModel {
         self.client = client
         self.serverDomain = serverDomain
         self.now = now
-        self.signer = signer ?? { reason in try await Keystore.deriveIRK(reason: reason) }
+        // Slice D — power-off / restart is a SENSITIVE order: sign with the admin
+        // master root when this device holds one, else the legacy owner IRK.
+        self.signer = signer ?? { reason in try await Keystore.sensitiveOrderSigningKey(reason: reason) }
     }
 
     public func run(mode: PowerMode) async {

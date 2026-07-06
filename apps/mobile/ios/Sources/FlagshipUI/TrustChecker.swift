@@ -1,5 +1,6 @@
 import Foundation
 import FlagshipCore
+import FlagshipAPI
 
 /// Fetches `GET /api/maintainer-blessing` from `.com` and feeds the verdict to
 /// the `TrustCenter`. The whole point of the feature: the client runs the full
@@ -16,7 +17,7 @@ public struct TrustChecker: Sendable {
 
     public init(
         urlSession: URLSession = .shared,
-        baseUrl: URL = URL(string: "https://flagshipserver.com")!
+        baseUrl: URL = Endpoints.controlBaseUrl
     ) {
         self.urlSession = urlSession
         self.baseUrl = baseUrl

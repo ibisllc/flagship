@@ -30,8 +30,9 @@ import {
   deriveIrkFromSeed,
   verifyWithEd25519Pub,
 } from "../keystore.js";
+import { controlApex } from "./apex.js";
 
-const APEX = "https://flagshipserver.com";
+const APEX = controlApex();
 const TAG = "flagship/trust-exception/v1";
 
 /** Reject "|" + control chars in a canonical field (defense-in-depth, mirrors

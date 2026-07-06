@@ -29,6 +29,10 @@ import com.flagshipserver.app.api.LiveBuildClient
 import com.flagshipserver.app.api.LiveScreensClient
 import com.flagshipserver.app.api.MockBuildClient
 import com.flagshipserver.app.api.LiveSecretMailboxClient
+import com.flagshipserver.app.api.LiveServerTransferClient
+import com.flagshipserver.app.api.MockServerTransferClient
+import com.flagshipserver.app.api.ServerTransferClient
+import com.flagshipserver.app.core.LocalServerTransferClient
 import com.flagshipserver.app.api.LiveFlagshipServerClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
@@ -56,6 +60,7 @@ import com.flagshipserver.app.core.LocalBuildClient
 import com.flagshipserver.app.core.LocalQrRelayClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
+import com.flagshipserver.app.core.LocalSessionStore
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.OkHttpJsonTransport
 import com.flagshipserver.app.core.LocalTrustCenter
@@ -90,9 +95,24 @@ class MainActivity : FragmentActivity() {
     private lateinit var appState: AppState
     private lateinit var biometric: BiometricAuthority
 
+    /** GYM smoke-mode (§10 Phase-5) — the tab the shell should open on when
+     *  launched with `flagship.smokeTab`. Null in production / a normal launch
+     *  ⇒ RootShell defaults to Home. */
+    private var smokeInitialTab: com.flagshipserver.app.core.RootDestination? = null
+
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // FIRST: apply a backend-apex override from the launch intent, BEFORE
+        // the OkHttp client / clients are built below (the pinner + the live
+        // clients read Endpoints at construction). The gym test build launches
+        // with `--es flagship.apexHost gym.flagshipserver.com`; a prod launch
+        // passes nothing, so Endpoints stays on today's literal (and the prod
+        // SPKI pins still apply). A persisted DeveloperSettings.apexHost is the
+        // fallback when no intent extra is present.
+        intent?.getStringExtra("flagship.apexHost")?.let { host ->
+            if (host.isNotBlank()) DeveloperSettings.applyApexOverride(host)
+        }
         Keystore.attach(applicationContext)
         FlagshipFcmService.ensureChannel(applicationContext)
         biometric = BiometricAuthority(this)
@@ -124,8 +144,37 @@ class MainActivity : FragmentActivity() {
         // red persistent trust sliver + the `.com` backend short-circuit.
         val trustCenter = TrustCenter()
         deepLinker = DeepLinker()
+
+        // GYM smoke-mode seam (§10 Phase-5) — DEBUG-ONLY, mirror of iOS
+        // FlagshipApp.applySmokeModeIfRequested. When the app is debuggable AND
+        // the launch intent carries `flagship.smokeMode`, seed DemoFixtures (no
+        // backend) + an optional ops/trust/server-event state and land on the
+        // requested tab. A RELEASE build skips this branch entirely, so an
+        // intent extra can never seed fixtures in production. The resulting
+        // initial tab is threaded into RootShell below.
+        val isDebuggable =
+            (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (isDebuggable) {
+            com.flagshipserver.app.core.SmokeModeConfig.from(intent)?.let { cfg ->
+                smokeInitialTab = com.flagshipserver.app.core.SmokeMode.apply(
+                    config = cfg,
+                    appState = appState,
+                    operations = operations,
+                    trust = trustCenter,
+                )
+            }
+        }
+
         val devSettings = DeveloperSettings.create(applicationContext)
+        // GYM: a smoke-mode launch is NO-BACKEND by contract — force the MOCK
+        // client (in-memory only) so the shell renders from MockScreensClient
+        // and the live maintainer-trust check never runs (it would clobber the
+        // seeded untrusted verdict). Debug-gated with the smoke seam above.
+        if (isDebuggable && smokeInitialTab != null) {
+            devSettings.forceMockForSmokeRun()
+        }
         AiKeyStore.attach(applicationContext)
+        com.flagshipserver.app.core.SecuredSessionStore.attach(applicationContext)
         val okHttp = buildOkHttp()
 
         // Identity / security plane. Mock for emulator/dev; Live talks to the
@@ -144,10 +193,22 @@ class MainActivity : FragmentActivity() {
 
         val mockScreens = MockScreensClient()
         val liveScreens = LiveScreensClient(client = okHttp, store = sessionStore)
+        // #91 — drains the box's phone-pollable AlertInbox (GET /api/phone/alerts)
+        // for AI-chat-needs-you events. Shares the box-pinned OkHttp + session
+        // store with the screens client. The poller is built + started in
+        // setContent (where the live/session pivot + operations center are in
+        // scope), mirroring the deploy-sync LaunchedEffect.
+        val livePhoneAlerts = com.flagshipserver.app.api.LivePhoneAlertClient(
+            client = okHttp,
+            store = sessionStore,
+        )
+        val appContext = applicationContext
         val mockBuild = MockBuildClient()
         val liveBuild = LiveBuildClient(client = okHttp, store = sessionStore)
         val mockRelay = MockQrRelayClient()
         val liveRelay = LiveQrRelayClient(client = okHttp)
+        val mockTransfer = MockServerTransferClient()
+        val liveTransfer = LiveServerTransferClient(OkHttpJsonTransport(okHttp))
         val mockMailbox = MockSecretMailboxClient()
         // A′ pinning — every live /pods fetch reconciles the cert-pin
         // registry under STKs derived from THIS device's UMK. Live-only by
@@ -197,6 +258,8 @@ class MainActivity : FragmentActivity() {
                 if (useLive) liveRelay else mockRelay
             val effectiveMailbox: SecretMailboxClient =
                 if (useLive) liveMailbox else mockMailbox
+            val effectiveTransfer: ServerTransferClient =
+                if (useLive) liveTransfer else mockTransfer
             // Identity calls are IRK-signed (not session-token gated), so this
             // pivots on the toggle alone — like relay/mailbox above.
             val effectiveFlagshipServer: FlagshipServerClient =
@@ -213,6 +276,102 @@ class MainActivity : FragmentActivity() {
                     is TrustChecker.Outcome.Untrusted -> trustCenter.markUntrusted(listOf(outcome.failure))
                     is TrustChecker.Outcome.NoVerdict -> trustCenter.markNoVerdict()
                 }
+            }
+
+            // #91 — AI-chat alert foreground poll. Live + paired only: the mock
+            // client has no real box to drain. The poller self-gates on
+            // paired+unlocked (mirrors the sliver's hide-under-lock). The
+            // notifier routes through the FCM-channel local notification so a
+            // tap deep-links to the chat, exactly like a real push wake.
+            val aiChatPoller = remember {
+                com.flagshipserver.app.core.AiChatAlertPoller(
+                    operations = operations,
+                    client = livePhoneAlerts,
+                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value },
+                    notify = { sessionId, request ->
+                        FlagshipFcmService.showAiChatNotification(
+                            appContext,
+                            sessionId,
+                            isEnvVar = request == com.flagshipserver.app.api.AiChatRequest.REQUEST_ENV_VAR,
+                        )
+                    },
+                )
+            }
+            LaunchedEffect(useLive, sessionToken != null) {
+                if (useLive && sessionToken != null) {
+                    aiChatPoller.start(this)
+                } else {
+                    aiChatPoller.stop()
+                }
+            }
+
+            // MULTI-POD (Fix B) — PodSessionSync. When the current/leader pod
+            // changes, point the single active base-URL + token slots at THAT
+            // pod's per-pod token (deterministic base URL `https://<fqdn>`).
+            // First-activation also runs the legacy-single-token migration so a
+            // box paired before the per-pod store attributes its existing token
+            // to its pod (idempotent). A pod with no stored token activates with a
+            // null token → the BFF 401s → "pair this device", never borrowing
+            // another pod's token. Mirror of iOS PodSessionSync.
+            val currentPodId by appState.currentPodId.collectAsState()
+            val pods by appState.pods.collectAsState()
+            LaunchedEffect(currentPodId, pods) {
+                val pod = pods.firstOrNull { it.podId == currentPodId }
+                if (pod != null && pod.fqdn.isNotEmpty()) {
+                    sessionStore.migrateSingleTokenToPod(pod.podId)
+                    sessionStore.activatePod(pod.podId, "https://${pod.fqdn}")
+                }
+            }
+
+            // LiveSync — the single app-scope live-update canal. ONE /stream
+            // long-poll feeds AppState (pods + Box Request Inbox), collapsing the
+            // per-screen Home pollers into one channel. It is wired HERE (at the
+            // shell, not a tab) so it spans every screen, and self-gates on
+            // paired+unlocked — locking on onStop (which clears isUnlocked) pauses
+            // it, matching the iOS .background semantics (foreground-only). Falls
+            // back to /pods when /stream is down, so behavior never degrades.
+            val liveSync = remember(effectiveMailbox) {
+                com.flagshipserver.app.core.LiveSyncCoordinator(
+                    app = appState,
+                    mailbox = effectiveMailbox,
+                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value },
+                    makeReconciler = {
+                        // Same reconcile path Home uses, incl. the secret-free
+                        // SWK/pairing deposit for newly-registered boxes
+                        // (idempotent, best-effort, no-op unless owed).
+                        val swkStore = com.flagshipserver.app.core.PendingSwkDepositStore.from(appContext)
+                        val pairingStore = com.flagshipserver.app.core.PendingPairingDepositStore.from(appContext)
+                        val cgkStore = com.flagshipserver.app.core.PendingCgkDepositStore.from(appContext)
+                        val holdStore = com.flagshipserver.app.core.MigrationHoldStore.from(appContext)
+                        com.flagshipserver.app.core.PendingServerReconciler(
+                            app = appState,
+                            mailbox = effectiveMailbox,
+                            onRegistered = { fqdn, identityPubKeyHex ->
+                                val user = appState.currentUser.value
+                                if (!user.isNullOrEmpty()) {
+                                    com.flagshipserver.app.core.SwkDepositCoordinator
+                                        .live(user, effectiveMailbox, swkStore, pairingStore, cgkStore, holdStore)
+                                        .depositIfNeeded(fqdn, identityPubKeyHex)
+                                }
+                            },
+                            // Per-cert relay-trust aggregation (maintainer-trust
+                            // Layer 3): verify each box's STK-signed box-trust-status
+                            // and aggregate the untrusted ones BY failing relay
+                            // cert-hash into the red sliver — one line + one override
+                            // per DISTINCT authority. A warning + override source; it
+                            // never gates `.com` I/O.
+                            onDirectory = { pods ->
+                                trustCenter.setRelayFailures(
+                                    com.flagshipserver.app.core.RelayTrustAggregator.aggregate(pods),
+                                )
+                            },
+                        )
+                    },
+                )
+            }
+            val liveSyncPaired by appState.isPaired.collectAsState()
+            LaunchedEffect(liveSyncPaired) {
+                if (liveSyncPaired) liveSync.start(this) else liveSync.stop()
             }
 
             val sizeClass = calculateWindowSizeClass(this)
@@ -234,6 +393,8 @@ class MainActivity : FragmentActivity() {
                     LocalFlagshipServerClient provides effectiveFlagshipServer,
                     LocalQrRelayClient provides effectiveRelay,
                     LocalSecretMailboxClient provides effectiveMailbox,
+                    LocalServerTransferClient provides effectiveTransfer,
+                    LocalSessionStore provides sessionStore,
                     LocalToastCenter provides toasts,
                     LocalActiveOperationsCenter provides operations,
                     LocalTrustCenter provides trustCenter,
@@ -250,7 +411,10 @@ class MainActivity : FragmentActivity() {
                     },
                 ) {
                     Surface(color = FS.colors.bg, modifier = Modifier.fillMaxSize()) {
-                        AppRoot(widthSizeClass = mapWidth(sizeClass.widthSizeClass))
+                        AppRoot(
+                            widthSizeClass = mapWidth(sizeClass.widthSizeClass),
+                            initialTab = smokeInitialTab,
+                        )
                     }
                 }
             }
@@ -304,7 +468,13 @@ class MainActivity : FragmentActivity() {
 }
 
 @Composable
-private fun AppRoot(widthSizeClass: WindowWidthSizeClass) {
+private fun AppRoot(
+    widthSizeClass: WindowWidthSizeClass,
+    /** GYM smoke-mode (§10 Phase-5) — opens the shell on this tab on first paint
+     *  when set (the `flagship.smokeTab` selector). Null ⇒ Home, the production
+     *  default. */
+    initialTab: com.flagshipserver.app.core.RootDestination? = null,
+) {
     val app = LocalAppState.current
     val isPaired by app.isPaired.collectAsState()
     val isUnlocked by app.isUnlocked.collectAsState()
@@ -322,6 +492,23 @@ private fun AppRoot(widthSizeClass: WindowWidthSizeClass) {
         operations.syncDeployOperations(if (isPaired) pods else emptyList())
     }
 
+    // Slice B — AUTO-PAIR. On unlock (with pods loaded), silently provision this
+    // device's per-box BFF session token for every ONLINE pod that lacks one,
+    // behind ONE biometric (the coordinator derives the owner IRK once + reuses
+    // it, and no-ops without a prompt when nothing is pending). A per-pod failure
+    // retries on the next unlock. Removes the manual "Pair this device" step;
+    // pairing-for-use is not sensitive, so it's admin-independent.
+    val sessionStore = LocalSessionStore.current
+    LaunchedEffect(isPaired, isUnlocked, pods) {
+        if (!isPaired || !isUnlocked) return@LaunchedEffect
+        val onlinePods = pods.filter {
+            it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE && it.fqdn.isNotEmpty()
+        }
+        if (onlinePods.isEmpty()) return@LaunchedEffect
+        com.flagshipserver.app.viewmodels.PodAutoPairCoordinator(store = sessionStore)
+            .pairAll(onlinePods) { reason -> Keystore.deriveIRK(reason) }
+    }
+
     Box(Modifier.fillMaxSize()) {
         if (isPaired) {
             // The teal sliver sits ABOVE the shell in a Column so revealing it
@@ -333,7 +520,7 @@ private fun AppRoot(widthSizeClass: WindowWidthSizeClass) {
                 // operation, and both push the shell down from the top.
                 GlobalTrustBar()
                 GlobalOperationsBar()
-                RootShell(widthSizeClass = widthSizeClass)
+                RootShell(widthSizeClass = widthSizeClass, initialTab = initialTab)
             }
         } else {
             OnboardingFlow(onFinished = { /* AppState.completeOnboarding flips isPaired */ })

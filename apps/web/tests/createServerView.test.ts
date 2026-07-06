@@ -41,6 +41,38 @@ const INDEX_HTML = readFileSync(
   "utf8",
 );
 
+describe("create-server view — SWK provisioning", () => {
+  it("imports the box SWK derivation (deriveSwkFromSeed) from the keystore", () => {
+    expect(VIEW_SRC).toMatch(/import \{[^}]*deriveSwkFromSeed[^}]*\} from "\.\.\/keystore\.js"/);
+  });
+
+  it("derives swkHex from the in-memory UMK seed + the box serverId and adds it to the bundle", () => {
+    // Box derivation (DOTS via deriveSwkFromSeed), serverId = blob.serverDomain
+    // (same as the STK), embedded as the recipe sibling.
+    expect(VIEW_SRC).toMatch(
+      /bundle\.swkHex = await deriveSwkFromSeed\(session\.umk, blob\.serverDomain\)/,
+    );
+  });
+
+  it("carries the swkHex sibling into the downloaded recipe", () => {
+    expect(VIEW_SRC).toMatch(/if \(blobBundle\.swkHex\) recipe\.swkHex = blobBundle\.swkHex/);
+  });
+
+  it("uses the protocol DOTS info (flagship.swk.v1), never the app-backup slashes form", () => {
+    const KS_SRC = readFileSync(
+      join(__dirname, "..", "public", "webapp", "keystore.js"),
+      "utf8",
+    );
+    expect(KS_SRC).toMatch(/flagship\.swk\.v1\|\$\{serverId\}/);
+    // deriveSwkFromSeed must NOT use the slash form "flagship/swk/v1".
+    const fn = KS_SRC.slice(
+      KS_SRC.indexOf("export async function deriveSwkFromSeed"),
+      KS_SRC.indexOf("export async function deriveBakFromSeed"),
+    );
+    expect(fn).not.toMatch(/flagship\/swk\/v1/);
+  });
+});
+
 describe("create-server view — static structure (#24)", () => {
   it("registers view-create-server with the router", () => {
     expect(VIEW_SRC).toMatch(/registerView\(['"]view-create-server['"]\)/);
@@ -85,8 +117,12 @@ describe("create-server view — static structure (#24)", () => {
     expect(VIEW_SRC).toContain("600");
   });
 
-  it("dials the apex host explicitly (the webapp lives on web.flagshipserver.com)", () => {
-    expect(VIEW_SRC).toContain("flagshipserver.com/qr-pipe");
+  it("dials the apex host via the single apex accessor (G2 — prod default unchanged)", () => {
+    // The relay host used to be the baked literal `flagshipserver.com`; it is
+    // now derived through lib/apex.js (origin-driven, prod-default) so a gym
+    // build retargets with one knob. The dial still lands on /qr-pipe as phone.
+    expect(VIEW_SRC).toMatch(/controlHost\(\)\}\/qr-pipe/);
+    expect(VIEW_SRC).toContain('from "../lib/apex.js"');
   });
 
   it("index.html has the view-create-server slot with every wired input", () => {

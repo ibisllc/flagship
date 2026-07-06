@@ -6,12 +6,14 @@ import {
 } from "@flagship/protocol";
 import type {
   AuthCodeStorage,
+  DeviceCapabilityGrantStorage,
   LuksKeyStorage,
   RoutingStorage,
   ServerStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX128, hexToBytes } from "./hex.js";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { validateServerLabel, validateUserLabel } from "./labels.js";
 import {
   forbidden,
@@ -129,6 +131,16 @@ export interface ServerReleaseDeps {
    * sealed to the old box's STK and overwritten on reuse).
    */
   luksKeys?: LuksKeyStorage;
+  /** Slice D — device-grant store for the master-admin authority gate (§2 row
+   *  30). Optional: absent ⇒ only the bare admin root satisfies the open gate. */
+  grants?: DeviceCapabilityGrantStorage;
+  /**
+   * The data-plane apex names live under — `flagship.services` in prod,
+   * `gym.flagship.services` in the test env (docs/ui-test-gym.md §6.5).
+   * Used only in the serverDomain namespace guard (not in canonical
+   * bytes). Defaults to the prod literal so prod is byte-identical.
+   */
+  apex?: string;
   freshnessMs?: number;
   now?: () => number;
 }
@@ -160,11 +172,12 @@ export async function handleServerReleaseName(
   const userV = validateUserLabel(r.username);
   if (!userV.ok) return malformed(userV.reason);
 
-  // serverDomain MUST be `<server>.<user>.flagship.services` with the
-  // user segment equal to the signing username and a valid server label.
-  // This binds the release to the owner's own namespace — even a valid
-  // IRK can't release a name under a different user.
-  const expectedSuffix = `.${userV.label}.flagship.services`;
+  // serverDomain MUST be `<server>.<user>.<apex>` with the user segment
+  // equal to the signing username and a valid server label. This binds the
+  // release to the owner's own namespace — even a valid IRK can't release a
+  // name under a different user.
+  const apex = deps.apex ?? "flagship.services";
+  const expectedSuffix = `.${userV.label}.${apex}`;
   if (
     !r.serverDomain.endsWith(expectedSuffix) ||
     r.serverDomain.length === expectedSuffix.length
@@ -196,7 +209,17 @@ export async function handleServerReleaseName(
     serverDomain: r.serverDomain,
     issuedAt: r.issuedAt,
   };
-  if (!verifyReleaseServerName(claim, sig, hexToBytes(userRec.irkPubHex))) {
+  // Slice D §2 row 30 — SENSITIVE: master-admin authority (legacy owner-IRK when
+  // no admin root is pinned).
+  const authz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: userV.label,
+      userRec,
+      verifyWith: (pub) => verifyReleaseServerName(claim, sig, hexToBytes(pub)),
+    },
+  );
+  if (!authz.ok) {
     return forbidden("invalid signature");
   }
 

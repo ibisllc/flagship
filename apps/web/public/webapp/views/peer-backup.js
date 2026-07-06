@@ -37,6 +37,7 @@ import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 
 registerView("view-peer-backup");
 
@@ -50,7 +51,7 @@ function fmtBytes(n) {
 
 function fmtDate(unixMs) {
   if (typeof unixMs !== "number" || unixMs <= 0) return "never";
-  return new Date(unixMs).toLocaleString();
+  return formatWhen(unixMs);
 }
 
 // Daemon-side honest-zero accounting for fields the my-shard layer
@@ -198,7 +199,7 @@ export async function renderPeerBackup() {
               <div class="faint-sm">
                 ${escapeHtml(String(p.shardsHosted ?? 0))} shard${p.shardsHosted === 1 ? "" : "s"}
                 · last seen ${escapeHtml(fmtDate(p.lastSeenMs))}
-                ${p.online ? '<span class="pill ok">online</span>' : '<span class="pill warn">offline</span>'}
+                ${p.online ? '<span class="pill ok">Online</span>' : '<span class="pill warn">Offline</span>'}
               </div>
             </div>
           </div>

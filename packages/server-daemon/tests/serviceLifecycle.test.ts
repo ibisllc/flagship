@@ -1,3 +1,4 @@
+import { swkOps } from "./helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import { deriveIRK, deriveSWK, type AppManifest } from "@flagship/protocol";
 import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
@@ -13,7 +14,7 @@ import {
 
 const umk = { seed: new Uint8Array(32).fill(11) };
 const ownerIrk = deriveIRK(umk);
-const swk = deriveSWK(umk, "srv-1");
+const swk = swkOps(deriveSWK(umk, "srv-1"));
 
 class RecordingRunner implements CommandRunner {
   calls: { cmd: string; args: string[] }[] = [];

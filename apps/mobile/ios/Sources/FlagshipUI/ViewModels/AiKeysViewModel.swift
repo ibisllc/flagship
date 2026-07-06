@@ -23,7 +23,7 @@ public final class AiKeysViewModel {
     public var formLabel: String = ""
     public private(set) var errorMessage: String?
 
-    public let providers = ["anthropic", "openai", "google", "openrouter", "ollama"]
+    public let providers = ["anthropic", "openai", "google", "openrouter", "ollama", "flagship"]
 
     private let store: SavedKeyStore
 

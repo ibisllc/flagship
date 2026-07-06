@@ -141,6 +141,13 @@ export interface VibeCodeSessionMeta {
     | "cancelled";
   serviceId?: string;
   url?: string;
+  /**
+   * The reason the session failed, captured at `fail()` time. Persisted on
+   * meta so a client that re-attaches AFTER the failure (its live WS dropped,
+   * the user reopened the Building screen) gets the actual cause instead of a
+   * generic "session failed" — the original error event is long gone by then.
+   */
+  failureReason?: string;
 }
 
 const FILE_BOUNDARY = /^===\s+(.+?)\s+===\s*$/;
@@ -277,7 +284,13 @@ export type NotifyOwnerCallback = (args: {
  */
 export class VibeCodeSession extends EventEmitter {
   readonly meta: VibeCodeSessionMeta;
-  readonly parser = new VibeCodeStreamParser();
+  // Not `readonly`: it is REPLACED with a fresh parser when the conversation
+  // resumes after a tool reply (see `prepareForResume`). A parser that observed
+  // `=== END ===` — or whose turn merely ended after a talkToUser question —
+  // is `done` and silently ignores all further `feed()`, so without a reset the
+  // resumed file output would never be parsed (the session would reach
+  // ready-to-deploy with NO files → deploy 502).
+  parser = new VibeCodeStreamParser();
   private readonly history: Array<{
     role: "user" | "assistant";
     content: string;
@@ -496,6 +509,23 @@ export class VibeCodeSession extends EventEmitter {
     }
   }
 
+  /**
+   * Reset the file parser before the conversation RESUMES (after a `talkToUser`
+   * reply or a `requestEnvVar` ack). The prior turn called `endAssistant()` →
+   * `parser.end()`, which marks the parser `done`; a `done` parser ignores all
+   * further `feed()`, so the resumed turn's `=== file === / === END ===` output
+   * would otherwise never be captured (the session would reach ready-to-deploy
+   * with NO files → deploy 502). Installing a fresh parser (same event wiring)
+   * lets the continued stream emit its files. The model holds the full build
+   * spec across the turn, so it re-emits any blocks it may have started before
+   * asking — a clean parser is the safe reset.
+   */
+  prepareForResume(): void {
+    const next = new VibeCodeStreamParser();
+    next.on("event", (e: VibeCodeEvent) => this.emit("event", e));
+    this.parser = next;
+  }
+
   cancel(): void {
     this.cancelled = true;
     this.meta.status = "cancelled";
@@ -529,6 +559,7 @@ export class VibeCodeSession extends EventEmitter {
 
   fail(message: string, recoverable = false): void {
     this.meta.status = "failed";
+    this.meta.failureReason = message;
     this.emit("event", { kind: "error", message, recoverable } as VibeCodeEvent);
   }
 

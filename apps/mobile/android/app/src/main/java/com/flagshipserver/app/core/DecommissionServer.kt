@@ -31,7 +31,11 @@ suspend fun decommissionServer(
         return
     }
     try {
-        val irk = Keystore.deriveIRK("Delete server ${pod.name}")
+        // Slice D — release-server-name is SENSITIVE (serverRevoke.ts gates it
+        // on the admin master root): sign with the admin root when this device
+        // holds one, else the owner IRK (legacy). The belt-and-braces auth-code
+        // revoke below rides the same key (best-effort — failures are swallowed).
+        val irk = Keystore.adminSigningKey("Delete server ${pod.name}")
         val now = System.currentTimeMillis()
         // 1. Release the name (the real free-the-name mechanism).
         val releaseBytes = ReleaseServerNameBytes.canonicalBytes(username, pod.fqdn, now)

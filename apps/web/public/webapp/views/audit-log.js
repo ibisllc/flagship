@@ -30,6 +30,7 @@ import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatDateTime } from "../lib/dateFormat.js";
 
 registerView("view-audit-log");
 registerView("view-audit-entry");
@@ -48,8 +49,8 @@ const KIND_LABELS = {
   "app-grant.issue": "App-grant issued",
   "app-grant.renew": "App-grant renewed",
   "app-grant.revoke": "App-grant revoked",
-  "pod.register": "Pod registered",
-  "pod.revoke": "Pod revoked",
+  "pod.register": "Server registered",
+  "pod.revoke": "Server revoked",
   "url.claim": "URL claimed",
   "url.drop": "URL dropped",
   "lease.grant": "Auto-unlock lease granted",
@@ -101,7 +102,7 @@ export const KNOWN_EVENT_KINDS = Object.freeze(Object.keys(KIND_LABELS));
 
 function fmtDate(unixMs) {
   if (typeof unixMs !== "number") return "—";
-  return new Date(unixMs).toLocaleString();
+  return formatDateTime(unixMs);
 }
 
 function kindLabel(kind) {
@@ -112,8 +113,8 @@ function actorLabel(entry) {
   const a = entry.actor;
   if (!a) return "—";
   if (a.kind === "self") return "you (this device)";
-  if (a.kind === "sibling") return `sibling pod ${escapeHtml(a.podId ?? "?")}`;
-  if (a.kind === "irk") return `IRK ${escapeHtml((a.pubkeyHex ?? "").slice(0, 12))}…`;
+  if (a.kind === "sibling") return `Sibling server ${escapeHtml(a.podId ?? "?")}`;
+  if (a.kind === "irk") return `Account key ${escapeHtml((a.pubkeyHex ?? "").slice(0, 12))}…`;
   return escapeHtml(String(a.kind));
 }
 
@@ -302,7 +303,7 @@ export async function enterAuditEntry(eventId) {
         </div>
       ` : ""}
       ${envelope ? `
-        <h3 class="mt-4">Signed envelope</h3>
+        <h3 class="mt-4">Signed request</h3>
         <div class="card">
           <pre class="audit-envelope-pre">${escapeHtml(JSON.stringify(envelope, null, 2))}</pre>
         </div>

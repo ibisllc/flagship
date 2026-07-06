@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +45,8 @@ import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSearchField
+import com.flagshipserver.app.ui.components.PodSwitcher
+import com.flagshipserver.app.ui.components.PodSwitcherModel
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FSLayout
 import com.flagshipserver.app.viewmodels.ServicesListViewModel
@@ -84,8 +87,17 @@ fun ServicesListScreen(nav: NavController) {
     // Presentation-only narrowing — never mutates the loaded apps.
     var query by remember { mutableStateOf("") }
     var ownerFilter by remember { mutableStateOf(OwnerFilter.ALL) }
+    // V8 — server filter (the PodSwitcher). null == "All servers".
+    var serverFilter by remember { mutableStateOf<String?>(null) }
 
     val me = (appState.currentUser.collectAsState().value ?: "").lowercase()
+    val pods by appState.pods.collectAsState()
+    val leaderPodId by appState.leaderPodId.collectAsState()
+    // A pod the user no longer owns can't stay selected (it would hide every
+    // app); treat a stale selection as "All servers". Derived (not a state
+    // write) so it's safe to compute during composition.
+    val effectiveServerFilter = serverFilter?.takeIf { id -> pods.any { it.podId == id } }
+    val filterPodName = pods.firstOrNull { it.podId == effectiveServerFilter }?.name
 
     // Merge the daemon apps-list with the per-service /links fan-out
     // exactly as iOS AppsTab.AppRow does: slug.capitalized name,
@@ -113,6 +125,11 @@ fun ServicesListScreen(nav: NavController) {
                 OwnerFilter.SHARED -> me.isNotEmpty() && app.creator.lowercase() != me
             }
         }
+        // V8 — server filter: when a pod is selected, keep only the apps whose
+        // canonical URL carries that pod's name as a subdomain (mirrors iOS).
+        .filter { app ->
+            filterPodName == null || PodSwitcherModel.matchesPod(app.canonicalUrl, filterPodName)
+        }
 
     val subtitle = when (val st = state) {
         is LoadingState.Loading -> "Loading…"
@@ -136,6 +153,7 @@ fun ServicesListScreen(nav: NavController) {
             text = "Services",
             color = FS.colors.text,
             style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
+            modifier = Modifier.testTag("services-title"),
         )
         Text(
             text = subtitle,
@@ -153,7 +171,7 @@ fun ServicesListScreen(nav: NavController) {
                         style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
                     )
                     Text(
-                        text = "Describe what you want in plain English. The AI writes it; the daemon runs it.",
+                        text = "Describe what you want in plain English. The AI writes it; your server runs it.",
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
                     )
@@ -161,11 +179,26 @@ fun ServicesListScreen(nav: NavController) {
                         label = "Build a service",
                         onClick = { nav.navigate("build/source") },
                         block = true,
+                        modifier = Modifier.testTag("services-build-cta"),
                     )
                 }
             }
         } else {
             Spacer(Modifier.height(FS.space.s4))
+            // V8 — the server filter sits above search when the user owns more
+            // than one pod, doubling as a context switcher ("All servers" =
+            // every app regardless of which pod runs it).
+            if (pods.size > 1) {
+                PodSwitcher(
+                    pods = pods,
+                    currentPodId = effectiveServerFilter,
+                    leaderPodId = leaderPodId,
+                    onPick = { serverFilter = it.podId },
+                    allLabel = "All servers",
+                    onPickAll = { serverFilter = null },
+                )
+                Spacer(Modifier.height(FS.space.s3))
+            }
             FSSearchField(
                 value = query,
                 onValueChange = { query = it },
@@ -231,7 +264,8 @@ private fun BuildAnotherAppRow(onClick: () -> Unit) {
             .background(FS.colors.primary.copy(alpha = 0.08f))
             .border(1.dp, FS.colors.primary.copy(alpha = 0.25f), RoundedCornerShape(FS.radius.md))
             .clickable(onClick = onClick)
-            .padding(horizontal = FS.space.s4, vertical = FS.space.s3),
+            .padding(horizontal = FS.space.s4, vertical = FS.space.s3)
+            .testTag("services-build-cta"),
     ) {
         Text("✨", color = FS.colors.primary, style = TextStyle(fontSize = 15.sp))
         Text(

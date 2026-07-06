@@ -29,6 +29,16 @@ export interface CloudflareDnsRecord {
   ttl: number;
 }
 
+/**
+ * Minimal delete surface for teardown cleanup. Structurally satisfied by
+ * {@link CloudflareDnsClient}. Handlers that only ever delete records
+ * (server revoke, demo-user teardown) depend on this narrow interface so
+ * they stay decoupled from the full client + are trivially faked in tests.
+ */
+export interface DnsDeleteClient {
+  deleteByName(name: string, type: string): Promise<number>;
+}
+
 const CF_API = "https://api.cloudflare.com/client/v4";
 
 export class CloudflareDnsClient {
@@ -129,11 +139,25 @@ export class CloudflareDnsClient {
         proxied: false,
       }),
     });
-    const body = (await resp.json()) as { success: boolean; result?: CloudflareDnsRecord; errors?: unknown };
-    if (!body.success || !body.result) {
-      throw new Error(`Cloudflare DNS createTxt failed: ${JSON.stringify(body.errors ?? body)}`);
+    const body = (await resp.json()) as {
+      success: boolean;
+      result?: CloudflareDnsRecord;
+      errors?: Array<{ code?: number; message?: string }>;
+    };
+    if (body.success && body.result) return body.result;
+    // Idempotency. Cloudflare error 81058 = "An identical record already
+    // exists". For ACME DNS-01 the only invariant that matters is that a TXT at
+    // `name` carrying `value` is PRESENT — which, on an 81058, it already is. A
+    // daemon restart or an issuance retry (which re-publishes the same challenge
+    // value before the prior record is swept) would otherwise wedge issuance
+    // forever on this error. Resolve to the existing record so the caller can
+    // still track it (and delete it on cleanup) instead of throwing.
+    const alreadyExists = (body.errors ?? []).some((e) => e?.code === 81058);
+    if (alreadyExists) {
+      const existing = (await this.list(opts.name, "TXT")).find((r) => r.content === opts.value);
+      if (existing) return existing;
     }
-    return body.result;
+    throw new Error(`Cloudflare DNS createTxt failed: ${JSON.stringify(body.errors ?? body)}`);
   }
 
   /** Look up a single record by its CF record id. Returns null on 404. */

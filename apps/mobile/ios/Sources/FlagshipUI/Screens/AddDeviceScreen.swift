@@ -62,8 +62,10 @@ public struct AddDeviceScreen: View {
         switch vm.phase {
         case .waitingForDevice(let qrUrl):
             qrCard(c, qrUrl: qrUrl, waiting: true, matchCode: nil)
+            promoteCard(c)
         case .confirmMatch(let qrUrl, let matchCode, let gateExpired):
             qrCard(c, qrUrl: qrUrl, waiting: false, matchCode: matchCode)
+            promoteCard(c)
             confirmCard(c, matchCode: matchCode, gateExpired: gateExpired)
         case .admitting:
             statusCard(c, system: "lock.shield", title: "Sharing your account key…", detail: "Hold on — sending the keys securely to the new device.")
@@ -76,6 +78,37 @@ public struct AddDeviceScreen: View {
         case .invalidated(let msg):
             statusCard(c, system: "eye.slash", title: "Pairing cancelled", detail: msg)
             FSSecondaryButton("Start again", block: true) { Task { await vm.start() } }
+        }
+    }
+
+    // MARK: - D-4 promote-at-add toggle (assurance-gated)
+
+    /// "Also make this device an admin" — default OFF, shown ONLY here (the
+    /// synchronous, admin-initiated, SAS ceremony) and ONLY when THIS device
+    /// holds the master root. A hard warning spells out the blast radius.
+    @ViewBuilder
+    private func promoteCard(_ c: FSColors) -> some View {
+        if vm.canPromoteToAdmin {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Toggle(isOn: Binding(
+                        get: { vm.promoteNewDeviceToAdmin },
+                        set: { vm.promoteNewDeviceToAdmin = $0 }
+                    )) {
+                        HStack(spacing: FS.space.s2) {
+                            Image(systemName: "key.horizontal.fill")
+                                .foregroundColor(vm.promoteNewDeviceToAdmin ? c.danger : c.primary)
+                            Text("Also make this device an admin")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(c.text)
+                        }
+                    }
+                    .accessibilityIdentifier("add-device-promote-admin-toggle")
+                    Text("Off by default. If on, this device will be able to wipe, transfer, or decommission your cloud — the same powers as your own device. Only turn this on for a device you fully control or a person you completely trust.")
+                        .font(FS.font.caption())
+                        .foregroundColor(vm.promoteNewDeviceToAdmin ? c.danger : c.textMuted)
+                }
+            }
         }
     }
 

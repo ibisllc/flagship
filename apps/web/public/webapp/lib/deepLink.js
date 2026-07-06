@@ -12,8 +12,59 @@
 import { parseViewQuery, clearViewQuery } from "./router.js";
 import { humanError } from "./humanError.js";
 import { toast } from "./toast.js";
+import { transferLinkFromLocation } from "./serverTransfer.js";
+
+/** Strip the transfer `o=` param from the URL bar after we've ingested it, so
+ *  a reload / re-dispatch can't re-open the claim sheet. Best-effort. */
+function clearTransferQuery() {
+  try {
+    const u = new URL(window.location.href);
+    if (u.searchParams.has("o")) {
+      u.searchParams.delete("o");
+      window.history.replaceState({}, "", u.toString());
+    }
+  } catch { /* old browsers — ignore */ }
+}
 
 export async function dispatchInitialView() {
+  // Take-over deep link: a `/transfer?o=<b64url>` universal link (a phone
+  // Camera opening the offer in the browser, or an in-app deep link) routes
+  // straight into the acquirer claim view. The offer is verified (signature +
+  // expiry) inside the claim view BEFORE any severe confirm / claim. Runs
+  // before the normal ?view dispatch; only fires when this load carried a
+  // /transfer link (else null → fall through).
+  try {
+    const offer = transferLinkFromLocation();
+    if (offer) {
+      clearTransferQuery();
+      const { enterTransferClaim } = await import("../views/transfer-claim.js");
+      await enterTransferClaim(offer).catch((e) => {
+        // A user-cancelled claim dialog is not an error.
+        if (e?.code !== "cancelled") throw e;
+      });
+      return;
+    }
+  } catch (e) {
+    console.error(e);
+    toast(humanError(e), "err");
+  }
+
+  // Service-access friend deep-link: if this load was a /invite#<secret>
+  // landing that detoured through bootstrap/unlock/PIN/recovery to get the
+  // friend's key, resume the redeem now instead of the normal dispatch
+  // (docs/service-access-gating.md). Best-effort + non-fatal.
+  try {
+    const { hasPendingInviteRedeem, resumePendingInviteRedeem } = await import(
+      "../views/invite-redeem.js"
+    );
+    if (hasPendingInviteRedeem()) {
+      await resumePendingInviteRedeem();
+      return;
+    }
+  } catch {
+    /* invite-redeem not loaded / no pending redeem — fall through */
+  }
+
   const q = parseViewQuery();
   clearViewQuery();
   if (!q?.view) {

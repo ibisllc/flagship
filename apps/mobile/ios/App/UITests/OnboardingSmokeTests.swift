@@ -29,12 +29,13 @@ final class OnboardingSmokeTests: XCTestCase {
         XCTAssertTrue(create.waitForExistence(timeout: 5))
         create.tap()
 
-        // 2. ChooseUsername
-        let usernameField = app.textFields["harry"]
-        XCTAssertTrue(usernameField.waitForExistence(timeout: 5))
-        usernameField.tap()
-        usernameField.typeText("harry")
-        app.buttons["Continue"].tap()
+        // 2. SuggestUsername — accept the auto-suggested random handle (the
+        //    mock client suggests one instantly; there's no typed field now).
+        let acctContinue = app.buttons["Continue"]
+        XCTAssertTrue(acctContinue.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: acctContinue)
+        waitForExpectations(timeout: 5)
+        acctContinue.tap()
 
         // 3. CreateServer — fill name, Continue to the QR step.
         let nameField = app.textFields.matching(identifier: "cs-name-field").firstMatch
@@ -64,10 +65,11 @@ final class OnboardingSmokeTests: XCTestCase {
         app.launch()
 
         app.buttons["Create your account"].tap()
-        let user = app.textFields["harry"]
-        XCTAssertTrue(user.waitForExistence(timeout: 5))
-        user.tap(); user.typeText("harry")
-        app.buttons["Continue"].tap()
+        let cont = app.buttons["Continue"]
+        XCTAssertTrue(cont.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: cont)
+        waitForExpectations(timeout: 5)
+        cont.tap()
 
         let nameField = app.textFields.matching(identifier: "cs-name-field").firstMatch
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))

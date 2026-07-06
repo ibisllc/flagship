@@ -88,8 +88,15 @@ export const defaultWebSocketFactory: WebSocketFactory = Object.assign(
 export interface TunnelClientOptions {
   /** ws:// or wss:// URL of the control-plane tunnel hub. */
   hubUrl: string;
-  /** Pod's STK keypair (signs the HELLO envelope). */
-  signingKey: Keypair;
+  /**
+   * Signs the HELLO envelope's canonical bytes with the pod's STK. Prefer the
+   * closure form: the internet-facing tunnel client then never holds the box
+   * identity seed — it holds only "sign this" (custodian-backed in production).
+   * `signingKey` (a raw Keypair) is the legacy form, kept for callers (e.g. the
+   * hub e2e harness) that still hand over a keypair. Exactly one is required.
+   */
+  sign?: (msg: Bytes) => Bytes;
+  signingKey?: Keypair;
   /**
    * Source of fresh entitlement bundles. Called every HELLO so the
    * pod can pick up rotated certs on the fly. The serverId for HELLO
@@ -225,7 +232,11 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
       nonce,
       issuedAt,
     };
-    const signature = signTunnelHelloV2(envelope, opts.signingKey);
+    // signTunnelHelloV2 accepts a Keypair OR a sign(msg) closure (MsgSigner),
+    // so either option form yields byte-identical signatures.
+    const signer = opts.sign ?? opts.signingKey;
+    if (!signer) throw new Error("tunnel client requires `sign` or `signingKey`");
+    const signature = signTunnelHelloV2(envelope, signer);
     const payload = JSON.stringify({
       version: 2,
       serverId: bundle.rootEntitlement.podCanonical,
@@ -591,7 +602,8 @@ export function superviseTunnelClient(
     try {
       client = startClient({
         hubUrl: opts.hubUrl,
-        signingKey: opts.signingKey,
+        ...(opts.sign ? { sign: opts.sign } : {}),
+        ...(opts.signingKey ? { signingKey: opts.signingKey } : {}),
         getEntitlements: opts.getEntitlements,
         resolveBackend: opts.resolveBackend,
         onDomainGranted: opts.onDomainGranted,

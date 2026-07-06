@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { boxSigner, swkOps } from "./helpers/keyCustody.js";
+import type { SwkOps } from "../src/keyCustodian.js";
 import { ed, signInstallService, type Keypair } from "@flagship/protocol";
 import {
   decideAccess,
@@ -18,10 +20,10 @@ function makeKey(): Keypair {
   return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
 }
 
-function fakeSwk(): Uint8Array {
+function fakeSwk(): SwkOps {
   const swk = new Uint8Array(32);
   crypto.getRandomValues(swk);
-  return swk;
+  return swkOps(swk);
 }
 
 const NOOP_CMD: CommandRunner = {
@@ -136,7 +138,7 @@ describe("handleAppRequest — full flow", () => {
     const { app } = await makeApp({ publicRoutes: [] });
     let forwardCalled = false;
     const r = await handleAppRequest(app, fakeReq("/secret"), {
-      injectorKey: makeKey(),
+      injector: boxSigner(makeKey()),
       forward: async () => {
         forwardCalled = true;
         return { status: 200, body: "leaked" };
@@ -158,7 +160,7 @@ describe("handleAppRequest — full flow", () => {
         cookie: "session=abc",
       }),
       {
-        injectorKey: makeKey(),
+        injector: boxSigner(makeKey()),
         forward: async (host, port, req) => {
           captured = { headers: req.headers, path: req.path };
           expect(host).toBe("127.0.0.1");
@@ -184,7 +186,7 @@ describe("handleAppRequest — full flow", () => {
     const { app } = await makeApp({ publicRoutes: ["/.flagship/runtime-pubkey"] });
     const key = makeKey();
     const r = await handleAppRequest(app, fakeReq("/.flagship/runtime-pubkey"), {
-      injectorKey: key,
+      injector: boxSigner(key),
       forward: async () => {
         throw new Error("forward should not be called");
       },
@@ -203,7 +205,7 @@ describe("handleAppRequest — full flow", () => {
     const injector = makeKey();
     let captured: Record<string, string> = {};
     await handleAppRequest(app, fakeReq("/"), {
-      injectorKey: injector,
+      injector: boxSigner(injector),
       forward: async (_h, _p, req) => {
         captured = req.headers;
         return { status: 200, body: "" };
@@ -234,7 +236,7 @@ describe("handleAppRequest — full flow", () => {
       },
     } as Pick<import("../src/updateServer.js").UpdateServer, "handle">;
     const r = await handleAppRequest(app, fakeReq("/.flagship/update"), {
-      injectorKey: injector,
+      injector: boxSigner(injector),
       forward: async () => {
         containerForwarded = true;
         return { status: 500, body: "should not happen" };
@@ -252,7 +254,7 @@ describe("handleAppRequest — full flow", () => {
     const injector = makeKey();
     let containerForwarded = false;
     const r = await handleAppRequest(app, fakeReq("/.flagship/update"), {
-      injectorKey: injector,
+      injector: boxSigner(injector),
       forward: async () => {
         containerForwarded = true;
         return { status: 200, body: "container said hi" };
@@ -261,5 +263,36 @@ describe("handleAppRequest — full flow", () => {
     });
     expect(containerForwarded).toBe(true);
     expect(String(r.body)).toBe("container said hi");
+  });
+});
+
+describe("defaultForward — hop-by-hop header stripping", () => {
+  it("drops the container's content-length (the runtime writes its own; a duplicate makes fetch clients reject every proxied response)", async () => {
+    const { createServer } = await import("node:http");
+    const { defaultForward } = await import("../src/serviceProxy.js");
+    const srv = createServer((_req, res) => {
+      res.setHeader("Content-Length", "2");
+      res.setHeader("Content-Type", "text/plain");
+      res.setHeader("Connection", "close");
+      res.end("ok");
+    });
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+    const port = (srv.address() as { port: number }).port;
+    try {
+      const res = await defaultForward("127.0.0.1", port, {
+        method: "GET",
+        path: "/",
+        headers: {},
+        body: Buffer.alloc(0),
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.toString()).toBe("ok");
+      expect(res.headers["content-length"]).toBeUndefined();
+      expect(res.headers["transfer-encoding"]).toBeUndefined();
+      expect(res.headers["connection"]).toBeUndefined();
+      expect(res.headers["content-type"]).toContain("text/plain");
+    } finally {
+      srv.close();
+    }
   });
 });

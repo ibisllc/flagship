@@ -1,9 +1,5 @@
-import {
-  openLlmPayload,
-  sealLlmPayload,
-  type Bytes,
-  type SealedBlob,
-} from "@flagship/protocol";
+import { type SealedBlob } from "@flagship/protocol";
+import type { SwkOps } from "./keyCustodian.js";
 import {
   assertSafeProviderBaseUrl,
   defaultRegistry,
@@ -24,7 +20,7 @@ import {
 } from "@flagship/llm-providers";
 
 export interface LlmHarnessOptions {
-  swk: Bytes;
+  swk: SwkOps;
   registry?: ProviderRegistry;
   /**
    * Streaming-provider registry for `chatStream`. Defaults to the
@@ -57,6 +53,16 @@ export interface LlmCredential {
   provider: string;
   apiKey: string;
   baseUrl?: string;
+  /**
+   * Provenance. `"promo"` marks a Flagship-minted free-credits token
+   * (scoped `.com` token → our blessed inference endpoint). The harness
+   * pins a promo credential's SSRF guard to its OWN baseUrl host, so even
+   * if something downstream tried to redirect the call, the scoped token
+   * can only ever be presented to the blessed RunPod host — never an
+   * attacker proxy or an internal service. Absent / `"byok"` ⇒ the
+   * owner's key keeps the strict default guard (no host allowlist).
+   */
+  source?: "byok" | "promo";
 }
 
 /** Outcome of a `chatStream` call (no model text — that flows via onEvent). */
@@ -92,9 +98,11 @@ interface SealedError {
 export class LlmHarness {
   private readonly registry: ProviderRegistry;
   private readonly streamingRegistry: StreamingProviderRegistry;
-  private readonly fetchImpl: FetchLike;
-  private readonly streamingFetchImpl: StreamingFetchLike;
-  private readonly swk: Bytes;
+  private readonly injectedFetch?: FetchLike;
+  private readonly injectedStreamingFetch?: StreamingFetchLike;
+  private readonly defaultFetch: FetchLike;
+  private readonly defaultStreamingFetch: StreamingFetchLike;
+  private readonly swk: SwkOps;
   private readonly baseUrlGuard?: BaseUrlGuardOptions;
 
   constructor(opts: LlmHarnessOptions) {
@@ -102,14 +110,61 @@ export class LlmHarness {
     this.registry = opts.registry ?? defaultRegistry;
     this.streamingRegistry = opts.streamingRegistry ?? defaultStreamingRegistry;
     this.baseUrlGuard = opts.baseUrlGuard;
-    // Default both fetchers to the SSRF-guarded production fetch bound to
-    // the SAME posture as the up-front baseUrl string check, so the actual
-    // connect (and every redirect hop) re-resolves + re-classifies the host
-    // — closing the redirect-bypass and DNS-record bypass. The string guard
-    // above stays as a fast pre-check. Tests inject their own impls.
-    this.fetchImpl = opts.fetchImpl ?? guardedFetch({ guard: this.baseUrlGuard });
-    this.streamingFetchImpl =
-      opts.streamingFetchImpl ?? guardedStreamingFetch({ guard: this.baseUrlGuard });
+    // Tests inject their own fetchers; we honor them verbatim so a test
+    // controls the wire. Production leaves them unset and each call builds
+    // an SSRF-guarded fetch bound to the effective per-credential posture
+    // (`guardFor`), so the actual connect + every redirect hop re-resolves
+    // + re-classifies the host under the RIGHT guard — closing the
+    // redirect / DNS-record bypass AND enforcing the promo host-pin.
+    this.injectedFetch = opts.fetchImpl;
+    this.injectedStreamingFetch = opts.streamingFetchImpl;
+    this.defaultFetch = guardedFetch({ guard: this.baseUrlGuard });
+    this.defaultStreamingFetch = guardedStreamingFetch({ guard: this.baseUrlGuard });
+  }
+
+  /** The blocking fetch for a credential — injected impl, else a guarded
+   *  fetch bound to this credential's effective guard (promo host-pin). */
+  private fetchForCredential(credential: LlmCredential): FetchLike {
+    if (this.injectedFetch) return this.injectedFetch;
+    if (credential.source === "promo") return guardedFetch({ guard: this.guardFor(credential) });
+    return this.defaultFetch;
+  }
+
+  private streamingFetchForCredential(credential: LlmCredential): StreamingFetchLike {
+    if (this.injectedStreamingFetch) return this.injectedStreamingFetch;
+    if (credential.source === "promo") {
+      return guardedStreamingFetch({ guard: this.guardFor(credential) });
+    }
+    return this.defaultStreamingFetch;
+  }
+
+  /**
+   * The effective SSRF posture for one credential. A promo credential is
+   * PINNED to its own baseUrl host (the blessed inference endpoint) via
+   * `exclusiveHost`: the scoped token can ONLY ever be sent there — every
+   * other host, and any redirect to one, is rejected.
+   *
+   * We deliberately use `exclusiveHost` and NOT `hostAllowlist`: the
+   * allowlist is a permit-list that BYPASSES the private/loopback block
+   * for the listed host (it returns before IP classification), which
+   * would let a misconfigured promo baseUrl reach an internal address.
+   * `exclusiveHost` restricts without bypassing, so the strict public-
+   * only classification (incl. the unconditional metadata block + the
+   * https-only scheme rule, since allowPrivate/allowHttp stay off) still
+   * runs. A BYOK credential keeps the harness default (no pin).
+   */
+  private guardFor(credential: LlmCredential): BaseUrlGuardOptions | undefined {
+    if (credential.source !== "promo") return this.baseUrlGuard;
+    if (typeof credential.baseUrl !== "string" || credential.baseUrl.length === 0) {
+      return this.baseUrlGuard;
+    }
+    let host: string;
+    try {
+      host = new URL(credential.baseUrl).hostname;
+    } catch {
+      return this.baseUrlGuard;
+    }
+    return { ...this.baseUrlGuard, exclusiveHost: host };
   }
 
   listProviders(): string[] {
@@ -150,7 +205,7 @@ export class LlmHarness {
     const cfg: ProviderConfig = { apiKey: credential.apiKey };
     if (typeof credential.baseUrl === "string" && credential.baseUrl.length > 0) {
       try {
-        assertSafeProviderBaseUrl(credential.baseUrl, this.baseUrlGuard);
+        assertSafeProviderBaseUrl(credential.baseUrl, this.guardFor(credential));
       } catch (e) {
         const message =
           e instanceof UnsafeBaseUrlError ? e.message : "invalid baseUrl";
@@ -168,7 +223,7 @@ export class LlmHarness {
         if (e.kind === "error" && !sawError) sawError = { message: e.message };
         onEvent(e);
       },
-      this.streamingFetchImpl,
+      this.streamingFetchForCredential(credential),
     );
     if (sawError) {
       return { ok: false, reason: "provider-error", message: (sawError as { message: string }).message };
@@ -191,13 +246,15 @@ export class LlmHarness {
       throw new Error("unknown provider");
     }
     if (typeof credential.baseUrl === "string" && credential.baseUrl.length > 0) {
-      assertSafeProviderBaseUrl(credential.baseUrl, this.baseUrlGuard);
+      assertSafeProviderBaseUrl(credential.baseUrl, this.guardFor(credential));
     }
     const cfg: ProviderConfig = { apiKey: credential.apiKey };
     if (typeof credential.baseUrl === "string" && credential.baseUrl.length > 0) {
       cfg.baseUrl = credential.baseUrl;
     }
-    return this.registry.get(credential.provider).chat(request, cfg, this.fetchImpl);
+    return this.registry
+      .get(credential.provider)
+      .chat(request, cfg, this.fetchForCredential(credential));
   }
 
   /**
@@ -208,7 +265,7 @@ export class LlmHarness {
   async chat(sealed: SealedBlob): Promise<SealedBlob> {
     let opened: Uint8Array;
     try {
-      opened = openLlmPayload(sealed, this.swk);
+      opened = this.swk.openWithSwk(sealed);
     } catch {
       return this.sealError({ ok: false, message: "decrypt failed" });
     }
@@ -252,10 +309,10 @@ export class LlmHarness {
       const response = await this.registry.get(req.provider).chat(
         req.request,
         { apiKey: req.apiKey, baseUrl: req.baseUrl },
-        this.fetchImpl,
+        this.injectedFetch ?? this.defaultFetch,
       );
       const sealedResp: SealedResponse = { ok: true, response };
-      return sealLlmPayload(new TextEncoder().encode(JSON.stringify(sealedResp)), this.swk);
+      return this.swk.sealWithSwk(new TextEncoder().encode(JSON.stringify(sealedResp)));
     } catch (e) {
       if (e instanceof ProviderError) {
         return this.sealError({
@@ -274,7 +331,7 @@ export class LlmHarness {
   }
 
   private sealError(err: SealedError): SealedBlob {
-    return sealLlmPayload(new TextEncoder().encode(JSON.stringify(err)), this.swk);
+    return this.swk.sealWithSwk(new TextEncoder().encode(JSON.stringify(err)));
   }
 }
 

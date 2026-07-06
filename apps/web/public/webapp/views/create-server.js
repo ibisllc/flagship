@@ -22,9 +22,11 @@
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
 import { getSession, ensureUsername } from "../lib/state.js";
-import { bytesToHex, signWithIrk } from "../keystore.js";
+import { bytesToHex, signWithIrk, deriveSwkFromSeed } from "../keystore.js";
+import { ensureAdminRoot, sensitiveSigner } from "../lib/adminRoot.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 import {
   canonicalInstallBlob,
   deleteDraft,
@@ -33,6 +35,11 @@ import {
   saveDraft,
 } from "../lib/buildDraft.js";
 import { releaseServerName, serverDomainOf } from "../lib/releaseServer.js";
+import { controlApex, controlHost, serverFqdn } from "../lib/apex.js";
+import { buildPairingOrder } from "../lib/bootApproval.js";
+import { markSwkDepositPending, clearSwkDeposit } from "../lib/swkDeposit.js";
+import { markPairingDepositPending, clearPairingDeposit } from "../lib/pairingDeposit.js";
+import { setSessionToken } from "../lib/api.js";
 
 registerView("view-create-server");
 
@@ -189,7 +196,7 @@ function renderDraftList(drafts) {
       </div>
       <div class="row">
         <span class="label">updated</span>
-        <span class="value">${escapeHtml(new Date(d.updatedAt).toLocaleString())}</span>
+        <span class="value">${escapeHtml(formatWhen(d.updatedAt))}</span>
       </div>
       <div class="row-2 mt-2">
         <button class="secondary" data-action="resume" data-id="${escapeHtml(d.id)}">Resume</button>
@@ -236,7 +243,7 @@ function renderDraftList(drafts) {
  */
 async function cancelServer(id) {
   const d = await getDraft(id);
-  if (!d) return toast("draft not found", "err");
+  if (!d) return toast("Draft not found", "err");
   const session = getSession();
   // P14 Phase 2 — companion profiles route the cancel through the
   // owner; they don't need an unlocked session to QUEUE the request.
@@ -245,11 +252,11 @@ async function cancelServer(id) {
   const { isCompanionProfile } = await import("../lib/companionGuard.js");
   const asCompanion = isCompanionProfile();
   if (!asCompanion && (!session.umk || !session.irk)) {
-    return toast("unlock the webapp first", "err");
+    return toast("Unlock the webapp first", "err");
   }
   const username = session.username
     || (await ensureUsername().catch(() => null));
-  if (!username) return toast("no account on this device", "err");
+  if (!username) return toast("No account on this device", "err");
 
   const { inlineConfirm } = await import("../lib/modal.js");
   const confirmed = await inlineConfirm({
@@ -265,7 +272,8 @@ async function cancelServer(id) {
   const serverDomain = serverDomainOf(d.serverName, username);
   try {
     const out = await releaseServerName(
-      { username, serverDomain, umk: session.umk, signWithIrk },
+      // Slice D: release-server-name is a SENSITIVE order (admin root when present).
+      { username, serverDomain, umk: session.umk, signWithIrk: sensitiveSigner() },
     );
     if (out && out.pending) {
       // Companion path — open the polling sheet until the owner resolves.
@@ -276,7 +284,7 @@ async function cancelServer(id) {
       if (result.outcome === "approved") {
         if (d.code) await revokeAuthCodeBestEffort(d.code, username).catch(() => {});
         await deleteDraft(id);
-        toast(`server "${d.serverName}" cancelled — the name is free again`, "ok");
+        toast(`Server "${d.serverName}" cancelled — the name is free again`, "ok");
         await refreshDrafts();
         return;
       }
@@ -291,10 +299,10 @@ async function cancelServer(id) {
       await revokeAuthCodeBestEffort(d.code, username).catch(() => {});
     }
     await deleteDraft(id);
-    toast(`server "${d.serverName}" cancelled — the name is free again`, "ok");
+    toast(`Server "${d.serverName}" cancelled — the name is free again`, "ok");
     await refreshDrafts();
   } catch (e) {
-    toast(`cancel failed: ${e.message ?? e}`, "err");
+    toast(`Cancel failed: ${e.message ?? e}`, "err");
   }
 }
 
@@ -307,7 +315,7 @@ async function revokeAuthCodeBestEffort(serial, username) {
     canonical(["flagship/auth-code-revoke/v1", serial, username, issuedAt]),
   );
   const resp = await fetch(
-    `https://flagshipserver.com/api/auth-code/${encodeURIComponent(serial)}/revoke`,
+    `${controlApex()}/api/auth-code/${encodeURIComponent(serial)}/revoke`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -336,12 +344,12 @@ async function refreshDrafts() {
 
 async function resumeDraft(id) {
   const d = await getDraft(id);
-  if (!d) return toast("draft not found", "err");
+  if (!d) return toast("Draft not found", "err");
   activeDraftId = id;
   $("cs-server-name").value = d.serverName || "";
   $("cs-backup-policy").value = d.backupPolicy || "phone-only";
   restoreDiskEncryption(d.diskEncryption);
-  toast(`resumed ${d.serverName}`);
+  toast(`Resumed ${d.serverName}`);
 }
 
 function readInputs() {
@@ -366,7 +374,60 @@ function readInputs() {
   // InstallBlob so a relay can't downgrade an encrypted box to plaintext.
   // Default "luks" (encrypted); the user opts OUT explicitly.
   const diskEncryption = readDiskEncryption();
-  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, diskEncryption };
+  // Secret-free recipe: embed-secrets is reachable ONLY under Advanced mode.
+  // Default OFF ⇒ the recipe is secret-free of the SWK + the webapp deposits it
+  // after the box registers. ON (advanced/offline) ⇒ embed `swkHex` in the recipe.
+  const embedSecrets = readEmbedSecrets();
+  // Debug-friendly server: an Advanced-only opt-in. When ON the minter signs an
+  // owner-IRK `flagship/debug-access/v1` grant and embeds it as the recipe's
+  // unsigned `debugGrant` sibling; the box-side gate verifies it under the
+  // config-pinned owner IRK before enabling the console `debug` user. Default OFF
+  // ⇒ no grant ⇒ a production image.
+  const debugFriendly = readDebugFriendly();
+  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, diskEncryption, embedSecrets, debugFriendly };
+}
+
+// Read the embed-secrets choice. Only honored when Advanced mode is on; the
+// checkbox lives inside the (hidden-by-default) advanced section. Absent control
+// or Advanced off ⇒ false (the secret-free default). Exported for the unit test.
+export function readEmbedSecrets() {
+  const adv = $("cs-advanced");
+  const embed = $("cs-embed-secrets");
+  if (!adv || !adv.checked || !embed) return false;
+  return !!embed.checked;
+}
+
+// Read the debug-friendly choice. Gated behind Advanced mode exactly like
+// embed-secrets — absent control or Advanced off ⇒ false (production default).
+// Exported for the unit test.
+export function readDebugFriendly() {
+  const adv = $("cs-advanced");
+  const dbg = $("cs-debug-friendly");
+  if (!adv || !adv.checked || !dbg) return false;
+  return !!dbg.checked;
+}
+
+// Build the recipe's unsigned `debugGrant` sibling: an owner-IRK-signed
+// `flagship/debug-access/v1` grant the box-side gate (server-daemon
+// debugAccessGate.ts) verifies before enabling the console debug user. The
+// signable scope is `serverDomain|sshAuthorizedKey|issuedAt` (sshAuthorizedKey
+// "", issuedAt = now) — no box STK, so it's signable at mint time since the
+// webapp already knows the box's FQDN. Returns the carrier JSON STRING
+// `{grant,signatureHex}`, the SAME shape the iOS/Android minter + the box gate
+// consume. `signWithIrk`/`umk` are injectable for the unit test (mirrors
+// buildSwkDeliveryCarrier).
+export async function buildDebugGrant({
+  serverDomain,
+  issuedAt = Date.now(),
+  signWithIrk: signFn = signWithIrk,
+  umk,
+}) {
+  const grant = { serverDomain, sshAuthorizedKey: "", issuedAt };
+  const canonical = new TextEncoder().encode(
+    ["flagship/debug-access/v1", grant.serverDomain, grant.sshAuthorizedKey, String(grant.issuedAt)].join("|"),
+  );
+  const sig = await signFn(umk, canonical);
+  return JSON.stringify({ grant, signatureHex: bytesToHex(sig) });
 }
 
 // Read the disk-encryption choice from the "Encrypt disk" checkbox. The box
@@ -430,6 +491,21 @@ function enableRecipeDownload(blobBundle) {
   btn.disabled = false;
   btn.textContent = "Download recipe (.json)";
   const recipe = { ...blobBundle.blob, blobSignatureHex: blobBundle.blobSignature };
+  // Secret-free pairing (offline/embed): carry the unsigned plaintext
+  // `pairingOrder` sibling (the owner-IRK-signed `add-paired-session` order) into
+  // the downloaded recipe so the burner writes it to the box's install-blob.json
+  // and the daemon adds the session locally with NO `.com` call. Absent (the
+  // default online path) ⇒ recipe is byte-identical + carries ZERO pairing secret.
+  if (blobBundle.pairingOrder) recipe.pairingOrder = blobBundle.pairingOrder;
+  // SWK provisioning: carry the unsigned `swkHex` sibling into the downloaded
+  // recipe so the burner writes it to the box's install-blob.json (the daemon
+  // persists it at first boot). Absent ⇒ recipe is byte-identical.
+  if (blobBundle.swkHex) recipe.swkHex = blobBundle.swkHex;
+  // Debug-friendly server: carry the unsigned `debugGrant` carrier (a JSON
+  // string `{grant,signatureHex}`) into the downloaded recipe so the burner
+  // writes it to install-blob.json and the box-side gate can verify it. Absent
+  // (the production default) ⇒ recipe is byte-identical + carries no grant.
+  if (blobBundle.debugGrant) recipe.debugGrant = blobBundle.debugGrant;
   btn.onclick = () => {
     const json = JSON.stringify(recipe, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -455,7 +531,7 @@ async function handleSaveDraft() {
       status: "draft",
     });
     activeDraftId = saved.id;
-    toast("draft saved");
+    toast("Draft saved");
     await refreshDrafts();
   } catch (e) {
     console.error(e);
@@ -467,7 +543,7 @@ async function handleSaveDraft() {
 async function handleDeliverNow() {
   const session = getSession();
   if (!session.umk || !session.irk) {
-    return toast("unlock the webapp first", "err");
+    return toast("Unlock the webapp first", "err");
   }
   let inputs;
   try { inputs = readInputs(); }
@@ -529,13 +605,31 @@ function setStatus(kind, text) {
   el.textContent = text;
 }
 
-async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
+// Exported so the GYM-ONLY `window.__gymCreate` seam (app.js, gym branch only)
+// can drive the EXACT same compose+sign path the real "Deliver to homepage"
+// button uses — the app is the author of the signed recipe. No behaviour change
+// for the normal flow; this is purely making the genuine composer reusable by
+// the live-e2e harness (faithful "create via the app").
+export async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
   const { serverName, recipeTtlMs } = inputs;
   // §7a.1: only "approve" is carried on the wire; "auto" is the absent-field
   // default so legacy recipes stay byte-identical (see canonicalInstallBlob).
   const bootUnlockMode = inputs.bootUnlockMode === "approve" ? "approve" : "auto";
   const ttlMs = clampRecipeTtlMs(recipeTtlMs);
   const irkPubHex = bytesToHex(session.irk.publicKey);
+
+  // Slice D (docs/device-admin-tier-spec.md §1.3 / §8.1) — ensure this device
+  // holds the account's admin master root (idempotent; mints one only if
+  // absent, e.g. a legacy direct-entry create that skipped open-account). Its
+  // pubkey is published with the claim AND pinned INSIDE the recipe AuthCode so
+  // the fresh box pins it. Best-effort: a mint failure leaves adminRootPubHex
+  // null → a legacy no-admin-root recipe (byte-identical to pre-D).
+  let adminRootPubHex = null;
+  try {
+    adminRootPubHex = await ensureAdminRoot(session);
+  } catch {
+    adminRootPubHex = null;
+  }
 
   // 1. Claim username (idempotent) — Phase 2: SKIPPED when the account
   // was already opened (the standalone claim ran at open-account time).
@@ -547,12 +641,16 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
     const claimIssuedAt = Date.now();
     const claimMsg = canonical([TAG_CLAIM, username, irkPubHex, claimIssuedAt]);
     const claimSig = await signWithIrk(session.umk, claimMsg);
-    const claimResp = await fetch("/api/username/claim", {
+    // Absolute control-plane URL — a relative POST hits the webapp origin
+    // (web.<apex>, GET/HEAD-only assets) and 405s. Matches the sibling
+    // controlApex() calls in this file (auth-code revoke, registrationUrl).
+    const claimResp = await fetch(`${controlApex()}/api/username/claim`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         request: { username, irkPub: irkPubHex, issuedAt: claimIssuedAt },
         signature: bytesToHex(claimSig),
+        ...(adminRootPubHex ? { adminRootPub: adminRootPubHex } : {}),
       }),
     });
     if (!claimResp.ok && claimResp.status !== 409) {
@@ -568,19 +666,30 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
     serial: genSerial(),
     username,
     serverName,
-    serverDomain: `${serverName}.${username}.flagship.services`,
+    serverDomain: serverFqdn(serverName, username),
     delegatedPubKey: delegated.publicKey,
     userPubKey: session.irk.publicKey,
     issuedAt: acIssuedAt,
     expiresAt: acExpiresAt,
   };
-  const acMsg = canonical([
+  // Slice D — pin the admin master root INSIDE the AuthCode (decision D-1). It
+  // is appended as a signature-covered `ar=<hex>` field, byte-identical to
+  // @flagship/protocol canonicalAuthCode: an AuthCode WITHOUT it canonicalises
+  // exactly as before, so legacy (no-admin-root) recipes are unchanged. The IRK
+  // still signs the AuthCode (membership); the admin root only RIDES it, so a
+  // compromised network/.com cannot swap the box's admin anchor in transit.
+  const acParts = [
     TAG_AUTH_CODE, code.version, code.serial, code.username, code.serverName,
     code.serverDomain, bytesToHex(code.delegatedPubKey), bytesToHex(code.userPubKey),
     code.issuedAt, code.expiresAt,
-  ]);
+  ];
+  if (adminRootPubHex) acParts.push(`ar=${adminRootPubHex}`);
+  const acMsg = canonical(acParts);
   const acSig = await signWithIrk(session.umk, acMsg);
-  const issueResp = await fetch("/api/auth-code/issue", {
+  // Absolute control-plane URL — a relative POST hits the webapp origin
+  // (web.<apex>, GET/HEAD-only assets) and 405s. Matches the claim call above
+  // and the sibling controlApex() calls in this file.
+  const issueResp = await fetch(`${controlApex()}/api/auth-code/issue`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -590,6 +699,7 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
         delegatedPubKey: bytesToHex(code.delegatedPubKey),
         userPubKey: bytesToHex(code.userPubKey),
         issuedAt: code.issuedAt, expiresAt: code.expiresAt,
+        ...(adminRootPubHex ? { adminRootPubKey: adminRootPubHex } : {}),
       },
       signature: bytesToHex(acSig),
     }),
@@ -602,7 +712,9 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
     TAG_RCK_REGISTER, username, code.serverDomain, bytesToHex(rck.publicKey), rckRegIssuedAt,
   ]);
   const rckRegSig = await signWithIrk(session.umk, rckRegMsg);
-  const rckResp = await fetch("/api/routing/register-rck", {
+  // Absolute control-plane URL — same reason as the auth-code/issue call above:
+  // a relative POST hits the GET/HEAD-only webapp origin and 405s.
+  const rckResp = await fetch(`${controlApex()}/api/routing/register-rck`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -621,7 +733,7 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
     username,
     serverName,
     phoneDelegatedPubKey: delegated.publicKey,
-    registrationUrl: "https://flagshipserver.com/api/server/register",
+    registrationUrl: `${controlApex()}/api/server/register`,
     authCode: code,
     authCodeUserSignature: acSig,
     installerGitRef: "main",
@@ -652,6 +764,11 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
       delegatedPubKey: bytesToHex(code.delegatedPubKey),
       userPubKey: bytesToHex(code.userPubKey),
       issuedAt: code.issuedAt, expiresAt: code.expiresAt,
+      // Slice D — carry the pinned admin root in the downloaded recipe so the
+      // burner writes it to the box's install-blob (box pins it as
+      // ServerConfig.adminRootPub). Present iff the account has an admin root;
+      // covered by authCodeUserSignature via the `ar=` canonical field above.
+      ...(adminRootPubHex ? { adminRootPubKey: adminRootPubHex } : {}),
     },
     authCodeUserSignature: bytesToHex(acSig),
     installerGitRef: blob.installerGitRef,
@@ -664,7 +781,51 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
   // downloaded recipe JSON carries exactly what was signed (the burner round-
   // trips it and re-derives the same `de=none` token for box verification).
   if (blob.diskEncryption !== undefined) onWireBlob.diskEncryption = blob.diskEncryption;
-  return { blob: onWireBlob, blobSignature: bytesToHex(blobSig) };
+
+  // Secret-free pairing: build the owner-IRK-signed `add-paired-session` order
+  // at create time (the FIRST recipe carries ZERO pairing secret — no pairing
+  // keypair, no `pairingKeyPrivHex`). Persist its token as this device's session
+  // token so the BFF auths once the box claims the order. Best-effort: a failure
+  // leaves the manual pairing path as the fallback and NEVER blocks creation.
+  let pairingOrderJson;
+  try {
+    const pairing = await buildPairingOrder({ serverDomain: blob.serverDomain });
+    setSessionToken(pairing.token);
+    pairingOrderJson = pairing.pairingOrderJson;
+  } catch (e) {
+    console.warn("create-time pairing order build failed (non-fatal):", e);
+  }
+
+  const bundle = { blob: onWireBlob, blobSignature: bytesToHex(blobSig) };
+  // SWK + pairing provisioning (secret-free recipe, docs/recipe-delivery-and-remote-install.md).
+  //   embed-secrets ON (advanced/offline): bake BOTH the box's deterministic SWK
+  //     and the plaintext `pairingOrder` into the recipe as UNSIGNED siblings;
+  //     the box self-configures + self-pairs fully offline, NO `.com` deposit.
+  //   embed-secrets OFF (the DEFAULT): the recipe stays secret-free; stash the
+  //     SWK + the pairing order so the Home reconcile seals + deposits each once
+  //     the box registers (one delivery then, not now).
+  if (inputs.embedSecrets) {
+    bundle.swkHex = await deriveSwkFromSeed(session.umk, blob.serverDomain);
+    clearSwkDeposit(blob.serverDomain);
+    if (pairingOrderJson) bundle.pairingOrder = pairingOrderJson;
+    clearPairingDeposit(blob.serverDomain);
+  } else {
+    markSwkDepositPending(blob.serverDomain);
+    if (pairingOrderJson) markPairingDepositPending(blob.serverDomain, pairingOrderJson);
+  }
+  // Debug-friendly server (Advanced opt-in): sign + embed the owner-IRK
+  // debug-access grant as the recipe's unsigned `debugGrant` sibling. Absent
+  // (the production default) ⇒ the recipe carries no grant ⇒ the box stays a
+  // production image. The grant is consent-as-crypto: the box only enables the
+  // console debug user if this verifies under its config-pinned owner IRK.
+  if (inputs.debugFriendly) {
+    bundle.debugGrant = await buildDebugGrant({
+      serverDomain: blob.serverDomain,
+      signWithIrk,
+      umk: session.umk,
+    });
+  }
+  return bundle;
 }
 
 async function deliverThroughRelay({ sid, pkB }, blobBundle) {
@@ -680,7 +841,7 @@ async function deliverThroughRelay({ sid, pkB }, blobBundle) {
   // Open WS as phone. We always dial the apex — the webapp lives at
   // web.flagshipserver.com but the relay is on flagshipserver.com.
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  const wsUrl = `${proto}://flagshipserver.com/qr-pipe/${encodeURIComponent(sid)}?role=phone`;
+  const wsUrl = `${proto}://${controlHost()}/qr-pipe/${encodeURIComponent(sid)}?role=phone`;
 
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
@@ -793,8 +954,27 @@ function wireServerNameValidation() {
   input.addEventListener("blur", update);
 }
 
+// Show/hide the Advanced-mode sub-options + reset embed-secrets when Advanced
+// is turned off (so toggling it off can never leave a secret-embedding choice).
+function syncAdvancedVisibility() {
+  const adv = $("cs-advanced");
+  const opts = $("cs-advanced-options");
+  if (!adv || !opts) return;
+  if (adv.checked) {
+    opts.classList.remove("hidden");
+  } else {
+    opts.classList.add("hidden");
+    const embed = $("cs-embed-secrets");
+    if (embed) embed.checked = false;
+    const dbg = $("cs-debug-friendly");
+    if (dbg) dbg.checked = false;
+  }
+}
+
 export function initCreateServerView() {
   wireServerNameValidation();
+  $("cs-advanced")?.addEventListener("change", syncAdvancedVisibility);
+  syncAdvancedVisibility();
   $("cs-save-draft")?.addEventListener("click", () => handleSaveDraft());
   $("cs-deliver")?.addEventListener("click", () => handleDeliverNow().catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   $("cs-open-build")?.addEventListener("click", () => {

@@ -110,7 +110,7 @@ fun InviteIssueScreen(nav: NavController, serviceId: String) {
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            "Invites are bearer share-links. The daemon enforces a 24-hour default TTL. Names you type stay on this device.",
+            "Invites are share-links — anyone with the link can claim access. Your server expires them after 24 hours by default. Names you type stay on this device.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )
@@ -273,14 +273,8 @@ private fun copyToClipboard(ctx: Context, url: String) {
     cm.setPrimaryClip(ClipData.newPlainText("Flagship invite", url))
 }
 
-private fun fmtExpires(ms: Long): String {
-    val fmt = java.text.DateFormat.getDateTimeInstance(
-        java.text.DateFormat.SHORT,
-        java.text.DateFormat.SHORT,
-        java.util.Locale.US,
-    )
-    return fmt.format(java.util.Date(ms))
-}
+private fun fmtExpires(ms: Long): String =
+    com.flagshipserver.app.core.FlagshipDateFormat.format(ms, includeTime = true)
 
 /** Share-URL root for an installed app — the tier-1 canonical URL of THIS
  *  box's instance (`https://<urlLabel>.<server>.<user>.flagship.services`),
@@ -295,4 +289,4 @@ private suspend fun resolveAppShareUrl(
     client: com.flagshipserver.app.api.ScreensClient,
 ): String =
     runCatching { client.appDetail(serviceId).app.url }
-        .getOrElse { "https://$serviceId.flagship.services" }
+        .getOrElse { "https://$serviceId.${com.flagshipserver.app.core.Endpoints.dataApex}" }

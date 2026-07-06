@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -127,6 +128,7 @@ fun AiKeyStepScreen(
                 label = if (showForm) "Hide" else "Use a different key",
                 onClick = { showForm = !showForm },
                 block = true,
+                modifier = Modifier.testTag("build-key-different"),
             )
         }
 
@@ -201,7 +203,14 @@ fun AiKeyEntryForm(
             Spacer(Modifier.height(FS.space.s2))
             Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 AiKeyStore.SUPPORTED_PROVIDERS.forEach { p ->
-                    ProviderPickChip(label = p, selected = p == provider, onClick = { provider = p })
+                    ProviderPickChip(
+                        label = p,
+                        selected = p == provider,
+                        onClick = { provider = p },
+                        // Stable per-provider tag so a UI test can pick e.g.
+                        // "openai" (`ai-key-provider-openai`).
+                        modifier = Modifier.testTag("ai-key-provider-$p"),
+                    )
                 }
             }
 
@@ -211,6 +220,9 @@ fun AiKeyEntryForm(
                 onValueChange = { apiKey = it },
                 label = "API key",
                 placeholder = "sk-…",
+                // Tag the editable field itself (not the Column wrapper) so a UI
+                // test's performTextInput finds a focusable node.
+                fieldTag = "ai-key-field",
             )
             Spacer(Modifier.height(FS.space.s2))
             FSField(
@@ -250,17 +262,23 @@ fun AiKeyEntryForm(
                 onClick = { onSubmit(provider, apiKey, label, baseUrl, save) },
                 enabled = apiKey.isNotBlank(),
                 block = true,
+                modifier = Modifier.testTag("build-key-use"),
             )
         }
     }
 }
 
 @Composable
-private fun ProviderPickChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun ProviderPickChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val bg = if (selected) FS.colors.primary else FS.colors.surfaceSunken
-    val fg = if (selected) Color.White else FS.colors.textMuted
+    val fg = if (selected) FS.colors.onAccent else FS.colors.textMuted
     Box(
-        Modifier
+        modifier
             .clip(RoundedCornerShape(FS.radius.pill))
             .background(bg)
             .clickable(onClick = onClick)
@@ -294,6 +312,7 @@ fun AiKeysManagerScreen(nav: NavController, vm: AiKeysViewModel = viewModel()) {
             "AI keys",
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            modifier = Modifier.testTag("ai-keys-title"),
         )
         Spacer(Modifier.height(FS.space.s2))
         Text(
@@ -360,6 +379,7 @@ fun AiKeysManagerScreen(nav: NavController, vm: AiKeysViewModel = viewModel()) {
                 label = "Add a key",
                 onClick = { showForm = true },
                 block = true,
+                modifier = Modifier.testTag("ai-key-add"),
             )
         }
 

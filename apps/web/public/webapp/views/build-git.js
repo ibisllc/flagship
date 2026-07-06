@@ -5,7 +5,7 @@
 // Every step is recorded in the build journal.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError } from "../lib/api.js";
+import { screensFetch, ScreensError, buildEntryError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { enterVibeCode } from "./vibe-code.js";
@@ -36,7 +36,7 @@ export function enterBuildGit() {
 async function checkRepo() {
   const gitUrl = $("build-git-url").value.trim();
   const ref = $("build-git-ref").value.trim();
-  if (!gitUrl) return toast("paste a repo URL first", "err");
+  if (!gitUrl) return toast("Paste a repo URL first", "err");
   const btn = $("build-git-check");
   btn.disabled = true;
   btn.textContent = "cloning…";
@@ -47,7 +47,8 @@ async function checkRepo() {
     buildId = r.buildId;
     renderVerdict(r);
   } catch (e) {
-    toast(e instanceof ScreensError ? e.message : String(e), "err");
+    // A 404 here means the box has no service/build platform wired.
+    toast(buildEntryError(e), "err");
   } finally {
     btn.disabled = false;
     btn.textContent = "Check repo";
@@ -120,7 +121,7 @@ async function adapt() {
     $("build-git-deploy").addEventListener("click", deploy);
     const j = $("build-git-journal");
     if (j) j.addEventListener("click", (e) => { e.preventDefault(); enterBuildJournal(buildId); });
-    toast("adapted — review and install", "ok");
+    toast("Adapted — review and install", "ok");
   } catch (e) {
     if (e instanceof ScreensError && e.status === 503) {
       toast("AI adapt isn't available on this server yet — starting from scratch instead", "warn");
@@ -157,7 +158,7 @@ async function deploy() {
         <p><strong>Installed ✓</strong></p>
         <p class="note"><a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a></p>
       </div>`;
-    toast("deployed", "ok");
+    toast("Deployed", "ok");
   } catch (e) {
     toast(e instanceof ScreensError ? e.message : String(e), "err");
     btn.disabled = false;

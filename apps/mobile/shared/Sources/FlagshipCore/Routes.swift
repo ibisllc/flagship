@@ -6,8 +6,19 @@ import FlagshipAPI
 /// type-safe deep-linking and zero stringly-typed navigation.
 public enum HomeRoute: Hashable, Sendable {
     case serverDetail(podId: String)
-    case addServer
+    /// "Add a server" — provisions a new box. Goes straight into the CreateServer
+    /// flow: there's no chooser. Pairing is automatic (every control device sees
+    /// every server), and taking over a transferred box is a link/QR ingestion
+    /// (handled via the universal process-link path), not a menu option.
+    case provisionServer
     case installProgress(serial: String, name: String, description: String)
+    /// Slice C — take over a transferred box, reached from a scanned/deep-linked
+    /// (IRK-signed) transfer offer. Carries the offer JSON (`offerText`) so the
+    /// `TransferAcquirerViewModel` mounts with it pre-ingested + verified. The
+    /// screen shows a SEVERE confirmation (type-to-confirm + biometric) before
+    /// the claim. Distinct from a top-level menu entry — take-over is always a
+    /// link/QR ingestion, never a browsed action.
+    case transferAcquirer(offerText: String)
 }
 
 public enum AppsRoute: Hashable, Sendable {
@@ -52,6 +63,10 @@ public enum AppsRoute: Hashable, Sendable {
     /// share secret + TTL once submitted; the client builds the share
     /// URL + opens the share sheet locally.
     case inviteIssue(serviceId: String)
+    /// #92 — per-service access gating (docs/service-access-gating.md): the
+    /// open ⇄ restricted toggle + the bearer-invite allow-list manager.
+    /// Reached from the service-detail "Who can open this" row.
+    case serviceAccess(serviceId: String)
 }
 
 /// What the AI-key step does once a credential is chosen. The credential
@@ -85,6 +100,12 @@ public enum SettingsRoute: Hashable, Sendable {
     /// Device-local; never shows a full key.
     case aiKeys
     case recovery
+    /// Settings → Account security. TOTP enroll/disable, recovery codes, and
+    /// the Watch delegate. Reached via the account-security row — previously
+    /// unwired (the row fired a no-op handler and there was no route case, so
+    /// `AccountSecurityScreen` was unreachable from iOS Settings: a parity gap
+    /// with web + Android, surfaced by the UI gym).
+    case accountSecurity
     case postRecoveryProgress
     /// "Back up your account key" — passphrase-encrypted `.flagshipkey`
     /// export of the whole UMK. Reached from Settings → Recovery.
@@ -130,6 +151,21 @@ public enum SettingsRoute: Hashable, Sendable {
     /// approves (which IRK-signs + dispatches the destination call) or
     /// denies. Reached from Settings.
     case companionRequests
+    /// Web-experience gating (docs/service-access-gating.md) — "Open secured
+    /// sessions": the browser QR-login sessions THIS phone has authorized. Per
+    /// row: serviceUrl / browserAgent / started-at + a debounced Refresh
+    /// (online/offline) and a Stop (close + remove). Reached from Settings.
+    case securedSessions
+    /// Web-experience gating — "Process URL": a paste field that takes a
+    /// `flagship://access?…` deeplink (or the raw "Get link" string) from a
+    /// box's knock page and routes it into the same KnockAuthorize flow.
+    case processUrl
+    /// Last-device account-DEATH ceremony (docs/account-deletion-and-name-reclaim.md
+    /// §2). Reached only when `SignOutPolicy.evaluate(...) == .deletionCeremony`
+    /// (no cloud recovery AND this is the last device) after the confirm popup.
+    /// Hosts the full-page irreversible warning → typed-username + biometric →
+    /// owner-IRK self-delete bundle → local wipe → Welcome.
+    case deleteAccount
 }
 
 /// The four top-level destinations. Both the iPhone TabView and the iPad
@@ -163,7 +199,7 @@ public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Senda
 /// "I already have an account" (Welcome → Recovery via WebAuthn-PRF →
 /// PostRecoveryChoice). Both leave the user on the paired RootShell.
 /// Provisioning a server is no longer part of onboarding — it's the
-/// in-shell "Add a server" flow (HomeRoute.addServer).
+/// in-shell "Add a server" flow (HomeRoute.provisionServer).
 public enum OnboardingRoute: Hashable, Sendable {
     case chooseUsername
     /// Open account — the Phase-2 step that decouples account identity
@@ -171,7 +207,7 @@ public enum OnboardingRoute: Hashable, Sendable {
     /// POSTs a standalone `claimUsername`, and names this first device.
     /// On success the user lands on Home with ZERO servers; the
     /// create-server flow becomes a reusable "Add a server" from there
-    /// (HomeRoute.addServer), so onboarding no longer carries a
+    /// (HomeRoute.provisionServer), so onboarding no longer carries a
     /// server-mint route.
     case openAccount(username: String)
     /// Skippable "Secure your account" step. Shown right after a

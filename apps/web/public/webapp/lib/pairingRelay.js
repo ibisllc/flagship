@@ -19,14 +19,39 @@
 // never sees a plaintext payload or the SAS.
 //
 // NOTE (server dependency): the unmodified relay DO is one-directional
-// (phone → browser deliver only; "browser sends nothing"). The admin →
-// incoming seal therefore rides a second relay leg with the roles
-// swapped (the incoming opens a return session and shares its sid in its
-// first sealed frame). This module encapsulates that choreography so the
-// orchestrators stay transport-agnostic; the exact wire is documented
-// inline.
+// (phone → browser deliver only; "browser sends nothing") AND single-shot
+// (it marks the session consumed + tears down BOTH sockets the instant the
+// phone delivers its first frame — see apps/com/src/buildRelay.ts
+// onPhoneMessage). So the admin (role=browser) CANNOT send the sealed
+// bundle on leg-1: the DO rejects a browser-role inbound frame ("browser
+// sends nothing"), and even a phone-role frame would arrive on a leg the
+// incoming's pubkey-deliver already consumed.
+//
+// The admin → incoming seal therefore rides a SECOND relay leg with the
+// roles SWAPPED, exactly as this header always promised but the code never
+// implemented (proven live against the deployed DO in
+// tools/live-e2e/device-add-relay-probe.ts):
+//
+//   leg-1  sid_A (from the QR):  admin = browser, incoming = phone.
+//          The incoming's ONE allowed `deliver` carries, sealed under the
+//          SAS-verified leg-1 key, BOTH its device pubkey AND the
+//          coordinates of the return leg it has just opened:
+//          { devicePubHex, returnSid, returnPkB64u }.
+//   leg-2  sid_B (minted by the incoming): incoming = browser (LISTENER,
+//          opened before it sends the leg-1 frame so it is ready), admin =
+//          phone (SENDER). The admin opens sid_B as phone, hellos, and
+//          delivers the sealed { umkSeed, admit, admitSig } — sealed under
+//          the SAME SAS-verified leg-1 key, so leg-2's own ECDH is not a
+//          trust input and the bundle's confidentiality + authenticity are
+//          still anchored to the code the human compared.
+//
+// This module encapsulates that choreography so the orchestrators
+// (lib/crossDevicePairing.js) stay transport-agnostic — the `relay`
+// contract they drive is unchanged.
 
-const RELAY_HOST = "flagshipserver.com";
+import { controlHost } from "./apex.js";
+
+const RELAY_HOST = controlHost();
 
 function wsProto() {
   return (typeof location !== "undefined" && location.protocol === "https:") ? "wss" : "ws";
@@ -104,11 +129,16 @@ async function freshKeypair() {
  * promise the admin view passes to `confirm()`).
  */
 export function makeAdminRelay(opts = {}) {
-  let ws = null;
-  let kEncEncrypt = null;
+  let ws = null;            // leg-1 (browser)
+  let leg2Ws = null;        // leg-2 (phone — bundle sender)
+  let kEncEncrypt = null;   // SAS-verified leg-1 key (used for BOTH legs)
+  let kEncDecrypt = null;
   let sasResolved = null;
   let confirmResolve = null;
   let peerPubResolve = null;
+  // The return-leg coordinates the incoming shares inside its leg-1 frame.
+  let returnSid = null;
+  let returnPkB64u = null;
   const peerPubPromise = new Promise((res) => { peerPubResolve = res; });
 
   const relay = {
@@ -124,15 +154,28 @@ export function makeAdminRelay(opts = {}) {
         if (m.kind === "peer-hello") {
           const mat = await deriveMaterial(sk, m.phonePk);
           kEncEncrypt = mat.kEncEncrypt;
-          relay._kEncDecrypt = mat.kEncDecrypt;
+          kEncDecrypt = mat.kEncDecrypt;
           sasResolved = mat.sas;
           if (typeof opts.onSas === "function") opts.onSas(mat.sas);
         } else if (m.kind === "peer-deliver") {
-          // The incoming device's first sealed frame carries its device
-          // pubkey hex (so the admin can bind it in the admit).
+          // The incoming device's ONE allowed leg-1 frame carries, sealed
+          // under the SAS-verified key, its device pubkey hex AND the
+          // return-leg coordinates ({ devicePubHex, returnSid, returnPkB64u }).
           try {
-            const plain = await aeadOpen(relay._kEncDecrypt, m.ciphertext, m.nonce);
-            const pub = new TextDecoder().decode(plain).trim().toLowerCase();
+            const plain = await aeadOpen(kEncDecrypt, m.ciphertext, m.nonce);
+            const text = new TextDecoder().decode(plain).trim();
+            let pub;
+            try {
+              const obj = JSON.parse(text);
+              pub = String(obj.devicePubHex || "").trim().toLowerCase();
+              returnSid = obj.returnSid || null;
+              returnPkB64u = obj.returnPkB64u || null;
+            } catch {
+              // Tolerate the legacy bare-pubkey frame (no return leg) so a
+              // mixed-version pair still surfaces the pubkey; seal() will
+              // throw a clear error if it can't open the return leg.
+              pub = text.toLowerCase();
+            }
             peerPubResolve(pub);
           } catch { /* tag failure — ignore, host can restart */ }
         } else if (m.kind === "accepted") {
@@ -148,12 +191,54 @@ export function makeAdminRelay(opts = {}) {
     // The view calls this from its Confirm button click.
     _confirm(ok) { confirmResolve?.(ok); },
     receivePeerPub() { return peerPubPromise; },
+    // Seal the bundle on LEG-2 (roles swapped): the admin connects the
+    // incoming's return sid as the PHONE (sender) and delivers the bundle.
+    // The bundle is AEAD-sealed under the SAS-verified leg-1 key, so the
+    // human-compared code still anchors its confidentiality + authenticity.
     async seal(plaintextBytes) {
-      if (!kEncEncrypt || !ws) throw new Error("relay not ready to seal");
+      if (!kEncEncrypt) throw new Error("relay not ready to seal (no SAS-verified key)");
+      if (!returnSid || !returnPkB64u) {
+        throw new Error("the other device didn't open a return channel — ask it to reopen the pairing link");
+      }
       const { ciphertext, nonce } = await aeadSeal(kEncEncrypt, plaintextBytes);
-      ws.send(JSON.stringify({ kind: "deliver", ciphertext, nonce }));
+      const url = `${wsProto()}://${RELAY_HOST}/qr-pipe/${encodeURIComponent(returnSid)}?role=phone`;
+      leg2Ws = new WebSocket(url);
+      await new Promise((resolve, reject) => {
+        let settled = false;
+        const done = (fn, arg) => { if (!settled) { settled = true; fn(arg); } };
+        const timer = setTimeout(() => done(reject, new Error("timed out delivering keys to the other device")), 20_000);
+        leg2Ws.addEventListener("open", async () => {
+          // The DO gates `deliver` behind a phone `hello`; leg-2's own ECDH
+          // is unused (the bundle uses the leg-1 key), but the hello must be
+          // a syntactically valid phonePk, so mint a throwaway one.
+          try {
+            const eph = await freshKeypair();
+            leg2Ws.send(JSON.stringify({ kind: "hello", phonePk: eph.pkB64u }));
+          } catch (e) { clearTimeout(timer); done(reject, e); }
+        });
+        leg2Ws.addEventListener("message", (ev) => {
+          let m;
+          try { m = JSON.parse(ev.data); } catch { return; }
+          if (!m || typeof m.kind !== "string") return;
+          if (m.kind === "ack") {
+            leg2Ws.send(JSON.stringify({ kind: "deliver", ciphertext, nonce }));
+          } else if (m.kind === "delivered") {
+            clearTimeout(timer); done(resolve);
+          } else if (m.kind === "peer-missing") {
+            clearTimeout(timer); done(reject, new Error("the other device's return channel isn't connected"));
+          } else if (m.kind === "error") {
+            clearTimeout(timer); done(reject, new Error(`relay: ${m.reason}`));
+          } else if (m.kind === "expired") {
+            clearTimeout(timer); done(reject, new Error("pairing code expired — ask for a fresh one"));
+          }
+        });
+        leg2Ws.addEventListener("error", () => { clearTimeout(timer); done(reject, new Error("return channel error")); });
+      });
     },
-    close() { try { ws?.close(1000, "done"); } catch { /* ignore */ } ws = null; },
+    close() {
+      try { ws?.close(1000, "done"); } catch { /* ignore */ } ws = null;
+      try { leg2Ws?.close(1000, "done"); } catch { /* ignore */ } leg2Ws = null;
+    },
   };
   return relay;
 }
@@ -170,8 +255,9 @@ export function makeAdminRelay(opts = {}) {
  *   close()
  */
 export function makeIncomingRelay(opts = {}) {
-  let ws = null;
-  let kEncDecrypt = null;
+  let ws = null;            // leg-1 (phone)
+  let returnWs = null;      // leg-2 (browser — bundle receiver)
+  let kEncDecrypt = null;   // SAS-verified leg-1 key (used for BOTH legs)
   let bundleResolve = null;
   let bundleReject = null;
   const bundlePromise = new Promise((res, rej) => { bundleResolve = res; bundleReject = rej; });
@@ -181,6 +267,36 @@ export function makeIncomingRelay(opts = {}) {
       const { sk, pkB64u } = await freshKeypair();
       const mat = await deriveMaterial(sk, adminPkB64u);
       kEncDecrypt = mat.kEncDecrypt;
+
+      // Pre-open the RETURN leg (sid_B) as the BROWSER so it is listening
+      // before we tell the admin about it — the admin will connect it as
+      // phone the moment it reads sid_B from our leg-1 frame. The bundle
+      // arrives here as `peer-deliver`, decrypted under the leg-1 key.
+      const returnSid = freshSid();
+      const returnEph = await freshKeypair();
+      returnWs = new WebSocket(`${wsProto()}://${RELAY_HOST}/qr-pipe/${encodeURIComponent(returnSid)}?role=browser`);
+      returnWs.addEventListener("message", async (ev) => {
+        let m;
+        try { m = JSON.parse(ev.data); } catch { return; }
+        if (!m || typeof m.kind !== "string") return;
+        if (m.kind === "peer-deliver") {
+          try {
+            const plain = await aeadOpen(kEncDecrypt, m.ciphertext, m.nonce);
+            bundleResolve(plain);
+          } catch (e) { bundleReject(e); }
+        } else if (m.kind === "expired") {
+          bundleReject(new Error("pairing code expired — ask for a fresh one"));
+        } else if (m.kind === "rebind") {
+          bundleReject(new Error("return channel collision — reopen the pairing link"));
+        }
+        // peer-hello on the return leg is the admin's throwaway hello; ignore.
+      });
+      await new Promise((resolve) => {
+        if (returnWs.readyState === WebSocket.OPEN) return resolve();
+        returnWs.addEventListener("open", () => resolve(), { once: true });
+        returnWs.addEventListener("error", () => resolve(), { once: true });
+      });
+
       const url = `${wsProto()}://${RELAY_HOST}/qr-pipe/${encodeURIComponent(sid)}?role=phone`;
       ws = new WebSocket(url);
       ws.addEventListener("open", () => {
@@ -191,14 +307,16 @@ export function makeIncomingRelay(opts = {}) {
         try { m = JSON.parse(ev.data); } catch { return; }
         if (!m || typeof m.kind !== "string") return;
         if (m.kind === "ack") {
-          // Send our DEVICE pubkey (sealed) so the admin can bind it.
-          const { ciphertext, nonce } = await aeadSeal(mat.kEncEncrypt, new TextEncoder().encode(deviceIrkPubHex));
+          // Our ONE allowed leg-1 frame: our DEVICE pubkey + the return-leg
+          // coordinates, sealed under the SAS-verified key. (leg-1 is then
+          // consumed by the DO; the bundle comes back on the return leg.)
+          const payload = new TextEncoder().encode(JSON.stringify({
+            devicePubHex: String(deviceIrkPubHex).toLowerCase(),
+            returnSid,
+            returnPkB64u: returnEph.pkB64u,
+          }));
+          const { ciphertext, nonce } = await aeadSeal(mat.kEncEncrypt, payload);
           ws.send(JSON.stringify({ kind: "deliver", ciphertext, nonce }));
-        } else if (m.kind === "peer-deliver") {
-          try {
-            const plain = await aeadOpen(kEncDecrypt, m.ciphertext, m.nonce);
-            bundleResolve(plain);
-          } catch (e) { bundleReject(e); }
         } else if (m.kind === "peer-missing") {
           bundleReject(new Error("the admin's device isn't connected — ask them to reopen Add device"));
         } else if (m.kind === "expired") {
@@ -206,10 +324,14 @@ export function makeIncomingRelay(opts = {}) {
         } else if (m.kind === "error") {
           bundleReject(new Error(`relay: ${m.reason}`));
         }
+        // peer-deliver no longer arrives on leg-1 (the bundle is leg-2).
       });
       if (typeof opts.onConnecting === "function") opts.onConnecting();
       return { sas: mat.sas, awaitBundle: () => bundlePromise };
     },
-    close() { try { ws?.close(1000, "done"); } catch { /* ignore */ } ws = null; },
+    close() {
+      try { ws?.close(1000, "done"); } catch { /* ignore */ } ws = null;
+      try { returnWs?.close(1000, "done"); } catch { /* ignore */ } returnWs = null;
+    },
   };
 }

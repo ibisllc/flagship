@@ -15,6 +15,7 @@ import { bytesToHex, signWithIrk } from "../keystore.js";
 import { canonicalPushRevoke } from "../lib/push.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
+import { formatWhen } from "../lib/dateFormat.js";
 import {
   runReplaceDeviceCeremony,
   completeReplaceDeviceCeremony,
@@ -29,10 +30,11 @@ import {
   setCurrentIrkVersion,
 } from "../keystore.js";
 import { renderPendingBanner, shouldRenderBanner } from "../lib/pendingRePairBanner.js";
+import { controlApex } from "../lib/apex.js";
 
 registerView("view-trusted-devices");
 
-const COM_BASE = "https://flagshipserver.com";
+const COM_BASE = controlApex();
 
 /** Cached state: last-fetched devices + ETag for the If-Match flow.
  *  `pendingRePair` mirrors the GET /api/users/:u/re-pair snapshot so a
@@ -57,7 +59,19 @@ function platformDisplay(p) {
     apns: "iPhone / iPad",
     fcm: "Android",
     webpush: "Web",
-  })[p] ?? p;
+  })[p] ?? (p || "Unknown platform");
+}
+
+/** The name shown for a device row. Never renders the literal string
+ *  "undefined": falls back to a platform-derived label, then a short
+ *  token id, then a generic name — so a record missing its `label`
+ *  (or `label` AND `platform`) still reads sensibly. */
+function deviceName(device) {
+  if (device.label) return device.label;
+  if (device.platform) return `Untitled ${platformDisplay(device.platform)}`;
+  const id = device.tokenPrefix || device.tokenId;
+  if (id) return `Device ${String(id).slice(0, 8)}`;
+  return "Unnamed device";
 }
 
 function relative(ms) {
@@ -147,10 +161,7 @@ function isQuarantined(device) {
 function quarantineMessage(device) {
   const until = device.quarantineUntil;
   if (!until) return "This device is in quarantine. Use another device.";
-  const when = new Date(until).toLocaleDateString(undefined, {
-    year: "numeric", month: "short", day: "numeric",
-  });
-  return `Quarantined until ${when}. Use another device.`;
+  return `Quarantined until ${formatWhen(until)}. Use another device.`;
 }
 
 function renderDeviceCard(device) {
@@ -162,7 +173,7 @@ function renderDeviceCard(device) {
       <div class="row">
         <div class="weight-600">
           <span aria-hidden="true">${platformIcon(device.platform)}</span>
-          ${escapeHtml(device.label || `Untitled ${device.platform}`)}
+          ${escapeHtml(deviceName(device))}
           ${quarantined ? `<span aria-hidden="true" title="${escapeHtml(quarantineMsg)}"
                   data-quarantine-icon="${escapeHtml(device.tokenPrefix)}"
                   style="margin-left: 4px;">⏱</span>` : ""}
@@ -272,16 +283,17 @@ async function renderTrustedDevices() {
           return;
         }
         const { inlineConfirm } = await import("../lib/modal.js");
+        const name = deviceName(device);
         const ok = await inlineConfirm({
-          title: `Disconnect ${device.label}?`,
-          message: `We'll stop sending alerts to ${device.label}. It can sign back in with your passkey.`,
+          title: `Disconnect ${name}?`,
+          message: `We'll stop sending alerts to ${name}. It can sign back in with your passkey.`,
           okLabel: "Disconnect",
           danger: true,
         });
         if (!ok) return;
         try {
           await disconnectDevice(device);
-          toast(`Disconnected ${device.label}`);
+          toast(`Disconnected ${name}`);
           await renderTrustedDevices();
         } catch (e) {
           toast(e.message ?? "Couldn't disconnect", "err");
@@ -414,7 +426,7 @@ async function runReplaceDeviceSheet() {
       account — including this phone — will need to confirm a new pairing
       the next time it opens the app. You won't be locked out, but you'll
       see a one-time biometric prompt on each device.</p>
-      <p>Pods stay running. Apps stay installed.</p>
+      <p>Servers stay running. Apps stay installed.</p>
     `,
     primaryLabel: "Replace",
     primaryClass: "danger",
@@ -605,8 +617,7 @@ async function promptForTotpProof() {
 
 function formatCompletesAt(ms) {
   if (typeof ms !== "number" || !ms) return "soon";
-  const d = new Date(ms);
-  return d.toLocaleString();
+  return formatWhen(ms);
 }
 
 export function initTrustedDevicesView() {

@@ -52,11 +52,15 @@ async function post(path: string, body: unknown): Promise<{ status: number; body
 }
 
 async function main(): Promise<void> {
-  // Unique-ish username so we don't collide with existing test data.
-  const suffix = Math.floor(Math.random() * 1_000_000)
-    .toString(36)
-    .padStart(4, "0");
-  const username = `t${Date.now().toString(36).slice(-5)}${suffix}`;
+  // Names are claimable ONLY if the server recently SUGGESTED them
+  // (docs/username-suggestion-queue.md), so get one from /api/username/suggest
+  // instead of inventing our own.
+  const deviceKey = bytesToHex(makeKey().publicKey);
+  const sug = await post("/api/username/suggest", { deviceKey });
+  if (sug.status !== 200 || typeof (sug.body as { name?: string })?.name !== "string") {
+    throw new Error(`suggest failed: ${JSON.stringify(sug.body)}`);
+  }
+  const username = (sug.body as { name: string }).name;
   const serverName = "home";
   const serverDomain = `${serverName}.${username}.flagship.services`;
 

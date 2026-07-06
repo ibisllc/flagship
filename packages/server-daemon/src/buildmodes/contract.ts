@@ -23,7 +23,7 @@ export interface BuildContractRule {
 export const BUILD_CONTRACT_RULES: BuildContractRule[] = [
   { id: "no-auth", rule: "Do NOT write authentication. The daemon injects X-Flagship-User, X-Flagship-Role, X-Flagship-Member and X-Flagship-Signature on every request. Read those headers. No login forms, passwords, cookies, or JWTs. `X-Flagship-User: anonymous` arrives on routes listed in access.public_routes." },
   { id: "no-raw-browser", rule: "Do NOT use raw CDP, Puppeteer, Playwright, or shell out to Chromium. Set browser.domains in the manifest and call the daemon's /.flagship/browser/* API from inside the container." },
-  { id: "single-port", rule: "Listen on runtime.port ONLY. No second HTTP server, metrics port, or debug port." },
+  { id: "single-port", rule: "Listen on the port the daemon injects as the PORT environment variable (process.env.PORT / $PORT), which equals your manifest runtime.port. Bind 0.0.0.0:$PORT. Do NOT hardcode a port number, and do NOT open a second HTTP server, metrics port, or debug port. Your Dockerfile's final stage should EXPOSE the same runtime.port." },
   { id: "no-egress", rule: "No outbound calls to hosts not in browser.domains. The container has no general egress; fetch() outside the allowlist hangs." },
   { id: "data-layer-only", rule: "Do NOT persist to the container filesystem (wiped every deploy). Use FLAGSHIP_PG_URL, FLAGSHIP_S3_*, FLAGSHIP_REDIS_URL." },
   { id: "reserved-env", rule: "Do NOT define env vars whose names start with FLAGSHIP_ — that prefix is reserved by the runtime." },
@@ -35,7 +35,7 @@ export const INJECTED_ENV: Record<string, string> = {
   "data.stores.postgres": "FLAGSHIP_PG_URL, FLAGSHIP_PG_DATABASE, FLAGSHIP_PG_ROLE (named: FLAGSHIP_PG_URL_<INSTANCE>)",
   "data.stores.objects": "FLAGSHIP_S3_ENDPOINT, FLAGSHIP_S3_BUCKET, FLAGSHIP_S3_ACCESS_KEY, FLAGSHIP_S3_SECRET_KEY",
   "data.stores.kv": "FLAGSHIP_REDIS_URL, FLAGSHIP_REDIS_PREFIX (every key must start with the prefix)",
-  always: "FLAGSHIP_APP_TOKEN (bearer for /.flagship/* daemon APIs), FLAGSHIP_PEERS_TOKEN (sister-app lookups)",
+  always: "PORT (the port to listen on — equals runtime.port; bind 0.0.0.0:$PORT), FLAGSHIP_APP_TOKEN (bearer for /.flagship/* daemon APIs), FLAGSHIP_PEERS_TOKEN (sister-app lookups)",
 };
 
 export const MANIFEST_SCHEMA_SUMMARY =

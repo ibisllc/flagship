@@ -53,6 +53,75 @@ describe("parseSetKey", () => {
   });
 });
 
+// G1 (docs/ui-test-gym.md §12-G1): the apex is a CONFIG VARIABLE, defaulting
+// to the prod literal, and the parse is apex-RELATIVE — strip the configured
+// apex suffix, THEN take the username as the last remaining label. This also
+// fixes the latent fixed-depth misparse: a deeper apex used to slide the
+// username one label to the right.
+describe("parseSetKey — apex-relative (the gym-env fix)", () => {
+  it("default apex is byte-identical to the old fixed literal", () => {
+    // No apex arg → DEFAULT_APEX = flagship.services. The username is the
+    // last label before the apex; a pod canonical parses host→slug, user→user.
+    expect(parseSetKey("home.alice.flagship.services")).toEqual({
+      slug: "home",
+      author: "alice",
+      user: "alice",
+    });
+    // Passing the literal explicitly must match the default exactly.
+    expect(parseSetKey("home.alice.flagship.services", "flagship.services")).toEqual(
+      parseSetKey("home.alice.flagship.services"),
+    );
+  });
+
+  it("a deeper apex parses username=alice, NOT the apex's own label", () => {
+    // The whole point: under apex=gym.flagship.services the username is `alice`.
+    expect(
+      parseSetKey("home.alice.gym.flagship.services", "gym.flagship.services"),
+    ).toEqual({ slug: "home", author: "alice", user: "alice" });
+    // A real app FQDN under the gym apex likewise resolves the right user.
+    expect(
+      parseSetKey("messenger-facebook.kitchen.alice.gym.flagship.services", "gym.flagship.services"),
+    ).toEqual({ slug: "messenger", author: "facebook", user: "alice" });
+  });
+
+  it("demonstrates the latent bug the fix closes: a deeper FQDN misparses under the DEFAULT apex", () => {
+    // With the prod default apex, `…gym.flagship.services` strips only
+    // `.flagship.services`, leaving `home.alice.gym` → user=`gym` (the bug).
+    // Reserving `gym` as a username is the other half of the defense; here we
+    // simply pin that the relative parse under the CORRECT apex yields `alice`,
+    // never `gym`.
+    expect(parseSetKey("home.alice.gym.flagship.services")?.user).toBe("gym");
+    expect(
+      parseSetKey("home.alice.gym.flagship.services", "gym.flagship.services")?.user,
+    ).toBe("alice");
+  });
+
+  it("a gym-apex allocator routes by the apex-relative set key end-to-end", () => {
+    const gym = new AppUserAllocator({ apex: "gym.flagship.services" });
+    gym.addPod({
+      podCanonical: "kitchen.alice.gym.flagship.services",
+      canonicals: ["notes.kitchen.alice.gym.flagship.services"],
+    });
+    // The pod holds the shortened `notes.alice.gym.flagship.services` slot —
+    // proof the allocator computed the right (slug, author, user) under the
+    // deeper apex (user=alice, not gym).
+    expect(gym.findHolderByFqdn("notes.alice.gym.flagship.services")).toBe(
+      "kitchen.alice.gym.flagship.services",
+    );
+  });
+
+  it("derivableShorteneds is apex-relative too", () => {
+    // Default: drops the host, keeps the literal prod apex.
+    expect(derivableShorteneds("notes.kitchen.alice.flagship.services")).toContain(
+      "notes.alice.flagship.services",
+    );
+    // Gym apex: same shape under the deeper apex, user still alice.
+    expect(
+      derivableShorteneds("notes.kitchen.alice.gym.flagship.services", "gym.flagship.services"),
+    ).toContain("notes.alice.gym.flagship.services");
+  });
+});
+
 describe("derivableShorteneds", () => {
   it("self-authored canonical → user-zone shortened", () => {
     expect(derivableShorteneds("messenger.kitchen.john.flagship.services")).toEqual([
@@ -132,6 +201,36 @@ describe("AppUserAllocator — addPod", () => {
     expect(r2.shortenedsHeld).not.toContain("messenger.john.flagship.services");
     const holder = a.findHolderByFqdn("messenger.john.flagship.services");
     expect(holder).toBe(KITCHEN); // first registrant still holds
+  });
+
+  it("claims a DIRECTLY-presented tier-2 `<svc>.<user>` canonical as a routable slot (leader-route)", () => {
+    // A box that presents a short `<svc>.<user>` canonical in its
+    // ServiceEntitlement (NOT derivable from its 2-label root canonical) must
+    // become the SNI route holder for it — otherwise `findHolderByFqdn` returns
+    // undefined and the SNI router resets the connection (the tier-2 routing
+    // bug). It is held FCFS like a derived shortened.
+    const a = new AppUserAllocator({ now: () => 1_000 });
+    const r = a.addPod({
+      podCanonical: KITCHEN, // kitchen.john.flagship.services (the pod root)
+      canonicals: [KITCHEN, "blog.john.flagship.services"],
+    });
+    expect(r.shortenedsHeld).toContain("blog.john.flagship.services");
+    expect(a.findHolderByFqdn("blog.john.flagship.services")).toBe(KITCHEN);
+    // The pod's own root is still routed via the pods map, never a contended slot.
+    expect(a.findHolderByFqdn(KITCHEN)).toBe(KITCHEN);
+  });
+
+  it("does NOT claim a tier-1 `<svc>.<server>.<user>` (3-label) canonical as a shared slot", () => {
+    // A 3-label service-on-box canonical is box-specific (per-box wildcard +
+    // one-label-strip routing); it must never become a shared leader-route slot
+    // that a sibling box could inherit on failover.
+    const a = new AppUserAllocator({ now: () => 1_000 });
+    const r = a.addPod({
+      podCanonical: KITCHEN,
+      canonicals: [KITCHEN, "messenger.kitchen.john.flagship.services"],
+    });
+    expect(r.shortenedsHeld).not.toContain("messenger.kitchen.john.flagship.services");
+    expect(a.findHolderByFqdn("messenger.kitchen.john.flagship.services")).toBeUndefined();
   });
 
   it("two different apps coexist in different sets", () => {

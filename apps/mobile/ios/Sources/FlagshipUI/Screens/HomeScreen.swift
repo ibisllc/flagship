@@ -42,8 +42,12 @@ public struct HomeScreen: View {
     /// Lowercased fqdns of servers with a LIVE pending boot-unlock request
     /// (the box is waiting for the owner's approval). Drives the per-card
     /// liveness classification — a waiting box reads "Waiting for approval",
-    /// never "Never came online". Source: AppState.serversAwaitingApproval.
+    /// never "Never came online". Source: AppState.serversAwaiting(.unlockKey).
     let awaitingApproval: Set<String>
+    /// The entitlement (serve-auth) waiting set — same role as `awaitingApproval`
+    /// for the other inbox lane, so a box waiting on entitlement reads "Waiting
+    /// for approval" on Home, not "Never came online".
+    let awaitingEntitlement: Set<String>
     var onOpenPod: (PodInfo) -> Void = { _ in }
     var onAddServer: () -> Void = {}
     var onSetLeader: (PodInfo) -> Void = { _ in }
@@ -77,6 +81,7 @@ public struct HomeScreen: View {
         accountWasReset: Bool = false,
         deviceCapability: DeviceCapabilityBlock? = nil,
         awaitingApproval: Set<String> = [],
+        awaitingEntitlement: Set<String> = [],
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
         onCancelServer: @escaping (PodInfo) -> Void = { _ in },
         onDeleteDeadServer: @escaping (PodInfo) -> Void = { _ in },
@@ -98,6 +103,7 @@ public struct HomeScreen: View {
         self.accountWasReset = accountWasReset
         self.deviceCapability = deviceCapability
         self.awaitingApproval = awaitingApproval
+        self.awaitingEntitlement = awaitingEntitlement
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
         self.onSetLeader = onSetLeader
@@ -201,7 +207,7 @@ public struct HomeScreen: View {
         let q = search.trimmingCharacters(in: .whitespaces).lowercased()
         return pods.filter { pod in
             let liveness = pod.livenessState(
-                hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased())
+                hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased()) || awaitingEntitlement.contains(pod.fqdn.lowercased())
             )
             let matchesFilter = statusFilter.matches(pod: pod, liveness: liveness)
             let matchesSearch = q.isEmpty
@@ -217,7 +223,7 @@ public struct HomeScreen: View {
     private func filterCount(_ f: HomeStatusFilter) -> Int {
         pods.filter { pod in
             let liveness = pod.livenessState(
-                hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased())
+                hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased()) || awaitingEntitlement.contains(pod.fqdn.lowercased())
             )
             return f.matches(pod: pod, liveness: liveness)
         }.count
@@ -415,7 +421,7 @@ public struct HomeScreen: View {
     /// badge, and the full long-press context menu preserved verbatim.
     private func serverRow(pod: PodInfo, c: FSColors) -> some View {
         let liveness = pod.livenessState(
-            hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased())
+            hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased()) || awaitingEntitlement.contains(pod.fqdn.lowercased())
         )
         let isLeader = pod.podId == leaderPodId
         return Button(action: { onOpenPod(pod) }) {
@@ -449,7 +455,10 @@ public struct HomeScreen: View {
                 Button {
                     onSetLeader(pod)
                 } label: {
-                    Label("Make leader", systemImage: "crown.fill")
+                    // System contextMenu only renders SF Symbols for icons, so
+                    // the custom LeaderFlag can't be used here — use the closest
+                    // stock flag symbol instead of the retired crown.
+                    Label("Make leader", systemImage: "flag.fill")
                 }
             }
             Button {
@@ -555,10 +564,7 @@ public struct HomeScreen: View {
         }
     }
     private func relative(ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = RelativeDateTimeFormatter()
-        fmt.unitsStyle = .abbreviated
-        return fmt.localizedString(for: date, relativeTo: Date())
+        Date.flagshipFormatted(epochMs: ms)
     }
 }
 
@@ -613,6 +619,12 @@ public struct PodCard: View {
                         // came online (the leader is the daemon the screens
                         // point at) — never badge a dead box as Leader.
                         if isLeader && pod.cameOnline { LeaderBadge() }
+                        // Per-service leadership (Phase 6): the services this box
+                        // currently leads (from /pods `leadsServices`). Tolerant
+                        // of absence — renders nothing when empty.
+                        if pod.cameOnline && !pod.leadsServices.isEmpty {
+                            LeadServicesBadge(services: pod.leadsServices)
+                        }
                         Spacer(minLength: 0)
                     }
                     // "Your server is being installed" — a thin
@@ -657,6 +669,7 @@ public enum PodStatusStyle {
     public static func label(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> String {
         switch liveness {
         case .dead:               return "Never came online"
+        case .offline:            return "Offline"
         case .waitingForApproval: return "Waiting for approval"
         case .comingOnline:
             return status == .pending ? "Pending" : "Coming online…"
@@ -673,6 +686,7 @@ public enum PodStatusStyle {
     public static func pillKind(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> FSPillKind {
         switch liveness {
         case .dead:               return .offline
+        case .offline:            return .offline
         case .waitingForApproval: return .provisioning
         case .comingOnline:       return .provisioning
         case .online:
@@ -698,6 +712,7 @@ public enum PodStatusStyle {
     static func pillAccessibilityId(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> String {
         switch liveness {
         case .dead:               return "pod-card-never-online"
+        case .offline:            return "pod-card-offline"
         case .waitingForApproval: return "pod-card-waiting-approval"
         case .comingOnline where status != .pending: return "pod-card-coming-online"
         default:                  return "pod-card-status"
@@ -735,7 +750,7 @@ public enum HomeStatusFilter: CaseIterable, Hashable {
             default: return false
             }
         case .offline:
-            if liveness == .dead { return true }
+            if liveness == .dead || liveness == .offline { return true }
             return liveness == .online && pod.status == .offline
         }
     }
@@ -762,7 +777,7 @@ public struct LeaderBadge: View {
     public var body: some View {
         let c = FSColors.scheme(scheme)
         HStack(spacing: 6) {
-            Image(systemName: "crown.fill").font(.system(size: 9))
+            LeaderFlag(size: 11, tint: c.primary)
             Text("Leader").font(.system(size: 11, weight: .semibold))
         }
         .foregroundColor(c.primary)
@@ -771,5 +786,33 @@ public struct LeaderBadge: View {
         .frame(minHeight: 22)
         .background(c.primary.opacity(0.12))
         .clipShape(Capsule())
+    }
+}
+
+/// Per-service leadership (Phase 6) — a small "leads N" indicator for a box that
+/// is the current lead for one or more services (`PodInfo.leadsServices` from
+/// `/pods`). Tolerant of absence: renders nothing when the list is empty.
+public struct LeadServicesBadge: View {
+    @Environment(\.colorScheme) private var scheme
+    public let services: [String]
+    public init(services: [String]) { self.services = services }
+    public var body: some View {
+        let c = FSColors.scheme(scheme)
+        if !services.isEmpty {
+            let label = services.count == 1
+                ? "Leads \(services[0])"
+                : "Leads \(services.count) services"
+            HStack(spacing: 6) {
+                Image(systemName: "crown.fill").font(.system(size: 10, weight: .semibold))
+                Text(label).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+            }
+            .foregroundColor(c.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 2)
+            .frame(minHeight: 22)
+            .background(c.primary.opacity(0.12))
+            .clipShape(Capsule())
+            .accessibilityIdentifier("pod-leads-badge")
+        }
     }
 }

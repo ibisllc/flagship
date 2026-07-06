@@ -34,6 +34,11 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public let serverFqdn: String
     public let username: String
     public let daemonVersion: String
+    /// The box's code-checkout HEAD (full git SHA, lowercase) — the
+    /// applied-commit truth the self-update consumer enforces `fromCommit`
+    /// against. Optional: an old box's daemon (or a non-git deploy) doesn't
+    /// report it, and the update action is disabled without it.
+    public let currentCommit: String?
     public let startedAt: Int64
     public let uptimeMs: Int64
     public let certNotAfter: Int64?
@@ -118,10 +123,20 @@ public struct VibeCodeStartRequest: Codable, Equatable, Sendable {
     /// later turn. Omitted ⇒ the box falls back to whatever it has (and may
     /// answer `needsCredential: true`).
     public let credential: LlmProviderCredential?
-    public init(prompt: String, model: String?, credential: LlmProviderCredential? = nil) {
+    /// Owner-chosen service name/slug (the web address label) — decided on the
+    /// Describe form, not fixed. Optional for back-compat; the daemon treats it
+    /// as a hint for the deployed service's slug.
+    public let name: String?
+    /// Owner-chosen reach: "just-me" (gated to the owner) or "link" (anyone with
+    /// the link). Optional for back-compat; the daemon applies it at install.
+    public let visibility: String?
+    public init(prompt: String, model: String?, credential: LlmProviderCredential? = nil,
+                name: String? = nil, visibility: String? = nil) {
         self.prompt = prompt
         self.model = model
         self.credential = credential
+        self.name = name
+        self.visibility = visibility
     }
 }
 

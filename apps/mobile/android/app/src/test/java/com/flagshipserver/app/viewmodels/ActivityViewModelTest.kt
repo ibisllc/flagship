@@ -7,6 +7,7 @@ package com.flagshipserver.app.viewmodels
 import com.flagshipserver.app.api.AppInviteAccessResponse
 import com.flagshipserver.app.api.AppInviteIssueRequest
 import com.flagshipserver.app.api.AppInviteIssueResponse
+import com.flagshipserver.app.api.BuildDeployResponse
 import com.flagshipserver.app.api.AppInviteListResponse
 import com.flagshipserver.app.api.AppInviteRevokeRequest
 import com.flagshipserver.app.api.AppInviteRevokeResponse
@@ -107,6 +108,7 @@ private class StubScreensClient(
     override suspend fun serviceEnvUnset(appId: String, req: ServiceEnvUnsetRequest): ServiceEnvOpResponse = error("unused")
     override suspend fun vibeCodeSessionState(sessionId: String): VibeCodeSessionPublicState = error("unused")
     override suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse = error("unused")
+    override suspend fun vibeCodeDeploy(sessionId: String): BuildDeployResponse = error("unused")
     override suspend fun appInviteIssue(req: AppInviteIssueRequest): AppInviteIssueResponse = error("unused")
     override suspend fun appInviteList(serviceId: String): AppInviteListResponse = error("unused")
     override suspend fun appInviteAccess(serviceId: String): AppInviteAccessResponse = error("unused")
@@ -200,5 +202,48 @@ class ActivityViewModelTest {
         val snap = feed.items.single() as ActivityItem.RecoverySnapshot
         assertEquals(0L, snap.at)
         assertNull(snap.subtitle)
+    }
+
+    // ---- ActivityFeedFilter (pure server-filter logic) ------------------
+
+    private fun installItem(serviceId: String, detail: String? = null) =
+        ActivityItem.InstallEvent(
+            RecentInstallEvent(at = 1, kind = "installed", serviceId = serviceId, detail = detail),
+        )
+
+    private fun auditItem() =
+        ActivityItem.AuditEntry(
+            com.flagshipserver.app.api.AuditEvent(
+                seq = 1, eventKind = "device-added", detail = "Added iPad",
+                devicePrefix = "ab", postedAt = 1,
+            ),
+        )
+
+    @Test fun feedFilter_allServers_passesEverything() {
+        val items = listOf(
+            installItem("blog.home.harry.flagship.services"),
+            auditItem(),
+        )
+        assertEquals(items, ActivityFeedFilter.apply(items, null))
+        assertEquals(items, ActivityFeedFilter.apply(items, ""))
+    }
+
+    @Test fun feedFilter_specificServer_keepsAccountWideAndMatchingInstall() {
+        val matching = installItem("blog.home.harry.flagship.services")
+        val other = installItem("wiki.office.harry.flagship.services")
+        val matchByDetail = installItem("svc", detail = "deployed to home.harry.flagship.services")
+        val audit = auditItem()
+        val out = ActivityFeedFilter.apply(listOf(matching, other, matchByDetail, audit), "home")
+        // Account-wide audit always stays; only home-attributable installs remain.
+        assertTrue(out.contains(audit))
+        assertTrue(out.contains(matching))
+        assertTrue(out.contains(matchByDetail))
+        assertTrue(!out.contains(other))
+    }
+
+    @Test fun feedFilter_installMatch_isDelimitedSegmentNotBareSubstring() {
+        // "home" must appear as a `.home.` segment, not inside "homestead".
+        val item = installItem("blog.homestead.harry.flagship.services")
+        assertTrue(!ActivityFeedFilter.matches(item, "home"))
     }
 }

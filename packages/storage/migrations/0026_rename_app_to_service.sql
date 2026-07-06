@@ -11,19 +11,17 @@
 -- `service_id`. SQLite supports `ALTER TABLE ... RENAME COLUMN` since
 -- 3.25, which D1 inherits.
 
--- Custom domain orders: app_id → service_id (the only app_* column
--- already in production D1, confirmed by live table dump).
--- ALTER TABLE ... RENAME COLUMN is naturally idempotent against
--- re-runs: D1 surfaces a "no such column" error if the rename has
--- already been applied. Wrappers around this migration should treat
--- such an error as a no-op (the column rename is one-shot — once
--- service_id exists, app_id is gone). To keep this file directly
--- replayable in fresh dev DBs (where the table was created via
--- migration 0022 with service_id already), we no-op when the table
--- already has service_id.
-
--- (No standard SQL `IF EXISTS COLUMN` exists in SQLite, but the
--- pragma_table_info() table-valued function supports a guarded
--- check. We bias toward forward-only progression and let the
--- driver elide errors on column-already-renamed.)
-ALTER TABLE custom_domain_orders RENAME COLUMN app_id TO service_id;
+-- Custom domain orders: app_id → service_id. This is now a NO-OP.
+--
+-- The historical rename (`ALTER TABLE custom_domain_orders RENAME COLUMN
+-- app_id TO service_id;`) already ran on production D1 and is tracked by NAME in
+-- d1_migrations, so it never re-runs there. On any FRESH DB, migration 0022
+-- already creates `custom_domain_orders` with `service_id`, so the rename is
+-- redundant — and, worse, NOT replayable: it hits "no such column app_id", and
+-- `wrangler d1 migrations apply` (which has no error-eliding wrapper) then aborts
+-- the WHOLE apply, blocking every later migration (0027 demo_users,
+-- 0038 provision_status, … through HEAD). SQLite has no conditional
+-- `RENAME COLUMN`, so the only forward-only, replay-safe form is a no-op:
+-- production is unaffected (already applied, tracked by name); fresh dev / gym /
+-- region DBs now migrate cleanly to HEAD. (Surfaced by standing up the gym D1.)
+SELECT 1;

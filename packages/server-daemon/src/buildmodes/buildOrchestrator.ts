@@ -16,6 +16,8 @@ import { randomBytes } from "node:crypto";
 import { BuildWorkspace } from "./buildWorkspace.js";
 import { GitImporter, buildAdaptPrompt } from "./gitImport.js";
 import { McpBuildServer, type JsonRpcResponse, type McpDeployResult } from "./mcpServer.js";
+import { BuildToolHost } from "./buildToolHost.js";
+import { runBuildAgent, type AgentRunner, type BuildAgentResult } from "./buildAgent.js";
 import type { McpKeyStore } from "./mcpKeyStore.js";
 import type { BuildJournal, BuildJournalEntry, BuildJournalSummary, BuildMode } from "./buildJournal.js";
 import type { DeployResult } from "./deployArtifact.js";
@@ -106,8 +108,25 @@ export interface BuildOrchestratorDeps {
    * cloned repo into a Flagship app). Provider-agnostic. Absent ⇒ the
    * adapt endpoint reports "AI adapt not configured" (503) — the same
    * way the scratch live path degrades when the provider isn't wired.
+   *
+   * This is the LEGACY single-shot emit-format pass; when an `agentRunner`
+   * is also configured, `adaptGit` prefers the agentic tool-driving loop
+   * and only falls back to this for callers that wire `adaptRunner` alone.
    */
   adaptRunner?: AdaptRunner;
+  /**
+   * The AGENTIC adapt path (the product bar): a provider-agnostic
+   * tool-calling `chat()` runner the loop drives over the SHARED build
+   * tool surface — read_file → write_file → validate → deploy — until the
+   * app deploys. It is given the `buildId` so it can open THAT build's
+   * transient sealed BYOK credential just-in-time per call; the harness
+   * applies the SSRF guard and forwards the tools. flagshipserver.com is
+   * never in the path. When present (and a credential is available), this
+   * is used in preference to `adaptRunner`.
+   */
+  agentRunner?: AgentRunner;
+  /** Turn/cost bounds for the agentic loop (optional). */
+  agentMaxTurns?: number;
   /**
    * Optional per-build credential probe. When supplied AND it returns
    * false for a build, `adaptGit` short-circuits with the SAME clean
@@ -250,15 +269,17 @@ export class BuildOrchestrator {
   async adaptGit(
     buildId: string,
     opts: { instructions?: string } = {},
-  ): Promise<{ ok: true; fileCount: number } | { ok: false; reason: string }> {
+  ): Promise<
+    | { ok: true; fileCount: number; deployed?: boolean; deployedUrl?: string; serviceId?: string; turns?: number }
+    | { ok: false; reason: string }
+  > {
     const st = this.states.get(buildId);
     if (!st || st.mode !== "git") return { ok: false, reason: "not a git build" };
     const ws = this.workspaces.get(buildId);
     if (!ws) return { ok: false, reason: "no workspace for build" };
-    if (!this.deps.adaptRunner) {
-      // Mirror the scratch live-path degradation: the live LLM provider
-      // is not wired into the daemon yet, so there is no model to adapt
-      // with. The HTTP layer turns this into a 503.
+    if (!this.deps.adaptRunner && !this.deps.agentRunner) {
+      // Mirror the scratch live-path degradation: no model is wired to
+      // adapt with. The HTTP layer turns this into a 503.
       return { ok: false, reason: "AI adapt not configured" };
     }
     if (this.deps.adaptCredentialAvailable && !this.deps.adaptCredentialAvailable(buildId)) {
@@ -267,6 +288,15 @@ export class BuildOrchestrator {
       return { ok: false, reason: "AI adapt not configured" };
     }
 
+    // ---- Preferred path: the AGENTIC tool-driving loop ----
+    if (this.deps.agentRunner) {
+      return this.adaptGitAgentic(buildId, ws, opts);
+    }
+
+    // ---- Legacy path: single-shot emit-format pass ----
+    // Reachable only when agentRunner is absent; the early guard proved
+    // adaptRunner is set in that case.
+    const adaptRunner = this.deps.adaptRunner!;
     await this.deps.journal.append(buildId, {
       mode: "git",
       kind: "adapt-step",
@@ -285,7 +315,7 @@ export class BuildOrchestrator {
 
     let raw: string;
     try {
-      raw = await this.deps.adaptRunner({ buildId, systemPrompt: SYSTEM_PROMPT_V1, userPrompt });
+      raw = await adaptRunner({ buildId, systemPrompt: SYSTEM_PROMPT_V1, userPrompt });
     } catch (e) {
       const reason = `adapt model call failed: ${(e as Error).message}`;
       await this.deps.journal.append(buildId, { mode: "git", kind: "error", actor: "ai", summary: reason });
@@ -331,6 +361,109 @@ export class BuildOrchestrator {
 
     st.gitFit = true;
     return { ok: true, fileCount: written.length };
+  }
+
+  /**
+   * The agentic adapt loop: the box's AI drives the SHARED build tool
+   * surface (read_file / write_file / validate / deploy / request_env_var)
+   * over the build's workspace, multi-turn, until the app deploys (or it
+   * stops / hits the turn cap). `deploy` is wired straight to the
+   * orchestrator's own deploy primitive, so the same install path every
+   * mode uses runs from inside the loop. Returns the merged result; never
+   * throws.
+   */
+  private async adaptGitAgentic(
+    buildId: string,
+    ws: BuildWorkspace,
+    opts: { instructions?: string },
+  ): Promise<
+    | { ok: true; fileCount: number; deployed?: boolean; deployedUrl?: string; serviceId?: string; turns?: number }
+    | { ok: false; reason: string }
+  > {
+    const repoFiles = ws.list();
+    await this.deps.journal.append(buildId, {
+      mode: "git",
+      kind: "adapt-step",
+      actor: "ai",
+      summary: `agentic adapt over ${repoFiles.length} repo file(s)`,
+    });
+
+    // The tool host the model drives — the SAME surface MCP exposes, but
+    // here in-process. `deploy` funnels through the orchestrator's own
+    // deploy (Forgejo push → docker build → signed install).
+    const tools = new BuildToolHost({
+      buildId,
+      workspace: ws,
+      journal: this.deps.journal,
+      serverFqdn: this.deps.serverFqdn,
+      mode: "git",
+      envNames: this.deps.envNames ?? (async () => []),
+      recordEnvRequest: async (req) =>
+        this.recordEnvRequest(buildId, {
+          name: req.name,
+          ...(req.why != null ? { why: req.why } : {}),
+          ...(req.secret != null ? { secret: req.secret } : {}),
+          requestedAt: this.now(),
+          requestedBy: "ai",
+        }),
+      deploy: async () => {
+        const r = await this.deploy(buildId);
+        return r.ok
+          ? { ok: true, serviceId: r.serviceId, url: r.url }
+          : { ok: false, reason: r.reason };
+      },
+    });
+
+    const agentRunner = this.deps.agentRunner!;
+    let result: BuildAgentResult;
+    try {
+      result = await runBuildAgent({
+        buildId,
+        runner: (req) => agentRunner(buildId, req),
+        tools,
+        journal: this.deps.journal,
+        repoFiles,
+        ...(opts.instructions != null ? { instructions: opts.instructions } : {}),
+        ...(this.deps.agentMaxTurns != null ? { options: { maxTurns: this.deps.agentMaxTurns } } : {}),
+      });
+    } catch (e) {
+      // runBuildAgent never throws, but defend the boundary anyway.
+      const reason = `agentic adapt failed: ${(e as Error).message}`;
+      await this.deps.journal.append(buildId, { mode: "git", kind: "error", actor: "ai", summary: reason });
+      return { ok: false, reason };
+    }
+
+    const st = this.states.get(buildId);
+    if (st) st.gitFit = true;
+
+    // The model never produced a manifest and never deployed → surface a
+    // clear failure (the HTTP layer maps it to a 502).
+    const hasManifest = ws.manifestJson() != null;
+    if (!result.deployed && !hasManifest) {
+      const reason =
+        result.stopReason === "error"
+          ? result.note ?? "adapt model call failed"
+          : "the AI could not produce a valid Flagship app (no flagship.app.json was written)";
+      return { ok: false, reason };
+    }
+
+    await this.deps.journal.append(buildId, {
+      mode: "git",
+      kind: "adapt-step",
+      actor: "ai",
+      summary: result.deployed
+        ? `agentic adapt deployed in ${result.turns} turn(s)`
+        : `agentic adapt wrote a manifest in ${result.turns} turn(s) (not deployed)`,
+    });
+
+    return {
+      ok: true,
+      fileCount: ws.count(),
+      deployed: result.deployed,
+      ...(result.deployedUrl != null ? { deployedUrl: result.deployedUrl } : {}),
+      ...(result.serviceId != null ? { serviceId: result.serviceId } : {}),
+      turns: result.turns,
+    };
   }
 
   // ----- mcp mode --------------------------------------------------------

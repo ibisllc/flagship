@@ -124,9 +124,17 @@ export class AppUserAllocator {
   private readonly pods = new Map<string, PodEntry>();
   private readonly sets = new Map<string, SetEntry>();
   private readonly now: () => number;
+  /**
+   * The data-plane apex these FQDNs live under — `flagship.services` in
+   * prod, `gym.flagship.services` in the test env (docs/ui-test-gym.md
+   * §6.5). Threaded into the apex-RELATIVE parsers so a deeper apex never
+   * misparses the username. Defaults to the prod literal.
+   */
+  private readonly apex: string;
 
-  constructor(opts: { now?: () => number } = {}) {
+  constructor(opts: { now?: () => number; apex?: string } = {}) {
     this.now = opts.now ?? (() => Date.now());
+    this.apex = opts.apex ?? DEFAULT_APEX;
   }
 
   /**
@@ -163,7 +171,7 @@ export class AppUserAllocator {
     };
     // Compute derivable shorteneds from each canonical.
     for (const canonical of canonicals) {
-      for (const sh of derivableShorteneds(canonical)) {
+      for (const sh of derivableShorteneds(canonical, this.apex)) {
         entry.derivableShorteneds.add(sh);
       }
     }
@@ -174,7 +182,7 @@ export class AppUserAllocator {
 
     // Add this pod to every (slug, author, user) set it has a canonical in.
     for (const canonical of canonicals) {
-      const key = parseSetKey(canonical);
+      const key = parseSetKey(canonical, this.apex);
       if (!key) continue;
       const setKeyStr = encodeSetKey(key);
       let set = this.sets.get(setKeyStr);
@@ -201,6 +209,28 @@ export class AppUserAllocator {
       // additionally the slot the SNI router walks for direct pod
       // URLs (no shortening).
       enqueueCandidate(set, canonical, podCanonical);
+      // TIER-2 leader-route: a presented canonical that is a SHORT
+      // `<svc>.<user>` name (exactly two labels under the apex) and is NOT the
+      // pod's own root is a leader-routed service name the pod declared in its
+      // ServiceEntitlement. Unlike a derived shortened it isn't in
+      // `derivableShorteneds`, so the second loop never claims it — it would
+      // land in members/candidateQueue but NEVER in `slotHolders`, and
+      // `findHolderByFqdn` (which reads ONLY slotHolders for non-pod-canonical
+      // names) would return undefined → the SNI router has no route → the
+      // connection resets. Claim it FCFS here, mirroring the derived-shortened
+      // path, so the entitled box actually receives traffic for it. A
+      // `<svc>.<server>.<user>` tier-1 name (3+ labels under apex) is NOT a
+      // shared leader-route — it's box-specific (covered by the per-box
+      // wildcard + routed via the one-label strip), and a sibling box must
+      // never inherit it on failover; so we gate strictly on the short form.
+      if (
+        canonical !== podCanonical &&
+        isShortServiceCanonical(canonical, this.apex) &&
+        !set.slotHolders.has(canonical)
+      ) {
+        set.slotHolders.set(canonical, podCanonical);
+        shortenedsHeld.push(canonical);
+      }
     }
 
     // Try to allocate any free derivable shortened. The shortened may
@@ -211,7 +241,7 @@ export class AppUserAllocator {
     // claim into so it gets broadcasts + is eligible for
     // socket-death redistribution.
     for (const shortened of entry.derivableShorteneds) {
-      const key = parseSetKey(shortened);
+      const key = parseSetKey(shortened, this.apex);
       if (!key) continue;
       const setKeyStr = encodeSetKey(key);
       let set = this.sets.get(setKeyStr);
@@ -262,7 +292,7 @@ export class AppUserAllocator {
     const fqdn = args.fqdn.toLowerCase();
     const pod = this.pods.get(podCanonical);
     if (!pod) return { ok: false, reason: "pod not registered" };
-    const key = parseSetKey(fqdn);
+    const key = parseSetKey(fqdn, this.apex);
     if (!key) return { ok: false, reason: "fqdn not parseable" };
     if (!pod.derivableShorteneds.has(fqdn) && !pod.canonicals.has(fqdn)) {
       return { ok: false, reason: "fqdn not derivable from any of pod's canonicals" };
@@ -352,7 +382,7 @@ export class AppUserAllocator {
     // Direct pod canonical?
     if (this.pods.has(lower)) return lower;
     // Slot lookup — walk every set the FQDN could belong to.
-    const key = parseSetKey(lower);
+    const key = parseSetKey(lower, this.apex);
     if (!key) return undefined;
     const setKeyStr = encodeSetKey(key);
     const set = this.sets.get(setKeyStr);
@@ -484,12 +514,21 @@ function promoteToHead(set: SetEntry, slot: string, pod: string): void {
 // FQDN parsing helpers
 // ────────────────────────────────────────────────────────────────────
 
-const APEX = "flagship.services";
-const APEX_SUFFIX = "." + APEX;
+/**
+ * The prod data-plane apex. Every parser below takes `apex` as a
+ * defaulted parameter so the test env (`gym.flagship.services`,
+ * docs/ui-test-gym.md §6.5) parses apex-RELATIVE — strip the configured
+ * apex suffix, THEN take the username as the last remaining label. Prod
+ * (default apex) is byte-identical to the old fixed literal.
+ */
+const DEFAULT_APEX = "flagship.services";
 
 /**
- * Parse an FQDN under flagship.services into its (slug, author, user)
- * key. Returns null for FQDNs that don't fit the expected shapes.
+ * Parse an FQDN under the configured apex into its (slug, author, user)
+ * key. Returns null for FQDNs that don't fit the expected shapes. Parses
+ * apex-RELATIVE: the username is the last label remaining after the apex
+ * suffix is stripped, so a deeper apex (`gym.flagship.services`) yields
+ * `home.alice.gym.flagship.services` → user=`alice` (not `gym`).
  *
  * Shapes recognized:
  *   <slug>.<host>.<user>.flagship.services
@@ -511,10 +550,11 @@ const APEX_SUFFIX = "." + APEX;
  * is fine because those FQDNs ARE in some set (the host's own root
  * set, which is harmless to track but unused for app routing).
  */
-export function parseSetKey(fqdn: string): AppUserSetKey | null {
+export function parseSetKey(fqdn: string, apex: string = DEFAULT_APEX): AppUserSetKey | null {
+  const apexSuffix = "." + apex;
   const lower = fqdn.toLowerCase();
-  if (!lower.endsWith(APEX_SUFFIX)) return null;
-  const head = lower.slice(0, -APEX_SUFFIX.length);
+  if (!lower.endsWith(apexSuffix)) return null;
+  const head = lower.slice(0, -apexSuffix.length);
   if (head.length === 0) return null;
   const parts = head.split(".");
   if (parts.length < 2) return null;
@@ -556,10 +596,11 @@ export function parseSetKey(fqdn: string): AppUserSetKey | null {
  * Pod-root canonicals (`kitchen.john.flagship.services`) yield no
  * shortened — they're already as short as they go.
  */
-export function derivableShorteneds(canonical: string): string[] {
+export function derivableShorteneds(canonical: string, apex: string = DEFAULT_APEX): string[] {
+  const apexSuffix = "." + apex;
   const lower = canonical.toLowerCase();
-  if (!lower.endsWith(APEX_SUFFIX)) return [];
-  const head = lower.slice(0, -APEX_SUFFIX.length);
+  if (!lower.endsWith(apexSuffix)) return [];
+  const head = lower.slice(0, -apexSuffix.length);
   if (head.includes("*")) return []; // wildcard claims derive nothing (A′)
   const parts = head.split(".");
   // Need at least 3 labels (slug.host.user) to have any shortened.
@@ -570,17 +611,34 @@ export function derivableShorteneds(canonical: string): string[] {
   void host;
   const out: string[] = [];
   // Always include the user-zone-level shortened (drop host).
-  out.push(`${leftmost}.${user}.${APEX}`);
+  out.push(`${leftmost}.${user}.${apex}`);
   // If the leftmost has a `-author` suffix, also include the
   // bare-slug variants. Author is a hyphen-free username → split at
   // the LAST hyphen so a hyphenated slug stays intact.
   const dashIdx = leftmost.lastIndexOf("-");
   if (dashIdx > 0 && dashIdx < leftmost.length - 1) {
     const slug = leftmost.slice(0, dashIdx);
-    out.push(`${slug}.${user}.${APEX}`);
-    out.push(`${slug}.${parts[parts.length - 2]}.${user}.${APEX}`);
+    out.push(`${slug}.${user}.${apex}`);
+    out.push(`${slug}.${parts[parts.length - 2]}.${user}.${apex}`);
   }
   return out;
+}
+
+/**
+ * Is `fqdn` a SHORT tier-2 service canonical `<svc>.<user>.<apex>` — exactly
+ * two plain DNS labels under the apex? This is the hardware-agnostic
+ * leader-routed form; a `<svc>.<server>.<user>` tier-1 name has three and is
+ * NOT one (it's box-specific). Wildcards never qualify.
+ */
+function isShortServiceCanonical(fqdn: string, apex: string): boolean {
+  const apexSuffix = "." + apex;
+  const lower = fqdn.toLowerCase();
+  if (!lower.endsWith(apexSuffix)) return false;
+  const head = lower.slice(0, -apexSuffix.length);
+  if (head.length === 0 || head.includes("*")) return false;
+  const parts = head.split(".");
+  if (parts.length !== 2) return false;
+  return parts.every((p) => labelOk(p)) && userOk(parts[1]!);
 }
 
 /** Slug / generic DNS label — hyphens allowed in the interior. */
