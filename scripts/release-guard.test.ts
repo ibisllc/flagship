@@ -30,10 +30,12 @@ describe("release-guard.sh — against the real repo (backdoors present in dev)"
   it("dev build (RELEASE unset): reports the backdoors but exits 0", () => {
     const r = run({ RELEASE: "" });
     expect(r.code).toBe(0);
-    // It found the live definitions...
+    // It found the live definition...
     expect(r.stderr).toContain("burn-time LUKS passphrase");
-    expect(r.stderr).toContain("debug console user");
-    // ...and explained that dev is expected to carry them.
+    // ...and explained that dev is expected to carry it. The debug console
+    // user is NOT a finding anymore — grant-gated debug access ships in v1
+    // (owner decision 2026-07-05) from debugAccessGate.ts, which is exempt.
+    expect(r.stderr).not.toContain("debug console user");
     expect(r.stderr).toMatch(/dev\/PR build/);
   });
 
@@ -49,22 +51,19 @@ describe("release-guard.sh — against the real repo (backdoors present in dev)"
     expect(r.code).toBe(1);
   });
 
-  it("flags exactly the load-bearing definitions, not the strip machinery or tests", () => {
+  it("flags exactly the load-bearing definitions, not the strip machinery, tests, or the sanctioned gate", () => {
     // The output lists each finding as a file:line. Descriptive mentions of the
-    // `debug:flagship` marker and the *.test.* assertions must NOT appear — only
-    // the real BURN_PASSPHRASE assignment plus, since the 2026-06-30 console
-    // lockdown, the debug-access gate's known-password constant and its
-    // useradd/chpasswd lines (the Bucket-C item-2 target moved there when the
-    // inline bootstrap bake was removed). Assert none of the tolerated files
-    // leak into the findings.
+    // `debug:flagship` marker, the *.test.* assertions, and the SANCTIONED
+    // grant-gated home (debugAccessGate.ts — a shipping v1 feature since the
+    // 2026-07-05 owner decision) must NOT appear — only the real
+    // BURN_PASSPHRASE assignment (in src and the generated engine copies).
     const r = run({ RELEASE: "" });
     expect(r.stderr).not.toMatch(/\.test\.ts:/);
     expect(r.stderr).not.toMatch(/preseed\.test/);
     expect(r.stderr).not.toMatch(/EngineTests\.swift/);
-    // The flagged lines are the assignment + the gate's password/chpasswd lines.
+    expect(r.stderr).not.toMatch(/debugAccessGate\.ts/);
+    expect(r.stderr).not.toMatch(/chpasswd/);
     expect(r.stderr).toMatch(/userdata\.ts:\d+:export const BURN_PASSPHRASE/);
-    expect(r.stderr).toMatch(/debugAccessGate\.ts:\d+/);
-    expect(r.stderr).toMatch(/chpasswd/);
   });
 });
 
@@ -123,5 +122,40 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
     const r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("burn-time LUKS passphrase");
+  });
+
+  it("debug creds OUTSIDE the sanctioned gate still fail RELEASE (inline-bake regression)", () => {
+    dir = makeCleanTree();
+    writeFileSync(
+      join(dir, "packages", "flagship-burner", "src", "inline-bake.ts"),
+      "export const bake = `echo 'debug:flagship' | chpasswd`;\n",
+    );
+    const r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("debug console user");
+  });
+
+  it("the sanctioned gate is exempt — but ONLY while it still verifies the owner grant", () => {
+    dir = makeCleanTree();
+    const gateDir = join(dir, "packages", "server-daemon", "src");
+    mkdirSync(gateDir, { recursive: true });
+    const gateWithVerify = [
+      'import { verifyDebugAccessGrant } from "@flagship/protocol";',
+      'const DEBUG_PASSWORD = "flagship";',
+      "export async function gate() { if (!verifyDebugAccessGrant()) return; }",
+      "",
+    ].join("\n");
+    writeFileSync(join(gateDir, "debugAccessGate.ts"), gateWithVerify);
+    let r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
+    expect(r.code).toBe(0);
+
+    // Strip the verification but keep the creds: the exemption must not hide it.
+    writeFileSync(
+      join(gateDir, "debugAccessGate.ts"),
+      'const DEBUG_PASSWORD = "flagship";\nexport async function gate() {}\n',
+    );
+    r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("no longer verifies the owner grant");
   });
 });

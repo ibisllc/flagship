@@ -3,16 +3,26 @@
 # present in the shipping source.
 #
 # WHY THIS EXISTS (CLAUDE.md → "GA close-out TODO" Bucket-C item 4):
-# We are still in dev, so two known backdoors are LEFT ENABLED for hardware
-# bring-up and MUST be removed before GA (Bucket-C items 2 + 3):
+# We are still in dev, so a known backdoor is LEFT ENABLED for hardware
+# bring-up and MUST be removed before GA (Bucket-C item 3):
 #   1. the burn-time LUKS recovery passphrase BURN_PASSPHRASE
 #      (`flagship-burn-time-luks-rekey-me-immediately`), a kept known constant in
 #      packages/flagship-burner/src/userdata.ts + the Swift UserData.swift mirror.
-#   2. the `debug` / `flagship` console sudo user the burner bakes in for on-box
-#      console login during bring-up (`echo 'debug:flagship' | chpasswd`).
 # A forgotten backdoor must never silently ship. This gate makes a RELEASE build
-# FAIL while either backdoor is still live in source; the normal dev / PR / gym
-# path stays GREEN with the constants present (it only runs under RELEASE=1).
+# FAIL while it is still live in source; the normal dev / PR / gym path stays
+# GREEN with the constants present (it only runs under RELEASE=1).
+#
+# The `debug`/`flagship` console account is NOT a backdoor anymore — it is a
+# SHIPPING v1 feature (owner decision, 2026-07-05): advanced users can enable
+# SSH/console tinkering on their own box. It is consent-as-crypto: the creds
+# exist ONLY when the box verifies an owner-IRK-signed `flagship/debug-access/v1`
+# grant minted from the phone's biometric-gated Advanced toggle
+# (packages/server-daemon/src/debugAccessGate.ts — the single sanctioned home).
+# This guard therefore (a) EXEMPTS debugAccessGate.ts from the debug-account
+# scans, (b) still FAILS if those creds appear anywhere ELSE (a regression to an
+# unconditional inline bake), and (c) positively ASSERTS the gate file still
+# routes through verifyDebugAccessGrant — so stripping the verification while
+# keeping the creds also fails the release.
 #
 # DESIGN — what it flags vs. what it tolerates:
 # The burner already carries a `stripDebugFeatures()` defense (userdata.ts /
@@ -66,16 +76,25 @@ exclude_path() {
   esac
 }
 
+# The one sanctioned home of the grant-gated debug creds (a v1 FEATURE, not a
+# backdoor — see the header). Exempted from the debug-account scans; its grant
+# verification is positively asserted below instead.
+DEBUG_GATE_REL="packages/server-daemon/src/debugAccessGate.ts"
+exempt_debug_gate() {
+  [ "${1#"$root"/}" = "$DEBUG_GATE_REL" ]
+}
+
 # Each finding is "<marker label>\t<file>:<line>: <text>".
 findings=()
 
 scan() {
-  local label="$1" pattern="$2"
+  local label="$1" pattern="$2" allow_gate="${3:-}"
   # -I skip binary, -n line numbers, -E extended regex, -r recursive.
   while IFS= read -r hit; do
     [ -z "$hit" ] && continue
     local file="${hit%%:*}"
     exclude_path "$file" && continue
+    [ "$allow_gate" = "allow-debug-gate" ] && exempt_debug_gate "$file" && continue
     findings+=("$label"$'\t'"$hit")
   done < <(grep -rInE "$pattern" \
       --include="*.ts" --include="*.swift" --include="*.kt" --include="*.sh" \
@@ -89,22 +108,32 @@ scan() {
 scan "burn-time LUKS passphrase" \
   '(BURN_PASSPHRASE|burnPassphrase)[[:space:]]*=[[:space:]]*"flagship-burn-time-luks-rekey-me-immediately"'
 
-# Backdoor 2 — the `debug:flagship` console account. Since the 2026-06-30
-# console lockdown the inline bootstrap machinery is gone; the account is baked
-# ONLY by the owner-grant debug gate (server-daemon debugAccessGate.ts), whose
-# known-password constant + templated `echo '…' | chpasswd` line are the
-# load-bearing definitions this guard targets. The legacy literal forms stay in
-# the patterns so a regression to the old inline bake is also caught.
+# Debug-account regression scans. The grant-gated home (debugAccessGate.ts) is
+# EXEMPT — that path ships in v1 (see the header). Anywhere else these
+# definitions appear is a regression to an unconditional inline bake and fails
+# a release. The legacy literal forms stay in the patterns for the same reason.
 scan "debug console user (password constant)" \
-  'DEBUG_PASSWORD[[:space:]]*=[[:space:]]*"flagship"'
+  'DEBUG_PASSWORD[[:space:]]*=[[:space:]]*"flagship"' allow-debug-gate
 
 scan "debug console user (chpasswd)" \
-  "echo '?(debug|\\\$\\{DEBUG_USER\\}):(flagship|\\\$\\{DEBUG_PASSWORD\\})'?[[:space:]]*\\|[[:space:]]*chpasswd"
+  "echo '?(debug|\\\$\\{DEBUG_USER\\}):(flagship|\\\$\\{DEBUG_PASSWORD\\})'?[[:space:]]*\\|[[:space:]]*chpasswd" allow-debug-gate
 
-# Backdoor 2 (companion) — the `useradd … debug` line for the same account
-# (shell form or the gate's argv form ending in DEBUG_USER).
 scan "debug console user (useradd)" \
-  'useradd([[:space:]].*[[:space:]]debug([[:space:]]|$)|.*DEBUG_USER)'
+  'useradd([[:space:]].*[[:space:]]debug([[:space:]]|$)|.*DEBUG_USER)' allow-debug-gate
+
+# Positive assertion — the exempted gate must still route its cred writes
+# through the owner-grant verification. If someone strips the verify call but
+# keeps the creds, the exemption above would otherwise hide it.
+if [ -f "$root/$DEBUG_GATE_REL" ]; then
+  if ! grep -qE 'verifyDebugAccessGrant' "$root/$DEBUG_GATE_REL"; then
+    findings+=("debug gate no longer verifies the owner grant"$'\t'"$DEBUG_GATE_REL: verifyDebugAccessGrant not found")
+  fi
+elif grep -rInEq 'DEBUG_PASSWORD[[:space:]]*=[[:space:]]*"flagship"' \
+    --include="*.ts" "$root/packages" 2>/dev/null; then
+  # The gate moved without updating DEBUG_GATE_REL — fail loudly rather than
+  # silently exempting nothing (the scans above would already be flagging it).
+  findings+=("debug gate path stale"$'\t'"$DEBUG_GATE_REL: missing but debug creds exist elsewhere")
+fi
 
 count="${#findings[@]}"
 
@@ -124,8 +153,10 @@ release="${RELEASE:-}"
 if [ "$release" = "1" ] || [ "$release" = "true" ]; then
   echo >&2
   echo "::error::RELEASE build but a dev-mode backdoor is still present. Disarm Bucket-C" >&2
-  echo "items 2+3 before release: delete BURN_PASSPHRASE + the debug-user useradd/chpasswd," >&2
-  echo "re-enable the luksRemoveKey guard (CLAUDE.md → GA close-out TODO)." >&2
+  echo "item 3 before release: delete BURN_PASSPHRASE (+ regenerate the engine bundle and" >&2
+  echo "its vendored copies) and re-enable the luksRemoveKey guard (CLAUDE.md → GA close-out TODO)." >&2
+  echo "Debug creds outside debugAccessGate.ts are a regression — the grant-gated debug" >&2
+  echo "feature ships in v1 ONLY from that file." >&2
   exit 1
 fi
 

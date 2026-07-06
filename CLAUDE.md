@@ -527,16 +527,24 @@ domain). Earliest phone-home beacons in the preseed.
 >    add a per-env confirmation token + a prod row-count safety/dry-run + an
 >    audit-logged admin-only path, or remove it from the deployable surface. Keep its
 >    table list in sync with new migrations until then.
-> 2. **Remove the `debug` / `flagship` console user** (burner-installed sudo bring-up
->    backdoor). Needs a reburn.
+> 2. **~~Remove the `debug`/`flagship` console user~~ — RESOLVED AS A FEATURE
+>    (owner decision 2026-07-05).** Grant-gated debug access SHIPS in v1 for
+>    advanced users who want to tinker: the creds exist ONLY when the box
+>    verifies the phone-minted, biometric-gated, owner-IRK-signed
+>    `flagship/debug-access/v1` grant (`server-daemon/src/debugAccessGate.ts`,
+>    the single sanctioned home — the phone toggle lives under Advanced at
+>    mint). The old unconditional inline bake was already removed (95a460bb).
+>    The release-guard now EXEMPTS the gate file, still fails on debug creds
+>    anywhere else, and positively asserts the gate keeps calling
+>    `verifyDebugAccessGrant`.
 > 3. **Remove the burn-time LUKS recovery passphrase**
 >    (`flagship-burn-time-luks-rekey-me-immediately`, in `flagship-burner/src/userdata.ts`
 >    + the Swift mirror) **and re-enable the `luksRemoveKey` guard** (deliberately
 >    guarded off, not deleted, so the slot survives bring-up).
-> 4. **✅ DONE — CI grep-gate that FAILS a RELEASE build** if the item-2/3 constants are
+> 4. **✅ DONE — CI grep-gate that FAILS a RELEASE build** if the item-3 constant is
 >    present (`scripts/release-guard.sh` + `.github/workflows/release-guard.yml`;
 >    enforces on `release-*`/`v*` tags, advisory on PRs). Correctly RED today (the
->    constants are still present by design) — removing items 2–3 turns it green.
+>    constant is still present by design) — removing item 3 turns it green.
 > 5. **Remove the demo/dev flips** in the burner + apps (demo-mode + the 3-tap
 >    live/mock toggle).
 > 6. **Fill the `pro.html` payment placeholders** (Monero + mailing address) — needs the
