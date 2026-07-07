@@ -149,6 +149,36 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-07 (Chromebook instance) — on-device (phone) USB burn built out end to
+end + a reproducible ISO seed + transparent delivery.** On `feat/chromebook-fit`.
+Closes the long-standing OTG-burner §5 seam (VerbatimInjector). Design:
+`docs/iso-seed-and-on-device-burn.md`; public verify page
+`/security/iso-seed.html`. The phone no longer remasters an ISO — it streams a
+pre-baked **seed** verbatim and appends a `FLAGSHIP` FAT16 partition carrying the
+per-recipe preseed. Pieces: (a) **`iso-seed/build-seed.sh`** derives the seed
+from stock Debian netinst with xorriso only, **byte-for-byte reproducible**
+(pinned timestamps + GPT GUID; verified identical across runs,
+`sha256=367acd2f…`), boot equipment + Debian volid preserved; the baked stub
+preseed's early_command mounts FLAGSHIP and `debconf-set-selections`es the real
+preseed. (b) **flagship-burner**: `buildSeedStubPreseed()` + shared
+`SEED_LOCALE`/`SEED_KEYMAP` drift-guard; verified the full generator output
+applies cleanly mid-stream (nothing recipe-critical consumed before
+early_command). (c) **`.com`**: `/api/iso-manifest` serves the seed to
+`platform=android` (sha-pinned, arch-aware, `FLAGSHIP_ISO_SEED[_ARM64]`);
+desktop stays on the stock base; paths provably never cross. (d) **Android**:
+`SeedInjector` (+ `PartitionTable`, offset writes in `MassStorageWriter`)
+replaces VerbatimInjector; preseed text comes ONLY from the shared generator via
+Rhino, never reimplemented. Gates: `tsc -b` clean; flagship-burner 249 +
+isoManifest 27 vitest green; Android `:app:testDebugUnitTest` + `assembleDebug`
+green. **Verified on a build host**: assembled a full stick image (seed + FAT
+partition) and read preseed.cfg back out. **REMAINING (owner/hardware, task #19):**
+the seed is a **GPT isohybrid**, so an MBR-only FLAGSHIP append is invisible to
+d-i — register it in the GPT / build the seed MBR-only / pre-declare at
+seed-build time, then validate a real OTG burn+boot. Owner deploy: set
+`FLAGSHIP_ISO_SEED` to the real GitHub-release URL + pinned sha; publish the seed
+artifact.
+
+
 **2026-07-06 (evening, Chromebook instance) — Linux burner validated LIVE on
 ChromeOS; multi-arch Linux remainder DONE; Android/iOS large-screen polish.**
 On `feat/chromebook-fit` (branch off main; iOS half needs a Mac build before
