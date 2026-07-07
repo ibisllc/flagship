@@ -131,6 +131,111 @@ describe("iso manifest handler", () => {
     });
   });
 
+  describe("android seed selection", () => {
+    const SEED: IsoManifest = {
+      version: "flagship-seed-debian-13.5.0",
+      url: "https://github.com/ibisllc/flagship/releases/download/seed-v1/flagship-seed-debian-13.5.0-amd64.iso",
+      sha256: "367acd2f6f6f19b5da0335c65f692963b06bd996c9e09509ac6732978ec2168d",
+      sizeBytes: 799014912,
+      attestation:
+        "https://github.com/ibisllc/flagship/blob/main/docs/iso-seed-and-on-device-burn.md",
+    };
+    const SEED_ARM64: IsoManifest = {
+      version: "flagship-seed-debian-13.5.0-arm64",
+      url: "https://github.com/ibisllc/flagship/releases/download/seed-v1/flagship-seed-debian-13.5.0-arm64.iso",
+      sha256: "e".repeat(64),
+      sizeBytes: 742391808,
+      attestation:
+        "https://github.com/ibisllc/flagship/blob/main/docs/iso-seed-and-on-device-burn.md",
+    };
+
+    it("no seed configured → { download: null } (even though stock is blessed)", () => {
+      const r = handleIsoManifest(
+        { blessedManifest: BLESSED, blessedManifestArm64: BLESSED },
+        { platform: "android", burnerVersion: "1.0.0", current: null },
+      );
+      expect(r.status).toBe(200);
+      expect(r.body).toEqual({ download: null });
+    });
+
+    it("seed configured + current=null → returns the SEED (not the stock base)", () => {
+      const r = handleIsoManifest(
+        { blessedManifest: BLESSED, seedManifest: SEED },
+        { platform: "android", burnerVersion: "1.0.0", current: null },
+      );
+      expect(r.status).toBe(200);
+      expect(r.body).toEqual({ download: SEED });
+    });
+
+    it("seed configured + matching current sha (case-insensitive) → { download: null }", () => {
+      const r = handleIsoManifest(
+        { blessedManifest: BLESSED, seedManifest: SEED },
+        {
+          platform: "android",
+          burnerVersion: "1.0.0",
+          current: {
+            version: "flagship-seed-debian-13.5.0",
+            sha256: SEED.sha256.toUpperCase(),
+          },
+        },
+      );
+      expect(r.status).toBe(200);
+      expect(r.body).toEqual({ download: null });
+    });
+
+    it("seed configured + stale current sha → returns the SEED", () => {
+      const r = handleIsoManifest(
+        { blessedManifest: BLESSED, seedManifest: SEED },
+        {
+          platform: "android",
+          burnerVersion: "1.0.0",
+          current: { version: "flagship-seed-old", sha256: "f".repeat(64) },
+        },
+      );
+      expect(r.body).toEqual({ download: SEED });
+    });
+
+    it('android arch:"arm64" → the arm64 seed', () => {
+      const r = handleIsoManifest(
+        {
+          blessedManifest: BLESSED,
+          blessedManifestArm64: BLESSED,
+          seedManifest: SEED,
+          seedManifestArm64: SEED_ARM64,
+        },
+        { platform: "android", burnerVersion: "1.0.0", current: null, arch: "arm64" },
+      );
+      expect(r.body).toEqual({ download: SEED_ARM64 });
+    });
+
+    it('android arch:"arm64" unconfigured → { download: null } (no amd64-seed fallback)', () => {
+      const r = handleIsoManifest(
+        { blessedManifest: BLESSED, blessedManifestArm64: BLESSED, seedManifest: SEED },
+        { platform: "android", burnerVersion: "1.0.0", current: null, arch: "arm64" },
+      );
+      expect(r.body).toEqual({ download: null });
+    });
+
+    it("seed and stock never cross: desktop platforms get the STOCK base even when a seed is configured", () => {
+      for (const platform of ["mac", "linux", "windows"] as const) {
+        const r = handleIsoManifest(
+          { blessedManifest: BLESSED, seedManifest: SEED },
+          { platform, burnerVersion: "1.0.0", current: null },
+        );
+        expect(r.body).toEqual({ download: BLESSED });
+      }
+    });
+
+    it("seed and stock never cross: android never gets the stock base even when no seed is configured", () => {
+      const r = handleIsoManifest(
+        { blessedManifest: BLESSED, blessedManifestArm64: BLESSED },
+        { platform: "android", burnerVersion: "1.0.0", current: null },
+      );
+      expect(r.body).toEqual({ download: null });
+      expect(r.body).not.toEqual({ download: BLESSED });
+    });
+  });
+
   describe("bad input → 400", () => {
     it("missing body", () => {
       expect(handleIsoManifest({ blessedManifest: BLESSED }, undefined).status).toBe(400);
