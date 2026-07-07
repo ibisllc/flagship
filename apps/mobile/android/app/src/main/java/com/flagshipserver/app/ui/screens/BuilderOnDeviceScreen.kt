@@ -171,6 +171,7 @@ fun BuilderOnDeviceScreen(recipeJson: String, onDone: () -> Unit) {
                     BuilderOnDeviceViewModel.Phase.Verifying,
                     BuilderOnDeviceViewModel.Phase.Injecting,
                     BuilderOnDeviceViewModel.Phase.Writing,
+                    BuilderOnDeviceViewModel.Phase.Finalizing,
                     -> ProgressBlock(state)
 
                     else -> {}
@@ -236,6 +237,7 @@ private fun ProgressBlock(state: BuilderOnDeviceViewModel.State) {
         BuilderOnDeviceViewModel.Phase.Verifying -> "Verifying"
         BuilderOnDeviceViewModel.Phase.Injecting -> "Preparing"
         BuilderOnDeviceViewModel.Phase.Writing -> "Writing"
+        BuilderOnDeviceViewModel.Phase.Finalizing -> "Finalizing"
         else -> ""
     }
     FSCard {
