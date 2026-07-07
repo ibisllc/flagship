@@ -21,8 +21,9 @@ import java.io.InputStream
 
 /**
  * Post-write step for the seed-and-append model: after [InjectedImage.stream] is
- * written verbatim from LBA 0, lay the FLAGSHIP FAT volume in free space and
- * splice its MBR partition entry (docs/iso-seed-and-on-device-burn.md). The
+ * written verbatim from LBA 0, OVERWRITE the seed's pre-declared, GPT-registered
+ * FLAGSHIP region with the per-recipe FAT volume (docs/iso-seed-and-on-device-
+ * burn.md, "option 4"). No MBR/GPT edits — the region is already in the GPT. The
  * verbatim path leaves this null. Runs on the same open USB handle the caller
  * already holds.
  */

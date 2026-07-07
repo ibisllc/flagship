@@ -1,9 +1,11 @@
 // The real replacement for VerbatimInjector: the seed-and-append burn
-// (docs/iso-seed-and-on-device-burn.md). The stick gets the pre-baked SEED ISO
-// written verbatim from LBA 0 (isohybrid MBR/GPT ride along), then — via the
-// InjectedImage.placement hook the caller runs on the same USB handle — a
-// FLAGSHIP-labeled FAT16 volume carrying the per-recipe preseed.cfg is laid down
-// in free space past the ISO image and one MBR partition entry is spliced in.
+// (docs/iso-seed-and-on-device-burn.md, "option 4" — QEMU-validated). The stick
+// gets the pre-baked SEED ISO written verbatim from LBA 0 (isohybrid MBR/GPT
+// ride along, INCLUDING an empty, GPT-registered FLAGSHIP FAT16 partition the
+// seed build pre-declared). Then — via the InjectedImage.placement hook the
+// caller runs on the same USB handle — that already-registered region is
+// OVERWRITTEN with a FLAGSHIP-labeled FAT16 volume carrying the per-recipe
+// preseed.cfg. NO partition-table surgery: no MBR splice, no GPT CRC recompute.
 // No ISO remaster on-device.
 //
 // The preseed TEXT is NOT generated here. It comes from [PreseedSource], which
@@ -16,6 +18,7 @@
 package com.flagshipserver.app.burner.iso
 
 import java.io.File
+import java.io.RandomAccessFile
 
 /**
  * Supplies the per-recipe `preseed.cfg` for the on-device burn. Implementations
@@ -67,22 +70,38 @@ class SeedInjector(
 
         val stream = baseIso.inputStream().buffered(1 shl 20)
         val placement = SeedPlacement { writer, capacity ->
-            val place = PartitionTable.placeFatVolume(
-                seedImageBytes = seedBytes,
-                fatVolumeBytes = fatVolume.size,
-                blockSize = capacity.blockSize,
-                lastLba = capacity.lastLba,
+            // Locate the pre-declared FLAGSHIP region by reading the GPT off the
+            // seed bytes (byte-identical to the just-written stick).
+            val region = RandomAccessFile(baseIso, "r").use { raf ->
+                GptReader.findFlagshipRegion(
+                    { offset, length ->
+                        val buf = ByteArray(length)
+                        raf.seek(offset)
+                        raf.readFully(buf)
+                        buf
+                    },
+                    deviceBlockSize = capacity.blockSize,
+                )
+            }
+            if (fatVolume.size.toLong() > region.sizeBytes) {
+                throw IllegalStateException(
+                    "FLAGSHIP volume (${fatVolume.size} B) is larger than the pre-declared region (${region.sizeBytes} B)",
+                )
+            }
+            require(region.sizeBytes <= Int.MAX_VALUE) { "FLAGSHIP region too large to buffer (${region.sizeBytes} B)" }
+            // GPT offsets are 512-byte LBA units; convert to device blocks. The
+            // seed build MiB-aligns the region, so this divides cleanly (guarded
+            // by GptReader too).
+            val startLba = region.offsetBytes / capacity.blockSize
+            // Zero-pad the FAT volume to the full region so the leftover of the
+            // seed's empty partition is deterministically blank.
+            val fullRegion = ByteArray(region.sizeBytes.toInt())
+            fatVolume.copyInto(fullRegion)
+            writer.writeSectors(fullRegion, startLba, capacity.blockSize)
+            log(
+                "SeedInjector: overwrote FLAGSHIP region at byte ${region.offsetBytes} " +
+                    "(LBA $startLba, ${region.sizeBytes} B) with the preseed FAT volume.",
             )
-            // 1. Lay the FAT volume in free space past the ISO image.
-            writer.writeSectors(fatVolume, place.startLba, capacity.blockSize)
-            // 2. Read LBA 0, splice the FLAGSHIP entry into slot 3, write it back.
-            //    Read a whole block (>= 512) so bytes past the MBR are preserved.
-            val block = writer.readSectors(startLba = 0, count = 1, blockSize = capacity.blockSize)
-            val mbr = block.copyOfRange(0, PartitionTable.MBR_SIZE)
-            val entry = PartitionTable.partitionEntry(place, PartitionTable.TYPE_FAT16_LBA)
-            PartitionTable.spliceEntry(mbr, slotIndex = 3, entry = entry).copyInto(block, 0)
-            writer.writeSectors(block, startLba = 0, blockSize = capacity.blockSize)
-            log("SeedInjector: placed FLAGSHIP at LBA ${place.startLba} (${place.sectorCount} blocks) + patched MBR.")
         }
 
         return InjectedImage(

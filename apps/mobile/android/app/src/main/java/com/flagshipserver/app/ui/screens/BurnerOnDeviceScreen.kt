@@ -32,6 +32,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -148,6 +150,14 @@ fun BurnerOnDeviceScreen(recipeJson: String, onDone: () -> Unit) {
             BurnerOnDeviceViewModel.Phase.NoUsb -> NoUsbBlock(onRefresh = { vm.refreshDevices() })
             else -> {
                 DrivePicker(state, onSelect = { vm.select(it) }, onRefresh = { vm.refreshDevices() })
+                if (vm.devUnlocked) {
+                    Spacer(Modifier.height(FS.space.s3))
+                    DevSeedPicker(
+                        label = state.localSeedLabel,
+                        onPick = { uri, name -> vm.setLocalSeed(uri, name) },
+                        onClear = { vm.setLocalSeed(null, null) },
+                    )
+                }
                 Spacer(Modifier.height(FS.space.s4))
                 when (state.phase) {
                     BurnerOnDeviceViewModel.Phase.NeedPermission -> {
@@ -214,6 +224,39 @@ private fun DrivePicker(
         Spacer(Modifier.height(FS.space.s2))
     }
     FSGhostButton(label = "Rescan", onClick = onRefresh)
+}
+
+/**
+ * DEV-ONLY (gated on [BurnerOnDeviceViewModel.devUnlocked]): pick a locally
+ * `adb push`ed seed so a hardware tester can burn with no hosting (task #22).
+ */
+@Composable
+private fun DevSeedPicker(
+    label: String?,
+    onPick: (uri: String, name: String?) -> Unit,
+    onClear: () -> Unit,
+) {
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) onPick(uri.toString(), uri.lastPathSegment)
+    }
+    FSCard {
+        Text("Developer: seed source", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
+        Spacer(Modifier.height(FS.space.s1))
+        Text(
+            label ?: "Managed (manifest download)",
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FSGhostButton(label = "Choose local seed…", onClick = { picker.launch(arrayOf("*/*")) })
+            if (label != null) {
+                Spacer(Modifier.height(0.dp))
+                Text("  ")
+                FSGhostButton(label = "Use managed", onClick = onClear)
+            }
+        }
+    }
 }
 
 @Composable

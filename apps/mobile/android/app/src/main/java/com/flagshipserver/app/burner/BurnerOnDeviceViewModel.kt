@@ -19,6 +19,7 @@ import com.flagshipserver.app.burner.iso.PreseedEngine
 import com.flagshipserver.app.burner.iso.PreseedSource
 import com.flagshipserver.app.burner.iso.RecipeParse
 import com.flagshipserver.app.burner.iso.SeedInjector
+import com.flagshipserver.app.burner.iso.SeedSource
 import com.flagshipserver.app.burner.usb.MassStorageWriter
 import com.flagshipserver.app.burner.usb.UsbHost
 import com.flagshipserver.app.burner.usb.UsbMassStorageDevice
@@ -49,12 +50,31 @@ class BurnerOnDeviceViewModel(
         val recipeEmbedded: Boolean = false,
         val error: String? = null,
         val bytesWritten: Long = 0,
+        /** Dev-only: a locally-picked seed replacing the manifest download; null = managed. */
+        val localSeedLabel: String? = null,
     )
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
     private val usb: UsbManager = UsbHost.manager(app)
+
+    /** Debuggable build ⇒ dev affordances (local seed) are permitted. */
+    val devUnlocked: Boolean =
+        (app.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+    private var localSeedUri: String? = null
+
+    /**
+     * Dev-only: burn from a locally-supplied seed (a `content://` URI or a file
+     * path) instead of the manifest download, so a hardware tester can `adb push`
+     * a seed and burn with no hosting. Ignored on a non-debuggable build.
+     */
+    fun setLocalSeed(uri: String?, label: String?) {
+        if (!devUnlocked) return
+        localSeedUri = uri
+        _state.value = _state.value.copy(localSeedLabel = if (uri.isNullOrBlank()) null else (label ?: uri))
+    }
 
     init {
         // Parse the recipe up front so the UI can show what it's about to burn,
@@ -118,23 +138,29 @@ class BurnerOnDeviceViewModel(
 
         viewModelScope.launch {
             try {
-                // 1. Download + verify the base ISO (manifest-driven).
-                val cache = IsoBaseCache(
-                    client = IsoManifestClient(OkHttpBurnerHttp()),
-                    http = OkHttpBurnerHttp(),
-                    cacheDir = File(getApplication<Application>().cacheDir, "flagship-burner"),
-                    burnerVersion = burnerVersion(),
-                )
+                // 1. Obtain the seed ISO: a dev-only local file, or the
+                //    manifest-driven, sha-pinned download (production default).
                 set(Phase.Downloading, status = "Preparing the operating-system image…")
-                val baseIso = withContext(Dispatchers.IO) {
-                    cache.ensure { phase ->
-                        when (phase) {
-                            is IsoBaseCache.Phase.Inspected ->
-                                set(Phase.Downloading, status = "Checking cached image…")
-                            is IsoBaseCache.Phase.Downloading ->
-                                set(Phase.Downloading, progress = phase.progress, status = "Downloading the operating system…")
-                            is IsoBaseCache.Phase.Ready ->
-                                set(Phase.Verifying, progress = 1.0, status = if (phase.fromCache) "Using verified cached image." else "Image verified.")
+                val baseIso = when (val source = SeedSource.resolve(localSeedUri, devUnlocked)) {
+                    is SeedSource.LocalFile -> withContext(Dispatchers.IO) { copyLocalSeed(source.uri) }
+                    SeedSource.Managed -> {
+                        val cache = IsoBaseCache(
+                            client = IsoManifestClient(OkHttpBurnerHttp()),
+                            http = OkHttpBurnerHttp(),
+                            cacheDir = File(getApplication<Application>().cacheDir, "flagship-burner"),
+                            burnerVersion = burnerVersion(),
+                        )
+                        withContext(Dispatchers.IO) {
+                            cache.ensure { phase ->
+                                when (phase) {
+                                    is IsoBaseCache.Phase.Inspected ->
+                                        set(Phase.Downloading, status = "Checking cached image…")
+                                    is IsoBaseCache.Phase.Downloading ->
+                                        set(Phase.Downloading, progress = phase.progress, status = "Downloading the operating system…")
+                                    is IsoBaseCache.Phase.Ready ->
+                                        set(Phase.Verifying, progress = 1.0, status = if (phase.fromCache) "Using verified cached image." else "Image verified.")
+                                }
+                            }
                         }
                     }
                 }
@@ -163,7 +189,7 @@ class BurnerOnDeviceViewModel(
                                 set(Phase.Writing, progress = frac, status = "Writing to the USB drive — do not unplug…", bytes = w)
                             }
                         }
-                        // Seed-and-append: lay the FLAGSHIP FAT volume + patch the MBR.
+                        // Seed-and-append: overwrite the seed's pre-declared FLAGSHIP region.
                         injected.placement?.let { placement ->
                             set(Phase.Finalizing, status = "Finalizing the install image — do not unplug…")
                             placement.place(writer, cap)
@@ -194,6 +220,28 @@ class BurnerOnDeviceViewModel(
             statusLine = status ?: cur.statusLine,
             bytesWritten = bytes ?: cur.bytesWritten,
         )
+    }
+
+    /**
+     * Copy a dev-supplied seed ([uri]: a `content://` URI or a file path) into a
+     * private cache file the injector + writer can stream + memory-map. Reports
+     * progress on the Downloading/Verifying phases like the managed path.
+     */
+    private fun copyLocalSeed(uri: String): File {
+        set(Phase.Downloading, status = "Reading the local seed image…")
+        val app = getApplication<Application>()
+        val dir = File(app.cacheDir, "flagship-burner").apply { mkdirs() }
+        val out = File(dir, "local-seed.iso")
+        val input = if (uri.startsWith("content://")) {
+            app.contentResolver.openInputStream(android.net.Uri.parse(uri))
+                ?: throw RuntimeException("Couldn't open the local seed at $uri.")
+        } else {
+            File(uri.removePrefix("file://")).inputStream()
+        }
+        input.use { ins -> out.outputStream().use { os -> ins.copyTo(os, 1 shl 20) } }
+        if (out.length() == 0L) throw RuntimeException("The local seed at $uri is empty.")
+        set(Phase.Verifying, progress = 1.0, status = "Using local seed image (${human(out.length())}).")
+        return out
     }
 
     private fun burnerVersion(): String =
