@@ -166,17 +166,29 @@ applies cleanly mid-stream (nothing recipe-critical consumed before
 early_command). (c) **`.com`**: `/api/iso-manifest` serves the seed to
 `platform=android` (sha-pinned, arch-aware, `FLAGSHIP_ISO_SEED[_ARM64]`);
 desktop stays on the stock base; paths provably never cross. (d) **Android**:
-`SeedInjector` (+ `PartitionTable`, offset writes in `MassStorageWriter`)
-replaces VerbatimInjector; preseed text comes ONLY from the shared generator via
-Rhino, never reimplemented. Gates: `tsc -b` clean; flagship-burner 249 +
-isoManifest 27 vitest green; Android `:app:testDebugUnitTest` + `assembleDebug`
-green. **Verified on a build host**: assembled a full stick image (seed + FAT
-partition) and read preseed.cfg back out. **REMAINING (owner/hardware, task #19):**
-the seed is a **GPT isohybrid**, so an MBR-only FLAGSHIP append is invisible to
-d-i — register it in the GPT / build the seed MBR-only / pre-declare at
-seed-build time, then validate a real OTG burn+boot. Owner deploy: set
-`FLAGSHIP_ISO_SEED` to the real GitHub-release URL + pinned sha; publish the seed
-artifact.
+`SeedInjector` + `GptReader` overwrite the seed's pre-declared FLAGSHIP partition
+(the earlier MBR-splice `PartitionTable` was deleted — Linux ignores MBR entries
+on the GPT isohybrid); preseed text comes ONLY from the shared generator via
+Rhino, never reimplemented; + a dev `SeedSource.LocalFile` seam
+(FLAG_DEBUGGABLE-gated) so a hardware tester burns an adb-pushed seed with zero
+hosting. **GPT-registration RESOLVED (option 4):** the seed build appends an
+empty GPT-registered FLAGSHIP FAT16 partition via `xorriso -append_partition`
+(mformat pinned via SOURCE_DATE_EPOCH → still reproducible), so the burner does
+zero partition-table surgery.
+**★ VALIDATED END-TO-END IN QEMU (no hardware):** a burned stick (seed + FLAGSHIP
+overwritten with a real minted recipe) boots under OVMF/UEFI with a blank target
+disk + the stick as USB installer; d-i finds FLAGSHIP via the GPT, chain-loads
+the recipe preseed, installs UNATTENDED (partitioning → base → flagship
+bootstrap late_command succeeds → clean finish, 2.78 GB written), and the
+installed disk boots to the Flagship server login banner. This is the same boot
+chain real hardware runs — everything but the USB write transport is proven.
+Gates: `tsc -b` clean; flagship-burner 249 + isoManifest 27 vitest green; Android
+`:app:testDebugUnitTest` (incl. GptReader/SeedInjector/SeedSource) + assembleDebug
+green. **REMAINING (hardware, when the owner provides a device):** confirm the
+USB-C OTG *write* transport (`MassStorageWriter` over real SCSI-USB) on a phone;
+the FAT-in-region format (small FAT16 + zero tail) is a minor residual to eyeball.
+Owner deploy (after the device check): set `FLAGSHIP_ISO_SEED` to the real
+GitHub-release URL + pinned sha `bc8ccfe8…`; publish the seed artifact.
 
 
 **2026-07-06 (evening, Chromebook instance) — Linux burner validated LIVE on
