@@ -48,6 +48,17 @@ import { utf8ToBase64 } from "./base64.js";
  * pre-bootstrap rungs (`booting`/`partitioning`/`downloading`); the first-boot
  * bootstrap + daemon report the rest. ONE channel, ONE vocabulary.
  */
+/**
+ * The two settings d-i consumes BEFORE preseed/early_command runs (localechooser
+ * + keyboard). In the seed-ISO model the recipe-independent seed STUB
+ * (iso-seed/preseed.cfg + buildSeedStubPreseed) sets these in time, and the
+ * per-recipe preseed re-sets them via debconf-set-selections too late to matter —
+ * so the two MUST carry identical values or the stub silently wins. These
+ * constants are the single source both emit; a test pins that they can't drift.
+ */
+export const SEED_LOCALE = "en_US.UTF-8";
+export const SEED_KEYMAP = "us";
+
 export type ProvisionStatusPhase =
   | "booting"
   | "partitioning"
@@ -188,8 +199,8 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
 # Generated at burn time. Don't edit by hand.
 
 ### Localization — fixed, non-interactive.
-d-i debian-installer/locale string en_US.UTF-8
-d-i keyboard-configuration/xkb-keymap select us
+d-i debian-installer/locale string ${SEED_LOCALE}
+d-i keyboard-configuration/xkb-keymap select ${SEED_KEYMAP}
 
 ### Network.
 ${wifiNetcfgBlock}d-i netcfg/choose_interface select auto
@@ -296,6 +307,63 @@ d-i debian-installer/exit/poweroff boolean true
 ### First-boot bootstrap — the same install-blob + bootstrap the Ubuntu path
 ### writes, run in the installed target (d-i in-target == curtin in-target).
 d-i preseed/late_command string ${lateCommand}
+`;
+}
+
+/**
+ * The recipe-INDEPENDENT seed stub preseed baked into the seed ISO
+ * (iso-seed/preseed.cfg). It sets ONLY the settings d-i consumes before
+ * preseed/early_command (locale + keymap — the SEED_LOCALE/SEED_KEYMAP constants,
+ * shared with buildDebianPreseed so they can't drift), then chain-loads the real
+ * per-recipe preseed off the FAT partition labeled FLAGSHIP via
+ * debconf-set-selections. Every recipe-derived directive (partman/*, pkgsel,
+ * grub-installer/*, finish-install, late_command) is consumed AFTER
+ * early_command, so the chain-load lands in time — a standard d-i chain-load.
+ *
+ * Exported so the seed build + tests can assert the stub and the generator agree
+ * on the pre-early_command constants (buildSeedStubPreseed and buildDebianPreseed
+ * emit the SAME locale/keymap lines). Kept functionally byte-identical to the
+ * committed iso-seed/preseed.cfg (a test pins the two together).
+ */
+export function buildSeedStubPreseed(): string {
+  return `# Flagship SEED stub preseed — recipe-INDEPENDENT, identical for every user.
+#
+# The per-recipe preseed (the full \`buildDebianPreseed\` output, carrying the
+# phone's signed InstallBlob) is NOT here. It rides on a small FAT partition
+# labeled FLAGSHIP that the burner appends to the USB stick after streaming
+# this seed verbatim. This stub's job is only to (1) satisfy the few settings
+# d-i consumes before early_command runs, and (2) load the real preseed off the
+# FLAGSHIP partition into d-i's debconf DB, in time for every later stage
+# (partitioning, late_command) to see it.
+#
+# Applying the real preseed via \`debconf-set-selections\` from early_command is a
+# standard d-i chain-load: early_command runs right after this file is parsed,
+# and every recipe-derived directive (partman, late_command with the blob) is
+# consumed AFTER early_command — so it lands in time. The only cost is the
+# partition preseed's own early_command "booting" beacon, which cannot re-fire
+# (early_command runs once); the download/installed beacons in late_command are
+# unaffected.
+
+d-i debian-installer/locale string ${SEED_LOCALE}
+d-i keyboard-configuration/xkb-keymap select ${SEED_KEYMAP}
+
+d-i preseed/early_command string \\
+  mkdir -p /run/flagship; \\
+  loaded=; \\
+  for dev in $(list-devices partition) $(list-devices disk); do \\
+    if mount -t vfat -o ro "$dev" /run/flagship 2>/dev/null; then \\
+      if [ -f /run/flagship/preseed.cfg ]; then \\
+        debconf-set-selections /run/flagship/preseed.cfg && loaded=1; \\
+        umount /run/flagship; \\
+        break; \\
+      fi; \\
+      umount /run/flagship 2>/dev/null || true; \\
+    fi; \\
+  done; \\
+  if [ -z "$loaded" ]; then \\
+    echo "FLAGSHIP: recipe partition (label FLAGSHIP, /preseed.cfg) not found — halting" > /dev/console; \\
+    echo "FLAGSHIP: recipe partition not found" > /dev/tty1 2>/dev/null || true; \\
+  fi
 `;
 }
 

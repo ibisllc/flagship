@@ -20,7 +20,12 @@ export {
   type InstallerFamily,
   type BootUnlockMode,
 } from "./userdata.js";
-export { buildDebianPreseed } from "./preseed.js";
+export {
+  buildDebianPreseed,
+  buildSeedStubPreseed,
+  SEED_LOCALE,
+  SEED_KEYMAP,
+} from "./preseed.js";
 export { utf8ToBase64 } from "./base64.js";
 export {
   buildPreseedFromRecipe,
