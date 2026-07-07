@@ -34,9 +34,21 @@ export interface IsoManifestDeps {
    * keeps the original manifest and old burners are byte-compatible.
    */
   blessedManifestArm64?: IsoManifest | null;
+  /**
+   * The blessed pre-baked Flagship SEED manifest, or null when none is
+   * configured. Served ONLY to `platform: "android"` — on-device (phone)
+   * burning can't remaster an ISO, so it gets the pre-baked seed (a
+   * transparent, reproducible GitHub-release artifact) and only appends a
+   * FAT partition. The desktop platforms (mac/linux/windows) NEVER see this;
+   * they get the stock netinst base and remaster locally. See
+   * docs/iso-seed-and-on-device-burn.md.
+   */
+  seedManifest?: IsoManifest | null;
+  /** The blessed arm64 seed manifest (parity/future). See `seedManifest`. */
+  seedManifestArm64?: IsoManifest | null;
 }
 
-const ALLOWED_PLATFORMS = new Set(["mac", "linux", "windows"]);
+const ALLOWED_PLATFORMS = new Set(["mac", "linux", "windows", "android"]);
 const ALLOWED_ARCHES = new Set(["amd64", "arm64"]);
 const SHA256_RE = /^[0-9a-f]{64}$/i;
 
@@ -66,7 +78,7 @@ export function handleIsoManifest(
   const { platform, burnerVersion, current, arch } = body;
 
   if (typeof platform !== "string" || !ALLOWED_PLATFORMS.has(platform)) {
-    return malformed("platform must be one of mac, linux, windows");
+    return malformed("platform must be one of mac, linux, windows, android");
   }
   if (typeof burnerVersion !== "string" || burnerVersion.length === 0) {
     return malformed("burnerVersion must be a non-empty string");
@@ -91,8 +103,14 @@ export function handleIsoManifest(
     currentSha = c.sha256.toLowerCase();
   }
 
-  const blessed =
-    arch === "arm64" ? (deps.blessedManifestArm64 ?? null) : deps.blessedManifest;
+  const useSeed = platform === "android";
+  const blessed = useSeed
+    ? arch === "arm64"
+      ? (deps.seedManifestArm64 ?? null)
+      : (deps.seedManifest ?? null)
+    : arch === "arm64"
+      ? (deps.blessedManifestArm64 ?? null)
+      : deps.blessedManifest;
   if (!blessed) return ok({ download: null });
 
   if (currentSha !== null && currentSha === blessed.sha256.toLowerCase()) {

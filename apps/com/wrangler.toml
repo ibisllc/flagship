@@ -257,6 +257,19 @@ FLAGSHIP_ISO_MANIFEST = '{"version":"debian-13.5.0","url":"https://cdimage.debia
 # native-arch guests only). Burning stays amd64. Same re-pin rule on a Debian
 # point release: version/url/sha256 together, both arches at once.
 FLAGSHIP_ISO_MANIFEST_ARM64 = '{"version":"debian-13.5.0","url":"https://cdimage.debian.org/debian-cd/13.5.0/arm64/iso-cd/debian-13.5.0-arm64-netinst.iso","sha256":"3f8211e759d19370d50e1d853859b66ecba62700d712214a8a65ed26c6d08ecc","sizeBytes":735358976,"attestation":"https://cdimage.debian.org/debian-cd/13.5.0/arm64/iso-cd/SHA256SUMS"}'
+# The pre-baked Flagship SEED manifest — served ONLY to `platform:"android"`
+# (on-device phone burning appends a FAT partition to the seed rather than
+# remastering). Unlike the stock base above, the seed is OUR reproducible
+# derivative, so `url` is a TRANSPARENT PUBLIC ARTIFACT (the GitHub release
+# asset) and `sha256` is the pinned seed hash from
+# docs/iso-seed-and-on-device-burn.md
+# (367acd2f6f6f19b5da0335c65f692963b06bd996c9e09509ac6732978ec2168d for the
+# Debian 13.5.0 amd64 base). OWNER DEPLOY STEP: uncomment + fill in the real
+# GitHub release url + `sizeBytes` before deploy; until set, android manifest
+# requests get `{ download: null }`. Re-pin the seed sha with the stock base on
+# a Debian point release (build-seed.sh reproduces it).
+# FLAGSHIP_ISO_SEED = '{"version":"flagship-seed-debian-13.5.0","url":"https://github.com/ibisllc/flagship/releases/download/<tag>/flagship-seed-debian-13.5.0-amd64.iso","sha256":"367acd2f6f6f19b5da0335c65f692963b06bd996c9e09509ac6732978ec2168d","sizeBytes":0,"attestation":"https://github.com/ibisllc/flagship/blob/main/docs/iso-seed-and-on-device-burn.md"}'
+# FLAGSHIP_ISO_SEED_ARM64 = '{...same shape, arm64 seed...}'
 
 # W11 — `[varname]` block consumed by the admin-snapshot-now handler.
 # `FLAGSHIP_R2_TEMP_PUBLIC_BASE` is the public dev-url host for the

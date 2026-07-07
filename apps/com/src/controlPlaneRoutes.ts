@@ -303,6 +303,26 @@ export interface ControlPlaneEnv {
   FLAGSHIP_ISO_MANIFEST_ARM64?: string;
 
   /**
+   * The blessed pre-baked Flagship SEED manifest, same JSON shape as
+   * `FLAGSHIP_ISO_MANIFEST`. Served ONLY to `platform: "android"` — on-device
+   * (phone) burning appends a FAT partition to this pre-baked seed instead of
+   * remastering a stock ISO. `url` MUST point at the transparent public
+   * artifact (the GitHub release asset) and `sha256` at the reproducible seed
+   * hash pinned in docs/iso-seed-and-on-device-burn.md
+   * (367acd2f…8ec2168d for the Debian 13.5.0 amd64 base). Unset ⇒ android
+   * requests get `{ download: null }`. OWNER DEPLOY STEP: set this to the real
+   * release url + pinned seed sha before deploy; leave it unset in dev.
+   */
+  FLAGSHIP_ISO_SEED?: string;
+
+  /**
+   * The blessed arm64 SEED manifest, same JSON shape (parity/future). Served
+   * to android requests with `arch: "arm64"`. Unset ⇒ arm64 android requests
+   * get `{ download: null }` (they do NOT fall back to the amd64 seed).
+   */
+  FLAGSHIP_ISO_SEED_ARM64?: string;
+
+  /**
    * The blessed in-house inference endpoint that backs the free-credits
    * ("flagship") provider posture, as a JSON string of the
    * `InferenceEndpoint` shape: {"baseUrl","model"}. `baseUrl` is the
@@ -2850,6 +2870,8 @@ export async function tryControlPlane(
           blessedManifestArm64: parseBlessedIsoManifest(
             env.FLAGSHIP_ISO_MANIFEST_ARM64,
           ),
+          seedManifest: parseBlessedIsoManifest(env.FLAGSHIP_ISO_SEED),
+          seedManifestArm64: parseBlessedIsoManifest(env.FLAGSHIP_ISO_SEED_ARM64),
         },
         await readJson(request),
       ),
