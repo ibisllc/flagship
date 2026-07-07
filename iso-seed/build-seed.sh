@@ -46,6 +46,12 @@ chmod +w "$work/grub.cfg" "$work/txt.cfg" "$work/isolinux.cfg"
 # at the generic preseed baked below; the preseed's early_command then pulls the
 # per-recipe data off the FLAGSHIP partition.
 CMDLINE="auto=true priority=critical preseed/file=/cdrom/flagship/preseed.cfg"
+# Test-only: FLAGSHIP_SEED_CONSOLE=ttyS0 routes d-i output to the serial port so
+# a headless QEMU boot can be observed. NEVER set for a shipping seed (it changes
+# the sha and exposes the installer console).
+if [ -n "${FLAGSHIP_SEED_CONSOLE:-}" ]; then
+  CMDLINE="$CMDLINE console=${FLAGSHIP_SEED_CONSOLE},115200"
+fi
 
 echo ">> patching UEFI grub.cfg (prepend a default Flagship auto entry)"
 {
@@ -71,6 +77,22 @@ EOF
 # prompt 0 + a short timeout so BIOS auto-boots the default without a keypress.
 sed -i 's/^timeout .*/timeout 30/; s/^default .*/default flagship/' "$work/isolinux.cfg"
 
+# Pre-declare an EMPTY FLAGSHIP FAT16 partition (label FLAGSHIP), registered in
+# BOTH the GPT and the MBR by xorriso -append_partition. This is the fix for the
+# GPT-isohybrid problem: Linux ignores MBR-only entries on a GPT disk, so the
+# partition the installer must find has to live in the GPT. Declaring it here,
+# once, at build time means the burner does ZERO partition-table surgery — it
+# streams the seed verbatim (including this empty partition) and overwrites the
+# partition's CONTENTS with the per-recipe preseed FAT. 16 MiB leaves headroom
+# over the ~33 KB preseed. mformat is deterministic, so the seed stays
+# reproducible.
+FLAGSHIP_MB="${FLAGSHIP_MB:-16}"
+empty_fat="$work/flagship-empty.fat"
+dd if=/dev/zero of="$empty_fat" bs=1M count="$FLAGSHIP_MB" status=none
+# mtools stamps the volume-label dir entry with the wall clock; pin it so the
+# empty FAT (and thus the seed) is reproducible. mtools honors SOURCE_DATE_EPOCH.
+SOURCE_DATE_EPOCH=1767225600 mformat -i "$empty_fat" -v FLAGSHIP -N 464c4147 ::
+
 echo ">> repacking seed -> $OUT (boot equipment replayed verbatim)"
 rm -f "$OUT"
 # -volume_date commands come AFTER the -map commands so the newly-added files
@@ -86,6 +108,7 @@ rm -f "$OUT"
   -map "$work/grub.cfg" /boot/grub/grub.cfg \
   -map "$work/txt.cfg" /isolinux/txt.cfg \
   -map "$work/isolinux.cfg" /isolinux/isolinux.cfg \
+  -append_partition 3 0x0e "$empty_fat" \
   -volume_date all_file_dates "=$EPOCH" \
   -volume_date "c" "$EPOCH" \
   -volume_date "m" "$EPOCH" \

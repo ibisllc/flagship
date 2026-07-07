@@ -22,7 +22,7 @@ Public verification page: `https://flagshipserver.com/security/iso-seed.html`.
 ## Build
 
 ```sh
-# needs xorriso (apt install xorriso)
+# needs xorriso + mtools (apt install xorriso mtools)
 iso-seed/build-seed.sh <stock-debian-netinst.iso> <out-seed.iso>
 # prints the seed sha256 — must equal the value pinned in the design doc.
 ```
