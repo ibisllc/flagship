@@ -19,13 +19,16 @@ the Node CLI's `remasterIso.ts`.
 We split the work so the phone never touches the ISO9660 structure:
 
 1. **The seed** (`iso-seed/`, built once on a build host / CI): a stock Debian
-   netinst ISO with exactly three changes, all applied with `xorriso`:
+   netinst ISO with three changes, all applied with `xorriso`:
    - the default boot entry (BIOS **and** UEFI) auto-preseeds from
      `/cdrom/flagship/preseed.cfg` with a short timeout;
    - a **generic, recipe-independent** `preseed.cfg` is added at
      `/flagship/preseed.cfg` — the *seed stub*;
-   - nothing else — the boot equipment is replayed byte-for-byte so the seed
-     stays USB-bootable on BIOS and UEFI.
+   - an **empty, GPT-registered `FLAGSHIP` FAT16 partition** (16 MiB) is
+     appended (`-append_partition`), so the partition the installer must find
+     already exists in the GPT (see "Partition registration" below);
+   - otherwise the boot equipment is replayed byte-for-byte so the seed stays
+     USB-bootable on BIOS and UEFI.
 
    One seed serves **every** user; it carries no per-recipe data.
 
@@ -46,13 +49,12 @@ We split the work so the phone never touches the ISO9660 structure:
 
 4. **The on-device burn**:
    - stream the seed to the stick **verbatim** (raw copy from LBA 0 — the
-     isohybrid MBR/GPT come along);
-   - append the `FLAGSHIP` FAT16 volume in free space past the ISO image
-     (the stick is larger than the seed);
-   - add one MBR partition entry pointing at it.
+     isohybrid MBR/GPT *and the empty FLAGSHIP partition* come along);
+   - read the GPT to locate the FLAGSHIP region (the highest-first-LBA entry),
+     and **overwrite its contents** with the per-recipe preseed FAT volume.
 
-   All three are raw-sector operations (SCSI `WRITE(10)` to arbitrary LBAs) —
-   no ISO surgery, no native code.
+   Both are raw-sector operations (SCSI `WRITE(10)`) — no partition-table
+   surgery, no ISO surgery, no native code.
 
 ## Trust model (unchanged)
 
@@ -73,10 +75,12 @@ generic seed bytes, which are sha-pinned and reproducible (below).
   and points BIOS isolinux at an equivalent `flagship` label — both with the
   cmdline `auto=true priority=critical preseed/file=/cdrom/flagship/preseed.cfg`;
 - adds `iso-seed/preseed.cfg` at `/flagship/preseed.cfg`;
+- appends an empty `FLAGSHIP` FAT16 partition (`-append_partition`, GPT+MBR);
 - repacks with `-boot_image any replay` (boot equipment verbatim), keeping the
   **original Debian volume id** (d-i keys `/cdrom` detection on it);
-- pins every timestamp to a fixed epoch and the GPT disk GUID to a fixed value,
-  so the output is **byte-for-byte reproducible**.
+- pins every timestamp to a fixed epoch, the GPT disk GUID to a fixed value, and
+  `SOURCE_DATE_EPOCH` for `mformat`, so the output is **byte-for-byte
+  reproducible**.
 
 Given the same stock base + this script + the same `xorriso`, the seed sha256 is
 identical on every machine. Anyone can re-derive it and compare against the
@@ -87,7 +91,7 @@ published hash — that is the transparency guarantee.
 | field | value |
 |---|---|
 | stock base | Debian 13.5.0 amd64 netinst (`FLAGSHIP_ISO_MANIFEST`, official signed sha) |
-| seed sha256 | `367acd2f6f6f19b5da0335c65f692963b06bd996c9e09509ac6732978ec2168d` |
+| seed sha256 | `bc8ccfe82b77ba2424c9baefff11e29d8190578639312dac8ca76223867802ec` |
 | built by | `iso-seed/build-seed.sh` @ this commit, `xorriso` 1.x |
 
 Re-pin the seed sha whenever the stock base or `build-seed.sh` changes (a new
@@ -112,49 +116,41 @@ iso-seed/build-seed.sh debian-13.5.0-amd64-netinst.iso my-seed.iso
 sha256sum my-seed.iso   # must equal the pinned value above
 ```
 
-## ⚠️ Partition registration: the seed is a GPT isohybrid
+## Partition registration: the seed pre-declares FLAGSHIP in the GPT
 
-Verified by assembling a full stick image on a build host (seed streamed
-verbatim + a FAT16 `FLAGSHIP` volume placed past the ISO + an MBR entry) and
-reading `preseed.cfg` back out: the **FAT volume + its contents are correct**,
-but the seed carries a **GPT** (`xorriso -toc`: "MBR isohybrid … GPT APM"), and
-**Linux ignores MBR partition entries on a GPT disk**. So a `FLAGSHIP` partition
-added only to the MBR is invisible to the installer's `list-devices partition`.
+The seed is a GPT isohybrid (`xorriso -toc`: "MBR isohybrid … GPT APM"), and
+**Linux ignores MBR partition entries on a GPT disk** — so a `FLAGSHIP`
+partition the installer must find has to live in the **GPT**. An earlier design
+that added `FLAGSHIP` only to the MBR on-device was invisible to d-i's
+`list-devices partition` (confirmed on a build host).
 
-The burner MUST make the partition visible to the kernel. Options, most→least
-robust:
-
-1. **Add `FLAGSHIP` to the GPT partition array** (primary header at LBA 1; keep
-   the MBR entry too for MBR-only firmwares). Requires recomputing the GPT
-   header + partition-array CRC32s. This is the correct, most-compatible path.
-2. **Write `preseed.cfg` into the seed's existing ESP** (already a
-   GPT-enumerated FAT partition). Tested on a build host and found **not viable
-   as-is**: the Debian netinst ESP has only ~10 KB free, so a 33 KB preseed is
-   "Disk full". Would require the seed build to enlarge the ESP first.
-3. **Build the seed MBR-only** (strip the GPT) so the MBR is authoritative and
-   the slot-3 append is seen — this is the path the build-host layout test
-   already validates for the phone side; the open question is only whether an
-   MBR-only isohybrid UEFI-boots on the target (many do, via the `0xEF` ESP).
-4. **Best: register `FLAGSHIP` in the GPT at *seed-build* time** as a fixed
-   placeholder region just past the ISO, so the phone writes only FAT bytes into
-   an already-registered offset (no on-device GPT CRC surgery). More seed-build
-   work; cleanest phone side.
-
-The FAT-volume + partition-entry mechanics are verified on a build host;
-**which registration path boots on real hardware is the open
-hardware-validation question** (options 1/3/4 are the live candidates).
+**Resolved (option 4):** the seed build pre-declares an **empty, GPT-registered
+`FLAGSHIP` FAT16 partition** (16 MiB) via `xorriso -append_partition`, which
+registers it in **both the GPT and the MBR**. So the burner does **zero
+partition-table surgery**: it streams the seed verbatim (the empty partition
+comes along) and overwrites that partition's *contents* with the per-recipe
+preseed FAT. The burner finds the region by reading the GPT (the appended
+partition is the highest-first-LBA entry). `mformat` is deterministic under a
+pinned `SOURCE_DATE_EPOCH`, so the seed stays byte-for-byte reproducible.
 
 ## Validation status
 
 - **Reproducible seed build** — done + verified (byte-identical across runs;
-  `sha256=367acd2f…`).
-- **Seed still boots (isohybrid BIOS+UEFI El Torito preserved)** — verified via
-  `xorriso -toc`. A real boot on hardware is the remaining physical check.
-- **Stick layout** — verified on a build host: FAT16 `FLAGSHIP` volume built,
-  placed past the ISO, and `preseed.cfg` read back out of it; ESP + MBR
-  signature preserved. Does NOT exercise the SCSI-over-USB transport (hardware)
-  or resolve the GPT-registration question above.
-- **The `early_command` chain-load + partition boot** — needs a physical OTG
-  burn + boot to validate end to end (hardware-gated). Two open risks: the
-  GPT-vs-MBR partition registration (above), and d-i's `early_command` timing /
-  label detection.
+  `sha256=bc8ccfe8…` for the Debian 13.5.0 base).
+- **`FLAGSHIP` is GPT-registered** — verified by parsing the seed's GPT
+  (`part3: name=Appended3`, the 16 MiB FLAGSHIP region past the ISO).
+- **Full install in QEMU (no hardware)** — verified end to end: a burned stick
+  (seed + the FLAGSHIP partition overwritten with a real recipe preseed) boots
+  under OVMF/UEFI with a blank target disk + the stick as a USB installer; d-i
+  finds FLAGSHIP via the GPT, chain-loads the recipe preseed, and installs
+  **unattended** (no interactive stall) through partitioning, base install, and
+  the flagship bootstrap. This is the same boot chain real hardware runs — it
+  exercises everything except the USB write transport.
+- **The USB-C OTG *write* transport** (`MassStorageWriter` over real SCSI-USB) —
+  the ONE remaining hardware-gated piece; unit-tested against fakes, needs a
+  real phone + stick to confirm.
+
+### Build dependencies
+
+`build-seed.sh` needs `xorriso` and `mtools` (`mformat`/`mcopy`) on the build
+host. Both are packaged everywhere (`apt install xorriso mtools`).
