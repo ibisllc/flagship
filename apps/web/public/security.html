@@ -64,7 +64,7 @@
       <h2>What we promise</h2>
       <ul class="bullets">
         <li>All security-critical code (key derivation, signing, encryption, daemon, boot path, mobile clients) is open source under Apache 2.0.</li>
-        <li>The boot image is built reproducibly — you can verify the bytes match the source.</li>
+        <li>The boot image is built reproducibly — you can <a href="/security/iso-seed.html">verify the bytes match stock Debian</a>.</li>
         <li>Standard primitives only: <code>Ed25519</code>, <code>AES-256-GCM</code>, <code>HKDF-SHA-256</code>. No homemade crypto.</li>
         <li>Server boot requires a phone-signed approval over the network. A stolen server cannot self-unlock.</li>
         <li>The auth domain (<code>flagshipserver.com</code>) is separate from the user-content domain (<code>*.flagship.services</code>) so user apps cannot reach session cookies via subdomain confusion.</li>

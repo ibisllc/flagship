@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14120D" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="stylesheet" href="/site.css" />
+    <title>Verify the boot seed · Flagship</title>
+    <style>
+      table { border-collapse: collapse; margin: 1rem 0; width: 100%; }
+      th, td { padding: 0.6rem 0.9rem; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+      th { background: var(--bg-elev); font-weight: 500; font-size: 0.85rem; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.04em; }
+      code { background: var(--bg-elev); color: var(--fg); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.92em; }
+      pre { background: var(--bg-elev); border: 1px solid var(--line); border-radius: 6px; padding: 0.9rem 1rem; overflow-x: auto; }
+      pre code { background: none; padding: 0; }
+      .hash { word-break: break-all; }
+    </style>
+    <link rel="stylesheet" href="/theme-ui.css">
+  <script src="/theme.js"></script>
+</head>
+  <body>
+    <header class="topbar">
+      <a href="/" class="brand" aria-label="Flagship — home">
+        <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>
+        <span class="name">Flagship</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="/">Home</a>
+        <a href="/security.html">Security</a>
+        <a href="/security/disclosure.html">Disclosure</a>
+        <a href="/.well-known/security.txt">security.txt</a>
+      </nav>
+        <button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
+    </header>
+
+    <main>
+      <h1>Verify the boot seed</h1>
+      <p class="lede">
+        When you burn a Flagship installer from the mobile app, it writes a Debian
+        <em>seed</em> image we derive from the official Debian netinst — then appends
+        your recipe as a small partition. The seed carries no personal data and is
+        <strong>reproducible</strong>: you can rebuild it from the public Debian ISO and
+        confirm, byte for byte, that it is exactly stock Debian plus a published,
+        auditable change. Nothing to trust on our word.
+      </p>
+
+      <div class="callout">
+        <strong>Why a seed at all?</strong> A phone can't rewrite an 800&nbsp;MB ISO in place.
+        So we make the one structural edit — telling the installer to auto-configure from a
+        labeled partition — <em>once</em>, centrally and reproducibly, and the app only writes
+        your recipe onto that partition. Your recipe never leaves your device; the seed is the
+        same for everyone.
+      </div>
+
+      <h2>What the seed changes vs. stock Debian</h2>
+      <ul class="bullets">
+        <li>The default boot entry (BIOS and UEFI) auto-starts the installer with
+          <code>auto=true priority=critical preseed/file=/cdrom/flagship/preseed.cfg</code>.</li>
+        <li>A generic, recipe-free <code>preseed.cfg</code> is added at
+          <code>/flagship/preseed.cfg</code>; at install time it loads your recipe from the
+          partition the app appends (labeled <code>FLAGSHIP</code>).</li>
+        <li>Nothing else. The El&nbsp;Torito / isohybrid boot equipment is replayed
+          byte-for-byte, so it still boots on BIOS and UEFI.</li>
+      </ul>
+
+      <h2>The pinned hashes</h2>
+      <table>
+        <thead><tr><th>Artifact</th><th>SHA-256</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Stock base — Debian 13.5.0 amd64 netinst<br><span class="hash" style="color:var(--fg-mute)">official Debian signed <code>SHA256SUMS</code></span></td>
+            <td class="hash"><code>see debian.org/…/SHA256SUMS</code></td>
+          </tr>
+          <tr>
+            <td>Flagship seed (derived from the above)</td>
+            <td class="hash"><code>367acd2f6f6f19b5da0335c65f692963b06bd996c9e09509ac6732978ec2168d</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="color:var(--fg-mute); font-size:0.92rem;">
+        The seed hash is re-pinned together with the stock base on each Debian point release.
+      </p>
+
+      <h2>Reproduce it yourself</h2>
+      <p>The derivation is a single script — <a href="https://github.com/ibisllc/flagship/blob/main/iso-seed/build-seed.sh">iso-seed/build-seed.sh</a>
+        — using only <code>xorriso</code>. Given the same stock base, it produces the exact
+        seed hash above on any machine:</p>
+      <pre><code># 1. Download the exact stock base (url + sha are in the app's ISO manifest,
+#    and pinned to Debian's official signed SHA256SUMS).
+# 2. Re-derive the seed:
+git clone https://github.com/ibisllc/flagship
+flagship/iso-seed/build-seed.sh debian-13.5.0-amd64-netinst.iso my-seed.iso
+
+# 3. Confirm it matches the published hash:
+sha256sum my-seed.iso
+# 367acd2f6f6f19b5da0335c65f692963b06bd996c9e09509ac6732978ec2168d</code></pre>
+
+      <h2>How your recipe is applied — and why it can't be swapped</h2>
+      <p>
+        The seed is generic, so it can't target any particular box. Your recipe — a
+        Debian preseed carrying your phone's <strong>signed</strong> install blob — is written
+        onto the appended partition. The installed system trusts your phone's signature and
+        nothing else; <code>flagshipserver.com</code> is never in that trust path. The burner
+        checks that the preseed it writes embeds <em>your</em> signature before it lays it down,
+        so no server can substitute a different recipe.
+      </p>
+
+      <h2>The full spec</h2>
+      <p>
+        The complete design — the partition layout, the installer chain-load, the trust model,
+        and the reproducibility guarantees — lives in the repository at
+        <a href="https://github.com/ibisllc/flagship/blob/main/docs/iso-seed-and-on-device-burn.md">docs/iso-seed-and-on-device-burn.md</a>.
+        Audit it, build it, verify it.
+      </p>
+    </main>
+
+    <footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-col">
+      <a href="/" class="wordmark"><span class="glyph" aria-hidden="true"></span><span>Flagship</span></a>
+      <p>A personal cloud that respects you, your hardware, and your mobile device.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Product</h4>
+      <ul>
+        <li><a href="/docs#how-it-works">How it works</a></li>
+        <li><a href="https://web.flagshipserver.com/">Webapp</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Trust</h4>
+      <ul>
+        <li><a href="/security.html">Architecture</a></li>
+        <li><a href="/security/iso-seed.html">Verify the boot seed</a></li>
+        <li><a href="/security/disclosure.html">Disclosure</a></li>
+        <li><a href="/security/report.html">Report a vuln</a></li>
+        <li><a href="/.well-known/security.txt">security.txt</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Open</h4>
+      <ul>
+        <li><a href="/open-source.html">Open source</a></li>
+        <li><a href="/status/">Status</a></li>
+        <li><a href="/docs/">Docs</a></li>
+        <li><a href="/blog/">Blog</a></li>
+        <li><a href="/help">Help</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 Flagship · BUSL-1.1 → Apache 2.0 on 2030-05-03</span>
+    <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="https://flagshipserver.com">flagshipserver.com</a></span>
+  </div>
+</footer>
+  <script src="/motion.js" defer></script>
+</body>
+</html>
