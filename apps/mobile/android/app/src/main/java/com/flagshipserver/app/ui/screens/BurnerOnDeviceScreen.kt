@@ -171,6 +171,7 @@ fun BurnerOnDeviceScreen(recipeJson: String, onDone: () -> Unit) {
                     BurnerOnDeviceViewModel.Phase.Verifying,
                     BurnerOnDeviceViewModel.Phase.Injecting,
                     BurnerOnDeviceViewModel.Phase.Writing,
+                    BurnerOnDeviceViewModel.Phase.Finalizing,
                     -> ProgressBlock(state)
 
                     else -> {}
@@ -236,6 +237,7 @@ private fun ProgressBlock(state: BurnerOnDeviceViewModel.State) {
         BurnerOnDeviceViewModel.Phase.Verifying -> "Verifying"
         BurnerOnDeviceViewModel.Phase.Injecting -> "Preparing"
         BurnerOnDeviceViewModel.Phase.Writing -> "Writing"
+        BurnerOnDeviceViewModel.Phase.Finalizing -> "Finalizing"
         else -> ""
     }
     FSCard {

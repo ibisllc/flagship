@@ -14,8 +14,21 @@
 
 package com.flagshipserver.app.burner.iso
 
+import com.flagshipserver.app.burner.usb.MassStorageWriter
+import com.flagshipserver.app.burner.usb.ScsiCommands
 import java.io.File
 import java.io.InputStream
+
+/**
+ * Post-write step for the seed-and-append model: after [InjectedImage.stream] is
+ * written verbatim from LBA 0, lay the FLAGSHIP FAT volume in free space and
+ * splice its MBR partition entry (docs/iso-seed-and-on-device-burn.md). The
+ * verbatim path leaves this null. Runs on the same open USB handle the caller
+ * already holds.
+ */
+fun interface SeedPlacement {
+    fun place(writer: MassStorageWriter, capacity: ScsiCommands.Capacity)
+}
 
 /** The image to write + how big it is, ready for the raw USB write. */
 data class InjectedImage(
@@ -25,6 +38,12 @@ data class InjectedImage(
     val recipeEmbedded: Boolean,
     /** Closed by the caller after the write completes. */
     val closeable: AutoCloseable,
+    /**
+     * Optional post-write step run AFTER the verbatim stream is written — the
+     * seam that lets the single-stream contract also express "stream, then append
+     * the FAT volume + patch the MBR". Null for a pure verbatim write.
+     */
+    val placement: SeedPlacement? = null,
 )
 
 interface IsoInjector {

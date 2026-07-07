@@ -8,6 +8,7 @@
 
 package com.flagshipserver.app.burner.usb
 
+import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -118,26 +119,44 @@ class MassStorageWriter(
     }
 
     /**
-     * Stream [source] ([totalBytes] long) to the device starting at LBA 0,
-     * issuing WRITE(10) commands of at most [maxWriteBytes]. The final partial
-     * block is zero-padded to a whole block (USB MSC is block-addressed).
-     * [onProgress] is called with cumulative SOURCE bytes written (not padding).
-     *
-     * @return total source bytes written.
+     * Stream [source] ([totalBytes] long) to the device starting at LBA 0.
+     * Thin wrapper over [writeRegion] preserved for the verbatim full-image
+     * write; see [writeRegion] for the semantics.
      */
     fun writeImage(
         source: InputStream,
         totalBytes: Long,
         blockSize: Int,
         onProgress: (written: Long) -> Unit = {},
+    ): Long = writeRegion(source, totalBytes, startLba = 0L, blockSize = blockSize, onProgress = onProgress)
+
+    /**
+     * Stream [source] ([totalBytes] long) to the device starting at [startLba],
+     * issuing WRITE(10) commands of at most [maxWriteBytes]. The final partial
+     * block is zero-padded to a whole block (USB MSC is block-addressed).
+     * [onProgress] is called with cumulative SOURCE bytes written (not padding).
+     *
+     * The seed image is written from LBA 0 (`writeImage`); the appended FLAGSHIP
+     * FAT volume and the patched MBR are written to their computed LBAs via this
+     * (see docs/iso-seed-and-on-device-burn.md).
+     *
+     * @return total source bytes written.
+     */
+    fun writeRegion(
+        source: InputStream,
+        totalBytes: Long,
+        startLba: Long,
+        blockSize: Int,
+        onProgress: (written: Long) -> Unit = {},
     ): Long {
         require(blockSize > 0) { "blockSize must be > 0" }
+        require(startLba >= 0) { "startLba must be >= 0" }
         require(maxWriteBytes % blockSize == 0) {
             "maxWriteBytes ($maxWriteBytes) must be a multiple of blockSize ($blockSize)"
         }
         val blocksPerWrite = maxWriteBytes / blockSize
         val chunk = ByteArray(maxWriteBytes)
-        var lba = 0L
+        var lba = startLba
         var written = 0L
 
         while (written < totalBytes) {
@@ -166,5 +185,48 @@ class MassStorageWriter(
             onProgress(written)
         }
         return written
+    }
+
+    /**
+     * Write a small in-memory [bytes] blob starting at [startLba] (the MBR patch
+     * + the FAT volume). Zero-pads the tail to a whole block. No progress
+     * callback — these are single-shot control writes, not the long image copy.
+     */
+    fun writeSectors(bytes: ByteArray, startLba: Long, blockSize: Int) {
+        writeRegion(ByteArrayInputStream(bytes), bytes.size.toLong(), startLba, blockSize)
+    }
+
+    /**
+     * Read [count] whole blocks starting at [startLba] via READ(10). Used for the
+     * MBR read-modify-write (splice the FLAGSHIP partition entry, write LBA 0
+     * back). Returns exactly `count * blockSize` bytes.
+     */
+    fun readSectors(startLba: Long, count: Int, blockSize: Int): ByteArray {
+        require(blockSize > 0) { "blockSize must be > 0" }
+        require(count > 0) { "count must be > 0" }
+        require(startLba >= 0) { "startLba must be >= 0" }
+        require(maxWriteBytes % blockSize == 0) {
+            "maxWriteBytes ($maxWriteBytes) must be a multiple of blockSize ($blockSize)"
+        }
+        val blocksPerRead = maxWriteBytes / blockSize
+        val out = ByteArray(count * blockSize)
+        var lba = startLba
+        var off = 0
+        var remaining = count
+        while (remaining > 0) {
+            val n = minOf(blocksPerRead, remaining)
+            val buf = ByteArray(n * blockSize)
+            val got = transact(
+                ScsiCommands.cdbRead10(lba, n),
+                dataIn = buf, dataInLen = buf.size,
+                dataOut = null, dataOutLen = 0,
+            )
+            if (got < buf.size) throw MassStorageException("READ(10) short at LBA $lba (got=$got want=${buf.size})")
+            System.arraycopy(buf, 0, out, off, buf.size)
+            lba += n
+            off += n * blockSize
+            remaining -= n
+        }
+        return out
     }
 }

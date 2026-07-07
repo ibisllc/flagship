@@ -15,8 +15,10 @@ import com.flagshipserver.app.burner.iso.IsoInjector
 import com.flagshipserver.app.burner.iso.IsoManifestClient
 import com.flagshipserver.app.burner.iso.OkHttpBurnerHttp
 import com.flagshipserver.app.burner.iso.ParsedRecipe
+import com.flagshipserver.app.burner.iso.PreseedEngine
+import com.flagshipserver.app.burner.iso.PreseedSource
 import com.flagshipserver.app.burner.iso.RecipeParse
-import com.flagshipserver.app.burner.iso.VerbatimInjector
+import com.flagshipserver.app.burner.iso.SeedInjector
 import com.flagshipserver.app.burner.usb.MassStorageWriter
 import com.flagshipserver.app.burner.usb.UsbHost
 import com.flagshipserver.app.burner.usb.UsbMassStorageDevice
@@ -31,10 +33,10 @@ import java.io.File
 class BurnerOnDeviceViewModel(
     app: Application,
     private val recipeJson: String,
-    private val injector: IsoInjector = VerbatimInjector(),
+    private val injector: IsoInjector = SeedInjector(AssetPreseedSource(app)),
 ) : AndroidViewModel(app) {
 
-    enum class Phase { Idle, NoUsb, NeedPermission, Ready, Downloading, Verifying, Injecting, Writing, Done, Error }
+    enum class Phase { Idle, NoUsb, NeedPermission, Ready, Downloading, Verifying, Injecting, Writing, Finalizing, Done, Error }
 
     data class State(
         val phase: Phase = Phase.Idle,
@@ -108,7 +110,7 @@ class BurnerOnDeviceViewModel(
         val s = _state.value
         val target = s.selected ?: return
         val recipe = s.recipe ?: return
-        if (s.phase in setOf(Phase.Downloading, Phase.Verifying, Phase.Injecting, Phase.Writing)) return
+        if (s.phase in setOf(Phase.Downloading, Phase.Verifying, Phase.Injecting, Phase.Writing, Phase.Finalizing)) return
         if (!UsbHost.hasPermission(usb, target.device)) {
             _state.value = s.copy(phase = Phase.NeedPermission)
             return
@@ -155,12 +157,18 @@ class BurnerOnDeviceViewModel(
                             )
                         }
                         set(Phase.Writing, status = "Writing to the USB drive — do not unplug…")
-                        injected.stream.use { stream ->
+                        val n = injected.stream.use { stream ->
                             writer.writeImage(stream, injected.totalBytes, cap.blockSize) { w ->
                                 val frac = if (injected.totalBytes > 0) w.toDouble() / injected.totalBytes else 0.0
                                 set(Phase.Writing, progress = frac, status = "Writing to the USB drive — do not unplug…", bytes = w)
                             }
                         }
+                        // Seed-and-append: lay the FLAGSHIP FAT volume + patch the MBR.
+                        injected.placement?.let { placement ->
+                            set(Phase.Finalizing, status = "Finalizing the install image — do not unplug…")
+                            placement.place(writer, cap)
+                        }
+                        n
                     }
                     injected.closeable.close()
                     val note = if (injected.recipeEmbedded) {
@@ -206,4 +214,21 @@ class BurnerOnDeviceViewModel(
             return String.format("%.1f %s", v, units[i])
         }
     }
+}
+
+/**
+ * Production [PreseedSource]: runs the SINGLE shared generator (the canonical
+ * bundle in app assets, via Rhino) for the already-signature-verified recipe.
+ * The engine is loaded lazily on first burn so an asset problem surfaces as a
+ * loud burn-time failure, never a silent verbatim write.
+ */
+class AssetPreseedSource(
+    context: android.content.Context,
+    private val burnOptsJson: String = "{}",
+) : PreseedSource {
+    private val appContext = context.applicationContext
+    private val engine by lazy { PreseedEngine.fromAssets(appContext) }
+
+    override fun preseedFor(recipe: ParsedRecipe, recipeJson: String): String =
+        engine.buildPreseedFromRecipe(recipeJson, burnOptsJson)
 }
