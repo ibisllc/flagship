@@ -158,7 +158,7 @@ pre-baked **seed** verbatim and appends a `FLAGSHIP` FAT16 partition carrying th
 per-recipe preseed. Pieces: (a) **`iso-seed/build-seed.sh`** derives the seed
 from stock Debian netinst with xorriso only, **byte-for-byte reproducible**
 (pinned timestamps + GPT GUID; verified identical across runs,
-`sha256=367acd2f…`), boot equipment + Debian volid preserved; the baked stub
+`sha256=bc8ccfe8…`), boot equipment + Debian volid preserved; the baked stub
 preseed's early_command mounts FLAGSHIP and `debconf-set-selections`es the real
 preseed. (b) **flagship-burner**: `buildSeedStubPreseed()` + shared
 `SEED_LOCALE`/`SEED_KEYMAP` drift-guard; verified the full generator output
