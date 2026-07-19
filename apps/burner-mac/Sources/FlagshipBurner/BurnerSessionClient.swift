@@ -8,9 +8,10 @@ import FlagshipBurnerCore
 /// (send frames upstream, report stage/recipe/log to the model).
 ///
 /// The link is a ONE-SHOT recipe deposit. A socket `.failure`, a relay
-/// `expired`, or a `peer-gone` ends the session — but if a recipe was already
-/// delivered the model keeps it (the phone is done and may leave); only an
-/// undelivered session relocks. An app-level ping keeps the relay's idle TTL
+/// `expired` or relay failure ends the session. `peer-gone` is advisory: the
+/// engine holds long enough for the phone to reclaim its relay slot. If a
+/// recipe was already delivered the model keeps it; only an undelivered
+/// terminal failure relocks. An app-level ping keeps the relay's idle TTL
 /// pushed forward while we wait for the phone.
 ///
 /// Callbacks fire on a background queue; the model hops to the main actor.
@@ -21,9 +22,11 @@ final class BurnerSessionClient: NSObject {
     private var task: URLSessionWebSocketTask?
     private var urlSession: URLSession?
     private var closed = false
+    private var recipeReceiptQueued = false
 
     var onStage: ((BurnerPairingEngine.Stage) -> Void)?
     var onRecipe: ((Data) -> Void)?
+    var onRecipeReceiptQueued: (() -> Void)?
     var onLog: ((String) -> Void)?
 
     var qrPayload: String { engine.qrPayload }
@@ -77,6 +80,13 @@ final class BurnerSessionClient: NSObject {
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return
         }
+        // The phone closes only after receiving our recipe receipt. Seeing its
+        // departure therefore completes the one-shot handshake; it is not a
+        // connection failure and must not put the burner into reconnect mode.
+        if recipeReceiptQueued, obj["kind"] as? String == "peer-gone" {
+            close()
+            return
+        }
         for action in engine.onRelayFrame(obj) { apply(action) }
     }
 
@@ -98,6 +108,30 @@ final class BurnerSessionClient: NSObject {
     /// to the phone.
     func sendRaw(_ text: String) {
         task?.send(.string(text)) { _ in }
+    }
+
+    func acknowledgeRecipe() {
+        guard let task else {
+            fail("Couldn't return the recipe receipt to the phone.")
+            return
+        }
+        task.send(.string(BurnerPairingEngine.encode(.recipeAccepted))) { [weak self] error in
+            guard let self else { return }
+            if error != nil {
+                self.fail("Couldn't return the recipe receipt to the phone.")
+            } else {
+                // `send` completion means URLSession accepted the frame, not
+                // that the relay has forwarded it. Keep the socket alive until
+                // the phone receives the receipt and leaves; cancelling here
+                // races the relay and strands the phone on "Sending".
+                self.recipeReceiptQueued = true
+                self.onRecipeReceiptQueued?()
+                Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 10_000_000_000)
+                    self?.close()
+                }
+            }
+        }
     }
 
     private func startPing() {

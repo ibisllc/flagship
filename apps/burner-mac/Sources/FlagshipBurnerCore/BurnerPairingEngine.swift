@@ -21,18 +21,24 @@ import CryptoKit
 ///   {kind:"phone-hello", phonePk}
 ///   {kind:"confirm-pairing"}
 ///   {kind:"deliver", ciphertext, nonce}
+/// Burner app frames (inside `peer`):
+///   {kind:"burner-hello", burnerPk}
+///   {kind:"recipe-accepted"}
 public final class BurnerPairingEngine {
 
     public enum Stage: Equatable {
         case waitingForPhone
         case awaitingConfirm(matchCode: String)
         case paired
+        case reconnecting
         case ended(reason: String)
     }
 
     public enum Outbound: Equatable {
         /// Forwarded to the phone so a typed-code phone learns our pubkey.
         case burnerHello(burnerPubKeyB64: String)
+        /// Sent only after the desktop has successfully staged the recipe.
+        case recipeAccepted
     }
 
     public enum Action: Equatable {
@@ -52,6 +58,7 @@ public final class BurnerPairingEngine {
     public private(set) var stage: Stage = .waitingForPhone
     private var aeadKey: SymmetricKey?
     public private(set) var matchCode: String?
+    private var phonePk: Data?
 
     public init(privateKey: Curve25519.KeyAgreement.PrivateKey = Curve25519.KeyAgreement.PrivateKey(),
                 codeBytes: Data? = nil) {
@@ -84,7 +91,23 @@ public final class BurnerPairingEngine {
         case "pong":
             return []
         case "peer-gone":
-            return end("The phone disconnected.")
+            // The relay explicitly defines peer-gone as advisory. Hold a
+            // confirmed session so the same phone can reconnect after a
+            // transient iOS/network socket loss; before confirmation, keep
+            // the same QR live and wait again.
+            switch stage {
+            case .paired, .reconnecting:
+                if case .reconnecting = stage { return [] }
+                stage = .reconnecting
+                return [.stage(.reconnecting)]
+            default:
+                aeadKey = nil
+                matchCode = nil
+                phonePk = nil
+                if case .waitingForPhone = stage { return [] }
+                stage = .waitingForPhone
+                return [.stage(.waitingForPhone)]
+            }
         case "expired":
             return end("This pairing session reached its time limit.")
         case "error":
@@ -106,11 +129,27 @@ public final class BurnerPairingEngine {
                   let incomingPk = Base64URLBurner.decode(phonePkB64) else {
                 return [.log("Ignoring malformed phone-hello.")]
             }
+            if case .reconnecting = stage {
+                guard let previous = phonePk, previous == incomingPk else {
+                    return [.log("A different phone connected while waiting to reconnect — ignoring.")]
+                }
+                do {
+                    let mat = try BurnerPairing.deriveMaterial(burnerPrivateKey: privateKey,
+                                                               phonePublicKey: incomingPk)
+                    aeadKey = mat.aeadKey
+                    matchCode = mat.matchCode
+                    stage = .paired
+                    return [.stage(.paired)]
+                } catch {
+                    return [.log("Couldn't resume the session: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")]
+                }
+            }
             do {
                 let mat = try BurnerPairing.deriveMaterial(burnerPrivateKey: privateKey,
                                                            phonePublicKey: incomingPk)
                 aeadKey = mat.aeadKey
                 matchCode = mat.matchCode
+                phonePk = incomingPk
                 stage = .awaitingConfirm(matchCode: mat.matchCode)
                 return [.stage(stage)]
             } catch {
@@ -147,6 +186,8 @@ public final class BurnerPairingEngine {
         switch out {
         case .burnerHello(let pk):
             return jsonObject(["kind": "burner-hello", "burnerPk": pk])
+        case .recipeAccepted:
+            return jsonObject(["kind": "recipe-accepted"])
         }
     }
 
@@ -160,8 +201,8 @@ public final class BurnerPairingEngine {
 /// Pure, testable policy for what the model does when the live phone session
 /// ends (peer-gone / expired / error). A delivered recipe means the one-shot
 /// deposit completed — the phone is expected to leave — so we KEEP it and stay
-/// in the burn UI. With no recipe yet, the phone left before delivering, so we
-/// relock to a fresh QR.
+/// in the burn UI. With no recipe yet, a terminal expiry/error relocks to a
+/// fresh QR.
 ///
 /// This lives in the core (engine) module so the model's behaviour can be
 /// unit-tested via the shared seam — the `WizardModel` itself is in the exe

@@ -118,6 +118,38 @@ final class IsoBaseCacheTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: result), isoBody)
     }
 
+    /// If the network ended after all bytes landed but before promotion, the
+    /// next attempt verifies the complete partial locally instead of fetching
+    /// the entire image again.
+    func testCompletePartialIsPromotedWithoutRedownload() async throws {
+        let isoBody = Data(repeating: 0xA5, count: 5000)
+        let isoURL = "https://flagshipserver.com/iso/debian-arm64.iso"
+        let version = "debian-resume"
+        let partial = tmpDir.appendingPathComponent(
+            "flagship-base-arm64-\(version).iso.partial")
+        try isoBody.write(to: partial)
+        let isoRequests = Captured(0)
+        StubURLProtocol.responder = { req in
+            if req.url?.absoluteString == isoURL {
+                isoRequests.value += 1
+                return (500, Data())
+            }
+            return (200, self.manifestJSON(download: (
+                isoURL, self.sha256(isoBody), version, isoBody.count)))
+        }
+
+        let sawVerifying = Captured(false)
+        let result = try await makeCache(arch: .arm64).ensure { phase in
+            if case .verifying = phase { sawVerifying.value = true }
+        }
+
+        XCTAssertEqual(isoRequests.value, 0)
+        XCTAssertTrue(sawVerifying.value)
+        XCTAssertEqual(result.lastPathComponent,
+                       "flagship-base-arm64-\(version).iso")
+        XCTAssertEqual(try Data(contentsOf: result), isoBody)
+    }
+
     /// A fresh download supersedes an older cached base (prune).
     func testDownloadPrunesOlderBase() async throws {
         _ = writeCachedBase(version: "debian-12.4", body: Data("old".utf8))

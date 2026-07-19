@@ -109,6 +109,12 @@ final class BurnerPairingTests: XCTestCase {
         XCTAssertEqual(actions, [.send(.burnerHello(burnerPubKeyB64: burnerPubB64u))])
     }
 
+    func test_recipeAcceptedFrame() {
+        let json = BurnerPairingEngine.encode(.recipeAccepted)
+        let object = try! JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: String]
+        XCTAssertEqual(object, ["kind": "recipe-accepted"])
+    }
+
     func test_engineDerivesSasOnPhoneHelloThenPairsOnConfirm() {
         let e = engine()
         let sas = e.onRelayFrame(["kind": "peer", "frame": ["kind": "phone-hello", "phonePk": phonePubB64u]])
@@ -140,15 +146,18 @@ final class BurnerPairingTests: XCTestCase {
         XCTAssertEqual(actions, [.recipe(plaintext)])
     }
 
-    func test_enginePeerGoneEnds() {
-        // A phone drop ends the engine (the model decides whether to keep a
-        // delivered recipe — see SessionEndPolicy below).
+    func test_enginePeerGoneBeforePairingKeepsQrLive() {
         let e = engine()
-        let actions = e.onRelayFrame(["kind": "peer-gone"])
-        guard actions.count == 1, case .stage(.ended) = actions[0] else {
-            return XCTFail("expected ended stage, got \(actions)")
-        }
-        XCTAssertEqual(e.stage, .ended(reason: "The phone disconnected."))
+        XCTAssertEqual(e.onRelayFrame(["kind": "peer-gone"]), [])
+        XCTAssertEqual(e.stage, .waitingForPhone)
+    }
+
+    func test_engineResumesConfirmedSessionForSamePhone() {
+        let e = engine()
+        _ = e.onRelayFrame(["kind": "peer", "frame": ["kind": "phone-hello", "phonePk": phonePubB64u]])
+        _ = e.onRelayFrame(["kind": "peer", "frame": ["kind": "confirm-pairing"]])
+        XCTAssertEqual(e.onRelayFrame(["kind": "peer-gone"]), [.stage(.reconnecting)])
+        XCTAssertEqual(e.onRelayFrame(["kind": "peer", "frame": ["kind": "phone-hello", "phonePk": phonePubB64u]]), [.stage(.paired)])
     }
 
     func test_engineEndsOnExpired() {
@@ -161,7 +170,7 @@ final class BurnerPairingTests: XCTestCase {
 
     // MARK: - Session-end policy (model behaviour via the shared seam)
 
-    /// A DELIVERED recipe survives an `.ended` (e.g. peer-gone): the one-shot
+    /// A DELIVERED recipe survives a terminal `.ended` (e.g. expiry): the one-shot
     /// deposit is complete and the phone may leave, so the burn UI is kept.
     func test_deliveredRecipeSurvivesSessionEnd() {
         XCTAssertEqual(SessionEndPolicy.onSessionEnded(recipeDelivered: true), .keepDeliveredRecipe)

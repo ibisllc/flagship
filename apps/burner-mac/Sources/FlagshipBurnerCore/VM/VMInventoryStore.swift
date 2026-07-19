@@ -5,15 +5,21 @@ public struct VMRecord: Codable, Sendable, Equatable {
     public var config: VMConfig
     public var state: VMState
     public var createdAt: Date
+    public var stateChangedAt: Date?
+    public var lastConnectedAt: Date?
     public var tier: ServerTier
 
     public init(config: VMConfig,
                 state: VMState = .created,
                 createdAt: Date,
+                stateChangedAt: Date? = nil,
+                lastConnectedAt: Date? = nil,
                 tier: ServerTier = .hostedVM) {
         self.config = config
         self.state = state
         self.createdAt = createdAt
+        self.stateChangedAt = stateChangedAt ?? createdAt
+        self.lastConnectedAt = lastConnectedAt
         self.tier = tier
     }
 }

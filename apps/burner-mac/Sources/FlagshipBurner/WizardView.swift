@@ -43,12 +43,9 @@ struct WizardView: View {
         HStack(spacing: 0) {
             wizardColumn
                 .frame(width: 560)
-            // Right sidebar: appears once this Mac hosts at least one server.
-            if !model.vmManager.servers.isEmpty {
-                Divider()
-                HostedServersSidebar(model: model, vmManager: model.vmManager)
-                    .frame(width: 230)
-            }
+            Divider()
+            HostedServersSidebar(model: model, vmManager: model.vmManager)
+                .frame(width: 330)
         }
         .frame(height: 700)
         .background(FB.Colors.bg)
@@ -90,7 +87,7 @@ struct WizardView: View {
 
     // MARK: - Body
 
-    /// The live phone session is the gate: locked cover → SAS confirm →
+    /// The one-shot phone deposit is the gate: locked cover → SAS confirm →
     /// the destination chooser → the burn form OR the host-here pane. A
     /// sidebar selection overrides everything with that server's detail.
     /// "I have a recipe" jumps straight to a Simple-only burn form (no
@@ -98,13 +95,35 @@ struct WizardView: View {
     @ViewBuilder private var stageContent: some View {
         if let selected = model.selectedHostedServer {
             VMDetailView(model: model, vmManager: model.vmManager, name: selected)
+        } else if let countdown = model.homeResetCountdown {
+            recipeConsumedView(countdown: countdown)
         } else {
             switch model.burnerStage {
             case .locked:    coverView
             case .pairing:   pairingConfirmView
-            case .session, .recipeFile: destinationOrPanes
+            case .session, .recipeReady, .recipeFile: destinationOrPanes
             }
         }
+    }
+
+    private func recipeConsumedView(countdown: Int) -> some View {
+        VStack(spacing: FB.Spacing.s4) {
+            Spacer()
+            StatusCard(icon: "checkmark.circle.fill",
+                       tint: FB.Colors.success,
+                       title: "Recipe handed off",
+                       subtitle: "The server operation is continuing in the background. You can follow it from Servers on this Mac.")
+            HStack(spacing: FB.Spacing.s2) {
+                ProgressView().scaleEffect(0.7)
+                Text(countdown > 0
+                     ? "Returning home in \(countdown)…"
+                     : "Preparing a new pairing code…")
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.textMuted)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// Once a recipe is verified the user picks its destination; before that
@@ -223,6 +242,12 @@ struct WizardView: View {
                 .font(FB.Font.caption())
                 .foregroundStyle(FB.Colors.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
+            if let error = model.operationError {
+                StatusCard(icon: "exclamationmark.triangle.fill",
+                           tint: FB.Colors.warning,
+                           title: "Couldn't create the server",
+                           subtitle: error)
+            }
             Spacer(minLength: FB.Spacing.s2)
             VStack(spacing: FB.Spacing.s2) {
                 if model.isRunning {
@@ -273,7 +298,7 @@ struct WizardView: View {
 
     private var panes: some View {
         VStack(alignment: .leading, spacing: FB.Spacing.s4) {
-            // Advanced (BYO ISO + Debug) only exists inside a live session.
+            // Advanced (BYO ISO) remains available after the one-shot receipt.
             if model.advancedAllowed {
                 sessionHeader
                 modePicker
@@ -312,19 +337,24 @@ struct WizardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Live-session header: a "Disconnect from phone" control that wipes the
-    /// burn + retires the QR (usable even without the phone in hand). The
-    /// deposit is one-shot — once the recipe is delivered the phone may leave
-    /// and the burn continues; this is the laptop-user's explicit "I'm done".
+    /// Once the one-shot deposit completes there is no live phone connection.
+    /// Keep only a recipe-level reset action; during the brief handshake the
+    /// same action cancels pairing and retires the QR.
     private var sessionHeader: some View {
         HStack(spacing: FB.Spacing.s3) {
+            if model.burnerStage == .recipeReady {
+                Label("Recipe received · phone session finished", systemImage: "checkmark.circle.fill")
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.success)
+            }
             Spacer(minLength: 0)
             Button {
-                model.disconnectFromPhone()
+                model.startOver()
             } label: {
-                Label("Disconnect from phone", systemImage: "xmark.circle")
+                Label(model.burnerStage == .recipeReady ? "Start over" : "Cancel pairing",
+                      systemImage: model.burnerStage == .recipeReady ? "arrow.counterclockwise" : "xmark.circle")
                     .font(FB.Font.caption())
-                    .foregroundStyle(FB.Colors.danger)
+                    .foregroundStyle(model.burnerStage == .recipeReady ? FB.Colors.textMuted : FB.Colors.danger)
             }
             .buttonStyle(.plain)
             .pointerCursor()
@@ -374,7 +404,7 @@ struct WizardView: View {
 
     // MARK: - Locked cover (pair your phone)
 
-    /// The locked cover. The live phone session is the gate into the burner:
+    /// The locked cover. The one-shot phone deposit is the gate into the burner:
     /// scan the QR (or type the code) in the Flagship app, confirm the
     /// security code, and the burn UI opens. "I have a recipe" is the
     /// out-of-band escape hatch for a recipe received elsewhere.
@@ -502,14 +532,35 @@ struct WizardView: View {
 
     private var header: some View {
         HStack(spacing: FB.Spacing.s2) {
-            FlagshipLogo(size: 22)
-            Text("Flagship Assembler")
-                .font(FB.Font.title())
-                .foregroundStyle(FB.Colors.ink)
-            Spacer()
             themeToggle
+            if model.selectedHostedServer != nil {
+                homeButton
+            }
+            Spacer()
         }
         .padding(.bottom, FB.Spacing.s1)
+    }
+
+    private var homeButton: some View {
+        Button {
+            model.selectedHostedServer = nil
+        } label: {
+            Image(systemName: "house.fill")
+                .imageScale(.medium)
+                .foregroundStyle(FB.Colors.textMuted)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: FB.Radius.sm)
+                        .fill(FB.Colors.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: FB.Radius.sm)
+                        .strokeBorder(FB.Colors.border, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .help("Return to pairing home")
+        .pointerCursor()
     }
 
     /// Day/night toggle. Shows the side you'd switch *to*: a sun when
@@ -720,6 +771,12 @@ struct WizardView: View {
 
     private var bakeRow: some View {
         VStack(spacing: FB.Spacing.s2) {
+            if let error = model.operationError, !model.isRunning {
+                StatusCard(icon: "exclamationmark.triangle.fill",
+                           tint: FB.Colors.warning,
+                           title: "Couldn't build the server",
+                           subtitle: error)
+            }
             if model.isRunning {
                 VStack(spacing: FB.Spacing.s2) {
                     Group {

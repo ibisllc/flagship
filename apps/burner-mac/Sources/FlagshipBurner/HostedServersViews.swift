@@ -20,8 +20,20 @@ struct HostedServersSidebar: View {
                 .padding(.vertical, FB.Spacing.s3)
             ScrollView {
                 VStack(spacing: FB.Spacing.s2) {
-                    ForEach(vmManager.servers) { server in
-                        serverRow(server)
+                    if vmManager.servers.isEmpty {
+                        VStack(spacing: FB.Spacing.s2) {
+                            Image(systemName: "server.rack")
+                                .foregroundStyle(FB.Colors.inkFaint)
+                            Text("No servers hosted yet")
+                                .font(FB.Font.caption())
+                                .foregroundStyle(FB.Colors.textMuted)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, FB.Spacing.s5)
+                    } else {
+                        ForEach(vmManager.servers) { server in
+                            serverRow(server)
+                        }
                     }
                 }
                 .padding(.horizontal, FB.Spacing.s2)
@@ -77,20 +89,22 @@ struct HostedServersSidebar: View {
     private func serverRow(_ server: VMManager.HostedServer) -> some View {
         let isSelected = model.selectedHostedServer == server.id
         return HStack(alignment: .top, spacing: FB.Spacing.s1) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(server.record.config.serverName + "." + server.record.config.username)
-                    .font(FB.Font.rowTitle())
+            VStack(alignment: .leading, spacing: FB.Spacing.s1) {
+                Text(server.record.config.serverDomain)
+                    .font(FB.Font.mono())
                     .foregroundStyle(FB.Colors.ink)
-                    .lineLimit(1)
-                Text(server.record.tier.badgeLabel)
-                    .font(FB.Font.caption())
-                    .foregroundStyle(FB.Colors.textMuted)
-                HStack(spacing: FB.Spacing.s1) {
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                HStack(spacing: FB.Spacing.s2) {
                     stateDot(server.record.state)
-                    Text(server.record.state.label)
+                    sidebarStateLabel(server)
+                    Spacer(minLength: 0)
+                    Text(server.record.tier.badgeLabel)
                         .font(FB.Font.caption())
-                        .foregroundStyle(FB.Colors.textMuted)
+                        .foregroundStyle(FB.Colors.primary)
                 }
+                sidebarSpecs(server.record.config)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             rowMenu(server)
@@ -113,6 +127,52 @@ struct HostedServersSidebar: View {
         .onTapGesture { model.selectedHostedServer = server.id }
         .contextMenu { rowActions(server) }
         .pointerCursor()
+    }
+
+    @ViewBuilder
+    private func sidebarStateLabel(_ server: VMManager.HostedServer) -> some View {
+        if case .installing = server.record.state {
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                Text("Installing… \(elapsed(since: server.record.stateChangedAt ?? server.record.createdAt, now: context.date))")
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.textMuted)
+            }
+        } else {
+            Text(server.record.state.label)
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+        }
+    }
+
+    private func elapsed(since start: Date, now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(start)))
+        return seconds >= 3600
+            ? "\(seconds / 3600)h \((seconds % 3600) / 60)m"
+            : "\(seconds / 60)m"
+    }
+
+    private func sidebarSpecs(_ config: VMConfig) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: FB.Spacing.s3,
+             verticalSpacing: FB.Spacing.s1) {
+            GridRow {
+                sidebarSpec("cpu", "\(config.cpuCount) vCPU")
+                sidebarSpec("memorychip", "\(config.memoryBytes / VMResourcePlan.gib) GiB RAM")
+            }
+            GridRow {
+                sidebarSpec("internaldrive", "\(config.mainDiskSizeBytes / VMResourcePlan.gib) GiB disk")
+                sidebarSpec(config.diskEncrypted ? "lock.fill" : "lock.open",
+                            config.diskEncrypted ? "Encrypted" : "Unencrypted")
+            }
+        }
+        .font(FB.Font.caption())
+        .foregroundStyle(FB.Colors.textMuted)
+    }
+
+    private func sidebarSpec(_ icon: String, _ label: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon).imageScale(.small)
+            Text(label).lineLimit(1)
+        }
     }
 
     /// The ⋯ actions menu on the trailing edge of a row.
@@ -202,18 +262,18 @@ struct VMDetailView: View {
 
     var body: some View {
         if let server {
-            VStack(alignment: .leading, spacing: FB.Spacing.s4) {
-                header(server)
-                statusCard(server)
-                specRow(server.record.config)
-                controls(server)
-                if server.record.config.serialConsoleEnabled {
-                    consoleSection(server)
+            ScrollView {
+                VStack(alignment: .leading, spacing: FB.Spacing.s4) {
+                    header(server)
+                    statusCard(server)
+                    controls(server)
+                    dashboard(server)
+                    accessSection(server)
+                    dangerRow(server)
                 }
-                Spacer(minLength: 0)
-                dangerRow(server)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .scrollIndicators(.automatic)
             // A sidebar "Open console" / double-click request auto-opens the
             // serial console here (parity with the Windows ServerRow_OpenConsole
             // path). Consume + clear the one-shot request. Only meaningful for a
@@ -252,12 +312,22 @@ struct VMDetailView: View {
         }
     }
 
+    @ViewBuilder
     private func statusCard(_ server: VMManager.HostedServer) -> some View {
         let state = server.record.state
-        return StatusCard(icon: statusIcon(state),
-                          tint: statusTint(state),
-                          title: state.label,
-                          subtitle: statusSubtitle(server))
+        if case .installing = state {
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                StatusCard(icon: statusIcon(state),
+                           tint: statusTint(state),
+                           title: state.label,
+                           subtitle: statusSubtitle(server, now: context.date))
+            }
+        } else {
+            StatusCard(icon: statusIcon(state),
+                       tint: statusTint(state),
+                       title: state.label,
+                       subtitle: statusSubtitle(server, now: Date()))
+        }
     }
 
     private func statusIcon(_ state: VMState) -> String {
@@ -279,14 +349,16 @@ struct VMDetailView: View {
         }
     }
 
-    private func statusSubtitle(_ server: VMManager.HostedServer) -> String {
+    private func statusSubtitle(_ server: VMManager.HostedServer, now: Date) -> String {
         switch server.record.state {
         case .awaitingPhoneUnlock:
             return server.record.config.bootUnlockMode == "approve"
                 ? "The disk is sealed — approve the unlock on your phone."
                 : "The disk is sealed — waiting for the phone-home unlock."
         case .installing:
-            return "Unattended install running inside the VM."
+            let start = server.record.stateChangedAt ?? server.record.createdAt
+            let elapsed = max(0, Int(now.timeIntervalSince(start)) / 60)
+            return "Unattended install running inside the VM for \(elapsed) minute\(elapsed == 1 ? "" : "s")."
         case .running:
             return "Serving at https://\(server.record.config.serverDomain)/"
         case .failed(let f):
@@ -298,22 +370,82 @@ struct VMDetailView: View {
         }
     }
 
-    private func specRow(_ config: VMConfig) -> some View {
-        HStack(spacing: FB.Spacing.s4) {
-            spec("cpu", "\(config.cpuCount) vCPU")
-            spec("memorychip", "\(config.memoryBytes / VMResourcePlan.gib) GiB RAM")
-            spec("internaldrive", "\(config.mainDiskSizeBytes / VMResourcePlan.gib) GiB disk")
-            spec(config.diskEncrypted ? "lock.fill" : "lock.open",
-                 config.diskEncrypted ? "Encrypted (LUKS)" : "Unencrypted")
+    private func dashboard(_ server: VMManager.HostedServer) -> some View {
+        HStack(alignment: .top, spacing: FB.Spacing.s3) {
+            resourceCard(server.record.config)
+            activityCard(server)
         }
-        .font(FB.Font.caption())
-        .foregroundStyle(FB.Colors.textMuted)
     }
 
-    private func spec(_ icon: String, _ label: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon).imageScale(.small)
-            Text(label)
+    private func resourceCard(_ config: VMConfig) -> some View {
+        let host = HostResources.current()
+        return VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+            Label("Host allocation", systemImage: "chart.bar.fill")
+                .font(FB.Font.rowTitle())
+                .foregroundStyle(FB.Colors.ink)
+            allocationRow("CPU", value: config.cpuCount, total: max(1, host.cpuCount),
+                          detail: "\(config.cpuCount) of \(host.cpuCount) cores")
+            allocationRow("Memory",
+                          value: Int(config.memoryBytes / VMResourcePlan.gib),
+                          total: max(1, Int(host.memoryBytes / VMResourcePlan.gib)),
+                          detail: "\(config.memoryBytes / VMResourcePlan.gib) GiB reserved")
+            Label("\(config.mainDiskSizeBytes / VMResourcePlan.gib) GiB sparse disk",
+                  systemImage: "internaldrive")
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+            Label(config.diskEncrypted ? "LUKS encrypted" : "Unencrypted",
+                  systemImage: config.diskEncrypted ? "lock.fill" : "lock.open")
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+        }
+        .dashboardPanel()
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private func allocationRow(_ label: String, value: Int, total: Int,
+                               detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(label)
+                Spacer()
+                Text(detail)
+            }
+            .font(FB.Font.caption())
+            .foregroundStyle(FB.Colors.textMuted)
+            ProgressView(value: min(1, Double(value) / Double(max(1, total))))
+                .tint(FB.Colors.primary)
+        }
+    }
+
+    private func activityCard(_ server: VMManager.HostedServer) -> some View {
+        VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+            Label("Server details", systemImage: "clock.arrow.circlepath")
+                .font(FB.Font.rowTitle())
+                .foregroundStyle(FB.Colors.ink)
+            detailRow("State", server.record.state.label)
+            detailRow("Created", server.record.createdAt.formatted(
+                date: .abbreviated, time: .shortened))
+            detailRow("Last state change", (server.record.stateChangedAt ?? server.record.createdAt)
+                .formatted(date: .abbreviated, time: .shortened))
+            detailRow("Last connected", server.record.lastConnectedAt?.formatted(
+                date: .abbreviated, time: .shortened) ?? "Not yet")
+            detailRow("Network", "NAT + outbound tunnel")
+            detailRow("Unlock", server.record.config.bootUnlockMode == "approve"
+                      ? "Phone approval" : "Automatic lease")
+        }
+        .dashboardPanel()
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(FB.Colors.inkFaint)
+            Text(value)
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+                .lineLimit(2)
         }
     }
 
@@ -350,27 +482,43 @@ struct VMDetailView: View {
     /// grant. The console attaches to the VM's virtio serial port; the guest
     /// side still enforces its own gate (the grant-created debug login).
     @ViewBuilder
-    private func consoleSection(_ server: VMManager.HostedServer) -> some View {
-        VStack(alignment: .leading, spacing: FB.Spacing.s2) {
-            Button {
-                showConsole.toggle()
-            } label: {
-                Label(showConsole ? "Hide console" : "Open CLI/console",
-                      systemImage: "terminal")
-                    .font(FB.Font.caption())
+    private func accessSection(_ server: VMManager.HostedServer) -> some View {
+        if server.record.config.serialConsoleEnabled {
+            VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+                Label("CLI access", systemImage: "terminal")
+                    .font(FB.Font.rowTitle())
+                    .foregroundStyle(FB.Colors.ink)
+                Button {
+                    showConsole.toggle()
+                } label: {
+                    Label(showConsole ? "Hide serial console" : "Open serial console",
+                          systemImage: "terminal.fill")
+                        .font(FB.Font.caption())
+                }
+                .buttonStyle(.link)
+                .pointerCursor()
+                .disabled(vmManager.host(named: name) == nil)
+                if vmManager.host(named: name) == nil {
+                    Text("Console available while the server is running.")
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                }
+                if showConsole, let host = vmManager.host(named: name) {
+                    VMConsoleView(host: host)
+                        .frame(minHeight: 180, maxHeight: 260)
+                }
             }
-            .buttonStyle(.link)
-            .pointerCursor()
-            .disabled(vmManager.host(named: name) == nil)
-            if vmManager.host(named: name) == nil {
-                Text("Console available while the server is running.")
+            .dashboardPanel()
+        } else {
+            VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+                Label("CLI access locked", systemImage: "terminal")
+                    .font(FB.Font.rowTitle())
+                    .foregroundStyle(FB.Colors.ink)
+                Text("This production server was created without the phone-approved debug grant, so the VM has no console device.")
                     .font(FB.Font.caption())
                     .foregroundStyle(FB.Colors.textMuted)
             }
-            if showConsole, let host = vmManager.host(named: name) {
-                VMConsoleView(host: host)
-                    .frame(minHeight: 180, maxHeight: 260)
-            }
+            .dashboardPanel()
         }
     }
 
@@ -453,5 +601,17 @@ struct VMConsoleView: View {
                 }
             }
         }
+    }
+}
+
+private extension View {
+    func dashboardPanel() -> some View {
+        padding(FB.Spacing.s3)
+            .background(FB.Colors.surface)
+            .clipShape(RoundedRectangle(cornerRadius: FB.Radius.md))
+            .overlay(
+                RoundedRectangle(cornerRadius: FB.Radius.md)
+                    .strokeBorder(FB.Colors.border, lineWidth: 1)
+            )
     }
 }

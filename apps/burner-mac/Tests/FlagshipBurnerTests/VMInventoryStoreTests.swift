@@ -58,6 +58,20 @@ final class VMInventoryStoreTests: XCTestCase {
             atPath: store.layout.configURL(rec.config.name).path))
     }
 
+    func testLegacyRecordWithoutActivityTimestampsStillLoads() throws {
+        let rec = record(name: "legacy.harry.flagship.services")
+        try store.create(rec)
+        let url = store.layout.configURL(rec.config.name)
+        var json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        json.removeValue(forKey: "stateChangedAt")
+        json.removeValue(forKey: "lastConnectedAt")
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+
+        let loaded = try store.load(name: rec.config.name)
+        XCTAssertNil(loaded.stateChangedAt)
+        XCTAssertNil(loaded.lastConnectedAt)
+    }
+
     func testCreateRefusesToClobber() throws {
         let rec = record(name: "home.harry.flagship.services")
         try store.create(rec)

@@ -19,6 +19,10 @@ final class WizardModel: ObservableObject {
     @Published var isRunning = false
     @Published var logLines: [CLILogLine] = []
     @Published var recipeError: String? = nil
+    /// User-visible failure for a burn/host operation. The log keeps the full
+    /// transcript, but a collapsed log must never make a failed download look
+    /// like the button simply reset itself.
+    @Published var operationError: String? = nil
     @Published var verified: VerifyResult? = nil
     @Published var outIsoPath: URL? = nil
     @Published var isFinished: Bool = false
@@ -49,12 +53,13 @@ final class WizardModel: ObservableObject {
 
     // MARK: - Pairing / session gate
 
-    /// Top-level burner state. The live phone session is the gate: `.locked`
+    /// Top-level burner state. The one-shot phone deposit is the gate: `.locked`
     /// shows the QR + short code; `.pairing` shows the SAS to confirm on the
-    /// phone; `.session` is the unlocked burn UI (Advanced available);
+    /// phone; `.session` is the in-flight handoff and `.recipeReady` is the
+    /// disconnected burn UI (Advanced available);
     /// `.recipeFile` is the out-of-band "I have a recipe" path (Simple only,
-    /// no Advanced — there's no live session to authorize anything).
-    enum BurnerUIStage: Equatable { case locked, pairing, session, recipeFile }
+    /// no Advanced).
+    enum BurnerUIStage: Equatable { case locked, pairing, session, recipeReady, recipeFile }
 
     @Published var burnerStage: BurnerUIStage = .locked
     /// The QR payload + short code shown on the locked cover (from the engine).
@@ -66,19 +71,27 @@ final class WizardModel: ObservableObject {
     @Published var pairMatchCode: String? = nil
     /// Why the last session ended (shown briefly on the cover after a drop).
     @Published var lastSessionEndReason: String? = nil
+    /// After a recipe has been consumed by a USB/VM operation, briefly confirm
+    /// the handoff before returning the center pane to a fresh pairing QR.
+    @Published private(set) var homeResetCountdown: Int? = nil
 
-    /// Advanced features (BYO ISO, save-ISO) are only available inside a live
-    /// phone session — the out-of-band recipe path is deliberately Simple-only.
-    var advancedAllowed: Bool { burnerStage == .session }
+    /// Advanced features stay available for a phone-delivered recipe after its
+    /// one-shot session ends; the out-of-band recipe path is Simple-only.
+    var advancedAllowed: Bool { burnerStage == .session || burnerStage == .recipeReady }
 
     private var sessionClient: BurnerSessionClient? = nil
+    private var homeResetTask: Task<Void, Never>? = nil
 
     // MARK: - Destinations (Burn to USB / Host here)
 
     /// Where the delivered recipe goes. nil ⇒ the chooser is showing. Burn to
     /// USB is today's flow, unchanged; Host here creates a managed VM
     /// appliance on this Mac (docs/desktop-vm-appliance.md).
-    @Published var destination: ServerDestination? = nil
+    @Published var destination: ServerDestination? = nil {
+        didSet {
+            if destination != oldValue { operationError = nil }
+        }
+    }
 
     /// Sidebar selection: when set, the main area shows that hosted server's
     /// detail instead of the wizard stage.
@@ -126,6 +139,12 @@ final class WizardModel: ObservableObject {
         burnerStage = .locked
         client.onStage = { [weak self] stage in Task { @MainActor in self?.applyEngineStage(stage) } }
         client.onRecipe = { [weak self] data in Task { @MainActor in self?.handleSessionRecipe(data) } }
+        client.onRecipeReceiptQueued = { [weak self] in
+            Task { @MainActor in
+                self?.pairStatus = "Recipe received — phone session finished."
+                self?.burnerStage = .recipeReady
+            }
+        }
         client.onLog = { [weak self] msg in Task { @MainActor in self?.appendLog(stream: .stderr, text: msg) } }
         client.connect()
     }
@@ -144,6 +163,9 @@ final class WizardModel: ObservableObject {
         case .paired:
             pairStatus = "Paired."
             burnerStage = .session
+        case .reconnecting:
+            pairStatus = "Phone left before sending the recipe — waiting for it to reconnect…"
+            burnerStage = .session
         case .ended(let reason):
             // One-shot deposit: a DELIVERED recipe survives a phone disconnect.
             // The phone's job is done after delivery and it may lock/leave — keep
@@ -153,6 +175,7 @@ final class WizardModel: ObservableObject {
                 // Drop the now-dead socket but hold everything we're burning.
                 sessionClient?.close()
                 sessionClient = nil
+                burnerStage = .recipeReady
             case .relock:
                 wipeAndRelock(reason)
             }
@@ -174,30 +197,54 @@ final class WizardModel: ObservableObject {
         }
         pastedRecipeStaging = staging
         recipe = staging
-        Task { await runVerify() }
+        Task {
+            await runVerify()
+            if verified != nil { sessionClient?.acknowledgeRecipe() }
+        }
     }
 
-    /// The burner-side "Disconnect from phone" button: wipe everything we were
-    /// working on (including a delivered recipe) and return to a fresh locked
-    /// cover. The laptop-user's explicit "I'm done" — clears the desktop and
-    /// retires the QR. The phone has no further role, so nothing to notify.
-    func disconnectFromPhone() {
-        wipeAndRelock("You disconnected this burner.")
+    /// Discard the staged recipe and start over with a fresh pairing code.
+    /// There is no phone connection to disconnect after the one-shot receipt.
+    func startOver() {
+        wipeAndRelock(nil)
+    }
+
+    /// Keep the completed handoff visible just long enough to be legible, then
+    /// prepare a fresh pairing session. VM installation continues independently
+    /// in VMManager and remains visible/actionable in the persistent sidebar.
+    func scheduleHomeReset(after seconds: Int = 5) {
+        homeResetTask?.cancel()
+        let duration = max(1, seconds)
+        homeResetCountdown = duration
+        homeResetTask = Task { [weak self] in
+            for remaining in stride(from: duration - 1, through: 0, by: -1) {
+                do { try await Task.sleep(nanoseconds: 1_000_000_000) }
+                catch { return }
+                guard let self, !Task.isCancelled else { return }
+                self.homeResetCountdown = remaining
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.wipeAndRelock(nil)
+        }
     }
 
     /// Complete wipe of the in-progress burn + session, then return to the
     /// locked cover with a FRESH QR (so the old code is retired). Triggered by
-    /// the explicit Disconnect button, or by a session that ended BEFORE a
+    /// Start over, or by a session that ended BEFORE a
     /// recipe was delivered (a delivered recipe is kept instead — see
     /// `applyEngineStage(.ended)`).
     func wipeAndRelock(_ reason: String?) {
         // Don't yank a burn that's mid-write out from under the user.
         guard !isRunning else { return }
+        homeResetTask?.cancel()
+        homeResetTask = nil
+        homeResetCountdown = nil
         lastSessionEndReason = reason
         // Sensitive session/recipe material.
         recipe = nil
         verified = nil
         recipeError = nil
+        operationError = nil
         pairMatchCode = nil
         destination = nil
         // Reset Advanced selections so a fresh pairing starts clean.
@@ -437,6 +484,11 @@ final class WizardModel: ObservableObject {
                     self.baseDownloadURL = url
                     self.progress = p
                     DockProgress.set(p)
+                case .verifying:
+                    self.phase = "verify"
+                    self.baseDownloadURL = nil
+                    self.progress = nil
+                    DockProgress.set(nil)
                 case .ready:
                     // Hand off to the verify→remaster phase.
                     self.phase = "verify"
@@ -453,6 +505,7 @@ final class WizardModel: ObservableObject {
         guard let recipe = recipe, let iso = iso else { return }
         guard !isRunning else { return }
         isRunning = true
+        operationError = nil
         phase = "remaster"
         defer { isRunning = false; endProgress() }
         let outURL = iso.deletingLastPathComponent()
@@ -468,7 +521,7 @@ final class WizardModel: ObservableObject {
             appendLog(stream: .stdout, text: "+ installer family: \(used)")
             isFinished = true
         } catch {
-            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            reportOperationFailure(error)
         }
     }
 
@@ -485,6 +538,7 @@ final class WizardModel: ObservableObject {
         if mode.requiresRecipe && recipe == nil { return }
         guard !isRunning else { return }
         isRunning = true
+        operationError = nil
         progress = nil
         phase = nil
         baseDownloadURL = nil
@@ -506,7 +560,7 @@ final class WizardModel: ObservableObject {
             do {
                 srcISO = try await ensureBaseISO()
             } catch {
-                appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+                reportOperationFailure(error)
                 return
             }
         } else {
@@ -531,7 +585,7 @@ final class WizardModel: ObservableObject {
             didRemasterForTest = true
             appendLog(stream: .stdout, text: "+ installer family: \(used)")
         } catch {
-            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            reportOperationFailure(error)
             try? FileManager.default.removeItem(at: preparedURL)
             return
         }
@@ -542,8 +596,7 @@ final class WizardModel: ObservableObject {
         do {
             try HelperClient.ensureEnabled()
         } catch {
-            appendLog(stream: .stderr,
-                      text: (error as? LocalizedError)?.errorDescription ?? "\(error)")
+            reportOperationFailure(error)
             return
         }
 
@@ -591,9 +644,11 @@ final class WizardModel: ObservableObject {
             // Shred the single-use recipe file now that the burn succeeded.
             try? FileManager.default.removeItem(at: recipe)
             isFinished = true
+            scheduleHomeReset()
         } else {
-            appendLog(stream: .stderr,
-                      text: result.message.isEmpty ? "write failed (code \(result.code))" : result.message)
+            reportOperationFailure(result.message.isEmpty
+                ? "Write failed (code \(result.code))."
+                : result.message)
         }
     }
 
@@ -608,6 +663,7 @@ final class WizardModel: ObservableObject {
         if effectiveRequiresUserISO && iso == nil { return }
         guard !isRunning else { return }
         isRunning = true
+        operationError = nil
         progress = nil
         phase = nil
         baseDownloadURL = nil
@@ -619,18 +675,18 @@ final class WizardModel: ObservableObject {
             recipeData = try Data(contentsOf: recipe)
             parsed = try RecipeLoader.load(data: recipeData)
         } catch {
-            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            reportOperationFailure(error)
             return
         }
 
         let host = HostResources.current()
         let cap = VMResourcePlan.maxVMCount(host: host)
         guard cap > 0 else {
-            appendLog(stream: .stderr, text: "This Mac doesn't have enough free memory to host a server (each server needs ~\(VMResourcePlan.minimumVMMemoryBytes / VMResourcePlan.gib) GiB).")
+            reportOperationFailure("This Mac doesn't have enough free memory to host a server (each server needs ~\(VMResourcePlan.minimumVMMemoryBytes / VMResourcePlan.gib) GiB).")
             return
         }
         guard vmManager.servers.count < cap else {
-            appendLog(stream: .stderr, text: "This Mac is at its hosting limit (\(cap) server\(cap == 1 ? "" : "s")). Remove one first, or burn to USB.")
+            reportOperationFailure("This Mac is at its hosting limit (\(cap) server\(cap == 1 ? "" : "s")). Remove one first, or burn to USB.")
             return
         }
 
@@ -647,7 +703,7 @@ final class WizardModel: ObservableObject {
             do {
                 srcISO = try await ensureBaseISO(arch: HostArch.current())
             } catch {
-                appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+                reportOperationFailure(error)
                 return
             }
         } else {
@@ -664,7 +720,7 @@ final class WizardModel: ObservableObject {
         do {
             try vmManager.createServer(config: config)
         } catch {
-            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            reportOperationFailure(error)
             return
         }
         do {
@@ -678,20 +734,29 @@ final class WizardModel: ObservableObject {
             didRemasterForTest = true
             appendLog(stream: .stdout, text: "+ installer family: \(used)")
         } catch {
-            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            reportOperationFailure(error)
             await vmManager.deleteServer(named: config.name)
             return
         }
 
         // Shred the single-use recipe, exactly like a successful USB burn.
         try? FileManager.default.removeItem(at: recipe)
-        selectedHostedServer = config.name
         await vmManager.beginInstall(named: config.name)
+        scheduleHomeReset()
     }
 
     private final class Box<T> {
         var value: T
         init(_ value: T) { self.value = value }
+    }
+
+    private func reportOperationFailure(_ error: Error) {
+        reportOperationFailure((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+    }
+
+    private func reportOperationFailure(_ message: String) {
+        operationError = message
+        appendLog(stream: .stderr, text: message)
     }
 
     func clearLog() {

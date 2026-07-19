@@ -55,6 +55,8 @@ public struct IsoBaseCache {
         case inspected(path: String?, sha256: String?)
         /// A download was ordered. Carries the URL so the UI shows it under the bar.
         case downloading(url: String, version: String, progress: Double)
+        /// All bytes are local; checksum verification is still in progress.
+        case verifying(path: String)
         /// Done — either freshly downloaded or served from cache.
         case ready(path: String, sha256: String, fromCache: Bool)
     }
@@ -198,28 +200,73 @@ public struct IsoBaseCache {
             throw CacheError.offline("server returned a malformed download URL")
         }
         let dest = Self.cachedURL(version: order.version, arch: arch, dir: dir)
+        let tmp = dest.appendingPathExtension("partial")
 
-        progress(.downloading(url: order.url, version: order.version, progress: 0))
+        // A previous connection may have ended after writing the final bytes
+        // but before verification/promotion. Verify that complete partial
+        // locally instead of downloading the entire ISO again.
+        if order.sizeBytes > 0,
+           Self.fileSize(tmp) == Int64(order.sizeBytes) {
+            progress(.verifying(path: tmp.path))
+            let got = try Self.sha256OfFile(at: tmp)
+            if got == order.sha256.lowercased() {
+                return try Self.promote(tmp: tmp, to: dest, arch: arch, in: dir,
+                                        sha256: got, source: order.url,
+                                        log: log, progress: progress)
+            }
+            try? FileManager.default.removeItem(at: tmp)
+        }
+
+        let partialSize = Self.fileSize(tmp)
+        var request = URLRequest(url: url)
+        if partialSize > 0 {
+            request.setValue("bytes=\(partialSize)-", forHTTPHeaderField: "Range")
+            progress(.downloading(url: order.url, version: order.version,
+                                  progress: order.sizeBytes > 0
+                                    ? min(1, Double(partialSize) / Double(order.sizeBytes))
+                                    : 0))
+        } else {
+            progress(.downloading(url: order.url, version: order.version, progress: 0))
+        }
 
         let (bytes, response): (URLSession.AsyncBytes, URLResponse)
         do {
-            (bytes, response) = try await downloadSession.bytes(from: url)
+            (bytes, response) = try await downloadSession.bytes(for: request)
         } catch let e as URLError {
             throw CacheError.offline(e.localizedDescription)
         }
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            throw CacheError.httpStatus(http.statusCode)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 200
+        if !(200...299).contains(status) {
+            throw CacheError.httpStatus(status)
         }
+        // A compliant server returns 206 for a Range request. If it ignores
+        // Range and returns 200, restart the partial rather than appending a
+        // second complete image and guaranteeing a checksum failure.
+        let resumesPartial = partialSize > 0 && status == 206
+        let startingSize = resumesPartial ? partialSize : 0
         // Prefer the server-quoted size; fall back to the HTTP length.
         let expectedLen: Int64 = order.sizeBytes > 0
             ? Int64(order.sizeBytes)
-            : response.expectedContentLength
+            : response.expectedContentLength + startingSize
 
-        let tmp = dest.appendingPathExtension("partial")
-        FileManager.default.createFile(atPath: tmp.path, contents: nil)
+        if !FileManager.default.fileExists(atPath: tmp.path) {
+            FileManager.default.createFile(atPath: tmp.path, contents: nil)
+        }
         let handle = try FileHandle(forWritingTo: tmp)
         var hasher = SHA256()
-        var received: Int64 = 0
+        if resumesPartial {
+            try handle.seekToEnd()
+            let existing = try FileHandle(forReadingFrom: tmp)
+            while true {
+                let chunk = try existing.read(upToCount: 1 << 20) ?? Data()
+                if chunk.isEmpty { break }
+                hasher.update(data: chunk)
+            }
+            try? existing.close()
+        } else {
+            try handle.truncate(atOffset: 0)
+        }
+        var received = startingSize
         var buffer = Data(capacity: 1 << 20)
         do {
             for try await byte in bytes {
@@ -235,15 +282,18 @@ public struct IsoBaseCache {
                     }
                 }
             }
-        } catch let e as URLError {
-            try? handle.close(); try? FileManager.default.removeItem(at: tmp)
-            throw CacheError.offline(e.localizedDescription)
+        } catch {
+            // Keep the verified-length partial so the next click resumes via
+            // Range instead of throwing away hundreds of megabytes.
+            try? handle.close()
+            if let e = error as? URLError { throw CacheError.offline(e.localizedDescription) }
+            throw error
         }
         if !buffer.isEmpty {
             handle.write(buffer); hasher.update(data: buffer); received += Int64(buffer.count)
         }
         try? handle.close()
-        progress(.downloading(url: order.url, version: order.version, progress: 1.0))
+        progress(.verifying(path: tmp.path))
 
         // Stream-verify the downloaded bytes' sha256 against the manifest's.
         let got = hasher.finalize().map { String(format: "%02x", $0) }.joined()
@@ -252,17 +302,9 @@ public struct IsoBaseCache {
             throw CacheError.checksumMismatch(expected: order.sha256, got: got)
         }
 
-        // Atomic move into place.
-        try? FileManager.default.removeItem(at: dest)
-        try FileManager.default.moveItem(at: tmp, to: dest)
-        // A fresh order supersedes any older cached base OF THIS ARCH — drop
-        // stale versions so the next inspect reports the new one. Other
-        // arches' bases are untouched (the burn base survives a host fetch).
-        Self.pruneOtherBases(keeping: dest, arch: arch, in: dir)
-
-        log("downloaded \(dest.path) sha256=\(got) from \(order.url)")
-        progress(.ready(path: dest.path, sha256: got, fromCache: false))
-        return dest
+        return try Self.promote(tmp: tmp, to: dest, arch: arch, in: dir,
+                                sha256: got, source: order.url,
+                                log: log, progress: progress)
     }
 
     // MARK: - Helpers
@@ -277,6 +319,23 @@ public struct IsoBaseCache {
                 try? fm.removeItem(at: url)
             }
         }
+    }
+
+    private static func fileSize(_ url: URL) -> Int64 {
+        let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+    }
+
+    private static func promote(tmp: URL, to dest: URL, arch: IsoArch, in dir: URL,
+                                sha256: String, source: String,
+                                log: @Sendable (String) -> Void,
+                                progress: @escaping @Sendable (Phase) -> Void) throws -> URL {
+        try? FileManager.default.removeItem(at: dest)
+        try FileManager.default.moveItem(at: tmp, to: dest)
+        pruneOtherBases(keeping: dest, arch: arch, in: dir)
+        log("downloaded \(dest.path) sha256=\(sha256) from \(source)")
+        progress(.ready(path: dest.path, sha256: sha256, fromCache: false))
+        return dest
     }
 
     /// Streaming SHA-256 of a file (so a ~300 MB ISO isn't loaded into memory).

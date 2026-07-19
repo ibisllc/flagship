@@ -54,9 +54,11 @@ final class VMManager: ObservableObject {
             case .installing:
                 records[i].state = .failed(VMFailure(
                     phase: .install, reason: "The app quit while the install was running."))
+                records[i].stateChangedAt = Date()
                 try? store.save(records[i])
             case .awaitingPhoneUnlock, .running:
                 records[i].state = .stopped
+                records[i].stateChangedAt = Date()
                 try? store.save(records[i])
             default:
                 break
@@ -116,6 +118,10 @@ final class VMManager: ObservableObject {
         }
         lifecycles[name] = lc
         server.record.state = lc.state
+        server.record.stateChangedAt = lc.stateChangedAt
+        if case .running = lc.state {
+            server.record.lastConnectedAt = lc.stateChangedAt
+        }
         upsert(server)
         try? store.save(server.record)
         await run(effects: effects, on: server.record.config)
