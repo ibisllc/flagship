@@ -99,6 +99,9 @@ final class VMManager: ObservableObject {
     // MARK: - Lifecycle driving
 
     func beginInstall(named name: String) async { await apply(.startInstall, to: name) }
+    func cancelInstall(named name: String) async {
+        await apply(.installFailed("Installation stopped by you."), to: name)
+    }
     func powerOn(named name: String) async { await apply(.powerOn, to: name) }
     func powerOff(named name: String) async { await apply(.powerOff, to: name) }
 

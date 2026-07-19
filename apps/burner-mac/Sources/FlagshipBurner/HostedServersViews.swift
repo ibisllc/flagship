@@ -209,7 +209,12 @@ struct HostedServersSidebar: View {
             }
         case .failed:
             Button("Start") { select(name); Task { await vmManager.powerOn(named: name) } }
-        case .created, .installing:
+        case .installing:
+            Button("Stop installation") {
+                select(name)
+                Task { await vmManager.cancelInstall(named: name) }
+            }
+        case .created:
             EmptyView()
         }
         if server.record.config.serialConsoleEnabled {
@@ -472,7 +477,12 @@ struct VMDetailView: View {
             case .failed:
                 Button("Start") { Task { await vmManager.powerOn(named: name) } }
                     .buttonStyle(.borderedProminent)
-            case .created, .installing:
+            case .installing:
+                Button("Stop installation") {
+                    Task { await vmManager.cancelInstall(named: name) }
+                }
+                .buttonStyle(.bordered)
+            case .created:
                 EmptyView()
             }
         }
