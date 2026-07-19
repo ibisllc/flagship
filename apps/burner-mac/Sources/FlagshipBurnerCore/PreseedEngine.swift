@@ -130,7 +130,9 @@ public final class PreseedEngine {
 
     /// The canonical bundle source shipped as an SPM resource.
     public static func loadBundledSource() throws -> String {
-        guard let url = Bundle.module.url(forResource: "preseed-engine", withExtension: "js") else {
+        let url = Bundle.main.url(forResource: "preseed-engine", withExtension: "js")
+            ?? Bundle.module.url(forResource: "preseed-engine", withExtension: "js")
+        guard let url else {
             throw EngineError.bundleMissing
         }
         return try String(contentsOf: url, encoding: .utf8)

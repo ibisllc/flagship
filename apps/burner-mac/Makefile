@@ -24,6 +24,7 @@ BIN = FlagshipAssembler
 APP_NAME = Flagship Assembler
 BUILD_DIR = .build/release
 APP_BUNDLE = $(BUILD_DIR)/$(APP_NAME).app
+PRESEED_ENGINE = $(BUILD_DIR)/FlagshipBurner_FlagshipBurnerCore.bundle/preseed-engine.js
 ZIP_FILE = $(BUILD_DIR)/$(BIN).zip
 DMG_FILE = $(BUILD_DIR)/$(BIN).dmg
 
@@ -64,6 +65,7 @@ package-app: build-release
 	mkdir -p "$(APP_BUNDLE)/Contents/Library/LaunchDaemons"
 	cp "$(BUILD_DIR)/$(BIN_SRC)" "$(APP_BUNDLE)/Contents/MacOS/$(BIN)"
 	cp "$(BUILD_DIR)/FlagshipBurnerHelper" "$(APP_BUNDLE)/Contents/MacOS/FlagshipBurnerHelper"
+	cp "$(PRESEED_ENGINE)" "$(APP_BUNDLE)/Contents/Resources/preseed-engine.js"
 	cp Info.plist "$(APP_BUNDLE)/Contents/Info.plist"
 	cp HelperDaemon.plist "$(APP_BUNDLE)/Contents/Library/LaunchDaemons/com.flagshipserver.Burner.helper.plist"
 	cp AppIcon.icns "$(APP_BUNDLE)/Contents/Resources/AppIcon.icns"
