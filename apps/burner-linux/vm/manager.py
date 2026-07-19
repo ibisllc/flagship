@@ -115,6 +115,10 @@ class HostedServer:
         )
 
     @property
+    def can_cancel_install(self) -> bool:
+        return self.record.state.kind == VMStateKind.INSTALLING
+
+    @property
     def can_retry_install(self) -> bool:
         s = self.record.state
         return (
@@ -340,6 +344,9 @@ class VMManager:
 
     def begin_install(self, name: str) -> None:
         self._apply(VMEvent.start_install(), name)
+
+    def cancel_install(self, name: str) -> None:
+        self._apply(VMEvent.install_failed("Installation stopped by you."), name)
 
     def power_on(self, name: str) -> None:
         self._apply(VMEvent.power_on(), name)

@@ -25,6 +25,7 @@ import shlex
 import subprocess
 import tempfile
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -217,6 +218,7 @@ class WizardState:
     progress: Optional[float] = None
     # Raw phase token: "download" | "remaster" | "write".
     phase: Optional[str] = None
+    handoff_countdown: Optional[int] = None
     # URL of the base ISO being fetched in Simple mode — shown under the bar.
     download_url: Optional[str] = None
     # Cached/fetched base ISO path used by the Simple-mode CLI write.
@@ -272,6 +274,11 @@ class WizardState:
             "download": "Downloading base image…",
             "remaster": "Building image…",
             "write": "Writing to USB…",
+            "handoff": (
+                f"Server handed off · returning home in {self.handoff_countdown}…"
+                if self.handoff_countdown is not None
+                else "Preparing a new server…"
+            ),
         }.get(self.phase or "")
 
 
@@ -324,6 +331,7 @@ class WizardModel:
         vm_manager: Optional[VMManager] = None,
         pair_session_factory: Optional[Callable[[bool], PairSession]] = None,
         ssh_launch_fn: Optional[Callable[[int], object]] = None,
+        handoff_seconds: int = 5,
     ) -> None:
         self.state = WizardState(mode=mode)
         self.on_change = on_change or (lambda: None)
@@ -341,6 +349,7 @@ class WizardModel:
             lambda debug: PairSession(debug, locate_fn=self._locate_fn)
         )
         self._ssh_launch = ssh_launch_fn or ssh_launch.launch
+        self._handoff_seconds = max(0, handoff_seconds)
         self._pair: Optional[PairSession] = None
         # Set while a Simple-mode base download can be cancelled (the analog of
         # Wizard.cs's CancellationTokenSource); cancel() trips it.
@@ -814,13 +823,14 @@ class WizardModel:
                 os.unlink(recipe)
             except OSError:
                 pass
-            self.state.selected_server_name = config.name
-            self.state.destination = None
-            self.state.recipe_path = None
-            self.state.pasted_recipe_staging = None
-            self.state.verified = None
-            self._notify()
             self.vm.begin_install(config.name)
+            self.state.phase = "handoff"
+            for remaining in range(self._handoff_seconds, 0, -1):
+                self.state.handoff_countdown = remaining
+                self._notify()
+                time.sleep(1)
+            self.state.handoff_countdown = None
+            self.reset_to_new_server()
         finally:
             self._cancel_download = None
             self.state.phase = None
@@ -840,6 +850,9 @@ class WizardModel:
 
     def retry_install(self, name: str) -> None:
         threading.Thread(target=lambda: self.vm.begin_install(name), daemon=True).start()
+
+    def cancel_install(self, name: str) -> None:
+        threading.Thread(target=lambda: self.vm.cancel_install(name), daemon=True).start()
 
     def delete_server(self, name: str) -> None:
         """Confirmation is the VIEW's job (dialog); this executes."""
@@ -1055,6 +1068,10 @@ def build_window(application, model: Optional[WizardModel] = None):
     window.set_default_size(960, 820)
 
     header = Adw.HeaderBar()
+    home_btn = Gtk.Button(icon_name="go-home-symbolic")
+    home_btn.set_tooltip_text("Return to pairing home")
+    home_btn.connect("clicked", lambda _b: wizard_model.reset_to_new_server())
+    header.pack_start(home_btn)
 
     # ---- mode toggle (Simple default / Advanced) ----
     mode_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1495,6 +1512,8 @@ def build_window(application, model: Optional[WizardModel] = None):
     detail_retry = Gtk.Button(label="Retry install")
     detail_retry.add_css_class("suggested-action")
     detail_actions.append(detail_retry)
+    detail_cancel_install = Gtk.Button(label="Stop installation")
+    detail_actions.append(detail_cancel_install)
     # SSH exists IFF the recipe carried the owner-signed debug grant. A
     # production VM shows no debug affordance at all (the phone-signed grant is
     # the gate; there is no host-side override).
@@ -1543,6 +1562,9 @@ def build_window(application, model: Optional[WizardModel] = None):
     detail_retry.connect(
         "clicked", lambda _b: wizard_model.retry_install(_selected_name()) if _selected_name() else None
     )
+    detail_cancel_install.connect(
+        "clicked", lambda _b: wizard_model.cancel_install(_selected_name()) if _selected_name() else None
+    )
     detail_ssh.connect(
         "clicked", lambda _b: wizard_model.open_ssh(_selected_name()) if _selected_name() else None
     )
@@ -1553,7 +1575,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     # ---- Sidebar: servers hosted in this app ----
     content_row.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
     sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-    sidebar.set_size_request(250, -1)
+    sidebar.set_size_request(330, -1)
     content_row.append(sidebar)
     sidebar_title = Gtk.Label(label="Servers on this PC", xalign=0.0)
     sidebar_title.add_css_class("heading")
@@ -1607,16 +1629,20 @@ def build_window(application, model: Optional[WizardModel] = None):
                 getattr(grid, setter)(6)
             col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
             col.set_hexpand(True)
-            name_label = Gtk.Label(label=server.display_name, xalign=0.0)
+            name_label = Gtk.Label(label=server.fqdn, xalign=0.0)
             name_label.add_css_class("heading")
-            name_label.set_ellipsize(3)  # Pango.EllipsizeMode.END
+            name_label.set_wrap(True)
+            name_label.set_selectable(True)
             col.append(name_label)
-            badge_label = Gtk.Label(label=server.badge_label, xalign=0.0)
-            badge_label.add_css_class("dim-label")
-            col.append(badge_label)
-            state_label = Gtk.Label(label=f"● {server.state_label}", xalign=0.0)
+            state_label = Gtk.Label(
+                label=f"● {server.state_label} · {server.badge_label}", xalign=0.0
+            )
             state_label.add_css_class("dim-label")
             col.append(state_label)
+            spec_label = Gtk.Label(label=server.spec_summary, xalign=0.0)
+            spec_label.set_wrap(True)
+            spec_label.add_css_class("dim-label")
+            col.append(spec_label)
             grid.append(col)
 
             # Row actions: the ⋯ button, right-click, and double-click all
@@ -1649,6 +1675,8 @@ def build_window(application, model: Optional[WizardModel] = None):
                 _action("Stop", server.name, wizard_model.stop_server)
             if server.can_retry_install:
                 _action("Retry install", server.name, wizard_model.retry_install)
+            if server.can_cancel_install:
+                _action("Stop installation", server.name, wizard_model.cancel_install)
             _action("Delete…", server.name, _confirm_delete, destructive=True)
             popover.set_child(actions)
             menu_btn.set_popover(popover)
@@ -1729,6 +1757,7 @@ def build_window(application, model: Optional[WizardModel] = None):
             main_stack.set_visible_child_name("hosthere")
         else:
             main_stack.set_visible_child_name("wizard")
+        home_btn.set_visible(wizard_model.show_server_detail)
         # destination chooser
         chooser_domain.set_text(s.verified.server_domain if s.verified else "")
         reason = wizard_model.host_here_disabled_reason
@@ -1743,7 +1772,7 @@ def build_window(application, model: Optional[WizardModel] = None):
         hh_accel_warning.set_visible(accel_warning is not None)
         hh_create.set_visible(not s.is_running)
         hh_caption.set_visible(not s.is_running)
-        if s.is_running and s.phase in ("download", "remaster"):
+        if s.is_running and s.phase in ("download", "remaster", "handoff"):
             hh_progress.set_visible(True)
             if s.progress is None:
                 hh_progress.pulse()
@@ -1778,6 +1807,7 @@ def build_window(application, model: Optional[WizardModel] = None):
             detail_start.set_visible(server.can_start)
             detail_stop.set_visible(server.can_stop)
             detail_retry.set_visible(server.can_retry_install)
+            detail_cancel_install.set_visible(server.can_cancel_install)
             detail_ssh.set_visible(server.console_enabled)
         # sidebar
         _rebuild_server_list()

@@ -184,7 +184,15 @@ def test_run_host_here_creates_remasters_shreds_and_installs(tmp_path, monkeypat
         locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
         vm_manager=vm,
         ensure_base_fn=lambda *_a, **_k: base,
+        handoff_seconds=3,
     )
+    seen_handoff: list[int] = []
+    m.on_change = lambda: (
+        seen_handoff.append(m.state.handoff_countdown)
+        if m.state.phase == "handoff" and m.state.handoff_countdown is not None
+        else None
+    )
+    monkeypatch.setattr("wizard.time.sleep", lambda _seconds: None)
     recipe = _write_recipe(tmp_path)
     m.state.recipe_path = recipe
     verified(m)
@@ -212,8 +220,9 @@ def test_run_host_here_creates_remasters_shreds_and_installs(tmp_path, monkeypat
     (s,) = vm.servers
     assert s.record.state.kind == VMStateKind.INSTALLING
     assert host.started == [("home.harry.flagship.services", True)]
-    assert m.state.selected_server_name == "home.harry.flagship.services"
+    assert m.state.selected_server_name is None
     assert m.state.recipe_path is None and m.state.verified is None
+    assert seen_handoff == [3, 2, 1]
 
 
 def test_run_host_here_rolls_back_the_bundle_when_remaster_fails(tmp_path, monkeypatch):
@@ -224,6 +233,7 @@ def test_run_host_here_rolls_back_the_bundle_when_remaster_fails(tmp_path, monke
         locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
         vm_manager=vm,
         ensure_base_fn=lambda *_a, **_k: base,
+        handoff_seconds=0,
     )
     recipe = _write_recipe(tmp_path)
     m.state.recipe_path = recipe
@@ -256,6 +266,7 @@ def test_run_host_here_debug_recipe_yields_a_debug_vm(tmp_path, monkeypatch):
         locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
         vm_manager=vm,
         ensure_base_fn=lambda *_a, **_k: base,
+        handoff_seconds=0,
     )
     grant = json.dumps({"v": 1, "grant": {"sshAuthorizedKey": "ssh-ed25519 AAAA dev"}})
     m.state.recipe_path = _write_recipe(tmp_path, {"debugGrant": grant})
@@ -285,6 +296,7 @@ def test_run_host_here_owns_is_running_for_the_whole_pipeline(tmp_path, monkeypa
         locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
         vm_manager=vm,
         ensure_base_fn=fake_ensure,
+        handoff_seconds=0,
     )
     m.state.recipe_path = _write_recipe(tmp_path)
     verified(m)

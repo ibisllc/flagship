@@ -177,6 +177,12 @@ public partial class MainWindow : Window
             await _wizard.Vm.BeginInstallAsync(name);
     }
 
+    private async void CancelInstall_Click(object sender, RoutedEventArgs e)
+    {
+        if (_wizard.SelectedServerName is string name)
+            await _wizard.Vm.CancelInstallAsync(name);
+    }
+
     private async void DeleteServer_Click(object sender, RoutedEventArgs e)
         => await DeleteSelectedAsync();
 
@@ -294,6 +300,13 @@ public partial class MainWindow : Window
         _wizard.SelectedServerName = s.Name;
         CloseConsole();
         await _wizard.Vm.PowerOffAsync(s.Name);
+    }
+
+    private async void ServerRow_CancelInstall_Click(object sender, RoutedEventArgs e)
+    {
+        if (RowServer(sender) is not HostedServer s) return;
+        _wizard.SelectedServerName = s.Name;
+        await _wizard.Vm.CancelInstallAsync(s.Name);
     }
 
     private async void ServerRow_Delete_Click(object sender, RoutedEventArgs e)

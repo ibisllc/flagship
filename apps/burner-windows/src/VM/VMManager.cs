@@ -70,6 +70,7 @@ public sealed class HostedServer : INotifyPropertyChanged
     public bool CanStart => _record.State.Kind is VMStateKind.Installed or VMStateKind.Stopped
         || (_record.State.Kind == VMStateKind.Failed && _record.State.Failure?.Phase == VMFailurePhase.Run);
     public bool CanStop => _record.State.Kind is VMStateKind.Running or VMStateKind.AwaitingPhoneUnlock;
+    public bool CanCancelInstall => _record.State.Kind == VMStateKind.Installing;
     public bool CanRetryInstall => _record.State.Kind == VMStateKind.Failed
         && _record.State.Failure?.Phase == VMFailurePhase.Install;
     public bool ConsoleEnabled => _record.Config.SerialConsoleEnabled;
@@ -203,6 +204,8 @@ public sealed class VMManager
     // ---- Lifecycle driving ----
 
     public Task BeginInstallAsync(string name) => ApplyAsync(VMEvent.StartInstall, name);
+    public Task CancelInstallAsync(string name)
+        => ApplyAsync(VMEvent.InstallFailed("Installation stopped by you."), name);
     public Task PowerOnAsync(string name) => ApplyAsync(VMEvent.PowerOn, name);
     public Task PowerOffAsync(string name) => ApplyAsync(VMEvent.PowerOff, name);
 

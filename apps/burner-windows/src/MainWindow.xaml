@@ -6,9 +6,9 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         Title="Flagship for Desktop"
-        Width="840" Height="660"
-        MinWidth="760" MinHeight="580"
-        MaxWidth="1200"
+        Width="940" Height="660"
+        MinWidth="860" MinHeight="580"
+        MaxWidth="1400"
         Background="{StaticResource FB.Bg}"
         WindowStartupLocation="CenterScreen"
         FontFamily="{StaticResource FB.Font.Body}"
@@ -38,26 +38,14 @@
 
         <!-- Header -->
         <Grid Grid.Row="0" Margin="22,18,22,8">
-            <StackPanel Orientation="Horizontal"
-                        VerticalAlignment="Center">
-                <!-- The Flagship mark: rounded square frame + teal core
-                     (light scheme: dark frame, teal circle). -->
-                <Border Width="30" Height="30"
-                        CornerRadius="7"
-                        Background="{StaticResource FB.Ink}"
-                        VerticalAlignment="Center">
-                    <Ellipse Width="16" Height="16"
-                             Fill="{StaticResource FB.Primary}"
-                             HorizontalAlignment="Center"
-                             VerticalAlignment="Center"/>
-                </Border>
-                <TextBlock Text="Flagship for Desktop"
-                           FontFamily="{StaticResource FB.Font.Title}"
-                           FontSize="18"
-                           Foreground="{StaticResource FB.Text}"
-                           VerticalAlignment="Center"
-                           Margin="10,0,0,0"/>
-            </StackPanel>
+            <Button HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource LinkButton}"
+                    Content="⌂  Home"
+                    ToolTip="Return to pairing home"
+                    Click="AddServer_Click"
+                    Visibility="{Binding ShowServerDetail,
+                        Converter={StaticResource BoolToVisibility}}"/>
             <!-- Mode switch: names the mode a click switches TO (Simple⇄Advanced). -->
             <Button HorizontalAlignment="Right"
                     VerticalAlignment="Center"
@@ -70,7 +58,7 @@
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="228"/>
+                <ColumnDefinition Width="320"/>
             </Grid.ColumnDefinitions>
 
             <!-- ============ MAIN AREA ============ -->
@@ -641,6 +629,11 @@
                                     Click="RetryInstall_Click"
                                     Visibility="{Binding CanRetryInstall,
                                         Converter={StaticResource BoolToVisibility}}"/>
+                            <Button Style="{StaticResource SecondaryButton}"
+                                    Content="Stop installation"
+                                    Click="CancelInstall_Click"
+                                    Visibility="{Binding CanCancelInstall,
+                                        Converter={StaticResource BoolToVisibility}}"/>
                         </StackPanel>
 
                         <!-- Debug console — exists IFF the recipe carried the
@@ -783,18 +776,21 @@
                                                       Click="ServerRow_Stop_Click"
                                                       Visibility="{Binding CanStop,
                                                           Converter={StaticResource BoolToVisibility}}"/>
+                                            <MenuItem Header="Stop installation"
+                                                      Click="ServerRow_CancelInstall_Click"
+                                                      Visibility="{Binding CanCancelInstall,
+                                                          Converter={StaticResource BoolToVisibility}}"/>
                                             <Separator/>
                                             <MenuItem Header="Delete…"
                                                       Click="ServerRow_Delete_Click"/>
                                         </ContextMenu>
                                     </Grid.ContextMenu>
                                     <StackPanel Grid.Column="0">
-                                        <TextBlock Text="{Binding DisplayName}"
+                                        <TextBlock Text="{Binding Fqdn}"
                                                    Style="{StaticResource RowTitle}"
-                                                   FontSize="13"
-                                                   TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="{Binding BadgeLabel}"
-                                                   Style="{StaticResource Caption}"/>
+                                                   FontFamily="{StaticResource FB.Font.Mono}"
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap"/>
                                         <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                                             <Ellipse Width="7" Height="7"
                                                      VerticalAlignment="Center"
@@ -803,7 +799,14 @@
                                             <TextBlock Text="{Binding StateLabel}"
                                                        Style="{StaticResource Caption}"
                                                        Margin="5,0,0,0"/>
+                                            <TextBlock Text="{Binding BadgeLabel}"
+                                                       Style="{StaticResource Caption}"
+                                                       Margin="8,0,0,0"/>
                                         </StackPanel>
+                                        <TextBlock Text="{Binding SpecSummary}"
+                                                   Style="{StaticResource Caption}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,3,0,0"/>
                                     </StackPanel>
                                     <Button Grid.Column="1"
                                             Style="{StaticResource LinkButton}"

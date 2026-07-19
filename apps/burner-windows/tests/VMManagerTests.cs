@@ -145,5 +145,7 @@ public sealed class VMManagerTests : IDisposable
         Assert.False(s.CanStart);
         Assert.True(s.CanStop);
         Assert.Contains("https://home.harry.flagship.services/", s.StatusSubtitle);
+        s.Record = s.Record with { State = VMState.Installing };
+        Assert.True(s.CanCancelInstall);
     }
 }

@@ -180,6 +180,23 @@ def test_install_attaches_iso_and_starts(store):
     assert m.servers[0].record.state.kind == VMStateKind.INSTALLING
 
 
+def test_cancel_install_stops_host_and_keeps_retryable_installer(store):
+    host = FakeHost()
+    m = manager(store, host=host)
+    m.create_server(config())
+    iso = m.installer_iso_path("a.h.flagship.services")
+    open(iso, "wb").write(b"iso")
+    m.begin_install("a.h.flagship.services")
+    assert m.servers[0].can_cancel_install
+    m.cancel_install("a.h.flagship.services")
+    assert host.force_stops == 1
+    assert m.servers[0].record.state.kind == VMStateKind.FAILED
+    assert m.servers[0].can_retry_install
+    import os
+
+    assert os.path.exists(iso)
+
+
 def test_clean_stop_after_plausible_duration_is_success_then_first_boot(store, tmp_path):
     now = [1000.0]
     host = FakeHost()

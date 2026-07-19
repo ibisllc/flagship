@@ -335,6 +335,7 @@ def test_host_here_passes_the_host_arch_into_plan_and_base_fetch(tmp_path, monke
         locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
         vm_manager=vm,
         ensure_base_fn=fake_ensure,
+        handoff_seconds=0,
     )
     recipe = tmp_path / "r.json"
     recipe.write_text(json.dumps({

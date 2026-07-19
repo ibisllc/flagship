@@ -218,6 +218,7 @@ public sealed class Wizard : INotifyPropertyChanged
     private WhpxVerdict? _whpx;
     private ServerDestination? _destination;
     private string? _selectedServerName;
+    private int? _handoffCountdown;
 
     private async Task ProbeWhpxAsync(QemuToolchain toolchain)
     {
@@ -259,6 +260,11 @@ public sealed class Wizard : INotifyPropertyChanged
         => ShowWizardPanes && Verified != null && _destination == ServerDestination.BurnToUSB && !IsRunning;
 
     public bool HasHostedServers => Vm.Servers.Count > 0;
+    public int? HandoffCountdown
+    {
+        get => _handoffCountdown;
+        private set { if (_handoffCountdown != value) { _handoffCountdown = value; FireBag(); } }
+    }
 
     /// <summary>Why "Host on this PC" is unavailable — null means it's usable.
     /// Honest, actionable reasons only (capacity / WHPX / toolchain).</summary>
@@ -397,12 +403,19 @@ public sealed class Wizard : INotifyPropertyChanged
 
             // Shred the single-use recipe, exactly like a successful USB burn.
             try { File.Delete(recipe); } catch { }
-            SelectedServerName = config.Name;
+            await Vm.BeginInstallAsync(config.Name);
+            Phase = "handoff";
+            for (var remaining = 5; remaining > 0; remaining--)
+            {
+                HandoffCountdown = remaining;
+                await Task.Delay(1000);
+            }
+            HandoffCountdown = null;
+            SelectedServerName = null;
             Destination = null;
             RecipePath = null;
             Verified = null;
             _parsedRecipe = null;
-            await Vm.BeginInstallAsync(config.Name);
         }
         finally
         {
@@ -572,6 +585,9 @@ public sealed class Wizard : INotifyPropertyChanged
         "download" => "Downloading base image…",
         "remaster" => "Building image…",
         "write" => "Writing to USB…",
+        "handoff" => HandoffCountdown is int n
+            ? $"Server handed off · returning home in {n}…"
+            : "Preparing a new server…",
         _ => null,
     };
 
@@ -998,6 +1014,7 @@ public sealed class Wizard : INotifyPropertyChanged
         nameof(PhaseLabel), nameof(ProgressCaption), nameof(ProgressTint),
         nameof(ShowDownloadRow), nameof(DownloadUrlCaption),
         nameof(Destination), nameof(SelectedServerName), nameof(SelectedServer),
+        nameof(HandoffCountdown),
         nameof(ShowServerDetail), nameof(ShowDestinationChooser),
         nameof(ShowHostHerePane), nameof(ShowWizardPanes), nameof(ShowDestinationBackLink),
         nameof(IsPairing), nameof(ShowPairingCover), nameof(PairQr), nameof(PairCode),
