@@ -500,7 +500,12 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
 
   it("Beacon B — late_command POSTs the downloading phase FIRST, before the blob-decode", () => {
     const c = cfg();
-    expect(c).toContain(`d-i preseed/late_command string ${LATE_BEACON}; mkdir -p /target/var/flagship;`);
+    expect(c).toContain(
+      `${LATE_BEACON}; mkdir -p /target/var/flagship;`,
+    );
+    expect(c.indexOf(LATE_BEACON)).toBeLessThan(
+      c.indexOf("mkdir -p /target/var/flagship"),
+    );
   });
 
   it("Beacon C — partman/early_command POSTs the partitioning phase right before the wipe", () => {
@@ -508,24 +513,21 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
     expect(c).toContain(`${PARTITION_BEACON}; \\`);
   });
 
-  // Beacon E — `installing`, fired by base-installer right after partitioning
-  // (filling the silent multi-minute debootstrap/apt window). partman/early_command
-  // drops this executable into /usr/lib/base-installer.d/; the script body is the
-  // shared beacon idiom, BACKGROUNDED + `exit 0` so it can never block or fail
-  // base-installer. Byte-identical to EngineTests.swift.
-  const INSTALLING_DROP =
-    `( mkdir -p /usr/lib/base-installer.d; ` +
-    `{ echo '#!/bin/sh'; echo "( echo '{\\"phase\\":\\"installing\\"}' > /tmp/flagship-beacon.json; ` +
-    `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +
-    `https://flagshipserver.com/api/order/01TESTABCDEF/status ) || true &"; echo 'exit 0'; } ` +
-    `> /usr/lib/base-installer.d/05flagship-beacon; ` +
-    `chmod +x /usr/lib/base-installer.d/05flagship-beacon ) || true`;
+  function extractInstallerTelemetry(c: string): string {
+    const match = c.match(
+      /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/usr\/lib\/base-installer\.d\/05flagship-beacon/,
+    );
+    if (!match) throw new Error("base-installer telemetry drop not found");
+    return Buffer.from(match[1]!, "base64").toString("utf8");
+  }
 
   it("Beacon E — partman/early_command drops the base-installer.d 'installing' beacon script (both variants)", () => {
     const { blob, blobSignatureHex } = signedBlob();
     for (const encryptRoot of [true, false]) {
       const c = buildDebianPreseed({ blob, blobSignatureHex, encryptRoot });
-      expect(c, `encryptRoot=${encryptRoot}`).toContain(INSTALLING_DROP);
+      const telemetry = extractInstallerTelemetry(c);
+      expect(telemetry).toContain('"phase":"installing"');
+      expect(telemetry).toContain("/api/order/01TESTABCDEF/status");
       // Ordering inside the early_command: partitioning beacon → wipe → dropper.
       const partAt = c.indexOf('"phase":"partitioning"');
       const wipeAt = c.indexOf("dmsetup remove_all");
@@ -534,8 +536,37 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
       expect(wipeAt).toBeGreaterThan(partAt);
       expect(dropAt).toBeGreaterThan(wipeAt);
       // The dropped script is backgrounded + can never fail base-installer.
-      expect(c).toContain(`|| true &"; echo 'exit 0';`);
+      expect(telemetry).toContain(") >/dev/null 2>&1 &");
+      expect(telemetry).toContain("exit 0");
     }
+  });
+
+  it("reports allowlisted d-i stages and a two-minute heartbeat without uploading raw logs", () => {
+    const telemetry = extractInstallerTelemetry(cfg());
+    for (const detail of [
+      "Installing Debian base system",
+      "Configuring the Debian package source",
+      "Installing system packages",
+      "Installing the bootloader",
+      "Finishing the operating-system install",
+    ]) {
+      expect(telemetry).toContain(detail);
+    }
+    expect(telemetry).toContain("-ge 120");
+    expect(telemetry).toContain('"detail":"%s (%s min)"');
+    expect(telemetry).toContain("grep -q");
+    expect(telemetry).not.toContain("--post-file=/var/log/syslog");
+    expect(telemetry).not.toContain("/api/dev/late-log/");
+  });
+
+  it("stops installer telemetry before advancing to downloading", () => {
+    const c = cfg();
+    const stopAt = c.indexOf("touch /tmp/flagship-installer-telemetry.done");
+    const downloadingAt = c.indexOf('"phase":"downloading"');
+    expect(stopAt).toBeGreaterThan(0);
+    expect(downloadingAt).toBeGreaterThan(stopAt);
+    expect(c).toContain('kill "$(cat /tmp/flagship-installer-telemetry.pid)"');
+    expect(c).toContain("telemetry.pid)\" 2>/dev/null || true; fi; sleep 1;");
   });
 
   it("Beacon D — late_command POSTs 'installed' on the bootstrap SUCCESS path only, before poweroff", () => {
@@ -564,9 +595,10 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
   it("posts to the canonical order-status channel; the serial is inlined (no runtime blob parse)", () => {
     const c = cfg();
     expect(c).toContain("/api/order/01TESTABCDEF/status");
-    // No phase carries a detail field on the d-i beacon (serverDomain is
-    // authoritative from registration, not the beacon).
-    expect(c).not.toContain('"detail"');
+    // The only d-i detail is generated by the allowlisted installer watcher;
+    // serverDomain remains authoritative from registration, not a beacon.
+    expect(extractInstallerTelemetry(c)).toContain('"detail"');
+    expect(c).not.toContain('"serverDomain"');
   });
 
   it("sanitizes the inlined serial to an injection-proof set", () => {

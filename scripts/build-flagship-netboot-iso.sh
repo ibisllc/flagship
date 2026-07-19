@@ -28,7 +28,7 @@
 # Inputs (env):
 #   SOURCE_DATE_EPOCH  — required, for deterministic build (mtimes,
 #                        volid date, etc.). Defaults to 1700000000.
-#   DEBIAN_VERSION     — default '13.5.0' (latest Trixie netinst).
+#   DEBIAN_VERSION     — current Trixie point release (13.6.0 as of 2026-07-19).
 #   DEBIAN_ARCH        — default 'amd64'.
 #
 # Output:

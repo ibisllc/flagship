@@ -50,8 +50,8 @@ export const PINNED_DISTROS: readonly PinnedDistro[] = [
     id: "debian-13-netinst-amd64",
     displayName: "Debian 13 (trixie) netinst (amd64)",
     upstreamUrl:
-      "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso",
-    sha256: "95838884f5ea6c82421dfe6baaa5a639dbbe6756c1e380f9fe7a7cb0c1949d2a",
+      "https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso",
+    sha256: "65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7",
     sizeBytes: 791_674_880,
     family: "debian",
     cloudInitDatasource: "debian-cloud",
@@ -66,8 +66,8 @@ export const PINNED_DISTROS: readonly PinnedDistro[] = [
     id: "debian-13-netinst-arm64",
     displayName: "Debian 13 (trixie) netinst (arm64)",
     upstreamUrl:
-      "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/debian-13.5.0-arm64-netinst.iso",
-    sha256: "3f8211e759d19370d50e1d853859b66ecba62700d712214a8a65ed26c6d08ecc",
+      "https://cdimage.debian.org/cdimage/release/13.6.0/arm64/iso-cd/debian-13.6.0-arm64-netinst.iso",
+    sha256: "ffa590beb3ae9158c354e00ebc4bf45421f4720bb3a8ddf2db3cbfc0374cf480",
     sizeBytes: 735_358_976,
     family: "debian",
     cloudInitDatasource: "debian-cloud",

@@ -69,12 +69,12 @@ describe("iso manifest handler", () => {
 
   describe("arch selection", () => {
     const BLESSED_ARM64: IsoManifest = {
-      version: "debian-13.5.0-arm64",
-      url: "https://cdimage.debian.org/debian-cd/13.5.0/arm64/iso-cd/debian-13.5.0-arm64-netinst.iso",
+      version: "debian-13.6.0-arm64",
+      url: "https://cdimage.debian.org/cdimage/release/13.6.0/arm64/iso-cd/debian-13.6.0-arm64-netinst.iso",
       sha256: "d".repeat(64),
       sizeBytes: 735358976,
       attestation:
-        "https://cdimage.debian.org/debian-cd/13.5.0/arm64/iso-cd/SHA256SUMS",
+        "https://cdimage.debian.org/cdimage/release/13.6.0/arm64/iso-cd/SHA256SUMS",
     };
 
     it("absent arch → the amd64 manifest (back-compat with deployed burners)", () => {
@@ -107,7 +107,7 @@ describe("iso manifest handler", () => {
         {
           platform: "mac",
           burnerVersion: "1.2.3",
-          current: { version: "debian-13.5.0-arm64", sha256: "D".repeat(64) },
+          current: { version: "debian-13.6.0-arm64", sha256: "D".repeat(64) },
           arch: "arm64",
         },
       );

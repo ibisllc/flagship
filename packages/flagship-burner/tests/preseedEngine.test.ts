@@ -217,15 +217,18 @@ describe("preseed engine bundle", () => {
   it("the debug-access grant reaches install-blob.json (consent is load-bearing)", () => {
     const grant = JSON.stringify({ grant: { serverDomain: "home.harry.flagship.services", sshAuthorizedKey: "ssh-ed25519 AAAA", issuedAt: 1700000000000 }, signatureHex: "ab".repeat(64) });
     const preseed = engine.buildPreseed(buildSignedRecipe({ debugGrant: grant }), "{}");
-    // The preseed embeds install-blob.json as base64 in an `echo '<b64>' | base64 -d` line.
-    const m = preseed.match(/echo ['"]([A-Za-z0-9+/=]{200,})['"] ?\| ?base64 -d/);
+    const m = preseed.match(
+      /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/,
+    );
     expect(m).toBeTruthy();
     const decoded = Buffer.from(m![1]!, "base64").toString("utf8");
     const blobJson = JSON.parse(decoded) as { debugGrant?: string };
     expect(blobJson.debugGrant).toBe(grant);
     // And a recipe WITHOUT the grant must NOT carry it (production image).
     const plain = engine.buildPreseed(buildSignedRecipe({}), "{}");
-    const pm = plain.match(/echo ['"]([A-Za-z0-9+/=]{200,})['"] ?\| ?base64 -d/);
+    const pm = plain.match(
+      /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/,
+    );
     const plainJson = JSON.parse(Buffer.from(pm![1]!, "base64").toString("utf8")) as { debugGrant?: string };
     expect(plainJson.debugGrant).toBeUndefined();
   });

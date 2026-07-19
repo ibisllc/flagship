@@ -72,16 +72,16 @@ secret — a plain `wrangler deploy` activates it. The currently-seeded value:
 
 ```json
 {
-  "version": "debian-13.5.0",
-  "url": "https://cdimage.debian.org/debian-cd/13.5.0/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso",
-  "sha256": "95838884f5ea6c82421dfe6baaa5a639dbbe6756c1e380f9fe7a7cb0c1949d2a",
+  "version": "debian-13.6.0",
+  "url": "https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso",
+  "sha256": "65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7",
   "sizeBytes": 791674880,
-  "attestation": "https://cdimage.debian.org/debian-cd/13.5.0/amd64/iso-cd/SHA256SUMS"
+  "attestation": "https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/SHA256SUMS"
 }
 ```
 
 The `sha256` is the official value from Debian's signed SHA256SUMS for
-`debian-13.5.0-amd64-netinst.iso` (verified live 2026-06-08; size 791 674 880 B).
+`debian-13.6.0-amd64-netinst.iso` (verified live 2026-07-19; size 791 674 880 B).
 The `url` is **version-pinned** (not the rotating `current/` symlink) so `url`
 and `sha256` stay consistent.
 
@@ -90,9 +90,11 @@ hardcodes it.** Today it points at Debian's CDN (maximally transparent: the
 burner pulls from the source). To switch to our own R2 copy for permanence /
 reliability, upload the *same bytes* and change only `url` — `sha256` is
 unchanged because it's the same ISO. **On a new Debian point release**, re-pin
-all of `version`/`url`/`sha256` here and deploy (no burner reship); once
-`13.5.0` is archived, move the host to cdimage's `/cdimage/archive/13.5.0/…`
-path or to R2.
+both architecture manifests (`version`/`url`/`sha256`) immediately and deploy
+(no burner reship). The netinst consumes Debian's live stable package mirror;
+keeping its point-release media aligned avoids installer/component drift. If an
+older point release must be retained, move it to `/cdimage/archive/<version>/…`
+or R2 and validate it against the then-current mirror before blessing it.
 
 If the env var is **unset, unparseable, or fails shape validation**, the server
 treats it as **unconfigured** — it never throws, and the endpoint answers

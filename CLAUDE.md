@@ -126,7 +126,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Keep entries terse: what changed +
-> what remains, not test counts or commit hashes. Last updated **2026-07-05**.
+> what remains, not test counts or commit hashes. Last updated **2026-07-19**.
 
 ### Pending owner validation (the standing caveat — applies to nearly every entry below)
 
@@ -148,6 +148,25 @@ harness can't do:
   ISO + a physical OTG drive (`apps/mobile/android/OTG-BURNER-NOTES.md` §5).
 
 ### Recent work (condensed log, newest first)
+
+**2026-07-19 — stalled Mac VM diagnosed; Debian media re-pinned + unattended
+telemetry added.** The retained guest proved partitioning completed, then disk
+writes stopped four minutes into base installation while the hypervisor burned
+four vCPUs for over an hour. Its remastered media was Debian 13.5.0 (May 16)
+against the live stable package mirror, after Debian 13.6 shipped July 11. Both
+blessed manifests and Advanced distro pins now use Debian's official 13.6.0
+amd64/arm64 release media and hashes; prod serves them, and an old 13.5 cache is
+explicitly ordered to update. The shared d-i preseed now runs a non-blocking
+watcher during the previously opaque base-install window: stage changes and a
+two-minute heartbeat report only an allowlisted step + elapsed minutes (never
+raw syslog, recipe, Wi-Fi, or disk data), and stop before `downloading`. Node,
+Mac JavaScriptCore, and Android Rhino assets/vectors are synchronized. The
+stalled VM was stopped; its disk and 13.5 installer remain preserved, but the
+installer is moved aside so Retry cannot repeat it. The current Developer-ID
+Mac app is rebuilt/reinstalled and opens the guest as a safe failed install.
+**Remaining:** delete that failed VM, pair a fresh recipe, and physically
+validate a complete 13.6 hosted install; the new telemetry will identify the
+exact d-i stage if it stalls again.
 
 **2026-07-06 (evening, Chromebook instance) — Linux burner validated LIVE on
 ChromeOS; multi-arch Linux remainder DONE; Android/iOS large-screen polish.**

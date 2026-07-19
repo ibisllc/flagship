@@ -81,8 +81,14 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // booted the installer. Canonical phase `booting`.
   const earlyBeacon = debianBeaconCommand("booting", beaconSerial);
   // Beacon B — late_command (network guaranteed up): the mirror + blob fetch
-  // are happening. Canonical phase `downloading`.
+  // are happening. Canonical phase `downloading`. Stop the base-installer
+  // telemetry first so a delayed heartbeat cannot overwrite this later phase.
   const lateBeacon = debianBeaconCommand("downloading", beaconSerial);
+  const stopInstallerTelemetry =
+    `touch /tmp/flagship-installer-telemetry.done; ` +
+    `if [ -s /tmp/flagship-installer-telemetry.pid ]; then ` +
+    `kill "$(cat /tmp/flagship-installer-telemetry.pid)" 2>/dev/null || true; fi; ` +
+    `sleep 1`;
   // Beacon fired from partman/early_command (the network IS up by partman, so
   // this is the most reliable "the box exists" ping — emitted BEFORE the wipe so
   // the phone hears from the box even if partitioning later fails).
@@ -164,7 +170,7 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   const lateCommand =
     // Beacon B — network is guaranteed up by late_command; ping home that the
     // installer is running, before the blob-decode + bootstrap. Best-effort.
-    `${lateBeacon}; ` +
+    `${stopInstallerTelemetry}; ${lateBeacon}; ` +
     `mkdir -p /target/var/flagship; ` +
     `echo '${blobB64}' | base64 -d > /target/var/flagship/install-blob.json; ` +
     `chmod 600 /target/var/flagship/install-blob.json; ` +
@@ -364,26 +370,59 @@ function partmanEarlyCommand(partitionBeacon: string, installingDrop: string): s
  * Beacon E dropper, appended to partman/early_command. Writes a tiny executable
  * into /usr/lib/base-installer.d/ (the d-i hook dir base-installer runs right
  * after partitioning, e.g. hw-detect's 50install-firmware) that POSTs the
- * canonical `installing` phase — filling the otherwise-silent multi-minute
- * debootstrap/apt window on the phone's checklist. The script body IS the
- * shared debianBeaconCommand (busybox wget --post-file, --timeout=15, wrapped
- * `( … ) || true`), additionally BACKGROUNDED (`&`) + `exit 0` so it can NEVER
- * block or fail base-installer. The dropper itself is `( … ) || true` so a
- * read-only /usr/lib can't abort partman. The beacon's only `"` are escaped for
- * the double-quoted echo; it contains no `$`/backslash/backtick (the serial is
- * beaconSafe-sanitized), so no other escaping is needed.
- *
- * BYTE-IDENTICAL CONTRACT: mirrored by the Swift twin
- * (UserData.debianBaseInstallerBeaconDrop). Keep both in lockstep.
+ * canonical `installing` phase with a privacy-safe, allowlisted d-i stage and
+ * elapsed minutes. It reports on stage changes and every two minutes, so a
+ * prompt or package deadlock is distinguishable from a dead VM without
+ * uploading raw syslog (which can contain recipe material). The watcher is
+ * backgrounded and always exits zero, so telemetry can never gate the install.
  */
 function debianBaseInstallerBeaconDrop(serial: string): string {
-  const beacon = debianBeaconCommand("installing", serial).replace(/"/g, '\\"');
+  const scriptB64 = utf8ToBase64(debianInstallerTelemetryScript(serial));
   return (
     `( mkdir -p /usr/lib/base-installer.d; ` +
-    `{ echo '#!/bin/sh'; echo "${beacon} &"; echo 'exit 0'; } ` +
-    `> /usr/lib/base-installer.d/05flagship-beacon; ` +
+    `echo '${scriptB64}' | base64 -d > /usr/lib/base-installer.d/05flagship-beacon; ` +
     `chmod +x /usr/lib/base-installer.d/05flagship-beacon ) || true`
   );
+}
+
+/**
+ * A secret-free d-i progress watcher. It never sends log text: only one of the
+ * fixed labels below plus an integer minute count. `main-menu` selections are
+ * monotonic, so testing the later components first recovers the current stage
+ * from the accumulated syslog without parsing package names or user inputs.
+ */
+function debianInstallerTelemetryScript(serial: string): string {
+  return `#!/bin/sh
+STATUS_URL='https://flagshipserver.com/api/order/${serial}/status'
+(
+  _started=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)
+  _last_stage=''
+  _last_report=0
+  while [ ! -e /tmp/flagship-installer-telemetry.done ]; do
+    _now=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)
+    _minutes=$(( (_now - _started) / 60 ))
+    _stage='Installing Debian base system'
+    if grep -q "Menu item 'finish-install' selected" /var/log/syslog 2>/dev/null; then
+      _stage='Finishing the operating-system install'
+    elif grep -q "Menu item 'grub-installer' selected" /var/log/syslog 2>/dev/null; then
+      _stage='Installing the bootloader'
+    elif grep -q "Menu item 'pkgsel' selected" /var/log/syslog 2>/dev/null; then
+      _stage='Installing system packages'
+    elif grep -q "Menu item 'apt-setup' selected" /var/log/syslog 2>/dev/null; then
+      _stage='Configuring the Debian package source'
+    fi
+    if [ "$_stage" != "$_last_stage" ] || [ $(( _now - _last_report )) -ge 120 ]; then
+      printf '{"phase":"installing","detail":"%s (%s min)"}\n' "$_stage" "$_minutes" > /tmp/flagship-beacon.json
+      wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "$STATUS_URL" >/dev/null 2>&1 || true
+      _last_stage="$_stage"
+      _last_report=$_now
+    fi
+    sleep 15
+  done
+) >/dev/null 2>&1 &
+echo $! > /tmp/flagship-installer-telemetry.pid
+exit 0
+`;
 }
 
 /**
