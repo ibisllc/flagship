@@ -49,12 +49,14 @@ interface RecipeOpts {
   swkHex?: string;
   pairingOrder?: string;
   debugGrant?: string;
+  adminRoot?: boolean;
 }
 
 function buildSignedRecipe(o: RecipeOpts = {}): string {
   const irk = kp(7);
   const delegate = kp(8);
   const rck = kp(9);
+  const adminRoot = kp(10);
   const expiresAt = 1_900_000_000_000; // fixed → deterministic
   const authCode: AuthCode = {
     version: 1,
@@ -66,6 +68,7 @@ function buildSignedRecipe(o: RecipeOpts = {}): string {
     userPubKey: irk.publicKey,
     issuedAt: expiresAt - 3_600_000,
     expiresAt,
+    ...(o.adminRoot ? { adminRootPubKey: adminRoot.publicKey } : {}),
   };
   const blob: InstallBlob = {
     version: 2,
@@ -99,6 +102,9 @@ function buildSignedRecipe(o: RecipeOpts = {}): string {
       userPubKey: hex(authCode.userPubKey),
       issuedAt: authCode.issuedAt,
       expiresAt: authCode.expiresAt,
+      ...(authCode.adminRootPubKey
+        ? { adminRootPubKey: hex(authCode.adminRootPubKey) }
+        : {}),
     },
     authCodeUserSignature: hex(blob.authCodeUserSignature),
     installerGitRef: blob.installerGitRef,
@@ -135,6 +141,7 @@ const matrix: Array<{ name: string; recipe: RecipeOpts; burn: Record<string, unk
   { name: "no encryption", recipe: { diskEncryption: "none" }, burn: { encryptRoot: false } },
   { name: "wifi baked", recipe: {}, burn: { wifiSSID: "myssid", wifiPassword: "p@ss w0rd" } },
   { name: "approve unlock", recipe: { bootUnlockMode: "approve" }, burn: {} },
+  { name: "admin-root-gated recipe", recipe: { adminRoot: true }, burn: {} },
   { name: "swk + pairing siblings", recipe: { swkHex: "ab".repeat(32), pairingOrder: '{"request":"x","signature":"y"}' }, burn: {} },
   {
     name: "debug grant sibling",
@@ -184,6 +191,16 @@ describe("preseed engine bundle", () => {
       debugGrant: loaded.debugGrant,
     });
     expect(engine.buildPreseed(recipe, "{}")).toBe(viaCli);
+  });
+
+  it("preserves adminRootPubKey into the install-time auth code", () => {
+    const preseed = engine.buildPreseed(buildSignedRecipe({ adminRoot: true }), "{}");
+    const match = preseed.match(
+      /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/,
+    );
+    expect(match).not.toBeNull();
+    const embedded = JSON.parse(Buffer.from(match![1]!, "base64").toString("utf8"));
+    expect(embedded.authCode.adminRootPubKey).toBe(hex(kp(10).publicKey));
   });
 
   it("reproduces every committed golden vector (the cross-engine contract)", () => {

@@ -25,7 +25,10 @@ export function parseInstallBlob(o: Record<string, unknown>): InstallBlob | null
   const rckPub = hexToBytes(o.rckPubKey as string);
   const userPub = hexToBytes(authCode.userPubKey as string);
   const delegated = hexToBytes(authCode.delegatedPubKey as string);
+  const adminRootRaw = authCode.adminRootPubKey;
+  const adminRoot = adminRootRaw === undefined ? undefined : hexToBytes(adminRootRaw);
   if (!phonePub || !authUserSig || !rckPub || !userPub || !delegated) return null;
+  if (adminRootRaw !== undefined && (!adminRoot || adminRoot.length !== 32)) return null;
   if (o.version !== 2) return null;
   return {
     version: 2,
@@ -44,6 +47,7 @@ export function parseInstallBlob(o: Record<string, unknown>): InstallBlob | null
       userPubKey: userPub,
       issuedAt: Number(authCode.issuedAt),
       expiresAt: Number(authCode.expiresAt),
+      ...(adminRoot ? { adminRootPubKey: adminRoot } : {}),
     },
     authCodeUserSignature: authUserSig,
     installerGitRef: String(o.installerGitRef ?? ""),

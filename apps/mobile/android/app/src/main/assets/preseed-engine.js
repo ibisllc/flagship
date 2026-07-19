@@ -61,7 +61,10 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     var rckPub = hexToBytes(o.rckPubKey);
     var userPub = hexToBytes(authCode.userPubKey);
     var delegated = hexToBytes(authCode.delegatedPubKey);
+    var adminRootRaw = authCode.adminRootPubKey;
+    var adminRoot = adminRootRaw === void 0 ? void 0 : hexToBytes(adminRootRaw);
     if (!phonePub || !authUserSig || !rckPub || !userPub || !delegated) return null;
+    if (adminRootRaw !== void 0 && (!adminRoot || adminRoot.length !== 32)) return null;
     if (o.version !== 2) return null;
     return __spreadValues(__spreadValues({
       version: 2,
@@ -70,7 +73,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
       serverName: String(o.serverName),
       phoneDelegatedPubKey: phonePub,
       registrationUrl: String(o.registrationUrl),
-      authCode: {
+      authCode: __spreadValues({
         version: 1,
         serial: String(authCode.serial),
         username: String((_a = authCode.username) != null ? _a : o.username),
@@ -80,7 +83,9 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
         userPubKey: userPub,
         issuedAt: Number(authCode.issuedAt),
         expiresAt: Number(authCode.expiresAt)
-      },
+      }, adminRoot ? {
+        adminRootPubKey: adminRoot
+      } : {}),
       authCodeUserSignature: authUserSig,
       installerGitRef: String((_d = o.installerGitRef) != null ? _d : ""),
       rckPubKey: rckPub
@@ -268,7 +273,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
       serverName: b.serverName,
       phoneDelegatedPubKey: bytesToHex(b.phoneDelegatedPubKey),
       registrationUrl: b.registrationUrl,
-      authCode: {
+      authCode: __spreadValues({
         version: b.authCode.version,
         serial: b.authCode.serial,
         username: b.authCode.username,
@@ -278,7 +283,9 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
         userPubKey: bytesToHex(b.authCode.userPubKey),
         issuedAt: b.authCode.issuedAt,
         expiresAt: b.authCode.expiresAt
-      },
+      }, b.authCode.adminRootPubKey ? {
+        adminRootPubKey: bytesToHex(b.authCode.adminRootPubKey)
+      } : {}),
       authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
       installerGitRef: b.installerGitRef,
       rckPubKey: bytesToHex(b.rckPubKey),

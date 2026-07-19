@@ -17,13 +17,14 @@ const hex = (b) => Array.from(b).map((x) => x.toString(16).padStart(2, "0")).joi
 const kp = (seed) => { const sk = new Uint8Array(32).fill(seed); return { privateKey: sk, publicKey: ed.getPublicKey(sk) }; };
 
 function buildSignedRecipe(o = {}) {
-  const irk = kp(7), delegate = kp(8), rck = kp(9);
+  const irk = kp(7), delegate = kp(8), rck = kp(9), adminRoot = kp(10);
   const expiresAt = 1_900_000_000_000;
   const authCode = {
     version: 1, serial: "01ENGINETEST", username: "harry", serverName: "home",
     serverDomain: "home.harry.flagship.services",
     delegatedPubKey: delegate.publicKey, userPubKey: irk.publicKey,
     issuedAt: expiresAt - 3_600_000, expiresAt,
+    ...(o.adminRoot ? { adminRootPubKey: adminRoot.publicKey } : {}),
   };
   const blob = {
     version: 2, serverDomain: authCode.serverDomain, username: authCode.username,
@@ -41,6 +42,7 @@ function buildSignedRecipe(o = {}) {
       version: 1, serial: authCode.serial, username: authCode.username, serverName: authCode.serverName,
       serverDomain: authCode.serverDomain, delegatedPubKey: hex(authCode.delegatedPubKey),
       userPubKey: hex(authCode.userPubKey), issuedAt: authCode.issuedAt, expiresAt: authCode.expiresAt,
+      ...(authCode.adminRootPubKey ? { adminRootPubKey: hex(authCode.adminRootPubKey) } : {}),
     },
     authCodeUserSignature: hex(blob.authCodeUserSignature), installerGitRef: blob.installerGitRef,
     rckPubKey: hex(blob.rckPubKey),
@@ -58,6 +60,7 @@ const matrix = [
   { name: "no-encryption", recipe: { diskEncryption: "none" }, burn: { encryptRoot: false } },
   { name: "wifi", recipe: {}, burn: { wifiSSID: "myssid", wifiPassword: "p@ss w0rd" } },
   { name: "approve-unlock", recipe: { bootUnlockMode: "approve" }, burn: {} },
+  { name: "admin-root", recipe: { adminRoot: true }, burn: {} },
   { name: "swk-pairing", recipe: { swkHex: "ab".repeat(32), pairingOrder: '{"request":"x","signature":"y"}' }, burn: {} },
   { name: "debug-grant", recipe: { debugGrant: JSON.stringify({ grant: { serverDomain: "home.harry.flagship.services", sshAuthorizedKey: "ssh-ed25519 AAAAC3Test", issuedAt: 1700000000000 }, signatureHex: "ab".repeat(64) }) }, burn: {} },
 ];

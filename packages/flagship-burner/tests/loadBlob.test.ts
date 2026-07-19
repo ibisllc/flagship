@@ -32,10 +32,12 @@ function buildSignedRecipe(opts: {
   delegateSeed?: number;
   rckSeed?: number;
   bootUnlockMode?: "auto" | "approve";
+  adminRoot?: boolean;
 }): { json: string; userPubKey: Uint8Array } {
   const irk = makeKeypair(opts.irkSeed ?? 7);
   const delegate = makeKeypair(opts.delegateSeed ?? 8);
   const rck = makeKeypair(opts.rckSeed ?? 9);
+  const adminRoot = makeKeypair(10);
   const authCode: AuthCode = {
     version: 1,
     serial: "01TESTABCDEF",
@@ -46,6 +48,7 @@ function buildSignedRecipe(opts: {
     userPubKey: irk.publicKey,
     issuedAt: opts.authExpiresAt - 60 * 60_000, // 1h before expiry
     expiresAt: opts.authExpiresAt,
+    ...(opts.adminRoot ? { adminRootPubKey: adminRoot.publicKey } : {}),
   };
   const blob: InstallBlob = {
     version: 2,
@@ -78,6 +81,9 @@ function buildSignedRecipe(opts: {
       userPubKey: bytesToHex(authCode.userPubKey),
       issuedAt: authCode.issuedAt,
       expiresAt: authCode.expiresAt,
+      ...(authCode.adminRootPubKey
+        ? { adminRootPubKey: bytesToHex(authCode.adminRootPubKey) }
+        : {}),
     },
     authCodeUserSignature: bytesToHex(blob.authCodeUserSignature),
     installerGitRef: blob.installerGitRef,
@@ -108,6 +114,13 @@ describe("loadBlobFromString", () => {
     });
     const loaded = loadBlobFromString(json);
     expect(loaded.blob.bootUnlockMode).toBe("approve");
+  });
+
+  it("accepts and preserves an admin-root-gated auth code", () => {
+    const future = Date.now() + 6 * 60 * 60_000;
+    const { json } = buildSignedRecipe({ authExpiresAt: future, adminRoot: true });
+    const loaded = loadBlobFromString(json);
+    expect(loaded.blob.authCode.adminRootPubKey).toEqual(makeKeypair(10).publicKey);
   });
 
   it("accepts the issued envelope { blob, blobSignature } (what .com/website hand out)", () => {

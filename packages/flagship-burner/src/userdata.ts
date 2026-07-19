@@ -2084,6 +2084,9 @@ export function installBlobToJson(
       userPubKey: bytesToHex(b.authCode.userPubKey),
       issuedAt: b.authCode.issuedAt,
       expiresAt: b.authCode.expiresAt,
+      ...(b.authCode.adminRootPubKey
+        ? { adminRootPubKey: bytesToHex(b.authCode.adminRootPubKey) }
+        : {}),
     },
     authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
     installerGitRef: b.installerGitRef,

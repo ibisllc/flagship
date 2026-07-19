@@ -47,6 +47,7 @@ function signedBlob(): { blob: InstallBlob; blobSignatureHex: string; userPub: U
   const irk = makeKeypair(7);
   const delegate = makeKeypair(8);
   const rck = makeKeypair(9);
+  const adminRoot = makeKeypair(10);
   const authCode: AuthCode = {
     version: 1,
     serial: "01TESTABCDEF",
@@ -57,6 +58,7 @@ function signedBlob(): { blob: InstallBlob; blobSignatureHex: string; userPub: U
     userPubKey: irk.publicKey,
     issuedAt: Date.now(),
     expiresAt: Date.now() + 6 * 60 * 60_000,
+    adminRootPubKey: adminRoot.publicKey,
   };
   const authCodeUserSignature = signAuthCode(authCode, irk);
   const blob: InstallBlob = {
@@ -137,6 +139,7 @@ describe("buildAutoinstallUserData", () => {
       "userPubKey",
       "issuedAt",
       "expiresAt",
+      "adminRootPubKey",
     ]) {
       expect(embedded.authCode[f], `authCode.${f} must be embedded`).toBeDefined();
     }
@@ -156,6 +159,7 @@ describe("buildAutoinstallUserData", () => {
       userPubKey: unhex(e.authCode.userPubKey),
       issuedAt: e.authCode.issuedAt,
       expiresAt: e.authCode.expiresAt,
+      adminRootPubKey: unhex(e.authCode.adminRootPubKey),
     };
     const ok = verifyAuthCode(
       reconstructed,
