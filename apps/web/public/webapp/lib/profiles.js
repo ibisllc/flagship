@@ -1,7 +1,8 @@
 // W3 — multi-profile (multi-cloud) state for the webapp PWA. Mirrors
 // the iOS/Android `Profile` shape:
 //
-//     { cloudName, cloudRootPubHex, deviceLabel, deviceCapability,
+//     { cloudName, cloudRootPubHex, accountId, deviceId,
+//       accountDisplayName, deviceDisplayName, deviceCapability,
 //       demoServer, createdAt }
 //
 // A "cloud" is what we've been calling a "username" — each cloud has
@@ -30,7 +31,10 @@ import { setActiveKeystoreProfile } from "../keystore.js";
 /** @typedef {Object} Profile
  *  @property {string} cloudName
  *  @property {string} [cloudRootPubHex]
- *  @property {string|null} [deviceLabel]
+ *  @property {string} accountId
+ *  @property {string} deviceId
+ *  @property {string|null} [accountDisplayName]
+ *  @property {string|null} [deviceDisplayName]
  *  @property {object|null} [deviceCapability]
  *  @property {object|null} [demoServer]
  *  @property {number} createdAt

@@ -118,7 +118,7 @@ export function deviceCapabilityChipText(block) {
   const summary = (set.size === 1 && set.has("browse"))
     ? "browse-only"
     : `${block.scopes.length} scopes`;
-  return `Device: ${block.label} · ${summary}`;
+  return `Restricted device · ${summary}`;
 }
 
 /** Per-action capability gate. Returns true when the action is

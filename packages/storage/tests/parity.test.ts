@@ -827,7 +827,7 @@ describe("D1 ↔ InMemory parity", () => {
     const mk = (id: string, label: string, pub: string, issued: number, revokedAt: number | null = null) => ({
       grantId: id,
       username: "alice",
-      deviceLabel: label,
+      deviceId: label,
       devicePubHex: pub,
       scopesJson: '["browse"]',
       issuedAt: issued,
@@ -844,7 +844,7 @@ describe("D1 ↔ InMemory parity", () => {
       });
       expectParity(r);
       expect(r.d1.first).toEqual({ ok: true });
-      expect(r.d1.dup).toEqual({ ok: false, reason: "duplicate active grant for (username, device_label)" });
+      expect(r.d1.dup).toEqual({ ok: false, reason: "duplicate active grant for (username, device_id)" });
     });
 
     it("revoke then re-issue same label is allowed (partial index excludes revoked)", async () => {
@@ -852,7 +852,7 @@ describe("D1 ↔ InMemory parity", () => {
         await s.deviceCapabilityGrants.put(mk("g1", "phone", "pubA", 1));
         await s.deviceCapabilityGrants.revoke("g1", 5);
         const reissue = await s.deviceCapabilityGrants.put(mk("g2", "phone", "pubB", 6));
-        const active = await s.deviceCapabilityGrants.getActiveForUserLabel("alice", "phone");
+        const active = await s.deviceCapabilityGrants.getActiveForUserDevice("alice", "phone");
         const list = (await s.deviceCapabilityGrants.listForUser("alice")).map((g) => g.grantId);
         return { reissue, activeId: active?.grantId, list };
       });

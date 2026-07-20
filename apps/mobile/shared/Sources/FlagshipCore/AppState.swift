@@ -18,7 +18,11 @@ import FlagshipAPI
 public struct Profile: Codable, Equatable, Sendable {
     public let cloudName: String
     public let cloudRootPubHex: String
-    public let deviceLabel: String?
+    public let accountId: String
+    public let deviceId: String
+    /// OS-protected, account-scoped presentation cache. Never authoritative.
+    public let accountDisplayName: String?
+    public let deviceDisplayName: String?
     public let deviceCapability: DeviceCapabilityBlock?
     public let demoServer: DemoServerBlock?
     public let createdAt: Date
@@ -26,14 +30,20 @@ public struct Profile: Codable, Equatable, Sendable {
     public init(
         cloudName: String,
         cloudRootPubHex: String = "",
-        deviceLabel: String? = nil,
+        accountId: String = "",
+        deviceId: String = "",
+        accountDisplayName: String? = nil,
+        deviceDisplayName: String? = nil,
         deviceCapability: DeviceCapabilityBlock? = nil,
         demoServer: DemoServerBlock? = nil,
         createdAt: Date = Date()
     ) {
         self.cloudName = cloudName
         self.cloudRootPubHex = cloudRootPubHex
-        self.deviceLabel = deviceLabel
+        self.accountId = accountId
+        self.deviceId = deviceId
+        self.accountDisplayName = accountDisplayName
+        self.deviceDisplayName = deviceDisplayName
         self.deviceCapability = deviceCapability
         self.demoServer = demoServer
         self.createdAt = createdAt
@@ -262,7 +272,7 @@ public final class AppState {
     }
 
     /// W3 — the active Profile, or nil if none is active. Convenience
-    /// for surfaces that want the full descriptor (deviceLabel,
+    /// for surfaces that want the full account-scoped descriptor,
     /// demoServer, createdAt) and not just the cloud name.
     public var activeProfile: Profile? {
         guard let name = activeProfileCloudName else { return nil }
@@ -350,10 +360,15 @@ public final class AppState {
         // it active. Idempotent: re-running onboarding for an already
         // known cloud refreshes its capability/demoServer/createdAt
         // rather than appending a duplicate.
+        let existing = profiles.first(where: { $0.cloudName == username })
+        let generatedDeviceId = (try? AccountMetadata.generateDeviceId()) ?? "00000000000000000000000000000000"
         upsertProfile(Profile(
             cloudName: username,
             cloudRootPubHex: "",
-            deviceLabel: deviceCapability?.label,
+            accountId: username,
+            deviceId: deviceCapability?.deviceId ?? existing?.deviceId ?? generatedDeviceId,
+            accountDisplayName: existing?.accountDisplayName,
+            deviceDisplayName: existing?.deviceDisplayName,
             deviceCapability: deviceCapability,
             demoServer: nil,
             createdAt: Date()

@@ -260,7 +260,7 @@ public struct HomeScreen: View {
             Image(systemName: "lock.shield")
                 .foregroundColor(c.textMuted)
                 .font(.system(size: 12, weight: .semibold))
-            Text("Device: \(cap.label) · \(summary)")
+            Text("Restricted device · \(summary)")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(c.textMuted)
         }
@@ -269,7 +269,7 @@ public struct HomeScreen: View {
         .background(c.textMuted.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
         .accessibilityIdentifier("device-capability-chip")
-        .accessibilityLabel("Device \(cap.label), \(summary).")
+        .accessibilityLabel("Restricted device, \(summary).")
     }
 
     private func quickActions(c: FSColors) -> some View {

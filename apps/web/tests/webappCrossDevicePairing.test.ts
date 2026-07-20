@@ -32,6 +32,7 @@ import {
 
 type Stores = Map<string, Map<string, unknown>>;
 const DATABASES = new Map<string, Stores>();
+const DEVICE_ID = "10".repeat(16);
 
 function fireAsync(fn: () => void) {
   setTimeout(fn, 0);
@@ -193,20 +194,20 @@ describe("crossDevicePairing — /join link build + parse", () => {
  * ───────────────────────────────────────────────────────────────────── */
 
 describe("crossDevicePairing — DeviceAdmit canonical bytes (protocol interop)", () => {
-  it("deviceAdmitCanonicalBytes matches flagship/device-admit/v1|u|pub|issuedAt", async () => {
+  it("deviceAdmitCanonicalBytes matches v2 account-scoped identity bytes", async () => {
     const { deviceAdmitCanonicalBytes, TAG_DEVICE_ADMIT } = await loadPairing();
-    const admit = { username: "harry", newDevicePubHex: "ab".repeat(32), issuedAt: 1000 };
+    const admit = { username: "harry", deviceId: DEVICE_ID, newDevicePubHex: "ab".repeat(32), issuedAt: 1000 };
     const bytes = deviceAdmitCanonicalBytes(admit);
     const str = new TextDecoder().decode(bytes);
-    expect(str).toBe(`${TAG_DEVICE_ADMIT}|harry|${"ab".repeat(32)}|1000`);
-    expect(TAG_DEVICE_ADMIT).toBe("flagship/device-admit/v1");
+    expect(str).toBe(`${TAG_DEVICE_ADMIT}|harry|${DEVICE_ID}|${"ab".repeat(32)}|1000`);
+    expect(TAG_DEVICE_ADMIT).toBe("flagship/device-admit/v2");
   });
 
   it("buildDeviceAdmit lowercases + validates the device pubkey", async () => {
     const { buildDeviceAdmit } = await loadPairing();
-    const admit = buildDeviceAdmit({ username: "harry", newDevicePubHex: "AB".repeat(32), issuedAt: 5 });
+    const admit = buildDeviceAdmit({ username: "harry", deviceId: DEVICE_ID, newDevicePubHex: "AB".repeat(32), issuedAt: 5 });
     expect(admit.newDevicePubHex).toBe("ab".repeat(32));
-    expect(() => buildDeviceAdmit({ username: "harry", newDevicePubHex: "zz", issuedAt: 5 }))
+    expect(() => buildDeviceAdmit({ username: "harry", deviceId: DEVICE_ID, newDevicePubHex: "zz", issuedAt: 5 }))
       .toThrow(/32 bytes hex/);
   });
 
@@ -221,7 +222,7 @@ describe("crossDevicePairing — DeviceAdmit canonical bytes (protocol interop)"
 
     // The incoming device's fresh pubkey.
     const devicePub = "cd".repeat(32);
-    const admit = buildDeviceAdmit({ username: "hilton", newDevicePubHex: devicePub, issuedAt: 4242 });
+    const admit = buildDeviceAdmit({ username: "hilton", deviceId: DEVICE_ID, newDevicePubHex: devicePub, issuedAt: 4242 });
 
     const admitSigHex = await signAdmit({
       admit,
@@ -250,7 +251,7 @@ describe("crossDevicePairing — DeviceAdmit canonical bytes (protocol interop)"
 
     const seed = new Uint8Array(32).fill(9);
     const accountIrk = deriveIRK({ seed });
-    const admit = buildDeviceAdmit({ username: "harry", newDevicePubHex: "11".repeat(32), issuedAt: 1 });
+    const admit = buildDeviceAdmit({ username: "harry", deviceId: DEVICE_ID, newDevicePubHex: "11".repeat(32), issuedAt: 1 });
     const sig = signDeviceAdmit(admit as DeviceAdmit, accountIrk);
 
     const good = await verifyAdmit({
@@ -288,7 +289,7 @@ describe("crossDevicePairing — runAdminAddDevice (vouch + seal)", () => {
         open: vi.fn(async () => ({ sid: "SID1", pkB64u: "ADMINPK" })),
         onSas: vi.fn(),
         awaitConfirm: vi.fn(async () => true),
-        receivePeerPub: vi.fn(async () => "ab".repeat(32)),
+        receivePeerPub: vi.fn(async () => ({ devicePubHex: "ab".repeat(32), deviceId: DEVICE_ID })),
         seal: vi.fn(async (bytes: Uint8Array) => { calls.sealed = bytes; }),
         close: vi.fn(),
       },
@@ -314,7 +315,7 @@ describe("crossDevicePairing — runAdminAddDevice (vouch + seal)", () => {
 
     expect(out.outcome).toBe("sealed");
     expect(joinLink).toBe("https://flagshipserver.com/join?sid=SID1&pk=ADMINPK");
-    expect(out.admit).toEqual({ username: "harry", newDevicePubHex: "ab".repeat(32), issuedAt: 7000 });
+    expect(out.admit).toEqual({ username: "harry", deviceId: DEVICE_ID, newDevicePubHex: "ab".repeat(32), issuedAt: 7000 });
 
     // The sealed plaintext is { umkSeedHex, admit, admitSig } and the seed
     // is the admin's account UMK.
@@ -430,7 +431,7 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
     const deviceIrkPubHex = k.bytesToHex(deviceIrk.publicKey);
 
     // The admin's vouch (signed by harry's account IRK).
-    const admit = buildDeviceAdmit({ username: "harry", newDevicePubHex: deviceIrkPubHex, issuedAt: 100 });
+    const admit = buildDeviceAdmit({ username: "harry", deviceId: DEVICE_ID, newDevicePubHex: deviceIrkPubHex, issuedAt: 100 });
     const admitSig = signDeviceAdmit(admit as DeviceAdmit, harryIrk);
     const bundle = JSON.stringify({
       umkSeedHex: k.bytesToHex(harrySeed),
@@ -441,10 +442,10 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
     const registerPush = vi.fn(async ({ username }: any) => ({
       request: {
         username,
+        deviceId: DEVICE_ID,
         platform: "webpush",
         providerToken: "{}",
         pushX25519Pub: "00".repeat(32),
-        label: "Web (paired)",
         issuedAt: 100,
       },
       signatureHex: "dd".repeat(64),
@@ -457,6 +458,7 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
     const out = await runIncomingJoin({
       bundlePlaintext: bundle,
       deviceIrkPubHex,
+      deviceId: DEVICE_ID,
       // Resolve the account IRK pub straight from harry's seed (mirrors the
       // pubkey-cert response) instead of hitting the network.
       fetchAccountIrkPubHex: async () => k.bytesToHex(harryIrk.publicKey),
@@ -514,7 +516,7 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
     const deviceSeed = new Uint8Array(32).fill(0x99);
     const deviceIrkPubHex = k.bytesToHex((await k.deriveIrkFromSeed(deviceSeed)).publicKey);
 
-    const admit = buildDeviceAdmit({ username: "harry", newDevicePubHex: deviceIrkPubHex, issuedAt: 1 });
+    const admit = buildDeviceAdmit({ username: "harry", deviceId: DEVICE_ID, newDevicePubHex: deviceIrkPubHex, issuedAt: 1 });
     // Sign with the WRONG key → must fail verification under the resolved
     // account key.
     const admitSig = signDeviceAdmit(admit as DeviceAdmit, wrongIrk);
@@ -528,6 +530,7 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
     await expect(runIncomingJoin({
       bundlePlaintext: bundle,
       deviceIrkPubHex,
+      deviceId: DEVICE_ID,
       // The resolved account key is harry's REAL IRK (not the wrong signer).
       fetchAccountIrkPubHex: async () => k.bytesToHex(deriveIRK({ seed: harrySeed }).publicKey),
       verifyEd25519: k.verifyWithEd25519Pub,
@@ -557,7 +560,7 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
     const harrySeed = new Uint8Array(32).fill(0x21);
     const harryIrk = deriveIRK({ seed: harrySeed });
     // The admit binds SOME OTHER device pubkey.
-    const admit = buildDeviceAdmit({ username: "harry", newDevicePubHex: "ab".repeat(32), issuedAt: 1 });
+    const admit = buildDeviceAdmit({ username: "harry", deviceId: DEVICE_ID, newDevicePubHex: "ab".repeat(32), issuedAt: 1 });
     const admitSig = signDeviceAdmit(admit as DeviceAdmit, harryIrk);
     const bundle = JSON.stringify({
       umkSeedHex: k.bytesToHex(harrySeed),
@@ -570,6 +573,7 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
     await expect(runIncomingJoin({
       bundlePlaintext: bundle,
       deviceIrkPubHex: myPub,
+      deviceId: DEVICE_ID,
       fetchAccountIrkPubHex: async () => k.bytesToHex(harryIrk.publicKey),
       verifyEd25519: k.verifyWithEd25519Pub,
       setActiveKeystoreProfile: k.setActiveKeystoreProfile,

@@ -358,7 +358,9 @@ public struct SettingsTab: View {
                     app.addProfile(
                         Profile(
                             cloudName: profile.cloudName,
-                            deviceLabel: profile.deviceLabel
+                            accountId: profile.cloudName,
+                            deviceId: profile.deviceId,
+                            deviceDisplayName: profile.deviceDisplayName
                         ),
                         setActive: true
                     )
@@ -373,7 +375,9 @@ public struct SettingsTab: View {
                     app.addProfile(
                         Profile(
                             cloudName: profile.cloudName,
-                            deviceLabel: profile.deviceLabel
+                            accountId: profile.cloudName,
+                            deviceId: profile.deviceId,
+                            deviceDisplayName: profile.deviceDisplayName
                         ),
                         setActive: true
                     )

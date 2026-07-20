@@ -14,7 +14,7 @@
  * minting a child device's grant (e.g. `demoalice.reviewer`). It
  * derives a deterministic Device IRK from the same KEK, signs a
  * DeviceCapabilityGrant with the User IRK, and persists. Old grants
- * for the same (username, deviceLabel) are revoked-then-replaced (the
+ * for the same (username, deviceId) are revoked-then-replaced (the
  * re-issuance flow per §2.1).
  *
  * BOTH endpoints are admin-only. Deriving deterministic keys inside
@@ -26,6 +26,8 @@ import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import {
   DEVICE_SCOPES,
+  deriveAccountId,
+  deriveIRK,
   ed,
   signAuthCode,
   signDeviceCapabilityGrant,
@@ -80,12 +82,13 @@ const DEFAULT_DEMO_PRIMARY_SCOPES: readonly DeviceScope[] = [
 export const _internalDefaultDemoPrimaryScopes = DEFAULT_DEMO_PRIMARY_SCOPES;
 
 const HKDF_USER_IRK_SALT = "flagship-demo-irk-v1";
-const HKDF_USER_IRK_INFO = "user-irk";
 const HKDF_DEVICE_IRK_SALT = "flagship-demo-device-irk-v1";
 const HKDF_DEVICE_IRK_INFO = "device-irk";
 const HKDF_DELEGATED_INFO = "delegated";
 const HKDF_RCK_INFO = "rck";
-const HKDF_USER_AID_INFO = "user-aid";
+const HKDF_USER_UMK_INFO = "account-umk";
+const HKDF_ADMIN_ROOT_INFO = "admin-root";
+const HKDF_PRIMARY_DEVICE_INFO = "primary-device";
 
 /**
  * HKDF-SHA256 wrapper. Returns the requested L bytes.
@@ -120,13 +123,13 @@ function deriveUserIkm(kek: Uint8Array, username: string): Uint8Array {
   return sha256(concat);
 }
 
-/** Per-spec: sha256(KEK || ':' || username || '.' || deviceLabel). */
+/** Per-spec: sha256(KEK || ':' || username || '.' || deviceId). */
 function deriveDeviceIkm(
   kek: Uint8Array,
   username: string,
-  deviceLabel: string,
+  deviceId: string,
 ): Uint8Array {
-  const sep = new TextEncoder().encode(`:${username}.${deviceLabel}`);
+  const sep = new TextEncoder().encode(`:${username}.${deviceId}`);
   const concat = new Uint8Array(kek.length + sep.length);
   concat.set(kek, 0);
   concat.set(sep, kek.length);
@@ -146,9 +149,29 @@ export function deriveDemoUserIrk(
   kek: Uint8Array,
   username: string,
 ): Keypair {
-  const ikm = deriveUserIkm(kek, username);
-  const seed = hkdfSha256(HKDF_USER_IRK_SALT, ikm, HKDF_USER_IRK_INFO, 32);
-  return seedToKeypair(seed);
+  return deriveIRK({ seed: deriveDemoUmk(kek, username) });
+}
+
+export function deriveDemoUmk(kek: Uint8Array, username: string): Uint8Array {
+  return hkdfSha256(HKDF_USER_IRK_SALT, deriveUserIkm(kek, username), HKDF_USER_UMK_INFO, 32);
+}
+
+export function deriveDemoAdminRoot(kek: Uint8Array, username: string): Keypair {
+  return seedToKeypair(hkdfSha256(HKDF_USER_IRK_SALT, deriveUserIkm(kek, username), HKDF_ADMIN_ROOT_INFO, 32));
+}
+
+export function deriveDemoPrimaryDeviceKey(kek: Uint8Array, username: string): Keypair {
+  return seedToKeypair(hkdfSha256(HKDF_DEVICE_IRK_SALT, deriveUserIkm(kek, username), HKDF_PRIMARY_DEVICE_INFO, 32));
+}
+
+export function deriveDemoPrimaryDeviceId(kek: Uint8Array, username: string): string {
+  const pub = deriveDemoPrimaryDeviceKey(kek, username).publicKey;
+  return bytesToHex(sha256(new Uint8Array([
+    ...new TextEncoder().encode("flagship/demo-primary-device-id/v1|"),
+    ...new TextEncoder().encode(username.toLowerCase()),
+    0x7c,
+    ...pub,
+  ])).slice(0, 16));
 }
 
 /**
@@ -163,18 +186,16 @@ export function deriveDemoUserAid(
   kek: Uint8Array,
   username: string,
 ): Keypair {
-  const ikm = deriveUserIkm(kek, username);
-  const seed = hkdfSha256(HKDF_USER_IRK_SALT, ikm, HKDF_USER_AID_INFO, 32);
-  return seedToKeypair(seed);
+  return deriveAccountId({ seed: deriveDemoUmk(kek, username) });
 }
 
-/** Derive the deterministic Device IRK for (username, deviceLabel). */
+/** Derive the deterministic Device IRK for (username, deviceId). */
 export function deriveDemoDeviceIrk(
   kek: Uint8Array,
   username: string,
-  deviceLabel: string,
+  deviceId: string,
 ): Keypair {
-  const ikm = deriveDeviceIkm(kek, username, deviceLabel);
+  const ikm = deriveDeviceIkm(kek, username, deviceId);
   const seed = hkdfSha256(HKDF_DEVICE_IRK_SALT, ikm, HKDF_DEVICE_IRK_INFO, 32);
   return seedToKeypair(seed);
 }
@@ -431,7 +452,7 @@ export async function handleAdminClaimAndIssue(
   const grant: DeviceCapabilityGrant = {
     grantId,
     username,
-    deviceLabel: "primary",
+    deviceId: "primary",
     devicePubKey: userIrk.publicKey,
     scopes,
     issuedAt: now,
@@ -441,7 +462,7 @@ export async function handleAdminClaimAndIssue(
   await deps.deviceCapabilityGrants.put({
     grantId,
     username,
-    deviceLabel: "primary",
+    deviceId: "primary",
     devicePubHex: userIrkHex,
     scopesJson: JSON.stringify(scopes),
     issuedAt: grant.issuedAt,
@@ -456,7 +477,7 @@ export async function handleAdminClaimAndIssue(
     primaryGrant: {
       grantId,
       username,
-      deviceLabel: "primary",
+      deviceId: "primary",
       devicePubKey: userIrkHex,
       scopes,
       issuedAt: grant.issuedAt,
@@ -471,7 +492,7 @@ export async function handleAdminClaimAndIssue(
 // ──────────────────────────────────────────────────────────────────────
 
 export interface AdminMintDeviceGrantBody {
-  deviceLabel?: unknown;
+  deviceId?: unknown;
   scopes?: unknown;
 }
 
@@ -481,15 +502,15 @@ export async function handleAdminMintDeviceGrant(
   body: AdminMintDeviceGrantBody | undefined,
 ): Promise<HandlerResponseWithHeaders> {
   if (!body) return malformed("malformed body");
-  if (typeof body.deviceLabel !== "string" || !DEVICE_LABEL_RE.test(body.deviceLabel)) {
-    return malformed("deviceLabel must match [a-z0-9-]{1,24}");
+  if (typeof body.deviceId !== "string" || !DEVICE_LABEL_RE.test(body.deviceId)) {
+    return malformed("deviceId must match [a-z0-9-]{1,24}");
   }
-  const deviceLabel = body.deviceLabel.toLowerCase();
-  if (deviceLabel.startsWith("-") || deviceLabel.endsWith("-")) {
-    return malformed("deviceLabel must not start or end with '-'");
+  const deviceId = body.deviceId.toLowerCase();
+  if (deviceId.startsWith("-") || deviceId.endsWith("-")) {
+    return malformed("deviceId must not start or end with '-'");
   }
-  if (RESERVED_DEVICE_LABELS.has(deviceLabel)) {
-    return malformed(`deviceLabel "${deviceLabel}" is reserved`);
+  if (RESERVED_DEVICE_LABELS.has(deviceId)) {
+    return malformed(`deviceId "${deviceId}" is reserved`);
   }
   if (!Array.isArray(body.scopes)) {
     return malformed("scopes must be a non-empty array of known DeviceScope strings");
@@ -510,7 +531,7 @@ export async function handleAdminMintDeviceGrant(
   if (!row) return notFound("demo user does not exist");
 
   const userIrk = deriveDemoUserIrk(deps.demoIrkKek, u);
-  const deviceIrk = deriveDemoDeviceIrk(deps.demoIrkKek, u, deviceLabel);
+  const deviceIrk = deriveDemoDeviceIrk(deps.demoIrkKek, u, deviceId);
   const rand = deps.random ?? defaultRandom;
   const now = nowOf(deps);
 
@@ -518,7 +539,7 @@ export async function handleAdminMintDeviceGrant(
   const grant: DeviceCapabilityGrant = {
     grantId,
     username: u,
-    deviceLabel,
+    deviceId,
     devicePubKey: deviceIrk.publicKey,
     scopes,
     issuedAt: now,
@@ -526,12 +547,12 @@ export async function handleAdminMintDeviceGrant(
   };
   const grantSig = signDeviceCapabilityGrant(grant, userIrk);
 
-  // Re-issuance flow: if a previous grant for (u, deviceLabel) is
+  // Re-issuance flow: if a previous grant for (u, deviceId) is
   // still ACTIVE, revoke it first then write the new one. The storage
   // layer's unique partial index is the line-of-defense; we walk it
   // explicitly here so the failure mode surfaces as the spec's
   // "re-issuance" behavior rather than a 409.
-  const existing = await deps.deviceCapabilityGrants.getActiveForUserLabel(u, deviceLabel);
+  const existing = await deps.deviceCapabilityGrants.getActiveForUserDevice(u, deviceId);
   if (existing) {
     await deps.deviceCapabilityGrants.revoke(existing.grantId, now);
   }
@@ -539,7 +560,7 @@ export async function handleAdminMintDeviceGrant(
   const putResult = await deps.deviceCapabilityGrants.put({
     grantId,
     username: u,
-    deviceLabel,
+    deviceId,
     devicePubHex: bytesToHex(deviceIrk.publicKey),
     scopesJson: JSON.stringify(scopes),
     issuedAt: grant.issuedAt,
@@ -555,7 +576,7 @@ export async function handleAdminMintDeviceGrant(
     grant: {
       grantId,
       username: u,
-      deviceLabel,
+      deviceId,
       devicePubKey: bytesToHex(deviceIrk.publicKey),
       scopes,
       issuedAt: grant.issuedAt,

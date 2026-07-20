@@ -57,12 +57,10 @@ export type RateLimitEndpoint =
   // v2 device-addressing (S3.3). The five buckets:
   //   admin-* are admin-bearer gated, so per-IP only — there's no
   //   per-IRK identifier on the admin side.
-  //   device-grants-list is a public read; cheap + per-IP.
   //   device-grants-revoke is IRK-signed; per-IRK + per-IP.
   //   device-grants-mint is IRK-signed; per-IRK + per-IP.
   | "admin-claim-and-issue"
   | "admin-mint-device-grant"
-  | "device-grants-list"
   | "device-grants-revoke"
   | "device-grants-mint"
   // Watch delegate keys (Phase 2c) — same shape as device grants:
@@ -200,7 +198,6 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "ip", limit: 200, windowSec: 3600 },
   ],
-  "device-grants-list": [{ axis: "ip", limit: 60, windowSec: 60 }],
   "device-grants-revoke": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 20, windowSec: 3600 },
@@ -443,9 +440,6 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
     /^\/api\/users\/[^/]+\/device-grants\/revoke$/.test(pathname)
   ) {
     return "device-grants-revoke";
-  }
-  if (m === "GET" && /^\/api\/users\/[^/]+\/device-grants$/.test(pathname)) {
-    return "device-grants-list";
   }
   if (m === "POST" && /^\/api\/users\/[^/]+\/device-grants$/.test(pathname)) {
     return "device-grants-mint";

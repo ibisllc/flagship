@@ -7,8 +7,7 @@
  * Coverage:
  *   - admin-bearer rejection paths for the two admin endpoints
  *   - 503 when DEMO_IRK_KEK isn't configured
- *   - public GET /device-grants returns 200 + empty list for an
- *     unknown user (storage stub returns empty)
+ *   - anonymous device and grant enumeration routes do not exist
  *   - public POST /device-grants/revoke rejects malformed body with 400
  *   - public POST /device-grants rejects malformed body with 400
  */
@@ -95,7 +94,7 @@ describe("devGrants routes — admin endpoints", () => {
         "https://flagshipserver.com/api/dev/sample-user/demoalice/admin-mint-device-grant",
         {
           method: "POST",
-          body: JSON.stringify({ deviceLabel: "reviewer", scopes: ["browse"] }),
+          body: JSON.stringify({ deviceId: "reviewer", scopes: ["browse"] }),
         },
       ),
       baseEnv(),
@@ -111,7 +110,7 @@ describe("devGrants routes — admin endpoints", () => {
         {
           method: "POST",
           headers: { "x-admin-secret": ADMIN_SECRET },
-          body: JSON.stringify({ deviceLabel: "reviewer", scopes: ["browse"] }),
+          body: JSON.stringify({ deviceId: "reviewer", scopes: ["browse"] }),
         },
       ),
       baseEnv(),
@@ -127,7 +126,7 @@ describe("devGrants routes — admin endpoints", () => {
         {
           method: "POST",
           headers: { "x-admin-secret": ADMIN_SECRET },
-          body: JSON.stringify({ deviceLabel: "reviewer", scopes: ["browse"] }),
+          body: JSON.stringify({ deviceId: "reviewer", scopes: ["browse"] }),
         },
       ),
       baseEnv({ DEMO_IRK_KEK: KEK_HEX }),
@@ -138,16 +137,21 @@ describe("devGrants routes — admin endpoints", () => {
   });
 });
 
-describe("devGrants routes — public endpoints", () => {
-  it("GET /device-grants: returns 200 + empty list for unknown user", async () => {
+describe("devGrants routes — privacy containment", () => {
+  it("GET /device-grants is removed", async () => {
     const r = await tryControlPlane(
       new Request("https://flagshipserver.com/api/users/alice/device-grants"),
       baseEnv(),
     );
-    expect(r).not.toBeNull();
-    expect(r!.status).toBe(200);
-    const body = await r!.json();
-    expect((body as { grants: unknown[] }).grants).toEqual([]);
+    expect(r).toBeNull();
+  });
+
+  it("GET /devices is removed", async () => {
+    const r = await tryControlPlane(
+      new Request("https://flagshipserver.com/api/users/alice/devices"),
+      baseEnv(),
+    );
+    expect(r).toBeNull();
   });
 
   it("POST /device-grants: 400 on malformed body", async () => {
@@ -174,12 +178,7 @@ describe("devGrants routes — public endpoints", () => {
     expect(r!.status).toBe(400);
   });
 
-  it("POST /users/check: dot-form (<u>.<label>) is dispatched to the device-grants path", async () => {
-    // Regression: the route MUST wire `deviceCapabilityGrants` into
-    // handleUsersCheck's deps, otherwise the dot-form falls through
-    // to validateUserLabel and is rejected for containing a `.`.
-    // With the wiring in place, an unknown demo user yields 404
-    // ("unknown demo device label") instead of available=false.
+  it("POST /users/check does not resolve dot-form device identity", async () => {
     const r = await tryControlPlane(
       new Request("https://flagshipserver.com/api/users/check", {
         method: "POST",
@@ -189,8 +188,13 @@ describe("devGrants routes — public endpoints", () => {
       baseEnv(),
     );
     expect(r).not.toBeNull();
-    expect(r!.status).toBe(404);
+    expect(r!.status).toBe(200);
     const body = await r!.json();
-    expect((body as { error: string }).error).toBe("unknown demo device label");
+    expect(body).toEqual({
+      username: "demoalice.reviewer",
+      available: false,
+      reason: "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
+    });
+    expect(JSON.stringify(body)).not.toContain("deviceId");
   });
 });

@@ -50,7 +50,9 @@ function rowMarkup(profile, active) {
       <div class="row row-top">
         <div>
           <div class="weight-600">${escapeHtml(profile.cloudName)}</div>
-          ${profile.deviceLabel ? `<div class="muted-sm">Device: ${escapeHtml(profile.deviceLabel)}</div>` : ""}
+          <div class="weight-600">${escapeHtml(profile.accountDisplayName ?? `@${profile.cloudName}`)}</div>
+          ${profile.accountDisplayName ? `<div class="muted-sm">@${escapeHtml(profile.cloudName)}</div>` : ""}
+          ${profile.deviceDisplayName ? `<div class="muted-sm">This device: ${escapeHtml(profile.deviceDisplayName)}</div>` : ""}
         </div>
         ${isActive
           ? '<span class="pill ok">ACTIVE</span>'

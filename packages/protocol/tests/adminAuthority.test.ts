@@ -31,7 +31,7 @@ function grant(overrides: Partial<DeviceCapabilityGrant> = {}): DeviceCapability
   return {
     grantId: "550e8400-e29b-41d4-a716-446655440000",
     username: "harry",
-    deviceLabel: "ipad",
+    deviceId: "00112233445566778899aabbccddeeff",
     devicePubKey: device.publicKey,
     scopes: ["admin"],
     issuedAt: NOW - 1000,

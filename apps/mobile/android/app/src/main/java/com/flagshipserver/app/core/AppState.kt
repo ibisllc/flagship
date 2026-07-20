@@ -41,7 +41,10 @@ enum class KeychainSyncClass { CloudRoot, DeviceLocal }
 data class Profile(
     val cloudName: String,
     val cloudRootPubHex: String = "",
-    val deviceLabel: String? = null,
+    val accountId: String = "",
+    val deviceId: String = "",
+    val accountDisplayName: String? = null,
+    val deviceDisplayName: String? = null,
     val deviceCapability: DeviceCapabilityBlock? = null,
     val demoServer: DemoServerBlock? = null,
     val createdAt: Long = System.currentTimeMillis(),
@@ -339,11 +342,15 @@ class AppState(
         _isPaired.value = true
         // W3 — record the cloud in the durable profile list and mark
         // it active. Idempotent for re-onboarding the same cloud.
+        val existing = _profiles.value.firstOrNull { it.cloudName == username }
         upsertProfile(
             Profile(
                 cloudName = username,
                 cloudRootPubHex = "",
-                deviceLabel = _deviceCapability.value?.label,
+                accountId = username,
+                deviceId = _deviceCapability.value?.deviceId ?: existing?.deviceId ?: AccountMetadata.generateDeviceId(),
+                accountDisplayName = existing?.accountDisplayName,
+                deviceDisplayName = existing?.deviceDisplayName,
                 deviceCapability = _deviceCapability.value,
                 demoServer = null,
                 createdAt = System.currentTimeMillis(),

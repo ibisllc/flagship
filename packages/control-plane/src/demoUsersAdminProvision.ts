@@ -74,6 +74,7 @@ import {
 // ──────────────────────────────────────────────────────────────────────
 
 export interface ProvisioningHetznerClient {
+  findServerByName?(name: string): Promise<{ serverId: string; ipv4: string | null } | null>;
   createServerWithUserData(args: {
     name: string;
     location: string;
@@ -308,7 +309,7 @@ export async function handleAdminSnapshotNow(
 
   // Idempotency: don't spawn a second Hetzner VPS if one's already in
   // flight.
-  if (row.state === "up" || row.state === "provisioning") {
+  if ((row.state === "ready" && row.activeServerId) || row.state === "provisioning") {
     return {
       status: 200,
       body: {
@@ -417,7 +418,7 @@ export async function handleAdminSnapshotNow(
   // (Re-)mint the primary DeviceCapabilityGrant. The Worker's
   // re-issuance flow is "revoke active then put new" — preserves the
   // semantics admin-claim-and-issue uses.
-  const existing = await deps.deviceCapabilityGrants.getActiveForUserLabel(
+  const existing = await deps.deviceCapabilityGrants.getActiveForUserDevice(
     u,
     "primary",
   );
@@ -428,7 +429,7 @@ export async function handleAdminSnapshotNow(
   const grant: DeviceCapabilityGrant = {
     grantId,
     username: u,
-    deviceLabel: "primary",
+    deviceId: "primary",
     devicePubKey: userIrk.publicKey,
     scopes: [...DEFAULT_DEMO_PRIMARY_SCOPES],
     issuedAt: now,
@@ -438,7 +439,7 @@ export async function handleAdminSnapshotNow(
   await deps.deviceCapabilityGrants.put({
     grantId,
     username: u,
-    deviceLabel: "primary",
+    deviceId: "primary",
     devicePubHex: userIrkHex,
     scopesJson: JSON.stringify(grant.scopes),
     issuedAt: grant.issuedAt,
@@ -516,7 +517,7 @@ export async function handleAdminSnapshotNow(
   // /admin-snapshot-now doesn't race us. If the CAS misses (i.e. the
   // row already transitioned), we still stamp the activeServerId so
   // the next cron pass can act on it.
-  const transitioned = await deps.storage.transition(u, "none", "provisioning", {
+  const transitioned = await deps.storage.transition(u, "ready", "provisioning", {
     activeServerId: prov.serverId,
     activeServerIp: prov.ipv4,
     image: "ubuntu-22.04",

@@ -30,13 +30,14 @@ import {
 } from "@flagship/protocol";
 import type {
   AuditEventStorage,
+  DeviceIdentityStorage,
   PushTokenStorage,
   ServerStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
 import { hexToBytes, bytesToHex } from "./hex.js";
-import { forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
+import { conflict, forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
 
 /**
  * Phase 3b — quarantine window for a device admitted via the vouched
@@ -50,6 +51,7 @@ export const QUARANTINE_MS = 14 * 86_400_000;
 
 export interface PushDeps {
   pushTokens: PushTokenStorage;
+  deviceIdentities: DeviceIdentityStorage;
   usernames: UsernameStorage;
   /**
    * Registered servers, used by the relay to authenticate the sender:
@@ -82,21 +84,16 @@ export interface PushDeps {
 interface RegisterBody {
   request?: {
     username?: string;
+    deviceId?: string;
     platform?: string;
     providerToken?: string;
     pushX25519Pub?: string;
-    label?: string;
     issuedAt?: number;
   };
   signature?: string;
 }
 
-/** Maximum bytes of `label` we'll persist. Anything longer is rejected
- *  at the handler so the .com storage doesn't grow unbounded if a
- *  buggy / hostile client ships a 4 MB string. 64 is generous for
- *  "Harry's iPhone (kitchen)" patterns. */
-const MAX_LABEL_LEN = 64;
-const CONTROL_CHARS_RE = /[\x00-\x1f\x7f]/;
+const DEVICE_ID_RE = /^[0-9a-f]{32}$/;
 
 /**
  * Phase 3b — opt-in extras for the vouched cross-device admit path.
@@ -108,15 +105,8 @@ const CONTROL_CHARS_RE = /[\x00-\x1f\x7f]/;
 export interface PushRegisterOptions {
   quarantine?: boolean;
   /**
-   * Phase 3b — set ONLY by the vouched cross-device admit path
-   * (`handleVouchedDeviceAdmit`), which has already verified an
-   * IRK-signed `DeviceAdmit` envelope binding this device's pubkey.
-   * That admit IS the IRK's consent, so the redundant
-   * `PushTokenRegister` IRK signature is not required: the incoming
-   * device does not hold the account IRK and cannot produce one.
-   *
-   * Default (omitted / false) → the legacy register path verifies the
-   * IRK signature exactly as before, bit-for-bit.
+   * Retained only as an internal marker for the quarantine behavior. Every
+   * registration is signed by the active account-scoped device key.
    */
   skipSignatureVerify?: boolean;
 }
@@ -130,10 +120,10 @@ export async function handlePushRegister(
   if (
     !r ||
     typeof r.username !== "string" ||
+    typeof r.deviceId !== "string" ||
     typeof r.platform !== "string" ||
     typeof r.providerToken !== "string" ||
     typeof r.pushX25519Pub !== "string" ||
-    typeof r.label !== "string" ||
     typeof r.issuedAt !== "number" ||
     typeof body?.signature !== "string"
   ) {
@@ -142,22 +132,20 @@ export async function handlePushRegister(
   if (r.platform !== "apns" && r.platform !== "fcm" && r.platform !== "webpush") {
     return malformed("platform must be apns|fcm|webpush");
   }
-  if (r.label.length > MAX_LABEL_LEN) {
-    return malformed(`label longer than ${MAX_LABEL_LEN} bytes`);
-  }
-  if (CONTROL_CHARS_RE.test(r.label)) {
-    return malformed("label contains control characters");
-  }
+  const deviceId = r.deviceId.toLowerCase();
+  if (!DEVICE_ID_RE.test(deviceId)) return malformed("deviceId must be 16-byte lowercase hex");
   const userRec = await deps.usernames.get(r.username);
   if (!userRec) return notFound("username not registered");
+  const identity = await deps.deviceIdentities.get(r.username, deviceId);
+  if (!identity || identity.revokedAt !== null) return forbidden("invalid device authorization");
 
   let pushPub: Uint8Array;
   let sig: Uint8Array;
-  let irkPub: Uint8Array;
+  let devicePub: Uint8Array;
   try {
     pushPub = hexToBytes(r.pushX25519Pub);
     sig = hexToBytes(body.signature);
-    irkPub = hexToBytes(userRec.irkPubHex);
+    devicePub = hexToBytes(identity.devicePubHex);
   } catch {
     return malformed("invalid hex");
   }
@@ -165,19 +153,13 @@ export async function handlePushRegister(
 
   const claim: PushTokenRegister = {
     username: r.username,
+    deviceId,
     platform: r.platform,
     providerToken: r.providerToken,
     pushX25519Pub: pushPub,
-    label: r.label,
     issuedAt: r.issuedAt,
   };
-  // Phase 3b — the vouched-admit path has already verified the IRK's
-  // consent (the DeviceAdmit envelope); the incoming device cannot
-  // produce a PushTokenRegister IRK signature. Every other caller
-  // still enforces it.
-  if (options?.skipSignatureVerify !== true) {
-    if (!verifyPushTokenRegister(claim, sig, irkPub)) return forbidden("invalid signature");
-  }
+  if (!verifyPushTokenRegister(claim, sig, devicePub)) return forbidden("invalid device authorization");
 
   const freshness = deps.freshnessMs ?? 5 * 60_000;
   const now = (deps.now ?? (() => Date.now()))();
@@ -194,11 +176,11 @@ export async function handlePushRegister(
   await deps.pushTokens.put({
     tokenId,
     username: r.username,
+    deviceId,
     platform: r.platform,
     providerToken: r.providerToken,
     pushX25519PubHex: r.pushX25519Pub,
     registrationSignatureHex: body.signature,
-    label: r.label,
     registeredAt: now,
     lastSeenAt: now,
     quarantineUntil,
@@ -212,8 +194,8 @@ export async function handlePushRegister(
       {
         username: r.username.toLowerCase(),
         eventKind: "device-added",
-        detail: `New device joined via pairing: ${r.label}`,
-        devicePrefix: tokenId.slice(0, 8),
+        detail: "New device joined via pairing",
+        devicePrefix: deviceId.slice(0, 8),
         postedAt: now,
         quarantineUntil,
       },
@@ -246,6 +228,7 @@ export async function handlePushRegister(
 interface AdmitBody {
   admit?: {
     username?: string;
+    deviceId?: string;
     newDevicePubHex?: string;
     issuedAt?: number;
   };
@@ -265,6 +248,7 @@ export async function handleVouchedDeviceAdmit(
   if (
     !a ||
     typeof a.username !== "string" ||
+    typeof a.deviceId !== "string" ||
     typeof a.newDevicePubHex !== "string" ||
     typeof a.issuedAt !== "number" ||
     typeof body?.admitSig !== "string"
@@ -282,6 +266,10 @@ export async function handleVouchedDeviceAdmit(
     body.request.username.toLowerCase() !== a.username.toLowerCase()
   ) {
     return forbidden("register username does not match admit");
+  }
+  const deviceId = a.deviceId.toLowerCase();
+  if (!DEVICE_ID_RE.test(deviceId) || body.request?.deviceId?.toLowerCase() !== deviceId) {
+    return forbidden("register deviceId does not match admit");
   }
   const newDevicePubHex = a.newDevicePubHex.toLowerCase();
   if (!DEVICE_PUB_HEX_RE.test(newDevicePubHex)) {
@@ -302,6 +290,7 @@ export async function handleVouchedDeviceAdmit(
 
   const admit: DeviceAdmit = {
     username: a.username,
+    deviceId,
     newDevicePubHex,
     issuedAt: a.issuedAt,
   };
@@ -317,6 +306,17 @@ export async function handleVouchedDeviceAdmit(
   if (Math.abs(now - a.issuedAt) > freshness) {
     return { status: 401, body: { error: "stale admit proof" } };
   }
+
+  const identityPut = await deps.deviceIdentities.put({
+    accountId: a.username,
+    deviceId,
+    devicePubHex: newDevicePubHex,
+    platformClass: body.request?.platform ?? null,
+    createdAt: now,
+    lastSeenAt: now,
+    revokedAt: null,
+  });
+  if (!identityPut.ok) return conflict(identityPut.reason);
 
   // The admit is valid: admit the incoming device QUARANTINED. We
   // reuse handlePushRegister for the storage + quarantine + audit

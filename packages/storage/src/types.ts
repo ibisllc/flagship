@@ -1601,6 +1601,11 @@ export interface Storage {
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   pushTokens: PushTokenStorage;
+  deviceIdentities: DeviceIdentityStorage;
+  accountProfiles: AccountProfileStorage;
+  deviceSelfProfiles: DeviceSelfProfileStorage;
+  deviceManagedProfiles: DeviceManagedProfileStorage;
+  accountDirectoryKeyGrants: AccountDirectoryKeyGrantStorage;
   llmPromo: LlmPromoStorage;
   tiers: TierStorage;
   entitlementRevocations: EntitlementRevocationStorage;
@@ -1611,6 +1616,7 @@ export interface Storage {
   demoLlmLedger: DemoLlmLedgerStorage;
   installPolicyFanout: InstallPolicyFanoutStorage;
   demoUsers: DemoUsersStorage;
+  demoAccountProvisioning: DemoAccountProvisioningStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
   watchDelegates: WatchDelegateStorage;
   mintReservations: MintReservationStorage;
@@ -1899,16 +1905,12 @@ export interface EntitlementRevocationStorage {
 export interface PushTokenRecord {
   tokenId: string;                      // random 16-byte hex
   username: string;
+  /** Immutable account-scoped identity owning this transport token. */
+  deviceId: string;
   platform: "apns" | "fcm" | "webpush";
   providerToken: string;                 // opaque
   pushX25519PubHex: string;
   registrationSignatureHex: string;
-  /**
-   * User-facing device name from the registration envelope. Surfaced
-   * verbatim in the "Trusted devices" list — the Worker sanitizes
-   * length + control chars at the registration handler boundary.
-   */
-  label: string;
   registeredAt: number;
   lastSeenAt: number;
   /**
@@ -2232,16 +2234,18 @@ export interface CustomDomainOrderStorage {
 
 /** Server lifecycle state — see docs/sample-users.md §4. */
 export type DemoUserState =
-  | "none"
+  | "initializing"
   | "provisioning"
-  | "up"
+  | "ready"
+  | "failed"
+  | "cleanup-only"
   | "idle-pending-teardown";
 
 export interface DemoUserRecord {
   /** Lowercased; PRIMARY KEY in D1. */
   username: string;
-  /** Human-readable label used by /api/users/check + the demo UI. */
-  display: string;
+  /** Client-supplied idempotency key for the one supported provisioner. */
+  idempotencyKey: string;
   /** Hetzner snapshot id, populated by /install-complete; NULL until then. */
   snapshotId: string | null;
   /** R2 object key under flagship-iso-temp; cleared on delete. */
@@ -2249,7 +2253,7 @@ export interface DemoUserRecord {
   ttlIdleMinutes: number;
   region: string;
   size: string;
-  /** Hetzner server id while state ∈ (provisioning, up, idle-pending-teardown). */
+  /** Exact provider server id while a server exists. */
   activeServerId: string | null;
   /** Public IPv4 the provider handed back at create time (migration 0036).
    *  Device-identifying so a demo user can confirm the running box is
@@ -2270,7 +2274,7 @@ export interface DemoUserRecord {
    * Provisioning observability (migration 0035). The latest named PHASE
    * checkpoint the box pushed to .com — see `@flagship/protocol`
    * `PROVISION_PHASES`. NULL until the first checkpoint arrives. The
-   * `state` machine above ('none'/'provisioning'/'up') is coarse; this
+   * `state` machine above is coarse; this
    * field is the fine-grained "which step within provisioning" signal
    * the phone + debug tooling read via /api/account/resolve.
    */
@@ -2319,6 +2323,25 @@ export interface DemoUsersStorage {
   ): Promise<DemoUserRecord | null>;
 }
 
+export interface DemoAccountInitialization {
+  username: UsernameRecord;
+  primaryDevice: DeviceIdentityRecord;
+  primaryGrant: DeviceCapabilityGrantRecord;
+  accountProfile: AccountProfileRecord;
+  primaryDeviceProfile: DeviceSelfProfileRecord;
+  authCode: AuthCodeRecord;
+  demo: DemoUserRecord;
+}
+
+export type DemoAccountInitializationResult =
+  | { ok: true; created: boolean; record: DemoUserRecord }
+  | { ok: false; reason: "username-unavailable" | "idempotency-conflict" | "initialization-conflict" };
+
+export interface DemoAccountProvisioningStorage {
+  initialize(input: DemoAccountInitialization): Promise<DemoAccountInitializationResult>;
+  cleanup(username: string, idempotencyKey: string): Promise<boolean>;
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Device capability grants (v2 device-addressing — S3.2)
 // ──────────────────────────────────────────────────────────────────────
@@ -2343,7 +2366,7 @@ export interface DemoUsersStorage {
 export interface DeviceCapabilityGrantRecord {
   grantId: string;
   username: string;
-  deviceLabel: string;
+  deviceId: string;
   devicePubHex: string;
   scopesJson: string;
   issuedAt: number;
@@ -2370,14 +2393,14 @@ export interface DeviceCapabilityGrantRecord {
  * Invariants enforced by the storage layer:
  *
  *   • `put` rejects a duplicate ACTIVE grant for the same
- *     `(username, deviceLabel)` — re-issuance MUST call `revoke` on
+ *     `(username, deviceId)` — re-issuance MUST call `revoke` on
  *     the prior grant first. The D1 adapter relies on the unique
- *     partial index (`idx_dcg_username_label_active`) for this; the
+ *     partial index (`idx_dcg_username_device_active`) for this; the
  *     InMemory adapter checks explicitly. The shared reason string
- *     `'duplicate active grant for (username, device_label)'` makes
+ *     `'duplicate active grant for (username, device_id)'` makes
  *     the failure mode caller-checkable across both adapters.
  *
- *   • `getActiveForUserLabel` returns AT MOST one row. Both adapters
+ *   • `getActiveForUserDevice` returns AT MOST one row. Both adapters
  *     fail loudly (throw) if the invariant is somehow violated —
  *     defense-in-depth against a future migration that drops the
  *     partial index.
@@ -2394,7 +2417,7 @@ export interface DeviceCapabilityGrantRecord {
  */
 export interface DeviceCapabilityGrantStorage {
   /** Insert a fresh grant row. Returns `ok:false` with the well-known
-   *  reason `'duplicate active grant for (username, device_label)'`
+   *  reason `'duplicate active grant for (username, device_id)'`
    *  when another ACTIVE row already exists for that pair AND the
    *  incoming row is itself ACTIVE (`revokedAt === null`). */
   put(rec: DeviceCapabilityGrantRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
@@ -2402,9 +2425,9 @@ export interface DeviceCapabilityGrantStorage {
   /** All grants for a user, ACTIVE + revoked, sorted issued_at DESC
    *  (most-recent first). */
   listForUser(username: string): Promise<DeviceCapabilityGrantRecord[]>;
-  /** The SINGLE active grant matching `(username, deviceLabel)`, or
+  /** The SINGLE active grant matching `(username, deviceId)`, or
    *  undefined. */
-  getActiveForUserLabel(username: string, deviceLabel: string): Promise<DeviceCapabilityGrantRecord | undefined>;
+  getActiveForUserDevice(username: string, deviceId: string): Promise<DeviceCapabilityGrantRecord | undefined>;
   /** Look up by device pubkey hex. When more than one grant covers
    *  the same pubkey (a device that's been re-labeled), returns the
    *  most-recent ACTIVE grant; undefined when no active row matches. */
@@ -2412,6 +2435,96 @@ export interface DeviceCapabilityGrantStorage {
   /** Stamp `revoked_at` on the matching grant. Throws Error
    *  `'unknown grantId'` if no row exists. */
   revoke(grantId: string, revokedAt: number): Promise<void>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Private account/device directory
+// ──────────────────────────────────────────────────────────────────────
+
+export interface DeviceIdentityRecord {
+  accountId: string;
+  deviceId: string;
+  devicePubHex: string;
+  platformClass: string | null;
+  createdAt: number;
+  lastSeenAt: number;
+  revokedAt: number | null;
+}
+
+export interface DeviceIdentityStorage {
+  put(rec: DeviceIdentityRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(accountId: string, deviceId: string): Promise<DeviceIdentityRecord | undefined>;
+  getByPub(accountId: string, devicePubHex: string): Promise<DeviceIdentityRecord | undefined>;
+  listForAccount(accountId: string): Promise<DeviceIdentityRecord[]>;
+  touch(accountId: string, deviceId: string, at: number): Promise<boolean>;
+  revoke(accountId: string, deviceId: string, at: number): Promise<boolean>;
+}
+
+export interface EncryptedProfileRecord {
+  accountId: string;
+  revision: number;
+  keyVersion: number;
+  nonceHex: string;
+  ciphertextHex: string;
+  signerPubHex: string;
+  signatureHex: string;
+  issuedAt: number;
+  updatedAt: number;
+}
+
+export interface AccountProfileRecord extends EncryptedProfileRecord {}
+
+export interface DeviceSelfProfileRecord extends EncryptedProfileRecord {
+  deviceId: string;
+}
+
+export interface DeviceManagedProfileRecord extends EncryptedProfileRecord {
+  deviceId: string;
+  locked: boolean;
+}
+
+export type ProfileWriteResult<T> =
+  | { ok: true; record: T }
+  | { ok: false; reason: "revision-conflict" };
+
+export interface AccountProfileStorage {
+  get(accountId: string): Promise<AccountProfileRecord | undefined>;
+  put(rec: AccountProfileRecord, expectedRevision: number): Promise<ProfileWriteResult<AccountProfileRecord>>;
+}
+
+export interface DeviceSelfProfileStorage {
+  get(accountId: string, deviceId: string): Promise<DeviceSelfProfileRecord | undefined>;
+  listForAccount(accountId: string): Promise<DeviceSelfProfileRecord[]>;
+  put(rec: DeviceSelfProfileRecord, expectedRevision: number): Promise<ProfileWriteResult<DeviceSelfProfileRecord>>;
+}
+
+export interface DeviceManagedProfileStorage {
+  get(accountId: string, deviceId: string): Promise<DeviceManagedProfileRecord | undefined>;
+  listForAccount(accountId: string): Promise<DeviceManagedProfileRecord[]>;
+  put(rec: DeviceManagedProfileRecord, expectedRevision: number): Promise<ProfileWriteResult<DeviceManagedProfileRecord>>;
+  delete(accountId: string, deviceId: string, expectedRevision: number): Promise<boolean>;
+}
+
+export type AccountDirectoryKeyKind = "account-profile" | "device-directory";
+
+export interface AccountDirectoryKeyGrantRecord {
+  grantId: string;
+  accountId: string;
+  recipientDeviceId: string;
+  keyKind: AccountDirectoryKeyKind;
+  sealedKeyHex: string;
+  signerPubHex: string;
+  signatureHex: string;
+  issuedAt: number;
+  expiresAt: number;
+  revokedAt: number | null;
+}
+
+export interface AccountDirectoryKeyGrantStorage {
+  put(rec: AccountDirectoryKeyGrantRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(grantId: string): Promise<AccountDirectoryKeyGrantRecord | undefined>;
+  listActiveForDevice(accountId: string, deviceId: string, now: number): Promise<AccountDirectoryKeyGrantRecord[]>;
+  revoke(grantId: string, at: number): Promise<boolean>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

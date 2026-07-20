@@ -415,7 +415,7 @@ class LoginViewModel(
                 // staged rotation.
                 app.completeOnboarding(username = username, pods = emptyList())
                 app.activeProfile?.let { active ->
-                    app.addProfile(active.copy(deviceLabel = ADMIN_DEVICE_LABEL), setActive = true)
+                    app.addProfile(active.copy(deviceDisplayName = ADMIN_DEVICE_LABEL), setActive = true)
                 }
                 _phase.value = LoginPhase.Opened
                 return
@@ -515,7 +515,7 @@ class LoginViewModel(
             // Open as the RESOLVED user with ZERO pods, then stamp admin.
             app.completeOnboarding(username = username, pods = emptyList())
             app.activeProfile?.let { active ->
-                app.addProfile(active.copy(deviceLabel = ADMIN_DEVICE_LABEL), setActive = true)
+                app.addProfile(active.copy(deviceDisplayName = ADMIN_DEVICE_LABEL), setActive = true)
             }
             _phase.value = LoginPhase.Opened
         } catch (t: Throwable) {

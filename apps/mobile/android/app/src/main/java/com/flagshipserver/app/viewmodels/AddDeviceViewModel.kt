@@ -139,6 +139,7 @@ class AddDeviceViewModel(
     /** The incoming device's FRESH device pubkey (Ed25519, hex) the admit
      *  binds. Captured from the peer hello. */
     private var incomingDevicePubHex: String? = null
+    private var incomingDeviceId: String? = null
 
     /** The join URL rendered as the QR. */
     val joinUrl: String by lazy {
@@ -156,12 +157,14 @@ class AddDeviceViewModel(
         _phase.value = AddDevicePhase.ShowingQr(joinUrl)
         try {
             val helloBytes = relay.awaitPeerHello(sid)
-            require(helloBytes.size == 64) {
-                "peer hello must be 64 bytes (x25519 pub || device pub)"
+            require(helloBytes.size == 80) {
+                "peer hello must be 80 bytes (x25519 pub || device pub || device id)"
             }
             val peerX25519 = helloBytes.copyOfRange(0, 32)
             val peerDevicePub = helloBytes.copyOfRange(32, 64)
+            val peerDeviceId = helloBytes.copyOfRange(64, 80)
             incomingDevicePubHex = HexUtil.encode(peerDevicePub)
+            incomingDeviceId = HexUtil.encode(peerDeviceId)
             val matchCode = session.pair(peerX25519)
             _phase.value = AddDevicePhase.ConfirmSas(matchCode, gateExpired = false)
             // Un-gate Confirm after the anti-double-tap window (parity with
@@ -194,10 +197,15 @@ class AddDeviceViewModel(
             _phase.value = AddDevicePhase.Failed("Incoming device key missing — start over.")
             return
         }
+        val deviceId = incomingDeviceId ?: run {
+            _phase.value = AddDevicePhase.Failed("Incoming device identity missing — start over.")
+            return
+        }
         _phase.value = AddDevicePhase.Delivering
         try {
             val admit = DeviceAdmit(
                 username = username,
+                deviceId = deviceId,
                 newDevicePubHex = devicePubHex.lowercase(),
                 issuedAt = now(),
             )

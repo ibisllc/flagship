@@ -65,8 +65,8 @@ export interface QuarantinePushFireRequest {
   category: string;
   /** The quarantined device's token id (so the fan-out can EXCLUDE it). */
   quarantinedTokenId: string;
-  /** Verbatim device label of the quarantined device, for the push body. */
-  quarantinedLabel: string;
+  /** Opaque account-scoped device identity. */
+  quarantinedDeviceId: string;
   quarantineUntil: number;
   admittedAt: number;
   bit: number;
@@ -155,8 +155,8 @@ function buildDefaultFirePush(
         const day = labelDays(req.bit);
         const body =
           day === 0
-            ? `A new device ("${req.quarantinedLabel}") just joined your account. Tap to review or remove it.`
-            : `A new device ("${req.quarantinedLabel}") joined ${day} day${day === 1 ? "" : "s"} ago and is still under review. Tap to confirm or remove it.`;
+            ? "A new device joined your account. Unlock Flagship to review it."
+            : `A device joined ${day} day${day === 1 ? "" : "s"} ago and is still under review. Unlock Flagship to review it.`;
         await deps.pushFanout({
           username: req.username.toLowerCase(),
           targets: targets.map((p) => ({
@@ -174,7 +174,7 @@ function buildDefaultFirePush(
             meta: {
               eventKind: req.category,
               bit: req.bit,
-              quarantinedTokenPrefix: req.quarantinedTokenId.slice(0, 8),
+              deviceIdPrefix: req.quarantinedDeviceId.slice(0, 8),
               quarantineUntil: req.quarantineUntil,
               admittedAt: req.admittedAt,
             },
@@ -221,7 +221,7 @@ async function firePushAndStamp(
       username: row.username,
       category,
       quarantinedTokenId: row.tokenId,
-      quarantinedLabel: row.label,
+      quarantinedDeviceId: row.deviceId,
       quarantineUntil: row.quarantineUntil ?? 0,
       admittedAt: row.registeredAt,
       bit,

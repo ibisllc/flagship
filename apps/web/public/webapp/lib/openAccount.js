@@ -23,6 +23,7 @@
 
 import { controlApex } from "./apex.js";
 import { ensureAdminRoot as defaultEnsureAdminRoot } from "./adminRoot.js";
+import { generateDeviceId } from "./accountMetadata.js";
 
 /** Login/identity handle is a bare label: 3–30 lowercase letters/digits,
  *  3–30, interior single dashes OK (no leading/trailing), no `--` (the
@@ -179,7 +180,10 @@ export async function openAccount(username, deps) {
     deps.addProfile({
       cloudName: username,
       cloudRootPubHex: toHex(session.irk.publicKey),
-      deviceLabel: null,
+      accountId: username,
+      deviceId: generateDeviceId(),
+      accountDisplayName: null,
+      deviceDisplayName: null,
       deviceCapability: null,
       demoServer: null,
     });

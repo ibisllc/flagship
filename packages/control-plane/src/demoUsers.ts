@@ -56,10 +56,9 @@ export const DEMO_PAIRED_SESSION_CAP = 3;
  *  `/users/check` response state. `idle-pending-teardown` is
  *  surfaced as `provisioning` so clients can treat the transient
  *  destroy-and-relaunch window as "wait, the system is busy". */
-function publicStatus(state: DemoUserState): "none" | "provisioning" | "up" {
-  if (state === "up") return "up";
-  if (state === "none") return "none";
-  return "provisioning"; // 'provisioning' OR 'idle-pending-teardown'
+function publicStatus(row: DemoUserRecord): "none" | "provisioning" | "up" {
+  if (row.state === "ready") return row.activeServerId ? "up" : "none";
+  return "provisioning";
 }
 
 /** Build the FQDN we publish for a demo server. Single-server-per-demo;
@@ -235,7 +234,7 @@ function validateDemoUsername(
 
 export interface CreateDemoUserBody {
   username?: unknown;
-  display?: unknown;
+  idempotencyKey?: unknown;
   region?: unknown;
   size?: unknown;
   ttlIdleMinutes?: unknown;
@@ -249,10 +248,9 @@ export async function handleCreateDemoUser(
   const v = validateDemoUsername(body.username);
   if (!v.ok) return malformed(v.reason);
   const username = v.username;
-  if (typeof body.display !== "string" || body.display.length < 1 || body.display.length > 64) {
-    return malformed("display must be a 1-64 char string");
+  if (typeof body.idempotencyKey !== "string" || body.idempotencyKey.length < 16 || body.idempotencyKey.length > 128) {
+    return malformed("idempotencyKey must be a 16-128 char string");
   }
-  const display = body.display;
   const region = typeof body.region === "string" ? body.region : DEFAULT_REGION;
   const size = typeof body.size === "string" ? body.size : DEFAULT_SIZE;
   const ttlIdleMinutes =
@@ -265,7 +263,7 @@ export async function handleCreateDemoUser(
   if (existing) {
     return ok({
       username: existing.username,
-      display: existing.display,
+      idempotencyKey: existing.idempotencyKey,
       state: existing.state,
       createdAt: existing.createdAt,
       reused: true,
@@ -285,7 +283,7 @@ export async function handleCreateDemoUser(
   const createdAt = nowMs(deps);
   const row: DemoUserRecord = {
     username,
-    display,
+    idempotencyKey: body.idempotencyKey,
     snapshotId: null,
     isoR2Key: null,
     ttlIdleMinutes,
@@ -296,7 +294,7 @@ export async function handleCreateDemoUser(
     image: null,
     activeServerFqdn: null,
     lastActivityAt: 0,
-    state: "none",
+    state: "initializing",
     createdAt,
     provisionPhase: null,
     provisionPhaseAt: null,
@@ -310,8 +308,7 @@ export async function handleCreateDemoUser(
   await audit(deps, username, "demo-user-created", `region=${region} size=${size}`);
   return ok({
     username,
-    display,
-    state: "none",
+    state: "initializing",
     createdAt,
   });
 }
@@ -404,7 +401,7 @@ export async function handleDemoUserConnect(
   const now = nowMs(deps);
   const fqdn = row.activeServerFqdn ?? demoServerFqdn(u);
 
-  if (row.state === "up") {
+  if (row.state === "ready" && row.activeServerId) {
     await deps.storage.update(u, { lastActivityAt: now });
     return ok({ fqdn, status: "up" });
   }
@@ -416,7 +413,9 @@ export async function handleDemoUserConnect(
     return ok({ fqdn, status: "provisioning" });
   }
 
-  // state === 'none' — provision a new server.
+  if (row.state !== "ready") return conflict("demo account is not ready");
+
+  // Ready identity with no active server — provision a new server.
   if (!row.snapshotId) {
     return conflict("demo user not yet provisioned; call create+install-complete");
   }
@@ -439,14 +438,14 @@ export async function handleDemoUserConnect(
   }
 
   // Reserve the slot via CAS before calling Hetzner.
-  const reserved = await deps.storage.transition(u, "none", "provisioning", {
+  const reserved = await deps.storage.transition(u, "ready", "provisioning", {
     lastActivityAt: now,
   });
   if (!reserved) {
     // Concurrent /connect raced us. Return the current state.
     const fresh = await deps.storage.get(u);
     if (!fresh) return notFound("no such demo user");
-    return ok({ fqdn: fresh.activeServerFqdn ?? fqdn, status: publicStatus(fresh.state) });
+    return ok({ fqdn: fresh.activeServerFqdn ?? fqdn, status: publicStatus(fresh) });
   }
 
   let provision: { serverId: string; ipv4: string | null };
@@ -461,7 +460,7 @@ export async function handleDemoUserConnect(
     });
   } catch (e) {
     // Roll the reservation back so a retry can attempt again.
-    await deps.storage.transition(u, "provisioning", "none", {
+    await deps.storage.transition(u, "provisioning", "failed", {
       activeServerId: null,
       activeServerFqdn: null,
     });
@@ -492,7 +491,7 @@ export async function handleDemoUserHeartbeat(
   const u = username.toLowerCase();
   const row = await deps.storage.get(u);
   if (!row) return notFound("no such demo user");
-  if (row.state !== "up") {
+  if (row.state !== "ready" || !row.activeServerId) {
     return conflict("demo server is not up");
   }
   await deps.storage.update(u, { lastActivityAt: nowMs(deps) });
@@ -526,8 +525,8 @@ export async function handleDemoUserCancel(
   if (!row) return notFound("no such demo user");
 
   // Already torn down — idempotent success so a double-tap is a no-op.
-  if (row.state === "none") {
-    return ok({ username: u, cancelled: true, state: "none" });
+  if (row.state === "ready" && !row.activeServerId) {
+    return ok({ username: u, cancelled: true, state: "ready" });
   }
 
   // Best-effort provider destroy. The hetzner client treats 404 as
@@ -556,7 +555,7 @@ export async function handleDemoUserCancel(
   // (id/ip/fqdn) AND the provisioning observability fields so the next
   // run starts from a blank progress bar.
   await deps.storage.update(u, {
-    state: "none",
+    state: "ready",
     activeServerId: null,
     activeServerIp: null,
     activeServerFqdn: null,
@@ -565,7 +564,7 @@ export async function handleDemoUserCancel(
     provisionLastError: null,
   });
   await audit(deps, u, "demo-user-cancelled", `serverId=${row.activeServerId ?? ""}`);
-  return ok({ username: u, cancelled: true, state: "none" });
+  return ok({ username: u, cancelled: true, state: "ready" });
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -590,7 +589,7 @@ export async function handleGetDemoUser(
   }
   return ok({
     username: row.username,
-    display: row.display,
+    idempotencyKey: row.idempotencyKey,
     state: row.state,
     snapshotId: row.snapshotId,
     isoR2Key: row.isoR2Key,
@@ -616,7 +615,7 @@ export async function handleListDemoUsers(
   return ok({
     demoUsers: rows.map((r) => ({
       username: r.username,
-      display: r.display,
+      idempotencyKey: r.idempotencyKey,
       state: r.state,
       activeServerFqdn: r.activeServerFqdn,
       lastActivityAt: r.lastActivityAt,
@@ -662,7 +661,7 @@ export async function runDemoIdleReaper(deps: DemoUsersDeps): Promise<{
       await deps.storage.transition(
         row.username,
         "idle-pending-teardown",
-        "none",
+        "ready",
         { activeServerId: null, activeServerFqdn: null },
       );
       await audit(
@@ -729,7 +728,7 @@ export async function runDemoProvisioningPoller(
     const promotedRow = await deps.storage.transition(
       row.username,
       "provisioning",
-      "up",
+      "ready",
       { activeServerFqdn: fqdn, lastActivityAt: nowMs(deps) },
     );
     if (promotedRow) {
@@ -847,7 +846,7 @@ export async function runDemoW11SnapshotPoller(
       const transitioned = await deps.storage.transition(
         row.username,
         "provisioning",
-        "none",
+        "ready",
         {
           activeServerId: null,
           activeServerFqdn: null,
@@ -888,7 +887,7 @@ export async function runDemoW11SnapshotPoller(
         await deps.storage.transition(
           row.username,
           "provisioning",
-          "none",
+          "failed",
           {
             activeServerId: null,
             activeServerFqdn: null,
@@ -980,7 +979,7 @@ export interface DemoServerBlock {
 export function demoServerBlockFromRow(row: DemoUserRecord): DemoServerBlock {
   return {
     fqdn: row.activeServerFqdn ?? demoServerFqdn(row.username),
-    status: publicStatus(row.state),
+    status: publicStatus(row),
     ttlIdleMinutes: row.ttlIdleMinutes,
     phase: row.provisionPhase ?? null,
     phaseAt: row.provisionPhaseAt ?? null,

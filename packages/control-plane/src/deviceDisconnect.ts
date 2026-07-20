@@ -143,10 +143,8 @@ export async function handleDeviceDisconnect(
     await recordAuditEvent(deps, {
       username: r.username.toLowerCase(),
       eventKind: "quarantine-blocked-revoke",
-      detail: `Quarantined device blocked from removing ${(
-        callerRow.label || callerRow.platform
-      ).slice(0, 32)}`,
-      devicePrefix: r.callerTokenId.slice(0, 8),
+      detail: "Quarantined device blocked from removing another device",
+      devicePrefix: callerRow.deviceId.slice(0, 8),
       postedAt: now(),
       accountTypeAtEvent: accountType,
       quarantineUntil: callerRow.quarantineUntil ?? 0,
@@ -220,8 +218,8 @@ export async function handleDeviceDisconnect(
   await recordAuditEvent(deps, {
     username: r.username.toLowerCase(),
     eventKind: "device-disconnected",
-    detail: `Device removed (${(targetRow.label || targetRow.platform).slice(0, 32)})`,
-    devicePrefix: r.targetTokenId.slice(0, 8),
+    detail: "Device removed",
+    devicePrefix: targetRow.deviceId.slice(0, 8),
     postedAt: now(),
     accountTypeAtEvent: userRec?.accountType ?? "single",
   });

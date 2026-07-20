@@ -214,7 +214,7 @@ describe("handleAdminClaimAndIssue", () => {
       primaryGrant: {
         grantId: string;
         username: string;
-        deviceLabel: string;
+        deviceId: string;
         devicePubKey: string;
         scopes: string[];
         issuedAt: number;
@@ -279,13 +279,13 @@ describe("handleAdminClaimAndIssue", () => {
     // signed blob is returned inline and never stored at rest on .com.
 
     // 4. Primary grant verifies AND is persisted.
-    expect(body.primaryGrant.deviceLabel).toBe("primary");
+    expect(body.primaryGrant.deviceId).toBe("primary");
     expect(body.primaryGrant.devicePubKey).toBe(userPubHex);
     expect(body.primaryGrant.scopes).toEqual([..._internalDefaultDemoPrimaryScopes]);
     const grant: DeviceCapabilityGrant = {
       grantId: body.primaryGrant.grantId,
       username: body.primaryGrant.username,
-      deviceLabel: body.primaryGrant.deviceLabel,
+      deviceId: body.primaryGrant.deviceId,
       devicePubKey: hexToBytes(body.primaryGrant.devicePubKey),
       scopes: body.primaryGrant.scopes as DeviceCapabilityGrant["scopes"],
       issuedAt: body.primaryGrant.issuedAt,
@@ -377,25 +377,25 @@ describe("handleAdminMintDeviceGrant", () => {
   it("rejects when demo_users row doesn't exist", async () => {
     const h = await mkHarness();
     const r = await handleAdminMintDeviceGrant(h.deps, "ghost-user", {
-      deviceLabel: "reviewer",
+      deviceId: "reviewer",
       scopes: ["browse"],
     });
     expect(r.status).toBe(404);
   });
 
-  it("rejects malformed deviceLabel", async () => {
+  it("rejects malformed deviceId", async () => {
     const h = await mkHarness({ seed: true });
     const r = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
-      deviceLabel: "INVALID",
+      deviceId: "INVALID",
       scopes: ["browse"],
     });
     expect(r.status).toBe(400);
   });
 
-  it("rejects reserved deviceLabel", async () => {
+  it("rejects reserved deviceId", async () => {
     const h = await mkHarness({ seed: true });
     const r = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
-      deviceLabel: "admin",
+      deviceId: "admin",
       scopes: ["browse"],
     });
     expect(r.status).toBe(400);
@@ -404,12 +404,12 @@ describe("handleAdminMintDeviceGrant", () => {
   it("rejects empty / non-array scopes", async () => {
     const h = await mkHarness({ seed: true });
     const r1 = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
-      deviceLabel: "reviewer",
+      deviceId: "reviewer",
       scopes: [],
     });
     expect(r1.status).toBe(400);
     const r2 = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
-      deviceLabel: "reviewer",
+      deviceId: "reviewer",
       scopes: "browse",
     });
     expect(r2.status).toBe(400);
@@ -418,7 +418,7 @@ describe("handleAdminMintDeviceGrant", () => {
   it("happy path: signature verifies, devicePub matches HKDF derivation", async () => {
     const h = await mkHarness({ seed: true });
     const r = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
-      deviceLabel: "reviewer",
+      deviceId: "reviewer",
       scopes: ["browse"],
     });
     expect(r.status).toBe(200);
@@ -426,7 +426,7 @@ describe("handleAdminMintDeviceGrant", () => {
       grant: {
         grantId: string;
         username: string;
-        deviceLabel: string;
+        deviceId: string;
         devicePubKey: string;
         scopes: string[];
         issuedAt: number;
@@ -442,7 +442,7 @@ describe("handleAdminMintDeviceGrant", () => {
     const grant: DeviceCapabilityGrant = {
       grantId: body.grant.grantId,
       username: body.grant.username,
-      deviceLabel: body.grant.deviceLabel,
+      deviceId: body.grant.deviceId,
       devicePubKey: hexToBytes(body.grant.devicePubKey),
       scopes: body.grant.scopes as DeviceCapabilityGrant["scopes"],
       issuedAt: body.grant.issuedAt,
@@ -456,14 +456,14 @@ describe("handleAdminMintDeviceGrant", () => {
   it("re-issuance: second call for same (user, label) revokes prior + mints new", async () => {
     const h = await mkHarness({ seed: true });
     const a = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
-      deviceLabel: "reviewer",
+      deviceId: "reviewer",
       scopes: ["browse"],
     });
     const aId = (a.body as { grant: { grantId: string } }).grant.grantId;
 
     h.clock.now += 1_000;
     const b = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
-      deviceLabel: "reviewer",
+      deviceId: "reviewer",
       scopes: ["browse", "install-service"],
     });
     expect(b.status).toBe(200);
@@ -475,7 +475,7 @@ describe("handleAdminMintDeviceGrant", () => {
     const newRow = await h.deps.deviceCapabilityGrants.get(bId);
     expect(newRow!.revokedAt).toBeNull();
 
-    const active = await h.deps.deviceCapabilityGrants.getActiveForUserLabel(
+    const active = await h.deps.deviceCapabilityGrants.getActiveForUserDevice(
       "demoalice",
       "reviewer",
     );

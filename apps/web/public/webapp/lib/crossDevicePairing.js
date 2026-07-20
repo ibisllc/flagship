@@ -50,7 +50,7 @@ const APEX = controlApex();
 
 /** Canonical-bytes tag for the device-admit envelope. MUST match
  *  packages/protocol/src/auth.ts TAG_DEVICE_ADMIT and the Worker. */
-export const TAG_DEVICE_ADMIT = "flagship/device-admit/v1";
+export const TAG_DEVICE_ADMIT = "flagship/device-admit/v2";
 
 /** The relay session's single-use TTL. Short by design (Safeguard 1):
  *  a leaked screenshot of the QR is useless once the session expires.
@@ -182,14 +182,18 @@ export function joinLinkFromLocation(loc) {
  *  @param {{ username: string, newDevicePubHex: string, issuedAt?: number, now?: () => number }} args
  *  @returns {{ username: string, newDevicePubHex: string, issuedAt: number }}
  */
-export function buildDeviceAdmit({ username, newDevicePubHex, issuedAt, now }) {
+export function buildDeviceAdmit({ username, deviceId, newDevicePubHex, issuedAt, now }) {
   if (!username) throw new Error("buildDeviceAdmit: username required");
   if (!/^[0-9a-f]{64}$/.test(String(newDevicePubHex).toLowerCase())) {
     throw new Error("buildDeviceAdmit: newDevicePubHex must be 32 bytes hex");
   }
+  if (!/^[0-9a-f]{32}$/.test(String(deviceId).toLowerCase())) {
+    throw new Error("buildDeviceAdmit: deviceId must be 16 bytes hex");
+  }
   const at = issuedAt ?? (now ?? (() => Date.now()))();
   return {
     username,
+    deviceId: String(deviceId).toLowerCase(),
     newDevicePubHex: String(newDevicePubHex).toLowerCase(),
     issuedAt: at,
   };
@@ -204,6 +208,7 @@ export function deviceAdmitCanonicalBytes(admit) {
   return canonical([
     TAG_DEVICE_ADMIT,
     admit.username,
+    admit.deviceId,
     admit.newDevicePubHex,
     admit.issuedAt,
   ]);
@@ -428,8 +433,13 @@ export async function runAdminAddDevice(deps) {
 
   // Receive the incoming device's FRESH device pubkey; bind it in the
   // admit so a captured admit can't be re-aimed at a different device.
-  const newDevicePubHex = String(await relay.receivePeerPub()).toLowerCase();
-  const admit = buildDeviceAdmit({ username, newDevicePubHex, now });
+  const peer = await relay.receivePeerPub();
+  const admit = buildDeviceAdmit({
+    username,
+    deviceId: peer.deviceId,
+    newDevicePubHex: peer.devicePubHex,
+    now,
+  });
   const admitSigHex = await signAdmit({
     admit,
     seed,
@@ -565,7 +575,7 @@ export async function runIncomingJoin(deps) {
   if (!/^[0-9a-f]{64}$/.test(myPub)) {
     throw new Error("incoming device key unavailable");
   }
-  if (String(admit.newDevicePubHex).toLowerCase() !== myPub) {
+  if (String(admit.newDevicePubHex).toLowerCase() !== myPub || admit.deviceId !== deps.deviceId) {
     throw new Error("admit is for a different device — refusing");
   }
 
@@ -608,6 +618,7 @@ export async function runIncomingJoin(deps) {
   // the admit is the IRK consent so the server doesn't verify it).
   const { request, signatureHex } = await deps.registerPush({
     username,
+    deviceId: admit.deviceId,
     deviceIrkPubHex: myPub,
   });
   const admitResponse = await post({
@@ -625,7 +636,10 @@ export async function runIncomingJoin(deps) {
     deps.addProfile({
       cloudName: username,
       cloudRootPubHex: irkPubHex,
-      deviceLabel: null,
+      accountId: username,
+      deviceId: admit.deviceId,
+      accountDisplayName: null,
+      deviceDisplayName: null,
       deviceCapability: null,
       demoServer: null,
     });

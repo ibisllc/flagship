@@ -127,7 +127,7 @@ function mintBody(
   const grant: DeviceCapabilityGrant = {
     grantId,
     username,
-    deviceLabel: "dev2",
+    deviceId: "dev2",
     devicePubKey: hexToBytes(devicePubHex),
     scopes: scopes as DeviceCapabilityGrant["scopes"],
     issuedAt: now,
@@ -140,7 +140,7 @@ function mintBody(
       grant: {
         grantId,
         username,
-        deviceLabel: grant.deviceLabel,
+        deviceId: grant.deviceId,
         devicePubKey: devicePubHex,
         scopes,
         issuedAt: grant.issuedAt,

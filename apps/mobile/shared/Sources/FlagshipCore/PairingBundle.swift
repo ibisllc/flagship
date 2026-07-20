@@ -43,10 +43,12 @@ public struct PairingBundle: Codable, Equatable, Sendable {
 
     public struct AdmitFields: Codable, Equatable, Sendable {
         public let username: String
+        public let deviceId: String
         public let newDevicePubHex: String
         public let issuedAt: Int64
-        public init(username: String, newDevicePubHex: String, issuedAt: Int64) {
+        public init(username: String, deviceId: String, newDevicePubHex: String, issuedAt: Int64) {
             self.username = username
+            self.deviceId = deviceId
             self.newDevicePubHex = newDevicePubHex
             self.issuedAt = issuedAt
         }

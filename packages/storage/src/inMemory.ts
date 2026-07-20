@@ -62,6 +62,16 @@ import type {
   LuksKeyStorage,
   PushTokenRecord,
   PushTokenStorage,
+  DeviceIdentityRecord,
+  DeviceIdentityStorage,
+  AccountProfileRecord,
+  AccountProfileStorage,
+  DeviceSelfProfileRecord,
+  DeviceSelfProfileStorage,
+  DeviceManagedProfileRecord,
+  DeviceManagedProfileStorage,
+  AccountDirectoryKeyGrantRecord,
+  AccountDirectoryKeyGrantStorage,
   RoutingRecord,
   RoutingStorage,
   SealedLuksKeyRecord,
@@ -88,6 +98,9 @@ import type {
   DemoUserRecord,
   DemoUserState,
   DemoUsersStorage,
+  DemoAccountInitialization,
+  DemoAccountInitializationResult,
+  DemoAccountProvisioningStorage,
   InstallPolicyFanoutRecord,
   InstallPolicyFanoutStorage,
   DeviceCapabilityGrantRecord,
@@ -546,6 +559,148 @@ export class InMemoryPushTokenStorage implements PushTokenStorage {
     if (!r) return 0;
     r.quarantineAlertsFiredBitmap = (r.quarantineAlertsFiredBitmap ?? 0) | bit;
     return r.quarantineAlertsFiredBitmap;
+  }
+}
+
+export class InMemoryDeviceIdentityStorage implements DeviceIdentityStorage {
+  private rows = new Map<string, DeviceIdentityRecord>();
+  private key(accountId: string, deviceId: string) { return `${accountId.toLowerCase()}|${deviceId}`; }
+  async put(rec: DeviceIdentityRecord) {
+    const accountId = rec.accountId.toLowerCase();
+    const deviceId = rec.deviceId.toLowerCase();
+    const devicePubHex = rec.devicePubHex.toLowerCase();
+    const existing = this.rows.get(this.key(accountId, deviceId));
+    if (existing && existing.devicePubHex !== devicePubHex) {
+      return { ok: false as const, reason: "deviceId already bound to another key" };
+    }
+    for (const row of this.rows.values()) {
+      if (row.accountId === accountId && row.devicePubHex === devicePubHex && row.deviceId !== deviceId) {
+        return { ok: false as const, reason: "device key already bound to another deviceId" };
+      }
+    }
+    this.rows.set(this.key(accountId, deviceId), { ...rec, accountId, deviceId, devicePubHex });
+    return { ok: true as const };
+  }
+  async get(accountId: string, deviceId: string) {
+    const row = this.rows.get(this.key(accountId, deviceId));
+    return row ? { ...row } : undefined;
+  }
+  async getByPub(accountId: string, devicePubHex: string) {
+    const account = accountId.toLowerCase();
+    const pub = devicePubHex.toLowerCase();
+    const row = [...this.rows.values()].find((item) => item.accountId === account && item.devicePubHex === pub);
+    return row ? { ...row } : undefined;
+  }
+  async listForAccount(accountId: string) {
+    const account = accountId.toLowerCase();
+    return [...this.rows.values()]
+      .filter((row) => row.accountId === account)
+      .sort((a, b) => a.createdAt - b.createdAt || a.deviceId.localeCompare(b.deviceId))
+      .map((row) => ({ ...row }));
+  }
+  async touch(accountId: string, deviceId: string, at: number) {
+    const row = this.rows.get(this.key(accountId, deviceId));
+    if (!row) return false;
+    row.lastSeenAt = at;
+    return true;
+  }
+  async revoke(accountId: string, deviceId: string, at: number) {
+    const row = this.rows.get(this.key(accountId, deviceId));
+    if (!row) return false;
+    row.revokedAt = at;
+    return true;
+  }
+}
+
+abstract class InMemoryProfileStorage<T extends AccountProfileRecord> {
+  protected rows = new Map<string, T>();
+  protected abstract key(rec: Pick<T, "accountId">): string;
+  protected clone(rec: T): T { return { ...rec }; }
+  protected async putRecord(rec: T, expectedRevision: number) {
+    const key = this.key(rec);
+    const current = this.rows.get(key);
+    if ((current?.revision ?? 0) !== expectedRevision || rec.revision !== expectedRevision + 1) {
+      return { ok: false as const, reason: "revision-conflict" as const };
+    }
+    const stored = this.clone({ ...rec, accountId: rec.accountId.toLowerCase() });
+    this.rows.set(key, stored);
+    return { ok: true as const, record: this.clone(stored) };
+  }
+}
+
+export class InMemoryAccountProfileStorage
+  extends InMemoryProfileStorage<AccountProfileRecord>
+  implements AccountProfileStorage {
+  protected key(rec: Pick<AccountProfileRecord, "accountId">) { return rec.accountId.toLowerCase(); }
+  async get(accountId: string) {
+    const row = this.rows.get(accountId.toLowerCase());
+    return row ? this.clone(row) : undefined;
+  }
+  async put(rec: AccountProfileRecord, expectedRevision: number) { return this.putRecord(rec, expectedRevision); }
+}
+
+abstract class InMemoryDeviceProfileStorage<T extends DeviceSelfProfileRecord>
+  extends InMemoryProfileStorage<T> {
+  protected key(rec: Pick<T, "accountId"> & { deviceId?: string }) {
+    return `${rec.accountId.toLowerCase()}|${rec.deviceId ?? ""}`;
+  }
+  async get(accountId: string, deviceId: string) {
+    const row = this.rows.get(`${accountId.toLowerCase()}|${deviceId}`);
+    return row ? this.clone(row) : undefined;
+  }
+  async listForAccount(accountId: string) {
+    const prefix = `${accountId.toLowerCase()}|`;
+    return [...this.rows.entries()].filter(([key]) => key.startsWith(prefix)).map(([, row]) => this.clone(row));
+  }
+}
+
+export class InMemoryDeviceSelfProfileStorage
+  extends InMemoryDeviceProfileStorage<DeviceSelfProfileRecord>
+  implements DeviceSelfProfileStorage {
+  async put(rec: DeviceSelfProfileRecord, expectedRevision: number) { return this.putRecord(rec, expectedRevision); }
+}
+
+export class InMemoryDeviceManagedProfileStorage
+  extends InMemoryDeviceProfileStorage<DeviceManagedProfileRecord>
+  implements DeviceManagedProfileStorage {
+  async put(rec: DeviceManagedProfileRecord, expectedRevision: number) { return this.putRecord(rec, expectedRevision); }
+  async delete(accountId: string, deviceId: string, expectedRevision: number) {
+    const key = `${accountId.toLowerCase()}|${deviceId}`;
+    const current = this.rows.get(key);
+    if (!current || current.revision !== expectedRevision) return false;
+    return this.rows.delete(key);
+  }
+}
+
+export class InMemoryAccountDirectoryKeyGrantStorage
+  implements AccountDirectoryKeyGrantStorage {
+  private rows = new Map<string, AccountDirectoryKeyGrantRecord>();
+  async put(rec: AccountDirectoryKeyGrantRecord) {
+    if (this.rows.has(rec.grantId)) return { ok: false as const, reason: "duplicate grant id" };
+    this.rows.set(rec.grantId, {
+      ...rec,
+      accountId: rec.accountId.toLowerCase(),
+      recipientDeviceId: rec.recipientDeviceId.toLowerCase(),
+    });
+    return { ok: true as const };
+  }
+  async get(grantId: string) {
+    const row = this.rows.get(grantId);
+    return row ? { ...row } : undefined;
+  }
+  async listActiveForDevice(accountId: string, deviceId: string, now: number) {
+    const account = accountId.toLowerCase();
+    const device = deviceId.toLowerCase();
+    return [...this.rows.values()]
+      .filter((row) => row.accountId === account && row.recipientDeviceId === device && row.revokedAt === null && row.expiresAt > now)
+      .sort((a, b) => b.issuedAt - a.issuedAt)
+      .map((row) => ({ ...row }));
+  }
+  async revoke(grantId: string, at: number) {
+    const row = this.rows.get(grantId);
+    if (!row) return false;
+    row.revokedAt = at;
+    return true;
   }
 }
 
@@ -1598,7 +1753,7 @@ export class InMemoryInstallPolicyFanoutStorage
 
 const ACTIVE_DEMO_STATES = new Set<DemoUserState>([
   "provisioning",
-  "up",
+  "ready",
   "idle-pending-teardown",
 ]);
 
@@ -1649,7 +1804,7 @@ export class InMemoryDemoUsersStorage implements DemoUsersStorage {
     return [...this.byUsername.values()]
       .filter(
         (r) =>
-          (r.state === "up" ||
+          (r.state === "ready" ||
             r.state === "provisioning" ||
             r.state === "idle-pending-teardown") &&
           r.lastActivityAt < cutoffMs,
@@ -1686,6 +1841,55 @@ export class InMemoryDemoUsersStorage implements DemoUsersStorage {
   }
 }
 
+export class InMemoryDemoAccountProvisioningStorage implements DemoAccountProvisioningStorage {
+  constructor(
+    private readonly usernames: UsernameStorage,
+    private readonly identities: DeviceIdentityStorage,
+    private readonly grants: DeviceCapabilityGrantStorage,
+    private readonly accountProfiles: AccountProfileStorage,
+    private readonly selfProfiles: DeviceSelfProfileStorage,
+    private readonly authCodes: AuthCodeStorage,
+    private readonly demos: DemoUsersStorage,
+  ) {}
+  async initialize(input: DemoAccountInitialization): Promise<DemoAccountInitializationResult> {
+    const existingDemo = await this.demos.get(input.demo.username);
+    if (existingDemo) {
+      return existingDemo.idempotencyKey === input.demo.idempotencyKey
+        ? { ok: true, created: false, record: existingDemo }
+        : { ok: false, reason: "idempotency-conflict" };
+    }
+    if (await this.usernames.get(input.username.username)) return { ok: false, reason: "username-unavailable" };
+    const [identityBefore, grantBefore, accountBefore, profileBefore, authCodeBefore] = await Promise.all([
+      this.identities.get(input.primaryDevice.accountId, input.primaryDevice.deviceId),
+      this.grants.get(input.primaryGrant.grantId),
+      this.accountProfiles.get(input.accountProfile.accountId),
+      this.selfProfiles.get(input.primaryDeviceProfile.accountId, input.primaryDeviceProfile.deviceId),
+      this.authCodes.get(input.authCode.serial),
+    ]);
+    if (identityBefore || grantBefore || accountBefore || profileBefore || authCodeBefore) {
+      return { ok: false, reason: "initialization-conflict" };
+    }
+    const claim = await this.usernames.put(input.username);
+    const identity = await this.identities.put(input.primaryDevice);
+    const grant = await this.grants.put(input.primaryGrant);
+    const account = await this.accountProfiles.put(input.accountProfile, 0);
+    const profile = await this.selfProfiles.put(input.primaryDeviceProfile, 0);
+    const authCode = await this.authCodes.put(input.authCode);
+    const demo = await this.demos.insert(input.demo);
+    if (!claim.ok || !identity.ok || !grant.ok || !account.ok || !profile.ok || !authCode.ok || !demo.ok) {
+      return { ok: false, reason: "initialization-conflict" };
+    }
+    return { ok: true, created: true, record: input.demo };
+  }
+  async cleanup(username: string, idempotencyKey: string) {
+    const row = await this.demos.get(username);
+    if (!row || row.idempotencyKey !== idempotencyKey) return false;
+    await this.demos.delete(username);
+    await this.usernames.delete(username);
+    return true;
+  }
+}
+
 export class InMemoryDeviceCapabilityGrantStorage
   implements DeviceCapabilityGrantStorage
 {
@@ -1702,17 +1906,17 @@ export class InMemoryDeviceCapabilityGrantStorage
     // grant — that's the re-issuance flow.
     if (rec.revokedAt === null) {
       const u = rec.username.toLowerCase();
-      const l = rec.deviceLabel.toLowerCase();
+      const l = rec.deviceId.toLowerCase();
       for (const other of this.byId.values()) {
         if (
           other.grantId !== rec.grantId &&
           other.revokedAt === null &&
           other.username.toLowerCase() === u &&
-          other.deviceLabel.toLowerCase() === l
+          other.deviceId.toLowerCase() === l
         ) {
           return {
             ok: false as const,
-            reason: "duplicate active grant for (username, device_label)",
+            reason: "duplicate active grant for (username, device_id)",
           };
         }
       }
@@ -1738,15 +1942,15 @@ export class InMemoryDeviceCapabilityGrantStorage
     out.sort((a, b) => b.issuedAt - a.issuedAt);
     return out;
   }
-  async getActiveForUserLabel(username: string, deviceLabel: string) {
+  async getActiveForUserDevice(username: string, deviceId: string) {
     const u = username.toLowerCase();
-    const l = deviceLabel.toLowerCase();
+    const l = deviceId.toLowerCase();
     const matches: DeviceCapabilityGrantRecord[] = [];
     for (const r of this.byId.values()) {
       if (
         r.revokedAt === null &&
         r.username.toLowerCase() === u &&
-        r.deviceLabel.toLowerCase() === l
+        r.deviceId.toLowerCase() === l
       ) {
         matches.push(r);
       }
@@ -1754,7 +1958,7 @@ export class InMemoryDeviceCapabilityGrantStorage
     if (matches.length > 1) {
       // Defensive — the put-time guard should make this unreachable.
       throw new Error(
-        `getActiveForUserLabel: more than one active grant for ${u}/${l}`,
+        `getActiveForUserDevice: more than one active grant for ${u}/${l}`,
       );
     }
     return matches[0] ? this.clone(matches[0]) : undefined;
@@ -1804,6 +2008,11 @@ export class InMemoryStorage implements Storage {
   pendingRePairs = new InMemoryPendingRePairStorage();
   webauthnRecovery = new InMemoryWebauthnRecoveryStorage();
   pushTokens = new InMemoryPushTokenStorage();
+  deviceIdentities = new InMemoryDeviceIdentityStorage();
+  accountProfiles = new InMemoryAccountProfileStorage();
+  deviceSelfProfiles = new InMemoryDeviceSelfProfileStorage();
+  deviceManagedProfiles = new InMemoryDeviceManagedProfileStorage();
+  accountDirectoryKeyGrants = new InMemoryAccountDirectoryKeyGrantStorage();
   llmPromo = new InMemoryLlmPromoStorage();
   tiers = new InMemoryTierStorage();
   entitlementRevocations = new InMemoryEntitlementRevocationStorage();
@@ -1824,6 +2033,15 @@ export class InMemoryStorage implements Storage {
   serviceInvites = new InMemoryServiceInviteStorage();
   namespace = new InMemoryNamespaceStorage();
   peerBackupManifests = new InMemoryPeerBackupManifestStorage();
+  demoAccountProvisioning = new InMemoryDemoAccountProvisioningStorage(
+    this.usernames,
+    this.deviceIdentities,
+    this.deviceCapabilityGrants,
+    this.accountProfiles,
+    this.deviceSelfProfiles,
+    this.authCodes,
+    this.demoUsers,
+  );
 }
 
 /**

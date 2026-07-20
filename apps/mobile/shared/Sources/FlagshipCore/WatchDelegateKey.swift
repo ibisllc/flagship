@@ -158,7 +158,7 @@ public struct RevokeWatchDelegateEnvelope: Equatable, Sendable {
 
 /// Swift mirror of `canonicalDeviceCapabilityGrant` in
 /// packages/protocol/src/auth.ts. The grant binds a per-device key to a user
-/// under a human label with explicit capability scopes (v2 device addressing).
+/// under an opaque account-scoped device ID with explicit capability scopes.
 ///
 /// Grants are minted + signed by the Worker (admin path) today, so the mobile
 /// app only RECEIVES them as the read-only `DeviceCapabilityBlock` wire DTO.
@@ -168,8 +168,7 @@ public struct RevokeWatchDelegateEnvelope: Equatable, Sendable {
 /// by FIXED INDEX (`DEVICE_SCOPES` order, NOT alphabetical); an alphabetical
 /// sort diverges for any set spanning `add-device`/`admin`/`browse`.
 public struct DeviceCapabilityGrantEnvelope: Equatable, Sendable {
-    /// `flagship/device-capability-grant/v1`, same tag the Worker uses.
-    public static let canonicalTag = "flagship/device-capability-grant/v1"
+    public static let canonicalTag = "flagship/device-capability-grant/v2"
 
     /// Canonical scope ordering — mirrors `DEVICE_SCOPES` in
     /// packages/protocol/src/auth.ts. APPEND new scopes; never reorder. The
@@ -183,11 +182,12 @@ public struct DeviceCapabilityGrantEnvelope: Equatable, Sendable {
         "revoke-others",
         "demo-provision",
         "admin",
+        "view-directory",
     ]
 
     public let grantId: String
     public let username: String
-    public let deviceLabel: String
+    public let deviceId: String
     /// The device's Ed25519 pubkey, lowercased hex (32 bytes → 64 chars).
     public let devicePubKeyHex: String
     public let scopes: [String]
@@ -197,7 +197,7 @@ public struct DeviceCapabilityGrantEnvelope: Equatable, Sendable {
     public init(
         grantId: String,
         username: String,
-        deviceLabel: String,
+        deviceId: String,
         devicePubKeyHex: String,
         scopes: [String],
         issuedAt: Int64,
@@ -205,14 +205,14 @@ public struct DeviceCapabilityGrantEnvelope: Equatable, Sendable {
     ) {
         self.grantId = grantId
         self.username = username
-        self.deviceLabel = deviceLabel
+        self.deviceId = deviceId
         self.devicePubKeyHex = devicePubKeyHex
         self.scopes = scopes
         self.issuedAt = issuedAt
         self.expiresAt = expiresAt
     }
 
-    /// `flagship/device-capability-grant/v1|<grantId>|<username>|<deviceLabel>|<devicePubHex>|<sortedScopes>|<issuedAt>|<expiresAt>`.
+    /// `flagship/device-capability-grant/v2|<grantId>|<username>|<deviceId>|<devicePubHex>|<sortedScopes>|<issuedAt>|<expiresAt>`.
     public func canonicalBytes() -> Data {
         let sortedScopes = ScopeOrdering
             .sort(scopes, by: Self.deviceScopeOrder)
@@ -222,7 +222,7 @@ public struct DeviceCapabilityGrantEnvelope: Equatable, Sendable {
                 Self.canonicalTag,
                 grantId,
                 username,
-                deviceLabel,
+                deviceId,
                 devicePubKeyHex.lowercased(),
                 sortedScopes,
                 String(issuedAt),

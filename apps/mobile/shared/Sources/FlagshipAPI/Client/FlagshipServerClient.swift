@@ -1033,31 +1033,23 @@ public struct ProvisionStatus: Codable, Equatable, Sendable {
     }
 }
 
-/// POST /api/push/register — IRK-signed registration of an APNs (or FCM,
-/// or webpush) provider token + a per-device X25519 pubkey. Canonical
-/// bytes spec lives in packages/protocol/src/auth.ts
-/// `TAG_PUSH_TOKEN_REGISTER`; iOS computes the same string via
-/// `PushTokenRegister.canonicalBytes(...)` in Flagship/InstallBlob.swift.
+/// POST /api/push/register — IRK-signed registration of a provider token
+/// bound to the immutable account-scoped device identity.
 public struct PushTokenRegisterRequest: Codable, Equatable, Sendable {
     public struct Inner: Codable, Equatable, Sendable {
         public let username: String
+        public let deviceId: String
         public let platform: String            // "apns" | "fcm" | "webpush"
         public let providerToken: String       // APNs hex token (lowercased)
         public let pushX25519Pub: String       // hex
-        /// User-facing device label (e.g. "Harry's iPhone"). Surfaced
-        /// in the Trusted-devices list on .com. Must be part of the
-        /// canonical bytes the IRK signs — the field slots between
-        /// pushX25519Pub and issuedAt to match the Worker side.
-        public let label: String
         public let issuedAt: Int64
         public init(
-            username: String, platform: String, providerToken: String,
-            pushX25519Pub: String, label: String, issuedAt: Int64
+            username: String, deviceId: String, platform: String,
+            providerToken: String, pushX25519Pub: String, issuedAt: Int64
         ) {
-            self.username = username; self.platform = platform
+            self.username = username; self.deviceId = deviceId; self.platform = platform
             self.providerToken = providerToken
             self.pushX25519Pub = pushX25519Pub
-            self.label = label
             self.issuedAt = issuedAt
         }
     }
@@ -1105,10 +1097,12 @@ public struct PushTokenRevokeRequest: Codable, Equatable, Sendable {
 public struct DeviceAdmitRequest: Codable, Equatable, Sendable {
     public struct Admit: Codable, Equatable, Sendable {
         public let username: String
+        public let deviceId: String
         public let newDevicePubHex: String   // lowercased hex, 32 bytes
         public let issuedAt: Int64
-        public init(username: String, newDevicePubHex: String, issuedAt: Int64) {
+        public init(username: String, deviceId: String, newDevicePubHex: String, issuedAt: Int64) {
             self.username = username
+            self.deviceId = deviceId
             self.newDevicePubHex = newDevicePubHex
             self.issuedAt = issuedAt
         }
@@ -1593,18 +1587,9 @@ public struct DemoServerBlock: Codable, Equatable, Hashable, Sendable {
     }
 }
 
-/// v2 device-addressing — mirror of the Worker's `deviceCapability`
-/// block in `packages/control-plane/src/usersCheck.ts`. Embedded into
-/// the `/api/users/check` response when the typed username matched
-/// the `<u>.<device-label>` syntax AND a matching active
-/// DeviceCapabilityGrant exists. See
-/// docs/v2-device-addressing-and-real-ticket.md §2 + §5.1.
+/// Immutable account-scoped machine identity and its capability grant.
 public struct DeviceCapabilityBlock: Codable, Equatable, Sendable {
-    /// Human-meaningful label the user typed after the dot
-    /// ("reviewer", "ipad", "work-laptop"). RFC-1035-ish (a-z, 0-9,
-    /// hyphen; not at start/end; ≤24 chars). Used in the chip below
-    /// the username.
-    public let label: String
+    public let deviceId: String
     /// Device's Ed25519 pubkey, 32 bytes hex. Identifies the device
     /// across re-issuance. Not displayed in the UI; the client uses
     /// it when signing requests on behalf of this device.
@@ -1627,14 +1612,14 @@ public struct DeviceCapabilityBlock: Codable, Equatable, Sendable {
     public let signature: String
 
     public init(
-        label: String,
+        deviceId: String,
         devicePubKey: String,
         scopes: [DeviceScope],
         grantId: String,
         expiresAt: Int64,
         signature: String
     ) {
-        self.label = label
+        self.deviceId = deviceId
         self.devicePubKey = devicePubKey
         self.scopes = scopes
         self.grantId = grantId
@@ -1648,12 +1633,12 @@ public struct DeviceCapabilityBlock: Codable, Equatable, Sendable {
     /// daemon does the authoritative enforcement; this UI-layer parse
     /// is best-effort for rendering.
     private enum CodingKeys: String, CodingKey {
-        case label, devicePubKey, scopes, grantId, expiresAt, signature
+        case deviceId, devicePubKey, scopes, grantId, expiresAt, signature
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.label = try c.decode(String.self, forKey: .label)
+        self.deviceId = try c.decode(String.self, forKey: .deviceId)
         self.devicePubKey = try c.decode(String.self, forKey: .devicePubKey)
         self.grantId = try c.decode(String.self, forKey: .grantId)
         self.expiresAt = try c.decode(Int64.self, forKey: .expiresAt)
@@ -1686,6 +1671,7 @@ public enum DeviceScope: String, Codable, Equatable, Sendable, CaseIterable {
     case addDevice = "add-device"
     case manageServices = "manage-services"
     case revokeOthers = "revoke-others"
+    case viewDirectory = "view-directory"
     case demoProvision = "demo-provision"
 
     /// Decoder that tolerates unknown future strings: an unrecognised

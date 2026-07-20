@@ -64,7 +64,8 @@ public final class JoinAccountViewModel {
 
     public struct AdmittedProfile: Equatable, Sendable {
         public let cloudName: String
-        public let deviceLabel: String
+        public let deviceId: String
+        public let deviceDisplayName: String
         public let quarantineUntil: Int64?
     }
 
@@ -80,7 +81,7 @@ public final class JoinAccountViewModel {
     private let importAdminRoot: @MainActor (Data) async throws -> Void
     /// Seam: the device label for the new device (defaults to a generic
     /// "iPhone"; production wires UIDevice.current.name).
-    private let deviceLabel: String
+    private let deviceDisplayName: String
 
     private var ttlInvalidated = false
 
@@ -97,7 +98,7 @@ public final class JoinAccountViewModel {
     ) {
         self.relay = relay
         self.server = server
-        self.deviceLabel = deviceLabel
+        self.deviceDisplayName = deviceLabel
         self.installUMK = installUMK
         self.importAdminRoot = importAdminRoot
     }
@@ -130,6 +131,11 @@ public final class JoinAccountViewModel {
         // .com doesn't verify it on the admit path).
         let handshakeSk = Curve25519.KeyAgreement.PrivateKey()
         let devicePubHex = HexUtil.encode(handshakeSk.publicKey.rawRepresentation)
+        guard let deviceId = try? AccountMetadata.generateDeviceId(),
+              let deviceIdBytes = HexUtil.decode(deviceId) else {
+            phase = .failed("Couldn't create a device identity. Try again.")
+            return
+        }
         let pushSigningKey = Curve25519.Signing.PrivateKey()
 
         let material: QrRelay.DerivedMaterial
@@ -146,7 +152,8 @@ public final class JoinAccountViewModel {
         // Seal + send our handshake/device pubkey (the admin derives the
         // same shared secret from it AND binds it in the admit). The Mock
         // bridge hands the admin the raw pubkey so its await resolves.
-        let devicePubRaw = handshakeSk.publicKey.rawRepresentation
+        var devicePubRaw = handshakeSk.publicKey.rawRepresentation
+        devicePubRaw.append(deviceIdBytes)
         do {
             let sealed = try QrRelay.seal(payload: devicePubRaw, with: material.aeadKey)
             provideRawPubkeyToRelay?(devicePubRaw)
@@ -160,7 +167,8 @@ public final class JoinAccountViewModel {
                 frame: bundleFrame,
                 aeadKey: material.aeadKey,
                 pushSigningKey: pushSigningKey,
-                devicePubHex: devicePubHex
+                devicePubHex: devicePubHex,
+                deviceId: deviceId
             )
         } catch is PairingRelayError {
             if ttlInvalidated { return }
@@ -174,7 +182,8 @@ public final class JoinAccountViewModel {
         frame: (ciphertextBase64Url: String, nonceBase64Url: String),
         aeadKey: SymmetricKey,
         pushSigningKey: Curve25519.Signing.PrivateKey,
-        devicePubHex: String
+        devicePubHex: String,
+        deviceId: String
     ) async {
         phase = .admitting
         // 1 — AEAD-open the bundle.
@@ -195,7 +204,8 @@ public final class JoinAccountViewModel {
         // 2 — The admit MUST bind OUR fresh device pubkey. A captured
         // admit aimed at a different device is rejected here (defense in
         // depth — .com also binds it server-side).
-        guard bundle.admit.newDevicePubHex.lowercased() == devicePubHex.lowercased() else {
+        guard bundle.admit.newDevicePubHex.lowercased() == devicePubHex.lowercased(),
+              bundle.admit.deviceId == deviceId else {
             phase = .failed("This pairing was for a different device. Try again.")
             return
         }
@@ -210,6 +220,7 @@ public final class JoinAccountViewModel {
         }
         let admit = DeviceAdmit(
             username: bundle.admit.username,
+            deviceId: bundle.admit.deviceId,
             newDevicePubHex: bundle.admit.newDevicePubHex,
             issuedAt: bundle.admit.issuedAt
         )
@@ -270,7 +281,8 @@ public final class JoinAccountViewModel {
 
         admittedProfile = AdmittedProfile(
             cloudName: account,
-            deviceLabel: deviceLabel,
+            deviceId: deviceId,
+            deviceDisplayName: deviceDisplayName,
             quarantineUntil: quarantineUntil
         )
         phase = .joined(account: account, quarantineUntil: quarantineUntil)
@@ -289,23 +301,23 @@ public final class JoinAccountViewModel {
         // use a placeholder provider token (the real token re-registers
         // via PushRegistrar once APNs grants one post-onboarding).
         let providerToken = HexUtil.encode(Data((0..<8).map { _ in UInt8.random(in: 0...255) }))
-        let label = deviceLabel
+        let deviceId = bundle.admit.deviceId
         let inner = PushTokenRegisterRequest.Inner(
             username: account,
+            deviceId: deviceId,
             platform: "apns",
             providerToken: providerToken,
             pushX25519Pub: pushPubHex,
-            label: label,
             issuedAt: issuedAt
         )
         // Sign the push register with a fresh device-held key (carried;
         // .com does not verify it on the admit path — skipSignatureVerify).
         let bytes = PushTokenRegister.canonicalBytes(
             username: account,
+            deviceId: deviceId,
             platform: "apns",
             providerToken: providerToken,
             pushX25519PubHex: pushPubHex,
-            label: label,
             issuedAt: issuedAt
         )
         let regSig = try pushSigningKey.signature(for: bytes)
@@ -313,6 +325,7 @@ public final class JoinAccountViewModel {
         let req = DeviceAdmitRequest(
             admit: .init(
                 username: bundle.admit.username,
+                deviceId: bundle.admit.deviceId,
                 newDevicePubHex: bundle.admit.newDevicePubHex,
                 issuedAt: bundle.admit.issuedAt
             ),

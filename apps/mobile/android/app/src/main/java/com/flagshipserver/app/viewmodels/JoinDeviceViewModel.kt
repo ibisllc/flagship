@@ -31,6 +31,7 @@ import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.DeviceAdmitRequest
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.PushTokenRegisterRequest
+import com.flagshipserver.app.core.AccountMetadata
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.DeviceAdmit
 import com.flagshipserver.app.core.DeviceAdmitClaim
@@ -93,6 +94,7 @@ class JoinDeviceViewModel(
      *  genuinely new device. */
     private val deviceKeyPair = Ed25519Sign.KeyPair.newKeyPair()
     private val devicePubHex: String get() = HexUtil.encode(deviceKeyPair.publicKey)
+    private val deviceId = AccountMetadata.generateDeviceId()
 
     /**
      * Connect to the relay, send the hello (x25519 pub || device pub),
@@ -101,7 +103,7 @@ class JoinDeviceViewModel(
     suspend fun start() {
         _phase.value = JoinDevicePhase.Connecting
         try {
-            val hello = session.phonePubKey + deviceKeyPair.publicKey  // 32 || 32
+            val hello = session.phonePubKey + deviceKeyPair.publicKey + requireNotNull(HexUtil.decode(deviceId))
             relay.connectAndHello(joinLink.sid, hello)
             val matchCode = session.pair(joinLink.adminPubKey)
             _phase.value = JoinDevicePhase.VerifySas(matchCode)
@@ -126,7 +128,8 @@ class JoinDeviceViewModel(
 
             // 1. The admit MUST bind OUR fresh device pubkey — a captured
             //    admit can't be re-aimed at us.
-            if (!bundle.admit.newDevicePubHex.equals(devicePubHex, ignoreCase = true)) {
+            if (!bundle.admit.newDevicePubHex.equals(devicePubHex, ignoreCase = true) ||
+                bundle.admit.deviceId != deviceId) {
                 _phase.value = JoinDevicePhase.Failed(
                     "This invite was issued for a different device. Start over.",
                 )
@@ -143,6 +146,7 @@ class JoinDeviceViewModel(
                 ?: throw IllegalStateException("admit signature is not valid hex")
             val admitForVerify = DeviceAdmit(
                 username = bundle.admit.username,
+                deviceId = bundle.admit.deviceId,
                 newDevicePubHex = bundle.admit.newDevicePubHex.lowercase(),
                 issuedAt = bundle.admit.issuedAt,
             )
@@ -185,13 +189,12 @@ class JoinDeviceViewModel(
             val push = Keystore.loadOrCreatePushX25519()
             val pushPubHex = HexUtil.encode(push.publicKey)
             val issuedAt = now()
-            val label = "${cloudName} (new device)"
             val canonical = com.flagshipserver.app.core.PushTokenRegister.canonicalBytes(
                 username = cloudName,
+                deviceId = deviceId,
                 platform = "fcm",
                 providerToken = providerToken,
                 pushX25519PubHex = pushPubHex,
-                label = label,
                 issuedAt = issuedAt,
             )
             val irk = Keystore.deriveIRK("Register this device")
@@ -202,16 +205,17 @@ class JoinDeviceViewModel(
                 req = DeviceAdmitRequest(
                     admit = DeviceAdmitRequest.AdmitEnvelope(
                         username = bundle.admit.username,
+                        deviceId = bundle.admit.deviceId,
                         newDevicePubHex = bundle.admit.newDevicePubHex.lowercase(),
                         issuedAt = bundle.admit.issuedAt,
                     ),
                     admitSig = bundle.admitSig.lowercase(),
                     request = PushTokenRegisterRequest.Inner(
                         username = cloudName,
+                        deviceId = deviceId,
                         platform = "fcm",
                         providerToken = providerToken,
                         pushX25519Pub = pushPubHex,
-                        label = label,
                         issuedAt = issuedAt,
                     ),
                     signature = registerSig,
@@ -225,7 +229,8 @@ class JoinDeviceViewModel(
             app.addProfile(
                 Profile(
                     cloudName = cloudName,
-                    deviceLabel = label,
+                    accountId = cloudName,
+                    deviceId = deviceId,
                     createdAt = now(),
                 ),
                 setActive = true,

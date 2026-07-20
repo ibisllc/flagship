@@ -328,7 +328,7 @@ private fun DeviceCapabilityChip(cap: DeviceCapabilityBlock) {
     } else {
         "${cap.scopes.size} scopes"
     }
-    val label = "Device: ${cap.label} · $summary"
+    val label = "Restricted device · $summary"
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier

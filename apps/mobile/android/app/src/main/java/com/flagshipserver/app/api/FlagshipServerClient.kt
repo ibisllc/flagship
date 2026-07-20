@@ -253,6 +253,7 @@ data class DeviceAdmitRequest(
     @Serializable
     data class AdmitEnvelope(
         val username: String,
+        val deviceId: String,
         /** The incoming device's freshly-minted pubkey, lowercased hex
          *  (32 bytes). */
         val newDevicePubHex: String,
@@ -934,20 +935,14 @@ data class DemoServerBlock(
 /** v2 device-addressing — mirror of the Worker's `deviceCapability`
  *  block in `packages/control-plane/src/usersCheck.ts`. Embedded into
  *  the `/api/users/check` response when the typed username matched
- *  the `<u>.<device-label>` syntax AND a matching active
- *  DeviceCapabilityGrant exists. See
- *  docs/v2-device-addressing-and-real-ticket.md §2 + §5.1.
+ *  a matching active DeviceCapabilityGrant exists.
  *
  *  Note: `scopes` is a wire-format list of strings. Use [scopeSet]
  *  for the typed forward-compat parse (unknown future scope strings
  *  are silently dropped). */
 @Serializable
 data class DeviceCapabilityBlock(
-    /** Human-meaningful label the user typed after the dot
-     *  ("reviewer", "ipad", "work-laptop"). RFC-1035-ish (a-z, 0-9,
-     *  hyphen; not at start/end; ≤24 chars). Used in the chip below
-     *  the username. */
-    val label: String,
+    val deviceId: String,
     /** Device's Ed25519 pubkey, 32 bytes hex. Identifies the device
      *  across re-issuance. */
     val devicePubKey: String,
@@ -989,6 +984,7 @@ enum class DeviceScope(val wire: String) {
     ADD_DEVICE("add-device"),
     MANAGE_SERVICES("manage-services"),
     REVOKE_OTHERS("revoke-others"),
+    VIEW_DIRECTORY("view-directory"),
     DEMO_PROVISION("demo-provision");
 
     companion object {
@@ -1090,10 +1086,7 @@ data class GatedRecoveryEnvelope(
     val updatedAt: Long? = null,
 )
 
-/** POST /api/push/register canonical-bytes envelope. Inner shape mirrors
- *  the protocol tag `flagship/push-token-register/v1` exactly. The
- *  `label` field slots between `pushX25519Pub` and `issuedAt`, matching
- *  the Worker side (packages/protocol/src/auth.ts). */
+/** POST /api/push/register canonical-bytes envelope. */
 @Serializable
 data class PushTokenRegisterRequest(
     val request: Inner,
@@ -1102,13 +1095,10 @@ data class PushTokenRegisterRequest(
     @Serializable
     data class Inner(
         val username: String,
+        val deviceId: String,
         val platform: String,        // "apns" | "fcm" | "webpush"
         val providerToken: String,   // FCM token (verbatim) / APNs hex (lowercased)
         val pushX25519Pub: String,   // hex
-        /** User-facing device label ("Pixel 8 — kitchen"). Surfaced in
-         *  the Trusted-devices list on .com. Part of the canonical
-         *  bytes the IRK signs over. */
-        val label: String,
         val issuedAt: Long,
     )
 }

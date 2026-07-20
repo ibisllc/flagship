@@ -662,7 +662,7 @@ export async function handleAdminCloudInitNow(
   if (!row) return notFound("no such demo user");
 
   // Idempotency: same shape as W11.
-  if (row.state === "up" || row.state === "provisioning") {
+  if ((row.state === "ready" && row.activeServerId) || row.state === "provisioning") {
     return {
       status: 200,
       body: {
@@ -764,7 +764,7 @@ export async function handleAdminCloudInitNow(
   // (Re-)mint the primary DeviceCapabilityGrant — same revoke-then-put
   // dance as handleAdminSnapshotNow so re-running admin-cloud-init-now
   // doesn't leave two active grants.
-  const existing = await deps.deviceCapabilityGrants.getActiveForUserLabel(
+  const existing = await deps.deviceCapabilityGrants.getActiveForUserDevice(
     u,
     "primary",
   );
@@ -775,7 +775,7 @@ export async function handleAdminCloudInitNow(
   const grant: DeviceCapabilityGrant = {
     grantId,
     username: u,
-    deviceLabel: "primary",
+    deviceId: "primary",
     devicePubKey: userIrk.publicKey,
     scopes: [...DEFAULT_DEMO_PRIMARY_SCOPES],
     issuedAt: now,
@@ -785,7 +785,7 @@ export async function handleAdminCloudInitNow(
   await deps.deviceCapabilityGrants.put({
     grantId,
     username: u,
-    deviceLabel: "primary",
+    deviceId: "primary",
     devicePubHex: userIrkHex,
     scopesJson: JSON.stringify(grant.scopes),
     issuedAt: grant.issuedAt,
@@ -832,7 +832,7 @@ export async function handleAdminCloudInitNow(
   // (cloud-init-direct doesn't use R2), so we leave that field
   // explicitly null.
   const image = deps.hetznerImage ?? "debian-12";
-  const transitioned = await deps.storage.transition(u, "none", "provisioning", {
+  const transitioned = await deps.storage.transition(u, "ready", "provisioning", {
     activeServerId: prov.serverId,
     activeServerIp: prov.ipv4,
     image,
@@ -884,6 +884,7 @@ interface InstallBlobJsonShort {
     userPubKey: string;
     issuedAt: number;
     expiresAt: number;
+    adminRootPubKey?: string;
   };
   authCodeUserSignature: string;
   installerGitRef: string;
@@ -893,7 +894,7 @@ interface InstallBlobJsonShort {
   diskEncryption?: "luks" | "none";
 }
 
-function installBlobJsonShortString(b: InstallBlob, _sig: Uint8Array): string {
+export function installBlobJsonShortString(b: InstallBlob, _sig: Uint8Array): string {
   const json: InstallBlobJsonShort = {
     version: 2,
     serverDomain: b.serverDomain,
@@ -911,6 +912,9 @@ function installBlobJsonShortString(b: InstallBlob, _sig: Uint8Array): string {
       userPubKey: bytesToHex(b.authCode.userPubKey),
       issuedAt: b.authCode.issuedAt,
       expiresAt: b.authCode.expiresAt,
+      ...(b.authCode.adminRootPubKey !== undefined
+        ? { adminRootPubKey: bytesToHex(b.authCode.adminRootPubKey) }
+        : {}),
     },
     authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
     installerGitRef: b.installerGitRef,

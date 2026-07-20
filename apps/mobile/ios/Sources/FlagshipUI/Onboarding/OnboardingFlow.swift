@@ -175,7 +175,9 @@ public struct OnboardingFlow: View {
         app.addProfile(
             Profile(
                 cloudName: profile.cloudName,
-                deviceLabel: profile.deviceLabel
+                accountId: profile.cloudName,
+                deviceId: profile.deviceId,
+                deviceDisplayName: profile.deviceDisplayName
             ),
             setActive: true
         )
@@ -191,7 +193,9 @@ public struct OnboardingFlow: View {
         app.addProfile(
             Profile(
                 cloudName: username,
-                deviceLabel: RealAccountLoginViewModel.adminDeviceLabel,
+                accountId: username,
+                deviceId: app.activeProfile?.deviceId ?? "",
+                deviceDisplayName: RealAccountLoginViewModel.adminDeviceLabel,
                 createdAt: app.activeProfile?.createdAt ?? Date()
             ),
             setActive: true

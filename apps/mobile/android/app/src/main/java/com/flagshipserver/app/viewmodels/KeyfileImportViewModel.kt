@@ -160,7 +160,7 @@ class KeyfileImportViewModel(
             }
             app.completeOnboarding(username = grace.username, pods = emptyList())
             app.activeProfile?.let { active ->
-                app.addProfile(active.copy(deviceLabel = ADMIN_DEVICE_LABEL), setActive = true)
+                app.addProfile(active.copy(deviceDisplayName = ADMIN_DEVICE_LABEL), setActive = true)
             }
             _phase.value = KeyfileImportPhase.Opened(grace.username)
         } catch (t: Throwable) {

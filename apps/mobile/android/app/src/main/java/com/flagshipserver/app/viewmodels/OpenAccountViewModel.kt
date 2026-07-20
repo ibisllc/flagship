@@ -21,6 +21,7 @@ package com.flagshipserver.app.viewmodels
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.UsernameClaimRequest
+import com.flagshipserver.app.core.AccountMetadata
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.UsernameClaim
@@ -152,7 +153,10 @@ class OpenAccountViewModel(
             //    the human-readable name so Settings / multi-profile read
             //    it back.
             val active = app.activeProfile
-            if (active != null) app.addProfile(active.copy(deviceLabel = label), setActive = true)
+            if (active != null) app.addProfile(
+                active.copy(deviceDisplayName = AccountMetadata.validateDisplayName(label)),
+                setActive = true,
+            )
 
             _phase.value = OpenAccountPhase.Opened
         } catch (t: Throwable) {

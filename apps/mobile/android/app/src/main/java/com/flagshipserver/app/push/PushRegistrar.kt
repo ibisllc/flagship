@@ -9,7 +9,6 @@
 
 package com.flagshipserver.app.push
 
-import android.os.Build
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.PushTokenRegisterRequest
 import com.flagshipserver.app.api.PushTokenRevokeRequest
@@ -50,23 +49,25 @@ class PushRegistrar(
             val push = Keystore.loadOrCreatePushX25519()
             val pushPubHex = HexUtil.encode(push.publicKey)
             val issuedAt = System.currentTimeMillis()
-            val label = sanitizeLabel(deviceLabel())
+            val deviceId = requireNotNull(appState.activeProfile?.deviceId?.takeIf { it.isNotEmpty() }) {
+                "account-scoped device identity is not initialized"
+            }
             val canonical = PushTokenRegister.canonicalBytes(
                 username = username,
+                deviceId = deviceId,
                 platform = "fcm",
                 providerToken = fcmToken,
                 pushX25519PubHex = pushPubHex,
-                label = label,
                 issuedAt = issuedAt,
             )
             val signature = HexUtil.encode(irk.sign(canonical))
             val req = PushTokenRegisterRequest(
                 request = PushTokenRegisterRequest.Inner(
                     username = username,
+                    deviceId = deviceId,
                     platform = "fcm",
                     providerToken = fcmToken,
                     pushX25519Pub = pushPubHex,
-                    label = label,
                     issuedAt = issuedAt,
                 ),
                 signature = signature,
@@ -77,42 +78,6 @@ class PushRegistrar(
             _lastError.value = null
         } catch (t: Throwable) {
             _lastError.value = t
-        }
-    }
-
-    /** Default device label = "<Manufacturer> <Model>" (e.g.
-     *  "Google Pixel 8"). Android doesn't expose UIDevice.current.name
-     *  equivalent; an editable nickname can layer later. Visible to
-     *  tests via `internal`. */
-    internal fun deviceLabel(): String {
-        val manufacturer = (Build.MANUFACTURER ?: "").trim().replaceFirstChar { it.titlecase() }
-        val model = (Build.MODEL ?: "").trim()
-        return when {
-            manufacturer.isEmpty() && model.isEmpty() -> "Android"
-            model.startsWith(manufacturer, ignoreCase = true) || manufacturer.isEmpty() -> model
-            else -> "$manufacturer $model"
-        }
-    }
-
-    /** Length-cap + strip control characters to match the Worker's
-     *  validation (control-plane/src/push.ts caps at 64 bytes + rejects
-     *  0x00-0x1f + 0x7f). Internal so unit tests can exercise the
-     *  contract without a CredentialManager round-trip. */
-    internal companion object {
-        fun sanitizeLabel(raw: String): String {
-            val stripped = buildString(raw.length) {
-                for (c in raw) {
-                    val v = c.code
-                    if (v >= 0x20 && v != 0x7f) append(c)
-                }
-            }.trim()
-            // Truncate by UTF-8 bytes — not chars — since the server
-            // caps bytes. Step back until under the 64-byte budget.
-            var out = stripped
-            while (out.toByteArray(Charsets.UTF_8).size > 64 && out.isNotEmpty()) {
-                out = out.dropLast(1)
-            }
-            return out
         }
     }
 

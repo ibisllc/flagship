@@ -92,6 +92,7 @@ public final class AddDeviceViewModel {
     private var aeadKey: SymmetricKey?
     private var sid: String?
     private var incomingDevicePubHex: String?
+    private var incomingDeviceId: String?
     private var ttlTask: Task<Void, Never>?
 
     public init(
@@ -141,18 +142,21 @@ public final class AddDeviceViewModel {
                 sid: session,
                 aeadKey: SymmetricKey(size: .bits256)
             )
-            guard devicePubRaw.count == 32 else {
+            guard devicePubRaw.count == 48 else {
                 phase = .failed("The other device sent an invalid key.")
                 return
             }
+            let publicKey = Data(devicePubRaw.prefix(32))
+            let deviceIdBytes = Data(devicePubRaw.suffix(16))
             // Derive the real shared material against the incoming device
             // pubkey — the SAS the human compares + the AEAD seal key.
             let material = try QrRelay.deriveMaterial(
                 phonePrivateKey: sk,
-                browserPublicKey: devicePubRaw
+                browserPublicKey: publicKey
             )
             aeadKey = material.aeadKey
-            incomingDevicePubHex = HexUtil.encode(devicePubRaw)
+            incomingDevicePubHex = HexUtil.encode(publicKey)
+            incomingDeviceId = HexUtil.encode(deviceIdBytes)
             phase = .confirmMatch(qrUrl: qr, matchCode: material.matchCode, gateExpired: false)
             // 600ms anti-double-tap gate.
             Task { [weak self] in
@@ -175,13 +179,15 @@ public final class AddDeviceViewModel {
     /// delivers it. No-op until the anti-double-tap gate has elapsed.
     public func confirmMatch() async {
         guard case .confirmMatch(_, _, true) = phase,
-              let sid, let aeadKey, let devicePubHex = incomingDevicePubHex
+              let sid, let aeadKey, let devicePubHex = incomingDevicePubHex,
+              let deviceId = incomingDeviceId
         else { return }
         phase = .admitting
         do {
             let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
             let admit = DeviceAdmit(
                 username: account,
+                deviceId: deviceId,
                 newDevicePubHex: devicePubHex,
                 issuedAt: issuedAt
             )
@@ -203,6 +209,7 @@ public final class AddDeviceViewModel {
                 umkSeedHex: umkHex,
                 admit: .init(
                     username: account,
+                    deviceId: deviceId,
                     newDevicePubHex: devicePubHex,
                     issuedAt: issuedAt
                 ),
