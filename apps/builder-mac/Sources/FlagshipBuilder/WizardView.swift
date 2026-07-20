@@ -876,11 +876,20 @@ struct WizardView: View {
     /// Clicking anywhere on it slides the log overlay up or down.
     private var logBar: some View {
         VStack(spacing: 0) {
-            Divider()
+            // The separator only rests here while the log is CLOSED. When it opens
+            // the line slides up to the top of the log (see logOverlay), so no line
+            // shows at the bottom over the log content.
+            if !showLog {
+                Divider()
+            }
             HStack {
+                // Caret in a high-contrast filled circle (dynamic light/dark) for
+                // visibility — the ink circle + bg glyph invert with the appearance.
                 Image(systemName: showLog ? "chevron.down" : "chevron.up")
-                    .font(FB.Font.caption())
-                    .foregroundStyle(FB.Colors.textMuted)
+                    .font(FB.Font.caption().weight(.bold))
+                    .foregroundStyle(FB.Colors.bg)
+                    .frame(width: 20, height: 20)
+                    .background(Circle().fill(FB.Colors.ink))
                 Text("Log")
                     .font(FB.Font.caption())
                     .foregroundStyle(FB.Colors.textMuted)
@@ -890,12 +899,8 @@ struct WizardView: View {
                         .foregroundStyle(FB.Colors.textMuted)
                 }
                 Spacer()
-                if !model.logLines.isEmpty && !model.isRunning {
-                    Button("Clear") { model.clearLog() }
-                        .buttonStyle(.link)
-                        .font(FB.Font.caption())
-                        .pointerCursor()
-                }
+                // Clear moved into the log overlay (only visible while the log is
+                // on screen, above the resting separator's position).
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -914,10 +919,29 @@ struct WizardView: View {
     /// The log itself — slides up over the panes (it does not push them)
     /// and fills the available area so the whole scroll is reachable.
     private var logOverlay: some View {
-        LogPane(model: model)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.top, FB.Spacing.s2)
-            .background(FB.Colors.bg)
+        VStack(spacing: 0) {
+            // The separator, slid up to the top of the UI while the log is open —
+            // it rides the overlay's move-from-bottom transition, then slides back
+            // down to the log bar's resting position on close.
+            Divider()
+            HStack {
+                Spacer()
+                // Clear now lives with the log — above where the resting separator
+                // sits — and only while the log is on screen.
+                if !model.logLines.isEmpty && !model.isRunning {
+                    Button("Clear") { model.clearLog() }
+                        .buttonStyle(.link)
+                        .font(FB.Font.caption())
+                        .pointerCursor()
+                }
+            }
+            .frame(height: 16)
+            .padding(.horizontal, FB.Spacing.s5)
+            .padding(.vertical, FB.Spacing.s2)
+            LogPane(model: model)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(FB.Colors.bg)
     }
 }
 
