@@ -168,6 +168,23 @@ public sealed class VMLifecycle
     /// Convenience for the live adapter: derive the elapsed install time from
     /// this machine's own state timestamp. Only meaningful while installing.
     /// </summary>
+    /// <summary>
+    /// A sealed guest awaiting phone-unlock should come online within a few
+    /// minutes; past this it has very likely failed to reach the network (e.g. a
+    /// first-boot NIC/DHCP failure) and would otherwise spin on "Waiting for you
+    /// to unlock" forever with no hint. The UI keeps polling, but past this
+    /// threshold it surfaces an advisory. Mirrors macOS
+    /// VMLifecycle.comingUpStallThreshold / Linux COMING_UP_STALL_THRESHOLD.
+    /// </summary>
+    public static readonly TimeSpan ComingUpStallThreshold = TimeSpan.FromMinutes(8);
+
+    /// <summary>
+    /// True iff a hosted server has been sealed + awaiting unlock past the stall
+    /// threshold. Pure so the view can evaluate it against a live clock.
+    /// </summary>
+    public static bool ComingUpIsStalled(VMStateKind state, TimeSpan elapsed) =>
+        state == VMStateKind.AwaitingPhoneUnlock && elapsed >= ComingUpStallThreshold;
+
     public VMEvent VerdictForCleanInstallStop(DateTimeOffset now)
     {
         if (State.Kind != VMStateKind.Installing)

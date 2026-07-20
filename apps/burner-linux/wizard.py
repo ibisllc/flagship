@@ -55,6 +55,7 @@ from vm import host_arch, recipe_info, resource_plan, ssh_launch
 from vm.config import VMConfig
 from vm.host_resources import HostResources
 from vm.inventory import VMStoreError
+from vm.lifecycle import VMStateKind
 from vm.manager import VMManager
 from vm.server_tier import ServerDestination, ServerTier
 
@@ -1634,9 +1635,11 @@ def build_window(application, model: Optional[WizardModel] = None):
             name_label.set_wrap(True)
             name_label.set_selectable(True)
             col.append(name_label)
-            state_label = Gtk.Label(
-                label=f"● {server.state_label} · {server.badge_label}", xalign=0.0
-            )
+            if server.coming_up_stalled(time.time()):
+                _state_text = "⚠ Taking longer than expected — check the network"
+            else:
+                _state_text = f"● {server.state_label} · {server.badge_label}"
+            state_label = Gtk.Label(label=_state_text, xalign=0.0)
             state_label.add_css_class("dim-label")
             col.append(state_label)
             spec_label = Gtk.Label(label=server.spec_summary, xalign=0.0)
@@ -1802,7 +1805,7 @@ def build_window(application, model: Optional[WizardModel] = None):
             detail_fqdn.set_text(server.fqdn)
             detail_badge.set_text(server.badge_label)
             detail_state.set_text(server.state_label)
-            detail_subtitle.set_text(server.status_subtitle)
+            detail_subtitle.set_text(server.status_subtitle_at(time.time()))
             detail_spec.set_text(server.spec_summary)
             detail_start.set_visible(server.can_start)
             detail_stop.set_visible(server.can_stop)
@@ -1917,6 +1920,17 @@ def build_window(application, model: Optional[WizardModel] = None):
 
     wizard_model.on_change = _on_change
     _render()
+
+    # A sealed guest awaiting unlock produces no state change while it waits, so
+    # nothing re-renders and the "taking longer than expected" advisory would
+    # never appear on its own. Re-render on a slow timer while any server is in
+    # that state (cheap; a no-op otherwise). Runs on the GTK main loop already.
+    def _stall_tick() -> bool:
+        if any(s.state_kind == VMStateKind.AWAITING_PHONE_UNLOCK for s in wizard_model.vm.servers):
+            _render()
+        return True
+
+    GLib.timeout_add_seconds(30, _stall_tick)
 
     # Kick off the initial disk scan once the window is shown.
     GLib.idle_add(wizard_model.refresh_disks)

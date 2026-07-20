@@ -44,6 +44,22 @@ public partial class MainWindow : Window
         {
             Dispatcher.InvokeAsync(() => LogScroller?.ScrollToEnd());
         };
+        // A sealed guest awaiting unlock produces no state change while it waits,
+        // so nothing re-renders and the "taking longer than expected" advisory
+        // would never appear on its own. Tick a slow UI timer that re-raises the
+        // time-derived bindings for any awaiting-unlock server (cheap; a no-op
+        // otherwise). Mirrors the Mac TimelineView / Linux GLib timeout.
+        var stallTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(30),
+        };
+        stallTimer.Tick += (_, _) =>
+        {
+            foreach (var s in _wizard.Vm.Servers)
+                if (s.StateKind == VMStateKind.AwaitingPhoneUnlock)
+                    s.RefreshTimeDerivedState();
+        };
+        stallTimer.Start();
     }
 
     // ---- Recipe row ----

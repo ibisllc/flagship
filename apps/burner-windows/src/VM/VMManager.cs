@@ -45,17 +45,43 @@ public sealed class HostedServer : INotifyPropertyChanged
     public string StateLabel => _record.State.Label;
     public VMStateKind StateKind => _record.State.Kind;
 
-    public string StatusSubtitle => _record.State.Kind switch
+    public string StatusSubtitle
     {
-        VMStateKind.AwaitingPhoneUnlock => _record.Config.BootUnlockMode == "approve"
-            ? "The disk is sealed — approve the unlock on your phone."
-            : "The disk is sealed — waiting for the phone-home unlock.",
-        VMStateKind.Installing => "Unattended install running inside the VM.",
-        VMStateKind.Running => $"Serving at https://{_record.Config.ServerDomain}/",
-        VMStateKind.Failed => _record.State.Failure?.Reason ?? "",
-        VMStateKind.Installed or VMStateKind.Stopped => "Start the server to bring it online.",
-        _ => "Preparing the installer…",
-    };
+        get
+        {
+            if (ComingUpStalled)
+                return "Taking longer than expected — the box may not have reached the network. Check that it's online, or power off and retry.";
+            return _record.State.Kind switch
+            {
+                VMStateKind.AwaitingPhoneUnlock => _record.Config.BootUnlockMode == "approve"
+                    ? "The disk is sealed — approve the unlock on your phone."
+                    : "The disk is sealed — waiting for the phone-home unlock.",
+                VMStateKind.Installing => "Unattended install running inside the VM.",
+                VMStateKind.Running => $"Serving at https://{_record.Config.ServerDomain}/",
+                VMStateKind.Failed => _record.State.Failure?.Reason ?? "",
+                VMStateKind.Installed or VMStateKind.Stopped => "Start the server to bring it online.",
+                _ => "Preparing the installer…",
+            };
+        }
+    }
+
+    /// <summary>True iff this sealed guest has awaited unlock past the stall
+    /// threshold — the UI surfaces an advisory then (the poll keeps running).
+    /// Falls back to CreatedAt for legacy records with no StateChangedAt.</summary>
+    public bool ComingUpStalled
+    {
+        get
+        {
+            var since = _record.StateChangedAt == default ? _record.CreatedAt : _record.StateChangedAt;
+            return VMLifecycle.ComingUpIsStalled(_record.State.Kind, DateTimeOffset.UtcNow - since);
+        }
+    }
+
+    /// <summary>Re-raise PropertyChanged for time-derived bindings (StatusSubtitle)
+    /// so a sealed guest that produces no state change while it waits still flips
+    /// to the stall advisory. Called on a slow UI timer while awaiting unlock.</summary>
+    public void RefreshTimeDerivedState() =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
 
     public string SpecSummary
     {
@@ -155,8 +181,10 @@ public sealed class VMManager
                 VMStateKind.Installing => record with
                 {
                     State = VMState.Failed(VMFailurePhase.Install, "The app quit while the install was running."),
+                    StateChangedAt = _clock(),
                 },
-                VMStateKind.AwaitingPhoneUnlock or VMStateKind.Running => record with { State = VMState.Stopped },
+                VMStateKind.AwaitingPhoneUnlock or VMStateKind.Running =>
+                    record with { State = VMState.Stopped, StateChangedAt = _clock() },
                 _ => record,
             };
             if (!ReferenceEquals(normalized, record))
@@ -176,11 +204,13 @@ public sealed class VMManager
     /// </summary>
     public void CreateServer(VMConfig config)
     {
+        var now = _clock();
         var record = new VMRecord
         {
             Config = config,
             State = VMState.Created,
-            CreatedAt = _clock(),
+            CreatedAt = now,
+            StateChangedAt = now,
             Tier = ServerTier.HostedVM,
         };
         Store.Create(record);
@@ -231,7 +261,7 @@ public sealed class VMManager
             Log($"VM {name}: ignored {ev.Kind} in state {server.Record.State.Label}");
             return;
         }
-        server.Record = server.Record with { State = lc.State };
+        server.Record = server.Record with { State = lc.State, StateChangedAt = lc.StateChangedAt };
         try { Store.Save(server.Record); } catch { }
         await RunEffectsAsync(effects, server.Record.Config);
         SyncUnlockPoll(server.Record.Config);

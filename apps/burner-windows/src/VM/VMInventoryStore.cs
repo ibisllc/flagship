@@ -14,6 +14,10 @@ public sealed record VMRecord
     [JsonConverter(typeof(VMStateJsonConverter))]
     public VMState State { get; init; } = VMState.Created;
     public required DateTimeOffset CreatedAt { get; init; }
+    // When the current state was entered (mirrors macOS VMRecord.stateChangedAt /
+    // Linux state_changed_at). Drives the "still coming up" stall advisory. Legacy
+    // bundles predate it ⇒ default(DateTimeOffset); callers fall back to CreatedAt.
+    public DateTimeOffset StateChangedAt { get; init; }
     [JsonConverter(typeof(ServerTierJsonConverter))]
     public ServerTier Tier { get; init; } = ServerTier.HostedVM;
 }

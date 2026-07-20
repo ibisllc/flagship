@@ -31,6 +31,7 @@ from .lifecycle import (
     VMLifecycleError,
     VMState,
     VMStateKind,
+    coming_up_is_stalled,
 )
 from .qemu_host import QemuHost, QemuHostError
 from .qemu_locator import QemuLocatorError, QemuToolchain, locate
@@ -88,6 +89,22 @@ class HostedServer:
         if s.kind in (VMStateKind.INSTALLED, VMStateKind.STOPPED):
             return "Start the server to bring it online."
         return "Preparing the installer…"
+
+    def coming_up_stalled(self, now: float) -> bool:
+        """True iff this sealed guest has awaited unlock past the stall
+        threshold — the UI surfaces an advisory then (the poll keeps running)."""
+        since = self.record.state_changed_at or self.record.created_at
+        return coming_up_is_stalled(self.record.state.kind, now - since)
+
+    def status_subtitle_at(self, now: float) -> str:
+        """status_subtitle, but returns the stall advisory once a sealed guest
+        has waited too long to come online."""
+        if self.coming_up_stalled(now):
+            return (
+                "Taking longer than expected — the box may not have reached the "
+                "network. Check that it's online, or power off and retry."
+            )
+        return self.status_subtitle
 
     @property
     def spec_summary(self) -> str:
@@ -269,6 +286,7 @@ class VMManager:
                     ),
                     created_at=record.created_at,
                     tier=record.tier,
+                    state_changed_at=self._clock(),
                 )
             elif kind in (VMStateKind.AWAITING_PHONE_UNLOCK, VMStateKind.RUNNING):
                 normalized = VMRecord(
@@ -276,6 +294,7 @@ class VMManager:
                     state=VMState.stopped(),
                     created_at=record.created_at,
                     tier=record.tier,
+                    state_changed_at=self._clock(),
                 )
             else:
                 normalized = record
@@ -306,11 +325,13 @@ class VMManager:
         refusal = self.arch_refusal(config)
         if refusal is not None:
             raise ValueError(refusal)
+        now = self._clock()
         record = VMRecord(
             config=config,
             state=VMState.created(),
-            created_at=self._clock(),
+            created_at=now,
             tier=ServerTier.HOSTED_VM,
+            state_changed_at=now,
         )
         self.store.create(record)
         self._insert_sorted(HostedServer(record))
@@ -383,6 +404,7 @@ class VMManager:
             state=lc.state,
             created_at=server.record.created_at,
             tier=server.record.tier,
+            state_changed_at=lc.state_changed_at,
         )
         try:
             self.store.save(server.record)

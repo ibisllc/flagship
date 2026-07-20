@@ -5,13 +5,28 @@ from __future__ import annotations
 import pytest
 
 from vm.lifecycle import (
+    COMING_UP_STALL_THRESHOLD_SECONDS,
     VMEvent,
     VMEventKind,
     VMFailurePhase,
     VMLifecycle,
     VMState,
     VMStateKind,
+    coming_up_is_stalled,
 )
+
+
+def test_coming_up_stall_advisory():
+    below = COMING_UP_STALL_THRESHOLD_SECONDS - 1
+    above = COMING_UP_STALL_THRESHOLD_SECONDS + 1
+    # Only in the awaiting-unlock state, and only past the threshold.
+    assert not coming_up_is_stalled(VMStateKind.AWAITING_PHONE_UNLOCK, below)
+    assert coming_up_is_stalled(VMStateKind.AWAITING_PHONE_UNLOCK, above)
+    # Exactly at the threshold trips (inclusive).
+    assert coming_up_is_stalled(VMStateKind.AWAITING_PHONE_UNLOCK, COMING_UP_STALL_THRESHOLD_SECONDS)
+    # Never fires outside the awaiting-unlock state, no matter how long.
+    assert not coming_up_is_stalled(VMStateKind.RUNNING, above)
+    assert not coming_up_is_stalled(VMStateKind.INSTALLING, above)
 
 
 def test_labels_are_user_facing():

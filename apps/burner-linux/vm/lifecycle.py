@@ -180,6 +180,23 @@ def verdict_for_clean_install_stop(elapsed_seconds: float) -> VMEvent:
     )
 
 
+# A sealed guest awaiting phone-unlock should come online within a few minutes;
+# past this it has very likely failed to reach the network (e.g. a first-boot
+# NIC/DHCP failure) and would otherwise spin on "Waiting for you to unlock"
+# forever with no hint. The UI keeps polling, but past this threshold it surfaces
+# an advisory. Mirrors macOS VMLifecycle.comingUpStallThreshold.
+COMING_UP_STALL_THRESHOLD_SECONDS = 8 * 60.0
+
+
+def coming_up_is_stalled(state_kind: VMStateKind, elapsed_seconds: float) -> bool:
+    """True iff a hosted server has been sealed + awaiting unlock past the stall
+    threshold. Pure so the view can evaluate it against a live clock."""
+    return (
+        state_kind == VMStateKind.AWAITING_PHONE_UNLOCK
+        and elapsed_seconds >= COMING_UP_STALL_THRESHOLD_SECONDS
+    )
+
+
 class VMLifecycle:
     def __init__(
         self,

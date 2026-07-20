@@ -60,6 +60,10 @@ class VMRecord:
     state: VMState
     created_at: float
     tier: ServerTier = ServerTier.HOSTED_VM
+    # When the current state was entered (mirrors macOS VMRecord.stateChangedAt).
+    # Drives the "still coming up" stall advisory. 0.0 (legacy bundles) ⇒ callers
+    # fall back to created_at.
+    state_changed_at: float = 0.0
 
 
 class VMStoreErrorKind(enum.Enum):
@@ -138,16 +142,22 @@ def _record_to_dict(r: VMRecord) -> dict:
         "config": _config_to_dict(r.config),
         "state": _state_to_dict(r.state),
         "createdAt": r.created_at,
+        # Written raw (round-trip identity); the created_at fallback for a 0.0 /
+        # legacy value is applied at use time (HostedServer.coming_up_stalled).
+        "stateChangedAt": r.state_changed_at,
         "tier": r.tier.value,
     }
 
 
 def _record_from_dict(d: dict) -> VMRecord:
+    created = float(d.get("createdAt", 0.0))
     return VMRecord(
         config=_config_from_dict(d["config"]),
         state=_state_from_dict(d.get("state", {"kind": "created"})),
-        created_at=float(d.get("createdAt", 0.0)),
+        created_at=created,
         tier=ServerTier(d.get("tier", "hosted-vm")),
+        # Legacy bundles predate the field ⇒ fall back to created_at.
+        state_changed_at=float(d.get("stateChangedAt", created)),
     )
 
 
