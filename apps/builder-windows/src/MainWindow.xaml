@@ -29,6 +29,23 @@
         <local:StateKindToGlyphConverter x:Key="StateKindToGlyph"/>
     </Window.Resources>
 
+    <DockPanel>
+    <!-- Native top menu — the counterpart of the macOS menu bar and the Linux
+         hamburger. (Appearance/dark-mode is not here yet: this WPF app ships a
+         single light palette; adding Auto/Light/Dark needs a dark resource set.) -->
+    <Menu DockPanel.Dock="Top" Background="{StaticResource FB.Surface}" Padding="4,2">
+        <MenuItem Header="_File">
+            <MenuItem Header="New Server" Click="MenuNewServer_Click"/>
+            <Separator/>
+            <MenuItem Header="Exit" Click="MenuExit_Click"/>
+        </MenuItem>
+        <MenuItem Header="_Help">
+            <MenuItem Header="Documentation" Click="MenuDocumentation_Click"/>
+            <MenuItem Header="Report an Issue" Click="MenuReportIssue_Click"/>
+            <Separator/>
+            <MenuItem Header="About Flagship Studio" Click="MenuAbout_Click"/>
+        </MenuItem>
+    </Menu>
     <Grid Margin="0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>   <!-- header -->
@@ -927,4 +944,5 @@
             </StackPanel>
         </Border>
     </Grid>
+    </DockPanel>
 </Window>

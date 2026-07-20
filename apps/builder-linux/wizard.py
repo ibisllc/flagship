@@ -1089,6 +1089,78 @@ def build_window(application, model: Optional[WizardModel] = None):
     mode_box.append(mode_switch)
     header.pack_end(mode_box)
 
+    # ---- primary menu (☰): appearance, New Server, help, about/quit ----
+    # Native GNOME hamburger menu — the counterpart of the macOS menu bar and
+    # the Windows top menu. Appearance (Auto/Light/Dark) drives libadwaita's
+    # StyleManager; Auto (the default) follows the system like macOS's "".
+    def _win_action(name, callback):
+        act = Gio.SimpleAction.new(name, None)
+        act.connect("activate", lambda _a, _p: callback())
+        window.add_action(act)
+
+    def _open_uri(uri):
+        Gio.AppInfo.launch_default_for_uri(uri, None)
+
+    def _show_about():
+        dlg = Gtk.AboutDialog()
+        dlg.set_transient_for(window)
+        dlg.set_modal(True)
+        dlg.set_program_name("Flagship Studio")
+        dlg.set_version("0.1.0")
+        dlg.set_comments("Build and host your own Flagship server.")
+        dlg.set_website("https://flagshipserver.com")
+        dlg.present()
+
+    _win_action("new-server", lambda: wizard_model.reset_to_new_server())
+    _win_action("documentation", lambda: _open_uri("https://flagshipserver.com/docs"))
+    _win_action("report-issue", lambda: _open_uri("https://flagshipserver.com/security/report.html"))
+    _win_action("about", _show_about)
+    _win_action("quit", lambda: window.close())
+
+    style_mgr = Adw.StyleManager.get_default()
+    _scheme_map = {
+        "auto": Adw.ColorScheme.DEFAULT,
+        "light": Adw.ColorScheme.FORCE_LIGHT,
+        "dark": Adw.ColorScheme.FORCE_DARK,
+    }
+    scheme_action = Gio.SimpleAction.new_stateful(
+        "color-scheme", GLib.VariantType.new("s"), GLib.Variant("s", "auto"))
+
+    def _on_scheme(action, param):
+        action.set_state(param)
+        style_mgr.set_color_scheme(_scheme_map.get(param.get_string(), Adw.ColorScheme.DEFAULT))
+
+    scheme_action.connect("activate", _on_scheme)
+    window.add_action(scheme_action)
+
+    _menu = Gio.Menu()
+    _sec_new = Gio.Menu()
+    _sec_new.append("New Server", "win.new-server")
+    _menu.append_section(None, _sec_new)
+
+    _appearance = Gio.Menu()
+    _appearance.append("Auto (System)", "win.color-scheme::auto")
+    _appearance.append("Light", "win.color-scheme::light")
+    _appearance.append("Dark", "win.color-scheme::dark")
+    _sec_appear = Gio.Menu()
+    _sec_appear.append_submenu("Appearance", _appearance)
+    _menu.append_section(None, _sec_appear)
+
+    _sec_help = Gio.Menu()
+    _sec_help.append("Documentation", "win.documentation")
+    _sec_help.append("Report an Issue", "win.report-issue")
+    _menu.append_section(None, _sec_help)
+
+    _sec_about = Gio.Menu()
+    _sec_about.append("About Flagship Studio", "win.about")
+    _sec_about.append("Quit", "win.quit")
+    _menu.append_section(None, _sec_about)
+
+    menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic")
+    menu_btn.set_menu_model(_menu)
+    menu_btn.set_tooltip_text("Main menu")
+    header.pack_end(menu_btn)
+
     # Main vertical layout: (main panes | hosted-servers sidebar) + log pane.
     root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
     if hasattr(Adw, "ToolbarView"):

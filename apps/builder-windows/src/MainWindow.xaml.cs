@@ -62,6 +62,30 @@ public partial class MainWindow : Window
         stallTimer.Start();
     }
 
+    // ---- Top menu ----
+
+    private void MenuNewServer_Click(object sender, RoutedEventArgs e)
+    {
+        CloseConsole();
+        _wizard.ResetToNewServer();
+    }
+
+    private void MenuExit_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void MenuDocumentation_Click(object sender, RoutedEventArgs e)
+        => OpenUrl("https://flagshipserver.com/docs");
+
+    private void MenuReportIssue_Click(object sender, RoutedEventArgs e)
+        => OpenUrl("https://flagshipserver.com/security/report.html");
+
+    private void MenuAbout_Click(object sender, RoutedEventArgs e)
+        => MessageBox.Show(this,
+            "Flagship Studio 0.1.0\n\nBuild and host your own Flagship server.\nhttps://flagshipserver.com",
+            "About Flagship Studio", MessageBoxButton.OK, MessageBoxImage.Information);
+
+    private static void OpenUrl(string url)
+        => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+
     // ---- Recipe row ----
 
     private void RecipeRow_DragEnter(object sender, DragEventArgs e) => HandleDragEnter(RecipeRow, e);
