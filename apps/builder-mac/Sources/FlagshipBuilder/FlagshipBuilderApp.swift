@@ -21,16 +21,53 @@ enum AppMain {
 }
 
 struct FlagshipBuilderApp: App {
+    // Owned at the app level so the native menu bar can drive it (New Server,
+    // appearance) — the window and the menu share one model.
+    @StateObject private var model = WizardModel()
+
     var body: some Scene {
         WindowGroup("Flagship Studio", id: "main") {
-            WizardView()
+            WizardView(model: model)
         }
         .windowResizability(.contentSize)
+        .commands { BuilderCommands(model: model) }
 
         MenuBarExtra {
             MenuBarContent()
         } label: {
             MenuBarLabel()
+        }
+    }
+}
+
+/// Native menu-bar commands. Keeps appearance (Auto/Light/Dark) out of the
+/// window chrome and in the standard place, plus a New Server item and Help
+/// links. Appearance is stored under the same `builder.theme` AppStorage key
+/// WizardView reads to apply `preferredColorScheme`.
+struct BuilderCommands: Commands {
+    let model: WizardModel
+    @AppStorage("builder.theme") private var theme = ""
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("New Server") { model.selectedHostedServer = nil }
+                .keyboardShortcut("n", modifiers: .command)
+        }
+        CommandMenu("View") {
+            Picker("Appearance", selection: $theme) {
+                Text("Auto (System)").tag("")
+                Text("Light").tag("light")
+                Text("Dark").tag("dark")
+            }
+            .pickerStyle(.inline)
+        }
+        CommandGroup(replacing: .help) {
+            Button("Flagship Studio Help") {
+                NSWorkspace.shared.open(URL(string: "https://flagshipserver.com/docs")!)
+            }
+            Button("Report an Issue…") {
+                NSWorkspace.shared.open(URL(string: "https://flagshipserver.com/security/report.html")!)
+            }
         }
     }
 }

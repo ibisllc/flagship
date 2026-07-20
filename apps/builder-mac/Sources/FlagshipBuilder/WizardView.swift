@@ -19,7 +19,7 @@ enum FlagshipLinks {
 /// collapsed log drawer at the bottom. Each card carries a one-line
 /// description and a help link to the website.
 struct WizardView: View {
-    @StateObject private var model = WizardModel()
+    @ObservedObject var model: WizardModel
     @State private var showLog = false
     /// Tracks which Wi-Fi field holds the keyboard focus so we can resign it
     /// when the log overlay opens — otherwise AppKit leaves the blue focus
@@ -27,9 +27,9 @@ struct WizardView: View {
     @FocusState private var wifiFocus: WifiField?
 
     private enum WifiField: Hashable { case ssid, password }
-    // "" = follow the system appearance until the user picks a side.
+    // "" = follow the system appearance until the user picks a side (chosen from
+    // the menu bar: View → Appearance → Auto / Light / Dark).
     @AppStorage("builder.theme") private var theme = ""
-    @Environment(\.colorScheme) private var effectiveScheme
 
     private var preferredScheme: ColorScheme? {
         switch theme {
@@ -547,7 +547,6 @@ struct WizardView: View {
 
     private var header: some View {
         HStack(spacing: FB.Spacing.s2) {
-            themeToggle
             if model.selectedHostedServer != nil {
                 homeButton
             }
@@ -576,34 +575,6 @@ struct WizardView: View {
         .buttonStyle(.plain)
         .help("Return to pairing home")
         .pointerCursor()
-    }
-
-    /// Day/night toggle. Shows the side you'd switch *to*: a sun when
-    /// you're in the dark, a moon when you're in the light. Until first
-    /// tapped the app follows the system appearance.
-    private var themeToggle: some View {
-        let isDark = effectiveScheme == .dark
-        return Button {
-            theme = isDark ? "light" : "dark"
-        } label: {
-            Image(systemName: isDark ? "sun.max.fill" : "moon.fill")
-                .imageScale(.medium)
-                .foregroundStyle(FB.Colors.textMuted)
-                .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: FB.Radius.sm)
-                        .fill(FB.Colors.surface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: FB.Radius.sm)
-                        .strokeBorder(FB.Colors.border, lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .help(isDark ? "Switch to day" : "Switch to night")
-        .onHover { hovering in
-            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
     }
 
     // MARK: - Rows
