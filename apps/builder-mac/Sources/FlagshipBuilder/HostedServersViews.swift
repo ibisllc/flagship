@@ -13,53 +13,50 @@ struct HostedServersSidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // The section title only makes sense once there is a list to title;
-            // an empty machine shows just the "no servers" message, no header.
-            if !vmManager.servers.isEmpty {
+            if vmManager.servers.isEmpty {
+                // Empty machine: no header, and the message + icon sit centered
+                // vertically in the sidebar body (filling the space above the footer).
+                VStack(spacing: FB.Spacing.s2) {
+                    Image(systemName: "server.rack")
+                        .foregroundStyle(FB.Colors.inkFaint)
+                    Text("No servers hosted yet")
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
                 Text("Servers on this Mac")
                     .font(FB.Font.rowTitle())
                     .foregroundStyle(FB.Colors.ink)
                     .padding(.horizontal, FB.Spacing.s3)
                     .padding(.vertical, FB.Spacing.s3)
-            }
-            ScrollView {
-                VStack(spacing: FB.Spacing.s2) {
-                    if vmManager.servers.isEmpty {
-                        VStack(spacing: FB.Spacing.s2) {
-                            Image(systemName: "server.rack")
-                                .foregroundStyle(FB.Colors.inkFaint)
-                            Text("No servers hosted yet")
-                                .font(FB.Font.caption())
-                                .foregroundStyle(FB.Colors.textMuted)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, FB.Spacing.s5)
-                    } else {
+                ScrollView {
+                    VStack(spacing: FB.Spacing.s2) {
                         ForEach(vmManager.servers) { server in
                             serverRow(server)
                         }
                     }
+                    .padding(.horizontal, FB.Spacing.s2)
                 }
-                .padding(.horizontal, FB.Spacing.s2)
-            }
-            .confirmationDialog(
-                confirmDeleteServer.map { "Delete \($0.record.config.serverDomain)?" } ?? "",
-                isPresented: Binding(
-                    get: { confirmDeleteServer != nil },
-                    set: { if !$0 { confirmDeleteServer = nil } }),
-                presenting: confirmDeleteServer) { server in
-                Button("Delete VM and its disk", role: .destructive) {
-                    Task {
-                        await vmManager.deleteServer(named: server.id)
-                        if model.selectedHostedServer == server.id {
-                            model.selectedHostedServer = nil
+                .confirmationDialog(
+                    confirmDeleteServer.map { "Delete \($0.record.config.serverDomain)?" } ?? "",
+                    isPresented: Binding(
+                        get: { confirmDeleteServer != nil },
+                        set: { if !$0 { confirmDeleteServer = nil } }),
+                    presenting: confirmDeleteServer) { server in
+                    Button("Delete VM and its disk", role: .destructive) {
+                        Task {
+                            await vmManager.deleteServer(named: server.id)
+                            if model.selectedHostedServer == server.id {
+                                model.selectedHostedServer = nil
+                            }
                         }
                     }
+                } message: { _ in
+                    Text("The VM and its encrypted disk image are removed from this Mac. The server's identity and any backups live with your phone/account, not here.")
                 }
-            } message: { _ in
-                Text("The VM and its encrypted disk image are removed from this Mac. The server's identity and any backups live with your phone/account, not here.")
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
             Divider()
             Button {
                 model.selectedHostedServer = nil

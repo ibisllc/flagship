@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import Network
 import FlagshipBuilderCore
 
 /// Wizard controller — drives the CLI, tracks the user's selections,
@@ -69,8 +70,12 @@ final class WizardModel: ObservableObject {
     @Published var pairStatus: String = "Waiting for your phone…"
     /// The 6-digit SAS to confirm on the phone (set in `.pairing`).
     @Published var pairMatchCode: String? = nil
-    /// Why the last session ended (shown briefly on the cover after a drop).
-    @Published var lastSessionEndReason: String? = nil
+    /// Network reachability. The locked cover swaps its whole pairing block for a
+    /// "waiting for internet connection" placeholder while this is false, and no
+    /// relay session is spun up until it flips back true — so the QR can't churn
+    /// against a dead network.
+    @Published var isOnline: Bool = true
+    private let pathMonitor = NWPathMonitor()
     /// After a recipe has been consumed by a USB/VM operation, briefly confirm
     /// the handoff before returning the center pane to a fresh pairing QR.
     @Published private(set) var homeResetCountdown: Int? = nil
@@ -120,7 +125,39 @@ final class WizardModel: ObservableObject {
         vmManager.log = { [weak self] line in
             self?.appendLog(stream: .stdout, text: "+ \(line)")
         }
+        startConnectivityMonitor()
         beginPairing()
+    }
+
+    // MARK: - Connectivity
+
+    /// Watch network reachability. While offline we tear the pairing session
+    /// down (so the QR stops churning against a dead relay) and the cover swaps
+    /// to a "waiting for internet connection" placeholder; when connectivity
+    /// returns we spin a fresh session back up.
+    private func startConnectivityMonitor() {
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            let online = path.status == .satisfied
+            Task { @MainActor in self?.handleConnectivityChange(online) }
+        }
+        pathMonitor.start(queue: DispatchQueue.global(qos: .utility))
+    }
+
+    private func handleConnectivityChange(_ online: Bool) {
+        guard online != isOnline else { return }
+        isOnline = online
+        if online {
+            // Only auto-(re)start pairing from the locked/pairing cover — never
+            // disturb a delivered recipe, the recipe-file path, or a live burn.
+            if builderStage == .locked || builderStage == .pairing {
+                beginPairing()
+            }
+        } else {
+            // Offline — stop the connect/relock churn. The cover renders the
+            // "waiting for internet connection" placeholder off `isOnline`.
+            sessionClient?.close()
+            sessionClient = nil
+        }
     }
 
     // MARK: - Pairing lifecycle
@@ -130,13 +167,19 @@ final class WizardModel: ObservableObject {
     /// a session drops (so the cover always shows a live, joinable code).
     func beginPairing() {
         sessionClient?.close()
+        sessionClient = nil
+        pairMatchCode = nil
+        builderStage = .locked
+        // No relay session without a network — the cover shows the "waiting for
+        // internet connection" placeholder until connectivity returns, at which
+        // point handleConnectivityChange calls back in. This is what stops the QR
+        // from churning (fresh keypair per failed connect) while offline.
+        guard isOnline else { return }
         let client = BuilderSessionClient()
         sessionClient = client
         pairQrPayload = client.qrPayload
         pairCodeDisplay = client.humanCodeDisplay
-        pairMatchCode = nil
         pairStatus = "Waiting for your phone…"
-        builderStage = .locked
         client.onStage = { [weak self] stage in Task { @MainActor in self?.applyEngineStage(stage) } }
         client.onRecipe = { [weak self] data in Task { @MainActor in self?.handleSessionRecipe(data) } }
         client.onRecipeReceiptQueued = { [weak self] in
@@ -239,7 +282,9 @@ final class WizardModel: ObservableObject {
         homeResetTask?.cancel()
         homeResetTask = nil
         homeResetCountdown = nil
-        lastSessionEndReason = reason
+        // The old yellow "session ended" cover notice is gone; keep the reason in
+        // the log for diagnostics instead of surfacing a sticky banner.
+        if let reason { appendLog(stream: .stderr, text: "Pairing session ended: \(reason)") }
         // Sensitive session/recipe material.
         recipe = nil
         verified = nil

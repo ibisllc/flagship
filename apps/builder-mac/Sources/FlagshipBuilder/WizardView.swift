@@ -414,43 +414,58 @@ struct WizardView: View {
             Text("Pair your phone to begin")
                 .font(FB.Font.title())
                 .foregroundStyle(FB.Colors.ink)
-            Text("Open the Flagship app on your phone and scan this code — or type it in. You'll confirm a short security code, then build your server here.")
-                .font(FB.Font.caption())
-                .foregroundStyle(FB.Colors.textMuted)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, FB.Spacing.s4)
-
-            if let payload = model.pairQrPayload {
-                QRCodeView(payload: payload, size: 200)
-            } else {
-                ProgressView().frame(width: 200, height: 200)
-            }
-
-            if let code = model.pairCodeDisplay {
-                VStack(spacing: FB.Spacing.s1) {
-                    Text("Or enter this code")
-                        .font(FB.Font.caption())
-                        .foregroundStyle(FB.Colors.textMuted)
-                    Text(code)
-                        .font(.system(.title2, design: .monospaced, weight: .semibold))
-                        .foregroundStyle(FB.Colors.ink)
-                        .textSelection(.enabled)
-                }
-            }
-
-            HStack(spacing: FB.Spacing.s2) {
-                ProgressView().scaleEffect(0.6)
-                Text(model.pairStatus)
+            if model.isOnline {
+                Text("Open the Flagship app on your phone and scan this code — or type it in. You'll confirm a short security code, then build your server here.")
                     .font(FB.Font.caption())
                     .foregroundStyle(FB.Colors.textMuted)
-            }
-
-            if let reason = model.lastSessionEndReason {
-                Text(reason)
-                    .font(FB.Font.caption())
-                    .foregroundStyle(FB.Colors.warning)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, FB.Spacing.s4)
+
+                if let payload = model.pairQrPayload {
+                    QRCodeView(payload: payload, size: 200)
+                } else {
+                    ProgressView().frame(width: 200, height: 200)
+                }
+
+                if let code = model.pairCodeDisplay {
+                    VStack(spacing: FB.Spacing.s1) {
+                        Text("Or enter this code")
+                            .font(FB.Font.caption())
+                            .foregroundStyle(FB.Colors.textMuted)
+                        Text(code)
+                            .font(.system(.title2, design: .monospaced, weight: .semibold))
+                            .foregroundStyle(FB.Colors.ink)
+                            .textSelection(.enabled)
+                    }
+                }
+
+                HStack(spacing: FB.Spacing.s2) {
+                    ProgressView().scaleEffect(0.6)
+                    Text(model.pairStatus)
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                }
+            } else {
+                // No network: the QR / code / pairing status can't do anything, so
+                // the whole pairing block is replaced by a single "waiting for the
+                // internet" line. It swaps straight back to the live QR the moment
+                // connectivity returns (and back here if it drops again).
+                VStack(spacing: FB.Spacing.s3) {
+                    Text("Connect to the internet to pair your phone.")
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, FB.Spacing.s4)
+                    HStack(spacing: FB.Spacing.s2) {
+                        ProgressView().scaleEffect(0.6)
+                        Text("Waiting for internet connection…")
+                            .font(FB.Font.rowTitle())
+                            .foregroundStyle(FB.Colors.ink)
+                    }
+                }
+                .frame(minHeight: 200)
             }
 
             Spacer(minLength: FB.Spacing.s2)
