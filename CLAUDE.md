@@ -195,6 +195,18 @@ Wi-Fi path (hali was an 8-hour mystery precisely because the wired path only
 echoes to a console the Mac app doesn't capture); (b) the stalled-boot advisory is
 Mac-only — mirror it on Linux (`wizard.py`) + Windows (`Wizard.cs`/XAML).
 
+**2026-07-20 — TestFlight code preflight unblocked.** The burner-pair lifecycle
+fix is present; all four iOS/watch executable bundles now carry target-accurate
+privacy manifests for app-local and App-Group `UserDefaults`. The existing
+`group.com.flagshipserver.app` is confirmed registered and assigned to all four
+bundle IDs. A first signed upload exposed the Watch target's missing icon catalog;
+the Watch app now compiles the shared 1024px `AppIcon` watchOS slot, and its Release
+bundle contains `Assets.car` plus `CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconName`
+as App Store Connect requires. XcodeGen output was regenerated and fresh Release
+simulator + unsigned physical-device builds pass with the iOS widget, Watch app,
+Watch widget, and all four manifests embedded. **Remaining (owner):** create a new
+signed Archive and upload it to TestFlight.
+
 **2026-07-20 — root cause of "box boots but never serves HTTPS / still coming
 up"; installer GRUB-target fix; burner-pairing UX.** Three landings:
 - **Daemon self-restart fix (the "still coming up" killer).** The
@@ -245,6 +257,67 @@ Mac app is rebuilt/reinstalled and opens the guest as a safe failed install.
 **Remaining:** delete that failed VM, pair a fresh recipe, and physically
 validate a complete 13.6 hosted install; the new telemetry will identify the
 exact d-i stage if it stalls again.
+
+**2026-07-19 — Mac hosted-server work made background-native.** Hosting no
+longer navigates the whole center pane into an install status dead-end. A
+successful USB/VM recipe handoff shows a five-second countdown, resets to a
+fresh pairing QR, and leaves the VM running independently. The wider Servers
+on this Mac sidebar is always visible (including the empty state), shows each
+full FQDN, lifecycle, tier, CPU/RAM/disk/encryption, and live install elapsed
+time. The redundant in-content app title is gone; theme is top-left and server
+details add a neighboring Home button. The selected-server page is now a
+scrolling dashboard with honest host-allocation bars, created/state-change/
+last-connected activity, lifecycle controls, and phone-grant-gated CLI status.
+Persisted VM records accept legacy files while recording new activity fields;
+an in-flight install can now be stopped explicitly and retried. The signed app
+is installed on disk. **Remaining:** visually validate the new layout during a
+fresh hosted install.
+Linux/Windows parity is also landed: five-second background-handoff reset,
+always-on 330/320px server sidebars with full FQDN + resource summary, Home
+navigation, and stop-install/retry controls; Linux is fully tested, while WPF
+source/XML is validated but awaits a Windows build (no .NET SDK on this Mac).
+
+**2026-07-19 — encrypted Debian reburn regression fixed.** A physical USB install
+reached Debian's raw `Please unlock disk sda4_crypt` prompt because the recipe's
+admin-root public key was dropped twice: by the shared preseed serializer and
+again by the install-time registration helper. That changed the signed auth-code
+bytes, so `.com` rejected registration before the Flagship rekey/initramfs hook
+could be installed; the fixed installer passphrase consequently survived into
+first boot. The optional field is now preserved and validated end-to-end, with
+shared Node, macOS JavaScriptCore, and Android Rhino golden coverage plus a
+registration-signature regression test. The helper is published on `main`; the
+Developer-ID Mac burner is rebuilt/reinstalled and the Android debug app builds
+with the corrected canonical asset. **Remaining:** validate one fresh physical
+reburn through automatic unlock and registration.
+
+**2026-07-19 — iOS↔desktop burner pairing repaired; pending-server semantics
+made honest.** The iOS scanner now owns one camera session per presentation and
+the phone relay waits for socket acceptance/retries transient loss; the Mac
+burner tolerates the matching phone reconnecting instead of immediately
+relocking. The live 403 was an admin-authority drift: `register-rck` became a
+sensitive operation but all create clients still signed it with the membership
+IRK; iOS/Android/webapp now use the admin signer when the account is gated.
+Recipe delivery has an explicit burner receipt sent only after the Mac or
+shared Linux/Windows CLI successfully verifies/stages the recipe; iOS and
+Android both wait for it, then close and surface the Home pending row. Pending
+is consistently orange and can never carry the Leader badge. Android's JDK 17,
+SDK, API-35 ARM emulator, and shell paths are configured on the Mac; the full
+unit suite, debug APK build, emulator install, and cold launch pass. A live
+follow-up caught the Mac cancelling its socket as soon as URLSession queued the
+receipt (before relay delivery): it now holds through the phone's confirmed
+departure, leaves the obsolete live-session UI for a recipe-ready state, and
+offers Start over instead of Disconnect. Missing receipts time out honestly on
+both phones. Mac host-image downloads now retain/resume partials, locally
+promote a complete interrupted download, show checksum verification as a
+separate phase, and surface failures beside the Create button instead of only
+in the collapsed log. A live Host-on-this-Mac retry then exposed both blessed
+13.5 URLs as dead after Debian rotated 13.6 into `debian-cd/current`; prod now
+serves the tested 13.5 amd64+arm64 bytes from Debian's immutable archive (same
+official hashes/sizes), and all burner/download documentation uses that stable
+source. The Developer-ID Mac app and development iOS app were rebuilt/reinstalled;
+both launch; the manifest fix is deployed. **Remaining:** validate QR-first-open
+and live receipt pairing and complete Host-on-this-Mac on the physical phone and
+computer.
 
 **2026-07-06 (evening, Chromebook instance) — Linux burner validated LIVE on
 ChromeOS; multi-arch Linux remainder DONE; Android/iOS large-screen polish.**
