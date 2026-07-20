@@ -1664,6 +1664,20 @@ copy_exec /bin/sed /bin/sed 2>/dev/null || copy_exec /usr/bin/sed /bin/sed
 # ip powers the premount's net-ensure (route check / link up / carrier read);
 # a wired initrd does not stage it otherwise.
 copy_exec /sbin/ip /sbin/ip 2>/dev/null || copy_exec /bin/ip /sbin/ip
+# Network DRIVER modules for the pre-mount unlock. The installed system's initrd
+# is built with MODULES=most|dep and does NOT guarantee the virtio NIC drivers,
+# yet a virtio-backed guest (Apple Virtualization / QEMU-KVM) needs virtio_net
+# (over PCI or MMIO transport) to have ANY interface at premount. Without it,
+# net-ensure below sees only lo, gets no carrier, no DHCP, no route — so the
+# unlock-key request never leaves the box and the disk stays sealed FOREVER
+# (registered-at-install, then silent — the exact fingerprint of a stuck VM
+# guest). The d-i INSTALLER kernel has these built in, which is why install-time
+# registration succeeds even when the installed initrd lacks them. Stage them
+# explicitly; harmless on metal (real NIC drivers still load from MODULES=most).
+# modinfo pulls each module's deps; missing-on-this-arch is a no-op under || true.
+for _netmod in virtio_net virtio_pci virtio_mmio e1000 e1000e; do
+  manual_add_modules "$_netmod" 2>/dev/null || true
+done
 # Resolver plumbing for the glibc-linked curl: copy_exec's ldd walk never
 # sees the dlopen'd NSS modules, and the initrd ships no nsswitch.conf —
 # proven on metal: route + /etc/resolv.conf up yet curl(6) could-not-resolve.

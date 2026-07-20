@@ -1175,11 +1175,18 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootUnlockMode: "auto",
       bootHost: DEFAULT_BOOT_HOST,
     });
+    // The initramfs unlock hook must stage the virtio NIC drivers so a
+    // virtio-backed guest (Apple VZ / QEMU-KVM) has an interface at premount —
+    // without it net-ensure finds only lo, never DHCPs, and the disk stays
+    // sealed forever (registered-at-install, then silent).
+    expect(s).toContain("manual_add_modules");
+    expect(s).toContain("virtio_net");
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      // Re-pinned 2026-07-19: flagship-daemon unit is now Restart=always +
-      // StartLimitIntervalSec=0 (was on-failure, which stranded a box after it
-      // consumed its SWK via process.exit(0)).
-      "f0b74e683d4c8060cdc694740f72b9e2cfa3e600b8054882e25315e4c751f3b4",
+      // Re-pinned 2026-07-20: initramfs unlock hook now stages virtio_net/
+      // virtio_pci/virtio_mmio (VZ/KVM guests came up registered then silent
+      // because the installed initrd lacked the NIC driver). Prior re-pin
+      // 2026-07-19: flagship-daemon unit Restart=always + StartLimitIntervalSec=0.
+      "b390769990eb52788f4f6889892f6da2f9d83a1a50ff1cf109d6056da9edb110",
     );
   });
 
@@ -1202,9 +1209,9 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      // Re-pinned 2026-07-19: flagship-daemon unit Restart=always (see the
-      // wired pin above).
-      "627380a0dee9ff555d4f8e44687c507918481482f939e3551a5100366214eaa9",
+      // Re-pinned 2026-07-20: initramfs unlock hook stages virtio NIC drivers
+      // (see the wired pin above). Prior: 2026-07-19 daemon Restart=always.
+      "96e317b7af04f50f78191be3b1d63e1cce99de596e94c7859b2644aceb9e4f72",
     );
   });
 
