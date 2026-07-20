@@ -149,6 +149,64 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-20 (later) — VM-hosted "still coming up" root-caused (initramfs
+virtio_net); biometric "random Face ID" fixed; desktop hosted-servers UI.**
+Driven by a stuck Mac-hosted VM (`hali.jolly-quince`) + scary idle Face-ID prompts.
+- **VM stuck "still coming up" — a DIFFERENT bug from frank's daemon-restart.**
+  Prod-D1 fingerprint: hali REGISTERED at install then went totally silent — no
+  unlock/entitlement/swk mailbox posts, no `daemon_status` — i.e. a pre-daemon
+  boot/unlock stall, not frank's post-SWK `exit(0)` death. Root cause: the
+  installed system's **initramfs unlock hook staged no NIC driver**. The d-i
+  INSTALLER kernel has virtio_net built in (so install-time registration works),
+  but the installed initrd relies on `MODULES=most` and a virtio-backed guest
+  (Apple VZ / QEMU-KVM) can boot without `virtio_net` → net-ensure sees only `lo`
+  → no DHCP → the unlock request never leaves the box → disk sealed forever. Fix:
+  the `flagship-unlock` initramfs hook now `manual_add_modules virtio_net
+  virtio_pci virtio_mmio e1000 e1000e` (harmless on metal). Shared engine ⇒
+  reaches metal + Mac VZ + Linux KVM + Windows QEMU via the regenerated bundle;
+  re-pinned both cross-language sha pins + added semantic assertions. GRUB/disk
+  resolution was verified CORRECT for VZ (Feature A is NOT hali's cause).
+- **Biometric "random Face ID while idle" — trust the unlocked session.** The
+  LiveSync poll signs nothing, but on a stream change `reconcile → onRegistered →
+  SwkDepositCoordinator` derives the IRK when a deposit is OWED (the state a stuck
+  box leaves), and **iOS opened a fresh LAContext against a `.biometryCurrentSet`
+  SE key on every derive** → Face ID on the Home screen, seemingly at random.
+  Fix, matching the webapp (`session.umk`) + Android: (a) iOS `Keystore` caches
+  the unwrapped UMK in memory for the unlocked session (RAM-only, cleared on
+  lock/background/sign-out via `clearSessionKeyCache`, wired to `isUnlocked ->
+  false`); (b) the automatic deposit path DEFERS unless `hasSessionKey()` — so a
+  background refresh never *initiates* a biometric, it rides an unlocked session
+  or waits. Android brought to parity: `BiometricAuthority` freshness is now
+  SESSION-scoped (was a 60s window) + `isFresh()` gates the deposit defer +
+  `invalidate()` wired to `isUnlocked/isPaired -> false`. Webapp already correct.
+- **Desktop hosted-servers UI.** "Servers on this Mac/PC" title hidden when the
+  list is empty (Mac/Linux/Windows); Mac footer divider aligned to the log bar;
+  and a Mac "taking longer than expected — check it reached the network" advisory
+  once a sealed guest has awaited unlock past 8 min (the poll had no timeout and
+  spun forever) — pure `VMLifecycle.comingUpIsStalled` helper + test.
+Gates: flagship-burner vitest 251 · `tsc -b` clean · burner-mac `swift build` +
+`swift test` 162 green · Android `:app:testDebugUnitTest` + `assembleDebug` green.
+**Remaining (owner):** rebuild the Mac burner + re-provision hali to validate the
+virtio_net fix live (capture the VZ console/journalctl to confirm the exact
+stage); **rebuild iOS (Xcode) + Android (Gradle)** to surface the biometric + UI
+changes on device (iOS not compiled here). **Follow-ups (noted, not done):** (a)
+persist the WIRED initramfs unlock log to the FLAGSHIP_BOOT partition like the
+Wi-Fi path (hali was an 8-hour mystery precisely because the wired path only
+echoes to a console the Mac app doesn't capture); (b) the stalled-boot advisory is
+Mac-only — mirror it on Linux (`wizard.py`) + Windows (`Wizard.cs`/XAML).
+
+**2026-07-20 — TestFlight code preflight unblocked.** The burner-pair lifecycle
+fix is present; all four iOS/watch executable bundles now carry target-accurate
+privacy manifests for app-local and App-Group `UserDefaults`. The existing
+`group.com.flagshipserver.app` is confirmed registered and assigned to all four
+bundle IDs. A first signed upload exposed the Watch target's missing icon catalog;
+the Watch app now compiles the shared 1024px `AppIcon` watchOS slot, and its Release
+bundle contains `Assets.car` plus `CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconName`
+as App Store Connect requires. XcodeGen output was regenerated and fresh Release
+simulator + unsigned physical-device builds pass with the iOS widget, Watch app,
+Watch widget, and all four manifests embedded. **Remaining (owner):** create a new
+signed Archive and upload it to TestFlight.
+
 **2026-07-20 — root cause of "box boots but never serves HTTPS / still coming
 up"; installer GRUB-target fix; burner-pairing UX.** Three landings:
 - **Daemon self-restart fix (the "still coming up" killer).** The
