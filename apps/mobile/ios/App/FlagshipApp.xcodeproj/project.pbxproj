@@ -15,6 +15,7 @@
 		1C9D09A9144DD8F14716442B /* FlagshipWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 320466AFB364B4CE4A1DB396 /* FlagshipWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		25FF22502B5437B43895A9CB /* ProvisionPhaseComplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FE2F4580A4DFDE33146944 /* ProvisionPhaseComplication.swift */; };
 		34D09AC29C29E289630C4402 /* WatchRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */; };
+		37CD93243A7D74054B520FA0 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5E2730A9F5FEA2A10B78AFB0 /* PrivacyInfo.xcprivacy */; };
 		3C9A765CFA2D09FA245A31E0 /* FlagshipCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9703502B31E53B7A7B02182E /* FlagshipCore */; };
 		3E1A2A9FEFB1ABE512FD060D /* FlagshipUI in Frameworks */ = {isa = PBXBuildFile; productRef = E09B09A74799A9F822F53DEC /* FlagshipUI */; };
 		4139AA3CADE3E3E93DEF5F57 /* InstallProgressLiveActivityCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BCEBBC9F7EBD3839DF504F /* InstallProgressLiveActivityCenter.swift */; };
@@ -23,6 +24,7 @@
 		52740C43DE82D908A417150D /* FlagshipAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4050D91C1A76B12D804925FA /* FlagshipAppIntents.swift */; };
 		598E6331C6653579257D65A7 /* WatchTimelinePublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A78989926C4BD61EA637143 /* WatchTimelinePublisher.swift */; };
 		6B1F3A5CBAD6B75C65A23FC8 /* InstallProgressAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62CE490D10F73B8244E1BDAB /* InstallProgressAttributes.swift */; };
+		74752A1E3E6F72248180476E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 158DE768BE8CA676C31DE548 /* PrivacyInfo.xcprivacy */; };
 		7ACDEC69F8BFED51EA2AC646 /* GymSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FD61316C29AFC0C85995C9 /* GymSmokeTests.swift */; };
 		7BFECA1D36A2BB6408A4D8E2 /* PodStatusPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A21D2CD995D16DBBB0228F4 /* PodStatusPublisher.swift */; };
 		816E9648DA4A66666DE744FA /* FlagshipWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 364AF47F5435B920B6FCA2AA /* FlagshipWatchApp.swift */; };
@@ -38,9 +40,12 @@
 		BD9630458EA132BCD16ADCA4 /* GymFeatureMirrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CCAE03802624702DE798B52 /* GymFeatureMirrorTests.swift */; };
 		C4EB2B45098E076E61D61035 /* PodStatusWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F5522F4368F6C5A87495ADB /* PodStatusWidget.swift */; };
 		C74D00A6563CEB33082C616F /* PodStatusSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */; };
+		D47BC2950000E60AE793216A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7EBCD448CF95A530F142BF43 /* PrivacyInfo.xcprivacy */; };
 		D5CCF74541392B71FBFF4A81 /* WatchBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA35BF39206378728D34AE65 /* WatchBridge.swift */; };
 		DCF5A2645EE6DAD83067434A /* WatchConnectivityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A873E78CA17ECB3B23C2CA6 /* WatchConnectivityClient.swift */; };
+		DF1B7A00ED1C83D3064DF197 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4BCF8466537CDEBE460F85A8 /* Assets.xcassets */; };
 		E511C4B07B982FB2320280C6 /* OnboardingSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F095FFB5E2CFA036042119C /* OnboardingSmokeTests.swift */; };
+		EB76A98873BEC76F5CA15F11 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = CFA43B23D68777AA3E79F2B2 /* PrivacyInfo.xcprivacy */; };
 		F8E5776F2B87DE67108074EE /* GymLiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91E3BD7AFAF1A09A4E82D2FA /* GymLiveTests.swift */; };
 		FC64923B7DC383ED61C87497 /* WatchSecurityAlertsPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CA1F4CA62F0ED3857DFAF0 /* WatchSecurityAlertsPublisher.swift */; };
 		FF6B2586776383AA4776A217 /* FlagshipCore in Frameworks */ = {isa = PBXBuildFile; productRef = 62BE221458756CDD4E0B2EC4 /* FlagshipCore */; };
@@ -118,6 +123,7 @@
 		02E103AA00FB9BA7E6BEC6AE /* shared */ = {isa = PBXFileReference; lastKnownFileType = folder; name = shared; path = ../../shared; sourceTree = SOURCE_ROOT; };
 		052606FE5632D693E043CD9D /* FlagshipWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FlagshipWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRootView.swift; sourceTree = "<group>"; };
+		158DE768BE8CA676C31DE548 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		1CCAE03802624702DE798B52 /* GymFeatureMirrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymFeatureMirrorTests.swift; sourceTree = "<group>"; };
 		1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodStatusSnapshot.swift; sourceTree = "<group>"; };
 		2A78989926C4BD61EA637143 /* WatchTimelinePublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTimelinePublisher.swift; sourceTree = "<group>"; };
@@ -133,12 +139,14 @@
 		4BCF8466537CDEBE460F85A8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		53CF39E90AB3F77BFED7833A /* FlagshipWatchWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlagshipWatchWidgetsBundle.swift; sourceTree = "<group>"; };
 		5A21D2CD995D16DBBB0228F4 /* PodStatusPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodStatusPublisher.swift; sourceTree = "<group>"; };
+		5E2730A9F5FEA2A10B78AFB0 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		62CE490D10F73B8244E1BDAB /* InstallProgressAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallProgressAttributes.swift; sourceTree = "<group>"; };
 		6695FF22B3FF092FF12DC35A /* WatchSecurityAlertsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSecurityAlertsView.swift; sourceTree = "<group>"; };
 		6A873E78CA17ECB3B23C2CA6 /* WatchConnectivityClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConnectivityClient.swift; sourceTree = "<group>"; };
 		6D5AE5E513DBE2B79120ABD9 /* FlagshipWatchApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWatchApp.entitlements; sourceTree = "<group>"; };
 		6DABF23A55B894623149E1C8 /* FlagshipWatchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FlagshipWatchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6F5522F4368F6C5A87495ADB /* PodStatusWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodStatusWidget.swift; sourceTree = "<group>"; };
+		7EBCD448CF95A530F142BF43 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		8AB626C273D22599FB5455E5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		8CDD5005BBD09F56837E8ACA /* FlagshipWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWidgets.entitlements; sourceTree = "<group>"; };
 		8F095FFB5E2CFA036042119C /* OnboardingSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingSmokeTests.swift; sourceTree = "<group>"; };
@@ -150,16 +158,17 @@
 		C026689338C66E2541C8B3EF /* FlagshipApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FlagshipApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CA43A33A5EACE6A2A88A7032 /* ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ios; path = ..; sourceTree = SOURCE_ROOT; };
 		CF58F7F531BA9B5914B63CA1 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		CFA43B23D68777AA3E79F2B2 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		D2BCEBBC9F7EBD3839DF504F /* InstallProgressLiveActivityCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallProgressLiveActivityCenter.swift; sourceTree = "<group>"; };
 		D6FD61316C29AFC0C85995C9 /* GymSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSmokeTests.swift; sourceTree = "<group>"; };
 		E7C08C9B4454F05A0F494D78 /* ProvisionTimelineWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisionTimelineWatchView.swift; sourceTree = "<group>"; };
 		EA35BF39206378728D34AE65 /* WatchBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchBridge.swift; sourceTree = "<group>"; };
 		EB03394B07AE3AC9DDF17FDF /* FlagshipWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWatchWidgets.entitlements; sourceTree = "<group>"; };
 		F770CD2952CF826FD5D49B33 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_0B2B8D3C-D22D-4B90-9757-16D032229FD6" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_2D4D028C-D4A4-442C-AEE5-727F6B1762EA" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
-		"TEMP_AE0FBE8D-43B8-4516-8E8C-CC600F640198" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
-		"TEMP_B4264F74-5889-48D8-A154-96A1E848C843" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_949FBF30-FCDE-460E-AF53-25FABCDE189C" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_AE072815-CE78-4BEA-99F6-CE346012AB9C" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_E4219542-9E35-484A-B6E6-80EB526C5F87" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_E6F056DA-CF9C-488A-B85B-A1F03E574F88" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -211,6 +220,7 @@
 				EB03394B07AE3AC9DDF17FDF /* FlagshipWatchWidgets.entitlements */,
 				53CF39E90AB3F77BFED7833A /* FlagshipWatchWidgetsBundle.swift */,
 				F770CD2952CF826FD5D49B33 /* Info.plist */,
+				CFA43B23D68777AA3E79F2B2 /* PrivacyInfo.xcprivacy */,
 				95FE2F4580A4DFDE33146944 /* ProvisionPhaseComplication.swift */,
 			);
 			path = WatchWidgets;
@@ -232,6 +242,7 @@
 				8AB626C273D22599FB5455E5 /* Info.plist */,
 				378E57D6EA8CCCF38A83A0D3 /* InstallProgressLiveActivity.swift */,
 				6F5522F4368F6C5A87495ADB /* PodStatusWidget.swift */,
+				158DE768BE8CA676C31DE548 /* PrivacyInfo.xcprivacy */,
 				00FD448EA89E02E3EC94E310 /* WidgetBundleEntry.swift */,
 			);
 			path = WidgetExtension;
@@ -250,6 +261,7 @@
 			isa = PBXGroup;
 			children = (
 				4BCF8466537CDEBE460F85A8 /* Assets.xcassets */,
+				5E2730A9F5FEA2A10B78AFB0 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -283,6 +295,7 @@
 				6D5AE5E513DBE2B79120ABD9 /* FlagshipWatchApp.entitlements */,
 				364AF47F5435B920B6FCA2AA /* FlagshipWatchApp.swift */,
 				AC644708931B6CC8A4F4273F /* Info.plist */,
+				7EBCD448CF95A530F142BF43 /* PrivacyInfo.xcprivacy */,
 				E7C08C9B4454F05A0F494D78 /* ProvisionTimelineWatchView.swift */,
 				6A873E78CA17ECB3B23C2CA6 /* WatchConnectivityClient.swift */,
 				1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */,
@@ -318,13 +331,13 @@
 			path = UITests;
 			sourceTree = "<group>";
 		};
-		"TEMP_2A289F95-ED80-401F-AACD-2B9A8A2A188B" /* . */ = {
+		"TEMP_E9023C72-265E-49E3-A795-9C19B529E6FF" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_AE0FBE8D-43B8-4516-8E8C-CC600F640198" /* project.yml */,
-				"TEMP_2D4D028C-D4A4-442C-AEE5-727F6B1762EA" /* FlagshipApp.xcodeproj */,
-				"TEMP_B4264F74-5889-48D8-A154-96A1E848C843" /* FlagshipApp.entitlements */,
-				"TEMP_0B2B8D3C-D22D-4B90-9757-16D032229FD6" /* Info.plist */,
+				"TEMP_E4219542-9E35-484A-B6E6-80EB526C5F87" /* project.yml */,
+				"TEMP_E6F056DA-CF9C-488A-B85B-A1F03E574F88" /* FlagshipApp.xcodeproj */,
+				"TEMP_AE072815-CE78-4BEA-99F6-CE346012AB9C" /* FlagshipApp.entitlements */,
+				"TEMP_949FBF30-FCDE-460E-AF53-25FABCDE189C" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				5B69A221CA30982662250465 /* WidgetExtension */,
 				564C6947F31B33F80500C451 /* WatchWidgets */,
@@ -345,6 +358,7 @@
 			buildConfigurationList = 6E5003C827096C801A51E88F /* Build configuration list for PBXNativeTarget "FlagshipWatchWidgets" */;
 			buildPhases = (
 				0A07DEAC385ECF88055760F3 /* Sources */,
+				8EEFF3322EC4E7340267E323 /* Resources */,
 				46288564620EA6DD17008E0B /* Frameworks */,
 			);
 			buildRules = (
@@ -364,6 +378,7 @@
 			buildConfigurationList = 67F8B8C2FD80B6F3C16DFBCD /* Build configuration list for PBXNativeTarget "FlagshipWidgets" */;
 			buildPhases = (
 				5F239655622A416D933AB5BC /* Sources */,
+				816FBAA04E502D90C43A67A1 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -405,6 +420,7 @@
 			buildConfigurationList = 819E8225FA46B210725BE0BC /* Build configuration list for PBXNativeTarget "FlagshipWatchApp" */;
 			buildPhases = (
 				EC69399646768B5C24017860 /* Sources */,
+				6D6C4BA63020F25682E2FAE8 /* Resources */,
 				2FA51140DC2C890C0E0413D6 /* Frameworks */,
 				5F562245A651623CB476C049 /* Embed Foundation Extensions */,
 			);
@@ -504,6 +520,32 @@
 			buildActionMask = 2147483647;
 			files = (
 				0B9051D212D7ABF830BFC8C6 /* Assets.xcassets in Resources */,
+				37CD93243A7D74054B520FA0 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6D6C4BA63020F25682E2FAE8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DF1B7A00ED1C83D3064DF197 /* Assets.xcassets in Resources */,
+				D47BC2950000E60AE793216A /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		816FBAA04E502D90C43A67A1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				74752A1E3E6F72248180476E /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8EEFF3322EC4E7340267E323 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EB76A98873BEC76F5CA15F11 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
