@@ -1913,11 +1913,18 @@ describe("Pre-launch stealth gate (/wip_ + /alpha + coming-soon)", () => {
 });
 
 describe("/download/<os> — on-brand installer redirect", () => {
-  it("302s to the /docs#burn explainer while a platform's target is unset", async () => {
-    // No INSTALLER_DOWNLOADS target wired yet → coming-soon explainer,
-    // never a dead 404. (The /ready/ page links to /download/<os> so the
-    // storage URL never shows in the UI.)
-    for (const os of ["mac", "windows", "linux"]) {
+  it("302s macOS to the notarized DMG, and unset platforms to the /docs#burn explainer", async () => {
+    // macOS is wired to the staged DMG; the rest have no target yet → the
+    // coming-soon explainer, never a dead 404. (The /ready/ page links to
+    // /download/<os> so the storage path never shows in the UI.)
+    const mac = await route(
+      new Request("https://flagshipserver.com/download/mac"),
+      makeEnv(),
+    );
+    expect(mac.status).toBe(302);
+    expect(mac.headers.get("location")).toBe("/downloads/FlagshipStudio.dmg");
+
+    for (const os of ["windows", "linux"]) {
       const r = await route(
         new Request(`https://flagshipserver.com/download/${os}`),
         makeEnv(),

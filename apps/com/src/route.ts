@@ -244,7 +244,7 @@ const PROXY_PREFIX = "/api/";
 // touching the page. Empty → the /docs#burn explainer ("get the Builder",
 // i.e. coming soon). Set each once that platform's build is published.
 const INSTALLER_DOWNLOADS: Record<string, string> = {
-  mac: "",
+  mac: "/downloads/FlagshipStudio.dmg",
   windows: "",
   linux: "",
 };
@@ -1477,7 +1477,7 @@ const COMING_SOON_EXEMPT_PATHS = new Set<string>([
   "/theme.js",
   "/motion.js",
 ]);
-const COMING_SOON_EXEMPT_PREFIXES = ["/.well-known/", "/ready/"];
+const COMING_SOON_EXEMPT_PREFIXES = ["/.well-known/", "/ready/", "/downloads/"];
 
 function hasPreviewCookie(request: Request): boolean {
   const header = request.headers.get("cookie");
