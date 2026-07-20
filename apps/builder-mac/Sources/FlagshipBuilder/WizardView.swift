@@ -106,7 +106,8 @@ struct WizardView: View {
             switch model.builderStage {
             case .locked:    coverView
             case .pairing:   pairingConfirmView
-            case .session, .recipeReady, .recipeFile: destinationOrPanes
+            case .session:   awaitingAuthorizationView
+            case .recipeReady, .recipeFile: destinationOrPanes
             }
         }
     }
@@ -131,8 +132,8 @@ struct WizardView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Once a recipe is verified the user picks its destination; before that
-    /// (waiting for the phone / loading a file) the existing panes show.
+    /// Once a recipe is verified the user picks its destination; the recipe-file
+    /// escape hatch keeps its existing loading and error states below.
     @ViewBuilder private var destinationOrPanes: some View {
         if model.verified != nil && model.destination == nil {
             destinationChooser
@@ -149,10 +150,16 @@ struct WizardView: View {
         VStack(alignment: .leading, spacing: FB.Spacing.s4) {
             if model.advancedAllowed { sessionHeader }
             if let v = model.verified {
-                StatusCard(icon: "checkmark.seal.fill",
-                           tint: FB.Colors.primary,
-                           title: v.serverDomain,
-                           subtitle: "Recipe verified — choose where this server should live.")
+                VStack(alignment: .leading, spacing: FB.Spacing.s1) {
+                    Text(v.serverDomain)
+                        .font(FB.Font.title())
+                        .foregroundStyle(FB.Colors.ink)
+                        .textSelection(.enabled)
+                    Text("Recipe verified — choose where this server should live.")
+                        .font(FB.Font.rowHint())
+                        .foregroundStyle(FB.Colors.textMuted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             destinationCard(
                 icon: "externaldrive.fill",
@@ -489,6 +496,42 @@ struct WizardView: View {
     }
 
     // MARK: - SAS confirm
+
+    /// The security code is confirmed before the phone releases the recipe.
+    /// Keep that authorization gap visually sealed so it can never expose the
+    /// default USB form while Face ID / biometrics are still in progress.
+    private var awaitingAuthorizationView: some View {
+        VStack(spacing: FB.Spacing.s4) {
+            Spacer()
+            Image(systemName: "iphone.gen3")
+                .font(.system(size: 40))
+                .foregroundStyle(FB.Colors.primary)
+            Text("Awaiting authorization")
+                .font(FB.Font.title())
+                .foregroundStyle(FB.Colors.ink)
+            Text("Finish authorizing this server in the Flagship app. This screen will continue automatically when your phone sends the approved recipe.")
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, FB.Spacing.s5)
+            HStack(spacing: FB.Spacing.s2) {
+                ProgressView().scaleEffect(0.6)
+                Text(model.pairStatus == "Paired." ? "Waiting for your phone…" : model.pairStatus)
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.textMuted)
+            }
+            Button("Cancel pairing") {
+                model.startOver()
+            }
+            .buttonStyle(.link)
+            .font(FB.Font.caption())
+            .foregroundStyle(FB.Colors.danger)
+            .pointerCursor()
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 
     /// Shown once a phone joins: display the 6-digit security code for the
     /// user to compare with their phone. The phone's tap-to-confirm flips us

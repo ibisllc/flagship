@@ -149,6 +149,14 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-20 (pairing polish) — Mac Builder no longer flashes the USB form
+while phone authorization is pending.** The post-SAS `.session` stage now owns a
+full-pane "Awaiting authorization" state through biometric approval and recipe
+delivery, then advances to destination selection. The destination chooser now
+presents the verified server domain as a plain, larger page heading instead of a
+white rounded status card that resembled a third choice. **Remaining (owner):**
+cut + publish the next notarized Studio build to ship this UI.
+
 **2026-07-20 (ship) — Flagship Studio Mac app is DISTRIBUTION-READY + live on
 the site.** Signed (Developer ID: IBIS LLC / 8G8RHBU9BN), **notarized + stapled**
 (Apple Accepted), packaged as a DMG, and published: `flagshipserver.com/download/
