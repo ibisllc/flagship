@@ -1747,6 +1747,30 @@ else
     LOCK_ONCE_MOUNT=""
 fi
 
+# Persistent unlock log on the (already-mounted) FLAGSHIP_BOOT partition, so a
+# box stuck at the LUKS unlock is diagnosable after a recovery-passphrase
+# hand-unlock. The WIRED path otherwise only echoes to a console the host may
+# not capture (a VZ/KVM guest has none) — which is exactly why a stuck box was a
+# black box. Truncated per boot (only the current boot matters); best-effort;
+# the console echo always happens, and we sync after each line so it survives
+# even if the box then hangs in the relay wait forever. Mirrors the Wi-Fi path's
+# /boot/flagship-wifi.log, reusing the mount the lock-once check already took.
+UNLOCK_LOG=""
+if [ -n "$LOCK_ONCE_MOUNT" ]; then
+    UNLOCK_LOG="$LOCK_ONCE_MOUNT/flagship-unlock.log"
+    : > "$UNLOCK_LOG" 2>/dev/null || true
+fi
+log_line() {
+    _ts="$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)"
+    _msg="flagship [up=\${_ts}s] $*"
+    echo "$_msg"
+    if [ -n "$UNLOCK_LOG" ]; then
+        echo "$_msg" >> "$UNLOCK_LOG" 2>/dev/null || true
+        sync 2>/dev/null || true
+    fi
+}
+log_line "premount start (domain=$SERVER_DOMAIN mode=$BOOT_UNLOCK_MODE lock-once=$LOCK_ONCE)"
+
 [ -f "$IDENTITY_KEY" ] || { echo "flagship: missing $IDENTITY_KEY"; exit 0; }
 
 sign_canonical() {
@@ -2059,6 +2083,13 @@ if [ "$LOCK_ONCE" = "yes" ]; then
     EFFECTIVE_MODE="approve"
 fi
 echo "flagship: boot-unlock mode = $EFFECTIVE_MODE (baseline=$BOOT_UNLOCK_MODE, lock-once=$LOCK_ONCE)"
+# Net-state summary — the single most useful diagnostic for a box that never
+# unlocks: a virtio guest whose initrd lacks the NIC driver shows ifaces=[lo]
+# route=none here and then hangs in the relay wait forever. Logged just before
+# the (possibly-forever) dispatch so it is always on disk for a hand-unlock.
+_ifaces="$(echo $(ls /sys/class/net 2>/dev/null))"
+if ip route 2>/dev/null | grep -q '^default'; then _route=up; else _route=none; fi
+log_line "net state before unlock: ifaces=[$_ifaces] route=$_route mode=$EFFECTIVE_MODE"
 if [ "$EFFECTIVE_MODE" = "approve" ]; then
     unlock_via_relay
 else
@@ -2066,6 +2097,7 @@ else
         unlock_via_relay
     fi
 fi
+log_line "unlock succeeded — luksOpen done, proceeding to mount root"
 
 ${terminalUnlock}
 # CONSUME the one-shot lock marker only now — AFTER a successful luksOpen (set -e

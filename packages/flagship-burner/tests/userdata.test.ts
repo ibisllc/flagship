@@ -1181,12 +1181,18 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     // sealed forever (registered-at-install, then silent).
     expect(s).toContain("manual_add_modules");
     expect(s).toContain("virtio_net");
+    // The wired unlock premount persists a diagnostic log to FLAGSHIP_BOOT so a
+    // stuck box is diagnosable after a hand-unlock (the wired path otherwise only
+    // echoes to a console a VZ/KVM host never captures).
+    expect(s).toContain("flagship-unlock.log");
+    expect(s).toContain("net state before unlock:");
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      // Re-pinned 2026-07-20: initramfs unlock hook now stages virtio_net/
-      // virtio_pci/virtio_mmio (VZ/KVM guests came up registered then silent
-      // because the installed initrd lacked the NIC driver). Prior re-pin
-      // 2026-07-19: flagship-daemon unit Restart=always + StartLimitIntervalSec=0.
-      "b390769990eb52788f4f6889892f6da2f9d83a1a50ff1cf109d6056da9edb110",
+      // Re-pinned 2026-07-20: (1) initramfs hook stages virtio_net/virtio_pci/
+      // virtio_mmio (VZ/KVM guests came up registered then silent — no NIC driver
+      // in the installed initrd); (2) the wired premount now writes a persistent
+      // flagship-unlock.log to FLAGSHIP_BOOT. Prior: 2026-07-19 daemon
+      // Restart=always + StartLimitIntervalSec=0.
+      "9abd4d7227a4aa9f9d1ba5665e1fcb9314a978d26e9d54ed91f97678f3c638f3",
     );
   });
 
@@ -1209,9 +1215,10 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      // Re-pinned 2026-07-20: initramfs unlock hook stages virtio NIC drivers
-      // (see the wired pin above). Prior: 2026-07-19 daemon Restart=always.
-      "96e317b7af04f50f78191be3b1d63e1cce99de596e94c7859b2644aceb9e4f72",
+      // Re-pinned 2026-07-20: initramfs hook stages virtio NIC drivers + the
+      // wired premount persists flagship-unlock.log (see the wired pin above).
+      // Prior: 2026-07-19 daemon Restart=always.
+      "aad86e49bfa6b9c5448b75af4875694e92b507598f9f56af521002c7fd613d88",
     );
   });
 
