@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Native raw-disk write (pure-Swift port of write.ts's writer). Runs in the
 /// privileged helper: unmount the disk's volumes, then stream the prepared
@@ -49,9 +50,11 @@ public enum DiskWrite {
             throw DiskWriteError.cannotOpen(imagePath, "no such file")
         }
         defer { try? inp.close() }
-        guard let out = FileHandle(forWritingAtPath: raw) else {
-            throw DiskWriteError.cannotOpen(raw, "permission denied or busy")
+        let fd = raw.withCString { Darwin.open($0, O_WRONLY) }
+        guard fd >= 0 else {
+            throw DiskWriteError.cannotOpen(raw, openFailureReason(errno))
         }
+        let out = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
         defer { try? out.close() }
 
         var written = 0
@@ -105,6 +108,19 @@ public enum DiskWrite {
             return "the device refused the write — check for a write-protect switch"
         case EINVAL:
             return "unaligned write (EINVAL) — the device may use a sector size this writer doesn't handle"
+        default:
+            return "\(String(cString: strerror(code))) (errno \(code))"
+        }
+    }
+
+    static func openFailureReason(_ code: Int32) -> String {
+        switch code {
+        case EPERM, EACCES:
+            return "macOS denied removable-volume access — enable Flagship Studio in System Settings → Privacy & Security → Files & Folders → Removable Volumes, then try again"
+        case EBUSY:
+            return "the device is busy — close Disk Utility and any app using the drive, unplug and reconnect it, then try again"
+        case EROFS:
+            return "the device is read-only — check for a write-protect switch"
         default:
             return "\(String(cString: strerror(code))) (errno \(code))"
         }

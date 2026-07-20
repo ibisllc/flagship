@@ -590,6 +590,10 @@ final class WizardModel: ObservableObject {
         didRemasterForTest = false
         defer { isRunning = false; endProgress() }
 
+        // Trigger macOS's scoped Removable Volumes consent from the responsible
+        // GUI process before the root helper attempts to open /dev/rdiskN.
+        HelperClient.requestRemovableVolumeAccess(for: disk.deviceNode)
+
         let imagePath: String
         var preparedToCleanup: URL? = nil
         defer { if let p = preparedToCleanup { try? FileManager.default.removeItem(at: p) } }

@@ -28,6 +28,8 @@
     <string>BUSL-1.1 © Flagship</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>Flagship Studio needs access to the selected removable drive to erase it and create your server installer.</string>
     <!-- Sandboxing OFF — we need to spawn /usr/local/bin/node + read
          removable volumes + (via the CLI) raw-write to /dev/diskN.
          A sandboxed Mac app can't do any of those without specific

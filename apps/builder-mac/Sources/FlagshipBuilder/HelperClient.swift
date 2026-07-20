@@ -1,5 +1,6 @@
 import Foundation
 import ServiceManagement
+import Darwin
 import FlagshipBuilderCore
 
 /// Registers + talks to the privileged helper daemon. The daemon is shipped
@@ -30,6 +31,18 @@ enum HelperClient {
 
     static func service() -> SMAppService {
         SMAppService.daemon(plistName: plistName)
+    }
+
+    /// Establish the GUI app as the responsible process for removable-volume
+    /// access before the root launch daemon opens the raw device. macOS gates
+    /// `/dev/rdiskN` behind the scoped Removable Volumes TCC permission even
+    /// for a root SMAppService daemon; this deliberate open triggers the system
+    /// prompt, and failure here is expected because the GUI process is not root.
+    static func requestRemovableVolumeAccess(for devicePath: String) {
+        guard devicePath.hasPrefix("/dev/disk") else { return }
+        let raw = "/dev/r" + devicePath.dropFirst("/dev/".count)
+        let fd = raw.withCString { Darwin.open($0, O_RDWR) }
+        if fd >= 0 { Darwin.close(fd) }
     }
 
     private static func statusName(_ s: SMAppService.Status) -> String {

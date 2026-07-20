@@ -149,6 +149,20 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-20 (raw USB permission) — Mac Builder's first real Developer-ID burn
+reached the helper, then macOS denied `/dev/rdisk` despite UID 0.** This was not
+signing, Unix permissions, a busy/read-only stick, or a need for broad Full Disk
+Access: current macOS gates raw removable media behind the responsible GUI app's
+scoped **Removable Volumes** TCC grant. Studio now declares
+`NSRemovableVolumesUsageDescription` and deliberately opens the selected raw
+device from the GUI before remastering, which triggers the native consent prompt
+and lets the root SMAppService helper inherit the grant. The helper now preserves
+the actual `open(2)` errno and distinguishes permission, busy, and read-only
+failures instead of collapsing all three. **Remaining (owner):** install the next
+notarized build, accept Removable Volumes, and validate a complete physical USB
+write; current build can be unblocked manually in Privacy & Security → Files &
+Folders if the Flagship Studio row is already present.
+
 **2026-07-20 (pairing polish) — Mac Builder no longer flashes the USB form
 while phone authorization is pending.** The post-SAS `.session` stage now owns a
 full-pane "Awaiting authorization" state through biometric approval and recipe
