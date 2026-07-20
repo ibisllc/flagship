@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Flagship
 import FlagshipCore
 import FlagshipAPI
 import FlagshipUI
@@ -51,12 +52,24 @@ struct ContentView: View {
         }
         .onChange(of: app.isPaired) { _, paired in
             if paired { Task { await registerPush() } }
+            // Signing out ends the authenticated session — drop the cached UMK.
+            else { Keystore.clearSessionKeyCache() }
             PodStatusPublisher(app: app).publish()
             syncPendingWatchers()
             syncAiChatPoller()
             syncLiveSync()
             operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
             syncPodSession()
+        }
+        .onChange(of: app.isUnlocked) { _, unlocked in
+            // Trust-the-session model: the unwrapped UMK lives in memory only
+            // while the app is unlocked. The instant it re-locks (background
+            // relock or an explicit lock), drop the cached key so the next
+            // session re-authenticates once — the biometric still gates each
+            // session, it just no longer fires again mid-session. This is what
+            // stops the "random Face ID on the Home screen" the periodic
+            // deposit refresh used to trigger.
+            if !unlocked { Keystore.clearSessionKeyCache() }
         }
         .onChange(of: scenePhase) { _, _ in
             // Foreground-only: pause the live-update canal when the app leaves

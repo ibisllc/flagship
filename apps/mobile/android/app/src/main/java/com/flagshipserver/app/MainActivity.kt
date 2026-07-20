@@ -499,6 +499,17 @@ private fun AppRoot(
         operations.syncDeployOperations(if (isPaired) pods else emptyList())
     }
 
+    // Trust-the-session model (mirror of iOS ContentView clearing the UMK cache
+    // on isUnlocked/isPaired -> false): the biometric freshness latch lives only
+    // while the app is unlocked + paired. The instant it re-locks (background
+    // relock / explicit lock) or signs out, drop the latch so the next session
+    // re-authenticates once — the biometric still gates each session, it just no
+    // longer fires again mid-session (which is what stopped the random Face ID /
+    // fingerprint prompts the periodic deposit refresh used to trigger).
+    LaunchedEffect(isUnlocked, isPaired) {
+        if (!isUnlocked || !isPaired) BiometricAuthority.current()?.invalidate()
+    }
+
     // Slice B — AUTO-PAIR. On unlock (with pods loaded), silently provision this
     // device's per-box BFF session token for every ONLINE pod that lacks one,
     // behind ONE biometric (the coordinator derives the owner IRK once + reuses
