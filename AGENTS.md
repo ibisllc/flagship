@@ -161,7 +161,10 @@ the actual `open(2)` errno and distinguishes permission, busy, and read-only
 failures instead of collapsing all three. **Remaining (owner):** install the next
 notarized build, accept Removable Volumes, and validate a complete physical USB
 write; current build can be unblocked manually in Privacy & Security → Files &
-Folders if the Flagship Studio row is already present.
+Folders if the Flagship Studio row is already present. A Developer-ID signed,
+Apple-Accepted, stapled test DMG containing this fix + the pairing polish is
+staged locally (not published); **remaining:** install it after preserving or
+discarding the current in-memory recipe, accept the scoped prompt, and burn.
 
 **2026-07-20 (pairing polish) — Mac Builder no longer flashes the USB form
 while phone authorization is pending.** The post-SAS `.session` stage now owns a
