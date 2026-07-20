@@ -245,10 +245,10 @@ struct WizardView: View {
                 Spacer()
             }
             if let v = model.verified {
-                StatusCard(icon: "desktopcomputer",
-                           tint: FB.Colors.primary,
-                           title: v.serverDomain,
-                           subtitle: "Will run as a managed VM on this Mac — \(VMResourcePlan.vmCPUCount(host: host)) vCPU, \(VMResourcePlan.vmMemoryBytes(host: host) / VMResourcePlan.gib) GiB RAM, \(VMResourcePlan.defaultMainDiskSizeBytes / VMResourcePlan.gib) GiB disk.")
+                workServerHeader(
+                    domain: v.serverDomain,
+                    subtitle: "Will run as a managed VM on this Mac — \(VMResourcePlan.vmCPUCount(host: host)) vCPU, \(VMResourcePlan.vmMemoryBytes(host: host) / VMResourcePlan.gib) GiB RAM, \(VMResourcePlan.defaultMainDiskSizeBytes / VMResourcePlan.gib) GiB disk."
+                )
             }
             Text("The VM installs unattended from the same image a USB burn uses, then boots encrypted and waits for your phone to unlock it. This app never sees the disk key.")
                 .font(FB.Font.caption())
@@ -395,10 +395,10 @@ struct WizardView: View {
     private var sessionRecipeRow: some View {
         VStack(alignment: .leading, spacing: FB.Spacing.s2) {
             if let v = model.verified {
-                StatusCard(icon: "checkmark.seal.fill",
-                           tint: FB.Colors.primary,
-                           title: v.serverDomain,
-                           subtitle: "Recipe received from your phone.")
+                workServerHeader(
+                    domain: v.serverDomain,
+                    subtitle: "Recipe received from your phone."
+                )
             } else if let err = model.recipeError {
                 StatusCard(icon: "exclamationmark.triangle.fill",
                            tint: FB.Colors.warning,
@@ -412,6 +412,20 @@ struct WizardView: View {
             }
         }
         .padding(.bottom, FB.Spacing.s2)
+    }
+
+    private func workServerHeader(domain: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: FB.Spacing.s1) {
+            Text(domain)
+                .font(FB.Font.title())
+                .foregroundStyle(FB.Colors.ink)
+                .textSelection(.enabled)
+            Text(subtitle)
+                .font(FB.Font.rowHint())
+                .foregroundStyle(FB.Colors.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Locked cover (pair your phone)
