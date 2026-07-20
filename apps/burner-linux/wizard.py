@@ -1812,6 +1812,9 @@ def build_window(application, model: Optional[WizardModel] = None):
         # sidebar
         _rebuild_server_list()
         no_servers.set_visible(not wizard_model.has_hosted_servers)
+        # The section title only makes sense once there is a list to title; an
+        # empty machine shows just the "None yet" message, no header.
+        sidebar_title.set_visible(wizard_model.has_hosted_servers)
         # recipe status
         if s.recipe_error:
             recipe_status.set_text(s.recipe_error)

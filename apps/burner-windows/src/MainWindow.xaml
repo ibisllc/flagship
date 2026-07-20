@@ -726,10 +726,15 @@
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
+                    <!-- The section title only makes sense once there is a list
+                         to title; an empty machine shows just the "None yet"
+                         message below, no header. -->
                     <TextBlock Grid.Row="0"
                                Text="Servers on this PC"
                                Style="{StaticResource RowTitle}"
-                               Margin="12,12,12,8"/>
+                               Margin="12,12,12,8"
+                               Visibility="{Binding HasHostedServers,
+                                   Converter={StaticResource BoolToVisibility}}"/>
                     <ListBox Grid.Row="1"
                              x:Name="ServerList"
                              ItemsSource="{Binding Vm.Servers}"

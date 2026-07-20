@@ -13,11 +13,15 @@ struct HostedServersSidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Servers on this Mac")
-                .font(FB.Font.rowTitle())
-                .foregroundStyle(FB.Colors.ink)
-                .padding(.horizontal, FB.Spacing.s3)
-                .padding(.vertical, FB.Spacing.s3)
+            // The section title only makes sense once there is a list to title;
+            // an empty machine shows just the "no servers" message, no header.
+            if !vmManager.servers.isEmpty {
+                Text("Servers on this Mac")
+                    .font(FB.Font.rowTitle())
+                    .foregroundStyle(FB.Colors.ink)
+                    .padding(.horizontal, FB.Spacing.s3)
+                    .padding(.vertical, FB.Spacing.s3)
+            }
             ScrollView {
                 VStack(spacing: FB.Spacing.s2) {
                     if vmManager.servers.isEmpty {
@@ -66,7 +70,11 @@ struct HostedServersSidebar: View {
             }
             .buttonStyle(.plain)
             .pointerCursor()
-            .padding(FB.Spacing.s3)
+            // Match the main pane's logBar vertical padding (s2) so this footer
+            // divider lands at the same Y as the log bar's divider — both columns
+            // are pinned to the same height and bottom-aligned.
+            .padding(.horizontal, FB.Spacing.s3)
+            .padding(.vertical, FB.Spacing.s2)
         }
         .background(FB.Colors.surface)
     }
@@ -136,6 +144,24 @@ struct HostedServersSidebar: View {
                 Text("Installing… \(elapsed(since: server.record.stateChangedAt ?? server.record.createdAt, now: context.date))")
                     .font(FB.Font.caption())
                     .foregroundStyle(FB.Colors.textMuted)
+            }
+        } else if case .awaitingPhoneUnlock = server.record.state {
+            // A sealed guest that never phones home would otherwise spin on
+            // "Waiting for you to unlock" forever; past the stall threshold,
+            // surface an advisory (the unlock poll keeps running underneath).
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                let since = server.record.stateChangedAt ?? server.record.createdAt
+                if VMLifecycle.comingUpIsStalled(
+                    state: server.record.state,
+                    elapsed: context.date.timeIntervalSince(since)) {
+                    Text("Taking longer than expected — check it reached the network")
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.warning)
+                } else {
+                    Text(server.record.state.label)
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                }
             }
         } else {
             Text(server.record.state.label)
@@ -357,6 +383,10 @@ struct VMDetailView: View {
     private func statusSubtitle(_ server: VMManager.HostedServer, now: Date) -> String {
         switch server.record.state {
         case .awaitingPhoneUnlock:
+            let since = server.record.stateChangedAt ?? server.record.createdAt
+            if VMLifecycle.comingUpIsStalled(state: server.record.state, elapsed: now.timeIntervalSince(since)) {
+                return "Taking longer than expected — the box may not have reached the network. Check that it's online, or power off and retry."
+            }
             return server.record.config.bootUnlockMode == "approve"
                 ? "The disk is sealed — approve the unlock on your phone."
                 : "The disk is sealed — waiting for the phone-home unlock."

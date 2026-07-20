@@ -185,6 +185,22 @@ final class VMLifecycleTests: XCTestCase {
         }
     }
 
+    func testComingUpStallAdvisory() {
+        // A sealed guest awaiting unlock should surface a "taking longer than
+        // expected" advisory once it has waited past the stall threshold — but
+        // only in the awaiting-unlock state, and not before the threshold.
+        let below = VMLifecycle.comingUpStallThreshold - 1
+        let above = VMLifecycle.comingUpStallThreshold + 1
+        XCTAssertFalse(VMLifecycle.comingUpIsStalled(state: .awaitingPhoneUnlock, elapsed: below))
+        XCTAssertTrue(VMLifecycle.comingUpIsStalled(state: .awaitingPhoneUnlock, elapsed: above))
+        // Exactly at the threshold trips (inclusive).
+        XCTAssertTrue(VMLifecycle.comingUpIsStalled(state: .awaitingPhoneUnlock,
+                                                    elapsed: VMLifecycle.comingUpStallThreshold))
+        // Never fires outside the awaiting-unlock state, no matter how long.
+        XCTAssertFalse(VMLifecycle.comingUpIsStalled(state: .running, elapsed: above))
+        XCTAssertFalse(VMLifecycle.comingUpIsStalled(state: .installing, elapsed: above))
+    }
+
     // MARK: - Injectable clock
 
     func testStateTimestampsComeFromTheInjectedClock() throws {

@@ -185,4 +185,17 @@ extension VMLifecycle {
             ? .installed
             : .failedTooFast(elapsed: elapsed)
     }
+
+    /// A sealed guest awaiting phone-unlock should come online within a few
+    /// minutes; past this it has very likely failed to reach the network (e.g. a
+    /// first-boot NIC/DHCP failure) and would otherwise spin on "Waiting for you
+    /// to unlock" forever with no hint. The UI keeps polling, but past this
+    /// threshold it surfaces an advisory instead of an indefinite spinner.
+    public static let comingUpStallThreshold: TimeInterval = 8 * 60
+
+    /// True iff a hosted server has been sealed + awaiting unlock past the stall
+    /// threshold. Pure so the view can evaluate it against a live `now`.
+    public static func comingUpIsStalled(state: VMState, elapsed: TimeInterval) -> Bool {
+        state == .awaitingPhoneUnlock && elapsed >= comingUpStallThreshold
+    }
 }
