@@ -30,7 +30,7 @@ PRESEED_ENGINE = $(BUILD_DIR)/FlagshipBuilder_FlagshipBuilderCore.bundle/preseed
 ZIP_FILE = $(BUILD_DIR)/$(BIN).zip
 DMG_FILE = $(BUILD_DIR)/$(BIN).dmg
 
-.PHONY: build release sign notarize staple dmg clean check-env
+.PHONY: build build-release release package-app sign zip notarize notarize-with-password staple dmg clean check-env
 
 build:
 	swift build -c debug
@@ -106,13 +106,17 @@ sign: package-app
 	@echo "✓ Signed: $(APP_BUNDLE)"
 	codesign -dvv "$(APP_BUNDLE)" 2>&1 | head -10
 
-# Zip the bundle (notarytool needs a zip / dmg / pkg).
-$(ZIP_FILE): $(APP_BUNDLE)
+# Zip the bundle (notarytool needs a zip / dmg / pkg). PHONY — APP_NAME has a
+# space ("Flagship Studio"), which make cannot carry as a file prerequisite
+# (it splits the path at the space). These targets instead run in command-line
+# order after `sign`, so the .app already exists; the space is only ever handled
+# at the shell level, where it's quoted.
+zip:
 	cd $(BUILD_DIR) && /usr/bin/ditto -c -k --keepParent "$(APP_NAME).app" "$(BIN).zip"
 
 # Submit to Apple's notary service + wait for the verdict.
-notarize: $(ZIP_FILE)
-	xcrun notarytool submit $(ZIP_FILE) \
+notarize: zip
+	xcrun notarytool submit "$(ZIP_FILE)" \
 	    --key "$$FLAGSHIP_NOTARY_KEY" \
 	    --key-id "$$FLAGSHIP_NOTARY_KEY_ID" \
 	    --issuer "$$FLAGSHIP_NOTARY_ISSUER" \
@@ -122,8 +126,8 @@ notarize: $(ZIP_FILE)
 # Alternative for users who prefer an app-specific password to the
 # API key. Set FLAGSHIP_NOTARY_PASSWORD (an app-specific password from
 # appleid.apple.com) and run this target instead of `notarize`.
-notarize-with-password: $(ZIP_FILE)
-	xcrun notarytool submit $(ZIP_FILE) \
+notarize-with-password: zip
+	xcrun notarytool submit "$(ZIP_FILE)" \
 	    --apple-id "$$FLAGSHIP_APPLE_ID" \
 	    --team-id "$$FLAGSHIP_TEAM_ID" \
 	    --password "$$FLAGSHIP_NOTARY_PASSWORD" \
@@ -131,7 +135,7 @@ notarize-with-password: $(ZIP_FILE)
 
 # Staple the notarization ticket onto the bundle so Gatekeeper accepts
 # it offline. Must run AFTER notarize succeeds.
-staple: $(APP_BUNDLE)
+staple:
 	xcrun stapler staple "$(APP_BUNDLE)"
 	xcrun stapler validate "$(APP_BUNDLE)"
 	@echo "✓ Stapled"
@@ -139,7 +143,7 @@ staple: $(APP_BUNDLE)
 # Wrap the signed+notarized+stapled .app in a DMG that users can drag
 # into /Applications. The DMG is what you upload to your website /
 # GitHub release.
-dmg: $(APP_BUNDLE)
+dmg:
 	rm -f "$(DMG_FILE)"
 	hdiutil create -volname "$(APP_NAME)" \
 	    -srcfolder "$(APP_BUNDLE)" \
