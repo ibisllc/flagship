@@ -149,6 +149,14 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-20 (Mac Studio release refresh) — the pairing and raw-USB fixes are
+published in a fresh notarized build.** The app icon now uses the full macOS icon
+canvas instead of baking in a 112px transparent margin, so its teal tile is no
+longer shrunk inside a white square in Privacy & Security. The Developer-ID app
+is installed in `/Applications`; the stapled DMG is committed, deployed, and
+byte-verified at `flagshipserver.com/download/mac`. **Remaining (owner):** accept
+the scoped Removable Volumes prompt and validate a complete physical USB write.
+
 **2026-07-20 (raw USB permission) — Mac Builder's first real Developer-ID burn
 reached the helper, then macOS denied `/dev/rdisk` despite UID 0.** This was not
 signing, Unix permissions, a busy/read-only stick, or a need for broad Full Disk
@@ -158,21 +166,18 @@ scoped **Removable Volumes** TCC grant. Studio now declares
 device from the GUI before remastering, which triggers the native consent prompt
 and lets the root SMAppService helper inherit the grant. The helper now preserves
 the actual `open(2)` errno and distinguishes permission, busy, and read-only
-failures instead of collapsing all three. **Remaining (owner):** install the next
-notarized build, accept Removable Volumes, and validate a complete physical USB
-write; current build can be unblocked manually in Privacy & Security → Files &
-Folders if the Flagship Studio row is already present. A Developer-ID signed,
-Apple-Accepted, stapled test DMG containing this fix + the pairing polish is
-staged locally (not published); **remaining:** install it after preserving or
-discarding the current in-memory recipe, accept the scoped prompt, and burn.
+failures instead of collapsing all three. **Remaining (owner):** accept Removable
+Volumes and validate a complete physical USB write; the build can be unblocked
+manually in Privacy & Security → Files & Folders if the Flagship Studio row is
+already present.
 
 **2026-07-20 (pairing polish) — Mac Builder no longer flashes the USB form
 while phone authorization is pending.** The post-SAS `.session` stage now owns a
 full-pane "Awaiting authorization" state through biometric approval and recipe
 delivery, then advances to destination selection. The destination chooser now
 presents the verified server domain as a plain, larger page heading instead of a
-white rounded status card that resembled a third choice. **Remaining (owner):**
-cut + publish the next notarized Studio build to ship this UI.
+white rounded status card that resembled a third choice. Shipped in the current
+notarized Studio build.
 
 **2026-07-20 (ship) — Flagship Studio Mac app is DISTRIBUTION-READY + live on
 the site.** Signed (Developer ID: IBIS LLC / 8G8RHBU9BN), **notarized + stapled**
