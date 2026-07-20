@@ -60,10 +60,15 @@ struct WizardView: View {
 
     private var wizardColumn: some View {
         VStack(spacing: 0) {
-            header
-                .padding(.horizontal, FB.Spacing.s5)
-                .padding(.top, FB.Spacing.s5)
-                .padding(.bottom, FB.Spacing.s3)
+            // Hidden while the log is open: with the appearance toggle gone the
+            // header is mostly dead space, so dropping it lets the log's top rule
+            // slide all the way to the top edge of the UI.
+            if !showLog {
+                header
+                    .padding(.horizontal, FB.Spacing.s5)
+                    .padding(.top, FB.Spacing.s5)
+                    .padding(.bottom, FB.Spacing.s3)
+            }
             ZStack(alignment: .bottom) {
                 // Only render the form when the log is hidden. Conditional
                 // rendering (rather than just layering the log on top) removes

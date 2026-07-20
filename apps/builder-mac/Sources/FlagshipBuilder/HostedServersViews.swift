@@ -61,9 +61,19 @@ struct HostedServersSidebar: View {
             Button {
                 model.selectedHostedServer = nil
             } label: {
-                Label("Pair a new server", systemImage: "plus")
-                    .font(FB.Font.caption())
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: FB.Spacing.s2) {
+                    // Circled "+" mirrors the log bar's circled caret so this
+                    // footer's content height — and thus its divider's Y — matches
+                    // the log bar's, keeping the two bottom rules aligned.
+                    Image(systemName: "plus")
+                        .font(FB.Font.caption().weight(.bold))
+                        .foregroundStyle(FB.Colors.bg)
+                        .frame(width: 20, height: 20)
+                        .background(Circle().fill(FB.Colors.ink))
+                    Text("Pair a new server")
+                        .font(FB.Font.caption())
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
             .pointerCursor()
