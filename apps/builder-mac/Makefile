@@ -3,18 +3,20 @@
 # Two flows:
 #   make build       — debug build to test locally (no cert needed)
 #   make release     — signed + notarized .app + zip + dmg (needs your
-#                      Developer ID Application cert + an Apple ID)
+#                      Developer ID Application cert + an API key)
 #
-# Set these in your shell before `make release`:
-#   FLAGSHIP_SIGNING_ID    — "Developer ID Application: Your Name (TEAMID)"
-#   FLAGSHIP_APPLE_ID      — your Apple Developer email
-#   FLAGSHIP_TEAM_ID       — your 10-char team id (also in the signing-id)
+# Set these in your shell before `make release` (API-key path — no email):
+#   FLAGSHIP_SIGNING_ID    — "Developer ID Application: Your Org (TEAMID)"
 #   FLAGSHIP_NOTARY_KEY    — path to App-Store-Connect API key (.p8)
-#   FLAGSHIP_NOTARY_KEY_ID — 10-char key id
-#   FLAGSHIP_NOTARY_ISSUER — issuer UUID
+#   FLAGSHIP_NOTARY_KEY_ID — the key id (the XXXX in AuthKey_XXXX.p8)
+#   FLAGSHIP_NOTARY_ISSUER — issuer UUID (top of the App Store Connect Keys page)
 #
-# (You can use an app-specific password from appleid.apple.com instead
-# of the API key — see the `notarize-with-password` target.)
+# None of these reach the signed app — they only authenticate the notarization
+# submission to Apple. Your Apple ID / email is NOT used or needed on this path.
+#
+# ALTERNATE (app-specific password from appleid.apple.com — see the
+# `notarize-with-password` target): set FLAGSHIP_APPLE_ID, FLAGSHIP_TEAM_ID,
+# FLAGSHIP_NOTARY_PASSWORD and run the sub-targets manually instead of `release`.
 
 # BIN_SRC = the binary swift-build emits (matches the SwiftPM target).
 # BIN     = the binary name inside the .app (renamed on copy).
@@ -46,12 +48,14 @@ release: check-env build-release sign notarize staple dmg
 # expensive.
 check-env:
 	@test -n "$$FLAGSHIP_SIGNING_ID"    || (echo "✗ FLAGSHIP_SIGNING_ID not set"; exit 1)
-	@test -n "$$FLAGSHIP_APPLE_ID"      || (echo "✗ FLAGSHIP_APPLE_ID not set"; exit 1)
-	@test -n "$$FLAGSHIP_TEAM_ID"       || (echo "✗ FLAGSHIP_TEAM_ID not set"; exit 1)
 	@test -n "$$FLAGSHIP_NOTARY_KEY"    || (echo "✗ FLAGSHIP_NOTARY_KEY not set"; exit 1)
 	@test -n "$$FLAGSHIP_NOTARY_KEY_ID" || (echo "✗ FLAGSHIP_NOTARY_KEY_ID not set"; exit 1)
 	@test -n "$$FLAGSHIP_NOTARY_ISSUER" || (echo "✗ FLAGSHIP_NOTARY_ISSUER not set"; exit 1)
 	@echo "✓ env complete"
+	# NOTE: the API-key notarization path (`make release`) authenticates with the
+	# .p8 key + key-id + issuer ONLY. FLAGSHIP_APPLE_ID / FLAGSHIP_TEAM_ID are NOT
+	# required here and never leave your machine — they're only for the alternate
+	# `notarize-with-password` target. Neither ever reaches the signed app.
 
 # Re-package the swift-build binary as a proper .app bundle: the main app +
 # the privileged helper (Contents/MacOS), the LaunchDaemon plist
