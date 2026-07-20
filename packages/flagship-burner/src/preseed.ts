@@ -266,7 +266,11 @@ d-i pkgsel/upgrade select none
 popularity-contest popularity-contest/participate boolean false
 
 ### Bootloader — THE WHOLE POINT OF THE DEBIAN PATH.
-# Install GRUB to the disk, no other-OS probing.
+# Install GRUB to the disk, no other-OS probing. The static default is only a
+# fallback: partman/early_command replaces it with the same resolved fixed disk
+# used for partitioning. This matters when the installer is USB /dev/sda and
+# the real target is virtio /dev/vda (macOS VZ); Debian otherwise chooses the
+# ISO and fails at grub-install /dev/sda after the whole base install.
 d-i grub-installer/only_debian boolean true
 d-i grub-installer/with_other_os boolean false
 d-i grub-installer/bootdev string default
@@ -352,14 +356,17 @@ const wipeTargetDisk =
 
 /**
  * The partman/early_command line shared by both storage variants: resolve the
- * target disk, set it, phone home (network is up by partman), then wipe it,
- * then drop the Beacon E base-installer.d script. The preseed `\`-continuation
+ * target disk, set it for BOTH partman and GRUB, phone home (network is up by
+ * partman), then wipe it, then drop the Beacon E base-installer.d script. GRUB
+ * performs its own disk selection later and otherwise picks the USB ISO
+ * (`/dev/sda`) instead of the already-partitioned virtio disk (`/dev/vda`).
+ * The preseed `\`-continuation
  * style is kept (each logical step on its own line).
  */
 function partmanEarlyCommand(partitionBeacon: string, installingDrop: string): string {
   return (
     `d-i partman/early_command string \\\n` +
-    `  ${resolveTargetDisk}; debconf-set partman-auto/disk "$DISK"; \\\n` +
+    `  ${resolveTargetDisk}; debconf-set partman-auto/disk "$DISK"; debconf-set grub-installer/bootdev "$DISK"; \\\n` +
     `  ${partitionBeacon}; \\\n` +
     `  ${wipeTargetDisk}; \\\n` +
     `  ${installingDrop}`

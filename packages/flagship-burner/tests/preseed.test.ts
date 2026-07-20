@@ -162,6 +162,19 @@ describe("buildDebianPreseed — THE NVRAM/removable-path fix (the whole point)"
     expect(c).toContain("d-i grub-installer/only_debian boolean true");
     expect(c).toContain("d-i grub-installer/with_other_os boolean false");
   });
+
+  it("installs GRUB to the same resolved fixed disk as partman, not the USB installer", () => {
+    const c = cfg();
+    const resolve = c.indexOf("for _d in $(list-devices disk)");
+    const partman = c.indexOf('debconf-set partman-auto/disk "$DISK"');
+    const grub = c.indexOf('debconf-set grub-installer/bootdev "$DISK"');
+    const wipe = c.indexOf("dmsetup remove_all");
+
+    expect(resolve).toBeGreaterThanOrEqual(0);
+    expect(resolve).toBeLessThan(partman);
+    expect(partman).toBeLessThan(grub);
+    expect(grub).toBeLessThan(wipe);
+  });
 });
 
 describe("buildDebianPreseed — storage (LVM-on-LUKS; ESP + bios_grub + /boot)", () => {
@@ -262,6 +275,7 @@ describe("buildDebianPreseed — storage (LVM-on-LUKS; ESP + bios_grub + /boot)"
       expect(c).toContain('[ -n "$DISK" ] || DISK=$(list-devices disk | head -n1)');
       expect(c).not.toMatch(/string \\\n\s*DISK=\$\(list-devices disk \| head -n1\)/);
       expect(c).toContain('debconf-set partman-auto/disk "$DISK"');
+      expect(c).toContain('debconf-set grub-installer/bootdev "$DISK"');
       // dmsetup clears stale mappings; dd zeroes the front GPT; rereadpt re-reads.
       expect(c).toContain("dmsetup remove_all 2>/dev/null || true");
       expect(c).toContain('dd if=/dev/zero of="$DISK" bs=1M count=16 2>/dev/null || true');
