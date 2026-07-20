@@ -92,3 +92,7 @@ old_website.zip
 apps/web/e2e/live/.live-out/
 apps/web/e2e/live/.recovery-out/
 apps/web/e2e/live/.pairing-out/
+
+# private patent filing package - do not publish
+patent-filing/
+artifacts/
