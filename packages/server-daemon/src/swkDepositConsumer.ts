@@ -122,9 +122,10 @@ export interface ClaimSwkDepositOptions {
    */
   persistSwk: (swkHex: string) => Promise<void>;
   /**
-   * Restart the daemon so `servicePlatform` constructs on the next boot
-   * (systemd re-fires under Restart=on-failure). Injected; the daemon wires
-   * `process.exit`.
+   * Restart the daemon so `servicePlatform` constructs on the next boot. The
+   * daemon wires this to `process.exit(0)`, so the systemd unit MUST be
+   * `Restart=always` — under `on-failure` a clean exit(0) is treated as success
+   * and NOT restarted, stranding the box the instant it consumes its SWK.
    */
   restart: () => void;
   /** Idempotency marker store. */

@@ -212,7 +212,14 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     expect(b).toContain("EnvironmentFile=/etc/flagship/daemon.env");
     expect(b).toContain("WorkingDirectory=/opt/flagship");
     expect(b).toContain("Type=simple");
-    expect(b).toContain("Restart=on-failure");
+    // MUST be Restart=always: the daemon exits 0 to self-restart after
+    // provisioning a post-boot secret (SWK/CGK deposit), rotating the admin
+    // root, or committing an update. Under on-failure systemd treats exit 0 as
+    // success and leaves the box dead the instant it consumes its SWK — before
+    // it ever serves HTTPS (the "still coming up" first-boot failure).
+    expect(b).toContain("Restart=always");
+    expect(b).not.toContain("Restart=on-failure");
+    expect(b).toContain("StartLimitIntervalSec=0");
     expect(b).toContain("RestartSec=5");
     expect(b).toContain("WantedBy=multi-user.target");
     // The pre-fix bug used `npx … run start`; that must be gone.
@@ -1169,9 +1176,10 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootHost: DEFAULT_BOOT_HOST,
     });
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      // Re-pinned 2026-07-05: arch-neutral bootstrap (no GOARCH on the unseal
-      // build; NSS triplet globbed) for arm64 VM-hosted guests.
-      "f05ef19a228f35a61c8360c90358e66555c2d3d8be9833e633981f6ca32e20b4",
+      // Re-pinned 2026-07-19: flagship-daemon unit is now Restart=always +
+      // StartLimitIntervalSec=0 (was on-failure, which stranded a box after it
+      // consumed its SWK via process.exit(0)).
+      "f0b74e683d4c8060cdc694740f72b9e2cfa3e600b8054882e25315e4c751f3b4",
     );
   });
 
@@ -1194,8 +1202,9 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      // Re-pinned 2026-07-05: arch-neutral bootstrap (see the wired pin above).
-      "d5dc5a75d10f9086c4d9e3c02209216ca010dc6ee7a682fdf6acdd883908279d",
+      // Re-pinned 2026-07-19: flagship-daemon unit Restart=always (see the
+      // wired pin above).
+      "627380a0dee9ff555d4f8e44687c507918481482f939e3551a5100366214eaa9",
     );
   });
 

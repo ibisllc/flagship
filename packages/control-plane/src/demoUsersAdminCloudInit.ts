@@ -480,13 +480,18 @@ cat > /etc/systemd/system/flagship-daemon.service <<'UNIT'
 Description=Flagship server daemon
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 WorkingDirectory=/opt/flagship
 EnvironmentFile=/etc/flagship/daemon.env
 ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon
-Restart=on-failure
+# always, NOT on-failure: the daemon exits 0 to request a self-restart after
+# provisioning a post-boot secret (SWK/CGK deposit), rotating the admin root, or
+# committing an update (server-daemon/src/index.ts). on-failure would treat
+# exit 0 as success and leave the box dead after it consumes its SWK.
+Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal

@@ -228,7 +228,7 @@ export type RehomeOutcome =
  * (boot path) reads the marker and applies the override on the NEXT start; the
  * poller exists so a box that's already up when the transfer completes notices
  * it and writes the marker (it then re-homes on its next restart — the daemon
- * `Restart=on-failure`/admin restart cycle).
+ * `Restart=always`/admin restart cycle).
  */
 export async function checkAndRecordRehome(opts: CheckRehomeOptions): Promise<RehomeOutcome> {
   const fetchImpl = opts.fetchImpl ?? fetch;

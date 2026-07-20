@@ -787,13 +787,26 @@ cat > /etc/systemd/system/flagship-daemon.service <<'UNIT'
 Description=Flagship server daemon
 After=network-online.target flagship-first-boot-register.service
 Wants=network-online.target
+# Never stop restarting on a headless box: with a start-limit the daemon's
+# legitimate self-restarts (below) could trip StartLimitBurst and systemd would
+# give up, stranding the box with no console to recover it.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 WorkingDirectory=/opt/flagship
 EnvironmentFile=/etc/flagship/daemon.env
 ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon
-Restart=on-failure
+# MUST be always, NOT on-failure. The daemon deliberately exits 0 to ask the
+# supervisor to restart it once it has provisioned a post-boot secret or staged
+# an update: the SWK-deposit + CGK-deposit consumers, the admin-root rotation
+# consumer, and the self-update commit all exit with code 0 so the next boot
+# re-reads the new state (server-daemon/src/index.ts). Under on-failure systemd
+# treats exit 0 as success and does NOT restart, so a secret-free-recipe box
+# dies the instant it consumes its SWK, before it ever claims its entitlement,
+# opens the tunnel, runs ACME, or serves HTTPS. The real host power-off/reboot is
+# a separate systemctl poweroff (deadMan.ts), so always never strands a shutdown.
+Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
