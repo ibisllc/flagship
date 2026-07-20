@@ -159,6 +159,7 @@ describe("runPair transport glue", () => {
     const result = await p;
     expect(result.serverDomain).toBe("home.harry.flagship.services");
     expect(result.debugGranted).toBe(false);
+    expect(harness.sentKinds()).toContain("recipe-accepted");
 
     const written = JSON.parse(await readFile(out, "utf8")) as Record<string, unknown>;
     expect(written.serverDomain).toBe("home.harry.flagship.services");

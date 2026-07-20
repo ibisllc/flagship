@@ -61,9 +61,32 @@ final class BurnerPairViewModelTests: XCTestCase {
         let vm = makeVM(client)
         let pk = "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk"
         await vm.qrDetected("flagship://burner?c=AEBAGBAF&k=\(pk)")
+        client.emit(.accepted)
         try await Task.sleep(nanoseconds: 100_000_000)
         // QR path has the pubkey up front → goes straight to matching + sends hello.
         if case .matching = vm.phase {} else { XCTFail("expected .matching, got \(vm.phase)") }
         XCTAssertTrue(client.sentJSON.contains { $0.contains("\"phone-hello\"") })
+    }
+
+    func test_transientPhoneSocketLossReconnectsSameSession() async throws {
+        let client = MockBurnerPairClient()
+        let vm = makeVM(client)
+        let pk = "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk"
+        await vm.qrDetected("flagship://burner?c=AEBAGBAF&k=\(pk)")
+        client.emit(.accepted)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        client.emit(.relayError("network connection was lost"))
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        XCTAssertEqual(client.connectCount, 2)
+        if case .connecting = vm.phase {} else {
+            XCTFail("expected reconnecting connection, got \(vm.phase)")
+        }
+
+        client.emit(.accepted)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        if case .matching = vm.phase {} else {
+            XCTFail("expected matching after reconnect, got \(vm.phase)")
+        }
     }
 }

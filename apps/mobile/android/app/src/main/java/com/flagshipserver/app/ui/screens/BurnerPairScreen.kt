@@ -3,8 +3,9 @@
 // (or types its short code), confirms the 6-digit SAS, and the recipe is minted
 // + delivered over the live `/burner-pipe` session.
 //
-// ONE-SHOT: delivery is a single deposit. Once the recipe is sent the screen
-// shows "Sent ✓ — you can put your phone away" and the phone has no further
+// ONE-SHOT: delivery is a single deposit. Once the burner acknowledges that it
+// staged the recipe, the screen shows "Sent ✓ — you can put your phone away"
+// and the phone has no further
 // role; the burner keeps the recipe and the laptop user disconnects on the
 // burner side. The display is kept awake only while this screen is foreground
 // (so the OS auto-lock doesn't suspend the app mid-deposit).
@@ -77,7 +78,10 @@ fun BurnerPairScreen(
     val view = LocalView.current
     DisposableEffect(Unit) {
         view.keepScreenOn = true
-        onDispose { view.keepScreenOn = false }
+        onDispose {
+            view.keepScreenOn = false
+            controller.cancel()
+        }
     }
 
     val scroll = rememberScrollState()

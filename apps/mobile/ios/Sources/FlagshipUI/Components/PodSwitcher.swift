@@ -86,7 +86,8 @@ public struct PodSwitcher: View {
                 Text(currentName)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(c.text)
-                if currentPodId == leaderPodId && currentPodId != nil {
+                if let current = pods.first(where: { $0.podId == currentPodId }),
+                   current.podId == leaderPodId, current.cameOnline, current.status != .pending {
                     LeaderFlag(size: 12, tint: c.primary)
                 }
                 Image(systemName: open ? "chevron.up" : "chevron.down")
@@ -118,7 +119,7 @@ public struct PodSwitcher: View {
             ForEach(Array(pods.enumerated()), id: \.element.id) { idx, pod in
                 row(
                     label: pod.name,
-                    isLeader: pod.podId == leaderPodId,
+                    isLeader: pod.podId == leaderPodId && pod.cameOnline && pod.status != .pending,
                     isSelected: pod.podId == currentPodId,
                     c: c
                 ) {

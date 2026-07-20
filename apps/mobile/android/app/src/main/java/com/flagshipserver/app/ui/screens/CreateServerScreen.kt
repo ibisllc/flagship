@@ -233,6 +233,7 @@ fun CreateServerScreen(
             BurnerPairScreen(
                 controller = pc,
                 onDeliveredVisible = { domain, serial ->
+                    recordDelivered(domain)
                     onDeliveredVisible(domain, serial, name, description)
                 },
                 onClose = { domain, serial -> onDelivered(domain, serial, name, description) },
@@ -1313,8 +1314,8 @@ internal fun debugGrantEnvelope(
 
 /**
  * Pre-publish the auth-code + RCK on .com so the freshly-booted box can
- * register itself on first phone-home. Both are IRK-signed canonical-
- * bytes envelopes the Worker verifies.
+ * register itself on first phone-home. The auth-code is IRK-signed; RCK
+ * registration uses the sensitive admin signer when the account has one.
  *
  * Phase 2 (login redesign): the USERNAME CLAIM no longer happens here.
  * Account creation is decoupled from server provisioning — the account
@@ -1333,9 +1334,9 @@ internal suspend fun registerControlPlane(
     authCodeUserSig: String,
 ) {
     val now = System.currentTimeMillis()
-    val irk = Keystore.deriveIRK("Register on flagshipserver.com")
+    val rckSigner = Keystore.adminSigningKey("Authorize server routing")
 
-    val rckSig = HexUtil.encode(irk.sign(
+    val rckSig = HexUtil.encode(rckSigner.sign(
         RckRegister.canonicalBytes(
             username = bundle.blob.username,
             subdomain = bundle.blob.serverDomain,

@@ -2,6 +2,7 @@ package com.flagshipserver.app.core
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,11 +16,8 @@ import kotlinx.coroutines.flow.StateFlow
  * wires it to the create-server minter (byte-identical recipe to share/copy),
  * with any Advanced toggles (embed-secrets, debug-friendly) already baked in.
  *
- * ONE-SHOT: once the recipe is delivered the phone has NO further role — it
- * shows "Sent ✓" and the user may lock/leave. There is no ongoing session, no
- * resume, no countdown, no debug-consent round-trip (the debug grant, if any,
- * is baked into the recipe at mint). The burner keeps the recipe and the
- * laptop user disconnects on the burner side; `peer-gone` ends the session.
+ * ONE-SHOT: once the burner acknowledges the staged recipe, the phone has no
+ * further role. Both peers close immediately after that receipt.
  *
  * The 600ms anti-double-tap gate on the confirm button is a UI concern
  * (the screen disables the button) — this controller proceeds on confirm
@@ -51,8 +49,13 @@ class BurnerPairController(
 
     private var session: QrSession? = null
     private var burnerPub: ByteArray? = null
+    private var sessionId: String? = null
+    private var deliveredDomain: String? = null
     private var helloSent = false
     private var consumeJob: Job? = null
+    private var reconnectJob: Job? = null
+    private var receiptTimeoutJob: Job? = null
+    private var reconnectAttempts = 0
 
     fun switchToEnterCode() { _phase.value = Phase.EnterCode }
     fun switchToScan() { _phase.value = Phase.Scan }
@@ -64,11 +67,17 @@ class BurnerPairController(
         val scanned = BurnerPairing.parse(raw)
         if (scanned == null) { _phase.value = Phase.Failed("That code isn't valid."); return }
         val sid = BurnerPairing.sessionId(scanned.codeBytes)
+        sessionId = sid
         burnerPub = scanned.burnerPublicKey
         session = QrSession.fresh()
+        openStream(sid)
+    }
+
+    private suspend fun openStream(sid: String) {
+        consumeJob?.cancel()
+        helloSent = false
         val ch = client.connect(sid)
         consumeJob = scope.launch { for (ev in ch) onInbound(ev) }
-        if (scanned.burnerPublicKey != null) deriveAndHello()
     }
 
     /** Handle one inbound relay event (also called directly by tests). */
@@ -78,15 +87,29 @@ class BurnerPairController(
         // recipe and the laptop user disconnects on the burner side.
         if (_phase.value is Phase.Delivered) return
         when (ev) {
+            is BurnerInbound.Accepted -> {
+                reconnectAttempts = 0
+                deriveAndHello()
+            }
             is BurnerInbound.PeerPresent, is BurnerInbound.PeerJoined -> deriveAndHello()
             is BurnerInbound.BurnerHello -> {
                 if (burnerPub == null) burnerPub = Base64URL.decode(ev.burnerPkB64)
                 deriveAndHello()
             }
+            is BurnerInbound.RecipeAccepted -> {
+                val domain = deliveredDomain ?: return
+                if (_phase.value !is Phase.Delivering) return
+                receiptTimeoutJob?.cancel()
+                receiptTimeoutJob = null
+                _phase.value = Phase.Delivered(domain)
+                consumeJob?.cancel()
+                consumeJob = null
+                client.close()
+            }
             is BurnerInbound.ConsentRequest -> { /* no debug-consent round-trip in the one-shot model */ }
             is BurnerInbound.PeerGone -> fail("The computer's burner app disconnected.")
             is BurnerInbound.Expired -> fail("The pairing session timed out.")
-            is BurnerInbound.RelayError -> fail(ev.message)
+            is BurnerInbound.RelayError -> handleConnectionLoss(ev.message)
             is BurnerInbound.Pong -> { /* liveness */ }
         }
     }
@@ -102,7 +125,7 @@ class BurnerPairController(
     }
 
     /** The user confirmed the SAS matches: unlock the burner, mint, deliver.
-     *  After delivery the phone is done (one-shot). */
+     *  The phone is done only after the burner's acceptance receipt. */
     suspend fun confirmAndDeliver() {
         val s = session ?: return
         if (_phase.value !is Phase.Matching) return
@@ -111,22 +134,57 @@ class BurnerPairController(
         try {
             val minted = mint()
             lastDeliveredSerial = minted.serial
+            deliveredDomain = minted.serverDomain
             val sealed = s.seal(minted.json.toByteArray())
             client.send(BurnerOutbound.Deliver(sealed.ciphertextB64u, sealed.nonceB64u))
-            _phase.value = Phase.Delivered(minted.serverDomain)
+            receiptTimeoutJob?.cancel()
+            receiptTimeoutJob = scope.launch {
+                delay(20_000)
+                if (_phase.value is Phase.Delivering) {
+                    fail("The burner saved the recipe but didn't confirm receipt. Update or reopen the burner and try again.")
+                }
+            }
         } catch (t: Throwable) {
             fail(t.message ?: "Delivery failed.")
         }
     }
 
     fun cancel() {
+        reconnectJob?.cancel()
+        reconnectJob = null
+        receiptTimeoutJob?.cancel()
+        receiptTimeoutJob = null
         consumeJob?.cancel()
         consumeJob = null
         client.close()
         _phase.value = Phase.Scan
     }
 
+    private fun handleConnectionLoss(message: String) {
+        if (_phase.value !is Phase.Connecting && _phase.value !is Phase.Matching) {
+            fail(message)
+            return
+        }
+        val sid = sessionId
+        if (sid == null || reconnectAttempts >= 3) {
+            fail(message)
+            return
+        }
+        reconnectAttempts += 1
+        _phase.value = Phase.Connecting
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            delay(reconnectAttempts * 300L)
+            runCatching { openStream(sid) }
+                .onFailure { handleConnectionLoss(it.message ?: message) }
+        }
+    }
+
     private fun fail(message: String) {
+        reconnectJob?.cancel()
+        reconnectJob = null
+        receiptTimeoutJob?.cancel()
+        receiptTimeoutJob = null
         consumeJob?.cancel()
         consumeJob = null
         client.close()

@@ -711,7 +711,7 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   const rckRegMsg = canonical([
     TAG_RCK_REGISTER, username, code.serverDomain, bytesToHex(rck.publicKey), rckRegIssuedAt,
   ]);
-  const rckRegSig = await signWithIrk(session.umk, rckRegMsg);
+  const rckRegSig = await sensitiveSigner()(session.umk, rckRegMsg);
   // Absolute control-plane URL — same reason as the auth-code/issue call above:
   // a relative POST hits the GET/HEAD-only webapp origin and 405s.
   const rckResp = await fetch(`${controlApex()}/api/routing/register-rck`, {

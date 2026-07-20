@@ -404,7 +404,13 @@ public final class CreateServerViewModel {
             rckPubHex: HexUtil.encode(rck.publicKey.rawRepresentation),
             issuedAt: rckIssuedAt
         )
-        let rckSig = try irk.signature(for: rckBytes)
+        // register-rck is a sensitive routing-authority operation. Accounts
+        // with a pinned admin root must sign it with that root; legacy
+        // accounts still use the IRK already unsealed above.
+        let rckSigner = Keystore.hasAdminRoot
+            ? try await Keystore.adminRootKey(reason: "Authorize routing for \(name)")
+            : irk
+        let rckSig = try rckSigner.signature(for: rckBytes)
         try await server.registerRck(.init(
             request: .init(
                 username: username,

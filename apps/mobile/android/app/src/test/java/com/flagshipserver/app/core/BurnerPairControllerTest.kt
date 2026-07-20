@@ -2,6 +2,8 @@ package com.flagshipserver.app.core
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -9,7 +11,7 @@ import org.junit.Test
 /**
  * BurnerPairController one-shot handshake logic, driven by a MockBurnerPairClient.
  * Minting is injected as a stub (the real one needs the Keystore/biometric), so
- * connect → SAS → phone-hello → confirm → deliver-once are all exercised.
+ * connect → SAS → phone-hello → confirm → deliver → desktop receipt are all exercised.
  * Mirror of the iOS BurnerPairViewModelTests (one-shot model).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -55,14 +57,19 @@ class BurnerPairControllerTest {
         val client = MockBurnerPairClient()
         val c = controller(this, client)
         c.begin("flagship://burner?c=AEBAGBAF&k=$burnerPk")
+        c.onInbound(BurnerInbound.Accepted)
         assertTrue(c.phase.value is BurnerPairController.Phase.Matching)
 
         c.confirmAndDeliver()
+        assertTrue(c.phase.value is BurnerPairController.Phase.Delivering)
+        assertTrue("pending row must wait for the desktop receipt", !client.didClose)
+        c.onInbound(BurnerInbound.RecipeAccepted)
         assertEquals(
             BurnerPairController.Phase.Delivered("home.harry.flagship.services"),
             c.phase.value,
         )
         assertEquals("SER123", c.lastDeliveredSerial)
+        assertTrue("phone socket must close after the desktop receipt", client.didClose)
         assertTrue(client.sentJson.any { it.contains("\"confirm-pairing\"") })
         assertTrue(client.sentJson.any { it.contains("\"deliver\"") })
         c.cancel()
@@ -74,7 +81,9 @@ class BurnerPairControllerTest {
         val client = MockBurnerPairClient()
         val c = controller(this, client)
         c.begin("flagship://burner?c=AEBAGBAF&k=$burnerPk")
+        c.onInbound(BurnerInbound.Accepted)
         c.confirmAndDeliver()
+        c.onInbound(BurnerInbound.RecipeAccepted)
         assertTrue(c.phase.value is BurnerPairController.Phase.Delivered)
 
         c.onInbound(BurnerInbound.PeerGone)
@@ -84,5 +93,32 @@ class BurnerPairControllerTest {
             c.phase.value,
         )
         c.cancel()
+    }
+
+    @Test fun qrPathWaitsForRelayAcceptanceBeforeSendingHello() = runTest {
+        val client = MockBurnerPairClient()
+        val c = controller(this, client)
+        c.begin("flagship://burner?c=AEBAGBAF&k=$burnerPk")
+        assertTrue(c.phase.value is BurnerPairController.Phase.Connecting)
+        assertTrue(client.sentJson.none { it.contains("\"phone-hello\"") })
+
+        c.onInbound(BurnerInbound.Accepted)
+        assertTrue(c.phase.value is BurnerPairController.Phase.Matching)
+        assertTrue(client.sentJson.any { it.contains("\"phone-hello\"") })
+        c.cancel()
+    }
+
+    @Test fun missingDesktopReceiptDoesNotSpinForever() = runTest {
+        val client = MockBurnerPairClient()
+        val c = controller(this, client)
+        c.begin("flagship://burner?c=AEBAGBAF&k=$burnerPk")
+        c.onInbound(BurnerInbound.Accepted)
+        c.confirmAndDeliver()
+
+        advanceTimeBy(20_000)
+        runCurrent()
+
+        val failed = c.phase.value as BurnerPairController.Phase.Failed
+        assertTrue(failed.message.contains("didn't confirm receipt"))
     }
 }

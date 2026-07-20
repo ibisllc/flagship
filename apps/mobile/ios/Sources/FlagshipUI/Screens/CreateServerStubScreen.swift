@@ -26,7 +26,6 @@ public struct CreateServerStubScreen: View {
     @State private var deliveredTimeline: ProvisionTimelineViewModel?
     // Delivery-chooser state.
     @State private var pairVM: BurnerPairViewModel?
-    @State private var showPair = false
     @State private var shareURL: URL?
     @State private var showShare = false
     @State private var deliveryBusy = false
@@ -82,28 +81,26 @@ public struct CreateServerStubScreen: View {
             .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
-        .sheet(isPresented: $showPair) {
-            if let pairVM {
-                NavigationStack {
-                    BurnerPairScreen(
-                        vm: pairVM,
-                        onDelivered: { domain, _ in
-                            // Surface the pending pod the moment the recipe is sent.
-                            // One-shot: the phone has no further role after delivery.
-                            onDeliveredVisible(domain, vm.name, vm.description)
-                        },
-                        onClose: {
-                            let serial = pairVM.lastDeliveredSerial ?? ""
-                            let dom = pairVM.deliveredDomain
-                            showPair = false
-                            vm.lastDeliveredSerial = serial
-                            if let dom { vm.phase = .delivered(serial: serial, serverDomain: dom) }
-                        },
-                        onCancel: { showPair = false }
-                    )
-                    .navigationTitle("Pair with burner")
-                    .navigationBarTitleDisplayMode(.inline)
-                }
+        .sheet(item: $pairVM) { presentedVM in
+            NavigationStack {
+                BurnerPairScreen(
+                    vm: presentedVM,
+                    onDelivered: { domain, _ in
+                        // Surface it only after the burner has successfully
+                        // staged the recipe and returned its receipt.
+                        onDeliveredVisible(domain, vm.name, vm.description)
+                    },
+                    onClose: {
+                        let serial = presentedVM.lastDeliveredSerial ?? ""
+                        let dom = presentedVM.deliveredDomain
+                        pairVM = nil
+                        vm.lastDeliveredSerial = serial
+                        if let dom { vm.phase = .delivered(serial: serial, serverDomain: dom) }
+                    },
+                    onCancel: { pairVM = nil }
+                )
+                .navigationTitle("Pair with burner")
+                .navigationBarTitleDisplayMode(.inline)
             }
         }
         .sheet(isPresented: $showShare) {
@@ -173,9 +170,7 @@ public struct CreateServerStubScreen: View {
     }
 
     private func startPair() {
-        let vmPair = BurnerPairViewModel(client: LiveBurnerPairClient(), minter: vm)
-        pairVM = vmPair
-        showPair = true
+        pairVM = BurnerPairViewModel(client: LiveBurnerPairClient(), minter: vm)
     }
 
     private func shareRecipe() async {

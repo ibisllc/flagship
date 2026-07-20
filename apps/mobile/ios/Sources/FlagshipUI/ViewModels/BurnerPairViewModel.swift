@@ -17,14 +17,15 @@ import FlagshipCore
 /// transport differs. The crypto reuses `QrRelay` (the burner uses the
 /// identical X25519/HKDF/SAS constants).
 ///
-/// ONE-SHOT: once the recipe is delivered the phone has NO further role — it
-/// shows "Sent ✓" and the user may lock/leave. There is no ongoing session, no
-/// resume, no countdown, no debug-consent round-trip (the debug grant, if any,
-/// is baked into the recipe at mint). The burner keeps the recipe and the
-/// laptop user disconnects on the burner side.
+/// ONE-SHOT: once the burner acknowledges the staged recipe, the phone has NO
+/// further role — it shows "Sent ✓" and the user may lock/leave. There is no
+/// post-delivery session/resume, countdown, or debug-consent round-trip (the
+/// debug grant, if any, is baked into the recipe at mint). A brief socket loss
+/// during pairing is retried in-place. The burner keeps the recipe.
 @Observable
 @MainActor
-public final class BurnerPairViewModel {
+public final class BurnerPairViewModel: Identifiable {
+    public let id = UUID()
     public enum Phase: Sendable, Equatable {
         case scan
         case enterCode
@@ -44,7 +45,8 @@ public final class BurnerPairViewModel {
         BurnerPairing.codeBytes(fromHumanCode: typedCode) != nil
     }
 
-    /// Set after delivery so the host can record the pending pod.
+    /// Set while delivering; the host only observes them after the burner
+    /// acknowledges that it successfully staged the recipe.
     public private(set) var lastDeliveredSerial: String?
     public private(set) var deliveredDomain: String?
 
@@ -56,7 +58,11 @@ public final class BurnerPairViewModel {
     private var phoneSk: Curve25519.KeyAgreement.PrivateKey?
     private var burnerPk: Data?
     private var aeadKey: SymmetricKey?
+    private var sessionId: String?
     private var streamTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
+    private var receiptTimeoutTask: Task<Void, Never>?
+    private var reconnectAttempts = 0
     private var helloSent = false
 
     public init(client: any BurnerPairClient, minter: CreateServerViewModel) {
@@ -85,21 +91,24 @@ public final class BurnerPairViewModel {
         do {
             let scanned = try BurnerPairing.parse(raw)
             let sid = BurnerPairing.sessionId(forCodeBytes: scanned.codeBytes)
+            sessionId = sid
             burnerPk = scanned.burnerPublicKey
             let sk = Curve25519.KeyAgreement.PrivateKey()
             phoneSk = sk
-
-            let stream = try await client.connect(sid: sid)
-            streamTask = Task { [weak self] in
-                for await ev in stream {
-                    await self?.handle(ev)
-                }
-            }
-            // If we already have the burner pubkey (scanned QR), derive + greet
-            // immediately; otherwise we wait for `burner-hello`.
-            if scanned.burnerPublicKey != nil { try sendHelloIfReady() }
+            try await openStream(sid: sid)
         } catch {
             await fail(error.localizedDescription)
+        }
+    }
+
+    private func openStream(sid: String) async throws {
+        streamTask?.cancel()
+        helloSent = false
+        let stream = try await client.connect(sid: sid)
+        streamTask = Task { [weak self] in
+            for await ev in stream {
+                await self?.handle(ev)
+            }
         }
     }
 
@@ -109,13 +118,28 @@ public final class BurnerPairViewModel {
         // recipe and the laptop user disconnects on the burner side.
         if case .delivered = phase { return }
         switch ev {
+        case .accepted:
+            reconnectAttempts = 0
+            do { try await sendHelloIfReady() }
+            catch { await handleConnectionLoss(error.localizedDescription) }
         case .peerPresent, .peerJoined:
             // Re-send our hello if we already have the burner's key (covers a
             // late-joining burner in the QR path).
-            try? sendHelloIfReady()
+            do { try await sendHelloIfReady() }
+            catch { await handleConnectionLoss(error.localizedDescription) }
         case .burnerHello(let pkB64):
             if burnerPk == nil { burnerPk = Base64URL.decode(pkB64) }
-            try? sendHelloIfReady()
+            do { try await sendHelloIfReady() }
+            catch { await handleConnectionLoss(error.localizedDescription) }
+        case .recipeAccepted:
+            guard case .delivering = phase, let domain = deliveredDomain else { break }
+            receiptTimeoutTask?.cancel()
+            receiptTimeoutTask = nil
+            minter.recordDeliveredBookkeeping(serverDomain: domain)
+            phase = .delivered(serverDomain: domain)
+            streamTask?.cancel()
+            streamTask = nil
+            await client.close()
         case .consentRequest:
             // No debug-consent round-trip in the one-shot model — the debug
             // grant (if any) is baked into the recipe at mint time.
@@ -125,7 +149,7 @@ public final class BurnerPairViewModel {
         case .expired:
             await fail("The pairing session timed out.")
         case .relayError(let m):
-            await fail(m)
+            await handleConnectionLoss(m)
         case .pong:
             break
         }
@@ -133,13 +157,18 @@ public final class BurnerPairViewModel {
 
     /// Derive the SAS once we have both keys, greet the burner, and move to
     /// the match screen. Idempotent (only fires once).
-    private func sendHelloIfReady() throws {
+    private func sendHelloIfReady() async throws {
         guard !helloSent, let sk = phoneSk, let pk = burnerPk else { return }
         let derived = try QrRelay.deriveMaterial(phonePrivateKey: sk, browserPublicKey: pk)
-        aeadKey = derived.aeadKey
         helloSent = true
         let phonePkB64 = Base64URL.encode(sk.publicKey.rawRepresentation)
-        Task { await client.send(.phoneHello(phonePkB64: phonePkB64)) }
+        do {
+            try await client.send(.phoneHello(phonePkB64: phonePkB64))
+        } catch {
+            helloSent = false
+            throw error
+        }
+        aeadKey = derived.aeadKey
         phase = .matching(matchCode: derived.matchCode, gateExpired: false)
         // 600ms gate before Confirm is tappable (mirrors create-server).
         Task { [weak self] in
@@ -155,34 +184,85 @@ public final class BurnerPairViewModel {
     }
 
     /// The user confirmed the SAS matches: tell the burner to unlock, then
-    /// mint + seal + deliver the recipe. After delivery the phone is done.
+    /// mint + seal + deliver the recipe. The phone is done only after the
+    /// burner confirms that it successfully staged the recipe.
     public func confirmAndDeliver() async {
         guard case .matching(_, true) = phase, let key = aeadKey else { return }
-        await client.send(.confirmPairing)
         phase = .delivering
         do {
+            try await client.send(.confirmPairing)
             let blob = try await minter.mintInstallBlob()
             lastDeliveredSerial = blob.blob.authCode.serial
             deliveredDomain = blob.blob.serverDomain
             let payload = try JSONEncoder().encode(blob.onWire())
             let sealed = try QrRelay.seal(payload: payload, with: key)
-            await client.send(.deliver(ciphertextB64: sealed.ciphertextBase64Url,
-                                       nonceB64: sealed.nonceBase64Url))
-            minter.recordDeliveredBookkeeping(serverDomain: blob.blob.serverDomain)
-            phase = .delivered(serverDomain: blob.blob.serverDomain)
+            try await client.send(.deliver(ciphertextB64: sealed.ciphertextBase64Url,
+                                           nonceB64: sealed.nonceBase64Url))
+            receiptTimeoutTask?.cancel()
+            receiptTimeoutTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+                guard !Task.isCancelled, let self,
+                      case .delivering = self.phase else { return }
+                await self.fail("The burner saved the recipe but didn't confirm receipt. Update or reopen the burner and try again.")
+            }
         } catch {
             await fail(error.localizedDescription)
         }
     }
 
     public func cancel() async {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        receiptTimeoutTask?.cancel()
+        receiptTimeoutTask = nil
         streamTask?.cancel()
         streamTask = nil
         await client.close()
         phase = .scan
     }
 
+    public func screenDidDisappear() async {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        receiptTimeoutTask?.cancel()
+        receiptTimeoutTask = nil
+        streamTask?.cancel()
+        streamTask = nil
+        await client.close()
+    }
+
+    private func handleConnectionLoss(_ message: String) async {
+        switch phase {
+        case .connecting, .matching:
+            break
+        default:
+            await fail(message)
+            return
+        }
+        guard let sid = sessionId, reconnectAttempts < 3 else {
+            await fail(message)
+            return
+        }
+        reconnectAttempts += 1
+        phase = .connecting
+        reconnectTask?.cancel()
+        let delay = UInt64(reconnectAttempts) * 300_000_000
+        reconnectTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled, let self else { return }
+            do {
+                try await self.openStream(sid: sid)
+            } catch {
+                await self.handleConnectionLoss(error.localizedDescription)
+            }
+        }
+    }
+
     private func fail(_ message: String) async {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        receiptTimeoutTask?.cancel()
+        receiptTimeoutTask = nil
         streamTask?.cancel()
         streamTask = nil
         await client.close()

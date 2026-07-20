@@ -9,7 +9,7 @@ import FlagshipCore
 /// live session.
 ///
 /// ONE-SHOT: delivery is a single deposit. Once the recipe is sent the screen
-/// shows "Sent ✓ — you can put your phone away" and the phone has no further
+/// shows "Sent ✓ — you can close this screen" and the phone has no further
 /// role; the burner keeps the recipe and the laptop user disconnects on the
 /// burner side. The display is kept awake only while this screen is foreground
 /// (so the OS auto-lock doesn't suspend the app mid-deposit).
@@ -63,7 +63,10 @@ public struct BurnerPairScreen: View {
         // auto-lock doesn't suspend the app (and kill the socket) mid-deposit.
         // Reset on exit.
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
+            Task { await vm.screenDidDisappear() }
+        }
         .onChange(of: deliveredKey) { _, _ in
             if case .delivered(let domain) = vm.phase {
                 onDelivered(domain, vm.lastDeliveredSerial ?? "")
@@ -159,7 +162,7 @@ public struct BurnerPairScreen: View {
 
     private func deliveredPage(domain: String, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            header("Sent ✓ — you can put your phone away", "Your computer's burner has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.", c: c)
+            header("Sent ✓ — you can close this screen", "Your computer's burner has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.", c: c)
             FSCard {
                 Label(domain, systemImage: "checkmark.seal.fill")
                     .font(FS.font.h4())

@@ -209,7 +209,6 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
         return;
       }
       finalized = true;
-      cleanup();
       try {
         let toWrite = recipeText;
         if (debugCarrier) {
@@ -220,6 +219,8 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
           toWrite = JSON.stringify(obj);
         }
         await writeFile(outPath, toWrite, { mode: 0o600 });
+        sendUp({ kind: "recipe-accepted" });
+        cleanup();
         emit({ event: "done", recipePath: outPath, serverDomain: recipeDomain, debugGranted: !!debugCarrier });
         log("");
         log(`  ✅ Recipe received + verified for:   ${recipeDomain}`);
@@ -232,6 +233,7 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
         log(`     Next:     sudo flagship-burn write ${outPath} <base.iso>`);
         resolve({ recipePath: outPath, serverDomain: recipeDomain, debugGranted: !!debugCarrier });
       } catch (e) {
+        cleanup();
         reject(new Error(`couldn't save the recipe: ${(e as Error).message}`));
       }
     };
@@ -319,7 +321,7 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
             // The phone dropped after delivering — finalize with what we have.
             void finalize();
           } else {
-            log("  The phone disconnected. Waiting for it to reconnect…");
+            log("  The phone left before sending the recipe. Waiting for it to reconnect…");
             aeadKey = null; helloSent = false;
           }
           return;

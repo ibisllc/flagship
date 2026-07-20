@@ -14,15 +14,16 @@ import java.net.URLEncoder
 
 /**
  * Phone-side peer of `wss://<host>/burner-pipe/<sid>?role=phone` — the
- * long-lived bidirectional session with the desktop burner (relay DO:
+ * one-shot deposit session with the desktop burner (relay DO:
  * apps/com/src/burnerRelay.ts). Kotlin mirror of the iOS BurnerPairClient.
- * The socket is the gate: a drop / peer-gone / expired ends the session.
  */
 
 sealed interface BurnerInbound {
+    data object Accepted : BurnerInbound
     data object PeerPresent : BurnerInbound
     data object PeerJoined : BurnerInbound
     data class BurnerHello(val burnerPkB64: String) : BurnerInbound
+    data object RecipeAccepted : BurnerInbound
     // Phase 4 — the burner asks the phone to approve a security-sensitive
     // setting (e.g. Debug mode). Carries the box's serverDomain so the phone
     // can sign the owner-IRK debug-access grant the box verifies. Mirrors the
@@ -62,59 +63,85 @@ class LiveBurnerPairClient(
 ) : BurnerPairClient {
     private val scheme = if (secure) "wss" else "ws"
     private val json = Json { ignoreUnknownKeys = true }
-    private var ws: WebSocket? = null
+    @Volatile private var ws: WebSocket? = null
     private var pinger: Thread? = null
     @Volatile private var closed = false
-    private val channel = Channel<BurnerInbound>(Channel.UNLIMITED)
+    @Volatile private var generation = 0
+    private var channel = Channel<BurnerInbound>(Channel.UNLIMITED)
 
     override suspend fun connect(sid: String): Channel<BurnerInbound> {
+        val previousWs = ws
+        val previousChannel = channel
+        pinger?.interrupt()
+        generation += 1
+        val connectionGeneration = generation
+        closed = false
+        val nextChannel = Channel<BurnerInbound>(Channel.UNLIMITED)
+        channel = nextChannel
         val encodedSid = URLEncoder.encode(sid, "UTF-8")
         val req = Request.Builder()
             .url("$scheme://$host/burner-pipe/$encodedSid?role=phone")
             .build()
-        ws = client.newWebSocket(req, object : WebSocketListener() {
+        val nextWs = client.newWebSocket(req, object : WebSocketListener() {
             override fun onMessage(webSocket: WebSocket, text: String) {
-                decode(text)?.let { channel.trySend(it) }
+                if (isCurrent(connectionGeneration, webSocket)) {
+                    decode(text)?.let { nextChannel.trySend(it) }
+                }
             }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                if (!closed) { channel.trySend(BurnerInbound.RelayError("connection lost")); channel.close() }
+                if (isCurrent(connectionGeneration, webSocket)) {
+                    nextChannel.trySend(BurnerInbound.RelayError("connection lost"))
+                    nextChannel.close()
+                }
             }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (!closed) { channel.trySend(BurnerInbound.PeerGone); channel.close() }
+                if (isCurrent(connectionGeneration, webSocket)) {
+                    nextChannel.trySend(BurnerInbound.PeerGone)
+                    nextChannel.close()
+                }
             }
         })
-        startPing()
-        return channel
+        ws = nextWs
+        previousWs?.cancel()
+        previousChannel.close()
+        startPing(connectionGeneration, nextWs)
+        return nextChannel
     }
 
     override suspend fun send(frame: BurnerOutbound) {
-        ws?.send(frame.toJson())
+        check(ws?.send(frame.toJson()) == true) { "the pairing connection is closed" }
     }
 
-    private fun startPing() {
+    private fun startPing(connectionGeneration: Int, socket: WebSocket) {
         pinger = Thread {
-            while (!closed) {
+            while (!closed && generation == connectionGeneration) {
                 try { Thread.sleep(20_000) } catch (_: InterruptedException) { return@Thread }
-                if (closed) return@Thread
-                ws?.send("""{"kind":"ping"}""")
+                if (closed || generation != connectionGeneration) return@Thread
+                socket.send("""{"kind":"ping"}""")
             }
         }.apply { isDaemon = true; start() }
     }
 
+    @Synchronized
     override fun close() {
         if (closed) return
         closed = true
+        generation += 1
         pinger?.interrupt()
         ws?.close(1000, null)
         ws = null
         channel.close()
     }
 
+    @Synchronized
+    private fun isCurrent(connectionGeneration: Int, socket: WebSocket): Boolean =
+        !closed && generation == connectionGeneration && ws === socket
+
     private fun decode(text: String): BurnerInbound? {
         val obj = runCatching { json.decodeFromString(JsonObject.serializer(), text) }.getOrNull() ?: return null
         val kind = obj["kind"]?.jsonPrimitive?.content ?: return null
         return when (kind) {
-            "accepted" -> null
+            "accepted" -> BurnerInbound.Accepted
             "peer-present" -> BurnerInbound.PeerPresent
             "peer-joined" -> BurnerInbound.PeerJoined
             "peer-gone" -> BurnerInbound.PeerGone
@@ -125,6 +152,7 @@ class LiveBurnerPairClient(
                 val frame = obj["frame"]?.jsonObject ?: return null
                 when (frame["kind"]?.jsonPrimitive?.content) {
                     "burner-hello" -> frame["burnerPk"]?.jsonPrimitive?.content?.let { BurnerInbound.BurnerHello(it) }
+                    "recipe-accepted" -> BurnerInbound.RecipeAccepted
                     "consent-request" -> BurnerInbound.ConsentRequest(
                         frame["setting"]?.jsonPrimitive?.content ?: "",
                         frame["serverDomain"]?.jsonPrimitive?.content ?: "",
@@ -141,12 +169,14 @@ class LiveBurnerPairClient(
 /** Scripted mock for tests. emit() pushes inbound; sent captures outbound. */
 class MockBurnerPairClient : BurnerPairClient {
     var connectedSid: String? = null; private set
+    var connectCount: Int = 0; private set
     val sent = mutableListOf<BurnerOutbound>()
     var didClose = false; private set
     private val channel = Channel<BurnerInbound>(Channel.UNLIMITED)
 
     override suspend fun connect(sid: String): Channel<BurnerInbound> {
         connectedSid = sid
+        connectCount += 1
         return channel
     }
     override suspend fun send(frame: BurnerOutbound) { sent.add(frame) }
