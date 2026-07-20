@@ -27,6 +27,7 @@ import type {
 import type { HandlerResponseWithHeaders } from "./types.js";
 import { ok, malformed, notFound, conflict } from "./types.js";
 import type { DnsDeleteClient } from "./cloudflareDns.js";
+import { validateUserLabel } from "./labels.js";
 
 // ──────────────────────────────────────────────────────────────────────
 // Domain configuration
@@ -44,20 +45,6 @@ export const DEFAULT_REGION = "fsn1";
 export const DEFAULT_SIZE = "cx22";
 /** Default idle-timeout for /create when the caller omits ttlIdleMinutes. */
 export const DEFAULT_TTL_IDLE_MINUTES = 30;
-
-/** docs/sample-users.md §2.4 — username naming rules. Hyphen-free
- *  (aligned with real usernames) so a demo name can never break the
- *  `<creator>-<slug>` app-id split or be rejected by the hyphen-free
- *  username validators downstream; 3..32 keeps the demo length range. */
-const USERNAME_RE = /^[a-z0-9]{3,32}$/;
-const RESERVED_USERNAMES = new Set([
-  "admin",
-  "flagship",
-  "support",
-  "www",
-  "api",
-  "dev",
-]);
 
 /** docs/sample-users.md §3.3 — concurrent paired-session cap per
  *  demo username. (Enforced inside the daemon, not the .com Worker
@@ -214,11 +201,8 @@ async function audit(
 // Username validation
 // ──────────────────────────────────────────────────────────────────────
 
-// Legacy hyphenated names (e.g. `demo-alice`) predate the hyphen-free
-// rename. CREATE stays strict (USERNAME_RE), but destructive cleanup
-// (delete) must still accept them so pre-rename orphans can be torn
-// down. delete just identifies an existing row, so accepting hyphens
-// is harmless.
+// Destructive cleanup retains the old broad 3..32 grammar so any row minted
+// before username validation was centralized can never become undeletable.
 const LEGACY_USERNAME_RE = /^[a-z0-9-]{3,32}$/;
 
 function validateDemoUsername(
@@ -234,19 +218,15 @@ function validateDemoUsername(
   if (typeof raw !== "string") return { ok: false, reason: "username must be a string" };
   const u = raw.toLowerCase();
   const allowHyphens = opts?.allowLegacyHyphens ?? false;
-  const re = allowHyphens ? LEGACY_USERNAME_RE : USERNAME_RE;
-  if (!re.test(u)) {
-    return {
-      ok: false,
-      reason: allowHyphens
-        ? "username must match [a-z0-9-]{3,32}"
-        : "username must match [a-z0-9]{3,32} (no hyphens)",
-    };
+  if (allowHyphens) {
+    if (!LEGACY_USERNAME_RE.test(u)) {
+      return { ok: false, reason: "username must match [a-z0-9-]{3,32}" };
+    }
+    return { ok: true, username: u };
   }
-  if (RESERVED_USERNAMES.has(u)) {
-    return { ok: false, reason: "username is reserved" };
-  }
-  return { ok: true, username: u };
+  const validated = validateUserLabel(u);
+  if (!validated.ok) return { ok: false, reason: validated.reason };
+  return { ok: true, username: validated.label };
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -378,8 +358,8 @@ export async function handleDeleteDemoUser(
   body: DeleteDemoUserBody | undefined,
 ): Promise<HandlerResponseWithHeaders> {
   if (!body) return malformed("malformed body");
-  // Accept legacy hyphenated names here so pre-rename orphans (e.g.
-  // demo-alice) can still be torn down; CREATE remains hyphen-free.
+  // Accept the historical broad grammar here so old malformed rows can still
+  // be torn down; CREATE uses the canonical real-account username validator.
   const v = validateDemoUsername(body.username, { allowLegacyHyphens: true });
   if (!v.ok) return malformed(v.reason);
   const username = v.username;
@@ -802,9 +782,10 @@ export interface DemoW11SnapshotDeps {
 }
 
 /**
- * W11 snapshot + teardown driver. Runs on the same 10-minute cron as
- * the legacy reaper / promoter. For each W11 row
- * (`state='provisioning' && isoR2Key !== null`):
+ * Initial-image driver. Runs on the same 10-minute cron as the reaper /
+ * promoter. It handles legacy W11 installer rows and snapshots a live W13
+ * cloud-init-direct server once so it can be restored after idle teardown.
+ * For each W11 row (`state='provisioning' && isoR2Key !== null`):
  *
  *   1. Within `preSnapshotGraceMs` of last_state_change: skip (let
  *      the cloud-init dd-and-reboot finish + the daemon register).
@@ -820,6 +801,11 @@ export interface DemoW11SnapshotDeps {
  *      (Default 45 min — sized for Debian d-i mini.iso + apt pkgsel +
  *      late-command's `npm ci` + `tsc -b` on a small VPS. Alpine apkovl
  *      finished in ~5 min; Debian d-i legitimately needs 20-30 min.)
+ *
+ * A W13 row is `state='up' && snapshotId IS NULL && isoR2Key IS NULL`.
+ * Its daemon is already live, so the poller creates and records the snapshot
+ * but deliberately keeps the active server running. The idle reaper later
+ * destroys it while preserving snapshotId, making the next /connect viable.
  */
 export async function runDemoW11SnapshotPoller(
   deps: DemoW11SnapshotDeps,
@@ -834,8 +820,9 @@ export async function runDemoW11SnapshotPoller(
   let finalized = 0;
   let failed = 0;
   for (const row of rows) {
-    if (row.state !== "provisioning") continue;
-    if (!row.isoR2Key) continue; // not W11
+    const isW11 = row.state === "provisioning" && row.isoR2Key !== null;
+    const isW13Live = row.state === "up" && row.isoR2Key === null && !row.snapshotId;
+    if (!isW11 && !isW13Live) continue;
     if (!row.activeServerId) continue;
     const ageMs = now - row.createdAt;
     if (ageMs < graceMs) continue;
@@ -888,6 +875,7 @@ export async function runDemoW11SnapshotPoller(
 
     // No snapshot yet: check daemon registration first.
     if (!(await isRegistered(fqdn, podRecentMs))) {
+      if (isW13Live) continue;
       if (ageMs > failMs) {
         // Give up — destroy the VPS, clear active_server_id, surface
         // the failure via audit. Operator can re-run.

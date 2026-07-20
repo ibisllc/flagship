@@ -149,6 +149,22 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-20 — app-review demo path repaired and validated live.** The real
+operator path is `scripts/sample-user.mjs`; the older `scripts/demo-account.mjs`
+is only a non-executing authorization/plan printer, and `TEST_ACCOUNTS` is legacy
+fixture compatibility rather than live reviewer state. Demo creation now shares
+the real 3–30-character username validator (interior single hyphens allowed),
+and all admin/provision endpoints use that same grammar. W13 direct-cloud demos
+now finish CLI polling at `up`, snapshot the running server before the idle
+reaper, and allow a post-registration ACME retry to replace a transient error
+with `live`. DNS maintenance now removes hour-old ACME TXT records and reconciles
+old generated A/AAAA routes against active D1 servers in bounded cron batches;
+the live repair removed 2 stale challenges + 104 orphan routes without touching
+the 3 active servers. Reviewer account **`openai-build`** (display **OpenAI Build
+Week**) is live with a 30-day idle window, snapshot-backed cloud server
+`home.openai-build.flagship.services`, public DNS, a valid Let's Encrypt cert,
+and HTTP 200 through the production passthrough.
+
 **2026-07-20 (later) — VM-hosted "still coming up" root-caused (initramfs
 virtio_net); biometric "random Face ID" fixed; desktop hosted-servers UI.**
 Driven by a stuck Mac-hosted VM (`hali.jolly-quince`) + scary idle Face-ID prompts.

@@ -16,18 +16,18 @@ independent.
 ## 1. Overview
 
 The operator runs `node scripts/sample-user.mjs create demoalice
---display "Demo Alice"` from their laptop. The CLI builds a
-personalized Flagship ISO, uploads it to R2, provisions **one**
-temporary Hetzner CX22, lets the daemon install + register + obtain a
-real Let's Encrypt cert end-to-end, snapshots the booted disk via
-Hetzner's `create_image` action, destroys the temp server, and stores
-the snapshot id in D1.
+--display "Demo Alice"` from their laptop. The Worker provisions **one**
+Hetzner server through the current W13 cloud-init-direct path, lets the daemon
+register and obtain a real Let's Encrypt cert end-to-end, and marks it `up`.
+The 10-minute cron snapshots that live server and stores the snapshot id in D1;
+the server stays online until the ordinary idle reaper destroys it.
 
 From that point on, any iOS / Android / webapp client that types
 `demoalice` short-circuits into demo mode and sees **one** device.
-Tapping that device fires `POST /api/dev/sample-user/demoalice/connect`;
-the Worker calls Hetzner `POST /servers` with `image: <snapshot_id>`,
-which restores the snapshot in roughly 30 seconds. The client polls
+Tapping that device fires `POST /api/dev/sample-user/demoalice/connect`.
+When the server was reaped, the Worker calls Hetzner `POST /servers` with
+`image: <snapshot_id>` and restores it; while it is already live, the call is an
+idempotent activity refresh. The client polls
 `/api/users/check` until the response carries
 `demoServer.status: "up"`, then connects to `home.demoalice.flagship.
 services` over the real ACME-issued cert. All `/api/screens/*`
@@ -61,7 +61,7 @@ Implementation-ready bullets:
 ### 2.1 No required prefix
 
 Username is a normal-looking string. Operator picks whatever they want:
-`demoalice`, `alice-prog`, `reviewer`, `officetour`. There is **no**
+`demoalice`, `openai-build`, `reviewer`, `officetour`. There is **no**
 mandatory `demo-` prefix and no namespace separation from real
 usernames at the label-validation layer.
 
@@ -83,15 +83,13 @@ Phase C **extends** the existing `handleUsersCheck` so that when a
 username matches a `demo_users` row, the response carries both the
 existing `testAccount` block (for backward compatibility with already-
 shipped iOS/Android binaries) **and** a new `demoServer` block (§10).
-`TEST_ACCOUNTS` continues to carry the display string + ttlHours; the
-`demo_users` row is the source of truth for VPS state.
-
-The `create-sample-user` CLI writes to **both**: it appends the
-username to `TEST_ACCOUNTS` and inserts a row into `demo_users`.
-`delete-sample-user` removes both. The Worker treats absence of a
-`demo_users` row as "not a live demo, fall back to fixtures" — i.e.
-backward-compatible with the today behaviour for usernames that exist
-only in `TEST_ACCOUNTS`.
+`TEST_ACCOUNTS` continues to carry display metadata only for legacy
+fixture-only reviewers. A current live reviewer account needs only its
+`demo_users` row: `/api/users/check` and `/api/account/resolve` both detect
+that row and return the `demoServer` block used by current clients. The
+`sample-user` CLI therefore writes `demo_users`; it does not rewrite the
+off-git Worker secret. A name that exists only in `TEST_ACCOUNTS` retains
+the old fixture-only behavior.
 
 ### 2.3 Username uniqueness
 
@@ -112,27 +110,18 @@ match (see `usersCheck.ts:109`).
 
 ### 2.4 Demo username naming convention
 
-Enforce a strict pattern on `create-sample-user`. The CLI rejects
-locally before calling the Worker; the Worker enforces again
-defensively:
+Use the same canonical grammar as real accounts. The CLI rejects locally
+before calling the Worker; every Worker-side provisioning step validates
+again through `validateUserLabel`:
 
 ```
-^[a-z0-9-]{3,32}$
+3–30 lowercase letters/digits with interior single dashes
+(no leading/trailing dash and no `--`)
 ```
 
-with a small reserved-words guard list rejected even when otherwise
-syntactically valid:
-
-```
-admin, flagship, support, www, api, dev
-```
-
-These overlap with the existing `validateUserLabel` reserved list
-(see `packages/control-plane/src/labels.ts`); the create-sample-user
-endpoint MUST run `validateUserLabel` first, then apply the demo-
-specific length cap (32 chars; tighter than the general label cap to
-keep the FQDN compact: `home.<u>.flagship.services` is 32 + 26 = 58
-chars, well under the 63-char DNS label limit).
+The reserved-name list is the one in `packages/control-plane/src/labels.ts`.
+Keeping demos on the real grammar matters now that sign-up assigns readable
+`<adjective>-<noun>` handles and avoids another validator split.
 
 Implementation-ready bullets:
 
@@ -792,11 +781,9 @@ All under `/api/dev/sample-user`. Admin endpoints reuse the existing
    `created_at=now`. Idempotent: a duplicate-key error returns the
    existing row with HTTP 200 (the CLI's `--force` flag is the only
    path to re-do the row).
-4. Atomically append `username` to the `TEST_ACCOUNTS` JSON
-   structure. Implementation note: the Worker can't write its own
-   secrets at runtime; instead the CLI is responsible for the
-   `wrangler secret put TEST_ACCOUNTS` update separately. The Worker
-   endpoint just writes `demo_users`.
+4. No `TEST_ACCOUNTS` rewrite: current clients discover live reviewer
+   accounts directly from `demo_users`; the off-git secret remains a
+   separate legacy fixture roster.
 
 **Response 200:**
 ```json
@@ -1530,7 +1517,7 @@ Implementation-ready bullets:
 | Concern | Where it's handled |
 |---|---|
 | Real-account 2FA / multi-device hardening | `docs/v1.2-security-cascade.md` (Plan B) |
-| iOS App Store reviewer flow | The existing `TEST_ACCOUNTS` + `DemoFixtures` path stays available for reviewers who don't care about the live pod — this spec extends it, not replaces it. New reviewers who want a live demo use the `demoServer` path. |
+| iOS App Store reviewer flow | Current submissions use a `demo_users` live account and its `demoServer` block. The existing `TEST_ACCOUNTS` + `DemoFixtures` path remains only for legacy fixture-only reviewers. |
 | Maintainers + CA ceremony | Unrelated. Demo VPSs run the same per-pod ACME chain real servers run; they consume the same CA chain off the same maintainer pin (`5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae`). |
 | Reproducible-build CI | `.github/workflows/build-iso.yml` is unchanged. Demo ISOs are personalized from the same reproducible base. |
 | Peer-backup distribution | Demos do not enrol in peer-backup. The snapshot is the backup. |

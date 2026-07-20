@@ -43,6 +43,7 @@ import type {
 } from "@flagship/storage";
 import { bytesToHex } from "./hex.js";
 import type { DemoUsersDeps } from "./demoUsers.js";
+import { validateUserLabel } from "./labels.js";
 import {
   conflict,
   malformed,
@@ -51,7 +52,6 @@ import {
   type HandlerResponseWithHeaders,
 } from "./types.js";
 
-const USERNAME_RE = /^[a-z0-9-]{3,32}$/;
 const SERVER_NAME_RE = /^[a-z0-9-]{3,32}$/;
 const DEVICE_LABEL_RE = /^[a-z0-9-]{1,24}$/;
 const RESERVED_DEVICE_LABELS: ReadonlySet<string> = new Set([
@@ -292,8 +292,12 @@ export async function handleAdminClaimAndIssue(
   body: AdminClaimAndIssueBody | undefined,
 ): Promise<HandlerResponseWithHeaders> {
   if (!body) return malformed("malformed body");
-  if (typeof body.username !== "string" || !USERNAME_RE.test(body.username)) {
-    return malformed("username must match [a-z0-9-]{3,32}");
+  if (typeof body.username !== "string") {
+    return malformed("username must be a string");
+  }
+  const usernameValidation = validateUserLabel(body.username);
+  if (!usernameValidation.ok) {
+    return malformed(usernameValidation.reason);
   }
   if (typeof body.serverName !== "string" || !SERVER_NAME_RE.test(body.serverName)) {
     return malformed("serverName must match [a-z0-9-]{3,32}");
@@ -322,7 +326,7 @@ export async function handleAdminClaimAndIssue(
     return malformed(diskEncryption.error);
   }
 
-  const username = body.username.toLowerCase();
+  const username = usernameValidation.label;
   const serverName = body.serverName.toLowerCase();
 
   const row = await deps.storage.get(username);

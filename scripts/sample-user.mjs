@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * sample-user — W11 operator CLI.
+ * sample-user — reviewer/demo-account operator CLI.
  *
  * Thin HTTP wrapper around the Worker's `/api/dev/sample-user/*` admin
- * endpoints. As of W11 (2026-05-21), the laptop no longer needs
+ * endpoints. The laptop no longer needs
  * `HCLOUD_TOKEN` or an SSH key — the Worker handles ALL Hetzner
  * operations via cloud-init `user_data` (no SSH required). The only
  * remaining laptop secret is `FLAGSHIP_ADMIN_SECRET`; replacing that
@@ -21,7 +21,7 @@
  *   FLAGSHIP_ADMIN_SECRET   required for all subcommands (admin bearer).
  *   FLAGSHIP_BASE_URL       defaults to https://flagshipserver.com.
  *
- * The W11 `create` flow is a 4-step orchestration over 3 admin
+ * The current W13 `create` flow is a 4-step orchestration over 3 admin
  * endpoints + a polling loop:
  *
  *   1. POST /api/dev/sample-user/create            (reserve D1 row)
@@ -39,9 +39,8 @@
  *                                                    the broken W11
  *                                                    admin-snapshot-now
  *                                                    d-i path.)
- *   4. Poll GET /api/dev/sample-user/<u> until state='none' AND
- *      snapshotId !== null (the cron snapshotted + destroyed the temp
- *      VPS).
+ *   4. Poll GET /api/dev/sample-user/<u> until the W13 server is `up`
+ *      (legacy W11 also completes at state='none' + snapshotId).
  *
  * Exit codes:
  *   0  success
@@ -64,6 +63,32 @@ const SUBCOMMANDS = new Set([
   "help",
 ]);
 
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+const RESERVED_USERNAMES = new Set([
+  "api", "www", "admin", "administrator", "root", "support", "help",
+  "billing", "payment", "auth", "login", "signup", "register",
+  "flagship", "flagshipserver", "flagship-services", "service", "services",
+  "status", "ops", "ns1", "ns2", "mail", "email", "smtp", "imap", "pop",
+  "static", "cdn", "assets", "files", "git", "tunnel", "control",
+  "control-plane", "console", "dashboard", "blog", "docs", "broadcast",
+  "servers", "all", "gym", "test", "e2e", "qa", "ci", "staging",
+]);
+
+/** Mirror the canonical real-account grammar for the operator-side fast fail.
+ * The Worker validates independently before any row is written. */
+export function normalizeDemoUsername(raw) {
+  const username = String(raw).toLowerCase();
+  if (!USERNAME_RE.test(username) || username.includes("--")) {
+    throw new Error(
+      "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
+    );
+  }
+  if (RESERVED_USERNAMES.has(username)) {
+    throw new Error(`username \"${username}\" is reserved`);
+  }
+  return username;
+}
+
 export function parseArgs(argv) {
   if (argv.length === 0) return { command: "help", username: null, flags: {} };
   const first = argv[0];
@@ -85,7 +110,7 @@ export function parseArgs(argv) {
       throw new Error(`${command} requires a <username>`);
     }
     if (argv.length > 2) throw new Error(`${command} takes only <username>`);
-    return { command, username: u, flags: {} };
+    return { command, username: u.toLowerCase(), flags: {} };
   }
   if (command === "grant-device") {
     const u = argv[1];
@@ -121,14 +146,14 @@ export function parseArgs(argv) {
     if (!flags.scopes) {
       throw new Error("grant-device requires --scopes <comma-list>");
     }
-    return { command, username: u, deviceLabel: label, flags };
+    return { command, username: u.toLowerCase(), deviceLabel: label, flags };
   }
   // `create` takes <username> + named flags.
   const u = argv[1];
   if (!u || u.startsWith("--")) {
     throw new Error("create requires a <username>");
   }
-  const username = u;
+  const username = normalizeDemoUsername(u);
   let i = 2;
   while (i < argv.length) {
     const tok = argv[i];
@@ -164,7 +189,7 @@ export function parseArgs(argv) {
  * Returns `{ env, missing }`; the caller maps `missing` to a fail-closed
  * exit + clear message. Pure (env is passed in explicitly).
  *
- * W11 CHANGE: HCLOUD_TOKEN and DEMO_SSH_KEY_PATH are NO LONGER read.
+ * HCLOUD_TOKEN and DEMO_SSH_KEY_PATH are not read.
  * The Worker handles Hetzner end-to-end; the laptop only needs the
  * admin bearer.
  */
@@ -293,9 +318,8 @@ export async function runDelete(deps, username) {
  *                                                       Hetzner; the W11
  *                                                       d-i path is
  *                                                       broken)
- *   4. Poll GET /api/dev/sample-user/<u> until state=='none' AND
- *      snapshotId set (the cron finalized the snapshot + destroyed
- *      the temp VPS).
+ *   4. Poll GET /api/dev/sample-user/<u> until the W13 server is `up`
+ *      (legacy W11 also completes at state='none' + snapshotId).
  *
  * Heavy DI for tests — every fetch + poll function is overridable.
  */
@@ -385,9 +409,8 @@ export async function runCreate(deps, username, flags) {
     `[create] Worker accepted provisioning request (state=${provision.json?.state ?? "?"}; activeServerId=${provision.json?.activeServerId ?? "?"})\n`,
   );
 
-  // 4. Poll until the cron finalizes (state=none + snapshotId set).
-  //    Default 30-minute timeout — Alpine boot + LUKS + register + ACME
-  //    + snapshot create can run 15-20 min in the worst case.
+  // 4. Poll until the W13 server is live. Keep the legacy W11 snapshot-ready
+  //    terminal condition so old deployments remain operable.
   const timeoutMs = (deps.pollTimeoutMs ?? 30 * 60_000);
   const intervalMs = (deps.pollIntervalMs ?? 30_000);
   const pollResult = await deps.pollUntilReady({
@@ -409,6 +432,8 @@ export async function runCreate(deps, username, flags) {
       ready: true,
       snapshotId: pollResult.snapshotId,
       isoR2Key: pollResult.isoR2Key,
+      activeServerId: pollResult.activeServerId,
+      activeServerFqdn: pollResult.activeServerFqdn,
     }) + "\n",
   );
   return 0;
@@ -416,8 +441,8 @@ export async function runCreate(deps, username, flags) {
 
 /**
  * Default polling implementation. Tests pass a stub; the live wiring
- * loops on GET /api/dev/sample-user/<u> until state matches "ready"
- * (state=none with snapshotId set) OR the timeout fires.
+ * loops on GET /api/dev/sample-user/<u> until the direct W13 server is up,
+ * the legacy W11 snapshot is ready, or the timeout fires.
  */
 export async function pollUntilReady({
   fetchFn,
@@ -439,6 +464,15 @@ export async function pollUntilReady({
     );
     if (r.status === 200) {
       const j = r.json ?? {};
+      if (j.state === "up" && j.activeServerId) {
+        return {
+          ready: true,
+          snapshotId: j.snapshotId,
+          isoR2Key: j.isoR2Key,
+          activeServerId: j.activeServerId,
+          activeServerFqdn: j.activeServerFqdn,
+        };
+      }
       if (j.state === "none" && j.snapshotId) {
         return { ready: true, snapshotId: j.snapshotId, isoR2Key: j.isoR2Key };
       }

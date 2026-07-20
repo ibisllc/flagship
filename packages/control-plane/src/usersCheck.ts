@@ -187,18 +187,15 @@ export async function handleUsersCheck(
 
   // 1a. Demo-user / test-account lookups run BEFORE the validateUserLabel
   //     guard so a registered demo/test account is recognized as such
-  //     regardless of the real-account label rules (e.g. reserved names).
-  //     Demo usernames are now hyphen-free too (demoUsers.ts USERNAME_RE
-  //     `^[a-z0-9]{3,32}$`) — aligned with real usernames so a demo name
-  //     can never break the `<creator>-<slug>` app-id split or be
-  //     rejected by the hyphen-free username validators downstream.
+  //     regardless of the real-account label rules (e.g. a legacy reserved
+  //     name). New demo usernames use the canonical real-account grammar.
   //
   //     Strict matching here: the demoUsers/testAccounts hit MUST
   //     be a literal-string lookup against the supplied username
   //     (already lowercased into `norm`). No reformatting; if the
   //     lookup hits we trust it and short-circuit. If it misses we
   //     fall through to the canonical validateUserLabel path, which
-  //     handles every real (hyphen-free) account uniformly.
+  //     handles every real account uniformly.
 
   let demoServer: DemoServerBlock | undefined;
   if (deps.demoUsers) {
@@ -221,8 +218,8 @@ export async function handleUsersCheck(
     });
   }
 
-  // 1b. Now the standard label check (rejects "" / non-ASCII / hyphens
-  //     / reserved labels). Demo accounts already escaped above.
+  // 1b. Now the standard label check (rejects malformed / reserved labels).
+  //     Demo accounts already escaped above.
   const labelCheck = validateUserLabel(norm);
   if (!labelCheck.ok) {
     return ok<UsersCheckResponse>({

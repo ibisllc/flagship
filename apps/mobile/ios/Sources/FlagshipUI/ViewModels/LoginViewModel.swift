@@ -48,13 +48,9 @@ public final class LoginViewModel {
         case failed(String)
     }
 
-    /// RFC-1035-ish bare-handle rule, mirroring the Worker's
-    /// USERNAME_RE (packages/control-plane/src/labels.ts): 1–63
-    /// lowercase letters or digits, NO dots, NO hyphens, no specials.
-    /// Demo usernames may legitimately carry hyphens (they live in
-    /// their own table), so we do NOT pre-reject hyphens locally — the
-    /// Worker is authoritative and a demo name must still reach the
-    /// resolve call. The local check only blocks obviously-empty input.
+    /// The Worker is authoritative for the shared real/demo username grammar;
+    /// the local check only blocks obviously-empty input so legacy demo rows
+    /// remain reachable too.
     public nonisolated static let minLength = 1
 
     public private(set) var phase: Phase = .idle

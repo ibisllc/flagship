@@ -205,15 +205,20 @@ describe("handleCreateDemoUser", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects hyphenated demo usernames (must be hyphen-free)", async () => {
-    // A hyphen would brick the `<creator>-<slug>` app-id split and be
-    // rejected by the hyphen-free username validators downstream — demo
-    // names are now constrained to the same charset as real usernames.
+  it("accepts the same word-word grammar as real usernames", async () => {
     const res = await handleCreateDemoUser(h.deps, {
-      username: "demo-alice",
-      display: "x",
+      username: "OpenAI-Build",
+      display: "OpenAI Build Week",
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
+    expect(await h.deps.storage.get("openai-build")).toBeDefined();
+  });
+
+  it("rejects leading, trailing, and double dashes", async () => {
+    for (const username of ["-openai", "openai-", "openai--build"]) {
+      const res = await handleCreateDemoUser(h.deps, { username, display: "x" });
+      expect(res.status).toBe(400);
+    }
   });
 
   it("rejects reserved usernames", async () => {
@@ -323,10 +328,7 @@ describe("handleDeleteDemoUser", () => {
     expect((res.body as Record<string, unknown>).deleted).toBe(false);
   });
 
-  it("accepts legacy hyphenated names for cleanup (create stays strict)", async () => {
-    // demo-alice predates the hyphen-free rename; delete must still be
-    // able to tear down the orphan even though create now rejects the
-    // hyphen. Regression for the `delete demo-alice → 400` bug.
+  it("accepts legacy broad-grammar names for cleanup", async () => {
     const h = mkHarness();
     await seedDemoUser(h.deps, { username: "demo-alice", activeServerId: "777", state: "up" });
     const res = await handleDeleteDemoUser(h.deps, { username: "demo-alice" });
@@ -845,6 +847,36 @@ describe("runDemoW11SnapshotPoller", () => {
     expect(r.finalized).toBe(0);
     expect(r.failed).toBe(0);
     expect(w11.calls.snapshot).toEqual([]);
+  });
+
+  it("snapshots a live W13 server and keeps it running for the reviewer", async () => {
+    const h = mkHarness();
+    h.clock.now = 1_000_000 + 5 * 60_000;
+    await seedDemoUser(h.deps, {
+      state: "up",
+      activeServerId: "w13-live",
+      snapshotId: null,
+      isoR2Key: null,
+      image: "debian-12",
+      createdAt: 1_000_000,
+    });
+    const w11 = makeW11Hetzner();
+    const r = await runDemoW11SnapshotPoller(
+      {
+        storage: h.deps.storage,
+        hetzner: w11.client,
+        now: () => h.clock.now,
+      },
+      async () => true,
+    );
+    expect(r.snapshotted).toBe(1);
+    expect(w11.calls.snapshot).toEqual([
+      { serverId: "w13-live", description: "flagship-demo-demoalice" },
+    ]);
+    const row = await h.deps.storage.get("demoalice");
+    expect(row?.state).toBe("up");
+    expect(row?.activeServerId).toBe("w13-live");
+    expect(row?.snapshotId).toBe("img-1");
   });
 });
 

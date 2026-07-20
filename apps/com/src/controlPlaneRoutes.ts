@@ -697,6 +697,8 @@ const ROUTE_RE = {
   VOICI_SHORTEN: /^\/api\/voici\/shorten$/,
   ADMIN_REPUBLISH: /^\/api\/admin\/republish-server-dns$/,
   ADMIN_CLEANUP_APEX: /^\/api\/admin\/cleanup-apex$/,
+  ADMIN_DNS_CHALLENGE_GC: /^\/api\/admin\/dns-challenge-gc$/,
+  ADMIN_DNS_ROUTE_GC: /^\/api\/admin\/dns-route-gc$/,
   ADMIN_SCHEMA_STATUS: /^\/api\/admin\/schema-status$/,
   ADMIN_SCHEMA_STAMP: /^\/api\/admin\/schema-version\/([^/]+)$/,
   ADMIN_CA_LEASE_STATUS: /^\/api\/admin\/ca-lease-status$/,
@@ -2737,7 +2739,13 @@ export async function tryControlPlane(
     );
   }
 
-  if (method === "POST" && (ROUTE_RE.ADMIN_REPUBLISH.test(path) || ROUTE_RE.ADMIN_CLEANUP_APEX.test(path))) {
+  if (
+    method === "POST" &&
+    (ROUTE_RE.ADMIN_REPUBLISH.test(path) ||
+      ROUTE_RE.ADMIN_CLEANUP_APEX.test(path) ||
+      ROUTE_RE.ADMIN_DNS_CHALLENGE_GC.test(path) ||
+      ROUTE_RE.ADMIN_DNS_ROUTE_GC.test(path))
+  ) {
     const auth = authorizeAdmin({
       expected: env.FLAGSHIP_ADMIN_SECRET,
       provided: request.headers.get("x-admin-secret"),
@@ -2753,6 +2761,24 @@ export async function tryControlPlane(
       apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
       zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
     });
+    if (ROUTE_RE.ADMIN_DNS_CHALLENGE_GC.test(path)) {
+      const result = await dns.deleteStaleAcmeTxt({
+        apex: env.SERVICES_APEX ?? "flagship.services",
+        cutoffMs: Date.now() - 60 * 60 * 1000,
+      });
+      return jsonResponse({ ok: true, ...result });
+    }
+    if (ROUTE_RE.ADMIN_DNS_ROUTE_GC.test(path)) {
+      const servers = await storage.servers.listAll();
+      const result = await dns.deleteOrphanedServerRoutes({
+        apex: env.SERVICES_APEX ?? "flagship.services",
+        activeServerDomains: servers.filter((server) => !server.revokedAt).map((server) => server.serverDomain),
+        cutoffMs: Date.now() - 60 * 60 * 1000,
+        dryRun: url.searchParams.get("dryRun") === "true",
+        maxDeletes: 20,
+      });
+      return jsonResponse({ ok: true, ...result });
+    }
     if (ROUTE_RE.ADMIN_REPUBLISH.test(path)) {
       if (!env.SERVICES_PASSTHROUGH_IPV4) {
         return jsonResponse({ error: "SERVICES_PASSTHROUGH_IPV4 not set" }, 503);

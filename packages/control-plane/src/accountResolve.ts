@@ -64,9 +64,9 @@ export async function handleAccountResolve(
 ): Promise<HandlerResponseWithHeaders> {
   const norm = rawUsername.toLowerCase();
 
-  // Demo accounts live in their own table and legitimately carry
-  // hyphens, so they're matched by literal lookup BEFORE the hyphen-free
-  // real-username label check (mirrors usersCheck.ts). Demo crypto is a
+  // Demo accounts are matched by literal lookup before validation so legacy
+  // rows remain reachable (mirrors usersCheck.ts). New demo and real accounts
+  // share one username grammar. Demo crypto is a
   // no-op — knowing the name is the capability — so the client skips
   // every credential gate and just attaches a device.
   const demoRow = await deps.demoUsers.get(norm);
@@ -83,7 +83,7 @@ export async function handleAccountResolve(
     });
   }
 
-  // The login field is a bare username (no dots / hyphens / specials).
+  // The login field is a bare username (no dots or other specials).
   // Anything that fails the label rules is reported as a clean
   // `unknown` STATE so the client renders guidance, not an HTTP error.
   if (!validateUserLabel(norm).ok) {

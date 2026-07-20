@@ -425,6 +425,57 @@ describe("provision status channel", () => {
     expect(row?.provisionPhaseAt).toBe(42);
   });
 
+  it("lets W13 live replace an error after registration already promoted the demo row", async () => {
+    const storage = new InMemoryStorage();
+    await seedOrderWithOwner(storage, SERIAL, "alice", { withToken: false });
+    await storage.demoUsers.insert({
+      username: "alice",
+      display: "Alice",
+      snapshotId: null,
+      isoR2Key: null,
+      ttlIdleMinutes: 30,
+      region: "fsn1",
+      size: "cx22",
+      activeServerId: "srv-1",
+      activeServerFqdn: "home.alice.flagship.services",
+      lastActivityAt: 1_000,
+      state: "up",
+      createdAt: 1_000,
+      provisionPhase: "error",
+      provisionPhaseAt: 41,
+      provisionLastError: "transient ACME failure",
+    });
+
+    await handlePostProvisionStatus(
+      {
+        storage: storage.provisionStatus,
+        authCodes: storage.authCodes,
+        demoUsers: storage.demoUsers,
+        now: () => 42,
+      },
+      SERIAL,
+      { phase: "live" },
+    );
+    expect(await storage.demoUsers.get("alice")).toMatchObject({
+      state: "up",
+      provisionPhase: "live",
+      provisionPhaseAt: 42,
+      provisionLastError: null,
+    });
+
+    await handlePostProvisionStatus(
+      {
+        storage: storage.provisionStatus,
+        authCodes: storage.authCodes,
+        demoUsers: storage.demoUsers,
+        now: () => 43,
+      },
+      SERIAL,
+      { phase: "installing" },
+    );
+    expect((await storage.demoUsers.get("alice"))?.provisionPhase).toBe("live");
+  });
+
   it("a push-fan-out failure does not fail the status POST", async () => {
     const storage = new InMemoryStorage();
     await seedOrderWithOwner(storage, SERIAL, "alice");

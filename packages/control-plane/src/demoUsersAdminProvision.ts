@@ -53,6 +53,7 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import { bytesToHex } from "./hex.js";
+import { validateUserLabel } from "./labels.js";
 import {
   deriveDemoDelegatedKey,
   deriveDemoRckKey,
@@ -163,8 +164,6 @@ export interface AdminSnapshotNowBody {
    *  `de=` field). "luks"/absent ⇒ encrypted; "none" ⇒ unencrypted boot. */
   diskEncryption?: unknown;
 }
-
-const USERNAME_RE = /^[a-z0-9-]{3,32}$/;
 
 function defaultRandom(n: number): Uint8Array {
   const out = new Uint8Array(n);
@@ -300,8 +299,9 @@ export async function handleAdminSnapshotNow(
   body?: AdminSnapshotNowBody,
 ): Promise<HandlerResponseWithHeaders> {
   const u = username.toLowerCase();
-  if (!USERNAME_RE.test(u)) {
-    return malformed("username must match [a-z0-9-]{3,32}");
+  const usernameValidation = validateUserLabel(u);
+  if (!usernameValidation.ok) {
+    return malformed(usernameValidation.reason);
   }
   const row = await deps.storage.get(u);
   if (!row) return notFound("no such demo user");

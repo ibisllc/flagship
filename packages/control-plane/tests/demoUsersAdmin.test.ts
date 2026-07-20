@@ -130,10 +130,34 @@ describe("handleAdminClaimAndIssue", () => {
   it("rejects malformed username", async () => {
     const h = await mkHarness({ seed: true });
     const r = await handleAdminClaimAndIssue(h.deps, {
-      username: "UPPER",
+      username: "openai--build",
       serverName: "home",
     });
     expect(r.status).toBe(400);
+  });
+
+  it("claims a canonical word-word demo username", async () => {
+    const h = await mkHarness();
+    await h.deps.storage.insert({
+      username: "openai-build",
+      display: "OpenAI Build Week",
+      snapshotId: null,
+      isoR2Key: null,
+      ttlIdleMinutes: 30,
+      region: "fsn1",
+      size: "cpx11",
+      activeServerId: null,
+      activeServerFqdn: null,
+      lastActivityAt: 0,
+      state: "none",
+      createdAt: 1,
+    });
+    const r = await handleAdminClaimAndIssue(h.deps, {
+      username: "OpenAI-Build",
+      serverName: "home",
+    });
+    expect(r.status).toBe(200);
+    expect(await h.deps.usernames.get("openai-build")).toMatchObject({ isDemo: true });
   });
 
   it("rejects malformed serverName", async () => {

@@ -16,6 +16,7 @@ import { describe, expect, it, vi } from "vitest";
 // @ts-expect-error — .mjs sibling, no types
 import {
   parseArgs,
+  normalizeDemoUsername,
   resolveEnv,
   adminUrl,
   exitCodeForHttp,
@@ -69,16 +70,23 @@ describe("parseArgs", () => {
     expect(a.flags.size).toBe("cpx11");
     expect(a.flags.ttlIdleMinutes).toBe(30);
   });
+  it("uses the canonical word-word username grammar for create", () => {
+    expect(normalizeDemoUsername("OpenAI-Build")).toBe("openai-build");
+    expect(parseArgs(["create", "OpenAI-Build"]).username).toBe("openai-build");
+    for (const invalid of ["ab", "-openai", "openai-", "openai--build", "a".repeat(31), "support"]) {
+      expect(() => normalizeDemoUsername(invalid)).toThrow();
+    }
+  });
   it("rejects malformed args deterministically", () => {
     expect(() => parseArgs(["unknown"])).toThrow(/unknown subcommand/);
     expect(() => parseArgs(["create"])).toThrow(/requires a <username>/);
-    expect(() => parseArgs(["create", "u", "--display"])).toThrow(
+    expect(() => parseArgs(["create", "user", "--display"])).toThrow(
       /requires a value/,
     );
-    expect(() => parseArgs(["create", "u", "--frobnicate", "y"])).toThrow(
+    expect(() => parseArgs(["create", "user", "--frobnicate", "y"])).toThrow(
       /unknown flag/,
     );
-    expect(() => parseArgs(["create", "u", "--ttl-idle", "0"])).toThrow(
+    expect(() => parseArgs(["create", "user", "--ttl-idle", "0"])).toThrow(
       /positive integer/,
     );
   });
@@ -413,6 +421,34 @@ describe("runCreate — W11 4-step orchestration", () => {
 /* ─────────────────────── pollUntilReady ──────────────────────────────── */
 
 describe("pollUntilReady", () => {
+  it("returns ready=true when the W13 direct server is up", async () => {
+    const { fn } = stubFetch([
+      {
+        status: 200,
+        body: {
+          state: "up",
+          snapshotId: null,
+          activeServerId: "srv-w13",
+          activeServerFqdn: "home.openai-build.flagship.services",
+        },
+      },
+    ]);
+    const r = await pollUntilReady({
+      fetchFn: fn,
+      env: ENV_OK,
+      stderr: captureStream(),
+      username: "openai-build",
+      timeoutMs: 60_000,
+      intervalMs: 0,
+      now: () => 0,
+    });
+    expect(r).toMatchObject({
+      ready: true,
+      activeServerId: "srv-w13",
+      activeServerFqdn: "home.openai-build.flagship.services",
+    });
+  });
+
   it("returns ready=true when state=none AND snapshotId is set", async () => {
     const { fn } = stubFetch([
       { status: 200, body: { state: "provisioning", snapshotId: null } },
