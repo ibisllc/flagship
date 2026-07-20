@@ -101,6 +101,66 @@ export async function decryptProfile(envelope, keyBytes) {
   return validateProfileDisplayName(parsed.displayName);
 }
 
+export function canonicalAccountProfile(fields) {
+  return canonicalSignedProfile("flagship/account-profile/v1", fields, "", "");
+}
+
+export function canonicalDeviceSelfProfile(fields) {
+  return canonicalSignedProfile("flagship/device-profile-self/v1", fields, fields.deviceId, "");
+}
+
+export function canonicalDeviceManagedProfile(fields) {
+  return canonicalSignedProfile(
+    "flagship/device-profile-admin/v1",
+    fields,
+    fields.deviceId,
+    fields.locked ? "1" : "0",
+  );
+}
+
+export function canonicalDirectoryRequest(request) {
+  if (!request || !/^[0-9a-f]{32}$/.test(request.deviceId) ||
+      !/^[0-9a-f]{64}$/.test(request.signerPubHex) || !/^[0-9a-f]{32}$/.test(request.requestId) ||
+      !/^[A-Z]+$/.test(request.method) || !request.path?.startsWith("/api/accounts/") ||
+      !Number.isSafeInteger(request.issuedAt) || request.issuedAt <= 0) {
+    throw new Error("invalid directory request");
+  }
+  return encoder.encode([
+    "flagship/account-directory-request/v1",
+    request.method,
+    request.path,
+    request.accountId.toLowerCase(),
+    request.deviceId,
+    request.signerPubHex,
+    request.requestId,
+    request.issuedAt,
+  ].join("|"));
+}
+
+function canonicalSignedProfile(tag, fields, deviceId, locked) {
+  if (!fields || typeof fields.accountId !== "string" || !fields.accountId || fields.accountId.includes("|") ||
+      !Number.isSafeInteger(fields.revision) || fields.revision < 1 ||
+      !Number.isSafeInteger(fields.keyVersion) || fields.keyVersion < 1 ||
+      !/^[0-9a-f]{24}$/.test(fields.nonceHex) || !/^[0-9a-f]+$/.test(fields.ciphertextHex) ||
+      !/^[0-9a-f]{64}$/.test(fields.signerPubHex) ||
+      !Number.isSafeInteger(fields.issuedAt) || fields.issuedAt <= 0) {
+    throw new Error("invalid signed profile");
+  }
+  if (deviceId && !/^[0-9a-f]{32}$/.test(deviceId)) throw new Error("invalid deviceId");
+  return encoder.encode([
+    tag,
+    fields.accountId.toLowerCase(),
+    deviceId,
+    fields.revision,
+    fields.keyVersion,
+    fields.nonceHex,
+    fields.ciphertextHex,
+    locked,
+    fields.issuedAt,
+    fields.signerPubHex,
+  ].join("|"));
+}
+
 function validateFields(fields) {
   if (!fields || typeof fields.accountId !== "string" || !fields.accountId || fields.accountId.includes("|")) {
     throw new Error("invalid accountId");

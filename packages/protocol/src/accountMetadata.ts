@@ -9,6 +9,7 @@ import type { Bytes } from "./types.js";
 export const ACCOUNT_METADATA_SALT = "flagship/account-metadata/v1";
 export const ACCOUNT_PROFILE_INFO = "account-profile";
 export const DEVICE_DIRECTORY_INFO = "device-directory";
+export const ACCOUNT_DEVICE_KEY_INFO = "flagship/account-device-key/v1";
 export const PROFILE_KEY_BYTES = 32;
 export const PROFILE_NONCE_BYTES = 12;
 export const DEVICE_ID_BYTES = 16;
@@ -90,6 +91,18 @@ export function deriveAccountProfileKey(umk: Bytes): Bytes {
 
 export function deriveDeviceDirectoryKey(umk: Bytes): Bytes {
   return deriveMetadataKey(umk, DEVICE_DIRECTORY_INFO);
+}
+
+export function deriveAccountDeviceKeySeed(umk: Bytes, accountId: string, deviceId: string): Bytes {
+  if (umk.length !== 32) throw new Error("UMK must be 32 bytes");
+  validateRecordCoordinates({ accountId, deviceId, revision: 1, keyVersion: 1 });
+  return hkdf(
+    sha256,
+    umk,
+    new Uint8Array(0),
+    encoder.encode(`${ACCOUNT_DEVICE_KEY_INFO}|${accountId.toLowerCase()}|${deviceId}`),
+    32,
+  );
 }
 
 function deriveMetadataKey(umk: Bytes, info: string): Bytes {

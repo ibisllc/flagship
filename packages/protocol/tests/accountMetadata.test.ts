@@ -6,6 +6,7 @@ import {
   deviceSupportCode,
   deriveAccountProfileKey,
   deriveDeviceDirectoryKey,
+  deriveAccountDeviceKeySeed,
   encryptAccountProfile,
   encryptDeviceProfile,
   generateDeviceId,
@@ -40,6 +41,9 @@ describe("account metadata keys", () => {
     expect(hex(deriveAccountProfileKey(umk))).toBe("6704c17878d90b3c9767fecbcbc969c55c4683674c76a6e5f7143fc2f2b5b674");
     expect(hex(deriveDeviceDirectoryKey(umk))).toBe("0f64692831c58829479951cca532646137a61c168b9ec9f079bb121694ba0d7f");
     expect(deriveAccountProfileKey(umk)).not.toEqual(deriveDeviceDirectoryKey(umk));
+    expect(hex(deriveAccountDeviceKeySeed(umk, accountId, deviceId))).toBe(
+      "19ee5d26fa101529c8596a83fd8341a4b74847fc0b996bf061f7a43bc6734e9d",
+    );
   });
 
   it("mints a 128-bit account-scoped opaque identifier", () => {

@@ -20,6 +20,12 @@ class AccountMetadataTest {
             "0f64692831c58829479951cca532646137a61c168b9ec9f079bb121694ba0d7f",
             HexUtil.encode(AccountMetadata.deriveDeviceDirectoryKey(umk)),
         )
+        assertEquals(
+            "19ee5d26fa101529c8596a83fd8341a4b74847fc0b996bf061f7a43bc6734e9d",
+            HexUtil.encode(AccountMetadata.deriveAccountDeviceSeed(
+                umk, "jolly-ranger", "00112233445566778899aabbccddeeff",
+            )),
+        )
         val coordinates = AccountMetadataCoordinates(
             accountId = "jolly-ranger",
             recordType = AccountMetadataRecordType.ACCOUNT_PROFILE,

@@ -1616,6 +1616,7 @@ export interface Storage {
   demoLlmLedger: DemoLlmLedgerStorage;
   installPolicyFanout: InstallPolicyFanoutStorage;
   demoUsers: DemoUsersStorage;
+  accountProvisioning: AccountProvisioningStorage;
   demoAccountProvisioning: DemoAccountProvisioningStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
   watchDelegates: WatchDelegateStorage;
@@ -2340,6 +2341,22 @@ export type DemoAccountInitializationResult =
 export interface DemoAccountProvisioningStorage {
   initialize(input: DemoAccountInitialization): Promise<DemoAccountInitializationResult>;
   cleanup(username: string, idempotencyKey: string): Promise<boolean>;
+}
+
+export interface AccountInitialization {
+  username: UsernameRecord;
+  primaryDevice: DeviceIdentityRecord;
+  primaryGrant: DeviceCapabilityGrantRecord;
+  accountProfile: AccountProfileRecord;
+  primaryDeviceProfile: DeviceSelfProfileRecord;
+}
+
+export type AccountInitializationResult =
+  | { ok: true; created: boolean }
+  | { ok: false; reason: "username-unavailable" | "initialization-conflict" };
+
+export interface AccountProvisioningStorage {
+  initialize(input: AccountInitialization): Promise<AccountInitializationResult>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

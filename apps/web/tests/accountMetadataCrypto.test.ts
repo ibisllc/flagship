@@ -6,6 +6,7 @@ import {
   encryptProfile,
   validateProfileDisplayName,
 } from "../public/webapp/lib/accountMetadata.js";
+import { deriveAccountDeviceSeedFromSeed } from "../public/webapp/keystore.js";
 
 const hex = (bytes: Uint8Array) => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 const umk = Uint8Array.from({ length: 32 }, (_, i) => i);
@@ -16,6 +17,9 @@ describe("web account metadata parity", () => {
     const accountKey = await deriveAccountProfileKey(umk);
     expect(hex(accountKey)).toBe("6704c17878d90b3c9767fecbcbc969c55c4683674c76a6e5f7143fc2f2b5b674");
     expect(hex(await deriveDeviceDirectoryKey(umk))).toBe("0f64692831c58829479951cca532646137a61c168b9ec9f079bb121694ba0d7f");
+    expect(hex(await deriveAccountDeviceSeedFromSeed(
+      umk, "jolly-ranger", "00112233445566778899aabbccddeeff",
+    ))).toBe("19ee5d26fa101529c8596a83fd8341a4b74847fc0b996bf061f7a43bc6734e9d");
     const coordinates = {
       accountId: "jolly-ranger",
       recordType: "account-profile",

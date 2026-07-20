@@ -81,6 +81,9 @@ import type {
   DemoAccountInitialization,
   DemoAccountInitializationResult,
   DemoAccountProvisioningStorage,
+  AccountInitialization,
+  AccountInitializationResult,
+  AccountProvisioningStorage,
   InstallPolicyFanoutRecord,
   InstallPolicyFanoutStorage,
   DeviceCapabilityGrantRecord,
@@ -3875,6 +3878,94 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
   }
 }
 
+export class D1AccountProvisioningStorage implements AccountProvisioningStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async initialize(input: AccountInitialization): Promise<AccountInitializationResult> {
+    const u = input.username.username.toLowerCase();
+    const existing = await this.db.prepare(
+      `SELECT u.irk_pub_hex, u.admin_root_pub_hex, d.device_pub_hex
+         FROM usernames u
+         LEFT JOIN device_identities d ON d.account_id = u.username AND d.device_id = ?
+        WHERE u.username = ?`,
+    ).bind(input.primaryDevice.deviceId, u).first<{
+      irk_pub_hex: string;
+      admin_root_pub_hex: string | null;
+      device_pub_hex: string | null;
+    }>();
+    if (existing) {
+      const exact = existing.irk_pub_hex.toLowerCase() === input.username.irkPubHex.toLowerCase() &&
+        existing.admin_root_pub_hex?.toLowerCase() === input.username.adminRootPubHex?.toLowerCase() &&
+        existing.device_pub_hex?.toLowerCase() === input.primaryDevice.devicePubHex.toLowerCase();
+      if (!exact) return { ok: false, reason: "username-unavailable" };
+      const [grant, account, profile] = await Promise.all([
+        this.db.prepare("SELECT 1 AS hit FROM device_capability_grants WHERE grant_id = ? AND username = ? AND device_id = ?")
+          .bind(input.primaryGrant.grantId, u, input.primaryDevice.deviceId).first<{ hit: number }>(),
+        this.db.prepare("SELECT 1 AS hit FROM account_profiles WHERE account_id = ?")
+          .bind(u).first<{ hit: number }>(),
+        this.db.prepare("SELECT 1 AS hit FROM device_self_profiles WHERE account_id = ? AND device_id = ?")
+          .bind(u, input.primaryDevice.deviceId).first<{ hit: number }>(),
+      ]);
+      return grant && account && profile
+        ? { ok: true, created: false }
+        : { ok: false, reason: "initialization-conflict" };
+    }
+
+    const username = input.username;
+    const device = input.primaryDevice;
+    const grant = input.primaryGrant;
+    const account = input.accountProfile;
+    const profile = input.primaryDeviceProfile;
+    try {
+      await this.db.batch([
+        this.db.prepare(
+          `INSERT INTO usernames
+            (username, irk_pub_hex, claimed_at, is_demo, account_type, recovery_wipe_policy, aid_pub_hex, last_active, admin_root_pub_hex)
+           VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, username.irkPubHex, username.claimedAt, username.accountType ?? "single",
+          username.recoveryWipePolicy ?? "graceful", username.aidPubHex ?? null,
+          username.lastActive ?? username.claimedAt, username.adminRootPubHex ?? null,
+        ),
+        this.db.prepare(
+          `INSERT INTO device_identities
+            (account_id, device_id, device_pub_hex, platform_class, created_at, last_seen_at, revoked_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(u, device.deviceId, device.devicePubHex, device.platformClass, device.createdAt, device.lastSeenAt, device.revokedAt),
+        this.db.prepare(
+          `INSERT INTO device_capability_grants
+            (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          grant.grantId, u, grant.deviceId, grant.devicePubHex, grant.scopesJson,
+          grant.issuedAt, grant.expiresAt, grant.signatureHex, grant.revokedAt, grant.signerRoot,
+        ),
+        this.db.prepare(
+          `INSERT INTO account_profiles
+            (account_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, account.revision, account.keyVersion, account.nonceHex, account.ciphertextHex,
+          account.signerPubHex, account.signatureHex, account.issuedAt, account.updatedAt,
+        ),
+        this.db.prepare(
+          `INSERT INTO device_self_profiles
+            (account_id, device_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, profile.deviceId, profile.revision, profile.keyVersion, profile.nonceHex, profile.ciphertextHex,
+          profile.signerPubHex, profile.signatureHex, profile.issuedAt, profile.updatedAt,
+        ),
+      ]);
+      return { ok: true, created: true };
+    } catch {
+      const after = await this.db.prepare("SELECT irk_pub_hex FROM usernames WHERE username = ?")
+        .bind(u).first<{ irk_pub_hex: string }>();
+      return { ok: false, reason: after ? "username-unavailable" : "initialization-conflict" };
+    }
+  }
+}
+
 export class D1DemoAccountProvisioningStorage implements DemoAccountProvisioningStorage {
   constructor(private readonly db: D1Database) {}
   async initialize(input: DemoAccountInitialization): Promise<DemoAccountInitializationResult> {
@@ -4170,6 +4261,7 @@ export class D1Storage implements Storage {
   demoLlmLedger: DemoLlmLedgerStorage;
   installPolicyFanout: InstallPolicyFanoutStorage;
   demoUsers: DemoUsersStorage;
+  accountProvisioning: AccountProvisioningStorage;
   demoAccountProvisioning: DemoAccountProvisioningStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
   watchDelegates: WatchDelegateStorage;
@@ -4221,6 +4313,7 @@ export class D1Storage implements Storage {
     this.demoLlmLedger = new D1DemoLlmLedgerStorage(db);
     this.installPolicyFanout = new D1InstallPolicyFanoutStorage(db);
     this.demoUsers = new D1DemoUsersStorage(db);
+    this.accountProvisioning = new D1AccountProvisioningStorage(db);
     this.demoAccountProvisioning = new D1DemoAccountProvisioningStorage(db);
     this.deviceCapabilityGrants = new D1DeviceCapabilityGrantStorage(db);
     this.watchDelegates = new D1WatchDelegateStorage(db);

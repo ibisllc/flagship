@@ -405,6 +405,7 @@ export function rateLimitedResponse(result: RateLimitedResult): Response {
 export function endpointFor(method: string, pathname: string): RateLimitEndpoint | null {
   const m = method.toUpperCase();
   if (m === "POST" && pathname === "/api/username/claim") return "username-claim";
+  if (m === "POST" && pathname === "/api/accounts") return "username-claim";
   if (m === "POST" && pathname === "/api/username/suggest") return "username-suggest";
   if (m === "POST" && pathname === "/api/auth-code/issue") return "auth-code-issue";
   if (m === "POST" && pathname === "/api/server/register") return "server-register";

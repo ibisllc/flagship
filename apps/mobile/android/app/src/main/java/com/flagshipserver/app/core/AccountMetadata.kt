@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import com.google.crypto.tink.subtle.Ed25519Sign
 
 enum class AccountMetadataRecordType(val wireValue: String) {
     ACCOUNT_PROFILE("account-profile"),
@@ -42,6 +43,26 @@ object AccountMetadata {
     fun deriveAccountProfileKey(umk: ByteArray): ByteArray = deriveKey(umk, "account-profile")
 
     fun deriveDeviceDirectoryKey(umk: ByteArray): ByteArray = deriveKey(umk, "device-directory")
+
+    internal fun deriveAccountDeviceSeed(umk: ByteArray, accountId: String, deviceId: String): ByteArray {
+        require(accountId.isNotEmpty() && '|' !in accountId && deviceIdPattern.matches(deviceId))
+        val info = "flagship/account-device-key/v1|${accountId.lowercase()}|$deviceId".toByteArray(UTF_8)
+        val extract = Mac.getInstance("HmacSHA256")
+        extract.init(SecretKeySpec(ByteArray(32), "HmacSHA256"))
+        val prk = extract.doFinal(umk)
+        val expand = Mac.getInstance("HmacSHA256")
+        expand.init(SecretKeySpec(prk, "HmacSHA256"))
+        expand.update(info)
+        expand.update(1)
+        return expand.doFinal()
+    }
+
+    fun deriveAccountDeviceKey(umk: ByteArray, accountId: String, deviceId: String): Ed25519Sign =
+        Ed25519Sign(deriveAccountDeviceSeed(umk, accountId, deviceId))
+
+    fun deriveAccountDevicePub(umk: ByteArray, accountId: String, deviceId: String): ByteArray {
+        return Ed25519Sign.KeyPair.newKeyPairFromSeed(deriveAccountDeviceSeed(umk, accountId, deviceId)).publicKey
+    }
 
     fun generateDeviceId(): String = HexUtil.encode(ByteArray(16).also(SecureRandom()::nextBytes))
 
@@ -118,6 +139,20 @@ object AccountMetadata {
         require(parsed["version"]?.jsonPrimitive?.intOrNull == 1) { "invalid profile version" }
         return validateDisplayName(requireNotNull(parsed["displayName"]).jsonPrimitive.content)
     }
+
+    fun canonicalAccountProfile(accountId: String, revision: Long, keyVersion: Long, ciphertext: AccountMetadataCiphertext, issuedAt: Long, signerPubHex: String): ByteArray =
+        canonicalSigned("flagship/account-profile/v1", accountId, "", revision, keyVersion, ciphertext, "", issuedAt, signerPubHex)
+
+    fun canonicalDeviceSelfProfile(accountId: String, deviceId: String, revision: Long, keyVersion: Long, ciphertext: AccountMetadataCiphertext, issuedAt: Long, signerPubHex: String): ByteArray =
+        canonicalSigned("flagship/device-profile-self/v1", accountId, deviceId, revision, keyVersion, ciphertext, "", issuedAt, signerPubHex)
+
+    fun canonicalDirectoryRequest(accountId: String, deviceId: String, signerPubHex: String, method: String, path: String, requestId: String, issuedAt: Long): ByteArray =
+        listOf("flagship/account-directory-request/v1", method, path, accountId.lowercase(), deviceId, signerPubHex, requestId, issuedAt.toString())
+            .joinToString("|").toByteArray(UTF_8)
+
+    private fun canonicalSigned(tag: String, accountId: String, deviceId: String, revision: Long, keyVersion: Long, ciphertext: AccountMetadataCiphertext, locked: String, issuedAt: Long, signerPubHex: String): ByteArray =
+        listOf(tag, accountId.lowercase(), deviceId, revision.toString(), keyVersion.toString(), ciphertext.nonceHex, ciphertext.ciphertextHex, locked, issuedAt.toString(), signerPubHex)
+            .joinToString("|").toByteArray(UTF_8)
 
     private fun deriveKey(umk: ByteArray, info: String): ByteArray {
         require(umk.size == 32) { "UMK must be 32 bytes" }

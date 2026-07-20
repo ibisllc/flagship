@@ -478,7 +478,7 @@ public struct Keystore {
     /// AuthCode).
     public static func openAccountRoots(
         reason: String = "Open your Flagship account"
-    ) async throws -> (irk: Curve25519.Signing.PrivateKey, adminRootPubHex: String) {
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, adminRoot: Curve25519.Signing.PrivateKey, adminRootPubHex: String) {
         let umkSeed = SymmetricKey(size: .bits256)
         let umkBytes = umkSeed.withUnsafeBytes { Data($0) }
         let ephemeral = P256.KeyAgreement.PrivateKey()
@@ -510,7 +510,8 @@ public struct Keystore {
 
             let irkSeed = derive(umk: umkSeed, info: "flagship/irk/v\(currentIrkVersion())")
             let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
-            return (irk, HexUtil.encode(adminKey.publicKey.rawRepresentation))
+            storeSessionUmk(umkSeed, for: activeProfileId)
+            return (irk, adminKey, HexUtil.encode(adminKey.publicKey.rawRepresentation))
         } catch let e as KeystoreError {
             throw e
         } catch {

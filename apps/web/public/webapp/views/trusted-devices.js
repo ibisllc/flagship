@@ -1,18 +1,10 @@
-// Trusted devices — peer-class devices on the user's account (push-
-// token holders). Mirror of FlagshipUI/Screens/SettingsScreen.swift
-// and TrustedDevicesScreen.kt; on the webapp the surface is
-// read+manage-only (the webapp itself is a per-pod browser session,
-// not a peer trusted device — it never gets its own UMK).
-//
-// Wire shapes match the Worker (packages/control-plane/src/usersDevices.ts):
-//   GET /api/users/:u/devices       → { devices: [{tokenId,…}] } + ETag
-//   DELETE /api/push/<tokenId>      → revoke push tether (soft revoke)
+// Trusted devices are loaded only through the signed account directory.
+// Human names are decrypted in this unlocked client and never returned by
+// the control plane.
 
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
 import { getSession, unlockSession } from "../lib/state.js";
-import { bytesToHex, signWithIrk } from "../keystore.js";
-import { canonicalPushRevoke } from "../lib/push.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { formatWhen } from "../lib/dateFormat.js";
@@ -30,11 +22,15 @@ import {
   setCurrentIrkVersion,
 } from "../keystore.js";
 import { renderPendingBanner, shouldRenderBanner } from "../lib/pendingRePairBanner.js";
-import { controlApex } from "../lib/apex.js";
+import {
+  fetchDecryptedDirectory,
+  removeManagedDeviceDisplayName,
+  setManagedDeviceDisplayName,
+  updateAccountDisplayName,
+  updateSelfDisplayName,
+} from "../lib/accountDirectory.js";
 
 registerView("view-trusted-devices");
-
-const COM_BASE = controlApex();
 
 /** Cached state: last-fetched devices + ETag for the If-Match flow.
  *  `pendingRePair` mirrors the GET /api/users/:u/re-pair snapshot so a
@@ -42,23 +38,32 @@ const COM_BASE = controlApex();
 const state = {
   username: "",
   devices: [],
-  etag: null,
+  accountDisplayName: null,
+  accountProfile: null,
+  selfProfiles: [],
+  managedProfiles: [],
   pendingRePair: null,
 };
 
 function platformIcon(p) {
   return ({
-    apns: "📱",
-    fcm: "🤖",
-    webpush: "🌐",
+    ios: "📱",
+    android: "🤖",
+    web: "🌐",
+    macos: "💻",
+    windows: "💻",
+    linux: "💻",
   })[p] ?? "❔";
 }
 
 function platformDisplay(p) {
   return ({
-    apns: "iPhone / iPad",
-    fcm: "Android",
-    webpush: "Web",
+    ios: "iPhone / iPad",
+    android: "Android",
+    web: "Web",
+    macos: "Mac",
+    windows: "Windows PC",
+    linux: "Linux PC",
   })[p] ?? (p || "Unknown platform");
 }
 
@@ -67,11 +72,8 @@ function platformDisplay(p) {
  *  token id, then a generic name — so a record missing its `label`
  *  (or `label` AND `platform`) still reads sensibly. */
 function deviceName(device) {
-  if (device.label) return device.label;
-  if (device.platform) return `Untitled ${platformDisplay(device.platform)}`;
-  const id = device.tokenPrefix || device.tokenId;
-  if (id) return `Device ${String(id).slice(0, 8)}`;
-  return "Unnamed device";
+  if (device.displayName) return device.displayName;
+  return `${platformDisplay(device.platformClass)} · Device ${device.supportCode ?? device.deviceId.slice(0, 8)}`;
 }
 
 function relative(ms) {
@@ -90,22 +92,16 @@ async function fetchDevices() {
   if (!username) {
     state.username = "";
     state.devices = [];
-    state.etag = null;
+    state.accountDisplayName = null;
     return;
   }
   state.username = username;
-  const r = await fetch(`${COM_BASE}/api/users/${encodeURIComponent(username)}/devices`, {
-    method: "GET",
-    cache: "no-store",
-  });
-  if (!r.ok) {
-    state.devices = [];
-    state.etag = null;
-    throw new Error(`Couldn't fetch trusted devices (${r.status})`);
-  }
-  state.etag = r.headers.get("etag");
-  const body = await r.json();
-  state.devices = body.devices ?? [];
+  const directory = await fetchDecryptedDirectory();
+  state.accountDisplayName = directory.accountDisplayName;
+  state.accountProfile = directory.accountProfile;
+  state.selfProfiles = directory.selfProfiles;
+  state.managedProfiles = directory.managedProfiles;
+  state.devices = directory.devices;
 }
 
 async function fetchPendingRePairSnapshot() {
@@ -118,33 +114,6 @@ async function fetchPendingRePairSnapshot() {
     state.pendingRePair = out;
   } catch {
     state.pendingRePair = null;
-  }
-}
-
-async function disconnectDevice(device) {
-  // Same DELETE endpoint mobile uses. Revoke is now AUTHENTICATED: .com
-  // verifies an IRK-signed `flagship/push-token-revoke/v1` envelope against
-  // the token owner's registered IRK before deleting the tether (so a
-  // tokenId-knower can't silently kill a device's push registration). We
-  // sign with the session's in-memory UMK-derived IRK, exactly like the
-  // webapp's other signed calls (journal / lock-and-power).
-  const session = getSession();
-  if (!session?.umk) throw new Error("unlock the webapp first");
-  const issuedAt = Date.now();
-  const sig = await signWithIrk(
-    session.umk,
-    canonicalPushRevoke({ tokenId: device.tokenId, issuedAt }),
-  );
-  const r = await fetch(`${COM_BASE}/api/push/${encodeURIComponent(device.tokenId)}`, {
-    method: "DELETE",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      request: { tokenId: device.tokenId, issuedAt },
-      signature: bytesToHex(sig),
-    }),
-  });
-  if (!r.ok && r.status !== 404) {
-    throw new Error(`Disconnect failed (${r.status})`);
   }
 }
 
@@ -168,32 +137,34 @@ function renderDeviceCard(device) {
   const quarantined = isQuarantined(device);
   const quarantineMsg = quarantined ? quarantineMessage(device) : "";
   return `
-    <div class="card" data-token-prefix="${escapeHtml(device.tokenPrefix)}"
+    <div class="card" data-device-id="${escapeHtml(device.deviceId)}"
          ${quarantined ? `data-quarantined="true"` : ""}>
       <div class="row">
         <div class="weight-600">
-          <span aria-hidden="true">${platformIcon(device.platform)}</span>
+          <span aria-hidden="true">${platformIcon(device.platformClass)}</span>
           ${escapeHtml(deviceName(device))}
-          ${quarantined ? `<span aria-hidden="true" title="${escapeHtml(quarantineMsg)}"
-                  data-quarantine-icon="${escapeHtml(device.tokenPrefix)}"
-                  style="margin-left: 4px;">⏱</span>` : ""}
+          ${device.isCurrent ? `<span class="pill">This device</span>` : ""}
+          ${device.grant?.signerRoot === "admin-root" ? `<span class="pill">Administrator</span>` : ""}
+          ${device.managed ? `<span class="pill">${device.locked ? "Managed · locked" : "Managed"}</span>` : ""}
         </div>
-        <button class="secondary danger" data-disconnect="${escapeHtml(device.tokenId)}"
-                ${quarantined ? "disabled" : ""}>
-          Disconnect
-        </button>
       </div>
       <div class="note small">
-        ${escapeHtml(platformDisplay(device.platform))}
-        · added ${escapeHtml(relative(device.addedAt))}
+        ${escapeHtml(platformDisplay(device.platformClass))}
+        · Device ${escapeHtml(device.supportCode ?? device.deviceId.slice(0, 8))}
+        · added ${escapeHtml(relative(device.createdAt))}
         ${
-          device.lastSeenAt > device.addedAt
+          device.lastSeenAt > device.createdAt
             ? `· last seen ${escapeHtml(relative(device.lastSeenAt))}`
             : ""
         }
       </div>
+      <div class="row mt-2">
+        ${device.isCurrent ? `<button class="secondary" data-self-rename="${escapeHtml(device.deviceId)}">Rename this device</button>` : ""}
+        ${getSession().adminRootSeed ? `<button class="secondary" data-managed-name="${escapeHtml(device.deviceId)}">${device.managed ? "Edit managed name" : "Set managed name"}</button>` : ""}
+        ${device.managed && getSession().adminRootSeed ? `<button class="secondary" data-managed-remove="${escapeHtml(device.deviceId)}">Remove managed name</button>` : ""}
+      </div>
       ${quarantined
-        ? `<div class="note small err-text" data-quarantine-msg="${escapeHtml(device.tokenPrefix)}">${escapeHtml(quarantineMsg)}</div>`
+        ? `<div class="note small err-text">${escapeHtml(quarantineMsg)}</div>`
         : ""}
     </div>
   `;
@@ -269,42 +240,94 @@ async function renderTrustedDevices() {
       bindDangerZone();
       return;
     }
-    root.innerHTML = bannerHtml + state.devices.map(renderDeviceCard).join("") + renderDangerZone();
-    root.querySelectorAll("[data-disconnect]").forEach((btn) => {
-      btn.addEventListener("click", async (ev) => {
-        const tokenId = ev.currentTarget.getAttribute("data-disconnect");
-        const device = state.devices.find((d) => d.tokenId === tokenId);
-        if (!device) return;
-        // v1.2 Phase 4 — even though the button has `disabled` while
-        // quarantined, surface the explainer toast if an enabled
-        // copy somehow gets a click through (e.g. a stale DOM).
-        if (isQuarantined(device)) {
-          toast(quarantineMessage(device), "err");
-          return;
-        }
-        const { inlineConfirm } = await import("../lib/modal.js");
-        const name = deviceName(device);
-        const ok = await inlineConfirm({
-          title: `Disconnect ${name}?`,
-          message: `We'll stop sending alerts to ${name}. It can sign back in with your passkey.`,
-          okLabel: "Disconnect",
-          danger: true,
-        });
-        if (!ok) return;
-        try {
-          await disconnectDevice(device);
-          toast(`Disconnected ${name}`);
-          await renderTrustedDevices();
-        } catch (e) {
-          toast(e.message ?? "Couldn't disconnect", "err");
-        }
-      });
-    });
+    const accountHeader = `
+      <div class="card">
+        <div class="weight-600">${escapeHtml(state.accountDisplayName ?? `@${state.username}`)}</div>
+        <div class="note small">@${escapeHtml(state.username)} · public routing address</div>
+        ${getSession().adminRootSeed ? `<button class="secondary mt-2" id="edit-account-display-name">Edit account name</button>` : ""}
+      </div>`;
+    root.innerHTML = bannerHtml + accountHeader + state.devices.map(renderDeviceCard).join("") + renderDangerZone();
+    bindPrivateNameActions(root);
     bindPendingBanner();
     bindDangerZone();
   } catch (e) {
     root.innerHTML = `<div class="card placeholder err-text">${escapeHtml(e.message ?? "Couldn't load devices")}</div>`;
   }
+}
+
+function bindPrivateNameActions(root) {
+  document.getElementById("edit-account-display-name")?.addEventListener("click", async () => {
+    const { inlinePrompt } = await import("../lib/modal.js");
+    const name = await inlinePrompt({
+      title: "Edit account name",
+      message: "Encrypted presentation only. Your public routing username does not change.",
+      initial: state.accountDisplayName ?? "",
+      validate: (value) => value?.trim() ? null : "Enter an account name",
+    });
+    if (!name) return;
+    try {
+      await updateAccountDisplayName(name, state.accountProfile);
+      toast("Account name updated");
+      await renderTrustedDevices();
+    } catch (error) {
+      toast(error?.message ?? "Couldn't update account name", "err");
+    }
+  });
+  root.querySelectorAll("[data-self-rename]").forEach((button) => button.addEventListener("click", async () => {
+    const deviceId = button.getAttribute("data-self-rename");
+    const device = state.devices.find((item) => item.deviceId === deviceId);
+    const current = state.selfProfiles.find((item) => item.deviceId === deviceId) ?? null;
+    const { inlinePrompt } = await import("../lib/modal.js");
+    const name = await inlinePrompt({
+      title: "Rename this device",
+      message: "This name applies only inside this Flagship account.",
+      initial: device?.selfDisplayName ?? "",
+      validate: (value) => value?.trim() ? null : "Enter a device name",
+    });
+    if (!name) return;
+    try {
+      await updateSelfDisplayName(name, current);
+      toast(device?.managed ? "Suggestion saved; the managed name remains visible" : "Device renamed");
+      await renderTrustedDevices();
+    } catch (error) {
+      toast(error?.message ?? "Couldn't rename device", "err");
+    }
+  }));
+  root.querySelectorAll("[data-managed-name]").forEach((button) => button.addEventListener("click", async () => {
+    const deviceId = button.getAttribute("data-managed-name");
+    const device = state.devices.find((item) => item.deviceId === deviceId);
+    const current = state.managedProfiles.find((item) => item.deviceId === deviceId) ?? null;
+    const { inlineConfirm, inlinePrompt } = await import("../lib/modal.js");
+    if (!await inlineConfirm({ title: "Administrator change", message: "Use your unlocked administrator authority to manage this device name.", okLabel: "Continue" })) return;
+    const name = await inlinePrompt({
+      title: "Managed device name",
+      message: "This encrypted name overrides the device's own suggestion.",
+      initial: device?.managedDisplayName ?? device?.selfDisplayName ?? "",
+      validate: (value) => value?.trim() ? null : "Enter a device name",
+    });
+    if (!name) return;
+    const locked = await inlineConfirm({ title: "Lock this name?", message: "A locked managed name stays effective until an administrator removes or unlocks it.", okLabel: "Lock name", cancelLabel: "Leave unlocked" });
+    try {
+      await setManagedDeviceDisplayName(deviceId, name, locked, current);
+      toast("Managed name updated");
+      await renderTrustedDevices();
+    } catch (error) {
+      toast(error?.message ?? "Couldn't manage device name", "err");
+    }
+  }));
+  root.querySelectorAll("[data-managed-remove]").forEach((button) => button.addEventListener("click", async () => {
+    const deviceId = button.getAttribute("data-managed-remove");
+    const current = state.managedProfiles.find((item) => item.deviceId === deviceId) ?? null;
+    const { inlineConfirm } = await import("../lib/modal.js");
+    if (!await inlineConfirm({ title: "Remove managed name?", message: "The device's own encrypted suggestion becomes visible.", okLabel: "Remove", danger: true })) return;
+    try {
+      await removeManagedDeviceDisplayName(deviceId, current);
+      toast("Managed name removed");
+      await renderTrustedDevices();
+    } catch (error) {
+      toast(error?.message ?? "Couldn't remove managed name", "err");
+    }
+  }));
 }
 
 function bindPendingBanner() {

@@ -17,6 +17,7 @@ import CryptoKit
 /// Each request body is a signed canonical-bytes envelope using the
 /// device's IRK (derived via Flagship/Keystore.deriveIRK).
 public protocol FlagshipServerClient: Sendable {
+    func bootstrapAccount(_ req: AccountBootstrapRequest) async throws -> AccountBootstrapResponse
     func claimUsername(_ req: UsernameClaimRequest) async throws
     func issueAuthCode(_ req: AuthCodeIssueRequest) async throws
     func registerRck(_ req: RckRegisterRequest) async throws
@@ -273,6 +274,12 @@ public protocol FlagshipServerClient: Sendable {
         username: String,
         body: AdminRootRotationRequest
     ) async throws -> AdminRootRotationResponse
+}
+
+public extension FlagshipServerClient {
+    func bootstrapAccount(_ req: AccountBootstrapRequest) async throws -> AccountBootstrapResponse {
+        throw ScreensClientError.http(status: 501, message: "account bootstrap unavailable")
+    }
 }
 
 /// Slice D §5 — the `POST /api/users/:username/admin-root-rotation` body:
@@ -1375,6 +1382,78 @@ public struct UsernameClaimRequest: Codable, Equatable, Sendable {
     }
 }
 
+public struct AccountBootstrapRequest: Codable, Equatable, Sendable {
+    public struct Claim: Codable, Equatable, Sendable {
+        public let request: UsernameClaimRequest.Inner
+        public let signature: String
+        public init(request: UsernameClaimRequest.Inner, signature: String) {
+            self.request = request
+            self.signature = signature
+        }
+    }
+    public struct Device: Codable, Equatable, Sendable {
+        public let deviceId: String
+        public let devicePubHex: String
+        public let platformClass: String
+        public init(deviceId: String, devicePubHex: String, platformClass: String) {
+            self.deviceId = deviceId
+            self.devicePubHex = devicePubHex
+            self.platformClass = platformClass
+        }
+    }
+    public struct Grant: Codable, Equatable, Sendable {
+        public let grantId: String
+        public let username: String
+        public let deviceId: String
+        public let devicePubHex: String
+        public let scopes: [String]
+        public let issuedAt: Int64
+        public let expiresAt: Int64
+        public let signatureHex: String
+        public init(grantId: String, username: String, deviceId: String, devicePubHex: String, scopes: [String], issuedAt: Int64, expiresAt: Int64, signatureHex: String) {
+            self.grantId = grantId; self.username = username; self.deviceId = deviceId
+            self.devicePubHex = devicePubHex; self.scopes = scopes; self.issuedAt = issuedAt
+            self.expiresAt = expiresAt; self.signatureHex = signatureHex
+        }
+    }
+    public struct Profile: Codable, Equatable, Sendable {
+        public let accountId: String
+        public let deviceId: String?
+        public let revision: Int64
+        public let keyVersion: Int64
+        public let nonceHex: String
+        public let ciphertextHex: String
+        public let issuedAt: Int64
+        public let signerPubHex: String
+        public let signatureHex: String
+        public init(accountId: String, deviceId: String? = nil, revision: Int64, keyVersion: Int64, nonceHex: String, ciphertextHex: String, issuedAt: Int64, signerPubHex: String, signatureHex: String) {
+            self.accountId = accountId; self.deviceId = deviceId; self.revision = revision
+            self.keyVersion = keyVersion; self.nonceHex = nonceHex; self.ciphertextHex = ciphertextHex
+            self.issuedAt = issuedAt; self.signerPubHex = signerPubHex; self.signatureHex = signatureHex
+        }
+    }
+    public let claim: Claim
+    public let aidPub: String
+    public let adminRootPub: String
+    public let device: Device
+    public let grant: Grant
+    public let accountProfile: Profile
+    public let deviceProfile: Profile
+    public init(claim: Claim, aidPub: String, adminRootPub: String, device: Device, grant: Grant, accountProfile: Profile, deviceProfile: Profile) {
+        self.claim = claim; self.aidPub = aidPub; self.adminRootPub = adminRootPub
+        self.device = device; self.grant = grant; self.accountProfile = accountProfile
+        self.deviceProfile = deviceProfile
+    }
+}
+
+public struct AccountBootstrapResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let username: String
+    public let accountId: String
+    public let deviceId: String
+    public let created: Bool
+}
+
 /// POST /api/auth-code/issue — registers a serial-keyed AuthCode that
 /// authorizes the freshly-booted server to register itself.
 public struct AuthCodeIssueRequest: Codable, Equatable, Sendable {
@@ -2003,6 +2082,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// Tracks usernames that have been claimed so the mock can return
     /// 409 on a second different-IRK claim (idempotent under same IRK).
     public private(set) var claimedUsernames: [String: String] = [:]   // username → irkPub
+    public private(set) var bootstrappedAccounts: [String: AccountBootstrapRequest] = [:]
     public private(set) var issuedAuthCodes: [String: AuthCodeWire] = [:]   // serial → wire
     public private(set) var revokedAuthCodes: Set<String> = []        // serial set
     public private(set) var releasedServerNames: [ReleaseServerNameRequest] = [] // recorded releases
@@ -2034,6 +2114,17 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: 409, message: "username taken")
         }
         claimedUsernames[u] = req.request.irkPub
+    }
+
+    public func bootstrapAccount(_ req: AccountBootstrapRequest) async throws -> AccountBootstrapResponse {
+        try await tick()
+        let username = req.claim.request.username.lowercased()
+        if let prior = bootstrappedAccounts[username], prior != req {
+            throw ScreensClientError.http(status: 409, message: "username taken")
+        }
+        bootstrappedAccounts[username] = req
+        claimedUsernames[username] = req.claim.request.irkPub
+        return .init(ok: true, username: username, accountId: username, deviceId: req.device.deviceId, created: true)
     }
 
     public func issueAuthCode(_ req: AuthCodeIssueRequest) async throws {
@@ -3050,6 +3141,11 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let body = try JSONEncoder().encode(req)
         // 409 = idempotent retake under same IRK; treat as success.
         try await postJson("/api/username/claim", body: body, acceptStatuses: [200, 201, 204, 409])
+    }
+
+    public func bootstrapAccount(_ req: AccountBootstrapRequest) async throws -> AccountBootstrapResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await postJsonReturning("/api/accounts", body: body)
     }
 
     public func issueAuthCode(_ req: AuthCodeIssueRequest) async throws {

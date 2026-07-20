@@ -101,6 +101,9 @@ import type {
   DemoAccountInitialization,
   DemoAccountInitializationResult,
   DemoAccountProvisioningStorage,
+  AccountInitialization,
+  AccountInitializationResult,
+  AccountProvisioningStorage,
   InstallPolicyFanoutRecord,
   InstallPolicyFanoutStorage,
   DeviceCapabilityGrantRecord,
@@ -1841,6 +1844,43 @@ export class InMemoryDemoUsersStorage implements DemoUsersStorage {
   }
 }
 
+export class InMemoryAccountProvisioningStorage implements AccountProvisioningStorage {
+  constructor(
+    private readonly usernames: UsernameStorage,
+    private readonly identities: DeviceIdentityStorage,
+    private readonly grants: DeviceCapabilityGrantStorage,
+    private readonly accountProfiles: AccountProfileStorage,
+    private readonly deviceProfiles: DeviceSelfProfileStorage,
+  ) {}
+
+  async initialize(input: AccountInitialization): Promise<AccountInitializationResult> {
+    const username = input.username.username.toLowerCase();
+    const existing = await this.usernames.get(username);
+    if (existing) {
+      const identity = await this.identities.get(username, input.primaryDevice.deviceId);
+      const exact = existing.irkPubHex.toLowerCase() === input.username.irkPubHex.toLowerCase() &&
+        existing.adminRootPubHex?.toLowerCase() === input.username.adminRootPubHex?.toLowerCase() &&
+        identity?.devicePubHex.toLowerCase() === input.primaryDevice.devicePubHex.toLowerCase();
+      if (!exact) return { ok: false, reason: "username-unavailable" };
+      const grant = await this.grants.get(input.primaryGrant.grantId);
+      const account = await this.accountProfiles.get(username);
+      const profile = await this.deviceProfiles.get(username, input.primaryDevice.deviceId);
+      return grant && account && profile
+        ? { ok: true, created: false }
+        : { ok: false, reason: "initialization-conflict" };
+    }
+    const claimed = await this.usernames.put({ ...input.username, username });
+    if (!claimed.ok) return { ok: false, reason: "username-unavailable" };
+    const identity = await this.identities.put({ ...input.primaryDevice, accountId: username });
+    const grant = await this.grants.put({ ...input.primaryGrant, username });
+    const account = await this.accountProfiles.put({ ...input.accountProfile, accountId: username }, 0);
+    const profile = await this.deviceProfiles.put({ ...input.primaryDeviceProfile, accountId: username }, 0);
+    return identity.ok && grant.ok && account.ok && profile.ok
+      ? { ok: true, created: true }
+      : { ok: false, reason: "initialization-conflict" };
+  }
+}
+
 export class InMemoryDemoAccountProvisioningStorage implements DemoAccountProvisioningStorage {
   constructor(
     private readonly usernames: UsernameStorage,
@@ -2024,6 +2064,13 @@ export class InMemoryStorage implements Storage {
   installPolicyFanout = new InMemoryInstallPolicyFanoutStorage();
   demoUsers = new InMemoryDemoUsersStorage();
   deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
+  accountProvisioning = new InMemoryAccountProvisioningStorage(
+    this.usernames,
+    this.deviceIdentities,
+    this.deviceCapabilityGrants,
+    this.accountProfiles,
+    this.deviceSelfProfiles,
+  );
   watchDelegates = new InMemoryWatchDelegateStorage();
   mintReservations = new InMemoryMintReservationStorage();
   acmeAccountKeyGrants = new InMemoryAcmeAccountKeyGrantStorage();

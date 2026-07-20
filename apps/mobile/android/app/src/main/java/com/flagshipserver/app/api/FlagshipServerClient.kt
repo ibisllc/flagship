@@ -18,6 +18,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 interface FlagshipServerClient {
+    suspend fun bootstrapAccount(req: AccountBootstrapRequest): AccountBootstrapResponse =
+        error("account bootstrap unavailable")
     suspend fun claimUsername(req: UsernameClaimRequest)
     /** POST /api/account/self-delete — the last-device account-death bundle.
      *  accountSelfDelete is always sent; serversSelfDelete rides only for the
@@ -718,6 +720,50 @@ data class UsernameClaimRequest(
     )
 }
 
+@Serializable
+data class AccountBootstrapRequest(
+    val claim: Claim,
+    val aidPub: String,
+    val adminRootPub: String,
+    val device: Device,
+    val grant: Grant,
+    val accountProfile: Profile,
+    val deviceProfile: Profile,
+) {
+    @Serializable data class Claim(val request: UsernameClaimRequest.Inner, val signature: String)
+    @Serializable data class Device(val deviceId: String, val devicePubHex: String, val platformClass: String)
+    @Serializable data class Grant(
+        val grantId: String,
+        val username: String,
+        val deviceId: String,
+        val devicePubHex: String,
+        val scopes: List<String>,
+        val issuedAt: Long,
+        val expiresAt: Long,
+        val signatureHex: String,
+    )
+    @Serializable data class Profile(
+        val accountId: String,
+        val deviceId: String? = null,
+        val revision: Long,
+        val keyVersion: Long,
+        val nonceHex: String,
+        val ciphertextHex: String,
+        val issuedAt: Long,
+        val signerPubHex: String,
+        val signatureHex: String,
+    )
+}
+
+@Serializable
+data class AccountBootstrapResponse(
+    val ok: Boolean,
+    val username: String,
+    val accountId: String,
+    val deviceId: String,
+    val created: Boolean,
+)
+
 /** Body for POST /api/account/self-delete. `accountSelfDelete` is always
  *  present; `serversSelfDelete` is included ONLY for the opt-in content-wipe
  *  (the atomic §5 bundle — `.com` rejects the whole request if a serversSelfDelete
@@ -1177,6 +1223,7 @@ class MockFlagshipServerClient(
     private val recoveryByUsername = mutableMapOf<String, MockRecoveryRecord>()
 
     private val _claimedUsernames = mutableMapOf<String, String>()       // username → irkPub
+    private val _bootstrappedAccounts = mutableMapOf<String, AccountBootstrapRequest>()
     private val _issuedAuthCodes = mutableMapOf<String, AuthCodeWire>()  // serial → wire
     private val _revokedAuthCodes = mutableSetOf<String>()
     private val _releasedServerNames = mutableListOf<ReleaseServerNameRequest>()
@@ -1209,6 +1256,16 @@ class MockFlagshipServerClient(
         val prior = _claimedUsernames[u]
         if (prior != null && prior != req.request.irkPub) throw HttpException(409, "username taken")
         _claimedUsernames[u] = req.request.irkPub
+    }
+
+    override suspend fun bootstrapAccount(req: AccountBootstrapRequest): AccountBootstrapResponse {
+        tick()
+        val username = req.claim.request.username.lowercase()
+        val prior = _bootstrappedAccounts[username]
+        if (prior != null && prior != req) throw HttpException(409, "username taken")
+        _bootstrappedAccounts[username] = req
+        _claimedUsernames[username] = req.claim.request.irkPub
+        return AccountBootstrapResponse(true, username, username, req.device.deviceId, prior == null)
     }
 
     override suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest) {
@@ -2010,6 +2067,14 @@ class LiveFlagshipServerClient(
             accept = setOf(200, 201, 204, 409),
         )
     }
+
+    override suspend fun bootstrapAccount(req: AccountBootstrapRequest): AccountBootstrapResponse =
+        transport.postJsonForResponse(
+            "$base/api/accounts",
+            req,
+            serializer = AccountBootstrapRequest.serializer(),
+            responseSerializer = AccountBootstrapResponse.serializer(),
+        )
 
     override suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest) {
         // Only 200 is success; 403 (not last device / bad sig) + 404 throw

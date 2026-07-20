@@ -34,6 +34,7 @@ import { depositCgkIfNeeded } from "../lib/cgkDeposit.js";
 import { depositPairingIfNeeded } from "../lib/pairingDeposit.js";
 import { liveSync } from "../lib/liveSync.js";
 import { fetchLeads, invertLeadsMap } from "../lib/directLeads.js";
+import { fetchDecryptedDirectory } from "../lib/accountDirectory.js";
 
 registerView("view-home", { tab: "home" });
 
@@ -526,7 +527,6 @@ function isPromoEntry(e) {
   return e?.label?.startsWith(FLAGSHIP_PROMO_LABEL_PREFIX);
 }
 
-const COM_BASE_FOR_E7 = controlApex();
 const ACCOUNT_RESET_BANNER_ID = "home-account-reset-banner";
 
 // Mirrors wizard.js's `recoveryWarn` slot — the wizard SETs this to "true"
@@ -618,8 +618,8 @@ function renderRecoveryBanner() {
 /**
  * E7 — peer "your account was reset on another device" detector.
  *
- * Signal: this device's local `flagship.pushTokenId` is no longer
- * in `/api/users/:u/devices`. That can only happen if another device
+ * Signal: this profile's immutable account-scoped device ID is no longer
+ * present in the signed directory. That can only happen if another device
  * on the account ran a Disconnect / Replace / Wipe against us, or
  * the Worker GC'd us as an orphan post-rotation.
  *
@@ -634,21 +634,15 @@ function renderRecoveryBanner() {
  */
 async function detectAccountReset(username) {
   if (!username) return;
-  const localToken = recoveryStoreGet("pushTokenId");
-  if (!localToken) return; // fresh install, no token → never orphaned
+  const localDeviceId = getActiveProfile()?.deviceId;
+  if (!localDeviceId) return;
   let devices = [];
   try {
-    const r = await fetch(
-      `${COM_BASE_FOR_E7}/api/users/${encodeURIComponent(username)}/devices`,
-      { cache: "no-store" },
-    );
-    if (!r.ok) return;
-    const body = await r.json();
-    devices = body.devices ?? [];
+    devices = (await fetchDecryptedDirectory()).devices;
   } catch {
     return;
   }
-  const present = devices.some((d) => d.tokenId === localToken);
+  const present = devices.some((device) => device.deviceId === localDeviceId && device.revokedAt == null);
   const banner = document.getElementById(ACCOUNT_RESET_BANNER_ID);
   if (present) {
     // Recovered (or never lost) — clean up the banner if previous
@@ -928,8 +922,8 @@ export async function renderHome() {
   );
 
   // E7 — fire-and-forget account-reset detection. Renders a danger
-  // banner above the server list if our locally-stored push tokenId
-  // is no longer in /api/users/:u/devices. Silent on failure so a
+  // banner above the server list if our account-scoped device ID
+  // is no longer in the signed directory. Silent on failure so a
   // transient network blip doesn't flash a banner.
   detectAccountReset(session.username).catch(() => {});
 

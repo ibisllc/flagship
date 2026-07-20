@@ -53,6 +53,20 @@ public enum AccountMetadata {
         try deriveKey(umk: umk, info: directoryInfo)
     }
 
+    public static func deriveAccountDeviceKey(umk: Data, accountId: String, deviceId: String) throws -> Curve25519.Signing.PrivateKey {
+        guard !accountId.isEmpty, !accountId.contains("|"),
+              deviceIdPattern.firstMatch(in: deviceId, range: NSRange(deviceId.startIndex..., in: deviceId)) != nil
+        else { throw AccountMetadataError.malformed }
+        let material = SymmetricKey(data: umk)
+        let seed = HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: material,
+            salt: Data(),
+            info: Data("flagship/account-device-key/v1|\(accountId.lowercased())|\(deviceId)".utf8),
+            outputByteCount: 32
+        )
+        return try Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
+    }
+
     public static func generateDeviceId() throws -> String {
         HexUtil.encode(try randomData(count: 16))
     }
@@ -150,6 +164,69 @@ public enum AccountMetadata {
               let displayName = object["displayName"] as? String
         else { throw AccountMetadataError.malformed }
         return try validateDisplayName(displayName)
+    }
+
+    public static func canonicalAccountProfile(
+        accountId: String,
+        revision: Int64,
+        keyVersion: Int64,
+        ciphertext: AccountMetadataCiphertext,
+        issuedAt: Int64,
+        signerPubHex: String
+    ) -> Data {
+        canonicalSignedProfile(
+            tag: "flagship/account-profile/v1", accountId: accountId, deviceId: "",
+            revision: revision, keyVersion: keyVersion, ciphertext: ciphertext,
+            locked: "", issuedAt: issuedAt, signerPubHex: signerPubHex
+        )
+    }
+
+    public static func canonicalDeviceSelfProfile(
+        accountId: String,
+        deviceId: String,
+        revision: Int64,
+        keyVersion: Int64,
+        ciphertext: AccountMetadataCiphertext,
+        issuedAt: Int64,
+        signerPubHex: String
+    ) -> Data {
+        canonicalSignedProfile(
+            tag: "flagship/device-profile-self/v1", accountId: accountId, deviceId: deviceId,
+            revision: revision, keyVersion: keyVersion, ciphertext: ciphertext,
+            locked: "", issuedAt: issuedAt, signerPubHex: signerPubHex
+        )
+    }
+
+    public static func canonicalDirectoryRequest(
+        accountId: String,
+        deviceId: String,
+        signerPubHex: String,
+        method: String,
+        path: String,
+        requestId: String,
+        issuedAt: Int64
+    ) -> Data {
+        Data([
+            "flagship/account-directory-request/v1", method, path, accountId.lowercased(),
+            deviceId, signerPubHex, requestId, String(issuedAt),
+        ].joined(separator: "|").utf8)
+    }
+
+    private static func canonicalSignedProfile(
+        tag: String,
+        accountId: String,
+        deviceId: String,
+        revision: Int64,
+        keyVersion: Int64,
+        ciphertext: AccountMetadataCiphertext,
+        locked: String,
+        issuedAt: Int64,
+        signerPubHex: String
+    ) -> Data {
+        Data([
+            tag, accountId.lowercased(), deviceId, String(revision), String(keyVersion),
+            ciphertext.nonceHex, ciphertext.ciphertextHex, locked, String(issuedAt), signerPubHex,
+        ].joined(separator: "|").utf8)
     }
 
     private static func deriveKey(umk: Data, info: Data) throws -> Data {

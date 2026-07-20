@@ -68,7 +68,18 @@ public struct OnboardingFlow: View {
                     // the claim removed from mintInstallBlob.
                     OpenAccountScreen(
                         username: username,
-                        onOpened: { _ in
+                        onOpened: { accountName, deviceName, deviceId in
+                            app.addProfile(Profile(
+                                cloudName: username,
+                                cloudRootPubHex: "",
+                                accountId: username,
+                                deviceId: deviceId,
+                                accountDisplayName: accountName,
+                                deviceDisplayName: deviceName,
+                                deviceCapability: nil,
+                                demoServer: nil,
+                                createdAt: Date()
+                            ))
                             // The account/identity now exists. Before
                             // landing in the app, nudge a backup via the
                             // skippable "Secure your account" step. This

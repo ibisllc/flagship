@@ -37,6 +37,7 @@ import { trademarkClaimMailto } from "../lib/trademarkClaim.js";
 import { addProfile } from "../lib/profiles.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
+import { inlinePrompt } from "../lib/modal.js";
 import {
   get as profileGet,
   set as profileSet,
@@ -178,6 +179,23 @@ async function handleOpenAccount() {
     // ignore — fall through to the claim, which is authoritative.
   }
   try {
+    const suggestedAccountName = username.split("-")
+      .map((part) => part ? part[0].toUpperCase() + part.slice(1) : part)
+      .join(" ");
+    const accountDisplayName = await inlinePrompt({
+      title: "Name this account",
+      message: `This private name appears above @${username} and is never used in links.`,
+      initial: suggestedAccountName,
+      validate: (value) => value?.trim() ? null : "Enter an account name",
+    });
+    if (!accountDisplayName) return false;
+    const deviceDisplayName = await inlinePrompt({
+      title: "Name this device",
+      message: "This private name applies only inside this Flagship account.",
+      initial: "This browser",
+      validate: (value) => value?.trim() ? null : "Enter a device name",
+    });
+    if (!deviceDisplayName) return false;
     await openAccount(username, {
       session,
       signWithIrk,
@@ -193,6 +211,8 @@ async function handleOpenAccount() {
       // own keystore record so a second account never clobbers the first.
       persistSeedForProfile,
       addProfile,
+      accountDisplayName,
+      deviceDisplayName,
       // No dispatchInitialView — the wizard advances to the recovery
       // step itself. The account is open; the app shell comes after the
       // remaining (skippable) wizard steps.

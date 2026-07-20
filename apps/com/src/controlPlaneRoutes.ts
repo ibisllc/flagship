@@ -131,6 +131,7 @@ import {
   handleSetRoutingTarget,
   handleSuggestUsername,
   handleUsernameClaim,
+  handleAccountBootstrap,
   handleUsersCheck,
   handleUsernameLookup,
   handlePostUsernameRename,
@@ -485,6 +486,7 @@ const ROUTE_RE = {
   USAGE_REPORT: /^\/api\/usage\/report$/,
   USAGE_STATUS: /^\/api\/usage\/status$/,
   USERNAME_CLAIM: /^\/api\/username\/claim$/,
+  ACCOUNT_BOOTSTRAP: /^\/api\/accounts$/,
   USERNAME_SUGGEST: /^\/api\/username\/suggest$/,
   USERS_CHECK: /^\/api\/users\/check$/,
   ACCOUNT_RESOLVE: /^\/api\/account\/resolve\/([^/]+)$/,
@@ -895,6 +897,18 @@ export async function tryControlPlane(
     return finish(
       await handleUsernameClaim(
         { storage: storage.usernames, offers: storage.usernameOffers },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && ROUTE_RE.ACCOUNT_BOOTSTRAP.test(path)) {
+    return finish(
+      await handleAccountBootstrap(
+        {
+          provisioning: storage.accountProvisioning,
+          usernames: storage.usernames,
+          offers: storage.usernameOffers,
+        },
         await readJson(request),
       ),
     );
