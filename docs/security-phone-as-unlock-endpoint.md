@@ -13,7 +13,7 @@ Boot-time secrets currently pass through `.com` in the clear:
   **deposits the plaintext to `.com`**, which relays it one-shot to the box.
   So `.com` sees the disk key for that window — weaker than the platform's
   "flagship.services literally cannot read user content."
-- **Entitlement** — the burner box currently *self-signs* its admission
+- **Entitlement** — the builder box currently *self-signs* its admission
   credential because the user's IRK (which should sign it) lives only on the
   phone, and there's no channel for the phone to sign the box's freshly-minted
   STK at first boot.

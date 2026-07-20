@@ -306,7 +306,7 @@ public struct PendingSecretRequest: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-/// The box's self-reported device-info display hint (the burner / boot
+/// The box's self-reported device-info display hint (the builder / boot
 /// stage posts it alongside the SecretRequest). All fields optional — a
 /// missing field renders as "—" in the confirm sheet.
 public struct DeviceInfoHint: Codable, Equatable, Sendable {

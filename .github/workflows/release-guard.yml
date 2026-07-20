@@ -29,8 +29,8 @@ on:
       - "scripts/release-guard.sh"
       - "scripts/release-guard.test.ts"
       - ".github/workflows/release-guard.yml"
-      - "packages/flagship-burner/src/userdata.ts"
-      - "apps/burner-mac/Sources/FlagshipBurnerCore/UserData.swift"
+      - "packages/flagship-builder/src/userdata.ts"
+      - "apps/builder-mac/Sources/FlagshipBuilderCore/UserData.swift"
   workflow_dispatch:
     inputs:
       release:

@@ -465,7 +465,7 @@ function renderEmptyServersList(root, { reason, username } = {}) {
     ? `Signed in as ${username}. Your account has no servers yet — add your first one whenever you're ready. You can run zero, one, or many.`
     : reason === "unpaired"
       ? "Pair the webapp to your phone or pod first, or jump straight in and build a fresh server."
-      : "Mint a recipe, write it to a USB drive with the Flagship burner, and boot a spare machine — you're a few taps from your own cloud.";
+      : "Mint a recipe, write it to a USB drive with the Flagship builder, and boot a spare machine — you're a few taps from your own cloud.";
   const ctaLabel = accountOpen ? "Add your first server" : "Create a server";
   root.innerHTML = `
     <div class="card empty-state">

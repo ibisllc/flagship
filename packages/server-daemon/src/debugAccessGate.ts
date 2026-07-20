@@ -15,21 +15,21 @@ const execFileP = promisify(execFile);
  * Box-side enforcement of the owner-authorized debug-access grant
  * (`flagship/debug-access/v1`; docs/recipe-delivery-and-remote-install.md).
  *
- * Enabling the box's `debug` console user / SSH is NOT a burner checkbox — it
+ * Enabling the box's `debug` console user / SSH is NOT a builder checkbox — it
  * requires an owner-IRK-signed grant that the BOX verifies before turning
  * anything on. The phone signs the grant behind Face ID when the user approves
- * the burner's "Debug mode" toggle; the burner embeds it (+ the authorized SSH
+ * the builder's "Debug mode" toggle; the builder embeds it (+ the authorized SSH
  * key) into the recipe as an UNSIGNED top-level sibling `debugGrant` (a JSON
  * string of `{grant,signatureHex}`, exactly like `swkHex` / `pairingOrder` —
  * NOT part of the signed install-blob canonical bytes); this gate verifies it.
  *
- * This REPLACES the old unconditional debug-user baking: the burner no longer
+ * This REPLACES the old unconditional debug-user baking: the builder no longer
  * bakes a `debug` user into the preseed. With no valid grant the box stays a
  * production image — no debug user, no installed SSH key.
  *
  * Safety / self-healing:
  *   - We act ONLY when the signature verifies under OUR config-pinned owner IRK
- *     AND the grant names OUR box (`.com` / the burner are never trust anchors).
+ *     AND the grant names OUR box (`.com` / the builder are never trust anchors).
  *     An absent / forged / wrong-owner / wrong-box / junk grant is ignored —
  *     never a crash, never a debug-user-on-bad-input.
  *   - Idempotent: a local marker records that the gate ran, so a reboot never
@@ -83,7 +83,7 @@ export interface DebugGrantCarrier {
 /**
  * Read + parse the OPTIONAL `debugGrant` sibling from the on-disk install blob.
  * Returns the RAW (un-verified) carrier or null when absent/malformed — the
- * caller verifies. Accepts either the embedded JSON STRING (what the burner
+ * caller verifies. Accepts either the embedded JSON STRING (what the builder
  * writes) or an already-parsed object. Never throws.
  */
 export async function debugGrantFromInstallBlob(
@@ -249,7 +249,7 @@ export async function applyDebugAccess(
   const writeConfig = opts.writeConfigFile ?? defaultWriteConfigFile;
 
   // Create the debug user (best-effort — may already exist) and ensure it is
-  // unlocked + a sudoer, matching the bring-up backdoor the burner used to bake.
+  // unlocked + a sudoer, matching the bring-up backdoor the builder used to bake.
   await tryRun(runner, "useradd", ["-m", "-s", "/bin/bash", "-G", "sudo", DEBUG_USER], log);
   await tryRun(runner, "usermod", ["-U", "-aG", "sudo", DEBUG_USER], log);
 
@@ -367,7 +367,7 @@ export async function runDebugAccessGate(
     return { enabled: false, reason: "no-grant" };
   }
 
-  // Bind to THIS box (case-insensitive FQDN) — a relay/burner can't aim another
+  // Bind to THIS box (case-insensitive FQDN) — a relay/builder can't aim another
   // box's grant at us (the signature would fail too, but this is explicit).
   if (carrier.grant.serverDomain.toLowerCase() !== opts.serverDomain.toLowerCase()) {
     log(

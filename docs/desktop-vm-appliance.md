@@ -1,12 +1,12 @@
-# Flagship for Desktop — host a server in the app (encrypted, phone-gated VM appliance)
+# Flagship Studio — host a server in the app (encrypted, phone-gated VM appliance)
 
 > **Status: DESIGN LOCKED, build is POST-LAUNCH.** This records the decision + plan
 > from the 2026-07-01 design discussion. It is an upgrade to the
-> **desktop app** (today's burner, `apps/burner-mac`) only — the phone/webapp
+> **desktop app** (today's builder, `apps/builder-mac`) only — the phone/webapp
 > clients and the daemon core are reused unchanged.
 >
 > **Mac reference slice: foundation built on `feat/desktop-vm`.** Pure, fully
-> unit-tested VM core (`FlagshipBurnerCore/VM/`: config/resource-caps/lifecycle/
+> unit-tested VM core (`FlagshipBuilderCore/VM/`: config/resource-caps/lifecycle/
 > inventory/tier-badge), a thin `VZHost.swift` (VZEFIBootLoader +
 > VZGenericMachinePlatform), the virtualization entitlement, the Burn-to-USB /
 > Host-here wizard chooser, the hosted-servers sidebar, and the debug-grant-gated
@@ -20,7 +20,7 @@ Let people run a **real Flagship server on hardware they already own** (a Mac mi
 a spare PC, a home Linux box) via a **signed desktop app**, not just by building a
 dedicated USB-burned box — **without giving up the security promise**.
 
-The desktop app is the burner **evolved**, not replaced. One app, one pairing flow,
+The desktop app is the builder **evolved**, not replaced. One app, one pairing flow,
 one trust anchor, two destinations for the same recipe:
 
 - **Burn to USB** → dedicated bare-metal appliance (today's flow).
@@ -28,7 +28,7 @@ one trust anchor, two destinations for the same recipe:
   this machine (new).
 
 Same recipe, same daemon, same phone-unlock — just written to a VM disk instead of a
-USB. Rename the app from "the Burner"/"Assembler" to **Flagship for Desktop** (build a
+USB. Rename the app from "the Builder"/"Builder" to **Flagship Studio** (build a
 box *or* run one here).
 
 ## Decisions (and why)
@@ -44,10 +44,10 @@ box *or* run one here).
    pipe curl into bash is off-brand and the security-literate recoil. A **notarized,
    code-signed** app is a far stronger trust story, is GUI-easy for a non-technical
    owner, and **visibly differentiates us from OpenClaw-style installers** (which are
-   `curl | sh`). The current burner is already code-signed (Developer ID, notarizable,
+   `curl | sh`). The current builder is already code-signed (Developer ID, notarizable,
    privileged helper) — we extend it.
 
-3. **"The appliance, virtualized."** Maximal reuse: the burner already builds the
+3. **"The appliance, virtualized."** Maximal reuse: the builder already builds the
    Debian appliance image; the VM path writes that same image to a VM disk and boots
    it. The daemon runs **unmodified** (normal Linux env — no macOS launchd /
    `systemctl`-skip adaptation), and the phone-gated LUKS unlock runs **verbatim**
@@ -96,7 +96,7 @@ Achievable on all three, but **not with uniform effort or uniform security**. Se
   conflicts). Windows ships last and may launch a reduced tier initially.
 
 The VM management is inherently per-OS (VZ / WHPX-Hyper-V / KVM); expect per-OS VM
-backends behind a shared control/UI layer. The current burner is Mac-only Swift, so the
+backends behind a shared control/UI layer. The current builder is Mac-only Swift, so the
 cross-platform desktop app is new surface.
 
 ## App UX / layout
@@ -152,7 +152,7 @@ of the debug-access lockdown already shipped:
 
 Reuse the existing **one-shot pairing relay**: the app shows a QR + code, the phone
 pairs and delivers the recipe (a capability-bearing artifact — delivered, never
-fetched-by-name). Identical to today's burner pairing; the only difference is the
+fetched-by-name). Identical to today's builder pairing; the only difference is the
 recipe is applied to a VM instead of a USB.
 
 ## What this does NOT change

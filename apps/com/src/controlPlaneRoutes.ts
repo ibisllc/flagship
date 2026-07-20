@@ -277,7 +277,7 @@ export interface ControlPlaneEnv {
   FLAGSHIP_ADMIN_SECRET?: string;
 
   /**
-   * The blessed Debian base-ISO manifest the desktop burner should hold,
+   * The blessed Debian base-ISO manifest the desktop builder should hold,
    * as a JSON string of the `IsoManifest` shape:
    *   {"version","url","sha256","sizeBytes","attestation"}
    * Unset / unparseable / shape-invalid ⇒ treated as unconfigured, and
@@ -285,7 +285,7 @@ export interface ControlPlaneEnv {
    * value server-side IS the "ship a new release / hold an old one"
    * lever — there is no action/keep/urgent field on the wire. The
    * `sha256` MUST be pinned to Debian's official signed SHA256SUMS (the
-   * `attestation` URL) so the burner can verify the download end-to-end.
+   * `attestation` URL) so the builder can verify the download end-to-end.
    * Set via `wrangler secret put FLAGSHIP_ISO_MANIFEST` (or a [vars]
    * entry once values are public).
    */
@@ -535,7 +535,7 @@ const ROUTE_RE = {
   RCK_SET_TARGET: /^\/api\/routing\/set-target$/,
   ROUTING_LOOKUP: /^\/api\/routing\/lookup$/,
   INSTALL_EVENTS: /^\/api\/install-events\/([^/]+)$/,
-  // Desktop-burner base-ISO manifest channel. The burner POSTs what it
+  // Desktop-builder base-ISO manifest channel. The builder POSTs what it
   // currently holds on every launch; the server decides whether/where to
   // fetch the blessed Debian base ISO. Unauthenticated, rate-limited.
   ISO_MANIFEST: /^\/api\/iso-manifest$/,
@@ -797,7 +797,7 @@ const ROUTE_RE = {
  * (boot.flagshipserver.com collapsed onto flagship-com — see
  * docs/boot-worker-consolidation.md). The hostname + every path/shape is
  * byte-identical to the standalone `apps/boot` worker, so the box, the
- * burner, and the phone are wire-transparent; only the backing changes:
+ * builder, and the phone are wire-transparent; only the backing changes:
  *
  *   - storage → `flagship-state` (the `secret_mailbox` / `box_sealed_leases`
  *     / `boot_nonces` tables — the SAME D1 the rest of `.com` uses).
@@ -2864,10 +2864,10 @@ export async function tryControlPlane(
     );
   }
 
-  // ── Desktop-burner base-ISO manifest ──────────────────────────
+  // ── Desktop-builder base-ISO manifest ──────────────────────────
   // Unauthenticated + rate-limited (the "iso-manifest" bucket lives in
   // rateLimit.ts and is applied at the edge in route.ts). The server is
-  // the sole decider; the burner is a dumb executor.
+  // the sole decider; the builder is a dumb executor.
   if (method === "POST" && ROUTE_RE.ISO_MANIFEST.test(path)) {
     return finish(
       handleIsoManifest(
@@ -3738,7 +3738,7 @@ async function readJson(request: Request): Promise<any> {
  * IsoManifest shape) into a manifest, or null when unset / unparseable /
  * shape-invalid. NEVER throws — a bad config simply degrades to
  * "unconfigured", and POST /api/iso-manifest then answers
- * `{ download: null }` rather than failing the burner's launch.
+ * `{ download: null }` rather than failing the builder's launch.
  */
 function parseBlessedIsoManifest(raw: string | undefined): IsoManifest | null {
   if (!raw) return null;

@@ -1,0 +1,50 @@
+id: com.flagshipserver.Builder
+runtime: org.gnome.Platform
+runtime-version: "46"
+sdk: org.gnome.Sdk
+command: flagship-builder
+# NOTE: Flatpak sandbox blocks raw block-device access by design — the
+# `write` subcommand WILL NOT work from inside the flatpak. This manifest
+# is a stub so the wizard's verify / prepare paths can run under Flatpak
+# for users who already have a flashed USB workflow elsewhere
+# (balenaEtcher, GNOME Disks, etc). Phase-2 we may re-think this with a
+# portal-mediated "open this device" prompt.
+finish-args:
+  # Display + audio
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  # The raw write won't work in-sandbox, but verify + prepare (save-an-ISO) do.
+  - --share=network
+  # Allow reading the user's Downloads folder for recipe + ISO drag-drop.
+  - --filesystem=xdg-download:ro
+  - --filesystem=home:ro
+  # Talk to the host's pkexec via flatpak-spawn (Phase 2 — needs the
+  # org.freedesktop.Flatpak portal wired).
+  - --talk-name=org.freedesktop.Flatpak
+
+modules:
+  - name: python3-gi-cairo
+    buildsystem: simple
+    build-commands:
+      - pip3 install --prefix=${FLATPAK_DEST} pycairo
+
+  - name: flagship-builder
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 flagship-builder.py   ${FLATPAK_DEST}/bin/flagship-builder
+      - install -Dm644 wizard.py            ${FLATPAK_DEST}/share/flagship-builder/wizard.py
+      - install -Dm644 cli_runner.py        ${FLATPAK_DEST}/share/flagship-builder/cli_runner.py
+      - install -Dm644 iso_manifest_client.py ${FLATPAK_DEST}/share/flagship-builder/iso_manifest_client.py
+      - install -Dm644 iso_base_cache.py    ${FLATPAK_DEST}/share/flagship-builder/iso_base_cache.py
+      - install -Dm644 disk_enumerator.py   ${FLATPAK_DEST}/share/flagship-builder/disk_enumerator.py
+      - install -Dm644 container_env.py     ${FLATPAK_DEST}/share/flagship-builder/container_env.py
+      - install -Dm644 elevation.py         ${FLATPAK_DEST}/share/flagship-builder/elevation.py
+      - install -Dm644 pair_session.py      ${FLATPAK_DEST}/share/flagship-builder/pair_session.py
+      - mkdir -p ${FLATPAK_DEST}/share/flagship-builder/vm
+      - install -m644 -t ${FLATPAK_DEST}/share/flagship-builder/vm vm/*.py
+      - install -Dm755 disk_write.py        ${FLATPAK_DEST}/share/flagship-builder/disk_write.py
+      - install -Dm644 com.flagshipserver.Builder.desktop ${FLATPAK_DEST}/share/applications/com.flagshipserver.Builder.desktop
+    sources:
+      - type: dir
+        path: ..

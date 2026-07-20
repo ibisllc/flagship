@@ -109,8 +109,8 @@ name = "BUILD_RELAY"
 class_name = "BuildRelaySession"
 
 [[durable_objects.bindings]]
-name = "BURNER_RELAY"
-class_name = "BurnerRelaySession"
+name = "BUILDER_RELAY"
+class_name = "BuilderRelaySession"
 
 [[migrations]]
 tag = "v1"
@@ -118,7 +118,13 @@ new_sqlite_classes = ["BuildRelaySession"]
 
 [[migrations]]
 tag = "v2"
+# Deployed under the original class name; preserved verbatim, renamed in v3.
 new_sqlite_classes = ["BurnerRelaySession"]
+
+[[migrations]]
+tag = "v3"
+# burner→builder class rename (see apps/com/wrangler.toml). Ephemeral DO.
+renamed_classes = [{ from = "BurnerRelaySession", to = "BuilderRelaySession" }]
 
 [vars]
 # ⭐ THE FLIP (§6.5 / §12-G1): point the apex vars at the `gym.` apex. These are

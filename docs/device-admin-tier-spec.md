@@ -135,11 +135,11 @@ Trace, phone → box:
    `.com`/network from swapping the admin anchor in transit — same defense the
    blob already gives `bootUnlockMode` / `diskEncryption`
    (`installBlob.ts:91-125`).
-2. Burner parses it: `flagship-burner/src/preseedEngine.ts:41-70`
+2. Builder parses it: `flagship-builder/src/preseedEngine.ts:41-70`
    (`optionsFromRecipeJson` → `parseInstallBlob`) and `pair.ts:328`
    (`ownerIrkPub = loaded.blob.authCode.userPubKey`) — add the parallel
    `adminRootPub = loaded.blob.authCode.adminRootPubKey`.
-3. Burner writes it into the box's install-blob JSON (the same file the daemon
+3. Builder writes it into the box's install-blob JSON (the same file the daemon
    reads at `/var/flagship/install-blob.json`). For the cloud-init/demo path the
    field threads through `buildCloudConfigUserData`
    (`control-plane/src/demoUsersAdminCloudInit.ts:204-216`) exactly like
@@ -511,7 +511,7 @@ No retroactive migration. Sequence:
 4. **Redeploy** — `npx tsc -b && (cd apps/com && npm run deploy)` for the Worker;
    `flyctl deploy … -a flagship-services` for the hub if the mailbox lane touches
    it.
-5. **Rebuild + re-sign the Mac burner** (it now writes `adminRootPubHex` into the
+5. **Rebuild + re-sign the Mac builder** (it now writes `adminRootPubHex` into the
    install-blob) and rebuild iOS/Android/webapp (they now mint + seal the master
    root at account creation).
 6. **Reburn** every box. Fresh burns pin BOTH `irkPublicKey` (membership) and
@@ -523,7 +523,7 @@ No retroactive migration. Sequence:
 - **Unaffected:** IRK derivation is unchanged (`keys.ts:36-38`), so SWK
   (`keys.ts:107`) and CGK (`cloudGossip.ts:57`) golden vectors and the
   `preseed-vectors.json` / `preseed-engine.js` contract
-  (`flagship-burner/engine/golden/`) do NOT change.
+  (`flagship-builder/engine/golden/`) do NOT change.
 - **New vectors required:** the `AdminRootRotation` canonical bytes (§5.1) — add
   to `tools/test-vectors.ts` (→ `test-vectors/canonical-bytes.json`) so all four
   engines (TS/Swift/Kotlin/webapp) agree. `DeviceCapabilityGrant` canonical bytes

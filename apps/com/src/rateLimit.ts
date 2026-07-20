@@ -86,8 +86,8 @@ export type RateLimitEndpoint =
   // grant mint) but the RELEASE is a PUBLIC box poll (per-IP only, generous —
   // a box may poll a few times across a boot). The delivery-revoke is IRK-signed.
   | "acme-key-deposit"
-  // Desktop-burner base-ISO manifest poll. Public (the burner has no
-  // session) + unsigned, so per-IP only. The burner calls this once per
+  // Desktop-builder base-ISO manifest poll. Public (the builder has no
+  // session) + unsigned, so per-IP only. The builder calls this once per
   // launch; 30/min is generous for a human relaunching while letting us
   // fence a tight-loop client.
   | "iso-manifest"
@@ -237,7 +237,7 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "irk", limit: 50, windowSec: 3600 },
   ],
   "acme-key-release": [{ axis: "ip", limit: 120, windowSec: 60 }],
-  // Desktop-burner base-ISO manifest poll. Per-IP only (no session, no
+  // Desktop-builder base-ISO manifest poll. Per-IP only (no session, no
   // signed body). 30/min is plenty for once-per-launch; the cap fences a
   // tight-loop client from hammering the route.
   "iso-manifest": [{ axis: "ip", limit: 30, windowSec: 60 }],
@@ -510,7 +510,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/users\/[^/]+\/devices\/admit$/.test(pathname)) {
     return "device-admit";
   }
-  // Desktop-burner base-ISO manifest poll.
+  // Desktop-builder base-ISO manifest poll.
   if (m === "POST" && pathname === "/api/iso-manifest") {
     return "iso-manifest";
   }
@@ -652,25 +652,25 @@ export async function checkQrPipeUpgrade(
 }
 
 /**
- * Per-IP gate on /burner-pipe upgrades — same DO-spawn concern as the QR
+ * Per-IP gate on /builder-pipe upgrades — same DO-spawn concern as the QR
  * relay (each accepted upgrade materialises a Durable Object). Reuses the
  * `RATE_LIMITER_QR_PIPE` binding with a DISTINCT key prefix so the two
  * budgets are independent without provisioning a second namespace. Fails
  * open when the binding is absent (dev / tests), matching the module's
  * posture for missing bindings.
  */
-export async function checkBurnerPipeUpgrade(
+export async function checkBuilderPipeUpgrade(
   env: RateLimitEnv,
   ip: string | null,
 ): Promise<RateLimitedResult | AllowedResult> {
   if (!env.RATE_LIMITER_QR_PIPE) return { limited: false };
   if (!ip) return { limited: false };
-  const key = `burner-pipe-upgrade|ip|${ip}`;
+  const key = `builder-pipe-upgrade|ip|${ip}`;
   const outcome = await env.RATE_LIMITER_QR_PIPE.limit({ key });
   if (!outcome.success) {
     return {
       limited: true,
-      endpoint: "burner-pipe-upgrade",
+      endpoint: "builder-pipe-upgrade",
       axis: "ip",
       retryAfterSec: 60,
     };

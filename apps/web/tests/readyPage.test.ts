@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/server.js";
 
 describe("/ready/ — post-order recipe landing", () => {
-  it("serves /ready/index.html with copy+download recipe + Assembler steps", async () => {
+  it("serves /ready/index.html with copy+download recipe + Builder steps", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/ready/" });
     expect(r.statusCode).toBe(200);
@@ -12,25 +12,25 @@ describe("/ready/ — post-order recipe landing", () => {
     // OS-detected installer surfaces.
     expect(r.body).toContain('id="installerPrimary"');
     expect(r.body).toContain('id="installerOthers"');
-    // The Assembler reuses the install-once message.
+    // The Builder reuses the install-once message.
     expect(r.body).toContain("only install it");
     // The no-recipe fallback exists for direct navigation.
     expect(r.body).toContain('id="noRecipe"');
     expect(r.body).toContain('src="/ready/ready.js"');
   });
 
-  it("tells one story: copy/download the recipe + get the burner — no ISO/Alpine/Advanced framing", async () => {
+  it("tells one story: copy/download the recipe + get the builder — no ISO/Alpine/Advanced framing", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/ready/" });
     expect(r.statusCode).toBe(200);
 
-    // The recipe + Assembler affordances are the whole page.
+    // The recipe + Builder affordances are the whole page.
     expect(r.body).toContain('id="copyRecipe"');
     expect(r.body).toContain('id="downloadRecipe"');
     expect(r.body).toContain('id="installerPrimary"');
     expect(r.body).toContain('id="installerOthers"');
 
-    // The burner fetches the base OS — the user never picks/downloads an image.
+    // The builder fetches the base OS — the user never picks/downloads an image.
     expect(r.body).toContain("fetches the right base OS");
 
     // No Advanced "bring your own ISO" disclosure, no OS-name framing on the page.

@@ -16,7 +16,7 @@
 7. **Guard/disarm the prod-wipe script** — per-env confirmation token + prod row-count dry-run + audit-logged admin-only path (or remove it from the deployable surface). **[agent]**
 8. **Remove `DEV_LATE_LOG` + the W12 debug endpoints** from the release surface (keep on dev). **[agent]**
 9. **Gate the demo/dev flips** (3-tap live/mock toggle + DemoFixtures) behind the release flag — keep them for dev/gym. **[agent]**
-10. **Burner reburn:** remove the `debug`/`flagship` console user + burn-time LUKS passphrase + re-enable the `luksRemoveKey` guard. **[agent code + owner reburn]**
+10. **Builder reburn:** remove the `debug`/`flagship` console user + burn-time LUKS passphrase + re-enable the `luksRemoveKey` guard. **[agent code + owner reburn]**
 
 ## P2 — Store onboarding (the actual submission gate)
 11. **iOS TestFlight:** Associated Domains capability, Xcode Archive + ASC upload, metadata, ≥5 external testers. **[owner]**
@@ -29,4 +29,4 @@
 16. **On-device hand-test of the security ceremonies** (recovery, re-pair, device-takeover, unlock-approval) — least-proven, highest-risk. **[owner]**
 
 ## Recommended sequence
-P0 agent items now (1 in flight → 2 unblocks → 3 + 4) ∥ P1 Bucket-C agent items (6,7,8,9) → then the owner-gated P2 store onboarding + the burner reburn (#10) → P3. The store onboarding (P2) is the true long pole and is entirely owner-side, so it's worth starting in parallel with the agent work.
+P0 agent items now (1 in flight → 2 unblocks → 3 + 4) ∥ P1 Bucket-C agent items (6,7,8,9) → then the owner-gated P2 store onboarding + the builder reburn (#10) → P3. The store onboarding (P2) is the true long pole and is entirely owner-side, so it's worth starting in parallel with the agent work.

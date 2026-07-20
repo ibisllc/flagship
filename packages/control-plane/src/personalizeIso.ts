@@ -4,7 +4,7 @@
  * The user's phone/QR flow produces a signed install recipe. `/ready/` POSTs
  * that recipe here; we stream a PRE-BUILT reproducible Alpine base ISO with the
  * recipe appended as a trailer (packages/iso-personalizer/streamPersonalize) —
- * no per-user heavy build. The burner is then a dumb flasher (ISO + USB), and
+ * no per-user heavy build. The builder is then a dumb flasher (ISO + USB), and
  * the box reads the trailer back via the ISO9660-volume-size find
  * (packages/installer-tiny materialize_recipe).
  *
@@ -57,7 +57,7 @@ function hexToBytes(s: string): Uint8Array {
 
 /**
  * Parse a recipe envelope into a blob + 64-byte signature. Accepts every shape
- * the burner/webapp emit: the signature as `blobSignatureHex` | `blobSignature`
+ * the builder/webapp emit: the signature as `blobSignatureHex` | `blobSignature`
  * | `signature`, either flat (alongside the InstallBlob fields) or nested under
  * `{ blob: … }`.
  */

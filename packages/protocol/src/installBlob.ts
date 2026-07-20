@@ -124,7 +124,7 @@ export interface InstallBlob {
   /**
    * Disk-encryption policy chosen at server creation. The phone signs over it
    * so a compromised network/.com can't DOWNGRADE an encrypted box to plaintext
-   * by tampering with the recipe in transit (the burner verifies the blob
+   * by tampering with the recipe in transit (the builder verifies the blob
    * signature, so a flipped value would fail to verify).
    *
    *   - "luks" (DEFAULT): the root is LUKS-encrypted; the unlock key is sealed

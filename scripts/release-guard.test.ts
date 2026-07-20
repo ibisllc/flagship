@@ -76,15 +76,15 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
 
   function makeCleanTree(): string {
     const d = mkdtempSync(join(tmpdir(), "release-guard-clean-"));
-    const burnerSrc = join(d, "packages", "flagship-burner", "src");
-    mkdirSync(burnerSrc, { recursive: true });
-    // A burner source file that has done the GA disarm: NO BURN_PASSPHRASE, NO
+    const builderSrc = join(d, "packages", "flagship-builder", "src");
+    mkdirSync(builderSrc, { recursive: true });
+    // A builder source file that has done the GA disarm: NO BURN_PASSPHRASE, NO
     // debug user. It may still carry the stripDebugFeatures defense + a
     // descriptive comment mentioning the marker, which must NOT trip the gate.
     writeFileSync(
-      join(burnerSrc, "userdata.ts"),
+      join(builderSrc, "userdata.ts"),
       [
-        "// Production burner: the debug:flagship account is stripped; this comment",
+        "// Production builder: the debug:flagship account is stripped; this comment",
         "// references the marker but is not the backdoor.",
         "export function stripDebugFeatures(s: string): string {",
         "  return s.replace(/echo 'debug:flagship'/, '');",
@@ -116,8 +116,8 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
     dir = makeCleanTree();
     // Simulate a careless re-add of the passphrase constant.
     writeFileSync(
-      join(dir, "packages", "flagship-burner", "src", "regression.ts"),
-      'export const BURN_PASSPHRASE = "flagship-burn-time-luks-rekey-me-immediately";\n',
+      join(dir, "packages", "flagship-builder", "src", "regression.ts"),
+      'export const BURN_PASSPHRASE = "flagship-build-time-luks-rekey-me-immediately";\n',
     );
     const r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
     expect(r.code).toBe(1);
@@ -127,7 +127,7 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
   it("debug creds OUTSIDE the sanctioned gate still fail RELEASE (inline-bake regression)", () => {
     dir = makeCleanTree();
     writeFileSync(
-      join(dir, "packages", "flagship-burner", "src", "inline-bake.ts"),
+      join(dir, "packages", "flagship-builder", "src", "inline-bake.ts"),
       "export const bake = `echo 'debug:flagship' | chpasswd`;\n",
     );
     const r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });

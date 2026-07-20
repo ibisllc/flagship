@@ -372,7 +372,7 @@ async function tryLoadConfig(): Promise<ServerConfig | null> {
  * the owner-IRK-signed `add-paired-session` order in PLAINTEXT (`{request,
  * signature}` JSON) as an UNSIGNED recipe sibling (never in the signed
  * InstallBlob's canonical bytes, so existing recipe signatures are untouched),
- * exactly like `swkHex`; the burner writes it into /var/flagship/install-blob.json.
+ * exactly like `swkHex`; the builder writes it into /var/flagship/install-blob.json.
  * The daemon verifies the owner-IRK signature at boot and adds the session
  * LOCALLY with no `.com` call. Returns the raw JSON string (un-verified here —
  * `addEmbeddedPairing` verifies) or null when absent/malformed (the default
@@ -392,7 +392,7 @@ async function pairingOrderFromInstallBlob(): Promise<string | null> {
     const b = JSON.parse(raw) as { pairingOrder?: unknown };
     const v = b.pairingOrder;
     // Accept either the embedded JSON STRING or an already-parsed object (the
-    // burner writes the string; be tolerant of either shape).
+    // builder writes the string; be tolerant of either shape).
     if (typeof v === "string" && v.length > 0) return v;
     if (v && typeof v === "object") return JSON.stringify(v);
     return null;
@@ -405,7 +405,7 @@ async function pairingOrderFromInstallBlob(): Promise<string | null> {
  * Read the recipe's Service Workload Key (`swkHex`) from the on-disk install
  * blob. The phone embeds it as an UNSIGNED recipe sibling (= `deriveSWK(umk,
  * serverId)`, never in the signed InstallBlob's canonical bytes, mirroring
- * `pairingKeyPrivHex`); the burner writes it into /var/flagship/install-blob.json.
+ * `pairingKeyPrivHex`); the builder writes it into /var/flagship/install-blob.json.
  * The daemon consumes it at first boot to turn on the service/build platform.
  * Returns the validated 64-hex string (lowercased) or null when absent/malformed
  * (older recipes, or a recipe minted before SWK provisioning) — the box then
@@ -591,7 +591,7 @@ async function main(): Promise<void> {
   // The SWK gates the service/build platform (and peer-backup participation,
   // which stays inert until the owner toggles it). The phone provisions it at
   // first boot by embedding `swkHex` (= deriveSWK(umk, serverId)) as an UNSIGNED
-  // recipe sibling that the burner writes into install-blob.json. Resolution
+  // recipe sibling that the builder writes into install-blob.json. Resolution
   // order:
   //   1. FLAGSHIP_SWK_HEX env       (dev runs)
   //   2. /var/flagship/swk.hex      (already-provisioned box, the stable path)
@@ -658,7 +658,7 @@ async function main(): Promise<void> {
   // The InstallBlob's authCode.serial is the order id keying the
   // per-order install-progress timeline the phone polls
   // (POST /api/order/<serial>/status). The bootstrap (installer/install.sh
-  // + the burner's userdata.ts) writes it to /var/flagship/auth-code-serial
+  // + the builder's userdata.ts) writes it to /var/flagship/auth-code-serial
   // on first boot and POSTs the install-time phases. The daemon picks it
   // up here to report the two phases only IT can know:
   //   `pairing` — entitlement bundle loaded (paired with the phone)
@@ -2623,7 +2623,7 @@ async function wireOwnerHandlers(deps: {
   // a one-shot gate that enables the `debug` console user + installs its SSH key
   // ONLY if the recipe carries an owner-IRK-signed `debugGrant` that verifies
   // under the config-pinned owner IRK AND names THIS box. No valid grant ⇒ no
-  // debug user (the burner no longer bakes one). Idempotent via a local marker;
+  // debug user (the builder no longer bakes one). Idempotent via a local marker;
   // never throws. Fire-and-forget — never blocks the owner-API bring-up.
   {
     const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";

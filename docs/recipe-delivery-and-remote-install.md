@@ -15,7 +15,7 @@ Secrets reach the box one of two ways:
   the owner's phone delivers secrets over the box's own pinned pipe — reusing the
   existing box-sealed auto-unlock-lease + entitlement/pairing-deposit patterns.
 - **Offline (advanced):** the owner injects secrets into the boot media locally,
-  over a phone↔burner QR-matched channel, so the box needs no internet at boot.
+  over a phone↔builder QR-matched channel, so the box needs no internet at boot.
 
 Everything below follows from that single property.
 
@@ -38,14 +38,14 @@ Everything below follows from that single property.
 |---|---|---|
 | **Phone** | Trust root. Holds the UMK; derives IRK/BAK/SWK; **signs the recipe** with the IRK. | Yes — the recipe. |
 | **`.com`** | Namespace **registrar** + DNS + content-blind **relay** + signature **verifier** + (future) **transparency log**. | **No.** It verifies phone signatures and records state; it never signs a recipe. |
-| **Burner** | Local executor: pulls the secret-free recipe, downloads the OS, writes the USB, optionally injects secrets. | n/a |
+| **Builder** | Local executor: pulls the secret-free recipe, downloads the OS, writes the USB, optionally injects secrets. | n/a |
 | **Box** | **Attests** its identity (and, future, its image) so substitution/tampering is detectable. | Yes — its STK-signed daemon-status. |
 
 **Key honesty constraint:** the phone **cannot** cryptographically verify the
-burner is genuine over the channel. The burner is a *public binary*, so any
+builder is genuine over the channel. The builder is a *public binary*, so any
 embedded "I'm real" key is extractable into a trojan. OS code-signing protects the
 binary at *launch* (Gatekeeper/notarization) but is **not** observable to the
-phone in-band. Therefore burner trust is a **supply-chain** decision (got it from
+phone in-band. Therefore builder trust is a **supply-chain** decision (got it from
 the right place + the OS gatekept it), reinforced by an **informed-consent**
 warning at the one moment it matters (the secret hand-over) — never by "verified ✓"
 theater on a SAS.
@@ -57,7 +57,7 @@ presented as **two warm top-level choices**, not a three-card technical fork:
 
 1. **Set it up yourself** → method chosen by platform:
    - **On this phone** — Android USB-OTG (the hero path: phone is trust-root *and* tool, no second device).
-   - **On a computer** — the Burner app (the only self-build path on iOS; the fallback on Android when OTG is flaky or the download is too big for the phone).
+   - **On a computer** — the Builder app (the only self-build path on iOS; the fallback on Android when OTG is flaky or the download is too big for the phone).
 2. **Have someone set it up for you** → **export the secret-free recipe as a file.**
 
 The "someone else" path is **not** niche — "have my partner / kid / friend build
@@ -67,17 +67,17 @@ it" is common and warm. It is co-equal, not hidden.
 Phone writes the USB directly. Default flow needs no other device. Advanced
 features (below) available via the single Advanced toggle.
 
-### Path B — Computer (qr-on-burner session)
-1. The **burner shows a QR + a short code** — this is the entry point.
+### Path B — Computer (qr-on-builder session)
+1. The **builder shows a QR + a short code** — this is the entry point.
 2. The phone **scans the QR** (or the user **types the short code**) → establishes
-   a phone↔burner session. A short confirmation code shown after the scan is the
+   a phone↔builder session. A short confirmation code shown after the scan is the
    **SAS**: it proves *channel integrity* (no network MITM between the phone and
-   the app that drew the QR) — it does **not** prove the app is the genuine burner.
+   the app that drew the QR) — it does **not** prove the app is the genuine builder.
 3. The phone **immediately sends the secret-free recipe** (low stakes — signed,
-   nothing to steal). The burner downloads the base OS and writes the USB; progress
+   nothing to steal). The builder downloads the base OS and writes the USB; progress
    can mirror to the phone.
 4. **Advanced → embed secrets (offline):** see the handshake + consent warning
-   below. This is the only step that hands keys to the burner.
+   below. This is the only step that hands keys to the builder.
 
 The session is long-lived by design (clean UX); the **risk is the secret-send, not
 the session**. Keep the session, gate the escalation.
@@ -107,27 +107,27 @@ export stays secret-free in v1.)
 A curated **"trusted operators" directory** is a *business program* (vetting,
 endorsement, liability) — scope it separately from the cheap export feature.
 
-## Phone↔burner secret-injection handshake (Path B advanced / offline)
+## Phone↔builder secret-injection handshake (Path B advanced / offline)
 
-1. Burner generates an **ephemeral keypair**; the QR encodes its pubkey + a nonce;
+1. Builder generates an **ephemeral keypair**; the QR encodes its pubkey + a nonce;
    the short code is the **SAS** over the resulting channel.
 2. Phone scans → ECDH channel. The phone receiving the pubkey *optically off the
    screen* means a **remote** attacker can't sit in the middle (physical presence
    required). The SAS confirms no network MITM.
 3. **Consent gate (every time, not suppressible):**
-   > "You're about to send this box's secret keys to the Burner app. Send only to
-   > the genuine Flagship Burner you installed from flagshipserver.com."
-4. Phone encrypts the secrets to the burner's ephemeral pubkey → burner injects
+   > "You're about to send this box's secret keys to the Builder app. Send only to
+   > the genuine Flagship Studio you installed from flagshipserver.com."
+4. Phone encrypts the secrets to the builder's ephemeral pubkey → builder injects
    them into the USB image → **wipe the ephemeral key + tear down the channel.**
 
 Residual risk after the optical channel excludes remote attackers: *local malware
-impersonating the burner*. That is exactly the supply-chain risk the consent
+impersonating the builder*. That is exactly the supply-chain risk the consent
 warning + distribution hygiene address — and nothing a transport choice (`.com`
-vs LAN) can fix, since the burner is the endpoint either way.
+vs LAN) can fix, since the builder is the endpoint either way.
 
 ## The single "Advanced mode" toggle
 
-Both the phone-OTG flow and the computer burner expose **one** "Advanced mode"
+Both the phone-OTG flow and the computer builder expose **one** "Advanced mode"
 toggle — **off by default**, labelled plainly *"for people who know what they're
 doing."* It gates exactly these power-user features:
 
@@ -148,13 +148,13 @@ deliberate Advanced opt-in, **never default**, and stays bound to the existing
 `scripts/release-guard.sh` already guards the dev-only constants).
 
 **Box-side enforcement (consent-as-crypto).** Debug access is no longer an
-unconditional burner bake — it is enabled at boot ONLY when the recipe carries an
+unconditional builder bake — it is enabled at boot ONLY when the recipe carries an
 owner-IRK-signed grant the box itself verifies:
 
 - The phone signs a `flagship/debug-access/v1` `DebugAccessGrant`
   (`{serverDomain, sshAuthorizedKey, issuedAt}`; `packages/protocol/debugAccess.ts`)
   behind Face ID when the user enables Advanced → Debug mode.
-- The burner embeds it as an **UNSIGNED top-level recipe sibling `debugGrant`** —
+- The builder embeds it as an **UNSIGNED top-level recipe sibling `debugGrant`** —
   a JSON STRING of `{"grant":{"serverDomain":"…","sshAuthorizedKey":"…","issuedAt":N},"signatureHex":"…"}`
   (exactly like `swkHex` / `pairingOrder`; NOT part of the signed install-blob
   canonical bytes, so existing recipe signatures are untouched).
@@ -164,7 +164,7 @@ owner-IRK-signed grant the box itself verifies:
   installs the SSH key. **No valid grant ⇒ a production image, no debug user.**
   Idempotent via a local marker; never throws on an absent/forged/wrong-box grant.
 
-⇒ The burner **MUST stop baking the `debug` console user into the preseed**; the
+⇒ The builder **MUST stop baking the `debug` console user into the preseed**; the
 box-side gate is now the sole path that enables it (Bucket C item 2 — the
 unconditional bake — is replaced by this owner-authorized gate).
 
@@ -173,12 +173,12 @@ unconditional bake — is replaced by this owner-authorized gate).
 Warn at **consequential, new, irreversible decisions** — handing over keys,
 delegating to an operator — **not** at every theoretically-risky step.
 
-- **Start of a burner session:** an *ambient, non-blocking* provenance cue
-  ("Burner — install only from flagshipserver.com · how to verify"). **No blocking
-  modal:** the trust-the-burner decision was already made at download/launch, and
+- **Start of a builder session:** an *ambient, non-blocking* provenance cue
+  ("Builder — install only from flagshipserver.com · how to verify"). **No blocking
+  modal:** the trust-the-builder decision was already made at download/launch, and
   re-litigating it at connect-time only breeds fatigue and is theater for the
   image-tampering threat (a user who installed a trojan clicks "OK" anyway).
-  Do **not** frame it as "connecting to a burner *as opposed to* `.com`" — there
+  Do **not** frame it as "connecting to a builder *as opposed to* `.com`" — there
   is no `.com` alternative for writing media; the contrast is incoherent.
 - **Secret hand-over:** the explicit, every-time, non-suppressible consent modal.
 - **Image tampering is defended by attestation, not prose** (next section).
@@ -205,9 +205,9 @@ The recipe's signature stops *tampering with signed fields*. The rest is detecte
 **Future hardening (not v1):** *image-measurement attestation* — reproducible OS
 builds + the box measuring its own boot image hash and reporting it for the phone
 to check against the expected manifest. This is the **only** defense against a
-malicious burner that writes your *real* signed recipe but **backdoors the OS
+malicious builder that writes your *real* signed recipe but **backdoors the OS
 image** (box attests as "yours" but is trojaned). The natural extension of the
-identity attestation above; the honest ceiling on the burner-trust problem.
+identity attestation above; the honest ceiling on the builder-trust problem.
 
 ## The frontpage QR
 
@@ -224,7 +224,7 @@ high-value QR is later: a **retail-packaging deep-link** that opens the app into
 - You **cannot prevent** a physically-controlling installer from extracting secrets
   present at boot. Mitigation: minimize secrets in the handed-off artifact
   (secret-free default) + attest.
-- You **cannot cryptographically verify** the burner is genuine over the channel.
+- You **cannot cryptographically verify** the builder is genuine over the channel.
   Mitigation: informed consent + distribution hygiene + (future) image attestation.
 - **Detect, narrow, verify — not prevent.**
 
@@ -238,13 +238,13 @@ high-value QR is later: a **retail-packaging deep-link** that opens the app into
 - The **single Advanced-mode toggle** gating ISO-pick / embed-secrets / debug.
 
 **Later / sequenced after the online happy-path is proven:**
-- The phone↔burner session + QR-matched secret-injection (Path B advanced).
+- The phone↔builder session + QR-matched secret-injection (Path B advanced).
 - Android USB-OTG burning (Path A).
 - Export-file path + delegated-build UX (Path C).
 - `.com` transparency receipt; image-measurement attestation.
 
 **Open decisions:**
-1. **Recipe→burner transport:** `.com` relay under a short code (works across
+1. **Recipe→builder transport:** `.com` relay under a short code (works across
    networks, one infra piece, recipe is secret-free so `.com` stays blind) **vs**
    same-LAN discovery (fully sovereign, no `.com` hop). Lean: relay as default,
    LAN as the offline-purist option — it mirrors the secrets question one level

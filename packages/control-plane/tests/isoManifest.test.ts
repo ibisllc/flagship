@@ -13,7 +13,7 @@ describe("iso manifest handler", () => {
   it("configured + current=null → returns the download block", () => {
     const r = handleIsoManifest(
       { blessedManifest: BLESSED },
-      { platform: "mac", burnerVersion: "1.2.3", current: null },
+      { platform: "mac", builderVersion: "1.2.3", current: null },
     );
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ download: BLESSED });
@@ -24,7 +24,7 @@ describe("iso manifest handler", () => {
       { blessedManifest: BLESSED },
       {
         platform: "linux",
-        burnerVersion: "1.0.0",
+        builderVersion: "1.0.0",
         current: { version: "debian-old", sha256: "b".repeat(64) },
       },
     );
@@ -37,7 +37,7 @@ describe("iso manifest handler", () => {
       { blessedManifest: BLESSED },
       {
         platform: "windows",
-        burnerVersion: "2.0.0",
+        builderVersion: "2.0.0",
         current: { version: "whatever", sha256: "A".repeat(64) },
       },
     );
@@ -48,7 +48,7 @@ describe("iso manifest handler", () => {
   it("unconfigured (no blessed manifest) → { download: null }", () => {
     const r = handleIsoManifest(
       { blessedManifest: null },
-      { platform: "mac", burnerVersion: "1.2.3", current: null },
+      { platform: "mac", builderVersion: "1.2.3", current: null },
     );
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ download: null });
@@ -59,7 +59,7 @@ describe("iso manifest handler", () => {
       { blessedManifest: null },
       {
         platform: "mac",
-        burnerVersion: "1.2.3",
+        builderVersion: "1.2.3",
         current: { version: "x", sha256: "c".repeat(64) },
       },
     );
@@ -77,10 +77,10 @@ describe("iso manifest handler", () => {
         "https://cdimage.debian.org/cdimage/release/13.6.0/arm64/iso-cd/SHA256SUMS",
     };
 
-    it("absent arch → the amd64 manifest (back-compat with deployed burners)", () => {
+    it("absent arch → the amd64 manifest (back-compat with deployed builders)", () => {
       const r = handleIsoManifest(
         { blessedManifest: BLESSED, blessedManifestArm64: BLESSED_ARM64 },
-        { platform: "mac", burnerVersion: "1.2.3", current: null },
+        { platform: "mac", builderVersion: "1.2.3", current: null },
       );
       expect(r.body).toEqual({ download: BLESSED });
     });
@@ -88,7 +88,7 @@ describe("iso manifest handler", () => {
     it('arch:"amd64" → the amd64 manifest', () => {
       const r = handleIsoManifest(
         { blessedManifest: BLESSED, blessedManifestArm64: BLESSED_ARM64 },
-        { platform: "linux", burnerVersion: "1.2.3", current: null, arch: "amd64" },
+        { platform: "linux", builderVersion: "1.2.3", current: null, arch: "amd64" },
       );
       expect(r.body).toEqual({ download: BLESSED });
     });
@@ -96,7 +96,7 @@ describe("iso manifest handler", () => {
     it('arch:"arm64" → the arm64 manifest', () => {
       const r = handleIsoManifest(
         { blessedManifest: BLESSED, blessedManifestArm64: BLESSED_ARM64 },
-        { platform: "mac", burnerVersion: "1.2.3", current: null, arch: "arm64" },
+        { platform: "mac", builderVersion: "1.2.3", current: null, arch: "arm64" },
       );
       expect(r.body).toEqual({ download: BLESSED_ARM64 });
     });
@@ -106,7 +106,7 @@ describe("iso manifest handler", () => {
         { blessedManifest: BLESSED, blessedManifestArm64: BLESSED_ARM64 },
         {
           platform: "mac",
-          burnerVersion: "1.2.3",
+          builderVersion: "1.2.3",
           current: { version: "debian-13.6.0-arm64", sha256: "D".repeat(64) },
           arch: "arm64",
         },
@@ -117,7 +117,7 @@ describe("iso manifest handler", () => {
     it('arch:"arm64" unconfigured → { download: null } even though amd64 is blessed', () => {
       const r = handleIsoManifest(
         { blessedManifest: BLESSED },
-        { platform: "mac", burnerVersion: "1.2.3", current: null, arch: "arm64" },
+        { platform: "mac", builderVersion: "1.2.3", current: null, arch: "arm64" },
       );
       expect(r.body).toEqual({ download: null });
     });
@@ -125,7 +125,7 @@ describe("iso manifest handler", () => {
     it("bad arch → 400", () => {
       const r = handleIsoManifest(
         { blessedManifest: BLESSED, blessedManifestArm64: BLESSED_ARM64 },
-        { platform: "mac", burnerVersion: "1.2.3", current: null, arch: "riscv64" },
+        { platform: "mac", builderVersion: "1.2.3", current: null, arch: "riscv64" },
       );
       expect(r.status).toBe(400);
     });
@@ -139,7 +139,7 @@ describe("iso manifest handler", () => {
     it("unknown platform", () => {
       const r = handleIsoManifest(
         { blessedManifest: BLESSED },
-        { platform: "freebsd", burnerVersion: "1.0.0", current: null },
+        { platform: "freebsd", builderVersion: "1.0.0", current: null },
       );
       expect(r.status).toBe(400);
     });
@@ -147,23 +147,23 @@ describe("iso manifest handler", () => {
     it("missing platform", () => {
       const r = handleIsoManifest(
         { blessedManifest: BLESSED },
-        { burnerVersion: "1.0.0", current: null } as never,
+        { builderVersion: "1.0.0", current: null } as never,
       );
       expect(r.status).toBe(400);
     });
 
-    it("empty burnerVersion", () => {
+    it("empty builderVersion", () => {
       const r = handleIsoManifest(
         { blessedManifest: BLESSED },
-        { platform: "mac", burnerVersion: "", current: null },
+        { platform: "mac", builderVersion: "", current: null },
       );
       expect(r.status).toBe(400);
     });
 
-    it("non-string burnerVersion", () => {
+    it("non-string builderVersion", () => {
       const r = handleIsoManifest(
         { blessedManifest: BLESSED },
-        { platform: "mac", burnerVersion: 5 as never, current: null },
+        { platform: "mac", builderVersion: 5 as never, current: null },
       );
       expect(r.status).toBe(400);
     });
@@ -173,7 +173,7 @@ describe("iso manifest handler", () => {
         { blessedManifest: BLESSED },
         {
           platform: "mac",
-          burnerVersion: "1.0.0",
+          builderVersion: "1.0.0",
           current: { version: "x", sha256: "not-hex" },
         },
       );
@@ -185,7 +185,7 @@ describe("iso manifest handler", () => {
         { blessedManifest: BLESSED },
         {
           platform: "mac",
-          burnerVersion: "1.0.0",
+          builderVersion: "1.0.0",
           current: { version: "x", sha256: "abc" },
         },
       );
@@ -197,7 +197,7 @@ describe("iso manifest handler", () => {
         { blessedManifest: BLESSED },
         {
           platform: "mac",
-          burnerVersion: "1.0.0",
+          builderVersion: "1.0.0",
           current: { sha256: "d".repeat(64) } as never,
         },
       );

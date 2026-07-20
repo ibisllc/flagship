@@ -9,7 +9,7 @@ import kotlinx.serialization.json.put
 /**
  * Owner-authorized debug-access grant (Kotlin mirror of
  * packages/protocol/src/debugAccess.ts + the iOS DebugAccess). The phone
- * signs this behind biometric when the user approves the burner's "Debug
+ * signs this behind biometric when the user approves the builder's "Debug
  * mode" toggle over the live pairing session; the box verifies it against
  * the owner IRK before enabling the debug console user / SSH.
  *

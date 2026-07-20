@@ -99,13 +99,13 @@ public final class QRScannerController: UIViewController {
                     if granted {
                         self.configureCapture()
                     } else {
-                        self.showUnavailablePlaceholder("Camera access is off. Enable it in Settings to scan the burner QR.")
+                        self.showUnavailablePlaceholder("Camera access is off. Enable it in Settings to scan the builder QR.")
                         self.onError?("Camera access is off.")
                     }
                 }
             }
         case .denied, .restricted:
-            showUnavailablePlaceholder("Camera access is off. Enable it in Settings to scan the burner QR.")
+            showUnavailablePlaceholder("Camera access is off. Enable it in Settings to scan the builder QR.")
             onError?("Camera access is off.")
         @unknown default:
             showUnavailablePlaceholder("The camera isn't available right now.")

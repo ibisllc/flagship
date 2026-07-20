@@ -18,7 +18,7 @@ point." Everything you should verify or have on hand before starting.
 
 - [ ] Stock Ubuntu Server ISO downloaded:
       https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso
-      (the Burner refuses any other SHA — pinned at
+      (the Builder refuses any other SHA — pinned at
       `9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0`).
 - [ ] Your phone has a Flagship account (username claimed, IRK
       derived). If not, walk through the onboarding first.
@@ -30,8 +30,8 @@ cd ~/flagship
 npm install --workspaces                            # latest deps
 npx tsc -b                                          # full workspace clean
 npx vitest run                                      # 3214+ pass, 8 skipped
-node packages/flagship-burner/src/cli.ts distros    # lists Ubuntu 22.04
-node packages/flagship-burner/src/cli.ts --help     # all 6 subcommands
+node packages/flagship-builder/src/cli.ts distros    # lists Ubuntu 22.04
+node packages/flagship-builder/src/cli.ts --help     # all 6 subcommands
 ```
 
 If any of those fail, stop and investigate before starting the real
@@ -82,7 +82,7 @@ Downloads folder.
 ### Step 6 — Verify the recipe (optional but good first run)
 
 ```sh
-node packages/flagship-burner/src/cli.ts verify ~/Downloads/flagship-recipe-*.json
+node packages/flagship-builder/src/cli.ts verify ~/Downloads/flagship-recipe-*.json
 ```
 
 Confirms the signature verifies + prints the server-domain and expiry.
@@ -92,11 +92,11 @@ tampered).
 ### Step 7 — Burn the USB
 
 Plug in the USB drive. Make sure it's the one you intended (the
-Burner will refuse anything that looks internal, but better to be
+Builder will refuse anything that looks internal, but better to be
 sure).
 
 ```sh
-sudo node packages/flagship-burner/src/cli.ts write \
+sudo node packages/flagship-builder/src/cli.ts write \
     ~/Downloads/flagship-recipe-*.json \
     ~/Downloads/ubuntu-22.04.5-live-server-amd64.iso
 ```
@@ -104,7 +104,7 @@ sudo node packages/flagship-burner/src/cli.ts write \
 It'll show the device picker, you pick (say) `/dev/sdb`, type `yes`.
 Takes ~3 minutes to write.
 
-After write completes, the Burner auto-shreds the recipe `.json`
+After write completes, the Builder auto-shreds the recipe `.json`
 (default behavior; pass `--keep-recipe` to opt out).
 
 ### Step 8 — Boot the target machine
@@ -129,9 +129,9 @@ Let's Encrypt cert (green padlock).
 
 | Symptom | First thing to try |
 |---|---|
-| Burner refuses recipe | Check expiry; mint a fresh one |
-| Burner refuses ISO | Re-run `shasum -a 256` against Canonical's published value |
-| Subiquity hangs at "select language" | autoinstall didn't see the CIDATA partition. Re-burn with `flagship-burn write --device /dev/diskN`. Check that the USB has TWO partitions when `lsblk` |
+| Builder refuses recipe | Check expiry; mint a fresh one |
+| Builder refuses ISO | Re-run `shasum -a 256` against Canonical's published value |
+| Subiquity hangs at "select language" | autoinstall didn't see the CIDATA partition. Re-burn with `flagship-build write --device /dev/diskN`. Check that the USB has TWO partitions when `lsblk` |
 | Pod doesn't register | SSH into target as `flagship` (no password — will fail. Need to add a recovery method here in Phase 2). Otherwise: boot a recovery USB + `cat /var/log/flagship-bootstrap.log` |
 
 ## Next steps (signal to me when you're done)

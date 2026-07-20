@@ -29,8 +29,8 @@ import FlagshipCore
 public final class CreateServerViewModel {
     public enum Phase: Sendable {
         case design
-        /// After design: how do you want to get the recipe to a burner?
-        /// (Pair with the burner app · Save/Share the recipe file · Copy ·
+        /// After design: how do you want to get the recipe to a builder?
+        /// (Pair with the builder app · Save/Share the recipe file · Copy ·
         /// Burn on this device [Android]). Replaces the old "scan the site".
         case deliveryChooser
         case scanQr
@@ -324,9 +324,9 @@ public final class CreateServerViewModel {
     }
     private var pendingBundle: PendingBundle?
 
-    /// Internal (not private) so the burner-pairing flow can reuse the EXACT
+    /// Internal (not private) so the builder-pairing flow can reuse the EXACT
     /// minting path (auth-code issue, RCK register, create-time pairing, the
-    /// deposit-store bookkeeping) rather than duplicating it — the burner peer
+    /// deposit-store bookkeeping) rather than duplicating it — the builder peer
     /// receives a byte-identical `SignedInstallBlob`, just over a different
     /// transport. Configure the design fields, then call this.
     func mintInstallBlob() async throws -> SignedInstallBlob {
@@ -540,7 +540,7 @@ public struct SignedInstallBlob: Sendable {
     /// when create-time pairing didn't run.
     public let pairingOrder: String?
     /// The box's deterministic SWK (lowercase hex), an UNSIGNED recipe sibling
-    /// the burner carries to `/var/flagship/install-blob.json`; the daemon
+    /// the builder carries to `/var/flagship/install-blob.json`; the daemon
     /// persists it at first boot to turn on the service/build platform. nil only
     /// for legacy/mock paths that don't provision it.
     public let swkHex: String?
@@ -563,15 +563,15 @@ public struct SignedInstallBlob: Sendable {
         public let blob: OnWireBlob
         public let blobSignature: String
         /// Top-level recipe sibling (alongside `blob`/`blobSignature`); the
-        /// burner carries it into the on-disk install-blob.json. Omitted from
+        /// builder carries it into the on-disk install-blob.json. Omitted from
         /// JSON when nil so a non-pairing recipe is byte-identical to before.
         public let pairingOrder: String?
-        /// Top-level recipe sibling carrying the box's SWK (hex); the burner
+        /// Top-level recipe sibling carrying the box's SWK (hex); the builder
         /// preserves it into the on-disk install-blob.json. Omitted from JSON
         /// when nil so a recipe without it is byte-identical to before.
         public let swkHex: String?
         /// Top-level recipe sibling carrying the owner-IRK-signed debug-access
-        /// grant envelope; the burner preserves it into the on-disk
+        /// grant envelope; the builder preserves it into the on-disk
         /// install-blob.json as the `debugGrant` sibling. Omitted from JSON when
         /// nil so a non-debug recipe is byte-identical to before.
         public let debugGrant: String?
@@ -593,7 +593,7 @@ public struct SignedInstallBlob: Sendable {
         public let bootUnlockMode: String?
         /// Disk-encryption policy. Only present for "none" servers — nil
         /// (omitted from JSON) for the "luks" encrypted default, mirroring the
-        /// burner's RecipeDTO + trailer.ts. The box reads `blob.diskEncryption`
+        /// builder's RecipeDTO + trailer.ts. The box reads `blob.diskEncryption`
         /// from this JSON; absent ⇒ "luks".
         public let diskEncryption: String?
     }
@@ -607,7 +607,7 @@ public struct SignedInstallBlob: Sendable {
         public let userPubKey: String
         public let issuedAt: Int64
         public let expiresAt: Int64
-        /// Slice D (D-1) — the pinned admin master root pubkey (hex); the burner
+        /// Slice D (D-1) — the pinned admin master root pubkey (hex); the builder
         /// preserves it into the on-disk install-blob so the daemon loads it into
         /// `ServerConfig.adminRootPub`. Omitted from JSON when nil (a pre-D recipe
         /// serializes byte-identically).

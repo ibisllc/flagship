@@ -145,8 +145,8 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
 
     // Mozilla Rhino — runs the SINGLE canonical preseed/user-data generator
-    // (packages/flagship-burner/engine/preseed-engine.js, shipped as an Android
-    // asset) on-device, byte-identical to Node + the macOS/iOS JSC burner. Driven
+    // (packages/flagship-builder/engine/preseed-engine.js, shipped as an Android
+    // asset) on-device, byte-identical to Node + the macOS/iOS JSC builder. Driven
     // in interpreted mode on ART (optimizationLevel = -1) — see PreseedEngine.kt.
     //
     // Version notes (the Android-clean artifact is `rhino-runtime` — no AWT/tools;
@@ -162,7 +162,7 @@ dependencies {
     //     interpreted AND compiled mode), corrupting e.g. the base64 encoder.
     //
     // RESOLVED: the canonical bundle is now lowered to es5 (Babel — esbuild refuses
-    //   const→es5; see packages/flagship-burner engine.babel.json + bundle:engine),
+    //   const→es5; see packages/flagship-builder engine.babel.json + bundle:engine),
     //   which removes both the default params AND the block scoping that tripped
     //   Rhino. The es5 bundle is PROVEN byte-identical to Node + JSC on Rhino across
     //   all 6 golden vectors (PreseedEngineTest, green). We stay on `rhino:1.9.1`

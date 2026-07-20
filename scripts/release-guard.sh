@@ -6,8 +6,8 @@
 # We are still in dev, so a known backdoor is LEFT ENABLED for hardware
 # bring-up and MUST be removed before GA (Bucket-C item 3):
 #   1. the burn-time LUKS recovery passphrase BURN_PASSPHRASE
-#      (`flagship-burn-time-luks-rekey-me-immediately`), a kept known constant in
-#      packages/flagship-burner/src/userdata.ts + the Swift UserData.swift mirror.
+#      (`flagship-build-time-luks-rekey-me-immediately`), a kept known constant in
+#      packages/flagship-builder/src/userdata.ts + the Swift UserData.swift mirror.
 # A forgotten backdoor must never silently ship. This gate makes a RELEASE build
 # FAIL while it is still live in source; the normal dev / PR / gym path stays
 # GREEN with the constants present (it only runs under RELEASE=1).
@@ -25,7 +25,7 @@
 # keeping the creds also fails the release.
 #
 # DESIGN — what it flags vs. what it tolerates:
-# The burner already carries a `stripDebugFeatures()` defense (userdata.ts /
+# The builder already carries a `stripDebugFeatures()` defense (userdata.ts /
 # UserData.swift) that REMOVES the debug account + banner from every production
 # image and throws if a marker survives. That function — and the tests that prove
 # it — legitimately MENTION the `debug:flagship` marker (in a strip regex / an
@@ -106,7 +106,7 @@ scan() {
 # Matches the TS `BURN_PASSPHRASE = "...immediately"` and the Swift
 # `burnPassphrase = "...immediately"` literal assignments.
 scan "burn-time LUKS passphrase" \
-  '(BURN_PASSPHRASE|burnPassphrase)[[:space:]]*=[[:space:]]*"flagship-burn-time-luks-rekey-me-immediately"'
+  '(BURN_PASSPHRASE|burnPassphrase)[[:space:]]*=[[:space:]]*"flagship-build-time-luks-rekey-me-immediately"'
 
 # Debug-account regression scans. The grant-gated home (debugAccessGate.ts) is
 # EXEMPT — that path ships in v1 (see the header). Anywhere else these

@@ -6,7 +6,7 @@ unseal** in the initramfs.
 
 ## Why this exists
 
-On the burner / live boot path the disk is LUKS-encrypted. `boot-stage.sh` runs
+On the builder / live boot path the disk is LUKS-encrypted. `boot-stage.sh` runs
 in the **initramfs, before the root is unlocked**, where `/opt/flagship` (node +
 `@flagship/protocol`) sits on the still-encrypted root and is unavailable, and
 plain `openssl` can't do the Ed25519→X25519 private-key birational map or an
@@ -116,10 +116,10 @@ toolchain byte-identical. The prebuilt binary is **not** committed
 
 ### Wave 4 decision: build-at-install (no committed binary)
 
-The Burner's opt-in LUKS path (`UserDataOptions.encryptRoot`) **builds the helper
+The Builder's opt-in LUKS path (`UserDataOptions.encryptRoot`) **builds the helper
 at install time from the cloned source** — auditable, no committed binary. The
-first-boot bootstrap (`packages/flagship-burner/src/userdata.ts` /
-`apps/burner-mac/.../UserData.swift`, the `encryptRoot` branch) runs, in curtin's
+first-boot bootstrap (`packages/flagship-builder/src/userdata.ts` /
+`apps/builder-mac/.../UserData.swift`, the `encryptRoot` branch) runs, in curtin's
 in-target chroot:
 
 ```
@@ -131,7 +131,7 @@ apt-get install -y --no-install-recommends golang-go
 
 so the helper lands at **`/boot/flagship-unseal`** (mode 755, on the unencrypted
 `/boot`) before the root is sealed — exactly where `boot-stage.sh` and the Ubuntu
-initramfs premount hook expect it. The default (unencrypted) Burner path does not
+initramfs premount hook expect it. The default (unencrypted) Builder path does not
 build or ship the helper at all.
 
 ## The gate (wire-compat is the requirement)

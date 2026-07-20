@@ -25,7 +25,7 @@ import {
 } from "./qrPipeMetrics.js";
 import {
   checkQrPipeUpgrade,
-  checkBurnerPipeUpgrade,
+  checkBuilderPipeUpgrade,
   checkRateLimit,
   clientIp,
   endpointFor,
@@ -102,7 +102,7 @@ const RECOVERY_ORIGIN = `https://${RECOVERY_HOST}`;
  * operations now run HERE, host-dispatched, backed by `flagship-state`, with
  * the directory + owner push resolved in-process — no second worker, no second
  * mailbox, no shared secret. The hostname + the `/api/boot/*` contract are
- * unchanged, so the box, burner, and phone need no change. apps/boot stays as
+ * unchanged, so the box, builder, and phone need no change. apps/boot stays as
  * an optional cloneable target for an enterprise running its own identity
  * plane. See docs/boot-worker-consolidation.md.
  */
@@ -209,11 +209,11 @@ export interface RouteEnv {
    */
   BUILD_RELAY?: BuildRelayNamespaceLike;
   /**
-   * Burner-pairing Durable Object namespace — the phone↔desktop-burner
+   * Builder-pairing Durable Object namespace — the phone↔desktop-builder
    * live session (sibling of BUILD_RELAY). Tests pass a stub; production
    * wiring is in wrangler.toml.
    */
-  BURNER_RELAY?: BuildRelayNamespaceLike;
+  BUILDER_RELAY?: BuildRelayNamespaceLike;
 }
 
 export interface BuildRelayNamespaceLike {
@@ -237,11 +237,11 @@ export interface R2ObjectLike {
 
 const PROXY_PREFIX = "/api/";
 
-// Flagship Assembler installer targets, keyed by the OS slug used in
+// Flagship Studio installer targets, keyed by the OS slug used in
 // /download/<os>. The /ready/ page links to /download/<os> (on-brand, so the
 // storage URL never shows in the UI); we 302 to wherever the binary actually
 // lives (GitHub Releases asset, R2 object, …) — swappable here without
-// touching the page. Empty → the /docs#burn explainer ("get the Assembler",
+// touching the page. Empty → the /docs#burn explainer ("get the Builder",
 // i.e. coming soon). Set each once that platform's build is published.
 const INSTALLER_DOWNLOADS: Record<string, string> = {
   mac: "",
@@ -263,8 +263,8 @@ const BUILD_ISO_STREAM_PREFIX = "/build/iso/";
 const BUILD_RELAY_SESSIONS_PATH = "/api/build-relay/sessions";
 /** v2: WebSocket pipe for the QR relay. /qr-pipe/<sid>?role=browser|phone */
 const QR_PIPE_WS_PREFIX = "/qr-pipe/";
-/** Phone↔desktop-burner live session. /burner-pipe/<sid>?role=burner|phone */
-const BURNER_PIPE_WS_PREFIX = "/burner-pipe/";
+/** Phone↔desktop-builder live session. /builder-pipe/<sid>?role=builder|phone */
+const BUILDER_PIPE_WS_PREFIX = "/builder-pipe/";
 
 /**
  * Default tunnel hub URL when TUNNEL_HUB_URL env var isn't set. Matches
@@ -493,10 +493,10 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     return forwardQrPipeUpgrade(request, env, url);
   }
 
-  // Phone↔desktop-burner live session WS upgrade.
-  // /burner-pipe/<sid>?role=burner|phone → the DO addressed by idFromName(sid).
-  if (url.pathname.startsWith(BURNER_PIPE_WS_PREFIX)) {
-    return forwardBurnerPipeUpgrade(request, env, url);
+  // Phone↔desktop-builder live session WS upgrade.
+  // /builder-pipe/<sid>?role=builder|phone → the DO addressed by idFromName(sid).
+  if (url.pathname.startsWith(BUILDER_PIPE_WS_PREFIX)) {
+    return forwardBuilderPipeUpgrade(request, env, url);
   }
 
   // P3.6 — /og?title=...&subtitle=...
@@ -647,11 +647,11 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     return proxyToServices(buffered, env, url);
   }
 
-  // /download/<os> → the Flagship Assembler installer for that OS. The
+  // /download/<os> → the Flagship Studio installer for that OS. The
   // /ready/ page links here so the storage URL never shows in the UI; we
   // 302 to wherever the binary lives. Placed BEFORE the coming-soon gate
   // so the download link works regardless of the preview cookie / launch
-  // state. Unset or unknown OS → the /docs#burn "get the Assembler"
+  // state. Unset or unknown OS → the /docs#burn "get the Builder"
   // explainer (coming soon) rather than a dead 404.
   if (url.pathname === "/download" || url.pathname.startsWith("/download/")) {
     const os = url.pathname.slice("/download/".length).replace(/\/+$/, "");
@@ -887,34 +887,34 @@ async function forwardQrPipeUpgrade(
 }
 
 /**
- * Phone↔desktop-burner live session: forward a /burner-pipe/<sid>?role=…
- * upgrade to the BurnerRelaySession DO addressed by idFromName(sid). Same
+ * Phone↔desktop-builder live session: forward a /builder-pipe/<sid>?role=…
+ * upgrade to the BuilderRelaySession DO addressed by idFromName(sid). Same
  * shape as the QR-relay forwarder (length-bounded URL-safe sid, per-IP
  * upgrade gate, spawn metric); the DO arbitrates roles + presence.
  */
-async function forwardBurnerPipeUpgrade(
+async function forwardBuilderPipeUpgrade(
   request: Request,
   env: RouteEnv,
   url: URL,
 ): Promise<Response> {
-  if (!env.BURNER_RELAY) {
-    return jsonResponse({ error: "burner-pipe not configured" }, 503);
+  if (!env.BUILDER_RELAY) {
+    return jsonResponse({ error: "builder-pipe not configured" }, 503);
   }
   if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
     return jsonResponse({ error: "websocket upgrade required" }, 426);
   }
-  const sid = url.pathname.slice(BURNER_PIPE_WS_PREFIX.length).split("/")[0] ?? "";
+  const sid = url.pathname.slice(BUILDER_PIPE_WS_PREFIX.length).split("/")[0] ?? "";
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(sid)) {
     return jsonResponse({ error: "sid must be 16-64 base64url chars" }, 400);
   }
-  const rl = await checkBurnerPipeUpgrade(env, clientIp(request));
+  const rl = await checkBuilderPipeUpgrade(env, clientIp(request));
   if (rl.limited) {
     await recordRateLimited(env.DB);
     return rateLimitedResponse(rl);
   }
   await recordUpgrade(env.DB);
-  const id = env.BURNER_RELAY.idFromName(sid);
-  const stub = env.BURNER_RELAY.get(id);
+  const id = env.BUILDER_RELAY.idFromName(sid);
+  const stub = env.BUILDER_RELAY.get(id);
   return stub.fetch(request);
 }
 

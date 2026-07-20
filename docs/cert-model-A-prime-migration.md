@@ -2,8 +2,8 @@
 
 Status: **EXECUTED IN CODE on `main` (2026-06-10/11)** — all phases (1, 2, 3, 4,
 5) are implemented and gated (vitest 4608 · iOS full suite · Android 669 ·
-burner 109 · tsc clean). Remaining: the deploy set (Worker + D1 0047/0048 + CAA
-client wiring + burner/iOS rebuilds), tier-2 client-side mint/install
+builder 109 · tsc clean). Remaining: the deploy set (Worker + D1 0047/0048 + CAA
+client wiring + builder/iOS rebuilds), tier-2 client-side mint/install
 ORCHESTRATION UX (the daemon endpoints + protocol envelopes exist; no phone UI
 drives them yet), and the full post-rebuild hardware validation pass at the
 bottom of this doc. Pre-launch (all prod users wiped, only test boxes), so this
@@ -234,7 +234,7 @@ per-user wildcard — schedule it WITH Phase 1/2, not after.
 
 The cert/name rebuild changes issuance, names, DNS, routing, and every client, so a
 full validation pass must follow it. Open tests:
-- **Full regression sweep**: `npx vitest run`, iOS XCTests, Android gradle, burner
+- **Full regression sweep**: `npx vitest run`, iOS XCTests, Android gradle, builder
   swift, webapp — all green post-rebuild.
 - **A′ issuance e2e (hardware)**: fresh burn → box mints `[<server>.<user>,
   *.<server>.<user>]`, serves BOTH `<server>.<user>` AND `<service>.<server>.<user>`
@@ -261,6 +261,6 @@ full validation pass must follow it. Open tests:
   link-sharing only.
 - **Deploys to flip on**: apply D1 migration `0047_ct_alerts.sql`; wire
   `CloudflareDnsClient` as the CAA client; deploy `.com`; rebuild+re-sign the Mac
-  burner; rebuild iOS app (push token + all UX).
+  builder; rebuild iOS app (push token + all UX).
 - **Carry-over checks**: #52 same-day-rotation (why a live rotation beat the 3d grace);
   Recovery Phase B on-device validation; iOS owner-device confirmations.

@@ -24,7 +24,7 @@ export * from "./cloudGossip.js";
 export * from "./pairingOrder.js";
 export * from "./debugAccess.js";
 export * from "./serverUpdate.js";
-export * from "./burnerPairing.js";
+export * from "./builderPairing.js";
 export * from "./adminAuthority.js";
 export * from "./peerBackupManifest.js";
 export * from "./serverMigration.js";

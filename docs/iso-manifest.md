@@ -1,9 +1,9 @@
 # ISO-manifest endpoint
 
-The desktop burner calls this on every launch to learn whether — and from
+The desktop builder calls this on every launch to learn whether — and from
 where — to fetch its Debian base ISO. **The server decides everything; the
-burner is a dumb executor.** No update logic, version comparison, or "should I
-upgrade?" heuristic lives in the burner: it sends what it currently holds and
+builder is a dumb executor.** No update logic, version comparison, or "should I
+upgrade?" heuristic lives in the builder: it sends what it currently holds and
 does exactly what the response tells it.
 
 ## Wire contract (locked)
@@ -15,14 +15,14 @@ does exactly what the response tells it.
 ```json
 {
   "platform": "mac" | "linux" | "windows",
-  "burnerVersion": "<semver string>",
+  "builderVersion": "<semver string>",
   "current": { "version": "<string>", "sha256": "<hex64>" } | null
 }
 ```
 
 - `platform` MUST be one of `mac`, `linux`, `windows`.
-- `burnerVersion` MUST be a non-empty string.
-- `current` is `null` when the burner holds no base ISO yet, otherwise the
+- `builderVersion` MUST be a non-empty string.
+- `current` is `null` when the builder holds no base ISO yet, otherwise the
   `{version, sha256}` of what it has. `sha256` MUST match `/^[0-9a-f]{64}$/i`.
 
 Malformed input ⇒ `400`.
@@ -50,7 +50,7 @@ The server holds a single **blessed** Debian manifest in config:
 
 1. No blessed manifest configured ⇒ `{ "download": null }`.
 2. `request.current` is non-null AND `request.current.sha256` ===
-   `blessed.sha256` (case-insensitive) ⇒ `{ "download": null }` (the burner
+   `blessed.sha256` (case-insensitive) ⇒ `{ "download": null }` (the builder
    already has the right ISO).
 3. Otherwise ⇒ `{ "download": <blessed manifest> }`.
 
@@ -85,26 +85,26 @@ The `sha256` is the official value from Debian's signed SHA256SUMS for
 The `url` is **version-pinned** (not the rotating `current/` symlink) so `url`
 and `sha256` stay consistent.
 
-**Source choice (R2 vs CDN) is just the `url` field — the burner never
+**Source choice (R2 vs CDN) is just the `url` field — the builder never
 hardcodes it.** Today it points at Debian's CDN (maximally transparent: the
-burner pulls from the source). To switch to our own R2 copy for permanence /
+builder pulls from the source). To switch to our own R2 copy for permanence /
 reliability, upload the *same bytes* and change only `url` — `sha256` is
 unchanged because it's the same ISO. **On a new Debian point release**, re-pin
 both architecture manifests (`version`/`url`/`sha256`) immediately and deploy
-(no burner reship). The netinst consumes Debian's live stable package mirror;
+(no builder reship). The netinst consumes Debian's live stable package mirror;
 keeping its point-release media aligned avoids installer/component drift. If an
 older point release must be retained, move it to `/cdimage/archive/<version>/…`
 or R2 and validate it against the then-current mirror before blessing it.
 
 If the env var is **unset, unparseable, or fails shape validation**, the server
 treats it as **unconfigured** — it never throws, and the endpoint answers
-`{ "download": null }` so a config typo can never fail the burner's launch.
+`{ "download": null }` so a config typo can never fail the builder's launch.
 
 ## Verifiability — the attestation rule
 
 The manifest's `sha256` **MUST be pinned to the value in Debian's official
 signed `SHA256SUMS`** (the file the `attestation` URL points at). This is the
-cryptographic root: the burner downloads the ISO from `url`, then verifies it
+cryptographic root: the builder downloads the ISO from `url`, then verifies it
 against `sha256`, which a human (or CI) has cross-checked against the
 GPG-signed `SHA256SUMS`. We are only a pointer — we are never trusted to vouch
 for ISO bytes. Do **not** publish a manifest whose `sha256` is anything other

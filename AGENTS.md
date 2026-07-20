@@ -10,7 +10,7 @@ Personal-cloud ecosystem. The phone is the trust root; users run their own serve
 apps/com/                  Cloudflare Worker — flagshipserver.com (identity + state) + web.flagshipserver.com (webapp host-rewrite)
 apps/web/                  Fly app — flagship.services (stateless data plane) + the webapp static surface
 apps/web/public/           Static assets served by the Worker's [assets] binding
-   ready/                  /ready/ — after an order: copy/download the recipe + get the burner (replaced the old /build/ paste-a-code page; /build/iso/ stays as the R2 ISO-stream backend)
+   ready/                  /ready/ — after an order: copy/download the recipe + get the builder (replaced the old /build/ paste-a-code page; /build/iso/ stays as the R2 ISO-stream backend)
    dev/create-server       /dev/create-server — phone simulator
    status/                 /status/ — live health dashboard
    security/               disclosure.html, report.html
@@ -44,7 +44,7 @@ fly.toml                   :443 raw-TCP (SNI passthrough) + :8443 TLS-term (API 
 ## Live URLs
 
 - `https://flagshipserver.com/` — landing
-- `https://flagshipserver.com/ready/` — after an order: copy/download the recipe + get the burner
+- `https://flagshipserver.com/ready/` — after an order: copy/download the recipe + get the builder
 - `https://flagshipserver.com/dev/create-server` — phone simulator (mints build codes)
 - `https://flagshipserver.com/status/` — live health
 - `https://flagshipserver.com/api/health` — JSON health
@@ -97,7 +97,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
     `docs/account-deletion-and-name-reclaim.md` §4.
   - **`alpine` is a *parked* branch, not a feature-to-launch.** It holds the
     full Alpine bare-metal installer path (ISO builder + apkovl + installer-tiny
-    + the burner Quick/trailer flow + `/api/personalize-iso`) that `main` shed
+    + the builder Quick/trailer flow + `/api/personalize-iso`) that `main` shed
     when we went Debian-only. Same mechanics (it's `main` + the Alpine delta,
     built by reverting the removal commits — `git diff <pre-extraction> alpine`
     was empty = lossless), but its purpose is *revival* if/when the Alpine
@@ -145,9 +145,31 @@ harness can't do:
   before the Worker deploy** — the predeploy gate blocks on drift); hub changes ride
   the next `.services` Fly deploy.
 - **Android on-device USB-OTG** burn still needs a server-side pre-remastered base
-  ISO + a physical OTG drive (`apps/mobile/android/OTG-BURNER-NOTES.md` §5).
+  ISO + a physical OTG drive (`apps/mobile/android/OTG-BUILDER-NOTES.md` §5).
 
 ### Recent work (condensed log, newest first)
+
+**2026-07-20 (rename) — the desktop tool is now "Flagship Studio"
+(burner→builder, everywhere).** Front-facing name **Flagship Studio**; package /
+bundle id `com.flagshipserver.Burner`→`.Builder` (+ helper `.Builder.helper`,
+mach service, `.desktop`/polkit app-ids). EVERY "burner" identifier renamed to
+"builder" repo-wide (~1,900 occurrences across TS/Swift/Kotlin/C#/Python):
+directories (`apps/builder-{mac,linux,windows}`, `packages/flagship-builder`),
+Swift modules (`FlagshipBuilder{,Core,Helper}`), the Android `…app.builder`
+package, the C# `Flagship.Builder` namespace, the `flagship-build` CLI, the
+`BuilderPair*`/`builderRelay` classes, the pairing wire tag
+`flagship/burner-sid/v1`→`flagship/builder-sid/v1` (golden vectors + cross-lang
+sha pins regenerated), the VM data path (`FlagshipBuilder/VMs`), and CI
+(`builder-linux.yml`). The ONLY surviving "Burner" is DO **migration history** in
+`wrangler.toml`/`wrangler.gym.toml` (v2 created `BurnerRelaySession`; new **v3**
+`renamed_classes` renames it forward — applied migration history can't be
+rewritten, and the DO is ephemeral). Gates: vitest **7393** · `tsc -b` clean ·
+`swift build`+`test` **162** · Android tests+APK · pytest **280** (Windows/WPF
+uncompiled — no .NET SDK here). The Developer-ID Mac app (**Flagship Studio**,
+`com.flagshipserver.Builder`) is rebuilt + signed + installed to `/Applications`.
+**Remaining (owner):** `make release` with your notary secrets to
+notarize+staple+dmg; rebuild iOS/Android/Windows from this source so every peer
+speaks the new `builder-sid` tag; the next `.com` deploy applies DO migration v3.
 
 **2026-07-20 — app-review demo path repaired and validated live.** The real
 operator path is `scripts/sample-user.mjs`; the older `scripts/demo-account.mjs`
@@ -200,9 +222,9 @@ Driven by a stuck Mac-hosted VM (`hali.jolly-quince`) + scary idle Face-ID promp
   and a Mac "taking longer than expected — check it reached the network" advisory
   once a sealed guest has awaited unlock past 8 min (the poll had no timeout and
   spun forever) — pure `VMLifecycle.comingUpIsStalled` helper + test.
-Gates: flagship-burner vitest 251 · `tsc -b` clean · burner-mac `swift build` +
+Gates: flagship-builder vitest 251 · `tsc -b` clean · builder-mac `swift build` +
 `swift test` 162 green · Android `:app:testDebugUnitTest` + `assembleDebug` green.
-**Remaining (owner):** rebuild the Mac burner + re-provision hali to validate the
+**Remaining (owner):** rebuild the Mac builder + re-provision hali to validate the
 virtio_net fix live (capture the VZ console/journalctl to confirm the exact
 stage); **rebuild iOS (Xcode) + Android (Gradle)** to surface the biometric + UI
 changes on device (iOS not compiled here). **Follow-ups (noted, not done):** (a)
@@ -211,7 +233,7 @@ Wi-Fi path (hali was an 8-hour mystery precisely because the wired path only
 echoes to a console the Mac app doesn't capture); (b) the stalled-boot advisory is
 Mac-only — mirror it on Linux (`wizard.py`) + Windows (`Wizard.cs`/XAML).
 
-**2026-07-20 — TestFlight code preflight unblocked.** The burner-pair lifecycle
+**2026-07-20 — TestFlight code preflight unblocked.** The builder-pair lifecycle
 fix is present; all four iOS/watch executable bundles now carry target-accurate
 privacy manifests for app-local and App-Group `UserDefaults`. The existing
 `group.com.flagshipserver.app` is confirmed registered and assigned to all four
@@ -224,7 +246,7 @@ Watch widget, and all four manifests embedded. **Remaining (owner):** create a n
 signed Archive and upload it to TestFlight.
 
 **2026-07-20 — root cause of "box boots but never serves HTTPS / still coming
-up"; installer GRUB-target fix; burner-pairing UX.** Three landings:
+up"; installer GRUB-target fix; builder-pairing UX.** Three landings:
 - **Daemon self-restart fix (the "still coming up" killer).** The
   flagship-daemon systemd unit shipped `Restart=on-failure`, but the daemon
   signals "restart me to pick up new state" with `process.exit(0)` — the
@@ -235,7 +257,7 @@ up"; installer GRUB-target fix; burner-pairing UX.** Three landings:
   ran ACME, or served HTTPS. Diagnosed on frank.jolly-quince by querying prod D1
   (fingerprint: SWK + unlock consumed, `entitlement-deposit` NOT consumed,
   `daemon_status` empty). Fixed to `Restart=always` + `StartLimitIntervalSec=0`
-  in ALL three unit generators (`flagship-burner/src/userdata.ts` → the preseed
+  in ALL three unit generators (`flagship-builder/src/userdata.ts` → the preseed
   engine bundle, `demoUsersAdminCloudInit.ts`, `installer-netboot/late-command.sh`);
   corrected the misleading "systemd re-fires under on-failure" comments in the
   deposit consumers. Older boxes came up because pre-2026-06-23 recipes embedded
@@ -245,11 +267,11 @@ up"; installer GRUB-target fix; burner-pairing UX.** Three landings:
   now also sets `grub-installer/bootdev "$DISK"`, so GRUB targets the virtio disk
   instead of the USB installer ISO (`/dev/sda`) — the macOS-VZ case that failed at
   `grub-install /dev/sda` after the entire base install.
-- **Burner pairing acks delivery + honest pod status.** `pair.ts` sends a
+- **Builder pairing acks delivery + honest pod status.** `pair.ts` sends a
   `recipe-accepted` event to the phone before cleanup; pods render a distinct
   **Pending** pill (not "Provisioning") and suppress the leader flag until a pod is
   online and not pending, across iOS / Android / webapp.
-Gates: burner + control-plane + daemon-consumer vitest green, `tsc -b` clean.
+Gates: builder + control-plane + daemon-consumer vitest green, `tsc -b` clean.
 **Remaining (owner):** reburn to validate a fresh box comes up clean on the FIRST
 boot; the pairing / pod-status UX needs an Xcode + Gradle rebuild; the console
 still prints benign kernel/ACPI noise (`AE_AML_LOOP_TIMEOUT` etc.) — GA Bucket C
@@ -302,18 +324,18 @@ could be installed; the fixed installer passphrase consequently survived into
 first boot. The optional field is now preserved and validated end-to-end, with
 shared Node, macOS JavaScriptCore, and Android Rhino golden coverage plus a
 registration-signature regression test. The helper is published on `main`; the
-Developer-ID Mac burner is rebuilt/reinstalled and the Android debug app builds
+Developer-ID Mac builder is rebuilt/reinstalled and the Android debug app builds
 with the corrected canonical asset. **Remaining:** validate one fresh physical
 reburn through automatic unlock and registration.
 
-**2026-07-19 — iOS↔desktop burner pairing repaired; pending-server semantics
+**2026-07-19 — iOS↔desktop builder pairing repaired; pending-server semantics
 made honest.** The iOS scanner now owns one camera session per presentation and
 the phone relay waits for socket acceptance/retries transient loss; the Mac
-burner tolerates the matching phone reconnecting instead of immediately
+builder tolerates the matching phone reconnecting instead of immediately
 relocking. The live 403 was an admin-authority drift: `register-rck` became a
 sensitive operation but all create clients still signed it with the membership
 IRK; iOS/Android/webapp now use the admin signer when the account is gated.
-Recipe delivery has an explicit burner receipt sent only after the Mac or
+Recipe delivery has an explicit builder receipt sent only after the Mac or
 shared Linux/Windows CLI successfully verifies/stages the recipe; iOS and
 Android both wait for it, then close and surface the Home pending row. Pending
 is consistently orange and can never carry the Leader badge. Android's JDK 17,
@@ -329,13 +351,13 @@ separate phase, and surface failures beside the Create button instead of only
 in the collapsed log. A live Host-on-this-Mac retry then exposed both blessed
 13.5 URLs as dead after Debian rotated 13.6 into `debian-cd/current`; prod now
 serves the tested 13.5 amd64+arm64 bytes from Debian's immutable archive (same
-official hashes/sizes), and all burner/download documentation uses that stable
+official hashes/sizes), and all builder/download documentation uses that stable
 source. The Developer-ID Mac app and development iOS app were rebuilt/reinstalled;
 both launch; the manifest fix is deployed. **Remaining:** validate QR-first-open
 and live receipt pairing and complete Host-on-this-Mac on the physical phone and
 computer.
 
-**2026-07-06 (evening, Chromebook instance) — Linux burner validated LIVE on
+**2026-07-06 (evening, Chromebook instance) — Linux builder validated LIVE on
 ChromeOS; multi-arch Linux remainder DONE; Android/iOS large-screen polish.**
 On `feat/chromebook-fit` (branch off main; iOS half needs a Mac build before
 merge). Validated on a real Crostini Chromebook (Debian 12 container, /dev/kvm
@@ -354,14 +376,14 @@ fallback layout; (b) a GTK3-only `set_hscrollbar_policy` call — the window had
 never built on ANY GTK4; (c) AppImage+Flatpak packaging omitted
 `pair_session.py` + the whole `vm/` package → packaged startup ImportError;
 (d) the CLI locator preferred `src/cli.ts`, which plain node can't run → every
-checkout burner failed its first CLI call (dist/cli.js now wins). Chromebook
+checkout builder failed its first CLI call (dist/cli.js now wins). Chromebook
 fit: Crostini-aware empty-disk-picker hint (share USB via ChromeOS Settings);
 `garcon-terminal-handler` support for Open-in-SSH (command verbatim, no `-e`,
 symlink-resolved); elevation falls back to passwordless `sudo -n` where pkexec
 can't work (stock Crostini). Multi-arch handoff (9bb1d60d) CLOSED: `-machine
 virt` + explicit AHCI on arm64 (amd64 argv unchanged), VMManager host-arch
 detect + cross-arch create/start refusal, wizard arch pass-through, tests. New
-CI: `burner-linux.yml` runs pytest + a `render_smoke.py` window-build under
+CI: `builder-linux.yml` runs pytest + a `render_smoke.py` window-build under
 xvfb on ubuntu-latest AND debian:12 (both adw generations). Apps: Android
 edge-to-edge insets (targetSdk-35 bug — slivers drew under the status bar) +
 readingMaxWidth caps on detail/flow/welcome screens (validated fullscreen on
@@ -369,7 +391,7 @@ ARC with screenshots); iOS twin `.fsReadingColumn()` applied to the 5 matching
 screens — **UNCOMPILED, Mac must build + run GymIPadTests + eyeball an iPad
 sim before merge**.
 (a) **Arch-aware ISO manifest**: `POST /api/iso-manifest` takes optional
-`arch` (absent = amd64, deployed burners byte-compatible); the Worker serves a
+`arch` (absent = amd64, deployed builders byte-compatible); the Worker serves a
 second blessed manifest `FLAGSHIP_ISO_MANIFEST_ARM64` (official Debian 13.5.0
 arm64 netinst) for the desktop apps' HOST-a-VM path on arm64 hardware — VZ and
 KVM boot native-arch guests only; burning stays amd64. Guest payload is now
@@ -392,12 +414,12 @@ pytest green). Remaining (ordered list in commit 9bb1d60d): `-machine virt`
 + explicit AHCI argv on arm64, VMManager host-arch detection + cross-arch
 refusal, wizard arch pass-through, Crostini/Chromebook README, tests. Also
 same evening: prod wiped (58 tables, list re-audited through 0082), 0082
-applied+stamped, `.com` deployed, Mac burner re-signed+reinstalled, iOS
+applied+stamped, `.com` deployed, Mac builder re-signed+reinstalled, iOS
 jetsam fix (vibe-code log cap) + dead RecoverFromWelcomeContainer deleted,
 marketplace/retail re-synced+pushed.
 
 **2026-07-05 — Linux desktop parity MERGED: the desktop trio is complete.**
-`apps/burner-linux` (the last thin platform) gains the full VM-appliance host
+`apps/builder-linux` (the last thin platform) gains the full VM-appliance host
 layer at Windows/Mac parity: a pure Python VM core pinned to the shared golden
 vectors (`apps/desktop-shared/golden/vm-core-vectors.json` — Python/C#/Swift
 cores provably identical), a QEMU/KVM backend (`-accel kvm -cpu host`, AHCI
@@ -410,7 +432,7 @@ loopback hostfwd — the affordance Mac's VZ NAT can't offer; production VMs get
 no console AND no forwarded port). All GTK code stays behind `build_window`,
 so the whole layer unit-tests headless. Owner validation on a real Linux box:
 GTK render, live KVM boot→sealed→phone-unlock→padlock, real Open-in-SSH, live
-pairing, TCG degrade (list in `apps/burner-linux/README.md`). Earlier the same
+pairing, TCG degrade (list in `apps/builder-linux/README.md`). Earlier the same
 day (see agent-memory handoff): v1-hardening + gym-integration + desktop
 Mac/Windows waves merged; installer disk-selection trap + first-boot-units
 bugs fixed on `main`; migrations 0080/0081 applied to prod. **Migration 0082
@@ -468,27 +490,27 @@ dead OLD one).
 Gates: vitest 525 files green · `tsc -b` clean · iOS build + package tests green ·
 Android `:app:testDebugUnitTest` + `assembleDebug` green · release-guard +
 admin-authority-guard OK. **REMAINING (owner):** the Slice D rollout — apply migrations
-**0064–0068** → deploy `.com` → wipe → rebuild burner + apps → reburn (spec §7).
+**0064–0068** → deploy `.com` → wipe → rebuild builder + apps → reburn (spec §7).
 
-**2026-06-30 — burner pairing → ONE-SHOT deposit; debug box LAN-SSH-able; daemon self-heal; status/sliver fixes.**
+**2026-06-30 — builder pairing → ONE-SHOT deposit; debug box LAN-SSH-able; daemon self-heal; status/sliver fixes.**
 A multi-part day driven by live hand-testing.
 - **Pairing model = one-shot recipe deposit (final design).** First pass made the
   long session *resilient* (relay evicts a stale same-role socket → reconnect; ~1h
-  TTL; burner holds + auto-resumes; phone persists + resumes on unlock; countdown;
+  TTL; builder holds + auto-resumes; phone persists + resumes on unlock; countdown;
   `Disconnect` buttons) — committed `449fa227`/`f185e7d6` and the **relay was
   deployed** (`.com` `8bbe7955`). Then we **simplified further** (owner call): the
   two security choices — **debug-friendly** and **embed-secrets** — are now **phone
   Advanced toggles baked into the recipe at mint** (behind the existing mint Face
-  ID), so the burner has nothing to ask the phone. The link collapsed to a one-shot
+  ID), so the builder has nothing to ask the phone. The link collapsed to a one-shot
   deposit (scan → SAS → mint → deliver → "Sent ✓ — you can put your phone away");
   removed the debug-consent round-trip + the resume/countdown/persisted-session
-  machinery. The burner **keeps the delivered recipe** until the laptop-user hits
+  machinery. The builder **keeps the delivered recipe** until the laptop-user hits
   the red **Disconnect from phone** button (or quits) — no auto-lock. The phone
   signs an owner-IRK `flagship/debug-access/v1` grant (`sshAuthorizedKey:""`, no box
   STK) + embeds it as the unsigned `debugGrant` sibling. (The relay's eviction/1h
   TTL/`expiresAt` stay deployed but are now vestigial under one-shot — a harmless
-  deposit pipe.) Commits `2d697679` (burner), `27516794` (iOS/Android/webapp). Mac
-  burner **rebuilt + reinstalled**.
+  deposit pipe.) Commits `2d697679` (builder), `27516794` (iOS/Android/webapp). Mac
+  builder **rebuilt + reinstalled**.
 - **Debug box → actually LAN-SSH-able** (`53affe15`). The grant gate created a
   `debug` sudoer with **no password and no key** ⇒ SSH impossible. Now, ONLY on a
   verified owner grant, the gate also sets the known **`debug:flagship`** password,
@@ -522,7 +544,7 @@ A multi-part day driven by live hand-testing.
   layout space (push-down) instead of a `position:fixed` overlay (iOS/Android were
   already correct).
 
-Gates: burner-mac swift 84 · iOS 1270 · Android `:app:testDebugUnitTest` +
+Gates: builder-mac swift 84 · iOS 1270 · Android `:app:testDebugUnitTest` +
 `assembleDebug` green · webapp vitest 1611 · server-daemon vitest 1671 · relay 21 ·
 `tsc -b` clean. **Deployed:** `.com` Worker `8bbe7955` (relay). **REMAINING
 (owner):** **reburn** to validate the debug-access LAN-SSH gate + the daemon
@@ -534,26 +556,26 @@ the next `.com` deploy.
 generator is now a single TS implementation run on Node (Linux/Windows CLI),
 JavaScriptCore (macOS/iOS), and Rhino (Android), ending cross-language drift. ECMA
 `utf8ToBase64` replaces the only Node dep; committed es5 bundle
-`engine/preseed-engine.js` (zero Node builtins) the native burners ship +
+`engine/preseed-engine.js` (zero Node builtins) the native builders ship +
 `engine/golden/preseed-vectors.json` cross-engine contract (caught a real Rhino
 block-scoping bug in CI). Swift `UserData.swift` 2,200→81 lines (façade); Android
 `PreseedEngine.kt` (Rhino, interpreted). Bonus: `debugGrant` now threads end-to-end
 (was silently dropped on every non-Swift path).
 
-**2026-06-27 — burner pairing parity.** Linux/Chromebook CLI `flagship-burn pair
+**2026-06-27 — builder pairing parity.** Linux/Chromebook CLI `flagship-build pair
 --debug` mirrors the macOS debug-consent (signed grant verified locally vs owner IRK,
 embedded as recipe `debugGrant`). Android `FatVolume.buildPreseedVolume` is a
 pure-Kotlin FAT16 builder for the on-device OTG remaster (placement still owner-side).
 
-**2026-06-26 — phone PAIRS WITH the burner (inverted QR).** The burner opens LOCKED
+**2026-06-26 — phone PAIRS WITH the builder (inverted QR).** The builder opens LOCKED
 (shows a QR + 8-char code); the phone scans, both confirm a SAS, and the live socket
 IS the gate (drop → re-lock); the phone then mints + delivers the recipe over the
-session. New `.com` `BurnerRelaySession` DO + `/burner-pipe`. A **delivery chooser**
-on iOS/Android replaces "scan the site": Pair with burner / Save recipe file / Copy
-recipe / Burn on-device (Android). **Consent-as-crypto**: the burner Advanced debug
+session. New `.com` `BuilderRelaySession` DO + `/builder-pipe`. A **delivery chooser**
+on iOS/Android replaces "scan the site": Pair with builder / Save recipe file / Copy
+recipe / Burn on-device (Android). **Consent-as-crypto**: the builder Advanced debug
 toggle → phone signs a `flagship/debug-access/v1` grant → box-side `debugAccessGate.ts`
 verifies it vs the owner IRK (no grant ⇒ production image). Android in-device USB-OTG
-burner (no-root BOT/SCSI writer); full on-device ISO remaster infeasible → documented
+builder (no-root BOT/SCSI writer); full on-device ISO remaster infeasible → documented
 `VerbatimInjector` seam. Spec: `docs/recipe-delivery-and-remote-install.md` (Path B).
 
 **2026-06-24 — direct lead-read.** Clients read live per-service leadership straight
@@ -676,8 +698,8 @@ encrypted box comes online with ONE approval. New blind `entitlement-deposit` la
 daemon claims it before relaying.
 
 **2026-06-20 — ⭐ root cause "real boxes never came online".** Hub IRK-signature
-enforcement went live but the burner still minted a SELF-SIGNED RootEntitlement ⇒ every
-real box's HELLO was rejected ⇒ "Never came online". Fix: the burner writes NO
+enforcement went live but the builder still minted a SELF-SIGNED RootEntitlement ⇒ every
+real box's HELLO was rejected ⇒ "Never came online". Fix: the builder writes NO
 `entitlements.json`; the daemon's first-boot relay requests an IRK-signed one from the
 phone. Follow-ons: pairing-deposit TTL 5min→14d; daemon entitlement self-heal (discard
 a non-IRK-signed bundle vs crash-loop); `awaitingEntitlement` on `/pods`. Boxes
@@ -758,7 +780,7 @@ rest of the orders surface before GA. Spec: `docs/cert-model-A-prime-migration.m
 **Hardware / boot — Debian-only.** Debian is the sole shipping path; Alpine is parked on
 the `alpine` branch (its initramfs wouldn't enumerate USB on metal). A server-driven
 base-ISO manifest (`POST /api/iso-manifest`, blessed via `FLAGSHIP_ISO_MANIFEST` Worker
-env) lets the burner's Simple mode download + sha-verify the Debian base itself.
+env) lets the builder's Simple mode download + sha-verify the Debian base itself.
 Wi-Fi-in-initramfs unlock (build-time driver/firmware staging + a bounded best-effort
 premount) + a no-LUKS escape hatch (phone-signed `InstallBlob.diskEncryption`, default
 on). Boot worker consolidated into `flagship-com` (`boot.flagshipserver.com` is a custom
@@ -785,14 +807,14 @@ domain). Earliest phone-home beacons in the preseed.
 >    anywhere else, and positively asserts the gate keeps calling
 >    `verifyDebugAccessGrant`.
 > 3. **Remove the burn-time LUKS recovery passphrase**
->    (`flagship-burn-time-luks-rekey-me-immediately`, in `flagship-burner/src/userdata.ts`
+>    (`flagship-build-time-luks-rekey-me-immediately`, in `flagship-builder/src/userdata.ts`
 >    + the Swift mirror) **and re-enable the `luksRemoveKey` guard** (deliberately
 >    guarded off, not deleted, so the slot survives bring-up).
 > 4. **✅ DONE — CI grep-gate that FAILS a RELEASE build** if the item-3 constant is
 >    present (`scripts/release-guard.sh` + `.github/workflows/release-guard.yml`;
 >    enforces on `release-*`/`v*` tags, advisory on PRs). Correctly RED today (the
 >    constant is still present by design) — removing item 3 turns it green.
-> 5. **Remove the demo/dev flips** in the burner + apps (demo-mode + the 3-tap
+> 5. **Remove the demo/dev flips** in the builder + apps (demo-mode + the 3-tap
 >    live/mock toggle).
 > 6. **Fill the `pro.html` payment placeholders** (Monero + mailing address) — needs the
 >    owner's real addresses. NOTE: `pro.html` lives on `feat/marketplace`.
@@ -846,7 +868,7 @@ SPA HTML) for `.css`/`.js` (anticipated at `apps/com/src/route.ts:746-752`).
    (Debian 13.5.0 netinst, version-pinned, official sha) and a real recipe's Simple-mode
    download worked end to end. Only maintenance remains: re-pin all three fields
    (version/url/sha) on a new Debian point release, then redeploy `.com`.
-2. **Rebuild + re-sign the Mac burner** (it ships Simple-as-default + the manifest client
+2. **Rebuild + re-sign the Mac builder** (it ships Simple-as-default + the manifest client
    + the JSC preseed engine).
 3. **Run the wipe** — `bash scripts/wipe-all-users.sh` (NOT the raw `--file` .sql: prod
    D1 drifts from the repo migrations; the runner deletes each table independently).
@@ -893,7 +915,7 @@ spec in `docs/`, the runbooks in `docs/runbooks/`, or — for architecture —
 - **Cert & addressing** — `per-user-cert-and-addressing.md`, `per-user-cert-worklist.md`, `multiplexing.md`, `service-addressing-double-dash.md`
 - **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `box-request-inbox.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`, `account-deletion-and-name-reclaim.md`, `server-replacement-graceful-decommission.md`, `box-recipe-persistence-and-restore.md`, `multi-pod-liveness-session-leadership.md`
 - **Login / accounts / demo** — `login-and-account-redesign.md`, `naming-recovery-and-name-change.md`, `username-suggestion-queue.md`, `sample-users.md`
-- **Install / ISO / burner** — `recipe-schema-v2.md`, `installer-tiny.md`, `installer-netboot.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`, `recipe-delivery-and-remote-install.md`
+- **Install / ISO / builder** — `recipe-schema-v2.md`, `installer-tiny.md`, `installer-netboot.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`, `recipe-delivery-and-remote-install.md`
 - **NFC retail box** — `nfc-box-pairing.md`, `v1-operational-tasks.md § N`, `n-cloud-2-design-discussion.md`
 - **CA / maintainers** — `ca-operations.md`, `maintainer-ca-endorsement.md`, `maintainers-checkpoints-spec-v0.1.md`, `maintainers-deployment.md`
 - **Marketplace / apps / monetization** — `app-developer-guide.md`, `manifest.md`, `monetization-free-tier-first.md`, `multi-device-monetization.md`, `vibe-code-experience.md`

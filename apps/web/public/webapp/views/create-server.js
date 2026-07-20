@@ -468,8 +468,8 @@ export function clampRecipeTtlMs(raw) {
 }
 
 /**
- * Wire the "Download recipe" button to emit a JSON file the Burner
- * CLI can consume verbatim. Schema matches `flagship-burner`'s
+ * Wire the "Download recipe" button to emit a JSON file the Builder
+ * CLI can consume verbatim. Schema matches `flagship-builder`'s
  * `loadBlobFromFile()` exactly:
  *
  *   {
@@ -493,16 +493,16 @@ function enableRecipeDownload(blobBundle) {
   const recipe = { ...blobBundle.blob, blobSignatureHex: blobBundle.blobSignature };
   // Secret-free pairing (offline/embed): carry the unsigned plaintext
   // `pairingOrder` sibling (the owner-IRK-signed `add-paired-session` order) into
-  // the downloaded recipe so the burner writes it to the box's install-blob.json
+  // the downloaded recipe so the builder writes it to the box's install-blob.json
   // and the daemon adds the session locally with NO `.com` call. Absent (the
   // default online path) ⇒ recipe is byte-identical + carries ZERO pairing secret.
   if (blobBundle.pairingOrder) recipe.pairingOrder = blobBundle.pairingOrder;
   // SWK provisioning: carry the unsigned `swkHex` sibling into the downloaded
-  // recipe so the burner writes it to the box's install-blob.json (the daemon
+  // recipe so the builder writes it to the box's install-blob.json (the daemon
   // persists it at first boot). Absent ⇒ recipe is byte-identical.
   if (blobBundle.swkHex) recipe.swkHex = blobBundle.swkHex;
   // Debug-friendly server: carry the unsigned `debugGrant` carrier (a JSON
-  // string `{grant,signatureHex}`) into the downloaded recipe so the burner
+  // string `{grant,signatureHex}`) into the downloaded recipe so the builder
   // writes it to install-blob.json and the box-side gate can verify it. Absent
   // (the production default) ⇒ recipe is byte-identical + carries no grant.
   if (blobBundle.debugGrant) recipe.debugGrant = blobBundle.debugGrant;
@@ -572,15 +572,15 @@ async function handleDeliverNow() {
   }
 
   // Enable the "Download recipe" button now that we have a freshly
-  // signed bundle. The Burner CLI accepts this exact JSON via
-  // `flagship-burn verify <file>` / `flagship-burn user-data <file>
-  // out.yaml` / `flagship-burn prepare <file> <iso> out.iso`.
+  // signed bundle. The Builder CLI accepts this exact JSON via
+  // `flagship-build verify <file>` / `flagship-build user-data <file>
+  // out.yaml` / `flagship-build prepare <file> <iso> out.iso`.
   enableRecipeDownload(blobBundle);
 
   setStatus("active", "connecting to relay…");
   try {
     await deliverThroughRelay(qrUrl, blobBundle);
-    setStatus("done", "delivered. The browser is downloading the recipe — open it in the Flagship Assembler.");
+    setStatus("done", "delivered. The browser is downloading the recipe — open it in the Flagship Studio.");
     const saved = await saveDraft({
       id: activeDraftId,
       ...inputs,
@@ -765,7 +765,7 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
       userPubKey: bytesToHex(code.userPubKey),
       issuedAt: code.issuedAt, expiresAt: code.expiresAt,
       // Slice D — carry the pinned admin root in the downloaded recipe so the
-      // burner writes it to the box's install-blob (box pins it as
+      // builder writes it to the box's install-blob (box pins it as
       // ServerConfig.adminRootPub). Present iff the account has an admin root;
       // covered by authCodeUserSignature via the `ar=` canonical field above.
       ...(adminRootPubHex ? { adminRootPubKey: adminRootPubHex } : {}),
@@ -778,7 +778,7 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   // so the downloaded recipe JSON carries exactly what was signed.
   if (blob.bootUnlockMode !== undefined) onWireBlob.bootUnlockMode = blob.bootUnlockMode;
   // Mirror the conditional from the canonical blob: present iff "none", so the
-  // downloaded recipe JSON carries exactly what was signed (the burner round-
+  // downloaded recipe JSON carries exactly what was signed (the builder round-
   // trips it and re-derives the same `de=none` token for box verification).
   if (blob.diskEncryption !== undefined) onWireBlob.diskEncryption = blob.diskEncryption;
 

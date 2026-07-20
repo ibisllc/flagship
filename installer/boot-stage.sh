@@ -159,7 +159,7 @@ b64url() {
 # Epoch milliseconds, PORTABLE. GNU date supports %3N; busybox date (the
 # initramfs copy of this routine) prints %N literally, corrupting the signed
 # envelope + body issuedAt. Keep this helper in sync with the initramfs premount
-# in packages/flagship-burner/src/userdata.ts.
+# in packages/flagship-builder/src/userdata.ts.
 now_ms() {
     _ms=$(date +%s%3N 2>/dev/null)
     case "$_ms" in

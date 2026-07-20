@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { persistSwkHex, swkHexFromInstallBlob } from "../src/index.js";
 
 // First-boot SWK provisioning: the phone embeds `swkHex` (= deriveSWK(umk,
-// serverId)) as an UNSIGNED recipe sibling that the burner writes into
+// serverId)) as an UNSIGNED recipe sibling that the builder writes into
 // install-blob.json. The daemon reads + persists it so the service/build
 // platform turns on. These pin the read/parse + persist halves of that path
 // (the resolution-order wiring itself lives in main(), which is the boot

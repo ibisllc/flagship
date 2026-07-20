@@ -396,13 +396,13 @@
       );
       const recipeBytes = new Uint8Array(plain);
       // The recipe is opaque to this surface — we stash it for /ready/ to
-      // download for the user (the Burner consumes the JSON; the old
+      // download for the user (the Builder consumes the JSON; the old
       // personalize-and-write-ISO /build/ flow is retired).
       sessionStorage.setItem(RECIPE_HANDOFF_KEY, b64urlEncode(recipeBytes));
       session.delivered = true;
       card.dataset.state = "delivered";
       // Hand off to the "your recipe is ready" page, which downloads the
-      // recipe JSON and points the user at the Assembler.
+      // recipe JSON and points the user at the Builder.
       setTimeout(() => { location.href = "/ready/"; }, 200);
     } catch (e) {
       // AEAD tag failure means either a MitM, key mismatch, or a

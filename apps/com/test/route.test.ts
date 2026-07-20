@@ -1972,7 +1972,7 @@ describe("/how-to + /how-to.html — folded into /docs", () => {
   });
 });
 
-describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
+describe("/api/iso-manifest — desktop-builder base-ISO manifest", () => {
   // The control-plane dispatch only runs when DB is bound; the handler
   // itself needs no DB, so a no-op stub is enough to reach it.
   function stubDb(): import("@flagship/storage").D1Database {
@@ -2004,7 +2004,7 @@ describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           platform: "mac",
-          burnerVersion: "1.2.3",
+          builderVersion: "1.2.3",
           current: null,
         }),
       }),
@@ -2016,14 +2016,14 @@ describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("returns the download block when FLAGSHIP_ISO_MANIFEST is set + burner has nothing", async () => {
+  it("returns the download block when FLAGSHIP_ISO_MANIFEST is set + builder has nothing", async () => {
     const r = await route(
       new Request("https://flagshipserver.com/api/iso-manifest", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           platform: "linux",
-          burnerVersion: "1.2.3",
+          builderVersion: "1.2.3",
           current: null,
         }),
       }),
@@ -2033,14 +2033,14 @@ describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
     expect(await r.json()).toEqual({ download: BLESSED });
   });
 
-  it("returns { download: null } when the burner already holds the blessed sha", async () => {
+  it("returns { download: null } when the builder already holds the blessed sha", async () => {
     const r = await route(
       new Request("https://flagshipserver.com/api/iso-manifest", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           platform: "windows",
-          burnerVersion: "1.2.3",
+          builderVersion: "1.2.3",
           current: { version: "debian-12.7.0-amd64", sha256: "a".repeat(64) },
         }),
       }),
@@ -2057,7 +2057,7 @@ describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           platform: "mac",
-          burnerVersion: "1.2.3",
+          builderVersion: "1.2.3",
           current: null,
         }),
       }),
@@ -2074,7 +2074,7 @@ describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           platform: "freebsd",
-          burnerVersion: "1.2.3",
+          builderVersion: "1.2.3",
           current: null,
         }),
       }),

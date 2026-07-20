@@ -7,7 +7,7 @@
 
 ## Setup (one-time)
 1. **Rebuild the apps** — iOS in Xcode (Archive or run on device), Android `:app:assembleDebug` / Android Studio. All session changes (gating v1+v2, parity, hardenings) are source-only.
-2. **Get a v2 box** — either rebuild + re-sign the Mac burner (the daemon changes ship via the box recipe) and do a fresh encrypted burn, **or** provision a fresh demo box (it clones `main`, so it already has v2 gating + the box-as-authority + manifest fixes). Reuse the spare hardware if burning.
+2. **Get a v2 box** — either rebuild + re-sign the Mac builder (the daemon changes ship via the box recipe) and do a fresh encrypted burn, **or** provision a fresh demo box (it clones `main`, so it already has v2 gating + the box-as-authority + manifest fixes). Reuse the spare hardware if burning.
 3. **Live client** — 3-tap the Welcome box → flip to the live client → point at the box.
 4. Have **two devices** ready (iOS + Android ideally) for the multi-device + cross-platform flows.
 

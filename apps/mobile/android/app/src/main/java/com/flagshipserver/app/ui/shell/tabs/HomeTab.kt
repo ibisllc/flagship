@@ -369,7 +369,7 @@ fun HomeTab() {
         composable("create-server") {
             CreateServerScreen(
                 onDeliveredVisible = { serverDomain, serial, name, description ->
-                    // The recipe is out (burner-pair delivered) but the pairing
+                    // The recipe is out (builder-pair delivered) but the pairing
                     // screen stays open for consent prompts — surface the pending
                     // pod on Home now WITHOUT navigating away. Mirrors iOS
                     // CreateServerStubScreen.onDeliveredVisible.
