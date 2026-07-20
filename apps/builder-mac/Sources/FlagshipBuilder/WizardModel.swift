@@ -590,8 +590,10 @@ final class WizardModel: ObservableObject {
         didRemasterForTest = false
         defer { isRunning = false; endProgress() }
 
-        // Trigger macOS's scoped Removable Volumes consent from the responsible
-        // GUI process before the root helper attempts to open /dev/rdiskN.
+        // Give macOS a chance to grant the narrower Removable Volumes access
+        // before the root helper attempts to open /dev/rdiskN. Some macOS 26
+        // systems still require Full Disk Access for an SMAppService daemon;
+        // that failure opens the exact settings pane below.
         HelperClient.requestRemovableVolumeAccess(for: disk.deviceNode)
 
         let imagePath: String
@@ -695,6 +697,9 @@ final class WizardModel: ObservableObject {
             isFinished = true
             scheduleHomeReset()
         } else {
+            if result.message.contains("Full Disk Access") {
+                HelperClient.openFullDiskAccessSettings()
+            }
             reportOperationFailure(result.message.isEmpty
                 ? "Write failed (code \(result.code))."
                 : result.message)

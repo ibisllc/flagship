@@ -58,15 +58,16 @@ final class DiskWriteTests: XCTestCase {
         XCTAssertEqual(desc, "Write failed 180 MB in: x")
     }
 
-    func testRawOpenPermissionFailureNamesRemovableVolumesSetting() {
+    func testRawOpenPermissionFailureNamesFullDiskAccessSetting() {
         let reason = DiskWrite.openFailureReason(EPERM)
-        XCTAssertTrue(reason.contains("Removable Volumes"), reason)
+        XCTAssertTrue(reason.contains("Full Disk Access"), reason)
+        XCTAssertTrue(reason.contains("click +"), reason)
         XCTAssertFalse(reason.contains("busy"), reason)
     }
 
     func testRawOpenBusyFailureIsDistinctFromPermissionFailure() {
         let reason = DiskWrite.openFailureReason(EBUSY)
         XCTAssertTrue(reason.contains("device is busy"), reason)
-        XCTAssertFalse(reason.contains("Removable Volumes"), reason)
+        XCTAssertFalse(reason.contains("Full Disk Access"), reason)
     }
 }

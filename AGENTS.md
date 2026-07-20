@@ -149,27 +149,33 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-20 (macOS 26 raw-disk permission correction) — Full Disk Access is
+the reliable fallback for Studio's privileged USB writer.** The physical release
+Mac did not expose a Files & Folders → Removable Volumes row, and the launchd
+helper still received `EPERM` as root. Studio keeps the narrower removable-volume
+request as a best-effort first pass, but a denied raw-device open now gives the
+real visible path (Privacy & Security → Full Disk Access), explains how to add
+the app, and opens that exact pane automatically. **Remaining (owner):** add and
+enable Flagship Studio there, accept macOS's quit/reopen, then retry the burn.
+
 **2026-07-20 (Mac Studio release refresh) — the pairing and raw-USB fixes are
 published in a fresh notarized build.** The app icon now uses the full macOS icon
 canvas instead of baking in a 112px transparent margin, so its teal tile is no
 longer shrunk inside a white square in Privacy & Security. The Developer-ID app
 is installed in `/Applications`; the stapled DMG is committed, deployed, and
-byte-verified at `flagshipserver.com/download/mac`. **Remaining (owner):** accept
-the scoped Removable Volumes prompt and validate a complete physical USB write.
+byte-verified at `flagshipserver.com/download/mac`. **Remaining (owner):** grant
+Full Disk Access and validate a complete physical USB write.
 
 **2026-07-20 (raw USB permission) — Mac Builder's first real Developer-ID burn
 reached the helper, then macOS denied `/dev/rdisk` despite UID 0.** This was not
-signing, Unix permissions, a busy/read-only stick, or a need for broad Full Disk
-Access: current macOS gates raw removable media behind the responsible GUI app's
-scoped **Removable Volumes** TCC grant. Studio now declares
+signing, Unix permissions, or a busy/read-only stick: current macOS gates raw
+removable media behind TCC. Studio declares
 `NSRemovableVolumesUsageDescription` and deliberately opens the selected raw
-device from the GUI before remastering, which triggers the native consent prompt
-and lets the root SMAppService helper inherit the grant. The helper now preserves
-the actual `open(2)` errno and distinguishes permission, busy, and read-only
-failures instead of collapsing all three. **Remaining (owner):** accept Removable
-Volumes and validate a complete physical USB write; the build can be unblocked
-manually in Privacy & Security → Files & Folders if the Flagship Studio row is
-already present.
+device from the GUI before remastering, attempting the native scoped consent path
+before asking for anything broader. The helper now preserves the actual `open(2)`
+errno and distinguishes permission, busy, and read-only failures instead of
+collapsing all three. On this macOS 26 release machine the scoped row did not
+appear, so the current guidance uses Full Disk Access instead.
 
 **2026-07-20 (pairing polish) — Mac Builder no longer flashes the USB form
 while phone authorization is pending.** The post-SAS `.session` stage now owns a

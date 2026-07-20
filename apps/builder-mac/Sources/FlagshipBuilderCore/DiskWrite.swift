@@ -116,7 +116,7 @@ public enum DiskWrite {
     static func openFailureReason(_ code: Int32) -> String {
         switch code {
         case EPERM, EACCES:
-            return "macOS denied removable-volume access — enable Flagship Studio in System Settings → Privacy & Security → Files & Folders → Removable Volumes, then try again"
+            return "macOS denied raw-disk access — in System Settings → Privacy & Security → Full Disk Access, click +, add Flagship Studio from Applications, enable it, then quit and reopen Studio"
         case EBUSY:
             return "the device is busy — close Disk Utility and any app using the drive, unplug and reconnect it, then try again"
         case EROFS:

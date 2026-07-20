@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import ServiceManagement
 import Darwin
 import FlagshipBuilderCore
@@ -43,6 +44,13 @@ enum HelperClient {
         let raw = "/dev/r" + devicePath.dropFirst("/dev/".count)
         let fd = raw.withCString { Darwin.open($0, O_RDWR) }
         if fd >= 0 { Darwin.close(fd) }
+    }
+
+    static func openFullDiskAccessSettings() {
+        guard let url = URL(string:
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
+        else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private static func statusName(_ s: SMAppService.Status) -> String {
