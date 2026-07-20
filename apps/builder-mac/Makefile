@@ -14,9 +14,10 @@
 # None of these reach the signed app — they only authenticate the notarization
 # submission to Apple. Your Apple ID / email is NOT used or needed on this path.
 #
-# ALTERNATE (app-specific password from appleid.apple.com — see the
-# `notarize-with-password` target): set FLAGSHIP_APPLE_ID, FLAGSHIP_TEAM_ID,
-# FLAGSHIP_NOTARY_PASSWORD and run the sub-targets manually instead of `release`.
+# ALTERNATE (app-specific password from appleid.apple.com): use
+# `notarize-with-keychain` with a notarytool Keychain profile (preferred), or set
+# FLAGSHIP_APPLE_ID, FLAGSHIP_TEAM_ID, and FLAGSHIP_NOTARY_PASSWORD for the
+# `notarize-with-password` target.
 
 # BIN_SRC = the binary swift-build emits (matches the SwiftPM target).
 # BIN     = the binary name inside the .app (renamed on copy).
@@ -30,7 +31,7 @@ PRESEED_ENGINE = $(BUILD_DIR)/FlagshipBuilder_FlagshipBuilderCore.bundle/preseed
 ZIP_FILE = $(BUILD_DIR)/$(BIN).zip
 DMG_FILE = $(BUILD_DIR)/$(BIN).dmg
 
-.PHONY: build build-release release package-app sign zip notarize notarize-with-password staple dmg clean check-env
+.PHONY: build build-release release package-app sign zip notarize notarize-with-keychain notarize-with-password staple dmg clean check-env
 
 build:
 	swift build -c debug
@@ -124,8 +125,18 @@ notarize: zip
 	@echo "✓ Notarized"
 
 # Alternative for users who prefer an app-specific password to the
-# API key. Set FLAGSHIP_NOTARY_PASSWORD (an app-specific password from
-# appleid.apple.com) and run this target instead of `notarize`.
+# API key. The Keychain target keeps that password out of shell startup files
+# and process environments. Create the profile once with
+# `scripts/release-studio.sh --setup-keychain`.
+notarize-with-keychain: zip
+	xcrun notarytool submit "$(ZIP_FILE)" \
+	    --keychain-profile "$${FLAGSHIP_NOTARY_PROFILE:-flagship-studio}" \
+	    --wait
+	@echo "✓ Notarized"
+
+# Environment-variable fallback for CI or one-off use. Set
+# FLAGSHIP_NOTARY_PASSWORD (an app-specific password from appleid.apple.com)
+# and run this target instead of `notarize`.
 notarize-with-password: zip
 	xcrun notarytool submit "$(ZIP_FILE)" \
 	    --apple-id "$$FLAGSHIP_APPLE_ID" \

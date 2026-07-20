@@ -4,13 +4,15 @@
 # build -> sign -> notarize -> staple -> DMG -> stage into the website download
 # dir (apps/web/public/downloads), which flagshipserver.com/download/mac 302s to.
 #
-# Auth — set EITHER path's vars first (see apps/builder-mac/Makefile header):
+# Auth — use EITHER path (see apps/builder-mac/Makefile header):
 #   App Store Connect API key (preferred; no email):
 #     FLAGSHIP_SIGNING_ID FLAGSHIP_NOTARY_KEY FLAGSHIP_NOTARY_KEY_ID FLAGSHIP_NOTARY_ISSUER
-#   App-specific password (appleid.apple.com, uses your Apple ID):
-#     FLAGSHIP_SIGNING_ID FLAGSHIP_APPLE_ID FLAGSHIP_TEAM_ID FLAGSHIP_NOTARY_PASSWORD
+#   App-specific password stored in macOS Keychain (the configured default):
+#     scripts/release-studio.sh --setup-keychain
+#   A one-off FLAGSHIP_NOTARY_PASSWORD environment variable remains supported.
 #
 # Usage:
+#   scripts/release-studio.sh --setup-keychain # one-time durable credential setup
 #   scripts/release-studio.sh            # build + notarize + stage the DMG locally
 #   scripts/release-studio.sh --publish  # + git add/commit/push + deploy the Worker
 #
@@ -24,15 +26,35 @@ mac="$repo/apps/builder-mac"
 dmg_src="$mac/.build/release/FlagshipStudio.dmg"
 dmg_dest="$repo/apps/web/public/downloads/FlagshipStudio.dmg"
 
-: "${FLAGSHIP_SIGNING_ID:?set FLAGSHIP_SIGNING_ID (your Developer ID Application cert)}"
+export FLAGSHIP_SIGNING_ID="${FLAGSHIP_SIGNING_ID:-Developer ID Application: IBIS LLC (8G8RHBU9BN)}"
+export FLAGSHIP_APPLE_ID="${FLAGSHIP_APPLE_ID:-kamdemharry@yahoo.fr}"
+export FLAGSHIP_TEAM_ID="${FLAGSHIP_TEAM_ID:-8G8RHBU9BN}"
+export FLAGSHIP_NOTARY_PROFILE="${FLAGSHIP_NOTARY_PROFILE:-flagship-studio}"
+
+if [ "${1:-}" = "--setup-keychain" ]; then
+  : "${FLAGSHIP_NOTARY_PASSWORD:?export FLAGSHIP_NOTARY_PASSWORD once to seed macOS Keychain}"
+  echo "▸ Saving the app-specific password in macOS Keychain…"
+  xcrun notarytool store-credentials "$FLAGSHIP_NOTARY_PROFILE" \
+    --apple-id "$FLAGSHIP_APPLE_ID" \
+    --team-id "$FLAGSHIP_TEAM_ID" \
+    --password "$FLAGSHIP_NOTARY_PASSWORD"
+  echo "✓ Keychain profile '$FLAGSHIP_NOTARY_PROFILE' is ready; the password no longer needs to be exported"
+  exit 0
+fi
+
+if [ "${1:-}" != "" ] && [ "${1:-}" != "--publish" ]; then
+  echo "usage: scripts/release-studio.sh [--setup-keychain|--publish]" >&2
+  exit 2
+fi
 
 echo "▸ Building + signing + notarizing (uploads to Apple, waits a few minutes)…"
 cd "$mac"
 if [ -n "${FLAGSHIP_NOTARY_KEY:-}" ]; then
   make release                                          # API-key path (make's check-env)
-else
-  : "${FLAGSHIP_NOTARY_PASSWORD:?set FLAGSHIP_NOTARY_PASSWORD (or the API-key vars)}"
+elif [ -n "${FLAGSHIP_NOTARY_PASSWORD:-}" ]; then
   make package-app sign notarize-with-password staple dmg
+else
+  make package-app sign notarize-with-keychain staple dmg
 fi
 
 echo "▸ Staging the DMG into the site…"

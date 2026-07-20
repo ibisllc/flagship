@@ -149,6 +149,40 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-20 (ship) — Flagship Studio Mac app is DISTRIBUTION-READY + live on
+the site.** Signed (Developer ID: IBIS LLC / 8G8RHBU9BN), **notarized + stapled**
+(Apple Accepted), packaged as a DMG, and published: `flagshipserver.com/download/
+mac` 302s to `apps/web/public/downloads/FlagshipStudio.dmg` (in git + served;
+`/downloads/` is coming-soon-exempt; sha-verified byte-identical live). The
+notarized build is installed to `/Applications`. **`scripts/release-studio.sh`**
+cuts a new build in one command (build→sign→notarize→staple→DMG→stage; `--publish`
+also commits+pushes+deploys); supports the API-key OR app-specific-password path.
+On the release Mac, the three non-secret identity vars persist in `~/.zprofile`;
+the app-specific password lives in the macOS Keychain profile `flagship-studio`
+(seed/replace it with `scripts/release-studio.sh --setup-keychain`), and the
+script uses that profile after a reboot without exporting the password.
+`apps/builder-mac/Makefile` fixed for the spaced app name (make can't carry
+"Flagship Studio.app" as a prerequisite → zip/staple/dmg are now phony) and its
+`check-env` no longer needs the Apple ID on the API-key path. Also this session:
+the pairing cover now shows a clean "waiting for internet" state instead of a
+flickering QR + sticky yellow notice (NWPathMonitor; Mac-only — Linux/Windows
+pair via the user-initiated `flagship-build` subprocess, no auto-cover flicker);
+a **native menu bar** on all three desktops (Mac: File→New Server, View→Appearance
+Auto/Light/Dark, Help; Linux: GNOME ☰ menu; Windows: File/Help — no Appearance,
+WPF is light-only-static, dark mode is a separate effort); the in-window theme
+toggle removed; and log-drawer polish (circled caret, Clear moved into the log +
+only-when-open, the top rule slides to the very top of the UI, footer rules
+realigned). Gates: builder-mac `swift test` 162 · vitest green (route tests
+updated) · `.com` deployed (Worker `d7c2694e`). **Notary learnings (owner):** the
+Apple Developer account is `kamdemharry@yahoo.fr` (NOT the gmail); Developer-ID
+apps show the cert's legal entity "IBIS LLC" — "Houston Automation Lab" is only an
+App Store seller name and can't appear on a Developer-ID app without an Apple
+entity-name change (paperwork, not a build flag); **Individual** ASC API keys have
+no Issuer ID and can't notarize — use a Team key or an app-specific password.
+**Remaining (owner):** notarize+publish Windows/Linux builds and wire
+`INSTALLER_DOWNLOADS.windows/linux`; the DMG-in-git bloats the repo ~2.3MB/build
+(move to R2 / a GitHub release if it gets frequent); TestFlight for iOS/Android.
+
 **2026-07-20 (rename) — the desktop tool is now "Flagship Studio"
 (burner→builder, everywhere).** Front-facing name **Flagship Studio**; package /
 bundle id `com.flagshipserver.Burner`→`.Builder` (+ helper `.Builder.helper`,
