@@ -174,7 +174,7 @@ function buildDefaultFirePush(
             meta: {
               eventKind: req.category,
               bit: req.bit,
-              deviceIdPrefix: req.quarantinedDeviceId.slice(0, 8),
+              deviceIdPrefix: (req.quarantinedDeviceId ?? "").slice(0, 8),
               quarantineUntil: req.quarantineUntil,
               admittedAt: req.admittedAt,
             },
