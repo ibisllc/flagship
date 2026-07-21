@@ -393,13 +393,15 @@ describe("provision status channel", () => {
     // A provisioning demo row owned by the same user.
     await storage.demoUsers.insert({
       username: "alice",
-      display: "Alice",
+      idempotencyKey: "provision-status-alice",
       snapshotId: null,
       isoR2Key: null,
       ttlIdleMinutes: 30,
       region: "fsn1",
       size: "cx22",
       activeServerId: "srv-1",
+      activeServerIp: null,
+      image: null,
       activeServerFqdn: "home.alice.flagship.services",
       lastActivityAt: 1_000,
       state: "provisioning",
@@ -425,21 +427,23 @@ describe("provision status channel", () => {
     expect(row?.provisionPhaseAt).toBe(42);
   });
 
-  it("lets W13 live replace an error after registration already promoted the demo row", async () => {
+  it("lets live replace an error after registration already promoted the demo row", async () => {
     const storage = new InMemoryStorage();
     await seedOrderWithOwner(storage, SERIAL, "alice", { withToken: false });
     await storage.demoUsers.insert({
       username: "alice",
-      display: "Alice",
+      idempotencyKey: "provision-status-alice",
       snapshotId: null,
       isoR2Key: null,
       ttlIdleMinutes: 30,
       region: "fsn1",
       size: "cx22",
       activeServerId: "srv-1",
+      activeServerIp: null,
+      image: null,
       activeServerFqdn: "home.alice.flagship.services",
       lastActivityAt: 1_000,
-      state: "up",
+      state: "ready",
       createdAt: 1_000,
       provisionPhase: "error",
       provisionPhaseAt: 41,
@@ -457,7 +461,7 @@ describe("provision status channel", () => {
       { phase: "live" },
     );
     expect(await storage.demoUsers.get("alice")).toMatchObject({
-      state: "up",
+      state: "ready",
       provisionPhase: "live",
       provisionPhaseAt: 42,
       provisionLastError: null,

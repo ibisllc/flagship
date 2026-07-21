@@ -545,4 +545,3 @@ export function installBlobJsonShortString(b: InstallBlob, _sig: Uint8Array): st
   };
   return JSON.stringify(json);
 }
-

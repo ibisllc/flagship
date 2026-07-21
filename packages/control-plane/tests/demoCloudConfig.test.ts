@@ -225,4 +225,3 @@ describe("buildCloudConfigUserData", () => {
     expect(bootstrap).toContain(`GIT_REF="${sha}"`);
   });
 });
-

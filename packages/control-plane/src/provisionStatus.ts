@@ -221,9 +221,9 @@ const PHASE_BODIES: Record<ProvisionStatusPhase, string> = {
  * Mirror a canonical phase onto the owner's demo_users row, so the demo
  * install-progress timeline (rendered off `demoServer.phase`) reads off this
  * single canonical channel. SERIAL → auth-code → username → demo row. W13
- * promotes the row to `up` as soon as registration succeeds, so a later ACME
+ * promotes the row to `ready` as soon as registration succeeds, so a later ACME
  * retry must still be allowed to replace an earlier `error` with `live`; every
- * other report against an `up` row is ignored to prevent replay rewind. Never
+ * other report against a `ready` row is ignored to prevent replay rewind. Never
  * throws — the canonical status write has already succeeded.
  */
 async function mirrorToDemoRow(
@@ -239,7 +239,7 @@ async function mirrorToDemoRow(
     if (!order) return;
     const row = await deps.demoUsers.get(order.username);
     if (!row) return;
-    if (row.state !== "provisioning" && !(row.state === "up" && phase === "live")) return;
+    if (row.state !== "provisioning" && !(row.state === "ready" && phase === "live")) return;
     await deps.demoUsers.setProvisionPhase(
       order.username,
       phase,

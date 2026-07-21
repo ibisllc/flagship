@@ -2,7 +2,7 @@ import { gcm } from "@noble/ciphers/aes";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import { ed } from "./edSync.js";
-import { base32Encode } from "./burnerPairing.js";
+import { base32Encode } from "./builderPairing.js";
 import { hex, resolveMsgSigner, validateNoSepCtrl, type MsgSigner } from "./canonicalBase.js";
 import type { Bytes } from "./types.js";
 
