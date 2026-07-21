@@ -3894,21 +3894,72 @@ export class D1AccountProvisioningStorage implements AccountProvisioningStorage 
       device_pub_hex: string | null;
     }>();
     if (existing) {
-      const exact = existing.irk_pub_hex.toLowerCase() === input.username.irkPubHex.toLowerCase() &&
-        existing.admin_root_pub_hex?.toLowerCase() === input.username.adminRootPubHex?.toLowerCase() &&
-        existing.device_pub_hex?.toLowerCase() === input.primaryDevice.devicePubHex.toLowerCase();
-      if (!exact) return { ok: false, reason: "username-unavailable" };
-      const [grant, account, profile] = await Promise.all([
-        this.db.prepare("SELECT 1 AS hit FROM device_capability_grants WHERE grant_id = ? AND username = ? AND device_id = ?")
-          .bind(input.primaryGrant.grantId, u, input.primaryDevice.deviceId).first<{ hit: number }>(),
-        this.db.prepare("SELECT 1 AS hit FROM account_profiles WHERE account_id = ?")
-          .bind(u).first<{ hit: number }>(),
-        this.db.prepare("SELECT 1 AS hit FROM device_self_profiles WHERE account_id = ? AND device_id = ?")
-          .bind(u, input.primaryDevice.deviceId).first<{ hit: number }>(),
-      ]);
-      return grant && account && profile
-        ? { ok: true, created: false }
-        : { ok: false, reason: "initialization-conflict" };
+      // Matching IRK + admin root IS the proof of ownership — the same proof
+      // every other account operation rests on. Anyone else presenting this
+      // name fails here and gets the generic "unavailable".
+      const authorized = existing.irk_pub_hex.toLowerCase() === input.username.irkPubHex.toLowerCase() &&
+        existing.admin_root_pub_hex?.toLowerCase() === input.username.adminRootPubHex?.toLowerCase();
+      if (!authorized) return { ok: false, reason: "username-unavailable" };
+      if (existing.device_pub_hex !== null) {
+        if (existing.device_pub_hex.toLowerCase() !== input.primaryDevice.devicePubHex.toLowerCase()) {
+          return { ok: false, reason: "username-unavailable" };
+        }
+        const [grant, account, profile] = await Promise.all([
+          this.db.prepare("SELECT 1 AS hit FROM device_capability_grants WHERE grant_id = ? AND username = ? AND device_id = ?")
+            .bind(input.primaryGrant.grantId, u, input.primaryDevice.deviceId).first<{ hit: number }>(),
+          this.db.prepare("SELECT 1 AS hit FROM account_profiles WHERE account_id = ?")
+            .bind(u).first<{ hit: number }>(),
+          this.db.prepare("SELECT 1 AS hit FROM device_self_profiles WHERE account_id = ? AND device_id = ?")
+            .bind(u, input.primaryDevice.deviceId).first<{ hit: number }>(),
+        ]);
+        return grant && account && profile
+          ? { ok: true, created: false }
+          : { ok: false, reason: "initialization-conflict" };
+      }
+      // The account exists but has no device layer — the state a clean-schema
+      // cutover leaves behind. Re-establish it rather than stranding the owner
+      // with a name they can never use again. INSERT OR IGNORE so a surviving
+      // profile is never clobbered.
+      const d = input.primaryDevice;
+      const g = input.primaryGrant;
+      const ap = input.accountProfile;
+      const dp = input.primaryDeviceProfile;
+      try {
+        await this.db.batch([
+          this.db.prepare(
+            `INSERT INTO device_identities
+              (account_id, device_id, device_pub_hex, platform_class, created_at, last_seen_at, revoked_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(u, d.deviceId, d.devicePubHex, d.platformClass, d.createdAt, d.lastSeenAt, d.revokedAt),
+          this.db.prepare(
+            `INSERT OR IGNORE INTO device_capability_grants
+              (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            g.grantId, u, g.deviceId, g.devicePubHex, g.scopesJson,
+            g.issuedAt, g.expiresAt, g.signatureHex, g.revokedAt, g.signerRoot,
+          ),
+          this.db.prepare(
+            `INSERT OR IGNORE INTO account_profiles
+              (account_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            u, ap.revision, ap.keyVersion, ap.nonceHex, ap.ciphertextHex,
+            ap.signerPubHex, ap.signatureHex, ap.issuedAt, ap.updatedAt,
+          ),
+          this.db.prepare(
+            `INSERT OR IGNORE INTO device_self_profiles
+              (account_id, device_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            u, dp.deviceId, dp.revision, dp.keyVersion, dp.nonceHex, dp.ciphertextHex,
+            dp.signerPubHex, dp.signatureHex, dp.issuedAt, dp.updatedAt,
+          ),
+        ]);
+        return { ok: true, created: true };
+      } catch {
+        return { ok: false, reason: "initialization-conflict" };
+      }
     }
 
     const username = input.username;

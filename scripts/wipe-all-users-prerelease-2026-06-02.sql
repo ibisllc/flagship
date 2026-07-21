@@ -88,10 +88,17 @@ DELETE FROM pending_re_pairs;
 DELETE FROM trust_exceptions;
 DELETE FROM admin_root_rotations;
 
--- Devices + delegation + push
+-- Devices + delegation + push. Order matters: the private-naming tables
+-- (migration 0083) hang off device_identities by foreign key, so they are
+-- cleared before the identities they reference.
 DELETE FROM device_capability_grants;
-DELETE FROM watch_delegates;
+DELETE FROM device_self_profiles;
+DELETE FROM device_managed_profiles;
+DELETE FROM account_directory_key_grants;
+DELETE FROM account_profiles;
 DELETE FROM push_tokens;
+DELETE FROM device_identities;
+DELETE FROM watch_delegates;
 
 -- Demo sandbox
 DELETE FROM demo_users;

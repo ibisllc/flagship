@@ -160,3 +160,82 @@ describe("account bootstrap — no plaintext name anywhere in storage", () => {
     expect(JSON.stringify(response.body)).not.toContain("Erica");
   });
 });
+
+/**
+ * The clean-schema cutover (migration 0083) drops the whole device layer —
+ * identities, grants, profiles, push — but deliberately KEEPS `usernames`.
+ * That leaves an account whose name is taken and whose owner has no device
+ * record. If bootstrap refuses that state, the name is permanently unusable
+ * by the only person entitled to it.
+ */
+describe("account bootstrap — re-establishing a device layer the cutover dropped", () => {
+  it("lets the owner rebuild it, proven by a matching IRK and admin root", async () => {
+    const storage = new InMemoryStorage();
+    await storage.usernames.put({
+      username,
+      irkPubHex: hex(irk.publicKey),
+      adminRootPubHex: hex(admin.publicKey),
+      claimedAt: now,
+    } as never);
+    // No identity, no grant, no profiles — the post-migration state.
+    expect(await storage.deviceIdentities.listForAccount(username)).toEqual([]);
+
+    const response = await handleAccountBootstrap({
+      provisioning: storage.accountProvisioning,
+      usernames: storage.usernames,
+      offers: storage.usernameOffers,
+      now: () => now,
+    }, body());
+
+    expect(response.status).toBe(200);
+    // The device layer every dropped feature hangs off is back.
+    expect(await storage.deviceIdentities.get(username, deviceId)).toBeDefined();
+    expect(await storage.deviceCapabilityGrants.getActiveForUserDevice(username, deviceId)).toBeDefined();
+    expect(await storage.accountProfiles.get(username)).toBeDefined();
+    expect(await storage.deviceSelfProfiles.get(username, deviceId)).toBeDefined();
+  });
+
+  it("refuses anyone whose IRK does not match the surviving account", async () => {
+    const storage = new InMemoryStorage();
+    await storage.usernames.put({
+      username,
+      irkPubHex: hex(keypair(200).publicKey), // somebody else's account
+      adminRootPubHex: hex(admin.publicKey),
+      claimedAt: now,
+    } as never);
+
+    const response = await handleAccountBootstrap({
+      provisioning: storage.accountProvisioning,
+      usernames: storage.usernames,
+      offers: storage.usernameOffers,
+      now: () => now,
+    }, body());
+
+    // The offer gate rejects it before provisioning is even consulted.
+    expect(response.status).toBe(403);
+    // Nothing was created for the impostor.
+    expect(await storage.deviceIdentities.listForAccount(username)).toEqual([]);
+  });
+
+  it("refuses a matching IRK whose admin root differs", async () => {
+    const storage = new InMemoryStorage();
+    await storage.usernames.put({
+      username,
+      irkPubHex: hex(irk.publicKey),
+      adminRootPubHex: hex(keypair(210).publicKey),
+      claimedAt: now,
+    } as never);
+
+    const response = await handleAccountBootstrap({
+      provisioning: storage.accountProvisioning,
+      usernames: storage.usernames,
+      offers: storage.usernameOffers,
+      now: () => now,
+    }, body());
+
+    // The offer gate passes (the IRK matches) — provisioning is what
+    // refuses, proving the admin-root half of the check is load-bearing.
+    expect(response.status).toBe(409);
+    expect(await storage.deviceIdentities.listForAccount(username)).toEqual([]);
+  });
+});

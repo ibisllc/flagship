@@ -1857,16 +1857,41 @@ export class InMemoryAccountProvisioningStorage implements AccountProvisioningSt
     const username = input.username.username.toLowerCase();
     const existing = await this.usernames.get(username);
     if (existing) {
+      // Matching IRK + admin root IS the proof of ownership — the same proof
+      // every other account operation rests on. Anyone else presenting this
+      // name fails here and gets the generic "unavailable".
+      const authorized = existing.irkPubHex.toLowerCase() === input.username.irkPubHex.toLowerCase() &&
+        existing.adminRootPubHex?.toLowerCase() === input.username.adminRootPubHex?.toLowerCase();
+      if (!authorized) return { ok: false, reason: "username-unavailable" };
       const identity = await this.identities.get(username, input.primaryDevice.deviceId);
-      const exact = existing.irkPubHex.toLowerCase() === input.username.irkPubHex.toLowerCase() &&
-        existing.adminRootPubHex?.toLowerCase() === input.username.adminRootPubHex?.toLowerCase() &&
-        identity?.devicePubHex.toLowerCase() === input.primaryDevice.devicePubHex.toLowerCase();
-      if (!exact) return { ok: false, reason: "username-unavailable" };
-      const grant = await this.grants.get(input.primaryGrant.grantId);
-      const account = await this.accountProfiles.get(username);
-      const profile = await this.deviceProfiles.get(username, input.primaryDevice.deviceId);
-      return grant && account && profile
-        ? { ok: true, created: false }
+      if (identity) {
+        if (identity.devicePubHex.toLowerCase() !== input.primaryDevice.devicePubHex.toLowerCase()) {
+          return { ok: false, reason: "username-unavailable" };
+        }
+        const grant = await this.grants.get(input.primaryGrant.grantId);
+        const account = await this.accountProfiles.get(username);
+        const profile = await this.deviceProfiles.get(username, input.primaryDevice.deviceId);
+        return grant && account && profile
+          ? { ok: true, created: false }
+          : { ok: false, reason: "initialization-conflict" };
+      }
+      // The account exists but has no device layer — the state a clean-schema
+      // cutover leaves behind. Re-establish it rather than stranding the owner
+      // with a name they can never use again. Only records that are actually
+      // missing are written, so this can never clobber a surviving profile.
+      const reIdentity = await this.identities.put({ ...input.primaryDevice, accountId: username });
+      if (!reIdentity.ok) return { ok: false, reason: "initialization-conflict" };
+      const reGrant = await this.grants.get(input.primaryGrant.grantId)
+        ? { ok: true as const }
+        : await this.grants.put({ ...input.primaryGrant, username });
+      const reAccount = await this.accountProfiles.get(username)
+        ? { ok: true as const }
+        : await this.accountProfiles.put({ ...input.accountProfile, accountId: username }, 0);
+      const reProfile = await this.deviceProfiles.get(username, input.primaryDevice.deviceId)
+        ? { ok: true as const }
+        : await this.deviceProfiles.put({ ...input.primaryDeviceProfile, accountId: username }, 0);
+      return reGrant.ok && reAccount.ok && reProfile.ok
+        ? { ok: true, created: true }
         : { ok: false, reason: "initialization-conflict" };
     }
     const claimed = await this.usernames.put({ ...input.username, username });
