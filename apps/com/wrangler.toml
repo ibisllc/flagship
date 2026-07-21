@@ -219,6 +219,10 @@ renamed_classes = [{ from = "BurnerRelaySession", to = "BuilderRelaySession" }]
 # vectors never move).
 SERVICES_APEX = "flagship.services"
 CONTROL_APEX = "flagshipserver.com"
+# Open-beta launch: lift the coming-soon stealth gate for everyone. Unset (or
+# set to anything other than "1"/"true") to re-arm the pre-launch gate — see
+# the SITE_PUBLIC handling in route.ts. Non-secret, so it lives in [vars].
+SITE_PUBLIC = "1"
 # Fly's TLS-term endpoint (port 8443). The flagship.services apex itself
 # runs SNI passthrough on :443, so https://flagship.services/api/* will
 # always 525. The Worker proxies any /api/* path it doesn't handle to
