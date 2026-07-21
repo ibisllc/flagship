@@ -62,7 +62,7 @@ async function main() {
   console.log(`box = ${fqdn}`);
   const delegated = deriveDemoDelegatedKey(hexToBytes(KEK), user);
   const token = bytesToHex(randomBytes(24));
-  const order: PhoneOrder = { type: "add-paired-session", serverId: fqdn, token, label: "vibe-debug", issuedAt: Date.now() };
+  const order: PhoneOrder = { type: "add-paired-session", serverId: fqdn, token, issuedAt: Date.now() };
   const sig = bytesToHex(signPhoneOrder(order, delegated));
   const p = await http(`https://${fqdn}/api/orders-from-user`, {
     method: "POST", headers: { "content-type": "application/json" },

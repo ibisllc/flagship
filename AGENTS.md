@@ -185,6 +185,36 @@ then verifies the signed daemon certificate report, so a real live certificate
 no longer remains hidden as “No certificate yet.” **Remaining (owner):** rebuild
 the metal box from current `main` and validate TLS detail + one Vibe Code build.
 
+**2026-07-20 (later, resumable checkpoint) — private-name audit is partly
+complete; branch remains local and production untouched.** Work continues in
+the isolated `/private/tmp/flagship-private-names` worktree on
+`feat/private-account-device-names`; the primary worktree and concurrent
+Codex/Claude changes remain untouched. Commits are kept as reviewable protocol,
+bootstrap, client/admission, upstream-integration, paired-session-privacy, and
+test/audit slices; every slice is tested before commit. Since the preceding
+checkpoint, all stale iOS/shared Swift pairing, push, admission, grant, profile,
+and companion fixtures were converted to the clean deviceId protocols, and
+both Swift package test graphs compile against the iOS simulator SDK. The next
+audit slice removes a dead plaintext label input from web pod pairing, updates
+all live-E2E add-paired-session callers to v2, removes `device` from the public
+DNS name-claim kind, converts stale web tests to signed-directory deviceId
+semantics, and strengthens the predeploy private-name guard with negative
+self-tests for new plaintext columns, companion labels, and username-only
+device reads. Focused tests, TypeScript typecheck, Android unit tests, the Swift
+test builds, and the guard are green at this boundary. **Known next work:**
+finish the already-identified stale daemon companion-write and protocol
+legacy-field fixtures; replace the live web device-add E2E's removed anonymous
+roster GET with the signed directory flow; retire/update active docs and
+runbooks that still teach `deviceLabel`, dot-form device routing, `--display`,
+or `scripts/demo-account.mjs`; complete the storage/control-plane log, push,
+public-resolution, authorization, replay, recovery/reset, cross-account, and UI
+test audit; then run the complete TS/iOS/Android matrix and final diff review.
+Only after those gates: rebase/merge to current `main`, push, resolve exact
+production D1/provider targets, apply the clean schema/wipe, deploy `.com`
+(`.services` only if required), rebuild clients, and administratively tear down
+then recreate `@openai-build` with encrypted account name `OpenAI Build Week`.
+No merge, push, deployment, production mutation, or demo teardown has occurred.
+
 **2026-07-20 (feature branch checkpoint) — private account/device naming and
 atomic demo provisioning are build-complete in the core path; rollout is NOT
 started.** Work lives only on `feat/private-account-device-names`, developed in

@@ -86,7 +86,7 @@ export function deviceCapabilityScopeSet(block) {
 /** True iff the device's scopes cover the full DEVICE_SCOPES set —
  *  i.e. the device is a primary device with no restrictions. The chip
  *  + tooltips suppress when this is true; a null block also suppresses
- *  (legacy single-IRK path).
+ *  (unrestricted account session).
  *  @param {DeviceCapabilityBlock|null|undefined} block
  *  @returns {boolean}
  */
@@ -114,8 +114,8 @@ export function deviceCapabilityChipText(block) {
 }
 
 /** Per-action capability gate. Returns true when the action is
- *  allowed under the current device's scope set, OR when no capability
- *  is installed (legacy single-IRK — every scope implicit).
+ *  allowed under the current device's scope set, OR when no restricted
+ *  capability is installed.
  *  @param {DeviceCapabilityBlock|null|undefined} block
  *  @param {string} scope
  *  @returns {boolean}

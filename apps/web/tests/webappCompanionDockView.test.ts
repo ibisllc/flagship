@@ -57,7 +57,6 @@ describe("companion-dock view — static surface", () => {
     // Per-row fields
     for (const f of [
       "tokenPrefix",
-      "label",
       "redeemedAt",
       "expiresAt",
       "userAgent",

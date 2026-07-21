@@ -682,9 +682,8 @@ async function detectAccountReset(username) {
 }
 
 /**
- * v2 device-addressing — read the active profile's deviceCapability
- * block (the `<u>.<device-label>` restricted sub-identity). Returns
- * null for a legacy single-IRK session (no chip, all actions enabled),
+ * Read the active profile's opaque deviceCapability block. Returns
+ * null when the session has no restricted grant (no chip, all actions enabled),
  * mirroring iOS AppState.deviceCapability. The block is stored on the
  * profile descriptor by openAccount / accountResolve at sign-in.
  */
@@ -697,7 +696,7 @@ export function activeDeviceCapability() {
 }
 
 /**
- * Render (or clear) the "Device: <label> · browse-only" chip below the
+ * Render (or clear) the restricted-device scope chip below the
  * username, mirroring iOS HomeScreen.deviceChip. The chip suppresses
  * for a fully-scoped device or a legacy single-IRK session (chipText
  * returns null) — same rule as iOS `!cap.isFullyScoped`.

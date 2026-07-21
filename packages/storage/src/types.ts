@@ -2755,11 +2755,9 @@ export interface MintReservationStorage {
 //
 // docs/per-user-cert-and-addressing.md §3.4 + worklist task #25. Under
 // per-user addressing every public name a user serves — an APP label
-// (`<label>.<user>`), a BOX name (the per-box apex), and a DEVICE label
-// (the v2 device-addressing `<user>.<device-label>` form) — shares ONE
+// (`<label>.<user>`) and a BOX name (the per-box apex) — shares ONE
 // leftmost-label space beneath `*.<user>`. They MUST be mutually unique:
-// the resolver (worklist task #24) walks box-name → device-label
-// → app-label (the `--` pin step is retired — A′ migration), and that
+// the resolver walks box-name → app-label, and that
 // precedence is only sound if a single label can't
 // simultaneously mean two different things. This store is the `.com`-side
 // serializer of phone-signed name claims — it orders + dedupes so an
@@ -2770,12 +2768,12 @@ export interface MintReservationStorage {
 // are case-folding) — the adapters lower-case both columns on write so the
 // stored form is already canonical. `kind` tags which of the three sources
 // claimed it; `refId` is the stable identity the label maps to (the app's
-// stable-id, the box's serverId, or the device-label). A re-claim that
+// stable-id or the box's serverId). A re-claim that
 // carries the IDENTICAL `(kind, refId)` is idempotent (ok); a claim from a
 // DIFFERENT `(kind, refId)` is the collision the invariant exists to reject.
 // ──────────────────────────────────────────────────────────────────────
 
-export type NameClaimKind = "app" | "box" | "device";
+export type NameClaimKind = "app" | "box";
 
 export interface NameClaimRecord {
   /** Account that owns the `*.<user>` namespace. */
@@ -2783,10 +2781,10 @@ export interface NameClaimRecord {
   /** The leftmost DNS label being claimed (case-insensitive; the adapters
    *  store it lower-cased). */
   label: string;
-  /** Which of the three merged sources is claiming the label. */
+  /** Which public routing source is claiming the label. */
   kind: NameClaimKind;
-  /** The stable identity the label resolves to: an app's stable-id, a box's
-   *  serverId, or a device-label. Pairs with `kind` to decide whether a
+  /** The stable identity the label resolves to: an app's stable-id or a box's
+   *  serverId. Pairs with `kind` to decide whether a
    *  re-claim is the same claim (idempotent) or a genuine collision. */
   refId: string;
   /** ms since epoch — when the claim was first recorded. */

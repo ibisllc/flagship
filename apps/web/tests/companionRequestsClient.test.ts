@@ -33,7 +33,6 @@ describe("companionRequestsClient — listPendingWrites", () => {
           {
             requestId: "req-1",
             companionTokenPrefix: "abc",
-            companionLabel: "Library iMac",
             kind: "release-server",
             intent: { username: "alice", serverDomain: "home.alice.flagship.services", issuedAt: 1 },
             queuedAt: 1,

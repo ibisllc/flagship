@@ -194,12 +194,11 @@ for (const a of adapters) {
       const s = a.make();
       await s.claim(rec({ label: "blog", kind: "app", refId: "app-1", claimedAt: 300 }));
       await s.claim(rec({ label: "nas", kind: "box", refId: "server-1", claimedAt: 100 }));
-      await s.claim(rec({ label: "laptop", kind: "device", refId: "laptop", claimedAt: 200 }));
       // A different user's claim must not leak in.
       await s.claim(rec({ username: "bob", label: "blog", kind: "app", refId: "bob-app" }));
       const list = await s.listForUser("alice");
-      expect(list.map((c) => c.label)).toEqual(["nas", "laptop", "blog"]);
-      expect(list.map((c) => c.kind)).toEqual(["box", "device", "app"]);
+      expect(list.map((c) => c.label)).toEqual(["nas", "blog"]);
+      expect(list.map((c) => c.kind)).toEqual(["box", "app"]);
     });
 
     it("rejects a colliding claim from a DIFFERENT kind with ok:false + 'name taken'", async () => {
@@ -241,19 +240,19 @@ for (const a of adapters) {
       const s = a.make();
       await s.claim(rec({ label: "media", kind: "box", refId: "server-1" }));
       // Blocked while held.
-      expect(await s.claim(rec({ label: "media", kind: "device", refId: "tv" }))).toEqual({
+      expect(await s.claim(rec({ label: "media", kind: "app", refId: "app-media" }))).toEqual({
         ok: false,
         reason: "name taken",
       });
       await s.release("alice", "media");
       expect(await s.resolve("alice", "media")).toBeUndefined();
       // Now a previously-colliding kind can take it.
-      expect(await s.claim(rec({ label: "media", kind: "device", refId: "tv" }))).toEqual({
+      expect(await s.claim(rec({ label: "media", kind: "app", refId: "app-media" }))).toEqual({
         ok: true,
       });
       const got = await s.resolve("alice", "media");
-      expect(got?.kind).toBe("device");
-      expect(got?.refId).toBe("tv");
+      expect(got?.kind).toBe("app");
+      expect(got?.refId).toBe("app-media");
     });
 
     it("release of an absent (username, label) is a no-op success", async () => {
