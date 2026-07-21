@@ -376,6 +376,20 @@
       border-color: var(--teal-bright);
       color: var(--canvas);
     }
+    .btn--app {
+      height: 36px;
+      padding: 0 10px;
+      gap: 7px;
+      font-size: 10px;
+      letter-spacing: 0.07em;
+    }
+    .btn--pending {
+      background: color-mix(in srgb, var(--muted) 14%, var(--canvas));
+      border-color: var(--rule-strong);
+      color: var(--muted);
+      cursor: not-allowed;
+    }
+    .btn.btn--pending .glyph { width: 13px; height: 13px; }
     .btn .glyph { display: inline-flex; width: 16px; height: 16px; }
     .btn .glyph svg { width: 100%; height: 100%; }
 
@@ -1106,18 +1120,21 @@
           </p>
 
           <div class="hero-ctas" id="install">
-            <a href="#install-ios" class="btn btn--solid" aria-label="Install for iPhone and iPad">
+            <a href="https://web.flagshipserver.com/" target="_blank" rel="noopener" class="btn btn--app btn--solid" aria-label="Use the Flagship web app">
+              <span>Use web app</span>
+            </a>
+            <span class="btn btn--app btn--pending" aria-disabled="true" title="The iOS app is not ready yet">
               <span class="glyph" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 13.27c-.02-2.36 1.93-3.49 2.02-3.55-1.1-1.61-2.81-1.83-3.42-1.85-1.45-.15-2.85.85-3.59.85-.74 0-1.89-.83-3.11-.81-1.6.02-3.08.93-3.9 2.36-1.67 2.89-.43 7.16 1.2 9.51.8 1.15 1.74 2.45 2.97 2.4 1.2-.05 1.65-.78 3.1-.78s1.85.78 3.11.75c1.28-.02 2.09-1.17 2.87-2.33.91-1.33 1.29-2.63 1.31-2.7-.03-.01-2.52-.97-2.55-3.85zM14.66 5.66c.66-.8 1.1-1.91.98-3.02-.95.04-2.1.63-2.78 1.43-.61.7-1.14 1.83-1 2.92 1.06.08 2.14-.54 2.8-1.33z"/></svg>
               </span>
-              <span>Install for iOS</span>
-            </a>
-            <a href="#install-android" class="btn btn--solid" aria-label="Install for Android">
+              <span>iOS soon</span>
+            </span>
+            <span class="btn btn--app btn--pending" aria-disabled="true" title="The Android app is not ready yet">
               <span class="glyph" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18a.4.4 0 0 0-.69-.4l-1.87 3.22a11.34 11.34 0 0 0-9.76 0L5.25 5.9a.4.4 0 0 0-.69.4L6.4 9.48A10.83 10.83 0 0 0 1 18h22a10.83 10.83 0 0 0-5.4-8.52zM7 15.25a.96.96 0 1 1 .96-.96.96.96 0 0 1-.96.96zm10 0a.96.96 0 1 1 .96-.96.96.96 0 0 1-.96.96z"/></svg>
               </span>
-              <span>Install for Android</span>
-            </a>
+              <span>Android soon</span>
+            </span>
           </div>
 
           <p class="hero-hint">
@@ -1314,18 +1331,21 @@
         <h2 id="finale-h2">Take ten minutes.<br>Get the rest of your data back.</h2>
         <p>A USB stick, an old PC, a mobile device, and a vibe. We've kept it in production six months — your turn.</p>
         <div class="actions center">
-          <a href="#install-ios" class="btn btn--solid">
+          <a href="https://web.flagshipserver.com/" target="_blank" rel="noopener" class="btn btn--app btn--solid">
+            <span>Use web app</span>
+          </a>
+          <span class="btn btn--app btn--pending" aria-disabled="true" title="The iOS app is not ready yet">
             <span class="glyph" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 13.27c-.02-2.36 1.93-3.49 2.02-3.55-1.1-1.61-2.81-1.83-3.42-1.85-1.45-.15-2.85.85-3.59.85-.74 0-1.89-.83-3.11-.81-1.6.02-3.08.93-3.9 2.36-1.67 2.89-.43 7.16 1.2 9.51.8 1.15 1.74 2.45 2.97 2.4 1.2-.05 1.65-.78 3.1-.78s1.85.78 3.11.75c1.28-.02 2.09-1.17 2.87-2.33.91-1.33 1.29-2.63 1.31-2.7-.03-.01-2.52-.97-2.55-3.85zM14.66 5.66c.66-.8 1.1-1.91.98-3.02-.95.04-2.1.63-2.78 1.43-.61.7-1.14 1.83-1 2.92 1.06.08 2.14-.54 2.8-1.33z"/></svg>
             </span>
-            <span>Install for iOS</span>
-          </a>
-          <a href="#install-android" class="btn btn--solid">
+            <span>iOS soon</span>
+          </span>
+          <span class="btn btn--app btn--pending" aria-disabled="true" title="The Android app is not ready yet">
             <span class="glyph" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18a.4.4 0 0 0-.69-.4l-1.87 3.22a11.34 11.34 0 0 0-9.76 0L5.25 5.9a.4.4 0 0 0-.69.4L6.4 9.48A10.83 10.83 0 0 0 1 18h22a10.83 10.83 0 0 0-5.4-8.52zM7 15.25a.96.96 0 1 1 .96-.96.96.96 0 0 1-.96.96zm10 0a.96.96 0 1 1 .96-.96.96.96 0 0 1-.96.96z"/></svg>
             </span>
-            <span>Install for Android</span>
-          </a>
+            <span>Android soon</span>
+          </span>
         </div>
       </div>
 

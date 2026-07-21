@@ -55,8 +55,11 @@ describe("/ready/ — post-order recipe landing", () => {
     expect(r.body).toContain("navigator.clipboard");
     // Installer links go through the on-brand /download/<os> redirect.
     expect(r.body).toContain("/download/mac");
-    expect(r.body).toContain("/download/windows");
-    expect(r.body).toContain("/download/linux");
+    expect(r.body).not.toContain("/download/windows");
+    expect(r.body).not.toContain("/download/linux");
+    expect(r.body).toContain("Windows");
+    expect(r.body).toContain("Linux");
+    expect(r.body).toContain("Coming soon");
     // The curtailed website-built-image path is gone from the client too.
     expect(r.body).not.toContain("/api/personalize-iso");
     expect(r.body).not.toContain("downloadAlpineIso");

@@ -149,6 +149,11 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-21 (honest pre-release download surfaces) — the public site now
+leads app promotions with the live web app and presents iOS/Android as compact,
+gray coming-soon options.** The Studio chooser links only the published Mac DMG;
+Windows/Linux are visibly unavailable instead of routing to placeholder docs.
+
 **2026-07-21 (repo reconciliation + open-work rollup) — after parallel
 work-streams, `origin/main` is the single deployed truth; the merged handover
 branches (`feat/vm-prebuilt-appliance`, `feat/private-account-device-names`,

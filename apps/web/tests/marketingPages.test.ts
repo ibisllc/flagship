@@ -75,15 +75,34 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).toContain("github.com/ibisllc/flagship");
   });
 
-  it("the landing page leads with the new positioning headline + install CTAs", async () => {
+  it("the landing page leads with the new positioning headline + honest beta CTAs", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/" });
     expect(r.body).toContain("Your stuff");
     expect(r.body).toContain("hardware");
     expect(r.body).toContain("real green padlock");
-    // v2 primary CTAs replace "Get a build code".
-    expect(r.body).toContain("Install for iOS");
-    expect(r.body).toContain("Install for Android");
+    expect(r.body).toContain("Use web app");
+    expect(r.body).toContain("iOS soon");
+    expect(r.body).toContain("Android soon");
+    expect(r.body).toContain('aria-disabled="true"');
+  });
+
+  it("every app-promotion fallback points to the live web app without dead native links", async () => {
+    const app = buildServer();
+    for (const path of ["/", "/qr/"]) {
+      const r = await app.inject({ method: "GET", url: path });
+      expect(r.statusCode).toBe(200);
+      expect(r.body).toContain('href="https://web.flagshipserver.com/"');
+      expect(r.body).toContain('target="_blank"');
+      expect(r.body).toContain("iOS soon");
+      expect(r.body).toContain("Android soon");
+      expect(r.body).not.toMatch(/href="#install-(ios|android)"/);
+    }
+
+    const notFound = await app.inject({ method: "GET", url: "/404.html" });
+    expect(notFound.statusCode).toBe(200);
+    expect(notFound.body).toContain('href="https://web.flagshipserver.com/"');
+    expect(notFound.body).not.toContain("Get the mobile app");
   });
 
   it("the landing page no longer advertises /build/ or /pricing", async () => {

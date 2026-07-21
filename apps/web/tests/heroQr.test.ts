@@ -149,9 +149,10 @@ describe("hero-QR — v2 relay surface", () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/" });
     expect(r.body).toContain("Your stuff,");
-    // The new primary CTAs point to /#install-ios + /#install-android.
-    expect(r.body).toMatch(/href="#install-ios"/);
-    expect(r.body).toMatch(/href="#install-android"/);
+    expect(r.body).toContain('href="https://web.flagshipserver.com/"');
+    expect(r.body).toContain("iOS soon");
+    expect(r.body).toContain("Android soon");
+    expect(r.body).not.toMatch(/href="#install-(ios|android)"/);
     expect(r.body).toMatch(/src="\/heroQr\.js"\s+defer/);
   });
 });

@@ -13,8 +13,8 @@ const RECIPE_HANDOFF_KEY = "flagship:qr:recipe";
 // swappable (see INSTALLER_DOWNLOADS in apps/com/src/route.ts).
 const OS_INFO = {
   mac: { label: "macOS", note: "Apple Silicon & Intel · .dmg", href: "/download/mac" },
-  windows: { label: "Windows", note: "Windows 10/11 · .exe", href: "/download/windows" },
-  linux: { label: "Linux", note: "x86-64 · .AppImage", href: "/download/linux" },
+  windows: { label: "Windows", note: "Coming soon", href: null },
+  linux: { label: "Linux", note: "Coming soon", href: null },
 };
 const OS_ORDER = ["mac", "windows", "linux"];
 
@@ -33,19 +33,6 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
   ));
-}
-
-function detectOS() {
-  const ua = (navigator.userAgent || "").toLowerCase();
-  const plat = ((navigator.userAgentData && navigator.userAgentData.platform) ||
-    navigator.platform || "").toLowerCase();
-  const s = `${plat} ${ua}`;
-  // Mobile can't run the desktop Builder — fall through to "pick a platform".
-  if (/android|iphone|ipad|ipod/.test(s)) return null;
-  if (/mac/.test(s)) return "mac";
-  if (/win/.test(s)) return "windows";
-  if (/linux|x11|cros/.test(s)) return "linux";
-  return null;
 }
 
 function banner(text, ok = true) {
@@ -102,43 +89,26 @@ async function copyRecipe(text) {
   }
 }
 
-function renderInstaller(detected) {
+function renderInstaller() {
   const primary = $("installerPrimary");
   const others = $("installerOthers");
   if (!primary || !others) return;
 
-  if (detected && OS_INFO[detected]) {
-    const info = OS_INFO[detected];
-    primary.innerHTML =
-      `<a class="dl-primary" href="${info.href}">Download for ${escapeHtml(info.label)}</a>`;
-    const note = document.createElement("div");
-    note.className = "dl-note";
-    note.textContent = info.note;
-    primary.appendChild(note);
-
-    const rest = OS_ORDER.filter((o) => o !== detected);
-    others.innerHTML = "Also for: " + rest.map((o) =>
-      `<a href="${OS_INFO[o].href}">${escapeHtml(OS_INFO[o].label)}</a>`
-    ).join('<span class="sep">·</span>');
-  } else {
-    // Unknown / mobile — offer all three equally.
-    primary.innerHTML = OS_ORDER.map((o) =>
-      `<a class="btn-link" href="${OS_INFO[o].href}">${escapeHtml(OS_INFO[o].label)}</a>`
-    ).join(" ");
-    others.textContent = "The Builder is a desktop app — pick your platform.";
-  }
-
-  // No-recipe view: point the "get the builder ahead of time" link at the
-  // detected OS so the Builder is reachable even without a pending recipe.
-  const noRecipeLink = $("noRecipeInstaller");
-  if (noRecipeLink && detected && OS_INFO[detected]) {
-    noRecipeLink.href = OS_INFO[detected].href;
-    noRecipeLink.textContent = `Download the Flagship Studio for ${OS_INFO[detected].label}`;
-  }
+  const mac = OS_INFO.mac;
+  primary.innerHTML =
+    `<a class="dl-primary" href="${mac.href}">Download for ${escapeHtml(mac.label)}</a>` +
+    OS_ORDER.filter((os) => os !== "mac").map((os) =>
+      `<span class="dl-pending" aria-disabled="true" title="${escapeHtml(OS_INFO[os].note)}">${escapeHtml(OS_INFO[os].label)} · ${escapeHtml(OS_INFO[os].note)}</span>`
+    ).join("");
+  const note = document.createElement("div");
+  note.className = "dl-note";
+  note.textContent = mac.note;
+  primary.appendChild(note);
+  others.textContent = "Mac is available now. Windows and Linux are still in pre-release development.";
 }
 
 function main() {
-  renderInstaller(detectOS());
+  renderInstaller();
 
   const stashed = sessionStorage.getItem(RECIPE_HANDOFF_KEY);
   if (!stashed) {

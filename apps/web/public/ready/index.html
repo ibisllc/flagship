@@ -61,6 +61,12 @@
       .dl-others { margin-top: var(--space-3); font-size: var(--body-sm-size); color: var(--ink-muted); }
       .dl-others a { color: var(--ink); font-weight: 500; }
       .dl-others .sep { color: var(--border); margin: 0 0.4rem; }
+      .dl-pending {
+        display: inline-flex; align-items: center; min-height: 34px;
+        padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
+        background: var(--canvas-tinted); color: var(--ink-muted);
+        font-size: 12px; font-weight: 500; cursor: not-allowed;
+      }
       a.btn-link {
         display: inline-block; padding: 10px 18px;
         border: 1px solid var(--border); border-radius: var(--radius-md);
@@ -156,7 +162,7 @@
           <a class="secondary-link" href="/docs">How it works</a>
         </div>
         <p class="reuse-note" style="margin-top:1.25rem">
-          Want the builder app ahead of time? <a class="secondary-link" id="noRecipeInstaller" href="/download/mac">Download the Flagship Studio</a> — install it once, then feed it a recipe.
+          Want the builder app ahead of time? <a class="secondary-link" id="noRecipeInstaller" href="/download/mac">Download the Flagship Studio for Mac</a> — install it once, then feed it a recipe. Windows and Linux builds are coming soon.
         </p>
       </div>
     </main>
