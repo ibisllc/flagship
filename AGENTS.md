@@ -174,6 +174,17 @@ that rejected token still existed. Box-auth 401 now surfaces the explicit
 with a freshly signed session while ordinary transient failures keep retrying.
 **Remaining (owner):** install the rebuilt iOS app, open Leti, and tap Pair once.
 
+**2026-07-20 (Leti app-key + TLS recovery) — fresh and existing boxes now
+self-heal the two failures exposed on metal.** SWK claims no longer let a stale
+audit marker block a replacement deposit, and a failed key-file write now
+propagates instead of consuming the delivery as durable. Vibe Code's explicit
+503 repair may authenticate, re-arm, and resend the deterministic box key;
+background reconciliation remains biometric-free. Server-detail refresh now
+re-derives each box's public STK from the unlocked UMK after an app reinstall,
+then verifies the signed daemon certificate report, so a real live certificate
+no longer remains hidden as “No certificate yet.” **Remaining (owner):** rebuild
+the metal box from current `main` and validate TLS detail + one Vibe Code build.
+
 **2026-07-20 (VM install rethink) — Ezra proved install-per-VM is the wrong
 default; cross-platform privacy-safe progress landed and clone-and-specialize is
 the locked replacement.** `ezra.jolly-quince` on VZ/Debian 13.6 reached
