@@ -27,7 +27,6 @@ test("S6 — enable long-lived auto-unlock + assert wire-side POST shape", async
   await page.locator("#view-home .advanced-disclosure").evaluate((d) => { d.open = true; });
   await page.click("#open-pod-pair");
   await page.fill("#pod-pair-base", podSim.baseUrl);
-  await page.fill("#pod-pair-label", "e2e-s6");
   await page.click("#pod-pair-go");
   await expect.poll(() => podSim.orders.filterByType("add-paired-session").length).toBe(1);
   await page.click("#pod-pair-back");
@@ -85,7 +84,6 @@ test("S7 — auto-renewer fires on home enter when a lease is close to expiry", 
   await page.locator("#view-home .advanced-disclosure").evaluate((d) => { d.open = true; });
   await page.click("#open-pod-pair");
   await page.fill("#pod-pair-base", podSim.baseUrl);
-  await page.fill("#pod-pair-label", "e2e-s7");
   await page.click("#pod-pair-go");
   await expect.poll(() => podSim.orders.filterByType("add-paired-session").length).toBe(1);
   await page.click("#pod-pair-back");

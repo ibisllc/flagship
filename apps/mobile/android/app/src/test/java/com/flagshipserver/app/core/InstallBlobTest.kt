@@ -246,18 +246,18 @@ class InstallBlobTest {
     @Test fun pushTokenRegister_canonicalBytes() {
         val s = String(PushTokenRegister.canonicalBytes(
             username = "harry",
+            deviceId = "00112233445566778899aabbccddeeff",
             platform = "fcm",
             providerToken = "deadbeef",
             pushX25519PubHex = "ab".repeat(32),
-            label = "Pixel 8",
             issuedAt = 1700000000L,
         ))
-        // Field order: tag | username | platform | providerToken |
-        // pushX25519Pub | label | issuedAt. Mirrors the Worker side
+        // Field order: tag | username | deviceId | platform | providerToken |
+        // pushX25519Pub | issuedAt. Mirrors the Worker side
         // in packages/protocol/src/auth.ts.
         assertEquals(
-            "flagship/push-token-register/v1|harry|fcm|deadbeef|" +
-                "ab".repeat(32) + "|Pixel 8|1700000000",
+            "flagship/push-token-register/v2|harry|00112233445566778899aabbccddeeff|fcm|deadbeef|" +
+                "ab".repeat(32) + "|1700000000",
             s
         )
     }

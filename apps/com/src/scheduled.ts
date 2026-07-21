@@ -43,9 +43,7 @@ import {
   runCustomDomainVerificationPass,
   resolveCnameChain,
   pushRedirection,
-  runDemoIdleReaper,
   runDemoProvisioningPoller,
-  runDemoW11SnapshotPoller,
   schedulePendingRePairAlerts,
   scheduleQuarantineAlerts,
   runCtScan,
@@ -486,12 +484,7 @@ export async function runDemoCron(
   env: ScheduledEnv,
   now: Date,
 ): Promise<{
-  reaped: number;
-  stuck: number;
   promoted: number;
-  w11Snapshotted: number;
-  w11Finalized: number;
-  w11Failed: number;
 } | null> {
   if (!env.DB || !env.HCLOUD_TOKEN) return null;
   const storage = new D1Storage(env.DB);
@@ -504,7 +497,6 @@ export async function runDemoCron(
     audit: storage.auditEvents,
     now: () => now.getTime(),
   };
-  const reaperResult = await runDemoIdleReaper(deps);
   const pollerResult = await runDemoProvisioningPoller(
     deps,
     async (fqdn, createdAt) => {
@@ -525,40 +517,8 @@ export async function runDemoCron(
       return !!r;
     },
   );
-  // Initial demo image — W11 snapshots + destroys its temp installer VPS;
-  // W13 snapshots its already-live direct server and leaves it running until
-  // the ordinary idle reaper. Same Hetzner client; uses createImageSnapshot /
-  // getImageStatus / destroyServer methods. isRegistered consults the
-  // SAME install_events table the legacy poller uses but with a
-  // recency filter so we don't snapshot a daemon that registered
-  // hours ago and then died.
-  const w11Result = await runDemoW11SnapshotPoller(
-    {
-      storage: storage.demoUsers,
-      hetzner,
-      audit: storage.auditEvents,
-      now: () => now.getTime(),
-    },
-    async (fqdn, recencyMs) => {
-      const cutoff = now.getTime() - recencyMs;
-      // Same fix as the legacy poller above — daemon_status is the
-      // table that gets a row when the daemon successfully reports.
-      const r = await env
-        .DB!.prepare(
-          "SELECT 1 FROM daemon_status WHERE server_domain = ? AND last_reported > ? LIMIT 1",
-        )
-        .bind(fqdn, cutoff)
-        .first();
-      return !!r;
-    },
-  );
   return {
-    reaped: reaperResult.reaped,
-    stuck: reaperResult.stuck,
     promoted: pollerResult.promoted,
-    w11Snapshotted: w11Result.snapshotted,
-    w11Finalized: w11Result.finalized,
-    w11Failed: w11Result.failed,
   };
 }
 

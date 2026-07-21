@@ -88,10 +88,10 @@ class LiveFlagshipServerClientTest {
             PushTokenRegisterRequest(
                 request = PushTokenRegisterRequest.Inner(
                     username = "harry",
+                    deviceId = "01".repeat(16),
                     platform = "fcm",
                     providerToken = "FCM:abc",
                     pushX25519Pub = "ee",
-                    label = "Pixel 8",
                     issuedAt = 1L,
                 ),
                 signature = "00",

@@ -498,7 +498,7 @@ final class PairingDepositCoordinatorTests: XCTestCase {
     /// Build a stashable order JSON the way the create flow does.
     private func stashedOrderJson(irk: Curve25519.Signing.PrivateKey) throws -> String {
         try CreateTimePairing.build(
-            username: "alice", serverDomain: serverDomain, label: "iPhone",
+            username: "alice", serverDomain: serverDomain,
             irk: irk, now: 1_750_000_000_000, token: "ab".repeated(32)
         ).pairingOrderJson
     }

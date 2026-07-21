@@ -415,7 +415,7 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
           {
             grantId: i.grantId as string,
             username: i.username as string,
-            deviceLabel: i.deviceLabel as string,
+            deviceId: i.deviceId as string,
             devicePubKey: fromHex("devicePubKey"),
             scopes: i.scopes as DeviceScope[],
             issuedAt: i.issuedAt as number,

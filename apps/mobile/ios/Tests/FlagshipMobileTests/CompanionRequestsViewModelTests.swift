@@ -33,13 +33,11 @@ final class CompanionRequestsViewModelTests: XCTestCase {
         requestId: String = "req-rel-1",
         serverDomain: String = "home.alice.flagship.services",
         queuedAt: Int64 = 1_700_000_000_000,
-        expiresAt: Int64 = 1_700_000_600_000,
-        label: String? = "Library iMac"
+        expiresAt: Int64 = 1_700_000_600_000
     ) -> CompanionPendingWrite {
         return CompanionPendingWrite(
             requestId: requestId,
             companionTokenPrefix: "deadbeef0000",
-            companionLabel: label,
             kind: "release-server",
             intent: [
                 "username": AnyCodable("alice"),
@@ -60,7 +58,6 @@ final class CompanionRequestsViewModelTests: XCTestCase {
         return CompanionPendingWrite(
             requestId: requestId,
             companionTokenPrefix: "f00dcafe1111",
-            companionLabel: nil,
             kind: "revoke-server",
             intent: [
                 "userId": AnyCodable("alice"),
@@ -220,7 +217,6 @@ final class CompanionRequestsViewModelTests: XCTestCase {
         let row = CompanionPendingWrite(
             requestId: "req-unsupported",
             companionTokenPrefix: "0000feed",
-            companionLabel: "Library iMac",
             kind: "mystery-kind",
             intent: ["whatever": AnyCodable("blob")],
             queuedAt: 1_700_000_000_000,
@@ -347,7 +343,6 @@ final class CompanionRequestsViewModelTests: XCTestCase {
             CompanionPendingWrite(
                 requestId: "req-1",
                 companionTokenPrefix: "deadbeef",
-                companionLabel: "Library iMac",
                 kind: "release-server",
                 intent: [
                     "username": AnyCodable("alice"),

@@ -160,7 +160,7 @@ final class CanonicalBytesVectorsTests: XCTestCase {
             return DeviceCapabilityGrantEnvelope(
                 grantId: i["grantId"] as! String,
                 username: i["username"] as! String,
-                deviceLabel: i["deviceLabel"] as! String,
+                deviceId: i["deviceId"] as! String,
                 devicePubKeyHex: i["devicePubKey"] as! String,
                 scopes: i["scopes"] as! [String],
                 issuedAt: i64(i, "issuedAt"),

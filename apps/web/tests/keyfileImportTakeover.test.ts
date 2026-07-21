@@ -107,7 +107,7 @@ describe("keyfileImportTakeover — INITIATES the takeover re-pair (H6)", () => 
     // Returns the grace fields for the countdown + the admin label + the rotated
     // version the completion step must finalize.
     expect(out.rePair.completesAt).toBe(1000);
-    expect(out.deviceLabel).toBe("admin");
+    expect(out.deviceId).toMatch(/^[0-9a-f]{32}$/);
     expect(out.newIrkVersion).toBeGreaterThanOrEqual(2);
   });
 
@@ -126,13 +126,14 @@ describe("keyfileImportTakeover — INITIATES the takeover re-pair (H6)", () => 
   });
 
   it("records the device as the admin profile", async () => {
-    const { runKeyfileImportTakeover, ADMIN_LABEL } = await loadLib();
+    const { runKeyfileImportTakeover } = await loadLib();
     const { args, calls } = fakeArgs();
     await runKeyfileImportTakeover(args);
     expect(calls.profiles).toHaveLength(1);
     expect(calls.profiles[0]).toMatchObject({
       cloudName: "harry",
-      deviceLabel: ADMIN_LABEL,
+      accountId: "harry",
+      deviceId: expect.stringMatching(/^[0-9a-f]{32}$/),
     });
   });
 });

@@ -139,8 +139,8 @@ describe("webapp Profiles view (P12)", () => {
 
   it("renders one row per profile + ACTIVE pill on the selected one", async () => {
     const { profilesView, profilesLib, store } = await loadModules();
-    profilesLib.addProfile({ cloudName: "alice", deviceLabel: "browser" }, { storage });
-    profilesLib.addProfile({ cloudName: "bob", deviceLabel: "browser" }, { storage, setActive: false });
+    profilesLib.addProfile({ cloudName: "alice", accountId: "alice", deviceId: "11".repeat(16) }, { storage });
+    profilesLib.addProfile({ cloudName: "bob", accountId: "bob", deviceId: "22".repeat(16) }, { storage, setActive: false });
     store.ensureProfile("alice", storage);
     store.ensureProfile("bob", storage);
     store.setActiveCloudName("alice", storage);

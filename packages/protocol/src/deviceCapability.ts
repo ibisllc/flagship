@@ -1,11 +1,6 @@
 /**
- * Device-capability-grant domain (v2 device-addressing) — a per-device IRK
- * bound to a user under a human label with an explicit scope set, plus the
- * revoke envelope.
- *
- * Extracted verbatim from the original monolithic `auth.ts`; the scope list
- * + index sort order, tags, field order, label rules, and validators are
- * unchanged, so canonical bytes and signatures remain byte-identical.
+ * Device-capability-grant domain — an account-scoped opaque device identity
+ * bound to a device key and explicit scope set, plus the revoke envelope.
  */
 import { ed } from "./edSync.js";
 import { hex } from "./canonicalBase.js";
@@ -14,8 +9,8 @@ import type { Bytes, Keypair } from "./types.js";
 // ──────────────────────────────────────────────────────────────────────
 // DeviceCapabilityGrant (v2 device-addressing — S3.1)
 //
-// Models a per-device IRK bound to a user under a human-meaningful
-// label, with an explicit capability scope set. The User IRK signs the
+// Models a per-device IRK bound to a user under an opaque account-scoped
+// device ID, with an explicit capability scope set. The User IRK signs the
 // envelope; consumers verify under the user's IRK pub, check expiry,
 // and confirm the requested operation is in `scopes`.
 //
@@ -24,9 +19,7 @@ import type { Bytes, Keypair } from "./types.js";
 // hardening), and a SHA-256 hex of the canonical bytes (grantId
 // helper) is used as the D1 primary key + revocation handle.
 //
-// The single envelope serves BOTH the demo flow ("demoalice.reviewer"
-// is a browse-only sub-identity) and the corporate / restricted-device
-// path. See docs/v2-device-addressing-and-real-ticket.md §2 + §11.
+// Presentation names are encrypted separately and never enter this envelope.
 // ──────────────────────────────────────────────────────────────────────
 
 export type DeviceScope =
@@ -42,9 +35,8 @@ export type DeviceScope =
   // minting/renewing the per-user TLS cert (it holds the sealed ACME account
   // key). Granting it to only a subset of the user's devices keeps a lost or
   // less-trusted device from minting for the whole `*.<user>` namespace.
-  // Appended LAST so existing grants' canonical-byte scope indices are
-  // unchanged.
-  | "admin";
+  | "admin"
+  | "view-directory";
 
 /**
  * Canonical scope list — also the sort order for canonical-bytes. We
@@ -61,6 +53,7 @@ export const DEVICE_SCOPES: readonly DeviceScope[] = [
   "revoke-others",
   "demo-provision",
   "admin",
+  "view-directory",
 ] as const;
 
 const DEVICE_SCOPE_INDEX: ReadonlyMap<DeviceScope, number> = new Map(
@@ -94,23 +87,15 @@ export function isSensitiveScope(s: DeviceScope): boolean {
   return SENSITIVE_SCOPES.has(s);
 }
 
-const DEVICE_LABEL_RE = /^[a-z0-9-]{1,24}$/;
-const RESERVED_DEVICE_LABELS: ReadonlySet<string> = new Set([
-  "admin",
-  "user",
-  "root",
-  "home",
-  "service",
-  "services",
-]);
+const DEVICE_ID_RE = /^[0-9a-f]{32}$/;
 
 export interface DeviceCapabilityGrant {
   /** Fresh v4 UUID; consumers reject duplicates within the active window. */
   grantId: string;
   /** Username at issuance time. Renames produce new grants under the new name. */
   username: string;
-  /** Human-meaningful device label ("ipad", "work-laptop", "reviewer"). */
-  deviceLabel: string;
+  /** Random immutable 128-bit identity, minted independently per account membership. */
+  deviceId: string;
   /** Device's Ed25519 pubkey (32 bytes). Identifies the device. */
   devicePubKey: Bytes;
   /** Authorized scopes (sorted at canonicalization). */
@@ -121,20 +106,20 @@ export interface DeviceCapabilityGrant {
   expiresAt: number;
 }
 
-const TAG_DEVICE_CAPABILITY_GRANT = "flagship/device-capability-grant/v1";
+const TAG_DEVICE_CAPABILITY_GRANT = "flagship/device-capability-grant/v2";
 
 /**
  * Validate that no string field in a DeviceCapabilityGrant contains the
  * canonical-bytes separator '|' or any control byte (H1 hardening).
  * Also enforces structural rules: expiry ordering, non-empty + unique +
- * known-set scopes, deviceLabel charset + reserved-list. Throws on
+ * known-set scopes and opaque deviceId shape. Throws on
  * violation.
  */
 function validateDeviceCapabilityGrantFields(g: DeviceCapabilityGrant): void {
   const fields: Array<[string, string]> = [
     ["grantId", g.grantId],
     ["username", g.username],
-    ["deviceLabel", g.deviceLabel],
+    ["deviceId", g.deviceId],
   ];
   for (const [name, value] of fields) {
     for (let i = 0; i < value.length; i++) {
@@ -164,16 +149,8 @@ function validateDeviceCapabilityGrantFields(g: DeviceCapabilityGrant): void {
     }
     seen.add(s);
   }
-  if (!DEVICE_LABEL_RE.test(g.deviceLabel)) {
-    throw new Error(
-      `DeviceCapabilityGrant: deviceLabel "${g.deviceLabel}" must match /^[a-z0-9-]{1,24}$/`,
-    );
-  }
-  if (g.deviceLabel.startsWith("-") || g.deviceLabel.endsWith("-")) {
-    throw new Error("DeviceCapabilityGrant: deviceLabel must not start or end with '-'");
-  }
-  if (RESERVED_DEVICE_LABELS.has(g.deviceLabel)) {
-    throw new Error(`DeviceCapabilityGrant: deviceLabel "${g.deviceLabel}" is reserved`);
+  if (!DEVICE_ID_RE.test(g.deviceId)) {
+    throw new Error(`DeviceCapabilityGrant: deviceId must be 16-byte lowercase hex`);
   }
   if (g.devicePubKey.length !== 32) {
     throw new Error(
@@ -197,7 +174,7 @@ function canonicalDeviceCapabilityGrant(g: DeviceCapabilityGrant): Bytes {
       TAG_DEVICE_CAPABILITY_GRANT,
       g.grantId,
       g.username,
-      g.deviceLabel,
+      g.deviceId,
       hex(g.devicePubKey),
       sortedScopes,
       g.issuedAt,

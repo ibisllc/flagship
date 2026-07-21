@@ -134,8 +134,8 @@ class MockScreensClient(
         tick()
         return PairedSessionsListResponse(
             sessions = listOf(
-                PairedSessionSummary("a1b2c3d4", "Phone — Harry", now() - 60_000L * 60 * 24 * 14, true),
-                PairedSessionSummary("f9e8d7c6", "Pixel 8", now() - 60_000L * 60 * 24 * 3, false),
+                PairedSessionSummary("a1b2c3d4", now() - 60_000L * 60 * 24 * 14, true),
+                PairedSessionSummary("f9e8d7c6", now() - 60_000L * 60 * 24 * 3, false),
             )
         )
     }

@@ -23,6 +23,7 @@ function loadWebapp(rel: string) {
 }
 const loadPairing = () => loadWebapp("lib/crossDevicePairing.js");
 const loadKeystore = () => loadWebapp("keystore.js");
+const DEVICE_ID = "10".repeat(16);
 const loadRotation = () => loadWebapp("lib/adminRootRotation.js");
 const loadRecovery = () => loadWebapp("lib/recovery.js");
 
@@ -42,7 +43,7 @@ function fakeRelay() {
       open: vi.fn(async () => ({ sid: "SID1", pkB64u: "ADMINPK" })),
       onSas: vi.fn(),
       awaitConfirm: vi.fn(async () => true),
-      receivePeerPub: vi.fn(async () => "ab".repeat(32)),
+      receivePeerPub: vi.fn(async () => ({ devicePubHex: "ab".repeat(32), deviceId: DEVICE_ID })),
       seal: vi.fn(async (bytes: Uint8Array) => { calls.sealed = bytes; }),
       close: vi.fn(),
     },

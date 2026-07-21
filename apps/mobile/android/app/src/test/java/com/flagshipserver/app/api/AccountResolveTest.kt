@@ -46,7 +46,6 @@ class AccountResolveTest {
         // Demo crypto is a no-op — no recovery / TOTP factors.
         assertFalse(r.recovery.present)
         assertFalse(r.totpEnrolled)
-        assertEquals(0, r.trustedDeviceCount)
         assertEquals("instant", r.graceModel)
         assertEquals(AccountResolution.GraceModel.Instant, r.grace)
         // The demoServer block rides along so the join can activate the
@@ -78,7 +77,6 @@ class AccountResolveTest {
         assertFalse(r.recovery.hasFetchGate)
         assertNull(r.recovery.credentialId)
         assertFalse(r.totpEnrolled)
-        assertEquals(0, r.trustedDeviceCount)
         assertNull(r.demoServer)
         assertEquals("none", r.graceModel)
         assertEquals(AccountResolution.GraceModel.None, r.grace)
@@ -169,7 +167,6 @@ class AccountResolveTest {
           "kind": "demo",
           "recovery": { "present": false, "hasFetchGate": false },
           "totpEnrolled": false,
-          "trustedDeviceCount": 0,
           "demoServer": {
             "fqdn": "home.demoalice.flagship.services",
             "status": "provisioning",
@@ -194,7 +191,6 @@ class AccountResolveTest {
           "kind": "unknown",
           "recovery": { "present": false, "hasFetchGate": false },
           "totpEnrolled": false,
-          "trustedDeviceCount": 0,
           "graceModel": "none"
         }
         """.trimIndent()
@@ -213,7 +209,6 @@ class AccountResolveTest {
             kind = "enterprise-sso",  // a value this binary doesn't know
             recovery = AccountResolution.RecoveryState(false, false),
             totpEnrolled = false,
-            trustedDeviceCount = 0,
             graceModel = "quantum",
         )
         assertEquals(AccountResolution.AccountKind.Unknown, r.accountKind)

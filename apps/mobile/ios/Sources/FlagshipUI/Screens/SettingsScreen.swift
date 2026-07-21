@@ -21,7 +21,7 @@ public struct SettingsScreen: View {
     /// Appearance choice (Light / Dark / Auto) — read + written by the
     /// APPEARANCE segmented control; applied app-wide by RootShell.
     @Environment(PrivacySettings.self) private var privacy
-    @State private var disconnectTarget: TrustedDevice?
+    @State private var disconnectTarget: SettingsViewModel.DirectoryDevice?
     @State private var disconnectMessage: String?
     /// Browser-session revoke awaiting its confirm step. A revoke is
     /// destructive (the docked computer loses access), so it gates behind
@@ -48,19 +48,27 @@ public struct SettingsScreen: View {
     /// severity adapt on `hasCloudRecovery` (a wipe without recovery is
     /// permanent account loss, so it gets the danger-zone framing).
     @State private var signOutConfirm: Bool = false
+    @State private var nameEditor: NameEditor?
+    @State private var nameEditMessage: String?
     let username: String
+    let accountDisplayName: String?
     let controlDevices: LoadingState<[PairedSessionSummary]>
     /// Peer-class devices on this user's account (push-token holders).
     /// The new "Trusted devices" section. Empty list renders an
     /// explainer; .failed renders an error card.
-    let trustedDevices: LoadingState<[TrustedDevice]>
+    let trustedDevices: LoadingState<[SettingsViewModel.DirectoryDevice]>
     /// M4 — the pending re-pair snapshot (GET /re-pair). When a row is
     /// present + un-objected, the Trusted-devices section shows a
     /// grace-gated "Replace pending" banner; a "Finalize now" tap routes
     /// into the existing finalize screen via `onFinalizeReplace`. Mirrors
     /// the webapp banner. nil → no banner.
     var pendingRePair: PendingRePairSnapshot? = nil
-    var onDisconnectTrustedDevice: (TrustedDevice) async -> Bool = { _ in false }
+    var onDisconnectTrustedDevice: (SettingsViewModel.DirectoryDevice) async -> Bool = { _ in false }
+    var canManageNames: Bool = false
+    var onRenameAccount: (String) async -> Bool = { _ in false }
+    var onRenameCurrentDevice: (String) async -> Bool = { _ in false }
+    var onSetManagedDeviceName: (String, String, Bool) async -> Bool = { _, _, _ in false }
+    var onRemoveManagedDeviceName: (String) async -> Bool = { _ in false }
     let showDeveloper: Bool
     /// v1.2 Phase 4 — "Multi-device + 2FA" badge state read out of the
     /// Worker `usernames` row. Nil while the load is in flight or if
@@ -156,15 +164,21 @@ public struct SettingsScreen: View {
 
     public init(
         username: String,
+        accountDisplayName: String? = nil,
         controlDevices: LoadingState<[PairedSessionSummary]>,
-        trustedDevices: LoadingState<[TrustedDevice]> = .loaded([]),
+        trustedDevices: LoadingState<[SettingsViewModel.DirectoryDevice]> = .loaded([]),
         pendingRePair: PendingRePairSnapshot? = nil,
         showDeveloper: Bool = false,
         accountType: String? = nil,
         onAddDevice: @escaping () -> Void = {},
         onScanPairingCode: @escaping () -> Void = {},
         onRevokeDevice: @escaping (PairedSessionSummary) -> Void = { _ in },
-        onDisconnectTrustedDevice: @escaping (TrustedDevice) async -> Bool = { _ in false },
+        onDisconnectTrustedDevice: @escaping (SettingsViewModel.DirectoryDevice) async -> Bool = { _ in false },
+        canManageNames: Bool = false,
+        onRenameAccount: @escaping (String) async -> Bool = { _ in false },
+        onRenameCurrentDevice: @escaping (String) async -> Bool = { _ in false },
+        onSetManagedDeviceName: @escaping (String, String, Bool) async -> Bool = { _, _, _ in false },
+        onRemoveManagedDeviceName: @escaping (String) async -> Bool = { _ in false },
         onLock: @escaping () -> Void = {},
         onSignOut: @escaping () -> Void = {},
         onOpenProviders: @escaping () -> Void = {},
@@ -193,10 +207,16 @@ public struct SettingsScreen: View {
         onDeleteAccount: @escaping () -> Void = {}
     ) {
         self.username = username
+        self.accountDisplayName = accountDisplayName
         self.controlDevices = controlDevices
         self.trustedDevices = trustedDevices
         self.pendingRePair = pendingRePair
         self.onDisconnectTrustedDevice = onDisconnectTrustedDevice
+        self.canManageNames = canManageNames
+        self.onRenameAccount = onRenameAccount
+        self.onRenameCurrentDevice = onRenameCurrentDevice
+        self.onSetManagedDeviceName = onSetManagedDeviceName
+        self.onRemoveManagedDeviceName = onRemoveManagedDeviceName
         self.showDeveloper = showDeveloper
         self.accountType = accountType
         self.onAddDevice = onAddDevice
@@ -237,14 +257,16 @@ public struct SettingsScreen: View {
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
+        let profileName = accountDisplayName ?? "@\(username)"
+        let profileDetail = accountDisplayName == nil ? profileSubtitle : "@\(username) · \(profileSubtitle)"
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
                 // Account hero — teal monogram + username + account-type
                 // subtitle. Drills into Account security (the most relevant
                 // account-level destination).
                 FSProfileCard(
-                    name: username,
-                    subtitle: profileSubtitle,
+                    name: profileName,
+                    subtitle: profileDetail,
                     action: onOpenAccountSecurity
                 )
                 .padding(.top, FS.space.s2)
@@ -293,7 +315,7 @@ public struct SettingsScreen: View {
         .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
         .refreshable { await onRefresh() }
         .confirmationDialog(
-            disconnectTarget.map { "Disconnect \($0.label)?" } ?? "Disconnect device?",
+            disconnectTarget.map { "Revoke \($0.displayName)?" } ?? "Revoke device?",
             isPresented: Binding(
                 get: { disconnectTarget != nil },
                 set: { if !$0 { disconnectTarget = nil } }
@@ -301,18 +323,12 @@ public struct SettingsScreen: View {
             titleVisibility: .visible,
             presenting: disconnectTarget
         ) { target in
-            Button("Disconnect \(target.label)", role: .destructive) {
-                Task {
-                    let success = await onDisconnectTrustedDevice(target)
-                    if !success {
-                        disconnectMessage = "Couldn't disconnect — check your connection and try again."
-                    }
-                    disconnectTarget = nil
-                }
+            Button("Revoke \(target.displayName)", role: .destructive) {
+                disconnect(target)
             }
             Button("Cancel", role: .cancel) { disconnectTarget = nil }
         } message: { target in
-            Text("We'll stop sending alerts to \(target.label). It can sign back in with your passkey.")
+            Text("This revokes the device's account access. Its presentation name is never sent to Flagship's control plane in plaintext.")
         }
         .alert(
             "Disconnect failed",
@@ -325,11 +341,38 @@ public struct SettingsScreen: View {
         } message: {
             Text(disconnectMessage ?? "")
         }
+        .sheet(item: $nameEditor) { editor in
+            DeviceNameEditor(
+                title: editor.title,
+                initialName: editor.initialName,
+                supportsLock: editor.supportsLock,
+                initiallyLocked: editor.initiallyLocked
+            ) { name, locked in
+                let success: Bool
+                switch editor.kind {
+                case .account:
+                    success = await onRenameAccount(name)
+                case .selfDevice:
+                    success = await onRenameCurrentDevice(name)
+                case .managed(let deviceId):
+                    success = await onSetManagedDeviceName(deviceId, name, locked)
+                }
+                if !success { nameEditMessage = "Couldn't save the encrypted name. Check the name and try again." }
+                return success
+            }
+        }
+        .alert(
+            "Name not saved",
+            isPresented: Binding(
+                get: { nameEditMessage != nil },
+                set: { if !$0 { nameEditMessage = nil } }
+            )
+        ) { Button("OK") { nameEditMessage = nil } } message: { Text(nameEditMessage ?? "") }
         .sheet(isPresented: $showWipeComingSoon) {
             WipeComingSoonSheet { showWipeComingSoon = false }
         }
         .confirmationDialog(
-            revokeSessionTarget.map { "Revoke \($0.label)?" } ?? "Revoke this session?",
+            revokeSessionTarget.map { "Revoke session \($0.tokenPrefix)?" } ?? "Revoke this session?",
             isPresented: Binding(
                 get: { revokeSessionTarget != nil },
                 set: { if !$0 { revokeSessionTarget = nil } }
@@ -343,7 +386,7 @@ public struct SettingsScreen: View {
             }
             Button("Cancel", role: .cancel) { revokeSessionTarget = nil }
         } message: { target in
-            Text("The browser docked from \(target.label) loses access to this account.")
+            Text("Session \(target.tokenPrefix) loses access to this account.")
         }
         .confirmationDialog(
             "Replace this device?",
@@ -386,6 +429,16 @@ public struct SettingsScreen: View {
         }
     }
 
+    private func disconnect(_ target: SettingsViewModel.DirectoryDevice) {
+        Task {
+            let success = await onDisconnectTrustedDevice(target)
+            if !success {
+                disconnectMessage = "Couldn't disconnect — check your connection and try again."
+            }
+            disconnectTarget = nil
+        }
+    }
+
     /// Account-type one-liner under the username on the profile hero.
     private var profileSubtitle: String {
         switch accountType {
@@ -401,6 +454,16 @@ public struct SettingsScreen: View {
     /// subtitle and drills into AccountSecurityScreen.
     private func accountGroup(c: FSColors) -> some View {
         FSSettingsGroup("ACCOUNT", rows: [
+            FSSettingsRow(
+                icon: "person.text.rectangle",
+                title: "Display name",
+                subtitle: accountDisplayName ?? "Encrypted account presentation name",
+                accessibilityId: "settings-edit-account-name",
+                action: {
+                    guard canManageNames else { return }
+                    nameEditor = NameEditor(kind: .account, title: "Edit account name", initialName: accountDisplayName ?? "")
+                }
+            ),
             FSSettingsRow(
                 icon: accountType == "multi" ? "checkmark.shield.fill" : "shield.lefthalf.filled",
                 iconTint: accountType == "multi" ? c.success : c.primary,
@@ -537,89 +600,101 @@ public struct SettingsScreen: View {
     /// freshly-admitted window), surface a clock icon + tooltip and
     /// disable the destructive menu entries. Tapping a disabled
     /// entry surfaces a toast explaining why.
-    private func trustedDeviceRow(_ d: TrustedDevice, c: FSColors) -> some View {
-        let quarantined = d.isQuarantined()
+    private func trustedDeviceRow(_ d: SettingsViewModel.DirectoryDevice, c: FSColors) -> some View {
         return FSCard {
             HStack(alignment: .top, spacing: FS.space.s3) {
-                Image(systemName: platformIcon(d.platform))
+                Image(systemName: platformIcon(d.platformClass))
                     .foregroundColor(c.primary)
                     .imageScale(.large)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(d.label)
+                        Text(d.displayName)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(c.text)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                        if quarantined {
-                            Image(systemName: "clock.badge.exclamationmark")
-                                .foregroundColor(c.danger)
-                                .imageScale(.small)
-                                .accessibilityIdentifier("trusted-device-quarantine-icon-\(d.tokenPrefix)")
-                                .help(quarantineTooltip(for: d))
-                        }
+                        if d.isCurrent { Text("This device").font(FS.font.caption()).foregroundColor(c.primary) }
+                        if d.isLocked { Image(systemName: "lock.fill").foregroundColor(c.textMuted) }
                     }
                     HStack(spacing: 4) {
-                        Text(platformDisplay(d.platform))
+                        Text(platformDisplay(d.platformClass))
                         Text("·").foregroundColor(c.textMuted)
-                        Text("added \(relative(ms: d.addedAt))")
+                        Text("Device \(d.supportCode)")
                     }
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
-                    if quarantined {
-                        Text(quarantineTooltip(for: d))
-                            .font(FS.font.caption())
-                            .foregroundColor(c.danger)
-                            .accessibilityIdentifier("trusted-device-quarantine-msg-\(d.tokenPrefix)")
-                    } else if d.lastSeenAt > d.addedAt {
+                    if d.isManaged {
+                        Text(d.isLocked ? "Administrator-managed · locked" : "Administrator-managed")
+                            .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    } else if d.lastSeenAt > d.createdAt {
                         Text("last seen \(relative(ms: d.lastSeenAt))")
                             .font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
                 }
                 Spacer()
                 Menu {
-                    Button(role: .destructive) {
-                        if quarantined {
-                            disconnectMessage = quarantineTooltip(for: d)
-                        } else {
-                            disconnectTarget = d
+                    if d.isCurrent {
+                        Button {
+                            nameEditor = NameEditor(kind: .selfDevice, title: "Rename this device", initialName: d.displayName)
+                        } label: {
+                            Label("Rename this device", systemImage: "pencil")
                         }
+                    }
+                    if canManageNames {
+                        Button {
+                            nameEditor = NameEditor(
+                                kind: .managed(d.deviceId),
+                                title: d.isManaged ? "Edit managed name" : "Set managed name",
+                                initialName: d.displayName,
+                                supportsLock: true,
+                                initiallyLocked: d.isLocked
+                            )
+                        } label: {
+                            Label(d.isManaged ? "Edit managed name" : "Set managed name", systemImage: "lock.shield")
+                        }
+                        if d.isManaged {
+                            Button(role: .destructive) {
+                                Task {
+                                    if !(await onRemoveManagedDeviceName(d.deviceId)) {
+                                        nameEditMessage = "Couldn't remove the managed name."
+                                    }
+                                }
+                            } label: {
+                                Label("Remove managed name", systemImage: "lock.open")
+                            }
+                        }
+                        Divider()
+                    }
+                    Button(role: .destructive) {
+                        disconnectTarget = d
                     } label: {
                         Label("Disconnect", systemImage: "wifi.slash")
                     }
-                    .disabled(quarantined)
+                    .disabled(d.isCurrent)
                     // B7 — Replace device. Tap opens a two-stage scare
                     // sheet; the container drives the actual IRK
                     // rotation ceremony through ReplaceDeviceViewModel.
                     Button(role: .destructive) {
-                        if quarantined {
-                            disconnectMessage = quarantineTooltip(for: d)
-                        } else {
-                            replaceConfirm = true
-                        }
+                        replaceConfirm = true
                     } label: {
                         Label("Replace device", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    .disabled(quarantined)
+                    .disabled(d.isCurrent)
                     Divider()
                     // E2/E3 — Wipe & restart. Live ceremony. The
                     // container observes onWipeRestart and routes
                     // through WipeRestartViewModel.
                     Button(role: .destructive) {
-                        if quarantined {
-                            disconnectMessage = quarantineTooltip(for: d)
-                        } else {
-                            wipeConfirm = true
-                        }
+                        wipeConfirm = true
                     } label: {
                         Label("Wipe & restart…", systemImage: "trash")
                     }
-                    .disabled(quarantined)
+                    .disabled(d.isCurrent)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .foregroundColor(c.textMuted)
                         .imageScale(.large)
                 }
-                .accessibilityIdentifier("trusted-device-menu-\(d.tokenPrefix)")
+                .accessibilityIdentifier("trusted-device-menu-\(d.deviceId)")
             }
         }
     }
@@ -627,32 +702,23 @@ public struct SettingsScreen: View {
     /// Tooltip + toast copy for a quarantined device. Surfaced both
     /// next to the clock icon AND on a disabled-menu tap. Kept
     /// here (not inline) so the test asserts on the exact string.
-    private func quarantineTooltip(for d: TrustedDevice) -> String {
-        guard let until = d.quarantineUntil else {
-            return "This device is in quarantine. Use another device."
-        }
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .none
-        let when = f.string(from: Date(timeIntervalSince1970: TimeInterval(until) / 1000))
-        return "Quarantined until \(when). Use another device."
-    }
-
-    private func platformIcon(_ raw: String) -> String {
+    private func platformIcon(_ raw: String?) -> String {
         switch raw {
-        case "apns":    return "iphone"
-        case "fcm":     return "antenna.radiowaves.left.and.right"
-        case "webpush": return "globe"
+        case "ios": return "iphone"
+        case "android": return "antenna.radiowaves.left.and.right"
+        case "web": return "globe"
+        case "macos": return "laptopcomputer"
         default:        return "questionmark.circle"
         }
     }
 
-    private func platformDisplay(_ raw: String) -> String {
+    private func platformDisplay(_ raw: String?) -> String {
         switch raw {
-        case "apns":    return "iPhone / iPad"
-        case "fcm":     return "Android"
-        case "webpush": return "Web"
-        default:        return raw
+        case "ios": return "iPhone / iPad"
+        case "android": return "Android"
+        case "web": return "Web"
+        case "macos": return "Mac"
+        default: return "Device"
         }
     }
 
@@ -686,7 +752,7 @@ public struct SettingsScreen: View {
                 Image(systemName: s.current ? "iphone.gen3" : "laptopcomputer")
                     .foregroundColor(s.current ? c.success : c.textMuted)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(s.label).foregroundColor(c.text)
+                    Text("Session \(s.tokenPrefix)").foregroundColor(c.text)
                     Text("paired \(relative(ms: s.addedAt))")
                         .font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
@@ -906,6 +972,81 @@ public struct SettingsScreen: View {
     /// unlock time (mirrors the webapp's `formatCompletesAt`).
     private func absolute(ms: Int64) -> String {
         Date.flagshipFormatted(epochMs: ms, includeTime: true)
+    }
+}
+
+private struct NameEditor: Identifiable {
+    enum Kind {
+        case account
+        case selfDevice
+        case managed(String)
+    }
+
+    let id = UUID()
+    let kind: Kind
+    let title: String
+    let initialName: String
+    var supportsLock = false
+    var initiallyLocked = false
+}
+
+private struct DeviceNameEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var locked: Bool
+    @State private var saving = false
+    let title: String
+    let supportsLock: Bool
+    let onSave: (String, Bool) async -> Bool
+
+    init(
+        title: String,
+        initialName: String,
+        supportsLock: Bool,
+        initiallyLocked: Bool,
+        onSave: @escaping (String, Bool) async -> Bool
+    ) {
+        self.title = title
+        self.supportsLock = supportsLock
+        self.onSave = onSave
+        _name = State(initialValue: initialName)
+        _locked = State(initialValue: initiallyLocked)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Display name", text: $name)
+                    .textInputAutocapitalization(.words)
+                if supportsLock {
+                    Toggle("Lock managed name", isOn: $locked)
+                    Text("The device may retain its own suggestion, but the managed name remains visible until an administrator removes it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text("Names are encrypted and apply only inside this Flagship account.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(saving ? "Saving…" : "Save") {
+                        saving = true
+                        Task {
+                            if await onSave(name, locked) { dismiss() }
+                            saving = false
+                        }
+                    }
+                    .disabled(saving || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

@@ -34,23 +34,23 @@ describe("FilePairedSessionStore", () => {
   it("add + persist + load round-trips", async () => {
     const path = defaultPairedSessionPath(dir);
     const s1 = new FilePairedSessionStore(path);
-    await s1.add("a".repeat(32), "Harry's iPhone");
+    await s1.add("a".repeat(32), 1_700);
     const s2 = new FilePairedSessionStore(path);
     await s2.load();
     expect(s2.has("a".repeat(32))).toBe(true);
-    expect(s2.list()[0]?.label).toBe("Harry's iPhone");
+    expect(s2.list()[0]?.addedAt).toBe(1_700);
   });
 
   it("rejects short tokens", async () => {
     const s = new FilePairedSessionStore(defaultPairedSessionPath(dir));
-    await expect(s.add("short", "label")).rejects.toThrow(/too short/);
+    await expect(s.add("short")).rejects.toThrow(/too short/);
   });
 
   it("remove drops from disk", async () => {
     const path = defaultPairedSessionPath(dir);
     const s = new FilePairedSessionStore(path);
     const tok = "z".repeat(40);
-    await s.add(tok, "L");
+    await s.add(tok);
     await s.remove(tok);
     expect(s.has(tok)).toBe(false);
     const buf = await readFile(path, "utf8");

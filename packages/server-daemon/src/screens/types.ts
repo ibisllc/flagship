@@ -225,7 +225,6 @@ export interface BrowserTabsListResponse {
 export interface PairedSessionSummary {
   /** First 12 chars of the token; full token never returned. */
   tokenPrefix: string;
-  label: string;
   addedAt: number;
   /** True if this is the calling client's own session. */
   current: boolean;

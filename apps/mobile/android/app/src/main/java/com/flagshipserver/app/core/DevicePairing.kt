@@ -121,6 +121,8 @@ data class PairingBundle(
     val admit: DeviceAdmit,
     /** Ed25519 signature over the admit, lowercased hex (64 bytes). */
     val admitSig: String,
+    val grant: PairingGrant,
+    val grantSignature: String,
     /** Slice D (docs/device-admin-tier-spec.md §4.2, D-4) — the ADMIN MASTER
      *  ROOT seed (32 bytes, lowercased hex) when the admin chose to PROMOTE the
      *  joining device to admin in this synchronous SAS ceremony; null otherwise
@@ -141,3 +143,15 @@ data class PairingBundle(
             JSON.decodeFromString(serializer(), bytes.decodeToString())
     }
 }
+
+@Serializable
+data class PairingGrant(
+    val grantId: String,
+    val username: String,
+    val deviceId: String,
+    val devicePubHex: String,
+    val scopes: List<String>,
+    val issuedAt: Long,
+    val expiresAt: Long,
+    val signerRoot: String,
+)

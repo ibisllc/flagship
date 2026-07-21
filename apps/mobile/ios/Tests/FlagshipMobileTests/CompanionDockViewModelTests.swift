@@ -40,14 +40,14 @@ final class CompanionDockViewModelTests: XCTestCase {
         let client = makeClient()
         client.companionListFixture = CompanionListResponse(companions: [
             CompanionSummary(
-                tokenPrefix: "deadbe", label: "Work MacBook",
+                tokenPrefix: "deadbe",
                 redeemedAt: 1_700_000_000_000,
                 lastSeenMs: 1_700_000_500_000,
                 expiresAt: 1_700_014_400_000,
                 userAgent: "Mozilla/5.0"
             ),
             CompanionSummary(
-                tokenPrefix: "f00dca", label: nil,
+                tokenPrefix: "f00dca",
                 redeemedAt: 1_700_000_100_000,
                 lastSeenMs: 1_700_000_700_000,
                 expiresAt: 1_700_014_500_000,
@@ -61,9 +61,7 @@ final class CompanionDockViewModelTests: XCTestCase {
         }
         XCTAssertEqual(s.companions.count, 2)
         XCTAssertEqual(s.companions[0].tokenPrefix, "deadbe")
-        XCTAssertEqual(s.companions[0].label, "Work MacBook")
         XCTAssertEqual(s.companions[0].userAgent, "Mozilla/5.0")
-        XCTAssertNil(s.companions[1].label)
         XCTAssertNil(s.companions[1].userAgent)
     }
 
@@ -84,9 +82,8 @@ final class CompanionDockViewModelTests: XCTestCase {
     func test_mint_recordsCall_andSurfacesTicket() async {
         let client = makeClient()
         let vm = CompanionDockViewModel(client: client)
-        await vm.mint(label: "My laptop")
+        await vm.mint()
         XCTAssertEqual(client.companionMintCalls.count, 1)
-        XCTAssertEqual(client.companionMintCalls.first?.label, "My laptop")
         XCTAssertNotNil(vm.mintedTicket)
         XCTAssertNil(vm.mintError)
         // 60s TTL — within a 5s slack so the test isn't flaky on slow CI.
@@ -96,27 +93,11 @@ final class CompanionDockViewModelTests: XCTestCase {
         XCTAssertLessThanOrEqual(remaining, 60_000)
     }
 
-    func test_mint_blankLabelNormalizedToNil() async {
-        let client = makeClient()
-        let vm = CompanionDockViewModel(client: client)
-        await vm.mint(label: "   ")
-        XCTAssertEqual(client.companionMintCalls.count, 1)
-        XCTAssertNil(client.companionMintCalls.first?.label)
-    }
-
-    func test_mint_nilLabelStaysNil() async {
-        let client = makeClient()
-        let vm = CompanionDockViewModel(client: client)
-        await vm.mint(label: nil)
-        XCTAssertEqual(client.companionMintCalls.count, 1)
-        XCTAssertNil(client.companionMintCalls.first?.label)
-    }
-
     func test_mint_failure_setsMintError_clearsTicket() async {
         let client = makeClient()
         client.shouldFail = true
         let vm = CompanionDockViewModel(client: client)
-        await vm.mint(label: "x")
+        await vm.mint()
         XCTAssertNil(vm.mintedTicket)
         XCTAssertNotNil(vm.mintError)
     }
@@ -124,7 +105,7 @@ final class CompanionDockViewModelTests: XCTestCase {
     func test_dismissMintedTicket_clears() async {
         let client = makeClient()
         let vm = CompanionDockViewModel(client: client)
-        await vm.mint(label: nil)
+        await vm.mint()
         XCTAssertNotNil(vm.mintedTicket)
         vm.dismissMintedTicket()
         XCTAssertNil(vm.mintedTicket)
@@ -136,11 +117,11 @@ final class CompanionDockViewModelTests: XCTestCase {
         let client = makeClient()
         client.companionListFixture = CompanionListResponse(companions: [
             CompanionSummary(
-                tokenPrefix: "deadbe", label: "Work MacBook",
+                tokenPrefix: "deadbe",
                 redeemedAt: 1, lastSeenMs: 2, expiresAt: 3, userAgent: nil
             ),
             CompanionSummary(
-                tokenPrefix: "f00dca", label: nil,
+                tokenPrefix: "f00dca",
                 redeemedAt: 1, lastSeenMs: 2, expiresAt: 3, userAgent: nil
             )
         ])
@@ -174,12 +155,12 @@ final class CompanionDockViewModelTests: XCTestCase {
     func test_listResponse_codable_roundTrips() throws {
         let original = CompanionListResponse(companions: [
             CompanionSummary(
-                tokenPrefix: "abcdef", label: "Office",
+                tokenPrefix: "abcdef",
                 redeemedAt: 1, lastSeenMs: 2, expiresAt: 3,
                 userAgent: "ua"
             ),
             CompanionSummary(
-                tokenPrefix: "012345", label: nil,
+                tokenPrefix: "012345",
                 redeemedAt: 4, lastSeenMs: 5, expiresAt: 6,
                 userAgent: nil
             )
@@ -189,26 +170,11 @@ final class CompanionDockViewModelTests: XCTestCase {
         XCTAssertEqual(decoded, original)
     }
 
-    func test_mintRequest_codable_omitsNilLabelAsNull() throws {
-        // The daemon accepts both `{label: null}` and `{}` (label is
-        // optional). Swift's JSONEncoder emits `null` for nil; pin that
-        // shape so the wire-format match with TS/Kotlin is observable.
-        let req = CompanionMintTicketRequest(label: nil)
+    func test_mintRequest_codable_isEmptyObject() throws {
+        let req = CompanionMintTicketRequest()
         let json = try JSONEncoder().encode(req)
         let obj = try JSONSerialization.jsonObject(with: json) as? [String: Any]
-        XCTAssertNotNil(obj)
-        // Either the key is absent OR explicitly NSNull — both are
-        // acceptable on the wire.
-        if let raw = obj?["label"] {
-            XCTAssertTrue(raw is NSNull, "label should be null, got \(raw)")
-        }
-    }
-
-    func test_mintRequest_codable_includesLabelWhenPresent() throws {
-        let req = CompanionMintTicketRequest(label: "My laptop")
-        let json = try JSONEncoder().encode(req)
-        let obj = try JSONSerialization.jsonObject(with: json) as? [String: Any]
-        XCTAssertEqual(obj?["label"] as? String, "My laptop")
+        XCTAssertEqual(obj?.count, 0)
     }
 
     func test_revokeRequest_codable_carriesTokenPrefix() throws {

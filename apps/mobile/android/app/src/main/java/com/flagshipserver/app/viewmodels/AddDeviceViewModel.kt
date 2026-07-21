@@ -33,6 +33,7 @@ import com.flagshipserver.app.core.DeviceAdmitClaim
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.JoinLink
 import com.flagshipserver.app.core.PairingBundle
+import com.flagshipserver.app.core.PairingGrant
 import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.keystore.Keystore
 import kotlinx.coroutines.delay
@@ -139,6 +140,7 @@ class AddDeviceViewModel(
     /** The incoming device's FRESH device pubkey (Ed25519, hex) the admit
      *  binds. Captured from the peer hello. */
     private var incomingDevicePubHex: String? = null
+    private var incomingDeviceId: String? = null
 
     /** The join URL rendered as the QR. */
     val joinUrl: String by lazy {
@@ -156,12 +158,14 @@ class AddDeviceViewModel(
         _phase.value = AddDevicePhase.ShowingQr(joinUrl)
         try {
             val helloBytes = relay.awaitPeerHello(sid)
-            require(helloBytes.size == 64) {
-                "peer hello must be 64 bytes (x25519 pub || device pub)"
+            require(helloBytes.size == 80) {
+                "peer hello must be 80 bytes (x25519 pub || device pub || device id)"
             }
             val peerX25519 = helloBytes.copyOfRange(0, 32)
             val peerDevicePub = helloBytes.copyOfRange(32, 64)
+            val peerDeviceId = helloBytes.copyOfRange(64, 80)
             incomingDevicePubHex = HexUtil.encode(peerDevicePub)
+            incomingDeviceId = HexUtil.encode(peerDeviceId)
             val matchCode = session.pair(peerX25519)
             _phase.value = AddDevicePhase.ConfirmSas(matchCode, gateExpired = false)
             // Un-gate Confirm after the anti-double-tap window (parity with
@@ -194,10 +198,15 @@ class AddDeviceViewModel(
             _phase.value = AddDevicePhase.Failed("Incoming device key missing — start over.")
             return
         }
+        val deviceId = incomingDeviceId ?: run {
+            _phase.value = AddDevicePhase.Failed("Incoming device identity missing — start over.")
+            return
+        }
         _phase.value = AddDevicePhase.Delivering
         try {
             val admit = DeviceAdmit(
                 username = username,
+                deviceId = deviceId,
                 newDevicePubHex = devicePubHex.lowercase(),
                 issuedAt = now(),
             )
@@ -219,10 +228,37 @@ class AddDeviceViewModel(
                 } else {
                     null
                 }
+            val promoted = wrappedAdminRoot != null
+            val scopes = if (promoted) {
+                com.flagshipserver.app.core.DeviceCapabilityGrant.DEVICE_SCOPE_ORDER
+            } else {
+                listOf("browse", "install-service", "vibe-code", "view-directory")
+            }
+            val grantId = java.util.UUID.randomUUID().toString()
+            val expiresAt = admit.issuedAt + 90L * 24 * 3_600_000
+            val grantBytes = com.flagshipserver.app.core.DeviceCapabilityGrant.canonicalBytes(
+                grantId, username, deviceId, devicePubHex, scopes, admit.issuedAt, expiresAt,
+            )
+            val grantSigner = if (promoted) {
+                com.google.crypto.tink.subtle.Ed25519Sign(requireNotNull(adminRootSeed()))
+            } else {
+                Keystore.deriveIRK("Authorize the new device")
+            }
             val bundle = PairingBundle(
                 umkSeedHex = HexUtil.encode(seed),
                 admit = admit,
                 admitSig = HexUtil.encode(sig),
+                grant = PairingGrant(
+                    grantId = grantId,
+                    username = username,
+                    deviceId = deviceId,
+                    devicePubHex = devicePubHex,
+                    scopes = scopes,
+                    issuedAt = admit.issuedAt,
+                    expiresAt = expiresAt,
+                    signerRoot = if (promoted) "admin-root" else "membership",
+                ),
+                grantSignature = HexUtil.encode(grantSigner.sign(grantBytes)),
                 wrappedAdminRoot = wrappedAdminRoot,
             )
             val sealed = session.seal(bundle.toJsonBytes())

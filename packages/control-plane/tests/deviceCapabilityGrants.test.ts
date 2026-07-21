@@ -26,17 +26,18 @@ import {
 } from "@flagship/protocol";
 import {
   InMemoryDeviceCapabilityGrantStorage,
+  InMemoryDeviceIdentityStorage,
   InMemoryUsernameStorage,
 } from "@flagship/storage";
 import {
   handleMintDeviceGrant,
-  handleListDeviceGrants,
   handleRevokeDeviceGrant,
   requireDeviceScope,
   type DeviceCapabilityGrantsDeps,
 } from "../src/deviceCapabilityGrants.js";
 
 const USER = "alice";
+const DEVICE_A = "00112233445566778899aabbccddeeff";
 
 function makeKey(): Keypair {
   const priv = new Uint8Array(32);
@@ -68,6 +69,7 @@ async function mkHarness(): Promise<Harness> {
   const clock = { now: 1_000_000 };
   const deps: DeviceCapabilityGrantsDeps = {
     storage,
+    identities: new InMemoryDeviceIdentityStorage(),
     usernames,
     now: () => clock.now,
   };
@@ -77,7 +79,7 @@ async function mkHarness(): Promise<Harness> {
 function mintGrant(args: {
   userIrk: Keypair;
   username?: string;
-  deviceLabel?: string;
+  deviceId?: string;
   devicePub?: Uint8Array;
   scopes?: DeviceScope[];
   issuedAt?: number;
@@ -88,7 +90,7 @@ function mintGrant(args: {
     grant: {
       grantId: string;
       username: string;
-      deviceLabel: string;
+      deviceId: string;
       devicePubKey: string;
       scopes: DeviceScope[];
       issuedAt: number;
@@ -99,7 +101,7 @@ function mintGrant(args: {
   grant: DeviceCapabilityGrant;
   signature: Uint8Array;
 } {
-  const deviceLabel = args.deviceLabel ?? "ipad";
+  const deviceId = args.deviceId ?? DEVICE_A;
   const devicePub = args.devicePub ?? makeKey().publicKey;
   const scopes = args.scopes ?? ["browse", "install-service"];
   const issuedAt = args.issuedAt ?? 1_000_000;
@@ -108,7 +110,7 @@ function mintGrant(args: {
   const grant: DeviceCapabilityGrant = {
     grantId,
     username: args.username ?? USER,
-    deviceLabel,
+    deviceId,
     devicePubKey: devicePub,
     scopes,
     issuedAt,
@@ -120,7 +122,7 @@ function mintGrant(args: {
       grant: {
         grantId,
         username: grant.username,
-        deviceLabel,
+        deviceId,
         devicePubKey: hex(devicePub),
         scopes,
         issuedAt,
@@ -182,7 +184,7 @@ describe("handleMintDeviceGrant", () => {
     expect(JSON.parse(stored!.scopesJson)).toEqual(m.body.grant.scopes);
   });
 
-  it("re-mint of the same (user, label) before revoke returns 409", async () => {
+  it("cannot bind an existing immutable deviceId to another key", async () => {
     const h = await mkHarness();
     const a = mintGrant({ userIrk: h.userIrk, grantId: "g-1" });
     expect((await handleMintDeviceGrant(h.deps, a.body)).status).toBe(200);
@@ -192,65 +194,7 @@ describe("handleMintDeviceGrant", () => {
       devicePub: makeKey().publicKey,
     });
     const r = await handleMintDeviceGrant(h.deps, b.body);
-    expect(r.status).toBe(409);
-  });
-});
-
-// ──────────────────────────────────────────────────────────────────────
-// handleListDeviceGrants
-// ──────────────────────────────────────────────────────────────────────
-
-describe("handleListDeviceGrants", () => {
-  it("returns empty list for fresh user", async () => {
-    const h = await mkHarness();
-    const r = await handleListDeviceGrants(h.deps, USER);
-    expect(r.status).toBe(200);
-    expect((r.body as { grants: unknown[] }).grants).toEqual([]);
-  });
-
-  it("returns only active grants (excludes revoked)", async () => {
-    const h = await mkHarness();
-    const a = mintGrant({
-      userIrk: h.userIrk,
-      grantId: "g-a",
-      deviceLabel: "ipad",
-    });
-    const b = mintGrant({
-      userIrk: h.userIrk,
-      grantId: "g-b",
-      deviceLabel: "laptop",
-      devicePub: makeKey().publicKey,
-    });
-    await handleMintDeviceGrant(h.deps, a.body);
-    await handleMintDeviceGrant(h.deps, b.body);
-
-    await h.deps.storage.revoke("g-a", h.clock.now);
-
-    const r = await handleListDeviceGrants(h.deps, USER);
-    const grants = (r.body as { grants: Array<{ grantId: string }> }).grants;
-    expect(grants.map((g) => g.grantId)).toEqual(["g-b"]);
-  });
-
-  it("orders grants by issuedAt DESC (newest first)", async () => {
-    const h = await mkHarness();
-    const old = mintGrant({
-      userIrk: h.userIrk,
-      grantId: "g-old",
-      deviceLabel: "ipad",
-      issuedAt: 1_000_000,
-    });
-    const fresh = mintGrant({
-      userIrk: h.userIrk,
-      grantId: "g-fresh",
-      deviceLabel: "laptop",
-      devicePub: makeKey().publicKey,
-      issuedAt: 1_005_000,
-    });
-    await handleMintDeviceGrant(h.deps, old.body);
-    await handleMintDeviceGrant(h.deps, fresh.body);
-    const r = await handleListDeviceGrants(h.deps, USER);
-    const grants = (r.body as { grants: Array<{ grantId: string }> }).grants;
-    expect(grants.map((g) => g.grantId)).toEqual(["g-fresh", "g-old"]);
+    expect(r.status).toBe(403);
   });
 });
 
@@ -328,7 +272,7 @@ describe("handleRevokeDeviceGrant", () => {
     expect(r.status).toBe(403);
   });
 
-  it("marks the grant revoked + list excludes it", async () => {
+  it("marks the grant revoked", async () => {
     const h = await mkHarness();
     const m = mintGrant({ userIrk: h.userIrk, grantId: "g-1" });
     await handleMintDeviceGrant(h.deps, m.body);
@@ -338,8 +282,7 @@ describe("handleRevokeDeviceGrant", () => {
     expect(r.status).toBe(200);
     expect((r.body as { revokedAt: number }).revokedAt).toBe(h.clock.now);
 
-    const l = await handleListDeviceGrants(h.deps, USER);
-    expect((l.body as { grants: unknown[] }).grants).toEqual([]);
+    expect((await h.deps.storage.get("g-1"))?.revokedAt).toBe(h.clock.now);
   });
 });
 
@@ -348,7 +291,7 @@ describe("handleRevokeDeviceGrant", () => {
 // ──────────────────────────────────────────────────────────────────────
 
 describe("requireDeviceScope", () => {
-  it("allows the user-IRK fast path", async () => {
+  it("does not treat the shared membership IRK as a device identity", async () => {
     const h = await mkHarness();
     const r = await requireDeviceScope(
       h.deps,
@@ -356,35 +299,7 @@ describe("requireDeviceScope", () => {
       USER,
       "install-service",
     );
-    expect(r).toEqual({ ok: true });
-  });
-
-  // Slice D fence (docs/device-admin-tier-spec.md §3.2): the membership-IRK
-  // fast path must NEVER satisfy a SENSITIVE scope. A sensitive scope is
-  // satisfiable ONLY through requireMasterAdmin (the admin master root).
-  it("FENCES the user-IRK fast path off from the sensitive `admin` scope", async () => {
-    const h = await mkHarness();
-    const r = await requireDeviceScope(
-      h.deps,
-      hex(h.userIrk.publicKey),
-      USER,
-      "admin",
-    );
-    expect(r).toEqual({
-      ok: false,
-      reason: "sensitive scope requires master-admin authority",
-    });
-  });
-
-  it("still allows the user-IRK fast path for a NON-sensitive scope", async () => {
-    const h = await mkHarness();
-    const r = await requireDeviceScope(
-      h.deps,
-      hex(h.userIrk.publicKey),
-      USER,
-      "revoke-others",
-    );
-    expect(r).toEqual({ ok: true });
+    expect(r).toEqual({ ok: false, reason: "no active device grant" });
   });
 
   it("rejects when username is not registered", async () => {
@@ -491,7 +406,7 @@ describe("requireDeviceScope", () => {
       USER, // wrong owner
       "browse",
     );
-    expect(r).toEqual({ ok: false, reason: "username mismatch" });
+    expect(r).toEqual({ ok: false, reason: "device identity inactive" });
   });
 
   it("rejects when the grant signature fails defense-in-depth re-verification", async () => {
@@ -546,7 +461,7 @@ describe("requireDeviceScope", () => {
 // list).
 // ──────────────────────────────────────────────────────────────────────
 
-const KNOWN_REQUIRE_DEVICE_SCOPE_CONSUMERS = ["serverRevocation.ts"];
+const KNOWN_REQUIRE_DEVICE_SCOPE_CONSUMERS = ["accountDirectory.ts", "serverRevocation.ts"];
 
 describe("requireDeviceScope production consumers (grant-authorization pin)", () => {
   it("is called only by the known-consumer set of control-plane src/*.ts handlers", async () => {

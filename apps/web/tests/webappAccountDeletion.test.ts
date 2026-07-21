@@ -131,25 +131,23 @@ describe("account-deletion ceremony — webapp", () => {
   describe("accountDeletePolicy — ceremony only on no-recovery + last device", () => {
     it("no recovery + last device (count <= 1) ⇒ ceremony", async () => {
       const d = await loadDeletion();
-      expect(d.accountDeletePolicy({ hasCloudRecovery: false, trustedDeviceCount: 0 })).toBe("ceremony");
-      expect(d.accountDeletePolicy({ hasCloudRecovery: false, trustedDeviceCount: 1 })).toBe("ceremony");
+      expect(d.accountDeletePolicy({ hasCloudRecovery: false })).toBe("ceremony");
     });
 
     it("cloud recovery present ⇒ normal (key survives in the cloud)", async () => {
       const d = await loadDeletion();
-      expect(d.accountDeletePolicy({ hasCloudRecovery: true, trustedDeviceCount: 0 })).toBe("normal");
-      expect(d.accountDeletePolicy({ hasCloudRecovery: true, trustedDeviceCount: 5 })).toBe("normal");
+      expect(d.accountDeletePolicy({ hasCloudRecovery: true })).toBe("normal");
     });
 
-    it("another active device ⇒ normal (key survives on another device)", async () => {
+    it("does not trust a public device count to bypass the no-recovery ceremony", async () => {
       const d = await loadDeletion();
-      expect(d.accountDeletePolicy({ hasCloudRecovery: false, trustedDeviceCount: 2 })).toBe("normal");
+      expect(d.accountDeletePolicy({ hasCloudRecovery: false })).toBe("ceremony");
     });
 
     it("demo accounts are exempt (no real key to lose)", async () => {
       const d = await loadDeletion();
       expect(
-        d.accountDeletePolicy({ hasCloudRecovery: false, trustedDeviceCount: 1, isDemoAccount: true }),
+        d.accountDeletePolicy({ hasCloudRecovery: false, isDemoAccount: true }),
       ).toBe("exempt");
     });
 
@@ -157,7 +155,7 @@ describe("account-deletion ceremony — webapp", () => {
       const d = await loadDeletion();
       expect(d.accountDeletePolicy({ hasCloudRecovery: false })).toBe("ceremony");
       expect(
-        d.accountDeletePolicy({ hasCloudRecovery: false, trustedDeviceCount: NaN }),
+        d.accountDeletePolicy({ hasCloudRecovery: false }),
       ).toBe("ceremony");
     });
   });
@@ -283,6 +281,7 @@ describe("account-deletion ceremony — webapp", () => {
       });
       const shown: string[] = [];
       const removed: string[] = [];
+      const forgotten: string[] = [];
 
       await d.runDeletionCeremony(
         {
@@ -296,6 +295,10 @@ describe("account-deletion ceremony — webapp", () => {
           },
           lockSession: () => order.push("lockSession"),
           profileRemove: (slot: string) => removed.push(slot),
+          forgetProfile: (cloudName: string) => {
+            order.push("forgetProfile");
+            forgotten.push(cloudName);
+          },
           stopRenewals: () => order.push("stopRenewals"),
           show: (id: string) => shown.push(id),
         },
@@ -311,6 +314,11 @@ describe("account-deletion ceremony — webapp", () => {
         expect.arrayContaining(["sessionId", "sessionToken", "podBaseUrl", "username"]),
       );
       expect(shown).toContain("view-bootstrap");
+      // The account is gone server-side, so this browser must not keep its
+      // profile row — it holds the accountId and the account-scoped deviceId,
+      // and a stale row would keep offering a dead account in the switcher.
+      expect(forgotten).toEqual(["alice"]);
+      expect(order.indexOf("fetch")).toBeLessThan(order.indexOf("forgetProfile"));
     });
 
     it("on a 403: the local key is NOT wiped and we do NOT route to Welcome", async () => {

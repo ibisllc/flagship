@@ -190,7 +190,7 @@ ${c_green}Gym control plane is up.${c_off} Remaining manual steps (see docs/runb
   • Smoke the live chain (the gym admin secret is cached in .gym-secrets.env):
       source .gym-secrets.env
       FLAGSHIP_ADMIN_SECRET="\$GYM_ADMIN_SECRET" FLAGSHIP_BASE_URL="https://gym.flagshipserver.com" \\
-        node scripts/sample-user.mjs create gymdemo --display "Gym Demo"
+        node scripts/sample-user.mjs create gymdemo --account-name "Gym Demo"
       npm run gym -- live            # the live vertical slice (detects the env)
   • Wipe between runs (isolation by zeroing): the gym-DB loop in the runbook
     (names ${D1_NAME}, NEVER prod's flagship-state).

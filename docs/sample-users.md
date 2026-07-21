@@ -16,7 +16,7 @@ independent.
 ## 1. Overview
 
 The operator runs `node scripts/sample-user.mjs create demoalice
---display "Demo Alice"` from their laptop. The Worker provisions **one**
+--account-name "Demo Alice"` from their laptop. The Worker provisions **one**
 Hetzner server through the current W13 cloud-init-direct path, lets the daemon
 register and obtain a real Let's Encrypt cert end-to-end, and marks it `up`.
 The 10-minute cron snapshots that live server and stores the snapshot id in D1;
@@ -1209,46 +1209,43 @@ the admin endpoints + drives the operator-side ISO build and
 snapshot flow.
 
 ```sh
-# Create a new demo user. The CLI now drives a REAL `.com`-issued
-# install ticket end-to-end (see §14.4 below):
-#   1. POST /api/dev/sample-user/create (reserve D1 row)
-#   2. POST /api/dev/sample-user/admin-claim-and-issue (mint
-#      AuthCode + signed InstallBlob + primary DeviceCapabilityGrant)
-#   3. personalize-iso --blob-json (NOT --seed-hex)
-#   4. R2 upload + Hetzner rescue+dd + ACME + snapshot
-#   5. POST /api/dev/sample-user/<u>/install-complete
+# Create a new demo user. The CLI drives a REAL `.com`-issued install
+# ticket end-to-end (see §14.4 below). Identity, grants, primary device,
+# and the ENCRYPTED account profile all commit before cloud provisioning
+# starts, so the whole thing is one idempotent server-owned state machine
+# that is safe to re-run with the same --idempotency-key.
 node scripts/sample-user.mjs create <username> \
-    --display "<display string>" \
+    --account-name "<account name>" \
+    [--idempotency-key <key>] \
     [--region fsn1] \
-    [--size cx22] \
-    [--ttl-idle 30]
+    [--size cpx11]
 
 # Tear down everything: server (if up), snapshot, R2 ISO, D1 row, AND
-# every DeviceCapabilityGrant for that user.
-node scripts/sample-user.mjs delete <username>
+# every device capability grant for that user.
+node scripts/sample-user.mjs cleanup <username> [--idempotency-key <key>]
 
 # List all demo users.
 node scripts/sample-user.mjs list
 
 # Show one demo user, including a live Hetzner status poll.
 node scripts/sample-user.mjs status <username>
-
-# Mint a DeviceCapabilityGrant for a NEW device under an existing
-# demo user. Pure-Worker call (no Hetzner side-effect; needs only
-# FLAGSHIP_ADMIN_SECRET). The Worker validates the scopes — a typo
-# surfaces as a 400 with the offending string in the body.
-node scripts/sample-user.mjs grant-device <username> <device-label> \
-    --scopes <comma-list>
-
-# Examples:
-node scripts/sample-user.mjs grant-device demoalice reviewer --scopes browse
-node scripts/sample-user.mjs grant-device demoalice work-laptop \
-    --scopes browse,install-service,vibe-code
-
-# (Optional internal helper — used during create-sample-user; not for
-# direct operator use.) Upload a pre-built ISO to R2.
-node scripts/sample-user.mjs upload-iso <username> <iso-path>
 ```
+
+`--account-name` is the ONLY way to set the name, and it is not a
+plaintext column: the value is sealed into the standard **encrypted
+account profile** under the account's UMK-derived key, exactly like a
+name typed in the app. `.com` stores ciphertext and can't read it. The
+old `--display` flag is REJECTED (`unknown flag: --display`) rather than
+quietly accepted, so a stale script fails loudly instead of writing a
+plaintext name.
+
+There is no `grant-device` subcommand. Devices are not named by an
+operator and are never addressed by a label: a device gets an immutable,
+random, account-scoped `deviceId` when it joins, and whatever name it
+shows comes from an encrypted self-profile the device writes for itself
+(or an administrator-managed profile), decrypted locally by clients that
+hold the directory key. The reviewer's device therefore chooses its own
+name when it joins — the operator neither supplies nor can read one.
 
 ### 14.1 Env vars the CLI reads
 
@@ -1293,10 +1290,7 @@ tools:
 {"username":"demoalice","ready":true,"snapshotId":"12345678"}
 ```
 
-`grant-device` writes a single JSON line to stdout containing the
-full `{grant, signature, devicePubHex}` envelope returned by the
-Worker, and a one-line summary ("`Granted reviewer device with
-scopes: browse`") to stderr for human eyeballing.
+
 
 ### 14.4 Real-ticket install flow (v2; supersedes synthesizeBlob)
 
@@ -1337,13 +1331,10 @@ Call sequence executed by `node scripts/sample-user.mjs create
 5. `POST /api/dev/sample-user/<u>/install-complete` —
    persist `snapshot_id` + `iso_r2_key` on the demo_users row.
 
-`grant-device <u> <label> --scopes <comma-list>` is a one-step
-wrapper around `POST /api/dev/sample-user/<u>/admin-mint-device-
-grant`. Use it to add reviewer / corporate / work-laptop sub-
-identities to an existing demo user. The grant is a real
-`DeviceCapabilityGrant` envelope (same shape Plan A consumes for
-two-level addressing), signed by the demo user's IRK
-Worker-side.
+There is no operator-side device-minting subcommand. A device joins
+under its own random account-scoped `deviceId`, and any name it shows
+is an encrypted profile it writes for itself — the operator does not
+name devices and cannot read the names.
 
 Implementation-ready bullets:
 
@@ -1353,10 +1344,10 @@ Implementation-ready bullets:
 - Phase E: extends `tools/vps-e2e/src/providers/hetzner.ts` with
   `HetznerProvider.snapshot(serverId, description)` and
   `HetznerProvider.destroyImage(imageId)` (used by the CLI's
-  `delete` path).
+  `cleanup` path).
 - S3.4: `scripts/sample-user.mjs` refactored to call
   `admin-claim-and-issue` and `personalize-iso --blob-json` (per
-  this section); new `grant-device` subcommand added.
+  this section).
 
 ---
 
@@ -1379,7 +1370,7 @@ Assertion: `~/.ssh/flagship-demo-ssh` and `.pub` both exist.
 ### Step 2 — Create demo user
 
 ```sh
-node scripts/sample-user.mjs create demoalice --display "Demo Alice"
+node scripts/sample-user.mjs create demoalice --account-name "Demo Alice"
 ```
 
 Assertions (stderr-observed, in order):
@@ -1482,10 +1473,10 @@ already exists so:
 - Provisioning takes ~30 s (snapshot restore) instead of 10 min.
 - Total time from tap to `up` ≤ 60 s.
 
-### Step 10 — Delete
+### Step 10 — Cleanup
 
 ```sh
-node scripts/sample-user.mjs delete demoalice
+node scripts/sample-user.mjs cleanup demoalice
 ```
 
 Assertions:

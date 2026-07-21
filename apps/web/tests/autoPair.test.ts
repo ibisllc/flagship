@@ -72,10 +72,10 @@ describe("autoPair — sign + POST", () => {
     expect(legacy["home.alice.flagship.services"]).toBe(posted[0]!.body.request.token);
 
     // The canonical bytes signed match the pinned add-paired-session shape.
-    const { serverId, token, label, issuedAt } = posted[0]!.body.request;
-    const expected = DECODER.decode(canonicalAddPairedSession({ serverId, token, label, issuedAt }));
+    const { serverId, token, issuedAt } = posted[0]!.body.request;
+    const expected = DECODER.decode(canonicalAddPairedSession({ serverId, token, issuedAt }));
     expect(expected).toBe(
-      `flagship/order/add-paired-session/v1|${serverId}|${token}|${label}|${issuedAt}`,
+      `flagship/order/add-paired-session/v2|${serverId}|${token}|${issuedAt}`,
     );
   });
 

@@ -55,7 +55,6 @@ function singleResolution(username = "harry", withRecovery = true) {
       ? { present: true, hasFetchGate: true, credentialId: "abc123" }
       : { present: false, hasFetchGate: false },
     totpEnrolled: false,
-    trustedDeviceCount: 1,
     graceModel: "3d",
   };
 }
@@ -69,7 +68,6 @@ function multiResolution(username = "hilton", withRecovery = true) {
       ? { present: true, hasFetchGate: true, credentialId: "def456" }
       : { present: false, hasFetchGate: false },
     totpEnrolled: true,
-    trustedDeviceCount: 3,
     graceModel: "24h-totp",
   };
 }
@@ -237,7 +235,7 @@ describe("loginTakeover initiateRePair — J.3 envelope body", () => {
 
 describe("loginTakeover runTakeover — single (3-day grace)", () => {
   it("unwraps, persists, INITIATES re-pair, labels admin, opens", async () => {
-    const { runTakeover, TAKEOVER_IRK_VERSION, ADMIN_LABEL, TAG_RE_PAIR_INITIATE } = await loadLib();
+    const { runTakeover, TAKEOVER_IRK_VERSION, TAG_RE_PAIR_INITIATE } = await loadLib();
     const { deps, calls, seed, fetchMock } = fakeTakeoverDeps();
     const out = await runTakeover(singleResolution("harry"), deps);
 
@@ -268,11 +266,11 @@ describe("loginTakeover runTakeover — single (3-day grace)", () => {
     // 5 — admin label on the local profile.
     expect(calls.profiles).toHaveLength(1);
     expect(calls.profiles[0].cloudName).toBe("harry");
-    expect(calls.profiles[0].deviceLabel).toBe(ADMIN_LABEL);
+    expect(calls.profiles[0].deviceId).toMatch(/^[0-9a-f]{32}$/);
     // 6 — opened.
     expect(calls.dispatched).toBe(true);
     expect(out.username).toBe("harry");
-    expect(out.deviceLabel).toBe(ADMIN_LABEL);
+    expect(out.deviceId).toMatch(/^[0-9a-f]{32}$/);
     expect(out.rePair.ok).toBe(true);
   });
 
@@ -350,7 +348,7 @@ describe("loginTakeover loginRealAccount — full branch orchestration", () => {
     expect(confirm.mock.calls[0]![0].message).toMatch(/3-day grace/);
     expect(prompt).not.toHaveBeenCalled(); // single needs no second factor
     expect(out.outcome).toBe("takeover");
-    expect(out.takeover.deviceLabel).toBe("admin");
+    expect(out.takeover.deviceId).toMatch(/^[0-9a-f]{32}$/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -464,7 +462,7 @@ describe("#52 — single-device credential-required initiate", () => {
     // canonical bytes, so no re-sign is needed).
     expect(retry.request).toEqual(first.request);
     expect(retry.signature).toBe(first.signature);
-    expect(out.deviceLabel).toBe("admin");
+    expect(out.deviceId).toMatch(/^[0-9a-f]{32}$/);
   });
 
   it("runTakeover: cancelling the on-demand prompt throws the tagged cancel (no retry POST)", async () => {

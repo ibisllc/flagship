@@ -72,6 +72,7 @@ public struct SettingsTab: View {
             if let vm {
                 SettingsScreen(
                     username: app.currentUser ?? "",
+                    accountDisplayName: vm.accountDisplayName,
                     controlDevices: vm.controlDevices,
                     trustedDevices: vm.trustedDevices,
                     pendingRePair: vm.pendingRePair,
@@ -97,6 +98,15 @@ public struct SettingsTab: View {
                     onScanPairingCode: { path.append(.scanPairingCode) },
                     onRevokeDevice: { session in Task { await vm.revoke(session) } },
                     onDisconnectTrustedDevice: { device in await vm.disconnect(device) },
+                    canManageNames: Keystore.hasAdminRoot,
+                    onRenameAccount: { name in await vm.renameAccount(name) },
+                    onRenameCurrentDevice: { name in await vm.renameCurrentDevice(name) },
+                    onSetManagedDeviceName: { deviceId, name, locked in
+                        await vm.setManagedName(for: deviceId, displayName: name, locked: locked)
+                    },
+                    onRemoveManagedDeviceName: { deviceId in
+                        await vm.removeManagedName(for: deviceId)
+                    },
                     onLock: {
                         // Tier 1 — LOCK. Re-gate behind Face ID with zero
                         // side effects: no network, the key + session stay
@@ -274,7 +284,11 @@ public struct SettingsTab: View {
                 vm = SettingsViewModel(
                     client: client,
                     server: server,
-                    username: { [app] in app.currentUser }
+                    username: { [app] in app.currentUser },
+                    profile: { [app] in app.activeProfile },
+                    cacheNames: { [app] accountName, deviceName in
+                        app.cachePresentationNames(accountDisplayName: accountName, deviceDisplayName: deviceName)
+                    }
                 )
             }
             if case .idle = vm?.browserSessions { await vm?.load() }
@@ -358,7 +372,9 @@ public struct SettingsTab: View {
                     app.addProfile(
                         Profile(
                             cloudName: profile.cloudName,
-                            deviceLabel: profile.deviceLabel
+                            accountId: profile.cloudName,
+                            deviceId: profile.deviceId,
+                            deviceDisplayName: profile.deviceDisplayName
                         ),
                         setActive: true
                     )
@@ -373,7 +389,9 @@ public struct SettingsTab: View {
                     app.addProfile(
                         Profile(
                             cloudName: profile.cloudName,
-                            deviceLabel: profile.deviceLabel
+                            accountId: profile.cloudName,
+                            deviceId: profile.deviceId,
+                            deviceDisplayName: profile.deviceDisplayName
                         ),
                         setActive: true
                     )

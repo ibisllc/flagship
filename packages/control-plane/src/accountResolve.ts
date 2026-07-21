@@ -13,7 +13,6 @@ import type {
   UsernameStorage,
   WebauthnRecoveryStorage,
   DemoUsersStorage,
-  PushTokenStorage,
 } from "@flagship/storage";
 import { validateUserLabel } from "./labels.js";
 import { ok, type HandlerResponseWithHeaders } from "./types.js";
@@ -35,7 +34,6 @@ export interface AccountResolution {
   kind: AccountKind;
   recovery: { present: boolean; hasFetchGate: boolean; credentialId?: string };
   totpEnrolled: boolean;
-  trustedDeviceCount: number;
   /** Present only for demo accounts. */
   demoServer?: DemoServerBlock;
   graceModel: GraceModel;
@@ -45,7 +43,6 @@ export interface AccountResolveDeps {
   usernames: UsernameStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   demoUsers: DemoUsersStorage;
-  pushTokens: PushTokenStorage;
 }
 
 const unknown = (username: string): AccountResolution => ({
@@ -54,7 +51,6 @@ const unknown = (username: string): AccountResolution => ({
   kind: "unknown",
   recovery: { present: false, hasFetchGate: false },
   totpEnrolled: false,
-  trustedDeviceCount: 0,
   graceModel: "none",
 });
 
@@ -70,6 +66,9 @@ export async function handleAccountResolve(
   // no-op — knowing the name is the capability — so the client skips
   // every credential gate and just attaches a device.
   const demoRow = await deps.demoUsers.get(norm);
+  if (demoRow && (demoRow.state === "initializing" || demoRow.state === "cleanup-only")) {
+    return ok<AccountResolution>(unknown(norm));
+  }
   if (demoRow) {
     return ok<AccountResolution>({
       username: norm,
@@ -77,7 +76,6 @@ export async function handleAccountResolve(
       kind: "demo",
       recovery: { present: false, hasFetchGate: false },
       totpEnrolled: false,
-      trustedDeviceCount: 0,
       demoServer: demoServerBlockFromRow(demoRow),
       graceModel: "instant",
     });
@@ -100,8 +98,6 @@ export async function handleAccountResolve(
   // (including the legacy/absent default) resolves to single.
   const kind: AccountKind = user.accountType === "multi" ? "multi" : "single";
   const rec = await deps.webauthnRecovery.get(norm);
-  const tokens = await deps.pushTokens.listByUser(norm);
-
   return ok<AccountResolution>({
     username: norm,
     exists: true,
@@ -114,7 +110,6 @@ export async function handleAccountResolve(
         }
       : { present: false, hasFetchGate: false },
     totpEnrolled: !!user.totpEnrolledAt,
-    trustedDeviceCount: tokens.length,
     graceModel: kind === "multi" ? "24h-totp" : "3d",
   });
 }

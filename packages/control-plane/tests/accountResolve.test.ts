@@ -15,7 +15,6 @@ import type {
   UsernameStorage,
   WebauthnRecoveryStorage,
   DemoUsersStorage,
-  PushTokenStorage,
   UsernameRecord,
   WebauthnRecoveryRecord,
 } from "@flagship/storage";
@@ -50,22 +49,6 @@ function recovery(rows: Record<string, Partial<WebauthnRecoveryRecord>>): Webaut
   } as unknown as WebauthnRecoveryStorage;
 }
 
-function pushTokens(countByUser: Record<string, number>): PushTokenStorage {
-  return {
-    async listByUser(username: string) {
-      const n = countByUser[username.toLowerCase()] ?? 0;
-      return Array.from({ length: n }, (_, i) => ({
-        tokenId: `t${i}`,
-        username: username.toLowerCase(),
-        label: "d",
-        platform: "apns",
-        registeredAt: 1,
-        lastSeenAt: 1,
-      }));
-    },
-  } as unknown as PushTokenStorage;
-}
-
 const noDemo = { async get() { return undefined; } } as unknown as DemoUsersStorage;
 
 function deps(over: Partial<AccountResolveDeps> = {}): AccountResolveDeps {
@@ -73,7 +56,6 @@ function deps(over: Partial<AccountResolveDeps> = {}): AccountResolveDeps {
     usernames: usernames({}),
     webauthnRecovery: recovery({}),
     demoUsers: noDemo,
-    pushTokens: pushTokens({}),
     ...over,
   };
 }
@@ -89,7 +71,7 @@ describe("handleAccountResolve", () => {
     expect(b.exists).toBe(false);
     expect(b.graceModel).toBe("none");
     expect(b.recovery.present).toBe(false);
-    expect(b.trustedDeviceCount).toBe(0);
+    expect(b).not.toHaveProperty("trustedDeviceCount");
   });
 
   it("dotted/invalid input resolves to unknown (no dot-form login)", async () => {
@@ -103,7 +85,7 @@ describe("handleAccountResolve", () => {
     const demoUsers = new InMemoryDemoUsersStorage();
     await demoUsers.insert({
       username: "demoalice",
-      display: "Demo Alice",
+      idempotencyKey: "demo-account-request-1234",
       snapshotId: null,
       isoR2Key: null,
       ttlIdleMinutes: 30,
@@ -112,8 +94,13 @@ describe("handleAccountResolve", () => {
       activeServerId: null,
       activeServerFqdn: null,
       lastActivityAt: 0,
-      state: "none",
+      state: "ready",
       createdAt: 1,
+      activeServerIp: null,
+      image: "debian-12",
+      provisionPhase: null,
+      provisionPhaseAt: null,
+      provisionLastError: null,
     });
     const r = await handleAccountResolve(deps({ demoUsers }), "demoalice");
     expect(r.status).toBe(200);
@@ -128,7 +115,7 @@ describe("handleAccountResolve", () => {
 
   it("single account without cloud recovery: kind:single, recovery.present false, graceModel:3d", async () => {
     const r = await handleAccountResolve(
-      deps({ usernames: usernames({ harry: {} }), pushTokens: pushTokens({ harry: 1 }) }),
+      deps({ usernames: usernames({ harry: {} }) }),
       "harry",
     );
     expect(r.status).toBe(200);
@@ -138,7 +125,7 @@ describe("handleAccountResolve", () => {
     expect(b.graceModel).toBe("3d");
     expect(b.recovery.present).toBe(false);
     expect(b.totpEnrolled).toBe(false);
-    expect(b.trustedDeviceCount).toBe(1);
+    expect(b).not.toHaveProperty("trustedDeviceCount");
   });
 
   it("single account WITH cloud recovery: recovery.present + hasFetchGate + credentialId", async () => {
@@ -161,7 +148,6 @@ describe("handleAccountResolve", () => {
       deps({
         usernames: usernames({ team: { accountType: "multi", totpEnrolledAt: 123 } }),
         webauthnRecovery: recovery({ team: {} }),
-        pushTokens: pushTokens({ team: 3 }),
       }),
       "team",
     );
@@ -170,7 +156,7 @@ describe("handleAccountResolve", () => {
     expect(b.exists).toBe(true);
     expect(b.totpEnrolled).toBe(true);
     expect(b.graceModel).toBe("24h-totp");
-    expect(b.trustedDeviceCount).toBe(3);
+    expect(b).not.toHaveProperty("trustedDeviceCount");
     expect(b.recovery.present).toBe(true);
   });
 

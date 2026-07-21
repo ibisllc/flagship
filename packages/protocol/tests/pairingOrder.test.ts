@@ -21,7 +21,6 @@ const order: Extract<PhoneOrder, { type: "add-paired-session" }> = {
   type: "add-paired-session",
   serverId: SERVER_ID,
   token: "a".repeat(64),
-  label: "Alice's iPhone",
   issuedAt: ISSUED_AT,
 };
 const signature = signPhoneOrder(order, irk);
@@ -39,7 +38,6 @@ describe("pairing-order envelope (secret-free pairing)", () => {
     });
     expect(opened).not.toBeNull();
     expect(opened!.token).toBe(order.token);
-    expect(opened!.label).toBe(order.label);
     expect(opened!.issuedAt).toBe(order.issuedAt);
   });
 
@@ -52,7 +50,6 @@ describe("pairing-order envelope (secret-free pairing)", () => {
           type: "add-paired-session",
           serverId: SERVER_ID,
           token: "a".repeat(64),
-          label: "Alice's iPhone",
           issuedAt: ISSUED_AT,
         },
         signature:

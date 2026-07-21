@@ -154,7 +154,6 @@ describe("redeemCompanionAndPersist", () => {
           expiresAt: 9_999,
           podBaseUrl: "https://home.alice.flagship.services",
           username: "alice",
-          label: "iMac",
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       );
@@ -178,7 +177,7 @@ describe("redeemCompanionAndPersist", () => {
     expect(result.kind).toBe("companion");
     expect(result.sessionToken).toMatch(/^f+$/);
     expect(result.expiresAt).toBe(9_999);
-    expect(result.label).toBe("iMac");
+    expect(result.label).toBeUndefined();
   });
 
   it("persists a NEW companion profile slot with the documented kind + fields", async () => {
@@ -190,7 +189,6 @@ describe("redeemCompanionAndPersist", () => {
           expiresAt: 12_345,
           podBaseUrl: "https://home.alice.flagship.services",
           username: "alice",
-          label: "iMac",
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       );
@@ -210,7 +208,7 @@ describe("redeemCompanionAndPersist", () => {
     expect(slot.podBaseUrl).toBe("https://home.alice.flagship.services");
     expect(slot.sessionToken).toMatch(/^abcd1234ef56/);
     expect(slot.companionExpiresAt).toBe("12345");
-    expect(slot.companionLabel).toBe("iMac");
+    expect(slot.companionLabel).toBeUndefined();
 
     // api.js read-helpers see the new active session.
     expect(api.getPodBaseUrl()).toBe("https://home.alice.flagship.services");

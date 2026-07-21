@@ -45,7 +45,6 @@ public final class PodPairViewModel {
     private let client: any LockPowerClient
     private let store: any SessionStoring
     private let serverDomain: String
-    private let label: String
     private let signer: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
     private let now: () -> Int64
     private let makeToken: () -> String
@@ -54,7 +53,6 @@ public final class PodPairViewModel {
         client: any LockPowerClient,
         store: any SessionStoring,
         serverDomain: String,
-        label: String = "iPhone",
         signer: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         makeToken: @escaping () -> String = { AddPairedSessionOrder.freshToken() }
@@ -62,15 +60,6 @@ public final class PodPairViewModel {
         self.client = client
         self.store = store
         self.serverDomain = serverDomain
-        // The canonical bytes are `|`-separated and the daemon re-derives them
-        // under `legacyFieldGuard` (which rejects '|' + control chars), so a
-        // device name carrying either would fail verification. Strip them so
-        // any `UIDevice.current.name` pairs cleanly; fall back to "iPhone".
-        let cleaned = label
-            .components(separatedBy: CharacterSet(charactersIn: "|").union(.controlCharacters))
-            .joined(separator: " ")
-            .trimmingCharacters(in: .whitespaces)
-        self.label = cleaned.isEmpty ? "iPhone" : cleaned
         self.now = now
         self.makeToken = makeToken
         self.signer = signer ?? { reason in try await Keystore.deriveIRK(reason: reason) }
@@ -105,7 +94,6 @@ public final class PodPairViewModel {
         let order = AddPairedSessionOrder(
             serverId: serverDomain,
             token: token,
-            label: label,
             issuedAt: now()
         )
         let signature: Data

@@ -24,7 +24,7 @@ final class MultiProfileTests: XCTestCase {
             PodInfo(podId: "a", name: "A", fqdn: "a.harry.flagship.services")
         ])
         s.addProfile(
-            Profile(cloudName: "jay-family", deviceLabel: "phone"),
+            Profile(cloudName: "jay-family", deviceDisplayName: "phone"),
             setActive: false
         )
         XCTAssertEqual(s.profiles.count, 2)
@@ -53,14 +53,14 @@ final class MultiProfileTests: XCTestCase {
         let p = Profile(
             cloudName: "harry",
             cloudRootPubHex: "deadbeef",
-            deviceLabel: "iphone",
+            deviceDisplayName: "iphone",
             createdAt: Date(timeIntervalSince1970: 1_700_000_000)
         )
         let data = try JSONEncoder().encode(p)
         let decoded = try JSONDecoder().decode(Profile.self, from: data)
         XCTAssertEqual(decoded.cloudName, "harry")
         XCTAssertEqual(decoded.cloudRootPubHex, "deadbeef")
-        XCTAssertEqual(decoded.deviceLabel, "iphone")
+        XCTAssertEqual(decoded.deviceDisplayName, "iphone")
         XCTAssertEqual(decoded.createdAt.timeIntervalSince1970, 1_700_000_000, accuracy: 0.001)
     }
 

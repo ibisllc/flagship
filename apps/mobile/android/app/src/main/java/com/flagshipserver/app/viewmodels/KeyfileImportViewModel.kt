@@ -147,7 +147,7 @@ class KeyfileImportViewModel(
      * Finalize the takeover once its grace has elapsed. The complete
      * endpoint is a public, idempotent CAS-swap. On success we activate
      * the staged IRK rotation locally, open the account as the imported
-     * user, and stamp this device "admin".
+     * user, leaving the device unnamed.
      */
     suspend fun completeImport() {
         val grace = _phase.value as? KeyfileImportPhase.Grace ?: return
@@ -158,10 +158,9 @@ class KeyfileImportViewModel(
                 Keystore.setCurrentIrkVersion(pending)
                 Keystore.setPendingIrkRotationVersion(null)
             }
+            // Left unnamed: administrator status is a capability in the
+            // device's signed grant, never a locally invented display name.
             app.completeOnboarding(username = grace.username, pods = emptyList())
-            app.activeProfile?.let { active ->
-                app.addProfile(active.copy(deviceLabel = ADMIN_DEVICE_LABEL), setActive = true)
-            }
             _phase.value = KeyfileImportPhase.Opened(grace.username)
         } catch (t: Throwable) {
             _phase.value = KeyfileImportPhase.Failed(

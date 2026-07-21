@@ -22,8 +22,6 @@ export interface CompanionTicketRow {
   ticketId: string;
   /** SHA-256 hex of the random ticket secret. */
   secretHash: string;
-  /** Optional caller-supplied label, surfaced in the companion-list view. */
-  label: string | null;
   issuedAt: number;
   expiresAt: number;
   /** Set when redeemed; "consumed" tickets must NEVER redeem again. */

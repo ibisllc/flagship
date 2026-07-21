@@ -146,6 +146,26 @@ async function createAccount() {
   });
   if (!chosen) return; // cancelled
 
+  const suggestedAccountName = chosen.split("-")
+    .map((part) => part ? part[0].toUpperCase() + part.slice(1) : part)
+    .join(" ");
+  const accountDisplayName = await inlinePrompt({
+    title: "Name this account",
+    message: `This private name appears above @${chosen} and is never used in links.`,
+    placeholder: "Account name",
+    initial: suggestedAccountName,
+    validate: (v) => (!v?.trim() ? "Enter an account name" : null),
+  });
+  if (!accountDisplayName) return;
+  const deviceDisplayName = await inlinePrompt({
+    title: "Name this device",
+    message: "This private name applies only inside this Flagship account.",
+    placeholder: "This browser",
+    initial: "This browser",
+    validate: (v) => (!v?.trim() ? "Enter a device name" : null),
+  });
+  if (!deviceDisplayName) return;
+
   // Claim that EXACT name (idempotent, IRK-signed). No editable field, so a
   // free custom name is impossible — that's the paid name-change.
   try {
@@ -160,6 +180,8 @@ async function createAccount() {
       },
       persistSeedForProfile,
       addProfile,
+      accountDisplayName,
+      deviceDisplayName,
       // No dispatchInitialView — route into the recovery step (a backup is
       // required; the wizard owns that flow, then the app shell).
     });
@@ -259,10 +281,9 @@ async function joinDemo(resolution) {
  *  the credentialed JOIN off the resolution:
  *    - recovery.present == false → a clean inline STATE (not a 404).
  *    - single → cloud-recovery unwrap → 7-day-grace TAKEOVER → re-pair
- *               initiated → this device labelled "admin".
+ *               initiated → this device gets a fresh opaque deviceId.
  *    - multi  → unwrap + a recovery TOTP / recovery code (the Worker
- *               REQUIRES it for account_type=multi) → 24h-grace TAKEOVER
- *               → "admin".
+ *               REQUIRES it for account_type=multi) → 24h-grace TAKEOVER.
  *  (Mock/popup WebAuthn as today: `recoverFromCloud` is the existing
  *  sub-origin flow. Grace countdown/completion/push/quarantine are
  *  Phase 4.) */

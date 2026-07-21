@@ -8,13 +8,23 @@ import FlagshipCore
 @Observable
 @MainActor
 public final class SettingsViewModel {
-    /// Peer-class trusted devices on this user's account — the
-    /// new "Trusted devices" section the user manages from Settings.
-    /// Backed by GET /api/users/:u/devices.
-    public private(set) var trustedDevices: LoadingState<[TrustedDevice]> = .idle
-    /// Most-recent ETag the Worker returned. Held so the host can
-    /// pass it as If-Match on Disconnect / Replace requests, fencing
-    /// the device-list-changed-mid-action race (cf. A3).
+    public struct DirectoryDevice: Equatable, Sendable, Identifiable {
+        public let deviceId: String
+        public let displayName: String
+        public let platformClass: String?
+        public let supportCode: String
+        public let createdAt: Int64
+        public let lastSeenAt: Int64
+        public let isCurrent: Bool
+        public let isAdministrator: Bool
+        public let isRestricted: Bool
+        public let isManaged: Bool
+        public let isLocked: Bool
+        public var id: String { deviceId }
+    }
+
+    public private(set) var trustedDevices: LoadingState<[DirectoryDevice]> = .idle
+    public private(set) var accountDisplayName: String?
     public private(set) var devicesEtag: String?
     /// v1.2 Phase 4 — account-type badge state read from
     /// `GET /api/users/:u`. Nil while loading or on failure;
@@ -38,23 +48,24 @@ public final class SettingsViewModel {
     /// AppState.currentUser changes (e.g. after sign-out + sign-in)
     /// without a re-init.
     private let currentUsername: @MainActor () -> String?
-    /// Owner-IRK signer for the (now-authenticated) push-token revoke —
-    /// same injectable seam as JournalViewModel. Defaults to the biometric
-    /// `Keystore.deriveIRK`; tests inject a deterministic key.
-    private let signer: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
+    private let currentProfile: @MainActor () -> Profile?
+    private let cacheNames: @MainActor (String, String?) -> Void
     private let now: () -> Int64
+    private var directorySnapshot: AccountDirectoryResponse?
 
     public init(
         client: any ScreensClient,
         server: any FlagshipServerClient,
         username: @MainActor @escaping () -> String?,
-        signer: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        profile: @MainActor @escaping () -> Profile? = { nil },
+        cacheNames: @MainActor @escaping (String, String?) -> Void = { _, _ in },
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
         self.screens = client
         self.server = server
         self.currentUsername = username
-        self.signer = signer ?? { reason in try await Keystore.deriveIRK(reason: reason) }
+        self.currentProfile = profile
+        self.cacheNames = cacheNames
         self.now = now
     }
 
@@ -93,14 +104,114 @@ public final class SettingsViewModel {
     public func loadTrustedDevices() async {
         guard let username = currentUsername(), !username.isEmpty else {
             trustedDevices = .loaded([])
-            devicesEtag = nil
             pendingRePair = nil
             return
         }
+        guard let profile = currentProfile(), profile.deviceId.count == 32 else {
+            trustedDevices = .failed("This device has no account-scoped identity.")
+            return
+        }
         do {
-            let resp = try await server.listDevices(username: username)
-            trustedDevices = .loaded(resp.devices)
-            devicesEtag = resp.etag
+            let umk = try await Keystore.currentUMK(reason: "View trusted devices")
+            let umkData = umk.withUnsafeBytes { Data($0) }
+            let deviceKey = try Keystore.accountDeviceSigningKey(
+                umk: umkData,
+                accountId: username,
+                deviceId: profile.deviceId
+            )
+            let signerPubHex = HexUtil.encode(deviceKey.publicKey.rawRepresentation)
+            let requestId = try AccountMetadata.generateDeviceId()
+            let issuedAt = now()
+            let path = "/api/accounts/\(username.lowercased())/directory"
+            let canonical = AccountMetadata.canonicalDirectoryRequest(
+                accountId: username,
+                deviceId: profile.deviceId,
+                signerPubHex: signerPubHex,
+                method: "GET",
+                path: path,
+                requestId: requestId,
+                issuedAt: issuedAt
+            )
+            let signature = try deviceKey.signature(for: canonical)
+            let directory = try await server.accountDirectory(
+                accountId: username,
+                authorization: AccountDirectoryAuthorization(
+                    deviceId: profile.deviceId,
+                    signerPubHex: signerPubHex,
+                    requestId: requestId,
+                    issuedAt: issuedAt,
+                    signatureHex: HexUtil.encode(Data(signature))
+                )
+            )
+            directorySnapshot = directory
+            let accountKey = try AccountMetadata.deriveAccountProfileKey(umk: umkData)
+            let directoryKey = try AccountMetadata.deriveDeviceDirectoryKey(umk: umkData)
+            let decryptedAccountName = directory.accountProfile.flatMap { record in
+                try? AccountMetadata.decrypt(
+                    ciphertext: .init(nonceHex: record.nonceHex, ciphertextHex: record.ciphertextHex),
+                    keyBytes: accountKey,
+                    coordinates: .init(
+                        accountId: username,
+                        recordType: .accountProfile,
+                        revision: record.revision,
+                        keyVersion: record.keyVersion
+                    )
+                )
+            }
+            accountDisplayName = decryptedAccountName
+
+            let selfProfiles = Dictionary(uniqueKeysWithValues: directory.selfProfiles.map { ($0.deviceId, $0) })
+            let managedProfiles = Dictionary(uniqueKeysWithValues: directory.managedProfiles.map { ($0.deviceId, $0) })
+            let grants = Dictionary(grouping: directory.grants, by: \.deviceId)
+            let presentations = directory.devices.filter { $0.revokedAt == nil }.map { device in
+                let managed = managedProfiles[device.deviceId]
+                let own = selfProfiles[device.deviceId]
+                let encryptedName: String? = {
+                    if let managed {
+                        return try? AccountMetadata.decrypt(
+                            ciphertext: .init(nonceHex: managed.nonceHex, ciphertextHex: managed.ciphertextHex),
+                            keyBytes: directoryKey,
+                            coordinates: .init(
+                                accountId: username,
+                                deviceId: device.deviceId,
+                                recordType: .deviceManagedProfile,
+                                revision: managed.revision,
+                                keyVersion: managed.keyVersion
+                            )
+                        )
+                    }
+                    guard let own else { return nil }
+                    return try? AccountMetadata.decrypt(
+                        ciphertext: .init(nonceHex: own.nonceHex, ciphertextHex: own.ciphertextHex),
+                        keyBytes: directoryKey,
+                        coordinates: .init(
+                            accountId: username,
+                            deviceId: device.deviceId,
+                            recordType: .deviceSelfProfile,
+                            revision: own.revision,
+                            keyVersion: own.keyVersion
+                        )
+                    )
+                }()
+                let deviceGrants = grants[device.deviceId] ?? []
+                let scopeSet = deviceGrants.reduce(into: Set<String>()) { $0.formUnion($1.scopes) }
+                let fallbackPlatform = Self.platformDisplay(device.platformClass)
+                return DirectoryDevice(
+                    deviceId: device.deviceId,
+                    displayName: encryptedName ?? "\(fallbackPlatform) · Device \(device.supportCode)",
+                    platformClass: device.platformClass,
+                    supportCode: device.supportCode,
+                    createdAt: device.createdAt,
+                    lastSeenAt: device.lastSeenAt,
+                    isCurrent: device.deviceId == profile.deviceId,
+                    isAdministrator: scopeSet.contains("admin"),
+                    isRestricted: !scopeSet.contains("view-directory"),
+                    isManaged: managed != nil,
+                    isLocked: managed?.locked == true
+                )
+            }
+            trustedDevices = .loaded(presentations.sorted { $0.createdAt < $1.createdAt })
+            cacheNames(decryptedAccountName ?? username, presentations.first(where: { $0.isCurrent })?.displayName)
         } catch {
             trustedDevices = .failed(error.localizedDescription)
         }
@@ -135,40 +246,172 @@ public final class SettingsViewModel {
         }
     }
 
-    /// **Disconnect** — soft revoke of another trusted device's push
-    /// tether. Removes the row at .com so the device stops getting
-    /// alerts; the device's UMK in its Secure Enclave is unchanged.
-    /// Optimistic removal + revert on failure so the UI is responsive
-    /// on flaky networks.
-    ///
-    /// Returns true on success so the caller can surface a toast.
     @discardableResult
-    public func disconnect(_ device: TrustedDevice) async -> Bool {
-        guard case .loaded(let original) = trustedDevices else { return false }
-        var working = original
-        working.removeAll { $0.tokenId == device.tokenId }
-        trustedDevices = .loaded(working)
+    public func disconnect(_ device: DirectoryDevice) async -> Bool {
+        guard let username = currentUsername(), !device.isCurrent else { return false }
+        let path = "/api/accounts/\(username.lowercased())/devices/\(device.deviceId)"
         do {
-            // Revoke is IRK-signed (SEC): sign behind the biometric and let
-            // .com verify against the token owner's registered IRK before it
-            // deletes the tether.
-            let irk = try await signer("Disconnect \(device.label)")
-            let issuedAt = now()
-            let bytes = PushTokenRevoke.canonicalBytes(tokenId: device.tokenId, issuedAt: issuedAt)
-            let sig = try irk.signature(for: bytes)
-            try await server.revokePushToken(
-                PushTokenRevokeRequest(
-                    request: .init(tokenId: device.tokenId, issuedAt: issuedAt),
-                    signature: HexUtil.encode(Data(sig))
-                )
+            let context = try await directoryContext(method: "DELETE", path: path, reason: "Revoke this device")
+            try await server.revokeAccountDevice(
+                accountId: username,
+                deviceId: device.deviceId,
+                authorization: context.authorization
             )
-            // Refresh ETag + verify the row really did disappear.
             await loadTrustedDevices()
             return true
         } catch {
-            // Revert optimistic state so the row reappears.
-            trustedDevices = .loaded(original)
             return false
+        }
+    }
+
+    @discardableResult
+    public func renameAccount(_ displayName: String) async -> Bool {
+        guard let username = currentUsername(), let snapshot = directorySnapshot else { return false }
+        let expected = snapshot.accountProfile?.revision ?? 0
+        let revision = expected + 1
+        let path = "/api/accounts/\(username.lowercased())/profile"
+        do {
+            let context = try await directoryContext(method: "PUT", path: path, reason: "Rename this account")
+            let admin = try await Keystore.adminRootKey(reason: "Rename this account")
+            let signerPub = HexUtil.encode(admin.publicKey.rawRepresentation)
+            let ciphertext = try AccountMetadata.encrypt(
+                displayName: displayName,
+                keyBytes: AccountMetadata.deriveAccountProfileKey(umk: context.umk),
+                coordinates: .init(accountId: username, recordType: .accountProfile, revision: revision, keyVersion: 1)
+            )
+            let issuedAt = now()
+            let signature = try admin.signature(for: AccountMetadata.canonicalAccountProfile(
+                accountId: username, revision: revision, keyVersion: 1,
+                ciphertext: ciphertext, issuedAt: issuedAt, signerPubHex: signerPub
+            ))
+            try await server.putAccountProfile(
+                accountId: username,
+                authorization: context.authorization,
+                body: .init(profile: .init(
+                    accountId: username, revision: revision, keyVersion: 1,
+                    nonceHex: ciphertext.nonceHex, ciphertextHex: ciphertext.ciphertextHex,
+                    issuedAt: issuedAt, signerPubHex: signerPub,
+                    signatureHex: HexUtil.encode(Data(signature))
+                ), expectedRevision: expected)
+            )
+            await loadTrustedDevices()
+            return true
+        } catch { return false }
+    }
+
+    @discardableResult
+    public func renameCurrentDevice(_ displayName: String) async -> Bool {
+        guard let username = currentUsername(), let profile = currentProfile(), let snapshot = directorySnapshot else { return false }
+        let expected = snapshot.selfProfiles.first(where: { $0.deviceId == profile.deviceId })?.revision ?? 0
+        let revision = expected + 1
+        let path = "/api/accounts/\(username.lowercased())/devices/\(profile.deviceId)/profile"
+        do {
+            let context = try await directoryContext(method: "PUT", path: path, reason: "Rename this device")
+            let deviceKey = try Keystore.accountDeviceSigningKey(umk: context.umk, accountId: username, deviceId: profile.deviceId)
+            let signerPub = HexUtil.encode(deviceKey.publicKey.rawRepresentation)
+            let ciphertext = try AccountMetadata.encrypt(
+                displayName: displayName,
+                keyBytes: AccountMetadata.deriveDeviceDirectoryKey(umk: context.umk),
+                coordinates: .init(accountId: username, deviceId: profile.deviceId, recordType: .deviceSelfProfile, revision: revision, keyVersion: 1)
+            )
+            let issuedAt = now()
+            let signature = try deviceKey.signature(for: AccountMetadata.canonicalDeviceSelfProfile(
+                accountId: username, deviceId: profile.deviceId, revision: revision, keyVersion: 1,
+                ciphertext: ciphertext, issuedAt: issuedAt, signerPubHex: signerPub
+            ))
+            try await server.putDeviceSelfProfile(
+                accountId: username, deviceId: profile.deviceId,
+                authorization: context.authorization,
+                body: .init(profile: .init(
+                    accountId: username, deviceId: profile.deviceId, revision: revision, keyVersion: 1,
+                    nonceHex: ciphertext.nonceHex, ciphertextHex: ciphertext.ciphertextHex,
+                    issuedAt: issuedAt, signerPubHex: signerPub,
+                    signatureHex: HexUtil.encode(Data(signature))
+                ), expectedRevision: expected)
+            )
+            await loadTrustedDevices()
+            return true
+        } catch { return false }
+    }
+
+    @discardableResult
+    public func setManagedName(for deviceId: String, displayName: String, locked: Bool) async -> Bool {
+        guard let username = currentUsername(), let snapshot = directorySnapshot else { return false }
+        let expected = snapshot.managedProfiles.first(where: { $0.deviceId == deviceId })?.revision ?? 0
+        let revision = expected + 1
+        let path = "/api/accounts/\(username.lowercased())/devices/\(deviceId)/managed-profile"
+        do {
+            let context = try await directoryContext(method: "PUT", path: path, reason: "Manage this device name")
+            let admin = try await Keystore.adminRootKey(reason: "Manage this device name")
+            let signerPub = HexUtil.encode(admin.publicKey.rawRepresentation)
+            let ciphertext = try AccountMetadata.encrypt(
+                displayName: displayName,
+                keyBytes: AccountMetadata.deriveDeviceDirectoryKey(umk: context.umk),
+                coordinates: .init(accountId: username, deviceId: deviceId, recordType: .deviceManagedProfile, revision: revision, keyVersion: 1)
+            )
+            let issuedAt = now()
+            let signature = try admin.signature(for: AccountMetadata.canonicalDeviceManagedProfile(
+                accountId: username, deviceId: deviceId, revision: revision, keyVersion: 1,
+                ciphertext: ciphertext, locked: locked, issuedAt: issuedAt, signerPubHex: signerPub
+            ))
+            try await server.putDeviceManagedProfile(
+                accountId: username, deviceId: deviceId,
+                authorization: context.authorization,
+                body: .init(profile: .init(
+                    accountId: username, deviceId: deviceId, revision: revision, keyVersion: 1,
+                    nonceHex: ciphertext.nonceHex, ciphertextHex: ciphertext.ciphertextHex,
+                    locked: locked, issuedAt: issuedAt, signerPubHex: signerPub,
+                    signatureHex: HexUtil.encode(Data(signature))
+                ), expectedRevision: expected)
+            )
+            await loadTrustedDevices()
+            return true
+        } catch { return false }
+    }
+
+    @discardableResult
+    public func removeManagedName(for deviceId: String) async -> Bool {
+        guard let username = currentUsername(),
+              let expected = directorySnapshot?.managedProfiles.first(where: { $0.deviceId == deviceId })?.revision
+        else { return false }
+        let path = "/api/accounts/\(username.lowercased())/devices/\(deviceId)/managed-profile"
+        do {
+            _ = try await Keystore.adminRootKey(reason: "Remove the managed device name")
+            let context = try await directoryContext(method: "DELETE", path: path, reason: "Remove the managed device name")
+            try await server.deleteDeviceManagedProfile(
+                accountId: username, deviceId: deviceId,
+                authorization: context.authorization, expectedRevision: expected
+            )
+            await loadTrustedDevices()
+            return true
+        } catch { return false }
+    }
+
+    private func directoryContext(method: String, path: String, reason: String) async throws -> (umk: Data, authorization: AccountDirectoryAuthorization) {
+        guard let username = currentUsername(), let profile = currentProfile() else { throw Keystore.KeystoreError.keyNotFound }
+        let umkKey = try await Keystore.currentUMK(reason: reason)
+        let umk = umkKey.withUnsafeBytes { Data($0) }
+        let deviceKey = try Keystore.accountDeviceSigningKey(umk: umk, accountId: username, deviceId: profile.deviceId)
+        let signerPub = HexUtil.encode(deviceKey.publicKey.rawRepresentation)
+        let requestId = try AccountMetadata.generateDeviceId()
+        let issuedAt = now()
+        let signature = try deviceKey.signature(for: AccountMetadata.canonicalDirectoryRequest(
+            accountId: username, deviceId: profile.deviceId, signerPubHex: signerPub,
+            method: method, path: path, requestId: requestId, issuedAt: issuedAt
+        ))
+        return (umk, AccountDirectoryAuthorization(
+            deviceId: profile.deviceId, signerPubHex: signerPub, requestId: requestId,
+            issuedAt: issuedAt, signatureHex: HexUtil.encode(Data(signature))
+        ))
+    }
+
+    private static func platformDisplay(_ value: String?) -> String {
+        switch value {
+        case "ios": return "iPhone"
+        case "android": return "Android"
+        case "web": return "Web browser"
+        case "macos": return "Mac"
+        default: return "Device"
         }
     }
 

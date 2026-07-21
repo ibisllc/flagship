@@ -123,6 +123,7 @@ export interface HetznerImageStatusResult {
 }
 
 export interface HetznerClient {
+  findServerByName(name: string): Promise<HetznerCreateServerResult | null>;
   /** Legacy: provision a server FROM an existing snapshot (used by the
    *  on-connect path that lives outside the W11 scope). */
   createServerFromSnapshot(
@@ -197,6 +198,22 @@ export function createHetznerClient(
   }
 
   return {
+    async findServerByName(name) {
+      const { status, text } = await call("GET", `/servers?name=${encodeURIComponent(name)}`);
+      if (status < 200 || status >= 300) {
+        throwOnError("GET", "/servers", status, text);
+      }
+      const parsed = text ? safeJsonParse(text) : null;
+      const server = (parsed as {
+        servers?: Array<{ id?: unknown; public_net?: { ipv4?: { ip?: unknown } } }>;
+      } | null)?.servers?.[0];
+      if (!server?.id) return null;
+      const ip = server.public_net?.ipv4?.ip;
+      return {
+        serverId: String(server.id),
+        ipv4: typeof ip === "string" && ip.length > 0 ? ip : null,
+      };
+    },
     async createServerFromSnapshot(args) {
       const body = {
         name: args.name,

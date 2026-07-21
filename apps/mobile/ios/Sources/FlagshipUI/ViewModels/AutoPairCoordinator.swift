@@ -25,7 +25,6 @@ import FlagshipCore
 public final class AutoPairCoordinator {
     private let client: any LockPowerClient
     private let store: any SessionStoring
-    private let label: String
     private let signer: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
 
     /// Guards a SUCCESSFUL derive+pair pass to once per unlock. It's only set once
@@ -38,12 +37,10 @@ public final class AutoPairCoordinator {
     public init(
         client: any LockPowerClient,
         store: any SessionStoring,
-        label: String = "iPhone",
         signer: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil
     ) {
         self.client = client
         self.store = store
-        self.label = label
         self.signer = signer ?? { reason in try await Keystore.deriveIRK(reason: reason) }
     }
 
@@ -90,7 +87,6 @@ public final class AutoPairCoordinator {
                 client: client,
                 store: store,
                 serverDomain: pod.fqdn,
-                label: label,
                 signer: { _ in key }
             )
             await vm.pair()

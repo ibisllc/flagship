@@ -51,7 +51,6 @@ function buildOrder(opts: { irk: Keypair; domain?: string; token?: string }): {
     type: "add-paired-session",
     serverId: opts.domain ?? DOMAIN,
     token: opts.token ?? TOKEN,
-    label: "Alice's iPhone",
     issuedAt: 1_000,
   };
   const sig = signPhoneOrder(request, opts.irk);
@@ -88,16 +87,16 @@ function inMemMarker(): PairingClaimMarkerStore & { marked: boolean } {
   return m;
 }
 
-function inMemSink(seedToken?: string): PairingSessionSink & { added: Array<{ token: string; label: string }> } {
-  const added: Array<{ token: string; label: string }> = [];
-  if (seedToken) added.push({ token: seedToken, label: "seed" });
+function inMemSink(seedToken?: string): PairingSessionSink & { added: Array<{ token: string }> } {
+  const added: Array<{ token: string }> = [];
+  if (seedToken) added.push({ token: seedToken });
   return {
     added,
     has(token) {
       return added.some((a) => a.token === token);
     },
-    async add(token, label) {
-      added.push({ token, label });
+    async add(token) {
+      added.push({ token });
     },
   };
 }
@@ -133,7 +132,7 @@ describe("claimPairingDeposit (online default — sealed to box identity)", () =
       }),
     );
     expect(out).toEqual({ claimed: true, token: TOKEN });
-    expect(sink.added).toEqual([{ token: TOKEN, label: "Alice's iPhone" }]);
+    expect(sink.added).toEqual([{ token: TOKEN }]);
     expect(marker.marked).toBe(true);
   });
 
@@ -236,7 +235,7 @@ describe("addEmbeddedPairing (offline embed — plaintext order)", () => {
       markerStore: marker,
     });
     expect(out).toEqual({ added: true, token: TOKEN });
-    expect(sink.added).toEqual([{ token: TOKEN, label: "Alice's iPhone" }]);
+    expect(sink.added).toEqual([{ token: TOKEN }]);
     expect(marker.marked).toBe(true);
   });
 

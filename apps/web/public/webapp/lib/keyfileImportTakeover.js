@@ -40,10 +40,7 @@ import {
   isCredentialRequiredError,
   TAKEOVER_IRK_VERSION,
 } from "./loginTakeover.js";
-
-/** Label stamped on the device a keyfile-import takeover produces — the same
- *  "admin" reach as the login takeover + the mobile import. */
-export const ADMIN_LABEL = "admin";
+import { generateDeviceId } from "./accountMetadata.js";
 
 /** Canonical-bytes tag for the re-pair initiate envelope. MUST match
  *  packages/protocol/src/recovery.ts TAG_RE_PAIR_INITIATE + loginTakeover.js. */
@@ -87,7 +84,7 @@ export class SecondFactorRequiredError extends Error {
  *  On a `401 totpProof` (second factor enrolled) throws
  *  {@link SecondFactorRequiredError} so the host routes to sign-in.
  *
- *  Returns `{ username, rePair, deviceLabel, newIrkVersion }` (the rePair
+ *  Returns `{ username, rePair, deviceId, newIrkVersion }` (the rePair
  *  carries `completesAt` / `graceMs` / `accountType` for the grace countdown;
  *  `newIrkVersion` is the rotated version the completion step should finalize).
  *
@@ -109,7 +106,7 @@ export class SecondFactorRequiredError extends Error {
  *  @param {() => number} [args.now]
  *  @param {typeof fetch} [args.fetch]
  *  @param {string} [args.baseUrl]
- *  @returns {Promise<{username: string, rePair: object, deviceLabel: string, newIrkVersion: number}>}
+ *  @returns {Promise<{username: string, rePair: object, deviceId: string, newIrkVersion: number}>}
  */
 export async function runKeyfileImportTakeover(args) {
   const username = args?.username;
@@ -166,17 +163,17 @@ export async function runKeyfileImportTakeover(args) {
     throw err;
   }
 
-  // Record the device as `admin` on the local profile (reach is enforced
-  // server-side later; this is the local label, like loginTakeover).
+  const deviceId = generateDeviceId();
   if (typeof args.addProfile === "function") {
     args.addProfile({
       cloudName: username,
       cloudRootPubHex: oldIrkPubHex,
-      deviceLabel: ADMIN_LABEL,
+      accountId: username,
+      deviceId,
       deviceCapability: null,
       demoServer: null,
     });
   }
 
-  return { username, rePair, deviceLabel: ADMIN_LABEL, newIrkVersion: newVersion };
+  return { username, rePair, deviceId, newIrkVersion: newVersion };
 }

@@ -42,20 +42,12 @@
  *  @property {string=} reason
  *  @property {TestAccountMeta=} testAccount
  *  @property {DemoServerBlock=} demoServer
- *  @property {DeviceCapabilityBlock=} deviceCapability
  */
 
-/** v2 device-addressing — mirror of the Worker's `deviceCapability`
- *  block in `packages/control-plane/src/usersCheck.ts`. Embedded into
- *  the `/api/users/check` response when the typed username matched
- *  the `<u>.<device-label>` syntax AND a matching active
- *  DeviceCapabilityGrant exists. See
- *  docs/v2-device-addressing-and-real-ticket.md §5.1.
- *
- *  Scopes are wire-format strings; use `deviceCapabilityScopeSet` for
- *  forward-compat parsing (unknown future scope strings drop out).
+/** Authenticated account-membership capability cached only in the local
+ *  account profile. Public username checks never return this block.
  *  @typedef {Object} DeviceCapabilityBlock
- *  @property {string} label
+ *  @property {string} deviceId
  *  @property {string} devicePubKey
  *  @property {string[]} scopes
  *  @property {string} grantId
@@ -94,7 +86,7 @@ export function deviceCapabilityScopeSet(block) {
 /** True iff the device's scopes cover the full DEVICE_SCOPES set —
  *  i.e. the device is a primary device with no restrictions. The chip
  *  + tooltips suppress when this is true; a null block also suppresses
- *  (legacy single-IRK path).
+ *  (unrestricted account session).
  *  @param {DeviceCapabilityBlock|null|undefined} block
  *  @returns {boolean}
  */
@@ -118,12 +110,12 @@ export function deviceCapabilityChipText(block) {
   const summary = (set.size === 1 && set.has("browse"))
     ? "browse-only"
     : `${block.scopes.length} scopes`;
-  return `Device: ${block.label} · ${summary}`;
+  return `Restricted device · ${summary}`;
 }
 
 /** Per-action capability gate. Returns true when the action is
- *  allowed under the current device's scope set, OR when no capability
- *  is installed (legacy single-IRK — every scope implicit).
+ *  allowed under the current device's scope set, OR when no restricted
+ *  capability is installed.
  *  @param {DeviceCapabilityBlock|null|undefined} block
  *  @param {string} scope
  *  @returns {boolean}

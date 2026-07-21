@@ -30,6 +30,8 @@ public struct PairingBundle: Codable, Equatable, Sendable {
     /// `/devices/admit` (it verifies under the IRK it stores), so a
     /// forged carried pubkey can't actually admit a device.
     public let irkPubHex: String
+    public let grant: GrantFields
+    public let grantSignature: String
     /// Slice D §4.2 (promote-a-device, "seal the master root"). Present ONLY
     /// when the admin toggled "Also make this device an admin" in the
     /// synchronous SAS ceremony (D-4): the account's ADMIN MASTER ROOT private
@@ -43,12 +45,31 @@ public struct PairingBundle: Codable, Equatable, Sendable {
 
     public struct AdmitFields: Codable, Equatable, Sendable {
         public let username: String
+        public let deviceId: String
         public let newDevicePubHex: String
         public let issuedAt: Int64
-        public init(username: String, newDevicePubHex: String, issuedAt: Int64) {
+        public init(username: String, deviceId: String, newDevicePubHex: String, issuedAt: Int64) {
             self.username = username
+            self.deviceId = deviceId
             self.newDevicePubHex = newDevicePubHex
             self.issuedAt = issuedAt
+        }
+    }
+
+    public struct GrantFields: Codable, Equatable, Sendable {
+        public let grantId: String
+        public let username: String
+        public let deviceId: String
+        public let devicePubHex: String
+        public let scopes: [String]
+        public let issuedAt: Int64
+        public let expiresAt: Int64
+        public let signerRoot: String
+
+        public init(grantId: String, username: String, deviceId: String, devicePubHex: String, scopes: [String], issuedAt: Int64, expiresAt: Int64, signerRoot: String) {
+            self.grantId = grantId; self.username = username; self.deviceId = deviceId
+            self.devicePubHex = devicePubHex; self.scopes = scopes; self.issuedAt = issuedAt
+            self.expiresAt = expiresAt; self.signerRoot = signerRoot
         }
     }
 
@@ -57,12 +78,16 @@ public struct PairingBundle: Codable, Equatable, Sendable {
         admit: AdmitFields,
         admitSig: String,
         irkPubHex: String,
+        grant: GrantFields,
+        grantSignature: String,
         wrappedAdminRoot: String? = nil
     ) {
         self.umkSeedHex = umkSeedHex
         self.admit = admit
         self.admitSig = admitSig
         self.irkPubHex = irkPubHex
+        self.grant = grant
+        self.grantSignature = grantSignature
         self.wrappedAdminRoot = wrappedAdminRoot
     }
 

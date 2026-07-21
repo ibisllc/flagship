@@ -42,11 +42,9 @@ class CompanionRequestsViewModelTest {
         requestId: String = "req-rel-1",
         serverDomain: String = "home.alice.flagship.services",
         queuedAt: Long = 1_700_000_000_000L,
-        label: String? = "Library iMac",
     ): CompanionPendingWrite = CompanionPendingWrite(
         requestId = requestId,
         companionTokenPrefix = "deadbeef0000",
-        companionLabel = label,
         kind = "release-server",
         intent = JsonObject(
             mapOf(
@@ -67,7 +65,6 @@ class CompanionRequestsViewModelTest {
     ): CompanionPendingWrite = CompanionPendingWrite(
         requestId = requestId,
         companionTokenPrefix = "f00dcafe1111",
-        companionLabel = null,
         kind = "revoke-server",
         intent = JsonObject(
             mapOf(
@@ -206,7 +203,6 @@ class CompanionRequestsViewModelTest {
         val row = CompanionPendingWrite(
             requestId = "req-unsupported",
             companionTokenPrefix = "0000feed",
-            companionLabel = "Library iMac",
             kind = "mystery-kind",
             intent = JsonObject(mapOf("whatever" to JsonPrimitive("blob"))),
             queuedAt = 1_700_000_000_000L,

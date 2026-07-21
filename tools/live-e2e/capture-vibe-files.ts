@@ -21,7 +21,7 @@ async function main() {
   const box = JSON.parse(readFileSync(join("gym-results", "feature-screenshots", "box.json"), "utf8"));
   const irk = deriveIRK({ seed: hexToBytes(box.umkSeedHex) });
   const token = bytesToHex(randomBytes(24));
-  const order: PhoneOrder = { type: "add-paired-session", serverId: box.fqdn, token, label: "capfiles", issuedAt: Date.now() };
+  const order: PhoneOrder = { type: "add-paired-session", serverId: box.fqdn, token, issuedAt: Date.now() };
   const sig = bytesToHex(signPhoneOrder(order, irk));
   await http(`https://${box.fqdn}/api/orders-from-user`, {
     method: "POST",

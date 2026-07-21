@@ -225,11 +225,11 @@ export FLAGSHIP_ADMIN_SECRET="<the gym Worker's admin secret>"   # cached in .gy
 # https://flagshipserver.com), so no new flag is needed — just set it:
 export FLAGSHIP_BASE_URL="https://gym.flagshipserver.com"
 
-node scripts/sample-user.mjs create gymdemo --display "Gym Demo"
+node scripts/sample-user.mjs create gymdemo --account-name "Gym Demo"
 # → {"username":"gymdemo","ready":true,...}  (a TEST box under gym.flagship.services)
 
 curl -s https://gymdemo.gym.flagship.services/api/health 2>/dev/null || true
-node scripts/sample-user.mjs delete gymdemo     # tear the demo box down
+node scripts/sample-user.mjs cleanup gymdemo    # tear the demo box down
 ```
 
 > `sample-user.mjs` honours `FLAGSHIP_BASE_URL` (set above) — no CLI change is

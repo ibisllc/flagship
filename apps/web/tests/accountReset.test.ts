@@ -9,18 +9,14 @@
 import { describe, expect, it } from "vitest";
 
 interface Device {
-  tokenId: string;
-  tokenPrefix: string;
-  label: string;
-  platform: string;
-  addedAt: number;
-  lastSeenAt: number;
+  deviceId: string;
+  revokedAt?: number | null;
 }
 
 /** Mirrors the `present`-vs-orphan decision in detectAccountReset(). */
-function shouldShowAccountResetBanner(localTokenId: string | null, devices: Device[]): boolean {
-  if (!localTokenId) return false; // fresh install — never orphaned
-  return !devices.some((d) => d.tokenId === localTokenId);
+function shouldShowAccountResetBanner(localDeviceId: string | null, devices: Device[]): boolean {
+  if (!localDeviceId) return false;
+  return !devices.some((d) => d.deviceId === localDeviceId && d.revokedAt == null);
 }
 
 describe("E7 account-reset detector — predicate", () => {
@@ -30,36 +26,23 @@ describe("E7 account-reset detector — predicate", () => {
   });
 
   it("returns false when our token IS in the list", () => {
-    const devs: Device[] = [
-      { tokenId: "tA", tokenPrefix: "tA", label: "Phone", platform: "apns", addedAt: 1, lastSeenAt: 1 },
-      { tokenId: "tB", tokenPrefix: "tB", label: "Browser", platform: "webpush", addedAt: 2, lastSeenAt: 2 },
-    ];
-    expect(shouldShowAccountResetBanner("tB", devs)).toBe(false);
+    const devs: Device[] = [{ deviceId: "dA" }, { deviceId: "dB" }];
+    expect(shouldShowAccountResetBanner("dB", devs)).toBe(false);
   });
 
   it("returns true when our token is MISSING from the list", () => {
-    const devs: Device[] = [
-      { tokenId: "tA", tokenPrefix: "tA", label: "Phone", platform: "apns", addedAt: 1, lastSeenAt: 1 },
-    ];
-    // Locally we remember `tZ` but the server says only tA is left.
-    // → this browser was disconnected by another device.
-    expect(shouldShowAccountResetBanner("tZ", devs)).toBe(true);
+    const devs: Device[] = [{ deviceId: "dA" }];
+    expect(shouldShowAccountResetBanner("dZ", devs)).toBe(true);
   });
 
   it("returns true on an empty devices list when we have a local token", () => {
     // Edge case: the account was wiped entirely (e.g. v1.1 wipe-restart
     // ceremony with our token replaced). The user must re-pair.
-    expect(shouldShowAccountResetBanner("tZ", [])).toBe(true);
+    expect(shouldShowAccountResetBanner("dZ", [])).toBe(true);
   });
 
-  it("is case-sensitive on tokenId (matches Worker comparison)", () => {
-    // The Worker's listByUser doesn't lower-case tokenIds — they're
-    // opaque bytes hex-encoded. A casing mismatch should NOT match.
-    const devs: Device[] = [
-      { tokenId: "ABC123", tokenPrefix: "abc123", label: "Phone", platform: "apns", addedAt: 1, lastSeenAt: 1 },
-    ];
-    expect(shouldShowAccountResetBanner("abc123", devs)).toBe(true);
-    expect(shouldShowAccountResetBanner("ABC123", devs)).toBe(false);
+  it("treats a revoked matching device as removed", () => {
+    expect(shouldShowAccountResetBanner("dA", [{ deviceId: "dA", revokedAt: 7 }])).toBe(true);
   });
 });
 

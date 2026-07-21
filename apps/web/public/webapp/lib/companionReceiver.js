@@ -113,7 +113,6 @@ export async function redeemCompanionAndPersist(payload, deps = defaultReceiverD
     expiresAt,
     podBaseUrl,
     username,
-    label,
   } = body ?? {};
   if (typeof companionSessionToken !== "string" || typeof expiresAt !== "number") {
     return { error: "missing companionSessionToken/expiresAt in response" };
@@ -136,7 +135,6 @@ export async function redeemCompanionAndPersist(payload, deps = defaultReceiverD
   // localStorage only for the known legacy keys).
   profileSet("kind", "companion");
   profileSet("companionExpiresAt", String(expiresAt));
-  if (label) profileSet("companionLabel", label);
   // Mirror the active legacy api.js keys so unmigrated callsites
   // (which read getPodBaseUrl + getSessionToken) work right away.
   setPodBaseUrl(podBaseUrl ?? payload.podBaseUrl);
@@ -158,7 +156,6 @@ export async function redeemCompanionAndPersist(payload, deps = defaultReceiverD
     expiresAt,
     podBaseUrl: podBaseUrl ?? payload.podBaseUrl,
     username: username ?? payload.username,
-    label: label ?? null,
     kind: "companion",
   };
 }

@@ -36,6 +36,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -63,10 +65,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.viewmodel.initializer
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.PendingRePairSnapshot
-import com.flagshipserver.app.api.TrustedDevice
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.keystore.PasskeyRecoveryManager
+import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.PlatformWebAuthnProvider
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSPrimaryButton
@@ -96,18 +98,28 @@ fun TrustedDevicesScreen(nav: NavController) {
                 TrustedDevicesViewModel(
                     server = server,
                     username = { app.currentUser.value },
+                    profile = { app.activeProfile },
+                    cacheNames = { accountName, deviceName ->
+                        app.cachePresentationNames(accountName, deviceName)
+                    },
                 )
             }
         },
     )
     val state = vm.state.collectAsState().value
     val pendingRePair = vm.pendingRePair.collectAsState().value
+    val accountDisplayName = vm.accountDisplayName.collectAsState().value
     val scope = rememberCoroutineScope()
-    var sheetTarget by remember { mutableStateOf<TrustedDevice?>(null) }
-    var confirmDisconnect by remember { mutableStateOf<TrustedDevice?>(null) }
+    var sheetTarget by remember { mutableStateOf<TrustedDevicesViewModel.DirectoryDevice?>(null) }
+    var confirmDisconnect by remember { mutableStateOf<TrustedDevicesViewModel.DirectoryDevice?>(null) }
     var confirmReplace by remember { mutableStateOf(false) }
     var confirmWipe by remember { mutableStateOf(false) }
     var snackbarMsg by remember { mutableStateOf<String?>(null) }
+    var nameEditMode by remember { mutableStateOf<String?>(null) }
+    var nameEditTarget by remember { mutableStateOf<TrustedDevicesViewModel.DirectoryDevice?>(null) }
+    var nameDraft by remember { mutableStateOf("") }
+    var nameLocked by remember { mutableStateOf(false) }
+    val canManageNames = Keystore.hasAdminRoot()
     val replaceVm: com.flagshipserver.app.viewmodels.ReplaceDeviceViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
@@ -151,6 +163,23 @@ fun TrustedDevicesScreen(nav: NavController) {
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
+        Text(
+            accountDisplayName ?: "@${app.currentUser.value.orEmpty()}",
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+        )
+        Text(
+            "@${app.currentUser.value.orEmpty()}",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp),
+        )
+        if (canManageNames) {
+            TextButton(onClick = {
+                nameEditMode = "account"
+                nameDraft = accountDisplayName.orEmpty()
+                nameLocked = false
+            }) { Text("Edit account name") }
+        }
         Text(
             "Phones and tablets that hold your account keys.",
             color = FS.colors.textMuted,
@@ -213,56 +242,62 @@ fun TrustedDevicesScreen(nav: NavController) {
     // window). Tapping a disabled entry posts a toast explaining the
     // window so users aren't confused by silent failure.
     sheetTarget?.let { target ->
-        val isQuarantined = target.isQuarantined()
         ModalBottomSheet(onDismissRequest = { sheetTarget = null }) {
             Column(Modifier.padding(FS.space.s4), verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 Text(
-                    target.label,
+                    target.displayName,
                     color = FS.colors.text,
                     style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                 )
                 Text(
-                    "${platformDisplay(target.platform)} · added ${relative(target.addedAt)}",
+                    "${platformDisplay(target.platformClass)} · Device ${target.supportCode}",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp),
                 )
-                if (isQuarantined) {
-                    Text(
-                        quarantineToast(target),
-                        color = FS.colors.danger,
-                        style = TextStyle(fontSize = 13.sp),
-                        modifier = Modifier.semantics {
-                            contentDescription = "trusted-device-quarantine-msg-${target.tokenPrefix}"
-                        },
-                    )
+                if (target.isCurrent) {
+                    TextButton(onClick = {
+                        nameEditMode = "self"
+                        nameEditTarget = target
+                        nameDraft = target.displayName
+                        nameLocked = false
+                        sheetTarget = null
+                    }) { Text("Rename this device") }
+                }
+                if (canManageNames) {
+                    TextButton(onClick = {
+                        nameEditMode = "managed"
+                        nameEditTarget = target
+                        nameDraft = target.displayName
+                        nameLocked = target.isLocked
+                        sheetTarget = null
+                    }) { Text(if (target.isManaged) "Edit managed name" else "Set managed name") }
+                    if (target.isManaged) {
+                        TextButton(onClick = {
+                            sheetTarget = null
+                            scope.launch {
+                                if (!vm.removeManagedName(target.deviceId)) snackbarMsg = "Couldn't remove the managed name."
+                            }
+                        }) { Text("Remove managed name", color = FS.colors.danger) }
+                    }
                 }
                 TextButton(
                     onClick = {
-                        if (isQuarantined) {
-                            snackbarMsg = quarantineToast(target)
-                        } else {
-                            confirmDisconnect = target
-                        }
+                        confirmDisconnect = target
                         sheetTarget = null
                     },
-                    enabled = !isQuarantined,
+                    enabled = !target.isCurrent,
                     modifier = Modifier.semantics { contentDescription = "trusted-device-disconnect" },
                 ) {
-                    Text("Disconnect", color = FS.colors.danger)
+                    Text("Revoke", color = FS.colors.danger)
                 }
                 // C7 — Replace device. Tap opens the scare dialog;
                 // confirmation drives the ReplaceDeviceViewModel.
                 TextButton(
                     onClick = {
-                        if (isQuarantined) {
-                            snackbarMsg = quarantineToast(target)
-                            sheetTarget = null
-                        } else {
-                            confirmReplace = true
-                            sheetTarget = null
-                        }
+                        confirmReplace = true
+                        sheetTarget = null
                     },
-                    enabled = !isQuarantined,
+                    enabled = !target.isCurrent,
                     modifier = Modifier.semantics { contentDescription = "trusted-device-replace" },
                 ) {
                     Text("Replace device", color = FS.colors.danger)
@@ -270,15 +305,10 @@ fun TrustedDevicesScreen(nav: NavController) {
                 // E5 — Wipe & restart. Live ceremony.
                 TextButton(
                     onClick = {
-                        if (isQuarantined) {
-                            snackbarMsg = quarantineToast(target)
-                            sheetTarget = null
-                        } else {
-                            confirmWipe = true
-                            sheetTarget = null
-                        }
+                        confirmWipe = true
+                        sheetTarget = null
                     },
-                    enabled = !isQuarantined,
+                    enabled = !target.isCurrent,
                     modifier = Modifier.semantics { contentDescription = "trusted-device-wipe" },
                 ) {
                     Text("Wipe & restart", color = FS.colors.danger)
@@ -288,13 +318,65 @@ fun TrustedDevicesScreen(nav: NavController) {
         }
     }
 
+    nameEditMode?.let { mode ->
+        AlertDialog(
+            onDismissRequest = { nameEditMode = null },
+            title = {
+                Text(when (mode) {
+                    "account" -> "Edit account name"
+                    "self" -> "Rename this device"
+                    else -> "Managed device name"
+                })
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                    OutlinedTextField(
+                        value = nameDraft,
+                        onValueChange = { nameDraft = it },
+                        label = { Text("Display name") },
+                        singleLine = true,
+                    )
+                    if (mode == "managed") {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = nameLocked, onCheckedChange = { nameLocked = it })
+                            Text("Lock managed name")
+                        }
+                    }
+                    Text(
+                        "Names are encrypted and apply only inside this Flagship account.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = nameDraft.isNotBlank(),
+                    onClick = {
+                        val target = nameEditTarget
+                        nameEditMode = null
+                        scope.launch {
+                            val ok = when (mode) {
+                                "account" -> vm.renameAccount(nameDraft)
+                                "self" -> vm.renameCurrentDevice(nameDraft)
+                                else -> target?.let { vm.setManagedName(it.deviceId, nameDraft, nameLocked) } ?: false
+                            }
+                            if (!ok) snackbarMsg = "Couldn't save the encrypted name. Check the name and try again."
+                        }
+                    },
+                ) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { nameEditMode = null }) { Text("Cancel") } },
+        )
+    }
+
     // Scare-warning confirmation. "We'll stop sending alerts to <label>.
     // It can sign back in with your passkey."
     confirmDisconnect?.let { target ->
         AlertDialog(
             onDismissRequest = { confirmDisconnect = null },
-            title = { Text("Disconnect ${target.label}?") },
-            text = { Text("We'll stop sending alerts to ${target.label}. It can sign back in with your passkey.") },
+            title = { Text("Revoke ${target.displayName}?") },
+            text = { Text("This revokes the device's account access. Its presentation name is never stored by Flagship's control plane in plaintext.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDisconnect = null
@@ -303,7 +385,7 @@ fun TrustedDevicesScreen(nav: NavController) {
                         if (!ok) snackbarMsg = "Couldn't disconnect — check your connection and try again."
                     }
                 }) {
-                    Text("Disconnect", color = FS.colors.danger)
+                    Text("Revoke", color = FS.colors.danger)
                 }
             },
             dismissButton = {
@@ -483,8 +565,7 @@ internal fun formatCompletesAt(ms: Long): String =
     FlagshipDateFormat.format(ms, includeTime = true)
 
 @Composable
-private fun TrustedDeviceRow(device: TrustedDevice, onMenu: () -> Unit) {
-    val isQuarantined = device.isQuarantined()
+private fun TrustedDeviceRow(device: TrustedDevicesViewModel.DirectoryDevice, onMenu: () -> Unit) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -492,7 +573,7 @@ private fun TrustedDeviceRow(device: TrustedDevice, onMenu: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
         ) {
             Icon(
-                imageVector = platformIcon(device.platform),
+                imageVector = platformIcon(device.platformClass),
                 contentDescription = null,
                 tint = FS.colors.primary,
                 modifier = Modifier.size(28.dp),
@@ -500,36 +581,26 @@ private fun TrustedDeviceRow(device: TrustedDevice, onMenu: () -> Unit) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        device.label,
+                        device.displayName,
                         color = FS.colors.text,
                         style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                     )
-                    if (isQuarantined) {
-                        Icon(
-                            imageVector = Icons.Outlined.AccessTime,
-                            contentDescription = null,
-                            tint = FS.colors.danger,
-                            modifier = Modifier
-                                .size(16.dp)
-                                .semantics {
-                                    contentDescription =
-                                        "trusted-device-quarantine-icon-${device.tokenPrefix}"
-                                },
-                        )
+                    if (device.isCurrent) {
+                        Text("This device", color = FS.colors.primary, style = TextStyle(fontSize = 12.sp))
                     }
                 }
                 Text(
-                    "${platformDisplay(device.platform)} · added ${relative(device.addedAt)}",
+                    "${platformDisplay(device.platformClass)} · Device ${device.supportCode}",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 12.sp),
                 )
-                if (isQuarantined) {
+                if (device.isManaged) {
                     Text(
-                        quarantineToast(device),
-                        color = FS.colors.danger,
+                        if (device.isLocked) "Administrator-managed · locked" else "Administrator-managed",
+                        color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 12.sp),
                     )
-                } else if (device.lastSeenAt > device.addedAt) {
+                } else if (device.lastSeenAt > device.createdAt) {
                     Text(
                         "last seen ${relative(device.lastSeenAt)}",
                         color = FS.colors.textMuted,
@@ -540,7 +611,7 @@ private fun TrustedDeviceRow(device: TrustedDevice, onMenu: () -> Unit) {
             IconButton(
                 onClick = onMenu,
                 modifier = Modifier.semantics {
-                    contentDescription = "trusted-device-menu-${device.tokenPrefix}"
+                    contentDescription = "trusted-device-menu-${device.deviceId}"
                 },
             ) {
                 Icon(Icons.Outlined.Devices, contentDescription = null, tint = FS.colors.textMuted)
@@ -549,28 +620,19 @@ private fun TrustedDeviceRow(device: TrustedDevice, onMenu: () -> Unit) {
     }
 }
 
-/** Tooltip / toast copy for a quarantined device row. Kept as a
- *  top-level helper so the QuarantineIndicatorTest can assert on the
- *  exact byte-string without going through SwiftUI / Compose
- *  scaffolding. */
-internal fun quarantineToast(device: TrustedDevice): String {
-    val until = device.quarantineUntil ?: return "This device is in quarantine. Use another device."
-    val when_ = FlagshipDateFormat.format(until)
-    return "Quarantined until $when_. Use another device."
-}
-
-private fun platformIcon(raw: String): ImageVector = when (raw) {
-    "apns"    -> Icons.Outlined.PhoneIphone
-    "fcm"     -> Icons.Outlined.PhoneAndroid
-    "webpush" -> Icons.Outlined.Language
+private fun platformIcon(raw: String?): ImageVector = when (raw) {
+    "ios" -> Icons.Outlined.PhoneIphone
+    "android" -> Icons.Outlined.PhoneAndroid
+    "web" -> Icons.Outlined.Language
     else      -> Icons.Outlined.Devices
 }
 
-private fun platformDisplay(raw: String): String = when (raw) {
-    "apns"    -> "iPhone / iPad"
-    "fcm"     -> "Android"
-    "webpush" -> "Web"
-    else      -> raw
+private fun platformDisplay(raw: String?): String = when (raw) {
+    "ios" -> "iPhone / iPad"
+    "android" -> "Android"
+    "web" -> "Web"
+    "macos" -> "Mac"
+    else -> "Device"
 }
 
 private fun relative(ms: Long): String = FlagshipDateFormat.format(ms)

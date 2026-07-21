@@ -730,14 +730,27 @@ describe("D1 ↔ InMemory parity", () => {
   // pushTokens — quarantine fields, listQuarantined ordering, bitmap.
   // ────────────────────────────────────────────────────────────────────
   describe("pushTokens", () => {
+    const deviceId = "01".repeat(16);
+    const seedDevice = async (s: Storage, username: string) => {
+      await s.usernames.put({ username, irkPubHex: "11".repeat(32), claimedAt: 1 });
+      await s.deviceIdentities.put({
+        accountId: username,
+        deviceId,
+        devicePubHex: "22".repeat(32),
+        platformClass: "ios",
+        createdAt: 1,
+        lastSeenAt: 1,
+        revokedAt: null,
+      });
+    };
     const mk = (id: string, u: string, reg: number, extra: Partial<import("../src/types.js").PushTokenRecord> = {}) => ({
       tokenId: id,
       username: u,
+      deviceId,
       platform: "apns" as const,
       providerToken: "tok",
       pushX25519PubHex: "pk",
       registrationSignatureHex: "sig",
-      label: "iPhone",
       registeredAt: reg,
       lastSeenAt: reg,
       ...extra,
@@ -745,6 +758,7 @@ describe("D1 ↔ InMemory parity", () => {
 
     it("put / get / listByUser / remove / touchLastSeen parity", async () => {
       const r = await bothAdapters(async (s) => {
+        await seedDevice(s, "alice");
         await s.pushTokens.put(mk("t1", "alice", 1));
         await s.pushTokens.put(mk("t2", "alice", 2));
         await s.pushTokens.touchLastSeen("t1", 50);
@@ -760,6 +774,7 @@ describe("D1 ↔ InMemory parity", () => {
 
     it("setQuarantineUntil + listQuarantined ordering + orInQuarantineAlertBit", async () => {
       const r = await bothAdapters(async (s) => {
+        await seedDevice(s, "alice");
         await s.pushTokens.put(mk("q1", "alice", 10));
         await s.pushTokens.put(mk("q2", "alice", 5));
         await s.pushTokens.put(mk("notq", "alice", 1));
@@ -824,10 +839,15 @@ describe("D1 ↔ InMemory parity", () => {
   // partial index; InMemory checks explicitly).
   // ────────────────────────────────────────────────────────────────────
   describe("deviceCapabilityGrants", () => {
-    const mk = (id: string, label: string, pub: string, issued: number, revokedAt: number | null = null) => ({
+    const ids = {
+      phone: "01".repeat(16),
+      labelA: "02".repeat(16),
+      labelB: "03".repeat(16),
+    } as const;
+    const mk = (id: string, label: keyof typeof ids, pub: string, issued: number, revokedAt: number | null = null) => ({
       grantId: id,
       username: "alice",
-      deviceLabel: label,
+      deviceId: ids[label],
       devicePubHex: pub,
       scopesJson: '["browse"]',
       issuedAt: issued,
@@ -836,23 +856,38 @@ describe("D1 ↔ InMemory parity", () => {
       revokedAt,
     });
 
+    const seedDevice = async (s: Storage, label: keyof typeof ids, pub: string) => {
+      await s.usernames.put({ username: "alice", irkPubHex: "11".repeat(32), claimedAt: 1 });
+      await s.deviceIdentities.put({
+        accountId: "alice",
+        deviceId: ids[label],
+        devicePubHex: pub,
+        platformClass: "test",
+        createdAt: 1,
+        lastSeenAt: 1,
+        revokedAt: null,
+      });
+    };
+
     it("duplicate ACTIVE grant for (user,label) rejected with shared reason", async () => {
       const r = await bothAdapters(async (s) => {
-        const first = await s.deviceCapabilityGrants.put(mk("g1", "phone", "pubA", 1));
-        const dup = await s.deviceCapabilityGrants.put(mk("g2", "phone", "pubB", 2));
+        await seedDevice(s, "phone", "aa".repeat(32));
+        const first = await s.deviceCapabilityGrants.put(mk("g1", "phone", "aa".repeat(32), 1));
+        const dup = await s.deviceCapabilityGrants.put(mk("g2", "phone", "bb".repeat(32), 2));
         return { first, dup };
       });
       expectParity(r);
       expect(r.d1.first).toEqual({ ok: true });
-      expect(r.d1.dup).toEqual({ ok: false, reason: "duplicate active grant for (username, device_label)" });
+      expect(r.d1.dup).toEqual({ ok: false, reason: "duplicate active grant for (username, device_id)" });
     });
 
     it("revoke then re-issue same label is allowed (partial index excludes revoked)", async () => {
       const r = await bothAdapters(async (s) => {
-        await s.deviceCapabilityGrants.put(mk("g1", "phone", "pubA", 1));
+        await seedDevice(s, "phone", "aa".repeat(32));
+        await s.deviceCapabilityGrants.put(mk("g1", "phone", "aa".repeat(32), 1));
         await s.deviceCapabilityGrants.revoke("g1", 5);
-        const reissue = await s.deviceCapabilityGrants.put(mk("g2", "phone", "pubB", 6));
-        const active = await s.deviceCapabilityGrants.getActiveForUserLabel("alice", "phone");
+        const reissue = await s.deviceCapabilityGrants.put(mk("g2", "phone", "bb".repeat(32), 6));
+        const active = await s.deviceCapabilityGrants.getActiveForUserDevice("alice", ids.phone);
         const list = (await s.deviceCapabilityGrants.listForUser("alice")).map((g) => g.grantId);
         return { reissue, activeId: active?.grantId, list };
       });
@@ -872,10 +907,12 @@ describe("D1 ↔ InMemory parity", () => {
 
     it("getByDevicePub returns most-recent active match", async () => {
       const r = await bothAdapters(async (s) => {
-        await s.deviceCapabilityGrants.put(mk("g1", "labelA", "samepub", 1));
+        const samePub = "cc".repeat(32);
+        await seedDevice(s, "labelA", samePub);
+        await s.deviceCapabilityGrants.put(mk("g1", "labelA", samePub, 1));
         await s.deviceCapabilityGrants.revoke("g1", 2);
-        await s.deviceCapabilityGrants.put(mk("g2", "labelB", "samepub", 3));
-        const got = await s.deviceCapabilityGrants.getByDevicePub("samepub");
+        await s.deviceCapabilityGrants.put(mk("g2", "labelA", samePub, 3));
+        const got = await s.deviceCapabilityGrants.getByDevicePub(samePub);
         return got?.grantId;
       });
       expectParity(r);

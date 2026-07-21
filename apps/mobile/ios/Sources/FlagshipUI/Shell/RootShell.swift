@@ -215,8 +215,7 @@ public struct RootShell: View {
         guard app.isUnlocked, app.isPaired, !(app.currentUser ?? "").isEmpty else { return }
         let coord = autoPair ?? AutoPairCoordinator(
             client: lockPower,
-            store: sessionStore,
-            label: UIDevice.current.name
+            store: sessionStore
         )
         autoPair = coord
         let pods = app.pods

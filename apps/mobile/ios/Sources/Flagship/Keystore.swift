@@ -238,6 +238,30 @@ public struct Keystore {
         return try await unwrappedUMK(reason: reason)
     }
 
+    public static func storeAccountDeviceSigningKey(
+        _ key: Curve25519.Signing.PrivateKey,
+        accountId: String,
+        deviceId: String
+    ) throws {
+        try keychainWrite(
+            account: account("com.flagship.account-device.\(deviceId)", profile: accountId),
+            data: key.rawRepresentation,
+            sync: .deviceLocal
+        )
+    }
+
+    public static func accountDeviceSigningKey(
+        umk: Data,
+        accountId: String,
+        deviceId: String
+    ) throws -> Curve25519.Signing.PrivateKey {
+        let slot = account("com.flagship.account-device.\(deviceId)", profile: accountId)
+        if let raw = keychainRead(account: slot) {
+            return try Curve25519.Signing.PrivateKey(rawRepresentation: raw)
+        }
+        return try AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: accountId, deviceId: deviceId)
+    }
+
     // MARK: - Derivation
 
     /// Per-server symmetric wrap key (SWK). Used by app-backup encryption.
@@ -478,7 +502,7 @@ public struct Keystore {
     /// AuthCode).
     public static func openAccountRoots(
         reason: String = "Open your Flagship account"
-    ) async throws -> (irk: Curve25519.Signing.PrivateKey, adminRootPubHex: String) {
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, adminRoot: Curve25519.Signing.PrivateKey, adminRootPubHex: String) {
         let umkSeed = SymmetricKey(size: .bits256)
         let umkBytes = umkSeed.withUnsafeBytes { Data($0) }
         let ephemeral = P256.KeyAgreement.PrivateKey()
@@ -510,7 +534,8 @@ public struct Keystore {
 
             let irkSeed = derive(umk: umkSeed, info: "flagship/irk/v\(currentIrkVersion())")
             let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
-            return (irk, HexUtil.encode(adminKey.publicKey.rawRepresentation))
+            storeSessionUmk(umkSeed, for: activeProfileId)
+            return (irk, adminKey, HexUtil.encode(adminKey.publicKey.rawRepresentation))
         } catch let e as KeystoreError {
             throw e
         } catch {

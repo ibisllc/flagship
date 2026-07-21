@@ -107,16 +107,19 @@ private fun ProfileRow(profile: Profile, isActive: Boolean, onClick: () -> Unit)
         ) {
             Column(modifier = Modifier.padding(end = FS.space.s3)) {
                 Text(
-                    profile.cloudName,
+                    profile.accountDisplayName ?: "@${profile.cloudName}",
                     color = FS.colors.text,
                     style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
                 )
-                if (profile.deviceLabel != null) {
+                if (profile.accountDisplayName != null) {
                     Text(
-                        "Device: ${profile.deviceLabel}",
+                        "@${profile.cloudName}",
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 12.sp),
                     )
+                }
+                profile.deviceDisplayName?.let { deviceName ->
+                    Text("This device: $deviceName", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
                 }
             }
             if (isActive) {

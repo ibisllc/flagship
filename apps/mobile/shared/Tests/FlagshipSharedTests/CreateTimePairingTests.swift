@@ -18,15 +18,15 @@ final class CreateTimePairingTests: XCTestCase {
     private let pinnedIrkPub =
         "3e4a50e7afdfae54c86e1ccd70a8691d48155e9613cbdbf4d17bad5b6ba68045"
     private let pinnedSignature =
-        "6e63a086d673fa6e5dd8010aba6367a2aba1861210d21a63bce5dc1331b02f64" +
-        "566120c1647b355a51b10a334e01203d48c4d4c279d21d135203d415a70fe109"
+        "f3813a580fae693e082c12b04675da146d59092bc90386da00b88e25d2a6774" +
+        "cbba99331ac717c617062f17617cb3d41443874f168bf495d43fb2060dabd7707"
     private let pinnedJson =
         "{\"request\":{\"type\":\"add-paired-session\"," +
         "\"serverId\":\"kitchen.alice.flagship.services\"," +
         "\"token\":\"" + String(repeating: "a", count: 64) + "\"," +
-        "\"label\":\"Alice's iPhone\",\"issuedAt\":1750000000000}," +
-        "\"signature\":\"6e63a086d673fa6e5dd8010aba6367a2aba1861210d21a63bce5dc1331b02f64" +
-        "566120c1647b355a51b10a334e01203d48c4d4c279d21d135203d415a70fe109\"}"
+        "\"issuedAt\":1750000000000}," +
+        "\"signature\":\"f3813a580fae693e082c12b04675da146d59092bc90386da00b88e25d2a6774" +
+        "cbba99331ac717c617062f17617cb3d41443874f168bf495d43fb2060dabd7707\"}"
 
     /// HKDF-SHA256 with an EMPTY salt — the protocol `deriveIRK` (info
     /// "flagship.irk.v1").
@@ -45,7 +45,7 @@ final class CreateTimePairingTests: XCTestCase {
         XCTAssertEqual(HexUtil.encode(vectorIrk().publicKey.rawRepresentation), pinnedIrkPub)
         let order = AddPairedSessionOrder(
             serverId: host, token: String(repeating: "a", count: 64),
-            label: "Alice's iPhone", issuedAt: issuedAt
+            issuedAt: issuedAt
         )
         let json = PairingOrderEnvelope.toJson(order: order, signatureHex: pinnedSignature)
         XCTAssertEqual(json, pinnedJson)
@@ -61,7 +61,7 @@ final class CreateTimePairingTests: XCTestCase {
         let irk = Curve25519.Signing.PrivateKey()
         let token = "ab".repeated(32)
         let built = try CreateTimePairing.build(
-            username: "alice", serverDomain: host, label: "Alice's iPhone",
+            username: "alice", serverDomain: host,
             irk: irk, now: issuedAt, token: token
         )
         XCTAssertEqual(built.token, token)
@@ -75,7 +75,6 @@ final class CreateTimePairingTests: XCTestCase {
         let order = AddPairedSessionOrder(
             serverId: try XCTUnwrap(request["serverId"] as? String),
             token: try XCTUnwrap(request["token"] as? String),
-            label: try XCTUnwrap(request["label"] as? String),
             issuedAt: try XCTUnwrap((request["issuedAt"] as? NSNumber)?.int64Value)
         )
         let sig = try XCTUnwrap(HexUtil.decode(try XCTUnwrap(env["signature"] as? String)))
@@ -88,7 +87,7 @@ final class CreateTimePairingTests: XCTestCase {
     func testDefaultDepositSealsOrderToBoxIdentity() throws {
         let irk = Curve25519.Signing.PrivateKey()
         let built = try CreateTimePairing.build(
-            username: "alice", serverDomain: host, label: "iPhone",
+            username: "alice", serverDomain: host,
             irk: irk, now: issuedAt, token: "cd".repeated(32)
         )
         let boxSeed = Curve25519.Signing.PrivateKey()
@@ -127,7 +126,7 @@ final class CreateTimePairingTests: XCTestCase {
     func testWrongIdentityCannotOpenDeposit() throws {
         let irk = Curve25519.Signing.PrivateKey()
         let built = try CreateTimePairing.build(
-            username: "alice", serverDomain: host, label: "iPhone", irk: irk,
+            username: "alice", serverDomain: host, irk: irk,
             now: issuedAt, token: "ef".repeated(32)
         )
         let boxPub = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation

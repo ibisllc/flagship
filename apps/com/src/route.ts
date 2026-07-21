@@ -1190,8 +1190,8 @@ function applyCors(request: Request, url: URL, res: Response, env: RouteEnv): Re
 function corsPreflight(request: Request, env: RouteEnv): Response {
   const origin = originHeader(request);
   const headers = new Headers({
-    "access-control-allow-methods": "GET, HEAD, POST, DELETE, OPTIONS",
-    "access-control-allow-headers": "content-type, x-flagship-session, authorization, x-flagship-effective-host",
+    "access-control-allow-methods": "GET, HEAD, POST, PUT, DELETE, OPTIONS",
+    "access-control-allow-headers": "content-type, x-flagship-session, authorization, x-flagship-effective-host, x-flagship-device-id, x-flagship-device-pub, x-flagship-request-id, x-flagship-issued-at, x-flagship-signature",
     "access-control-max-age": "600",
     vary: "origin",
   });

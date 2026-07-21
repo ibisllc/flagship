@@ -12,12 +12,11 @@ registerView("view-pod-pair");
 
 async function handlePair() {
   const baseUrl = $("pod-pair-base").value.trim();
-  const label = $("pod-pair-label").value.trim() || "webapp";
   if (!baseUrl) return toast("Server URL required", "err");
   const btn = $("pod-pair-go");
   btn.disabled = true;
   try {
-    await pairWithPod({ baseUrl, label });
+    await pairWithPod({ baseUrl });
     toast("Paired with server");
     await enterPodPair(); // re-render the status card
   } catch (e) {

@@ -34,11 +34,11 @@ import {
 
 /** Canonical bytes for an `add-paired-session` PhoneOrder — byte-identical to
  *  pod-pair.js's. Format:
- *    flagship/order/add-paired-session/v1|<serverId>|<token>|<label>|<issuedAt>
+ *    flagship/order/add-paired-session/v2|<serverId>|<token>|<issuedAt>
  */
-export function canonicalAddPairedSession({ serverId, token, label, issuedAt }) {
+export function canonicalAddPairedSession({ serverId, token, issuedAt }) {
   return new TextEncoder().encode(
-    ["flagship/order/add-paired-session/v1", serverId, token, label, issuedAt].join("|"),
+    ["flagship/order/add-paired-session/v2", serverId, token, issuedAt].join("|"),
   );
 }
 
@@ -131,18 +131,17 @@ export async function autoPairPods(pods, deps = {}) {
       try {
         const baseUrl = `https://${fqdn}`;
         const serverId = fqdn;
-        const label = "webapp";
         const token = randomTokenHex(32, toHex);
         const issuedAt = now();
         const sig = await sign(
           session.umk,
-          canonicalAddPairedSession({ serverId, token, label, issuedAt }),
+          canonicalAddPairedSession({ serverId, token, issuedAt }),
         );
         const r = await f(`${baseUrl}/api/orders-from-user`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            request: { type: "add-paired-session", serverId, token, label, issuedAt },
+            request: { type: "add-paired-session", serverId, token, issuedAt },
             signature: toHex(sig),
           }),
         });

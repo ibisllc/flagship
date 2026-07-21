@@ -95,7 +95,7 @@ function rowToView(rec: DeviceCapabilityGrantRecord): AdminGrantView | null {
     grant: {
       grantId: rec.grantId,
       username: rec.username,
-      deviceLabel: rec.deviceLabel,
+      deviceId: rec.deviceId,
       devicePubKey: devicePub,
       scopes,
       issuedAt: rec.issuedAt,

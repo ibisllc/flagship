@@ -554,7 +554,6 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       const callerToken = (deps.resolveCallerToken ?? defaultResolveCallerToken)(req);
       const sessions = deps.pairedSessions.list().map((s) => ({
         tokenPrefix: s.token.slice(0, 12),
-        label: s.label,
         addedAt: s.addedAt,
         current: callerToken !== null && s.token === callerToken,
       }));

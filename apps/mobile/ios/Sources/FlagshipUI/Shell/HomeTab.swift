@@ -227,42 +227,16 @@ public struct HomeTab: View {
         }
     }
 
-    /// Best-effort fetch of cloud-recovery presence + E7 account-reset
-    /// detection. We fan out the two reads in parallel — the devices
-    /// list doubles as our peer-detection signal: if our local push
-    /// tokenId is absent, another device disconnected us.
+    /// Best-effort fetch of cloud-recovery presence. Device membership is
+    /// checked only through the signed account directory after unlock; the
+    /// former username-only push-token roster was intentionally removed.
     /// Any failure is silent so a transient blip doesn't flash a
     /// danger banner; the next successful round-trip will settle the
     /// state correctly.
     private func refreshRecoveryStatus() async {
         guard let user = app.currentUser, !user.isEmpty else { return }
-        // hasCloudRecovery — drives B9 nudge.
-        async let recoveryTask: Bool? = {
-            do { return try await server.hasCloudRecovery(username: user) }
-            catch { return nil }
-        }()
-        // listDevices — drives E7 account-reset detector.
-        async let devicesTask: [TrustedDevice]? = {
-            do { return try await server.listDevices(username: user).devices }
-            catch { return nil }
-        }()
-        let (recovery, devices) = await (recoveryTask, devicesTask)
+        let recovery: Bool? = try? await server.hasCloudRecovery(username: user)
         if let recovery { app.hasCloudRecovery = recovery }
-        if let devices {
-            // We only flip accountWasReset when we have BOTH a
-            // confirmed devices fetch AND a local tokenId — a fresh
-            // install (no local token) shouldn't trigger E7.
-            if let localToken = Keystore.pushTokenId(), !localToken.isEmpty {
-                let present = devices.contains { $0.tokenId == localToken }
-                if !present {
-                    app.accountWasReset = true
-                } else if app.accountWasReset {
-                    // Recovered — the user must have re-registered.
-                    // Clear the flag so the banner disappears.
-                    app.accountWasReset = false
-                }
-            }
-        }
     }
 
     @ViewBuilder
@@ -935,8 +909,7 @@ struct ServerDetailContainer: View {
         let vm = PodPairViewModel(
             client: lockPower,
             store: sessionStore,
-            serverDomain: fqdn,
-            label: UIDevice.current.name
+            serverDomain: fqdn
         )
         pairVm = vm
         // This affordance is shown only after the detail BFF proved the current
@@ -998,7 +971,7 @@ struct PairedSessionRow: View {
                 Image(systemName: session.current ? "iphone.gen3" : "laptopcomputer")
                     .foregroundColor(session.current ? c.success : c.textMuted)
                 VStack(alignment: .leading) {
-                    Text(session.label).foregroundColor(c.text)
+                    Text("Session \(session.tokenPrefix)").foregroundColor(c.text)
                     Text("token: \(session.tokenPrefix)…")
                         .font(FS.font.mono())
                         .foregroundColor(c.textMuted)

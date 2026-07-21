@@ -185,7 +185,7 @@ class SwkDepositTest {
 
     private fun stashedOrderJson(): String =
         CreateTimePairing.build(
-            serverDomain = serverDomain, label = "iPhone",
+            serverDomain = serverDomain,
             irk = Ed25519Sign(irkKp.privateKey), now = 1_750_000_000_000L, token = "ab".repeat(32),
         ).pairingOrderJson
 

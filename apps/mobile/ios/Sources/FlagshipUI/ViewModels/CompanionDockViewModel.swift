@@ -29,13 +29,11 @@ public final class CompanionDockViewModel {
         }
     }
 
-    public func mint(label: String?) async {
+    public func mint() async {
         mintError = nil
-        let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalized = (trimmed?.isEmpty ?? true) ? nil : trimmed
         do {
             mintedTicket = try await client.companionMintTicket(
-                CompanionMintTicketRequest(label: normalized)
+                CompanionMintTicketRequest()
             )
         } catch {
             mintedTicket = nil
