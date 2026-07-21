@@ -163,19 +163,11 @@ describe("SEC-6 — PhoneOrder variants", () => {
       }
     }
   });
-  it("add-paired-session.{token,label} + remove-paired-session.token", () => {
-    for (const f of ["token", "label"] as const) {
-      bothBad<PhoneOrder>(
-        (bad) => ({
-          type: "add-paired-session",
-          serverId: "s",
-          token: f === "token" ? bad : "tok",
-          label: f === "label" ? bad : "lbl",
-          issuedAt: NOW,
-        }),
-        (o) => signPhoneOrder(o, kp),
-      );
-    }
+  it("add-paired-session.token + remove-paired-session.token", () => {
+    bothBad<PhoneOrder>(
+      (token) => ({ type: "add-paired-session", serverId: "s", token, issuedAt: NOW }),
+      (o) => signPhoneOrder(o, kp),
+    );
     bothBad<PhoneOrder>(
       (token) => ({ type: "remove-paired-session", serverId: "s", token, issuedAt: NOW }),
       (o) => signPhoneOrder(o, kp),
@@ -477,15 +469,15 @@ describe("SEC-6 — service / recovery / lease / totp", () => {
   it("RegisterUser.username", () => {
     bothBad<RegisterUser>((username) => ({ username, irkPub: PUB, issuedAt: NOW }), (r) => signRegisterUser(r, kp));
   });
-  it("PushTokenRegister.{username,providerToken,label}", () => {
-    for (const f of ["username", "providerToken", "label"] as const) {
+  it("PushTokenRegister.{username,deviceId,providerToken}", () => {
+    for (const f of ["username", "deviceId", "providerToken"] as const) {
       bothBad<PushTokenRegister>(
         (bad) => ({
           username: "u",
+          deviceId: "0123456789abcdef0123456789abcdef",
           platform: "apns",
           providerToken: "tok",
           pushX25519Pub: PUB,
-          label: "lbl",
           [f]: bad,
           issuedAt: NOW,
         }),

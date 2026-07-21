@@ -131,7 +131,6 @@ test("two devices, one cloud: companion-pair a fresh device into the owner's box
     });
     await expect(d1.locator("#view-pod-pair")).toBeVisible();
     await d1.fill("#pod-pair-base", POD_URL);
-    await d1.fill("#pod-pair-label", "device-1-owner");
     await shot(d1, "d1-pod-pair-form");
     // The real UI click signs an add-paired-session order + round-trips to the
     // box; the box can be slow on first contact, so click + wait for the status

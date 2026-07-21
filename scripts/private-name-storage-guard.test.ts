@@ -89,6 +89,36 @@ describe("private-name-storage-guard", () => {
     expect(run().code).toBe(1);
   });
 
+  // Raw NUL / 0x1f / 0x7f bytes, written exactly as they occur in real
+  // sources (regex bounds, NUL key separators) rather than pasted inline.
+  const RAW_BOUNDS = `${String.fromCharCode(0)}-${String.fromCharCode(0x1f)}${String.fromCharCode(0x7f)}`;
+  it("reports the offending line in sources that embed raw control bytes", () => {
+    // Real sources carry raw control bytes (regex character-class bounds, NUL
+    // composite-key separators), which makes tools classify them as binary:
+    // ripgrep SKIPS them outright, and grep hides the matching line behind
+    // "Binary file ... matches". Either way the operator loses the location.
+    // A webapp file exactly like this hid a v1 plaintext-label pairing order.
+    makeCleanTree();
+    write(
+      "packages/protocol/src/regression.ts",
+      `const bound = /[|${RAW_BOUNDS}]/;\nexport const deviceLabel = "laptop";\nexport { bound };\n`,
+    );
+    const result = run();
+    expect(result.code).toBe(1);
+    // The actual offending line must be printed, not "Binary file ... matches".
+    expect(result.stdout).toContain("deviceLabel");
+    expect(result.stdout).not.toContain("Binary file");
+  });
+
+  it("fails when a scan target resolves to no files", () => {
+    // A renamed or deleted directory must break the guard loudly rather than
+    // quietly reducing coverage to nothing.
+    fixtureRoot = mkdtempSync(join(tmpdir(), "private-name-guard-empty-"));
+    const result = run();
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("no files to scan for");
+  });
+
   it("allows only the explicitly neutralized historical migrations", () => {
     makeCleanTree();
     write("packages/storage/migrations/0017_push_token_label.sql", "ALTER TABLE push_tokens ADD COLUMN label TEXT;\n");

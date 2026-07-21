@@ -104,7 +104,7 @@ function watchBoxCalls(page: Page, who: string) {
 /** Pair the given page (already an owner session) to the box via the REAL
  *  pod-pair UI — IRK-signed add-paired-session → owner paired-session token.
  *  Returns { paired, text, session }. */
-async function pairToBox(page: Page, label: string) {
+async function pairToBox(page: Page) {
   // Render the real pod-pair view (for the screenshot), then drive the SAME
   // pairWithPod() the "#pod-pair-go" button calls — directly, so we surface the
   // box's order response/error instead of it being swallowed into a toast.
@@ -114,21 +114,20 @@ async function pairToBox(page: Page, label: string) {
   });
   await expect(page.locator("#view-pod-pair")).toBeVisible();
   await page.fill("#pod-pair-base", POD_URL).catch(() => undefined);
-  await page.fill("#pod-pair-label", label).catch(() => undefined);
   let result = { ok: false, err: "", base: "", tok: "" };
   for (let attempt = 0; attempt < 3; attempt++) {
     result = await page.evaluate(
-      async ({ podUrl, lbl }) => {
+      async ({ podUrl }) => {
         try {
           const { pairWithPod } = await import("/lib/podPair.js");
-          await pairWithPod({ baseUrl: podUrl, label: lbl });
+          await pairWithPod({ baseUrl: podUrl });
           const api = await import("/lib/api.js");
           return { ok: true, err: "", base: api.getPodBaseUrl(), tok: api.getSessionToken().slice(0, 10) };
         } catch (e) {
           return { ok: false, err: String((e && (e as any).message) || e), base: "", tok: "" };
         }
       },
-      { podUrl: POD_URL, lbl: label },
+      { podUrl: POD_URL },
     );
     if (result.ok && result.tok.length > 0) break;
     await page.waitForTimeout(2_500);
@@ -195,7 +194,7 @@ test("lost device → recover account + regain the same cloud (keyfile recovery)
 
     // Device-1 PAIRS to the box — proves it holds a real owner session BEFORE we
     // back it up (the thing the recovered device must regain).
-    const d1Pair = await pairToBox(d1, "device-1-owner");
+    const d1Pair = await pairToBox(d1);
     record({
       step: "device-1 (owner) is paired to the box before backup",
       grade: d1Pair.paired ? "A" : "FAIL",
@@ -539,7 +538,7 @@ test("lost device → recover account + regain the same cloud (keyfile recovery)
       };
       try {
         const { pairWithPod } = await import("/lib/podPair.js");
-        await pairWithPod({ baseUrl: podUrl, label: "recovered-device-diag" });
+        await pairWithPod({ baseUrl: podUrl });
         const api = await import("/lib/api.js");
         out.pairOk = true;
         out.base = api.getPodBaseUrl();
@@ -557,7 +556,7 @@ test("lost device → recover account + regain the same cloud (keyfile recovery)
     });
     const d2Pair = pairDiag?.pairOk
       ? { paired: true, text: `paired to ${POD_URL}`, session: { base: pairDiag.base, tok: pairDiag.tok } }
-      : await pairToBox(d2, "recovered-device");
+      : await pairToBox(d2);
     record({
       step: "device-2 (recovered) pairs to the SAME box (IRK-signed, instant — key unchanged)",
       grade: d2Pair.paired ? "A" : "FAIL",

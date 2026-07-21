@@ -42,7 +42,6 @@ test("S5 — Approve a pending unlock request → webapp signs + posts a lease",
   await page.locator("#view-home .advanced-disclosure").evaluate((d) => { d.open = true; });
   await page.click("#open-pod-pair");
   await page.fill("#pod-pair-base", podSim.baseUrl);
-  await page.fill("#pod-pair-label", "e2e-s5");
   await page.click("#pod-pair-go");
   await expect.poll(() => podSim.orders.filterByType("add-paired-session").length).toBe(1);
   await page.click("#pod-pair-back");
