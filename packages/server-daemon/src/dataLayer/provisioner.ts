@@ -73,8 +73,15 @@ export class DataProvisioner {
     creator: string;
     slug: string;
     stores: AppDataStores;
+    /**
+     * Which dataspace to provision. "prod" (default) is byte-identical to the
+     * historical behaviour. "dev" provisions the parallel, provably-disjoint
+     * synthetic dataspace (see `provisionDevDataspace` for the seeding variant).
+     */
+    space?: "dev" | "prod";
   }): Promise<AppDataCredentials> {
     const { creator, slug, stores } = args;
+    const space = args.space ?? "prod";
     const secret = this.opts.generateSecret ?? generateSecret;
     const ep = this.opts.endpoints ?? {};
     const out: AppDataCredentials = { creator, slug };
@@ -85,7 +92,7 @@ export class DataProvisioner {
       out.postgresSingleton = isSingletonStore(stores.postgres);
       out.postgres = {};
       for (const storeName of pgStores) {
-        const id: AppDataIdentity = { creator, slug, storeName };
+        const id: AppDataIdentity = { creator, slug, storeName, space };
         const db = pgDatabase(id);
         const role = pgRole(id);
         const password = secret();
@@ -106,7 +113,7 @@ export class DataProvisioner {
       out.objectsSingleton = isSingletonStore(stores.objects);
       out.objects = {};
       for (const storeName of s3Stores) {
-        const id: AppDataIdentity = { creator, slug, storeName };
+        const id: AppDataIdentity = { creator, slug, storeName, space };
         const bucket = s3Bucket(id);
         const accessKey = s3AccessKey(id);
         // MinIO service-account secrets must be 8–40 chars; generateSecret
@@ -129,7 +136,7 @@ export class DataProvisioner {
       out.kvSingleton = isSingletonStore(stores.kv);
       out.kv = {};
       for (const storeName of kvStores) {
-        const id: AppDataIdentity = { creator, slug, storeName };
+        const id: AppDataIdentity = { creator, slug, storeName, space };
         const user = redisUser(id);
         const prefix = redisPrefix(id);
         const password = secret();
@@ -150,15 +157,17 @@ export class DataProvisioner {
     creator: string;
     slug: string;
     stores: AppDataStores;
+    space?: "dev" | "prod";
   }): Promise<void> {
+    const space = args.space ?? "prod";
     for (const storeName of normalizeStoreFlag(args.stores.postgres)) {
       if (!this.opts.postgres) continue;
-      const id: AppDataIdentity = { creator: args.creator, slug: args.slug, storeName };
+      const id: AppDataIdentity = { creator: args.creator, slug: args.slug, storeName, space };
       await this.opts.postgres.dropRoleAndDb({ db: pgDatabase(id), role: pgRole(id) });
     }
     for (const storeName of normalizeStoreFlag(args.stores.objects)) {
       if (!this.opts.objects) continue;
-      const id: AppDataIdentity = { creator: args.creator, slug: args.slug, storeName };
+      const id: AppDataIdentity = { creator: args.creator, slug: args.slug, storeName, space };
       await this.opts.objects.dropBucketAndKey({
         bucket: s3Bucket(id),
         accessKey: s3AccessKey(id),
@@ -166,9 +175,67 @@ export class DataProvisioner {
     }
     for (const storeName of normalizeStoreFlag(args.stores.kv)) {
       if (!this.opts.kv) continue;
-      const id: AppDataIdentity = { creator: args.creator, slug: args.slug, storeName };
+      const id: AppDataIdentity = { creator: args.creator, slug: args.slug, storeName, space };
       await this.opts.kv.dropAclUser(redisUser(id));
     }
+  }
+
+  /**
+   * Provision the DEV dataspace for an app and seed its Postgres store(s) with
+   * the synthesizer's fabricated rows. Returns dev credentials (same shape as
+   * prod, but every name is `dev`-namespaced and provably disjoint from prod).
+   *
+   * The `seedSqlByStore` map is `storeName → seed SQL` from
+   * `synth.datasetToSql(...)`. Absent stores are provisioned empty. This method
+   * NEVER touches a prod database: every identity it builds carries
+   * `space:"dev"`, so `pgDatabase`/`s3Bucket`/`redisPrefix` render the disjoint
+   * dev names — a prod name can never begin with the dev sentinel.
+   *
+   * Idempotent-friendly: if a dev store already exists (a re-mint from the same
+   * recorded seed), the caller should `teardownDevDataspace` first.
+   */
+  async provisionDevDataspace(args: {
+    creator: string;
+    slug: string;
+    stores: AppDataStores;
+    seedSqlByStore?: Record<string, string>;
+  }): Promise<AppDataCredentials> {
+    const creds = await this.provisionApp({
+      creator: args.creator,
+      slug: args.slug,
+      stores: args.stores,
+      space: "dev",
+    });
+    // Seed each Postgres dev store from the synthesizer output.
+    if (creds.postgres && args.seedSqlByStore) {
+      if (!this.opts.postgres?.execSql) {
+        throw new Error("postgres admin does not support execSql; cannot seed dev dataspace");
+      }
+      for (const [storeName, store] of Object.entries(creds.postgres)) {
+        const seed = args.seedSqlByStore[storeName];
+        if (!seed) continue;
+        // Defence in depth: refuse to seed anything that isn't a dev database.
+        if (!store.database.startsWith("__dev_")) {
+          throw new Error(`refusing to seed non-dev database ${store.database}`);
+        }
+        await this.opts.postgres.execSql({ db: store.database, sql: seed });
+      }
+    }
+    return creds;
+  }
+
+  /** Tear down an app's DEV dataspace. Only ever drops `dev`-namespaced stores. */
+  async teardownDevDataspace(args: {
+    creator: string;
+    slug: string;
+    stores: AppDataStores;
+  }): Promise<void> {
+    await this.deprovisionApp({
+      creator: args.creator,
+      slug: args.slug,
+      stores: args.stores,
+      space: "dev",
+    });
   }
 
   // Read-only accessors used by the data dashboard. Each throws if the

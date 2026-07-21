@@ -15,7 +15,7 @@ seams (`../provisioner.ts`, `../naming.ts`, `../../buildmodes/deployArtifact.ts`
 | # | Component | Status |
 |---|-----------|--------|
 | A | **Synthesizer** — schema→typed fake data, seeded/reproducible, FK/uniqueness/enum/boundary-preserving, canaries | ✅ **done** — `synth/` + golden vector + 12 tests |
-| B | Dev dataspace — provisioner `dev` variant + teardown | 🟡 **foundation** — `space:"dev"\|"prod"` threaded through `naming.ts` (provably-disjoint names + tests); `provisionDevDataspace()` still TODO |
+| B | Dev dataspace — provisioner `dev` variant + teardown | ✅ **done** — `space:"dev"\|"prod"` through `naming.ts`; `provisionDevDataspace()` (seeds PG from synth SQL) + `teardownDevDataspace()` in `../provisioner.ts`; `PostgresAdmin.execSql`; dev/prod isolation + teardown-never-touches-prod tests |
 | C | `--dev` routing — app-proxy prefix + dev principal selection | ⬜ not started |
 | D | Promotion wall — `flagship/service-promote/v1` + consumer + deploy target | ⬜ not started |
 | F | Model-to-dev loop — surface the dev URL into the vibecode session | ⬜ not started |

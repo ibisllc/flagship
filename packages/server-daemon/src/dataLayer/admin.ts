@@ -11,6 +11,15 @@ export interface PostgresAdmin {
   listTables(db: string): Promise<string[]>;
   /** Bounded query for the visualizer. Caller is trusted (paired session); we still cap. */
   query(args: { db: string; sql: string; maxRows: number }): Promise<{ columns: string[]; rows: unknown[][] }>;
+  /**
+   * Execute a trusted SQL script against a database (schema DDL + the
+   * synthesizer's seed INSERTs). Used ONLY to populate a DEV dataspace with
+   * fabricated rows; never runs untrusted input and never touches a prod db by
+   * contract (the caller passes a `__dev_`-prefixed database name). Optional so
+   * a minimal admin without a seeding path can omit it — `provisionDevDataspace`
+   * throws a clear error when it's needed but absent.
+   */
+  execSql?(args: { db: string; sql: string }): Promise<void>;
 }
 
 export interface MinioAdmin {
@@ -54,6 +63,23 @@ export class InMemoryPostgresAdmin implements PostgresAdmin {
     const t = d.tables.get(m[1]!);
     if (!t) return { columns: [], rows: [] };
     return { columns: ["row"], rows: t.slice(0, args.maxRows).map((r) => [JSON.stringify(r)]) };
+  }
+  /**
+   * Model a seed script: register each `INSERT INTO "<table>"` as a row in that
+   * table so `listTables`/`query` reflect the seeded dev data. Ignores DDL and
+   * anything else — enough to verify the dev-dataspace seeding contract.
+   */
+  async execSql(args: { db: string; sql: string }): Promise<void> {
+    const d = this.databases.get(args.db);
+    if (!d) throw new Error(`unknown db ${args.db}`);
+    const re = /insert\s+into\s+"?([a-z_][a-z0-9_]*)"?/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(args.sql)) !== null) {
+      const table = m[1]!;
+      const existing = d.tables.get(table) ?? [];
+      existing.push([]);
+      d.tables.set(table, existing);
+    }
   }
 }
 
