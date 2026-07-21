@@ -31,7 +31,7 @@ public extension EnvironmentValues {
 /// Worker has somewhere to relay encrypted push payloads.
 ///
 /// The canonical-bytes shape is identical to the verifier in
-/// packages/protocol/src/auth.ts (`flagship/push-token-register/v1|...`)
+/// packages/protocol/src/push.ts (`flagship/push-token-register/v2|...`)
 /// so the Worker's `verifyPushTokenRegister` accepts the signature we
 /// produce here.
 ///

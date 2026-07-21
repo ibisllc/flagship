@@ -62,25 +62,28 @@ final class AdminRootPhase3Tests: XCTestCase {
         XCTAssertFalse(r.verify(signature: sig, oldAdminRootPub: newRoot.publicKey.rawRepresentation))
     }
 
-    // MARK: - PairingBundle carries wrappedAdminRoot (back-compat)
+    // MARK: - PairingBundle carries wrappedAdminRoot
 
-    func test_pairingBundle_wrappedAdminRoot_backCompatCodec() throws {
-        // Absent → decodes to nil (a pre-D bundle).
+    func test_pairingBundle_wrappedAdminRoot_codec() throws {
+        let deviceId = "00112233445566778899aabbccddeeff"
+        let grant = PairingBundle.GrantFields(
+            grantId: "grant-1", username: "acme", deviceId: deviceId,
+            devicePubHex: "cd", scopes: ["view-directory"], issuedAt: 7,
+            expiresAt: 8, signerRoot: "membership"
+        )
         let bare = PairingBundle(
             umkSeedHex: String(repeating: "ab", count: 32),
-            admit: .init(username: "acme", newDevicePubHex: "cd", issuedAt: 7),
-            admitSig: "ef", irkPubHex: "01"
+            admit: .init(username: "acme", deviceId: deviceId, newDevicePubHex: "cd", issuedAt: 7),
+            admitSig: "ef", irkPubHex: "01", grant: grant, grantSignature: "02"
         )
         let bareDecoded = try PairingBundle.decode(bare.encoded())
         XCTAssertNil(bareDecoded.wrappedAdminRoot)
-        // Explicit pre-D JSON (no key) still decodes.
-        let legacyJson = Data(#"{"umkSeedHex":"00","admit":{"username":"a","newDevicePubHex":"b","issuedAt":1},"admitSig":"c","irkPubHex":"d"}"#.utf8)
-        XCTAssertNil(try PairingBundle.decode(legacyJson).wrappedAdminRoot)
         // Present → round-trips.
         let promoted = PairingBundle(
             umkSeedHex: String(repeating: "ab", count: 32),
-            admit: .init(username: "acme", newDevicePubHex: "cd", issuedAt: 7),
+            admit: .init(username: "acme", deviceId: deviceId, newDevicePubHex: "cd", issuedAt: 7),
             admitSig: "ef", irkPubHex: "01",
+            grant: grant, grantSignature: "02",
             wrappedAdminRoot: String(repeating: "77", count: 32)
         )
         XCTAssertEqual(try PairingBundle.decode(promoted.encoded()), promoted)

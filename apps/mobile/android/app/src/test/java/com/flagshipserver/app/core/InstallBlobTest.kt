@@ -252,8 +252,8 @@ class InstallBlobTest {
             pushX25519PubHex = "ab".repeat(32),
             issuedAt = 1700000000L,
         ))
-        // Field order: tag | username | platform | providerToken |
-        // pushX25519Pub | label | issuedAt. Mirrors the Worker side
+        // Field order: tag | username | deviceId | platform | providerToken |
+        // pushX25519Pub | issuedAt. Mirrors the Worker side
         // in packages/protocol/src/auth.ts.
         assertEquals(
             "flagship/push-token-register/v2|harry|00112233445566778899aabbccddeeff|fcm|deadbeef|" +

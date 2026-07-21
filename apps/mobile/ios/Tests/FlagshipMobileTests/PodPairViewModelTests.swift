@@ -24,7 +24,6 @@ final class PodPairViewModelTests: XCTestCase {
             client: mock,
             store: s,
             serverDomain: server,
-            label: "iPhone",
             signer: { _ in k },
             now: { 1700 },
             makeToken: { "0011aabb" }
@@ -40,9 +39,9 @@ final class PodPairViewModelTests: XCTestCase {
         XCTAssertEqual(sent.serverDomain, server)
         XCTAssertEqual(sent.request["type"], "add-paired-session")
         XCTAssertEqual(sent.request["token"], "0011aabb")
-        XCTAssertEqual(sent.request["label"], "iPhone")
+        XCTAssertNil(sent.request["label"])
         // The posted signature verifies against the EXACT canonical bytes.
-        let order = AddPairedSessionOrder(serverId: server, token: "0011aabb", label: "iPhone", issuedAt: 1700)
+        let order = AddPairedSessionOrder(serverId: server, token: "0011aabb", issuedAt: 1700)
         let sig = Data(HexUtil.decode(sent.signatureHex)!)
         XCTAssertTrue(k.publicKey.isValidSignature(sig, for: order.canonicalBytes()))
         // The token was persisted ONLY after the POST succeeded.
@@ -132,19 +131,5 @@ final class PodPairViewModelTests: XCTestCase {
         XCTAssertTrue(mock.sent.isEmpty, "must not POST when signing fails")
         let token = await s.sessionToken
         XCTAssertNil(token)
-    }
-
-    /// A device name carrying the canonical separator is sanitized so the
-    /// daemon's `legacyFieldGuard`-on-verify can never reject the order.
-    func testLabelSeparatorIsSanitized() async {
-        let mock = MockLockPowerClient()
-        let s = store()
-        let vm = PodPairViewModel(
-            client: mock, store: s, serverDomain: server,
-            label: "Harry|iPhone", signer: { _ in self.key() }, makeToken: { "tok" }
-        )
-        await vm.pair()
-        XCTAssertEqual(vm.phase, .paired)
-        XCTAssertFalse(mock.sent[0].request["label"]!.contains("|"))
     }
 }

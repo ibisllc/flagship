@@ -4,7 +4,7 @@
 //
 // MIRRORS: apps/mobile/ios/Sources/FlagshipUI/Push/PushRegistrar.swift
 // Canonical-bytes layout is identical to the verifier in
-// packages/protocol/src/auth.ts ("flagship/push-token-register/v1|...")
+// packages/protocol/src/push.ts ("flagship/push-token-register/v2|...")
 // so the Worker's verifyPushTokenRegister accepts both clients.
 
 package com.flagshipserver.app.push

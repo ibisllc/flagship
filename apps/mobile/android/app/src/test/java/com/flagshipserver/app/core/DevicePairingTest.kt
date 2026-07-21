@@ -133,7 +133,7 @@ class DevicePairingTest {
     //    Worker verifier) ─────────────────────────────────────────────
     //
     // The Worker verifies under canonical bytes
-    //   flagship/device-admit/v1|<username>|<newDevicePubHex>|<issuedAt>
+    //   flagship/device-admit/v2|<username>|<deviceId>|<newDevicePubHex>|<issuedAt>
     // Drift in tag, separator, field order, or `issuedAt` rendering
     // breaks every cross-device admit. Mirrors
     // ios/Sources/Flagship/DeviceAdmit.swift `canonicalBytes()`.

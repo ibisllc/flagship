@@ -35,7 +35,7 @@ public struct DeviceAdmit: Equatable, Sendable {
         self.issuedAt = issuedAt
     }
 
-    /// `flagship/device-admit/v1|<username>|<newDevicePubHex>|<issuedAt>`.
+    /// `flagship/device-admit/v2|<username>|<deviceId>|<newDevicePubHex>|<issuedAt>`.
     public func canonicalBytes() -> Data {
         Data(
             [Self.canonicalTag, username, deviceId, newDevicePubHex, String(issuedAt)]

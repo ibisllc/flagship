@@ -201,16 +201,18 @@ longer exposes device data and the username-only device-list route is gone. The
 demo flow is now one idempotent server-owned state machine whose identity,
 grants, primary device, and encrypted standard account profile commit before
 cloud provisioning; the CLI uses `--account-name`, and the obsolete demo
-creation modules and plaintext `demo_users.display` path are removed. A final
-privacy pass is removing plaintext names from paired browser/companion sessions
-too: add-paired-session is v2 without `label`, and daemon/client companion rows
-use opaque session codes. TypeScript builds and focused protocol/daemon/web
-tests pass; Android production compilation + its full unit suite pass; the iOS
-simulator app build passes. **Remaining before merge:** finish stale iOS paired-
-session test fixtures; complete repository-wide legacy-name classification and
-strengthen the release guard; run the complete TS/mobile test and build matrix;
-close any missing authorization/privacy/cross-account/UI cases from the work
-order; and review the final branch diff for feature-branch impact. **Rollout
+creation modules and plaintext `demo_users.display` path are removed. Plaintext
+names are also gone from paired browser/companion sessions:
+add-paired-session is v2 without `label`, and daemon/client companion rows use
+opaque session codes. Stale native pairing, admission, push, and companion
+fixtures now target only the clean deviceId/grant/encrypted-profile protocols;
+both Swift package test graphs compile for the iOS simulator SDK. TypeScript
+builds and focused protocol/daemon/web tests pass; Android production
+compilation + its full unit suite pass; the iOS simulator app build passes.
+**Remaining before merge:** complete repository-wide legacy-name classification
+and strengthen the release guard; run the complete TS/mobile test and build
+matrix; close any missing authorization/privacy/cross-account/UI cases from the
+work order; and review the final branch diff for feature-branch impact. **Rollout
 remains owner-gated:** apply the clean D1 migration/wipe, deploy `.com` (and
 `.services` only if the final daemon delta requires it), rebuild clients, and
 exercise the full account create/join/rename/lock/recovery flows. Do not convert

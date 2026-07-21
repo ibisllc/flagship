@@ -33,6 +33,7 @@ import CryptoKit
 ///   multi    present     .realAccount             .multiTakeover   (24h+TOTP)
 @MainActor
 final class LoginDecisionMatrixConformanceTests: XCTestCase {
+    private let deviceId = "00112233445566778899aabbccddeeff"
 
     // MARK: - Fixtures
 
@@ -40,6 +41,29 @@ final class LoginDecisionMatrixConformanceTests: XCTestCase {
         let s = MockFlagshipServerClient()
         s.simulatedLatency = 0
         return s
+    }
+
+    private func admitRequest(username: String) -> DeviceAdmitRequest {
+        DeviceAdmitRequest(
+            admit: .init(username: username, deviceId: deviceId, newDevicePubHex: "ab", issuedAt: 1),
+            admitSig: "ff",
+            grant: .init(
+                grantId: "grant-1", username: username, deviceId: deviceId,
+                devicePubHex: "ab", scopes: ["view-directory"], issuedAt: 1,
+                expiresAt: 2, signerRoot: "membership"
+            ),
+            grantSignature: "ee",
+            profile: .init(
+                accountId: username, deviceId: deviceId, revision: 1, keyVersion: 1,
+                nonceHex: "00", ciphertextHex: "00", issuedAt: 1,
+                signerPubHex: "ab", signatureHex: "dd"
+            ),
+            request: .init(
+                username: username, deviceId: deviceId, platform: "apns",
+                providerToken: "tok", pushX25519Pub: "pp", issuedAt: 1
+            ),
+            signature: "sig"
+        )
     }
 
     private func demoBlock(_ username: String) -> DemoServerBlock {
@@ -234,13 +258,7 @@ final class LoginDecisionMatrixConformanceTests: XCTestCase {
     func test_admit_returnsFourteenDayQuarantine() async throws {
         let server = makeServer()
         server.nowProvider = { 10_000 }
-        let req = DeviceAdmitRequest(
-            admit: .init(username: "acme", newDevicePubHex: "ab", issuedAt: 1),
-            admitSig: "ff",
-            request: .init(username: "acme", platform: "apns", providerToken: "tok",
-                           pushX25519Pub: "pp", label: "Reviewer", issuedAt: 1),
-            signature: "sig"
-        )
+        let req = admitRequest(username: "acme")
         let resp = try await server.admitDevice(account: "acme", body: req)
         XCTAssertEqual(resp.quarantineUntil, 10_000 + MockFlagshipServerClient.quarantineMs)
         XCTAssertEqual(MockFlagshipServerClient.quarantineMs, 14 * 24 * 60 * 60 * 1000)
@@ -349,13 +367,7 @@ final class LoginDecisionMatrixConformanceTests: XCTestCase {
     /// JoinAccountViewModel exercises the same rejection contract.
     func test_admitWire_usernameMismatch_is403_likeWorker() async {
         let server = makeServer()
-        let mismatched = DeviceAdmitRequest(
-            admit: .init(username: "other", newDevicePubHex: "ab", issuedAt: 1),
-            admitSig: "ff",
-            request: .init(username: "other", platform: "apns", providerToken: "t",
-                           pushX25519Pub: "p", label: "L", issuedAt: 1),
-            signature: "s"
-        )
+        let mismatched = admitRequest(username: "other")
         do {
             _ = try await server.admitDevice(account: "acme", body: mismatched)
             XCTFail("admit username/url mismatch must be rejected")

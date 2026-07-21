@@ -1,6 +1,6 @@
 // Phase 3b — DeviceAdmit canonical-bytes + sign/verify parity with the
 // Worker (packages/protocol/src/auth.ts). The canonical bytes MUST be
-// "flagship/device-admit/v1|username|newDevicePubHex|issuedAt" so the
+// "flagship/device-admit/v2|username|deviceId|newDevicePubHex|issuedAt" so the
 // .com verifier accepts an admit signed on Android.
 
 package com.flagshipserver.app.core
