@@ -75,6 +75,35 @@ final class PodPairViewModelTests: XCTestCase {
         XCTAssertEqual(token, "existing-token")
     }
 
+    /// A BFF 401 proves the per-pod token is stale. The explicit recovery tap
+    /// must replace it instead of taking the normal idempotent no-op path.
+    func testExplicitRepairReplacesRejectedToken() async {
+        let mock = MockLockPowerClient()
+        let s = store()
+        let podId = PodInfo.podId(forFqdn: server)
+        await s.setSessionToken("rejected-token", forPodId: podId)
+        var signerCalled = false
+        let vm = PodPairViewModel(
+            client: mock,
+            store: s,
+            serverDomain: server,
+            signer: { _ in signerCalled = true; return self.key() },
+            now: { 1700 },
+            makeToken: { "replacement-token" }
+        )
+
+        await vm.pair(replacingExistingToken: true)
+
+        XCTAssertEqual(vm.phase, .paired)
+        XCTAssertTrue(signerCalled)
+        XCTAssertEqual(mock.sent.count, 1)
+        XCTAssertEqual(mock.sent[0].request["token"], "replacement-token")
+        let podToken = await s.sessionToken(forPodId: podId)
+        let activeToken = await s.sessionToken
+        XCTAssertEqual(podToken, "replacement-token")
+        XCTAssertEqual(activeToken, "replacement-token")
+    }
+
     /// A non-2xx from the box surfaces as failed AND does NOT persist a token
     /// (so the idempotency guard doesn't later block a real retry).
     func testPostFailureSurfacesAndDoesNotPersist() async {

@@ -789,7 +789,8 @@ struct ServerDetailContainer: View {
                     // "waiting for approval" on Home but no Approve card here.
                     awaitingUnlock: pod.map { app.isAwaitingUnlock($0) } ?? false,
                     awaitingEntitlement: pod.map { app.isAwaitingEntitlement($0) } ?? false,
-                    // The BFF said "no session token" → this device isn't paired.
+                    // No local token OR a 401-rejected stale token → this
+                    // device isn't paired with the box.
                     // Surface the one-tap pairing affordance (but only for a box
                     // that's actually reachable — a dead box never paired and
                     // never will, so it stays on the decommission path).
@@ -893,7 +894,10 @@ struct ServerDetailContainer: View {
             label: UIDevice.current.name
         )
         pairVm = vm
-        await vm.pair()
+        // This affordance is shown only after the detail BFF proved the current
+        // token absent or rejected. Replace a stale per-pod token instead of
+        // letting PodPairViewModel's normal idempotency guard no-op on it.
+        await vm.pair(replacingExistingToken: true)
         switch vm.phase {
         case .paired, .alreadyPaired:
             await detailVm.load()
@@ -960,4 +964,3 @@ struct PairedSessionRow: View {
         }
     }
 }
-

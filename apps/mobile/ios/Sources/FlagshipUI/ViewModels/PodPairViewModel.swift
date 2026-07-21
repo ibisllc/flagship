@@ -20,10 +20,10 @@ import FlagshipCore
 ///      over the box's pinned session,
 ///   4. on HTTP 200, persist the token via `setSessionToken` so the BFF auths.
 ///
-/// IDEMPOTENT: if the store already holds a session token, `pair()` no-ops —
-/// it never re-pairs and never re-prompts Face ID. The biometric fires ONCE
-/// per genuine pairing, inside `signer`; the trigger UI must fire `pair()` once
-/// per tap (never in a loop).
+/// IDEMPOTENT by default: if the store already holds a session token, `pair()`
+/// no-ops. A caller that received a 401 from the box can explicitly replace the
+/// rejected token. The biometric fires ONCE per genuine pairing, inside
+/// `signer`; the trigger UI must fire `pair()` once per tap (never in a loop).
 @Observable
 @MainActor
 public final class PodPairViewModel {
@@ -79,13 +79,15 @@ public final class PodPairViewModel {
     /// Perform one pairing attempt, advancing `phase` to `.paired` /
     /// `.alreadyPaired` / `.failed`. Fire it once per user tap — the biometric
     /// fires inside `signer`, so never call this in a loop or on appearance.
-    public func pair() async {
+    public func pair(replacingExistingToken: Bool = false) async {
         // Idempotency — a token already stored FOR THIS POD means this device is
         // paired with this box; do nothing (no re-pair, no biometric). Keyed
         // per-pod (Fix B) so pairing a 2nd box isn't short-circuited by the 1st
         // box's token sitting in the active slot.
         let podId = PodInfo.podId(forFqdn: serverDomain)
-        if let existing = await store.sessionToken(forPodId: podId), !existing.isEmpty {
+        if !replacingExistingToken,
+           let existing = await store.sessionToken(forPodId: podId),
+           !existing.isEmpty {
             phase = .alreadyPaired
             return
         }

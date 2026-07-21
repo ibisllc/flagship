@@ -149,6 +149,15 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-20 (stale box-session recovery) — an online box can no longer leave
+the iOS detail page on “Connecting…” forever.** A missing pairing deposit left
+Leti rejecting the create-time local session token with 401; the app classified
+only a missing local token as unpaired, then its Pair action would no-op because
+that rejected token still existed. Box-auth 401 now surfaces the explicit
+“Pair this server” card, and that user-authorized tap replaces the stale token
+with a freshly signed session while ordinary transient failures keep retrying.
+**Remaining (owner):** install the rebuilt iOS app, open Leti, and tap Pair once.
+
 **2026-07-20 (VM install rethink) — Ezra proved install-per-VM is the wrong
 default; cross-platform privacy-safe progress landed and clone-and-specialize is
 the locked replacement.** `ezra.jolly-quince` on VZ/Debian 13.6 reached
