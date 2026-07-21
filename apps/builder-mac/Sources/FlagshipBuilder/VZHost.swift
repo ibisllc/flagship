@@ -192,6 +192,7 @@ final class VZHost: NSObject {
         let url = layout.diskImageURL(config.name)
         guard !FileManager.default.fileExists(atPath: url.path) else { return }
         FileManager.default.createFile(atPath: url.path, contents: nil)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         let handle = try FileHandle(forWritingTo: url)
         defer { try? handle.close() }
         try handle.truncate(atOffset: config.mainDiskSizeBytes)

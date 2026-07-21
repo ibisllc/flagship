@@ -15,6 +15,7 @@ final class VMManager: ObservableObject {
     }
 
     @Published private(set) var servers: [HostedServer] = []
+    @Published private(set) var installObservations: [String: VMInstallObservation] = [:]
 
     let store: VMInventoryStore
     /// Log sink — the wizard routes this into its log pane.
@@ -25,6 +26,8 @@ final class VMManager: ObservableObject {
     /// The lifecycle's attach/detach effect, remembered for the next start.
     private var attachISO: [String: Bool] = [:]
     private var unlockPolls: [String: Task<Void, Never>] = [:]
+    private var installPolls: [String: Task<Void, Never>] = [:]
+    private var installStallLogged: Set<String> = []
 
     init(layout: VMBundleLayout = VMBundleLayout(root: VMBundleLayout.defaultRoot())) {
         store = VMInventoryStore(layout: layout)
@@ -41,6 +44,9 @@ final class VMManager: ObservableObject {
 
     /// The live VZ adapter for a VM (console access etc.), if it's running.
     func host(named name: String) -> VZHost? { hosts[name] }
+    func installObservation(named name: String) -> VMInstallObservation? {
+        installObservations[name]
+    }
 
     // MARK: - Launch normalization
 
@@ -92,6 +98,10 @@ final class VMManager: ObservableObject {
         lifecycles[name] = nil
         unlockPolls[name]?.cancel()
         unlockPolls[name] = nil
+        installPolls[name]?.cancel()
+        installPolls[name] = nil
+        installObservations[name] = nil
+        installStallLogged.remove(name)
         try? store.delete(name: name)
         servers.removeAll { $0.id == name }
     }
@@ -122,6 +132,9 @@ final class VMManager: ObservableObject {
         lifecycles[name] = lc
         server.record.state = lc.state
         server.record.stateChangedAt = lc.stateChangedAt
+        if case .installed = lc.state {
+            server.record.config = server.record.config.clearingProvisionStatusSerial()
+        }
         if case .running = lc.state {
             server.record.lastConnectedAt = lc.stateChangedAt
         }
@@ -129,6 +142,7 @@ final class VMManager: ObservableObject {
         try? store.save(server.record)
         await run(effects: effects, on: server.record.config)
         syncUnlockPoll(for: server.record.config)
+        syncInstallPoll(for: server.record.config)
     }
 
     private func run(effects: [VMEffect], on config: VMConfig) async {
@@ -268,6 +282,61 @@ final class VMManager: ObservableObject {
                 try? await Task.sleep(nanoseconds: 15_000_000_000)
             }
         }
+    }
+
+    // MARK: - Privacy-safe install checkpoints
+
+    /// Read the same allowlisted order-status stream the phone consumes. The
+    /// guest sends only a canonical phase, a fixed stage label, and elapsed
+    /// minutes — never syslog, package output, recipe bytes, keys, or content.
+    private func syncInstallPoll(for config: VMConfig) {
+        let name = config.name
+        guard currentState(name) == .installing,
+              installPolls[name] == nil,
+              let serial = config.provisionStatusSerial,
+              let url = VMInstallObservation.statusURL(serial: serial) else {
+            if currentState(name) != .installing {
+                installPolls[name]?.cancel()
+                installPolls[name] = nil
+                installStallLogged.remove(name)
+            }
+            return
+        }
+        let installStartedAt = server(named: name)?.record.stateChangedAt ?? Date()
+        installPolls[name] = Task { [weak self] in
+            let session = URLSession(configuration: {
+                let c = URLSessionConfiguration.ephemeral
+                c.timeoutIntervalForRequest = 10
+                return c
+            }())
+            while !Task.isCancelled {
+                if let (data, response) = try? await session.data(from: url),
+                   (response as? HTTPURLResponse)?.statusCode == 200,
+                   let observation = VMInstallObservation.decode(data),
+                   observation.updatedAt >= installStartedAt.addingTimeInterval(-30) {
+                    self?.receiveInstallObservation(observation, name: name)
+                }
+                self?.reportInstallStallIfNeeded(name: name)
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+            }
+        }
+    }
+
+    private func receiveInstallObservation(_ observation: VMInstallObservation, name: String) {
+        let prior = installObservations[name]
+        installObservations[name] = observation
+        if prior != observation {
+            log("VM \(name): installer checkpoint — \(observation.summary)")
+        }
+        if !observation.isStale(at: Date()) { installStallLogged.remove(name) }
+    }
+
+    private func reportInstallStallIfNeeded(name: String) {
+        guard let observation = installObservations[name],
+              observation.isStale(at: Date()),
+              !installStallLogged.contains(name) else { return }
+        installStallLogged.insert(name)
+        log("VM \(name): no guest checkpoint for \(observation.staleMinutes(at: Date())) minutes; last: \(observation.summary)")
     }
 
     private func upsert(_ server: HostedServer) {

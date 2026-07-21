@@ -32,12 +32,32 @@ public struct VMConfig: Codable, Sendable, Equatable {
     public let bootUnlockMode: String
     /// From the SIGNED blob: whether the guest root is LUKS-encrypted.
     public let diskEncrypted: Bool
+    /// Random order capability used only while the unattended guest install is
+    /// running, so Studio can read the same privacy-safe checkpoints the phone
+    /// sees. It never grants access to the server or its content.
+    public let provisionStatusSerial: String?
 
     /// Whether a boot passes through the sealed "waiting for you to unlock"
     /// state: an encrypted guest halts in the initramfs until the phone-home
     /// unlock supplies the key (auto = a held lease answers, approve = the
     /// owner taps). An unencrypted guest boots straight through.
     public var awaitsPhoneUnlockAtBoot: Bool { diskEncrypted }
+
+    public func clearingProvisionStatusSerial() -> VMConfig {
+        VMConfig(
+            name: name,
+            serverDomain: serverDomain,
+            username: username,
+            serverName: serverName,
+            cpuCount: cpuCount,
+            memoryBytes: memoryBytes,
+            mainDiskSizeBytes: mainDiskSizeBytes,
+            networkMode: networkMode,
+            serialConsoleEnabled: serialConsoleEnabled,
+            bootUnlockMode: bootUnlockMode,
+            diskEncrypted: diskEncrypted,
+            provisionStatusSerial: nil)
+    }
 
     public init(name: String,
                 serverDomain: String,
@@ -49,7 +69,8 @@ public struct VMConfig: Codable, Sendable, Equatable {
                 networkMode: VMNetworkMode,
                 serialConsoleEnabled: Bool,
                 bootUnlockMode: String,
-                diskEncrypted: Bool) {
+                diskEncrypted: Bool,
+                provisionStatusSerial: String? = nil) {
         self.name = name
         self.serverDomain = serverDomain
         self.username = username
@@ -61,6 +82,7 @@ public struct VMConfig: Codable, Sendable, Equatable {
         self.serialConsoleEnabled = serialConsoleEnabled
         self.bootUnlockMode = bootUnlockMode
         self.diskEncrypted = diskEncrypted
+        self.provisionStatusSerial = provisionStatusSerial
     }
 
     /// Build the spec for a verified recipe on this host. Deterministic: the
@@ -83,6 +105,7 @@ public struct VMConfig: Codable, Sendable, Equatable {
             networkMode: .nat,
             serialConsoleEnabled: RecipeSiblings.debugGrant(inRecipeJSON: recipeJSON) != nil,
             bootUnlockMode: recipe.effectiveBootUnlockMode,
-            diskEncrypted: recipe.encryptsDisk)
+            diskEncrypted: recipe.encryptsDisk,
+            provisionStatusSerial: recipe.authCode.serial)
     }
 }

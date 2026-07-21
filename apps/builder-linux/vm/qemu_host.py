@@ -81,9 +81,11 @@ class QemuHost:
                 raise QemuHostError(
                     f"qemu-img create failed ({r.returncode}): {r.stderr.strip()}"
                 )
+            os.chmod(disk, 0o600)
         vars_path = layout.efi_variable_store_path(config.name)
         if not os.path.exists(vars_path):
             shutil.copyfile(self._toolchain.uefi_vars_template, vars_path)
+            os.chmod(vars_path, 0o600)
 
     def start(self, config: VMConfig, layout: VMBundleLayout, attach_installer_iso: bool) -> None:
         """Start the VM. attach_installer_iso mirrors the lifecycle effects."""

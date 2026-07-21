@@ -818,7 +818,7 @@
                                                      VerticalAlignment="Center"
                                                      Fill="{Binding StateKind,
                                                          Converter={StaticResource StateKindToBrush}}"/>
-                                            <TextBlock Text="{Binding StateLabel}"
+                                            <TextBlock Text="{Binding SidebarStatus}"
                                                        Style="{StaticResource Caption}"
                                                        Margin="5,0,0,0"/>
                                             <TextBlock Text="{Binding BadgeLabel}"

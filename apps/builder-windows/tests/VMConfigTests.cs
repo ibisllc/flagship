@@ -69,6 +69,7 @@ public class VMConfigTests
         Assert.Equal(VMResourcePlan.VmMemoryBytes(Host16), cfg.MemoryBytes);
         Assert.Equal(VMResourcePlan.DefaultMainDiskSizeBytes, cfg.MainDiskSizeBytes);
         Assert.Equal(VMNetworkMode.Nat, cfg.NetworkMode);
+        Assert.Equal("01VMTEST", cfg.ProvisionStatusSerial);
     }
 
     // ---- Serial console ⇔ debug grant (the hard guardrail) ----

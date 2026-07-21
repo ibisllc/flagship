@@ -46,6 +46,7 @@ class VMConfig:
     # could but would be dishonestly slow). "amd64" on x86 hosts, "arm64" on
     # arm64 Chromebooks/SBCs. Legacy bundles (no persisted arch) are amd64.
     arch: str = "amd64"
+    provision_status_serial: str | None = None
 
     @property
     def awaits_phone_unlock_at_boot(self) -> bool:
@@ -80,4 +81,5 @@ class VMConfig:
             boot_unlock_mode=fields.effective_boot_unlock_mode,
             disk_encrypted=fields.encrypts_disk,
             arch=arch,
+            provision_status_serial=fields.auth_code_serial,
         )

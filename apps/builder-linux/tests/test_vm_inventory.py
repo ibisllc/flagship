@@ -66,6 +66,20 @@ def test_create_load_round_trip(tmp_path):
     store.create(record())
     got = store.load("home.harry.flagship.services")
     assert got == record()
+    assert os.stat(store.layout.bundle_dir(got.config.name)).st_mode & 0o777 == 0o700
+    assert os.stat(store.layout.config_path(got.config.name)).st_mode & 0o777 == 0o600
+
+
+def test_load_hardens_legacy_bundle_artifacts(tmp_path):
+    store = VMInventoryStore(VMBundleLayout(str(tmp_path)))
+    store.create(record())
+    disk = store.layout.disk_image_path("home.harry.flagship.services")
+    open(disk, "wb").write(b"x")
+    os.chmod(disk, 0o644)
+
+    store.load("home.harry.flagship.services")
+
+    assert os.stat(disk).st_mode & 0o777 == 0o600
 
 
 def test_failed_state_round_trips_with_phase_and_reason(tmp_path):

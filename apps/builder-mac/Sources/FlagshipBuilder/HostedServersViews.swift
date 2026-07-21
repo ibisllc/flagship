@@ -148,9 +148,11 @@ struct HostedServersSidebar: View {
     private func sidebarStateLabel(_ server: VMManager.HostedServer) -> some View {
         if case .installing = server.record.state {
             TimelineView(.periodic(from: .now, by: 30)) { context in
-                Text("Installing… \(elapsed(since: server.record.stateChangedAt ?? server.record.createdAt, now: context.date))")
+                let observation = vmManager.installObservation(named: server.id)
+                Text(installSidebarText(server, observation: observation, now: context.date))
                     .font(FB.Font.caption())
-                    .foregroundStyle(FB.Colors.textMuted)
+                    .foregroundStyle(observation?.isStale(at: context.date) == true
+                                     ? FB.Colors.warning : FB.Colors.textMuted)
             }
         } else if case .awaitingPhoneUnlock = server.record.state {
             // A sealed guest that never phones home would otherwise spin on
@@ -182,6 +184,17 @@ struct HostedServersSidebar: View {
         return seconds >= 3600
             ? "\(seconds / 3600)h \((seconds % 3600) / 60)m"
             : "\(seconds / 60)m"
+    }
+
+    private func installSidebarText(_ server: VMManager.HostedServer,
+                                    observation: VMInstallObservation?,
+                                    now: Date) -> String {
+        let runtime = elapsed(since: server.record.stateChangedAt ?? server.record.createdAt, now: now)
+        guard let observation else { return "Waiting for first guest checkpoint · \(runtime)" }
+        if observation.isStale(at: now) {
+            return "No guest progress for \(observation.staleMinutes(at: now))m · \(observation.summary)"
+        }
+        return "\(observation.summary) · \(runtime)"
     }
 
     private func sidebarSpecs(_ config: VMConfig) -> some View {
@@ -400,7 +413,13 @@ struct VMDetailView: View {
         case .installing:
             let start = server.record.stateChangedAt ?? server.record.createdAt
             let elapsed = max(0, Int(now.timeIntervalSince(start)) / 60)
-            return "Unattended install running inside the VM for \(elapsed) minute\(elapsed == 1 ? "" : "s")."
+            if let observation = vmManager.installObservation(named: server.id) {
+                if observation.isStale(at: now) {
+                    return "No new guest checkpoint for \(observation.staleMinutes(at: now)) minutes. Last reported: \(observation.summary). The VM may be stalled."
+                }
+                return "\(observation.summary). Last guest checkpoint \(relativeAge(observation.updatedAt, now: now)); \(elapsed) minute\(elapsed == 1 ? "" : "s") total."
+            }
+            return "Waiting for the first guest checkpoint; \(elapsed) minute\(elapsed == 1 ? "" : "s") total."
         case .running:
             return "Serving at https://\(server.record.config.serverDomain)/"
         case .failed(let f):
@@ -471,12 +490,24 @@ struct VMDetailView: View {
                 .formatted(date: .abbreviated, time: .shortened))
             detailRow("Last connected", server.record.lastConnectedAt?.formatted(
                 date: .abbreviated, time: .shortened) ?? "Not yet")
+            if let observation = vmManager.installObservation(named: server.id) {
+                detailRow("Installer checkpoint", observation.summary)
+                detailRow("Checkpoint received", observation.updatedAt.formatted(
+                    date: .omitted, time: .standard))
+            }
             detailRow("Network", "NAT + outbound tunnel")
             detailRow("Unlock", server.record.config.bootUnlockMode == "approve"
                       ? "Phone approval" : "Automatic lease")
         }
         .dashboardPanel()
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private func relativeAge(_ date: Date, now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
+        if seconds < 60 { return "less than a minute ago" }
+        let minutes = seconds / 60
+        return "\(minutes) minute\(minutes == 1 ? "" : "s") ago"
     }
 
     private func detailRow(_ label: String, _ value: String) -> some View {

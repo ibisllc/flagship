@@ -149,6 +149,34 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-20 (VM install rethink) — Ezra proved install-per-VM is the wrong
+default; cross-platform privacy-safe progress landed and clone-and-specialize is
+the locked replacement.** `ezra.jolly-quince` on VZ/Debian 13.6 reached
+partitioning, wrote ~2 GiB, then held one vCPU at 100% with no disk writes or
+guest checkpoint after "Installing Debian base system (0 min)" — the same
+signature as the prior 13.5 stall. The d-i watcher itself was being reaped after
+its first report; it now launches in a detached session and reports fixed
+download/verify/extract/unpack/configure + later installer stages every two
+minutes. Mac/Linux/Windows persist the order-status capability from the verified
+recipe, poll the same allowlisted stream as the phone, show the actual guest
+checkpoint, log changes, and warn after three silent minutes; no raw syslog,
+package output, recipe bytes, keys, identifiers, or content leave the guest.
+The capability is cleared after install success; Unix VM bundle directories and
+config/disk/installer/EFI artifacts are owner-only, including existing bundles
+hardened on load. Design decision:
+Host-here will use a signed dual-arch generalized LUKS appliance, downloaded once
+then APFS-cloned (Mac) / qcow2-overlaid (Linux/Windows) and specialized/rekeyed on
+first boot; the per-server Debian install remains only a compatibility path and
+USB keeps d-i. **Remaining:** build/generalize/sign the amd64+arm64 appliance,
+add the manifest/cache + seed-disk receipt, validate Mac LUKS rekey→registration→
+green padlock, then port the image path to Linux/Windows. Ezra was stopped by
+the owner after evidence capture; its failed disk remains preserved.
+**TODO (Windows dev machine):** pull this commit, compile + run the Windows test
+suite, fix any WPF/.NET issues, produce the signed Windows build, then use WSL2
+or the paired Linux environment to run pytest + render smoke and produce the
+Linux AppImage. Verify both installers show live guest checkpoints + the
+three-minute stale warning before publishing their download URLs.
+
 **2026-07-20 (leti bring-up) — `.services` accepts the same admin-root
 RootEntitlement authority the phone and box enforce; deployed + live-verified.**
 A fresh admin-pinned box correctly received an admin-root-signed entitlement,

@@ -56,7 +56,7 @@ public partial class MainWindow : Window
         stallTimer.Tick += (_, _) =>
         {
             foreach (var s in _wizard.Vm.Servers)
-                if (s.StateKind == VMStateKind.AwaitingPhoneUnlock)
+                if (s.StateKind is VMStateKind.AwaitingPhoneUnlock or VMStateKind.Installing)
                     s.RefreshTimeDerivedState();
         };
         stallTimer.Start();

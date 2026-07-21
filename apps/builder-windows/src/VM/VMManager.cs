@@ -5,10 +5,33 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Flagship.Builder.VM;
+
+public sealed record InstallObservation(string Phase, string? Detail, DateTimeOffset UpdatedAt)
+{
+    public string Summary => !string.IsNullOrWhiteSpace(Detail) ? Detail : Phase switch
+    {
+        "booting" => "Booting the installer",
+        "partitioning" => "Preparing the encrypted disk",
+        "installing" => "Installing Debian",
+        "downloading" => "Downloading Flagship software",
+        "registering" => "Registering the server",
+        "sealing" => "Sealing the disk key",
+        "installed" => "Installation complete",
+        "pairing" => "Pairing with your phone",
+        "live" => "Server is live",
+        "error" => "Installation reported an error",
+        _ => "Waiting for an installer checkpoint",
+    };
+
+    public bool IsStale(DateTimeOffset now) => now - UpdatedAt >= TimeSpan.FromMinutes(3);
+    public int StaleMinutes(DateTimeOffset now) => Math.Max(0, (int)(now - UpdatedAt).TotalMinutes);
+}
 
 /// <summary>
 /// One hosted server as the UI sees it: the persisted record + change
@@ -44,6 +67,12 @@ public sealed class HostedServer : INotifyPropertyChanged
     public string BadgeLabel => _record.Tier.BadgeLabel();
     public string StateLabel => _record.State.Label;
     public VMStateKind StateKind => _record.State.Kind;
+    public InstallObservation? InstallObservation { get; internal set; }
+    public string SidebarStatus => StateKind == VMStateKind.Installing && InstallObservation is { } observation
+        ? observation.IsStale(DateTimeOffset.UtcNow)
+            ? $"No guest progress for {observation.StaleMinutes(DateTimeOffset.UtcNow)}m · {observation.Summary}"
+            : observation.Summary
+        : StateLabel;
 
     public string StatusSubtitle
     {
@@ -56,7 +85,11 @@ public sealed class HostedServer : INotifyPropertyChanged
                 VMStateKind.AwaitingPhoneUnlock => _record.Config.BootUnlockMode == "approve"
                     ? "The disk is sealed — approve the unlock on your phone."
                     : "The disk is sealed — waiting for the phone-home unlock.",
-                VMStateKind.Installing => "Unattended install running inside the VM.",
+                VMStateKind.Installing => InstallObservation is null
+                    ? "Waiting for the first guest checkpoint."
+                    : InstallObservation.IsStale(DateTimeOffset.UtcNow)
+                        ? $"No new guest checkpoint for {InstallObservation.StaleMinutes(DateTimeOffset.UtcNow)} minutes. Last reported: {InstallObservation.Summary}. The VM may be stalled."
+                        : $"{InstallObservation.Summary}. Guest checkpoint is current.",
                 VMStateKind.Running => $"Serving at https://{_record.Config.ServerDomain}/",
                 VMStateKind.Failed => _record.State.Failure?.Reason ?? "",
                 VMStateKind.Installed or VMStateKind.Stopped => "Start the server to bring it online.",
@@ -130,9 +163,18 @@ public sealed class VMManager
     private readonly Dictionary<string, QemuHost> _hosts = new();
     private readonly Dictionary<string, bool> _attachIso = new();
     private readonly Dictionary<string, CancellationTokenSource> _unlockPolls = new();
+    private readonly Dictionary<string, CancellationTokenSource> _installPolls = new();
+    private readonly HashSet<string> _installStallLogged = new();
     private readonly SynchronizationContext? _sync;
     private readonly Func<DateTimeOffset> _clock;
     private static readonly HttpClient UnlockProbe = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly HttpClient InstallProbe = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly Regex ProvisionSerial = new("^[A-Za-z0-9_-]{8,64}$", RegexOptions.CultureInvariant);
+    private static readonly HashSet<string> ProvisionPhases = new()
+    {
+        "booting", "partitioning", "installing", "downloading", "registering",
+        "sealing", "installed", "pairing", "live", "error",
+    };
 
     public VMManager(VMInventoryStore store, QemuToolchain? toolchain, string? toolchainError = null,
                      Func<DateTimeOffset>? clock = null)
@@ -226,6 +268,7 @@ public sealed class VMManager
         _hosts.Remove(name);
         _lifecycles.Remove(name);
         if (_unlockPolls.Remove(name, out var cts)) cts.Cancel();
+        if (_installPolls.Remove(name, out var installCts)) installCts.Cancel();
         try { Store.Delete(name); } catch { }
         var server = Server(name);
         if (server != null) Servers.Remove(server);
@@ -261,10 +304,19 @@ public sealed class VMManager
             Log($"VM {name}: ignored {ev.Kind} in state {server.Record.State.Label}");
             return;
         }
-        server.Record = server.Record with { State = lc.State, StateChangedAt = lc.StateChangedAt };
+        var config = lc.State.Kind == VMStateKind.Installed
+            ? server.Record.Config with { ProvisionStatusSerial = null }
+            : server.Record.Config;
+        server.Record = server.Record with
+        {
+            Config = config,
+            State = lc.State,
+            StateChangedAt = lc.StateChangedAt,
+        };
         try { Store.Save(server.Record); } catch { }
         await RunEffectsAsync(effects, server.Record.Config);
         SyncUnlockPoll(server.Record.Config);
+        SyncInstallPoll(server.Record.Config);
     }
 
     private async Task RunEffectsAsync(IReadOnlyList<VMEffect> effects, VMConfig config)
@@ -434,6 +486,72 @@ public sealed class VMManager
                 {
                     // Not up yet (TLS handshake fails while sealed) — keep waiting.
                 }
+                try { await Task.Delay(TimeSpan.FromSeconds(15), cts.Token); }
+                catch (OperationCanceledException) { return; }
+            }
+        });
+    }
+
+    // ---- Privacy-safe install checkpoints ----
+
+    private void SyncInstallPoll(VMConfig config)
+    {
+        var name = config.Name;
+        if (CurrentStateKind(name) != VMStateKind.Installing)
+        {
+            if (_installPolls.Remove(name, out var old)) old.Cancel();
+            _installStallLogged.Remove(name);
+            return;
+        }
+        var serial = config.ProvisionStatusSerial;
+        if (_installPolls.ContainsKey(name) || string.IsNullOrEmpty(serial)
+            || !ProvisionSerial.IsMatch(serial)) return;
+        var startedAt = Server(name)?.Record.StateChangedAt ?? _clock();
+        var cts = new CancellationTokenSource();
+        _installPolls[name] = cts;
+        _ = Task.Run(async () =>
+        {
+            var url = $"https://flagshipserver.com/api/order/{serial}/status";
+            while (!cts.IsCancellationRequested)
+            {
+                try
+                {
+                    using var response = await InstallProbe.GetAsync(url, cts.Token);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cts.Token));
+                        var root = doc.RootElement;
+                        var phase = root.GetProperty("phase").GetString();
+                        var updatedAt = DateTimeOffset.FromUnixTimeMilliseconds(root.GetProperty("updatedAt").GetInt64());
+                        if (phase is not null && ProvisionPhases.Contains(phase)
+                            && updatedAt >= startedAt.AddSeconds(-30))
+                        {
+                            string? detail = root.TryGetProperty("detail", out var d) && d.ValueKind == JsonValueKind.String
+                                ? new string((d.GetString() ?? "").Where(c => !char.IsControl(c)).Take(240).ToArray())
+                                : null;
+                            var observation = new InstallObservation(phase, detail, updatedAt);
+                            OnUi(() =>
+                            {
+                                var server = Server(name);
+                                if (server is null) return;
+                                var changed = server.InstallObservation != observation;
+                                server.InstallObservation = observation;
+                                if (changed) Log($"VM {name}: installer checkpoint — {observation.Summary}");
+                                if (!observation.IsStale(_clock())) _installStallLogged.Remove(name);
+                                server.RefreshTimeDerivedState();
+                            });
+                        }
+                    }
+                }
+                catch (OperationCanceledException) when (cts.IsCancellationRequested) { return; }
+                catch { }
+                OnUi(() =>
+                {
+                    var observation = Server(name)?.InstallObservation;
+                    if (observation is null || !observation.IsStale(_clock())
+                        || !_installStallLogged.Add(name)) return;
+                    Log($"VM {name}: no guest checkpoint for {observation.StaleMinutes(_clock())} minutes; last: {observation.Summary}");
+                });
                 try { await Task.Delay(TimeSpan.FromSeconds(15), cts.Token); }
                 catch (OperationCanceledException) { return; }
             }

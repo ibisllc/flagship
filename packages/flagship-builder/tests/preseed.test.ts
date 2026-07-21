@@ -529,9 +529,17 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
 
   function extractInstallerTelemetry(c: string): string {
     const match = c.match(
-      /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/usr\/lib\/base-installer\.d\/05flagship-beacon/,
+      /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/tmp\/flagship-installer-telemetry\.sh/,
     );
     if (!match) throw new Error("base-installer telemetry drop not found");
+    return Buffer.from(match[1]!, "base64").toString("utf8");
+  }
+
+  function extractInstallerTelemetryLauncher(c: string): string {
+    const match = c.match(
+      /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/usr\/lib\/base-installer\.d\/05flagship-beacon/,
+    );
+    if (!match) throw new Error("base-installer telemetry launcher not found");
     return Buffer.from(match[1]!, "base64").toString("utf8");
   }
 
@@ -540,6 +548,7 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
     for (const encryptRoot of [true, false]) {
       const c = buildDebianPreseed({ blob, blobSignatureHex, encryptRoot });
       const telemetry = extractInstallerTelemetry(c);
+      const launcher = extractInstallerTelemetryLauncher(c);
       expect(telemetry).toContain('"phase":"installing"');
       expect(telemetry).toContain("/api/order/01TESTABCDEF/status");
       // Ordering inside the early_command: partitioning beacon → wipe → dropper.
@@ -549,9 +558,12 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
       expect(partAt).toBeGreaterThan(0);
       expect(wipeAt).toBeGreaterThan(partAt);
       expect(dropAt).toBeGreaterThan(wipeAt);
-      // The dropped script is backgrounded + can never fail base-installer.
-      expect(telemetry).toContain(") >/dev/null 2>&1 &");
-      expect(telemetry).toContain("exit 0");
+      // A detached launcher owns the backgrounding so d-i cannot reap the
+      // watcher when this run-parts hook returns.
+      expect(launcher).toContain("setsid /bin/sh /tmp/flagship-installer-telemetry.sh");
+      expect(launcher).toContain("trap '' HUP");
+      expect(launcher).toContain("echo $! > /tmp/flagship-installer-telemetry.pid");
+      expect(launcher).toContain("exit 0");
     }
   });
 
@@ -559,6 +571,11 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
     const telemetry = extractInstallerTelemetry(cfg());
     for (const detail of [
       "Installing Debian base system",
+      "Downloading Debian base packages",
+      "Verifying Debian base packages",
+      "Extracting the Debian base system",
+      "Unpacking the Debian base system",
+      "Configuring the Debian base system",
       "Configuring the Debian package source",
       "Installing system packages",
       "Installing the bootloader",

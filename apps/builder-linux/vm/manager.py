@@ -13,10 +13,13 @@ run inline.
 from __future__ import annotations
 
 import platform
+import json
+import re
 import threading
 import time
 import urllib.error
 import urllib.request
+from dataclasses import replace
 from typing import Callable, Dict, List, Optional
 
 from . import host_arch, kvm_probe, resource_plan
@@ -38,12 +41,50 @@ from .qemu_locator import QemuLocatorError, QemuToolchain, locate
 from .server_tier import ServerTier
 
 
+_PROVISION_PHASES = {
+    "booting", "partitioning", "installing", "downloading", "registering",
+    "sealing", "installed", "pairing", "live", "error",
+}
+_SERIAL_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+
+
+class InstallObservation:
+    def __init__(self, phase: str, detail: Optional[str], updated_at: float) -> None:
+        self.phase = phase
+        self.detail = detail
+        self.updated_at = updated_at
+
+    @property
+    def summary(self) -> str:
+        if self.detail:
+            return self.detail
+        return {
+            "booting": "Booting the installer",
+            "partitioning": "Preparing the encrypted disk",
+            "installing": "Installing Debian",
+            "downloading": "Downloading Flagship software",
+            "registering": "Registering the server",
+            "sealing": "Sealing the disk key",
+            "installed": "Installation complete",
+            "pairing": "Pairing with your phone",
+            "live": "Server is live",
+            "error": "Installation reported an error",
+        }.get(self.phase, "Waiting for an installer checkpoint")
+
+    def stale_minutes(self, now: float) -> int:
+        return max(0, int(now - self.updated_at) // 60)
+
+    def is_stale(self, now: float) -> bool:
+        return now - self.updated_at >= 180
+
+
 class HostedServer:
     """One hosted server as the UI sees it: the persisted record + derived
     display properties. Pure presentation mapping — no QEMU, no filesystem."""
 
     def __init__(self, record: VMRecord) -> None:
         self.record = record
+        self.install_observation: Optional[InstallObservation] = None
 
     @property
     def name(self) -> str:
@@ -81,7 +122,16 @@ class HostedServer:
                 return "The disk is sealed — approve the unlock on your phone."
             return "The disk is sealed — waiting for the phone-home unlock."
         if s.kind == VMStateKind.INSTALLING:
-            return "Unattended install running inside the VM."
+            observation = self.install_observation
+            if observation is None:
+                return "Waiting for the first guest checkpoint."
+            now = time.time()
+            if observation.is_stale(now):
+                return (
+                    f"No new guest checkpoint for {observation.stale_minutes(now)} minutes. "
+                    f"Last reported: {observation.summary}. The VM may be stalled."
+                )
+            return f"{observation.summary}. Guest checkpoint is current."
         if s.kind == VMStateKind.RUNNING:
             return f"Serving at https://{c.server_domain}/"
         if s.kind == VMStateKind.FAILED:
@@ -209,6 +259,8 @@ class VMManager:
         self._hosts: Dict[str, QemuHost] = {}
         self._attach_iso: Dict[str, bool] = {}
         self._unlock_polls: Dict[str, threading.Event] = {}
+        self._install_polls: Dict[str, threading.Event] = {}
+        self._install_stall_logged: set[str] = set()
         self._load_and_normalize()
 
     @staticmethod
@@ -352,6 +404,7 @@ class VMManager:
                 pass
         self._lifecycles.pop(name, None)
         self._cancel_unlock_poll(name)
+        self._cancel_install_poll(name)
         try:
             self.store.delete(name)
         except VMStoreError:
@@ -399,8 +452,11 @@ class VMManager:
         except VMLifecycleError:
             self.log(f"VM {name}: ignored {event.kind.value} in state {server.record.state.label}")
             return
+        config = server.record.config
+        if lc.state.kind == VMStateKind.INSTALLED:
+            config = replace(config, provision_status_serial=None)
         server.record = VMRecord(
-            config=server.record.config,
+            config=config,
             state=lc.state,
             created_at=server.record.created_at,
             tier=server.record.tier,
@@ -413,6 +469,7 @@ class VMManager:
         self.on_change()
         self._run_effects(effects, server.record.config)
         self._sync_unlock_poll(server.record.config)
+        self._sync_install_poll(server.record.config)
 
     def _run_effects(self, effects, config: VMConfig) -> None:
         import os
@@ -542,6 +599,73 @@ class VMManager:
 
     def _cancel_unlock_poll(self, name: str) -> None:
         stop = self._unlock_polls.pop(name, None)
+        if stop is not None:
+            stop.set()
+
+    # ---- privacy-safe install checkpoints ----
+
+    def _sync_install_poll(self, config: VMConfig) -> None:
+        name = config.name
+        if self._current_state_kind(name) != VMStateKind.INSTALLING:
+            self._cancel_install_poll(name)
+            self._install_stall_logged.discard(name)
+            return
+        serial = config.provision_status_serial
+        if name in self._install_polls or not serial or not _SERIAL_RE.fullmatch(serial):
+            return
+        server = self.server(name)
+        started_at = server.record.state_changed_at if server else self._clock()
+        stop = threading.Event()
+        self._install_polls[name] = stop
+        url = f"https://flagshipserver.com/api/order/{serial}/status"
+
+        def poll() -> None:
+            while not stop.is_set():
+                try:
+                    with urllib.request.urlopen(url, timeout=10) as response:
+                        raw = json.load(response)
+                    phase = raw.get("phase")
+                    updated_at = float(raw.get("updatedAt", 0)) / 1000
+                    if phase in _PROVISION_PHASES and updated_at >= started_at - 30:
+                        detail = raw.get("detail")
+                        if isinstance(detail, str):
+                            detail = "".join(c for c in detail if c.isprintable())[:240]
+                        else:
+                            detail = None
+                        observation = InstallObservation(phase, detail, updated_at)
+                        current = self.server(name)
+                        if current is not None:
+                            prior = current.install_observation
+                            current.install_observation = observation
+                            if prior is None or (
+                                prior.phase, prior.detail, prior.updated_at
+                            ) != (observation.phase, observation.detail, observation.updated_at):
+                                self.log(f"VM {name}: installer checkpoint — {observation.summary}")
+                                self.on_change()
+                            if not observation.is_stale(self._clock()):
+                                self._install_stall_logged.discard(name)
+                except Exception:
+                    pass
+                current = self.server(name)
+                observation = current.install_observation if current else None
+                if (
+                    observation is not None
+                    and observation.is_stale(self._clock())
+                    and name not in self._install_stall_logged
+                ):
+                    self._install_stall_logged.add(name)
+                    self.log(
+                        f"VM {name}: no guest checkpoint for "
+                        f"{observation.stale_minutes(self._clock())} minutes; "
+                        f"last: {observation.summary}"
+                    )
+                    self.on_change()
+                stop.wait(15)
+
+        threading.Thread(target=poll, daemon=True).start()
+
+    def _cancel_install_poll(self, name: str) -> None:
+        stop = self._install_polls.pop(name, None)
         if stop is not None:
             stop.set()
 

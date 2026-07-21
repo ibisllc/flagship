@@ -101,6 +101,7 @@ def _config_to_dict(c: VMConfig) -> dict:
         "bootUnlockMode": c.boot_unlock_mode,
         "diskEncrypted": c.disk_encrypted,
         "arch": c.arch,
+        "provisionStatusSerial": c.provision_status_serial,
     }
 
 
@@ -119,6 +120,7 @@ def _config_from_dict(d: dict) -> VMConfig:
         disk_encrypted=bool(d["diskEncrypted"]),
         # Legacy bundles predate multi-arch hosting and are all amd64.
         arch=d.get("arch", "amd64"),
+        provision_status_serial=d.get("provisionStatusSerial"),
     )
 
 
@@ -189,6 +191,7 @@ class VMInventoryStore:
         path = self.layout.config_path(name)
         if not os.path.exists(path):
             raise VMStoreError(VMStoreErrorKind.NOT_FOUND, name)
+        self._harden_permissions(name)
         with open(path, "rb") as f:
             return _record_from_dict(json.load(f))
 
@@ -201,6 +204,7 @@ class VMInventoryStore:
         if os.path.exists(d):
             raise VMStoreError(VMStoreErrorKind.ALREADY_EXISTS, name)
         os.makedirs(d, exist_ok=False)
+        os.chmod(d, 0o700)
         self._write(record)
 
     def save(self, record: VMRecord) -> None:
@@ -227,7 +231,26 @@ class VMInventoryStore:
         tmp = path + ".tmp"
         with open(tmp, "wb") as f:
             f.write(data)
+        os.chmod(tmp, 0o600)
         os.replace(tmp, path)
+
+    def _harden_permissions(self, name: str) -> None:
+        paths = (
+            self.layout.config_path(name),
+            self.layout.disk_image_path(name),
+            self.layout.installer_iso_path(name),
+            self.layout.efi_variable_store_path(name),
+            self.layout.console_log_path(name),
+        )
+        try:
+            os.chmod(self.layout.bundle_dir(name), 0o700)
+        except OSError:
+            pass
+        for path in paths:
+            try:
+                os.chmod(path, 0o600)
+            except OSError:
+                pass
 
     # ---- FQDN name validation (pinned by the shared golden vectors) ----
 

@@ -46,6 +46,9 @@ public sealed record VMConfig
     public required string BootUnlockMode { get; init; }
     /// <summary>From the SIGNED blob: whether the guest root is LUKS-encrypted.</summary>
     public required bool DiskEncrypted { get; init; }
+    /// <summary>Random order capability used only to read privacy-safe guest
+    /// install checkpoints. It grants no server/content access.</summary>
+    public string? ProvisionStatusSerial { get; init; }
 
     /// <summary>
     /// Whether a boot passes through the sealed "waiting for you to unlock"
@@ -80,6 +83,7 @@ public sealed record VMConfig
             SerialConsoleEnabled = RecipeSiblings.DebugGrant(recipeJson) != null,
             BootUnlockMode = recipe.EffectiveBootUnlockMode,
             DiskEncrypted = recipe.EncryptsDisk,
+            ProvisionStatusSerial = recipe.AuthCode.Serial,
         };
 }
 

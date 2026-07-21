@@ -818,6 +818,8 @@ class WizardModel:
             if not remastered[0]:
                 self.vm.delete_server(config.name)
                 return
+            if os.path.exists(out_iso):
+                os.chmod(out_iso, 0o600)
 
             # Shred the single-use recipe, exactly like a successful USB burn.
             try:
@@ -1709,6 +1711,15 @@ def build_window(application, model: Optional[WizardModel] = None):
             col.append(name_label)
             if server.coming_up_stalled(time.time()):
                 _state_text = "⚠ Taking longer than expected — check the network"
+            elif server.state_kind == VMStateKind.INSTALLING and server.install_observation:
+                observation = server.install_observation
+                if observation.is_stale(time.time()):
+                    _state_text = (
+                        f"⚠ No guest progress for {observation.stale_minutes(time.time())}m · "
+                        f"{observation.summary}"
+                    )
+                else:
+                    _state_text = f"● {observation.summary} · {server.badge_label}"
             else:
                 _state_text = f"● {server.state_label} · {server.badge_label}"
             state_label = Gtk.Label(label=_state_text, xalign=0.0)

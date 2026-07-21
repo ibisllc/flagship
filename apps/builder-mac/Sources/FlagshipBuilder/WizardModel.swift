@@ -785,6 +785,8 @@ final class WizardModel: ObservableObject {
                 try Remaster.remasterInstaller(srcISO: srcISO, outISO: outISO,
                                                userDataYAML: cfgs.yaml, preseedCfg: cfgs.preseed)
             }.value
+            try FileManager.default.setAttributes([.posixPermissions: 0o600],
+                                                  ofItemAtPath: outISO.path)
             didRemasterForTest = true
             appendLog(stream: .stdout, text: "+ installer family: \(used)")
         } catch {

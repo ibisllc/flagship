@@ -17,7 +17,12 @@ from vm.qemu_locator import QemuToolchain
 from vm.server_tier import ServerTier
 
 
-def config(name: str = "a.h.flagship.services", debug: bool = False, encrypted: bool = True) -> VMConfig:
+def config(
+    name: str = "a.h.flagship.services",
+    debug: bool = False,
+    encrypted: bool = True,
+    provision_status_serial: str | None = None,
+) -> VMConfig:
     return VMConfig(
         name=name,
         server_domain=name,
@@ -30,6 +35,7 @@ def config(name: str = "a.h.flagship.services", debug: bool = False, encrypted: 
         serial_console_enabled=debug,
         boot_unlock_mode="auto",
         disk_encrypted=encrypted,
+        provision_status_serial=provision_status_serial,
     )
 
 
@@ -201,7 +207,7 @@ def test_clean_stop_after_plausible_duration_is_success_then_first_boot(store, t
     now = [1000.0]
     host = FakeHost()
     m = manager(store, host=host, clock=lambda: now[0])
-    m.create_server(config(encrypted=True))
+    m.create_server(config(encrypted=True, provision_status_serial="01VMTEST"))
     m.begin_install("a.h.flagship.services")
     # The single-use installer exists and is reclaimed on success.
     iso = m.installer_iso_path("a.h.flagship.services")
@@ -215,6 +221,8 @@ def test_clean_stop_after_plausible_duration_is_success_then_first_boot(store, t
     assert not os.path.exists(iso)
     # The VM was restarted from disk (second start, no ISO).
     assert host.started == [("a.h.flagship.services", True), ("a.h.flagship.services", False)]
+    assert m.servers[0].record.config.provision_status_serial is None
+    assert store.load("a.h.flagship.services").config.provision_status_serial is None
     m._cancel_unlock_poll("a.h.flagship.services")
 
 

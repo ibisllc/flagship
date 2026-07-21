@@ -385,9 +385,20 @@ function partmanEarlyCommand(partitionBeacon: string, installingDrop: string): s
  */
 function debianBaseInstallerBeaconDrop(serial: string): string {
   const scriptB64 = utf8ToBase64(debianInstallerTelemetryScript(serial));
+  const launcherB64 = utf8ToBase64(`#!/bin/sh
+if command -v setsid >/dev/null 2>&1; then
+  setsid /bin/sh /tmp/flagship-installer-telemetry.sh </dev/null >/dev/null 2>&1 &
+else
+  ( trap '' HUP; /bin/sh /tmp/flagship-installer-telemetry.sh </dev/null >/dev/null 2>&1 ) &
+fi
+echo $! > /tmp/flagship-installer-telemetry.pid
+exit 0
+`);
   return (
     `( mkdir -p /usr/lib/base-installer.d; ` +
-    `echo '${scriptB64}' | base64 -d > /usr/lib/base-installer.d/05flagship-beacon; ` +
+    `echo '${scriptB64}' | base64 -d > /tmp/flagship-installer-telemetry.sh; ` +
+    `chmod +x /tmp/flagship-installer-telemetry.sh; ` +
+    `echo '${launcherB64}' | base64 -d > /usr/lib/base-installer.d/05flagship-beacon; ` +
     `chmod +x /usr/lib/base-installer.d/05flagship-beacon ) || true`
   );
 }
@@ -401,34 +412,40 @@ function debianBaseInstallerBeaconDrop(serial: string): string {
 function debianInstallerTelemetryScript(serial: string): string {
   return `#!/bin/sh
 STATUS_URL='https://flagshipserver.com/api/order/${serial}/status'
-(
-  _started=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)
-  _last_stage=''
-  _last_report=0
-  while [ ! -e /tmp/flagship-installer-telemetry.done ]; do
-    _now=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)
-    _minutes=$(( (_now - _started) / 60 ))
-    _stage='Installing Debian base system'
-    if grep -q "Menu item 'finish-install' selected" /var/log/syslog 2>/dev/null; then
-      _stage='Finishing the operating-system install'
-    elif grep -q "Menu item 'grub-installer' selected" /var/log/syslog 2>/dev/null; then
-      _stage='Installing the bootloader'
-    elif grep -q "Menu item 'pkgsel' selected" /var/log/syslog 2>/dev/null; then
-      _stage='Installing system packages'
-    elif grep -q "Menu item 'apt-setup' selected" /var/log/syslog 2>/dev/null; then
-      _stage='Configuring the Debian package source'
-    fi
-    if [ "$_stage" != "$_last_stage" ] || [ $(( _now - _last_report )) -ge 120 ]; then
-      printf '{"phase":"installing","detail":"%s (%s min)"}\n' "$_stage" "$_minutes" > /tmp/flagship-beacon.json
-      wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "$STATUS_URL" >/dev/null 2>&1 || true
-      _last_stage="$_stage"
-      _last_report=$_now
-    fi
-    sleep 15
-  done
-) >/dev/null 2>&1 &
-echo $! > /tmp/flagship-installer-telemetry.pid
-exit 0
+_started=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)
+_last_stage=''
+_last_report=0
+while [ ! -e /tmp/flagship-installer-telemetry.done ]; do
+  _now=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)
+  _minutes=$(( (_now - _started) / 60 ))
+  _stage='Installing Debian base system'
+  if grep -q "Menu item 'finish-install' selected" /var/log/syslog 2>/dev/null; then
+    _stage='Finishing the operating-system install'
+  elif grep -q "Menu item 'grub-installer' selected" /var/log/syslog 2>/dev/null; then
+    _stage='Installing the bootloader'
+  elif grep -q "Menu item 'pkgsel' selected" /var/log/syslog 2>/dev/null; then
+    _stage='Installing system packages'
+  elif grep -q "Menu item 'apt-setup' selected" /var/log/syslog 2>/dev/null; then
+    _stage='Configuring the Debian package source'
+  elif grep -q 'debootstrap:.*Configuring' /var/log/syslog 2>/dev/null; then
+    _stage='Configuring the Debian base system'
+  elif grep -q 'debootstrap:.*Unpacking' /var/log/syslog 2>/dev/null; then
+    _stage='Unpacking the Debian base system'
+  elif grep -q 'debootstrap:.*Extracting' /var/log/syslog 2>/dev/null; then
+    _stage='Extracting the Debian base system'
+  elif grep -q 'debootstrap:.*Validating' /var/log/syslog 2>/dev/null; then
+    _stage='Verifying Debian base packages'
+  elif grep -q 'debootstrap:.*Retrieving' /var/log/syslog 2>/dev/null; then
+    _stage='Downloading Debian base packages'
+  fi
+  if [ "$_stage" != "$_last_stage" ] || [ $(( _now - _last_report )) -ge 120 ]; then
+    printf '{"phase":"installing","detail":"%s (%s min)"}\n' "$_stage" "$_minutes" > /tmp/flagship-beacon.json
+    wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "$STATUS_URL" >/dev/null 2>&1 || true
+    _last_stage="$_stage"
+    _last_report=$_now
+  fi
+  sleep 15
+done
 `;
 }
 

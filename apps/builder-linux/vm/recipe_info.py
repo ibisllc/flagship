@@ -22,6 +22,7 @@ class RecipeFields:
     server_domain: str
     username: str
     server_name: str
+    auth_code_serial: Optional[str] = None
     # Raw phone-signed values; absence has a defined default below.
     boot_unlock_mode: Optional[str] = None
     disk_encryption: Optional[str] = None
@@ -73,6 +74,12 @@ def read_recipe_fields(recipe_json: bytes) -> RecipeFields:
         server_domain=req_str("serverDomain"),
         username=req_str("username"),
         server_name=req_str("serverName"),
+        auth_code_serial=(
+            fields.get("authCode", {}).get("serial")
+            if isinstance(fields.get("authCode"), dict)
+            and isinstance(fields.get("authCode", {}).get("serial"), str)
+            else None
+        ),
         boot_unlock_mode=opt_str("bootUnlockMode"),
         disk_encryption=opt_str("diskEncryption"),
     )

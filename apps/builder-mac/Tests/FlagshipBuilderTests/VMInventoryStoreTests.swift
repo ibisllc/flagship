@@ -56,6 +56,25 @@ final class VMInventoryStoreTests: XCTestCase {
         XCTAssertEqual(back, rec)
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: store.layout.configURL(rec.config.name).path))
+        let configMode = try FileManager.default.attributesOfItem(
+            atPath: store.layout.configURL(rec.config.name).path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(configMode?.intValue, 0o600)
+        let bundleMode = try FileManager.default.attributesOfItem(
+            atPath: store.layout.bundleDir(rec.config.name).path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(bundleMode?.intValue, 0o700)
+    }
+
+    func testLoadHardensLegacyBundleArtifacts() throws {
+        let rec = record(name: "legacy.harry.flagship.services")
+        try store.create(rec)
+        let disk = store.layout.diskImageURL(rec.config.name)
+        try Data([0]).write(to: disk)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: disk.path)
+
+        _ = try store.load(name: rec.config.name)
+
+        let mode = try FileManager.default.attributesOfItem(atPath: disk.path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(mode?.intValue, 0o600)
     }
 
     func testLegacyRecordWithoutActivityTimestampsStillLoads() throws {

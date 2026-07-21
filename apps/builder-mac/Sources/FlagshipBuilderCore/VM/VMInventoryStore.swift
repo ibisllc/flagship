@@ -103,6 +103,7 @@ public final class VMInventoryStore {
     public func load(name: String) throws -> VMRecord {
         let url = layout.configURL(name)
         guard fm.fileExists(atPath: url.path) else { throw VMStoreError.notFound(name) }
+        hardenPermissions(name: name)
         let data = try Data(contentsOf: url)
         return try Self.decoder().decode(VMRecord.self, from: data)
     }
@@ -114,6 +115,7 @@ public final class VMInventoryStore {
         let dir = layout.bundleDir(name)
         if fm.fileExists(atPath: dir.path) { throw VMStoreError.alreadyExists(name) }
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
         try write(record)
     }
 
@@ -135,7 +137,19 @@ public final class VMInventoryStore {
 
     private func write(_ record: VMRecord) throws {
         let data = try Self.encoder().encode(record)
-        try data.write(to: layout.configURL(record.config.name), options: [.atomic])
+        let url = layout.configURL(record.config.name)
+        try data.write(to: url, options: [.atomic])
+        try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+
+    private func hardenPermissions(name: String) {
+        let dir = layout.bundleDir(name)
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+        for url in [layout.configURL(name), layout.diskImageURL(name),
+                    layout.installerISOURL(name), layout.efiVariableStoreURL(name),
+                    layout.consoleLogURL(name)] where fm.fileExists(atPath: url.path) {
+            try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        }
     }
 
     /// Bundle names are server FQDNs — plain hostnames. Reject anything that
