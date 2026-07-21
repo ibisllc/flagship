@@ -117,6 +117,16 @@ export interface StartStreamingArgs {
   visibility?: "just-me" | "link";
 }
 
+export function modelForProvider(
+  provider: string,
+  requested: string | undefined,
+  fallback: string,
+): string {
+  if (requested) return requested;
+  if (provider === "openrouter") return "openrouter/auto";
+  return fallback;
+}
+
 /**
  * The function the screens BFF calls when the phone POSTs
  * /api/screens/vibe-code/start. Fire-and-forget — caller does not await.
@@ -152,7 +162,7 @@ export function buildVibeCodeStartStreaming(
       "\n\n" +
       TOOL_USE_PROMPT_SUPPLEMENT;
     const request: ChatRequest = {
-      model: s.model ?? args.defaultModel,
+      model: modelForProvider(credential.provider, s.model, args.defaultModel),
       messages: [
         { role: "system", content: systemMessage },
         {
@@ -251,7 +261,7 @@ export function buildVibeCodeResumeStreaming(
       })),
     ];
     const request: ChatRequest = {
-      model: model ?? args.defaultModel,
+      model: modelForProvider(credential.provider, model, args.defaultModel),
       messages,
       tools: VIBE_CODE_TOOLS.map((t) => ({ ...t })),
     };

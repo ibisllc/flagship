@@ -126,7 +126,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Keep entries terse: what changed +
-> what remains, not test counts or commit hashes. Last updated **2026-07-20**.
+> what remains, not test counts or commit hashes. Last updated **2026-07-21**.
 
 ### Pending owner validation (the standing caveat — applies to nearly every entry below)
 
@@ -148,6 +148,18 @@ harness can't do:
   ISO + a physical OTG drive (`apps/mobile/android/OTG-BUILDER-NOTES.md` §5).
 
 ### Recent work (condensed log, newest first)
+
+**2026-07-21 (OpenRouter Vibe Code streaming) — OpenRouter BYOK sessions now
+reach the agent loop.** OpenRouter was accepted for stored AI keys and blocking
+chat, but omitted from the streaming registry that Vibe Code exclusively uses,
+so every build failed immediately with “no streaming adapter for provider.” Its
+OpenAI-compatible SSE endpoint now uses the existing text + tool-call streaming
+adapter, and provider errors embedded mid-stream are surfaced as failures rather
+than a false successful end. The iOS client also bridges OpenRouter credentials
+through the legacy daemon's existing OpenAI adapter with the official
+`openrouter/auto` model, so an already-installed box does not need a reburn for
+this repair. **Remaining (owner):** install the rebuilt iOS app and start a fresh
+Vibe Code session on Colette with the OpenRouter key.
 
 **2026-07-20 (Leti certificate + service-key recovery) — an online box now
 reports its verified live certificate, and a consumed-but-undurable SWK can

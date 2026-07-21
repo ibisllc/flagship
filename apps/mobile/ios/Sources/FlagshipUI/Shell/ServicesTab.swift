@@ -532,10 +532,10 @@ struct VibeCodeDescribeContainer: View {
                     // AI-key step (kept on the holder so the describe screen
                     // could re-render without losing it). Name + visibility are
                     // the owner's choices on the form (no longer fixed).
-                    let cred = holder.credential
+                    let selection = VibeCodeCredentialSelection.compatible(with: holder.credential)
                     let resp = try await client.vibeCodeStart(
                         VibeCodeStartRequest(
-                            prompt: prompt, model: nil, credential: cred,
+                            prompt: prompt, model: selection.model, credential: selection.credential,
                             name: name, visibility: visibility
                         )
                     )

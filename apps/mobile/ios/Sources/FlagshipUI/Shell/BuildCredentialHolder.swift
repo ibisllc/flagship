@@ -22,3 +22,22 @@ public final class BuildCredentialHolder {
 
     public func clear() { credential = nil }
 }
+
+struct VibeCodeCredentialSelection: Equatable {
+    let credential: LlmProviderCredential?
+    let model: String?
+
+    static func compatible(with credential: LlmProviderCredential?) -> Self {
+        guard let credential, credential.provider == "openrouter" else {
+            return Self(credential: credential, model: nil)
+        }
+        return Self(
+            credential: LlmProviderCredential(
+                provider: "openai",
+                apiKey: credential.apiKey,
+                baseUrl: credential.baseUrl ?? "https://openrouter.ai/api"
+            ),
+            model: "openrouter/auto"
+        )
+    }
+}
