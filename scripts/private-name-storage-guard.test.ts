@@ -32,6 +32,7 @@ function makeCleanTree(): void {
   write("packages/server-daemon/src/clean.ts", "export const clean = true;\n");
   write("apps/com/src/clean.ts", "export const clean = true;\n");
   write("apps/web/public/webapp/clean.js", "export const clean = true;\n");
+  write("apps/web/public/webapp/lib/profiles.js", "export const KEY = 'flagship.profiles.v1';\n");
 }
 
 function run(): { code: number; stdout: string; stderr: string } {
@@ -108,6 +109,19 @@ describe("private-name-storage-guard", () => {
     // The actual offending line must be printed, not "Binary file ... matches".
     expect(result.stdout).toContain("deviceLabel");
     expect(result.stdout).not.toContain("Binary file");
+  });
+
+  it("fails a plaintext presentation name cached in the browser profile store", () => {
+    // The names are decrypted per render. Persisting one here would put it in
+    // localStorage — readable without the account key, and outliving the
+    // account. This regressed once already via a jsdoc @property line, so the
+    // check matches the identifier anywhere in the file.
+    makeCleanTree();
+    write(
+      "apps/web/public/webapp/lib/profiles.js",
+      "/** @property {string|null} [accountDisplayName] */\nexport const KEY = 'x';\n",
+    );
+    expect(run().code).toBe(1);
   });
 
   it("fails when a scan target resolves to no files", () => {

@@ -281,10 +281,9 @@ async function joinDemo(resolution) {
  *  the credentialed JOIN off the resolution:
  *    - recovery.present == false → a clean inline STATE (not a 404).
  *    - single → cloud-recovery unwrap → 7-day-grace TAKEOVER → re-pair
- *               initiated → this device labelled "admin".
+ *               initiated → this device gets a fresh opaque deviceId.
  *    - multi  → unwrap + a recovery TOTP / recovery code (the Worker
- *               REQUIRES it for account_type=multi) → 24h-grace TAKEOVER
- *               → "admin".
+ *               REQUIRES it for account_type=multi) → 24h-grace TAKEOVER.
  *  (Mock/popup WebAuthn as today: `recoverFromCloud` is the existing
  *  sub-origin flow. Grace countdown/completion/push/quarantine are
  *  Phase 4.) */

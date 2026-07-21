@@ -67,6 +67,11 @@ check '\bcompanionLabel\b' packages/server-daemon/src packages/control-plane/src
 check 'flagship/order/add-paired-session/v1' packages/protocol/src packages/server-daemon/src apps/com/src apps/web/public/webapp
 check 'GET[[:space:]]+/api/users/[^[:space:]]+/devices\b' packages/control-plane/src apps/com/src
 
+# A decrypted presentation name is a RENDER-time value. Persisting one into
+# the browser's profile store would put it in localStorage — readable without
+# the account key, and outliving the account itself.
+check '(accountDisplayName|deviceDisplayName)' apps/web/public/webapp/lib/profiles.js
+
 check_block '/interface PushTokenRecord/,/^}/p' "$TYPES" '\blabel\??:'
 check_block '/CREATE TABLE push_tokens/,/);/p' "$SCHEMA" '\blabel\b'
 check_block '/interface DemoUserRecord/,/^}/p' "$TYPES" '\bdisplay\??:'

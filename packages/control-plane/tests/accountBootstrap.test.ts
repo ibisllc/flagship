@@ -109,3 +109,54 @@ describe("account bootstrap", () => {
     expect(await storage.usernames.get(username)).toBeUndefined();
   });
 });
+
+/**
+ * The harness-side stand-in for "dump D1 and grep it".
+ *
+ * Per-record assertions only prove the record you thought to look at is
+ * clean. A presentation name leaking into an audit row, an install event, a
+ * provisioning record, or any table nobody remembered would sail past them.
+ * This walks EVERY store the aggregate exposes and asserts the chosen names
+ * appear nowhere at all.
+ */
+describe("account bootstrap — no plaintext name anywhere in storage", () => {
+  async function dumpAll(storage: InMemoryStorage): Promise<string> {
+    const parts: string[] = [];
+    for (const [name, store] of Object.entries(storage as unknown as Record<string, unknown>)) {
+      if (!store || typeof store !== "object") continue;
+      // Reach past the store wrapper into whatever it is actually holding, so
+      // a leak hides in no private Map.
+      for (const value of Object.values(store as Record<string, unknown>)) {
+        if (value instanceof Map) {
+          parts.push(name, JSON.stringify([...value.entries()]));
+        } else if (Array.isArray(value)) {
+          parts.push(name, JSON.stringify(value));
+        }
+      }
+    }
+    return parts.join("\n");
+  }
+
+  it("keeps the account name and the device name out of every table", async () => {
+    const storage = new InMemoryStorage();
+    await storage.usernameOffers.record(username, "signup-device", now);
+    const response = await handleAccountBootstrap({
+      provisioning: storage.accountProvisioning,
+      usernames: storage.usernames,
+      offers: storage.usernameOffers,
+      now: () => now,
+    }, body());
+    expect(response.status).toBe(200);
+
+    const dump = await dumpAll(storage);
+    // Sanity: the sweep is actually reading rows, so an empty dump can't pass.
+    expect(dump).toContain(deviceId);
+    expect(dump).toContain(username);
+    // The two names the caller chose. Neither is a column anywhere.
+    expect(dump).not.toContain("Johnson Family");
+    expect(dump).not.toContain("Erica");
+    // Nor does the response echo them back.
+    expect(JSON.stringify(response.body)).not.toContain("Johnson Family");
+    expect(JSON.stringify(response.body)).not.toContain("Erica");
+  });
+});

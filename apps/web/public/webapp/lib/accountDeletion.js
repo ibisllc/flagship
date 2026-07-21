@@ -172,6 +172,7 @@ export async function submitAccountSelfDelete(args, deps = {}) {
  * @param {() => void} args.lockSession
  * @param {(viewId: string) => void} args.show
  * @param {(slot: string) => void} [args.profileRemove]
+ * @param {(cloudName: string) => void} [args.forgetProfile]  profiles.removeProfile — drop the whole profile row
  * @param {() => void} [args.stopRenewals]
  * @param {(text: string) => void} [args.setSubtitle]
  * @param {string} [args.welcomeViewId]   landing view after deletion (default "view-bootstrap")
@@ -188,6 +189,7 @@ export async function runDeletionCeremony(args, deps = {}) {
     lockSession,
     show,
     profileRemove,
+    forgetProfile,
     stopRenewals,
     setSubtitle,
     welcomeViewId = "view-bootstrap",
@@ -207,6 +209,12 @@ export async function runDeletionCeremony(args, deps = {}) {
     for (const slot of ["sessionId", "sessionToken", "podBaseUrl", "username"]) {
       profileRemove(slot);
     }
+  }
+  // The account no longer exists, so neither should this browser's record of
+  // it — otherwise its accountId + account-scoped deviceId outlive it in
+  // localStorage and the switcher keeps offering a dead profile.
+  if (typeof forgetProfile === "function") {
+    try { forgetProfile(username); } catch { /* best-effort local cleanup */ }
   }
   lockSession();
   setSubtitle?.("account deleted");

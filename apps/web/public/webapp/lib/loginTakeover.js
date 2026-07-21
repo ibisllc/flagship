@@ -18,7 +18,7 @@
 //   3. multi (recovery.present)   → cloud-recovery unwrap + collect a
 //        recovery TOTP (6-digit) OR a recovery code → pass it as the
 //        re-pair `totpProof` (the Worker REQUIRES it for
-//        account_type === "multi") → 24h-grace TAKEOVER → "admin" label.
+//        account_type === "multi") → 24h-grace TAKEOVER.
 //
 // The recovered seed IS the user key (UMK). The currently-registered
 // IRK is the v1 derivation of that seed (`flagship.irk.v1` — what every
@@ -217,8 +217,9 @@ export function isCredentialRequiredError(err) {
  *    4. INITIATE the re-pair (the grace clock starts server-side; the
  *       swap + countdown are Phase 4). Multi passes the collected
  *       `totpProof` — the Worker rejects a multi initiate without it.
- *    5. Record the device as `admin` on the local profile (reach is
- *       enforced server-side later; this is the local label).
+ *    5. Mint a fresh opaque account-scoped `deviceId` for this
+ *       membership. No label and no capability is recorded locally —
+ *       reach is a server-side decision.
  *    6. Open the account (dispatch to Home).
  *
  *  Multi-profile keying: when `setActiveKeystoreProfile` is injected the

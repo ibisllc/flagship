@@ -153,3 +153,45 @@ describe("webapp profiles (W3 multi-cloud)", () => {
     expect(state.activeCloudName).toBeNull();
   });
 });
+
+describe("removeProfile — an account this browser no longer has", () => {
+  it("drops the row and its account-scoped identifiers", async () => {
+    const { addProfile, loadProfiles, removeProfile } = await loadProfilesLib();
+    const storage = memoryStorage();
+    addProfile({ cloudName: "alice", accountId: "alice", deviceId: "aa".repeat(16) }, { storage });
+    addProfile({ cloudName: "bob", accountId: "bob", deviceId: "bb".repeat(16) }, { storage });
+
+    removeProfile("alice", storage);
+
+    const state = loadProfiles(storage);
+    expect(state.profiles.map((p: { cloudName: string }) => p.cloudName)).toEqual(["bob"]);
+    // The deleted account's identifiers must be gone from the raw blob, not
+    // merely hidden from the list.
+    const raw = storage.getItem("flagship.profiles.v1") ?? "";
+    expect(raw).not.toContain("alice");
+    expect(raw).not.toContain("aa".repeat(16));
+  });
+
+  it("moves the active pointer off a removed profile", async () => {
+    const { addProfile, loadProfiles, removeProfile } = await loadProfilesLib();
+    const storage = memoryStorage();
+    addProfile({ cloudName: "alice", accountId: "alice", deviceId: "aa".repeat(16) }, { storage });
+    addProfile({ cloudName: "bob", accountId: "bob", deviceId: "bb".repeat(16) }, { storage });
+    expect(loadProfiles(storage).activeCloudName).toBe("bob");
+
+    removeProfile("bob", storage);
+    expect(loadProfiles(storage).activeCloudName).toBe("alice");
+
+    // Removing the last one leaves no active account rather than a dangling one.
+    removeProfile("alice", storage);
+    expect(loadProfiles(storage)).toEqual({ profiles: [], activeCloudName: null });
+  });
+
+  it("is a no-op for an unknown profile", async () => {
+    const { addProfile, loadProfiles, removeProfile } = await loadProfilesLib();
+    const storage = memoryStorage();
+    addProfile({ cloudName: "alice", accountId: "alice", deviceId: "aa".repeat(16) }, { storage });
+    removeProfile("nobody", storage);
+    expect(loadProfiles(storage).profiles).toHaveLength(1);
+  });
+});

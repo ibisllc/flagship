@@ -2,8 +2,7 @@
 // the iOS/Android `Profile` shape:
 //
 //     { cloudName, cloudRootPubHex, accountId, deviceId,
-//       accountDisplayName, deviceDisplayName, deviceCapability,
-//       demoServer, createdAt }
+//       deviceCapability, demoServer, createdAt }
 //
 // A "cloud" is what we've been calling a "username" — each cloud has
 // one root key (today's IRK). One browser profile can hold multiple
@@ -13,7 +12,11 @@
 //
 // W8 NOTE: this module deliberately stores ONLY public identifiers
 // (cloud-root pubkey hex, capability blocks) — never private key
-// material. Private keys live in the browser keystore (IndexedDB-
+// material, and never a chosen presentation name. Account and device
+// names live ONLY as ciphertext server-side and are decrypted into
+// memory per render; caching a plaintext copy here would put them in
+// localStorage, readable without the account key and surviving the
+// account itself. Private keys live in the browser keystore (IndexedDB-
 // backed) and never get serialized here. The webapp has no analog of
 // iOS's iCloud Keychain auto-sync; cross-device profile portability is
 // the user's choice via cloud recovery.
@@ -33,8 +36,6 @@ import { setActiveKeystoreProfile } from "../keystore.js";
  *  @property {string} [cloudRootPubHex]
  *  @property {string} accountId
  *  @property {string} deviceId
- *  @property {string|null} [accountDisplayName]
- *  @property {string|null} [deviceDisplayName]
  *  @property {object|null} [deviceCapability]
  *  @property {object|null} [demoServer]
  *  @property {number} createdAt
@@ -113,6 +114,26 @@ export function addProfile(profile, opts = {}) {
   }
   saveProfiles(state, storage);
   return state;
+}
+
+/** Forget a profile entirely — the row, and the active pointer if it was
+ *  the one selected. Used by the account-deletion ceremony: once the
+ *  account is gone server-side, this browser must not keep its
+ *  account-scoped identifiers (accountId, deviceId) lying around.
+ *  @param {string} cloudName
+ *  @param {Storage} [storage]
+ *  @returns {ProfilesState}
+ */
+export function removeProfile(cloudName, storage = globalThis.localStorage) {
+  const state = loadProfiles(storage);
+  const remaining = state.profiles.filter((p) => p.cloudName !== cloudName);
+  const activeCloudName = state.activeCloudName === cloudName
+    ? (remaining[0]?.cloudName ?? null)
+    : state.activeCloudName;
+  const next = { profiles: remaining, activeCloudName };
+  saveProfiles(next, storage);
+  if (activeCloudName) setActiveKeystoreProfile(activeCloudName);
+  return next;
 }
 
 /** Switch the active profile. No-op if `cloudName` isn't in storage.

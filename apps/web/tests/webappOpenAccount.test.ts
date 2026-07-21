@@ -84,9 +84,12 @@ describe("webapp account bootstrap", () => {
       cloudName: "jolly-ranger",
       accountId: "jolly-ranger",
       deviceId,
-      accountDisplayName: "Johnson Family",
-      deviceDisplayName: "This browser",
     });
+    // The names were just encrypted for the directory. Persisting a plaintext
+    // copy in localStorage would make them readable without the account key
+    // and outlive the account itself, so the local record must not carry them.
+    expect(JSON.stringify(local.profile)).not.toContain("Johnson Family");
+    expect(JSON.stringify(local.profile)).not.toContain("This browser");
     expect(local.dispatched).toBe(true);
     expect(out).toEqual({ username: "jolly-ranger", alreadyClaimed: false, deviceId });
   });

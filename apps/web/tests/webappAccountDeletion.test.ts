@@ -281,6 +281,7 @@ describe("account-deletion ceremony — webapp", () => {
       });
       const shown: string[] = [];
       const removed: string[] = [];
+      const forgotten: string[] = [];
 
       await d.runDeletionCeremony(
         {
@@ -294,6 +295,10 @@ describe("account-deletion ceremony — webapp", () => {
           },
           lockSession: () => order.push("lockSession"),
           profileRemove: (slot: string) => removed.push(slot),
+          forgetProfile: (cloudName: string) => {
+            order.push("forgetProfile");
+            forgotten.push(cloudName);
+          },
           stopRenewals: () => order.push("stopRenewals"),
           show: (id: string) => shown.push(id),
         },
@@ -309,6 +314,11 @@ describe("account-deletion ceremony — webapp", () => {
         expect.arrayContaining(["sessionId", "sessionToken", "podBaseUrl", "username"]),
       );
       expect(shown).toContain("view-bootstrap");
+      // The account is gone server-side, so this browser must not keep its
+      // profile row — it holds the accountId and the account-scoped deviceId,
+      // and a stale row would keep offering a dead account in the switcher.
+      expect(forgotten).toEqual(["alice"]);
+      expect(order.indexOf("fetch")).toBeLessThan(order.indexOf("forgetProfile"));
     });
 
     it("on a 403: the local key is NOT wiped and we do NOT route to Welcome", async () => {

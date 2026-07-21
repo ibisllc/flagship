@@ -45,27 +45,28 @@ describe("webapp pairingOrderToJson matches the protocol vector byte-for-byte", 
       type: "add-paired-session" as const,
       serverId: SERVER_ID,
       token: TOKEN,
-      label: "Alice's iPhone",
       issuedAt: ISSUED_AT,
     };
     const signature = signPhoneOrder(order, irk);
     const json = pairingOrderToJson(
-      { serverId: SERVER_ID, token: TOKEN, label: "Alice's iPhone", issuedAt: ISSUED_AT },
+      { serverId: SERVER_ID, token: TOKEN, issuedAt: ISSUED_AT },
       signature,
     );
-    // Byte-identical to the protocol's pairingOrderToJson (the daemon parses this).
+    // Byte-identical to the protocol's pairingOrderToJson (the daemon parses
+    // this). v2 carries NO label — a session is named by its opaque
+    // token-derived code, so there is no human string in the envelope.
     expect(json).toBe(
       JSON.stringify({
         request: {
           type: "add-paired-session",
           serverId: SERVER_ID,
           token: TOKEN,
-          label: "Alice's iPhone",
           issuedAt: ISSUED_AT,
         },
         signature: toHex(signature),
       }),
     );
+    expect(json).not.toContain("label");
     // And the box's open chain accepts it under the owner IRK.
     const opened = openPairingOrderEnvelope({
       json,
@@ -85,7 +86,7 @@ describe("buildPairingOrder + depositPairingOrder (secret-free, default online)"
 
   it("builds an owner-IRK-signed order the box verifies, with a fresh token", async () => {
     const built = await buildPairingOrder(
-      { serverDomain: SERVER_ID, label: "webapp" },
+      { serverDomain: SERVER_ID },
       { now: () => ISSUED_AT, token: TOKEN },
     );
     expect(built.token).toBe(TOKEN);
@@ -96,12 +97,12 @@ describe("buildPairingOrder + depositPairingOrder (secret-free, default online)"
     });
     expect(opened).not.toBeNull();
     expect(opened!.token).toBe(TOKEN);
-    expect(opened!.label).toBe("webapp");
+    expect(built.pairingOrderJson).not.toContain("label");
   });
 
   it("the default deposit seals the order JSON to the box identity (box opens it verbatim)", async () => {
     const built = await buildPairingOrder(
-      { serverDomain: SERVER_ID, label: "webapp" },
+      { serverDomain: SERVER_ID },
       { now: () => ISSUED_AT, token: TOKEN },
     );
 

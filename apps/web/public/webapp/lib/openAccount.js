@@ -270,8 +270,8 @@ export async function openAccount(username, deps) {
       cloudRootPubHex: toHex(session.irk.publicKey),
       accountId: username,
       deviceId,
-      accountDisplayName,
-      deviceDisplayName,
+      // Deliberately NOT the chosen names: they were just encrypted above
+      // and belong in the directory, not in localStorage.
       deviceCapability: null,
       demoServer: null,
     });
