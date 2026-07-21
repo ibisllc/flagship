@@ -149,6 +149,17 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-20 (leti bring-up) — `.services` now accepts the same admin-root
+RootEntitlement authority the phone and box enforce.** A fresh admin-pinned box
+correctly received an admin-root-signed entitlement, but the tunnel hub still
+checked every RootEntitlement against the membership IRK, so HELLO was rejected
+before ACME and the app stayed "still coming up." The cached `.com` username
+resolver now carries both authorities; the hub verifies RootEntitlement with the
+admin root when present (legacy IRK fallback), while service entitlements,
+grants, and revocation lists remain IRK-authorized. **Remaining (owner):** deploy
+the `.services` Fly app; `leti.jolly-quince.flagship.services` should reconnect
+with its already-persisted entitlement and proceed through ACME without a reburn.
+
 **2026-07-20 (Studio work-page hierarchy) — server names are plain headings on
 both destination work screens.** Burn-to-USB and Host-on-this-Mac now share the
 same background-free, larger domain heading introduced on the destination

@@ -34,7 +34,7 @@ interface Setup {
   irk: Keypair;
 }
 
-async function makeHub(opts?: { idleCloseMs?: number }): Promise<Setup> {
+async function makeHub(opts?: { idleCloseMs?: number; adminRoot?: Keypair }): Promise<Setup> {
   const registry = new TunnelRegistry();
   const app = Fastify({ logger: false });
   await app.listen({ port: 0, host: "127.0.0.1" });
@@ -47,6 +47,14 @@ async function makeHub(opts?: { idleCloseMs?: number }): Promise<Setup> {
       return null;
     },
     irkLookup: (username) => (username === "alice" ? irk.publicKey : null),
+    ...(opts?.adminRoot
+      ? {
+          authorityLookup: (username: string) =>
+            username === "alice"
+              ? { irkPub: irk.publicKey, adminRootPub: opts.adminRoot!.publicKey }
+              : null,
+        }
+      : {}),
     idleCloseMs: opts?.idleCloseMs,
   });
   const hubPort = (app.server.address() as AddressInfo).port;
@@ -63,20 +71,37 @@ function startClient(args: {
   podFqdn: string;
   stk: Keypair;
   irk: Keypair;
+  rootSigner?: Keypair;
   serviceCanonicals?: string[];
   onDomainGranted?: (e: { fqdn: string; ownerServerId: string }) => void;
 }): TunnelClient {
   return startTunnelClient({
     hubUrl: `ws://127.0.0.1:${args.hubPort}/tunnel`,
     signingKey: args.stk,
-    getEntitlements: () =>
-      mintDevEntitlements({
+    getEntitlements: () => {
+      const root = mintDevEntitlements({
+        irk: args.rootSigner ?? args.irk,
+        podPubKey: args.stk.publicKey,
+        username: "alice",
+        podCanonical: args.podFqdn,
+      });
+      if (!args.serviceCanonicals) return root;
+      const service = mintDevEntitlements({
         irk: args.irk,
         podPubKey: args.stk.publicKey,
         username: "alice",
         podCanonical: args.podFqdn,
         serviceCanonicals: args.serviceCanonicals,
-      }),
+      });
+      if (!service.serviceEntitlement || !service.serviceEntitlementSig) {
+        throw new Error("test setup did not mint a service entitlement");
+      }
+      return {
+        ...root,
+        serviceEntitlement: service.serviceEntitlement,
+        serviceEntitlementSig: service.serviceEntitlementSig,
+      };
+    },
     resolveBackend: () => null,
     onDomainGranted: args.onDomainGranted,
   });
@@ -113,6 +138,43 @@ describe("tunnel hub: per-pod identity + entitlement validation", () => {
     expect(s.registry.findBySni(HOME_FQDN)).toBeDefined();
     expect(s.registry.findBySni("notes.home.alice.flagship.services")).toBeDefined();
     expect(s.registry.findBySni("notes.alice.flagship.services")).toBeDefined();
+    await t.close();
+  });
+
+  it("accepts an admin-root-signed RootEntitlement for an admin-pinned account", async () => {
+    const adminRoot = makeKey();
+    await teardown(s);
+    s = await makeHub({ adminRoot });
+    const stk = deriveStkFor(HOME_FQDN, 1);
+    const t = startClient({
+      hubPort: s.hubPort,
+      podFqdn: HOME_FQDN,
+      stk,
+      irk: s.irk,
+      rootSigner: adminRoot,
+      serviceCanonicals: ["notes.home.alice.flagship.services"],
+    });
+
+    await t.ready();
+    expect(s.registry.findBySni(HOME_FQDN)).toBeDefined();
+    expect(s.registry.findBySni("notes.home.alice.flagship.services")).toBeDefined();
+    await t.close();
+  });
+
+  it("rejects an IRK-signed RootEntitlement once an admin root is pinned", async () => {
+    const adminRoot = makeKey();
+    await teardown(s);
+    s = await makeHub({ adminRoot });
+    const stk = deriveStkFor(HOME_FQDN, 1);
+    const t = startClient({
+      hubPort: s.hubPort,
+      podFqdn: HOME_FQDN,
+      stk,
+      irk: s.irk,
+    });
+
+    await expect(t.ready()).rejects.toThrow(/rootEntitlement signature failed verification/);
+    expect(s.registry.findBySni(HOME_FQDN)).toBeUndefined();
     await t.close();
   });
 
