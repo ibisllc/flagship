@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  Flagship Studio — PolicyKit action.
+
+  The `write` subcommand needs raw block-device access, which on Linux
+  requires CAP_SYS_ADMIN (effectively root). Rather than installing a
+  setuid binary, we use pkexec — the standard Linux way to elevate one
+  operation. When the user clicks "Bake to USB", pkexec invokes the
+  Node CLI as root after the user types their password into the
+  PolicyKit agent prompt.
+
+  Install this file to /usr/share/polkit-1/actions/.
+-->
+<policyconfig>
+
+  <vendor>Flagship</vendor>
+  <vendor_url>https://flagshipserver.com</vendor_url>
+  <icon_name>drive-removable-media-usb</icon_name>
+
+  <action id="com.flagshipserver.builder.write">
+    <description>Write a Flagship install image to a USB drive</description>
+    <message>Authentication is required to write the Flagship install image to your USB drive. This will erase the drive.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/node</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+
+</policyconfig>

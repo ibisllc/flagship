@@ -260,7 +260,7 @@ public struct HomeScreen: View {
             Image(systemName: "lock.shield")
                 .foregroundColor(c.textMuted)
                 .font(.system(size: 12, weight: .semibold))
-            Text("Device: \(cap.label) · \(summary)")
+            Text("Restricted device · \(summary)")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(c.textMuted)
         }
@@ -269,7 +269,7 @@ public struct HomeScreen: View {
         .background(c.textMuted.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
         .accessibilityIdentifier("device-capability-chip")
-        .accessibilityLabel("Device \(cap.label), \(summary).")
+        .accessibilityLabel("Restricted device, \(summary).")
     }
 
     private func quickActions(c: FSColors) -> some View {
@@ -434,7 +434,7 @@ public struct HomeScreen: View {
                     // own line — a long label like "Never came online" would be
                     // crushed in the right-floated trailing slot against the name.
                     HStack(spacing: FS.space.s2) {
-                        if isLeader && pod.cameOnline { LeaderBadge() }
+                        if isLeader && pod.cameOnline && pod.status != .pending { LeaderBadge() }
                         FSPill(
                             PodStatusStyle.label(liveness: liveness, status: pod.status),
                             kind: PodStatusStyle.pillKind(liveness: liveness, status: pod.status)
@@ -618,7 +618,7 @@ public struct PodCard: View {
                         // Leader only makes sense for a server that actually
                         // came online (the leader is the daemon the screens
                         // point at) — never badge a dead box as Leader.
-                        if isLeader && pod.cameOnline { LeaderBadge() }
+                        if isLeader && pod.cameOnline && pod.status != .pending { LeaderBadge() }
                         // Per-service leadership (Phase 6): the services this box
                         // currently leads (from /pods `leadsServices`). Tolerant
                         // of absence — renders nothing when empty.
@@ -684,6 +684,7 @@ public enum PodStatusStyle {
     }
 
     public static func pillKind(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> FSPillKind {
+        if status == .pending { return .pending }
         switch liveness {
         case .dead:               return .offline
         case .offline:            return .offline
@@ -694,7 +695,7 @@ public enum PodStatusStyle {
             case .online:  return .online
             case .offline: return .offline
             case .unknown: return .idle
-            case .pending: return .provisioning
+            case .pending: return .pending
             }
         }
     }
@@ -705,6 +706,7 @@ public enum PodStatusStyle {
         case .renewing:     return c.warning
         case .offline:      return c.danger
         case .provisioning: return c.primary
+        case .pending:      return c.warning
         case .idle:         return c.textMuted
         }
     }

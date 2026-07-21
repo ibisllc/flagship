@@ -221,6 +221,10 @@ targets:
       - path: WatchApp
         excludes:
           - "Info.plist"
+      # Compile the shared AppIcon catalog for watchOS too. The catalog carries
+      # a watchOS 1024x1024 slot, from which Xcode generates every Watch icon
+      # variant and the CFBundleIcons metadata required by App Store Connect.
+      - path: Resources/Assets.xcassets
     dependencies:
       # The wire types the watch decodes (WatchProtocol.*) +
       # cross-platform protocol code (NfcPair, ProvisionTimelineLadder,

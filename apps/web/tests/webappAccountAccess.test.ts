@@ -14,7 +14,6 @@ function res(over: Partial<Record<string, unknown>> = {}): Resolution {
     kind: "single",
     recovery: { present: false, hasFetchGate: false },
     totpEnrolled: false,
-    trustedDeviceCount: 1,
     graceModel: "3d",
     ...over,
   } as unknown as Resolution;

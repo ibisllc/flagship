@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { persistSwkHex, swkHexFromInstallBlob } from "../src/index.js";
 
 // First-boot SWK provisioning: the phone embeds `swkHex` (= deriveSWK(umk,
-// serverId)) as an UNSIGNED recipe sibling that the burner writes into
+// serverId)) as an UNSIGNED recipe sibling that the builder writes into
 // install-blob.json. The daemon reads + persists it so the service/build
 // platform turns on. These pin the read/parse + persist halves of that path
 // (the resolution-order wiring itself lives in main(), which is the boot
@@ -76,8 +76,7 @@ describe("swkHexFromInstallBlob", () => {
 });
 
 describe("persistSwkHex", () => {
-  it("is non-fatal when the path is unwritable", async () => {
-    // A directory-as-file target makes the write fail; the helper swallows it.
-    await expect(persistSwkHex(dir, VALID_SWK)).resolves.toBeUndefined();
+  it("surfaces an unwritable target so a consumed deposit is never marked durable", async () => {
+    await expect(persistSwkHex(dir, VALID_SWK)).rejects.toThrow();
   });
 });

@@ -74,7 +74,6 @@ fun CompanionDockScreen(nav: NavController) {
     val currentUser by app.currentUser.collectAsState()
     val currentPodFqdn = app.currentPod?.fqdn
 
-    var label by remember { mutableStateOf("") }
     var pendingRevoke by remember { mutableStateOf<CompanionSummary?>(null) }
 
     LaunchedEffect(Unit) { vm.load() }
@@ -107,17 +106,9 @@ fun CompanionDockScreen(nav: NavController) {
 
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                OutlinedTextField(
-                    value = label,
-                    onValueChange = { label = it },
-                    label = { Text("Label (optional)") },
-                    placeholder = { Text("Living-room laptop") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
                 FSPrimaryButton(
                     label = "Mint pairing QR",
-                    onClick = { vm.mint(label.ifBlank { null }) },
+                    onClick = { vm.mint() },
                     block = true,
                 )
             }
@@ -181,7 +172,7 @@ fun CompanionDockScreen(nav: NavController) {
             title = { Text("Revoke this browser?") },
             text = {
                 Text(
-                    "Revoke ${c.label ?: c.tokenPrefix}. The browser session will stop immediately. " +
+                    "Revoke session ${c.tokenPrefix}. The browser session will stop immediately. " +
                         "You can pair it again any time by minting a new QR.",
                 )
             },
@@ -271,7 +262,7 @@ private fun CompanionRow(
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    companion.label ?: companion.tokenPrefix,
+                    "Session ${companion.tokenPrefix}",
                     color = FS.colors.text,
                     style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                 )

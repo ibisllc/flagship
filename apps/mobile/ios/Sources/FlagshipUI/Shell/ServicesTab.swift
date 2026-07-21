@@ -521,7 +521,9 @@ struct VibeCodeDescribeContainer: View {
     @Binding var path: [AppsRoute]
     let holder: BuildCredentialHolder
     @Environment(\.screensClient) private var client
+    @Environment(\.secretMailboxClient) private var mailbox
     @Environment(ToastCenter.self) private var toasts
+    @Environment(AppState.self) private var app
     var body: some View {
         VibeCodeDescribeScreen(onBuild: { prompt, name, visibility in
             Task {
@@ -530,10 +532,10 @@ struct VibeCodeDescribeContainer: View {
                     // AI-key step (kept on the holder so the describe screen
                     // could re-render without losing it). Name + visibility are
                     // the owner's choices on the form (no longer fixed).
-                    let cred = holder.credential
+                    let selection = VibeCodeCredentialSelection.compatible(with: holder.credential)
                     let resp = try await client.vibeCodeStart(
                         VibeCodeStartRequest(
-                            prompt: prompt, model: nil, credential: cred,
+                            prompt: prompt, model: selection.model, credential: selection.credential,
                             name: name, visibility: visibility
                         )
                     )
@@ -545,6 +547,16 @@ struct VibeCodeDescribeContainer: View {
                     }
                     path.append(.vibeCodeGenerating(sessionId: resp.sessionId))
                 } catch {
+                    switch await repairMissingServicePlatform(for: error) {
+                    case .accepted:
+                        toasts.warning("This server was missing its app key. We sent it again; the server will restart within a few minutes. Then retry the build.")
+                        return
+                    case .deferred:
+                        toasts.warning("This server still needs its app key. Return Home, unlock the app if asked, and pull down to refresh before retrying.")
+                        return
+                    case .notApplicable:
+                        break
+                    }
                     // Don't swallow — a tap that does nothing with no feedback
                     // is a dead control. Surface the failure so the owner knows
                     // the build didn't start (and a test can see why).
@@ -552,6 +564,38 @@ struct VibeCodeDescribeContainer: View {
                 }
             }
         })
+    }
+
+    private enum ServicePlatformRepair {
+        case accepted, deferred, notApplicable
+    }
+
+    /// A platform-less secret-free box answers the vibe entry route with this
+    /// exact 503. Re-arm the deterministic SWK delivery and immediately run the
+    /// same owner-sealed deposit path Home uses; no key is exposed to `.com`.
+    private func repairMissingServicePlatform(for error: Error) async -> ServicePlatformRepair {
+        guard case let ScreensClientError.http(status, message) = error,
+              status == 503,
+              message.lowercased().contains("vibe-code not configured"),
+              let username = app.currentUser,
+              let pod = app.sessionPod,
+              !pod.fqdn.isEmpty,
+              !pod.identityPubKeyHex.isEmpty
+        else { return .notApplicable }
+
+        let store = PendingSwkDepositStore()
+        store.markPending(for: pod.fqdn)
+        let coordinator = SwkDepositCoordinator(
+            username: username,
+            mailbox: mailbox,
+            store: store
+        )
+        await coordinator.depositIfNeeded(
+            serverDomain: pod.fqdn,
+            identityPubKeyHex: pod.identityPubKeyHex,
+            allowAuthentication: true
+        )
+        return store.isDeposited(for: pod.fqdn) ? .accepted : .deferred
     }
 }
 

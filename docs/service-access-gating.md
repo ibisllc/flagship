@@ -169,7 +169,7 @@ webapp 1392 · tsc clean.
   test-pinned).
 
 **Remaining (low-priority / owner):** retire the dual-accept IRK-create path once nothing needs it (safe to
-keep); deploy `.com` (the new by-inviteId fetch route) + rebuild the burner/apps to ship to real boxes/devices.
+keep); deploy `.com` (the new by-inviteId fetch route) + rebuild the builder/apps to ship to real boxes/devices.
 
 ## v2 hardening — box-as-authority + pairwise AIDs + author-confirmed binding (2026-06-19, from the design critique)
 

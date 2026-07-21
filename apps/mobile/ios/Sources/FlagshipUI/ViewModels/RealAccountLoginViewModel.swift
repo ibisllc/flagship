@@ -11,13 +11,15 @@ import FlagshipCore
 /// runs `/api/account/resolve` (200 always) and lands on `.realAccount`
 /// for `kind == single | multi`. This view model takes that resolution
 /// and drives the credentialed-takeover branches that Phase 1 stubbed
-/// out to the old `RecoverFromWelcomeContainer`.
+/// out to the old passkey container (removed with the login redesign).
 ///
 /// Mock-only (per the Phase 3 scope): the WebAuthn-PRF unwrap runs
 /// against `MockWebAuthnProvider`; live `ASAuthorization` wrappers are a
 /// separate human/device task. Everything else — install the recovered
-/// UMK, initiate the re-pair, label this device `admin`, complete
-/// onboarding — is the real path.
+/// UMK, initiate the re-pair, complete onboarding — is the real path.
+/// The device is never named here: administrator reach is a capability in
+/// its signed grant, and a display name is an encrypted self-profile its
+/// owner writes later.
 ///
 /// Branching (driven entirely off `AccountResolution`, never re-derived):
 ///   - `recovery.present == false` → a clean STATE (no crash, no 404):
@@ -41,7 +43,6 @@ public final class RealAccountLoginViewModel {
     /// stays `ukey.dkey`; the `admin` label is the *reach* primitive
     /// (`ukey.*`) the no-lockout guarantee depends on. We carry it as
     /// the local device label so this device records itself as admin.
-    public static let adminDeviceLabel = "admin"
 
     /// What the host should render for this resolution. Computed from
     /// the preflight ONCE so the view doesn't re-derive the matrix.

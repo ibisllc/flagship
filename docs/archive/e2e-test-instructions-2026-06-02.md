@@ -41,7 +41,7 @@ demo (the snapshot is the artifact). Re-run the create to get a fresh live box.
 ## 1. Demo path — from the simulator app
 
 The iOS app is **rebuilt and running** on the booted simulator (iPhone 16,
-`com.flagshipserver.app`). The Mac burner ("Flagship Assembler") is **rebuilt,
+`com.flagshipserver.app`). The Mac builder ("Flagship Studio") is **rebuilt,
 signed (Developer ID IBIS LLC), and installed** to `/Applications`.
 
 1. In the simulator, the app should be on the Welcome screen. To exercise the
@@ -68,7 +68,7 @@ curl -o /dev/null -w "%{http_code} %{ssl_verify_result}\n" https://home.demo5678
 
 ---
 
-## 2. Human / real-user path — sim app → recipe → burner → hardware
+## 2. Human / real-user path — sim app → recipe → builder → hardware
 
 This is the path a real user takes. Account ≠ server: you create an **account**
 (name-first), then mint a **server install recipe**, burn it, and boot real
@@ -86,11 +86,11 @@ hardware.
      through the recipe signature.)
 3. The app mints a **signed InstallBlob** and shows a **recipe** (build code /
    recipe JSON). Copy it (or download).
-4. **Burn it:** open **Flagship Assembler** (`/Applications`). On first launch
+4. **Burn it:** open **Flagship Studio** (`/Applications`). On first launch
    after a rebuild you may need to re-approve: System Settings → Login Items
    (allow the helper) and grant the helper **Full Disk Access**. Paste the
    recipe (Mac button or CLI `-`), insert a USB stick, and burn.
-   - The burner bakes `bootUnlockMode` **and** `certAutonomy` into the recipe
+   - The builder bakes `bootUnlockMode` **and** `certAutonomy` into the recipe
      trailer (both are signature-covered — verified at 3 box checkpoints).
 5. **Boot the hardware** from the USB. The box: LUKS-formats, clones the repo,
    registers with `.com` (publishes the **2** user-zone DNS records

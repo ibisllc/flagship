@@ -6,7 +6,7 @@
 //
 // Endpoints:
 //   GET  /api/screens/companion/pending-writes
-//     → { pending: [{ requestId, companionTokenPrefix, companionLabel,
+//     → { pending: [{ requestId, companionTokenPrefix,
 //                     kind, intent, queuedAt, expiresAt }] }
 //   POST /api/screens/companion/resolve-pending
 //     body { requestId, outcome: "approved" | "denied" }

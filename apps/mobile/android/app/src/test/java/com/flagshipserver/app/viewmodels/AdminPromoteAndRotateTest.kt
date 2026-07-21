@@ -127,6 +127,7 @@ class AdminPromoteAndRotateTest {
         advanceUntilIdle()
         adminVm.confirmAndSeal()
         assertEquals(AddDevicePhase.Delivered, adminVm.phase.first())
+        incomingVm.confirmDisplayName("Reviewer Android")
         incomingVm.verifyAndJoin()
         return incomingVm.phase.first()
     }
@@ -169,11 +170,17 @@ class AdminPromoteAndRotateTest {
     }
 
     @Test fun bundle_carriesWrappedAdminRoot_onlyWhenPresent() {
-        val admit = DeviceAdmit(account, "aa".repeat(32), 1L)
+        val admit = DeviceAdmit(account, "00".repeat(16), "aa".repeat(32), 1L)
+        val grant = com.flagshipserver.app.core.PairingGrant(
+            "g", account, admit.deviceId, admit.newDevicePubHex,
+            listOf("view-directory"), 1L, 2L, "membership",
+        )
         val withRoot = PairingBundle(
             umkSeedHex = "11".repeat(32),
             admit = admit,
             admitSig = "22".repeat(64),
+            grant = grant,
+            grantSignature = "44".repeat(64),
             wrappedAdminRoot = "33".repeat(32),
         )
         val roundTripped = PairingBundle.fromJsonBytes(withRoot.toJsonBytes())
@@ -183,6 +190,8 @@ class AdminPromoteAndRotateTest {
             umkSeedHex = "11".repeat(32),
             admit = admit,
             admitSig = "22".repeat(64),
+            grant = grant,
+            grantSignature = "44".repeat(64),
         )
         assertNull("default bundle carries no admin root", withoutRoot.wrappedAdminRoot)
         assertNull(PairingBundle.fromJsonBytes(withoutRoot.toJsonBytes()).wrappedAdminRoot)

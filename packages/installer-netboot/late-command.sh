@@ -233,12 +233,17 @@ Description=Flagship server daemon
 After=flagship-data-services.service flagship-boot-stage.service network-online.target
 Wants=network-online.target
 Requires=flagship-data-services.service
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 WorkingDirectory=/opt/flagship
 ExecStart=/usr/bin/npx --workspace=@flagship/server-daemon run start
-Restart=on-failure
+# `always`, NOT `on-failure`: the daemon exits 0 to request a self-restart after
+# provisioning a post-boot secret (SWK/CGK deposit), rotating the admin root, or
+# committing an update. `on-failure` treats exit 0 as success and would leave the
+# box dead after it consumes its SWK, before it ever serves HTTPS.
+Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal

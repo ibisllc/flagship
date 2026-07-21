@@ -101,7 +101,7 @@ describe("/webapp PWA static surface", () => {
     const r = await app.inject({ method: "GET", url: "/webapp/lib/podPair.js" });
     expect(r.statusCode).toBe(200);
     // Same canonical-bytes tag the pod's auth.ts uses to verify.
-    expect(r.body).toContain("flagship/order/add-paired-session/v1");
+    expect(r.body).toContain("flagship/order/add-paired-session/v2");
     // POSTs to the daemon's orders endpoint.
     expect(r.body).toContain("/api/orders-from-user");
     expect(r.body).toContain("signWithIrk");
@@ -175,7 +175,7 @@ describe("/webapp PWA static surface", () => {
       "flagship/order/shut-down/v1",
       "flagship/order/set-backup-policy/v1",
       "flagship/order/revoke-self/v1",
-      "flagship/order/add-paired-session/v1",
+      "flagship/order/add-paired-session/v2",
       "flagship/order/remove-paired-session/v1",
       "flagship/order/backup-app/v1",
     ]) {
@@ -341,7 +341,7 @@ describe("/webapp PWA static surface", () => {
     // endpoint the iOS/Android paths use (apns/fcm). Pinned to the
     // protocol-side canonical-bytes tag.
     expect(r.body).toContain('platform: "webpush"');
-    expect(r.body).toContain("flagship/push-token-register/v1");
+    expect(r.body).toContain("flagship/push-token-register/v2");
     expect(r.body).toContain("/api/push/register");
     expect(r.body).toContain("/api/push/vapid-public-key");
     // userVisibleOnly is required by the spec for push subscriptions.

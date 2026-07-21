@@ -44,6 +44,16 @@ import type {
   LuksKeyStorage,
   PushTokenRecord,
   PushTokenStorage,
+  DeviceIdentityRecord,
+  DeviceIdentityStorage,
+  AccountProfileRecord,
+  AccountProfileStorage,
+  DeviceSelfProfileRecord,
+  DeviceSelfProfileStorage,
+  DeviceManagedProfileRecord,
+  DeviceManagedProfileStorage,
+  AccountDirectoryKeyGrantRecord,
+  AccountDirectoryKeyGrantStorage,
   RoutingRecord,
   RoutingStorage,
   SealedLuksKeyRecord,
@@ -72,6 +82,12 @@ import type {
   DemoUserRecord,
   DemoUserState,
   DemoUsersStorage,
+  DemoAccountInitialization,
+  DemoAccountInitializationResult,
+  DemoAccountProvisioningStorage,
+  AccountInitialization,
+  AccountInitializationResult,
+  AccountProvisioningStorage,
   InstallPolicyFanoutRecord,
   InstallPolicyFanoutStorage,
   DeviceCapabilityGrantRecord,
@@ -2761,18 +2777,17 @@ export class D1PushTokenStorage implements PushTokenStorage {
     // device-admit handler bumps quarantine_until via a dedicated
     // UPDATE.
     await this.db.prepare(
-      `INSERT INTO push_tokens (token_id, username, platform, provider_token, push_x25519_pub_hex, registration_signature_hex, label, registered_at, last_seen_at, quarantine_until, quarantine_alerts_fired_bitmap)
+      `INSERT INTO push_tokens (token_id, username, device_id, platform, provider_token, push_x25519_pub_hex, registration_signature_hex, registered_at, last_seen_at, quarantine_until, quarantine_alerts_fired_bitmap)
        VALUES (?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(token_id) DO UPDATE SET
          provider_token=excluded.provider_token,
          push_x25519_pub_hex=excluded.push_x25519_pub_hex,
          registration_signature_hex=excluded.registration_signature_hex,
-         label=excluded.label,
+         device_id=excluded.device_id,
          last_seen_at=excluded.last_seen_at`,
     ).bind(
-      rec.tokenId, rec.username, rec.platform, rec.providerToken,
+      rec.tokenId, rec.username, rec.deviceId, rec.platform, rec.providerToken,
       rec.pushX25519PubHex, rec.registrationSignatureHex,
-      rec.label,
       rec.registeredAt, rec.lastSeenAt,
       rec.quarantineUntil ?? 0,
       rec.quarantineAlertsFiredBitmap ?? 0,
@@ -2832,10 +2847,286 @@ export class D1PushTokenStorage implements PushTokenStorage {
   }
 }
 
+interface DeviceIdentityRow {
+  account_id: string;
+  device_id: string;
+  device_pub_hex: string;
+  platform_class: string | null;
+  created_at: number;
+  last_seen_at: number;
+  revoked_at: number | null;
+}
+
+function rowToDeviceIdentity(row: DeviceIdentityRow): DeviceIdentityRecord {
+  return {
+    accountId: row.account_id,
+    deviceId: row.device_id,
+    devicePubHex: row.device_pub_hex,
+    platformClass: row.platform_class,
+    createdAt: row.created_at,
+    lastSeenAt: row.last_seen_at,
+    revokedAt: row.revoked_at,
+  };
+}
+
+export class D1DeviceIdentityStorage implements DeviceIdentityStorage {
+  constructor(private readonly db: D1Database) {}
+  async put(rec: DeviceIdentityRecord) {
+    const accountId = rec.accountId.toLowerCase();
+    const deviceId = rec.deviceId.toLowerCase();
+    const pub = rec.devicePubHex.toLowerCase();
+    const existing = await this.get(accountId, deviceId);
+    if (existing) {
+      return existing.devicePubHex === pub
+        ? { ok: true as const }
+        : { ok: false as const, reason: "deviceId already bound to another key" };
+    }
+    const byPub = await this.getByPub(accountId, pub);
+    if (byPub) return { ok: false as const, reason: "device key already bound to another deviceId" };
+    try {
+      await this.db.prepare(
+        `INSERT INTO device_identities
+          (account_id, device_id, device_pub_hex, platform_class, created_at, last_seen_at, revoked_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(accountId, deviceId, pub, rec.platformClass, rec.createdAt, rec.lastSeenAt, rec.revokedAt).run();
+      return { ok: true as const };
+    } catch (error) {
+      if (/UNIQUE/i.test(String((error as Error).message ?? error))) {
+        return { ok: false as const, reason: "device identity already exists" };
+      }
+      throw error;
+    }
+  }
+  async get(accountId: string, deviceId: string) {
+    const row = await this.db.prepare(
+      "SELECT * FROM device_identities WHERE account_id = ? AND device_id = ?",
+    ).bind(accountId.toLowerCase(), deviceId.toLowerCase()).first<DeviceIdentityRow>();
+    return row ? rowToDeviceIdentity(row) : undefined;
+  }
+  async getByPub(accountId: string, devicePubHex: string) {
+    const row = await this.db.prepare(
+      "SELECT * FROM device_identities WHERE account_id = ? AND device_pub_hex = ?",
+    ).bind(accountId.toLowerCase(), devicePubHex.toLowerCase()).first<DeviceIdentityRow>();
+    return row ? rowToDeviceIdentity(row) : undefined;
+  }
+  async listForAccount(accountId: string) {
+    const rows = await this.db.prepare(
+      "SELECT * FROM device_identities WHERE account_id = ? ORDER BY created_at, device_id",
+    ).bind(accountId.toLowerCase()).all<DeviceIdentityRow>();
+    return (rows.results ?? []).map(rowToDeviceIdentity);
+  }
+  async touch(accountId: string, deviceId: string, at: number) {
+    const result = await this.db.prepare(
+      "UPDATE device_identities SET last_seen_at = ? WHERE account_id = ? AND device_id = ?",
+    ).bind(at, accountId.toLowerCase(), deviceId.toLowerCase()).run();
+    return (result.meta.changes ?? 1) > 0;
+  }
+  async revoke(accountId: string, deviceId: string, at: number) {
+    const result = await this.db.prepare(
+      "UPDATE device_identities SET revoked_at = ? WHERE account_id = ? AND device_id = ?",
+    ).bind(at, accountId.toLowerCase(), deviceId.toLowerCase()).run();
+    return (result.meta.changes ?? 1) > 0;
+  }
+}
+
+interface ProfileRow {
+  account_id: string;
+  device_id?: string;
+  revision: number;
+  key_version: number;
+  nonce_hex: string;
+  ciphertext_hex: string;
+  signer_pub_hex: string;
+  signature_hex: string;
+  issued_at: number;
+  updated_at: number;
+  locked?: number;
+}
+
+function baseProfile(row: ProfileRow): AccountProfileRecord {
+  return {
+    accountId: row.account_id,
+    revision: row.revision,
+    keyVersion: row.key_version,
+    nonceHex: row.nonce_hex,
+    ciphertextHex: row.ciphertext_hex,
+    signerPubHex: row.signer_pub_hex,
+    signatureHex: row.signature_hex,
+    issuedAt: row.issued_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function profileBinds(rec: AccountProfileRecord): unknown[] {
+  return [
+    rec.accountId.toLowerCase(), rec.revision, rec.keyVersion, rec.nonceHex,
+    rec.ciphertextHex, rec.signerPubHex, rec.signatureHex, rec.issuedAt, rec.updatedAt,
+  ];
+}
+
+export class D1AccountProfileStorage implements AccountProfileStorage {
+  constructor(private readonly db: D1Database) {}
+  async get(accountId: string) {
+    const row = await this.db.prepare("SELECT * FROM account_profiles WHERE account_id = ?")
+      .bind(accountId.toLowerCase()).first<ProfileRow>();
+    return row ? baseProfile(row) : undefined;
+  }
+  async put(rec: AccountProfileRecord, expectedRevision: number) {
+    const result = await this.db.prepare(
+      `INSERT INTO account_profiles
+        (account_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+       WHERE ? = 0 OR EXISTS (SELECT 1 FROM account_profiles WHERE account_id = ? AND revision = ?)
+       ON CONFLICT(account_id) DO UPDATE SET
+         revision=excluded.revision, key_version=excluded.key_version, nonce_hex=excluded.nonce_hex,
+         ciphertext_hex=excluded.ciphertext_hex, signer_pub_hex=excluded.signer_pub_hex,
+         signature_hex=excluded.signature_hex, issued_at=excluded.issued_at, updated_at=excluded.updated_at
+       WHERE account_profiles.revision = ? AND excluded.revision = ? + 1`,
+    ).bind(...profileBinds(rec), expectedRevision, rec.accountId.toLowerCase(), expectedRevision, expectedRevision, expectedRevision).run();
+    if ((result.meta.changes ?? 0) === 0 || rec.revision !== expectedRevision + 1) {
+      return { ok: false as const, reason: "revision-conflict" as const };
+    }
+    return { ok: true as const, record: (await this.get(rec.accountId))! };
+  }
+}
+
+abstract class D1DeviceProfileStorage<T extends DeviceSelfProfileRecord> {
+  constructor(protected readonly db: D1Database, protected readonly table: "device_self_profiles" | "device_managed_profiles") {}
+  protected fromRow(row: ProfileRow): T {
+    return { ...baseProfile(row), deviceId: row.device_id! } as T;
+  }
+  async get(accountId: string, deviceId: string) {
+    const row = await this.db.prepare(`SELECT * FROM ${this.table} WHERE account_id = ? AND device_id = ?`)
+      .bind(accountId.toLowerCase(), deviceId.toLowerCase()).first<ProfileRow>();
+    return row ? this.fromRow(row) : undefined;
+  }
+  async listForAccount(accountId: string) {
+    const rows = await this.db.prepare(`SELECT * FROM ${this.table} WHERE account_id = ? ORDER BY device_id`)
+      .bind(accountId.toLowerCase()).all<ProfileRow>();
+    return (rows.results ?? []).map((row) => this.fromRow(row));
+  }
+  protected async putRecord(rec: T, expectedRevision: number, locked?: boolean) {
+    const managed = this.table === "device_managed_profiles";
+    const columns = managed
+      ? "account_id, device_id, revision, key_version, nonce_hex, ciphertext_hex, locked, signer_pub_hex, signature_hex, issued_at, updated_at"
+      : "account_id, device_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at";
+    const placeholders = managed ? "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?" : "?, ?, ?, ?, ?, ?, ?, ?, ?, ?";
+    const values: unknown[] = [rec.accountId.toLowerCase(), rec.deviceId.toLowerCase(), rec.revision, rec.keyVersion, rec.nonceHex, rec.ciphertextHex];
+    if (managed) values.push(locked ? 1 : 0);
+    values.push(rec.signerPubHex, rec.signatureHex, rec.issuedAt, rec.updatedAt);
+    const lockedUpdate = managed ? ", locked=excluded.locked" : "";
+    const result = await this.db.prepare(
+      `INSERT INTO ${this.table} (${columns})
+       SELECT ${placeholders}
+       WHERE ? = 0 OR EXISTS (SELECT 1 FROM ${this.table} WHERE account_id = ? AND device_id = ? AND revision = ?)
+       ON CONFLICT(account_id, device_id) DO UPDATE SET
+         revision=excluded.revision, key_version=excluded.key_version, nonce_hex=excluded.nonce_hex,
+         ciphertext_hex=excluded.ciphertext_hex${lockedUpdate}, signer_pub_hex=excluded.signer_pub_hex,
+         signature_hex=excluded.signature_hex, issued_at=excluded.issued_at, updated_at=excluded.updated_at
+       WHERE ${this.table}.revision = ? AND excluded.revision = ? + 1`,
+    ).bind(...values, expectedRevision, rec.accountId.toLowerCase(), rec.deviceId.toLowerCase(), expectedRevision, expectedRevision, expectedRevision).run();
+    if ((result.meta.changes ?? 0) === 0 || rec.revision !== expectedRevision + 1) {
+      return { ok: false as const, reason: "revision-conflict" as const };
+    }
+    return { ok: true as const, record: (await this.get(rec.accountId, rec.deviceId))! };
+  }
+}
+
+export class D1DeviceSelfProfileStorage
+  extends D1DeviceProfileStorage<DeviceSelfProfileRecord>
+  implements DeviceSelfProfileStorage {
+  constructor(db: D1Database) { super(db, "device_self_profiles"); }
+  async put(rec: DeviceSelfProfileRecord, expectedRevision: number) { return this.putRecord(rec, expectedRevision); }
+}
+
+export class D1DeviceManagedProfileStorage
+  extends D1DeviceProfileStorage<DeviceManagedProfileRecord>
+  implements DeviceManagedProfileStorage {
+  constructor(db: D1Database) { super(db, "device_managed_profiles"); }
+  protected override fromRow(row: ProfileRow): DeviceManagedProfileRecord {
+    return { ...baseProfile(row), deviceId: row.device_id!, locked: row.locked === 1 };
+  }
+  async put(rec: DeviceManagedProfileRecord, expectedRevision: number) { return this.putRecord(rec, expectedRevision, rec.locked); }
+  async delete(accountId: string, deviceId: string, expectedRevision: number) {
+    const result = await this.db.prepare(
+      "DELETE FROM device_managed_profiles WHERE account_id = ? AND device_id = ? AND revision = ?",
+    ).bind(accountId.toLowerCase(), deviceId.toLowerCase(), expectedRevision).run();
+    return (result.meta.changes ?? 0) > 0;
+  }
+}
+
+interface DirectoryKeyGrantRow {
+  grant_id: string;
+  account_id: string;
+  recipient_device_id: string;
+  key_kind: "account-profile" | "device-directory";
+  sealed_key_hex: string;
+  signer_pub_hex: string;
+  signature_hex: string;
+  issued_at: number;
+  expires_at: number;
+  revoked_at: number | null;
+}
+
+function rowToDirectoryKeyGrant(row: DirectoryKeyGrantRow): AccountDirectoryKeyGrantRecord {
+  return {
+    grantId: row.grant_id,
+    accountId: row.account_id,
+    recipientDeviceId: row.recipient_device_id,
+    keyKind: row.key_kind,
+    sealedKeyHex: row.sealed_key_hex,
+    signerPubHex: row.signer_pub_hex,
+    signatureHex: row.signature_hex,
+    issuedAt: row.issued_at,
+    expiresAt: row.expires_at,
+    revokedAt: row.revoked_at,
+  };
+}
+
+export class D1AccountDirectoryKeyGrantStorage implements AccountDirectoryKeyGrantStorage {
+  constructor(private readonly db: D1Database) {}
+  async put(rec: AccountDirectoryKeyGrantRecord) {
+    try {
+      await this.db.prepare(
+        `INSERT INTO account_directory_key_grants
+          (grant_id, account_id, recipient_device_id, key_kind, sealed_key_hex, signer_pub_hex, signature_hex, issued_at, expires_at, revoked_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        rec.grantId, rec.accountId.toLowerCase(), rec.recipientDeviceId.toLowerCase(), rec.keyKind,
+        rec.sealedKeyHex, rec.signerPubHex, rec.signatureHex, rec.issuedAt, rec.expiresAt, rec.revokedAt,
+      ).run();
+      return { ok: true as const };
+    } catch (error) {
+      if (/UNIQUE/i.test(String((error as Error).message ?? error))) {
+        return { ok: false as const, reason: "duplicate grant id" };
+      }
+      throw error;
+    }
+  }
+  async get(grantId: string) {
+    const row = await this.db.prepare("SELECT * FROM account_directory_key_grants WHERE grant_id = ?")
+      .bind(grantId).first<DirectoryKeyGrantRow>();
+    return row ? rowToDirectoryKeyGrant(row) : undefined;
+  }
+  async listActiveForDevice(accountId: string, deviceId: string, now: number) {
+    const rows = await this.db.prepare(
+      `SELECT * FROM account_directory_key_grants
+       WHERE account_id = ? AND recipient_device_id = ? AND revoked_at IS NULL AND expires_at > ?
+       ORDER BY issued_at DESC`,
+    ).bind(accountId.toLowerCase(), deviceId.toLowerCase(), now).all<DirectoryKeyGrantRow>();
+    return (rows.results ?? []).map(rowToDirectoryKeyGrant);
+  }
+  async revoke(grantId: string, at: number) {
+    const result = await this.db.prepare(
+      "UPDATE account_directory_key_grants SET revoked_at = ? WHERE grant_id = ? AND revoked_at IS NULL",
+    ).bind(at, grantId).run();
+    return (result.meta.changes ?? 0) > 0;
+  }
+}
+
 interface RawPushRow {
-  token_id: string; username: string; platform: string; provider_token: string;
+  token_id: string; username: string; device_id: string; platform: string; provider_token: string;
   push_x25519_pub_hex: string; registration_signature_hex: string;
-  label: string | null;
   registered_at: number; last_seen_at: number;
   // v1.2 — nullable so a SELECT against a pre-migration database
   // decodes safely; rowToRecord defaults absence to 0.
@@ -2847,11 +3138,11 @@ function pushRowToRecord(r: RawPushRow): PushTokenRecord {
   return {
     tokenId: r.token_id,
     username: r.username,
+    deviceId: r.device_id,
     platform: r.platform as "apns" | "fcm" | "webpush",
     providerToken: r.provider_token,
     pushX25519PubHex: r.push_x25519_pub_hex,
     registrationSignatureHex: r.registration_signature_hex,
-    label: r.label ?? "",
     registeredAt: r.registered_at,
     lastSeenAt: r.last_seen_at,
     quarantineUntil: r.quarantine_until ?? 0,
@@ -3360,7 +3651,7 @@ export class D1InstallPolicyFanoutStorage
 
 interface DemoUserRow {
   username: string;
-  display: string;
+  idempotency_key: string;
   snapshot_id: string | null;
   iso_r2_key: string | null;
   ttl_idle_minutes: number;
@@ -3381,7 +3672,7 @@ interface DemoUserRow {
 function rowToDemoUser(r: DemoUserRow): DemoUserRecord {
   return {
     username: r.username,
-    display: r.display,
+    idempotencyKey: r.idempotency_key,
     snapshotId: r.snapshot_id,
     isoR2Key: r.iso_r2_key,
     ttlIdleMinutes: r.ttl_idle_minutes,
@@ -3411,7 +3702,7 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
       await this.db
         .prepare(
           "INSERT INTO demo_users " +
-            "(username, display, snapshot_id, iso_r2_key, ttl_idle_minutes, " +
+            "(username, idempotency_key, snapshot_id, iso_r2_key, ttl_idle_minutes, " +
             "region, size, active_server_id, active_server_ip, image, " +
             "active_server_fqdn, " +
             "last_activity_at, state, created_at, " +
@@ -3420,7 +3711,7 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
         )
         .bind(
           u,
-          rec.display,
+          rec.idempotencyKey,
           rec.snapshotId,
           rec.isoR2Key,
           rec.ttlIdleMinutes,
@@ -3463,7 +3754,7 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
     const setClauses: string[] = [];
     const binds: unknown[] = [];
     const map: Record<string, string> = {
-      display: "display",
+      idempotencyKey: "idempotency_key",
       snapshotId: "snapshot_id",
       isoR2Key: "iso_r2_key",
       ttlIdleMinutes: "ttl_idle_minutes",
@@ -3508,7 +3799,7 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
     // CAS in one UPDATE so two concurrent /connect handlers can't both
     // win the none→provisioning race (docs/sample-users.md §4.4).
     const map: Record<string, string> = {
-      display: "display",
+      idempotencyKey: "idempotency_key",
       snapshotId: "snapshot_id",
       isoR2Key: "iso_r2_key",
       ttlIdleMinutes: "ttl_idle_minutes",
@@ -3553,7 +3844,7 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
     const r = await this.db
       .prepare(
         "SELECT * FROM demo_users " +
-          "WHERE state IN ('up', 'provisioning', 'idle-pending-teardown') " +
+          "WHERE state IN ('ready', 'provisioning', 'idle-pending-teardown') " +
           "AND last_activity_at < ? " +
           "ORDER BY last_activity_at ASC LIMIT 50",
       )
@@ -3565,7 +3856,7 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
     const r = await this.db
       .prepare(
         "SELECT COUNT(*) AS n FROM demo_users " +
-          "WHERE state IN ('provisioning', 'up', 'idle-pending-teardown')",
+          "WHERE state IN ('provisioning', 'ready', 'idle-pending-teardown')",
       )
       .first<{ n: number }>();
     return r?.n ?? 0;
@@ -3591,10 +3882,257 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
   }
 }
 
+export class D1AccountProvisioningStorage implements AccountProvisioningStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async initialize(input: AccountInitialization): Promise<AccountInitializationResult> {
+    const u = input.username.username.toLowerCase();
+    const existing = await this.db.prepare(
+      `SELECT u.irk_pub_hex, u.admin_root_pub_hex, d.device_pub_hex
+         FROM usernames u
+         LEFT JOIN device_identities d ON d.account_id = u.username AND d.device_id = ?
+        WHERE u.username = ?`,
+    ).bind(input.primaryDevice.deviceId, u).first<{
+      irk_pub_hex: string;
+      admin_root_pub_hex: string | null;
+      device_pub_hex: string | null;
+    }>();
+    if (existing) {
+      // Matching IRK + admin root IS the proof of ownership — the same proof
+      // every other account operation rests on. Anyone else presenting this
+      // name fails here and gets the generic "unavailable".
+      const authorized = existing.irk_pub_hex.toLowerCase() === input.username.irkPubHex.toLowerCase() &&
+        existing.admin_root_pub_hex?.toLowerCase() === input.username.adminRootPubHex?.toLowerCase();
+      if (!authorized) return { ok: false, reason: "username-unavailable" };
+      if (existing.device_pub_hex !== null) {
+        if (existing.device_pub_hex.toLowerCase() !== input.primaryDevice.devicePubHex.toLowerCase()) {
+          return { ok: false, reason: "username-unavailable" };
+        }
+        const [grant, account, profile] = await Promise.all([
+          this.db.prepare("SELECT 1 AS hit FROM device_capability_grants WHERE grant_id = ? AND username = ? AND device_id = ?")
+            .bind(input.primaryGrant.grantId, u, input.primaryDevice.deviceId).first<{ hit: number }>(),
+          this.db.prepare("SELECT 1 AS hit FROM account_profiles WHERE account_id = ?")
+            .bind(u).first<{ hit: number }>(),
+          this.db.prepare("SELECT 1 AS hit FROM device_self_profiles WHERE account_id = ? AND device_id = ?")
+            .bind(u, input.primaryDevice.deviceId).first<{ hit: number }>(),
+        ]);
+        return grant && account && profile
+          ? { ok: true, created: false }
+          : { ok: false, reason: "initialization-conflict" };
+      }
+      // The account exists but has no device layer — the state a clean-schema
+      // cutover leaves behind. Re-establish it rather than stranding the owner
+      // with a name they can never use again. INSERT OR IGNORE so a surviving
+      // profile is never clobbered.
+      const d = input.primaryDevice;
+      const g = input.primaryGrant;
+      const ap = input.accountProfile;
+      const dp = input.primaryDeviceProfile;
+      try {
+        await this.db.batch([
+          this.db.prepare(
+            `INSERT INTO device_identities
+              (account_id, device_id, device_pub_hex, platform_class, created_at, last_seen_at, revoked_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(u, d.deviceId, d.devicePubHex, d.platformClass, d.createdAt, d.lastSeenAt, d.revokedAt),
+          this.db.prepare(
+            `INSERT OR IGNORE INTO device_capability_grants
+              (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            g.grantId, u, g.deviceId, g.devicePubHex, g.scopesJson,
+            g.issuedAt, g.expiresAt, g.signatureHex, g.revokedAt, g.signerRoot,
+          ),
+          this.db.prepare(
+            `INSERT OR IGNORE INTO account_profiles
+              (account_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            u, ap.revision, ap.keyVersion, ap.nonceHex, ap.ciphertextHex,
+            ap.signerPubHex, ap.signatureHex, ap.issuedAt, ap.updatedAt,
+          ),
+          this.db.prepare(
+            `INSERT OR IGNORE INTO device_self_profiles
+              (account_id, device_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            u, dp.deviceId, dp.revision, dp.keyVersion, dp.nonceHex, dp.ciphertextHex,
+            dp.signerPubHex, dp.signatureHex, dp.issuedAt, dp.updatedAt,
+          ),
+        ]);
+        return { ok: true, created: true };
+      } catch {
+        return { ok: false, reason: "initialization-conflict" };
+      }
+    }
+
+    const username = input.username;
+    const device = input.primaryDevice;
+    const grant = input.primaryGrant;
+    const account = input.accountProfile;
+    const profile = input.primaryDeviceProfile;
+    try {
+      await this.db.batch([
+        this.db.prepare(
+          `INSERT INTO usernames
+            (username, irk_pub_hex, claimed_at, is_demo, account_type, recovery_wipe_policy, aid_pub_hex, last_active, admin_root_pub_hex)
+           VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, username.irkPubHex, username.claimedAt, username.accountType ?? "single",
+          username.recoveryWipePolicy ?? "graceful", username.aidPubHex ?? null,
+          username.lastActive ?? username.claimedAt, username.adminRootPubHex ?? null,
+        ),
+        this.db.prepare(
+          `INSERT INTO device_identities
+            (account_id, device_id, device_pub_hex, platform_class, created_at, last_seen_at, revoked_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(u, device.deviceId, device.devicePubHex, device.platformClass, device.createdAt, device.lastSeenAt, device.revokedAt),
+        this.db.prepare(
+          `INSERT INTO device_capability_grants
+            (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          grant.grantId, u, grant.deviceId, grant.devicePubHex, grant.scopesJson,
+          grant.issuedAt, grant.expiresAt, grant.signatureHex, grant.revokedAt, grant.signerRoot,
+        ),
+        this.db.prepare(
+          `INSERT INTO account_profiles
+            (account_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, account.revision, account.keyVersion, account.nonceHex, account.ciphertextHex,
+          account.signerPubHex, account.signatureHex, account.issuedAt, account.updatedAt,
+        ),
+        this.db.prepare(
+          `INSERT INTO device_self_profiles
+            (account_id, device_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, profile.deviceId, profile.revision, profile.keyVersion, profile.nonceHex, profile.ciphertextHex,
+          profile.signerPubHex, profile.signatureHex, profile.issuedAt, profile.updatedAt,
+        ),
+      ]);
+      return { ok: true, created: true };
+    } catch {
+      const after = await this.db.prepare("SELECT irk_pub_hex FROM usernames WHERE username = ?")
+        .bind(u).first<{ irk_pub_hex: string }>();
+      return { ok: false, reason: after ? "username-unavailable" : "initialization-conflict" };
+    }
+  }
+}
+
+export class D1DemoAccountProvisioningStorage implements DemoAccountProvisioningStorage {
+  constructor(private readonly db: D1Database) {}
+  async initialize(input: DemoAccountInitialization): Promise<DemoAccountInitializationResult> {
+    const u = input.username.username.toLowerCase();
+    const existing = await this.db.prepare("SELECT * FROM demo_users WHERE username = ? OR idempotency_key = ?")
+      .bind(u, input.demo.idempotencyKey).first<DemoUserRow>();
+    if (existing) {
+      if (existing.username === u && existing.idempotency_key === input.demo.idempotencyKey) {
+        return { ok: true, created: false, record: rowToDemoUser(existing) };
+      }
+      return { ok: false, reason: "idempotency-conflict" };
+    }
+    const username = input.username;
+    const device = input.primaryDevice;
+    const grant = input.primaryGrant;
+    const account = input.accountProfile;
+    const profile = input.primaryDeviceProfile;
+    const authCode = input.authCode;
+    const demo = input.demo;
+    try {
+      await this.db.batch([
+        this.db.prepare(
+          `INSERT INTO usernames
+            (username, irk_pub_hex, claimed_at, is_demo, account_type, recovery_wipe_policy, aid_pub_hex, last_active, admin_root_pub_hex)
+           VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, username.irkPubHex, username.claimedAt, username.accountType ?? "demo",
+          username.recoveryWipePolicy ?? "graceful", username.aidPubHex ?? null,
+          username.lastActive ?? username.claimedAt, username.adminRootPubHex ?? null,
+        ),
+        this.db.prepare(
+          `INSERT INTO device_identities
+            (account_id, device_id, device_pub_hex, platform_class, created_at, last_seen_at, revoked_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(u, device.deviceId, device.devicePubHex, device.platformClass, device.createdAt, device.lastSeenAt, device.revokedAt),
+        this.db.prepare(
+          `INSERT INTO device_capability_grants
+            (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          grant.grantId, u, grant.deviceId, grant.devicePubHex, grant.scopesJson,
+          grant.issuedAt, grant.expiresAt, grant.signatureHex, grant.revokedAt, grant.signerRoot,
+        ),
+        this.db.prepare(
+          `INSERT INTO account_profiles
+            (account_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, account.revision, account.keyVersion, account.nonceHex, account.ciphertextHex,
+          account.signerPubHex, account.signatureHex, account.issuedAt, account.updatedAt,
+        ),
+        this.db.prepare(
+          `INSERT INTO device_self_profiles
+            (account_id, device_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, profile.deviceId, profile.revision, profile.keyVersion, profile.nonceHex, profile.ciphertextHex,
+          profile.signerPubHex, profile.signatureHex, profile.issuedAt, profile.updatedAt,
+        ),
+        this.db.prepare(
+          `INSERT INTO auth_codes
+            (serial, username, server_name, server_domain, delegated_pubkey_hex, user_pubkey_hex, user_signature_hex,
+             issued_at, expires_at, status, recorded_at, admin_root_pub_key_hex)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          authCode.serial, u, authCode.serverName, authCode.serverDomain, authCode.delegatedPubKeyHex,
+          authCode.userPubKeyHex, authCode.userSignatureHex, authCode.issuedAt, authCode.expiresAt,
+          authCode.status, authCode.recordedAt, authCode.adminRootPubKeyHex ?? null,
+        ),
+        this.db.prepare(
+          `INSERT INTO demo_users
+            (username, idempotency_key, snapshot_id, iso_r2_key, ttl_idle_minutes, region, size,
+             active_server_id, active_server_ip, image, active_server_fqdn, last_activity_at, state, created_at,
+             provision_phase, provision_phase_at, provision_last_error)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, demo.idempotencyKey, demo.snapshotId, demo.isoR2Key, demo.ttlIdleMinutes, demo.region, demo.size,
+          demo.activeServerId, demo.activeServerIp, demo.image, demo.activeServerFqdn, demo.lastActivityAt,
+          demo.state, demo.createdAt, demo.provisionPhase, demo.provisionPhaseAt, demo.provisionLastError,
+        ),
+      ]);
+      return { ok: true, created: true, record: { ...demo, username: u } };
+    } catch (error) {
+      const after = await this.db.prepare("SELECT * FROM demo_users WHERE username = ? OR idempotency_key = ?")
+        .bind(u, demo.idempotencyKey).first<DemoUserRow>();
+      if (after && after.username === u && after.idempotency_key === demo.idempotencyKey) {
+        return { ok: true, created: false, record: rowToDemoUser(after) };
+      }
+      const usernameTaken = await this.db.prepare("SELECT 1 AS hit FROM usernames WHERE username = ?")
+        .bind(u).first<{ hit: number }>();
+      return { ok: false, reason: usernameTaken ? "username-unavailable" : "initialization-conflict" };
+    }
+  }
+  async cleanup(username: string, idempotencyKey: string) {
+    const u = username.toLowerCase();
+    const exact = await this.db.prepare(
+      "SELECT 1 AS hit FROM demo_users WHERE username = ? AND idempotency_key = ?",
+    ).bind(u, idempotencyKey).first<{ hit: number }>();
+    if (!exact) return false;
+    await this.db.batch([
+      this.db.prepare("DELETE FROM auth_codes WHERE username = ?").bind(u),
+      this.db.prepare("DELETE FROM demo_users WHERE username = ? AND idempotency_key = ?").bind(u, idempotencyKey),
+      this.db.prepare("DELETE FROM usernames WHERE username = ?").bind(u),
+    ]);
+    return true;
+  }
+}
+
 interface DeviceCapabilityGrantRow {
   grant_id: string;
   username: string;
-  device_label: string;
+  device_id: string;
   device_pub_hex: string;
   scopes_json: string;
   issued_at: number;
@@ -3612,7 +4150,7 @@ function rowToDeviceCapabilityGrant(
   return {
     grantId: r.grant_id,
     username: r.username,
-    deviceLabel: r.device_label,
+    deviceId: r.device_id,
     devicePubHex: r.device_pub_hex,
     scopesJson: r.scopes_json,
     issuedAt: r.issued_at,
@@ -3628,8 +4166,8 @@ export class D1DeviceCapabilityGrantStorage
 {
   constructor(private readonly db: D1Database) {}
   async put(rec: DeviceCapabilityGrantRecord) {
-    // The unique partial index `idx_dcg_username_label_active`
-    // enforces "at most one ACTIVE grant per (username, device_label)"
+    // The unique partial index `idx_dcg_username_device_active`
+    // enforces "at most one ACTIVE grant per (username, device_id)"
     // at the DB level — re-issuance MUST revoke the old row first.
     // We catch the surfaced UNIQUE-constraint message rather than
     // pre-checking, both to avoid the read-then-write race and to keep
@@ -3638,7 +4176,7 @@ export class D1DeviceCapabilityGrantStorage
       await this.db
         .prepare(
           `INSERT INTO device_capability_grants
-            (grant_id, username, device_label, device_pub_hex,
+            (grant_id, username, device_id, device_pub_hex,
              scopes_json, issued_at, expires_at, signature_hex, revoked_at,
              signer_root)
            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
@@ -3646,7 +4184,7 @@ export class D1DeviceCapabilityGrantStorage
         .bind(
           rec.grantId,
           rec.username.toLowerCase(),
-          rec.deviceLabel.toLowerCase(),
+          rec.deviceId.toLowerCase(),
           rec.devicePubHex.toLowerCase(),
           rec.scopesJson,
           rec.issuedAt,
@@ -3662,7 +4200,7 @@ export class D1DeviceCapabilityGrantStorage
       if (/UNIQUE/i.test(msg)) {
         return {
           ok: false as const,
-          reason: "duplicate active grant for (username, device_label)",
+          reason: "duplicate active grant for (username, device_id)",
         };
       }
       throw e;
@@ -3688,13 +4226,13 @@ export class D1DeviceCapabilityGrantStorage
       .all<DeviceCapabilityGrantRow>();
     return (r.results ?? []).map(rowToDeviceCapabilityGrant);
   }
-  async getActiveForUserLabel(username: string, deviceLabel: string) {
+  async getActiveForUserDevice(username: string, deviceId: string) {
     const r = await this.db
       .prepare(
         `SELECT * FROM device_capability_grants
-         WHERE username = ?1 AND device_label = ?2 AND revoked_at IS NULL`,
+         WHERE username = ?1 AND device_id = ?2 AND revoked_at IS NULL`,
       )
-      .bind(username.toLowerCase(), deviceLabel.toLowerCase())
+      .bind(username.toLowerCase(), deviceId.toLowerCase())
       .all<DeviceCapabilityGrantRow>();
     const rows = r.results ?? [];
     if (rows.length > 1) {
@@ -3702,8 +4240,8 @@ export class D1DeviceCapabilityGrantStorage
       // unreachable. Fail loudly so a misconfigured DB is impossible
       // to silently keep using.
       throw new Error(
-        `getActiveForUserLabel: more than one active grant for ` +
-          `${username}/${deviceLabel}`,
+        `getActiveForUserDevice: more than one active grant for ` +
+          `${username}/${deviceId}`,
       );
     }
     return rows[0] ? rowToDeviceCapabilityGrant(rows[0]) : undefined;
@@ -3938,6 +4476,11 @@ export class D1Storage implements Storage {
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   pushTokens: PushTokenStorage;
+  deviceIdentities: DeviceIdentityStorage;
+  accountProfiles: AccountProfileStorage;
+  deviceSelfProfiles: DeviceSelfProfileStorage;
+  deviceManagedProfiles: DeviceManagedProfileStorage;
+  accountDirectoryKeyGrants: AccountDirectoryKeyGrantStorage;
   llmPromo: LlmPromoStorage;
   tiers: TierStorage;
   entitlementRevocations: EntitlementRevocationStorage;
@@ -3948,6 +4491,8 @@ export class D1Storage implements Storage {
   demoLlmLedger: DemoLlmLedgerStorage;
   installPolicyFanout: InstallPolicyFanoutStorage;
   demoUsers: DemoUsersStorage;
+  accountProvisioning: AccountProvisioningStorage;
+  demoAccountProvisioning: DemoAccountProvisioningStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
   boxSerials: BoxSerialsStorage;
   nfcRendezvous: NfcRendezvousStorage;
@@ -3985,6 +4530,11 @@ export class D1Storage implements Storage {
     this.pendingRePairs = new D1PendingRePairStorage(db);
     this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);
     this.pushTokens = new D1PushTokenStorage(db);
+    this.deviceIdentities = new D1DeviceIdentityStorage(db);
+    this.accountProfiles = new D1AccountProfileStorage(db);
+    this.deviceSelfProfiles = new D1DeviceSelfProfileStorage(db);
+    this.deviceManagedProfiles = new D1DeviceManagedProfileStorage(db);
+    this.accountDirectoryKeyGrants = new D1AccountDirectoryKeyGrantStorage(db);
     this.llmPromo = new D1LlmPromoStorage(db);
     this.tiers = new D1TierStorage(db);
     this.entitlementRevocations = new D1EntitlementRevocationStorage(db);
@@ -3995,6 +4545,8 @@ export class D1Storage implements Storage {
     this.demoLlmLedger = new D1DemoLlmLedgerStorage(db);
     this.installPolicyFanout = new D1InstallPolicyFanoutStorage(db);
     this.demoUsers = new D1DemoUsersStorage(db);
+    this.accountProvisioning = new D1AccountProvisioningStorage(db);
+    this.demoAccountProvisioning = new D1DemoAccountProvisioningStorage(db);
     this.deviceCapabilityGrants = new D1DeviceCapabilityGrantStorage(db);
     this.boxSerials = new D1BoxSerialsStorage(db);
     this.nfcRendezvous = new D1NfcRendezvousStorage(db);
@@ -4957,7 +5509,7 @@ function rowToNameClaim(r: NameClaimRow): NameClaimRecord {
 
 /** D1 NamespaceStorage — the merged per-user leftmost-label uniqueness
  *  invariant (§3.4; per-user-cert design). The unique index
- *  `idx_name_claims_username_label` enforces "at most one claim per
+ *  `idx_name_claims_username_device` enforces "at most one claim per
  *  (username, label)" at the DB level. `claim` first reads the existing
  *  row: an identical (kind, ref_id) is idempotent (ok, original claimed_at
  *  preserved); otherwise it INSERTs and translates a surfaced UNIQUE

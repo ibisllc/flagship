@@ -496,7 +496,6 @@ async function handleNoRecoveryGatedTap() {
   }
   const policy = accountDeletePolicy({
     hasCloudRecovery: false,
-    trustedDeviceCount: resolution?.trustedDeviceCount,
     isDemoAccount: resolution?.kind === "demo",
   });
   if (policy === "ceremony") {

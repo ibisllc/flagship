@@ -132,7 +132,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).toContain('id="burn"');
     // Debian 13 netinst is the recommended image, centralized here.
     expect(r.body).toContain(
-      "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso",
+      "https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso",
     );
     expect(r.body).toMatch(/Debian 13/);
   });

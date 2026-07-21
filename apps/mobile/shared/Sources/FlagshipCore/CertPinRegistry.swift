@@ -40,6 +40,10 @@ public final class CertPinRegistry: @unchecked Sendable {
     private let lock = NSLock()
     /// box FQDN (lowercase) → leaf-cert DER SHA-256 (lowercase hex).
     private var pins: [String: String] = [:]
+    /// Last STK-verified daemon-status report for each box. This is the same
+    /// evidence that installed `pins`; retaining it lets detail UI show real
+    /// certificate metadata without trusting an unsigned relay projection.
+    private var reports: [String: DaemonStatusReport] = [:]
     /// box FQDN (lowercase) → locally derived STK pubkey (32 bytes).
     private var stkPubs: [String: Data] = [:]
     private let defaults: UserDefaults?
@@ -117,6 +121,7 @@ public final class CertPinRegistry: @unchecked Sendable {
         // Case 1 — prune pins for domains the directory no longer vouches for.
         for domain in pins.keys where !listed.contains(domain) {
             pins.removeValue(forKey: domain)
+            reports.removeValue(forKey: domain)
         }
         lock.unlock()
 
@@ -125,9 +130,10 @@ public final class CertPinRegistry: @unchecked Sendable {
             guard !domain.isEmpty else { continue }
             // Case 2 — a fresh verified report replaces the pin. Case 3 — no
             // fresh pin ⇒ LEAVE the existing pin untouched (keep-last-good).
-            if let pin = verifiedPin(for: pod, domain: domain, nowMs: nowMs) {
+            if let verified = verifiedStatus(for: pod, domain: domain, nowMs: nowMs) {
                 lock.lock()
-                pins[domain] = pin
+                pins[domain] = verified.pin
+                reports[domain] = verified.report
                 lock.unlock()
             }
         }
@@ -153,7 +159,11 @@ public final class CertPinRegistry: @unchecked Sendable {
         update(pods: pods, nowMs: nowMs)
     }
 
-    private func verifiedPin(for pod: PodDirectoryEntry, domain: String, nowMs: Int64) -> String? {
+    private func verifiedStatus(
+        for pod: PodDirectoryEntry,
+        domain: String,
+        nowMs: Int64
+    ) -> (pin: String, report: DaemonStatusReport)? {
         guard pod.revokedAt == nil,
               let signed = pod.signedStatus,
               // The signed report must be ABOUT this pod — a valid report
@@ -169,7 +179,7 @@ public final class CertPinRegistry: @unchecked Sendable {
               let pin = signed.report.certSha256?.lowercased(),
               Self.isHex64(pin)
         else { return nil }
-        return pin
+        return (pin, signed.report)
     }
 
     // MARK: - Lookup (the enforcement input)
@@ -189,11 +199,23 @@ public final class CertPinRegistry: @unchecked Sendable {
         return nil
     }
 
+    /// The last fresh, STK-verified status report for this exact box. Unlike
+    /// `pinFor`, this deliberately does not inherit to service subdomains: the
+    /// server-detail screen asks about one canonical box FQDN.
+    public func verifiedReport(for domain: String) -> DaemonStatusReport? {
+        let key = Self.normalize(domain)
+        guard !key.isEmpty else { return nil }
+        lock.lock()
+        defer { lock.unlock() }
+        return reports[key]
+    }
+
     /// Drop every pin (sign-out / profile switch). The STK-pub cache is
     /// also dropped — a different account's boxes derive differently.
     public func clear() {
         lock.lock()
         pins.removeAll()
+        reports.removeAll()
         stkPubs.removeAll()
         lock.unlock()
         defaults?.removeObject(forKey: Self.stkPubsDefaultsKey)

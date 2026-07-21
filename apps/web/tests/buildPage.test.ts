@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/server.js";
 
-describe("/build/ is retired (recipe + Assembler replaced the ISO flow)", () => {
+describe("/build/ is retired (recipe + Builder replaced the ISO flow)", () => {
   it("serves a retirement stub, not the old personalize-and-write-ISO UI", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/build/" });

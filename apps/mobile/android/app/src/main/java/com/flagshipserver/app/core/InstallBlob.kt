@@ -271,7 +271,7 @@ object WipeRestartClaim {
 }
 
 object PushTokenRegister {
-    const val CANONICAL_TAG = "flagship/push-token-register/v1"
+    const val CANONICAL_TAG = "flagship/push-token-register/v2"
 
     /**
      * Field order must match the Worker's canonicalPushTokenRegister
@@ -281,13 +281,13 @@ object PushTokenRegister {
      */
     fun canonicalBytes(
         username: String,
+        deviceId: String,
         platform: String,
         providerToken: String,
         pushX25519PubHex: String,
-        label: String,
         issuedAt: Long,
     ): ByteArray = listOf(
-        CANONICAL_TAG, username, platform, providerToken, pushX25519PubHex, label, issuedAt.toString()
+        CANONICAL_TAG, username, deviceId, platform, providerToken, pushX25519PubHex, issuedAt.toString()
     ).joinToString("|").toByteArray()
 }
 

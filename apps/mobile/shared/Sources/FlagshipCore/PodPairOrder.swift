@@ -19,30 +19,27 @@ import CryptoKit
 /// the TS generator (`canonicalPhoneOrder` in `orders.ts`) and the webapp
 /// (`canonicalAddPairedSession` in `podPair.js`):
 ///
-///   flagship/order/add-paired-session/v1|<serverId>|<token>|<label>|<issuedAt>
+///   flagship/order/add-paired-session/v2|<serverId>|<token>|<issuedAt>
 ///
 /// `serverId` is the pod's FQDN (the daemon enforces `serverId` === its own
-/// FQDN); `token` is fresh 32-byte hex; `label` is a human-readable name the
-/// owner can later revoke ("Harry's iPhone").
+/// FQDN); `token` is fresh 32-byte hex.
 public struct AddPairedSessionOrder: Equatable, Sendable {
-    public static let canonicalTag = "flagship/order/add-paired-session/v1"
+    public static let canonicalTag = "flagship/order/add-paired-session/v2"
 
     public let serverId: String
     public let token: String
-    public let label: String
     public let issuedAt: Int64
 
-    public init(serverId: String, token: String, label: String, issuedAt: Int64) {
+    public init(serverId: String, token: String, issuedAt: Int64) {
         self.serverId = serverId
         self.token = token
-        self.label = label
         self.issuedAt = issuedAt
     }
 
-    /// `flagship/order/add-paired-session/v1|<serverId>|<token>|<label>|<issuedAt>`.
+    /// `flagship/order/add-paired-session/v2|<serverId>|<token>|<issuedAt>`.
     public func canonicalBytes() -> Data {
         Data(
-            [Self.canonicalTag, serverId, token, label, String(issuedAt)]
+            [Self.canonicalTag, serverId, token, String(issuedAt)]
                 .joined(separator: "|").utf8
         )
     }
@@ -60,7 +57,6 @@ public struct AddPairedSessionOrder: Equatable, Sendable {
                 "type": "add-paired-session",
                 "serverId": serverId,
                 "token": token,
-                "label": label,
                 "issuedAt": issuedAt,
             ],
             "signature": signatureHex,

@@ -88,7 +88,7 @@ function mailboxAuth(irk: Keypair, opts?: { username?: string; phoneIrkPub?: Uin
 }
 
 /** Build the sealed `add-paired-session` envelope blob, sealed for the box STK. */
-function sealedPairing(opts: { irk: Keypair; stk: Keypair; token?: string; label?: string }): {
+function sealedPairing(opts: { irk: Keypair; stk: Keypair; token?: string }): {
   token: string;
   sealedHex: string;
 } {
@@ -97,12 +97,11 @@ function sealedPairing(opts: { irk: Keypair; stk: Keypair; token?: string; label
     type: "add-paired-session",
     serverId: HOST,
     token,
-    label: opts.label ?? "Alice's iPhone",
     issuedAt: Date.now(),
   };
   const sig = signPhoneOrder(order, opts.irk);
   const envelope = JSON.stringify({
-    request: { type: "add-paired-session", serverId: HOST, token, label: order.label, issuedAt: order.issuedAt },
+    request: { type: "add-paired-session", serverId: HOST, token, issuedAt: order.issuedAt },
     signature: bytesToHex(sig),
   });
   const sealed = sealForEd25519Recipient(new TextEncoder().encode(envelope), opts.stk.publicKey);

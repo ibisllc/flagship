@@ -66,23 +66,16 @@ export function canonicalServersSelfDeleteBytes(username, issuedAt) {
  *
  * @param {object} args
  * @param {boolean} args.hasCloudRecovery
- * @param {number} [args.trustedDeviceCount]  added-device roster size from
- *        /api/account/resolve (the founding device is implicit). <=1 ⇒ last.
  * @param {boolean} [args.isDemoAccount]
  * @returns {"ceremony" | "normal" | "exempt"}
  */
 export function accountDeletePolicy({
   hasCloudRecovery,
-  trustedDeviceCount,
   isDemoAccount = false,
 }) {
   if (isDemoAccount) return "exempt";
   if (hasCloudRecovery) return "normal";
-  // Fail-closed on an unknown count: if we can't prove another device exists,
-  // treat it as the last device (so the no-recovery wipe runs the ceremony
-  // rather than silently orphaning the only key).
-  const count = Number.isFinite(trustedDeviceCount) ? trustedDeviceCount : 1;
-  return count <= 1 ? "ceremony" : "normal";
+  return "ceremony";
 }
 
 function makeError(message, status) {
@@ -179,6 +172,7 @@ export async function submitAccountSelfDelete(args, deps = {}) {
  * @param {() => void} args.lockSession
  * @param {(viewId: string) => void} args.show
  * @param {(slot: string) => void} [args.profileRemove]
+ * @param {(cloudName: string) => void} [args.forgetProfile]  profiles.removeProfile — drop the whole profile row
  * @param {() => void} [args.stopRenewals]
  * @param {(text: string) => void} [args.setSubtitle]
  * @param {string} [args.welcomeViewId]   landing view after deletion (default "view-bootstrap")
@@ -195,6 +189,7 @@ export async function runDeletionCeremony(args, deps = {}) {
     lockSession,
     show,
     profileRemove,
+    forgetProfile,
     stopRenewals,
     setSubtitle,
     welcomeViewId = "view-bootstrap",
@@ -214,6 +209,12 @@ export async function runDeletionCeremony(args, deps = {}) {
     for (const slot of ["sessionId", "sessionToken", "podBaseUrl", "username"]) {
       profileRemove(slot);
     }
+  }
+  // The account no longer exists, so neither should this browser's record of
+  // it — otherwise its accountId + account-scoped deviceId outlive it in
+  // localStorage and the switcher keeps offering a dead profile.
+  if (typeof forgetProfile === "function") {
+    try { forgetProfile(username); } catch { /* best-effort local cleanup */ }
   }
   lockSession();
   setSubtitle?.("account deleted");

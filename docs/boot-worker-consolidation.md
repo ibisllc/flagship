@@ -33,7 +33,7 @@ silently-best-effort cross-worker call is the root fragility.
 (same Cloudflare zone), host-dispatched exactly the way `web.` and `recovery.`
 already are (`apps/com/src/route.ts`). The `/api/boot/*` contract — hostname,
 paths, request/response JSON, the `Flagship-Boot-v1` `Authorization` gate — is
-**byte-identical**, so the box, the burner, and the phone need NO change.
+**byte-identical**, so the box, the builder, and the phone need NO change.
 
 What changed is only the backing:
 
@@ -132,16 +132,16 @@ worker's own `boot_nonces`).
    > `apps/boot/wrangler.toml` and deploys `flagship-boot` against its own
    > identity plane — the reference deployment just doesn't point a hostname at
    > it anymore.
-4. No client (box, burner, phone) rebuild is required for the consolidation —
+4. No client (box, builder, phone) rebuild is required for the consolidation —
    the hostname + `/api/boot/*` contract are unchanged.
 
 ## Wire-transparency (verified)
 
-- **Box** (`installer/boot-stage.sh`, `packages/flagship-burner/src/userdata.ts`,
-  `apps/burner-mac/.../UserData.swift`): targets
+- **Box** (`installer/boot-stage.sh`, `packages/flagship-builder/src/userdata.ts`,
+  `apps/builder-mac/.../UserData.swift`): targets
   `https://boot.flagshipserver.com` + `/api/boot/{lease,request,response}`,
   box-STK `Flagship-Boot-v1` auth. Unchanged.
-- **Burner**: bakes `https://boot.flagshipserver.com` to
+- **Builder**: bakes `https://boot.flagshipserver.com` to
   `/boot/flagship-boot-host`. Unchanged.
 - **Phone** (`apps/mobile/shared/.../SecretMailboxClient.swift`): posts
   `/api/boot/response` + `PUT /api/boot/lease` + `DELETE /api/boot/lease/:d/:id`

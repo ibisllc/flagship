@@ -3,6 +3,7 @@ import {
   anthropicStreaming,
   googleStreaming,
   openaiStreaming,
+  openrouterStreaming,
   type ChatStreamEvent,
   type StreamingFetchLike,
 } from "../src/index.js";
@@ -141,6 +142,48 @@ describe("openaiStreaming", () => {
     const end = events[events.length - 1];
     expect(end?.kind).toBe("end");
     if (end?.kind === "end") expect(end.stopReason).toBe("stop");
+  });
+});
+
+describe("openrouterStreaming", () => {
+  it("streams OpenAI-compatible deltas through the OpenRouter endpoint", async () => {
+    const { f, calls } = streamingFakeFetch({
+      lines: [
+        `data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":null}]}`,
+        `data: {"choices":[{"delta":{"content":" router"},"finish_reason":null}]}`,
+        `data: {"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+        `data: [DONE]`,
+      ],
+    });
+    const events: ChatStreamEvent[] = [];
+    await openrouterStreaming.chatStream(
+      { model: "anthropic/claude-sonnet-4", messages: [{ role: "user", content: "hi" }] },
+      { apiKey: "or-test" },
+      (e) => events.push(e),
+      f,
+    );
+    expect(calls[0]?.url).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect((calls[0]?.body as { stream?: boolean }).stream).toBe(true);
+    expect(
+      events.filter((e) => e.kind === "delta").map((e) => (e as { kind: "delta"; text: string }).text).join(""),
+    ).toBe("Hello router");
+    expect(events.at(-1)).toEqual({ kind: "end", stopReason: "stop" });
+  });
+
+  it("surfaces OpenRouter mid-stream errors without reporting a successful end", async () => {
+    const { f } = streamingFakeFetch({
+      lines: [
+        `data: {"error":{"code":429,"message":"Rate limit exceeded"},"choices":[{"delta":{"content":""},"finish_reason":"error"}]}`,
+      ],
+    });
+    const events: ChatStreamEvent[] = [];
+    await openrouterStreaming.chatStream(
+      { model: "anthropic/claude-sonnet-4", messages: [{ role: "user", content: "hi" }] },
+      { apiKey: "or-test" },
+      (e) => events.push(e),
+      f,
+    );
+    expect(events).toEqual([{ kind: "error", message: "Rate limit exceeded" }]);
   });
 });
 

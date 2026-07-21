@@ -4,8 +4,8 @@ import FlagshipCore
 
 /// Phase 3 — the real single/multi login screen. Hosts
 /// `RealAccountLoginViewModel` and renders the branch the preflight
-/// resolved to. Replaces the Phase-1 stopgap that pushed the old
-/// `RecoverFromWelcomeContainer` passkey container.
+/// resolved to. Replaces the Phase-1 stopgap passkey container (removed
+/// with the 2026-06-22 login redesign).
 ///
 ///   - `.noRecovery`     → a clean STATE (single vs multi copy), NOT a
 ///                         404/error card. The only action is Back.

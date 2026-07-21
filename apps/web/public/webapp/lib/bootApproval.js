@@ -606,7 +606,7 @@ export async function buildSwkDeliveryCarrier({ serverDomain, swk, boxIdentityPu
   const sealed = await sealForBoxStk(swk, boxIdentityPub);
   // Field guard: serverDomain must never contain '|' or control chars (mirrors
   // legacyFieldGuard) — true for every real FQDN; assert it defensively.
-  if (/[| -]/.test(serverDomain)) {
+  if (/[|\u0000-\u001f\u007f]/.test(serverDomain)) {
     throw new Error("serverDomain contains a reserved canonical-bytes char");
   }
   const sealedHex = bytesToHex(sealed);
@@ -900,7 +900,6 @@ export function pairingOrderToJson(request, signature) {
       type: "add-paired-session",
       serverId: request.serverId,
       token: request.token,
-      label: request.label,
       issuedAt: request.issuedAt,
     },
     signature: bytesToHex(signature),
@@ -915,7 +914,7 @@ export function pairingOrderToJson(request, signature) {
  * + the plaintext `pairingOrderJson` (`pairingOrderToJson` shape) the caller
  * either EMBEDS (offline) or STASHES to seal + deposit post-registration.
  *
- * @param {{ serverDomain: string, label?: string }} args
+ * @param {{ serverDomain: string }} args
  * @param {{ signWithIrk?: Function, now?: () => number, token?: string }} [deps]
  * @returns {Promise<{ token: string, pairingOrderJson: string }>}
  */
@@ -928,14 +927,14 @@ export async function buildPairingOrder(args, deps = {}) {
   const now = (deps.now || Date.now)();
 
   const token = deps.token || bytesToHex(randomBytes(32));
-  const label = String(args.label || "webapp")
-    .replace(/[| -]/g, " ").trim() || "webapp";
+  // v2 carries NO label: a paired session is identified by its opaque
+  // token-derived code, never by a human name the box or `.com` could read.
   const orderCanonical = te(
-    ["flagship/order/add-paired-session/v1", serverDomain, token, label, now].join("|"),
+    ["flagship/order/add-paired-session/v2", serverDomain, token, now].join("|"),
   );
   const orderSig = await sign(session.umk, orderCanonical);
   const pairingOrderJson = pairingOrderToJson(
-    { serverId: serverDomain, token, label, issuedAt: now },
+    { serverId: serverDomain, token, issuedAt: now },
     orderSig,
   );
   return { token, pairingOrderJson };

@@ -32,7 +32,7 @@ describe("webapp debug-friendly grant verifies under @flagship/protocol", () => 
     });
 
     // The recipe sibling is a JSON STRING `{grant,signatureHex}` (the shape the
-    // burner + box-side gate consume).
+    // builder + box-side gate consume).
     const carrier = JSON.parse(carrierJson) as {
       grant: { serverDomain: string; sshAuthorizedKey: string; issuedAt: number };
       signatureHex: string;

@@ -112,8 +112,9 @@ export interface ClaimCgkDepositOptions {
    */
   persistCgk: (cgkHex: string) => Promise<void>;
   /**
-   * Restart the daemon so `wireGossip` enables on the next boot (systemd re-fires
-   * under Restart=on-failure). Injected; the daemon wires `process.exit`.
+   * Restart the daemon so `wireGossip` enables on the next boot. The daemon
+   * wires this to `process.exit(0)`, so the systemd unit MUST be
+   * `Restart=always` (a clean exit(0) is not restarted under `on-failure`).
    */
   restart: () => void;
   /** Idempotency marker store. */

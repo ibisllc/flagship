@@ -68,7 +68,8 @@ class ComponentsListTest {
     fun podStatusStyle_pillKindsMatchIos() {
         assertEquals(FSPillKind.Offline, PodStatusStyle.pillKind(L.DEAD, S.OFFLINE))
         assertEquals(FSPillKind.Provisioning, PodStatusStyle.pillKind(L.WAITING_FOR_APPROVAL, S.UNKNOWN))
-        assertEquals(FSPillKind.Provisioning, PodStatusStyle.pillKind(L.COMING_ONLINE, S.PENDING))
+        assertEquals(FSPillKind.Pending, PodStatusStyle.pillKind(L.COMING_ONLINE, S.PENDING))
+        assertEquals(FSPillKind.Pending, PodStatusStyle.pillKind(L.DEAD, S.PENDING))
         assertEquals(FSPillKind.Online, PodStatusStyle.pillKind(L.ONLINE, S.ONLINE))
         assertEquals(FSPillKind.Offline, PodStatusStyle.pillKind(L.ONLINE, S.OFFLINE))
         assertEquals(FSPillKind.Idle, PodStatusStyle.pillKind(L.ONLINE, S.UNKNOWN))

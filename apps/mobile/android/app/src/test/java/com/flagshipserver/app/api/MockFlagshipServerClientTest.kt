@@ -72,15 +72,15 @@ class MockFlagshipServerClientTest {
         val resp = c.registerPushToken(PushTokenRegisterRequest(
             request = PushTokenRegisterRequest.Inner(
                 username = "harry", platform = "fcm",
+                deviceId = "01".repeat(16),
                 providerToken = "FCM:abc", pushX25519Pub = "ee",
-                label = "Pixel 8 — kitchen",
                 issuedAt = 100L,
             ),
             signature = "00",
         ))
         assertTrue(resp.ok)
         assertNotNull(c.registeredPushTokens[resp.tokenId])
-        assertEquals("Pixel 8 — kitchen", c.registeredPushTokens[resp.tokenId]?.label)
+        assertEquals("01".repeat(16), c.registeredPushTokens[resp.tokenId]?.deviceId)
         c.revokePushToken(revokeReq(resp.tokenId))
         assertNull(c.registeredPushTokens[resp.tokenId])
         // revoking a missing tokenId is a no-op (no throw)

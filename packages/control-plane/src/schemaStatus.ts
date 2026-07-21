@@ -41,6 +41,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0080",
   "0081",
   "0082",
+  // Private account/device naming: the clean directory schema.
+  "0083",
 ];
 
 export interface SchemaStatusDeps {

@@ -46,6 +46,12 @@ public struct SwkDepositCoordinator {
     /// the network; the default consults the persisted migration holds and only
     /// touches `.com` when one is live.
     private let resolveMigrationSwk: (_ podDomain: String) async -> MigrationSwkResolution
+    /// True iff the app already holds an unlocked-session key, so a derive this
+    /// pass is silent (no Face ID). The automatic deposit path DEFERS when the
+    /// session is cold, so a background refresh never *initiates* a biometric — it
+    /// rides an already-unlocked session or waits for the next one. Injectable so
+    /// tests run without a Keychain session (default: the real session cache).
+    private let hasSessionKey: () -> Bool
 
     public init(
         username: String,
@@ -53,6 +59,7 @@ public struct SwkDepositCoordinator {
         store: PendingSwkDepositStore = PendingSwkDepositStore(),
         pairingStore: PendingPairingDepositStore = PendingPairingDepositStore(),
         cgkStore: PendingCgkDepositStore = PendingCgkDepositStore(),
+        hasSessionKey: @escaping () -> Bool = { Keystore.hasSessionKey() },
         deriveIrkAndSwk: @escaping (_ serverId: String, _ reason: String) async throws -> (irk: Curve25519.Signing.PrivateKey, swkHex: String) = { serverId, reason in
             let m = try await Keystore.deriveIRKBoxStkAndSwk(serverId: serverId, reason: reason)
             return (m.irk, m.boxSwkHex)
@@ -68,6 +75,7 @@ public struct SwkDepositCoordinator {
         self.store = store
         self.pairingStore = pairingStore
         self.cgkStore = cgkStore
+        self.hasSessionKey = hasSessionKey
         self.deriveIrkAndSwk = deriveIrkAndSwk
         self.deriveCgkHex = deriveCgkHex
         self.resolveMigrationSwk = resolveMigrationSwk ?? { podDomain in
@@ -89,11 +97,22 @@ public struct SwkDepositCoordinator {
     /// secret-free PAIRING order (pairs the creating device with no manual tap).
     /// Both ride ONE biometric (the IRK derived once) and are sealed to the box
     /// identity. No-op when nothing is owed.
-    public func depositIfNeeded(serverDomain: String, identityPubKeyHex: String) async {
+    public func depositIfNeeded(
+        serverDomain: String,
+        identityPubKeyHex: String,
+        allowAuthentication: Bool = false
+    ) async {
         var swkOwed = store.isPending(for: serverDomain)
         let pairingOrderJson = pairingStore.pendingOrder(for: serverDomain)
         let cgkOwed = cgkStore.isPending(for: serverDomain)
         guard swkOwed || pairingOrderJson != nil || cgkOwed else { return }
+        // Never let this automatic (reconcile-driven) deposit INITIATE a Face ID
+        // prompt: proceed only when the session is already unlocked, so the derive
+        // below is silent. A cold session defers — the pending markers stay and the
+        // deposit rides the next pass after the user next authenticates. This is
+        // what stops the "random Face ID on the Home screen" the periodic reconcile
+        // used to cause when a box left a deposit owed.
+        guard allowAuthentication || hasSessionKey() else { return }
         guard let boxIdentityPub = HexUtil.decode(identityPubKeyHex), boxIdentityPub.count == 32 else { return }
 
         // Server-migration (docs/server-migration.md invariant 4): when this pod

@@ -19,7 +19,7 @@ import type {
 import { recordAuditEvent } from "./auditEvents.js";
 import { hexToBytes } from "./hex.js";
 import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
-import { computeDevicesEtag } from "./usersDevices.js";
+import { computeDevicesEtag } from "./deviceDirectoryEtag.js";
 import {
   consumeRecoveryCode,
   fireFailedRateAlertIfDue,
@@ -264,14 +264,11 @@ export async function handleInitiateRePair(
     const currentEtag = await computeDevicesEtag(
       rows
         .map((p) => ({
-          tokenId: p.tokenId,
-          tokenPrefix: p.tokenId.slice(0, 8),
-          label: p.label || `Untitled ${p.platform}`,
+          deviceId: p.deviceId,
           platform: p.platform,
           addedAt: p.registeredAt,
-          lastSeenAt: p.lastSeenAt,
         }))
-        .sort((a, b) => a.addedAt - b.addedAt || a.tokenId.localeCompare(b.tokenId)),
+        .sort((a, b) => a.addedAt - b.addedAt || a.deviceId.localeCompare(b.deviceId)),
     );
     if (currentEtag !== ifMatch) {
       return {
@@ -733,7 +730,7 @@ export async function handleObjectRePair(
 export interface CompleteRePairBody {
   refreshedGrants?: Array<{
     grantId: string;
-    deviceLabel: string;
+    deviceId: string;
     devicePubKey: string;
     scopes: string[];
     issuedAt: number;
@@ -753,7 +750,7 @@ export interface CompleteRePairBody {
  *   for the user (no new-device admission via the re-sign path).
  * - Refreshed `scopes` MUST be a SUBSET of the old grant's scopes (no
  *   privilege escalation).
- * - Refreshed `deviceLabel` MUST equal the old grant's label (renaming
+ * - Refreshed `deviceId` MUST equal the old grant's label (renaming
  *   a device under the new IRK is its own /device-grants/mint flow).
  */
 async function validateRefreshedGrants(
@@ -779,7 +776,7 @@ async function validateRefreshedGrants(
     if (
       typeof rg.grantId !== "string" ||
       rg.grantId.length === 0 ||
-      typeof rg.deviceLabel !== "string" ||
+      typeof rg.deviceId !== "string" ||
       typeof rg.devicePubKey !== "string" ||
       typeof rg.issuedAt !== "number" ||
       typeof rg.expiresAt !== "number" ||
@@ -817,11 +814,11 @@ async function validateRefreshedGrants(
         error: "refreshedGrant devicePubKey does not match an existing active grant",
       };
     }
-    if (old.deviceLabel !== rg.deviceLabel) {
+    if (old.deviceId !== rg.deviceId) {
       return {
         ok: false,
         status: 403,
-        error: "refreshedGrant deviceLabel must match the existing grant's label",
+        error: "refreshedGrant deviceId must match the existing grant's label",
       };
     }
     // No scope inflation. Refreshed scopes MUST be a subset of the
@@ -860,7 +857,7 @@ async function validateRefreshedGrants(
     const grant: DeviceCapabilityGrant = {
       grantId: rg.grantId,
       username,
-      deviceLabel: rg.deviceLabel,
+      deviceId: rg.deviceId,
       devicePubKey: devicePubBytes,
       scopes,
       issuedAt: rg.issuedAt,
@@ -876,7 +873,7 @@ async function validateRefreshedGrants(
     const next: DeviceCapabilityGrantRecord = {
       grantId: rg.grantId,
       username: username.toLowerCase(),
-      deviceLabel: rg.deviceLabel,
+      deviceId: rg.deviceId,
       devicePubHex: devPubLower,
       scopesJson: JSON.stringify(scopes),
       issuedAt: rg.issuedAt,
@@ -1027,10 +1024,10 @@ export async function handleCompleteRePair(
       }
     } else if (wipePolicy === "graceful" && validatedPairs.length > 0) {
       // Two-step per pair: revoke the OLD first (so the storage
-      // layer's duplicate-active guard for (username, deviceLabel)
+      // layer's duplicate-active guard for (username, deviceId)
       // doesn't reject the matching new row), then put the NEW.
       // Doing it the other way would make every put fail because the
-      // refreshed grant has the SAME (username, deviceLabel) as the
+      // refreshed grant has the SAME (username, deviceId) as the
       // old. The window where neither row is active is the same wall-
       // clock tick on the InMemory adapter; on D1 it's bounded by the
       // adjacent UPDATE + INSERT and the read endpoint is eventually-

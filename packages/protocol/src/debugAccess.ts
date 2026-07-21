@@ -1,11 +1,11 @@
 /**
  * Owner-authorized debug-access grant — `flagship/debug-access/v1`.
  *
- * Enabling the box's debug console user / SSH is NOT a burner checkbox: it
+ * Enabling the box's debug console user / SSH is NOT a builder checkbox: it
  * requires an owner-IRK-signed grant that the BOX verifies before turning
  * anything on. The phone signs this grant (behind Face ID) when the user
- * approves the burner's "Debug mode" toggle over the live pairing session;
- * the burner embeds it (+ the authorized SSH key) into the install config;
+ * approves the builder's "Debug mode" toggle over the live pairing session;
+ * the builder embeds it (+ the authorized SSH key) into the install config;
  * the daemon/bootstrap enables debug access ONLY if the grant verifies
  * against the config-pinned owner IRK. No valid grant ⇒ a production image.
  *

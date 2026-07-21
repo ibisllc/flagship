@@ -15,21 +15,19 @@ package com.flagshipserver.app.core
  * Built by hand (NOT kotlinx.serialization, whose escaping/ordering we don't want
  * to depend on) to be byte-identical to the TS `pairingOrderToJson` pinned vector
  * (`packages/protocol/tests/pairingOrder.test.ts`): key order
- * `{request:{type,serverId,token,label,issuedAt}, signature}`, no whitespace,
+ * `{request:{type,serverId,token,issuedAt}, signature}`, no whitespace,
  * `issuedAt` a bare number.
  */
 object PairingOrderEnvelope {
     fun toJson(
         serverId: String,
         token: String,
-        label: String,
         issuedAt: Long,
         signatureHex: String,
     ): String {
         val req = "{\"type\":\"add-paired-session\"," +
             "\"serverId\":${jsonString(serverId)}," +
             "\"token\":${jsonString(token)}," +
-            "\"label\":${jsonString(label)}," +
             "\"issuedAt\":$issuedAt}"
         return "{\"request\":$req,\"signature\":${jsonString(signatureHex)}}"
     }

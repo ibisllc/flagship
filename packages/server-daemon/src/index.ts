@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { X509Certificate } from "node:crypto";
 import {
   ed,
   signServerRevokeBySelf,
@@ -372,7 +373,7 @@ async function tryLoadConfig(): Promise<ServerConfig | null> {
  * the owner-IRK-signed `add-paired-session` order in PLAINTEXT (`{request,
  * signature}` JSON) as an UNSIGNED recipe sibling (never in the signed
  * InstallBlob's canonical bytes, so existing recipe signatures are untouched),
- * exactly like `swkHex`; the burner writes it into /var/flagship/install-blob.json.
+ * exactly like `swkHex`; the builder writes it into /var/flagship/install-blob.json.
  * The daemon verifies the owner-IRK signature at boot and adds the session
  * LOCALLY with no `.com` call. Returns the raw JSON string (un-verified here —
  * `addEmbeddedPairing` verifies) or null when absent/malformed (the default
@@ -392,7 +393,7 @@ async function pairingOrderFromInstallBlob(): Promise<string | null> {
     const b = JSON.parse(raw) as { pairingOrder?: unknown };
     const v = b.pairingOrder;
     // Accept either the embedded JSON STRING or an already-parsed object (the
-    // burner writes the string; be tolerant of either shape).
+    // builder writes the string; be tolerant of either shape).
     if (typeof v === "string" && v.length > 0) return v;
     if (v && typeof v === "object") return JSON.stringify(v);
     return null;
@@ -405,7 +406,7 @@ async function pairingOrderFromInstallBlob(): Promise<string | null> {
  * Read the recipe's Service Workload Key (`swkHex`) from the on-disk install
  * blob. The phone embeds it as an UNSIGNED recipe sibling (= `deriveSWK(umk,
  * serverId)`, never in the signed InstallBlob's canonical bytes, mirroring
- * `pairingKeyPrivHex`); the burner writes it into /var/flagship/install-blob.json.
+ * `pairingKeyPrivHex`); the builder writes it into /var/flagship/install-blob.json.
  * The daemon consumes it at first boot to turn on the service/build platform.
  * Returns the validated 64-hex string (lowercased) or null when absent/malformed
  * (older recipes, or a recipe minted before SWK provisioning) — the box then
@@ -425,20 +426,34 @@ export async function swkHexFromInstallBlob(): Promise<string | null> {
   }
 }
 
-/** Best-effort persist of the SWK hex to /var/flagship/swk.hex (mode 0600), so
- *  reboots resolve via the existing on-disk path and never re-read the blob.
- *  Non-fatal: a write failure just means the next boot re-reads the blob. */
+/** Persist the SWK hex to /var/flagship/swk.hex (mode 0600). A deposit claim
+ *  MUST observe write failure so it never marks a consumed secret as durable. */
 export async function persistSwkHex(path: string, swkHex: string): Promise<void> {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  const tmp = `${path}.tmp`;
+  await writeFile(tmp, swkHex.trim() + "\n", { mode: 0o600 });
+  await rename(tmp, path);
+}
+
+/** Snapshot the certificate metadata the synchronous screens BFF needs. */
+export function liveCertInfo(
+  certPem: string,
+  notAfter: number,
+  names: string[],
+): { notAfter?: number; notBefore?: number; sans?: string[] } {
+  let notBefore: number | undefined;
   try {
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    const tmp = `${path}.tmp`;
-    await writeFile(tmp, swkHex.trim() + "\n", { mode: 0o600 });
-    await rename(tmp, path);
-  } catch (e) {
-    console.warn(
-      `[daemon] could not persist swk.hex (${(e as Error).message}); will re-read the install blob next boot`,
-    );
+    const parsed = Date.parse(new X509Certificate(certPem).validFrom);
+    if (Number.isFinite(parsed)) notBefore = parsed;
+  } catch {
+    // The cert is already installed by the runtime. Parsing metadata is
+    // presentation-only; expiry + SANs remain useful if introspection fails.
   }
+  return {
+    ...(Number.isFinite(notAfter) ? { notAfter } : {}),
+    ...(notBefore !== undefined ? { notBefore } : {}),
+    ...(names.length > 0 ? { sans: [...names] } : {}),
+  };
 }
 
 /** Best-effort persist of the CGK hex to /var/flagship/cgk.hex (mode 0600), so a
@@ -591,7 +606,7 @@ async function main(): Promise<void> {
   // The SWK gates the service/build platform (and peer-backup participation,
   // which stays inert until the owner toggles it). The phone provisions it at
   // first boot by embedding `swkHex` (= deriveSWK(umk, serverId)) as an UNSIGNED
-  // recipe sibling that the burner writes into install-blob.json. Resolution
+  // recipe sibling that the builder writes into install-blob.json. Resolution
   // order:
   //   1. FLAGSHIP_SWK_HEX env       (dev runs)
   //   2. /var/flagship/swk.hex      (already-provisioned box, the stable path)
@@ -608,7 +623,13 @@ async function main(): Promise<void> {
     if (fromBlob) {
       swkHex = fromBlob;
       console.log("[daemon] SWK provisioned from install blob; service platform enabled");
-      await persistSwkHex(swkHexFilePath, fromBlob);
+      try {
+        await persistSwkHex(swkHexFilePath, fromBlob);
+      } catch (e) {
+        console.warn(
+          `[daemon] could not persist swk.hex (${(e as Error).message}); will re-read the install blob next boot`,
+        );
+      }
     }
   }
   // When NOTHING above provisions an SWK the box stays platform-less — say so
@@ -658,7 +679,7 @@ async function main(): Promise<void> {
   // The InstallBlob's authCode.serial is the order id keying the
   // per-order install-progress timeline the phone polls
   // (POST /api/order/<serial>/status). The bootstrap (installer/install.sh
-  // + the burner's userdata.ts) writes it to /var/flagship/auth-code-serial
+  // + the builder's userdata.ts) writes it to /var/flagship/auth-code-serial
   // on first boot and POSTs the install-time phases. The daemon picks it
   // up here to report the two phases only IT can know:
   //   `pairing` — entitlement bundle loaded (paired with the phone)
@@ -925,6 +946,9 @@ async function main(): Promise<void> {
     readLeads: () => gossipLoopRef.current?.currentLeads() ?? [],
     readTrustStatus: () => relayLockdownRef.current?.trustStatus() ?? null,
   });
+  const liveCertInfoRef: {
+    current: { notAfter?: number; notBefore?: number; sans?: string[] } | null;
+  } = { current: null };
 
   let runtime: DaemonRuntime;
   try {
@@ -973,6 +997,7 @@ async function main(): Promise<void> {
       // gated here on the cert actually landing — not when startDaemonRuntime
       // resolves (which happens BEFORE the first cert attempt).
       onCertIssued: (cert, notAfter, names) => {
+        liveCertInfoRef.current = liveCertInfo(cert.certPem, notAfter, names);
         void reportStatus("live");
         // Feed the signed daemon-status heartbeat with the freshly-issued
         // cert so /pods gets REAL fingerprint/validity/issuer + a fresh
@@ -1145,6 +1170,7 @@ async function main(): Promise<void> {
       pullStateStore,
       updateClient,
       updateScheduler,
+      liveCertInfoRef,
     });
   } catch (e) {
     const msg = (e as Error).message ?? String(e);
@@ -1928,6 +1954,9 @@ async function wireRuntimeSurfaces(deps: {
   pullStateStore: FileAppPullStateStore;
   updateClient: UpdateClient;
   updateScheduler: UpdateScheduler;
+  liveCertInfoRef: {
+    current: { notAfter?: number; notBefore?: number; sans?: string[] } | null;
+  };
 }): Promise<void> {
   const {
     runtime,
@@ -1948,6 +1977,7 @@ async function wireRuntimeSurfaces(deps: {
     pullStateStore,
     updateClient,
     updateScheduler,
+    liveCertInfoRef,
   } = deps;
 
   // Wire vibe-code (legacy /api/llm/sessions) + the BFF /api/screens/*
@@ -2324,6 +2354,7 @@ async function wireRuntimeSurfaces(deps: {
     startedAt: Date.now(),
     servicePlatform: runtime.servicePlatform,
     pairedSessions,
+    certInfo: () => liveCertInfoRef.current,
     tabRegistry: browserBundle?.tabRegistry ?? null,
     appBackup: runtime.appBackup,
     urlController: runtime.urlController,
@@ -2623,7 +2654,7 @@ async function wireOwnerHandlers(deps: {
   // a one-shot gate that enables the `debug` console user + installs its SSH key
   // ONLY if the recipe carries an owner-IRK-signed `debugGrant` that verifies
   // under the config-pinned owner IRK AND names THIS box. No valid grant ⇒ no
-  // debug user (the burner no longer bakes one). Idempotent via a local marker;
+  // debug user (the builder no longer bakes one). Idempotent via a local marker;
   // never throws. Fire-and-forget — never blocks the owner-API bring-up.
   {
     const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
@@ -3010,9 +3041,9 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
         }
       : undefined,
     addPairedSession: deps.pairedSessions
-      ? async ({ token, label }) => {
-          await deps.pairedSessions!.add(token, label);
-          console.log(`[daemon] order: add-paired-session label=${JSON.stringify(label)}`);
+      ? async ({ token }) => {
+          await deps.pairedSessions!.add(token);
+          console.log(`[daemon] order: add-paired-session tokenPrefix=${token.slice(0, 12)}`);
         }
       : undefined,
     removePairedSession: deps.pairedSessions

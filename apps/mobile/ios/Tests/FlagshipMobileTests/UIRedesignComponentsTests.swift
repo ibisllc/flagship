@@ -134,6 +134,8 @@ final class UIRedesignComponentsTests: XCTestCase {
         XCTAssertEqual(PodStatusStyle.pillKind(liveness: .dead, status: .unknown), .offline)
         XCTAssertEqual(PodStatusStyle.pillKind(liveness: .waitingForApproval, status: .offline), .provisioning)
         XCTAssertEqual(PodStatusStyle.pillKind(liveness: .online, status: .unknown), .idle)
+        XCTAssertEqual(PodStatusStyle.pillKind(liveness: .comingOnline, status: .pending), .pending)
+        XCTAssertEqual(PodStatusStyle.pillKind(liveness: .dead, status: .pending), .pending)
     }
 
     func test_podStatusStyle_accessibilityIds_matchLegacyPodCard() {

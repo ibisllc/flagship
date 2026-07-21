@@ -428,7 +428,6 @@ test("full device-add: a second device joins the SAME cloud, quarantined, after 
       let d2Paired = false;
       for (let attempt = 0; attempt < 3; attempt++) {
         await d2.fill("#pod-pair-base", POD_URL).catch(() => undefined);
-        await d2.fill("#pod-pair-label", "device-2-member").catch(() => undefined);
         await d2.click("#pod-pair-go").catch(() => undefined);
         await d2.locator("#pod-pair-status:has-text('paired to')")
           .waitFor({ state: "visible", timeout: 20_000 }).catch(() => undefined);
@@ -447,22 +446,45 @@ test("full device-add: a second device joins the SAME cloud, quarantined, after 
       });
     }
 
-    // ── Verify on device-1 that the new device shows in the roster. ───────────
-    const ownerRoster = await d1.evaluate(async (uname: string) => {
+    // ── Verify on device-1 that the new device shows in the directory. ────────
+    // There is no anonymous roster route: the device list is readable ONLY over
+    // the signed active-device directory API, and its names are ciphertext that
+    // decrypts locally under the account's UMK-derived directory key. So drive
+    // the real webapp module rather than a bare fetch — that is the only path a
+    // caller without the unlocked account can't take.
+    const ownerRoster = await d1.evaluate(async () => {
+      try {
+        const m = await import("/lib/accountDirectory.js");
+        const dir = await m.fetchDecryptedDirectory();
+        const devices = Array.isArray(dir?.devices) ? dir.devices : [];
+        return {
+          ok: true,
+          count: devices.length,
+          // deviceIds are opaque 16-byte hex; names never travel in plaintext.
+          opaqueIds: devices.every((d: any) => /^[0-9a-f]{32}$/.test(String(d?.deviceId ?? ""))),
+          // Whatever the UI shows came from LOCAL decryption, not the wire.
+          decryptedNames: devices.filter((d: any) => typeof d?.displayName === "string").length,
+        };
+      } catch (e) { return { ok: false, err: String(e) }; }
+    }).catch((e) => ({ ok: false, err: String(e) } as any));
+    record({
+      step: "signed directory read lists the admitted device (opaque ids, locally decrypted names)",
+      grade: ownerRoster?.ok && (ownerRoster.count ?? 0) >= 1 && ownerRoster.opaqueIds ? "A" : "C",
+      detail: `GET /api/accounts/${BOX.username}/directory (signed) → ${JSON.stringify(ownerRoster)}`,
+    });
+    // The privacy invariant: the removed anonymous roster route must stay gone.
+    const anonRoster = await d1.evaluate(async (uname: string) => {
       try {
         const r = await fetch(`https://${location.host.replace(/^web\./, "")}/api/users/${uname}/devices`, {
           method: "GET",
         }).catch(() => null);
-        if (!r) return { ok: false, err: "no response" };
-        let body: any = null;
-        try { body = await r.json(); } catch { /* */ }
-        return { ok: r.ok, status: r.status, count: Array.isArray(body?.devices) ? body.devices.length : null, body: JSON.stringify(body).slice(0, 200) };
-      } catch (e) { return { ok: false, err: String(e) }; }
-    }, BOX.username).catch((e) => ({ ok: false, err: String(e) } as any));
+        return r ? { status: r.status } : { status: null };
+      } catch { return { status: null }; }
+    }, BOX.username).catch(() => ({ status: null } as any));
     record({
-      step: "device roster lists the admitted device (owner-visible)",
-      grade: ownerRoster?.ok && (ownerRoster.count ?? 0) >= 1 ? "A" : "C",
-      detail: `GET /api/users/${BOX.username}/devices → ${JSON.stringify(ownerRoster)}`,
+      step: "anonymous device-roster route is gone (no username-only device read)",
+      grade: anonRoster?.status !== 200 ? "A" : "FAIL",
+      detail: `GET /api/users/${BOX.username}/devices → ${anonRoster?.status}`,
     });
     await shot(d1, "d1-final");
 

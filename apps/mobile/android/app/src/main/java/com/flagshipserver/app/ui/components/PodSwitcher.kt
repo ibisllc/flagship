@@ -160,7 +160,9 @@ fun PodSwitcher(
                 color = c.text,
                 style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
             )
-            if (PodSwitcherModel.showsLeaderFlag(currentPodId, leaderPodId)) {
+            val currentPod = pods.firstOrNull { it.podId == currentPodId }
+            if (PodSwitcherModel.showsLeaderFlag(currentPodId, leaderPodId) &&
+                currentPod?.cameOnline == true && currentPod.status != PodInfo.Status.PENDING) {
                 LeaderFlag(tint = c.primary, size = 12.dp)
             }
             Text("▾", color = c.textMuted, style = TextStyle(fontSize = 11.sp)) // ▾
@@ -194,7 +196,7 @@ fun PodSwitcher(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(pod.name, color = c.text)
-                            if (pod.podId == leaderPodId) {
+                            if (pod.podId == leaderPodId && pod.cameOnline && pod.status != PodInfo.Status.PENDING) {
                                 Spacer(Modifier.size(4.dp))
                                 LeaderFlag(tint = c.primary, size = 12.dp)
                             }

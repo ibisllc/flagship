@@ -17,6 +17,7 @@ import { getSession, lockSession } from "../lib/state.js";
 import { signWithIrk, resetDevice } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
 import { remove as profileRemove } from "../lib/profilesStore.js";
+import { removeProfile as forgetProfile } from "../lib/profiles.js";
 import { stopRenewals } from "./home.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
@@ -58,6 +59,7 @@ async function runDelete() {
       resetDevice,
       lockSession,
       profileRemove,
+      forgetProfile,
       stopRenewals,
       show,
       setSubtitle,

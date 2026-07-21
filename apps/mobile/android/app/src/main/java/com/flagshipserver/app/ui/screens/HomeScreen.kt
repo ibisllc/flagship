@@ -328,7 +328,7 @@ private fun DeviceCapabilityChip(cap: DeviceCapabilityBlock) {
     } else {
         "${cap.scopes.size} scopes"
     }
-    val label = "Device: ${cap.label} · $summary"
+    val label = "Restricted device · $summary"
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -381,6 +381,7 @@ private fun statusIconColor(liveness: PodInfo.LivenessState, status: PodInfo.Sta
         FSPillKind.Renewing -> FS.colors.warning
         FSPillKind.Offline -> FS.colors.danger
         FSPillKind.Provisioning -> FS.colors.primary
+        FSPillKind.Pending -> FS.colors.warning
         FSPillKind.Idle -> FS.colors.textMuted
     }
 
@@ -446,7 +447,7 @@ fun ServerRow(
                 ) {
                     // Leader = the daemon the screens point at; only badge a
                     // server that actually came online.
-                    if (isLeader && pod.cameOnline) FSPill("Leader", kind = FSPillKind.Online)
+                    if (isLeader && pod.cameOnline && pod.status != PodInfo.Status.PENDING) FSPill("Leader", kind = FSPillKind.Online)
                     // Per-service leadership (Phase 6): the services this box leads
                     // (from /pods `leadsServices`). Tolerant of absence.
                     LeadServicesPill(pod)
@@ -550,7 +551,7 @@ fun PodCard(
                         color = FS.colors.text,
                         style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
                     )
-                    if (isLeader && pod.cameOnline) FSPill("Leader", kind = FSPillKind.Online)
+                    if (isLeader && pod.cameOnline && pod.status != PodInfo.Status.PENDING) FSPill("Leader", kind = FSPillKind.Online)
                     // Per-service leadership (Phase 6): "Leads N" badge, tolerant
                     // of absence (renders nothing when the box leads nothing).
                     LeadServicesPill(pod)

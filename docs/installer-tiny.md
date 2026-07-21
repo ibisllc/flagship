@@ -1,7 +1,7 @@
 # Tiny live installer — base evaluation, design, QEMU validation, build plan
 
 Status: **design + QEMU-validated skeleton** (2026-05-25). Not yet wired into
-the burner; the d-i path (`packages/flagship-burner/src/userdata.ts` /
+the builder; the d-i path (`packages/flagship-builder/src/userdata.ts` /
 `preseed.ts`) is untouched and remains the shipping path until this is live.
 
 ## 0. Why move off Debian-netinst (d-i)
@@ -79,9 +79,9 @@ reproducibly with `SOURCE_DATE_EPOCH` + a pinned ISO/sha256.
 ## 2. Installer design
 
 ```
-USB (burner output)
+USB (builder output)
  ├─ Alpine -lts kernel + initramfs (+ modloop)        ← the tiny live OS
- ├─ /flagship/install-blob.json  (signed recipe)      ← baked by the burner
+ ├─ /flagship/install-blob.json  (signed recipe)      ← baked by the builder
  ├─ /flagship/install-blob.sig                         ← Ed25519 over canonical bytes
  ├─ /flagship/installer.env       (CONTROL_PLANE_BASE, GIT_REF, FW set, Wi-Fi)
  └─ flagship.apkovl.tar.gz        (drops installer.sh into /etc/local.d)
@@ -113,7 +113,7 @@ Boot flow (each step `report_phase`s to `/api/order/<serial>/status`):
    (Option A — gives the installed OS a package manager for the first-boot heavy
    work). Persist the recipe + the LUKS key handoff material.
 5. **drop first-boot unit** — `/etc/local.d/10-flagship-provision.start` (OpenRC)
-   carries the **proven heavy sequence verbatim** (`packages/flagship-burner/src/userdata.ts`):
+   carries the **proven heavy sequence verbatim** (`packages/flagship-builder/src/userdata.ts`):
    `git clone` → `npm install` → `tsc -b` → `gen-identity` → `mint-entitlements`
    → register (`POST /api/server/register`) → `seal-for-bak` → push sealed LUKS
    key (`POST /api/server/<domain>/sealed-luks-key`). It `report_phase`s
@@ -126,12 +126,12 @@ Boot flow (each step `report_phase`s to `/api/order/<serial>/status`):
    relay hook do the actual per-boot unlock — `boot.flagshipserver.com`).
 7. **reboot** into the encrypted OS.
 
-### Burner integration (how the USB is produced)
+### Builder integration (how the USB is produced)
 
-The burner already produces a USB and bakes the recipe (`packages/flagship-burner`,
-`apps/burner-mac`). For this path it:
+The builder already produces a USB and bakes the recipe (`packages/flagship-builder`,
+`apps/builder-mac`). For this path it:
 
-- writes the Alpine -lts kernel/initramfs/modloop (the burner already remasters
+- writes the Alpine -lts kernel/initramfs/modloop (the builder already remasters
   ISOs — `remasterIso.ts`),
 - drops `flagship.apkovl.tar.gz` built with the existing
   `packages/installer-apkovl` `buildApkovl()` (the same pure tar builder this
@@ -141,7 +141,7 @@ The burner already produces a USB and bakes the recipe (`packages/flagship-burne
   `CONTROL_PLANE_BASE`, `GIT_REF`, the curated `FW_PACKAGES`, and the burn-time
   Wi-Fi SSID/PSK — Wi-Fi is **never** part of the signed blob).
 
-This reuses the burner's existing remaster + the repo's existing apkovl builder;
+This reuses the builder's existing remaster + the repo's existing apkovl builder;
 no new heavy machinery.
 
 ## 3. QEMU validation log (what was actually proven)
@@ -259,7 +259,7 @@ unit (also needs node + live `.com`).
    network is a chicken/egg: bake the Wi-Fi firmware + driver into the
    initramfs/modloop, OR require Ethernet for the install and bring Wi-Fi up
    only on the installed OS.
-6. **Burner integration.** Teach the burner to emit the Alpine -lts media +
+6. **Builder integration.** Teach the builder to emit the Alpine -lts media +
    apkovl + `installer.env` (reuse `remasterIso.ts` + `buildApkovl()`). Add the
    `report_phase booting/downloading/partitioning` early calls (the d-i path can
    only report from clone onward; this path reports the full timeline).

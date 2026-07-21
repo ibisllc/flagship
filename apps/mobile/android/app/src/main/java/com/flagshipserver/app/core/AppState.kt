@@ -41,7 +41,10 @@ enum class KeychainSyncClass { CloudRoot, DeviceLocal }
 data class Profile(
     val cloudName: String,
     val cloudRootPubHex: String = "",
-    val deviceLabel: String? = null,
+    val accountId: String = "",
+    val deviceId: String = "",
+    val accountDisplayName: String? = null,
+    val deviceDisplayName: String? = null,
     val deviceCapability: DeviceCapabilityBlock? = null,
     val demoServer: DemoServerBlock? = null,
     val createdAt: Long = System.currentTimeMillis(),
@@ -111,10 +114,9 @@ class AppState(
 
     /**
      * E7 — true once we've observed that this device's local push
-     * tokenId is no longer in /api/users/:u/devices, meaning another
-     * device on the account ran a Disconnect / Replace / Wipe against
-     * us. The Home banner uses this to render a danger card with a
-     * "Sign in again" CTA.
+     * the current account-scoped device identity is rejected by an
+     * authenticated directory read, meaning another device ran a revoke,
+     * replace, or wipe operation against us.
      */
     private val _accountWasReset = MutableStateFlow(accountWasReset)
     val accountWasReset: StateFlow<Boolean> = _accountWasReset.asStateFlow()
@@ -339,11 +341,15 @@ class AppState(
         _isPaired.value = true
         // W3 — record the cloud in the durable profile list and mark
         // it active. Idempotent for re-onboarding the same cloud.
+        val existing = _profiles.value.firstOrNull { it.cloudName == username }
         upsertProfile(
             Profile(
                 cloudName = username,
                 cloudRootPubHex = "",
-                deviceLabel = _deviceCapability.value?.label,
+                accountId = username,
+                deviceId = _deviceCapability.value?.deviceId ?: existing?.deviceId ?: AccountMetadata.generateDeviceId(),
+                accountDisplayName = existing?.accountDisplayName,
+                deviceDisplayName = existing?.deviceDisplayName,
                 deviceCapability = _deviceCapability.value,
                 demoServer = null,
                 createdAt = System.currentTimeMillis(),
@@ -400,6 +406,14 @@ class AppState(
         } else {
             current + profile
         }
+    }
+
+    fun cachePresentationNames(accountDisplayName: String, deviceDisplayName: String?) {
+        val active = activeProfile ?: return
+        upsertProfile(active.copy(
+            accountDisplayName = accountDisplayName,
+            deviceDisplayName = deviceDisplayName ?: active.deviceDisplayName,
+        ))
     }
 
     fun addPod(pod: PodInfo) {

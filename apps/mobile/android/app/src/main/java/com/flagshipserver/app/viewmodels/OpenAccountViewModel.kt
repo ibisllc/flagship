@@ -21,6 +21,10 @@ package com.flagshipserver.app.viewmodels
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.UsernameClaimRequest
+import com.flagshipserver.app.api.AccountBootstrapRequest
+import com.flagshipserver.app.core.AccountMetadata
+import com.flagshipserver.app.core.AccountMetadataCoordinates
+import com.flagshipserver.app.core.AccountMetadataRecordType
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.UsernameClaim
@@ -70,6 +74,10 @@ class OpenAccountViewModel(
     fun defaultDeviceName(deviceModel: String?): String =
         deviceModel?.takeIf { it.isNotBlank() } ?: "$username's phone"
 
+    fun defaultAccountName(): String = username.split("-").joinToString(" ") {
+        it.replaceFirstChar(Char::uppercase)
+    }
+
     /**
      * Ensure the UMK, run the STANDALONE username claim, record the
      * device name, then complete onboarding with an EMPTY pod set.
@@ -78,8 +86,8 @@ class OpenAccountViewModel(
      * (username, irkPub); calling it twice from the same device key is a
      * no-op server-side, so a tapped-twice / retried open is safe.
      */
-    suspend fun openAccount(deviceName: String) {
-        if (_phase.value == OpenAccountPhase.Working) return
+    suspend fun openAccount(deviceName: String, accountName: String = defaultAccountName()) {
+        if (_phase.value == OpenAccountPhase.Working || _phase.value == OpenAccountPhase.Opened) return
         _phase.value = OpenAccountPhase.Working
         val label = deviceName.trim().ifEmpty { defaultDeviceName(null) }
         try {
@@ -97,7 +105,7 @@ class OpenAccountViewModel(
             // 1. Ensure the UMK exists. The StrongBox AES anchor key +
             //    the cached 32-byte seed that backs the IRK HKDF.
             ensureHardwareUmk()
-            Keystore.loadOrCreateUmkSeed()
+            val umk = Keystore.loadOrCreateUmkSeed()
 
             // 1b. Slice D — mint this account's ADMIN MASTER ROOT on the FIRST
             //    device, immediately after the UMK. A fresh random Ed25519
@@ -125,21 +133,59 @@ class OpenAccountViewModel(
                     ),
                 ),
             )
-            server.claimUsername(
-                UsernameClaimRequest(
-                    request = UsernameClaimRequest.Inner(
-                        username = username,
-                        irkPub = irkPubHex,
-                        issuedAt = issuedAt,
-                    ),
-                    signature = claimSig,
-                    // Slice D — publish the admin master root so `.com` pins it
-                    // at `usernames.admin_root_pub_hex` (a top-level sibling, not
-                    // signature-covered; the box anchors authority via the
-                    // signed AuthCode).
-                    adminRootPub = adminRootPubHex,
-                ),
+            val normalizedAccountName = AccountMetadata.validateDisplayName(accountName)
+            val normalizedDeviceName = AccountMetadata.validateDisplayName(label)
+            val deviceId = AccountMetadata.generateDeviceId()
+            val deviceKey = AccountMetadata.deriveAccountDeviceKey(umk, username, deviceId)
+            val devicePubHex = HexUtil.encode(AccountMetadata.deriveAccountDevicePub(umk, username, deviceId))
+            val adminRoot = Keystore.adminRootKey("Authorize your private account name")
+            val accountCiphertext = AccountMetadata.encrypt(
+                normalizedAccountName,
+                AccountMetadata.deriveAccountProfileKey(umk),
+                AccountMetadataCoordinates(username, AccountMetadataRecordType.ACCOUNT_PROFILE, 1, 1),
             )
+            val accountSignature = HexUtil.encode(adminRoot.sign(AccountMetadata.canonicalAccountProfile(
+                username, 1, 1, accountCiphertext, issuedAt, adminRootPubHex,
+            )))
+            val deviceCiphertext = AccountMetadata.encrypt(
+                normalizedDeviceName,
+                AccountMetadata.deriveDeviceDirectoryKey(umk),
+                AccountMetadataCoordinates(username, AccountMetadataRecordType.DEVICE_SELF_PROFILE, 1, 1, deviceId),
+            )
+            val deviceSignature = HexUtil.encode(deviceKey.sign(AccountMetadata.canonicalDeviceSelfProfile(
+                username, deviceId, 1, 1, deviceCiphertext, issuedAt, devicePubHex,
+            )))
+            val scopes = listOf(
+                "browse", "install-service", "vibe-code", "add-device", "manage-services",
+                "revoke-others", "admin", "view-directory",
+            )
+            val grantId = java.util.UUID.randomUUID().toString().lowercase()
+            val expiresAt = issuedAt + 90L * 24 * 3_600_000
+            val grantBytes = listOf(
+                "flagship/device-capability-grant/v2", grantId, username, deviceId, devicePubHex,
+                scopes.joinToString(","), issuedAt.toString(), expiresAt.toString(),
+            ).joinToString("|").toByteArray()
+            server.bootstrapAccount(AccountBootstrapRequest(
+                claim = AccountBootstrapRequest.Claim(
+                    UsernameClaimRequest.Inner(username, irkPubHex, issuedAt), claimSig,
+                ),
+                aidPub = HexUtil.encode(com.flagshipserver.app.core.ServerKeys.deriveAccountIdPub(umk)),
+                adminRootPub = adminRootPubHex,
+                device = AccountBootstrapRequest.Device(deviceId, devicePubHex, "android"),
+                grant = AccountBootstrapRequest.Grant(
+                    grantId, username, deviceId, devicePubHex, scopes, issuedAt, expiresAt,
+                    HexUtil.encode(adminRoot.sign(grantBytes)),
+                ),
+                accountProfile = AccountBootstrapRequest.Profile(
+                    username, revision = 1, keyVersion = 1,
+                    nonceHex = accountCiphertext.nonceHex, ciphertextHex = accountCiphertext.ciphertextHex,
+                    issuedAt = issuedAt, signerPubHex = adminRootPubHex, signatureHex = accountSignature,
+                ),
+                deviceProfile = AccountBootstrapRequest.Profile(
+                    username, deviceId, 1, 1, deviceCiphertext.nonceHex, deviceCiphertext.ciphertextHex,
+                    issuedAt, devicePubHex, deviceSignature,
+                ),
+            ))
 
             // 3. Open the account with ZERO servers → Home empty-state.
             //    Arm the SKIPPABLE "Secure your account" backup nudge
@@ -152,7 +198,14 @@ class OpenAccountViewModel(
             //    the human-readable name so Settings / multi-profile read
             //    it back.
             val active = app.activeProfile
-            if (active != null) app.addProfile(active.copy(deviceLabel = label), setActive = true)
+            if (active != null) app.addProfile(
+                active.copy(
+                    deviceId = deviceId,
+                    accountDisplayName = normalizedAccountName,
+                    deviceDisplayName = normalizedDeviceName,
+                ),
+                setActive = true,
+            )
 
             _phase.value = OpenAccountPhase.Opened
         } catch (t: Throwable) {

@@ -51,6 +51,10 @@ public struct ServerDetailScreen: View {
     /// True while a pairing attempt is in flight (Face ID → sign → POST), so the
     /// button shows progress and can't be double-fired.
     let pairing: Bool
+    /// Last STK-verified daemon-status report from `/pods`. Older daemons leave
+    /// their server-detail cert seam empty even while serving HTTPS; this is the
+    /// authenticated fallback for expiry, issuer, and SANs.
+    let verifiedCertStatus: DaemonStatusReport?
     var onOpenSessions: () -> Void = {}
     var onOpenTier: () -> Void = {}
     var onRefresh: () async -> Void = {}
@@ -75,6 +79,7 @@ public struct ServerDetailScreen: View {
         lastSeen: String? = nil,
         comingUp: Bool = false,
         pairing: Bool = false,
+        verifiedCertStatus: DaemonStatusReport? = nil,
         onOpenSessions: @escaping () -> Void = {},
         onOpenTier: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
@@ -93,6 +98,7 @@ public struct ServerDetailScreen: View {
         self.lastSeen = lastSeen
         self.comingUp = comingUp
         self.pairing = pairing
+        self.verifiedCertStatus = verifiedCertStatus
         self.onOpenSessions = onOpenSessions
         self.onOpenTier = onOpenTier
         self.onRefresh = onRefresh
@@ -211,6 +217,7 @@ public struct ServerDetailScreen: View {
             }
             .padding(.horizontal, FS.space.s6)
             .padding(.top, FS.space.s4)
+            .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Server")
@@ -382,11 +389,17 @@ public struct ServerDetailScreen: View {
     private func cert(d: ServerDetailResponse, c: FSColors) -> some View {
         sectionWrap("TLS CERTIFICATE", c: c) {
             FSCard {
-                if let after = d.certNotAfter, let before = d.certNotBefore {
+                if let after = d.certNotAfter ?? verifiedCertStatus?.certValidUntil {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         labeled("Renews", relative(ms: after), c: c)
-                        labeled("Issued", relative(ms: before), c: c)
-                        if let sans = d.certSans, !sans.isEmpty {
+                        if let before = d.certNotBefore {
+                            labeled("Issued", relative(ms: before), c: c)
+                        }
+                        if let issuer = verifiedCertStatus?.certIssuer, !issuer.isEmpty {
+                            labeled("Issuer", issuer, c: c)
+                        }
+                        let sans = d.certSans ?? verifiedCertStatus?.appsServed
+                        if let sans, !sans.isEmpty {
                             Text("SANS").font(FS.font.caption()).foregroundColor(c.textMuted).padding(.top, FS.space.s2)
                             VStack(alignment: .leading, spacing: FS.space.s1) {
                                 ForEach(sans, id: \.self) { san in

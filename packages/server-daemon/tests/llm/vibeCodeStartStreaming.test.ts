@@ -33,6 +33,7 @@ import { LlmHarness } from "../../src/llmHarness.js";
 import { InMemoryBuildCredentialStore } from "../../src/llm/buildCredentialStore.js";
 import {
   buildVibeCodeStartStreaming,
+  modelForProvider,
   ownerChoiceSupplement,
 } from "../../src/llm/vibeCodeStartStreaming.js";
 import {
@@ -117,6 +118,20 @@ describe("ownerChoiceSupplement — Describe-form name + visibility steer the pr
     const s = ownerChoiceSupplement("notes", "link");
     expect(s).toContain('"notes"');
     expect(s).toMatch(/anyone with the link/);
+  });
+});
+
+describe("modelForProvider", () => {
+  it("uses OpenRouter's agent-capable auto router when the phone did not choose a model", () => {
+    expect(modelForProvider("openrouter", undefined, "claude-3-5-sonnet-latest"))
+      .toBe("openrouter/auto");
+  });
+
+  it("preserves an explicit model and other providers' configured default", () => {
+    expect(modelForProvider("openrouter", "anthropic/claude-sonnet-4", "fallback"))
+      .toBe("anthropic/claude-sonnet-4");
+    expect(modelForProvider("anthropic", undefined, "claude-default"))
+      .toBe("claude-default");
   });
 });
 

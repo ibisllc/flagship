@@ -36,6 +36,7 @@ final class CertPinRegistryTests: XCTestCase {
         let reg = CertPinRegistry(persistingIn: nil)
         reg.update(pods: [makePod()], umkSeed: umkSeed, nowMs: now)
         XCTAssertEqual(reg.pinFor(host: domain), pinHex)
+        XCTAssertEqual(reg.verifiedReport(for: domain), DaemonStatusVerifierTests.report)
     }
 
     func testServiceHostUnderTheBoxSharesThePin() {
@@ -240,6 +241,7 @@ final class CertPinRegistryTests: XCTestCase {
         XCTAssertEqual(reg.pinFor(host: domain), pinHex)
         reg.update(pods: [], nowMs: now)
         XCTAssertNil(reg.pinFor(host: domain))
+        XCTAssertNil(reg.verifiedReport(for: domain))
     }
 
     func testRevokedPodDropsAnExistingPin() {

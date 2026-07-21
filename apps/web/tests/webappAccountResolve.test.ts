@@ -45,7 +45,6 @@ function demoResolution(username = "demoalice") {
     kind: "demo",
     recovery: { present: false, hasFetchGate: false },
     totpEnrolled: false,
-    trustedDeviceCount: 0,
     demoServer: {
       fqdn: `home.${username}.flagship.services`,
       status: "up",
@@ -64,7 +63,6 @@ function singleResolution(username = "harry", withRecovery = true) {
       ? { present: true, hasFetchGate: true, credentialId: "abc123" }
       : { present: false, hasFetchGate: false },
     totpEnrolled: false,
-    trustedDeviceCount: 1,
     graceModel: "3d",
   };
 }
@@ -76,7 +74,6 @@ function multiResolution(username = "hilton") {
     kind: "multi",
     recovery: { present: true, hasFetchGate: true, credentialId: "def456" },
     totpEnrolled: true,
-    trustedDeviceCount: 3,
     graceModel: "24h-totp",
   };
 }
@@ -88,7 +85,6 @@ function unknownResolution(username = "nope") {
     kind: "unknown",
     recovery: { present: false, hasFetchGate: false },
     totpEnrolled: false,
-    trustedDeviceCount: 0,
     graceModel: "none",
   };
 }

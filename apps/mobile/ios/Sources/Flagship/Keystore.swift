@@ -63,6 +63,59 @@ public struct Keystore {
     private static var _activeProfileHydrated = false
     private static let activeProfileLock = NSLock()
 
+    // MARK: - Session key cache ("trust the unlocked session")
+    //
+    // The unwrapped UMK, held in memory for the duration of an unlocked session,
+    // keyed by profileId. Populated the first time a derive unwraps the UMK — one
+    // Secure-Enclave use, i.e. one Face ID, per session — then reused for every
+    // later derive WITHOUT re-prompting. This is the same "trust the session once
+    // it's unlocked" model the other two clients already use: the webapp keeps the
+    // UMK in memory (`session.umk`) and Android caches the IRK seed behind a
+    // freshness window (BiometricAuthority). iOS was the outlier — every derive
+    // opened a fresh LAContext against a `.biometryCurrentSet` Secure-Enclave key,
+    // so a background refresh that needed to derive (an owed SWK/CGK/pairing
+    // deposit) re-prompted Face ID on the Home screen, seemingly at random.
+    //
+    // The cache is RAM-only (never persisted — strictly more conservative than
+    // Android's on-disk seed cache) and is dropped the instant the app re-locks,
+    // backgrounds, or signs out (`clearSessionKeyCache`, wired to `isUnlocked ->
+    // false`) and on a profile switch. The biometric therefore still gates each
+    // *session*; it just no longer fires again mid-session.
+    private static var _sessionUmk: [String: SymmetricKey] = [:]
+    private static let sessionUmkLock = NSLock()
+
+    /// True iff the active profile's UMK is already cached for this unlocked
+    /// session — i.e. a derive can proceed WITHOUT prompting for Face ID. The
+    /// automatic SWK/CGK/pairing deposit path checks this so a periodic refresh
+    /// never *initiates* a biometric prompt: it either rides an already-unlocked
+    /// session silently or defers until the user next authenticates.
+    public static func hasSessionKey() -> Bool {
+        let p = activeProfileId
+        sessionUmkLock.lock(); defer { sessionUmkLock.unlock() }
+        return _sessionUmk[p] != nil
+    }
+
+    /// Drop every cached session UMK. Wired to `isUnlocked -> false` (lock /
+    /// background / sign-out) so the in-memory key never outlives the unlocked
+    /// session; also called on a profile switch and on a full wipe.
+    public static func clearSessionKeyCache() {
+        sessionUmkLock.lock(); defer { sessionUmkLock.unlock() }
+        _sessionUmk.removeAll()
+    }
+
+    // Synchronous cache read/write helpers — the NSLock is acquired and released
+    // entirely inside these non-async functions (never held across an await), so
+    // the async `unwrappedUMK` can use the cache without tripping Swift 6's
+    // "no NSLock in async contexts" rule.
+    private static func cachedSessionUmk(_ profile: String) -> SymmetricKey? {
+        sessionUmkLock.lock(); defer { sessionUmkLock.unlock() }
+        return _sessionUmk[profile]
+    }
+    private static func storeSessionUmk(_ umk: SymmetricKey, for profile: String) {
+        sessionUmkLock.lock(); defer { sessionUmkLock.unlock() }
+        _sessionUmk[profile] = umk
+    }
+
     /// Normalize a caller-supplied profileId to the canonical slot key.
     /// nil / empty / whitespace-only → the default sentinel. Otherwise
     /// trimmed + lowercased (the profileId is the profile's `cloudName`,
@@ -98,6 +151,9 @@ public struct Keystore {
         _activeProfileId = normalized
         _activeProfileHydrated = true
         activeProfileLock.unlock()
+        // A different profile has a different UMK; never let one profile's
+        // cached session key be reachable after a switch.
+        clearSessionKeyCache()
         // Persist the pointer (device-global, never suffixed). The default
         // sentinel is stored too so an explicit reset survives relaunch.
         try? keychainWrite(account: activeProfilePointerAccount,
@@ -180,6 +236,30 @@ public struct Keystore {
     /// the hood since UMK lives behind WrappingKeypair.
     public static func currentUMK(reason: String) async throws -> SymmetricKey {
         return try await unwrappedUMK(reason: reason)
+    }
+
+    public static func storeAccountDeviceSigningKey(
+        _ key: Curve25519.Signing.PrivateKey,
+        accountId: String,
+        deviceId: String
+    ) throws {
+        try keychainWrite(
+            account: account("com.flagship.account-device.\(deviceId)", profile: accountId),
+            data: key.rawRepresentation,
+            sync: .deviceLocal
+        )
+    }
+
+    public static func accountDeviceSigningKey(
+        umk: Data,
+        accountId: String,
+        deviceId: String
+    ) throws -> Curve25519.Signing.PrivateKey {
+        let slot = account("com.flagship.account-device.\(deviceId)", profile: accountId)
+        if let raw = keychainRead(account: slot) {
+            return try Curve25519.Signing.PrivateKey(rawRepresentation: raw)
+        }
+        return try AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: accountId, deviceId: deviceId)
     }
 
     // MARK: - Derivation
@@ -422,7 +502,7 @@ public struct Keystore {
     /// AuthCode).
     public static func openAccountRoots(
         reason: String = "Open your Flagship account"
-    ) async throws -> (irk: Curve25519.Signing.PrivateKey, adminRootPubHex: String) {
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, adminRoot: Curve25519.Signing.PrivateKey, adminRootPubHex: String) {
         let umkSeed = SymmetricKey(size: .bits256)
         let umkBytes = umkSeed.withUnsafeBytes { Data($0) }
         let ephemeral = P256.KeyAgreement.PrivateKey()
@@ -454,7 +534,8 @@ public struct Keystore {
 
             let irkSeed = derive(umk: umkSeed, info: "flagship/irk/v\(currentIrkVersion())")
             let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
-            return (irk, HexUtil.encode(adminKey.publicKey.rawRepresentation))
+            storeSessionUmk(umkSeed, for: activeProfileId)
+            return (irk, adminKey, HexUtil.encode(adminKey.publicKey.rawRepresentation))
         } catch let e as KeystoreError {
             throw e
         } catch {
@@ -929,12 +1010,22 @@ public struct Keystore {
         _activeProfileId = defaultProfileId
         _activeProfileHydrated = true
         activeProfileLock.unlock()
+        clearSessionKeyCache()
         CertPinRegistry.shared.clear()
     }
 
     // MARK: - Internals
 
     private static func unwrappedUMK(reason: String) async throws -> SymmetricKey {
+        // Trust the unlocked session: once this session has unwrapped the UMK
+        // (one Secure-Enclave use = one Face ID), reuse it for every later derive
+        // without re-prompting. The cache is cleared on lock/background/sign-out
+        // (clearSessionKeyCache), so the biometric still gates each *session*.
+        let profile = activeProfileId
+        if let cached = cachedSessionUmk(profile) {
+            return cached
+        }
+
         guard
             let wrapped = keychainRead(account: account(KCKey.wrappedUmk)),
             let ephemeralRaw = keychainRead(account: account(KCKey.ephemeralPub))
@@ -956,7 +1047,9 @@ public struct Keystore {
         do {
             let box = try AES.GCM.SealedBox(combined: wrapped)
             let plaintext = try AES.GCM.open(box, using: unwrapKey)
-            return SymmetricKey(data: plaintext)
+            let umk = SymmetricKey(data: plaintext)
+            storeSessionUmk(umk, for: profile)
+            return umk
         } catch {
             throw KeystoreError.unwrapFailed(String(describing: error))
         }

@@ -27,11 +27,11 @@ function quarantinedToken(overrides: Partial<PushTokenRecord> = {}): PushTokenRe
   return {
     tokenId: "collab-device",
     username: USERNAME,
+    deviceId: "cc".repeat(16),
     platform: "apns",
     providerToken: "provider-collab",
     pushX25519PubHex: "01".repeat(32),
     registrationSignatureHex: "00".repeat(64),
-    label: "Collaborator's Pixel",
     registeredAt: FIXED_NOW,
     lastSeenAt: FIXED_NOW,
     quarantineUntil: FIXED_NOW + QUARANTINE_MS,
@@ -255,11 +255,11 @@ describe("scheduleQuarantineAlerts — real fan-out targets the owner's OTHER de
       await s.pushTokens.put({
         tokenId: id,
         username: USERNAME,
+        deviceId: (id === "trusted-A" ? "aa" : "bb").repeat(16),
         platform: "apns",
         providerToken: `provider-${id}`,
         pushX25519PubHex: "01".repeat(32),
         registrationSignatureHex: "00".repeat(64),
-        label: `Owner device ${id}`,
         registeredAt: FIXED_NOW - 86_400_000,
         lastSeenAt: FIXED_NOW,
       });
@@ -267,6 +267,30 @@ describe("scheduleQuarantineAlerts — real fan-out targets the owner's OTHER de
     // ...plus the freshly-admitted quarantined collaborator device.
     await s.pushTokens.put(quarantinedToken());
   }
+
+  it("still alerts when the quarantined row predates the deviceId column", async () => {
+    // The alert is the whole point of quarantine: the owner must hear that a
+    // new device joined. A row registered before deviceId existed has none,
+    // and the fan-out sits inside a catch that treats ANY throw as a
+    // transient push outage — so a crash here would leave the bit clear and
+    // silently never alert, retrying forever. Prove it fires anyway.
+    const s = new InMemoryStorage();
+    await seedOwnerDevices(s);
+    await s.pushTokens.put(quarantinedToken({ deviceId: undefined as unknown as string }));
+    const fires: Array<{ tokenIds: string[] }> = [];
+    await scheduleQuarantineAlerts({
+      pushTokens: s.pushTokens,
+      auditEvents: s.auditEvents,
+      pushFanout: async ({ targets }) => {
+        fires.push({ tokenIds: targets.map((t) => t.tokenId) });
+      },
+      now: () => FIXED_NOW,
+    });
+    expect(fires).toHaveLength(1);
+    expect(new Set(fires[0]!.tokenIds)).toEqual(new Set(["trusted-A", "trusted-B"]));
+    // And the bit is stamped, so it does not retry forever.
+    expect((await s.pushTokens.get("collab-device"))?.quarantineAlertsFiredBitmap).not.toBe(0);
+  });
 
   it("fans out to the trusted devices and EXCLUDES the quarantined device", async () => {
     const s = new InMemoryStorage();

@@ -29,7 +29,6 @@ function singleResolution(username = "harry", withRecovery = true) {
       ? { present: true, hasFetchGate: true, credentialId: "abc123" }
       : { present: false, hasFetchGate: false },
     totpEnrolled: false,
-    trustedDeviceCount: 1,
     graceModel: "3d",
   };
 }
@@ -76,7 +75,7 @@ function fakeTakeoverDeps(overrides: Record<string, any> = {}) {
 
 describe("loginTakeover runKeepBoth — no-rotation bring-in", () => {
   it("unwraps, persists, labels the device, opens — and NEVER touches the network", async () => {
-    const { runKeepBoth, ADMIN_LABEL } = await loadLib();
+    const { runKeepBoth } = await loadLib();
     const { deps, calls, seed, fetchMock } = fakeTakeoverDeps();
     const out = await runKeepBoth(singleResolution("harry"), deps);
 
@@ -97,7 +96,8 @@ describe("loginTakeover runKeepBoth — no-rotation bring-in", () => {
     expect(calls.profiles[0].cloudName).toBe("harry");
     expect(calls.profiles[0].cloudRootPubHex).toBe("a1".repeat(32));
     expect(calls.dispatched).toBe(true);
-    expect(out).toEqual({ username: "harry", seed, deviceLabel: ADMIN_LABEL });
+    expect(out).toMatchObject({ username: "harry", seed });
+    expect(out.deviceId).toMatch(/^[0-9a-f]{32}$/);
   });
 
   it("rejects a no-recovery resolution before touching the passkey", async () => {
@@ -127,7 +127,7 @@ describe("loginTakeover loginRealAccount — chooseDisposition branch", () => {
       takeoverDeps: deps,
     });
     expect(out.outcome).toBe("keep-both");
-    expect(out.keepBoth.deviceLabel).toBe("admin");
+    expect(out.keepBoth.deviceId).toMatch(/^[0-9a-f]{32}$/);
     expect(confirm).not.toHaveBeenCalled(); // no takeover grace explainer
     expect(fetchMock).not.toHaveBeenCalled(); // no re-pair POST
   });

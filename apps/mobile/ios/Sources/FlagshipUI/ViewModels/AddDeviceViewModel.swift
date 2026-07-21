@@ -47,7 +47,7 @@ public final class AddDeviceViewModel {
         /// Sealing + delivering the UMK bundle to the incoming device.
         case admitting
         /// The incoming device received the bundle. Done.
-        case admitted(deviceLabelHint: String?)
+        case admitted(deviceDisplayNameHint: String?)
         /// Recoverable failure; the screen offers a retry.
         case failed(String)
         /// The session was invalidated (screenshot / TTL / cancel).
@@ -92,6 +92,7 @@ public final class AddDeviceViewModel {
     private var aeadKey: SymmetricKey?
     private var sid: String?
     private var incomingDevicePubHex: String?
+    private var incomingDeviceId: String?
     private var ttlTask: Task<Void, Never>?
 
     public init(
@@ -141,18 +142,22 @@ public final class AddDeviceViewModel {
                 sid: session,
                 aeadKey: SymmetricKey(size: .bits256)
             )
-            guard devicePubRaw.count == 32 else {
+            guard devicePubRaw.count == 80 else {
                 phase = .failed("The other device sent an invalid key.")
                 return
             }
+            let publicKey = Data(devicePubRaw.prefix(32))
+            let deviceSigningPublicKey = Data(devicePubRaw.dropFirst(32).prefix(32))
+            let deviceIdBytes = Data(devicePubRaw.suffix(16))
             // Derive the real shared material against the incoming device
             // pubkey — the SAS the human compares + the AEAD seal key.
             let material = try QrRelay.deriveMaterial(
                 phonePrivateKey: sk,
-                browserPublicKey: devicePubRaw
+                browserPublicKey: publicKey
             )
             aeadKey = material.aeadKey
-            incomingDevicePubHex = HexUtil.encode(devicePubRaw)
+            incomingDevicePubHex = HexUtil.encode(deviceSigningPublicKey)
+            incomingDeviceId = HexUtil.encode(deviceIdBytes)
             phase = .confirmMatch(qrUrl: qr, matchCode: material.matchCode, gateExpired: false)
             // 600ms anti-double-tap gate.
             Task { [weak self] in
@@ -175,13 +180,15 @@ public final class AddDeviceViewModel {
     /// delivers it. No-op until the anti-double-tap gate has elapsed.
     public func confirmMatch() async {
         guard case .confirmMatch(_, _, true) = phase,
-              let sid, let aeadKey, let devicePubHex = incomingDevicePubHex
+              let sid, let aeadKey, let devicePubHex = incomingDevicePubHex,
+              let deviceId = incomingDeviceId
         else { return }
         phase = .admitting
         do {
             let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
             let admit = DeviceAdmit(
                 username: account,
+                deviceId: deviceId,
                 newDevicePubHex: devicePubHex,
                 issuedAt: issuedAt
             )
@@ -199,15 +206,50 @@ public final class AddDeviceViewModel {
                 wrappedAdminRoot = try await adminRootSeedHex("Make the new device an admin")
             }
 
+            let grantId = UUID().uuidString.lowercased()
+            let promoted = wrappedAdminRoot != nil
+            let scopes = promoted
+                ? DeviceCapabilityGrantEnvelope.deviceScopeOrder
+                : ["browse", "install-service", "vibe-code", "view-directory"]
+            let expiresAt = issuedAt + 90 * 24 * 3_600_000
+            let grantEnvelope = DeviceCapabilityGrantEnvelope(
+                grantId: grantId,
+                username: account,
+                deviceId: deviceId,
+                devicePubKeyHex: devicePubHex,
+                scopes: scopes,
+                issuedAt: issuedAt,
+                expiresAt: expiresAt
+            )
+            let grantSigner: Curve25519.Signing.PrivateKey
+            if let wrappedAdminRoot, let rootSeed = HexUtil.decode(wrappedAdminRoot) {
+                grantSigner = try Curve25519.Signing.PrivateKey(rawRepresentation: rootSeed)
+            } else {
+                grantSigner = irk
+            }
+            let grantSignature = try grantSigner.signature(for: grantEnvelope.canonicalBytes())
+
             let bundle = PairingBundle(
                 umkSeedHex: umkHex,
                 admit: .init(
                     username: account,
+                    deviceId: deviceId,
                     newDevicePubHex: devicePubHex,
                     issuedAt: issuedAt
                 ),
                 admitSig: HexUtil.encode(admitSig),
                 irkPubHex: HexUtil.encode(irk.publicKey.rawRepresentation),
+                grant: .init(
+                    grantId: grantId,
+                    username: account,
+                    deviceId: deviceId,
+                    devicePubHex: devicePubHex,
+                    scopes: scopes,
+                    issuedAt: issuedAt,
+                    expiresAt: expiresAt,
+                    signerRoot: promoted ? "admin-root" : "membership"
+                ),
+                grantSignature: HexUtil.encode(Data(grantSignature)),
                 wrappedAdminRoot: wrappedAdminRoot
             )
             let payload = try bundle.encoded()
@@ -218,7 +260,7 @@ public final class AddDeviceViewModel {
                 nonceBase64Url: sealed.nonceBase64Url
             )
             ttlTask?.cancel()
-            phase = .admitted(deviceLabelHint: nil)
+            phase = .admitted(deviceDisplayNameHint: nil)
             await relay.close()
         } catch {
             phase = .failed("Couldn't add the device. \(HumanError.humanize(error))")

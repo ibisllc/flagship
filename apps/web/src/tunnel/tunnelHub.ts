@@ -65,6 +65,20 @@ export interface IrkLookup {
   (username: string): Bytes | null | Promise<Bytes | null>;
 }
 
+export interface UsernameAuthority {
+  irkPub: Bytes;
+  adminRootPub: Bytes | null;
+}
+
+export interface UsernameAuthorityLookup {
+  /**
+   * Look up both account authorities. A RootEntitlement is a sensitive
+   * authorize-this-box order, so it verifies under the admin root when one is
+   * pinned and falls back to the IRK only for a legacy account.
+   */
+  (username: string): UsernameAuthority | null | Promise<UsernameAuthority | null>;
+}
+
 export interface TunnelHubOptions {
   /**
    * Which surface the host process is serving. When "services" (the
@@ -83,12 +97,19 @@ export interface TunnelHubOptions {
    */
   authLookup?: TunnelAuthLookup;
   /**
-   * Required in production: lets the hub verify the IRK signature on
-   * each entitlement cert. Tests pass a static map.
+   * Required in production: supplies the account IRK for service
+   * entitlements, grants, and the legacy RootEntitlement fallback. Tests pass
+   * a static map.
    *
    * If omitted, IRK verification is SKIPPED (v0 dev only).
    */
   irkLookup?: IrkLookup;
+  /**
+   * Optional admin-aware authority lookup for RootEntitlements. Production
+   * supplies this from the same cached `.com` username record as `irkLookup`.
+   * When omitted, RootEntitlements retain the legacy IRK-only behavior.
+   */
+  authorityLookup?: UsernameAuthorityLookup;
   /**
    * Optional: list of revoked entitlement cert ids per user. Hub
    * fetches via this callback (caller caches with TTL) on every HELLO.
@@ -708,13 +729,21 @@ async function authenticateHello(
       return { ok: false, reason: "serviceEntitlement.podPubKey mismatches root", closeCode: 1008 };
     }
   }
-  // Verify entitlement IRK signatures against the user's IRK.
+  // RootEntitlement is the sensitive authorize-this-box order: on an
+  // admin-pinned account it verifies under that admin root, while a legacy
+  // account falls back to its IRK. ServiceEntitlement remains an IRK-signed
+  // membership credential. Both authorities come from the same `.com`
+  // directory record in production.
   if (opts.irkLookup) {
-    const irkPub = await opts.irkLookup(hello.rootEntitlement.username);
-    if (!irkPub) {
+    const authority = opts.authorityLookup
+      ? await opts.authorityLookup(hello.rootEntitlement.username)
+      : null;
+    const irkPub = authority?.irkPub ?? await opts.irkLookup(hello.rootEntitlement.username);
+    if (!irkPub || (opts.authorityLookup && !authority)) {
       return { ok: false, reason: "username not registered with .com", closeCode: 1008 };
     }
-    if (!verifyRootEntitlement(hello.rootEntitlement, hello.rootEntitlementSig, irkPub)) {
+    const rootAuthority = authority?.adminRootPub ?? irkPub;
+    if (!verifyRootEntitlement(hello.rootEntitlement, hello.rootEntitlementSig, rootAuthority)) {
       return { ok: false, reason: "rootEntitlement signature failed verification", closeCode: 1008 };
     }
     if (hello.serviceEntitlement && hello.serviceEntitlementSig) {

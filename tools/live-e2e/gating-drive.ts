@@ -175,7 +175,7 @@ async function main(): Promise<void> {
   const token = bytesToHex(randomBytes(24));
   let paired = false;
   await step("mint a paired session (add-paired-session, delegated-signed)", async () => {
-    const order: PhoneOrder = { type: "add-paired-session", serverId: fqdn, token, label: "gating-e2e", issuedAt: Date.now() };
+    const order: PhoneOrder = { type: "add-paired-session", serverId: fqdn, token, issuedAt: Date.now() };
     const sig = bytesToHex(signPhoneOrder(order, delegated));
     const r = await http(`https://${fqdn}/api/orders-from-user`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ request: order, signature: sig }) });
     assert(r.status === 200 || r.status === 204, `got ${r.status}: ${r.text.slice(0, 120)}`);

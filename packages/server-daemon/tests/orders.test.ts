@@ -324,9 +324,9 @@ describe("orders-from-user handler", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("dispatches add-paired-session with token + label", async () => {
+  it("dispatches add-paired-session with its opaque token", async () => {
     const psk = makeKey();
-    const calls: Array<{ token: string; label: string }> = [];
+    const calls: Array<{ token: string }> = [];
     const ex: OrderExecutor = {
       addPairedSession: (a) => {
         calls.push(a);
@@ -337,12 +337,11 @@ describe("orders-from-user handler", () => {
       type: "add-paired-session",
       serverId: SERVER_FQDN,
       token: "a".repeat(64),
-      label: "Harry's iPhone",
       issuedAt: Date.now(),
     };
     const r = await h(makeReq(envelope(order, psk)));
     expect(r.status).toBe(200);
-    expect(calls[0]?.label).toBe("Harry's iPhone");
+    expect(calls[0]?.token).toBe("a".repeat(64));
   });
 
   it("dispatches remove-paired-session", async () => {
@@ -488,7 +487,7 @@ describe("orders-from-user — Slice D admin gate (spec §2 row 10)", () => {
     const adminRoot = makeKey();
     const calls: string[] = [];
     const ex: OrderExecutor = {
-      addPairedSession: ({ label }) => void calls.push(`pair:${label}`),
+      addPairedSession: ({ token }) => void calls.push(`pair:${token}`),
     };
     const h = buildOrdersHandler({
       serverFqdn: SERVER_FQDN,
@@ -501,11 +500,10 @@ describe("orders-from-user — Slice D admin gate (spec §2 row 10)", () => {
       type: "add-paired-session",
       serverId: SERVER_FQDN,
       token: "tok-1",
-      label: "webapp",
       issuedAt: Date.now(),
     };
     const r = await h(makeReq(envelope(order, psk)));
     expect(r.status).toBe(200);
-    expect(calls).toEqual(["pair:webapp"]);
+    expect(calls).toEqual(["pair:tok-1"]);
   });
 });

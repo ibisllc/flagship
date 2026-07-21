@@ -42,7 +42,7 @@ const HEX = /^[0-9a-f]+$/;
 /** Minimal view of the paired-session store this consumer needs. */
 export interface PairingSessionSink {
   has(token: string): boolean;
-  add(token: string, label: string): Promise<void>;
+  add(token: string): Promise<void>;
 }
 
 /** Records that a pairing claim already ran (idempotency). */
@@ -164,7 +164,7 @@ export async function claimPairingDeposit(
   }
 
   try {
-    await opts.pairedSessions.add(order.token, order.label);
+    await opts.pairedSessions.add(order.token);
   } catch (e) {
     log(`[pairing-deposit] add session failed (${(e as Error).message}); keep polling`);
     return { claimed: false, reason: "error" };
@@ -283,7 +283,7 @@ export async function addEmbeddedPairing(
   }
 
   try {
-    await opts.pairedSessions.add(order.token, order.label);
+    await opts.pairedSessions.add(order.token);
   } catch (e) {
     log(`[pairing-embed] add session failed (${(e as Error).message})`);
     return { added: false, reason: "error" };

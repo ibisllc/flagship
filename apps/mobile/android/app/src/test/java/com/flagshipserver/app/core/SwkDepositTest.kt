@@ -79,6 +79,10 @@ class SwkDepositTest {
         /** Records the serverId each SWK derivation used (the migration seam's
          *  observable output). */
         derivedServerIds: MutableList<String> = mutableListOf(),
+        /** Whether the biometric session is already unlocked. Tests default to a
+         *  warm session; the cold-session test passes false to prove the deposit
+         *  DEFERS instead of prompting. */
+        hasSession: Boolean = true,
     ) =
         SwkDepositCoordinator(
             username = "alice",
@@ -92,6 +96,7 @@ class SwkDepositTest {
             },
             deriveCgkHex = { HexUtil.encode(cgk) },
             resolveMigrationSwk = { resolution },
+            hasSessionKey = { hasSession },
         )
 
     @Test
@@ -100,6 +105,22 @@ class SwkDepositTest {
         val mailbox = MockSecretMailboxClient()
         coordinator(store, mailbox).depositIfNeeded(serverDomain, boxPubHex)
         assertTrue(mailbox.swkDeposits.isEmpty())
+    }
+
+    @Test
+    fun coldSessionDefersDepositNoPromptStaysPending() = runBlocking {
+        // The automatic (reconcile-driven) deposit must NEVER initiate a biometric
+        // prompt: when the session is not already unlocked (hasSession = false) it
+        // DEFERS — no deposit, the pending marker stays for a later pass once the
+        // user has authenticated. Mirror of iOS. This is what stops the "random
+        // fingerprint/Face ID on Home" a periodic refresh used to trigger.
+        val store = freshStore()
+        store.markPending(serverDomain)
+        val mailbox = MockSecretMailboxClient()
+        coordinator(store, mailbox, hasSession = false).depositIfNeeded(serverDomain, boxPubHex)
+        assertTrue("cold session must not deposit", mailbox.swkDeposits.isEmpty())
+        assertTrue("marker stays pending for retry", store.isPending(serverDomain))
+        assertFalse(store.isDeposited(serverDomain))
     }
 
     @Test
@@ -164,7 +185,7 @@ class SwkDepositTest {
 
     private fun stashedOrderJson(): String =
         CreateTimePairing.build(
-            serverDomain = serverDomain, label = "iPhone",
+            serverDomain = serverDomain,
             irk = Ed25519Sign(irkKp.privateKey), now = 1_750_000_000_000L, token = "ab".repeat(32),
         ).pairingOrderJson
 

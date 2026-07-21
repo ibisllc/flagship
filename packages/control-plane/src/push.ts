@@ -19,10 +19,15 @@
 import {
   isPushRelayCategory,
   verifyDeviceAdmit,
+  verifyDeviceCapabilityGrant,
+  verifyDeviceSelfProfile,
   verifyPushRelayRequest,
   verifyPushTokenRegister,
   verifyPushTokenRevoke,
   type DeviceAdmit,
+  type DeviceCapabilityGrant,
+  type DeviceSelfProfileEnvelope,
+  type DeviceScope,
   type PushRelayCategory,
   type PushRelayRequest,
   type PushTokenRegister,
@@ -30,13 +35,16 @@ import {
 } from "@flagship/protocol";
 import type {
   AuditEventStorage,
+  DeviceIdentityStorage,
+  DeviceCapabilityGrantStorage,
+  DeviceSelfProfileStorage,
   PushTokenStorage,
   ServerStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
 import { hexToBytes, bytesToHex } from "./hex.js";
-import { forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
+import { conflict, forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
 
 /**
  * Phase 3b — quarantine window for a device admitted via the vouched
@@ -50,6 +58,9 @@ export const QUARANTINE_MS = 14 * 86_400_000;
 
 export interface PushDeps {
   pushTokens: PushTokenStorage;
+  deviceIdentities: DeviceIdentityStorage;
+  deviceCapabilityGrants?: DeviceCapabilityGrantStorage;
+  deviceSelfProfiles?: DeviceSelfProfileStorage;
   usernames: UsernameStorage;
   /**
    * Registered servers, used by the relay to authenticate the sender:
@@ -82,21 +93,16 @@ export interface PushDeps {
 interface RegisterBody {
   request?: {
     username?: string;
+    deviceId?: string;
     platform?: string;
     providerToken?: string;
     pushX25519Pub?: string;
-    label?: string;
     issuedAt?: number;
   };
   signature?: string;
 }
 
-/** Maximum bytes of `label` we'll persist. Anything longer is rejected
- *  at the handler so the .com storage doesn't grow unbounded if a
- *  buggy / hostile client ships a 4 MB string. 64 is generous for
- *  "Harry's iPhone (kitchen)" patterns. */
-const MAX_LABEL_LEN = 64;
-const CONTROL_CHARS_RE = /[\x00-\x1f\x7f]/;
+const DEVICE_ID_RE = /^[0-9a-f]{32}$/;
 
 /**
  * Phase 3b — opt-in extras for the vouched cross-device admit path.
@@ -107,18 +113,6 @@ const CONTROL_CHARS_RE = /[\x00-\x1f\x7f]/;
  */
 export interface PushRegisterOptions {
   quarantine?: boolean;
-  /**
-   * Phase 3b — set ONLY by the vouched cross-device admit path
-   * (`handleVouchedDeviceAdmit`), which has already verified an
-   * IRK-signed `DeviceAdmit` envelope binding this device's pubkey.
-   * That admit IS the IRK's consent, so the redundant
-   * `PushTokenRegister` IRK signature is not required: the incoming
-   * device does not hold the account IRK and cannot produce one.
-   *
-   * Default (omitted / false) → the legacy register path verifies the
-   * IRK signature exactly as before, bit-for-bit.
-   */
-  skipSignatureVerify?: boolean;
 }
 
 export async function handlePushRegister(
@@ -130,10 +124,10 @@ export async function handlePushRegister(
   if (
     !r ||
     typeof r.username !== "string" ||
+    typeof r.deviceId !== "string" ||
     typeof r.platform !== "string" ||
     typeof r.providerToken !== "string" ||
     typeof r.pushX25519Pub !== "string" ||
-    typeof r.label !== "string" ||
     typeof r.issuedAt !== "number" ||
     typeof body?.signature !== "string"
   ) {
@@ -142,22 +136,20 @@ export async function handlePushRegister(
   if (r.platform !== "apns" && r.platform !== "fcm" && r.platform !== "webpush") {
     return malformed("platform must be apns|fcm|webpush");
   }
-  if (r.label.length > MAX_LABEL_LEN) {
-    return malformed(`label longer than ${MAX_LABEL_LEN} bytes`);
-  }
-  if (CONTROL_CHARS_RE.test(r.label)) {
-    return malformed("label contains control characters");
-  }
+  const deviceId = r.deviceId.toLowerCase();
+  if (!DEVICE_ID_RE.test(deviceId)) return malformed("deviceId must be 16-byte lowercase hex");
   const userRec = await deps.usernames.get(r.username);
   if (!userRec) return notFound("username not registered");
+  const identity = await deps.deviceIdentities.get(r.username, deviceId);
+  if (!identity || identity.revokedAt !== null) return forbidden("invalid device authorization");
 
   let pushPub: Uint8Array;
   let sig: Uint8Array;
-  let irkPub: Uint8Array;
+  let devicePub: Uint8Array;
   try {
     pushPub = hexToBytes(r.pushX25519Pub);
     sig = hexToBytes(body.signature);
-    irkPub = hexToBytes(userRec.irkPubHex);
+    devicePub = hexToBytes(identity.devicePubHex);
   } catch {
     return malformed("invalid hex");
   }
@@ -165,25 +157,22 @@ export async function handlePushRegister(
 
   const claim: PushTokenRegister = {
     username: r.username,
+    deviceId,
     platform: r.platform,
     providerToken: r.providerToken,
     pushX25519Pub: pushPub,
-    label: r.label,
     issuedAt: r.issuedAt,
   };
-  // Phase 3b — the vouched-admit path has already verified the IRK's
-  // consent (the DeviceAdmit envelope); the incoming device cannot
-  // produce a PushTokenRegister IRK signature. Every other caller
-  // still enforces it.
-  if (options?.skipSignatureVerify !== true) {
-    if (!verifyPushTokenRegister(claim, sig, irkPub)) return forbidden("invalid signature");
-  }
+  if (!verifyPushTokenRegister(claim, sig, devicePub)) return forbidden("invalid device authorization");
 
   const freshness = deps.freshnessMs ?? 5 * 60_000;
   const now = (deps.now ?? (() => Date.now()))();
   if (Math.abs(now - r.issuedAt) > freshness) return forbidden("stale request");
 
-  const tokenId = generateTokenId();
+  const existingToken = (await deps.pushTokens.listByUser(r.username)).find(
+    (token) => token.deviceId === deviceId && token.platform === r.platform && token.providerToken === r.providerToken,
+  );
+  const tokenId = existingToken?.tokenId ?? generateTokenId();
   // Phase 3b — a vouched cross-device admit stamps the 14-day
   // quarantine on the row at insert time (rather than a follow-up
   // setQuarantineUntil) so the device is never momentarily un-
@@ -194,16 +183,16 @@ export async function handlePushRegister(
   await deps.pushTokens.put({
     tokenId,
     username: r.username,
+    deviceId,
     platform: r.platform,
     providerToken: r.providerToken,
     pushX25519PubHex: r.pushX25519Pub,
     registrationSignatureHex: body.signature,
-    label: r.label,
-    registeredAt: now,
+    registeredAt: existingToken?.registeredAt ?? now,
     lastSeenAt: now,
     quarantineUntil,
   });
-  if (quarantine && deps.auditEvents) {
+  if (quarantine && !existingToken && deps.auditEvents) {
     // Best-effort: the audit insert never fails the admission. The
     // device-added row carries quarantineUntil so the Activity feed
     // renders "joined — under review until …".
@@ -212,8 +201,8 @@ export async function handlePushRegister(
       {
         username: r.username.toLowerCase(),
         eventKind: "device-added",
-        detail: `New device joined via pairing: ${r.label}`,
-        devicePrefix: tokenId.slice(0, 8),
+        detail: "New device joined via pairing",
+        devicePrefix: deviceId.slice(0, 8),
         postedAt: now,
         quarantineUntil,
       },
@@ -229,16 +218,14 @@ export async function handlePushRegister(
  *   - `admit`     : the DeviceAdmit envelope { username, newDevicePubHex, issuedAt }
  *   - `admitSig`  : Ed25519 over the admit, signed by the account's CURRENT IRK
  *   - `request`   : the same push-token registration fields handlePushRegister takes
- *   - `signature` : the PushTokenRegister signature (carried for storage; NOT
- *                   verified here — the admit is the IRK consent)
+ *   - `signature` : the PushTokenRegister signature made by the admitted device
  *
  * Verify gate (rejects 401/403):
  *   (a) the DeviceAdmit signature verifies under `users.irk_pub_hex`,
  *   (b) the admit's issuedAt is fresh (~5 min),
  *   (c) the admit username matches the :u path AND the register body,
  *
- * On success → handlePushRegister(deps, body, { quarantine: true,
- * skipSignatureVerify: true }) so the device lands quarantined and a
+ * On success → handlePushRegister(deps, body, { quarantine: true }) so the device lands quarantined and a
  * `device-added` audit fires (when `auditEvents` is wired). The admit
  * binds `newDevicePubHex` so a captured admit can't be re-aimed at a
  * different device.
@@ -246,10 +233,23 @@ export async function handlePushRegister(
 interface AdmitBody {
   admit?: {
     username?: string;
+    deviceId?: string;
     newDevicePubHex?: string;
     issuedAt?: number;
   };
   admitSig?: string;
+  grant?: {
+    grantId?: string;
+    username?: string;
+    deviceId?: string;
+    devicePubHex?: string;
+    scopes?: DeviceScope[];
+    issuedAt?: number;
+    expiresAt?: number;
+    signerRoot?: "membership" | "admin-root";
+  };
+  grantSignature?: string;
+  profile?: DeviceSelfProfileEnvelope;
   request?: RegisterBody["request"];
   signature?: string;
 }
@@ -265,6 +265,7 @@ export async function handleVouchedDeviceAdmit(
   if (
     !a ||
     typeof a.username !== "string" ||
+    typeof a.deviceId !== "string" ||
     typeof a.newDevicePubHex !== "string" ||
     typeof a.issuedAt !== "number" ||
     typeof body?.admitSig !== "string"
@@ -283,6 +284,10 @@ export async function handleVouchedDeviceAdmit(
   ) {
     return forbidden("register username does not match admit");
   }
+  const deviceId = a.deviceId.toLowerCase();
+  if (!DEVICE_ID_RE.test(deviceId) || body.request?.deviceId?.toLowerCase() !== deviceId) {
+    return forbidden("register deviceId does not match admit");
+  }
   const newDevicePubHex = a.newDevicePubHex.toLowerCase();
   if (!DEVICE_PUB_HEX_RE.test(newDevicePubHex)) {
     return malformed("newDevicePubHex must be 32 bytes hex");
@@ -290,6 +295,23 @@ export async function handleVouchedDeviceAdmit(
 
   const userRec = await deps.usernames.get(a.username);
   if (!userRec) return notFound("username not registered");
+
+  const g = body.grant;
+  const profile = body.profile;
+  if (
+    !deps.deviceCapabilityGrants || !deps.deviceSelfProfiles || !g ||
+    typeof g.grantId !== "string" || typeof g.username !== "string" ||
+    typeof g.deviceId !== "string" || typeof g.devicePubHex !== "string" ||
+    !Array.isArray(g.scopes) || typeof g.issuedAt !== "number" ||
+    typeof g.expiresAt !== "number" || typeof g.signerRoot !== "string" ||
+    typeof body.grantSignature !== "string" || !profile
+  ) return malformed("missing device bootstrap");
+  if (
+    g.username.toLowerCase() !== a.username.toLowerCase() || g.deviceId !== deviceId ||
+    g.devicePubHex.toLowerCase() !== newDevicePubHex || !g.scopes.includes("view-directory") ||
+    profile.accountId.toLowerCase() !== a.username.toLowerCase() ||
+    profile.deviceId !== deviceId || profile.signerPubHex !== newDevicePubHex
+  ) return forbidden("device bootstrap mismatch");
 
   let admitSig: Uint8Array;
   let irkPub: Uint8Array;
@@ -302,6 +324,7 @@ export async function handleVouchedDeviceAdmit(
 
   const admit: DeviceAdmit = {
     username: a.username,
+    deviceId,
     newDevicePubHex,
     issuedAt: a.issuedAt,
   };
@@ -310,6 +333,29 @@ export async function handleVouchedDeviceAdmit(
   if (!verifyDeviceAdmit(admit, admitSig, irkPub)) {
     return { status: 401, body: { error: "invalid admit proof" } };
   }
+
+  let grantSig: Uint8Array;
+  let profileSigner: Uint8Array;
+  try {
+    grantSig = hexToBytes(body.grantSignature);
+    profileSigner = hexToBytes(newDevicePubHex);
+  } catch {
+    return malformed("invalid bootstrap hex");
+  }
+  const grant: DeviceCapabilityGrant = {
+    grantId: g.grantId,
+    username: g.username.toLowerCase(),
+    deviceId,
+    devicePubKey: profileSigner,
+    scopes: g.scopes,
+    issuedAt: g.issuedAt,
+    expiresAt: g.expiresAt,
+  };
+  const grantAuthorityHex = g.signerRoot === "admin-root" ? userRec.adminRootPubHex : userRec.irkPubHex;
+  if (!grantAuthorityHex || !verifyDeviceCapabilityGrant(grant, grantSig, hexToBytes(grantAuthorityHex))) {
+    return forbidden("invalid device grant");
+  }
+  if (!verifyDeviceSelfProfile(profile, profileSigner)) return forbidden("invalid device profile");
   // (b) Freshness — bound replay of a captured admit. Mirrors the
   // push-register window.
   const freshness = deps.freshnessMs ?? 5 * 60_000;
@@ -318,13 +364,73 @@ export async function handleVouchedDeviceAdmit(
     return { status: 401, body: { error: "stale admit proof" } };
   }
 
+  const identityRecord = {
+    accountId: a.username,
+    deviceId,
+    devicePubHex: newDevicePubHex,
+    platformClass: body.request?.platform ?? null,
+    createdAt: now,
+    lastSeenAt: now,
+    revokedAt: null,
+  };
+  const existingIdentity = await deps.deviceIdentities.get(a.username, deviceId);
+  if (existingIdentity) {
+    if (existingIdentity.revokedAt !== null || existingIdentity.devicePubHex !== newDevicePubHex) {
+      return conflict("device identity conflict");
+    }
+  } else {
+    const identityPut = await deps.deviceIdentities.put(identityRecord);
+    if (!identityPut.ok) return conflict(identityPut.reason);
+  }
+
+  const grantRecord = {
+    grantId: grant.grantId,
+    username: grant.username,
+    deviceId,
+    devicePubHex: newDevicePubHex,
+    scopesJson: JSON.stringify(grant.scopes),
+    issuedAt: grant.issuedAt,
+    expiresAt: grant.expiresAt,
+    signatureHex: body.grantSignature,
+    revokedAt: null,
+    signerRoot: g.signerRoot,
+  };
+  const existingGrant = await deps.deviceCapabilityGrants.get(grant.grantId);
+  if (existingGrant) {
+    if (
+      existingGrant.username !== grantRecord.username || existingGrant.deviceId !== deviceId ||
+      existingGrant.devicePubHex !== newDevicePubHex || existingGrant.signatureHex !== body.grantSignature ||
+      existingGrant.revokedAt !== null
+    ) return conflict("device grant conflict");
+  } else {
+    const activeGrant = await deps.deviceCapabilityGrants.getActiveForUserDevice(grant.username, deviceId);
+    if (activeGrant) return conflict("device grant conflict");
+    const grantPut = await deps.deviceCapabilityGrants.put(grantRecord);
+    if (!grantPut.ok) return conflict(grantPut.reason);
+  }
+  const profileRecord = {
+    ...profile,
+    accountId: a.username.toLowerCase(),
+    deviceId,
+    updatedAt: now,
+  };
+  const existingProfile = await deps.deviceSelfProfiles.get(a.username, deviceId);
+  if (existingProfile) {
+    if (
+      existingProfile.revision !== profileRecord.revision ||
+      existingProfile.nonceHex !== profileRecord.nonceHex ||
+      existingProfile.ciphertextHex !== profileRecord.ciphertextHex ||
+      existingProfile.signatureHex !== profileRecord.signatureHex
+    ) return conflict("profile conflict");
+  } else {
+    const profilePut = await deps.deviceSelfProfiles.put(profileRecord, 0);
+    if (!profilePut.ok) return conflict("profile conflict");
+  }
+
   // The admit is valid: admit the incoming device QUARANTINED. We
   // reuse handlePushRegister for the storage + quarantine + audit
-  // path; skipSignatureVerify is safe here because the IRK already
-  // consented via the admit envelope (the incoming device holds no IRK).
   return handlePushRegister(deps, { request: body.request, signature: body.signature }, {
     quarantine: true,
-    skipSignatureVerify: true,
   });
 }
 

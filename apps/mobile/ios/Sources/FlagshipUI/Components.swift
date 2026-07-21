@@ -195,7 +195,7 @@ public struct FSField: View {
     }
 }
 
-public enum FSPillKind { case online, renewing, offline, provisioning, idle }
+public enum FSPillKind { case online, renewing, offline, provisioning, pending, idle }
 
 public struct FSPill: View {
     @Environment(\.colorScheme) private var scheme
@@ -220,6 +220,7 @@ public struct FSPill: View {
         case .renewing:     return (c.warning, c.warning.opacity(0.12))
         case .offline:      return (c.danger, c.danger.opacity(0.12))
         case .provisioning: return (c.primary, c.primary.opacity(0.12))
+        case .pending:      return (c.warning, c.warning.opacity(0.12))
         case .idle:         return (c.textMuted, c.surfaceSunken)
         }
     }

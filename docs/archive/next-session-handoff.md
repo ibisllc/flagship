@@ -74,13 +74,13 @@ the truthful picture:
 | Path | Status | Why |
 |---|---|---|
 | **Alpine apkovl** (self-deleting, the Recommended path) | ❌ blocked | `POST /api/personalize-iso` returns 503 — `flagship-alpine-base.iso` has never been built + uploaded to R2 with the `af_packet` kernel-module fix. The Phase-4 lynchpin below. |
-| **Debian-13 netinst** (Advanced mode in burner GUI) | ✅ works end-to-end | Pinned default in `packages/flagship-burner/src/distros.ts`; 2026-05-25 e2e on home.harry; 3 fixes landed in `2f7f743`; native Mac burner GUI signed under "IBIS LLC" Developer ID. |
+| **Debian-13 netinst** (Advanced mode in builder GUI) | ✅ works end-to-end | Pinned default in `packages/flagship-builder/src/distros.ts`; 2026-05-25 e2e on home.harry; 3 fixes landed in `2f7f743`; native Mac builder GUI signed under "IBIS LLC" Developer ID. |
 | **iOS install-progress alerts** | 🟡 code wired, can't actually receive | Daemon → cloud (deployed today, migration 0038) → APNs push → `ProvisionTimelineView` + `InstallProgressLiveActivity` (Lock Screen + Dynamic Island) — but **not on TestFlight**, so nothing on your device receives them yet. |
 | **Android install-progress alerts** | 🟡 same as iOS | `ProvisionPhasePush.kt` + `InstallProgressScreen.kt` mirror iOS; FCM wired Worker-side. **Not on Play internal track yet.** |
 | **Apple Watch install-progress alerts** | ❌ no surface | The Watch app today handles unlock approvals only. Install-progress surface for Watch is unscoped work. |
 
 **Net for the owner**: today, the only working server-creation route is
-**Debian via the Mac burner's advanced mode**, and the install will
+**Debian via the Mac builder's advanced mode**, and the install will
 complete silently because no Apple/Android device has the app
 installed yet to receive the push timeline. The Phase 1, 2, 3, and 4
 items below all clear independent blockers; doing any one of them
@@ -201,7 +201,7 @@ Debian advanced-mode is the only working creation route.**
   account" iCloud passkey path).
 - [ ] Mint recipe at `flagshipserver.com/dev/create-server`.
 - [ ] Download personalized ISO from `/ready` (the now-Recommended path).
-- [ ] Burn via the Mac Assembler (Quick mode is the default).
+- [ ] Burn via the Mac Builder (Quick mode is the default).
 - [ ] Boot box, watch the provisioning-status timeline **on your
   phone's Live Activity** (the end-to-end test for everything that
   shipped today), observe live padlock at
@@ -358,7 +358,7 @@ works without it.
 
 - [ ] **E2E-PREP** — Pair iPhone + Watch + create test account in the
   app (📱⌚ 10 min). **Blocked by TF5.**
-- [ ] **E2E-DEBIAN** — Create server from app → Mac burner Advanced →
+- [ ] **E2E-DEBIAN** — Create server from app → Mac builder Advanced →
   Debian 13 netinst → burn → boot → observe alerts on iPhone Lock
   Screen + Dynamic Island + Watch + green padlock at
   `https://<server>.<you>.flagship.services/` (📱⌚📦 ~1h).

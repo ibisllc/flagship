@@ -447,6 +447,8 @@ export async function start(opts: {
   const irkResolver = new RemoteUsernameResolver({ comBaseUrl });
   const irkLookup = (username: string): Promise<Uint8Array | null> =>
     irkResolver.lookup(username);
+  const authorityLookup = (username: string) =>
+    irkResolver.lookupAuthority(username);
   // Per-user revoked-entitlement-cert set, pulled from .com's
   // phone-signed list and re-verified locally (the cache trusts the
   // IRK signature, not the Worker). Fail-open on a transient fetch
@@ -496,6 +498,7 @@ export async function start(opts: {
     apex: servicesApex,
     authLookup: remoteAuthLookup,
     irkLookup,
+    authorityLookup,
     revocationLookup,
     evictionLookup,
     ...(blessingProvider ? { blessingSource: blessingProvider } : {}),

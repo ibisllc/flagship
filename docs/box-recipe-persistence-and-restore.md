@@ -36,7 +36,7 @@ and the optional `bootUnlockMode` / `diskEncryption` (`de=` suffix). It is signe
 by the owner IRK (`signInstallBlob`, `installBlob.ts:236`).
 
 Two **UNSIGNED siblings** ride alongside the signed blob in the on-wire JSON (not
-in canonical bytes, so they never change a signature or the burner sha-pins):
+in canonical bytes, so they never change a signature or the builder sha-pins):
 
 - `pairingKeyPrivHex` — a **random** per-burn pairing keypair private half; the
   phone deposits an owner-IRK-signed `add-paired-session` order to `.com` sealed

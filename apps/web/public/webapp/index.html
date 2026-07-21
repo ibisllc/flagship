@@ -335,7 +335,6 @@
             Paste your pod's base URL. The webapp signs an add-paired-session order with your IRK and stores the resulting token in this browser only.
           </p>
           <input id="pod-pair-base" type="url" placeholder="https://home.alice.flagship.services" autocomplete="off" />
-          <input id="pod-pair-label" type="text" placeholder="Device label (e.g. 'phone-webapp')" autocomplete="off" class="mt-2" />
           <button id="pod-pair-go" class="full-width mt-2">Pair</button>
         </div>
         <button class="secondary full-width mt-2" id="pod-pair-back">← Back</button>
@@ -770,7 +769,7 @@
         <h2>Create a server</h2>
         <div class="card">
           <p class="note">
-            Compose a build-and-deliver draft. Save it for later, or deliver the signed recipe to a browser tab open at the QR on <a href="https://flagshipserver.com/" target="_blank" rel="noopener">flagshipserver.com</a> — it downloads the recipe for the Flagship Assembler. The webapp signs with your IRK; the relay sees only opaque ciphertext.
+            Compose a build-and-deliver draft. Save it for later, or deliver the signed recipe to a browser tab open at the QR on <a href="https://flagshipserver.com/" target="_blank" rel="noopener">flagshipserver.com</a> — it downloads the recipe for the Flagship Studio. The webapp signs with your IRK; the relay sees only opaque ciphertext.
           </p>
           <label>Server name</label>
           <input id="cs-server-name" type="text" placeholder="home" autocomplete="off"
@@ -848,7 +847,7 @@
           <button id="cs-deliver" class="full-width mt-2">Deliver to homepage</button>
           <p class="faint-sm mt-2">
             …or download the signed recipe and feed it to
-            <code>flagship-burn</code> on a different machine (for the
+            <code>flagship-build</code> on a different machine (for the
             real-USB install path).
           </p>
           <button id="cs-download-recipe" class="secondary full-width" disabled>Download recipe (mint first)</button>

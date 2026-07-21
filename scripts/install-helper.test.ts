@@ -5,9 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ed,
+  signAuthCode,
+  verifyAuthCode,
   verifyConsumeUnlockKey,
   verifyRootEntitlement,
+  verifyServerRegister,
   verifyServiceEntitlement,
+  type AuthCode,
+  type ServerRegisterRequest,
 } from "@flagship/protocol";
 
 const HELPER = join(__dirname, "install-helper.ts");
@@ -158,6 +163,82 @@ describe("install-helper", () => {
     expect(env.request.sealedKey).toBe(sealedHex);
     expect(env.request.issuedAt).toBe(parseInt(issuedAt, 10));
     expect(env.signature).toMatch(/^[0-9a-f]{128}$/);
+  });
+
+  it("sign-server-register preserves the signed admin root in the forwarded auth code", () => {
+    const irkPriv = new Uint8Array(32).fill(0x51);
+    const irk = { privateKey: irkPriv, publicKey: ed.getPublicKey(irkPriv) };
+    const delegatedPubKey = ed.getPublicKey(new Uint8Array(32).fill(0x52));
+    const adminRootPubKey = ed.getPublicKey(new Uint8Array(32).fill(0x53));
+    const authCode: AuthCode = {
+      version: 1,
+      serial: "01ADMINROOTTEST",
+      username: "alice",
+      serverName: "home",
+      serverDomain: "home.alice.flagship.services",
+      delegatedPubKey,
+      userPubKey: irk.publicKey,
+      issuedAt: Date.now() - 1_000,
+      expiresAt: Date.now() + 60_000,
+      adminRootPubKey,
+    };
+    const authCodeUserSignature = signAuthCode(authCode, irk);
+    const blobPath = join(dir, "install-blob.json");
+    writeFileSync(blobPath, JSON.stringify({
+      authCode: {
+        ...authCode,
+        delegatedPubKey: Buffer.from(delegatedPubKey).toString("hex"),
+        userPubKey: Buffer.from(irk.publicKey).toString("hex"),
+        adminRootPubKey: Buffer.from(adminRootPubKey).toString("hex"),
+      },
+      authCodeUserSignature: Buffer.from(authCodeUserSignature).toString("hex"),
+    }));
+
+    const stkPriv = new Uint8Array(32).fill(0x54);
+    const stkPub = ed.getPublicKey(stkPriv);
+    const { stdout } = run([
+      "sign-server-register",
+      "--priv-hex", Buffer.from(stkPriv).toString("hex"),
+      "--auth-code-blob", blobPath,
+    ]);
+    const env = JSON.parse(stdout) as {
+      request: {
+        authCode: {
+          version: 1;
+          serial: string;
+          username: string;
+          serverName: string;
+          serverDomain: string;
+          delegatedPubKey: string;
+          userPubKey: string;
+          issuedAt: number;
+          expiresAt: number;
+          adminRootPubKey?: string;
+        };
+        authCodeUserSignature: string;
+        serverIdentityPubKey: string;
+        issuedAt: number;
+        nonce: string;
+      };
+      signature: string;
+    };
+    expect(env.request.authCode.adminRootPubKey).toBe(Buffer.from(adminRootPubKey).toString("hex"));
+
+    const forwarded: AuthCode = {
+      ...env.request.authCode,
+      delegatedPubKey: hexToBytes(env.request.authCode.delegatedPubKey),
+      userPubKey: hexToBytes(env.request.authCode.userPubKey),
+      adminRootPubKey: hexToBytes(env.request.authCode.adminRootPubKey!),
+    };
+    expect(verifyAuthCode(forwarded, hexToBytes(env.request.authCodeUserSignature), irk.publicKey)).toBe(true);
+    const request: ServerRegisterRequest = {
+      authCode: forwarded,
+      authCodeUserSignature: hexToBytes(env.request.authCodeUserSignature),
+      serverIdentityPubKey: stkPub,
+      issuedAt: env.request.issuedAt,
+      nonce: hexToBytes(env.request.nonce),
+    };
+    expect(verifyServerRegister(request, hexToBytes(env.signature), stkPub)).toBe(true);
   });
 
   it("mint-entitlements: writes a bundle whose RootEntitlement verifies under the IRK + binds the STK", () => {

@@ -1,6 +1,15 @@
-import type { ChatRequest, ChatResponse, FetchLike, LLMProvider, ProviderConfig } from "../types.js";
+import type {
+  ChatRequest,
+  ChatResponse,
+  ChatStreamEvent,
+  FetchLike,
+  LLMProvider,
+  ProviderConfig,
+  StreamingFetchLike,
+  StreamingLLMProvider,
+} from "../types.js";
 import { ProviderError } from "../types.js";
-import { toOpenAiMessages } from "./openai.js";
+import { openaiStreaming, toOpenAiMessages } from "./openai.js";
 
 const DEFAULT_BASE = "https://openrouter.ai/api";
 
@@ -78,5 +87,22 @@ export const openrouter: LLMProvider = {
       raw: data,
       toolUses: toolUses.length > 0 ? toolUses : undefined,
     };
+  },
+};
+
+export const openrouterStreaming: StreamingLLMProvider = {
+  name: "openrouter",
+  chatStream(
+    req: ChatRequest,
+    cfg: ProviderConfig,
+    onEvent: (e: ChatStreamEvent) => void,
+    fetchImpl?: StreamingFetchLike,
+  ): Promise<void> {
+    return openaiStreaming.chatStream(
+      req,
+      { ...cfg, baseUrl: cfg.baseUrl ?? DEFAULT_BASE },
+      onEvent,
+      fetchImpl,
+    );
   },
 };

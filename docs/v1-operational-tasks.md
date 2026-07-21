@@ -27,7 +27,7 @@ xcodebuild green, Android gradle green, `tsc -b` clean.
 - **A1** `/ready` Advanced-options disclosure (BYO-ISO/Debian path tucked behind a `<details>`; Alpine custom-ISO download stays primary) — `620d16f`
 - **P1 (webapp)** post-creation backup reminder banner on home (dismissable; reuses the wizard's `flagship.recovery.warn.v1` signal) — `e598f32`
 - **P2 / P3 / P5 / P7 (iOS)** — trademark-claim, release-server (real `ReleaseServerName` envelope + release-then-revoke on cancel), dedicated audit-log viewer, tier-status screen — `ca7165a` (500 XCTest, 0 failures)
-- **A2** Mac burner Quick (dumb-flash, default) vs Advanced (remaster) mode toggle — `e3407ef` (71 burner tests pass)
+- **A2** Mac builder Quick (dumb-flash, default) vs Advanced (remaster) mode toggle — `e3407ef` (71 builder tests pass)
 - **P2 / P3 / P5 / P7 (Android)** — Android half of the parity wave, wire-identical with iOS (same canonical bytes, copy, field sets) — `01e8dd4` (gradle test BUILD SUCCESSFUL)
 
 ### Parity wave 2 (2026-05-25 night)
@@ -77,7 +77,7 @@ xcodebuild green, Android gradle green, `tsc -b` clean.
 ## A — Install → live padlock (the e2e operation)
 
 - ~~**A1** — `/ready` Advanced-options affordance (BYO-ISO/Debian)~~ ✅ `620d16f`.
-- ~~**A2** — Burner Quick (default, dumb-flash) vs Advanced (remaster) toggle~~ ✅ `e3407ef`. The TS burner in `packages/flagship-burner` is a CLI library only (no UI), so the "Mode toggle" lives on the Mac GUI; the TS side already exposes both code paths.
+- ~~**A2** — Builder Quick (default, dumb-flash) vs Advanced (remaster) toggle~~ ✅ `e3407ef`. The TS builder in `packages/flagship-builder` is a CLI library only (no UI), so the "Mode toggle" lives on the Mac GUI; the TS side already exposes both code paths.
 - **A3** — Base-ISO af_packet fix (modloop/DHCP). **_ops/CI (lynchpin)._** Stock
   Alpine standard ISO in apkovl-mode doesn't mount modloop → no af_packet → no
   DHCP (`docs/installer-tiny.md §3a`). Bake af_packet into the initramfs / make
@@ -89,7 +89,7 @@ xcodebuild green, Android gradle green, `tsc -b` clean.
 - **A5** — Real-hardware Alpine e2e: fresh backed-up account → custom ISO →
   dumb-flash → boot → early-signal timeline → green padlock. _owner._ Blocked by
   A3, A4. Box: `flagship-pod`/pw `flagship`; burn LUKS pass
-  `flagship-burn-time-luks-rekey-me-immediately`.
+  `flagship-build-time-luks-rekey-me-immediately`.
 - **A6** — Real-hardware boot-unlock e2e via `boot.flagshipserver.com` (deployed):
   reboot → box fetches sealed lease / requests unlock → phone approves → LUKS
   unlock; both `auto` and `approve` modes. _owner._ Blocked by A5.

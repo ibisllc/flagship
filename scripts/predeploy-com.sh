@@ -31,6 +31,8 @@
 
 set -euo pipefail
 
+bash "$(dirname "$0")/private-name-storage-guard.sh"
+
 # Repo root, resolved from this script's location so the freshness check
 # works regardless of the caller's cwd. FLAGSHIP_DIST_CHECK_ROOT lets the
 # test suite point the freshness check at a throwaway fixture tree.

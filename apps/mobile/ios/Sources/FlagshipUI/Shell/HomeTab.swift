@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import CryptoKit
 import Flagship
 import FlagshipCore
 import FlagshipAPI
@@ -226,42 +227,16 @@ public struct HomeTab: View {
         }
     }
 
-    /// Best-effort fetch of cloud-recovery presence + E7 account-reset
-    /// detection. We fan out the two reads in parallel — the devices
-    /// list doubles as our peer-detection signal: if our local push
-    /// tokenId is absent, another device disconnected us.
+    /// Best-effort fetch of cloud-recovery presence. Device membership is
+    /// checked only through the signed account directory after unlock; the
+    /// former username-only push-token roster was intentionally removed.
     /// Any failure is silent so a transient blip doesn't flash a
     /// danger banner; the next successful round-trip will settle the
     /// state correctly.
     private func refreshRecoveryStatus() async {
         guard let user = app.currentUser, !user.isEmpty else { return }
-        // hasCloudRecovery — drives B9 nudge.
-        async let recoveryTask: Bool? = {
-            do { return try await server.hasCloudRecovery(username: user) }
-            catch { return nil }
-        }()
-        // listDevices — drives E7 account-reset detector.
-        async let devicesTask: [TrustedDevice]? = {
-            do { return try await server.listDevices(username: user).devices }
-            catch { return nil }
-        }()
-        let (recovery, devices) = await (recoveryTask, devicesTask)
+        let recovery: Bool? = try? await server.hasCloudRecovery(username: user)
         if let recovery { app.hasCloudRecovery = recovery }
-        if let devices {
-            // We only flip accountWasReset when we have BOTH a
-            // confirmed devices fetch AND a local tokenId — a fresh
-            // install (no local token) shouldn't trigger E7.
-            if let localToken = Keystore.pushTokenId(), !localToken.isEmpty {
-                let present = devices.contains { $0.tokenId == localToken }
-                if !present {
-                    app.accountWasReset = true
-                } else if app.accountWasReset {
-                    // Recovered — the user must have re-registered.
-                    // Clear the flag so the banner disappears.
-                    app.accountWasReset = false
-                }
-            }
-        }
     }
 
     @ViewBuilder
@@ -742,6 +717,7 @@ struct ServerDetailContainer: View {
     /// action succeeds (the pod is gone, so this page now points at nothing).
     var onDeleted: () -> Void = {}
     @Environment(\.screensClient) private var client
+    @Environment(\.secretMailboxClient) private var mailbox
     @Environment(\.lockPowerClient) private var lockPower
     @Environment(\.sessionStore) private var sessionStore
     @Environment(\.colorScheme) private var scheme
@@ -789,7 +765,8 @@ struct ServerDetailContainer: View {
                     // "waiting for approval" on Home but no Approve card here.
                     awaitingUnlock: pod.map { app.isAwaitingUnlock($0) } ?? false,
                     awaitingEntitlement: pod.map { app.isAwaitingEntitlement($0) } ?? false,
-                    // The BFF said "no session token" → this device isn't paired.
+                    // No local token OR a 401-rejected stale token → this
+                    // device isn't paired with the box.
                     // Surface the one-tap pairing affordance (but only for a box
                     // that's actually reachable — a dead box never paired and
                     // never will, so it stays on the decommission path).
@@ -803,7 +780,11 @@ struct ServerDetailContainer: View {
                     lastSeen: pod?.humanizedLastSeen(),
                     comingUp: pod.map { app.liveness(for: $0) == .comingOnline && $0.status != .pending } ?? false,
                     pairing: isPairing,
+                    verifiedCertStatus: pod.flatMap {
+                        CertPinRegistry.shared.verifiedReport(for: $0.fqdn)
+                    },
                     onRefresh: {
+                        await refreshDirectoryAndRepairAppKey(allowAuthentication: true)
                         async let a: Void = detailVm.load()
                         async let b: Void = metricsVm.load()
                         _ = await (a, b)
@@ -837,6 +818,7 @@ struct ServerDetailContainer: View {
             if metricsVm == nil {
                 metricsVm = ServerMetricsViewModel(podId: podId, client: client)
             }
+            await refreshDirectoryAndRepairAppKey(allowAuthentication: false)
             metricsVm?.startPolling(every: 15)
             // Retry the BFF detail load until it lands. A box that JUST came
             // online can take a few seconds before its daemon answers the
@@ -878,6 +860,44 @@ struct ServerDetailContainer: View {
         }
     }
 
+    @MainActor
+    private func refreshDirectoryAndRepairAppKey(allowAuthentication: Bool) async {
+        guard let username = app.currentUser, !username.isEmpty else { return }
+        guard let directory = try? await mailbox.fetchPods(username: username) else { return }
+        // A reinstall/profile restore can preserve the account UMK while losing
+        // this app-local cache of each box's derived STK public key. A seedless
+        // /pods refresh can then fetch a perfectly valid signed daemon report
+        // but has no local authority with which to verify it, leaving the TLS
+        // card stuck on "No certificate yet" forever. Rebuild the public-key
+        // cache whenever the owner explicitly refreshes, or silently when the
+        // current unlocked session already holds the UMK. Background refreshes
+        // with a cold session remain biometric-free.
+        if allowAuthentication || Keystore.hasSessionKey(),
+           let umk = try? await Keystore.currentUMK(reason: "Verify your servers") {
+            let seed = umk.withUnsafeBytes { Data($0) }
+            CertPinRegistry.shared.update(pods: directory.pods, umkSeed: seed)
+        } else {
+            CertPinRegistry.shared.update(pods: directory.pods)
+        }
+
+        guard let fqdn = pod?.fqdn, !fqdn.isEmpty else { return }
+        let store = PendingSwkDepositStore()
+        guard store.isPending(for: fqdn),
+              let identityPubKeyHex = directory.identityPubKey(forServerDomain: fqdn)
+        else { return }
+
+        let coordinator = SwkDepositCoordinator(
+            username: username,
+            mailbox: mailbox,
+            store: store
+        )
+        await coordinator.depositIfNeeded(
+            serverDomain: fqdn,
+            identityPubKeyHex: identityPubKeyHex,
+            allowAuthentication: allowAuthentication
+        )
+    }
+
     /// One pairing attempt (Face ID → sign `add-paired-session` → POST →
     /// persist token), then reload the BFF so the page fills in. Fired once per
     /// tap from the "Pair this server" button — never auto-fired. Idempotent in
@@ -889,11 +909,13 @@ struct ServerDetailContainer: View {
         let vm = PodPairViewModel(
             client: lockPower,
             store: sessionStore,
-            serverDomain: fqdn,
-            label: UIDevice.current.name
+            serverDomain: fqdn
         )
         pairVm = vm
-        await vm.pair()
+        // This affordance is shown only after the detail BFF proved the current
+        // token absent or rejected. Replace a stale per-pod token instead of
+        // letting PodPairViewModel's normal idempotency guard no-op on it.
+        await vm.pair(replacingExistingToken: true)
         switch vm.phase {
         case .paired, .alreadyPaired:
             await detailVm.load()
@@ -949,7 +971,7 @@ struct PairedSessionRow: View {
                 Image(systemName: session.current ? "iphone.gen3" : "laptopcomputer")
                     .foregroundColor(session.current ? c.success : c.textMuted)
                 VStack(alignment: .leading) {
-                    Text(session.label).foregroundColor(c.text)
+                    Text("Session \(session.tokenPrefix)").foregroundColor(c.text)
                     Text("token: \(session.tokenPrefix)…")
                         .font(FS.font.mono())
                         .foregroundColor(c.textMuted)
@@ -960,4 +982,3 @@ struct PairedSessionRow: View {
         }
     }
 }
-

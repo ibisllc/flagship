@@ -149,7 +149,7 @@ class CanonicalBytesVectorsTest {
         },
         "device-capability-grant" to { i ->
             DeviceCapabilityGrant.canonicalBytes(
-                i.str("grantId"), i.str("username"), i.str("deviceLabel"), i.str("devicePubKey"),
+                i.str("grantId"), i.str("username"), i.str("deviceId"), i.str("devicePubKey"),
                 i.strList("scopes"), i.long("issuedAt"), i.long("expiresAt"),
             )
         },

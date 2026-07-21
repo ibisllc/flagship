@@ -26,6 +26,8 @@ public struct JoinAccountScreen: View {
     let onJoined: (JoinAccountViewModel.AdmittedProfile) -> Void
 
     @State private var scanError: String?
+    @State private var deviceDisplayName = "This iPhone"
+    @State private var deviceNameError: String?
 
     public init(
         vm: JoinAccountViewModel,
@@ -128,17 +130,27 @@ public struct JoinAccountScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 Text("Confirm with the admin")
                     .font(FS.font.h4()).foregroundColor(c.text)
-                Text("These six digits should match the admin's screen. The admin taps \"Confirm\" once they do.")
+                Text("These six digits should match the admin's screen. Confirm the encrypted name this device will use only in this account.")
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 Text(QrRelay.formatMatchCode(matchCode))
                     .font(.system(size: 34, weight: .semibold, design: .monospaced))
                     .tracking(6)
                     .foregroundColor(c.text)
                     .frame(maxWidth: .infinity)
-                HStack(spacing: FS.space.s2) {
-                    ProgressView()
-                    Text("Waiting for the admin to confirm…")
-                        .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                TextField("Name in this account", text: $deviceDisplayName)
+                    .textFieldStyle(.roundedBorder)
+                Text("The suggestion stays on this phone until you confirm it.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                if let deviceNameError {
+                    Text(deviceNameError).font(FS.font.caption()).foregroundColor(c.danger)
+                }
+                FSPrimaryButton("Confirm name and join", enabled: !deviceDisplayName.isEmpty, block: true) {
+                    do {
+                        try vm.confirmDeviceDisplayName(deviceDisplayName)
+                        deviceNameError = nil
+                    } catch {
+                        deviceNameError = HumanError.humanize(error)
+                    }
                 }
             }
         }

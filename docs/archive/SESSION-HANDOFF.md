@@ -2,9 +2,9 @@
 
 > **▶ START HERE (2026-06-02):** the latest session's open items live in
 > **`docs/session-handoff-2026-06-02.md`** — brand/icon + teal migration + the
-> burner `certAutonomy` fix shipped; the recovery QR fix, the Passwords-app
+> builder `certAutonomy` fix shipped; the recovery QR fix, the Passwords-app
 > icon refresh, and a real burn await owner on-device confirmation; Recovery
-> Phase B + two iOS diagnostics + an e2e run + the Windows-C# burner test run
+> Phase B + two iOS diagnostics + an e2e run + the Windows-C# builder test run
 > are parked.
 
 > **Pending design (not yet implemented):**

@@ -17,6 +17,30 @@ import CryptoKit
 ///   - `/join` URL build/parse round-trip.
 ///   - Safeguards: invalidate tears down the session; quarantine copy.
 final class Phase3bPairingTests: XCTestCase {
+    private let deviceId = "00112233445566778899aabbccddeeff"
+
+    private func admitRequest(username: String) -> DeviceAdmitRequest {
+        DeviceAdmitRequest(
+            admit: .init(username: username, deviceId: deviceId, newDevicePubHex: "ab", issuedAt: 1),
+            admitSig: "ff",
+            grant: .init(
+                grantId: "grant-1", username: username, deviceId: deviceId,
+                devicePubHex: "ab", scopes: ["view-directory"], issuedAt: 1,
+                expiresAt: 2, signerRoot: "membership"
+            ),
+            grantSignature: "ee",
+            profile: .init(
+                accountId: username, deviceId: deviceId, revision: 1, keyVersion: 1,
+                nonceHex: "00", ciphertextHex: "00", issuedAt: 1,
+                signerPubHex: "ab", signatureHex: "dd"
+            ),
+            request: .init(
+                username: username, deviceId: deviceId, platform: "apns",
+                providerToken: "tok", pushX25519Pub: "pp", issuedAt: 1
+            ),
+            signature: "sig"
+        )
+    }
 
     // Profile slots this suite touches — wiped fore + aft so cases are
     // hermetic and never leak into other Keystore tests.
@@ -40,29 +64,30 @@ final class Phase3bPairingTests: XCTestCase {
     func test_deviceAdmit_canonicalBytes_matchesWireFormat() {
         let admit = DeviceAdmit(
             username: "acme",
+            deviceId: deviceId,
             newDevicePubHex: "ab12",
             issuedAt: 1_700_000_000_000
         )
-        let expected = "flagship/device-admit/v1|acme|ab12|1700000000000"
+        let expected = "flagship/device-admit/v2|acme|00112233445566778899aabbccddeeff|ab12|1700000000000"
         XCTAssertEqual(admit.canonicalBytes(), Data(expected.utf8))
     }
 
     func test_deviceAdmit_signVerify_roundTrip() throws {
         let irk = Curve25519.Signing.PrivateKey()
-        let admit = DeviceAdmit(username: "acme", newDevicePubHex: "deadbeef", issuedAt: 42)
+        let admit = DeviceAdmit(username: "acme", deviceId: deviceId, newDevicePubHex: "deadbeef", issuedAt: 42)
         let sig = try admit.sign(with: irk)
         XCTAssertTrue(admit.verify(signature: sig, irkPub: irk.publicKey.rawRepresentation))
         // A different IRK pub rejects.
         let wrong = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
         XCTAssertFalse(admit.verify(signature: sig, irkPub: wrong))
         // Tampering the bound pubkey rejects (the admit commits to it).
-        let tampered = DeviceAdmit(username: "acme", newDevicePubHex: "cafe", issuedAt: 42)
+        let tampered = DeviceAdmit(username: "acme", deviceId: deviceId, newDevicePubHex: "cafe", issuedAt: 42)
         XCTAssertFalse(tampered.verify(signature: sig, irkPub: irk.publicKey.rawRepresentation))
     }
 
     func test_deviceAdmit_verify_falseOnMalformedSignature() {
         let irk = Curve25519.Signing.PrivateKey()
-        let admit = DeviceAdmit(username: "acme", newDevicePubHex: "00", issuedAt: 1)
+        let admit = DeviceAdmit(username: "acme", deviceId: deviceId, newDevicePubHex: "00", issuedAt: 1)
         // 3 bytes is not a valid Ed25519 signature → false, never throws.
         XCTAssertFalse(admit.verify(signature: Data([1, 2, 3]), irkPub: irk.publicKey.rawRepresentation))
     }
@@ -129,6 +154,7 @@ final class Phase3bPairingTests: XCTestCase {
         // the account IRK we injected.
         let admit = DeviceAdmit(
             username: "acme",
+            deviceId: deviceId,
             newDevicePubHex: incomingPubHex,
             issuedAt: 1
         )
@@ -162,9 +188,9 @@ final class Phase3bPairingTests: XCTestCase {
         )
         let incomingVm = JoinAccountViewModel(
             relay: relay,
-            server: server,
-            deviceLabel: "Reviewer iPhone"
+            server: server
         )
+        try incomingVm.confirmDeviceDisplayName("Reviewer iPhone")
 
         // 3 — Build the admin's /join URL the incoming side scans. We
         //     need the admin's ephemeral pub; AddDeviceViewModel mints it
@@ -229,13 +255,15 @@ final class Phase3bPairingTests: XCTestCase {
         let admitted = server.admittedDevices["acme"] ?? []
         XCTAssertEqual(admitted.count, 1)
         XCTAssertEqual(admitted.first?.admit.username, "acme")
-        XCTAssertEqual(admitted.first?.request.label, "Reviewer iPhone")
+        XCTAssertEqual(admitted.first?.request.deviceId, admitted.first?.admit.deviceId)
+        XCTAssertEqual(admitted.first?.profile.deviceId, admitted.first?.admit.deviceId)
         // The carried admit signature verifies under the account IRK
         // (the unforgeable vouch the Worker re-checks server-side).
         if let body = admitted.first,
            let sig = HexUtil.decode(body.admitSig) {
             let admit = DeviceAdmit(
                 username: body.admit.username,
+                deviceId: body.admit.deviceId,
                 newDevicePubHex: body.admit.newDevicePubHex,
                 issuedAt: body.admit.issuedAt
             )
@@ -267,12 +295,14 @@ final class Phase3bPairingTests: XCTestCase {
         let foreignDeviceKey = Curve25519.Signing.PrivateKey()
         let foreignAdmit = DeviceAdmit(
             username: "acme",
+            deviceId: deviceId,
             newDevicePubHex: HexUtil.encode(foreignDeviceKey.publicKey.rawRepresentation),
             issuedAt: Int64(Date().timeIntervalSince1970 * 1000)
         )
         let foreignSig = try foreignAdmit.sign(with: accountIrk)
 
         let incomingVm = JoinAccountViewModel(relay: relay, server: server)
+        try incomingVm.confirmDeviceDisplayName("Reviewer iPhone")
         let task = Task {
             await incomingVm.connect(joinUrl: joinUrl, provideRawPubkeyToRelay: { handshakePub in
                 // We now know the incoming handshake pubkey → derive the
@@ -286,11 +316,19 @@ final class Phase3bPairingTests: XCTestCase {
                     umkSeedHex: HexUtil.encode(SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }),
                     admit: .init(
                         username: foreignAdmit.username,
+                        deviceId: foreignAdmit.deviceId,
                         newDevicePubHex: foreignAdmit.newDevicePubHex,
                         issuedAt: foreignAdmit.issuedAt
                     ),
                     admitSig: HexUtil.encode(foreignSig),
-                    irkPubHex: HexUtil.encode(accountIrk.publicKey.rawRepresentation)
+                    irkPubHex: HexUtil.encode(accountIrk.publicKey.rawRepresentation),
+                    grant: .init(
+                        grantId: "grant-foreign", username: "acme", deviceId: self.deviceId,
+                        devicePubHex: foreignAdmit.newDevicePubHex,
+                        scopes: ["view-directory"], issuedAt: foreignAdmit.issuedAt,
+                        expiresAt: foreignAdmit.issuedAt + 1_000, signerRoot: "membership"
+                    ),
+                    grantSignature: "00"
                 )
                 let sealed = try! QrRelay.seal(payload: try! bundle.encoded(), with: material.aeadKey)
                 Task { try? await relay.adminDeliverBundle(sid: "sid-x", ciphertextBase64Url: sealed.ciphertextBase64Url, nonceBase64Url: sealed.nonceBase64Url) }
@@ -312,9 +350,15 @@ final class Phase3bPairingTests: XCTestCase {
     func test_pairingBundle_codecRoundTrip() throws {
         let b = PairingBundle(
             umkSeedHex: String(repeating: "ab", count: 32),
-            admit: .init(username: "acme", newDevicePubHex: "cd", issuedAt: 7),
+            admit: .init(username: "acme", deviceId: deviceId, newDevicePubHex: "cd", issuedAt: 7),
             admitSig: "ef",
-            irkPubHex: "01"
+            irkPubHex: "01",
+            grant: .init(
+                grantId: "grant-1", username: "acme", deviceId: deviceId,
+                devicePubHex: "cd", scopes: ["view-directory"], issuedAt: 7,
+                expiresAt: 8, signerRoot: "membership"
+            ),
+            grantSignature: "02"
         )
         let decoded = try PairingBundle.decode(b.encoded())
         XCTAssertEqual(decoded, b)
@@ -421,12 +465,7 @@ final class Phase3bPairingTests: XCTestCase {
     func test_mockServer_admitDevice_returnsQuarantineAndRecords() async throws {
         let server = MockFlagshipServerClient()
         server.nowProvider = { 5_000 }
-        let req = DeviceAdmitRequest(
-            admit: .init(username: "acme", newDevicePubHex: "ab", issuedAt: 1),
-            admitSig: "ff",
-            request: .init(username: "acme", platform: "apns", providerToken: "tok", pushX25519Pub: "pp", label: "L", issuedAt: 1),
-            signature: "sig"
-        )
+        let req = admitRequest(username: "acme")
         let resp = try await server.admitDevice(account: "acme", body: req)
         XCTAssertTrue(resp.ok)
         XCTAssertEqual(resp.quarantineUntil, 5_000 + MockFlagshipServerClient.quarantineMs)
@@ -436,12 +475,7 @@ final class Phase3bPairingTests: XCTestCase {
     @MainActor
     func test_mockServer_admitDevice_rejectsUsernameMismatch() async {
         let server = MockFlagshipServerClient()
-        let req = DeviceAdmitRequest(
-            admit: .init(username: "other", newDevicePubHex: "ab", issuedAt: 1),
-            admitSig: "ff",
-            request: .init(username: "other", platform: "apns", providerToken: "t", pushX25519Pub: "p", label: "L", issuedAt: 1),
-            signature: "s"
-        )
+        let req = admitRequest(username: "other")
         do {
             _ = try await server.admitDevice(account: "acme", body: req)
             XCTFail("expected mismatch rejection")

@@ -51,7 +51,7 @@ export interface OrderExecutor {
   }): Promise<void> | void;
   addSubscriber?(args: { serviceId: string; fqdn: string }): Promise<void> | void;
   removeSubscriber?(args: { serviceId: string; fqdn: string }): Promise<void> | void;
-  addPairedSession?(args: { token: string; label: string }): Promise<void> | void;
+  addPairedSession?(args: { token: string }): Promise<void> | void;
   removePairedSession?(args: { token: string }): Promise<void> | void;
   // (claimUrl / releaseUrl removed in N12d — claims now flow app →
   //  daemon → hub via FRAME_REQUEST_TRANSFER, not via PhoneOrder.)
@@ -269,12 +269,11 @@ function parseOrder(r: Record<string, unknown>): PhoneOrder | null {
         issuedAt: r.issuedAt,
       };
     case "add-paired-session":
-      if (typeof r.token !== "string" || typeof r.label !== "string") return null;
+      if (typeof r.token !== "string") return null;
       return {
         type: "add-paired-session",
         serverId: r.serverId,
         token: r.token,
-        label: r.label,
         issuedAt: r.issuedAt,
       };
     case "remove-paired-session":
@@ -352,7 +351,7 @@ async function dispatch(order: PhoneOrder, ex: OrderExecutor): Promise<void> {
       return;
     case "add-paired-session":
       if (!ex.addPairedSession) throw new Error("addPairedSession not implemented");
-      await ex.addPairedSession({ token: order.token, label: order.label });
+      await ex.addPairedSession({ token: order.token });
       return;
     case "remove-paired-session":
       if (!ex.removePairedSession) throw new Error("removePairedSession not implemented");

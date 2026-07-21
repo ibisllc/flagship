@@ -40,7 +40,6 @@ final class RealAccountLoginViewModelTests: XCTestCase {
             kind: kind,
             recovery: .init(present: recoveryPresent, hasFetchGate: false, credentialId: recoveryPresent ? "mock-cred-existing" : nil),
             totpEnrolled: totpEnrolled,
-            trustedDeviceCount: 0,
             demoServer: nil,
             graceModel: grace
         )

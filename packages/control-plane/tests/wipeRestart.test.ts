@@ -337,7 +337,7 @@ describe("handleWipeRestart — v2 device-capability-grant revocation", () => {
     await s.deviceCapabilityGrants.put({
       grantId: "11111111-1111-1111-1111-111111111111",
       username: USERNAME,
-      deviceLabel: "primary",
+      deviceId: "primary",
       devicePubHex: bytesToHex(oldIrk.publicKey),
       scopesJson: '["browse","install-service"]',
       issuedAt: now - 1000,
@@ -348,7 +348,7 @@ describe("handleWipeRestart — v2 device-capability-grant revocation", () => {
     await s.deviceCapabilityGrants.put({
       grantId: "22222222-2222-2222-2222-222222222222",
       username: USERNAME,
-      deviceLabel: "ipad",
+      deviceId: "ipad",
       devicePubHex: bytesToHex(makeKey().publicKey),
       scopesJson: '["browse"]',
       issuedAt: now - 500,

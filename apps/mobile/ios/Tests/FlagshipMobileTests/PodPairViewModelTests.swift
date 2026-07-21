@@ -24,7 +24,6 @@ final class PodPairViewModelTests: XCTestCase {
             client: mock,
             store: s,
             serverDomain: server,
-            label: "iPhone",
             signer: { _ in k },
             now: { 1700 },
             makeToken: { "0011aabb" }
@@ -40,9 +39,9 @@ final class PodPairViewModelTests: XCTestCase {
         XCTAssertEqual(sent.serverDomain, server)
         XCTAssertEqual(sent.request["type"], "add-paired-session")
         XCTAssertEqual(sent.request["token"], "0011aabb")
-        XCTAssertEqual(sent.request["label"], "iPhone")
+        XCTAssertNil(sent.request["label"])
         // The posted signature verifies against the EXACT canonical bytes.
-        let order = AddPairedSessionOrder(serverId: server, token: "0011aabb", label: "iPhone", issuedAt: 1700)
+        let order = AddPairedSessionOrder(serverId: server, token: "0011aabb", issuedAt: 1700)
         let sig = Data(HexUtil.decode(sent.signatureHex)!)
         XCTAssertTrue(k.publicKey.isValidSignature(sig, for: order.canonicalBytes()))
         // The token was persisted ONLY after the POST succeeded.
@@ -75,6 +74,35 @@ final class PodPairViewModelTests: XCTestCase {
         XCTAssertEqual(token, "existing-token")
     }
 
+    /// A BFF 401 proves the per-pod token is stale. The explicit recovery tap
+    /// must replace it instead of taking the normal idempotent no-op path.
+    func testExplicitRepairReplacesRejectedToken() async {
+        let mock = MockLockPowerClient()
+        let s = store()
+        let podId = PodInfo.podId(forFqdn: server)
+        await s.setSessionToken("rejected-token", forPodId: podId)
+        var signerCalled = false
+        let vm = PodPairViewModel(
+            client: mock,
+            store: s,
+            serverDomain: server,
+            signer: { _ in signerCalled = true; return self.key() },
+            now: { 1700 },
+            makeToken: { "replacement-token" }
+        )
+
+        await vm.pair(replacingExistingToken: true)
+
+        XCTAssertEqual(vm.phase, .paired)
+        XCTAssertTrue(signerCalled)
+        XCTAssertEqual(mock.sent.count, 1)
+        XCTAssertEqual(mock.sent[0].request["token"], "replacement-token")
+        let podToken = await s.sessionToken(forPodId: podId)
+        let activeToken = await s.sessionToken
+        XCTAssertEqual(podToken, "replacement-token")
+        XCTAssertEqual(activeToken, "replacement-token")
+    }
+
     /// A non-2xx from the box surfaces as failed AND does NOT persist a token
     /// (so the idempotency guard doesn't later block a real retry).
     func testPostFailureSurfacesAndDoesNotPersist() async {
@@ -103,19 +131,5 @@ final class PodPairViewModelTests: XCTestCase {
         XCTAssertTrue(mock.sent.isEmpty, "must not POST when signing fails")
         let token = await s.sessionToken
         XCTAssertNil(token)
-    }
-
-    /// A device name carrying the canonical separator is sanitized so the
-    /// daemon's `legacyFieldGuard`-on-verify can never reject the order.
-    func testLabelSeparatorIsSanitized() async {
-        let mock = MockLockPowerClient()
-        let s = store()
-        let vm = PodPairViewModel(
-            client: mock, store: s, serverDomain: server,
-            label: "Harry|iPhone", signer: { _ in self.key() }, makeToken: { "tok" }
-        )
-        await vm.pair()
-        XCTAssertEqual(vm.phase, .paired)
-        XCTAssertFalse(mock.sent[0].request["label"]!.contains("|"))
     }
 }

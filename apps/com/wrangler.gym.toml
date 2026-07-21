@@ -109,8 +109,8 @@ name = "BUILD_RELAY"
 class_name = "BuildRelaySession"
 
 [[durable_objects.bindings]]
-name = "BURNER_RELAY"
-class_name = "BurnerRelaySession"
+name = "BUILDER_RELAY"
+class_name = "BuilderRelaySession"
 
 [[migrations]]
 tag = "v1"
@@ -118,7 +118,13 @@ new_sqlite_classes = ["BuildRelaySession"]
 
 [[migrations]]
 tag = "v2"
+# Deployed under the original class name; preserved verbatim, renamed in v3.
 new_sqlite_classes = ["BurnerRelaySession"]
+
+[[migrations]]
+tag = "v3"
+# burner→builder class rename (see apps/com/wrangler.toml). Ephemeral DO.
+renamed_classes = [{ from = "BurnerRelaySession", to = "BuilderRelaySession" }]
 
 [vars]
 # ⭐ THE FLIP (§6.5 / §12-G1): point the apex vars at the `gym.` apex. These are
@@ -152,7 +158,7 @@ BASE_ISO_VERSION = "flagship-alpine-3.21.0-x86_64-apkovl3-debug"
 BASE_ISO_SHA256 = "52bbb7432dade2b6a86be483d00edd95df02a34b84bb4d9ca9a8dfddd71cc653"
 FLAGSHIP_NETBOOT_ISO_URL = "https://flagshipserver.com/build/iso/flagship-netboot-trixie-amd64-v5.iso"
 FLAGSHIP_NETBOOT_ISO_KEY = "flagship-netboot-trixie-amd64-v5.iso"
-FLAGSHIP_ISO_MANIFEST = '{"version":"debian-13.5.0","url":"https://cdimage.debian.org/debian-cd/13.5.0/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso","sha256":"95838884f5ea6c82421dfe6baaa5a639dbbe6756c1e380f9fe7a7cb0c1949d2a","sizeBytes":791674880,"attestation":"https://cdimage.debian.org/debian-cd/13.5.0/amd64/iso-cd/SHA256SUMS"}'
+FLAGSHIP_ISO_MANIFEST = '{"version":"debian-13.6.0","url":"https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso","sha256":"65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7","sizeBytes":791674880,"attestation":"https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/SHA256SUMS"}'
 FLAGSHIP_BASE_ISO_KEY = "flagship-base-alpine-3.21.0-x86_64-apkovl3-debug3.iso"
 # PLACEHOLDER — the gym temp bucket's public dev-url host (PER-BUCKET, differs
 # from prod). After `wrangler r2 bucket dev-url enable flagship-iso-temp-gym`,

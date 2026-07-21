@@ -33,7 +33,7 @@
  *
  *   {
  *     "request":   { "type":"add-paired-session", "serverId":"<fqdn>",
- *                    "token":"<hex>", "label":"<name>", "issuedAt":<ms> },
+ *                    "token":"<hex>", "issuedAt":<ms> },
  *     "signature": "<hex Ed25519 over canonicalPhoneOrder(request), by the owner IRK>"
  *   }
  */
@@ -78,7 +78,6 @@ export function pairingOrderToJson(
       type: request.type,
       serverId: request.serverId,
       token: request.token,
-      label: request.label,
       issuedAt: request.issuedAt,
     },
     signature: hex(signature),
@@ -110,7 +109,6 @@ export function parsePairingOrderEnvelope(json: string): PairingOrderEnvelope | 
     r.type !== "add-paired-session" ||
     typeof r.serverId !== "string" ||
     typeof r.token !== "string" ||
-    typeof r.label !== "string" ||
     typeof r.issuedAt !== "number"
   ) {
     return null;
@@ -120,7 +118,6 @@ export function parsePairingOrderEnvelope(json: string): PairingOrderEnvelope | 
       type: "add-paired-session",
       serverId: r.serverId,
       token: r.token,
-      label: r.label,
       issuedAt: r.issuedAt,
     },
     signature: hexToBytes(o.signature.toLowerCase()),

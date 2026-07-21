@@ -7,7 +7,7 @@
     <uses-permission android:name="android.permission.NFC" />
 
     <uses-feature android:name="android.hardware.strongbox_keystore" android:required="false" />
-    <!-- On-device USB-OTG burner: write a bootable installer to a USB stick via
+    <!-- On-device USB-OTG builder: write a bootable installer to a USB stick via
          the USB Host API (no root). The flow is launched in-app from the
          create-server delivery chooser and requests device permission at
          runtime, so no USB_DEVICE_ATTACHED launch intent-filter is declared

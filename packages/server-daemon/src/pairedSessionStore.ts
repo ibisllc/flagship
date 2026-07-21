@@ -5,11 +5,11 @@
  *
  * Tokens are minted by the phone (random 32-byte hex is the usual
  * choice) and added via the `add-paired-session` PhoneOrder. The
- * daemon stores them with a human-readable label and emit timestamp;
+ * daemon stores them with an emit timestamp;
  * the host can list + revoke specific entries from the phone.
  *
  * On-disk layout: a single JSON file at `<dataDir>/paired-sessions.json`
- * holding `{[token]: {label, addedAt}}`. Atomic write-then-rename keeps
+ * holding `{[token]: {addedAt}}`. Atomic write-then-rename keeps
  * it crash-safe; concurrent writes from a single phone are serialized
  * by the orders handler so there's no contention.
  */
@@ -21,7 +21,6 @@ import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { PairedSessionGate } from "./alertInboxHttp.js";
 
 export interface PairedSession {
-  label: string;
   addedAt: number;
   /**
    * P14 — companion-browser dock. When `true`, this session was minted
@@ -35,8 +34,6 @@ export interface PairedSession {
   companion?: boolean;
   /** Hard-expiry unix-ms for companion sessions. Unused on owner sessions. */
   expiresAt?: number;
-  /** Optional human label captured at redeem time (e.g. "Library iMac"). */
-  companionLabel?: string;
   /** Best-effort User-Agent at redeem time, for the owner's list view. */
   companionUserAgent?: string;
 }
@@ -60,11 +57,10 @@ export class FilePairedSessionStore implements PairedSessionGate {
       const parsed = JSON.parse(raw) as Record<string, PairedSession>;
       this.byToken.clear();
       for (const [tok, info] of Object.entries(parsed)) {
-        if (typeof info?.label === "string" && typeof info.addedAt === "number") {
-          const row: PairedSession = { label: info.label, addedAt: info.addedAt };
+        if (typeof info?.addedAt === "number") {
+          const row: PairedSession = { addedAt: info.addedAt };
           if (info.companion === true) row.companion = true;
           if (typeof info.expiresAt === "number") row.expiresAt = info.expiresAt;
-          if (typeof info.companionLabel === "string") row.companionLabel = info.companionLabel;
           if (typeof info.companionUserAgent === "string") {
             row.companionUserAgent = info.companionUserAgent;
           }
@@ -76,9 +72,9 @@ export class FilePairedSessionStore implements PairedSessionGate {
     }
   }
 
-  async add(token: string, label: string, addedAt: number = Date.now()): Promise<void> {
+  async add(token: string, addedAt: number = Date.now()): Promise<void> {
     if (!token || token.length < 16) throw new Error("token too short");
-    this.byToken.set(token, { label, addedAt });
+    this.byToken.set(token, { addedAt });
     await this.flush();
   }
 
@@ -89,22 +85,16 @@ export class FilePairedSessionStore implements PairedSessionGate {
    */
   async addCompanion(args: {
     token: string;
-    label: string | null;
     addedAt: number;
     expiresAt: number;
     userAgent?: string | null;
   }): Promise<void> {
     if (!args.token || args.token.length < 16) throw new Error("token too short");
     const row: PairedSession = {
-      // The label column is the human label rendered in the
-      // paired-sessions list. We mirror the companion label here so
-      // existing callers (UI / removeAll on recovery) keep working.
-      label: args.label ?? "companion",
       addedAt: args.addedAt,
       companion: true,
       expiresAt: args.expiresAt,
     };
-    if (args.label) row.companionLabel = args.label;
     if (args.userAgent) row.companionUserAgent = args.userAgent;
     this.byToken.set(args.token, row);
     await this.flush();
@@ -124,14 +114,12 @@ export class FilePairedSessionStore implements PairedSessionGate {
    */
   listCompanions(nowMs: number = this.now()): Array<{
     token: string;
-    label: string | null;
     addedAt: number;
     expiresAt: number;
     userAgent?: string;
   }> {
     const out: Array<{
       token: string;
-      label: string | null;
       addedAt: number;
       expiresAt: number;
       userAgent?: string;
@@ -142,13 +130,11 @@ export class FilePairedSessionStore implements PairedSessionGate {
       if (info.expiresAt <= nowMs) continue;
       const row: {
         token: string;
-        label: string | null;
         addedAt: number;
         expiresAt: number;
         userAgent?: string;
       } = {
         token,
-        label: info.companionLabel ?? null,
         addedAt: info.addedAt,
         expiresAt: info.expiresAt,
       };
@@ -181,10 +167,9 @@ export class FilePairedSessionStore implements PairedSessionGate {
     return n;
   }
 
-  list(): Array<{ token: string; label: string; addedAt: number }> {
+  list(): Array<{ token: string; addedAt: number }> {
     return [...this.byToken.entries()].map(([token, info]) => ({
       token,
-      label: info.label,
       addedAt: info.addedAt,
     }));
   }

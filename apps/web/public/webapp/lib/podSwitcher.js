@@ -70,7 +70,16 @@ export const ALL_PODS_BASE_URL = "";
 export function leaderFqdnOf(pods) {
   const list = pods instanceof Map ? [...pods.values()] : Array.isArray(pods) ? pods : [];
   const live = list
-    .filter((p) => String(p?.serverDomain ?? "").trim() && p?.revokedAt == null)
+    .filter((p) => {
+      if (!String(p?.serverDomain ?? "").trim() || p?.revokedAt != null) return false;
+      // Parity with iOS/Android PodSwitcher: a pod that has NEVER come online
+      // (no heartbeat, no cert) is not the leader — otherwise an account whose
+      // earliest-registered box is still provisioning would wear the leader flag
+      // on a box that isn't serving. `cameOnline` uses the SAME predicate as
+      // boxInbox.js: a landed cert OR at least one heartbeat.
+      const cameOnline = p?.lastReported != null || p?.currentCert != null;
+      return cameOnline;
+    })
     .sort((a, b) => (a?.registeredAt ?? 0) - (b?.registeredAt ?? 0));
   return live.length ? String(live[0].serverDomain).trim().toLowerCase() : "";
 }

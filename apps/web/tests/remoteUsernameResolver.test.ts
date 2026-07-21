@@ -11,6 +11,7 @@ import type { FetchLike } from "@flagship/llm-providers";
 
 const harryUmk = { seed: new Uint8Array(32).fill(11) };
 const harryIrk = deriveIRK(harryUmk);
+const harryAdminRoot = deriveIRK({ seed: new Uint8Array(32).fill(12) });
 
 function bytesToHex(b: Uint8Array): string {
   let s = "";
@@ -80,6 +81,53 @@ describe("RemoteUsernameResolver", () => {
     const b = await resolver.lookup("harry");
     expect(b).toEqual(harryIrk.publicKey);
     expect(calls).toBe(1); // second hit was served from cache
+  });
+
+  it("returns the admin root from the same cached username record", async () => {
+    let calls = 0;
+    const fetchImpl: FetchLike = async () => {
+      calls += 1;
+      return {
+        ok: true,
+        status: 200,
+        async text() { return ""; },
+        async json() {
+          return {
+            irkPub: bytesToHex(harryIrk.publicKey),
+            adminRootPub: bytesToHex(harryAdminRoot.publicKey),
+          };
+        },
+      };
+    };
+    const resolver = new RemoteUsernameResolver({
+      comBaseUrl: "https://flagshipserver.com",
+      fetchImpl,
+    });
+
+    const authority = await resolver.lookupAuthority("harry");
+    expect(authority).toEqual({
+      irkPub: harryIrk.publicKey,
+      adminRootPub: harryAdminRoot.publicKey,
+    });
+    expect(await resolver.lookup("harry")).toEqual(harryIrk.publicKey);
+    expect(calls).toBe(1);
+  });
+
+  it("fails closed on a malformed advertised admin root", async () => {
+    const resolver = new RemoteUsernameResolver({
+      comBaseUrl: "https://flagshipserver.com",
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        async text() { return ""; },
+        async json() {
+          return { irkPub: bytesToHex(harryIrk.publicKey), adminRootPub: "bad" };
+        },
+      }),
+    });
+
+    expect(await resolver.lookupAuthority("harry")).toBeNull();
+    expect(await resolver.lookup("harry")).toBeNull();
   });
 
   it("returns null and negative-caches unknown usernames", async () => {

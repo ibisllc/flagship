@@ -276,7 +276,7 @@ fun FSField(
 
 // ── Pill ───────────────────────────────────────────────────────
 
-enum class FSPillKind { Online, Renewing, Offline, Provisioning, Idle }
+enum class FSPillKind { Online, Renewing, Offline, Provisioning, Pending, Idle }
 
 @Composable
 fun FSPill(label: String, kind: FSPillKind, modifier: Modifier = Modifier) {
@@ -285,6 +285,7 @@ fun FSPill(label: String, kind: FSPillKind, modifier: Modifier = Modifier) {
         FSPillKind.Renewing -> FS.colors.warning to FS.colors.warning.copy(alpha = 0.12f)
         FSPillKind.Offline -> FS.colors.danger to FS.colors.danger.copy(alpha = 0.12f)
         FSPillKind.Provisioning -> FS.colors.primary to FS.colors.primary.copy(alpha = 0.12f)
+        FSPillKind.Pending -> FS.colors.warning to FS.colors.warning.copy(alpha = 0.12f)
         FSPillKind.Idle -> FS.colors.textMuted to FS.colors.surfaceSunken
     }
     Row(

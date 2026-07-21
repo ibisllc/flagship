@@ -30,10 +30,12 @@ describe("release-guard.sh — against the real repo (backdoors present in dev)"
   it("dev build (RELEASE unset): reports the backdoors but exits 0", () => {
     const r = run({ RELEASE: "" });
     expect(r.code).toBe(0);
-    // It found the live definitions...
+    // It found the live definition...
     expect(r.stderr).toContain("burn-time LUKS passphrase");
-    expect(r.stderr).toContain("debug console user");
-    // ...and explained that dev is expected to carry them.
+    // ...and explained that dev is expected to carry it. The debug console
+    // user is NOT a finding anymore — grant-gated debug access ships in v1
+    // (owner decision 2026-07-05) from debugAccessGate.ts, which is exempt.
+    expect(r.stderr).not.toContain("debug console user");
     expect(r.stderr).toMatch(/dev\/PR build/);
   });
 
@@ -49,22 +51,19 @@ describe("release-guard.sh — against the real repo (backdoors present in dev)"
     expect(r.code).toBe(1);
   });
 
-  it("flags exactly the load-bearing definitions, not the strip machinery or tests", () => {
+  it("flags exactly the load-bearing definitions, not the strip machinery, tests, or the sanctioned gate", () => {
     // The output lists each finding as a file:line. Descriptive mentions of the
-    // `debug:flagship` marker and the *.test.* assertions must NOT appear — only
-    // the real BURN_PASSPHRASE assignment plus, since the 2026-06-30 console
-    // lockdown, the debug-access gate's known-password constant and its
-    // useradd/chpasswd lines (the Bucket-C item-2 target moved there when the
-    // inline bootstrap bake was removed). Assert none of the tolerated files
-    // leak into the findings.
+    // `debug:flagship` marker, the *.test.* assertions, and the SANCTIONED
+    // grant-gated home (debugAccessGate.ts — a shipping v1 feature since the
+    // 2026-07-05 owner decision) must NOT appear — only the real
+    // BURN_PASSPHRASE assignment (in src and the generated engine copies).
     const r = run({ RELEASE: "" });
     expect(r.stderr).not.toMatch(/\.test\.ts:/);
     expect(r.stderr).not.toMatch(/preseed\.test/);
     expect(r.stderr).not.toMatch(/EngineTests\.swift/);
-    // The flagged lines are the assignment + the gate's password/chpasswd lines.
+    expect(r.stderr).not.toMatch(/debugAccessGate\.ts/);
+    expect(r.stderr).not.toMatch(/chpasswd/);
     expect(r.stderr).toMatch(/userdata\.ts:\d+:export const BURN_PASSPHRASE/);
-    expect(r.stderr).toMatch(/debugAccessGate\.ts:\d+/);
-    expect(r.stderr).toMatch(/chpasswd/);
   });
 });
 
@@ -77,15 +76,15 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
 
   function makeCleanTree(): string {
     const d = mkdtempSync(join(tmpdir(), "release-guard-clean-"));
-    const burnerSrc = join(d, "packages", "flagship-burner", "src");
-    mkdirSync(burnerSrc, { recursive: true });
-    // A burner source file that has done the GA disarm: NO BURN_PASSPHRASE, NO
+    const builderSrc = join(d, "packages", "flagship-builder", "src");
+    mkdirSync(builderSrc, { recursive: true });
+    // A builder source file that has done the GA disarm: NO BURN_PASSPHRASE, NO
     // debug user. It may still carry the stripDebugFeatures defense + a
     // descriptive comment mentioning the marker, which must NOT trip the gate.
     writeFileSync(
-      join(burnerSrc, "userdata.ts"),
+      join(builderSrc, "userdata.ts"),
       [
-        "// Production burner: the debug:flagship account is stripped; this comment",
+        "// Production builder: the debug:flagship account is stripped; this comment",
         "// references the marker but is not the backdoor.",
         "export function stripDebugFeatures(s: string): string {",
         "  return s.replace(/echo 'debug:flagship'/, '');",
@@ -117,11 +116,46 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
     dir = makeCleanTree();
     // Simulate a careless re-add of the passphrase constant.
     writeFileSync(
-      join(dir, "packages", "flagship-burner", "src", "regression.ts"),
-      'export const BURN_PASSPHRASE = "flagship-burn-time-luks-rekey-me-immediately";\n',
+      join(dir, "packages", "flagship-builder", "src", "regression.ts"),
+      'export const BURN_PASSPHRASE = "flagship-build-time-luks-rekey-me-immediately";\n',
     );
     const r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("burn-time LUKS passphrase");
+  });
+
+  it("debug creds OUTSIDE the sanctioned gate still fail RELEASE (inline-bake regression)", () => {
+    dir = makeCleanTree();
+    writeFileSync(
+      join(dir, "packages", "flagship-builder", "src", "inline-bake.ts"),
+      "export const bake = `echo 'debug:flagship' | chpasswd`;\n",
+    );
+    const r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("debug console user");
+  });
+
+  it("the sanctioned gate is exempt — but ONLY while it still verifies the owner grant", () => {
+    dir = makeCleanTree();
+    const gateDir = join(dir, "packages", "server-daemon", "src");
+    mkdirSync(gateDir, { recursive: true });
+    const gateWithVerify = [
+      'import { verifyDebugAccessGrant } from "@flagship/protocol";',
+      'const DEBUG_PASSWORD = "flagship";',
+      "export async function gate() { if (!verifyDebugAccessGrant()) return; }",
+      "",
+    ].join("\n");
+    writeFileSync(join(gateDir, "debugAccessGate.ts"), gateWithVerify);
+    let r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
+    expect(r.code).toBe(0);
+
+    // Strip the verification but keep the creds: the exemption must not hide it.
+    writeFileSync(
+      join(gateDir, "debugAccessGate.ts"),
+      'const DEBUG_PASSWORD = "flagship";\nexport async function gate() {}\n',
+    );
+    r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("no longer verifies the owner grant");
   });
 });

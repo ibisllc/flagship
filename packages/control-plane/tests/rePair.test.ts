@@ -15,6 +15,7 @@ import {
   RE_PAIR_SINGLE_GRACE_MS,
   RE_PAIR_QUARANTINE_MS,
 } from "../src/rePair.js";
+import { computeDevicesEtag } from "../src/deviceDirectoryEtag.js";
 
 const USERNAME = "alice";
 
@@ -191,17 +192,19 @@ describe("re-pair initiate", () => {
     await storage.pushTokens.put({
       tokenId: "deviceA",
       username: USERNAME,
+      deviceId: "00112233445566778899aabbccddeeff",
       platform: "apns",
       providerToken: "p",
       pushX25519PubHex: "01".repeat(32),
       registrationSignatureHex: "00".repeat(64),
-      label: "iPhone",
       registeredAt: 1,
       lastSeenAt: 1,
     });
-    const { handleGetUsersDevices } = await import("../src/usersDevices.js");
-    const { headers } = await handleGetUsersDevices({ pushTokens: storage.pushTokens }, USERNAME);
-    const goodEtag = headers!.etag!;
+    const goodEtag = await computeDevicesEtag([{
+      deviceId: "00112233445566778899aabbccddeeff",
+      platform: "apns",
+      addedAt: 1,
+    }]);
     const res = await handleInitiateRePair(
       { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs, pushTokens: storage.pushTokens },
       USERNAME,
@@ -675,11 +678,11 @@ describe("v1.2 Phase 2 — 14-day quarantine", () => {
     await s.pushTokens.put({
       tokenId: args.tokenId,
       username: USERNAME,
+      deviceId: "10112233445566778899aabbccddeeff",
       platform: "apns",
       providerToken: "p",
       pushX25519PubHex: "01".repeat(32),
       registrationSignatureHex: "00".repeat(64),
-      label: "device",
       registeredAt: 1,
       lastSeenAt: 1,
       quarantineUntil: args.quarantineUntil ?? 0,
@@ -1185,11 +1188,11 @@ describe("v1.2 Plan B Phase 5 — audit emissions on re-pair", () => {
     await storage.pushTokens.put({
       tokenId: "oldDevice",
       username: USERNAME,
+      deviceId: "20112233445566778899aabbccddeeff",
       platform: "apns",
       providerToken: "providerOld",
       pushX25519PubHex: "01".repeat(32),
       registrationSignatureHex: "00".repeat(64),
-      label: "Old iPhone",
       registeredAt: 1,
       lastSeenAt: 1,
     });
@@ -1228,11 +1231,11 @@ describe("v1.2 Plan B Phase 5 — audit emissions on re-pair", () => {
     await storage.pushTokens.put({
       tokenId: "trusted",
       username: USERNAME,
+      deviceId: "30112233445566778899aabbccddeeff",
       platform: "apns",
       providerToken: "providerTrust",
       pushX25519PubHex: "01".repeat(32),
       registrationSignatureHex: "00".repeat(64),
-      label: "Trusted iPhone",
       registeredAt: 1,
       lastSeenAt: 1,
     });
@@ -1296,7 +1299,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const grantA: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000001",
       username: USERNAME,
-      deviceLabel: "ipad",
+      deviceId: "01".repeat(16),
       devicePubKey: devA.publicKey,
       scopes: ["browse"],
       issuedAt: 1,
@@ -1305,7 +1308,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const grantB: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000002",
       username: USERNAME,
-      deviceLabel: "laptop",
+      deviceId: "02".repeat(16),
       devicePubKey: devB.publicKey,
       scopes: ["browse", "install-service"],
       issuedAt: 1,
@@ -1316,7 +1319,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     await storage.deviceCapabilityGrants.put({
       grantId: grantA.grantId,
       username: USERNAME,
-      deviceLabel: grantA.deviceLabel,
+      deviceId: grantA.deviceId,
       devicePubHex: bytesToHex(devA.publicKey),
       scopesJson: JSON.stringify(grantA.scopes),
       issuedAt: grantA.issuedAt,
@@ -1327,7 +1330,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     await storage.deviceCapabilityGrants.put({
       grantId: grantB.grantId,
       username: USERNAME,
-      deviceLabel: grantB.deviceLabel,
+      deviceId: grantB.deviceId,
       devicePubHex: bytesToHex(devB.publicKey),
       scopesJson: JSON.stringify(grantB.scopes),
       issuedAt: grantB.issuedAt,
@@ -1362,7 +1365,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const oldGrant: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000010",
       username: USERNAME,
-      deviceLabel: "ipad",
+      deviceId: "03".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse", "install-service"],
       issuedAt: 1,
@@ -1372,7 +1375,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     await storage.deviceCapabilityGrants.put({
       grantId: oldGrant.grantId,
       username: USERNAME,
-      deviceLabel: oldGrant.deviceLabel,
+      deviceId: oldGrant.deviceId,
       devicePubHex: bytesToHex(dev.publicKey),
       scopesJson: JSON.stringify(oldGrant.scopes),
       issuedAt: oldGrant.issuedAt,
@@ -1386,7 +1389,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const refreshed: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000011",
       username: USERNAME,
-      deviceLabel: "ipad",
+      deviceId: "03".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse", "install-service"],
       issuedAt: 2,
@@ -1408,7 +1411,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
         refreshedGrants: [
           {
             grantId: refreshed.grantId,
-            deviceLabel: refreshed.deviceLabel,
+            deviceId: refreshed.deviceId,
             devicePubKey: bytesToHex(refreshed.devicePubKey),
             scopes: refreshed.scopes,
             issuedAt: refreshed.issuedAt,
@@ -1441,7 +1444,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const oldGrant: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000020",
       username: USERNAME,
-      deviceLabel: "ipad",
+      deviceId: "04".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse"],
       issuedAt: 1,
@@ -1450,7 +1453,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     await storage.deviceCapabilityGrants.put({
       grantId: oldGrant.grantId,
       username: USERNAME,
-      deviceLabel: oldGrant.deviceLabel,
+      deviceId: oldGrant.deviceId,
       devicePubHex: bytesToHex(dev.publicKey),
       scopesJson: JSON.stringify(oldGrant.scopes),
       issuedAt: oldGrant.issuedAt,
@@ -1464,7 +1467,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const inflated: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000021",
       username: USERNAME,
-      deviceLabel: "ipad",
+      deviceId: "04".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse", "install-service"] as DeviceScope[],
       issuedAt: 2,
@@ -1486,7 +1489,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
         refreshedGrants: [
           {
             grantId: inflated.grantId,
-            deviceLabel: inflated.deviceLabel,
+            deviceId: inflated.deviceId,
             devicePubKey: bytesToHex(inflated.devicePubKey),
             scopes: inflated.scopes,
             issuedAt: inflated.issuedAt,
@@ -1517,7 +1520,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const phantom: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000030",
       username: USERNAME,
-      deviceLabel: "ghost",
+      deviceId: "05".repeat(16),
       devicePubKey: unknownDev.publicKey,
       scopes: ["browse"],
       issuedAt: 2,
@@ -1539,7 +1542,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
         refreshedGrants: [
           {
             grantId: phantom.grantId,
-            deviceLabel: phantom.deviceLabel,
+            deviceId: phantom.deviceId,
             devicePubKey: bytesToHex(phantom.devicePubKey),
             scopes: phantom.scopes,
             issuedAt: phantom.issuedAt,
@@ -1564,7 +1567,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const oldGrant: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000040",
       username: USERNAME,
-      deviceLabel: "ipad",
+      deviceId: "06".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse"],
       issuedAt: 1,
@@ -1573,7 +1576,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     await storage.deviceCapabilityGrants.put({
       grantId: oldGrant.grantId,
       username: USERNAME,
-      deviceLabel: oldGrant.deviceLabel,
+      deviceId: oldGrant.deviceId,
       devicePubHex: bytesToHex(dev.publicKey),
       scopesJson: JSON.stringify(oldGrant.scopes),
       issuedAt: oldGrant.issuedAt,
@@ -1585,7 +1588,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const refreshed: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000041",
       username: USERNAME,
-      deviceLabel: "ipad",
+      deviceId: "06".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse"],
       issuedAt: 2,
@@ -1607,7 +1610,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
         refreshedGrants: [
           {
             grantId: refreshed.grantId,
-            deviceLabel: refreshed.deviceLabel,
+            deviceId: refreshed.deviceId,
             devicePubKey: bytesToHex(refreshed.devicePubKey),
             scopes: refreshed.scopes,
             issuedAt: refreshed.issuedAt,
@@ -1640,7 +1643,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const oldGrant: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000050",
       username: USERNAME,
-      deviceLabel: "ipad",
+      deviceId: "07".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse"],
       issuedAt: 1,
@@ -1649,7 +1652,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     await storage.deviceCapabilityGrants.put({
       grantId: oldGrant.grantId,
       username: USERNAME,
-      deviceLabel: oldGrant.deviceLabel,
+      deviceId: oldGrant.deviceId,
       devicePubHex: bytesToHex(dev.publicKey),
       scopesJson: JSON.stringify(oldGrant.scopes),
       issuedAt: oldGrant.issuedAt,

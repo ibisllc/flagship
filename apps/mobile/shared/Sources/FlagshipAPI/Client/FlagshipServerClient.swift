@@ -17,6 +17,7 @@ import CryptoKit
 /// Each request body is a signed canonical-bytes envelope using the
 /// device's IRK (derived via Flagship/Keystore.deriveIRK).
 public protocol FlagshipServerClient: Sendable {
+    func bootstrapAccount(_ req: AccountBootstrapRequest) async throws -> AccountBootstrapResponse
     func claimUsername(_ req: UsernameClaimRequest) async throws
     func issueAuthCode(_ req: AuthCodeIssueRequest) async throws
     func registerRck(_ req: RckRegisterRequest) async throws
@@ -92,12 +93,20 @@ public protocol FlagshipServerClient: Sendable {
     /// the beginning; subsequent polls pass the response's
     /// `cursor`. Worker side: GET /api/install-events/<serial>?since=N.
     func getInstallEvents(serial: String, since: Int) async throws -> InstallEventsPollResponse
-    /// List the peer-class trusted devices on the user's account.
-    /// Returns the ETag the Worker computed so the caller can pass it
-    /// as If-Match on revocation / rotation requests. Worker side:
-    /// GET /api/users/:u/devices.
-    func listDevices(username: String) async throws -> TrustedDevicesListResponse
-
+    /// Fetch the encrypted, account-scoped device directory. The caller
+    /// supplies a fresh device signature over the canonical method/path,
+    /// account, request ID, and timestamp. The response contains machine
+    /// metadata and ciphertext only; clients decrypt presentation names
+    /// locally after unlock.
+    func accountDirectory(
+        accountId: String,
+        authorization: AccountDirectoryAuthorization
+    ) async throws -> AccountDirectoryResponse
+    func putAccountProfile(accountId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) async throws
+    func putDeviceSelfProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) async throws
+    func putDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryManagedProfileWriteRequest) async throws
+    func deleteDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, expectedRevision: Int64) async throws
+    func revokeAccountDevice(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization) async throws
     /// Watch delegate keys — opt-in "quick approve a box boot from the Watch".
     /// The phone mints an IRK-signed `WatchDelegateKey` (scoped boot-approval,
     /// 7-day TTL) and registers it; the boot worker then accepts the delegate
@@ -273,6 +282,24 @@ public protocol FlagshipServerClient: Sendable {
         username: String,
         body: AdminRootRotationRequest
     ) async throws -> AdminRootRotationResponse
+}
+
+public extension FlagshipServerClient {
+    func bootstrapAccount(_ req: AccountBootstrapRequest) async throws -> AccountBootstrapResponse {
+        throw ScreensClientError.http(status: 501, message: "account bootstrap unavailable")
+    }
+
+    func accountDirectory(
+        accountId: String,
+        authorization: AccountDirectoryAuthorization
+    ) async throws -> AccountDirectoryResponse {
+        throw ScreensClientError.http(status: 501, message: "account directory unavailable")
+    }
+    func putAccountProfile(accountId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) async throws { throw ScreensClientError.http(status: 501, message: "account directory unavailable") }
+    func putDeviceSelfProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) async throws { throw ScreensClientError.http(status: 501, message: "account directory unavailable") }
+    func putDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryManagedProfileWriteRequest) async throws { throw ScreensClientError.http(status: 501, message: "account directory unavailable") }
+    func deleteDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, expectedRevision: Int64) async throws { throw ScreensClientError.http(status: 501, message: "account directory unavailable") }
+    func revokeAccountDevice(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization) async throws { throw ScreensClientError.http(status: 501, message: "account directory unavailable") }
 }
 
 /// Slice D §5 — the `POST /api/users/:username/admin-root-rotation` body:
@@ -628,44 +655,169 @@ public struct AuditEventListResponse: Codable, Equatable, Sendable {
     public init(events: [AuditEvent]) { self.events = events }
 }
 
-public struct TrustedDevice: Codable, Equatable, Sendable, Identifiable {
-    public let tokenId: String
-    public let tokenPrefix: String
-    public let label: String
-    public let platform: String   // "apns" | "fcm" | "webpush"
-    public let addedAt: Int64
-    public let lastSeenAt: Int64
-    /// v1.2 Phase 4 — wall-clock ms before which this device cannot
-    /// revoke another device on the account. Nil / 0 / past = the
-    /// 14-day quarantine has elapsed (or never applied), so Remove
-    /// / Replace flow as normal. A future value means the row was
-    /// freshly admitted and the UI must show a clock indicator +
-    /// gate the destructive actions.
-    public let quarantineUntil: Int64?
+public struct AccountDirectoryAuthorization: Equatable, Sendable {
+    public let deviceId: String
+    public let signerPubHex: String
+    public let requestId: String
+    public let issuedAt: Int64
+    public let signatureHex: String
 
-    public var id: String { tokenId }
-
-    /// Convenience for the UI — returns true iff the quarantine
-    /// window is in the future relative to `now`. Surfacing here so
-    /// view code doesn't replicate the `> now` comparison everywhere.
-    public func isQuarantined(now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) -> Bool {
-        guard let until = quarantineUntil, until > 0 else { return false }
-        return until > now
+    public init(deviceId: String, signerPubHex: String, requestId: String, issuedAt: Int64, signatureHex: String) {
+        self.deviceId = deviceId
+        self.signerPubHex = signerPubHex
+        self.requestId = requestId
+        self.issuedAt = issuedAt
+        self.signatureHex = signatureHex
     }
+}
+
+public struct DirectoryProfileEnvelope: Codable, Equatable, Sendable {
+    public let accountId: String
+    public let deviceId: String?
+    public let revision: Int64
+    public let keyVersion: Int64
+    public let nonceHex: String
+    public let ciphertextHex: String
+    public let issuedAt: Int64
+    public let signerPubHex: String
+    public let signatureHex: String
+    public init(accountId: String, deviceId: String? = nil, revision: Int64, keyVersion: Int64, nonceHex: String, ciphertextHex: String, issuedAt: Int64, signerPubHex: String, signatureHex: String) {
+        self.accountId = accountId; self.deviceId = deviceId; self.revision = revision
+        self.keyVersion = keyVersion; self.nonceHex = nonceHex; self.ciphertextHex = ciphertextHex
+        self.issuedAt = issuedAt; self.signerPubHex = signerPubHex; self.signatureHex = signatureHex
+    }
+}
+
+public struct DirectoryManagedProfileEnvelope: Codable, Equatable, Sendable {
+    public let accountId: String
+    public let deviceId: String
+    public let revision: Int64
+    public let keyVersion: Int64
+    public let nonceHex: String
+    public let ciphertextHex: String
+    public let locked: Bool
+    public let issuedAt: Int64
+    public let signerPubHex: String
+    public let signatureHex: String
+    public init(accountId: String, deviceId: String, revision: Int64, keyVersion: Int64, nonceHex: String, ciphertextHex: String, locked: Bool, issuedAt: Int64, signerPubHex: String, signatureHex: String) {
+        self.accountId = accountId; self.deviceId = deviceId; self.revision = revision
+        self.keyVersion = keyVersion; self.nonceHex = nonceHex; self.ciphertextHex = ciphertextHex
+        self.locked = locked; self.issuedAt = issuedAt; self.signerPubHex = signerPubHex
+        self.signatureHex = signatureHex
+    }
+}
+
+public struct DirectoryProfileWriteRequest: Codable, Equatable, Sendable {
+    public let profile: DirectoryProfileEnvelope
+    public let expectedRevision: Int64
+    public init(profile: DirectoryProfileEnvelope, expectedRevision: Int64) {
+        self.profile = profile; self.expectedRevision = expectedRevision
+    }
+}
+
+public struct DirectoryManagedProfileWriteRequest: Codable, Equatable, Sendable {
+    public let profile: DirectoryManagedProfileEnvelope
+    public let expectedRevision: Int64
+    public init(profile: DirectoryManagedProfileEnvelope, expectedRevision: Int64) {
+        self.profile = profile; self.expectedRevision = expectedRevision
+    }
+}
+
+private struct DirectoryDeleteRequest: Codable { let expectedRevision: Int64 }
+
+public struct AccountDirectoryAccountProfile: Codable, Equatable, Sendable {
+    public let accountId: String
+    public let revision: Int64
+    public let keyVersion: Int64
+    public let nonceHex: String
+    public let ciphertextHex: String
+    public let signerPubHex: String
+    public let signatureHex: String
+    public let issuedAt: Int64
+    public let updatedAt: Int64
+}
+
+public struct AccountDirectoryDevice: Codable, Equatable, Sendable, Identifiable {
+    public let accountId: String
+    public let deviceId: String
+    public let devicePubHex: String
+    public let platformClass: String?
+    public let createdAt: Int64
+    public let lastSeenAt: Int64
+    public let revokedAt: Int64?
+    public let supportCode: String
+    public var id: String { deviceId }
+}
+
+public struct AccountDirectoryGrant: Codable, Equatable, Sendable {
+    public let grantId: String
+    public let username: String
+    public let deviceId: String
+    public let devicePubHex: String
+    public let scopesJson: String
+    public let issuedAt: Int64
+    public let expiresAt: Int64
+    public let signatureHex: String
+    public let revokedAt: Int64?
+    public let signerRoot: String
+
+    public var scopes: Set<String> {
+        guard let data = scopesJson.data(using: .utf8),
+              let values = try? JSONDecoder().decode([String].self, from: data)
+        else { return [] }
+        return Set(values)
+    }
+}
+
+public struct AccountDirectorySelfProfile: Codable, Equatable, Sendable {
+    public let accountId: String
+    public let deviceId: String
+    public let revision: Int64
+    public let keyVersion: Int64
+    public let nonceHex: String
+    public let ciphertextHex: String
+    public let signerPubHex: String
+    public let signatureHex: String
+    public let issuedAt: Int64
+    public let updatedAt: Int64
+}
+
+public struct AccountDirectoryManagedProfile: Codable, Equatable, Sendable {
+    public let accountId: String
+    public let deviceId: String
+    public let revision: Int64
+    public let keyVersion: Int64
+    public let nonceHex: String
+    public let ciphertextHex: String
+    public let locked: Bool
+    public let signerPubHex: String
+    public let signatureHex: String
+    public let issuedAt: Int64
+    public let updatedAt: Int64
+}
+
+public struct AccountDirectoryResponse: Codable, Equatable, Sendable {
+    public let accountId: String
+    public let accountProfile: AccountDirectoryAccountProfile?
+    public let devices: [AccountDirectoryDevice]
+    public let grants: [AccountDirectoryGrant]
+    public let selfProfiles: [AccountDirectorySelfProfile]
+    public let managedProfiles: [AccountDirectoryManagedProfile]
 
     public init(
-        tokenId: String,
-        tokenPrefix: String,
-        label: String,
-        platform: String,
-        addedAt: Int64,
-        lastSeenAt: Int64,
-        quarantineUntil: Int64? = nil
+        accountId: String,
+        accountProfile: AccountDirectoryAccountProfile?,
+        devices: [AccountDirectoryDevice],
+        grants: [AccountDirectoryGrant],
+        selfProfiles: [AccountDirectorySelfProfile],
+        managedProfiles: [AccountDirectoryManagedProfile]
     ) {
-        self.tokenId = tokenId; self.tokenPrefix = tokenPrefix
-        self.label = label; self.platform = platform
-        self.addedAt = addedAt; self.lastSeenAt = lastSeenAt
-        self.quarantineUntil = quarantineUntil
+        self.accountId = accountId
+        self.accountProfile = accountProfile
+        self.devices = devices
+        self.grants = grants
+        self.selfProfiles = selfProfiles
+        self.managedProfiles = managedProfiles
     }
 }
 
@@ -791,26 +943,6 @@ public struct TotpDisableResponse: Decodable, Equatable, Sendable {
     public let ok: Bool
     /// Always "single" on success.
     public let accountType: String
-}
-
-/// Response wrapper that surfaces the ETag header alongside the body.
-/// Callers feed the ETag to subsequent /re-pair / Disconnect requests
-/// as If-Match to fence against another device joining mid-revoke.
-public struct TrustedDevicesListResponse: Equatable, Sendable {
-    public let devices: [TrustedDevice]
-    /// Server-supplied ETag for the snapshot (form `W/"hex"`). Nil
-    /// only when the Mock impl didn't compute one.
-    public let etag: String?
-
-    public init(devices: [TrustedDevice], etag: String?) {
-        self.devices = devices; self.etag = etag
-    }
-}
-
-/// On-wire body shape — separate from TrustedDevicesListResponse so
-/// the ETag (header, not body) doesn't leak into Codable.
-private struct TrustedDevicesWireBody: Codable {
-    let devices: [TrustedDevice]
 }
 
 /// On-wire body for GET /api/users/:u/re-pair — the Worker wraps the
@@ -1033,31 +1165,23 @@ public struct ProvisionStatus: Codable, Equatable, Sendable {
     }
 }
 
-/// POST /api/push/register — IRK-signed registration of an APNs (or FCM,
-/// or webpush) provider token + a per-device X25519 pubkey. Canonical
-/// bytes spec lives in packages/protocol/src/auth.ts
-/// `TAG_PUSH_TOKEN_REGISTER`; iOS computes the same string via
-/// `PushTokenRegister.canonicalBytes(...)` in Flagship/InstallBlob.swift.
+/// POST /api/push/register — IRK-signed registration of a provider token
+/// bound to the immutable account-scoped device identity.
 public struct PushTokenRegisterRequest: Codable, Equatable, Sendable {
     public struct Inner: Codable, Equatable, Sendable {
         public let username: String
+        public let deviceId: String
         public let platform: String            // "apns" | "fcm" | "webpush"
         public let providerToken: String       // APNs hex token (lowercased)
         public let pushX25519Pub: String       // hex
-        /// User-facing device label (e.g. "Harry's iPhone"). Surfaced
-        /// in the Trusted-devices list on .com. Must be part of the
-        /// canonical bytes the IRK signs — the field slots between
-        /// pushX25519Pub and issuedAt to match the Worker side.
-        public let label: String
         public let issuedAt: Int64
         public init(
-            username: String, platform: String, providerToken: String,
-            pushX25519Pub: String, label: String, issuedAt: Int64
+            username: String, deviceId: String, platform: String,
+            providerToken: String, pushX25519Pub: String, issuedAt: Int64
         ) {
-            self.username = username; self.platform = platform
+            self.username = username; self.deviceId = deviceId; self.platform = platform
             self.providerToken = providerToken
             self.pushX25519Pub = pushX25519Pub
-            self.label = label
             self.issuedAt = issuedAt
         }
     }
@@ -1105,26 +1229,52 @@ public struct PushTokenRevokeRequest: Codable, Equatable, Sendable {
 public struct DeviceAdmitRequest: Codable, Equatable, Sendable {
     public struct Admit: Codable, Equatable, Sendable {
         public let username: String
+        public let deviceId: String
         public let newDevicePubHex: String   // lowercased hex, 32 bytes
         public let issuedAt: Int64
-        public init(username: String, newDevicePubHex: String, issuedAt: Int64) {
+        public init(username: String, deviceId: String, newDevicePubHex: String, issuedAt: Int64) {
             self.username = username
+            self.deviceId = deviceId
             self.newDevicePubHex = newDevicePubHex
             self.issuedAt = issuedAt
         }
     }
+    public struct Grant: Codable, Equatable, Sendable {
+        public let grantId: String
+        public let username: String
+        public let deviceId: String
+        public let devicePubHex: String
+        public let scopes: [String]
+        public let issuedAt: Int64
+        public let expiresAt: Int64
+        public let signerRoot: String
+        public init(grantId: String, username: String, deviceId: String, devicePubHex: String, scopes: [String], issuedAt: Int64, expiresAt: Int64, signerRoot: String) {
+            self.grantId = grantId; self.username = username; self.deviceId = deviceId
+            self.devicePubHex = devicePubHex; self.scopes = scopes; self.issuedAt = issuedAt
+            self.expiresAt = expiresAt; self.signerRoot = signerRoot
+        }
+    }
     public let admit: Admit
     public let admitSig: String                    // hex; Ed25519 by account IRK
+    public let grant: Grant
+    public let grantSignature: String
+    public let profile: AccountBootstrapRequest.Profile
     public let request: PushTokenRegisterRequest.Inner
     public let signature: String                   // hex; carried, not verified
     public init(
         admit: Admit,
         admitSig: String,
+        grant: Grant,
+        grantSignature: String,
+        profile: AccountBootstrapRequest.Profile,
         request: PushTokenRegisterRequest.Inner,
         signature: String
     ) {
         self.admit = admit
         self.admitSig = admitSig
+        self.grant = grant
+        self.grantSignature = grantSignature
+        self.profile = profile
         self.request = request
         self.signature = signature
     }
@@ -1381,6 +1531,78 @@ public struct UsernameClaimRequest: Codable, Equatable, Sendable {
     }
 }
 
+public struct AccountBootstrapRequest: Codable, Equatable, Sendable {
+    public struct Claim: Codable, Equatable, Sendable {
+        public let request: UsernameClaimRequest.Inner
+        public let signature: String
+        public init(request: UsernameClaimRequest.Inner, signature: String) {
+            self.request = request
+            self.signature = signature
+        }
+    }
+    public struct Device: Codable, Equatable, Sendable {
+        public let deviceId: String
+        public let devicePubHex: String
+        public let platformClass: String
+        public init(deviceId: String, devicePubHex: String, platformClass: String) {
+            self.deviceId = deviceId
+            self.devicePubHex = devicePubHex
+            self.platformClass = platformClass
+        }
+    }
+    public struct Grant: Codable, Equatable, Sendable {
+        public let grantId: String
+        public let username: String
+        public let deviceId: String
+        public let devicePubHex: String
+        public let scopes: [String]
+        public let issuedAt: Int64
+        public let expiresAt: Int64
+        public let signatureHex: String
+        public init(grantId: String, username: String, deviceId: String, devicePubHex: String, scopes: [String], issuedAt: Int64, expiresAt: Int64, signatureHex: String) {
+            self.grantId = grantId; self.username = username; self.deviceId = deviceId
+            self.devicePubHex = devicePubHex; self.scopes = scopes; self.issuedAt = issuedAt
+            self.expiresAt = expiresAt; self.signatureHex = signatureHex
+        }
+    }
+    public struct Profile: Codable, Equatable, Sendable {
+        public let accountId: String
+        public let deviceId: String?
+        public let revision: Int64
+        public let keyVersion: Int64
+        public let nonceHex: String
+        public let ciphertextHex: String
+        public let issuedAt: Int64
+        public let signerPubHex: String
+        public let signatureHex: String
+        public init(accountId: String, deviceId: String? = nil, revision: Int64, keyVersion: Int64, nonceHex: String, ciphertextHex: String, issuedAt: Int64, signerPubHex: String, signatureHex: String) {
+            self.accountId = accountId; self.deviceId = deviceId; self.revision = revision
+            self.keyVersion = keyVersion; self.nonceHex = nonceHex; self.ciphertextHex = ciphertextHex
+            self.issuedAt = issuedAt; self.signerPubHex = signerPubHex; self.signatureHex = signatureHex
+        }
+    }
+    public let claim: Claim
+    public let aidPub: String
+    public let adminRootPub: String
+    public let device: Device
+    public let grant: Grant
+    public let accountProfile: Profile
+    public let deviceProfile: Profile
+    public init(claim: Claim, aidPub: String, adminRootPub: String, device: Device, grant: Grant, accountProfile: Profile, deviceProfile: Profile) {
+        self.claim = claim; self.aidPub = aidPub; self.adminRootPub = adminRootPub
+        self.device = device; self.grant = grant; self.accountProfile = accountProfile
+        self.deviceProfile = deviceProfile
+    }
+}
+
+public struct AccountBootstrapResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let username: String
+    public let accountId: String
+    public let deviceId: String
+    public let created: Bool
+}
+
 /// POST /api/auth-code/issue — registers a serial-keyed AuthCode that
 /// authorizes the freshly-booted server to register itself.
 public struct AuthCodeIssueRequest: Codable, Equatable, Sendable {
@@ -1482,26 +1704,16 @@ public struct UsernameAvailabilityResponse: Codable, Equatable, Sendable {
     /// legacy (testAccount-only) behaviour preserved. See
     /// docs/sample-users.md §10.9.
     public let demoServer: DemoServerBlock?
-    /// v2 device-addressing — present when the typed username matched
-    /// the `<u>.<device-label>` syntax AND a matching active grant
-    /// exists in `device_capability_grants` on the Worker. The mobile
-    /// client treats this as a strong declaration of "you are a
-    /// restricted device under this user" and greys out actions
-    /// absent from `scopes`. See
-    /// docs/v2-device-addressing-and-real-ticket.md §5.1.
-    public let deviceCapability: DeviceCapabilityBlock?
     public init(
         username: String,
         available: Bool,
         reason: String?,
         testAccount: TestAccountMeta? = nil,
-        demoServer: DemoServerBlock? = nil,
-        deviceCapability: DeviceCapabilityBlock? = nil
+        demoServer: DemoServerBlock? = nil
     ) {
         self.username = username; self.available = available; self.reason = reason
         self.testAccount = testAccount
         self.demoServer = demoServer
-        self.deviceCapability = deviceCapability
     }
 }
 
@@ -1593,18 +1805,9 @@ public struct DemoServerBlock: Codable, Equatable, Hashable, Sendable {
     }
 }
 
-/// v2 device-addressing — mirror of the Worker's `deviceCapability`
-/// block in `packages/control-plane/src/usersCheck.ts`. Embedded into
-/// the `/api/users/check` response when the typed username matched
-/// the `<u>.<device-label>` syntax AND a matching active
-/// DeviceCapabilityGrant exists. See
-/// docs/v2-device-addressing-and-real-ticket.md §2 + §5.1.
+/// Immutable account-scoped machine identity and its capability grant.
 public struct DeviceCapabilityBlock: Codable, Equatable, Sendable {
-    /// Human-meaningful label the user typed after the dot
-    /// ("reviewer", "ipad", "work-laptop"). RFC-1035-ish (a-z, 0-9,
-    /// hyphen; not at start/end; ≤24 chars). Used in the chip below
-    /// the username.
-    public let label: String
+    public let deviceId: String
     /// Device's Ed25519 pubkey, 32 bytes hex. Identifies the device
     /// across re-issuance. Not displayed in the UI; the client uses
     /// it when signing requests on behalf of this device.
@@ -1627,14 +1830,14 @@ public struct DeviceCapabilityBlock: Codable, Equatable, Sendable {
     public let signature: String
 
     public init(
-        label: String,
+        deviceId: String,
         devicePubKey: String,
         scopes: [DeviceScope],
         grantId: String,
         expiresAt: Int64,
         signature: String
     ) {
-        self.label = label
+        self.deviceId = deviceId
         self.devicePubKey = devicePubKey
         self.scopes = scopes
         self.grantId = grantId
@@ -1648,12 +1851,12 @@ public struct DeviceCapabilityBlock: Codable, Equatable, Sendable {
     /// daemon does the authoritative enforcement; this UI-layer parse
     /// is best-effort for rendering.
     private enum CodingKeys: String, CodingKey {
-        case label, devicePubKey, scopes, grantId, expiresAt, signature
+        case deviceId, devicePubKey, scopes, grantId, expiresAt, signature
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.label = try c.decode(String.self, forKey: .label)
+        self.deviceId = try c.decode(String.self, forKey: .deviceId)
         self.devicePubKey = try c.decode(String.self, forKey: .devicePubKey)
         self.grantId = try c.decode(String.self, forKey: .grantId)
         self.expiresAt = try c.decode(Int64.self, forKey: .expiresAt)
@@ -1686,6 +1889,7 @@ public enum DeviceScope: String, Codable, Equatable, Sendable, CaseIterable {
     case addDevice = "add-device"
     case manageServices = "manage-services"
     case revokeOthers = "revoke-others"
+    case viewDirectory = "view-directory"
     case demoProvision = "demo-provision"
 
     /// Decoder that tolerates unknown future strings: an unrecognised
@@ -1757,7 +1961,6 @@ public struct AccountResolution: Codable, Equatable, Hashable, Sendable {
     public let kind: Kind
     public let recovery: Recovery
     public let totpEnrolled: Bool
-    public let trustedDeviceCount: Int
     /// Present only for demo accounts. Same shape /api/users/check
     /// returns today.
     public let demoServer: DemoServerBlock?
@@ -1769,7 +1972,6 @@ public struct AccountResolution: Codable, Equatable, Hashable, Sendable {
         kind: Kind,
         recovery: Recovery,
         totpEnrolled: Bool,
-        trustedDeviceCount: Int,
         demoServer: DemoServerBlock? = nil,
         graceModel: GraceModel
     ) {
@@ -1778,7 +1980,6 @@ public struct AccountResolution: Codable, Equatable, Hashable, Sendable {
         self.kind = kind
         self.recovery = recovery
         self.totpEnrolled = totpEnrolled
-        self.trustedDeviceCount = trustedDeviceCount
         self.demoServer = demoServer
         self.graceModel = graceModel
     }
@@ -1793,7 +1994,6 @@ public struct AccountResolution: Codable, Equatable, Hashable, Sendable {
             kind: .unknown,
             recovery: Recovery(present: false, hasFetchGate: false),
             totpEnrolled: false,
-            trustedDeviceCount: 0,
             demoServer: nil,
             graceModel: .none
         )
@@ -1985,15 +2185,6 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// — a username may carry both (legacy reviewer compat) or just
     /// the new block (live demo only).
     public var demoServers: [String: DemoServerBlock] = [:]
-    /// v2 device-addressing — mirror of the Worker's
-    /// `device_capability_grants` D1 table. Keyed by the full
-    /// `<u>.<label>` string the user types. When `usernameAvailable`
-    /// is called with a key here AND the user-part has a `demoServers`
-    /// row, the response carries the `deviceCapability` block + the
-    /// `demoServer` block from the user-part row (the underlying
-    /// demo server the device is observing). See
-    /// docs/v2-device-addressing-and-real-ticket.md §5.1.
-    public var deviceCapabilities: [String: DeviceCapabilityBlock] = [:]
     private var recoveryStore: [String: RecoveryEnvelope] = [:]
     /// Username-keyed mirror of the Worker's `webauthn_recovery` row,
     /// holding the Task #74 passphrase-gate hashes so the gated fetch can
@@ -2017,6 +2208,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// Tracks usernames that have been claimed so the mock can return
     /// 409 on a second different-IRK claim (idempotent under same IRK).
     public private(set) var claimedUsernames: [String: String] = [:]   // username → irkPub
+    public private(set) var bootstrappedAccounts: [String: AccountBootstrapRequest] = [:]
     public private(set) var issuedAuthCodes: [String: AuthCodeWire] = [:]   // serial → wire
     public private(set) var revokedAuthCodes: Set<String> = []        // serial set
     public private(set) var releasedServerNames: [ReleaseServerNameRequest] = [] // recorded releases
@@ -2048,6 +2240,17 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: 409, message: "username taken")
         }
         claimedUsernames[u] = req.request.irkPub
+    }
+
+    public func bootstrapAccount(_ req: AccountBootstrapRequest) async throws -> AccountBootstrapResponse {
+        try await tick()
+        let username = req.claim.request.username.lowercased()
+        if let prior = bootstrappedAccounts[username], prior != req {
+            throw ScreensClientError.http(status: 409, message: "username taken")
+        }
+        bootstrappedAccounts[username] = req
+        claimedUsernames[username] = req.claim.request.irkPub
+        return .init(ok: true, username: username, accountId: username, deviceId: req.device.deviceId, created: true)
     }
 
     public func issueAuthCode(_ req: AuthCodeIssueRequest) async throws {
@@ -2085,32 +2288,6 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
         try await tick()
         let lower = username.lowercased()
-        // v2 device-addressing — `<u>.<label>` syntax precedes every
-        // other rule. The Worker behaves the same way: when a typed
-        // dot-form matches both a demo_users row AND an active
-        // device_capability_grants row, the response carries the
-        // `deviceCapability` block + the underlying demoServer. Any
-        // other dot-form returns 404 — we translate that to
-        // available=false + a `reason` mirroring the Worker.
-        if lower.contains(".") {
-            if let cap = deviceCapabilities[lower] {
-                let dot = lower.firstIndex(of: ".")!
-                let userPart = String(lower[..<dot])
-                let underlyingDemo = demoServers[userPart]
-                return .init(
-                    username: lower,
-                    available: false,
-                    reason: "device capability",
-                    demoServer: underlyingDemo,
-                    deviceCapability: cap
-                )
-            }
-            // Mirror the Worker's 404 → "unknown demo device label".
-            // Returning available=false here so the Mock's wire shape
-            // stays parseable; the Live client surfaces the 404 via
-            // `usernameLookupBadRequest` / errors.
-            throw ScreensClientError.http(status: 404, message: "unknown demo device label")
-        }
         // Plan A — every return branch folds in the demoServer block
         // when present. Independent of the testAccount / claim
         // branches; the Worker behaves the same way.
@@ -2192,7 +2369,6 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
                 kind: .demo,
                 recovery: .init(present: false, hasFetchGate: false),
                 totpEnrolled: false,
-                trustedDeviceCount: 0,
                 demoServer: demo,
                 graceModel: .instant
             )
@@ -2205,14 +2381,12 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let kind: AccountResolution.Kind =
             (accountTypeByUser[u] == "multi") ? .multi : .single
         let hasRecovery = cloudRecoveryByUser[u] ?? false
-        let deviceCount = (devicesByUser[u] ?? []).count
         return AccountResolution(
             username: u,
             exists: true,
             kind: kind,
             recovery: .init(present: hasRecovery, hasFetchGate: false),
             totpEnrolled: totpEnrolledAtByUser[u] != nil,
-            trustedDeviceCount: deviceCount,
             demoServer: nil,
             graceModel: kind == .multi ? .twentyFourHourTotp : .threeDay
         )
@@ -2409,10 +2583,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// number of new events.
     public var installEventScripts: [String: [(eventName: String, detail: String, postedAt: Int64)]] = [:]
 
-    /// Scripted devices listing per username for tests + dev mode.
-    /// The Mock returns a synthesized ETag (sha-prefix of JSON) so
-    /// If-Match flows can be exercised without the real Worker.
-    public var devicesByUser: [String: [TrustedDevice]] = [:]
+    public var accountDirectories: [String: AccountDirectoryResponse] = [:]
 
     /// Scripted audit log per username. Tests configure the array
     /// to drive ActivityViewModel renders without hitting the
@@ -2715,47 +2886,20 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         Self.synthesizeMockShortCode(forServiceId: serviceId, label: label)
     }
 
-    public func listDevices(username: String) async throws -> TrustedDevicesListResponse {
+    public func accountDirectory(
+        accountId: String,
+        authorization: AccountDirectoryAuthorization
+    ) async throws -> AccountDirectoryResponse {
         try await tick()
-        let devices = devicesByUser[username.lowercased()] ?? []
-        let sorted = devices.sorted { a, b in
-            a.addedAt != b.addedAt ? a.addedAt < b.addedAt : a.tokenId < b.tokenId
-        }
-        let etag = Self.etagFor(sorted)
-        return TrustedDevicesListResponse(devices: sorted, etag: etag)
-    }
-
-    private static func etagFor(_ devices: [TrustedDevice]) -> String {
-        // Identity-significant subset only; lastSeenAt deliberately
-        // excluded so test push-delivery doesn't flutter the ETag.
-        // We hash the canonicalized bytes directly (FNV-1a) instead
-        // of going through JSONEncoder — Swift's synthesized Codable
-        // for a local struct nested inside a function doesn't
-        // guarantee stable byte output across calls, which made the
-        // ETag non-deterministic.
-        var hash: UInt64 = 14695981039346656037
-        func feedString(_ s: String) {
-            for b in s.utf8 { hash ^= UInt64(b); hash &*= 1099511628211 }
-            // Separator so concatenation collisions are impossible
-            // (e.g. {"abc"+"d"} vs {"ab"+"cd"}).
-            hash ^= 0x1f; hash &*= 1099511628211
-        }
-        func feedInt(_ n: Int64) {
-            let bits = UInt64(bitPattern: n)
-            for shift in stride(from: 0, through: 56, by: 8) {
-                hash ^= UInt64((bits >> UInt64(shift)) & 0xff)
-                hash &*= 1099511628211
-            }
-            hash ^= 0x1f; hash &*= 1099511628211
-        }
-        for d in devices {
-            feedString(d.tokenId)
-            feedString(d.label)
-            feedString(d.platform)
-            feedInt(d.addedAt)
-        }
-        let hex = String(hash, radix: 16, uppercase: false)
-        return "W/\"\(String(repeating: "0", count: max(0, 16 - hex.count)) + hex)\""
+        if let directory = accountDirectories[accountId.lowercased()] { return directory }
+        return AccountDirectoryResponse(
+            accountId: accountId.lowercased(),
+            accountProfile: nil,
+            devices: [],
+            grants: [],
+            selfProfiles: [],
+            managedProfiles: []
+        )
     }
 
     public func getInstallEvents(serial: String, since: Int) async throws -> InstallEventsPollResponse {
@@ -3066,6 +3210,11 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await postJson("/api/username/claim", body: body, acceptStatuses: [200, 201, 204, 409])
     }
 
+    public func bootstrapAccount(_ req: AccountBootstrapRequest) async throws -> AccountBootstrapResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await postJsonReturning("/api/accounts", body: body)
+    }
+
     public func issueAuthCode(_ req: AuthCodeIssueRequest) async throws {
         let body = try JSONEncoder().encode(req)
         try await postJson("/api/auth-code/issue", body: body)
@@ -3267,22 +3416,95 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return try JSONDecoder().decode(InstallEventsPollResponse.self, from: data)
     }
 
-    public func listDevices(username: String) async throws -> TrustedDevicesListResponse {
-        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
-        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/devices"))
+    public func accountDirectory(
+        accountId: String,
+        authorization: AccountDirectoryAuthorization
+    ) async throws -> AccountDirectoryResponse {
+        let normalized = accountId.lowercased()
+        let encoded = normalized.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? normalized
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/accounts/\(encoded)/directory"))
         req.httpMethod = "GET"
+        req.setValue(authorization.deviceId, forHTTPHeaderField: "x-flagship-device-id")
+        req.setValue(authorization.signerPubHex, forHTTPHeaderField: "x-flagship-device-pub")
+        req.setValue(authorization.requestId, forHTTPHeaderField: "x-flagship-request-id")
+        req.setValue(String(authorization.issuedAt), forHTTPHeaderField: "x-flagship-issued-at")
+        req.setValue(authorization.signatureHex, forHTTPHeaderField: "x-flagship-signature")
+        req.setValue("no-store", forHTTPHeaderField: "cache-control")
         let (data, resp) = try await send(req)
-        let http = resp as? HTTPURLResponse
-        let status = http?.statusCode ?? 0
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
             throw ScreensClientError.http(status: status, message: text)
         }
-        let body = try JSONDecoder().decode(TrustedDevicesWireBody.self, from: data)
-        // ETag header — case-insensitive lookup, may be missing if a
-        // proxy strips it. Callers tolerate nil by skipping If-Match.
-        let etag = http?.value(forHTTPHeaderField: "Etag") ?? http?.value(forHTTPHeaderField: "ETag")
-        return TrustedDevicesListResponse(devices: body.devices, etag: etag)
+        return try JSONDecoder().decode(AccountDirectoryResponse.self, from: data)
+    }
+
+    public func putAccountProfile(accountId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) async throws {
+        try await directoryMutation(
+            method: "PUT",
+            path: "/api/accounts/\(accountId.lowercased())/profile",
+            authorization: authorization,
+            body: body
+        )
+    }
+
+    public func putDeviceSelfProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) async throws {
+        try await directoryMutation(
+            method: "PUT",
+            path: "/api/accounts/\(accountId.lowercased())/devices/\(deviceId.lowercased())/profile",
+            authorization: authorization,
+            body: body
+        )
+    }
+
+    public func putDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryManagedProfileWriteRequest) async throws {
+        try await directoryMutation(
+            method: "PUT",
+            path: "/api/accounts/\(accountId.lowercased())/devices/\(deviceId.lowercased())/managed-profile",
+            authorization: authorization,
+            body: body
+        )
+    }
+
+    public func deleteDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, expectedRevision: Int64) async throws {
+        try await directoryMutation(
+            method: "DELETE",
+            path: "/api/accounts/\(accountId.lowercased())/devices/\(deviceId.lowercased())/managed-profile",
+            authorization: authorization,
+            body: DirectoryDeleteRequest(expectedRevision: expectedRevision)
+        )
+    }
+
+    public func revokeAccountDevice(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization) async throws {
+        try await directoryMutation(
+            method: "DELETE",
+            path: "/api/accounts/\(accountId.lowercased())/devices/\(deviceId.lowercased())",
+            authorization: authorization,
+            body: DirectoryDeleteRequest(expectedRevision: 0)
+        )
+    }
+
+    private func directoryMutation<Body: Encodable>(
+        method: String,
+        path: String,
+        authorization: AccountDirectoryAuthorization,
+        body: Body
+    ) async throws {
+        var req = URLRequest(url: baseUrl.appendingPathComponent(path))
+        req.httpMethod = method
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.setValue(authorization.deviceId, forHTTPHeaderField: "x-flagship-device-id")
+        req.setValue(authorization.signerPubHex, forHTTPHeaderField: "x-flagship-device-pub")
+        req.setValue(authorization.requestId, forHTTPHeaderField: "x-flagship-request-id")
+        req.setValue(String(authorization.issuedAt), forHTTPHeaderField: "x-flagship-issued-at")
+        req.setValue(authorization.signatureHex, forHTTPHeaderField: "x-flagship-signature")
+        req.setValue("no-store", forHTTPHeaderField: "cache-control")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, response) = try await send(req)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
     }
 
     public func hasCloudRecovery(username: String) async throws -> Bool {

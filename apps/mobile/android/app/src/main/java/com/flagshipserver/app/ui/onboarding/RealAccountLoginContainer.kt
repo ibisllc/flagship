@@ -5,7 +5,7 @@
 // container hand-off for these branches — the win is every absent
 // factor renders a STATE, not an error card, and the takeover actually
 // installs the recovered UMK + initiates re-pair + labels this device
-// "admin" with the RESOLVED username (no "recovered-user" placeholder).
+// the account with the RESOLVED username (no "recovered-user" placeholder).
 //
 // Phase 4 adds the grace countdown / completion polling / push /
 // quarantine.

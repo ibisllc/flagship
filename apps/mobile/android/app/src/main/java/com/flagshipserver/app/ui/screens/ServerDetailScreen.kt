@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -84,6 +85,7 @@ import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.ui.theme.FSLayout
 import kotlinx.coroutines.launch
 import com.flagshipserver.app.viewmodels.BootUnlockApprovalViewModel
 import com.flagshipserver.app.viewmodels.CoordinatorApprovalSource
@@ -143,9 +145,16 @@ fun ServerDetailScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+            .verticalScroll(scroll),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+      // Reading column — clamp + center on expanded panes; a no-op on phones.
+      Column(
+        modifier = Modifier
+            .widthIn(max = FSLayout.readingMaxWidth)
+            .fillMaxWidth()
+            .padding(horizontal = FS.space.s6),
+      ) {
         Spacer(Modifier.height(FS.space.s8))
         FSGhostButton(label = "← Back", onClick = onBack)
         Spacer(Modifier.height(FS.space.s3))
@@ -226,6 +235,7 @@ fun ServerDetailScreen(
         }
 
         Spacer(Modifier.height(FS.space.s12))
+      }
     }
 }
 

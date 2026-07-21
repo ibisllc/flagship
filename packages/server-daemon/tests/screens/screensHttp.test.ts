@@ -48,7 +48,7 @@ function fakeGate(allowToken = "tok-good") {
   };
 }
 
-function fakePairedSessions(sessions: Array<{ token: string; label: string; addedAt: number }>) {
+function fakePairedSessions(sessions: Array<{ token: string; addedAt: number }>) {
   const map = new Map(sessions.map((s) => [s.token, s]));
   return {
     list: () => [...map.values()],
@@ -311,8 +311,8 @@ describe("screens HTTP — P1.12 paired-sessions/list", () => {
       // The phone is the caller, so the gate must accept its full token.
       gate: fakeGate(PHONE_TOKEN),
       pairedSessions: fakePairedSessions([
-        { token: PHONE_TOKEN, label: "phone", addedAt: 100 },
-        { token: LAPTOP_TOKEN, label: "laptop", addedAt: 200 },
+        { token: PHONE_TOKEN, addedAt: 100 },
+        { token: LAPTOP_TOKEN, addedAt: 200 },
       ]),
     });
     const r = await handle(req({
@@ -322,10 +322,10 @@ describe("screens HTTP — P1.12 paired-sessions/list", () => {
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
     expect(body.sessions).toHaveLength(2);
-    const phone = body.sessions.find((s: { label: string }) => s.label === "phone");
+    const phone = body.sessions.find((s: { tokenPrefix: string }) => s.tokenPrefix === PHONE_TOKEN.slice(0, 12));
     expect(phone.tokenPrefix).toBe(PHONE_TOKEN.slice(0, 12));
     expect(phone.current).toBe(true);
-    const laptop = body.sessions.find((s: { label: string }) => s.label === "laptop");
+    const laptop = body.sessions.find((s: { tokenPrefix: string }) => s.tokenPrefix === LAPTOP_TOKEN.slice(0, 12));
     expect(laptop.current).toBe(false);
     // Full tokens are never returned
     expect(JSON.stringify(body)).not.toContain(PHONE_TOKEN);
@@ -1086,4 +1086,3 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
     expect(r?.status).toBe(502);
   });
 });
-

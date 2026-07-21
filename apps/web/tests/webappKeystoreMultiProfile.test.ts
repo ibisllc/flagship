@@ -369,13 +369,24 @@ describe("webapp keystore — per-profile keying (multi-profile device keys)", (
   it("openAccount flow: a second account's UMK lands under ITS OWN record (A intact)", async () => {
     const k = await loadKeystore();
     const openAccount = (await loadOpenAccount()).openAccount;
+    const ensureAdminRoot = async (session: { adminRootSeed?: Uint8Array }) => {
+      session.adminRootSeed = new Uint8Array(32).fill(0x44);
+      return "55".repeat(32);
+    };
+    const signWithAdminRoot = async () => new Uint8Array(64).fill(0x66);
+    const signWithDevice = async () => new Uint8Array(64).fill(0x77);
 
     // First account: bootstrap the device key under DEFAULT (no profile
     // yet — exactly the live device-key-gen step), then open the account.
     const seedA = await k.bootstrapNewIdentity(PASS); // DEFAULT record
     await openAccount("alice", {
+      accountDisplayName: "Alice Account",
+      deviceDisplayName: "This Browser",
       session: { umk: seedA, irk: await k.deriveIrkFromSeed(seedA) },
       signWithIrk: (umk: Uint8Array, bytes: Uint8Array) => k.signWithIrk(umk, bytes),
+      ensureAdminRoot,
+      signWithAdminRoot,
+      signWithDevice,
       bytesToHex: k.bytesToHex,
       fetch: (() => okJson(200)) as any,
       persistSeedForProfile: k.persistSeedForProfile,
@@ -391,8 +402,13 @@ describe("webapp keystore — per-profile keying (multi-profile device keys)", (
     // simulate a distinct second seed and open under "bob".
     const seedB = new Uint8Array(32).fill(0x77);
     await openAccount("bob", {
+      accountDisplayName: "Bob Account",
+      deviceDisplayName: "This Browser",
       session: { umk: seedB, irk: await k.deriveIrkFromSeed(seedB) },
       signWithIrk: (umk: Uint8Array, bytes: Uint8Array) => k.signWithIrk(umk, bytes),
+      ensureAdminRoot,
+      signWithAdminRoot,
+      signWithDevice,
       bytesToHex: k.bytesToHex,
       fetch: (() => okJson(200)) as any,
       persistSeedForProfile: k.persistSeedForProfile,

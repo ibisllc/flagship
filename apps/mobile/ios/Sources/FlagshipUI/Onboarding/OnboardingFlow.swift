@@ -24,8 +24,8 @@ import FlagshipAPI
 ///                       state machine (RealAccountLoginViewModel):
 ///                       no-recovery STATE / single 3-day-grace takeover
 ///                       / multi 24h-grace + recovery-TOTP takeover →
-///                       install UMK → re-pair → label this device
-///                       `admin` → completeOnboarding.
+///                       install UMK → re-pair → completeOnboarding
+///                       (the device is left unnamed).
 public struct OnboardingFlow: View {
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
@@ -68,7 +68,18 @@ public struct OnboardingFlow: View {
                     // the claim removed from mintInstallBlob.
                     OpenAccountScreen(
                         username: username,
-                        onOpened: { _ in
+                        onOpened: { accountName, deviceName, deviceId in
+                            app.addProfile(Profile(
+                                cloudName: username,
+                                cloudRootPubHex: "",
+                                accountId: username,
+                                deviceId: deviceId,
+                                accountDisplayName: accountName,
+                                deviceDisplayName: deviceName,
+                                deviceCapability: nil,
+                                demoServer: nil,
+                                createdAt: Date()
+                            ))
                             // The account/identity now exists. Before
                             // landing in the app, nudge a backup via the
                             // skippable "Secure your account" step. This
@@ -115,7 +126,7 @@ public struct OnboardingFlow: View {
                     // recovered UMK, and initiates the takeover re-pair
                     // (multi attaches the recovery-TOTP / recovery-code
                     // as totpProof). On completion the host records this
-                    // device's `admin` label and flips AppState paired.
+                    // fresh account-scoped device identity and flips AppState paired.
                     RealAccountLoginScreen(
                         resolution: resolution,
                         onComplete: { username in
@@ -175,26 +186,22 @@ public struct OnboardingFlow: View {
         app.addProfile(
             Profile(
                 cloudName: profile.cloudName,
-                deviceLabel: profile.deviceLabel
+                accountId: profile.cloudName,
+                deviceId: profile.deviceId,
+                deviceDisplayName: profile.deviceDisplayName
             ),
             setActive: true
         )
     }
 
     fileprivate func completeRealAccountLogin(username: String) {
+        // `completeOnboarding` already upserts the profile with this
+        // account's opaque deviceId. Nothing further is recorded: a
+        // credential-proven takeover confers ADMINISTRATOR CAPABILITY, which
+        // lives in the device's signed capability grant and is decided
+        // server-side — it is not a name. The device stays unnamed until its
+        // owner writes an encrypted self-profile through the normal rename
+        // flow, exactly as on web and Android.
         app.completeOnboarding(username: username, pods: [])
-        // Label this device `admin`. A credential-proven takeover makes
-        // the new device the admin (reach = ukey.*); record it locally
-        // so the profile + any device-label surface reflects it.
-        // completeOnboarding upserts the profile by cloudName, so this
-        // refresh sets the label without duplicating the entry.
-        app.addProfile(
-            Profile(
-                cloudName: username,
-                deviceLabel: RealAccountLoginViewModel.adminDeviceLabel,
-                createdAt: app.activeProfile?.createdAt ?? Date()
-            ),
-            setActive: true
-        )
     }
 }

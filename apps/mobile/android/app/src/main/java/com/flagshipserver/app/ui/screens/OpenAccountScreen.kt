@@ -58,6 +58,7 @@ fun OpenAccountScreen(
     val phase by vm.phase.collectAsState()
 
     val deviceModel = remember { (Build.MODEL ?: "").trim().ifEmpty { null } }
+    var accountName by remember { mutableStateOf(vm.defaultAccountName()) }
     var deviceName by remember { mutableStateOf(vm.defaultDeviceName(deviceModel)) }
 
     // When the claim + onboarding land, hand back to the host (which lets
@@ -86,6 +87,15 @@ fun OpenAccountScreen(
         )
 
         FSField(
+            value = accountName,
+            onValueChange = { accountName = it },
+            label = "Account display name",
+            placeholder = "Johnson Family",
+            helper = "Encrypted and shown above @$username. It is never used in links.",
+            enabled = phase !is OpenAccountPhase.Working,
+        )
+
+        FSField(
             value = deviceName,
             onValueChange = { deviceName = it },
             label = "This device's name",
@@ -106,10 +116,10 @@ fun OpenAccountScreen(
 
         FSPrimaryButton(
             label = if (phase is OpenAccountPhase.Failed) "Try again" else "Open account",
-            onClick = { scope.launch { vm.openAccount(deviceName) } },
+            onClick = { scope.launch { vm.openAccount(deviceName, accountName) } },
             block = true,
             large = true,
-            enabled = phase !is OpenAccountPhase.Working && deviceName.isNotBlank(),
+            enabled = phase !is OpenAccountPhase.Working && deviceName.isNotBlank() && accountName.isNotBlank(),
         )
         FSGhostButton(
             label = "Back",

@@ -53,6 +53,7 @@ public struct WelcomeScreen: View {
                 Spacer().frame(height: FS.space.s8)
             }
             .padding(.horizontal, FS.space.s6)
+            .fsReadingColumn()
         }
     }
 

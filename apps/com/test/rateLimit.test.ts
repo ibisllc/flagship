@@ -56,14 +56,6 @@ describe("rateLimit — endpoint detection", () => {
     expect(endpointFor("DELETE", "/api/recovery/by-username/abc123")).toBe("recovery-by-username");
   });
 
-  it("rate-limits the demo cancel endpoint per-IP", () => {
-    expect(endpointFor("POST", "/api/dev/sample-user/demoalice/cancel")).toBe("demo-cancel");
-    // connect / heartbeat are NOT in this table (they're dispatched
-    // unthrottled today); only cancel is added here.
-    expect(endpointFor("POST", "/api/dev/sample-user/demoalice/connect")).toBeNull();
-    expect(LIMITS["demo-cancel"]?.every((a) => a.axis === "ip")).toBe(true);
-  });
-
   it("maps the #28 seal-to-box ACME delivery endpoints by method", () => {
     const p = "/api/server/nas.dani.flagship.services/acme-account-key";
     expect(endpointFor("POST", p)).toBe("acme-key-deposit");

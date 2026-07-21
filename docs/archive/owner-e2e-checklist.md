@@ -323,7 +323,7 @@ Paste verbatim into the ASC TestFlight → "What to Test" field. ~620
 chars, single paragraph, sized to fit ASC's input.
 
 ```
-Exercise the full create-server flow end-to-end: mint a recipe from the iPhone app, paste it into the Mac burner, burn a USB, boot a spare machine, and watch it provision. While the install runs, glance at the Lock Screen and Dynamic Island for the live install-progress timeline (8 phases: booting → downloading → partitioning → installing → registering → sealing → pairing → live) and confirm the paired Apple Watch shows the same ladder plus the watch-face complication ("Flagship: sealing", etc.). Also sanity-test pair-existing-box, recovery via .flagshipkey + iCloud passkey, the P14 companion-dock pairing on web.flagshipserver.com, and a P13 server-revoke from the danger zone. File any phase that fails to surface on any one of those channels.
+Exercise the full create-server flow end-to-end: mint a recipe from the iPhone app, paste it into the Mac builder, burn a USB, boot a spare machine, and watch it provision. While the install runs, glance at the Lock Screen and Dynamic Island for the live install-progress timeline (8 phases: booting → downloading → partitioning → installing → registering → sealing → pairing → live) and confirm the paired Apple Watch shows the same ladder plus the watch-face complication ("Flagship: sealing", etc.). Also sanity-test pair-existing-box, recovery via .flagshipkey + iCloud passkey, the P14 companion-dock pairing on web.flagshipserver.com, and a P13 server-revoke from the danger zone. File any phase that fails to surface on any one of those channels.
 ```
 
 ### TF3 — pre-archive Info.plist audit
@@ -524,7 +524,7 @@ reachable; baseline screenshot saved.
 **Description** (the actual demo):
 1. In the phone app: Create server → fill form → app shows recipe
    code.
-2. Open the Mac burner GUI → click **Advanced options** → select
+2. Open the Mac builder GUI → click **Advanced options** → select
    **Debian 13 (trixie) netinst** → paste recipe code → burn USB.
 3. Insert USB into target machine, boot from it.
 4. **Observe on iPhone** (per phase: booting → downloading →
@@ -552,7 +552,7 @@ correctly across the full 8-phase sequence; live padlock confirmed.
 1. In the phone app: Create server → fill form → app shows recipe.
 2. Open `https://flagshipserver.com/ready` → "Download personalized
    ISO" (this is what was 503-ing before ALP3).
-3. Open the Mac burner GUI → Quick mode (default) → burn the
+3. Open the Mac builder GUI → Quick mode (default) → burn the
    downloaded ISO.
 4. Boot target machine → observe all the same alert surfaces.
 
@@ -567,8 +567,8 @@ on disk after first boot.
 **Owner**: 📱📦 owner. **Blocked by**: AND3.
 
 **Description**: Pick either Debian or Alpine. Use the Android app
-to: create server → get recipe → burn (same Mac burner; the AAB
-isn't running the burner — it's just providing the recipe) → boot.
+to: create server → get recipe → burn (same Mac builder; the AAB
+isn't running the builder — it's just providing the recipe) → boot.
 Verify FCM push lands + `InstallProgressScreen.kt` renders the
 timeline + foreground notification persists across phases.
 

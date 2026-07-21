@@ -12,7 +12,7 @@
  *   2. pending-writes
  *        - owner-gated
  *        - returns only unresolved + non-expired rows, oldest-first
- *        - surfaces companionTokenPrefix + companionLabel + intent
+ *        - surfaces companionTokenPrefix + intent (never a human label)
  *   3. resolve-pending
  *        - owner-gated, approved + denied both work
  *        - idempotent second call → { ok: true, alreadyResolved: true }
@@ -76,7 +76,7 @@ interface Harness {
   pairedSessions: FilePairedSessionStore;
   writeRequestStore: InMemoryCompanionWriteRequestStore;
   setNow: (n: number) => void;
-  mintAndRedeem: (label: string) => Promise<string>;
+  mintAndRedeem: () => Promise<string>;
 }
 
 async function buildHarness(opts?: {
@@ -113,13 +113,13 @@ async function buildHarness(opts?: {
     companion: companionDeps,
   });
 
-  async function mintAndRedeem(label: string): Promise<string> {
+  async function mintAndRedeem(): Promise<string> {
     const mintR = await handle(
       withToken(
         {
           method: "POST",
           path: "/api/screens/companion/mint-ticket",
-          body: Buffer.from(JSON.stringify({ label })),
+          body: Buffer.from(JSON.stringify({})),
         },
         OWNER_TOKEN,
       ),
@@ -233,7 +233,7 @@ describe("POST /api/companion/request-write", () => {
     const { handle, mintAndRedeem, writeRequestStore } = await buildHarness({
       initialNow: 1_000_000,
     });
-    const companionToken = await mintAndRedeem("Library iMac");
+    const companionToken = await mintAndRedeem();
 
     const intent = { serverName: "home", reason: "renaming" };
     const r = await handle(
@@ -253,7 +253,7 @@ describe("POST /api/companion/request-write", () => {
     expect(body.queuedAt).toBe(1_000_000);
     expect(body.expiresAt - body.queuedAt).toBe(10 * 60_000);
 
-    // Persisted with the companion's tokenPrefix + label.
+    // Persisted with the companion's opaque token prefix — no human label.
     const persisted = writeRequestStore._all();
     expect(persisted).toHaveLength(1);
     const row = persisted[0]!;
@@ -262,12 +262,12 @@ describe("POST /api/companion/request-write", () => {
     expect(row.intent).toEqual(intent);
     expect(row.status).toBe("pending");
     expect(row.companionTokenPrefix).toBe(companionToken.slice(0, 12));
-    expect(row.companionLabel).toBe("Library iMac");
+    expect("companionLabel" in row).toBe(false);
   });
 
   it("400s on unsupported kind with the documented error code", async () => {
     const { handle, mintAndRedeem } = await buildHarness();
-    const companionToken = await mintAndRedeem("iMac");
+    const companionToken = await mintAndRedeem();
     const r = await handle(
       withToken(
         {
@@ -288,7 +288,7 @@ describe("POST /api/companion/request-write", () => {
 
   it("400s on malformed body (missing kind / non-object intent / empty body)", async () => {
     const { handle, mintAndRedeem } = await buildHarness();
-    const companionToken = await mintAndRedeem("iMac");
+    const companionToken = await mintAndRedeem();
 
     const cases: Array<{ body: Buffer; why: string }> = [
       { body: Buffer.alloc(0), why: "empty body" },
@@ -324,7 +324,7 @@ describe("POST /api/companion/request-write", () => {
 
   it("revoke-server is also accepted", async () => {
     const { handle, mintAndRedeem } = await buildHarness();
-    const companionToken = await mintAndRedeem("iMac");
+    const companionToken = await mintAndRedeem();
     const r = await handle(
       withToken(
         {
@@ -348,7 +348,7 @@ describe("POST /api/companion/request-write", () => {
     const { handle, mintAndRedeem, setNow } = await buildHarness({
       initialNow: nowMs,
     });
-    const companionToken = await mintAndRedeem("iMac");
+    const companionToken = await mintAndRedeem();
     nowMs = 5_000 + 4 * 60 * 60_000 + 1;
     setNow(nowMs);
     const r = await handle(
@@ -384,8 +384,8 @@ describe("GET /api/screens/companion/pending-writes", () => {
     let nowMs = 1_000_000;
     const { handle, mintAndRedeem, setNow, writeRequestStore } =
       await buildHarness({ initialNow: nowMs });
-    const t1 = await mintAndRedeem("A");
-    const t2 = await mintAndRedeem("B");
+    const t1 = await mintAndRedeem();
+    const t2 = await mintAndRedeem();
 
     // queued at 1_000_000
     const r1 = await handle(
@@ -454,10 +454,10 @@ describe("GET /api/screens/companion/pending-writes", () => {
     expect(body.pending[1].requestId).toBe(id2);
     expect(body.pending[0].kind).toBe("release-server");
     expect(body.pending[0].intent).toEqual({ serverName: "x" });
-    expect(body.pending[0].companionLabel).toBe("A");
     expect(typeof body.pending[0].companionTokenPrefix).toBe("string");
     expect(body.pending[0].companionTokenPrefix.length).toBe(12);
-    expect(body.pending[1].companionLabel).toBe("B");
+    expect(body.pending[0].companionLabel).toBeUndefined();
+    expect(body.pending[1].companionLabel).toBeUndefined();
   });
 
   it("filters out rows past their 10-minute TTL", async () => {
@@ -465,7 +465,7 @@ describe("GET /api/screens/companion/pending-writes", () => {
     const { handle, mintAndRedeem, setNow } = await buildHarness({
       initialNow: nowMs,
     });
-    const t1 = await mintAndRedeem("A");
+    const t1 = await mintAndRedeem();
     await handle(
       withToken(
         {
@@ -521,7 +521,7 @@ describe("POST /api/screens/companion/resolve-pending", () => {
 
   it("companion cannot call resolve-pending — 403 companion-write-not-allowed", async () => {
     const { handle, mintAndRedeem } = await buildHarness();
-    const companionToken = await mintAndRedeem("iMac");
+    const companionToken = await mintAndRedeem();
     const r = await handle(
       withToken(
         {
@@ -541,7 +541,7 @@ describe("POST /api/screens/companion/resolve-pending", () => {
 
   it("approves a row, then idempotent re-resolve returns alreadyResolved: true", async () => {
     const { handle, mintAndRedeem, writeRequestStore } = await buildHarness();
-    const companionToken = await mintAndRedeem("iMac");
+    const companionToken = await mintAndRedeem();
     const enqueued = await handle(
       withToken(
         {
@@ -596,7 +596,7 @@ describe("POST /api/screens/companion/resolve-pending", () => {
 
   it("denied outcome works and is reflected in the row", async () => {
     const { handle, mintAndRedeem, writeRequestStore } = await buildHarness();
-    const companionToken = await mintAndRedeem("iMac");
+    const companionToken = await mintAndRedeem();
     const enqueued = await handle(
       withToken(
         {
@@ -709,8 +709,8 @@ describe("GET /api/companion/my-pending", () => {
 
   it("only returns rows that companion submitted (token-prefix filter)", async () => {
     const { handle, mintAndRedeem } = await buildHarness();
-    const tA = await mintAndRedeem("iMac-A");
-    const tB = await mintAndRedeem("iMac-B");
+    const tA = await mintAndRedeem();
+    const tB = await mintAndRedeem();
 
     const eA = await handle(
       withToken(
@@ -761,7 +761,7 @@ describe("GET /api/companion/my-pending", () => {
     const { handle, mintAndRedeem, setNow } = await buildHarness({
       initialNow: nowMs,
     });
-    const tA = await mintAndRedeem("iMac");
+    const tA = await mintAndRedeem();
     const eA = await handle(
       withToken(
         {
@@ -879,7 +879,7 @@ describe("Companion write-request expiry", () => {
     const { handle, mintAndRedeem, setNow } = await buildHarness({
       initialNow: nowMs,
     });
-    const t = await mintAndRedeem("iMac");
+    const t = await mintAndRedeem();
     const enqueued = await handle(
       withToken(
         {
@@ -914,7 +914,7 @@ describe("Companion write-request expiry", () => {
     const { handle, mintAndRedeem, setNow } = await buildHarness({
       initialNow: nowMs,
     });
-    const t = await mintAndRedeem("iMac");
+    const t = await mintAndRedeem();
     const enqueued = await handle(
       withToken(
         {

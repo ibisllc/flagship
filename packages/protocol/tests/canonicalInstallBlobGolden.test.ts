@@ -6,7 +6,7 @@
  * Android Kotlin `InstallBlob.canonicalBytes()` + webapp
  * `canonicalInstallBlob()` MUST all produce the same bytes given the
  * same input — otherwise signatures don't cross-verify, and the whole
- * QR-pipe → Burner → daemon-register chain breaks.
+ * QR-pipe → Builder → daemon-register chain breaks.
  *
  * If this test starts failing, ONE of these is true:
  *   (a) you changed the field order in `canonicalInstallBlob` — that's

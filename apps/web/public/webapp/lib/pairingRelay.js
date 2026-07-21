@@ -164,19 +164,13 @@ export function makeAdminRelay(opts = {}) {
           try {
             const plain = await aeadOpen(kEncDecrypt, m.ciphertext, m.nonce);
             const text = new TextDecoder().decode(plain).trim();
-            let pub;
-            try {
-              const obj = JSON.parse(text);
-              pub = String(obj.devicePubHex || "").trim().toLowerCase();
-              returnSid = obj.returnSid || null;
-              returnPkB64u = obj.returnPkB64u || null;
-            } catch {
-              // Tolerate the legacy bare-pubkey frame (no return leg) so a
-              // mixed-version pair still surfaces the pubkey; seal() will
-              // throw a clear error if it can't open the return leg.
-              pub = text.toLowerCase();
-            }
-            peerPubResolve(pub);
+            const obj = JSON.parse(text);
+            const pub = String(obj.devicePubHex || "").trim().toLowerCase();
+            const deviceId = String(obj.deviceId || "").trim().toLowerCase();
+            if (!/^[0-9a-f]{64}$/.test(pub) || !/^[0-9a-f]{32}$/.test(deviceId)) return;
+            returnSid = obj.returnSid || null;
+            returnPkB64u = obj.returnPkB64u || null;
+            peerPubResolve({ devicePubHex: pub, deviceId });
           } catch { /* tag failure — ignore, host can restart */ }
         } else if (m.kind === "accepted") {
           if (typeof opts.onPeerWaiting === "function") opts.onPeerWaiting();
@@ -263,7 +257,7 @@ export function makeIncomingRelay(opts = {}) {
   const bundlePromise = new Promise((res, rej) => { bundleResolve = res; bundleReject = rej; });
 
   return {
-    async connect({ sid, adminPkB64u, deviceIrkPubHex }) {
+    async connect({ sid, adminPkB64u, deviceIrkPubHex, deviceId }) {
       const { sk, pkB64u } = await freshKeypair();
       const mat = await deriveMaterial(sk, adminPkB64u);
       kEncDecrypt = mat.kEncDecrypt;
@@ -312,6 +306,7 @@ export function makeIncomingRelay(opts = {}) {
           // consumed by the DO; the bundle comes back on the return leg.)
           const payload = new TextEncoder().encode(JSON.stringify({
             devicePubHex: String(deviceIrkPubHex).toLowerCase(),
+            deviceId: String(deviceId).toLowerCase(),
             returnSid,
             returnPkB64u: returnEph.pkB64u,
           }));

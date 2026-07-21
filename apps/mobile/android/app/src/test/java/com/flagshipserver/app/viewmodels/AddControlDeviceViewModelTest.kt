@@ -36,11 +36,10 @@ class AddControlDeviceViewModelTest {
         val bytes = AddPairedSessionOrder.canonicalBytes(
             serverId = server,
             token = "deadbeef",
-            label = "Harry's iPhone",
             issuedAt = 1700,
         )
         assertEquals(
-            "flagship/order/add-paired-session/v1|home.alice.flagship.services|deadbeef|Harry's iPhone|1700",
+            "flagship/order/add-paired-session/v2|home.alice.flagship.services|deadbeef|1700",
             String(bytes, Charsets.UTF_8),
         )
     }
@@ -50,13 +49,6 @@ class AddControlDeviceViewModelTest {
         assertEquals(64, t.length)
         assertNotNull(HexUtil.decode(t))
         assertTrue(t != AddPairedSessionOrder.freshToken())
-    }
-
-    @Test fun sanitizeLabel_stripsPipeAndControl_keepsSpacesAndApostrophes() {
-        assertEquals("Harry's iPhone", AddPairedSessionOrder.sanitizeLabel("Harry's iPhone"))
-        assertEquals("a b", AddPairedSessionOrder.sanitizeLabel("a|b"))
-        assertEquals("Android", AddPairedSessionOrder.sanitizeLabel("   "))
-        assertEquals("Android", AddPairedSessionOrder.sanitizeLabel("|"))
     }
 
     @Test fun resolveServerDomain_acceptsBareFqdnHttpsUrlAndPath() {
@@ -77,7 +69,6 @@ class AddControlDeviceViewModelTest {
             store = store,
             signer = { Ed25519Sign(kp.privateKey) },
             client = LockPowerClient(transport = transport, podBaseUrl = { "https://$it" }),
-            label = "Pixel 9",
             now = { 1_700_000_000_000L },
             makeToken = { "00".repeat(32) },
         )
@@ -89,14 +80,13 @@ class AddControlDeviceViewModelTest {
         assertEquals("add-paired-session", body.request.type)
         assertEquals(server, body.request.serverId)
         assertEquals("00".repeat(32), body.request.token)
-        assertEquals("Pixel 9", body.request.label)
         assertEquals(1_700_000_000_000L, body.request.issuedAt)
 
         val sig = HexUtil.decode(body.signature)
         assertNotNull(sig)
         Ed25519Verify(kp.publicKey).verify(
             sig!!,
-            AddPairedSessionOrder.canonicalBytes(server, "00".repeat(32), "Pixel 9", 1_700_000_000_000L),
+            AddPairedSessionOrder.canonicalBytes(server, "00".repeat(32), 1_700_000_000_000L),
         )
 
         // Token persisted ONLY after the 200 — both the active slot AND the
@@ -140,7 +130,6 @@ class AddControlDeviceViewModelTest {
             store = store,
             signer = { Ed25519Sign(kp.privateKey) },
             client = LockPowerClient(transport = RecordingTransport("""{"ok":true}"""), podBaseUrl = { "https://$it" }),
-            label = "Pixel 9",
             now = { 1_700_000_000_000L },
             makeToken = { "ab".repeat(16) },
         )

@@ -56,7 +56,6 @@ export async function handleReset() {
     }
     const policy = accountDeletePolicy({
       hasCloudRecovery: false,
-      trustedDeviceCount: resolution?.trustedDeviceCount,
       isDemoAccount: resolution?.kind === "demo",
     });
     if (policy === "ceremony") {

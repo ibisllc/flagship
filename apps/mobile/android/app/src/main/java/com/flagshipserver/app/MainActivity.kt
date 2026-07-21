@@ -3,10 +3,16 @@ package com.flagshipserver.app
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
@@ -103,6 +109,7 @@ class MainActivity : FragmentActivity() {
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         // FIRST: apply a backend-apex override from the launch intent, BEFORE
         // the OkHttp client / clients are built below (the pinner + the live
         // clients read Endpoints at construction). The gym test build launches
@@ -492,6 +499,17 @@ private fun AppRoot(
         operations.syncDeployOperations(if (isPaired) pods else emptyList())
     }
 
+    // Trust-the-session model (mirror of iOS ContentView clearing the UMK cache
+    // on isUnlocked/isPaired -> false): the biometric freshness latch lives only
+    // while the app is unlocked + paired. The instant it re-locks (background
+    // relock / explicit lock) or signs out, drop the latch so the next session
+    // re-authenticates once — the biometric still gates each session, it just no
+    // longer fires again mid-session (which is what stopped the random Face ID /
+    // fingerprint prompts the periodic deposit refresh used to trigger).
+    LaunchedEffect(isUnlocked, isPaired) {
+        if (!isUnlocked || !isPaired) BiometricAuthority.current()?.invalidate()
+    }
+
     // Slice B — AUTO-PAIR. On unlock (with pods loaded), silently provision this
     // device's per-box BFF session token for every ONLINE pod that lacks one,
     // behind ONE biometric (the coordinator derives the owner IRK once + reuses
@@ -509,7 +527,18 @@ private fun AppRoot(
             .pairAll(onlinePods) { reason -> Keystore.deriveIRK(reason) }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    // Edge-to-edge (targetSdk 35 forces it): pad the status bar + landscape
+    // side bars ONCE here so the slivers, shell, onboarding, and overlays all
+    // clear them. The padding CONSUMES those insets, so inner Scaffolds don't
+    // double-pad; the bottom is deliberately left to NavigationBar/Rail, which
+    // pad their own systemBars insets.
+    Box(
+        Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(
+                WindowInsets.systemBars.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+            ),
+    ) {
         if (isPaired) {
             // The teal sliver sits ABOVE the shell in a Column so revealing it
             // physically pushes the whole shell down (it animates its own

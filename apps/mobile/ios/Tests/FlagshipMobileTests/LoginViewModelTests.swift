@@ -42,7 +42,6 @@ final class LoginViewModelTests: XCTestCase {
         // Demo crypto is a no-op → recovery + factors are zeroed.
         XCTAssertFalse(r.recovery.present)
         XCTAssertFalse(r.totpEnrolled)
-        XCTAssertEqual(r.trustedDeviceCount, 0)
     }
 
     func test_mockResolve_demoMatch_isCaseInsensitive() async throws {
@@ -65,7 +64,6 @@ final class LoginViewModelTests: XCTestCase {
         XCTAssertFalse(r.recovery.hasFetchGate)
         XCTAssertNil(r.recovery.credentialId)
         XCTAssertFalse(r.totpEnrolled)
-        XCTAssertEqual(r.trustedDeviceCount, 0)
         XCTAssertNil(r.demoServer)
         XCTAssertEqual(r.graceModel, .none)
     }
@@ -122,7 +120,6 @@ final class LoginViewModelTests: XCTestCase {
           "kind": "demo",
           "recovery": { "present": false, "hasFetchGate": false },
           "totpEnrolled": false,
-          "trustedDeviceCount": 0,
           "demoServer": { "fqdn": "home.demoalice.flagship.services", "status": "up", "ttlIdleMinutes": 30 },
           "graceModel": "instant"
         }
@@ -143,7 +140,6 @@ final class LoginViewModelTests: XCTestCase {
           "kind": "future-kind",
           "recovery": { "present": false, "hasFetchGate": false },
           "totpEnrolled": false,
-          "trustedDeviceCount": 0,
           "graceModel": "future-grace"
         }
         """.data(using: .utf8)!

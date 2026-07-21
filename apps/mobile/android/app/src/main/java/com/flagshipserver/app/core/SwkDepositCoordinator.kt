@@ -21,6 +21,7 @@
 package com.flagshipserver.app.core
 
 import com.flagshipserver.app.api.SecretMailboxClient
+import com.flagshipserver.app.keystore.BiometricAuthority
 import com.flagshipserver.app.keystore.Keystore
 import com.google.crypto.tink.subtle.Ed25519Sign
 
@@ -50,6 +51,14 @@ class SwkDepositCoordinator(
      *  `.com` when one is live. */
     private val resolveMigrationSwk: suspend (podDomain: String) -> MigrationSwkResolution =
         { MigrationSwkResolution.Normal },
+    /** True iff the app already holds an authenticated biometric session, so the
+     *  derive this pass is silent (no prompt). The automatic (reconcile-driven)
+     *  deposit path DEFERS when the session is cold, so a background refresh never
+     *  *initiates* a biometric — it rides an already-unlocked session or waits for
+     *  the next one. Injectable so tests run without a live BiometricAuthority
+     *  (default: the real session latch). Mirror of iOS `hasSessionKey`. */
+    private val hasSessionKey: () -> Boolean =
+        { BiometricAuthority.current()?.isFresh() ?: false },
 ) {
     /** Deposit what's OWED for a box that has registered (carrying
      *  `identityPubKeyHex`): the SWK (turns on the service platform) AND/OR the
@@ -61,6 +70,13 @@ class SwkDepositCoordinator(
         val pairingOrderJson = pairingStore.pendingOrder(serverDomain)
         val cgkOwed = cgkStore.isPending(serverDomain)
         if (!swkOwed && pairingOrderJson == null && !cgkOwed) return
+        // Never let this automatic (reconcile-driven) deposit INITIATE a biometric
+        // prompt: proceed only when the session is already authenticated, so the
+        // derive below is silent. A cold session defers — the pending markers stay
+        // and the deposit rides the next pass after the user next authenticates.
+        // This is what stops the "random Face ID on the Home screen" the periodic
+        // reconcile used to cause when a box left a deposit owed. Mirror of iOS.
+        if (!hasSessionKey()) return
         val boxIdentityPub = HexUtil.decode(identityPubKeyHex) ?: return
         if (boxIdentityPub.size != 32) return
 

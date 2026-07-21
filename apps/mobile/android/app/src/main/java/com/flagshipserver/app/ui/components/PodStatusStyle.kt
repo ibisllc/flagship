@@ -38,6 +38,7 @@ object PodStatusStyle {
         }
 
     fun pillKind(liveness: PodInfo.LivenessState, status: PodInfo.Status): FSPillKind =
+        if (status == PodInfo.Status.PENDING) FSPillKind.Pending else
         when (liveness) {
             PodInfo.LivenessState.DEAD -> FSPillKind.Offline
             PodInfo.LivenessState.OFFLINE -> FSPillKind.Offline
@@ -47,7 +48,7 @@ object PodStatusStyle {
                 PodInfo.Status.ONLINE -> FSPillKind.Online
                 PodInfo.Status.OFFLINE -> FSPillKind.Offline
                 PodInfo.Status.UNKNOWN -> FSPillKind.Idle
-                PodInfo.Status.PENDING -> FSPillKind.Provisioning
+                PodInfo.Status.PENDING -> FSPillKind.Pending
             }
         }
 }

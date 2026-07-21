@@ -646,7 +646,7 @@ function buildVectors(): Vector[] {
   const dcg: DeviceCapabilityGrant = {
     grantId: "550e8400-e29b-41d4-a716-446655440000",
     username: "harry",
-    deviceLabel: "ipad",
+    deviceId: "00112233445566778899aabbccddeeff",
     devicePubKey: DEMO_DEVICE_PUB,
     scopes: ["install-service", "browse"],
     issuedAt: ISSUED_AT,
@@ -1175,15 +1175,16 @@ function payloadByName(name: string, i: Record<string, unknown>): Uint8Array {
         "revoke-others",
         "demo-provision",
         "admin",
+        "view-directory",
       ];
       const idx = (s: string) => order.indexOf(s);
       const sorted = [...(i.scopes as string[])].sort((a, b) => idx(a) - idx(b)).join(",");
       return enc(
         [
-          "flagship/device-capability-grant/v1",
+          "flagship/device-capability-grant/v2",
           i.grantId,
           i.username,
-          i.deviceLabel,
+          i.deviceId,
           i.devicePubKey,
           sorted,
           i.issuedAt,

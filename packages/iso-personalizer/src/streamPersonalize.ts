@@ -8,12 +8,8 @@
  * and emits a ReadableStream<Uint8Array> the Worker can pipe straight
  * into `R2Bucket.put(stream)` — never landing the 240 MB ISO in V8 heap.
  *
- * Why "already signed":
- *   The Worker's `admin-claim-and-issue` handler is the one place that
- *   holds the deterministic User IRK derivation; this module deliberately
- *   does NOT re-sign — it just glues the byte blob it receives onto the
- *   trailer envelope. That keeps the signing surface to exactly one
- *   handler.
+ * Why "already signed": this module deliberately does not own identity or
+ * signing authority; it only glues signed bytes into the trailer envelope.
  *
  * Wire format (byte-for-byte identical to `buildTrailer`):
  *

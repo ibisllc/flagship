@@ -18,10 +18,12 @@ const umk = { seed: new Uint8Array(32).fill(7) };
 const otherUmk = { seed: new Uint8Array(32).fill(8) };
 
 const NEW_DEVICE_PUB_HEX = "ab".repeat(32);
+const DEVICE_ID = "12".repeat(16);
 
 function baseAdmit(overrides: Partial<DeviceAdmit> = {}): DeviceAdmit {
   return {
     username: "alice",
+    deviceId: DEVICE_ID,
     newDevicePubHex: NEW_DEVICE_PUB_HEX,
     issuedAt: 1_780_000_000_000,
     ...overrides,

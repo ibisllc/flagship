@@ -80,6 +80,7 @@ public struct ServiceDetailScreen: View {
             }
             .padding(.horizontal, FS.space.s6)
             .padding(.top, FS.space.s4)
+            .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
         .navigationTitle(vm.detail.value?.app.slug.capitalized ?? "Service")

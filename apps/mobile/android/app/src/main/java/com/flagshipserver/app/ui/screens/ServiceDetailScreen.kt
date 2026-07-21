@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -59,6 +60,7 @@ import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.ui.theme.FSLayout
 import com.flagshipserver.app.viewmodels.CustomDomainCooldownStore
 import com.flagshipserver.app.viewmodels.CustomDomainPrompt
 import com.flagshipserver.app.viewmodels.LoadingState
@@ -147,9 +149,16 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+            .verticalScroll(scroll),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+      // Reading column — clamp + center on expanded panes; a no-op on phones.
+      Column(
+        modifier = Modifier
+            .widthIn(max = FSLayout.readingMaxWidth)
+            .fillMaxWidth()
+            .padding(horizontal = FS.space.s6),
+      ) {
         Spacer(Modifier.height(FS.space.s10))
         when (val d = detail) {
             is LoadingState.Idle, is LoadingState.Loading -> {
@@ -383,6 +392,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                 Spacer(Modifier.height(FS.space.s12))
             }
         }
+      }
     }
 
     if (showReplaceDialog) {

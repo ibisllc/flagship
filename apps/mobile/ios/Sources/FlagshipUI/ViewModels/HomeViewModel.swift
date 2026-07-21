@@ -6,12 +6,11 @@ import FlagshipAPI
 @MainActor
 public final class HomeViewModel {
     public private(set) var detail: LoadingState<ServerDetailResponse> = .idle
-    /// True when the LAST load failed specifically because this device has no
-    /// paired-session token (`ScreensClientError.noSessionToken`) — the BFF
-    /// can't auth until the owner pairs. The server-detail container reads this
-    /// to surface the one-tap "Pair this server" affordance instead of the
-    /// transient "Connecting…" placeholder (which would otherwise retry forever
-    /// without a token). Cleared on any successful load.
+    /// True when the LAST load failed because this device has no usable
+    /// paired-session token. That includes both a missing local token and a 401
+    /// from the box rejecting a stale token. The server-detail container reads
+    /// this to surface the one-tap "Pair this server" affordance instead of the
+    /// transient "Connecting…" placeholder (which would otherwise retry forever).
     public private(set) var needsPairing = false
 
     private let client: any ScreensClient
@@ -39,11 +38,17 @@ public final class HomeViewModel {
             detail = .loaded(resp)
             needsPairing = false
         } catch {
-            // A missing paired-session token is NOT transient — retrying never
-            // helps until the owner pairs. Flag it so the container shows the
-            // pairing affordance; any other error stays the "Connecting…" path.
-            if case ScreensClientError.noSessionToken = error {
+            // A missing OR box-rejected paired-session token is NOT transient —
+            // retrying never helps until the owner pairs. A 403 is deliberately
+            // excluded: it can be an operation-level authorization decision,
+            // whereas the BFF's session gate reports an absent token as 401.
+            switch error {
+            case ScreensClientError.noSessionToken:
                 needsPairing = true
+            case ScreensClientError.http(status: 401, message: _):
+                needsPairing = true
+            default:
+                needsPairing = false
             }
             // Keep showing the last successful detail on a transient refresh
             // failure; only fall back to the "Connecting…" state when we never

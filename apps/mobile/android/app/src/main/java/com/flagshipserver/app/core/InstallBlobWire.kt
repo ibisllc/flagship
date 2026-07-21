@@ -23,7 +23,7 @@ data class InstallBlobBundle(
     val pairingOrder: String? = null,
     // The box's deterministic SWK (lowercase hex) — an UNSIGNED recipe sibling
     // (top-level, NOT inside `blob` / never in the signed canonical bytes) the
-    // burner carries to the on-disk install-blob.json; the daemon persists it at
+    // builder carries to the on-disk install-blob.json; the daemon persists it at
     // first boot to turn on the service/build platform (the box can't derive it:
     // no UMK). Omitted from JSON when null (encodeDefaults=false), so a recipe
     // without it is byte-identical. Derived via ServerKeys.deriveSwk (DOTS).
@@ -74,7 +74,7 @@ data class WireAuthCode(
     val issuedAt: Long,
     val expiresAt: Long,
     // Slice D (D-1) — the admin master root pubkey (hex), signature-covered by
-    // authCodeUserSignature. The burner reads it into the box install-blob so
+    // authCodeUserSignature. The builder reads it into the box install-blob so
     // the box pins ServerConfig.adminRootPub. Null on a legacy recipe.
     val adminRootPubKey: String? = null,
 )

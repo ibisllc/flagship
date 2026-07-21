@@ -346,7 +346,10 @@ describe("Fix B — api.js per-pod fetch helpers (unit contract)", () => {
 describe("Fix C — new pod does not become the default/leader selection", () => {
   let seq = 0;
   function pod(fqdn: string, extra: Record<string, unknown> = {}) {
-    return { serverDomain: fqdn, registeredAt: ++seq, revokedAt: null, ...extra };
+    // lastReported marks the pod as having come online (leaderFqdnOf ignores
+    // never-online pods, matching iOS/Android); override with lastReported:null
+    // to model a still-provisioning box.
+    return { serverDomain: fqdn, registeredAt: ++seq, revokedAt: null, lastReported: 1, ...extra };
   }
   const HOME = "home.alice.flagship.services";
   const WORK = "work.alice.flagship.services";

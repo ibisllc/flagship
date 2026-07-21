@@ -55,9 +55,9 @@ git merges them with zero conflict markers and ships a broken hybrid (see §2/§
 ### local `main` (15) — phone-provisioned SWK + Box Request Inbox + transfer entry
 
 **Phone-provisioned SWK:**
-- `3afbfe99` provision the Service Workload Key from the phone at first boot (TS layers); `cbe798c5` merge of SWK TS plumbing (daemon first-boot consume + burner `swkHex` sibling + `deriveSWK` vector).
+- `3afbfe99` provision the Service Workload Key from the phone at first boot (TS layers); `cbe798c5` merge of SWK TS plumbing (daemon first-boot consume + builder `swkHex` sibling + `deriveSWK` vector).
 - `2a790598`/`dbbadd85`/`b35225df` iOS / Android / webapp derive + embed the box SWK in the recipe at create-time.
-- `56511f06` burner-mac preserves the `swkHex` recipe sibling through the envelope flatten.
+- `56511f06` builder-mac preserves the `swkHex` recipe sibling through the envelope flatten.
 
 **Box Request Inbox unification:**
 - `cd178bad` unify the two parallel approval sets into one Box Request Inbox.
@@ -215,7 +215,7 @@ native builds + native unit tests after Step 2; webapp vitest after Step 3;
   human — they were made by "whoever touched the file last." **Mitigation:** treat
   §3 as a required pre-merge sign-off; do NOT let a clean merge stand in for a
   decision.
-- **`userdata.ts` / recipe seam.** Local's `flagship-burner/src/userdata.ts` +
+- **`userdata.ts` / recipe seam.** Local's `flagship-builder/src/userdata.ts` +
   `loadBlob.ts` (SWK sibling preservation) and origin's grammar changes don't
   share a file, but both feed the recipe → install-blob → daemon chain. A clean
   textual merge can still produce a recipe whose `swkHex` sibling survives but

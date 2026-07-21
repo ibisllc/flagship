@@ -67,11 +67,16 @@ public struct ProfilesScreen: View {
         return Button(action: { onSelect(profile.cloudName) }) {
             HStack(alignment: .center, spacing: FS.space.s3) {
                 VStack(alignment: .leading, spacing: FS.space.s1) {
-                    Text(profile.cloudName)
+                    Text(profile.accountDisplayName ?? "@\(profile.cloudName)")
                         .font(FS.font.body())
                         .foregroundColor(c.text)
-                    if let label = profile.deviceLabel {
-                        Text("Device: \(label)")
+                    if profile.accountDisplayName != nil {
+                        Text("@\(profile.cloudName)")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.textMuted)
+                    }
+                    if let deviceName = profile.deviceDisplayName {
+                        Text("This device: \(deviceName)")
                             .font(FS.font.caption())
                             .foregroundColor(c.textMuted)
                     }

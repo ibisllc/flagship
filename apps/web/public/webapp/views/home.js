@@ -34,6 +34,7 @@ import { depositCgkIfNeeded } from "../lib/cgkDeposit.js";
 import { depositPairingIfNeeded } from "../lib/pairingDeposit.js";
 import { liveSync } from "../lib/liveSync.js";
 import { fetchLeads, invertLeadsMap } from "../lib/directLeads.js";
+import { fetchDecryptedDirectory } from "../lib/accountDirectory.js";
 
 registerView("view-home", { tab: "home" });
 
@@ -465,7 +466,7 @@ function renderEmptyServersList(root, { reason, username } = {}) {
     ? `Signed in as ${username}. Your account has no servers yet — add your first one whenever you're ready. You can run zero, one, or many.`
     : reason === "unpaired"
       ? "Pair the webapp to your phone or pod first, or jump straight in and build a fresh server."
-      : "Mint a recipe, write it to a USB drive with the Flagship burner, and boot a spare machine — you're a few taps from your own cloud.";
+      : "Mint a recipe, write it to a USB drive with the Flagship builder, and boot a spare machine — you're a few taps from your own cloud.";
   const ctaLabel = accountOpen ? "Add your first server" : "Create a server";
   root.innerHTML = `
     <div class="card empty-state">
@@ -526,7 +527,6 @@ function isPromoEntry(e) {
   return e?.label?.startsWith(FLAGSHIP_PROMO_LABEL_PREFIX);
 }
 
-const COM_BASE_FOR_E7 = controlApex();
 const ACCOUNT_RESET_BANNER_ID = "home-account-reset-banner";
 
 // Mirrors wizard.js's `recoveryWarn` slot — the wizard SETs this to "true"
@@ -618,8 +618,8 @@ function renderRecoveryBanner() {
 /**
  * E7 — peer "your account was reset on another device" detector.
  *
- * Signal: this device's local `flagship.pushTokenId` is no longer
- * in `/api/users/:u/devices`. That can only happen if another device
+ * Signal: this profile's immutable account-scoped device ID is no longer
+ * present in the signed directory. That can only happen if another device
  * on the account ran a Disconnect / Replace / Wipe against us, or
  * the Worker GC'd us as an orphan post-rotation.
  *
@@ -634,21 +634,15 @@ function renderRecoveryBanner() {
  */
 async function detectAccountReset(username) {
   if (!username) return;
-  const localToken = recoveryStoreGet("pushTokenId");
-  if (!localToken) return; // fresh install, no token → never orphaned
+  const localDeviceId = getActiveProfile()?.deviceId;
+  if (!localDeviceId) return;
   let devices = [];
   try {
-    const r = await fetch(
-      `${COM_BASE_FOR_E7}/api/users/${encodeURIComponent(username)}/devices`,
-      { cache: "no-store" },
-    );
-    if (!r.ok) return;
-    const body = await r.json();
-    devices = body.devices ?? [];
+    devices = (await fetchDecryptedDirectory()).devices;
   } catch {
     return;
   }
-  const present = devices.some((d) => d.tokenId === localToken);
+  const present = devices.some((device) => device.deviceId === localDeviceId && device.revokedAt == null);
   const banner = document.getElementById(ACCOUNT_RESET_BANNER_ID);
   if (present) {
     // Recovered (or never lost) — clean up the banner if previous
@@ -688,9 +682,8 @@ async function detectAccountReset(username) {
 }
 
 /**
- * v2 device-addressing — read the active profile's deviceCapability
- * block (the `<u>.<device-label>` restricted sub-identity). Returns
- * null for a legacy single-IRK session (no chip, all actions enabled),
+ * Read the active profile's opaque deviceCapability block. Returns
+ * null when the session has no restricted grant (no chip, all actions enabled),
  * mirroring iOS AppState.deviceCapability. The block is stored on the
  * profile descriptor by openAccount / accountResolve at sign-in.
  */
@@ -703,7 +696,7 @@ export function activeDeviceCapability() {
 }
 
 /**
- * Render (or clear) the "Device: <label> · browse-only" chip below the
+ * Render (or clear) the restricted-device scope chip below the
  * username, mirroring iOS HomeScreen.deviceChip. The chip suppresses
  * for a fully-scoped device or a legacy single-IRK session (chipText
  * returns null) — same rule as iOS `!cap.isFullyScoped`.
@@ -928,8 +921,8 @@ export async function renderHome() {
   );
 
   // E7 — fire-and-forget account-reset detection. Renders a danger
-  // banner above the server list if our locally-stored push tokenId
-  // is no longer in /api/users/:u/devices. Silent on failure so a
+  // banner above the server list if our account-scoped device ID
+  // is no longer in the signed directory. Silent on failure so a
   // transient network blip doesn't flash a banner.
   detectAccountReset(session.username).catch(() => {});
 

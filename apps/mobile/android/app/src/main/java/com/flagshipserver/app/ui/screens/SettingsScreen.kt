@@ -101,17 +101,10 @@ fun SettingsScreen(nav: NavController) {
     val scope = rememberCoroutineScope()
     val hasRecovery by app.hasCloudRecovery.collectAsState()
     val username = app.currentUser.collectAsState().value ?: ""
-    // Last-device signal for the deletion ceremony (docs §0: the founding
-    // device isn't in the roster, so derive it from the trusted-device list,
-    // count <= 1). Defaults false until loaded — conservative: shows "set up
-    // recovery" rather than the delete ceremony; .com re-enforces last-device.
+    // The control plane enforces last-device status. The old public push-token
+    // roster is intentionally unavailable and is never used as an identity
+    // source for account deletion.
     var isLastDevice by remember { mutableStateOf(false) }
-    LaunchedEffect(username) {
-        if (username.isNotEmpty()) {
-            isLastDevice = runCatching { server.listDevices(username).devices.size <= 1 }
-                .getOrDefault(false)
-        }
-    }
 
     // Real account type (single vs multi-device + 2FA), read off the Worker
     // `usernames` row via the same VM the Account-security screen uses, so the

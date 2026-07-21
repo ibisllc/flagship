@@ -25,8 +25,7 @@ public struct CreateServerStubScreen: View {
     /// hardcoded "Status: pending" that never moved.
     @State private var deliveredTimeline: ProvisionTimelineViewModel?
     // Delivery-chooser state.
-    @State private var pairVM: BurnerPairViewModel?
-    @State private var showPair = false
+    @State private var pairVM: BuilderPairViewModel?
     @State private var shareURL: URL?
     @State private var showShare = false
     @State private var deliveryBusy = false
@@ -79,30 +78,29 @@ public struct CreateServerStubScreen: View {
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
+            .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
-        .sheet(isPresented: $showPair) {
-            if let pairVM {
-                NavigationStack {
-                    BurnerPairScreen(
-                        vm: pairVM,
-                        onDelivered: { domain, _ in
-                            // Surface the pending pod the moment the recipe is sent.
-                            // One-shot: the phone has no further role after delivery.
-                            onDeliveredVisible(domain, vm.name, vm.description)
-                        },
-                        onClose: {
-                            let serial = pairVM.lastDeliveredSerial ?? ""
-                            let dom = pairVM.deliveredDomain
-                            showPair = false
-                            vm.lastDeliveredSerial = serial
-                            if let dom { vm.phase = .delivered(serial: serial, serverDomain: dom) }
-                        },
-                        onCancel: { showPair = false }
-                    )
-                    .navigationTitle("Pair with burner")
-                    .navigationBarTitleDisplayMode(.inline)
-                }
+        .sheet(item: $pairVM) { presentedVM in
+            NavigationStack {
+                BuilderPairScreen(
+                    vm: presentedVM,
+                    onDelivered: { domain, _ in
+                        // Surface it only after the builder has successfully
+                        // staged the recipe and returned its receipt.
+                        onDeliveredVisible(domain, vm.name, vm.description)
+                    },
+                    onClose: {
+                        let serial = presentedVM.lastDeliveredSerial ?? ""
+                        let dom = presentedVM.deliveredDomain
+                        pairVM = nil
+                        vm.lastDeliveredSerial = serial
+                        if let dom { vm.phase = .delivered(serial: serial, serverDomain: dom) }
+                    },
+                    onCancel: { pairVM = nil }
+                )
+                .navigationTitle("Pair with builder")
+                .navigationBarTitleDisplayMode(.inline)
             }
         }
         .sheet(isPresented: $showShare) {
@@ -114,12 +112,12 @@ public struct CreateServerStubScreen: View {
 
     private func deliveryChooserPage(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            phaseHeader("Get it to a burner", subtitle: "Your recipe is ready. Pick how to send it to the Flagship burner that writes your USB stick.", c: c)
+            phaseHeader("Get it to a builder", subtitle: "Your recipe is ready. Pick how to send it to the Flagship builder that writes your USB stick.", c: c)
 
             Button { startPair() } label: {
                 deliveryCard(icon: "qrcode.viewfinder", accent: c.primary,
-                             title: "Pair with the burner app",
-                             body: "Scan the burner's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the burner is open in front of you.",
+                             title: "Pair with the builder app",
+                             body: "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you.",
                              c: c)
             }
             .buttonStyle(.plain)
@@ -128,7 +126,7 @@ public struct CreateServerStubScreen: View {
             Button { Task { await shareRecipe() } } label: {
                 deliveryCard(icon: "square.and.arrow.up", accent: c.text,
                              title: "Save / share recipe file",
-                             body: "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the box opens it in the burner. No secrets in the file.",
+                             body: "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the box opens it in the builder. No secrets in the file.",
                              c: c)
             }
             .buttonStyle(.plain)
@@ -137,14 +135,14 @@ public struct CreateServerStubScreen: View {
             Button { Task { await copyRecipe() } } label: {
                 deliveryCard(icon: "doc.on.clipboard", accent: c.text,
                              title: copiedToast ? "Copied!" : "Copy recipe to clipboard",
-                             body: "Copy the recipe text, then paste it into the burner's “I have a recipe” box.",
+                             body: "Copy the recipe text, then paste it into the builder's “I have a recipe” box.",
                              c: c)
             }
             .buttonStyle(.plain)
             .disabled(deliveryBusy)
 
             // MOCK mode only: drive the whole create flow end-to-end with no
-            // desktop/burner via the legacy demo-QR relay path. Keeps the
+            // desktop/builder via the legacy demo-QR relay path. Keeps the
             // mock onboarding smoke test exercising a real mint+deliver.
             if !dev.useLiveClient {
                 FSGhostButton("Use a demo QR (mock)", block: true) {
@@ -172,9 +170,7 @@ public struct CreateServerStubScreen: View {
     }
 
     private func startPair() {
-        let vmPair = BurnerPairViewModel(client: LiveBurnerPairClient(), minter: vm)
-        pairVM = vmPair
-        showPair = true
+        pairVM = BuilderPairViewModel(client: LiveBuilderPairClient(), minter: vm)
     }
 
     private func shareRecipe() async {

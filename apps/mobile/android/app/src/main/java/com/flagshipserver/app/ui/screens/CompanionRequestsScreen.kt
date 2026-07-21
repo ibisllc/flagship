@@ -212,7 +212,7 @@ private fun RequestCard(
 }
 
 private fun title(row: CompanionPendingWrite): String {
-    val who = row.companionLabel?.takeIf { it.isNotEmpty() } ?: row.companionTokenPrefix
+    val who = row.companionTokenPrefix
     return when (row.kind) {
         "release-server" -> "Release server name — from $who"
         "revoke-server" -> "Revoke server — from $who"

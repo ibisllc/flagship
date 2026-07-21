@@ -215,7 +215,7 @@ async function main(): Promise<void> {
     let paired = false;
     try {
       const token = bytesToHex(randomBytes(24));
-      const order: PhoneOrder = { type: "add-paired-session", serverId: fqdn, token, label: "enforce-e2e", issuedAt: Date.now() };
+      const order: PhoneOrder = { type: "add-paired-session", serverId: fqdn, token, issuedAt: Date.now() };
       const sig = bytesToHex(signPhoneOrder(order, delegated));
       const r = await http(`https://${fqdn}/api/orders-from-user`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ request: order, signature: sig }) });
       paired = r.status === 200 || r.status === 204;

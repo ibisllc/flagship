@@ -1,18 +1,10 @@
-# Flagship for Desktop — host a server in the app (encrypted, phone-gated VM appliance)
+# Flagship Studio — host a server in the app (encrypted, phone-gated VM appliance)
 
-> **Status: DESIGN LOCKED, build is POST-LAUNCH.** This records the decision + plan
-> from the 2026-07-01 design discussion. It is an upgrade to the
-> **desktop app** (today's burner, `apps/burner-mac`) only — the phone/webapp
-> clients and the daemon core are reused unchanged.
->
-> **Mac reference slice: foundation built on `feat/desktop-vm`.** Pure, fully
-> unit-tested VM core (`FlagshipBurnerCore/VM/`: config/resource-caps/lifecycle/
-> inventory/tier-badge), a thin `VZHost.swift` (VZEFIBootLoader +
-> VZGenericMachinePlatform), the virtualization entitlement, the Burn-to-USB /
-> Host-here wizard chooser, the hosted-servers sidebar, and the debug-grant-gated
-> serial console. NOT yet done: a manual end-to-end VM boot on real hardware
-> (install → sealed → phone unlock → green padlock), Linux/Windows backends, and
-> auto-start-on-host-boot.
+> **Status: SHIPPING, fast-provisioning redesign locked 2026-07-20.** Mac,
+> Linux, and Windows host implementations exist. The current per-server Debian
+> install remains a compatibility path while the generalized encrypted appliance
+> image below is built and validated. The missing physical proof is a fresh image
+> reaching sealed boot, phone approval, registration, and a green padlock.
 
 ## Vision
 
@@ -20,7 +12,7 @@ Let people run a **real Flagship server on hardware they already own** (a Mac mi
 a spare PC, a home Linux box) via a **signed desktop app**, not just by building a
 dedicated USB-burned box — **without giving up the security promise**.
 
-The desktop app is the burner **evolved**, not replaced. One app, one pairing flow,
+The desktop app is the builder **evolved**, not replaced. One app, one pairing flow,
 one trust anchor, two destinations for the same recipe:
 
 - **Burn to USB** → dedicated bare-metal appliance (today's flow).
@@ -28,7 +20,7 @@ one trust anchor, two destinations for the same recipe:
   this machine (new).
 
 Same recipe, same daemon, same phone-unlock — just written to a VM disk instead of a
-USB. Rename the app from "the Burner"/"Assembler" to **Flagship for Desktop** (build a
+USB. Rename the app from "the Builder"/"Builder" to **Flagship Studio** (build a
 box *or* run one here).
 
 ## Decisions (and why)
@@ -44,10 +36,10 @@ box *or* run one here).
    pipe curl into bash is off-brand and the security-literate recoil. A **notarized,
    code-signed** app is a far stronger trust story, is GUI-easy for a non-technical
    owner, and **visibly differentiates us from OpenClaw-style installers** (which are
-   `curl | sh`). The current burner is already code-signed (Developer ID, notarizable,
+   `curl | sh`). The current builder is already code-signed (Developer ID, notarizable,
    privileged helper) — we extend it.
 
-3. **"The appliance, virtualized."** Maximal reuse: the burner already builds the
+3. **"The appliance, virtualized."** Maximal reuse: the builder already builds the
    Debian appliance image; the VM path writes that same image to a VM disk and boots
    it. The daemon runs **unmodified** (normal Linux env — no macOS launchd /
    `systemctl`-skip adaptation), and the phone-gated LUKS unlock runs **verbatim**
@@ -96,7 +88,7 @@ Achievable on all three, but **not with uniform effort or uniform security**. Se
   conflicts). Windows ships last and may launch a reduced tier initially.
 
 The VM management is inherently per-OS (VZ / WHPX-Hyper-V / KVM); expect per-OS VM
-backends behind a shared control/UI layer. The current burner is Mac-only Swift, so the
+backends behind a shared control/UI layer. The current builder is Mac-only Swift, so the
 cross-platform desktop app is new surface.
 
 ## App UX / layout
@@ -152,7 +144,7 @@ of the debug-access lockdown already shipped:
 
 Reuse the existing **one-shot pairing relay**: the app shows a QR + code, the phone
 pairs and delivers the recipe (a capability-bearing artifact — delivered, never
-fetched-by-name). Identical to today's burner pairing; the only difference is the
+fetched-by-name). Identical to today's builder pairing; the only difference is the
 recipe is applied to a VM instead of a USB.
 
 ## What this does NOT change
@@ -176,14 +168,102 @@ recipe is applied to a VM instead of a USB.
   (possibly reduced tier initially). Reuse hard: same image, same daemon, same unlock —
   the app is a VM host + control panel, not a reimplementation.
 
+## Fast provisioning — replace install-per-VM with clone-and-specialize
+
+The original implementation boots a remastered Debian netinst ISO and performs
+a complete unattended OS install inside every new VM. That is correct for a USB
+stick targeting unknown physical hardware, but it is the wrong abstraction for
+a managed VM whose virtual hardware is known in advance.
+
+The failure that forced the redesign was `ezra.jolly-quince` on an Apple-silicon
+Mac: Debian 13.6 arm64 reached partitioning, entered base-system installation,
+wrote about 2 GiB to its sparse disk, then stopped writing while the VZ guest
+held one vCPU at 100%. The only surviving checkpoint was "Installing Debian base
+system (0 min)". A prior 13.5 guest failed with the same disk/CPU signature, so
+updating installation media did not address the underlying d-i/VZ failure.
+
+### Chosen path: a Flagship generalized encrypted appliance
+
+Build and publish one secret-free appliance base for each native guest
+architecture (`amd64`, `arm64`):
+
+1. Start from a pinned Debian cloud/raw build or a reproducible debootstrap
+   pipeline. Debian publishes current 3 GiB raw and roughly 320–415 MiB qcow2
+   images for both architectures at
+   `https://cloud.debian.org/images/cloud/trixie/latest/`; those prove the size
+   and boot model, but are not used unmodified because their root is not LUKS.
+2. Produce the Flagship disk layout ahead of time: EFI + `/boot` + LUKS root,
+   using the same disposable build-time key and phone rekey protocol as the
+   installer path.
+3. Preinstall the kernel/initramfs (including the VM NIC/storage drivers), Node,
+   Docker, Caddy, the daemon release, systemd units, and first-boot specializer.
+   A new server must not run apt, git clone, npm install, or TypeScript builds.
+4. Generalize before publication: remove machine-id, host keys, random seeds,
+   logs, network leases, Flagship identity, recipes, entitlements, certificates,
+   and every other per-machine artifact. CI boots the image once and asserts
+   those absences before signing its manifest.
+5. Studio downloads and hash-verifies the compressed base once per architecture.
+   macOS creates an APFS copy-on-write clone of the raw disk; Linux and Windows
+   create a qcow2 overlay backed by the immutable cached base. Creation is then
+   metadata-speed rather than a 30–60 minute OS install.
+6. Attach a small owner-only seed disk carrying the verified recipe. First boot
+   expands the data/root allocation, generates the unique box identity, replaces
+   the disposable LUKS key with the phone-sealed key, registers, and starts the
+   daemon. After an authenticated guest receipt, Studio detaches and deletes the
+   seed. The host never receives the final disk key.
+
+Expected user-visible flow: download/verify the base on first use, then
+"Creating encrypted server" for clone + specialization; subsequent servers skip
+the base download. Success is driven by signed/allowlisted guest checkpoints,
+not elapsed-time guesses or a clean VM stop.
+
+### Rejected/default-not-chosen paths
+
+- **Official cloud image + ordinary cloud-init:** very fast, but the published
+  root is unencrypted. Adding LUKS after first boot creates a plaintext window
+  and changes the security promise, so it is useful only as an image-builder
+  input.
+- **Native daemon or containers on the host:** lightest and fastest, but removes
+  phone-gated LUKS and weakens isolation. It remains intentionally below the VM
+  appliance tier.
+- **Install once locally, then clone that VM:** improves the second server but
+  leaves every customer with one long/failure-prone first install and makes
+  safe generalization/versioning harder than a CI-built base.
+- **Keep optimizing d-i:** retain only as compatibility/fallback and for USB.
+  More CPUs, a full DVD ISO, or fewer tasksel packages can reduce time but do not
+  remove the installer state machine or its hang surface.
+- **Alpine/Buildroot/microVM rewrite:** could make the smallest guest, but forks
+  the production Debian appliance and revives the parked Alpine work. Revisit
+  only after the Debian generalized image is proven.
+
+### Compatibility-path observability
+
+Until clone-and-specialize replaces it, all three desktop hosts show the same
+privacy-safe installer stream: canonical phase, an allowlisted d-i stage, and
+elapsed minutes. The detached guest watcher reports stage changes plus a
+two-minute heartbeat; Studio logs each new checkpoint and warns after three
+minutes without one. It never uploads raw syslog, package names/output, recipe
+bytes, keys, network identifiers, or user content. Remastered installer/config/
+disk artifacts are owner-only on Unix hosts. The random order-status capability
+is validated before use, retained only through an incomplete/retryable install,
+and erased from the VM record as soon as installation succeeds.
+
+### Delivery order
+
+1. Reproducible dual-arch image builder + generalization audit.
+2. Signed appliance manifest and cache alongside the existing ISO manifest.
+3. macOS APFS clone + seed-disk proof, including LUKS rekey and first green
+   padlock.
+4. Linux qcow2 overlay parity, then Windows qcow2/WHPX parity.
+5. Switch Host-here to the image path; keep the installer behind an explicit
+   recovery/compatibility action until the image path has physical validation.
+
 ## Open questions / follow-ups
 
-- Which hypervisor building blocks per OS (raw VZ vs a thin wrapper; QEMU/WHPX vs
-  Hyper-V on Windows; KVM/libvirt vs a lib on Linux) — spike on Mac first.
-- Cross-platform desktop app stack (per-OS native vs Tauri/Electron shell over per-OS VM
-  backends).
 - Can we trim the guest data stack for lighter hosts (e.g. optional chromium/forgejo)
   without forking the appliance image?
 - Auto-start-on-host-boot + the "waiting for you to unlock" state UX (the VM boots with
   the host but stays sealed until the phone approves).
 - Whether/how to surface the hosted-VM tier badge on the phone (optional polish).
+- Whether the immutable base should carry a minimal recovery partition so a
+  failed update can atomically roll back without downloading the full base.

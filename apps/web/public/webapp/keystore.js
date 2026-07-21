@@ -432,6 +432,26 @@ export async function deriveAccountIdFromSeed(umkSeed) {
   return irkFromInfoSeed(umkSeed, "flagship/account-id/v1");
 }
 
+export async function deriveAccountDeviceKeyFromSeed(umkSeed, accountId, deviceId) {
+  if (typeof accountId !== "string" || !accountId || accountId.includes("|") ||
+      typeof deviceId !== "string" || !/^[0-9a-f]{32}$/.test(deviceId)) {
+    throw new Error("invalid account-scoped device key coordinates");
+  }
+  return irkFromInfoSeed(umkSeed, accountDeviceInfo(accountId, deviceId));
+}
+
+export async function deriveAccountDeviceSeedFromSeed(umkSeed, accountId, deviceId) {
+  if (typeof accountId !== "string" || !accountId || accountId.includes("|") ||
+      typeof deviceId !== "string" || !/^[0-9a-f]{32}$/.test(deviceId)) {
+    throw new Error("invalid account-scoped device key coordinates");
+  }
+  return hkdf32(umkSeed, accountDeviceInfo(accountId, deviceId));
+}
+
+function accountDeviceInfo(accountId, deviceId) {
+  return `flagship/account-device-key/v1|${accountId.toLowerCase()}|${deviceId}`;
+}
+
 /**
  * Contact Account Id (per-author pseudonym) — the v2 redemption identity the
  * CONSUMER (friend) presents to a given author's services, mirroring

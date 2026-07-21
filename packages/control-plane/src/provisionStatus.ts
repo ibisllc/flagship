@@ -175,8 +175,8 @@ export async function handlePostProvisionStatus(
 
   // Mirror onto the demo_users row (if any) so the demo install-progress
   // timeline reads off this SAME canonical channel — one vocabulary for both
-  // demo + real boxes. Best-effort + scoped to a still-`provisioning` row so a
-  // replayed serial can't rewind a live demo's phase.
+  // demo + real boxes. Best-effort; an `up` row accepts only the definitive
+  // `live` recovery because W13 promotes at registration, before ACME finishes.
   await mirrorToDemoRow(deps, serial, body.phase, body.detail, now);
 
   // Push the change to the order owner's devices so the phone's
@@ -220,9 +220,11 @@ const PHASE_BODIES: Record<ProvisionStatusPhase, string> = {
 /**
  * Mirror a canonical phase onto the owner's demo_users row, so the demo
  * install-progress timeline (rendered off `demoServer.phase`) reads off this
- * single canonical channel. SERIAL → auth-code → username → demo row. Only
- * stamps a row that is still `provisioning` (a replayed serial can't rewind a
- * live demo). Never throws — the canonical status write has already succeeded.
+ * single canonical channel. SERIAL → auth-code → username → demo row. W13
+ * promotes the row to `ready` as soon as registration succeeds, so a later ACME
+ * retry must still be allowed to replace an earlier `error` with `live`; every
+ * other report against a `ready` row is ignored to prevent replay rewind. Never
+ * throws — the canonical status write has already succeeded.
  */
 async function mirrorToDemoRow(
   deps: ProvisionStatusDeps,
@@ -236,7 +238,8 @@ async function mirrorToDemoRow(
     const order = await deps.authCodes.get(serial);
     if (!order) return;
     const row = await deps.demoUsers.get(order.username);
-    if (!row || row.state !== "provisioning") return;
+    if (!row) return;
+    if (row.state !== "provisioning" && !(row.state === "ready" && phase === "live")) return;
     await deps.demoUsers.setProvisionPhase(
       order.username,
       phase,

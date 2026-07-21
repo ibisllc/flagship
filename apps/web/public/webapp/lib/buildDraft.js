@@ -151,7 +151,7 @@ export function canonicalInstallBlob(b) {
   // the exact pre-existing canonical bytes (old signatures keep verifying).
   // When present it is appended as the LAST field, so the signer commits to
   // it — a relay cannot strip the field (signature would fail) nor downgrade
-  // the value. MUST stay byte-identical to the TS or the QR→burner→register
+  // the value. MUST stay byte-identical to the TS or the QR→builder→register
   // signature chain breaks.
   if (b.bootUnlockMode !== undefined) parts.push(b.bootUnlockMode);
   // Same backward-compatible append, AFTER bootUnlockMode. The `de=` prefix

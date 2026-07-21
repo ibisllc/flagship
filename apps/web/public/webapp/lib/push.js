@@ -13,6 +13,7 @@
 import { bytesToHex, hexToBytes, signWithIrk } from "../keystore.js";
 import { getSession } from "./state.js";
 import { get as profileGet, set as profileSet, remove as profileRemove } from "./profilesStore.js";
+import { getActiveProfile } from "./profiles.js";
 import { controlApex } from "./apex.js";
 
 const APEX = controlApex();
@@ -136,6 +137,7 @@ async function registerWithCom({ session, providerToken }) {
 
   const canonical = canonicalRegister({
     username: session.username,
+    deviceId: getActiveProfile()?.deviceId,
     platform: "webpush",
     providerToken,
     pushX25519Pub,
@@ -148,6 +150,7 @@ async function registerWithCom({ session, providerToken }) {
     body: JSON.stringify({
       request: {
         username: session.username,
+        deviceId: getActiveProfile()?.deviceId,
         platform: "webpush",
         providerToken,
         pushX25519Pub: bytesToHex(pushX25519Pub),
@@ -168,11 +171,13 @@ async function registerWithCom({ session, providerToken }) {
 }
 
 // Pinned to the canonical-bytes shapes in @flagship/protocol.
-function canonicalRegister({ username, platform, providerToken, pushX25519Pub, issuedAt }) {
+function canonicalRegister({ username, deviceId, platform, providerToken, pushX25519Pub, issuedAt }) {
+  if (!/^[0-9a-f]{32}$/.test(deviceId ?? "")) throw new Error("device identity is not initialized");
   return new TextEncoder().encode(
     [
-      "flagship/push-token-register/v1",
+      "flagship/push-token-register/v2",
       username,
+      deviceId,
       platform,
       providerToken,
       bytesToHex(pushX25519Pub),

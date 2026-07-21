@@ -160,7 +160,7 @@ final class SwkDepositCoordinatorTests: XCTestCase {
         return PendingCgkDepositStore(defaults: d)
     }
 
-    private func coordinator(store: PendingSwkDepositStore, mailbox: MockSecretMailboxClient) -> SwkDepositCoordinator {
+    private func coordinator(store: PendingSwkDepositStore, mailbox: MockSecretMailboxClient, hasSession: Bool = true) -> SwkDepositCoordinator {
         let irk = ownerIrk()
         let swkHex = HexUtil.encode(swk)
         return SwkDepositCoordinator(
@@ -168,6 +168,7 @@ final class SwkDepositCoordinatorTests: XCTestCase {
             mailbox: mailbox,
             store: store,
             cgkStore: freshCgkStore(),
+            hasSessionKey: { hasSession },
             deriveIrkAndSwk: { _, _ in (irk, swkHex) },
             deriveCgkHex: { _ in HexUtil.encode(Data(repeating: 0x55, count: 32)) }
         )
@@ -218,6 +219,36 @@ final class SwkDepositCoordinatorTests: XCTestCase {
         XCTAssertEqual(mailbox.swkDeposits.count, 1, "no double-deposit")
     }
 
+    func test_coldSessionDefersDeposit_noPrompt_staysPending() async {
+        // The automatic (reconcile-driven) deposit must NEVER initiate a Face ID
+        // prompt: when the session is not already unlocked (`hasSessionKey` false)
+        // it defers — no deposit, the pending marker stays for a later pass once
+        // the user has authenticated. This is what stops the "random Face ID on
+        // the Home screen" a periodic refresh used to cause.
+        let store = freshStore()
+        store.markPending(for: serverDomain)
+        let mailbox = MockSecretMailboxClient()
+        await coordinator(store: store, mailbox: mailbox, hasSession: false)
+            .depositIfNeeded(serverDomain: serverDomain, identityPubKeyHex: boxIdentityPubHex())
+        XCTAssertTrue(mailbox.swkDeposits.isEmpty, "cold session must not deposit")
+        XCTAssertTrue(store.isPending(for: serverDomain), "marker stays pending for retry")
+        XCTAssertFalse(store.isDeposited(for: serverDomain))
+    }
+
+    func test_userInitiatedRepairMayAuthenticateAndDeposit() async {
+        let store = freshStore()
+        store.markPending(for: serverDomain)
+        let mailbox = MockSecretMailboxClient()
+        await coordinator(store: store, mailbox: mailbox, hasSession: false)
+            .depositIfNeeded(
+                serverDomain: serverDomain,
+                identityPubKeyHex: boxIdentityPubHex(),
+                allowAuthentication: true
+            )
+        XCTAssertEqual(mailbox.swkDeposits.count, 1)
+        XCTAssertTrue(store.isDeposited(for: serverDomain))
+    }
+
     func test_failureKeepsPendingForRetry() async {
         let store = freshStore()
         store.markPending(for: serverDomain)
@@ -241,6 +272,7 @@ final class SwkDepositCoordinatorTests: XCTestCase {
         let cgk = Data(repeating: 0x55, count: 32)
         let coord = SwkDepositCoordinator(
             username: "alice", mailbox: mailbox, store: swkStore, cgkStore: cgkStore,
+            hasSessionKey: { true },
             deriveIrkAndSwk: { _, _ in (irk, HexUtil.encode(self.swk)) },
             deriveCgkHex: { _ in HexUtil.encode(cgk) }
         )
@@ -327,6 +359,7 @@ final class SwkDepositMigrationContractTests: XCTestCase {
             mailbox: mailbox,
             store: store,
             cgkStore: freshCgkStore(),
+            hasSessionKey: { true },
             deriveIrkAndSwk: { serverId, _ in
                 derived.serverIds.append(serverId)
                 return (irk, HexUtil.encode(Data(repeating: 0x33, count: 32)))
@@ -388,6 +421,7 @@ final class SwkDepositMigrationContractTests: XCTestCase {
         let irk = ownerIrk()
         let coord = SwkDepositCoordinator(
             username: "alice", mailbox: mailbox, store: store, cgkStore: cgkStore,
+            hasSessionKey: { true },
             deriveIrkAndSwk: { _, _ in (irk, HexUtil.encode(Data(repeating: 0x33, count: 32))) },
             deriveCgkHex: { _ in HexUtil.encode(Data(repeating: 0x55, count: 32)) },
             resolveMigrationSwk: { _ in .deferDeposit }
@@ -456,6 +490,7 @@ final class PairingDepositCoordinatorTests: XCTestCase {
         let irk = ownerIrk()
         return SwkDepositCoordinator(
             username: "alice", mailbox: mailbox, store: swk, pairingStore: pairing,
+            hasSessionKey: { true },
             deriveIrkAndSwk: { _, _ in (irk, HexUtil.encode(Data(repeating: 0x33, count: 32))) }
         )
     }
@@ -463,7 +498,7 @@ final class PairingDepositCoordinatorTests: XCTestCase {
     /// Build a stashable order JSON the way the create flow does.
     private func stashedOrderJson(irk: Curve25519.Signing.PrivateKey) throws -> String {
         try CreateTimePairing.build(
-            username: "alice", serverDomain: serverDomain, label: "iPhone",
+            username: "alice", serverDomain: serverDomain,
             irk: irk, now: 1_750_000_000_000, token: "ab".repeated(32)
         ).pairingOrderJson
     }

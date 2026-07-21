@@ -30,7 +30,10 @@ function podOptions(model: { options: Array<{ isAll: boolean }> }) {
 // `revokedAt` drive leader derivation (earliest-registered non-revoked).
 let registeredSeq = 0;
 function pod(serverDomain: string, extra: Record<string, unknown> = {}) {
-  return { serverDomain, state: "online" as const, registeredAt: ++registeredSeq, revokedAt: null, ...extra };
+  // lastReported marks the pod as having come online — leaderFqdnOf skips
+  // never-online pods (parity with iOS/Android); override lastReported:null to
+  // model a still-provisioning box.
+  return { serverDomain, state: "online" as const, registeredAt: ++registeredSeq, revokedAt: null, lastReported: 1, ...extra };
 }
 
 const HOME = "home.alice.flagship.services";
@@ -179,6 +182,21 @@ describe("podSwitcher — leader marking", () => {
     expect(leaderFqdnOf([pod(HOME), pod(WORK)])).toBe(HOME.toLowerCase());
     expect(leaderFqdnOf([pod(WORK, { revokedAt: 1 }), pod(HOME)])).toBe(HOME.toLowerCase());
     expect(leaderFqdnOf([])).toBe("");
+  });
+
+  it("leaderFqdnOf skips a never-online pod (parity with iOS/Android leader suppression)", () => {
+    // HOME registered first but has never come online (still provisioning);
+    // WORK registered later but is live. The leader is the live pod, not the
+    // earliest-registered one — a provisioning box must not wear the leader flag.
+    const home = pod(HOME, { lastReported: null }); // registeredAt = N, never online
+    const work = pod(WORK); // registeredAt = N+1, online (factory sets lastReported)
+    expect(leaderFqdnOf([home, work])).toBe(WORK.toLowerCase());
+    // A pod that came online via a landed cert (no heartbeat yet) still counts.
+    const homeCert = pod(HOME, { lastReported: null, currentCert: { validUntil: Date.now() + 1e6 } });
+    const workNever = pod(WORK, { lastReported: null });
+    expect(leaderFqdnOf([homeCert, workNever])).toBe(HOME.toLowerCase());
+    // No pod has come online yet ⇒ no leader flag anywhere.
+    expect(leaderFqdnOf([pod(HOME, { lastReported: null }), pod(WORK, { lastReported: null })])).toBe("");
   });
 });
 

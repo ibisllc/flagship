@@ -27,7 +27,7 @@ final class AutoPairCoordinatorTests: XCTestCase {
         let s = store()
         let k = key()
         let counter = Counter()
-        let coord = AutoPairCoordinator(client: mock, store: s, label: "iPhone", signer: { _ in counter.n += 1; return k })
+        let coord = AutoPairCoordinator(client: mock, store: s, signer: { _ in counter.n += 1; return k })
 
         let pods = [pod("home.alice.flagship.services"), pod("blog.alice.flagship.services")]
         await coord.pairVisiblePods(pods)

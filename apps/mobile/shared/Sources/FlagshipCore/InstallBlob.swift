@@ -369,21 +369,17 @@ public enum WipeRestartClaim {
 /// signed. Platform is one of `apns`, `fcm`, `webpush`; `providerToken`
 /// is opaque to .com (APNs hex token or FCM registration ID).
 public enum PushTokenRegister {
-    public static let canonicalTag = "flagship/push-token-register/v1"
+    public static let canonicalTag = "flagship/push-token-register/v2"
     public static func canonicalBytes(
         username: String,
+        deviceId: String,
         platform: String,
         providerToken: String,
         pushX25519PubHex: String,
-        label: String,
         issuedAt: Int64
     ) -> Data {
-        // Field order must match the Worker's canonicalPushTokenRegister
-        // in packages/protocol/src/auth.ts. The `label` field was added
-        // pre-launch (no v2 bump needed); it slots between pushX25519Pub
-        // and issuedAt on both sides.
         Data([
-            canonicalTag, username, platform, providerToken, pushX25519PubHex, label, String(issuedAt)
+            canonicalTag, username, deviceId, platform, providerToken, pushX25519PubHex, String(issuedAt)
         ].joined(separator: "|").utf8)
     }
 }
