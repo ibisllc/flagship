@@ -165,6 +165,7 @@ class VMLifecycleError(Exception):
 # install cannot complete faster than this. Edge: exactly the minimum counts as
 # success.
 MIN_PLAUSIBLE_INSTALL_SECONDS = 90.0
+MIN_PLAUSIBLE_SPECIALIZATION_SECONDS = 5.0
 
 
 def verdict_for_clean_install_stop(elapsed_seconds: float) -> VMEvent:
@@ -177,6 +178,18 @@ def verdict_for_clean_install_stop(elapsed_seconds: float) -> VMEvent:
         f"The installer stopped after only {secs}s — too fast to have completed. "
         "The guest likely failed to boot the installer ISO. Retry the install; "
         "if it persists, re-download the base image and remaster again."
+    )
+
+
+def verdict_for_clean_provisioning_stop(elapsed_seconds: float, prebuilt: bool) -> VMEvent:
+    if not prebuilt:
+        return verdict_for_clean_install_stop(elapsed_seconds)
+    if elapsed_seconds >= MIN_PLAUSIBLE_SPECIALIZATION_SECONDS:
+        return VMEvent.install_succeeded()
+    secs = int(round(elapsed_seconds))
+    return VMEvent.install_failed(
+        f"The appliance stopped after only {secs}s — too fast to have specialized. "
+        "The image may be the wrong architecture or otherwise not bootable."
     )
 
 

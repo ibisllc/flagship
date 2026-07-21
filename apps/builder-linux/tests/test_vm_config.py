@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 
 from vm import resource_plan
-from vm.config import VMConfig, VMNetworkMode
+from vm.config import VMConfig, VMNetworkMode, VMProvisioningMode
 from vm.host_resources import HostResources
 from vm.recipe_info import read_recipe_fields
 
@@ -53,3 +53,13 @@ def test_sealed_boot_follows_disk_encryption():
 def test_boot_unlock_mode_defaults_auto():
     assert plan(RECIPE).boot_unlock_mode == "auto"
     assert plan({**RECIPE, "bootUnlockMode": "approve"}).boot_unlock_mode == "approve"
+
+
+def test_prebuilt_provisioning_mode_is_explicit_and_iso_is_default():
+    assert plan(RECIPE).provisioning_mode == VMProvisioningMode.INSTALLER_ISO
+    raw = json.dumps(RECIPE).encode("utf-8")
+    cfg = VMConfig.plan(
+        read_recipe_fields(raw), raw, HOST,
+        provisioning_mode=VMProvisioningMode.PREBUILT_APPLIANCE,
+    )
+    assert cfg.provisioning_mode == VMProvisioningMode.PREBUILT_APPLIANCE

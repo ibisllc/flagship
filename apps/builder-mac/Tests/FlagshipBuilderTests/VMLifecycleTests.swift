@@ -185,6 +185,23 @@ final class VMLifecycleTests: XCTestCase {
         }
     }
 
+    func testPrebuiltSpecializationUsesShortButNonzeroStopFloor() {
+        let start = Date(timeIntervalSince1970: 0)
+        let complete = start.addingTimeInterval(VMLifecycle.minPlausibleSpecializationDuration)
+        XCTAssertEqual(VMLifecycle.verdictForCleanProvisioningStop(
+            mode: .prebuiltAppliance, installStartedAt: start, now: complete), .installed)
+        guard case .failedTooFast = VMLifecycle.verdictForCleanProvisioningStop(
+            mode: .prebuiltAppliance, installStartedAt: start,
+            now: start.addingTimeInterval(0.3)) else {
+            return XCTFail("an immediate clean stop must not pass appliance specialization")
+        }
+        guard case .failedTooFast = VMLifecycle.verdictForCleanProvisioningStop(
+            mode: .installerISO, installStartedAt: start,
+            now: start.addingTimeInterval(VMLifecycle.minPlausibleSpecializationDuration)) else {
+            return XCTFail("the ISO path must retain its longer install floor")
+        }
+    }
+
     func testComingUpStallAdvisory() {
         // A sealed guest awaiting unlock should surface a "taking longer than
         // expected" advisory once it has waited past the stall threshold — but

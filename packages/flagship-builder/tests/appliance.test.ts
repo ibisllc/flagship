@@ -1,0 +1,70 @@
+import { createHash } from "node:crypto";
+import { describe, expect, it } from "vitest";
+import {
+  APPLIANCE_FORBIDDEN_PATHS,
+  APPLIANCE_SEED_HEADER_BYTES,
+  APPLIANCE_SEED_MAGIC,
+  APPLIANCE_SEED_SIZE_BYTES,
+  buildAppliancePrepareScript,
+  buildApplianceSpecializerScript,
+  encodeApplianceSeed,
+} from "../src/appliance.js";
+
+describe("generalized VM appliance", () => {
+  it("encodes a fixed-size, independently hashed raw seed", () => {
+    const recipe = Buffer.from('{"serverDomain":"home.alice.flagship.services"}');
+    const seed = Buffer.from(encodeApplianceSeed(recipe, "#!/bin/bash\necho specialize\n"));
+    expect(seed.length).toBe(APPLIANCE_SEED_SIZE_BYTES);
+    expect(seed.subarray(0, 8).toString("ascii")).toBe(APPLIANCE_SEED_MAGIC);
+    const bodyLength = Number.parseInt(seed.subarray(8, 16).toString("ascii"), 16);
+    const bodySha = seed.subarray(16, 80).toString("ascii");
+    const body = seed.subarray(APPLIANCE_SEED_HEADER_BYTES, APPLIANCE_SEED_HEADER_BYTES + bodyLength);
+    expect(createHash("sha256").update(body).digest("hex")).toBe(bodySha);
+    const payload = JSON.parse(body.toString("utf8"));
+    expect(Buffer.from(payload.recipeBase64, "base64")).toEqual(recipe);
+    expect(Buffer.from(payload.bootstrapBase64, "base64").toString()).toContain("specialize");
+    expect(payload.recipeSha256).toBe(createHash("sha256").update(recipe).digest("hex"));
+  });
+
+  it("specializes only after validating the seed and cleans the public build key last", () => {
+    const script = buildApplianceSpecializerScript();
+    expect(script).toContain("specialization failed line=$LINENO rc=$rc");
+    expect(script).toContain("| xxd -p");
+    expect(script).toContain("generalized base readiness marker missing");
+    expect(script).toContain("generalized base verified");
+    expect(script).toContain(`'${APPLIANCE_SEED_MAGIC}' | xxd -p`);
+    expect(script).toContain("sha256sum -c -");
+    expect(script).toContain("growpart \"/dev/$ROOT_PARENT\"");
+    expect(script).toContain("cryptsetup resize \"$ROOT_MAPPER\"");
+    expect(script).toContain("resize2fs \"$ROOT_SOURCE\"");
+    expect(script).toContain("FLAGSHIP_APPLIANCE_PREINSTALLED=1");
+    expect(script).toContain("canonical bootstrap failed rc=$BOOTSTRAP_RC");
+    expect(script).toContain("grep -E '^\\[flagship-bootstrap\\] (FATAL|ERROR|WARN(ING)?):'");
+    expect(script.indexOf("FLAGSHIP_APPLIANCE_PREINSTALLED=1")).toBeLessThan(
+      script.indexOf("rm -f /etc/flagship/appliance-build.key"),
+    );
+    expect(script).toContain('cryptsetup luksRemoveKey "$ROOT_LUKS_PART" /etc/flagship/appliance-build.key');
+    expect(script).toContain("systemctl poweroff");
+  });
+
+  it("prepares a secret-free image and declares the generalization audit", () => {
+    const script = buildAppliancePrepareScript({ gitRef: "v-test" });
+    expect(script).toContain(".flagship-appliance-ref");
+    expect(script).toContain("KEYFILE_PATTERN=/etc/flagship/appliance-build.key");
+    expect(script).toContain("flagship-appliance-specialize.service");
+    expect(script).toContain("npx tsc -b\n");
+    expect(script).toContain("workspace link missing");
+    expect(script).toContain("/usr/local/lib/flagship-appliance/flagship-unseal");
+    expect(script).toContain("GOMODCACHE=/root/go/pkg/mod");
+    expect(script).toContain("git clone --depth 2");
+    expect(script).toContain("rm -rf /root/go /root/.cache/go-build /root/.npm /root/.cache");
+    expect(script).toContain("apt-get clean");
+    expect(script).toContain("rm -rf /var/lib/apt/lists/*");
+    expect(script).toContain("touch /etc/flagship/appliance-ready");
+    expect(script).not.toContain("npx tsc -b || true");
+    for (const path of APPLIANCE_FORBIDDEN_PATHS) {
+      expect(script).toContain(path);
+    }
+    expect(script).not.toContain("home.alice");
+  });
+});

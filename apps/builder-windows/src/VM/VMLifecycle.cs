@@ -146,6 +146,7 @@ public sealed class VMLifecycle
     /// complete faster than this.
     /// </summary>
     public static readonly TimeSpan MinPlausibleInstallDuration = TimeSpan.FromSeconds(90);
+    public static readonly TimeSpan MinPlausibleSpecializationDuration = TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// The duration-gated verdict for a clean guest-stop observed while
@@ -162,6 +163,19 @@ public sealed class VMLifecycle
             $"The installer stopped after only {secs}s — too fast to have completed. " +
             "The guest likely failed to boot the installer ISO. Retry the install; " +
             "if it persists, re-download the base image and remaster again.");
+    }
+
+    public static VMEvent VerdictForCleanProvisioningStop(
+        TimeSpan elapsedSinceInstallStart, VMProvisioningMode mode)
+    {
+        if (mode == VMProvisioningMode.InstallerISO)
+            return VerdictForCleanInstallStop(elapsedSinceInstallStart);
+        if (elapsedSinceInstallStart >= MinPlausibleSpecializationDuration)
+            return VMEvent.InstallSucceeded;
+        var secs = (int)Math.Round(elapsedSinceInstallStart.TotalSeconds);
+        return VMEvent.InstallFailed(
+            $"The appliance stopped after only {secs}s — too fast to have specialized. " +
+            "The image may be the wrong architecture or otherwise not bootable.");
     }
 
     /// <summary>

@@ -15,6 +15,12 @@ public enum VMNetworkMode
     Nat,
 }
 
+public enum VMProvisioningMode
+{
+    InstallerISO,
+    PrebuiltAppliance,
+}
+
 /// <summary>
 /// The deterministic spec for one hosted VM — a pure function of the recipe +
 /// host resources. All decisions live HERE; the QEMU adapter merely translates
@@ -49,6 +55,8 @@ public sealed record VMConfig
     /// <summary>Random order capability used only to read privacy-safe guest
     /// install checkpoints. It grants no server/content access.</summary>
     public string? ProvisionStatusSerial { get; init; }
+    [JsonConverter(typeof(VMProvisioningModeJsonConverter))]
+    public VMProvisioningMode ProvisioningMode { get; init; } = VMProvisioningMode.InstallerISO;
 
     /// <summary>
     /// Whether a boot passes through the sealed "waiting for you to unlock"
@@ -69,7 +77,8 @@ public sealed record VMConfig
     public static VMConfig Plan(Recipe recipe,
                                 byte[] recipeJson,
                                 HostResources host,
-                                ulong mainDiskSizeBytes = VMResourcePlan.DefaultMainDiskSizeBytes)
+                                ulong mainDiskSizeBytes = VMResourcePlan.DefaultMainDiskSizeBytes,
+                                VMProvisioningMode provisioningMode = VMProvisioningMode.InstallerISO)
         => new()
         {
             Name = recipe.ServerDomain,
@@ -84,7 +93,23 @@ public sealed record VMConfig
             BootUnlockMode = recipe.EffectiveBootUnlockMode,
             DiskEncrypted = recipe.EncryptsDisk,
             ProvisionStatusSerial = recipe.AuthCode.Serial,
+            ProvisioningMode = provisioningMode,
         };
+}
+
+public sealed class VMProvisioningModeJsonConverter : JsonConverter<VMProvisioningMode>
+{
+    public override VMProvisioningMode Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        => reader.GetString() switch
+        {
+            "installerISO" => VMProvisioningMode.InstallerISO,
+            "prebuiltAppliance" => VMProvisioningMode.PrebuiltAppliance,
+            var s => throw new JsonException($"Unknown provisioning mode '{s}'."),
+        };
+
+    public override void Write(Utf8JsonWriter writer, VMProvisioningMode value, JsonSerializerOptions options)
+        => writer.WriteStringValue(value == VMProvisioningMode.PrebuiltAppliance
+            ? "prebuiltAppliance" : "installerISO");
 }
 
 /// <summary>JSON string form matches the Swift raw value ("nat").</summary>

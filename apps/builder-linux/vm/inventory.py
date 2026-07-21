@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
-from .config import VMConfig, VMNetworkMode
+from .config import VMConfig, VMNetworkMode, VMProvisioningMode
 from .lifecycle import VMFailure, VMFailurePhase, VMState, VMStateKind
 from .server_tier import ServerTier
 
@@ -46,6 +46,9 @@ class VMBundleLayout:
 
     def installer_iso_path(self, name: str) -> str:
         return str(Path(self.bundle_dir(name)) / "installer.iso")
+
+    def appliance_seed_path(self, name: str) -> str:
+        return str(Path(self.bundle_dir(name)) / "seed.img")
 
     def efi_variable_store_path(self, name: str) -> str:
         return str(Path(self.bundle_dir(name)) / "efi-vars.fd")
@@ -102,6 +105,7 @@ def _config_to_dict(c: VMConfig) -> dict:
         "diskEncrypted": c.disk_encrypted,
         "arch": c.arch,
         "provisionStatusSerial": c.provision_status_serial,
+        "provisioningMode": c.provisioning_mode.value,
     }
 
 
@@ -121,6 +125,9 @@ def _config_from_dict(d: dict) -> VMConfig:
         # Legacy bundles predate multi-arch hosting and are all amd64.
         arch=d.get("arch", "amd64"),
         provision_status_serial=d.get("provisionStatusSerial"),
+        provisioning_mode=VMProvisioningMode(
+            d.get("provisioningMode", VMProvisioningMode.INSTALLER_ISO.value)
+        ),
     )
 
 
@@ -239,6 +246,7 @@ class VMInventoryStore:
             self.layout.config_path(name),
             self.layout.disk_image_path(name),
             self.layout.installer_iso_path(name),
+            self.layout.appliance_seed_path(name),
             self.layout.efi_variable_store_path(name),
             self.layout.console_log_path(name),
         )

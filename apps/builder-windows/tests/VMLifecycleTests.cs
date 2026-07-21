@@ -216,6 +216,17 @@ public class VMLifecycleTests
     }
 
     [Fact]
+    public void PrebuiltSpecializationHasShortNonzeroFloor()
+    {
+        Assert.Equal(VMEvent.InstallSucceeded, VMLifecycle.VerdictForCleanProvisioningStop(
+            VMLifecycle.MinPlausibleSpecializationDuration, VMProvisioningMode.PrebuiltAppliance));
+        Assert.Equal(VMEventKind.InstallFailed, VMLifecycle.VerdictForCleanProvisioningStop(
+            TimeSpan.FromMilliseconds(300), VMProvisioningMode.PrebuiltAppliance).Kind);
+        Assert.Equal(VMEventKind.InstallFailed, VMLifecycle.VerdictForCleanProvisioningStop(
+            VMLifecycle.MinPlausibleSpecializationDuration, VMProvisioningMode.InstallerISO).Kind);
+    }
+
+    [Fact]
     public void InstanceVerdictDerivesElapsedFromTheStateTimestamp()
     {
         var t0 = DateTimeOffset.FromUnixTimeSeconds(1000);

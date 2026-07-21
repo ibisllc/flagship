@@ -169,6 +169,11 @@ extension VMLifecycle {
     /// or REBOOTED (VZ surfaces both as a delegate `guestDidStop`, so the
     /// distinction is duration, not the stop kind).
     public static let minPlausibleInstallDuration: TimeInterval = 90
+    /// A prebuilt disk has no OS/package install phase. It only needs enough
+    /// time to boot, validate its seed, register, re-key LUKS, and shut down.
+    /// Retain a small floor so an unbootable/wrong-arch disk cannot be marked
+    /// installed from Virtualization.framework's immediate clean stop.
+    public static let minPlausibleSpecializationDuration: TimeInterval = 5
 
     public enum InstallStopVerdict: Equatable, Sendable {
         case installed
@@ -184,6 +189,16 @@ extension VMLifecycle {
         return elapsed >= minPlausibleInstallDuration
             ? .installed
             : .failedTooFast(elapsed: elapsed)
+    }
+
+    public static func verdictForCleanProvisioningStop(mode: VMProvisioningMode,
+                                                       installStartedAt: Date,
+                                                       now: Date) -> InstallStopVerdict {
+        let elapsed = now.timeIntervalSince(installStartedAt)
+        let minimum = mode == .prebuiltAppliance
+            ? minPlausibleSpecializationDuration
+            : minPlausibleInstallDuration
+        return elapsed >= minimum ? .installed : .failedTooFast(elapsed: elapsed)
     }
 
     /// A sealed guest awaiting phone-unlock should come online within a few

@@ -57,6 +57,7 @@ public sealed class VMInventoryStoreTests : IDisposable
         Assert.Equal("config.json", Path.GetFileName(layout.ConfigPath("a.b")));
         Assert.Equal("disk.qcow2", Path.GetFileName(layout.DiskImagePath("a.b")));
         Assert.Equal("installer.iso", Path.GetFileName(layout.InstallerIsoPath("a.b")));
+        Assert.Equal("seed.img", Path.GetFileName(layout.ApplianceSeedPath("a.b")));
         Assert.Equal("efi-vars.fd", Path.GetFileName(layout.EfiVariableStorePath("a.b")));
         Assert.Equal("console.log", Path.GetFileName(layout.ConsoleLogPath("a.b")));
     }

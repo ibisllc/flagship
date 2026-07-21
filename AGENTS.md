@@ -149,6 +149,55 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-20 (feature branch only — NOT merged or deployed) — the measured VM
+replacement is a custom preinstalled Flagship appliance, built from Debian's
+official generic cloud image.** Ezra2 repeated Ezra's VZ failure: registration
+never happened and the allowlisted stream remained at “Unpacking the Debian
+base system” through 38 minutes after disk writes stopped. The QEMU/HVF factory
+instead converted Debian's SHA-512-pinned arm64 image into an encrypted 8 GiB
+generalized base in 153–196 seconds; independent fresh-firmware boot smoke
+reaches the readiness marker in about five seconds. A later Mac/HVF rebuild
+stopped writing during the encrypted copy for 23 minutes, so Mac is explicitly
+not a release factory: reproducible artifacts must be manufactured and tested
+under Linux/KVM CI. Customer preparation
+(verify the full base SHA-256, make a 64 GiB thin overlay, write the fixed 8 MiB
+read-only seed) takes 3.9–4.2 seconds and initially allocates ~193 KiB; the base
+allocates ~2.7 GiB. Converting the encrypted base to compressed qcow2 took 42
+seconds and produced a valid 2.65 GiB artifact—LUKS ciphertext does not compress
+meaningfully. The factory now uses a two-commit shallow clone and clears Go/npm/
+apt build caches; its final size still needs measuring under Linux/KVM. A first
+real specialization proved the existing privacy-safe status sequence
+(`Specializing prebuilt server` → registering → sealing) and consumed Ezra2's
+one-time production auth, but exposed 24 minutes of avoidable per-customer
+workspace/Go compilation. The factory now preinstalls the pinned workspace and
+compiled unseal helper; the optimized image passes its factory + fresh-boot
+gates, but Ezra2's recipe expired before its final optimized registration→rekey→
+poweroff timing could be rerun. A fresh paired recipe is the only remaining Mac
+end-to-end input.
+
+Mac verifies arch/ref/size/SHA and APFS-clones (copy fallback); Linux/Windows use
+the same canonical Node verifier/seed generator and thin qcow2 overlays. The
+guest validates the seed, generates a fresh identity, verifies/registers the
+unchanged phone-signed recipe, replaces the public disposable factory LUKS key
+with the phone-sealed key, removes the factory key from disk + initramfs, and
+powers off for normal sealed boot. Factory success requires an explicit guest
+marker, populated removable EFI loader, and an independent boot smoke; logs
+publish only fixed stages/return codes plus one bounded allowlisted fatal line,
+never recipes, keys, package logs, or raw syslog. Decision: manufacture amd64 +
+arm64 Flagship derivatives in Linux/QEMU-KVM CI from official Debian Cloud
+`generic` inputs; do not put a third-party derivative in the trust chain. Cache
+once, clone/overlay per server; retain d-i for USB/bare metal and a VM fallback.
+Before production, sign/pin the appliance manifest and serve resumable artifacts
+from controlled storage. `FLAGSHIP_VM_APPLIANCE_BASE` opts development Studio
+in; `FLAGSHIP_VM_FORCE_ISO=1` selects the baseline. Gates on this Mac: full
+TypeScript suite (the four sandbox-blocked tunnel tests pass with local-listener
+permission), Mac release build + 172 tests, Linux 286 tests, Android unit tests +
+Kotlin compile. **Windows dev-machine TODO (required before merge/release):**
+run/fix the full .NET/WPF suite, build/sign Windows, and perform a real WHPX
+specialization; then run/fix/package Linux and perform a real KVM specialization.
+Publish neither platform nor appliance artifacts until those tests and the
+fresh-recipe Mac sealed→live comparison pass.
+
 **2026-07-21 (OpenRouter Vibe Code streaming) — OpenRouter BYOK sessions now
 reach the agent loop.** OpenRouter was accepted for stored AI keys and blocking
 chat, but omitted from the streaming registry that Vibe Code exclusively uses,
@@ -319,7 +368,6 @@ the deployed `@openai-build` row in place: after local gates pass, resolve its
 exact D1/provider identifiers, tear it down through the administrative cleanup
 path, then recreate the same public username with encrypted account name
 `OpenAI Build Week`; no production data or server has been touched yet.
-
 **2026-07-20 (VM install rethink) — Ezra proved install-per-VM is the wrong
 default; cross-platform privacy-safe progress landed and clone-and-specialize is
 the locked replacement.** `ezra.jolly-quince` on VZ/Debian 13.6 reached

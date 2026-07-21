@@ -8,6 +8,11 @@ public enum VMNetworkMode: String, Codable, Sendable, Equatable {
     case nat
 }
 
+public enum VMProvisioningMode: String, Codable, Sendable, Equatable {
+    case installerISO
+    case prebuiltAppliance
+}
+
 /// The deterministic spec for one hosted VM — a pure function of the recipe +
 /// host resources. All decisions live HERE; the VZ adapter merely translates
 /// this into a VZVirtualMachineConfiguration.
@@ -36,6 +41,11 @@ public struct VMConfig: Codable, Sendable, Equatable {
     /// running, so Studio can read the same privacy-safe checkpoints the phone
     /// sees. It never grants access to the server or its content.
     public let provisionStatusSerial: String?
+    /// nil decodes legacy bundles as installerISO.
+    public let provisioningMode: VMProvisioningMode?
+    public var effectiveProvisioningMode: VMProvisioningMode {
+        provisioningMode ?? .installerISO
+    }
 
     /// Whether a boot passes through the sealed "waiting for you to unlock"
     /// state: an encrypted guest halts in the initramfs until the phone-home
@@ -56,7 +66,8 @@ public struct VMConfig: Codable, Sendable, Equatable {
             serialConsoleEnabled: serialConsoleEnabled,
             bootUnlockMode: bootUnlockMode,
             diskEncrypted: diskEncrypted,
-            provisionStatusSerial: nil)
+            provisionStatusSerial: nil,
+            provisioningMode: provisioningMode)
     }
 
     public init(name: String,
@@ -70,7 +81,8 @@ public struct VMConfig: Codable, Sendable, Equatable {
                 serialConsoleEnabled: Bool,
                 bootUnlockMode: String,
                 diskEncrypted: Bool,
-                provisionStatusSerial: String? = nil) {
+                provisionStatusSerial: String? = nil,
+                provisioningMode: VMProvisioningMode? = nil) {
         self.name = name
         self.serverDomain = serverDomain
         self.username = username
@@ -83,6 +95,7 @@ public struct VMConfig: Codable, Sendable, Equatable {
         self.bootUnlockMode = bootUnlockMode
         self.diskEncrypted = diskEncrypted
         self.provisionStatusSerial = provisionStatusSerial
+        self.provisioningMode = provisioningMode
     }
 
     /// Build the spec for a verified recipe on this host. Deterministic: the
@@ -93,7 +106,8 @@ public struct VMConfig: Codable, Sendable, Equatable {
     public static func plan(recipe: Recipe,
                             recipeJSON: Data,
                             host: HostResources,
-                            mainDiskSizeBytes: UInt64 = VMResourcePlan.defaultMainDiskSizeBytes) -> VMConfig {
+                            mainDiskSizeBytes: UInt64 = VMResourcePlan.defaultMainDiskSizeBytes,
+                            provisioningMode: VMProvisioningMode = .installerISO) -> VMConfig {
         VMConfig(
             name: recipe.serverDomain,
             serverDomain: recipe.serverDomain,
@@ -106,6 +120,7 @@ public struct VMConfig: Codable, Sendable, Equatable {
             serialConsoleEnabled: RecipeSiblings.debugGrant(inRecipeJSON: recipeJSON) != nil,
             bootUnlockMode: recipe.effectiveBootUnlockMode,
             diskEncrypted: recipe.encryptsDisk,
-            provisionStatusSerial: recipe.authCode.serial)
+            provisionStatusSerial: recipe.authCode.serial,
+            provisioningMode: provisioningMode)
     }
 }

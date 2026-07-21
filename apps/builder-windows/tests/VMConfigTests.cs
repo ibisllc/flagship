@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Xunit;
 using Flagship.Builder;
 using Flagship.Builder.VM;
@@ -148,5 +149,20 @@ public class VMConfigTests
         Assert.Equal(cfg, back);
         // The network mode serializes as the shared raw value.
         Assert.Contains("\"networkMode\": \"nat\"", json);
+    }
+
+    [Fact]
+    public void PrebuiltModeRoundTripsAndLegacyDefaultsToIso()
+    {
+        var cfg = VMConfig.Plan(MakeRecipe(), Json("{}"), Host16,
+            provisioningMode: VMProvisioningMode.PrebuiltAppliance);
+        var json = JsonSerializer.Serialize(cfg, VMInventoryStore.SerializerOptions);
+        Assert.Contains("\"provisioningMode\": \"prebuiltAppliance\"", json);
+        Assert.Equal(cfg, JsonSerializer.Deserialize<VMConfig>(json, VMInventoryStore.SerializerOptions));
+        var legacyObject = JsonNode.Parse(json)!.AsObject();
+        legacyObject.Remove("provisioningMode");
+        var legacy = legacyObject.ToJsonString();
+        Assert.Equal(VMProvisioningMode.InstallerISO,
+            JsonSerializer.Deserialize<VMConfig>(legacy, VMInventoryStore.SerializerOptions)!.ProvisioningMode);
     }
 }

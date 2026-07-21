@@ -14,7 +14,12 @@
  * flagshipserver.com — the phone's signature is the trust root and
  * .com's involvement in the burn step is a non-feature.
  */
-import { writeFile, unlink, readFile } from "node:fs/promises";
+import { writeFile, unlink, readFile, stat, chmod } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { resolve } from "node:path";
+import { createReadStream } from "node:fs";
 import {
   loadBlobFromFile,
   loadBlobFromStdin,
@@ -28,6 +33,12 @@ import {
   remasterIsoWithInstaller,
   detectIsoFamily,
   debugSshKeyFromGrant,
+  buildBootstrapFromRecipe,
+  encodeApplianceSeed,
+  buildDebianApplianceFactoryPreseed,
+  buildDebianCloudApplianceFactoryUserData,
+  buildNocloudSeedIso,
+  remasterIsoWithPreseed,
   type IsoFamily,
 } from "./index.js";
 
@@ -51,6 +62,14 @@ async function main(): Promise<void> {
       return cmdUserData(args.slice(1));
     case "prepare":
       return cmdPrepare(args.slice(1));
+    case "appliance-provision":
+      return cmdApplianceProvision(args.slice(1));
+    case "appliance-factory-iso":
+      return cmdApplianceFactoryIso(args.slice(1));
+    case "appliance-cloud-factory-seed":
+      return cmdApplianceCloudFactorySeed(args.slice(1));
+    case "appliance-manifest":
+      return cmdApplianceManifest(args.slice(1));
     case "write":
       return cmdWrite(args.slice(1));
     case "write-image":
@@ -236,6 +255,148 @@ async function cmdPrepare(rest: string[]): Promise<void> {
   }
 }
 
+interface ApplianceBaseManifest {
+  version: number;
+  arch: "amd64" | "arm64";
+  installerGitRef: string;
+  sha256: string;
+  sizeBytes: number;
+  virtualSizeBytes: number;
+}
+
+/** Linux/Windows host specialization seam. The desktop passes an already
+ * downloaded raw base plus its adjacent manifest; this command verifies the
+ * phone-signed recipe, exact image digest/size/arch/ref, creates a thin qcow2
+ * overlay, and emits the byte-identical seed used by macOS. Nothing owner-
+ * specific is ever written to the generalized base. */
+async function cmdApplianceProvision(rest: string[]): Promise<void> {
+  const recipePath = rest[0];
+  const basePath = rest[1];
+  const manifestPath = rest[2];
+  const diskPath = rest[3];
+  const seedPath = rest[4];
+  const arch = extractFlagValue(rest, "--arch");
+  const diskSizeRaw = extractFlagValue(rest, "--disk-size");
+  const qemuImg = extractFlagValue(rest, "--qemu-img");
+  if (!recipePath || !basePath || !manifestPath || !diskPath || !seedPath
+      || (arch !== "amd64" && arch !== "arm64") || !diskSizeRaw || !qemuImg) {
+    console.error("usage: flagship-build appliance-provision <recipe.json> <base.raw> <manifest.json> <disk.qcow2> <seed.img> --arch amd64|arm64 --disk-size <bytes> --qemu-img <path>");
+    process.exit(2);
+  }
+  const diskSize = Number(diskSizeRaw);
+  if (!Number.isSafeInteger(diskSize) || diskSize <= 0) throw new Error("invalid --disk-size");
+
+  const loaded = await loadRecipe(recipePath);
+  const recipe = await readFile(recipePath);
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as ApplianceBaseManifest;
+  if (manifest.version !== 1 || (manifest.arch !== "amd64" && manifest.arch !== "arm64")
+      || !/^[0-9a-f]{64}$/.test(manifest.sha256)
+      || !Number.isSafeInteger(manifest.sizeBytes) || manifest.sizeBytes <= 0
+      || !Number.isSafeInteger(manifest.virtualSizeBytes)
+      || manifest.virtualSizeBytes < manifest.sizeBytes) {
+    throw new Error("prebuilt appliance manifest is malformed or unsupported");
+  }
+  if (manifest.arch !== arch) throw new Error(`prebuilt appliance is ${manifest.arch}; this host needs ${arch}`);
+  if (manifest.installerGitRef !== loaded.blob.installerGitRef) {
+    throw new Error(`prebuilt appliance contains installer ref ${manifest.installerGitRef}; recipe requires ${loaded.blob.installerGitRef}`);
+  }
+  const baseStat = await stat(basePath);
+  if (baseStat.size !== manifest.sizeBytes) {
+    throw new Error(`prebuilt appliance size mismatch: manifest=${manifest.sizeBytes} actual=${baseStat.size}`);
+  }
+  if (diskSize < manifest.virtualSizeBytes) {
+    throw new Error(`hosted disk is too small: image needs ${manifest.virtualSizeBytes}; configured=${diskSize}`);
+  }
+  const baseHasher = createHash("sha256");
+  for await (const chunk of createReadStream(basePath)) baseHasher.update(chunk);
+  const got = baseHasher.digest("hex");
+  if (got !== manifest.sha256) throw new Error(`prebuilt appliance checksum mismatch: expected=${manifest.sha256} got=${got}`);
+
+  const bootstrap = buildBootstrapFromRecipe(recipe.toString("utf8"), JSON.stringify({
+    installerGitRef: loaded.blob.installerGitRef,
+    encryptRoot: loaded.blob.diskEncryption !== "none",
+  }));
+  const seed = encodeApplianceSeed(recipe, bootstrap);
+  await writeFile(seedPath, seed, { mode: 0o600, flag: "wx" });
+  try {
+    await promisify(execFile)(qemuImg, [
+      "create", "-f", "qcow2", "-F", "raw", "-b", resolve(basePath),
+      diskPath, String(diskSize),
+    ]);
+    await chmod(diskPath, 0o600);
+  } catch (error) {
+    await unlink(seedPath).catch(() => undefined);
+    throw error;
+  }
+  console.log(`verified prebuilt appliance sha256=${got} ref=${manifest.installerGitRef} arch=${arch}`);
+  console.log(`created thin overlay: ${diskPath}`);
+  console.log(`wrote one-use specialization seed: ${seedPath}`);
+}
+
+async function cmdApplianceFactoryIso(rest: string[]): Promise<void> {
+  const input = rest[0];
+  const output = rest[1];
+  const gitRef = extractFlagValue(rest, "--git-ref");
+  if (!input || !output || !gitRef) {
+    console.error("usage: flagship-build appliance-factory-iso <debian.iso> <factory.iso> --git-ref <ref>");
+    process.exit(2);
+  }
+  await remasterIsoWithPreseed({
+    srcIsoPath: input,
+    outIsoPath: output,
+    preseedCfg: buildDebianApplianceFactoryPreseed(gitRef),
+  });
+  console.log(`wrote secret-free appliance factory ISO: ${output}`);
+}
+
+async function cmdApplianceCloudFactorySeed(rest: string[]): Promise<void> {
+  const output = rest[0];
+  const gitRef = extractFlagValue(rest, "--git-ref");
+  if (!output || !gitRef) {
+    console.error("usage: flagship-build appliance-cloud-factory-seed <seed.iso> --git-ref <ref>");
+    process.exit(2);
+  }
+  await buildNocloudSeedIso({
+    outIsoPath: output,
+    userDataYaml: buildDebianCloudApplianceFactoryUserData(gitRef),
+    networkConfigYaml: `version: 2
+ethernets:
+  factory:
+    match:
+      name: "en*"
+    dhcp4: true
+    dhcp6: true
+    nameservers:
+      addresses: [10.0.2.3]
+`,
+  });
+  console.log(`wrote secret-free cloud appliance factory seed: ${output}`);
+}
+
+async function cmdApplianceManifest(rest: string[]): Promise<void> {
+  const basePath = rest[0];
+  const output = rest[1];
+  const arch = extractFlagValue(rest, "--arch");
+  const gitRef = extractFlagValue(rest, "--git-ref");
+  if (!basePath || !output || (arch !== "amd64" && arch !== "arm64") || !gitRef) {
+    console.error("usage: flagship-build appliance-manifest <base.raw> <manifest.json> --arch amd64|arm64 --git-ref <ref>");
+    process.exit(2);
+  }
+  const info = await stat(basePath);
+  const hasher = createHash("sha256");
+  for await (const chunk of createReadStream(basePath)) hasher.update(chunk);
+  const manifest: ApplianceBaseManifest = {
+    version: 1,
+    arch,
+    installerGitRef: gitRef,
+    sha256: hasher.digest("hex"),
+    sizeBytes: info.size,
+    virtualSizeBytes: info.size,
+  };
+  await writeFile(output, JSON.stringify(manifest, null, 2) + "\n", { mode: 0o644, flag: "wx" });
+  console.log(`wrote appliance manifest: ${output}`);
+}
+
 async function cmdWrite(rest: string[]): Promise<void> {
   // `write` — full burn: verify recipe + ISO, pick a removable USB
   // target (interactive picker by default), get a typed-yes from the
@@ -384,6 +545,15 @@ usage:
                                                            (auto-shreds recipe; pass --keep-recipe to skip)
   flagship-build prepare <recipe.json|-> <iso> <out.iso>    bake a flashable unattended ISO
                                                            (auto-detects Ubuntu vs Debian; --family to force)
+  flagship-build appliance-provision <recipe> <base.raw> <manifest.json> <disk.qcow2> <seed.img>
+                                                           verify + create a thin hosted-VM specialization
+                                                           [--arch amd64|arm64] [--disk-size bytes] [--qemu-img path]
+  flagship-build appliance-factory-iso <debian.iso> <factory.iso> --git-ref <ref>
+                                                           build the secret-free generalized-base installer
+  flagship-build appliance-cloud-factory-seed <seed.iso> --git-ref <ref>
+                                                           convert an official Debian cloud disk into the encrypted base
+  flagship-build appliance-manifest <base.raw> <manifest.json> --arch <arch> --git-ref <ref>
+                                                           hash + describe a completed generalized raw disk
   flagship-build write <recipe.json> <iso>                  prepare + raw-write to a USB device
                                                            [--device /dev/diskN | auto] [--yes] [--keep-recipe]
                                                            (needs sudo; interactive picker if no --device)

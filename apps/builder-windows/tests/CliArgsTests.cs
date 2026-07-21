@@ -43,6 +43,17 @@ public class CliArgsTests
     }
 
     [Fact]
+    public void ApplianceProvisionCarriesExactVerificationAndOverlayInputs()
+    {
+        var argv = CliArgs.ApplianceProvision("cli.js", "recipe.json", "base.raw",
+            "base.raw.json", "disk.qcow2", "seed.img", "amd64", 68719476736,
+            "qemu-img.exe");
+        Assert.Equal(new[] { "cli.js", "appliance-provision", "recipe.json", "base.raw",
+            "base.raw.json", "disk.qcow2", "seed.img", "--arch", "amd64",
+            "--disk-size", "68719476736", "--qemu-img", "qemu-img.exe" }, argv);
+    }
+
+    [Fact]
     public void Write_WithDevice()
     {
         var argv = CliArgs.Write(@"C:\entry\cli.ts",

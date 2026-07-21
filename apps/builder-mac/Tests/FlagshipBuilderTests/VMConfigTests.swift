@@ -124,4 +124,18 @@ final class VMConfigTests: XCTestCase {
         let back = try VMInventoryStore.decoder().decode(VMConfig.self, from: data)
         XCTAssertEqual(back, cfg)
     }
+
+    func testPrebuiltProvisioningModeRoundTripAndLegacyDefault() throws {
+        let cfg = VMConfig.plan(recipe: makeRecipe(), recipeJSON: json([:]), host: host16,
+                                provisioningMode: .prebuiltAppliance)
+        XCTAssertEqual(cfg.effectiveProvisioningMode, .prebuiltAppliance)
+        let data = try VMInventoryStore.encoder().encode(cfg)
+        XCTAssertEqual(try VMInventoryStore.decoder().decode(VMConfig.self, from: data), cfg)
+
+        var object = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        object.removeValue(forKey: "provisioningMode")
+        let legacy = try VMInventoryStore.decoder().decode(
+            VMConfig.self, from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertEqual(legacy.effectiveProvisioningMode, .installerISO)
+    }
 }

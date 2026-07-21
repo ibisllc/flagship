@@ -148,6 +148,13 @@ public final class PreseedEngine {
         try invoke("buildUserDataFromRecipe", recipeJSON: recipeJSON, burnOptsJson: burnOpts.json())
     }
 
+    /// The canonical per-owner specialization script for a generalized VM
+    /// appliance. The guest runs it with FLAGSHIP_APPLIANCE_PREINSTALLED=1.
+    public func buildApplianceBootstrap(recipeJSON: Data,
+                                        burnOpts: BurnOptions = .init()) throws -> String {
+        try invoke("buildBootstrapFromRecipe", recipeJSON: recipeJSON, burnOptsJson: burnOpts.json())
+    }
+
     /// Raw invocation with a pre-built `burnOpts` JSON string — the exact wire
     /// shape the canonical generator + Node golden vectors use. Used by the
     /// byte-identity test to isolate JSC fidelity from the BurnOptions struct.

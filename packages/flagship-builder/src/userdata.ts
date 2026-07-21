@@ -635,6 +635,7 @@ GIT_REF="${args.ref}"
 # Recommends of docker.io); docker-compose ships the \`docker compose\` subcommand
 # the data-services init.sh calls.
 export DEBIAN_FRONTEND=noninteractive
+if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" != "1" ]; then
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || echo "[flagship-bootstrap] WARN: NodeSource setup failed; falling back to distro nodejs+npm"
 apt-get install -y --no-install-recommends nodejs jq git curl ca-certificates cryptsetup lvm2 xxd openssl gnupg docker.io docker-cli docker-compose${wpaPkg}
 # Debian's 'nodejs' package does NOT bundle npm (separate package); NodeSource's does.
@@ -646,6 +647,12 @@ if ! command -v npm >/dev/null 2>&1; then
     apt-get install -y --no-install-recommends npm
 fi
 command -v npm >/dev/null 2>&1 || { echo "[flagship-bootstrap] FATAL: npm unavailable; cannot build daemon"; exit 1; }
+else
+    echo "[flagship-bootstrap] generalized appliance detected — packages already present"
+    for _cmd in node npm jq git curl cryptsetup openssl docker; do
+        command -v "$_cmd" >/dev/null 2>&1 || { echo "[flagship-bootstrap] FATAL: appliance missing $_cmd"; exit 1; }
+    done
+fi
 
 # Read the install-blob fields the daemon needs.
 BLOB_JSON=/var/flagship/install-blob.json
@@ -714,7 +721,11 @@ flagship_on_error() {
     report_phase error "bootstrap exited $_rc"
 }
 trap flagship_on_error EXIT
-report_phase downloading
+if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" = "1" ]; then
+    report_phase installing "Specializing prebuilt server"
+else
+    report_phase downloading
+fi
 
 # Persist install-time facts the daemon reads on every boot.
 mkdir -p /var/flagship /boot/flagship
@@ -726,6 +737,14 @@ echo "$AUTH_CODE_SERIAL"       > /var/flagship/auth-code-serial
 cp "$BLOB_JSON" /boot/install-blob.json
 
 # Clone flagship + build daemon.
+if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" = "1" ]; then
+    [ -s /opt/flagship/.flagship-appliance-ref ] || { echo "[flagship-bootstrap] FATAL: appliance ref marker missing"; exit 1; }
+    APPLIANCE_REF="$(cat /opt/flagship/.flagship-appliance-ref)"
+    [ "$APPLIANCE_REF" = "$GIT_REF" ] || { echo "[flagship-bootstrap] FATAL: appliance ref $APPLIANCE_REF does not match signed recipe ref $GIT_REF"; exit 1; }
+    cd /opt/flagship
+    [ -e node_modules/@flagship/protocol/package.json ] || { echo "[flagship-bootstrap] FATAL: appliance workspace incomplete"; exit 1; }
+    echo "[flagship-bootstrap] reusing prebuilt Flagship workspace ref=$APPLIANCE_REF"
+else
 rm -rf /opt/flagship
 git clone --depth 50 --branch "$GIT_REF" "$REPO_URL" /opt/flagship || \\
     (git clone --depth 50 "$REPO_URL" /opt/flagship && \\
@@ -743,6 +762,7 @@ if [ ! -e /opt/flagship/node_modules/@flagship/protocol/package.json ]; then
     done
 fi
 npx tsc -b 2>&1 | tee /var/log/flagship-tsc.log || true
+fi
 
 # Generate server identity.
 mkdir -p /var/flagship/identity
@@ -1633,12 +1653,18 @@ echo "${mode}" > /boot/flagship-boot-unlock-mode
 #     the cloned source (auditable; no committed binary). golang-go from the
 #     Ubuntu archive can build the CGO-free static helper (one dep, pinned).
 echo "[flagship-bootstrap] building flagship-unseal from source"
+if [ "\${FLAGSHIP_APPLIANCE_PREINSTALLED:-0}" = "1" ]; then
+    [ -x /usr/local/lib/flagship-appliance/flagship-unseal ] || { echo "[flagship-bootstrap] FATAL: prebuilt unseal helper missing"; exit 1; }
+    install -m 755 /usr/local/lib/flagship-appliance/flagship-unseal /boot/flagship-unseal
+    echo "[flagship-bootstrap] reused prebuilt flagship-unseal"
+else
 apt-get install -y --no-install-recommends golang-go
 # No GOARCH: build for the arch we're running on — amd64 on real boxes,
 # arm64 inside a VM hosted on Apple-silicon / arm64 KVM hardware.
 ( cd /opt/flagship/installer/unseal-helper && \\
   CGO_ENABLED=0 GOOS=linux \\
     go build -trimpath -buildvcs=false -ldflags '-s -w' -o /boot/flagship-unseal . )
+fi
 chmod 755 /boot/flagship-unseal
 echo "[flagship-bootstrap] /boot/flagship-unseal baked ($(ls -l /boot/flagship-unseal))"
 

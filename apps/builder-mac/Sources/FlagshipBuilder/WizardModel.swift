@@ -352,6 +352,9 @@ final class WizardModel: ObservableObject {
         switch phase {
         case "download": return "Downloading base image…"
         case "verify": return "Verifying base image…"
+        case "verify appliance": return "Verifying prebuilt server image…"
+        case "clone appliance": return "Cloning prebuilt server…"
+        case "specialize": return "Securing this server…"
         case "remaster": return "Building image…"
         case "write": return "Writing to USB…"
         default: return nil
@@ -708,10 +711,12 @@ final class WizardModel: ObservableObject {
 
     // MARK: - Host here (VM appliance)
 
-    /// "Host here": the SAME recipe → the SAME remastered installer ISO, but
-    /// applied to a managed VM on this Mac instead of a USB stick. The guest
-    /// boot chain (autoinstall → LUKS → phone-home unlock → register) runs
-    /// unmodified inside the VM; this app never holds a key.
+    /// "Host here" prefers a verified generalized appliance when a local test
+    /// artifact is configured. It clones the already-installed disk, attaches
+    /// a one-use raw seed carrying the unchanged recipe + canonical bootstrap,
+    /// and lets the guest generate its identity, register, and replace the
+    /// public factory key. Without an appliance artifact, the shipping ISO
+    /// installer remains the fallback and comparison baseline.
     func runHostHere() async {
         guard let recipe = recipe else { return }
         if effectiveRequiresUserISO && iso == nil { return }
@@ -744,7 +749,59 @@ final class WizardModel: ObservableObject {
             return
         }
 
-        let config = VMConfig.plan(recipe: parsed, recipeJSON: recipeData, host: host)
+        let environment = ProcessInfo.processInfo.environment
+        let appliancePath = environment["FLAGSHIP_VM_FORCE_ISO"] == "1"
+            ? nil
+            : environment["FLAGSHIP_VM_APPLIANCE_BASE"]
+        let usesAppliance = mode == .simple && appliancePath?.isEmpty == false
+        let config = VMConfig.plan(
+            recipe: parsed, recipeJSON: recipeData, host: host,
+            provisioningMode: usesAppliance ? .prebuiltAppliance : .installerISO)
+
+        if usesAppliance, let appliancePath {
+            phase = "verify appliance"
+            do {
+                try vmManager.createServer(config: config)
+                let baseURL = URL(fileURLWithPath: appliancePath)
+                let manifestPath = environment["FLAGSHIP_VM_APPLIANCE_MANIFEST"]
+                let expectedArch = HostArch.current()
+                let installerGitRef = parsed.installerGitRef
+                let provisioner = try await Task.detached(priority: .userInitiated) {
+                    try ApplianceProvisioner.load(
+                        baseURL: baseURL,
+                        manifestURL: manifestPath.map(URL.init(fileURLWithPath:)),
+                        expectedArch: expectedArch,
+                        installerGitRef: installerGitRef)
+                }.value
+                phase = "clone appliance"
+                appendLog(stream: .stdout,
+                          text: "+ verified appliance \(baseURL.lastPathComponent) sha256=\(provisioner.manifest.sha256)")
+                let bootstrap = try UserData.applianceBootstrap(
+                    recipeJSON: recipeData,
+                    installerGitRef: parsed.installerGitRef,
+                    encryptRoot: parsed.encryptsDisk)
+                let layout = vmManager.store.layout
+                try await Task.detached(priority: .userInitiated) {
+                    try provisioner.provision(
+                        config: config,
+                        layout: layout,
+                        recipe: recipeData,
+                        bootstrap: bootstrap)
+                }.value
+                appendLog(stream: .stdout,
+                          text: "+ cloned generalized disk and wrote one-use specialization seed")
+            } catch {
+                reportOperationFailure(error)
+                await vmManager.deleteServer(named: config.name)
+                return
+            }
+
+            try? FileManager.default.removeItem(at: recipe)
+            phase = "specialize"
+            await vmManager.beginInstall(named: config.name)
+            scheduleHomeReset()
+            return
+        }
 
         // Same base-ISO selection as the USB path EXCEPT the arch: the guest
         // must match this Mac's silicon (Virtualization.framework boots

@@ -43,6 +43,7 @@ final class VMInventoryStoreTests: XCTestCase {
         XCTAssertEqual(layout.configURL("a.b").lastPathComponent, "config.json")
         XCTAssertEqual(layout.diskImageURL("a.b").lastPathComponent, "disk.img")
         XCTAssertEqual(layout.installerISOURL("a.b").lastPathComponent, "installer.iso")
+        XCTAssertEqual(layout.applianceSeedURL("a.b").lastPathComponent, "seed.img")
         XCTAssertEqual(layout.efiVariableStoreURL("a.b").lastPathComponent, "efi-vars.bin")
         XCTAssertEqual(layout.consoleLogURL("a.b").lastPathComponent, "console.log")
     }

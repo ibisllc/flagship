@@ -206,6 +206,7 @@ public sealed class VMManager
     public QemuHost? Host(string name) => _hosts.TryGetValue(name, out var h) ? h : null;
 
     public string InstallerIsoPath(string name) => Store.Layout.InstallerIsoPath(name);
+    public string ApplianceSeedPath(string name) => Store.Layout.ApplianceSeedPath(name);
 
     // ---- Launch normalization ----
 
@@ -335,7 +336,10 @@ public sealed class VMManager
                     // SUCCEEDED; a failed install keeps it so retry can re-attach.
                     if (CurrentStateKind(name) == VMStateKind.Installed)
                     {
-                        try { File.Delete(Store.Layout.InstallerIsoPath(name)); } catch { }
+                        var media = config.ProvisioningMode == VMProvisioningMode.PrebuiltAppliance
+                            ? Store.Layout.ApplianceSeedPath(name)
+                            : Store.Layout.InstallerIsoPath(name);
+                        try { File.Delete(media); } catch { }
                     }
                     break;
                 case VMEffect.StartVirtualMachine:
@@ -413,12 +417,16 @@ public sealed class VMManager
                         $"QEMU exited {exitCode}: {stderrTail.Trim()}"), name);
                     return;
                 }
+                var config = Server(name)!.Record.Config;
                 var verdict = _lifecycles.TryGetValue(name, out var lc)
-                    ? lc.VerdictForCleanInstallStop(_clock())
+                    ? VMLifecycle.VerdictForCleanProvisioningStop(
+                        _clock() - lc.StateChangedAt, config.ProvisioningMode)
                     : VMEvent.InstallSucceeded;
                 if (verdict.Kind == VMEventKind.InstallSucceeded)
                 {
-                    Log($"VM {name}: install finished — booting from disk");
+                    var verb = config.ProvisioningMode == VMProvisioningMode.PrebuiltAppliance
+                        ? "specialization" : "install";
+                    Log($"VM {name}: {verb} finished — booting sealed disk");
                     await ApplyAsync(VMEvent.InstallSucceeded, name);
                     // First boot from disk follows immediately; an encrypted
                     // guest then sits sealed in awaiting-phone-unlock.

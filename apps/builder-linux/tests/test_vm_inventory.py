@@ -8,7 +8,7 @@ import os
 import pytest
 
 from vm import resource_plan
-from vm.config import VMConfig, VMNetworkMode
+from vm.config import VMConfig, VMNetworkMode, VMProvisioningMode
 from vm.inventory import (
     VMBundleLayout,
     VMInventoryStore,
@@ -52,6 +52,7 @@ def test_layout_paths(tmp_path):
     assert layout.config_path(name).endswith("config.json")
     assert layout.disk_image_path(name).endswith("disk.qcow2")
     assert layout.installer_iso_path(name).endswith("installer.iso")
+    assert layout.appliance_seed_path(name).endswith("seed.img")
     assert layout.efi_variable_store_path(name).endswith("efi-vars.fd")
     assert layout.console_log_path(name).endswith("console.log")
 
@@ -68,6 +69,19 @@ def test_create_load_round_trip(tmp_path):
     assert got == record()
     assert os.stat(store.layout.bundle_dir(got.config.name)).st_mode & 0o777 == 0o700
     assert os.stat(store.layout.config_path(got.config.name)).st_mode & 0o777 == 0o600
+
+
+def test_legacy_config_defaults_to_iso_and_prebuilt_round_trips(tmp_path):
+    store = VMInventoryStore(VMBundleLayout(str(tmp_path)))
+    from dataclasses import replace
+    r = replace(record(), config=replace(config(), provisioning_mode=VMProvisioningMode.PREBUILT_APPLIANCE))
+    store.create(r)
+    assert store.load(r.config.name).config.provisioning_mode == VMProvisioningMode.PREBUILT_APPLIANCE
+    path = store.layout.config_path(r.config.name)
+    doc = json.loads(open(path, encoding="utf-8").read())
+    doc["config"].pop("provisioningMode")
+    open(path, "w", encoding="utf-8").write(json.dumps(doc))
+    assert store.load(r.config.name).config.provisioning_mode == VMProvisioningMode.INSTALLER_ISO
 
 
 def test_load_hardens_legacy_bundle_artifacts(tmp_path):
