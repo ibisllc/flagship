@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildAccountDirectoryKeyGrant,
+  decryptAccountProfile,
   deriveAccountProfileKey,
   deriveDeviceDirectoryKey,
   ed,
   encryptAccountProfile,
   encryptDeviceProfile,
+  openAccountDirectoryKeyGrant,
   signAccountDirectoryRequest,
   signAccountDirectoryKeyGrant,
   signAccountProfile,
@@ -261,32 +264,97 @@ describe("private account directory", () => {
     )).status).toBe(200);
   });
 
-  it("accepts only admin-root-signed targeted profile key grants", async () => {
+  it("delivers a real sealed profile key: admin seals, restricted device unseals, .com stays blind", async () => {
     const { deps, admin, device, other } = await harness();
-    const grant = {
+    // The admin (UMK holder) publishes the encrypted account profile first, so
+    // there is a real ciphertext the restricted device can only read once it
+    // holds the delivered profile key.
+    const profileKey = deriveAccountProfileKey(umk);
+    const displayName = "Johnson Family";
+    const encrypted = encryptAccountProfile(displayName, profileKey, {
+      accountId, revision: 1, keyVersion: 1, nonce,
+    });
+    const profileUnsigned = { ...encrypted, issuedAt: now, signerPubHex: hex(admin.publicKey) };
+    const accountProfile = { ...profileUnsigned, signatureHex: signAccountProfile(profileUnsigned, admin) };
+    await handlePutAccountProfile(
+      deps, accountId, auth(`/api/accounts/${accountId}/profile`, "PUT", deviceId, device),
+      { profile: accountProfile, expectedRevision: 0 },
+    );
+
+    // Admin SEALS the profile key to the restricted device's Ed25519 identity
+    // pubkey and admin-root-signs the grant. Nothing plaintext leaves here.
+    const { grant, signature } = buildAccountDirectoryKeyGrant({
       accountId,
       recipientDeviceId: otherDeviceId,
-      keyKind: "account-profile" as const,
-      sealedKeyHex: "001122",
+      keyKind: "account-profile",
+      key: profileKey,
+      recipientDevicePub: other.publicKey,
+      adminRoot: admin,
+      adminRootPubHex: hex(admin.publicKey),
       issuedAt: now,
       expiresAt: now + 60_000,
-      signerPubHex: hex(admin.publicKey),
-    };
-    const signature = signAccountDirectoryKeyGrant(grant, admin);
+    });
+    // The delivered ciphertext must NOT be the raw key (it is a real seal).
+    expect(grant.sealedKeyHex).not.toContain(hex(profileKey));
+    expect(grant.sealedKeyHex.length).toBe(92 * 2);
+
     const path = `/api/accounts/${accountId}/devices/${otherDeviceId}/directory-key-grant`;
+    // A non-administrator cannot publish a grant, even a well-formed one.
     expect((await handlePutAccountDirectoryKeyGrant(
       deps, accountId, otherDeviceId, auth(path, "PUT", otherDeviceId, other), { grant, signature },
     )).status).toBe(403);
     expect((await handlePutAccountDirectoryKeyGrant(
       deps, accountId, otherDeviceId, auth(path, "PUT", deviceId, device), { grant, signature },
     )).status).toBe(200);
+
+    // The restricted device reads the grant back off .com.
     const profilePath = `/api/accounts/${accountId}/profile`;
     const response = await handleGetAccountProfile(
       deps, accountId, auth(profilePath, "GET", otherDeviceId, other),
     );
-    const body = response.body as { keyGrants: Array<{ sealedKeyHex: string }> };
+    const body = response.body as {
+      profile: { nonceHex: string; ciphertextHex: string } | null;
+      keyGrants: Array<{ sealedKeyHex: string; signatureHex: string; keyKind: string }>;
+    };
     expect(body.keyGrants).toHaveLength(1);
-    expect(body.keyGrants[0]?.sealedKeyHex).toBe("001122");
+    expect(body.keyGrants[0]?.sealedKeyHex).toBe(grant.sealedKeyHex);
+
+    // The restricted device verifies the admin-root signature + binding, then
+    // UNSEALS with its own device identity seed → the exact profile key.
+    const delivered = body.keyGrants[0]!;
+    const unsealed = openAccountDirectoryKeyGrant({
+      grant: {
+        accountId,
+        recipientDeviceId: otherDeviceId,
+        keyKind: "account-profile",
+        sealedKeyHex: delivered.sealedKeyHex,
+        issuedAt: now,
+        expiresAt: now + 60_000,
+        signerPubHex: hex(admin.publicKey),
+      },
+      signature: delivered.signatureHex,
+      adminRootPub: admin.publicKey,
+      expectedAccountId: accountId,
+      expectedRecipientDeviceId: otherDeviceId,
+      recipientDeviceSeed: other.privateKey,
+      now,
+    });
+    expect(unsealed).not.toBeNull();
+    expect(hex(unsealed!)).toBe(hex(profileKey));
+
+    // With the delivered key the restricted device decrypts the real name.
+    const recovered = decryptAccountProfile(
+      { accountId, revision: 1, keyVersion: 1, nonceHex: body.profile!.nonceHex, ciphertextHex: body.profile!.ciphertextHex },
+      unsealed!,
+    );
+    expect(recovered.displayName).toBe(displayName);
+
+    // CONTROL-PLANE BLINDNESS: nothing the server ever held contains the
+    // plaintext key or the plaintext name.
+    const storedGrant = (await deps.keyGrants.listActiveForDevice(accountId, otherDeviceId, now))[0]!;
+    const serverState = JSON.stringify({ storedGrant, body });
+    expect(serverState).not.toContain(hex(profileKey));
+    expect(serverState).not.toContain(displayName);
   });
 
   it("revokes an opaque device identity, its grant, and its push transport", async () => {
