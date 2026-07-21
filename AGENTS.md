@@ -153,8 +153,9 @@ harness can't do:
 both destination work screens.** Burn-to-USB and Host-on-this-Mac now share the
 same background-free, larger domain heading introduced on the destination
 chooser; only actionable choices and real status/error notices retain rounded
-cards, eliminating the light-mode affordance ambiguity. **Remaining (owner):**
-include this UI polish in the next notarized Studio publish.
+cards, eliminating the light-mode affordance ambiguity. Shipped in the current
+Developer-ID-signed, notarized, stapled Studio DMG and deployed to the Mac
+download route.
 
 **2026-07-20 (macOS 26 raw-disk permission correction) — Full Disk Access is
 the reliable fallback for Studio's privileged USB writer.** The physical release
