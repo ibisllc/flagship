@@ -139,10 +139,11 @@ it** (§7). The visual device-info confirm at unlock time is the human backstop.
    registration attempt for a name.
 4. **TOFU binding.** STK→user is trust-on-first-registration. Mandate the
    one-tap confirm on first unlock (not skippable) so a race is always caught.
-5. **Endpoint naming + multi-device.** `device.<username>` vs
-   `<deviceLabel>.<username>`; which device answers when the user has several;
-   how the box discovers the right endpoint (likely: `.com` directory returns
-   the user's currently-claimable endpoint).
+5. **Endpoint naming + multi-device.** Devices are not addressable by name,
+   so `<deviceLabel>.<username>` is off the table; the open question is only
+   which device answers when the user has several, and how the box discovers
+   the right endpoint (likely: `.com` directory returns the user's
+   currently-claimable endpoint).
 
 ## 7a. Unattended reboot without trusting `.com` — the rogue-operator bound
 

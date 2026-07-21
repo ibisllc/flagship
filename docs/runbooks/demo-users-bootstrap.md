@@ -81,7 +81,7 @@ Exit code 0. Prints usage. NO env required for `--help`.
 ### 6. First demo user (Phase F)
 
 ```sh
-node scripts/sample-user.mjs create demoalice --display "Demo Alice"
+node scripts/sample-user.mjs create demoalice --account-name "Demo Alice"
 ```
 
 End-of-run line on stdout, JSON for piping:

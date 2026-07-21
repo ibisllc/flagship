@@ -25,10 +25,10 @@ wildcard cert* assumption in [[multiplexing]]. The HELLO /
 is unchanged and load-bearing here — only the cert shape and the public
 URL canonical change.
 
-**Reconcile with:** [[v2-device-addressing-and-real-ticket]] — device
-labels (`<device-label>.<user>.flagship.services`) share the *same*
-`*.<user>` leftmost-label space as app labels and box-coordination
-names. See §3.4: there is exactly one per-user leftmost-label resolver.
+**Reconcile with:** [[v2-device-addressing-and-real-ticket]] — but note
+its device-label addressing is DEAD (see that file's banner). Devices
+occupy no part of the `*.<user>` leftmost-label space; only app labels,
+box-coordination names, and pin targets do. See §3.4.
 
 **Revocation vocabulary:** reuse the three actions already specced in
 [[revocation-ui]] / [[multi-device]] / [[wipe-restart]] — Disconnect /
@@ -128,10 +128,14 @@ multi-box replication machinery to hold.
 | `<label>.<user>` | `photo-album.harry` | app, leader-routed (default) | yes (`*.<user>`) |
 | `<label>--<server>.<user>` | `photo-album--home.harry` | app, **pinned to a box** (rare escape hatch) | yes (`*.<user>`) |
 | `<server>.<user>` | `home.harry` | box coordination apex (`/.flagship/*`) | yes (`*.<user>`) |
-| `<device-label>.<user>` | `reviewer.harry` | device view — see [[v2-device-addressing-and-real-ticket]] | yes (`*.<user>`) |
 
-All four are **one label deep** under `<user>`, so the single per-user
+All three are **one label deep** under `<user>`, so the single per-user
 wildcard covers everything. There is no two-label-deep public name.
+
+There is **no device form**. Devices are identified by an opaque, random,
+account-scoped `deviceId` and are not addressable by name at all — a
+`<device-label>.<user>` name has no meaning and must never be minted. The
+device list is readable only over the signed active-device directory API.
 
 ### §3.2 Label is a *local name*, not an identity
 
@@ -182,11 +186,11 @@ back in through the side door).
 
 ### §3.4 ONE per-user leftmost-label resolver (reconciliation — important)
 
-App labels (§3.2), box-coordination names (`<server>`), pin targets
-(`label--server`), and **device labels** from
-[[v2-device-addressing-and-real-ticket]] all live in the *same*
-`*.<user>` leftmost-label space. They MUST be resolved by a single
-per-user resolver and MUST be mutually unique within a user.
+App labels (§3.2), box-coordination names (`<server>`), and pin targets
+(`label--server`) all live in the *same* `*.<user>` leftmost-label
+space. They MUST be resolved by a single per-user resolver and MUST be
+mutually unique within a user. Devices are NOT in this space — they are
+not publicly addressable.
 
 Resolution order for a leftmost label `L` under `<user>`:
 
@@ -201,13 +205,12 @@ Resolution order for a leftmost label `L` under `<user>`:
 5. Else → the disambiguation / "not pointing at an app" page
    (`runtime.ts:1346`).
 
-**OPEN (Q3):** the install table, the box-name registry, and the
-device-label table are three sources today. The resolver above assumes a
-*merged* per-user name table (or a deterministic precedence across the
-three) with a uniqueness constraint spanning all of {app-label,
-box-name, device-label}. Specify and enforce that uniqueness — it is the
-one genuinely new cross-cutting invariant. Reconcile against the v2
-device-addressing contract before implementing.
+**OPEN (Q3):** the install table and the box-name registry are two
+sources today. The resolver above assumes a *merged* per-user name table
+(or a deterministic precedence across the two) with a uniqueness
+constraint spanning {app-label, box-name}. Specify and enforce that
+uniqueness — it is the one genuinely new cross-cutting invariant. (There
+is no device-label table: devices are not publicly addressable.)
 
 ---
 
@@ -427,7 +430,7 @@ Verified 2026-06-01. Re-grep before editing; c4.6 may have shifted lines.
 - `packages/server-daemon/src/runtime.ts:1387-1396` (`userZoneOf`),
   `:1398-1405` (`leftmostLabel`), `:510-536` (SNI route +
   disambiguation) → implement the §3.4 single resolver: parse `--`
-  pins, distinguish box-name vs device-label vs install-table app-label.
+  pins, distinguish box-name vs install-table app-label.
 
 **DNS publishing (2 records, not 4)**
 - `packages/services-zone/src/serverDns.ts:85-86`
@@ -492,10 +495,9 @@ Verified 2026-06-01. Re-grep before editing; c4.6 may have shifted lines.
   exact recovery semantics (§4.4). Where does the account key live when
   there are two trust-root devices; how is it re-established on loss?
 - **Q3 (from §3.4). The merged per-user leftmost-label namespace** —
-  uniqueness spanning {app-label, box-name, device-label}, and the
-  precedence across the install table / box registry / device-label
-  table. Reconcile with [[v2-device-addressing-and-real-ticket]] before
-  coding the resolver.
+  uniqueness spanning {app-label, box-name}, and the precedence across
+  the install table and the box registry. Devices are excluded: they are
+  not publicly addressable.
 - **Q-E. Mesh ejection ↔ re-mint atomicity** (§5.2): how is "the box is
   out of the mesh" *confirmed* before step 3 in a partition?
 
