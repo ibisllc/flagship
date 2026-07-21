@@ -271,13 +271,54 @@ closed:
   transition and suppressed whenever status is `up`.
 - **Migration 0083 was stamped 2025-07-21**, a year early (a hardcoded
   timestamp). Corrected in prod to 2026-07-21.
-**Still open (not done):** restricted-device profile-key delivery is
-server-only — storage, route, and authorization exist, but NO client seals or
-unseals `sealedKeyHex`, and its test uses dummy ciphertext rather than a real
-round trip. Treat that capability as unimplemented until a client path lands.
-Also: several native rename/lock UI tests were deleted without equivalent
-replacements, and some active tests still carry obsolete plaintext display
-fixtures.
+**Still open — handover list (nothing half-finished is uncommitted; every
+item below is NOT started or explicitly blocked):**
+1. **Restricted-device profile-key delivery is server-only — treat as
+   UNIMPLEMENTED.** Storage, route (`PUT /api/accounts/:id/devices/:did/
+   directory-key-grant`), and admin-root authorization all exist, but **no
+   client anywhere seals or unseals `sealedKeyHex`** (grep all three clients:
+   zero hits), and `accountDirectory.test.ts` uses dummy ciphertext `"001122"`
+   instead of a round trip. Needs: X25519 seal-to-recipient-device-pub, a
+   publish path for an administrator, and a consume path on the recipient,
+   across web/iOS/Android — a feature build, not a gap-close.
+2. **iOS TestFlight upload is BLOCKED on credentials.** A distribution-signed
+   IPA exists at `~/Desktop/flagship-builds/FlagshipApp-20260721.ipa` (18.9 MB,
+   `iOS Team Store Provisioning Profile: com.flagshipserver.app`). No ASC API
+   key in `~/.appstoreconnect/private_keys` and no `AC_PASSWORD` keychain item;
+   the `flagship-studio` notary profile is notarytool-private and `altool`
+   cannot read it. Needs an app-specific password or a **Team** ASC key (an
+   Individual key has no Issuer ID and will not work). NOTE: that IPA is
+   App-Store-signed, so it will NOT install directly on a device — a
+   development-signed build is needed for on-device testing.
+3. **Native rename/lock/account-name UI tests were deleted without equivalent
+   replacements.** Home-hierarchy coverage was added (iOS `welcomeLine` unit
+   tests, a web assertion test, Android test tags) but the rename/lock editors
+   themselves are uncovered on native.
+4. **Obsolete plaintext display fixtures remain in some active tests.**
+5. **Pre-existing boxes are orphaned by the wipe.** `leti.jolly-quince` and the
+   other five server records were destroyed; those machines still run but have
+   no `.com` account behind them and need reburning or re-registration.
+6. **iOS/Android changes are compiled but never exercised on hardware** — the
+   apps are not on TestFlight/Play, so push and Live Activities cannot be
+   received on a device.
+
+**Environment traps that cost real time — read before building:**
+- `/private/tmp/flagship-rush-main/node_modules` is a **symlink to the primary
+  worktree's**, so `@flagship/*` resolves to `/Users/harrywinner/flagship/
+  packages/*` — a DIFFERENT branch. Building or deploying there silently uses
+  another branch's sources; it made a clean merge look like 20+ type errors.
+  Build and deploy only from a worktree with its own real `node_modules`
+  (`/private/tmp/flagship-private-names` has one). That worktree also holds
+  another author's uncommitted `llm-providers` changes — do not clean it.
+- The `Flagship` scheme is a **SwiftPM library**; archiving it yields an EMPTY
+  archive. The real app target is `FlagshipApp` in
+  `apps/mobile/ios/App/FlagshipApp.xcodeproj`.
+- `apps/com`'s `npm run deploy` runs the predeploy gates then calls a bare
+  `wrangler`, which is not on PATH. Run `npm run deploy` for the gates, then
+  `npx wrangler deploy`. Re-run `npx tsc -b --force` first: the freshness gate
+  compares mtimes and a `git checkout` makes `src/` newer than `dist/`.
+- Disk space on this Mac is tight (~122 MiB free was observed during review;
+  Xcode failed with "No space left on device"). Clear caches before a release.
 
 **2026-07-21 (private-name audit continued) — the audit slice is complete
 and the whole TypeScript/native matrix is green; branch is still local and
