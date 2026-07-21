@@ -83,4 +83,24 @@ describe("generalized VM appliance", () => {
     expect(buildAt).toBeLessThan(guardAt);
     expect(guardAt).toBeLessThan(purgeAt);
   });
+
+  it("strips docs, manuals, and surplus locales while preserving C.UTF-8", () => {
+    const script = buildAppliancePrepareScript({ gitRef: "v-test" });
+    expect(script).toContain("rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/*");
+    expect(script).toContain("dpkg.cfg.d/flagship-appliance-lean");
+    expect(script).toContain("path-exclude=/usr/share/doc/*");
+    expect(script).toContain("path-exclude=/usr/share/man/*");
+    // The dpkg exclude config must be written BEFORE packages are installed so
+    // the docs never land in the first place.
+    const excludeAt = script.indexOf("dpkg.cfg.d/flagship-appliance-lean");
+    const installAt = script.indexOf("apt-get -o Acquire::Retries=3");
+    expect(excludeAt).toBeGreaterThanOrEqual(0);
+    expect(installAt).toBeGreaterThanOrEqual(0);
+    expect(excludeAt).toBeLessThan(installAt);
+    // Locale purge keeps C / C.UTF-8 (do NOT break UTF-8) and en_US.
+    expect(script).toContain("/usr/share/locale");
+    expect(script).toContain("! -name 'C.UTF-8'");
+    expect(script).toContain("! -name 'en_US'");
+    expect(script).not.toContain("rm -rf /usr/share/locale/*");
+  });
 });
