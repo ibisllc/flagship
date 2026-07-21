@@ -215,7 +215,7 @@ class DevicePairingFlowTest {
         assertEquals(account, incomingApp.currentUser.first())
         assertNull("a scanned-in device is NOT admin", run {
             val label = incomingApp.activeProfile?.deviceDisplayName
-            if (label == ADMIN_DEVICE_LABEL) "is-admin" else null
+            if (label == "admin") "is-admin" else null
         })
         val quarantineUntil = (joined as JoinDevicePhase.Joined).quarantineUntil
         assertNotNull("quarantine deadline surfaced", quarantineUntil)

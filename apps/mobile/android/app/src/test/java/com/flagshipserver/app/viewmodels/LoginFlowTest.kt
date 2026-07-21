@@ -330,7 +330,12 @@ class LoginFlowTest {
         assertTrue(app.isPaired.first())
         assertEquals("harry", app.currentUser.first())
         assertTrue(app.pods.first().isEmpty())
-        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceDisplayName)
+        assertNull(
+            "a recovered device is NOT named locally: administrator status is a "
+                + "capability in its signed grant, and any display name is an "
+                + "encrypted self-profile its owner writes later",
+            app.activeProfile?.deviceDisplayName,
+        )
         assertNull("pending rotation cleared after completion", Keystore.pendingIrkRotationVersion())
     }
 
@@ -404,7 +409,12 @@ class LoginFlowTest {
         assertEquals(LoginPhase.Opened, m.phase.first())
         assertTrue("Phase A opens the account immediately", app.isPaired.first())
         assertEquals("harry", app.currentUser.first())
-        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceDisplayName)
+        assertNull(
+            "a recovered device is NOT named locally: administrator status is a "
+                + "capability in its signed grant, and any display name is an "
+                + "encrypted self-profile its owner writes later",
+            app.activeProfile?.deviceDisplayName,
+        )
         assertArrayEquals(recoveredSeed, Keystore.currentUmkSeed())
         assertNull("Phase A (key matches) must NOT initiate a re-pair", server.lastRePairInitiate)
         assertNull("no rotation staged on the instant path", Keystore.pendingIrkRotationVersion())
@@ -610,7 +620,12 @@ class LoginFlowTest {
         m.completeTakeover()
         assertEquals(LoginPhase.Opened, m.phase.first())
         assertEquals("hilton", app.currentUser.first())
-        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceDisplayName)
+        assertNull(
+            "a recovered device is NOT named locally: administrator status is a "
+                + "capability in its signed grant, and any display name is an "
+                + "encrypted self-profile its owner writes later",
+            app.activeProfile?.deviceDisplayName,
+        )
     }
 
     @Test fun multi_recoveryCode_tagsRecoveryMethod() = runTest {

@@ -101,7 +101,12 @@ class KeyfileImportFlowTest {
         assertEquals(KeyfileImportPhase.Opened("harry"), m.phase.first())
         assertTrue(app.isPaired.first())
         assertEquals("harry", app.currentUser.first())
-        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceDisplayName)
+        assertNull(
+            "a recovered device is NOT named locally: administrator status is a "
+                + "capability in its signed grant, and any display name is an "
+                + "encrypted self-profile its owner writes later",
+            app.activeProfile?.deviceDisplayName,
+        )
     }
 
     @Test

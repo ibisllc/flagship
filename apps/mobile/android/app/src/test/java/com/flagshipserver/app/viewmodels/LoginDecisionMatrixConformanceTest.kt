@@ -242,7 +242,12 @@ class LoginDecisionMatrixConformanceTest {
         assertNull("single carries no second factor", server.lastRePairInitiate!!.second.totpProof)
         m.completeTakeover()
         assertEquals(LoginPhase.Opened, m.phase.first())
-        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceDisplayName)
+        assertNull(
+            "a recovered device is NOT named locally: administrator status is a "
+                + "capability in its signed grant, and any display name is an "
+                + "encrypted self-profile its owner writes later",
+            app.activeProfile?.deviceDisplayName,
+        )
     }
 
     // ── multi → TOTP-gated 24h takeover ───────────────────────────────
