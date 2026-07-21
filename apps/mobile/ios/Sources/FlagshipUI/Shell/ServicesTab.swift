@@ -592,7 +592,8 @@ struct VibeCodeDescribeContainer: View {
         )
         await coordinator.depositIfNeeded(
             serverDomain: pod.fqdn,
-            identityPubKeyHex: pod.identityPubKeyHex
+            identityPubKeyHex: pod.identityPubKeyHex,
+            allowAuthentication: true
         )
         return store.isDeposited(for: pod.fqdn) ? .accepted : .deferred
     }

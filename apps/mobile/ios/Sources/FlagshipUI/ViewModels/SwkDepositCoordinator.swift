@@ -97,7 +97,11 @@ public struct SwkDepositCoordinator {
     /// secret-free PAIRING order (pairs the creating device with no manual tap).
     /// Both ride ONE biometric (the IRK derived once) and are sealed to the box
     /// identity. No-op when nothing is owed.
-    public func depositIfNeeded(serverDomain: String, identityPubKeyHex: String) async {
+    public func depositIfNeeded(
+        serverDomain: String,
+        identityPubKeyHex: String,
+        allowAuthentication: Bool = false
+    ) async {
         var swkOwed = store.isPending(for: serverDomain)
         let pairingOrderJson = pairingStore.pendingOrder(for: serverDomain)
         let cgkOwed = cgkStore.isPending(for: serverDomain)
@@ -108,7 +112,7 @@ public struct SwkDepositCoordinator {
         // deposit rides the next pass after the user next authenticates. This is
         // what stops the "random Face ID on the Home screen" the periodic reconcile
         // used to cause when a box left a deposit owed.
-        guard hasSessionKey() else { return }
+        guard allowAuthentication || hasSessionKey() else { return }
         guard let boxIdentityPub = HexUtil.decode(identityPubKeyHex), boxIdentityPub.count == 32 else { return }
 
         // Server-migration (docs/server-migration.md invariant 4): when this pod

@@ -742,6 +742,7 @@ struct ServerDetailContainer: View {
     /// action succeeds (the pod is gone, so this page now points at nothing).
     var onDeleted: () -> Void = {}
     @Environment(\.screensClient) private var client
+    @Environment(\.secretMailboxClient) private var mailbox
     @Environment(\.lockPowerClient) private var lockPower
     @Environment(\.sessionStore) private var sessionStore
     @Environment(\.colorScheme) private var scheme
@@ -808,6 +809,7 @@ struct ServerDetailContainer: View {
                         CertPinRegistry.shared.verifiedReport(for: $0.fqdn)
                     },
                     onRefresh: {
+                        await refreshDirectoryAndRepairAppKey(allowAuthentication: true)
                         async let a: Void = detailVm.load()
                         async let b: Void = metricsVm.load()
                         _ = await (a, b)
@@ -841,6 +843,7 @@ struct ServerDetailContainer: View {
             if metricsVm == nil {
                 metricsVm = ServerMetricsViewModel(podId: podId, client: client)
             }
+            await refreshDirectoryAndRepairAppKey(allowAuthentication: false)
             metricsVm?.startPolling(every: 15)
             // Retry the BFF detail load until it lands. A box that JUST came
             // online can take a few seconds before its daemon answers the
@@ -880,6 +883,30 @@ struct ServerDetailContainer: View {
             let anchor = app.sessionPod
             Task { await PodSessionSync.sync(currentPod: anchor, store: store) }
         }
+    }
+
+    @MainActor
+    private func refreshDirectoryAndRepairAppKey(allowAuthentication: Bool) async {
+        guard let username = app.currentUser, !username.isEmpty else { return }
+        guard let directory = try? await mailbox.fetchPods(username: username) else { return }
+        CertPinRegistry.shared.update(pods: directory.pods)
+
+        guard let fqdn = pod?.fqdn, !fqdn.isEmpty else { return }
+        let store = PendingSwkDepositStore()
+        guard store.isPending(for: fqdn),
+              let identityPubKeyHex = directory.identityPubKey(forServerDomain: fqdn)
+        else { return }
+
+        let coordinator = SwkDepositCoordinator(
+            username: username,
+            mailbox: mailbox,
+            store: store
+        )
+        await coordinator.depositIfNeeded(
+            serverDomain: fqdn,
+            identityPubKeyHex: identityPubKeyHex,
+            allowAuthentication: allowAuthentication
+        )
     }
 
     /// One pairing attempt (Face ID → sign `add-paired-session` → POST →

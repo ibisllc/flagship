@@ -235,6 +235,20 @@ final class SwkDepositCoordinatorTests: XCTestCase {
         XCTAssertFalse(store.isDeposited(for: serverDomain))
     }
 
+    func test_userInitiatedRepairMayAuthenticateAndDeposit() async {
+        let store = freshStore()
+        store.markPending(for: serverDomain)
+        let mailbox = MockSecretMailboxClient()
+        await coordinator(store: store, mailbox: mailbox, hasSession: false)
+            .depositIfNeeded(
+                serverDomain: serverDomain,
+                identityPubKeyHex: boxIdentityPubHex(),
+                allowAuthentication: true
+            )
+        XCTAssertEqual(mailbox.swkDeposits.count, 1)
+        XCTAssertTrue(store.isDeposited(for: serverDomain))
+    }
+
     func test_failureKeepsPendingForRetry() async {
         let store = freshStore()
         store.markPending(for: serverDomain)
