@@ -30,5 +30,6 @@ export * from "./peerBackupManifest.js";
 export * from "./serverMigration.js";
 export * from "./accountMetadata.js";
 export * from "./directoryKeyDelivery.js";
+export * from "./servicePromote.js";
 export { ed } from "./edSync.js";
 export { resolveMsgSigner, type MsgSigner } from "./canonicalBase.js";

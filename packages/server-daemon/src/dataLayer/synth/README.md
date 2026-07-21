@@ -17,9 +17,9 @@ seams (`../provisioner.ts`, `../naming.ts`, `../../buildmodes/deployArtifact.ts`
 | A | **Synthesizer** — schema→typed fake data, seeded/reproducible, FK/uniqueness/enum/boundary-preserving, canaries | ✅ **done** — `synth/` + golden vector + 12 tests |
 | B | Dev dataspace — provisioner `dev` variant + teardown | ✅ **done** — `space:"dev"\|"prod"` through `naming.ts`; `provisionDevDataspace()` (seeds PG from synth SQL) + `teardownDevDataspace()` in `../provisioner.ts`; `PostgresAdmin.execSql`; dev/prod isolation + teardown-never-touches-prod tests |
 | C | `--dev` routing — app-proxy prefix + dev principal selection | ⬜ not started |
-| D | Promotion wall — `flagship/service-promote/v1` + consumer + deploy target | ⬜ not started |
+| D | Promotion wall — `flagship/service-promote/v1` + gate + state machine | 🟡 **core done** — protocol envelope (`servicePromote.ts`) + `promoteGate.ts` (pure gate: owner/admin auth AND digest-bound attestation, fail-closed) + `ServiceSpaceState` machine + tests. Consumer wiring into `deployArtifact` (target:"dev"\|"prod") still TODO |
+| E | Paid security-review gate — `flagship/code-security-attestation/v1` + verifier | 🟡 **envelope + verifier done** — `CodeSecurityAttestation` signed/verified by a pinned review key; enforced inside `promoteGate`. The paid scanner SERVICE that issues attestations is separate (shares the marketplace Trivy scanner) |
 | F | Model-to-dev loop — surface the dev URL into the vibecode session | ⬜ not started |
-| E | Paid security-review gate — `flagship/code-security-attestation/v1` + verifier | ⬜ not started |
 
 ## What's in this package (Component A)
 
