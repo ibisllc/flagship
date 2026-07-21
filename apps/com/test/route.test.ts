@@ -1746,6 +1746,23 @@ describe("Pre-launch stealth gate (/wip_ + /alpha + coming-soon)", () => {
     expect(await r.text()).toBe("asset:/faq.html");
   });
 
+  it("SITE_PUBLIC=1 lifts the gate for everyone (open-beta launch, no cookie)", async () => {
+    for (const p of ["/", "/faq.html", "/deck/", "/docs/"]) {
+      const r = await route(
+        new Request(`https://flagshipserver.com${p}`),
+        makeEnv({ SITE_PUBLIC: "1" }),
+      );
+      expect(r.status, p).toBe(200);
+      const body = await r.text();
+      expect(body, p).not.toBe("asset:/coming-soon.html");
+    }
+  });
+
+  it("SITE_PUBLIC unset keeps the gate armed (still coming-soon)", async () => {
+    const r = await route(new Request("https://flagshipserver.com/"), makeEnv());
+    expect(await r.text()).toBe("asset:/coming-soon.html");
+  });
+
   it("exempt static essentials are always served even without the cookie", async () => {
     for (const p of [
       "/coming-soon.html",

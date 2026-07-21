@@ -158,6 +158,12 @@ export interface RouteEnv {
   SERVICES_BASE_URL: string;
   /** The Worker assets binding. Tests pass a stub. */
   ASSETS: { fetch(req: Request): Promise<Response> };
+  /**
+   * Public-launch kill-switch for the coming-soon stealth gate. When "1"/"true"
+   * the marketing surface is served to everyone (open beta); unset/absent keeps
+   * the pre-launch gate armed (only the /wip_ preview cookie sees the site).
+   */
+  SITE_PUBLIC?: string;
   /** Optional base-ISO override for /api/build/iso-info. */
   BASE_ISO_URL?: string;
   BASE_ISO_VERSION?: string;
@@ -665,7 +671,12 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // static-asset fallbacks (marketing HTML, /docs, /blog, /status, /qr,
   // /deck, CSS/JS/fonts). Show coming-soon to those unless the request
   // carries the preview cookie set by /wip_.
-  if (!hasPreviewCookie(request) && !isComingSoonExempt(url.pathname)) {
+  //
+  // SITE_PUBLIC=1 lifts the gate entirely for the public open-beta launch;
+  // an env kill-switch (not a code deletion) so the stealth gate can be
+  // re-armed by unsetting the var without a code change.
+  const sitePublic = env.SITE_PUBLIC === "1" || env.SITE_PUBLIC === "true";
+  if (!sitePublic && !hasPreviewCookie(request) && !isComingSoonExempt(url.pathname)) {
     return serveComingSoon(env);
   }
 
