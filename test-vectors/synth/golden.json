@@ -1,0 +1,205 @@
+{
+  "schema": "CREATE TABLE users (\n  id integer PRIMARY KEY,\n  email text NOT NULL UNIQUE,\n  full_name text,\n  status text CHECK (status IN ('active','invited','disabled')),\n  created_at timestamp\n);\nCREATE TABLE notes (\n  id integer PRIMARY KEY,\n  user_id integer NOT NULL REFERENCES users(id),\n  title varchar(200) NOT NULL,\n  body text,\n  pinned boolean\n);",
+  "seedHex": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+  "dataset": {
+    "seedHex": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+    "pg": [
+      {
+        "table": "users",
+        "columns": [
+          "id",
+          "email",
+          "full_name",
+          "status",
+          "created_at"
+        ],
+        "rows": [
+          {
+            "id": 1,
+            "email": "linus.lovelace0@example.test",
+            "full_name": "yuki lovelace",
+            "status": "active",
+            "created_at": "2024-01-01T00:00:00.000Z"
+          },
+          {
+            "id": 2,
+            "email": "yuki.lovelace1@example.test",
+            "full_name": "john jackson",
+            "status": "invited",
+            "created_at": "2024-01-02T00:00:00.000Z"
+          },
+          {
+            "id": 3,
+            "email": "john.silva2@example.test",
+            "full_name": "yuki johnson",
+            "status": "disabled",
+            "created_at": "2024-01-03T00:00:00.000Z"
+          },
+          {
+            "id": 4,
+            "email": "yuki.lamarr3@example.test",
+            "full_name": "katherine lovelace",
+            "status": "disabled",
+            "created_at": "2024-01-04T00:00:00.000Z"
+          },
+          {
+            "id": 5,
+            "email": "linus.okonkwo4@example.test",
+            "full_name": "hedy novak",
+            "status": "disabled",
+            "created_at": "2024-01-05T00:00:00.000Z"
+          },
+          {
+            "id": 6,
+            "email": "omar.turing5@example.test",
+            "full_name": "john chen",
+            "status": "active",
+            "created_at": null
+          },
+          {
+            "id": 7,
+            "email": "yuki.lamarr6@example.test",
+            "full_name": "yuki chen",
+            "status": "invited",
+            "created_at": "2024-01-07T00:00:00.000Z"
+          },
+          {
+            "id": 8,
+            "email": "mary.silva7@example.test",
+            "full_name": null,
+            "status": "disabled",
+            "created_at": null
+          },
+          {
+            "id": 9,
+            "email": "ada.torvalds8@example.test",
+            "full_name": "linus okonkwo",
+            "status": "invited",
+            "created_at": "2024-01-09T00:00:00.000Z"
+          },
+          {
+            "id": 10,
+            "email": "alan.jackson9@example.test",
+            "full_name": "hedy silva",
+            "status": "active",
+            "created_at": "2024-01-10T00:00:00.000Z"
+          },
+          {
+            "id": 11,
+            "email": "grace.novak10@example.test",
+            "full_name": "john torvalds",
+            "status": "disabled",
+            "created_at": "2024-01-11T00:00:00.000Z"
+          },
+          {
+            "id": 12,
+            "email": "linus.lovelace11@example.test",
+            "full_name": "ada lovelace",
+            "status": "active",
+            "created_at": "2024-01-12T00:00:00.000Z"
+          }
+        ]
+      },
+      {
+        "table": "notes",
+        "columns": [
+          "id",
+          "user_id",
+          "title",
+          "body",
+          "pinned"
+        ],
+        "rows": [
+          {
+            "id": 1,
+            "user_id": 6,
+            "title": "Meeting Notes",
+            "body": "sit amet consectetur adipiscing elit sed FLAGSHIP-CANARY-240bf8b6784f",
+            "pinned": true
+          },
+          {
+            "id": 2,
+            "user_id": 12,
+            "title": "Reading List",
+            "body": null,
+            "pinned": false
+          },
+          {
+            "id": 3,
+            "user_id": 11,
+            "title": "Reading List",
+            "body": "lorem ipsum dolor lorem ipsum dolor",
+            "pinned": true
+          },
+          {
+            "id": 4,
+            "user_id": 2,
+            "title": "Meeting Notes",
+            "body": "lorem ipsum dolor adipiscing elit sed",
+            "pinned": null
+          },
+          {
+            "id": 5,
+            "user_id": 7,
+            "title": "Ideas",
+            "body": null,
+            "pinned": true
+          },
+          {
+            "id": 6,
+            "user_id": 9,
+            "title": "Meeting Notes",
+            "body": "adipiscing elit sed incididunt ut labore",
+            "pinned": false
+          },
+          {
+            "id": 7,
+            "user_id": 2,
+            "title": "Shopping List",
+            "body": "do eiusmod tempor adipiscing elit sed",
+            "pinned": null
+          },
+          {
+            "id": 8,
+            "user_id": 4,
+            "title": "Reading List",
+            "body": "adipiscing elit sed do eiusmod tempor",
+            "pinned": null
+          },
+          {
+            "id": 9,
+            "user_id": 1,
+            "title": "Reading List",
+            "body": "incididunt ut labore sit amet consectetur",
+            "pinned": true
+          },
+          {
+            "id": 10,
+            "user_id": 11,
+            "title": "Meeting Notes",
+            "body": "sit amet consectetur sit amet consectetur",
+            "pinned": false
+          },
+          {
+            "id": 11,
+            "user_id": 2,
+            "title": "Ideas",
+            "body": null,
+            "pinned": true
+          },
+          {
+            "id": 12,
+            "user_id": 3,
+            "title": "Ideas",
+            "body": "do eiusmod tempor incididunt ut labore",
+            "pinned": null
+          }
+        ]
+      }
+    ],
+    "canaries": [
+      "FLAGSHIP-CANARY-240bf8b6784f"
+    ]
+  },
+  "sql": "-- Synthetic dev dataset (generated; represents no real person).\n-- seed=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff\nINSERT INTO \"users\" (\"id\", \"email\", \"full_name\", \"status\", \"created_at\") VALUES (1, 'linus.lovelace0@example.test', 'yuki lovelace', 'active', '2024-01-01T00:00:00.000Z');\nINSERT INTO \"users\" (\"id\", \"email\", \"full_name\", \"status\", \"created_at\") VALUES (2, 'yuki.lovelace1@example.test', 'john jackson', 'invited', '2024-01-02T00:00:00.000Z');\nINSERT INTO \"users\" (\"id\", \"email\", \"full_name\", \"status\", \"created_at\") VALUES (3, 'john.silva2@example.test', 'yuki johnson', 'disabled', '2024-01-03T00:00:00.000Z');\nINSERT INTO \"users\" (\"id\", \"email\", \"full_name\", \"status\", \"created_at\") VALUES (4, 'yuki.lamarr3@example.test', 'katherine lovelace', 'disabled', '2024-01-04T00:00:00.000Z');\nINSERT INTO \"users\" (\"id\", \"email\", \"full_name\", \"status\", \"created_at\") VALUES (5, 'linus.okonkwo4@example.test', 'hedy novak', 'disabled', '2024-01-05T00:00:00.000Z');\nINSERT INTO \"users\" (\"id\", \"email\", \"full_name\", \"status\", \"created_at\") VALUES (6, 'omar.turing5@example.test', 'john chen', 'active', NULL);\nINSERT INTO \"users\" (\"id\", \"email\", \"full_name\", \"status\", \"created_at\") VALUES (7, 'yuki.lamarr6@example.test', 'yuki chen', 'invited', '2024-01-07T00:00:00.000Z');\nINSERT INTO \"users\" (\"id\", \"email\", \"full_name\", \"status\", \"created_at\") VALUES (8, 'mary.silva7@example.test', NULL, 'disabled', NULL);\nINSERT INTO \"users\" (\"id\", \"email\", \"full_name\", \"status\", \"created_at\") VALUES (9, 'ada.torvalds8@example.test', 'linus okonkwo', 'invited', '2024-01-09T00:00:00.000Z');\nINSERT INTO \"users\" (\"id\", \"email\", \"full_name\", \"status\", \"created_at\") VALUES (10, 'alan.jackson9@example.test', 'hedy silva', 'active', '2024-01-10T00:00:00.000Z');\nINSERT INTO \"users\" (\"id\", \"email\", \"full_name\", \"status\", \"created_at\") VALUES (11, 'grace.novak10@example.test', 'john torvalds', 'disabled', '2024-01-11T00:00:00.000Z');\nINSERT INTO \"users\" (\"id\", \"email\", \"full_name\", \"status\", \"created_at\") VALUES (12, 'linus.lovelace11@example.test', 'ada lovelace', 'active', '2024-01-12T00:00:00.000Z');\nINSERT INTO \"notes\" (\"id\", \"user_id\", \"title\", \"body\", \"pinned\") VALUES (1, 6, 'Meeting Notes', 'sit amet consectetur adipiscing elit sed FLAGSHIP-CANARY-240bf8b6784f', TRUE);\nINSERT INTO \"notes\" (\"id\", \"user_id\", \"title\", \"body\", \"pinned\") VALUES (2, 12, 'Reading List', NULL, FALSE);\nINSERT INTO \"notes\" (\"id\", \"user_id\", \"title\", \"body\", \"pinned\") VALUES (3, 11, 'Reading List', 'lorem ipsum dolor lorem ipsum dolor', TRUE);\nINSERT INTO \"notes\" (\"id\", \"user_id\", \"title\", \"body\", \"pinned\") VALUES (4, 2, 'Meeting Notes', 'lorem ipsum dolor adipiscing elit sed', NULL);\nINSERT INTO \"notes\" (\"id\", \"user_id\", \"title\", \"body\", \"pinned\") VALUES (5, 7, 'Ideas', NULL, TRUE);\nINSERT INTO \"notes\" (\"id\", \"user_id\", \"title\", \"body\", \"pinned\") VALUES (6, 9, 'Meeting Notes', 'adipiscing elit sed incididunt ut labore', FALSE);\nINSERT INTO \"notes\" (\"id\", \"user_id\", \"title\", \"body\", \"pinned\") VALUES (7, 2, 'Shopping List', 'do eiusmod tempor adipiscing elit sed', NULL);\nINSERT INTO \"notes\" (\"id\", \"user_id\", \"title\", \"body\", \"pinned\") VALUES (8, 4, 'Reading List', 'adipiscing elit sed do eiusmod tempor', NULL);\nINSERT INTO \"notes\" (\"id\", \"user_id\", \"title\", \"body\", \"pinned\") VALUES (9, 1, 'Reading List', 'incididunt ut labore sit amet consectetur', TRUE);\nINSERT INTO \"notes\" (\"id\", \"user_id\", \"title\", \"body\", \"pinned\") VALUES (10, 11, 'Meeting Notes', 'sit amet consectetur sit amet consectetur', FALSE);\nINSERT INTO \"notes\" (\"id\", \"user_id\", \"title\", \"body\", \"pinned\") VALUES (11, 2, 'Ideas', NULL, TRUE);\nINSERT INTO \"notes\" (\"id\", \"user_id\", \"title\", \"body\", \"pinned\") VALUES (12, 3, 'Ideas', 'do eiusmod tempor incididunt ut labore', NULL);\n"
+}

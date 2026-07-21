@@ -66,6 +66,27 @@ export interface AppDataIdentity {
   creator: string;
   slug: string;
   storeName?: string;
+  /**
+   * Which dataspace this identity addresses. Absent / "prod" = the production
+   * dataspace (byte-identical to pre-dev-dataspace names — no migration).
+   * "dev" = the ephemeral synthetic dev dataspace: a parallel, `dev`-prefixed
+   * db / role / bucket / prefix that the author's app runs against during
+   * authoring, and which can never collide with prod. See
+   * `docs/dev-prod-dataspace-harness-spec.md` §3.
+   */
+  space?: "dev" | "prod";
+}
+
+/**
+ * The `dev` marker woven into every dev-space name. Kept short + dashless so it
+ * is valid in Postgres identifiers (with the leading `_`), Redis, and S3
+ * buckets alike. A prod identity NEVER carries this token.
+ */
+const DEV_SPACE_TOKEN = "dev";
+
+/** True when the identity addresses the dev dataspace. */
+function isDev(id: AppDataIdentity): boolean {
+  return id.space === "dev";
 }
 
 /**
@@ -91,7 +112,12 @@ export function pgDatabase(id: AppDataIdentity): string {
   const slugSafe = id.slug.replace(/-/g, "_");
   const eff = effectiveStoreName(id.storeName);
   const suffix = eff ? `_${eff}` : "";
-  return `_${id.creator}_${slugSafe}${suffix}`;
+  // Prod: `_<creator>_<slug>`. Dev: `__dev_<creator>_<slug>` — a prod name is
+  // always `_<creator>_…` with creator [a-z0-9], so it can never begin with
+  // `__`. The dev and prod namespaces are therefore provably disjoint even
+  // after slug dashes collapse to underscores.
+  const prefix = isDev(id) ? `__${DEV_SPACE_TOKEN}_` : `_`;
+  return `${prefix}${id.creator}_${slugSafe}${suffix}`;
 }
 
 export function pgRole(id: AppDataIdentity): string {
@@ -107,10 +133,13 @@ export function redisPrefix(id: AppDataIdentity): string {
   assertSlug(id.slug);
   assertStoreName(id.storeName);
   // Redis prefixes are free-form (we just glob-match on them); preserve
-  // dashes in the slug for human readability.
+  // dashes in the slug for human readability. Dev space gets a leading
+  // `dev:` segment — the colon is the reserved separator and a prod prefix
+  // starts with the creator ([a-z0-9]), so `dev:` can never collide.
   const eff = effectiveStoreName(id.storeName);
   const suffix = eff ? `${eff}:` : "";
-  return `${id.creator}:${id.slug}:${suffix}`;
+  const devSeg = isDev(id) ? `${DEV_SPACE_TOKEN}:` : "";
+  return `${devSeg}${id.creator}:${id.slug}:${suffix}`;
 }
 
 export function s3Bucket(id: AppDataIdentity): string {
@@ -119,10 +148,13 @@ export function s3Bucket(id: AppDataIdentity): string {
   assertStoreName(id.storeName);
   // S3 bucket: 3–63 chars, lowercase alnum + dash + dot, no leading/trailing
   // dash or dot, no underscores. Slug already conforms; creator is dashless;
-  // storeName is dashless. Concatenation is well-formed.
+  // storeName is dashless. Concatenation is well-formed. Dev space gets a
+  // leading `dev.` label — the dot is a valid S3 bucket separator and a prod
+  // bucket starts with the creator ([a-z0-9]), so `dev.` never collides.
   const eff = effectiveStoreName(id.storeName);
   const suffix = eff ? `-${eff}` : "";
-  return `${id.creator}-${id.slug}${suffix}`;
+  const devSeg = isDev(id) ? `${DEV_SPACE_TOKEN}.` : "";
+  return `${devSeg}${id.creator}-${id.slug}${suffix}`;
 }
 
 export function s3AccessKey(id: AppDataIdentity): string {

@@ -265,3 +265,43 @@ describe("cross-host portability — same data identity regardless of where the 
     expect(redisPrefix({ creator: "alice", slug: "game1" })).toBe("alice:game1:");
   });
 });
+
+describe("dev dataspace naming — provably disjoint from prod (feat/dev-prod-dataspace)", () => {
+  const id = { creator: "harry", slug: "habit-tracker" } as const;
+
+  it("prod names are byte-identical to the pre-dev-dataspace form (no migration)", () => {
+    expect(pgDatabase({ ...id, space: "prod" })).toBe(pgDatabase(id));
+    expect(redisPrefix({ ...id, space: "prod" })).toBe(redisPrefix(id));
+    expect(s3Bucket({ ...id, space: "prod" })).toBe(s3Bucket(id));
+    expect(pgDatabase(id)).toBe("_harry_habit_tracker");
+  });
+
+  it("dev names carry a store-valid dev marker", () => {
+    expect(pgDatabase({ ...id, space: "dev" })).toBe("__dev_harry_habit_tracker");
+    expect(redisPrefix({ ...id, space: "dev" })).toBe("dev:harry:habit-tracker:");
+    expect(s3Bucket({ ...id, space: "dev" })).toBe("dev.harry-habit-tracker");
+  });
+
+  it("dev and prod names NEVER collide across creators/slugs (incl. a creator literally named 'dev')", () => {
+    const cases = [
+      { creator: "dev", slug: "notes" },
+      { creator: "harry", slug: "dev-notes" },
+      { creator: "d", slug: "e-v" },
+      { creator: "harry", slug: "habit-tracker" },
+    ] as const;
+    for (const c of cases) {
+      expect(pgDatabase({ ...c, space: "dev" })).not.toBe(pgDatabase({ ...c, space: "prod" }));
+      expect(redisPrefix({ ...c, space: "dev" })).not.toBe(redisPrefix({ ...c, space: "prod" }));
+      expect(s3Bucket({ ...c, space: "dev" })).not.toBe(s3Bucket({ ...c, space: "prod" }));
+      // A prod pg name can never begin with the dev sentinel `__`.
+      expect(pgDatabase({ ...c, space: "prod" }).startsWith("__")).toBe(false);
+      expect(pgDatabase({ ...c, space: "dev" }).startsWith("__dev_")).toBe(true);
+    }
+  });
+
+  it("pgRole/redisUser follow pgDatabase into the dev namespace", () => {
+    expect(pgRole({ ...id, space: "dev" })).toBe("__dev_harry_habit_tracker");
+    expect(redisUser({ ...id, space: "dev" })).toBe("__dev_harry_habit_tracker");
+    expect(s3AccessKey({ ...id, space: "dev" })).toBe("dev.harry-habit-tracker");
+  });
+});
