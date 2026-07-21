@@ -16,13 +16,14 @@ class DeviceAdmitTest {
 
     private val admit = DeviceAdmit(
         username = "hilton",
+        deviceId = "00".repeat(16),
         newDevicePubHex = "aa".repeat(32),
         issuedAt = 1_700_000_000_000L,
     )
 
     @Test fun canonicalBytes_matchWorkerLayout() {
         val expected =
-            "flagship/device-admit/v1|hilton|${"aa".repeat(32)}|1700000000000"
+            "flagship/device-admit/v2|hilton|${"00".repeat(16)}|${"aa".repeat(32)}|1700000000000"
         assertArrayEquals(
             expected.toByteArray(Charsets.UTF_8),
             DeviceAdmitClaim.canonicalBytes(admit),

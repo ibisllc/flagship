@@ -126,7 +126,7 @@ public struct OnboardingFlow: View {
                     // recovered UMK, and initiates the takeover re-pair
                     // (multi attaches the recovery-TOTP / recovery-code
                     // as totpProof). On completion the host records this
-                    // device's `admin` label and flips AppState paired.
+                    // fresh account-scoped device identity and flips AppState paired.
                     RealAccountLoginScreen(
                         resolution: resolution,
                         onComplete: { username in

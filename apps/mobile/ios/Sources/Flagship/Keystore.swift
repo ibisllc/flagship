@@ -238,6 +238,30 @@ public struct Keystore {
         return try await unwrappedUMK(reason: reason)
     }
 
+    public static func storeAccountDeviceSigningKey(
+        _ key: Curve25519.Signing.PrivateKey,
+        accountId: String,
+        deviceId: String
+    ) throws {
+        try keychainWrite(
+            account: account("com.flagship.account-device.\(deviceId)", profile: accountId),
+            data: key.rawRepresentation,
+            sync: .deviceLocal
+        )
+    }
+
+    public static func accountDeviceSigningKey(
+        umk: Data,
+        accountId: String,
+        deviceId: String
+    ) throws -> Curve25519.Signing.PrivateKey {
+        let slot = account("com.flagship.account-device.\(deviceId)", profile: accountId)
+        if let raw = keychainRead(account: slot) {
+            return try Curve25519.Signing.PrivateKey(rawRepresentation: raw)
+        }
+        return try AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: accountId, deviceId: deviceId)
+    }
+
     // MARK: - Derivation
 
     /// Per-server symmetric wrap key (SWK). Used by app-backup encryption.

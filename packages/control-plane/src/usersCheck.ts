@@ -43,12 +43,7 @@ export interface UsersCheckDeps {
   /** Directive validity window. Default 7 days (matches the pubkey
    *  binding); the client re-fetches on every check anyway. */
   demoDirectiveTtlMs?: number;
-  /** Plan A — sample-user / on-connect Hetzner provisioning. When
-   *  wired AND the typed username has a matching demo_users row,
-   *  the response embeds a `demoServer` block (the fqdn + lifecycle
-   *  state) so mobile clients can render one real device and decide
-   *  whether to call /api/dev/sample-user/{u}/connect. Absent ⇒
-   *  legacy behavior unchanged. See docs/sample-users.md §10.9. */
+  /** Demo provisioning status for a durably issued demo identity. */
   demoUsers?: DemoUsersStorage;
 }
 

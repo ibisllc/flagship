@@ -162,9 +162,9 @@ final class Phase3bPairingTests: XCTestCase {
         )
         let incomingVm = JoinAccountViewModel(
             relay: relay,
-            server: server,
-            deviceLabel: "Reviewer iPhone"
+            server: server
         )
+        try incomingVm.confirmDeviceDisplayName("Reviewer iPhone")
 
         // 3 — Build the admin's /join URL the incoming side scans. We
         //     need the admin's ephemeral pub; AddDeviceViewModel mints it
@@ -273,6 +273,7 @@ final class Phase3bPairingTests: XCTestCase {
         let foreignSig = try foreignAdmit.sign(with: accountIrk)
 
         let incomingVm = JoinAccountViewModel(relay: relay, server: server)
+        try incomingVm.confirmDeviceDisplayName("Reviewer iPhone")
         let task = Task {
             await incomingVm.connect(joinUrl: joinUrl, provideRawPubkeyToRelay: { handshakePub in
                 // We now know the incoming handshake pubkey → derive the

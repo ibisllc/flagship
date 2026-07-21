@@ -19,6 +19,7 @@ import type {
   DeviceIdentityStorage,
   DeviceManagedProfileStorage,
   DeviceSelfProfileStorage,
+  PushTokenStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
@@ -38,6 +39,7 @@ export interface AccountDirectoryDeps {
   selfProfiles: DeviceSelfProfileStorage;
   managedProfiles: DeviceManagedProfileStorage;
   keyGrants: AccountDirectoryKeyGrantStorage;
+  pushTokens: PushTokenStorage;
   nonces: DirectoryNonceStore;
   now?: () => number;
   freshnessMs?: number;
@@ -291,4 +293,38 @@ export async function handleDeleteDeviceManagedProfile(
   if (typeof body?.expectedRevision !== "number") return malformed("malformed body");
   if (!(await deps.managedProfiles.delete(account, id, body.expectedRevision))) return conflict("revision conflict");
   return ok({ ok: true }, { "cache-control": "private, no-store" });
+}
+
+export async function handleRevokeAccountDevice(
+  deps: AccountDirectoryDeps,
+  accountId: string,
+  deviceId: string,
+  auth: DirectoryAuthorization | undefined,
+): Promise<HandlerResponseWithHeaders> {
+  const account = accountId.toLowerCase();
+  const id = deviceId.toLowerCase();
+  const path = `/api/accounts/${account}/devices/${id}`;
+  const caller = await authorizeActiveDevice(deps, auth, { accountId: account, method: "DELETE", path });
+  if (!caller) return forbidden("not authorized");
+  if (caller.deviceId !== id) {
+    const scoped = await requireDeviceScope(
+      { storage: deps.grants, identities: deps.identities, usernames: deps.usernames, now: deps.now },
+      caller.signerPubHex,
+      account,
+      "revoke-others",
+    );
+    if (!scoped.ok && !(await isAdministrator(deps, caller))) return forbidden("not authorized");
+  }
+  const target = await deps.identities.get(account, id);
+  if (!target) return forbidden("not authorized");
+  const revokedAt = (deps.now ?? (() => Date.now()))();
+  if (target.revokedAt === null) await deps.identities.revoke(account, id, revokedAt);
+  const grants = await deps.grants.listForUser(account);
+  await Promise.all(
+    grants.filter((grant) => grant.deviceId === id && grant.revokedAt === null)
+      .map((grant) => deps.grants.revoke(grant.grantId, revokedAt)),
+  );
+  const tokens = await deps.pushTokens.listByUser(account);
+  await Promise.all(tokens.filter((token) => token.deviceId === id).map((token) => deps.pushTokens.remove(token.tokenId)));
+  return ok({ ok: true, deviceId: id, revokedAt }, { "cache-control": "private, no-store" });
 }

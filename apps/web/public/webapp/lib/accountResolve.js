@@ -40,12 +40,12 @@
  *  @property {AccountKind} kind
  *  @property {AccountRecoveryFactor} recovery
  *  @property {boolean} totpEnrolled
- *  @property {number} trustedDeviceCount
  *  @property {DemoServerBlock=} demoServer    present only for demo accounts
  *  @property {GraceModel} graceModel
  */
 
 import { controlApex } from "./apex.js";
+import { generateDeviceId } from "./accountMetadata.js";
 
 /** Login field is a bare handle: 3–30 lowercase letters/digits, interior single
  *  dashes OK (no leading/trailing), no dots, no `--`. Mirror of control-plane
@@ -65,7 +65,6 @@ function localUnknown(username) {
     kind: "unknown",
     recovery: { present: false, hasFetchGate: false },
     totpEnrolled: false,
-    trustedDeviceCount: 0,
     graceModel: "none",
   };
 }
@@ -200,7 +199,10 @@ export async function activateDemoAccount(resolution, deps) {
   if (typeof deps.addProfile === "function") {
     deps.addProfile({
       cloudName: username,
-      deviceLabel: null,
+      accountId: username,
+      deviceId: generateDeviceId(),
+      accountDisplayName: null,
+      deviceDisplayName: null,
       deviceCapability: null,
       demoServer: resolution.demoServer ?? null,
     });

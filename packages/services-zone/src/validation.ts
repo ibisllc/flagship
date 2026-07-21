@@ -147,7 +147,7 @@ export function parseAppLabel(label: string): { slug: string; creator: string } 
 
 /**
  * The class a leftmost label resolves to under the ONE per-user resolver.
- * App labels, box-coordination names, and device labels all share the same
+ * App labels and box-coordination names share the same
  * `*.<user>` leftmost-label space and MUST be mutually unique within a user
  * (the storage invariant); this resolver applies the deterministic
  * PRECEDENCE so the class is well-defined even if that invariant is ever
@@ -159,13 +159,11 @@ export function parseAppLabel(label: string): { slug: string; creator: string } 
  * zone and is routed by its `<server>.<user>` suffix — it never reaches
  * this user-zone resolver.
  */
-export type LabelClass = "box-apex" | "device" | "app" | "none";
+export type LabelClass = "box-apex" | "app" | "none";
 
 export interface ResolverLookups {
   /** Is `label` a registered box (server) name for this user? */
   isBoxName(label: string): boolean;
-  /** Is `label` a registered device label (v2 device-addressing)? */
-  isDeviceLabel(label: string): boolean;
   /** Is `label` an app installed in this user's install table? */
   isAppLabel(label: string): boolean;
 }
@@ -180,10 +178,9 @@ export interface ResolvedLabel {
  * The per-user leftmost-label resolver (names directly under the USER zone,
  * i.e. tier 2 `<label>.<user>.flagship.services`). Resolution PRECEDENCE:
  *   1. registered box name → box-coordination apex (`/.flagship/*`).
- *   2. registered device label → device view (capability scopes apply).
- *   3. in the install table → leader-route to that service (tier 2,
+ *   2. in the install table → leader-route to that service (tier 2,
  *      hardware-agnostic).
- *   4. else → the disambiguation / "not an app" page.
+ *   3. else → the disambiguation / "not an app" page.
  *
  * Box-pinned access is NOT a tier here: it is the hierarchical canonical
  * name `<service>.<server>.<user>` under the box zone, routed by suffix
@@ -195,7 +192,6 @@ export interface ResolvedLabel {
 export function resolveLeftmostLabel(leftmostLabel: string, lookups: ResolverLookups): ResolvedLabel {
   const norm = String(leftmostLabel).toLowerCase();
   if (lookups.isBoxName(norm)) return { cls: "box-apex", label: norm };
-  if (lookups.isDeviceLabel(norm)) return { cls: "device", label: norm };
   if (lookups.isAppLabel(norm)) return { cls: "app", label: norm };
   return { cls: "none", label: norm };
 }

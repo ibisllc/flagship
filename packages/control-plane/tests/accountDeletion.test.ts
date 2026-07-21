@@ -191,10 +191,20 @@ describe("handleAccountDeletionBundle — LAST-DEVICE enforcement", () => {
     devSeed: number,
   ): Promise<void> {
     const dev = makeKey(devSeed);
+    const deviceId = devSeed.toString(16).padStart(2, "0").repeat(16);
+    await storage.deviceIdentities.put({
+      accountId: username,
+      deviceId,
+      devicePubHex: hex(dev.publicKey),
+      platformClass: null,
+      createdAt: NOW,
+      lastSeenAt: NOW,
+      revokedAt: null,
+    });
     await storage.deviceCapabilityGrants.put({
       grantId: `g-${devSeed}`,
       username,
-      deviceLabel: `dev-${devSeed}`,
+      deviceId,
       devicePubHex: hex(dev.publicKey),
       scopesJson: JSON.stringify(["install-service"]),
       issuedAt: NOW,
@@ -324,10 +334,20 @@ describe("handleAccountDeletionBundle — §5 bundle atomicity", () => {
     const irk = makeKey(14);
     await seedAccount(storage, "jane", irk);
     const dev = makeKey(140);
+    const deviceId = "8c".repeat(16);
+    await storage.deviceIdentities.put({
+      accountId: "jane",
+      deviceId,
+      devicePubHex: hex(dev.publicKey),
+      platformClass: null,
+      createdAt: NOW,
+      lastSeenAt: NOW,
+      revokedAt: null,
+    });
     await storage.deviceCapabilityGrants.put({
       grantId: "g-jane",
       username: "jane",
-      deviceLabel: "second",
+      deviceId,
       devicePubHex: hex(dev.publicKey),
       scopesJson: JSON.stringify(["install-service"]),
       issuedAt: NOW,
@@ -484,10 +504,20 @@ describe("handleAdminUsernameReclaim", () => {
     await seedAccount(storage, "owen", irk, NINETY_ONE_DAYS_AGO);
     await storage.usernames.touchLastActive("owen", NINETY_ONE_DAYS_AGO);
     const dev = makeKey(230);
+    const deviceId = "e6".repeat(16);
+    await storage.deviceIdentities.put({
+      accountId: "owen",
+      deviceId,
+      devicePubHex: hex(dev.publicKey),
+      platformClass: null,
+      createdAt: NINETY_ONE_DAYS_AGO,
+      lastSeenAt: NINETY_ONE_DAYS_AGO,
+      revokedAt: null,
+    });
     await storage.deviceCapabilityGrants.put({
       grantId: "g-owen",
       username: "owen",
-      deviceLabel: "d",
+      deviceId,
       devicePubHex: hex(dev.publicKey),
       scopesJson: JSON.stringify(["install-service"]),
       issuedAt: NINETY_ONE_DAYS_AGO,

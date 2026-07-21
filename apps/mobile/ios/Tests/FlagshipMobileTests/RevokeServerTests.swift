@@ -194,7 +194,6 @@ final class RevokeServerTests: XCTestCase {
         func revokePushToken(_ req: PushTokenRevokeRequest) async throws { throw error }
         func admitDevice(account: String, body: DeviceAdmitRequest) async throws -> DeviceAdmitResponse { throw error }
         func getInstallEvents(serial: String, since: Int) async throws -> InstallEventsPollResponse { throw error }
-        func listDevices(username: String) async throws -> TrustedDevicesListResponse { throw error }
         func mintWatchDelegate(username: String, body: WatchDelegateMintRequest) async throws -> WatchDelegateMintResponse { throw error }
         func listWatchDelegates(username: String) async throws -> WatchDelegatesListResponse { throw error }
         func revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest) async throws { throw error }

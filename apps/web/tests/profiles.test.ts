@@ -86,7 +86,7 @@ describe("webapp profiles (W3 multi-cloud)", () => {
   it("addProfile + setActiveProfile round-trips through localStorage", async () => {
     const lib = await loadProfilesLib();
     lib.addProfile({ cloudName: "harry", cloudRootPubHex: "abc" }, { storage });
-    lib.addProfile({ cloudName: "jay-family", deviceLabel: "browser" }, { storage, setActive: false });
+    lib.addProfile({ cloudName: "jay-family", accountId: "jay-family", deviceId: "11".repeat(16) }, { storage, setActive: false });
     const state = lib.loadProfiles(storage);
     expect(state.profiles.map((p: any) => p.cloudName)).toEqual(["harry", "jay-family"]);
     expect(state.activeCloudName).toBe("harry");
@@ -100,10 +100,10 @@ describe("webapp profiles (W3 multi-cloud)", () => {
   it("addProfile replaces an existing entry by cloudName (no duplicate)", async () => {
     const lib = await loadProfilesLib();
     lib.addProfile({ cloudName: "harry" }, { storage });
-    lib.addProfile({ cloudName: "harry", deviceLabel: "phone" }, { storage });
+    lib.addProfile({ cloudName: "harry", accountId: "harry", deviceId: "22".repeat(16), deviceDisplayName: "phone" }, { storage });
     const state = lib.loadProfiles(storage);
     expect(state.profiles).toHaveLength(1);
-    expect(state.profiles[0].deviceLabel).toBe("phone");
+    expect(state.profiles[0].deviceDisplayName).toBe("phone");
   });
 
   it("setActiveProfile ignores unknown cloudName", async () => {

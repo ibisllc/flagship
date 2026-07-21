@@ -126,7 +126,7 @@ class OpenAccountFlowTest {
         val profile = app.activeProfile
         assertNotNull("the active profile is recorded", profile)
         assertEquals("harry", profile?.cloudName)
-        assertEquals("Harry's Pixel", profile?.deviceLabel)
+        assertEquals("Harry's Pixel", profile?.deviceDisplayName)
     }
 
     @Test fun openAccount_blankName_fallsBackToUsernamesPhone() = runTest {
@@ -137,7 +137,7 @@ class OpenAccountFlowTest {
         vm.openAccount("   ")
 
         assertEquals(OpenAccountPhase.Opened, vm.phase.first())
-        assertEquals("harry's phone", app.activeProfile?.deviceLabel)
+        assertEquals("harry's phone", app.activeProfile?.deviceDisplayName)
     }
 
     @Test fun defaultDeviceName_prefersModel_thenFallsBack() {

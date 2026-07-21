@@ -90,11 +90,9 @@ public final class AppState {
     /// to Activity and back.
     public var recoveryNudgeDismissedThisSession: Bool
     /// E7 — true once we've observed that this device's local push
-    /// tokenId is no longer in /api/users/:u/devices, meaning another
-    /// device on the account ran a Disconnect / Replace / Wipe against
-    /// us. The Home banner uses this to render a danger card with a
-    /// "Sign in again" CTA. Default false — set by the detector after
-    /// a successful round-trip.
+    /// the current account-scoped device identity is rejected by an
+    /// authenticated directory read, meaning another device ran a revoke,
+    /// replace, or wipe operation against us.
     public var accountWasReset: Bool
     /// B12 — when true, the app requires a successful biometric
     /// evaluation at launch (and on resume from cold-background)
@@ -431,6 +429,21 @@ public final class AppState {
         } else {
             profiles.append(profile)
         }
+    }
+
+    public func cachePresentationNames(accountDisplayName: String, deviceDisplayName: String?) {
+        guard let active = activeProfile else { return }
+        upsertProfile(Profile(
+            cloudName: active.cloudName,
+            cloudRootPubHex: active.cloudRootPubHex,
+            accountId: active.accountId,
+            deviceId: active.deviceId,
+            accountDisplayName: accountDisplayName,
+            deviceDisplayName: deviceDisplayName ?? active.deviceDisplayName,
+            deviceCapability: active.deviceCapability,
+            demoServer: active.demoServer,
+            createdAt: active.createdAt
+        ))
     }
 
     public func addPod(_ pod: PodInfo) {

@@ -41,7 +41,6 @@ import com.flagshipserver.app.api.DeviceAdmitRequest
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.PushTokenRegisterRequest
 import com.flagshipserver.app.api.RecoveryEnvelopeRequest
-import com.flagshipserver.app.api.TrustedDevice
 import com.flagshipserver.app.api.UsernameClaimRequest
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.DemoFixtures
@@ -132,7 +131,6 @@ class LoginDecisionMatrixConformanceTest {
         assertEquals(AccountResolution.GraceModel.Instant, r.grace)
         assertFalse(r.recovery.present)
         assertFalse(r.totpEnrolled)
-        assertEquals(0, r.trustedDeviceCount)
         assertNotNull("demo carries its sandbox device block", r.demoServer)
     }
 
@@ -168,22 +166,12 @@ class LoginDecisionMatrixConformanceTest {
         assertTrue(r.totpEnrolled)
     }
 
-    @Test fun matrix_single_withRecoveryAndDevices_projectsFactors() = runTest {
-        // accountResolve.ts projects recovery-presence + trustedDeviceCount
-        // straight through. Pin both so a future Mock edit can't drift the
-        // wire away from the Worker.
+    @Test fun matrix_single_withRecovery_doesNotNeedPublicDeviceMetadata() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
         claim(server, "dana")
         server.cloudRecoveryByUser = mapOf("dana" to true)
-        server.devicesByUser = mapOf(
-            "dana" to listOf(
-                TrustedDevice("tok_1", "to", "Pixel", "fcm", 1L, 1L),
-                TrustedDevice("tok_2", "to", "iPad", "apns", 2L, 2L),
-            ),
-        )
         val r = server.resolveAccount("dana")
         assertTrue(r.recovery.present)
-        assertEquals(2, r.trustedDeviceCount)
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -237,7 +225,6 @@ class LoginDecisionMatrixConformanceTest {
             kind = "single",
             recovery = AccountResolution.RecoveryState(true, false, credentialId),
             totpEnrolled = false,
-            trustedDeviceCount = 0,
             graceModel = "3d",
             // A rotated (mismatched) registered IRK forces the Phase-B
             // re-pair-with-grace path this branch pins. The instant-pair
@@ -255,7 +242,7 @@ class LoginDecisionMatrixConformanceTest {
         assertNull("single carries no second factor", server.lastRePairInitiate!!.second.totpProof)
         m.completeTakeover()
         assertEquals(LoginPhase.Opened, m.phase.first())
-        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceLabel)
+        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceDisplayName)
     }
 
     // ── multi → TOTP-gated 24h takeover ───────────────────────────────
@@ -270,7 +257,6 @@ class LoginDecisionMatrixConformanceTest {
             kind = "multi",
             recovery = AccountResolution.RecoveryState(true, false, credentialId),
             totpEnrolled = true,
-            trustedDeviceCount = 0,
             graceModel = "24h-totp",
         )
         val m = loginVm(r, server, app)
@@ -297,7 +283,6 @@ class LoginDecisionMatrixConformanceTest {
             kind = "single",
             recovery = AccountResolution.RecoveryState(false, false),
             totpEnrolled = false,
-            trustedDeviceCount = 0,
             graceModel = "3d",
         )
         val m = loginVm(r, server, app)
@@ -319,7 +304,6 @@ class LoginDecisionMatrixConformanceTest {
             kind = "multi",
             recovery = AccountResolution.RecoveryState(false, false),
             totpEnrolled = true,
-            trustedDeviceCount = 0,
             graceModel = "24h-totp",
         )
         val m = loginVm(r, server, app)
@@ -361,7 +345,6 @@ class LoginDecisionMatrixConformanceTest {
             kind = "single",
             recovery = AccountResolution.RecoveryState(true, false, credentialId),
             totpEnrolled = false,
-            trustedDeviceCount = 0,
             graceModel = "3d",
         )
         val m = loginVm(r, server, app)
@@ -374,23 +357,38 @@ class LoginDecisionMatrixConformanceTest {
     //  Mock-matches-Worker-wire — admitDevice quarantine + reject paths.
     // ════════════════════════════════════════════════════════════════
 
+    private fun dummyAdmitRequest(account: String): DeviceAdmitRequest {
+        val deviceId = "cd".repeat(16)
+        val devicePub = "ab".repeat(32)
+        return DeviceAdmitRequest(
+            admit = DeviceAdmitRequest.AdmitEnvelope(account, deviceId, devicePub, 1L),
+            admitSig = "00".repeat(64),
+            grant = DeviceAdmitRequest.Grant(
+                "g", account, deviceId, devicePub, listOf("view-directory"),
+                1L, 2L, "membership",
+            ),
+            grantSignature = "00".repeat(64),
+            profile = com.flagshipserver.app.api.AccountBootstrapRequest.Profile(
+                account, deviceId, 1L, 1L, "00".repeat(12), "00".repeat(16),
+                1L, devicePub, "00".repeat(64),
+            ),
+            request = PushTokenRegisterRequest.Inner(
+                username = account,
+                deviceId = deviceId,
+                platform = "fcm",
+                providerToken = "tok",
+                pushX25519Pub = devicePub,
+                issuedAt = 1L,
+            ),
+            signature = "00".repeat(64),
+        )
+    }
+
     @Test fun admit_returnsQuarantineUntil_andRendersCountdown() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
         val resp = server.admitDevice(
             account = "acme",
-            req = DeviceAdmitRequest(
-                admit = DeviceAdmitRequest.AdmitEnvelope("acme", "cd".repeat(32), 1L),
-                admitSig = "00".repeat(64),
-                request = PushTokenRegisterRequest.Inner(
-                    username = "acme",
-                    platform = "fcm",
-                    providerToken = "tok",
-                    pushX25519Pub = "ab".repeat(32),
-                    label = "acme (new device)",
-                    issuedAt = 1L,
-                ),
-                signature = "00".repeat(64),
-            ),
+            req = dummyAdmitRequest("acme"),
         )
         assertTrue(resp.ok)
         assertNotNull("a vouched admit lands quarantined (~14d)", resp.quarantineUntil)
@@ -407,14 +405,7 @@ class LoginDecisionMatrixConformanceTest {
         try {
             server.admitDevice(
                 account = "acme",
-                req = DeviceAdmitRequest(
-                    admit = DeviceAdmitRequest.AdmitEnvelope("acme", "cd".repeat(32), 1L),
-                    admitSig = "00".repeat(64),
-                    request = PushTokenRegisterRequest.Inner(
-                        "acme", "fcm", "tok", "ab".repeat(32), "acme (new device)", 1L,
-                    ),
-                    signature = "00".repeat(64),
-                ),
+                req = dummyAdmitRequest("acme"),
             )
         } catch (t: Throwable) {
             threw = true
@@ -437,7 +428,6 @@ class LoginDecisionMatrixConformanceTest {
             kind = "enterprise-sso",
             recovery = AccountResolution.RecoveryState(false, false),
             totpEnrolled = false,
-            trustedDeviceCount = 0,
             graceModel = "quantum",
         )
         assertEquals(AccountResolution.AccountKind.Unknown, r.accountKind)

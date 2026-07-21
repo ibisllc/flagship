@@ -197,23 +197,6 @@ fun HomeTab() {
         if (!u.isNullOrEmpty()) {
             runCatching { server.hasCloudRecovery(u) }
                 .onSuccess { app.setHasCloudRecovery(it) }
-            // E7 — check whether our local push tokenId is still in
-            // the trusted-devices list. Absent = another device
-            // ran Disconnect/Replace/Wipe and we're orphaned.
-            runCatching { server.listDevices(u).devices }
-                .onSuccess { devices ->
-                    val localToken = com.flagshipserver.app.keystore.Keystore.pushTokenId()
-                    if (!localToken.isNullOrEmpty()) {
-                        val present = devices.any { it.tokenId == localToken }
-                        if (!present) {
-                            app.setAccountWasReset(true)
-                        } else if (app.accountWasReset.value) {
-                            // Recovered — clear the flag so the
-                            // banner disappears.
-                            app.setAccountWasReset(false)
-                        }
-                    }
-                }
         }
     }
 

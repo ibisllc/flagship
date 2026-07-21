@@ -33,6 +33,7 @@ import com.flagshipserver.app.core.DeviceAdmitClaim
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.JoinLink
 import com.flagshipserver.app.core.PairingBundle
+import com.flagshipserver.app.core.PairingGrant
 import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.keystore.Keystore
 import kotlinx.coroutines.delay
@@ -227,10 +228,37 @@ class AddDeviceViewModel(
                 } else {
                     null
                 }
+            val promoted = wrappedAdminRoot != null
+            val scopes = if (promoted) {
+                com.flagshipserver.app.core.DeviceCapabilityGrant.DEVICE_SCOPE_ORDER
+            } else {
+                listOf("browse", "install-service", "vibe-code", "view-directory")
+            }
+            val grantId = java.util.UUID.randomUUID().toString()
+            val expiresAt = admit.issuedAt + 90L * 24 * 3_600_000
+            val grantBytes = com.flagshipserver.app.core.DeviceCapabilityGrant.canonicalBytes(
+                grantId, username, deviceId, devicePubHex, scopes, admit.issuedAt, expiresAt,
+            )
+            val grantSigner = if (promoted) {
+                com.google.crypto.tink.subtle.Ed25519Sign(requireNotNull(adminRootSeed()))
+            } else {
+                Keystore.deriveIRK("Authorize the new device")
+            }
             val bundle = PairingBundle(
                 umkSeedHex = HexUtil.encode(seed),
                 admit = admit,
                 admitSig = HexUtil.encode(sig),
+                grant = PairingGrant(
+                    grantId = grantId,
+                    username = username,
+                    deviceId = deviceId,
+                    devicePubHex = devicePubHex,
+                    scopes = scopes,
+                    issuedAt = admit.issuedAt,
+                    expiresAt = expiresAt,
+                    signerRoot = if (promoted) "admin-root" else "membership",
+                ),
+                grantSignature = HexUtil.encode(grantSigner.sign(grantBytes)),
                 wrappedAdminRoot = wrappedAdminRoot,
             )
             val sealed = session.seal(bundle.toJsonBytes())

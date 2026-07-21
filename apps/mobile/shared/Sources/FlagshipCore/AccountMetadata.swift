@@ -33,6 +33,11 @@ public struct AccountMetadataCoordinates: Sendable {
 public struct AccountMetadataCiphertext: Equatable, Sendable {
     public let nonceHex: String
     public let ciphertextHex: String
+
+    public init(nonceHex: String, ciphertextHex: String) {
+        self.nonceHex = nonceHex
+        self.ciphertextHex = ciphertextHex
+    }
 }
 
 public enum AccountMetadata {
@@ -194,6 +199,23 @@ public enum AccountMetadata {
             tag: "flagship/device-profile-self/v1", accountId: accountId, deviceId: deviceId,
             revision: revision, keyVersion: keyVersion, ciphertext: ciphertext,
             locked: "", issuedAt: issuedAt, signerPubHex: signerPubHex
+        )
+    }
+
+    public static func canonicalDeviceManagedProfile(
+        accountId: String,
+        deviceId: String,
+        revision: Int64,
+        keyVersion: Int64,
+        ciphertext: AccountMetadataCiphertext,
+        locked: Bool,
+        issuedAt: Int64,
+        signerPubHex: String
+    ) -> Data {
+        canonicalSignedProfile(
+            tag: "flagship/device-profile-admin/v1", accountId: accountId, deviceId: deviceId,
+            revision: revision, keyVersion: keyVersion, ciphertext: ciphertext,
+            locked: locked ? "1" : "0", issuedAt: issuedAt, signerPubHex: signerPubHex
         )
     }
 

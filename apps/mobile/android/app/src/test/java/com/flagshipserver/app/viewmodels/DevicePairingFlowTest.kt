@@ -178,6 +178,7 @@ class DevicePairingFlowTest {
         adminVm.confirmAndSeal()                 // signs admit + seals + delivers
         assertEquals(AddDevicePhase.Delivered, adminVm.phase.first())
 
+        incomingVm.confirmDisplayName("Reviewer Android")
         incomingVm.verifyAndJoin()               // opens + verifies + installs + admits
         val joined = incomingVm.phase.first()
         assertTrue("incoming must JOIN, not fail: $joined", joined is JoinDevicePhase.Joined)
@@ -203,7 +204,7 @@ class DevicePairingFlowTest {
         assertEquals(account, acct)
         val record = server.getUsernameRecord(account)
         val verified = DeviceAdmitClaim.verify(
-            DeviceAdmit(req.admit.username, req.admit.newDevicePubHex, req.admit.issuedAt),
+            DeviceAdmit(req.admit.username, req.admit.deviceId, req.admit.newDevicePubHex, req.admit.issuedAt),
             HexUtil.decode(req.admitSig)!!,
             HexUtil.decode(record.irkPub)!!,
         )
@@ -213,7 +214,7 @@ class DevicePairingFlowTest {
         //     was added active, and the 14-day quarantine is surfaced.
         assertEquals(account, incomingApp.currentUser.first())
         assertNull("a scanned-in device is NOT admin", run {
-            val label = incomingApp.activeProfile?.deviceLabel
+            val label = incomingApp.activeProfile?.deviceDisplayName
             if (label == ADMIN_DEVICE_LABEL) "is-admin" else null
         })
         val quarantineUntil = (joined as JoinDevicePhase.Joined).quarantineUntil
@@ -248,18 +249,32 @@ class DevicePairingFlowTest {
         val hello = relay.admin.awaitPeerHello("sid-evil")
         val peerX25519 = hello.copyOfRange(0, 32)
         val devicePubHex = HexUtil.encode(hello.copyOfRange(32, 64))
+        val deviceId = HexUtil.encode(hello.copyOfRange(64, 80))
         attackerSession.pair(peerX25519)  // same kEnc as the incoming
 
         val attackerKey = Ed25519Sign(Ed25519Sign.KeyPair.newKeyPair().privateKey)
-        val admit = DeviceAdmit(account, devicePubHex, 5_000L)
+        val admit = DeviceAdmit(account, deviceId, devicePubHex, 5_000L)
+        val forgedGrant = com.flagshipserver.app.core.PairingGrant(
+            "forged", account, deviceId, devicePubHex,
+            listOf("view-directory"), 5_000L, 10_000L, "membership",
+        )
         val forged = PairingBundle(
             umkSeedHex = "33".repeat(32),
             admit = admit,
             admitSig = HexUtil.encode(DeviceAdmitClaim.sign(admit, attackerKey)),
+            grant = forgedGrant,
+            grantSignature = HexUtil.encode(attackerKey.sign(
+                com.flagshipserver.app.core.DeviceCapabilityGrant.canonicalBytes(
+                    forgedGrant.grantId, forgedGrant.username, forgedGrant.deviceId,
+                    forgedGrant.devicePubHex, forgedGrant.scopes,
+                    forgedGrant.issuedAt, forgedGrant.expiresAt,
+                ),
+            )),
         )
         val sealed = attackerSession.seal(forged.toJsonBytes())
         relay.admin.deliver(sealed.ciphertextB64u, sealed.nonceB64u)
 
+        incomingVm.confirmDisplayName("Reviewer Android")
         incomingVm.verifyAndJoin()
         val phase = incomingVm.phase.first()
         assertTrue("forged admit must fail closed: $phase", phase is JoinDevicePhase.Failed)

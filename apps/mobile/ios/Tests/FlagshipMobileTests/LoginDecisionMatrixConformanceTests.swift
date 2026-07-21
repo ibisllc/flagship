@@ -229,37 +229,6 @@ final class LoginDecisionMatrixConformanceTests: XCTestCase {
         XCTAssertEqual(RealAccountLoginViewModel.deriveBranch(r), .noRecovery(multi: true))
     }
 
-    // MARK: - 7. quarantined device → countdown / disabled-remove
-
-    /// A freshly-admitted (vouched) device carries a future
-    /// `quarantineUntil`; the device-management surface must report it as
-    /// quarantined (drives the clock indicator + disables the destructive
-    /// menu). Past / absent / zero ⇒ not quarantined (Remove flows
-    /// normally). This is the device-list node of the matrix.
-    func test_quarantinedDevice_isQuarantined_gatesRemove() {
-        let now: Int64 = 1_000_000
-        let fresh = TrustedDevice(
-            tokenId: "t1", tokenPrefix: "t1", label: "Reviewer iPhone",
-            platform: "apns", addedAt: now, lastSeenAt: now,
-            quarantineUntil: now + MockFlagshipServerClient.quarantineMs
-        )
-        XCTAssertTrue(fresh.isQuarantined(now: now), "a future deadline ⇒ quarantined ⇒ Remove disabled")
-
-        let elapsed = TrustedDevice(
-            tokenId: "t2", tokenPrefix: "t2", label: "Old iPhone",
-            platform: "apns", addedAt: 1, lastSeenAt: 2,
-            quarantineUntil: now - 1
-        )
-        XCTAssertFalse(elapsed.isQuarantined(now: now), "an elapsed window ⇒ Remove enabled")
-
-        let neverQuarantined = TrustedDevice(
-            tokenId: "t3", tokenPrefix: "t3", label: "Trusted",
-            platform: "apns", addedAt: 1, lastSeenAt: 2,
-            quarantineUntil: nil
-        )
-        XCTAssertFalse(neverQuarantined.isQuarantined(now: now))
-    }
-
     /// The admit response that drives the quarantine countdown carries a
     /// deadline exactly 14 days out (matches the Worker's QUARANTINE_MS).
     func test_admit_returnsFourteenDayQuarantine() async throws {
@@ -341,7 +310,7 @@ final class LoginDecisionMatrixConformanceTests: XCTestCase {
         let workerJson = """
         {"username":"demoalice","exists":true,"kind":"demo",
          "recovery":{"present":false,"hasFetchGate":false},
-         "totpEnrolled":false,"trustedDeviceCount":0,
+         "totpEnrolled":false,
          "demoServer":{"fqdn":"home.demoalice.flagship.services","status":"up","ttlIdleMinutes":30},
          "graceModel":"instant"}
         """.data(using: .utf8)!
@@ -355,7 +324,7 @@ final class LoginDecisionMatrixConformanceTests: XCTestCase {
         let workerJson = """
         {"username":"nobody","exists":false,"kind":"unknown",
          "recovery":{"present":false,"hasFetchGate":false},
-         "totpEnrolled":false,"trustedDeviceCount":0,"graceModel":"none"}
+         "totpEnrolled":false,"graceModel":"none"}
         """.data(using: .utf8)!
         let fromWorker = try JSONDecoder().decode(AccountResolution.self, from: workerJson)
         XCTAssertEqual(fromMock, fromWorker, "Mock unknown resolve must equal the Worker wire shape")
@@ -366,11 +335,10 @@ final class LoginDecisionMatrixConformanceTests: XCTestCase {
         try await seedAccount(server, username: "hilton", multi: true, recovery: false, totp: true)
         let fromMock = try await server.resolveAccount(username: "hilton")
         // Worker: multi, no recovery, totp enrolled, one trusted device count
-        // is environment-derived; the Mock counts devicesByUser (none here ⇒ 0).
         let workerJson = """
         {"username":"hilton","exists":true,"kind":"multi",
          "recovery":{"present":false,"hasFetchGate":false},
-         "totpEnrolled":true,"trustedDeviceCount":0,"graceModel":"24h-totp"}
+         "totpEnrolled":true,"graceModel":"24h-totp"}
         """.data(using: .utf8)!
         let fromWorker = try JSONDecoder().decode(AccountResolution.self, from: workerJson)
         XCTAssertEqual(fromMock, fromWorker, "Mock multi resolve must equal the Worker wire shape")

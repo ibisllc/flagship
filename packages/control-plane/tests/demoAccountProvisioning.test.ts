@@ -2,12 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { decryptAccountProfile, deriveAccountProfileKey } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 import { handleAccountResolve } from "../src/accountResolve.js";
+import { handleGetDemoUser, runDemoProvisioningPoller } from "../src/demoUsers.js";
 import {
   handleCreateDemoAccount,
   handleCleanupDemoAccount,
   type DemoAccountProvisioningDeps,
 } from "../src/demoAccountProvisioning.js";
-import { deriveDemoUmk } from "../src/demoUsersAdmin.js";
+import { deriveDemoUmk } from "../src/demoIdentity.js";
 
 const now = 1_900_000_000_000;
 const kek = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
@@ -22,6 +23,7 @@ function harness(createImpl?: () => Promise<{ serverId: string; ipv4: string | n
   let randomByte = 0xa0;
   const createServerWithUserData = vi.fn(createImpl ?? (async () => ({ serverId: "server-1", ipv4: "192.0.2.8" })));
   const findServerByName = vi.fn(async () => null);
+  const getServerStatus = vi.fn(async () => ({ status: "running", ipv4: "192.0.2.8" }));
   const deps: DemoAccountProvisioningDeps = {
     provisioning: storage.demoAccountProvisioning,
     demos: storage.demoUsers,
@@ -33,7 +35,7 @@ function harness(createImpl?: () => Promise<{ serverId: string; ipv4: string | n
     now: () => now,
     random: (length) => new Uint8Array(length).fill(randomByte++),
   };
-  return { storage, deps, createServerWithUserData, findServerByName };
+  return { storage, deps, createServerWithUserData, findServerByName, getServerStatus };
 }
 
 describe("atomic demo account provisioning", () => {
@@ -84,6 +86,23 @@ describe("atomic demo account provisioning", () => {
     expect((await resolve()).body).toMatchObject({ exists: false, kind: "unknown" });
     await storage.demoUsers.update(body.username, { state: "cleanup-only" });
     expect((await resolve()).body).toMatchObject({ exists: false, kind: "unknown" });
+  });
+
+  it("becomes ready only after the provider is running and the daemon registered", async () => {
+    const { storage, deps, getServerStatus } = harness();
+    await handleCreateDemoAccount(deps, body);
+    const lifecycleDeps = {
+      storage: storage.demoUsers,
+      hetzner: { getServerStatus },
+      now: () => now + 1,
+    };
+    expect((await runDemoProvisioningPoller(lifecycleDeps, async () => false)).promoted).toBe(0);
+    expect((await storage.demoUsers.get(body.username))?.state).toBe("provisioning");
+    expect((await runDemoProvisioningPoller(lifecycleDeps, async () => true)).promoted).toBe(1);
+    expect((await storage.demoUsers.get(body.username))?.state).toBe("ready");
+    const status = await handleGetDemoUser(lifecycleDeps, body.username);
+    expect(status.body).not.toHaveProperty("accountName");
+    expect(JSON.stringify(status.body)).not.toContain(body.accountName);
   });
 
   it("rejects invalid input before creating public state", async () => {

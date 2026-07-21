@@ -589,9 +589,9 @@ describe("D1 ↔ InMemory parity — CAS / conditional surface", () => {
   // strings legitimately differ — assert ok-parity only).
   // ────────────────────────────────────────────────────────────────────
   describe("demoUsers", () => {
-    const mk = (user: string, state: import("../src/types.js").DemoUserState = "none") => ({
+    const mk = (user: string, state: import("../src/types.js").DemoUserState = "initializing") => ({
       username: user,
-      display: user.toUpperCase(),
+      idempotencyKey: `request-${user}-12345678`,
       snapshotId: null,
       isoR2Key: null,
       ttlIdleMinutes: 30,
@@ -609,15 +609,22 @@ describe("D1 ↔ InMemory parity — CAS / conditional surface", () => {
       provisionLastError: null,
     });
 
+    const claim = (s: Storage, username: string) => s.usernames.put({
+      username,
+      irkPubHex: "11".repeat(32),
+      claimedAt: 1,
+      isDemo: true,
+    });
+
     it("CAS transition succeeds only when `from` matches; the loser gets null", async () => {
       const r = await parityCase(async (s) => {
-        await s.demoUsers.insert(mk("alice", "none"));
-        // winner: none → provisioning, applying a patch
-        const winner = await s.demoUsers.transition("alice", "none", "provisioning", {
+        await claim(s, "alice");
+        await s.demoUsers.insert(mk("alice", "initializing"));
+        const winner = await s.demoUsers.transition("alice", "initializing", "provisioning", {
           activeServerId: "srv-1",
         });
         // a second none→provisioning loses (state is already provisioning)
-        const loser = await s.demoUsers.transition("alice", "none", "provisioning", {
+        const loser = await s.demoUsers.transition("alice", "initializing", "provisioning", {
           activeServerId: "srv-2",
         });
         const after = await s.demoUsers.get("alice");
@@ -641,13 +648,14 @@ describe("D1 ↔ InMemory parity — CAS / conditional surface", () => {
 
     it("transition on an unknown username is null in both", async () => {
       const r = await parityCase((s) =>
-        s.demoUsers.transition("ghost", "none", "provisioning"),
+        s.demoUsers.transition("ghost", "initializing", "provisioning"),
       );
       expect(r).toBeNull();
     });
 
     it("setProvisionPhase is idempotent + returns the merged row; null on unknown", async () => {
       const r = await parityCase(async (s) => {
+        await claim(s, "alice");
         await s.demoUsers.insert(mk("alice", "provisioning"));
         const p1 = await s.demoUsers.setProvisionPhase("alice", "booting", null, 100);
         const p2 = await s.demoUsers.setProvisionPhase("alice", "booting", null, 200); // re-post
@@ -673,10 +681,11 @@ describe("D1 ↔ InMemory parity — CAS / conditional surface", () => {
 
     it("countActive + findIdle agree across adapters", async () => {
       const r = await parityCase(async (s) => {
-        await s.demoUsers.insert({ ...mk("a", "up"), lastActivityAt: 10 });
+        for (const username of ["a", "b", "c", "d"]) await claim(s, username);
+        await s.demoUsers.insert({ ...mk("a", "ready"), lastActivityAt: 10 });
         await s.demoUsers.insert({ ...mk("b", "provisioning"), lastActivityAt: 5 });
         await s.demoUsers.insert({ ...mk("c", "idle-pending-teardown"), lastActivityAt: 20 });
-        await s.demoUsers.insert({ ...mk("d", "none"), lastActivityAt: 1 }); // not active
+        await s.demoUsers.insert({ ...mk("d", "initializing"), lastActivityAt: 1 });
         const active = await s.demoUsers.countActive();
         const idle = (await s.demoUsers.findIdle(15)).map((x) => x.username); // lastActivity<15
         return { active, idle };
@@ -692,6 +701,8 @@ describe("D1 ↔ InMemory parity — CAS / conditional surface", () => {
       // CALLER-OBSERVABLE contract (ok:false) is identical; the reason is
       // the handler's to translate, so we do NOT assert it for equality.
       const { mem, d1 } = freshPair();
+      await claim(mem, "dup");
+      await claim(d1, "dup");
       await mem.demoUsers.insert(mk("dup"));
       await d1.demoUsers.insert(mk("dup"));
       const memDup = await mem.demoUsers.insert(mk("dup"));

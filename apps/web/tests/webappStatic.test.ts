@@ -341,7 +341,7 @@ describe("/webapp PWA static surface", () => {
     // endpoint the iOS/Android paths use (apns/fcm). Pinned to the
     // protocol-side canonical-bytes tag.
     expect(r.body).toContain('platform: "webpush"');
-    expect(r.body).toContain("flagship/push-token-register/v1");
+    expect(r.body).toContain("flagship/push-token-register/v2");
     expect(r.body).toContain("/api/push/register");
     expect(r.body).toContain("/api/push/vapid-public-key");
     // userVisibleOnly is required by the spec for push subscriptions.

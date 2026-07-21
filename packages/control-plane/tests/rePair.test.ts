@@ -1299,7 +1299,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const grantA: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000001",
       username: USERNAME,
-      deviceId: "ipad",
+      deviceId: "01".repeat(16),
       devicePubKey: devA.publicKey,
       scopes: ["browse"],
       issuedAt: 1,
@@ -1308,7 +1308,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const grantB: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000002",
       username: USERNAME,
-      deviceId: "laptop",
+      deviceId: "02".repeat(16),
       devicePubKey: devB.publicKey,
       scopes: ["browse", "install-service"],
       issuedAt: 1,
@@ -1365,7 +1365,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const oldGrant: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000010",
       username: USERNAME,
-      deviceId: "ipad",
+      deviceId: "03".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse", "install-service"],
       issuedAt: 1,
@@ -1389,7 +1389,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const refreshed: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000011",
       username: USERNAME,
-      deviceId: "ipad",
+      deviceId: "03".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse", "install-service"],
       issuedAt: 2,
@@ -1444,7 +1444,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const oldGrant: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000020",
       username: USERNAME,
-      deviceId: "ipad",
+      deviceId: "04".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse"],
       issuedAt: 1,
@@ -1467,7 +1467,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const inflated: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000021",
       username: USERNAME,
-      deviceId: "ipad",
+      deviceId: "04".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse", "install-service"] as DeviceScope[],
       issuedAt: 2,
@@ -1520,7 +1520,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const phantom: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000030",
       username: USERNAME,
-      deviceId: "ghost",
+      deviceId: "05".repeat(16),
       devicePubKey: unknownDev.publicKey,
       scopes: ["browse"],
       issuedAt: 2,
@@ -1567,7 +1567,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const oldGrant: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000040",
       username: USERNAME,
-      deviceId: "ipad",
+      deviceId: "06".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse"],
       issuedAt: 1,
@@ -1588,7 +1588,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const refreshed: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000041",
       username: USERNAME,
-      deviceId: "ipad",
+      deviceId: "06".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse"],
       issuedAt: 2,
@@ -1643,7 +1643,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const oldGrant: import("@flagship/protocol").DeviceCapabilityGrant = {
       grantId: "00000000-0000-4000-8000-000000000050",
       username: USERNAME,
-      deviceId: "ipad",
+      deviceId: "07".repeat(16),
       devicePubKey: dev.publicKey,
       scopes: ["browse"],
       issuedAt: 1,

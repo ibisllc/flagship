@@ -54,13 +54,6 @@ export type RateLimitEndpoint =
   | "server-register"
   | "recovery-by-username"
   | "qr-pipe-upgrade"
-  // v2 device-addressing (S3.3). The five buckets:
-  //   admin-* are admin-bearer gated, so per-IP only — there's no
-  //   per-IRK identifier on the admin side.
-  //   device-grants-revoke is IRK-signed; per-IRK + per-IP.
-  //   device-grants-mint is IRK-signed; per-IRK + per-IP.
-  | "admin-claim-and-issue"
-  | "admin-mint-device-grant"
   | "device-grants-revoke"
   | "device-grants-mint"
   // Watch delegate keys (Phase 2c) — same shape as device grants:
@@ -108,11 +101,6 @@ export type RateLimitEndpoint =
   | "mint-reservation-acquire"
   | "mint-reservation-release"
   | "account-resolve"
-  // "Cancel this device" on the install-progress page. Public (a demo
-  // account is a no-auth capability), so per-IP only at the edge. Tight
-  // so a captured demo name can't be used to flap a VPS in a loop; the
-  // handler is idempotent + scoped to demo_users.
-  | "demo-cancel"
   // Phase 3b — vouched cross-device admit. The body carries the admit
   // (admit.username + newDevicePubHex), not the account IRK pub, so we
   // throttle per-IP only; the handler does the full DeviceAdmit
@@ -185,19 +173,6 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   // general LIMITS table, but the discriminated-union completeness
   // forces a key here.
   "qr-pipe-upgrade": [{ axis: "ip", limit: 30, windowSec: 60 }],
-  // v2 device-addressing (S3.3). Per-IP only for the admin tier
-  // (admin-bearer already gates; the per-IP cap stops a credential-
-  // theft from being used to mint a huge backlog of grants in tight
-  // succession). The public read path is generous (60/min). Mutating
-  // public paths get the same per-IP+per-IRK shape as auth-code-issue.
-  "admin-claim-and-issue": [
-    { axis: "ip", limit: 10, windowSec: 60 },
-    { axis: "ip", limit: 100, windowSec: 3600 },
-  ],
-  "admin-mint-device-grant": [
-    { axis: "ip", limit: 30, windowSec: 60 },
-    { axis: "ip", limit: 200, windowSec: 3600 },
-  ],
   "device-grants-revoke": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 20, windowSec: 3600 },
@@ -264,13 +239,6 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "account-resolve": [
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "usernameHash", limit: 10, windowSec: 900 },
-  ],
-  // Cancel-this-device. Per-IP only (no IRK at the edge; demo is
-  // capability-by-name). 6/min is plenty for a real tap-to-cancel; the
-  // 30/h ceiling stops a flap loop.
-  "demo-cancel": [
-    { axis: "ip", limit: 6, windowSec: 60 },
-    { axis: "ip", limit: 30, windowSec: 3600 },
   ],
   // Phase 3b — vouched cross-device admit. Per-IP only (the body has no
   // IRK pub at the edge). A real admin admits a handful of devices; the
@@ -427,15 +395,6 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   }
   // v2 device-addressing (S3.3). Order matters: the longer `/revoke`
   // suffix must hit BEFORE the bare `/device-grants` literal.
-  if (m === "POST" && pathname === "/api/dev/sample-user/admin-claim-and-issue") {
-    return "admin-claim-and-issue";
-  }
-  if (
-    m === "POST" &&
-    /^\/api\/dev\/sample-user\/[^/]+\/admin-mint-device-grant$/.test(pathname)
-  ) {
-    return "admin-mint-device-grant";
-  }
   if (
     m === "POST" &&
     /^\/api\/users\/[^/]+\/device-grants\/revoke$/.test(pathname)
@@ -494,12 +453,6 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   }
   if (m === "GET" && /^\/api\/account\/resolve\/[^/]+$/.test(pathname)) {
     return "account-resolve";
-  }
-  if (
-    m === "POST" &&
-    /^\/api\/dev\/sample-user\/[^/]+\/cancel$/.test(pathname)
-  ) {
-    return "demo-cancel";
   }
   // Phase 3b — vouched cross-device admit.
   if (m === "POST" && /^\/api\/users\/[^/]+\/devices\/admit$/.test(pathname)) {

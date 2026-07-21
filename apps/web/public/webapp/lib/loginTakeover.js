@@ -14,7 +14,7 @@
 //   2. single (recovery.present)  → cloud-recovery unwrap → TAKEOVER:
 //        7-day-grace explainer → on confirm: persist the recovered
 //        seed/profile, INITIATE re-pair (POST /api/users/:u/re-pair),
-//        label this device "admin", open the account.
+//        mint a fresh account-scoped device ID, open the account.
 //   3. multi (recovery.present)   → cloud-recovery unwrap + collect a
 //        recovery TOTP (6-digit) OR a recovery code → pass it as the
 //        re-pair `totpProof` (the Worker REQUIRES it for
@@ -53,7 +53,7 @@ export const TAKEOVER_IRK_VERSION = 2;
  *  whole user namespace (the no-lockout guarantee); the stable id stays
  *  a normal `ukey.dkey`. Reach enforcement is Phase 4+ / server-side —
  *  here we record the label on the local profile. */
-export const ADMIN_LABEL = "admin";
+import { generateDeviceId } from "./accountMetadata.js";
 
 /** Canonical-bytes tag for the re-pair initiate envelope. MUST match
  *  packages/protocol/src/auth.ts TAG_RE_PAIR_INITIATE and the Worker. */
@@ -247,7 +247,7 @@ export function isCredentialRequiredError(err) {
  *    baseUrl?: string,
  *    now?: () => number,
  *  }} deps
- *  @returns {Promise<{username: string, seed: Uint8Array, rePair: object, deviceLabel: string}>}
+ *  @returns {Promise<{username: string, seed: Uint8Array, rePair: object, deviceId: string}>}
  */
 export async function runTakeover(resolution, deps) {
   const username = resolution?.username;
@@ -338,12 +338,14 @@ export async function runTakeover(resolution, deps) {
     rePair = await initiateRePair({ ...initiateArgs, totpProof: proof });
   }
 
-  // 5 — record the device as `admin` on the local profile.
+  // 5 — mint an account-scoped opaque identity for this membership.
+  const deviceId = generateDeviceId();
   if (typeof deps.addProfile === "function") {
     deps.addProfile({
       cloudName: username,
       cloudRootPubHex: oldIrkPubHex,
-      deviceLabel: ADMIN_LABEL,
+      accountId: username,
+      deviceId,
       deviceCapability: null,
       demoServer: null,
     });
@@ -354,7 +356,7 @@ export async function runTakeover(resolution, deps) {
     await deps.dispatchInitialView();
   }
 
-  return { username, seed, rePair, deviceLabel: ADMIN_LABEL };
+  return { username, seed, rePair, deviceId };
 }
 
 /** L4 — "Keep my other devices working": bring THIS recovered device into
@@ -367,7 +369,7 @@ export async function runTakeover(resolution, deps) {
  *  @param {object} resolution  a single|multi AccountResolution
  *  @param {object} deps        the same takeover-deps bundle runTakeover
  *                              takes (the rotation/re-pair fields go unused)
- *  @returns {Promise<{username: string, seed: Uint8Array, deviceLabel: string}>}
+ *  @returns {Promise<{username: string, seed: Uint8Array, deviceId: string}>}
  */
 export async function runKeepBoth(resolution, deps) {
   const username = resolution?.username;
@@ -395,15 +397,17 @@ export async function runKeepBoth(resolution, deps) {
   await deps.unlockSession(seed, username);
 
   // 3 — NO rotation: this device's reach IS the account IRK (v1). Record
-  // it on the local profile under that registered key. We never derive a
+  // it on the local profile under a fresh account-scoped ID. We never derive a
   // rotated key, never sign a re-pair, never touch the network — that is
   // the whole point of keep-both vs. a takeover.
   const accountIrk = await deps.deriveIrkFromSeed(seed);
+  const deviceId = generateDeviceId();
   if (typeof deps.addProfile === "function") {
     deps.addProfile({
       cloudName: username,
       cloudRootPubHex: toHex(accountIrk.publicKey),
-      deviceLabel: ADMIN_LABEL,
+      accountId: username,
+      deviceId,
       deviceCapability: null,
       demoServer: null,
     });
@@ -414,7 +418,7 @@ export async function runKeepBoth(resolution, deps) {
     await deps.dispatchInitialView();
   }
 
-  return { username, seed, deviceLabel: ADMIN_LABEL };
+  return { username, seed, deviceId };
 }
 
 /** Orchestrate the full single/multi login branch off a resolution.

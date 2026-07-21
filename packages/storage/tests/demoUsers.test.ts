@@ -16,7 +16,7 @@ import type { DemoUserRecord } from "../src/types.js";
 function seed(overrides: Partial<DemoUserRecord> = {}): DemoUserRecord {
   return {
     username: "demoalice",
-    display: "Demo Alice",
+    idempotencyKey: "demo-request-12345678",
     snapshotId: null,
     isoR2Key: null,
     ttlIdleMinutes: 30,
@@ -25,7 +25,7 @@ function seed(overrides: Partial<DemoUserRecord> = {}): DemoUserRecord {
     activeServerId: null,
     activeServerFqdn: null,
     lastActivityAt: 0,
-    state: "none",
+    state: "initializing",
     createdAt: 1_700_000_000_000,
     provisionPhase: null,
     provisionPhaseAt: null,
@@ -41,8 +41,7 @@ describe("InMemoryDemoUsersStorage", () => {
     expect(res).toEqual({ ok: true });
     const row = await s.get("demoalice");
     expect(row?.username).toBe("demoalice");
-    expect(row?.display).toBe("Demo Alice");
-    expect(row?.state).toBe("none");
+    expect(row?.state).toBe("initializing");
   });
 
   it("insert rejects PK collision with ok:false", async () => {
@@ -59,7 +58,7 @@ describe("InMemoryDemoUsersStorage", () => {
     const row = await s.get("demoalice");
     expect(row?.snapshotId).toBe("snap-1");
     expect(row?.isoR2Key).toBe("demo-isos/x.iso");
-    expect(row?.state).toBe("none");
+    expect(row?.state).toBe("initializing");
   });
 
   it("delete is idempotent (no error when absent)", async () => {
@@ -72,16 +71,16 @@ describe("InMemoryDemoUsersStorage", () => {
 
   it("transition is a real CAS: wrong `from` returns null and leaves row untouched", async () => {
     const s = new InMemoryDemoUsersStorage();
-    await s.insert(seed({ state: "up", activeServerId: "S1" }));
-    const wrong = await s.transition("demoalice", "none", "provisioning");
+    await s.insert(seed({ state: "ready", activeServerId: "S1" }));
+    const wrong = await s.transition("demoalice", "initializing", "provisioning");
     expect(wrong).toBeNull();
-    expect((await s.get("demoalice"))?.state).toBe("up");
+    expect((await s.get("demoalice"))?.state).toBe("ready");
   });
 
   it("transition applies the patch atomically with the state move", async () => {
     const s = new InMemoryDemoUsersStorage();
     await s.insert(seed());
-    const next = await s.transition("demoalice", "none", "provisioning", {
+    const next = await s.transition("demoalice", "initializing", "provisioning", {
       activeServerId: "S1",
       lastActivityAt: 123,
     });
@@ -94,40 +93,38 @@ describe("InMemoryDemoUsersStorage", () => {
     // Models the docs/sample-users.md §4.4 concurrent-/connect race.
     const s = new InMemoryDemoUsersStorage();
     await s.insert(seed());
-    const a = s.transition("demoalice", "none", "provisioning", { activeServerId: "A" });
-    const b = s.transition("demoalice", "none", "provisioning", { activeServerId: "B" });
+    const a = s.transition("demoalice", "initializing", "provisioning", { activeServerId: "A" });
+    const b = s.transition("demoalice", "initializing", "provisioning", { activeServerId: "B" });
     const [rA, rB] = await Promise.all([a, b]);
     const wins = [rA, rB].filter((r) => r !== null).length;
     expect(wins).toBe(1);
   });
 
-  it("findIdle returns only (up, provisioning, idle-pending-teardown) rows older than cutoff", async () => {
+  it("findIdle returns only ready or provisioning rows older than cutoff", async () => {
     const s = new InMemoryDemoUsersStorage();
-    await s.insert(seed({ username: "u-none", state: "none", lastActivityAt: 100 }));
-    await s.insert(seed({ username: "u-up-old", state: "up", lastActivityAt: 100 }));
-    await s.insert(seed({ username: "u-up-fresh", state: "up", lastActivityAt: 9_000 }));
+    await s.insert(seed({ username: "u-init", state: "initializing", lastActivityAt: 100 }));
+    await s.insert(seed({ username: "u-ready-old", state: "ready", lastActivityAt: 100 }));
+    await s.insert(seed({ username: "u-ready-fresh", state: "ready", lastActivityAt: 9_000 }));
     await s.insert(seed({ username: "u-prov-old", state: "provisioning", lastActivityAt: 50 }));
-    await s.insert(seed({ username: "u-pend-old", state: "idle-pending-teardown", lastActivityAt: 1 }));
     const idle = await s.findIdle(1_000);
     expect(idle.map((r) => r.username).sort()).toEqual([
-      "u-pend-old", "u-prov-old", "u-up-old",
+      "u-prov-old", "u-ready-old",
     ]);
   });
 
   it("countActive counts only the three non-quiescent states", async () => {
     const s = new InMemoryDemoUsersStorage();
-    await s.insert(seed({ username: "n1", state: "none" }));
+    await s.insert(seed({ username: "n1", state: "initializing" }));
     await s.insert(seed({ username: "p1", state: "provisioning" }));
-    await s.insert(seed({ username: "u1", state: "up" }));
-    await s.insert(seed({ username: "u2", state: "up" }));
-    await s.insert(seed({ username: "t1", state: "idle-pending-teardown" }));
-    expect(await s.countActive()).toBe(4);
+    await s.insert(seed({ username: "u1", state: "ready" }));
+    await s.insert(seed({ username: "u2", state: "ready" }));
+    expect(await s.countActive()).toBe(3);
   });
 
   it("list returns every row regardless of state", async () => {
     const s = new InMemoryDemoUsersStorage();
-    await s.insert(seed({ username: "a", state: "none" }));
-    await s.insert(seed({ username: "b", state: "up" }));
+    await s.insert(seed({ username: "a", state: "initializing" }));
+    await s.insert(seed({ username: "b", state: "ready" }));
     const rows = await s.list();
     expect(rows).toHaveLength(2);
     expect(rows.map((r) => r.username).sort()).toEqual(["a", "b"]);

@@ -34,7 +34,6 @@ import {
   handleRevokedSinceServiceInvites,
   handleCleanupApex,
   handleCompleteRePair,
-  handleDeviceDisconnect,
   handleConsumeUnlockKey,
   handleDepositAutoUnlockLease,
   handleGetRePair,
@@ -146,6 +145,7 @@ import {
   handlePutDeviceSelfProfile,
   handlePutDeviceManagedProfile,
   handleDeleteDeviceManagedProfile,
+  handleRevokeAccountDevice,
   handlePutAccountDirectoryKeyGrant,
   handleGetAuditEvents,
   handlePostDaemonStatus,
@@ -175,9 +175,6 @@ import {
   handlePutUserIdentity,
   handleCreateDemoAccount,
   handleCleanupDemoAccount,
-  handleDemoUserConnect,
-  handleDemoUserCancel,
-  handleDemoUserHeartbeat,
   handleGetDemoUser,
   handleListDemoUsers,
   handleGymProvision,
@@ -400,66 +397,19 @@ export interface ControlPlaneEnv {
    */
   FLAGSHIP_TOTP_KEK?: string;
 
-  /**
-   * v2 device-addressing (S3.3) — 32-byte hex Worker secret used as
-   * the KEK from which `admin-claim-and-issue` derives a deterministic
-   * User IRK for a demo username (HKDF salt="flagship-demo-irk-v1",
-   * info="user-irk"; see packages/control-plane/src/demoUsersAdmin.ts).
-   * Generate once via `openssl rand -hex 32` and set via
-   * `wrangler secret put DEMO_IRK_KEK`. When unset, both new admin
-   * endpoints (admin-claim-and-issue + admin-mint-device-grant) return
-   * 503; legacy demo handlers (create/connect/heartbeat) keep working.
-   * NEVER appears in code, logs, or D1.
-   */
+  /** Worker-only KEK for deterministic demo key custody. Demo accounts use
+   * the standard encrypted profile and account-scoped device protocols. */
   DEMO_IRK_KEK?: string;
 
-  /**
-   * W11 — base Alpine ISO bucket binding. Holds the unmodified
-   * Alpine + apkovl ISO that the build-relay serves to the browser
-   * AND the W11 admin-snapshot-now handler streams through
-   * `streamPersonalize` into ISO_TEMP_BUCKET. Bound via
-   * `[[r2_buckets]] binding = "ISO_BUCKET"`.
-   */
+  /** Base installer ISO bucket used by the build relay. */
   ISO_BUCKET?: ProvisioningBaseBucket;
 
-  /**
-   * W11 — temp bucket for personalized demo ISOs. The cloud-init
-   * `user_data` script wgets from this bucket's public dev-url.
-   * Bound via `[[r2_buckets]] binding = "ISO_TEMP_BUCKET"`.
-   */
+  /** Temporary operational-artifact bucket used by gym diagnostics. */
   ISO_TEMP_BUCKET?: ProvisioningTempBucket;
-
-  /**
-   * W11 — public dev-url base for `ISO_TEMP_BUCKET`. Set in
-   * `wrangler.toml [vars]` once the bucket has public access enabled
-   * via `wrangler r2 bucket dev-url enable flagship-iso-temp`. The
-   * cloud-init script wgets `${base}/${key}`.
-   */
-  FLAGSHIP_R2_TEMP_PUBLIC_BASE?: string;
-
-  /**
-   * W11 — base ISO key inside `ISO_BUCKET`. Defaults to the
-   * `flagship-base-alpine-…iso` path the build-relay serves. Set in
-   * `wrangler.toml [vars]` if you bump Alpine versions.
-   */
-  FLAGSHIP_BASE_ISO_KEY?: string;
-
-  /**
-   * W12 — public URL of the Debian-12-netinst-based netboot ISO used
-   * by the cloud demo (admin-snapshot-now) path. Cloud-init wgets
-   * this directly from the VPS. Build with
-   *   scripts/build-flagship-netboot-iso.sh out/flagship-netboot.iso
-   * and upload to R2. Falls back to FLAGSHIP_NETBOOT_ISO_URL → the
-   * pinned default below.
-   */
-  FLAGSHIP_NETBOOT_ISO_URL?: string;
-  /** R2 object key for the netboot ISO inside `ISO_BUCKET`. */
-  FLAGSHIP_NETBOOT_ISO_KEY?: string;
 }
 
-// Structural shapes for the R2 bindings the W11 handler uses. Kept
-// inline so the control-plane package's structural types stay
-// decoupled from @cloudflare/workers-types.
+// Structural R2 shapes kept inline so control-plane remains decoupled from
+// @cloudflare/workers-types.
 interface ProvisioningBaseBucket {
   get(key: string): Promise<{
     body: ReadableStream<Uint8Array> | null;
@@ -665,7 +615,6 @@ const ROUTE_RE = {
   USER_DEVICE_ADMIT: /^\/api\/users\/([^/]+)\/devices\/admit$/,
   // v1.2 Phase 2 — IRK-signed disconnect-a-sibling. Quarantine-gated
   // on the caller's push_token row.
-  USER_DEVICE_DISCONNECT: /^\/api\/users\/([^/]+)\/devices\/([^/]+)\/disconnect$/,
   USER_AUDIT: /^\/api\/users\/([^/]+)\/audit$/,
   DAEMON_STATUS: /^\/api\/daemon-status$/,
   RE_PAIR_INITIATE: /^\/api\/users\/([^/]+)\/re-pair$/,
@@ -709,15 +658,9 @@ const ROUTE_RE = {
   USER_IDENTITY_GET: /^\/api\/user-identity\/([^/]+)$/,
   INTERNAL_ACTIVE_REDIRECTIONS: /^\/api\/internal\/active-redirections$/,
   INTERNAL_REDIRECTION_LOOKUP: /^\/api\/internal\/redirection-lookup$/,
-  // Plan A — demo-user / Hetzner on-connect provisioning. The two
-  // public-rate-limited endpoints (connect, heartbeat) live above the
-  // bare GET in matching order so `/connect` and `/heartbeat` win
-  // over the `/:u` matcher.
+  // Idempotent demo creation, exact-ID cleanup, and admin status reads.
   DEMO_USER_CREATE: /^\/api\/dev\/sample-user\/create$/,
   DEMO_USER_CLEANUP: /^\/api\/dev\/sample-user\/cleanup$/,
-  DEMO_USER_CONNECT: /^\/api\/dev\/sample-user\/([^/]+)\/connect$/,
-  DEMO_USER_CANCEL: /^\/api\/dev\/sample-user\/([^/]+)\/cancel$/,
-  DEMO_USER_HEARTBEAT: /^\/api\/dev\/sample-user\/([^/]+)\/heartbeat$/,
   DEMO_USER_GET: /^\/api\/dev\/sample-user\/([^/]+)$/,
   DEMO_USER_LIST: /^\/api\/dev\/sample-user$/,
   // Phase 1 of the gym recipe→Hetzner pipeline. GYM-ONLY: provisions a box
@@ -732,6 +675,7 @@ const ROUTE_RE = {
   DEVICE_SELF_PROFILE: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/profile$/,
   DEVICE_MANAGED_PROFILE: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/managed-profile$/,
   DEVICE_DIRECTORY_KEY_GRANT: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/directory-key-grant$/,
+  ACCOUNT_DEVICE: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)$/,
   // Slice D §5 — admin master-root recovery rotation.
   ADMIN_ROOT_ROTATION_APPLY: /^\/api\/users\/([^/]+)\/admin-root-rotation$/,
   ADMIN_ROOT_ROTATIONS_LIST: /^\/api\/users\/([^/]+)\/admin-root-rotations$/,
@@ -2330,6 +2274,15 @@ export async function tryControlPlane(
       await readJson(request),
     ));
   }
+  if (method === "DELETE" && (m = path.match(ROUTE_RE.ACCOUNT_DEVICE))) {
+    const accountId = decodeURIComponent(m[1]!);
+    return finish(await handleRevokeAccountDevice(
+      accountDirectoryDeps(storage, env.DB),
+      accountId,
+      decodeURIComponent(m[2]!),
+      directoryAuthorization(request, accountId, path),
+    ));
+  }
   // Device capability mutation endpoints. The revoke route's
   // `/revoke` suffix must hit BEFORE the bare DEVICE_GRANTS_LIST match
   // for the same path prefix.
@@ -2482,26 +2435,6 @@ export async function tryControlPlane(
           acmeGrants: storage.acmeAccountKeyGrants,
           usernames: storage.usernames,
         },
-        await readJson(request),
-      ),
-    );
-  }
-  if (method === "POST" && (m = path.match(ROUTE_RE.USER_DEVICE_DISCONNECT))) {
-    const ddFanout = buildOptionalV12PushFanout(env);
-    return finishPlain(
-      await handleDeviceDisconnect(
-        {
-          pushTokens: storage.pushTokens,
-          usernames: storage.usernames,
-          auditEvents: storage.auditEvents,
-          // v1.2 Phase 5 — when a quarantined device's
-          // disconnect attempt is blocked, the user's OTHER trusted
-          // devices get a push alert (and the audit log captures
-          // the attempt under accountTypeAtEvent).
-          ...(ddFanout ? { pushFanout: ddFanout } : {}),
-        },
-        decodeURIComponent(m[1]!),
-        decodeURIComponent(m[2]!),
         await readJson(request),
       ),
     );
@@ -2971,6 +2904,8 @@ export async function tryControlPlane(
         {
           pushTokens: storage.pushTokens,
           deviceIdentities: storage.deviceIdentities,
+          deviceCapabilityGrants: storage.deviceCapabilityGrants,
+          deviceSelfProfiles: storage.deviceSelfProfiles,
           usernames: storage.usernames,
           auditEvents: storage.auditEvents,
         },
@@ -3161,33 +3096,8 @@ export async function tryControlPlane(
   }
 
   // ──────────────────────────────────────────────────────────────────
-  // Plan A — demo-user / on-connect Hetzner provisioning
-  //
-  // The 5 admin endpoints (create / delete / install-complete / GET /
-  // LIST) gate behind FLAGSHIP_ADMIN_SECRET. The 2 public endpoints
-  // (connect / heartbeat) are rate-limited at the edge by the
-  // Worker's main fetch handler (see apps/com/src/index.ts); we only
-  // dispatch here.
-  //
-  // Important matching order: `/create`, `/delete`, `/sample-user`
-  // (list) must hit BEFORE the bare `/sample-user/{u}` GET (which
-  // would otherwise swallow the literal "create" as a username).
-  //
-  // Lazy-construct Hetzner deps so the bootstrap path works:
-  //   - `create` writes a D1 row; doesn't touch Hetzner at all.
-  //   - `install-complete` updates the D1 row with snapshot_id;
-  //     also doesn't touch Hetzner.
-  //   - `delete` / `connect` / `heartbeat` / `get` / `list` need
-  //     Hetzner only when an active server actually exists.
-  //
-  // The operator's first `create-sample-user` run is the chicken-
-  // and-egg break: the CLI uses its OWN HCLOUD_TOKEN to upload an
-  // SSH key to Hetzner and gets back the numeric DEMO_PUBLIC_SSH_KEY_ID,
-  // which the operator THEN sets in wrangler.toml [vars] + redeploys.
-  // A pre-deploy gate that required DEMO_PUBLIC_SSH_KEY_ID would block
-  // the first create — bootstrap-impossible. Instead the deps stub
-  // throws lazily if a request actually tries to use the Worker-side
-  // Hetzner client without configuration.
+  // One admin-owned demo lifecycle: create-or-resume, status, and exact-ID
+  // cleanup. There are no public connect, wake, heartbeat, or snapshot routes.
   if (path.startsWith("/api/dev/sample-user")) {
     const lazyHetzner = env.HCLOUD_TOKEN
       ? createHetznerClient(env.HCLOUD_TOKEN)
@@ -3266,15 +3176,6 @@ export async function tryControlPlane(
         demos: storage.demoUsers,
         destroyServer: (serverId) => cleanupHetzner.destroyServer(serverId),
       }, await readJson(request)));
-    }
-    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_CONNECT))) {
-      return finishPlain(await handleDemoUserConnect(demoDeps, decodeURIComponent(m[1]!)));
-    }
-    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_CANCEL))) {
-      return finishPlain(await handleDemoUserCancel(demoDeps, decodeURIComponent(m[1]!)));
-    }
-    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_HEARTBEAT))) {
-      return finishPlain(await handleDemoUserHeartbeat(demoDeps, decodeURIComponent(m[1]!)));
     }
     if (method === "GET" && ROUTE_RE.DEMO_USER_LIST.test(path)) {
       {
@@ -3658,6 +3559,7 @@ function accountDirectoryDeps(storage: D1Storage, db: D1Database) {
     selfProfiles: storage.deviceSelfProfiles,
     managedProfiles: storage.deviceManagedProfiles,
     keyGrants: storage.accountDirectoryKeyGrants,
+    pushTokens: storage.pushTokens,
     nonces: new D1NonceStore(db),
   };
 }

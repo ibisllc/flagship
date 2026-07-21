@@ -227,6 +227,28 @@ object Keystore {
     fun currentUmkSeed(): ByteArray =
         loadOrCreateUmkSeed()
 
+    fun storeAccountDeviceSeed(deviceId: String, seed: ByteArray) {
+        require(deviceId.matches(Regex("^[0-9a-f]{32}$")))
+        require(seed.size == 32)
+        requirePrefs().edit()
+            .putString(pkey("account.device.seed.$deviceId"), HexUtil.encode(seed))
+            .apply()
+    }
+
+    fun accountDeviceSigner(umk: ByteArray, accountId: String, deviceId: String): Ed25519Sign {
+        val stored = requirePrefs().getString(pkey("account.device.seed.$deviceId"), null)
+            ?.let(HexUtil::decode)
+        return if (stored != null && stored.size == 32) Ed25519Sign(stored)
+        else com.flagshipserver.app.core.AccountMetadata.deriveAccountDeviceKey(umk, accountId, deviceId)
+    }
+
+    fun accountDevicePublicKey(umk: ByteArray, accountId: String, deviceId: String): ByteArray {
+        val stored = requirePrefs().getString(pkey("account.device.seed.$deviceId"), null)
+            ?.let(HexUtil::decode)
+        return if (stored != null && stored.size == 32) Ed25519Sign.KeyPair.newKeyPairFromSeed(stored).publicKey
+        else com.flagshipserver.app.core.AccountMetadata.deriveAccountDevicePub(umk, accountId, deviceId)
+    }
+
     /** Derive (and cache) the IRK Ed25519 keypair at the currently
      *  active version. See `deriveIRK(reason, version)` for the
      *  versioned variant used by Replace device (C7) and Wipe &

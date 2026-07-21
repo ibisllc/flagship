@@ -110,7 +110,7 @@ final class AdminRootPhase3Tests: XCTestCase {
         // Incoming: spy the admin-root seal so we assert the exact seed lands.
         let importedSeed = LockedBox<Data?>(nil)
         let incomingVm = JoinAccountViewModel(
-            relay: relay, server: server, deviceLabel: "Partner iPhone",
+            relay: relay, server: server,
             importAdminRoot: { seed in importedSeed.set(seed) }
         )
 
@@ -643,6 +643,7 @@ final class AdminRootPhase3Tests: XCTestCase {
         incomingVm: JoinAccountViewModel,
         relay: MockPairingRelayClient
     ) async throws {
+        try incomingVm.confirmDeviceDisplayName("Partner iPhone")
         let adminStart = Task { await adminVm.start() }
         try await Task.sleep(nanoseconds: 50_000_000)
         guard case .waitingForDevice(let joinUrl) = adminVm.phase else {

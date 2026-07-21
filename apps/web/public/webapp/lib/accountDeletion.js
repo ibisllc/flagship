@@ -66,23 +66,16 @@ export function canonicalServersSelfDeleteBytes(username, issuedAt) {
  *
  * @param {object} args
  * @param {boolean} args.hasCloudRecovery
- * @param {number} [args.trustedDeviceCount]  added-device roster size from
- *        /api/account/resolve (the founding device is implicit). <=1 ⇒ last.
  * @param {boolean} [args.isDemoAccount]
  * @returns {"ceremony" | "normal" | "exempt"}
  */
 export function accountDeletePolicy({
   hasCloudRecovery,
-  trustedDeviceCount,
   isDemoAccount = false,
 }) {
   if (isDemoAccount) return "exempt";
   if (hasCloudRecovery) return "normal";
-  // Fail-closed on an unknown count: if we can't prove another device exists,
-  // treat it as the last device (so the no-recovery wipe runs the ceremony
-  // rather than silently orphaning the only key).
-  const count = Number.isFinite(trustedDeviceCount) ? trustedDeviceCount : 1;
-  return count <= 1 ? "ceremony" : "normal";
+  return "ceremony";
 }
 
 function makeError(message, status) {

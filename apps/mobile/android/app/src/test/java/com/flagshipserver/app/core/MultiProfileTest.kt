@@ -30,7 +30,7 @@ class MultiProfileTest {
             "harry",
             listOf(PodInfo(podId = "a", name = "A", fqdn = "a.harry.flagship.services")),
         )
-        s.addProfile(Profile(cloudName = "jay-family", deviceLabel = "phone"), setActive = false)
+        s.addProfile(Profile(cloudName = "jay-family", deviceDisplayName = "phone"), setActive = false)
         assertEquals(2, s.profiles.value.size)
         assertEquals("harry", s.activeCloudName.value)
         assertEquals("harry", s.currentUser.value)
@@ -57,7 +57,7 @@ class MultiProfileTest {
         val p = Profile(
             cloudName = "harry",
             cloudRootPubHex = "deadbeef",
-            deviceLabel = "android",
+            deviceDisplayName = "android",
             createdAt = 1_700_000_000_000L,
         )
         val json = Json { ignoreUnknownKeys = true }
@@ -65,7 +65,7 @@ class MultiProfileTest {
         val decoded = json.decodeFromString(Profile.serializer(), data)
         assertEquals("harry", decoded.cloudName)
         assertEquals("deadbeef", decoded.cloudRootPubHex)
-        assertEquals("android", decoded.deviceLabel)
+        assertEquals("android", decoded.deviceDisplayName)
         assertEquals(1_700_000_000_000L, decoded.createdAt)
     }
 

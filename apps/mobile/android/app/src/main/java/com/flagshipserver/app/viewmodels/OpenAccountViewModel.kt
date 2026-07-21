@@ -87,7 +87,7 @@ class OpenAccountViewModel(
      * no-op server-side, so a tapped-twice / retried open is safe.
      */
     suspend fun openAccount(deviceName: String, accountName: String = defaultAccountName()) {
-        if (_phase.value == OpenAccountPhase.Working) return
+        if (_phase.value == OpenAccountPhase.Working || _phase.value == OpenAccountPhase.Opened) return
         _phase.value = OpenAccountPhase.Working
         val label = deviceName.trim().ifEmpty { defaultDeviceName(null) }
         try {

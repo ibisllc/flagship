@@ -128,24 +128,17 @@ describe("canonicalServiceFqdn (tier 1 — box-pinned, model A′)", () => {
 });
 
 describe("resolveLeftmostLabel (user-zone precedence)", () => {
-  function lookups(over: Partial<{ boxes: string[]; devices: string[]; apps: string[] }> = {}): ResolverLookups {
+  function lookups(over: Partial<{ boxes: string[]; apps: string[] }> = {}): ResolverLookups {
     const boxes = new Set(over.boxes ?? []);
-    const devices = new Set(over.devices ?? []);
     const apps = new Set(over.apps ?? []);
     return {
       isBoxName: (l) => boxes.has(l),
-      isDeviceLabel: (l) => devices.has(l),
       isAppLabel: (l) => apps.has(l),
     };
   }
 
   it("1. a registered box name → box-apex", () => {
     expect(resolveLeftmostLabel("home", lookups({ boxes: ["home"] }))).toEqual({ cls: "box-apex", label: "home" });
-  });
-
-  it("2. a device label → device (before app)", () => {
-    expect(resolveLeftmostLabel("reviewer", lookups({ devices: ["reviewer"], apps: ["reviewer"] })))
-      .toEqual({ cls: "device", label: "reviewer" });
   });
 
   it("3. an install-table app → app", () => {

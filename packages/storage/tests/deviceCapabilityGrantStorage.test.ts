@@ -30,7 +30,7 @@ import type {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MIGRATION_PATH = resolve(
   HERE,
-  "../migrations/0031_device_capability_grants.sql",
+  "../migrations/0083_private_account_device_directory.sql",
 );
 const MIGRATION_SQL = readFileSync(MIGRATION_PATH, "utf8");
 
@@ -40,7 +40,7 @@ function rec(
   return {
     grantId: "g-" + (overrides.grantId ?? "primary"),
     username: "alice",
-    deviceId: "primary",
+    deviceId: "01".repeat(16),
     devicePubHex: "aa".repeat(32),
     scopesJson: JSON.stringify(["browse", "install-service"]),
     issuedAt: 1_700_000_000_000,
@@ -230,16 +230,16 @@ const adapters: Adapter[] = [
   },
 ];
 
-describe("migration 0031 (device_capability_grants)", () => {
+describe("clean private-device migration (device_capability_grants)", () => {
   it("creates the table with grant_id PRIMARY KEY", () => {
     expect(MIGRATION_SQL).toMatch(
-      /CREATE TABLE IF NOT EXISTS device_capability_grants/,
+      /CREATE TABLE device_capability_grants/,
     );
     expect(MIGRATION_SQL).toMatch(/grant_id\s+TEXT PRIMARY KEY/);
   });
   it("creates the unique partial index on (username, device_id) WHERE revoked_at IS NULL", () => {
     expect(MIGRATION_SQL).toMatch(
-      /CREATE UNIQUE INDEX IF NOT EXISTS idx_dcg_username_device_active/,
+      /CREATE UNIQUE INDEX idx_dcg_username_device_active/,
     );
     expect(MIGRATION_SQL).toMatch(
       /ON device_capability_grants\(username, device_id\)\s+WHERE revoked_at IS NULL/,
@@ -247,13 +247,13 @@ describe("migration 0031 (device_capability_grants)", () => {
   });
   it("creates the username + device_pub + expires_at lookup indexes", () => {
     expect(MIGRATION_SQL).toMatch(
-      /CREATE INDEX IF NOT EXISTS idx_dcg_username\s+ON device_capability_grants\(username\)/,
+      /CREATE INDEX idx_dcg_username\s+ON device_capability_grants\(username\)/,
     );
     expect(MIGRATION_SQL).toMatch(
-      /CREATE INDEX IF NOT EXISTS idx_dcg_device_pub\s+ON device_capability_grants\(device_pub_hex\)/,
+      /CREATE INDEX idx_dcg_device_pub\s+ON device_capability_grants\(device_pub_hex\)/,
     );
     expect(MIGRATION_SQL).toMatch(
-      /CREATE INDEX IF NOT EXISTS idx_dcg_expires_at\s+ON device_capability_grants\(expires_at\)/,
+      /CREATE INDEX idx_dcg_expires_at\s+ON device_capability_grants\(expires_at\)/,
     );
   });
 });
@@ -272,7 +272,7 @@ for (const a of adapters) {
       expect(got).toBeDefined();
       expect(got?.grantId).toBe("g-1");
       expect(got?.username).toBe("alice");
-      expect(got?.deviceId).toBe("primary");
+      expect(got?.deviceId).toBe("01".repeat(16));
       expect(got?.devicePubHex).toBe("aa".repeat(32));
       expect(got?.scopesJson).toBe(
         JSON.stringify(["browse", "demo-provision"]),
@@ -400,7 +400,7 @@ for (const a of adapters) {
         await s.getActiveForUserDevice("alice", "primary"),
       ).toBeUndefined();
       await s.put(rec({ grantId: "g-1" }));
-      const got = await s.getActiveForUserDevice("alice", "primary");
+      const got = await s.getActiveForUserDevice("alice", "01".repeat(16));
       expect(got?.grantId).toBe("g-1");
     });
 

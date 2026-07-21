@@ -10,9 +10,9 @@ import { validateUserLabel } from "./labels.js";
 import {
   deriveDemoAdminRoot, deriveDemoDelegatedKey, deriveDemoPrimaryDeviceId, deriveDemoPrimaryDeviceKey,
   deriveDemoRckKey, deriveDemoUmk, deriveDemoUserAid, deriveDemoUserIrk,
-} from "./demoUsersAdmin.js";
-import { buildCloudConfigUserData, installBlobJsonShortString } from "./demoUsersAdminCloudInit.js";
-import type { ProvisioningHetznerClient } from "./demoUsersAdminProvision.js";
+} from "./demoIdentity.js";
+import { buildCloudConfigUserData, installBlobJsonShortString } from "./demoCloudConfig.js";
+import type { ProvisioningHetznerClient } from "./demoProvisioningProvider.js";
 import { conflict, malformed, ok, type HandlerResponseWithHeaders } from "./types.js";
 
 const PRIMARY_SCOPES: readonly DeviceScope[] = [

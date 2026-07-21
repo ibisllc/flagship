@@ -146,6 +146,9 @@ object AccountMetadata {
     fun canonicalDeviceSelfProfile(accountId: String, deviceId: String, revision: Long, keyVersion: Long, ciphertext: AccountMetadataCiphertext, issuedAt: Long, signerPubHex: String): ByteArray =
         canonicalSigned("flagship/device-profile-self/v1", accountId, deviceId, revision, keyVersion, ciphertext, "", issuedAt, signerPubHex)
 
+    fun canonicalDeviceManagedProfile(accountId: String, deviceId: String, revision: Long, keyVersion: Long, ciphertext: AccountMetadataCiphertext, locked: Boolean, issuedAt: Long, signerPubHex: String): ByteArray =
+        canonicalSigned("flagship/device-profile-admin/v1", accountId, deviceId, revision, keyVersion, ciphertext, if (locked) "1" else "0", issuedAt, signerPubHex)
+
     fun canonicalDirectoryRequest(accountId: String, deviceId: String, signerPubHex: String, method: String, path: String, requestId: String, issuedAt: Long): ByteArray =
         listOf("flagship/account-directory-request/v1", method, path, accountId.lowercase(), deviceId, signerPubHex, requestId, issuedAt.toString())
             .joinToString("|").toByteArray(UTF_8)

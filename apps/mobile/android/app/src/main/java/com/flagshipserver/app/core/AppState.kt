@@ -114,10 +114,9 @@ class AppState(
 
     /**
      * E7 — true once we've observed that this device's local push
-     * tokenId is no longer in /api/users/:u/devices, meaning another
-     * device on the account ran a Disconnect / Replace / Wipe against
-     * us. The Home banner uses this to render a danger card with a
-     * "Sign in again" CTA.
+     * the current account-scoped device identity is rejected by an
+     * authenticated directory read, meaning another device ran a revoke,
+     * replace, or wipe operation against us.
      */
     private val _accountWasReset = MutableStateFlow(accountWasReset)
     val accountWasReset: StateFlow<Boolean> = _accountWasReset.asStateFlow()
@@ -407,6 +406,14 @@ class AppState(
         } else {
             current + profile
         }
+    }
+
+    fun cachePresentationNames(accountDisplayName: String, deviceDisplayName: String?) {
+        val active = activeProfile ?: return
+        upsertProfile(active.copy(
+            accountDisplayName = accountDisplayName,
+            deviceDisplayName = deviceDisplayName ?: active.deviceDisplayName,
+        ))
     }
 
     fun addPod(pod: PodInfo) {

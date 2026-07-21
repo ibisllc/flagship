@@ -101,7 +101,7 @@ class KeyfileImportFlowTest {
         assertEquals(KeyfileImportPhase.Opened("harry"), m.phase.first())
         assertTrue(app.isPaired.first())
         assertEquals("harry", app.currentUser.first())
-        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceLabel)
+        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceDisplayName)
     }
 
     @Test

@@ -131,25 +131,23 @@ describe("account-deletion ceremony — webapp", () => {
   describe("accountDeletePolicy — ceremony only on no-recovery + last device", () => {
     it("no recovery + last device (count <= 1) ⇒ ceremony", async () => {
       const d = await loadDeletion();
-      expect(d.accountDeletePolicy({ hasCloudRecovery: false, trustedDeviceCount: 0 })).toBe("ceremony");
-      expect(d.accountDeletePolicy({ hasCloudRecovery: false, trustedDeviceCount: 1 })).toBe("ceremony");
+      expect(d.accountDeletePolicy({ hasCloudRecovery: false })).toBe("ceremony");
     });
 
     it("cloud recovery present ⇒ normal (key survives in the cloud)", async () => {
       const d = await loadDeletion();
-      expect(d.accountDeletePolicy({ hasCloudRecovery: true, trustedDeviceCount: 0 })).toBe("normal");
-      expect(d.accountDeletePolicy({ hasCloudRecovery: true, trustedDeviceCount: 5 })).toBe("normal");
+      expect(d.accountDeletePolicy({ hasCloudRecovery: true })).toBe("normal");
     });
 
-    it("another active device ⇒ normal (key survives on another device)", async () => {
+    it("does not trust a public device count to bypass the no-recovery ceremony", async () => {
       const d = await loadDeletion();
-      expect(d.accountDeletePolicy({ hasCloudRecovery: false, trustedDeviceCount: 2 })).toBe("normal");
+      expect(d.accountDeletePolicy({ hasCloudRecovery: false })).toBe("ceremony");
     });
 
     it("demo accounts are exempt (no real key to lose)", async () => {
       const d = await loadDeletion();
       expect(
-        d.accountDeletePolicy({ hasCloudRecovery: false, trustedDeviceCount: 1, isDemoAccount: true }),
+        d.accountDeletePolicy({ hasCloudRecovery: false, isDemoAccount: true }),
       ).toBe("exempt");
     });
 
@@ -157,7 +155,7 @@ describe("account-deletion ceremony — webapp", () => {
       const d = await loadDeletion();
       expect(d.accountDeletePolicy({ hasCloudRecovery: false })).toBe("ceremony");
       expect(
-        d.accountDeletePolicy({ hasCloudRecovery: false, trustedDeviceCount: NaN }),
+        d.accountDeletePolicy({ hasCloudRecovery: false }),
       ).toBe("ceremony");
     });
   });

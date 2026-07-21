@@ -42,20 +42,12 @@
  *  @property {string=} reason
  *  @property {TestAccountMeta=} testAccount
  *  @property {DemoServerBlock=} demoServer
- *  @property {DeviceCapabilityBlock=} deviceCapability
  */
 
-/** v2 device-addressing — mirror of the Worker's `deviceCapability`
- *  block in `packages/control-plane/src/usersCheck.ts`. Embedded into
- *  the `/api/users/check` response when the typed username matched
- *  the `<u>.<device-label>` syntax AND a matching active
- *  DeviceCapabilityGrant exists. See
- *  docs/v2-device-addressing-and-real-ticket.md §5.1.
- *
- *  Scopes are wire-format strings; use `deviceCapabilityScopeSet` for
- *  forward-compat parsing (unknown future scope strings drop out).
+/** Authenticated account-membership capability cached only in the local
+ *  account profile. Public username checks never return this block.
  *  @typedef {Object} DeviceCapabilityBlock
- *  @property {string} label
+ *  @property {string} deviceId
  *  @property {string} devicePubKey
  *  @property {string[]} scopes
  *  @property {string} grantId

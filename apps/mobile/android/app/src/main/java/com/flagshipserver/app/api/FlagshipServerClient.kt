@@ -16,6 +16,7 @@ import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.JsonHttpTransport
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 
 interface FlagshipServerClient {
     suspend fun bootstrapAccount(req: AccountBootstrapRequest): AccountBootstrapResponse =
@@ -89,12 +90,15 @@ interface FlagshipServerClient {
      *  cleaned up" as an error. */
     suspend fun revokePushToken(req: PushTokenRevokeRequest)
 
-    /** List the peer-class trusted devices on the user's account.
-     *  Returns the ETag the Worker computed so the caller can pass
-     *  it as `If-Match` on revocation / rotation requests, fencing
-     *  the device-list-changed-mid-action race (cf. Worker A3).
-     *  Worker side: GET /api/users/:u/devices. */
-    suspend fun listDevices(username: String): TrustedDevicesListResponse
+    suspend fun accountDirectory(
+        accountId: String,
+        authorization: AccountDirectoryAuthorization,
+    ): AccountDirectoryResponse = error("account directory unavailable")
+    suspend fun putAccountProfile(accountId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest): Unit = error("account directory unavailable")
+    suspend fun putDeviceSelfProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest): Unit = error("account directory unavailable")
+    suspend fun putDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryManagedProfileWriteRequest): Unit = error("account directory unavailable")
+    suspend fun deleteDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, expectedRevision: Long): Unit = error("account directory unavailable")
+    suspend fun revokeAccountDevice(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization): Unit = error("account directory unavailable")
 
     /** Account-level audit log surfaced via /api/users/:u/audit. Used
      *  by the Activity feed to render device-disconnect / device-
@@ -248,10 +252,24 @@ data class DeviceAdmitRequest(
     /** Ed25519 over the admit, signed by the account's CURRENT IRK,
      *  lowercased hex (64 bytes). */
     val admitSig: String,
+    val grant: Grant,
+    val grantSignature: String,
+    val profile: AccountBootstrapRequest.Profile,
     val request: PushTokenRegisterRequest.Inner,
     /** PushTokenRegister signature, carried for storage. Hex. */
     val signature: String,
 ) {
+    @Serializable
+    data class Grant(
+        val grantId: String,
+        val username: String,
+        val deviceId: String,
+        val devicePubHex: String,
+        val scopes: List<String>,
+        val issuedAt: Long,
+        val expiresAt: Long,
+        val signerRoot: String,
+    )
     @Serializable
     data class AdmitEnvelope(
         val username: String,
@@ -347,7 +365,6 @@ data class AccountResolution(
     val kind: String,
     val recovery: RecoveryState,
     val totpEnrolled: Boolean,
-    val trustedDeviceCount: Int,
     /** Present only for demo accounts — the single sandbox device. */
     val demoServer: DemoServerBlock? = null,
     /** Server-derived recovery-speed hint:
@@ -571,28 +588,136 @@ data class AuditEventListResponse(
     val events: List<AuditEvent>,
 )
 
+data class AccountDirectoryAuthorization(
+    val deviceId: String,
+    val signerPubHex: String,
+    val requestId: String,
+    val issuedAt: Long,
+    val signatureHex: String,
+)
+
 @Serializable
-data class TrustedDevice(
-    val tokenId: String,
-    val tokenPrefix: String,
-    val label: String,
-    val platform: String,        // "apns" | "fcm" | "webpush"
-    val addedAt: Long,
+data class DirectoryProfileEnvelope(
+    val accountId: String,
+    val deviceId: String? = null,
+    val revision: Long,
+    val keyVersion: Long,
+    val nonceHex: String,
+    val ciphertextHex: String,
+    val issuedAt: Long,
+    val signerPubHex: String,
+    val signatureHex: String,
+)
+
+@Serializable
+data class DirectoryManagedProfileEnvelope(
+    val accountId: String,
+    val deviceId: String,
+    val revision: Long,
+    val keyVersion: Long,
+    val nonceHex: String,
+    val ciphertextHex: String,
+    val locked: Boolean,
+    val issuedAt: Long,
+    val signerPubHex: String,
+    val signatureHex: String,
+)
+
+@Serializable
+data class DirectoryProfileWriteRequest(
+    val profile: DirectoryProfileEnvelope,
+    val expectedRevision: Long,
+)
+
+@Serializable
+data class DirectoryManagedProfileWriteRequest(
+    val profile: DirectoryManagedProfileEnvelope,
+    val expectedRevision: Long,
+)
+
+@Serializable
+private data class DirectoryDeleteRequest(val expectedRevision: Long)
+
+@Serializable
+data class AccountDirectoryAccountProfile(
+    val accountId: String,
+    val revision: Long,
+    val keyVersion: Long,
+    val nonceHex: String,
+    val ciphertextHex: String,
+    val signerPubHex: String,
+    val signatureHex: String,
+    val issuedAt: Long,
+    val updatedAt: Long,
+)
+
+@Serializable
+data class AccountDirectoryDevice(
+    val accountId: String,
+    val deviceId: String,
+    val devicePubHex: String,
+    val platformClass: String? = null,
+    val createdAt: Long,
     val lastSeenAt: Long,
-    /** v1.2 Phase 4 — wall-clock ms before which this device cannot
-     *  revoke another device on the account. Null / 0 / past = the
-     *  14-day quarantine has elapsed (or never applied). A future
-     *  value tells the UI to show a clock indicator + disable the
-     *  Remove / Replace actions. */
-    val quarantineUntil: Long? = null,
+    val revokedAt: Long? = null,
+    val supportCode: String,
+)
+
+@Serializable
+data class AccountDirectoryGrant(
+    val grantId: String,
+    val username: String,
+    val deviceId: String,
+    val devicePubHex: String,
+    val scopesJson: String,
+    val issuedAt: Long,
+    val expiresAt: Long,
+    val signatureHex: String,
+    val revokedAt: Long? = null,
+    val signerRoot: String,
 ) {
-    /** Convenience for the UI; returns true iff the quarantine window
-     *  is in the future relative to [now]. */
-    fun isQuarantined(now: Long = System.currentTimeMillis()): Boolean {
-        val until = quarantineUntil ?: return false
-        return until > 0 && until > now
-    }
+    fun scopes(json: kotlinx.serialization.json.Json): Set<String> =
+        runCatching { json.decodeFromString<List<String>>(scopesJson).toSet() }.getOrDefault(emptySet())
 }
+
+@Serializable
+data class AccountDirectorySelfProfile(
+    val accountId: String,
+    val deviceId: String,
+    val revision: Long,
+    val keyVersion: Long,
+    val nonceHex: String,
+    val ciphertextHex: String,
+    val signerPubHex: String,
+    val signatureHex: String,
+    val issuedAt: Long,
+    val updatedAt: Long,
+)
+
+@Serializable
+data class AccountDirectoryManagedProfile(
+    val accountId: String,
+    val deviceId: String,
+    val revision: Long,
+    val keyVersion: Long,
+    val nonceHex: String,
+    val ciphertextHex: String,
+    val locked: Boolean,
+    val signerPubHex: String,
+    val signatureHex: String,
+    val issuedAt: Long,
+    val updatedAt: Long,
+)
+
+@Serializable
+data class AccountDirectoryResponse(
+    val accountId: String,
+    val accountProfile: AccountDirectoryAccountProfile? = null,
+    val devices: List<AccountDirectoryDevice> = emptyList(),
+    val grants: List<AccountDirectoryGrant> = emptyList(),
+    val selfProfiles: List<AccountDirectorySelfProfile> = emptyList(),
+    val managedProfiles: List<AccountDirectoryManagedProfile> = emptyList(),
+)
 
 /**
  * v1.2 Phase 4 — GET /api/users/:u response shape. Mirrors the iOS
@@ -682,24 +807,6 @@ data class TotpDisableResponse(
     val ok: Boolean,
     val accountType: String,
 )
-
-/**
- * Response wrapper that surfaces the ETag header alongside the body.
- * Callers feed the ETag to subsequent /re-pair and /api/push/<id>
- * requests as If-Match so a Worker-side device-list change between
- * fetch and action yields a 412 instead of a half-applied rotation.
- */
-data class TrustedDevicesListResponse(
-    val devices: List<TrustedDevice>,
-    /** Server-supplied ETag for the snapshot (form `W/"hex"`).
-     *  Null only when the Mock impl didn't compute one. */
-    val etag: String?,
-)
-
-/** On-wire shape — separate from TrustedDevicesListResponse so the
- *  header-only ETag doesn't bleed into the @Serializable body type. */
-@Serializable
-private data class TrustedDevicesWireBody(val devices: List<TrustedDevice>)
 
 @Serializable
 data class UsernameClaimRequest(
@@ -906,13 +1013,6 @@ data class UsernameAvailabilityResponse(
      *  legacy (testAccount-only) behaviour preserved. See
      *  docs/sample-users.md §10.9. */
     val demoServer: DemoServerBlock? = null,
-    /** v2 device-addressing — present when the typed username matched
-     *  the `<u>.<device-label>` syntax AND a matching active
-     *  DeviceCapabilityGrant exists. The mobile client greys out
-     *  actions absent from `scopes` and renders the device-label chip
-     *  below the username. See
-     *  docs/v2-device-addressing-and-real-ticket.md §5.1. */
-    val deviceCapability: DeviceCapabilityBlock? = null,
 )
 
 @Serializable
@@ -1197,7 +1297,6 @@ class MockFlagshipServerClient(
      *  row, the response carries the `deviceCapability` block + the
      *  `demoServer` block from the user-part row. See
      *  docs/v2-device-addressing-and-real-ticket.md §5.1. */
-    var deviceCapabilities: MutableMap<String, DeviceCapabilityBlock> = mutableMapOf(),
     /** Canonical provisioning channel — mirror of the Worker's
      *  `provision_status` table, keyed by auth-code SERIAL. When a serial
      *  is present here, [fetchProvisionStatus] returns the record; absent ⇒
@@ -1311,29 +1410,6 @@ class MockFlagshipServerClient(
     override suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse {
         tick()
         val lower = username.lowercase()
-        // v2 device-addressing — `<u>.<label>` syntax precedes every
-        // other rule. The Worker behaves the same way: when a typed
-        // dot-form matches both a demo_users row AND an active
-        // device_capability_grants row, the response carries the
-        // `deviceCapability` block + the underlying demoServer. Any
-        // other dot-form returns 404 — the live client throws an
-        // HttpException(404) which the Mock mirrors so callers see
-        // the same failure mode.
-        if (lower.contains('.')) {
-            val cap = deviceCapabilities[lower]
-            if (cap != null) {
-                val userPart = lower.substringBefore('.')
-                val underlyingDemo = demoServers[userPart]
-                return UsernameAvailabilityResponse(
-                    username = lower,
-                    available = false,
-                    reason = "device capability",
-                    demoServer = underlyingDemo,
-                    deviceCapability = cap,
-                )
-            }
-            throw HttpException(404, "unknown demo device label")
-        }
         // Plan A — every return branch folds in the demoServer block
         // when present. Independent of testAccount / claim branches;
         // the Worker behaves the same way.
@@ -1453,7 +1529,7 @@ class MockFlagshipServerClient(
     }
 
     /** Scripted devices listing per username for tests + dev mode. */
-    var devicesByUser: Map<String, List<TrustedDevice>> = emptyMap()
+    var accountDirectories: Map<String, AccountDirectoryResponse> = emptyMap()
 
     /** Scripted audit log per username — tests configure to drive
      *  Activity feed renders without hitting the Worker. The default
@@ -1468,7 +1544,7 @@ class MockFlagshipServerClient(
             "harry" to listOf(
                 AuditEvent(
                     seq = 4, eventKind = "device-added",
-                    detail = "Added iPad (kitchen)",
+                    detail = "A device joined the account",
                     devicePrefix = "f9e8d7c6",
                     postedAt = now - 2 * hour,
                 ),
@@ -1486,7 +1562,7 @@ class MockFlagshipServerClient(
                 ),
                 AuditEvent(
                     seq = 1, eventKind = "device-disconnected",
-                    detail = "Disconnected iPhone (old)",
+                    detail = "A device left the account",
                     devicePrefix = "deadbeef",
                     postedAt = now - 30 * 24 * hour,
                 ),
@@ -1748,11 +1824,12 @@ class MockFlagshipServerClient(
         return AuditEventListResponse(events = filtered.take(cappedLimit))
     }
 
-    override suspend fun listDevices(username: String): TrustedDevicesListResponse {
+    override suspend fun accountDirectory(
+        accountId: String,
+        authorization: AccountDirectoryAuthorization,
+    ): AccountDirectoryResponse {
         tick()
-        val rows = devicesByUser[username.lowercase()] ?: emptyList()
-        val sorted = rows.sortedWith(compareBy({ it.addedAt }, { it.tokenId }))
-        return TrustedDevicesListResponse(devices = sorted, etag = etagFor(sorted))
+        return accountDirectories[accountId.lowercase()] ?: AccountDirectoryResponse(accountId.lowercase())
     }
 
     // ── v1.2 Phase 4 — account-type + TOTP scripted state ─────────
@@ -1874,7 +1951,6 @@ class MockFlagshipServerClient(
                 kind = "demo",
                 recovery = AccountResolution.RecoveryState(present = false, hasFetchGate = false),
                 totpEnrolled = false,
-                trustedDeviceCount = 0,
                 demoServer = block,
                 graceModel = "instant",
             )
@@ -1892,7 +1968,6 @@ class MockFlagshipServerClient(
                 kind = "unknown",
                 recovery = AccountResolution.RecoveryState(present = false, hasFetchGate = false),
                 totpEnrolled = false,
-                trustedDeviceCount = 0,
                 graceModel = "none",
             )
         }
@@ -1905,7 +1980,6 @@ class MockFlagshipServerClient(
         val hasRecovery = (cloudRecoveryByUser[u] ?: false) || record != null
         val hasFetchGate = record?.fetchTokenHashHex != null
         val credentialId = record?.credentialId
-        val devices = devicesByUser[u]?.size ?: 0
         return AccountResolution(
             username = u,
             exists = true,
@@ -1916,7 +1990,6 @@ class MockFlagshipServerClient(
                 credentialId = credentialId,
             ),
             totpEnrolled = totpEnrolledAtByUser[u] != null,
-            trustedDeviceCount = devices,
             graceModel = if (kind == "multi") "24h-totp" else "3d",
             // Recovery Phase A vs B — surface the account's currently
             // registered IRK so the single-device takeover can tell a
@@ -2017,33 +2090,6 @@ class MockFlagshipServerClient(
         rotatedAdminRootByUser[username.lowercase()] = req.rotation.newAdminRootPub.lowercase()
     }
 
-    private fun etagFor(devices: List<TrustedDevice>): String {
-        // Identity-significant subset only; lastSeenAt deliberately
-        // excluded so test push-delivery doesn't flutter the ETag.
-        // FNV-1a over a byte-feed of the identity fields. Mirrors the
-        // Swift MockFlagshipServerClient.etagFor exactly so a future
-        // cross-client test can verify byte-for-byte parity.
-        var h: ULong = 14695981039346656037uL
-        fun feedString(s: String) {
-            for (b in s.toByteArray(Charsets.UTF_8)) {
-                h = h xor (b.toInt() and 0xff).toULong()
-                h *= 1099511628211uL
-            }
-            h = h xor 0x1fuL; h *= 1099511628211uL
-        }
-        fun feedLong(n: Long) {
-            for (shift in 0 until 64 step 8) {
-                h = h xor ((n.toULong() shr shift) and 0xffuL)
-                h *= 1099511628211uL
-            }
-            h = h xor 0x1fuL; h *= 1099511628211uL
-        }
-        for (d in devices) {
-            feedString(d.tokenId); feedString(d.label); feedString(d.platform); feedLong(d.addedAt)
-        }
-        val hex = h.toString(16).padStart(16, '0').takeLast(16)
-        return "W/\"$hex\""
-    }
 }
 
 // ── Live ──────────────────────────────────────────────────────────
@@ -2228,21 +2274,87 @@ class LiveFlagshipServerClient(
         )
     }
 
-    override suspend fun listDevices(username: String): TrustedDevicesListResponse {
-        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
-        // execute(...) so we can read the ETag header. The
-        // convenience getJson(...) only surfaces the body.
+    override suspend fun accountDirectory(
+        accountId: String,
+        authorization: AccountDirectoryAuthorization,
+    ): AccountDirectoryResponse {
+        val normalized = accountId.lowercase()
+        val encoded = java.net.URLEncoder.encode(normalized, "UTF-8")
         val resp = transport.execute(
             method = "GET",
-            url = "$base/api/users/$encoded/devices",
+            url = "$base/api/accounts/$encoded/directory",
+            extraHeaders = mapOf(
+                "x-flagship-device-id" to authorization.deviceId,
+                "x-flagship-device-pub" to authorization.signerPubHex,
+                "x-flagship-request-id" to authorization.requestId,
+                "x-flagship-issued-at" to authorization.issuedAt.toString(),
+                "x-flagship-signature" to authorization.signatureHex,
+                "cache-control" to "no-store",
+            ),
             accept = setOf(200),
         )
-        val body = transport.json.decodeFromString(
-            TrustedDevicesWireBody.serializer(),
+        return transport.json.decodeFromString(
+            AccountDirectoryResponse.serializer(),
             resp.body.decodeToString(),
         )
-        val etag = resp.headers.entries.firstOrNull { it.key.equals("etag", ignoreCase = true) }?.value
-        return TrustedDevicesListResponse(devices = body.devices, etag = etag)
+    }
+
+    override suspend fun putAccountProfile(accountId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) {
+        directoryMutation(
+            "PUT", "/api/accounts/${accountId.lowercase()}/profile", authorization,
+            transport.json.encodeToString(DirectoryProfileWriteRequest.serializer(), body).toByteArray(),
+        )
+    }
+
+    override suspend fun putDeviceSelfProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) {
+        directoryMutation(
+            "PUT", "/api/accounts/${accountId.lowercase()}/devices/${deviceId.lowercase()}/profile", authorization,
+            transport.json.encodeToString(DirectoryProfileWriteRequest.serializer(), body).toByteArray(),
+        )
+    }
+
+    override suspend fun putDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryManagedProfileWriteRequest) {
+        directoryMutation(
+            "PUT", "/api/accounts/${accountId.lowercase()}/devices/${deviceId.lowercase()}/managed-profile", authorization,
+            transport.json.encodeToString(DirectoryManagedProfileWriteRequest.serializer(), body).toByteArray(),
+        )
+    }
+
+    override suspend fun deleteDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, expectedRevision: Long) {
+        directoryMutation(
+            "DELETE", "/api/accounts/${accountId.lowercase()}/devices/${deviceId.lowercase()}/managed-profile", authorization,
+            transport.json.encodeToString(DirectoryDeleteRequest.serializer(), DirectoryDeleteRequest(expectedRevision)).toByteArray(),
+        )
+    }
+
+    override suspend fun revokeAccountDevice(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization) {
+        directoryMutation(
+            "DELETE", "/api/accounts/${accountId.lowercase()}/devices/${deviceId.lowercase()}", authorization,
+            transport.json.encodeToString(DirectoryDeleteRequest.serializer(), DirectoryDeleteRequest(0)).toByteArray(),
+        )
+    }
+
+    private suspend fun directoryMutation(
+        method: String,
+        path: String,
+        authorization: AccountDirectoryAuthorization,
+        body: ByteArray,
+    ) {
+        transport.execute(
+            method = method,
+            url = "$base$path",
+            body = body,
+            contentType = "application/json; charset=utf-8",
+            extraHeaders = mapOf(
+                "x-flagship-device-id" to authorization.deviceId,
+                "x-flagship-device-pub" to authorization.signerPubHex,
+                "x-flagship-request-id" to authorization.requestId,
+                "x-flagship-issued-at" to authorization.issuedAt.toString(),
+                "x-flagship-signature" to authorization.signatureHex,
+                "cache-control" to "no-store",
+            ),
+            accept = setOf(200),
+        )
     }
 
     override suspend fun listAuditEvents(username: String, sinceSeq: Int, limit: Int): AuditEventListResponse {

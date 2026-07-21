@@ -23,6 +23,7 @@ import {
   InMemoryDeviceManagedProfileStorage,
   InMemoryDeviceSelfProfileStorage,
   InMemoryUsernameStorage,
+  InMemoryPushTokenStorage,
 } from "@flagship/storage";
 import {
   handleDeleteDeviceManagedProfile,
@@ -32,6 +33,7 @@ import {
   handlePutAccountDirectoryKeyGrant,
   handlePutDeviceManagedProfile,
   handlePutDeviceSelfProfile,
+  handleRevokeAccountDevice,
   type AccountDirectoryDeps,
   type DirectoryAuthorization,
 } from "../src/accountDirectory.js";
@@ -135,6 +137,7 @@ async function harness() {
     selfProfiles: new InMemoryDeviceSelfProfileStorage(),
     managedProfiles: new InMemoryDeviceManagedProfileStorage(),
     keyGrants: new InMemoryAccountDirectoryKeyGrantStorage(),
+    pushTokens: new InMemoryPushTokenStorage(),
     nonces: {
       async claim(value) {
         if (claimed.has(value)) return false;
@@ -284,5 +287,23 @@ describe("private account directory", () => {
     const body = response.body as { keyGrants: Array<{ sealedKeyHex: string }> };
     expect(body.keyGrants).toHaveLength(1);
     expect(body.keyGrants[0]?.sealedKeyHex).toBe("001122");
+  });
+
+  it("revokes an opaque device identity, its grant, and its push transport", async () => {
+    const { deps, device, other } = await harness();
+    await deps.pushTokens.put({
+      tokenId: "11".repeat(16), username: accountId, deviceId: otherDeviceId,
+      platform: "webpush", providerToken: "opaque-provider-token",
+      pushX25519PubHex: "22".repeat(32), registrationSignatureHex: "33".repeat(64),
+      registeredAt: now, lastSeenAt: now,
+    });
+    const path = `/api/accounts/${accountId}/devices/${otherDeviceId}`;
+    const response = await handleRevokeAccountDevice(
+      deps, accountId, otherDeviceId, auth(path, "DELETE", deviceId, device),
+    );
+    expect(response.status).toBe(200);
+    expect((await deps.identities.get(accountId, otherDeviceId))?.revokedAt).toBe(now);
+    expect(await deps.grants.getActiveForUserDevice(accountId, otherDeviceId)).toBeUndefined();
+    expect(await deps.pushTokens.listByUser(accountId)).toHaveLength(0);
   });
 });

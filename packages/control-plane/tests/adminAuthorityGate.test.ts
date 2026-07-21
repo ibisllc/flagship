@@ -115,7 +115,7 @@ describe("Slice D gate — set-custom-domain (§2 row 20)", () => {
     const grant: DeviceCapabilityGrant = {
       grantId: "g-admin-1",
       username: USER,
-      deviceId: "ipad",
+      deviceId: "01".repeat(16),
       devicePubKey: device.publicKey,
       scopes: ["admin"],
       issuedAt: NOW - 1000,
@@ -161,7 +161,7 @@ describe("Slice D gate — set-custom-domain (§2 row 20)", () => {
     const grant: DeviceCapabilityGrant = {
       grantId: "g-forged-1",
       username: USER,
-      deviceId: "ipad",
+      deviceId: "02".repeat(16),
       devicePubKey: device.publicKey,
       scopes: ["admin"],
       issuedAt: NOW - 1000,
