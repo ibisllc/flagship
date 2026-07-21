@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import CryptoKit
 import Flagship
 import FlagshipCore
 import FlagshipAPI
@@ -889,7 +890,21 @@ struct ServerDetailContainer: View {
     private func refreshDirectoryAndRepairAppKey(allowAuthentication: Bool) async {
         guard let username = app.currentUser, !username.isEmpty else { return }
         guard let directory = try? await mailbox.fetchPods(username: username) else { return }
-        CertPinRegistry.shared.update(pods: directory.pods)
+        // A reinstall/profile restore can preserve the account UMK while losing
+        // this app-local cache of each box's derived STK public key. A seedless
+        // /pods refresh can then fetch a perfectly valid signed daemon report
+        // but has no local authority with which to verify it, leaving the TLS
+        // card stuck on "No certificate yet" forever. Rebuild the public-key
+        // cache whenever the owner explicitly refreshes, or silently when the
+        // current unlocked session already holds the UMK. Background refreshes
+        // with a cold session remain biometric-free.
+        if allowAuthentication || Keystore.hasSessionKey(),
+           let umk = try? await Keystore.currentUMK(reason: "Verify your servers") {
+            let seed = umk.withUnsafeBytes { Data($0) }
+            CertPinRegistry.shared.update(pods: directory.pods, umkSeed: seed)
+        } else {
+            CertPinRegistry.shared.update(pods: directory.pods)
+        }
 
         guard let fqdn = pod?.fqdn, !fqdn.isEmpty else { return }
         let store = PendingSwkDepositStore()
