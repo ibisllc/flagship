@@ -177,9 +177,17 @@ queued:**
   cutover, not yet replaced).
 - **Fixture cleanup** — classify + remove/convert any obsolete plaintext
   display-name fixtures still in active tests.
-- **Retail iOS build** — `feat/retail` iOS target fails resolving FlagshipCore /
-  FlagshipAPI SwiftPM products; land the general fix on `main`, then merge into
-  retail rather than keeping it retail-only.
+- **Retail iOS build** — RESOLVED: it was a build-invocation issue, not a code
+  or package-wiring defect (and not retail-specific — pristine `main` reproduces
+  it identically). `xcodebuild ... -sdk iphonesimulator` forces one SDKROOT
+  across the whole graph, which starves the multiplatform FlagshipShared package
+  of an iphonesimulator slice (the watchOS targets pin it to watchsimulator), so
+  the iOS targets can't resolve FlagshipCore/FlagshipAPI. Build with a
+  `-destination` and NO `-sdk` (as the gym's iOS adapter already does):
+  `xcodebuild -project apps/mobile/ios/App/FlagshipApp.xcodeproj -scheme
+  FlagshipApp -destination 'generic/platform=iOS Simulator'
+  CODE_SIGNING_ALLOWED=NO build`. See the header comment in
+  `apps/mobile/ios/App/project.yml` for the full explanation.
 - **VM appliance follow-through** — make appliance discovery/download native in
   Studio (currently the checked-in fetch helper + `FLAGSHIP_VM_APPLIANCE_BASE`
   opt-in); shrink the ~2.7 GiB base toward the leanest secure footprint; confirm
