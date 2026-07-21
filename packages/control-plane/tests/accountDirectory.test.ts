@@ -307,3 +307,179 @@ describe("private account directory", () => {
     expect(await deps.pushTokens.listByUser(accountId)).toHaveLength(0);
   });
 });
+
+// =========================================================================
+// Adversarial coverage: an authenticated device is not a trusted one. Each
+// case below is a caller that HAS a valid signature but is reaching outside
+// what its identity entitles it to.
+// =========================================================================
+
+describe("private account directory — authorization matrix", () => {
+  it("rejects a signature made by a device key other than the claimed deviceId", async () => {
+    const { deps, other } = await harness();
+    const path = `/api/accounts/${accountId}/directory`;
+    // `other` signs, but the request names the admin device. The stored
+    // identity for that deviceId carries a different pub, so the binding
+    // check must fail before any signature verification succeeds.
+    const request: AccountDirectoryRequest = {
+      accountId,
+      deviceId,
+      signerPubHex: hex(other.publicKey),
+      method: "GET",
+      path,
+      requestId: "aa".repeat(16),
+      issuedAt: now,
+    };
+    const forged = { request, signature: signAccountDirectoryRequest(request, other) };
+    expect((await handleGetAccountDirectory(deps, accountId, forged)).status).toBe(403);
+  });
+
+  it("rejects a request replayed against a different account, method, or path", async () => {
+    const { deps, other } = await harness();
+    const path = `/api/accounts/${accountId}/directory`;
+    // Correctly signed for THIS path — then aimed elsewhere.
+    const signed = auth(path, "GET", otherDeviceId, other);
+    expect((await handleGetAccountProfile(deps, accountId, signed)).status).toBe(403);
+    expect((await handleGetAccountDirectory(deps, "someone-else", signed)).status).toBe(403);
+  });
+
+  it("rejects a stale signature outside the freshness window", async () => {
+    const { deps, other } = await harness();
+    const path = `/api/accounts/${accountId}/directory`;
+    const request: AccountDirectoryRequest = {
+      accountId,
+      deviceId: otherDeviceId,
+      signerPubHex: hex(other.publicKey),
+      method: "GET",
+      path,
+      requestId: "bb".repeat(16),
+      issuedAt: now - 6 * 60_000,
+    };
+    const stale = { request, signature: signAccountDirectoryRequest(request, other) };
+    expect((await handleGetAccountDirectory(deps, accountId, stale)).status).toBe(403);
+  });
+
+  it("refuses a non-administrator writing another device's managed profile", async () => {
+    const { deps, admin, other } = await harness();
+    // `other` holds view-directory only. Even a correctly admin-root-SIGNED
+    // record must not land, because the CALLER is not an administrator.
+    const encrypted = encryptDeviceProfile("Renamed by a peer", deriveDeviceDirectoryKey(umk), {
+      accountId, deviceId, revision: 1, keyVersion: 1, managed: true, nonce,
+    });
+    const unsigned = {
+      ...encrypted, deviceId, locked: true, issuedAt: now, signerPubHex: hex(admin.publicKey),
+    };
+    const profile = { ...unsigned, signatureHex: signDeviceManagedProfile(unsigned, admin) };
+    const path = `/api/accounts/${accountId}/devices/${deviceId}/managed-profile`;
+    expect((await handlePutDeviceManagedProfile(
+      deps, accountId, deviceId, auth(path, "PUT", otherDeviceId, other), { profile, expectedRevision: 0 },
+    )).status).toBe(403);
+    expect(await deps.managedProfiles.get(accountId, deviceId)).toBeUndefined();
+  });
+
+  it("refuses a managed profile signed by anything but the account's admin root", async () => {
+    const { deps, device, other } = await harness();
+    // A real administrator CALLER, but the record is signed by a non-root key.
+    const encrypted = encryptDeviceProfile("Forged authority", deriveDeviceDirectoryKey(umk), {
+      accountId, deviceId, revision: 1, keyVersion: 1, managed: true, nonce,
+    });
+    const unsigned = {
+      ...encrypted, deviceId, locked: true, issuedAt: now, signerPubHex: hex(other.publicKey),
+    };
+    const profile = { ...unsigned, signatureHex: signDeviceManagedProfile(unsigned, other) };
+    const path = `/api/accounts/${accountId}/devices/${deviceId}/managed-profile`;
+    expect((await handlePutDeviceManagedProfile(
+      deps, accountId, deviceId, auth(path, "PUT", deviceId, device), { profile, expectedRevision: 0 },
+    )).status).toBe(403);
+  });
+
+  it("refuses a device writing a self profile onto another device", async () => {
+    const { deps, device, other } = await harness();
+    const encrypted = encryptDeviceProfile("Impersonator", deriveDeviceDirectoryKey(umk), {
+      accountId, deviceId: otherDeviceId, revision: 1, keyVersion: 1, nonce,
+    });
+    const unsigned = {
+      ...encrypted, deviceId: otherDeviceId, issuedAt: now, signerPubHex: hex(device.publicKey),
+    };
+    const profile = { ...unsigned, signatureHex: signDeviceSelfProfile(unsigned, device) };
+    const path = `/api/accounts/${accountId}/devices/${otherDeviceId}/profile`;
+    expect((await handlePutDeviceSelfProfile(
+      deps, accountId, otherDeviceId, auth(path, "PUT", deviceId, device), { profile, expectedRevision: 0 },
+    )).status).toBe(403);
+    expect(await deps.selfProfiles.get(accountId, otherDeviceId)).toBeUndefined();
+  });
+
+  it("keeps an administrator lock intact when the device writes its own suggestion", async () => {
+    const { deps, admin, device } = await harness();
+    // A lock does not silence the device — a self-profile is a SUGGESTION and
+    // may still be written. What the lock guarantees is that the managed
+    // record survives untouched, so clients (which prefer managed over self)
+    // keep rendering the administrator's name. Pin both halves: the self
+    // write is accepted, and it cannot displace or clear the locked record.
+    const managedEnc = encryptDeviceProfile("Marketing (locked)", deriveDeviceDirectoryKey(umk), {
+      accountId, deviceId, revision: 1, keyVersion: 1, managed: true, nonce,
+    });
+    const managedUnsigned = {
+      ...managedEnc, deviceId, locked: true, issuedAt: now, signerPubHex: hex(admin.publicKey),
+    };
+    const managed = { ...managedUnsigned, signatureHex: signDeviceManagedProfile(managedUnsigned, admin) };
+    const managedPath = `/api/accounts/${accountId}/devices/${deviceId}/managed-profile`;
+    expect((await handlePutDeviceManagedProfile(
+      deps, accountId, deviceId, auth(managedPath, "PUT", deviceId, device), { profile: managed, expectedRevision: 0 },
+    )).status).toBe(200);
+
+    const selfEnc = encryptDeviceProfile("My own name", deriveDeviceDirectoryKey(umk), {
+      accountId, deviceId, revision: 1, keyVersion: 1, nonce,
+    });
+    const selfUnsigned = { ...selfEnc, deviceId, issuedAt: now, signerPubHex: hex(device.publicKey) };
+    const self = { ...selfUnsigned, signatureHex: signDeviceSelfProfile(selfUnsigned, device) };
+    const selfPath = `/api/accounts/${accountId}/devices/${deviceId}/profile`;
+    expect((await handlePutDeviceSelfProfile(
+      deps, accountId, deviceId, auth(selfPath, "PUT", deviceId, device), { profile: self, expectedRevision: 0 },
+    )).status).toBe(200);
+
+    const stillManaged = await deps.managedProfiles.get(accountId, deviceId);
+    expect(stillManaged?.locked).toBe(true);
+    expect(stillManaged?.ciphertextHex).toBe(managed.ciphertextHex);
+  });
+
+  it("scopes every record to its own account", async () => {
+    const { deps, device } = await harness();
+    // The SAME deviceId under a different account must not resolve. Storage
+    // is keyed by (accountId, deviceId), so a cross-account read finds
+    // nothing and the caller is refused rather than served another tenant.
+    const path = `/api/accounts/other-account/directory`;
+    const request: AccountDirectoryRequest = {
+      accountId: "other-account",
+      deviceId,
+      signerPubHex: hex(device.publicKey),
+      method: "GET",
+      path,
+      requestId: "cc".repeat(16),
+      issuedAt: now,
+    };
+    const signed = { request, signature: signAccountDirectoryRequest(request, device) };
+    expect((await handleGetAccountDirectory(deps, "other-account", signed)).status).toBe(403);
+  });
+
+  it("never lets a revoked device read or write the directory again", async () => {
+    const { deps, admin, other } = await harness();
+    await deps.identities.revoke(accountId, otherDeviceId, now);
+    const dirPath = `/api/accounts/${accountId}/directory`;
+    expect((await handleGetAccountDirectory(
+      deps, accountId, auth(dirPath, "GET", otherDeviceId, other),
+    )).status).toBe(403);
+    const profilePath = `/api/accounts/${accountId}/profile`;
+    expect((await handleGetAccountProfile(
+      deps, accountId, auth(profilePath, "GET", otherDeviceId, other),
+    )).status).toBe(403);
+    const encrypted = encryptAccountProfile("After revocation", deriveAccountProfileKey(umk), {
+      accountId, revision: 1, keyVersion: 1, nonce,
+    });
+    const unsigned = { ...encrypted, issuedAt: now, signerPubHex: hex(admin.publicKey) };
+    const profile = { ...unsigned, signatureHex: signAccountProfile(unsigned, admin) };
+    expect((await handlePutAccountProfile(
+      deps, accountId, auth(profilePath, "PUT", otherDeviceId, other), { profile, expectedRevision: 0 },
+    )).status).toBe(403);
+  });
+});
