@@ -5,9 +5,10 @@
  * While the box has NO SWK it polls the `.com` swk lane; when the owner's phone
  * has deposited an IRK-signed delivery sealing the SWK to THIS box's identity,
  * the daemon verifies under the config-pinned owner IRK, unseals with the box
- * identity key, persists swk.hex, marks idempotency, and restarts. Tests:
+ * identity key, persists swk.hex, writes an audit marker, and restarts. Tests:
  *   - happy path: verified delivery → persist runs once + marker written + restart fired;
- *   - idempotency: a re-poll after the marker is present never re-claims/restarts;
+ *   - recovery: an orphan marker never blocks a replacement deposit while the
+ *     SWK file is still absent;
  *   - 404 (no deposit) → keep polling, no persist;
  *   - rejection WITHOUT persisting for a forged sig, a wrong-box delivery, and junk;
  *   - swkHex-present path: the consumer is gated off entirely (proven via the helper).
@@ -202,7 +203,7 @@ describe("claimSwkDeposit", () => {
     expect(h.restarted).toBe(0);
   });
 
-  it("idempotent: a re-poll after the marker is present never re-claims", async () => {
+  it("an orphan marker does not block a replacement deposit while SWK is absent", async () => {
     const irk = makeKey(1);
     const boxKey = makeKey(9);
     const marker = inMemMarker();
@@ -212,9 +213,9 @@ describe("claimSwkDeposit", () => {
       markerStore: marker,
     });
     const out = await claimSwkDeposit(h.opts(irk, boxKey));
-    expect(out).toEqual({ claimed: false, reason: "already-claimed" });
-    expect(h.persisted).toEqual([]);
-    expect(h.restarted).toBe(0);
+    expect(out).toEqual({ claimed: true, swkHex: hex(SWK) });
+    expect(h.persisted).toEqual([hex(SWK)]);
+    expect(h.restarted).toBe(1);
   });
 
   it("forged signature → rejected WITHOUT persisting", async () => {

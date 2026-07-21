@@ -76,8 +76,7 @@ describe("swkHexFromInstallBlob", () => {
 });
 
 describe("persistSwkHex", () => {
-  it("is non-fatal when the path is unwritable", async () => {
-    // A directory-as-file target makes the write fail; the helper swallows it.
-    await expect(persistSwkHex(dir, VALID_SWK)).resolves.toBeUndefined();
+  it("surfaces an unwritable target so a consumed deposit is never marked durable", async () => {
+    await expect(persistSwkHex(dir, VALID_SWK)).rejects.toThrow();
   });
 });

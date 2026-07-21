@@ -804,6 +804,9 @@ struct ServerDetailContainer: View {
                     lastSeen: pod?.humanizedLastSeen(),
                     comingUp: pod.map { app.liveness(for: $0) == .comingOnline && $0.status != .pending } ?? false,
                     pairing: isPairing,
+                    verifiedCertStatus: pod.flatMap {
+                        CertPinRegistry.shared.verifiedReport(for: $0.fqdn)
+                    },
                     onRefresh: {
                         async let a: Void = detailVm.load()
                         async let b: Void = metricsVm.load()

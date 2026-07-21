@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { X509Certificate } from "node:crypto";
 import {
   ed,
   signServerRevokeBySelf,
@@ -425,20 +426,34 @@ export async function swkHexFromInstallBlob(): Promise<string | null> {
   }
 }
 
-/** Best-effort persist of the SWK hex to /var/flagship/swk.hex (mode 0600), so
- *  reboots resolve via the existing on-disk path and never re-read the blob.
- *  Non-fatal: a write failure just means the next boot re-reads the blob. */
+/** Persist the SWK hex to /var/flagship/swk.hex (mode 0600). A deposit claim
+ *  MUST observe write failure so it never marks a consumed secret as durable. */
 export async function persistSwkHex(path: string, swkHex: string): Promise<void> {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  const tmp = `${path}.tmp`;
+  await writeFile(tmp, swkHex.trim() + "\n", { mode: 0o600 });
+  await rename(tmp, path);
+}
+
+/** Snapshot the certificate metadata the synchronous screens BFF needs. */
+export function liveCertInfo(
+  certPem: string,
+  notAfter: number,
+  names: string[],
+): { notAfter?: number; notBefore?: number; sans?: string[] } {
+  let notBefore: number | undefined;
   try {
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    const tmp = `${path}.tmp`;
-    await writeFile(tmp, swkHex.trim() + "\n", { mode: 0o600 });
-    await rename(tmp, path);
-  } catch (e) {
-    console.warn(
-      `[daemon] could not persist swk.hex (${(e as Error).message}); will re-read the install blob next boot`,
-    );
+    const parsed = Date.parse(new X509Certificate(certPem).validFrom);
+    if (Number.isFinite(parsed)) notBefore = parsed;
+  } catch {
+    // The cert is already installed by the runtime. Parsing metadata is
+    // presentation-only; expiry + SANs remain useful if introspection fails.
   }
+  return {
+    ...(Number.isFinite(notAfter) ? { notAfter } : {}),
+    ...(notBefore !== undefined ? { notBefore } : {}),
+    ...(names.length > 0 ? { sans: [...names] } : {}),
+  };
 }
 
 /** Best-effort persist of the CGK hex to /var/flagship/cgk.hex (mode 0600), so a
@@ -608,7 +623,13 @@ async function main(): Promise<void> {
     if (fromBlob) {
       swkHex = fromBlob;
       console.log("[daemon] SWK provisioned from install blob; service platform enabled");
-      await persistSwkHex(swkHexFilePath, fromBlob);
+      try {
+        await persistSwkHex(swkHexFilePath, fromBlob);
+      } catch (e) {
+        console.warn(
+          `[daemon] could not persist swk.hex (${(e as Error).message}); will re-read the install blob next boot`,
+        );
+      }
     }
   }
   // When NOTHING above provisions an SWK the box stays platform-less — say so
@@ -925,6 +946,9 @@ async function main(): Promise<void> {
     readLeads: () => gossipLoopRef.current?.currentLeads() ?? [],
     readTrustStatus: () => relayLockdownRef.current?.trustStatus() ?? null,
   });
+  const liveCertInfoRef: {
+    current: { notAfter?: number; notBefore?: number; sans?: string[] } | null;
+  } = { current: null };
 
   let runtime: DaemonRuntime;
   try {
@@ -973,6 +997,7 @@ async function main(): Promise<void> {
       // gated here on the cert actually landing — not when startDaemonRuntime
       // resolves (which happens BEFORE the first cert attempt).
       onCertIssued: (cert, notAfter, names) => {
+        liveCertInfoRef.current = liveCertInfo(cert.certPem, notAfter, names);
         void reportStatus("live");
         // Feed the signed daemon-status heartbeat with the freshly-issued
         // cert so /pods gets REAL fingerprint/validity/issuer + a fresh
@@ -1145,6 +1170,7 @@ async function main(): Promise<void> {
       pullStateStore,
       updateClient,
       updateScheduler,
+      liveCertInfoRef,
     });
   } catch (e) {
     const msg = (e as Error).message ?? String(e);
@@ -1928,6 +1954,9 @@ async function wireRuntimeSurfaces(deps: {
   pullStateStore: FileAppPullStateStore;
   updateClient: UpdateClient;
   updateScheduler: UpdateScheduler;
+  liveCertInfoRef: {
+    current: { notAfter?: number; notBefore?: number; sans?: string[] } | null;
+  };
 }): Promise<void> {
   const {
     runtime,
@@ -1948,6 +1977,7 @@ async function wireRuntimeSurfaces(deps: {
     pullStateStore,
     updateClient,
     updateScheduler,
+    liveCertInfoRef,
   } = deps;
 
   // Wire vibe-code (legacy /api/llm/sessions) + the BFF /api/screens/*
@@ -2324,6 +2354,7 @@ async function wireRuntimeSurfaces(deps: {
     startedAt: Date.now(),
     servicePlatform: runtime.servicePlatform,
     pairedSessions,
+    certInfo: () => liveCertInfoRef.current,
     tabRegistry: browserBundle?.tabRegistry ?? null,
     appBackup: runtime.appBackup,
     urlController: runtime.urlController,

@@ -28,9 +28,9 @@ import {
  *     names OUR box AND the seal opens to a 32-byte SWK. A forged / wrong-box /
  *     wrong-owner / junk delivery is rejected and we KEEP polling — never brick,
  *     never persist garbage.
- *   - Idempotent: a local marker records a successful claim, so a re-poll (or a
- *     reboot before the restart lands) never re-claims. `.com`'s consume-once is
- *     the primary guard; the marker is belt-and-suspenders.
+ *   - Idempotent: `.com` consumes each deposit once and the poller stops after a
+ *     durable claim. The local marker is audit-only; while `swk.hex` is absent it
+ *     must never block a fresh replacement deposit.
  */
 
 const HEX = /^[0-9a-f]+$/;
@@ -79,7 +79,9 @@ export function decodeAndVerifySwkCarrier(args: {
   return bytesToHex(swk);
 }
 
-/** Records that an SWK claim already ran (idempotency). */
+/** Records that an SWK claim ran. The marker is audit-only: this consumer is
+ * constructed only while the SWK file is absent, so a marker in that state is
+ * evidence of an interrupted/failed prior claim, not proof the key is durable. */
 export interface SwkClaimMarkerStore {
   has(): Promise<boolean>;
   mark(swkHex: string): Promise<void>;
@@ -128,14 +130,14 @@ export interface ClaimSwkDepositOptions {
    * and NOT restarted, stranding the box the instant it consumes its SWK.
    */
   restart: () => void;
-  /** Idempotency marker store. */
+  /** Audit marker store. */
   markerStore: SwkClaimMarkerStore;
   fetchImpl?: typeof fetch;
   onLog?: (m: string) => void;
 }
 
 export type SwkClaimOutcome =
-  | { claimed: false; reason: "already-claimed" | "no-deposit" | "rejected" | "error" }
+  | { claimed: false; reason: "no-deposit" | "rejected" | "error" }
   | { claimed: true; swkHex: string };
 
 /**
@@ -145,13 +147,6 @@ export type SwkClaimOutcome =
 export async function claimSwkDeposit(opts: ClaimSwkDepositOptions): Promise<SwkClaimOutcome> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const log = opts.onLog ?? (() => {});
-
-  // Belt-and-suspenders: if a prior poll already claimed, never do it again.
-  try {
-    if (await opts.markerStore.has()) return { claimed: false, reason: "already-claimed" };
-  } catch {
-    /* a missing/unreadable marker is treated as "not yet claimed" */
-  }
 
   const base = opts.controlPlaneBaseUrl.replace(/\/+$/, "");
   const url = `${base}/api/server/${encodeURIComponent(opts.serverDomain)}/swk-deposit`;
@@ -217,8 +212,8 @@ export interface SwkDepositPoller {
 
 /**
  * Poll the swk lane on the daemon heartbeat cadence (default 5 min). Stops itself
- * after a successful claim (the restart is imminent) or after an already-claimed
- * result. Mirrors buildSelfDeletePoller's shape; the timer is unref'd so it never
+ * after a successful claim (the restart is imminent). Mirrors
+ * buildSelfDeletePoller's shape; the timer is unref'd so it never
  * keeps the process alive on its own. The first tick fires immediately so a box
  * with a deposit already waiting comes online without a poll-interval delay.
  */
@@ -230,7 +225,7 @@ export function buildSwkDepositPoller(
 
   async function pollOnce(): Promise<SwkClaimOutcome> {
     const out = await claimSwkDeposit(opts);
-    if (out.claimed || (!out.claimed && out.reason === "already-claimed")) stop();
+    if (out.claimed) stop();
     return out;
   }
   function stop() {

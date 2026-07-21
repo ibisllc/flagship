@@ -149,6 +149,22 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-20 (Leti certificate + service-key recovery) — an online box now
+reports its verified live certificate, and a consumed-but-undurable SWK can
+self-heal.** Production confirmed Leti has a current Let's Encrypt certificate,
+fresh heartbeats, and completed unlock/entitlement mailboxes; the iOS detail
+screen nevertheless showed “No cert yet” because its runtime never supplied the
+optional certificate endpoint. It now falls back to the daemon's signed,
+STK-verified status report. The missing vibe-code platform traced to a separate
+durability hole: the daemon swallowed an SWK write failure, acknowledged the
+claim, then treated its audit marker as proof that the key existed forever. SWK
+persistence now fails closed, orphan markers permit a replacement deposit, and
+iOS recognizes the exact unavailable-platform response and immediately resends
+the key from the unlocked session. The daemon also exposes live certificate
+metadata through its local screens surface. **Remaining (owner):** retry Leti's
+vibe build from the rebuilt iOS app; the daemon-side recovery hardening reaches
+existing boxes with their next daemon update or reburn.
+
 **2026-07-20 (stale box-session recovery) — an online box can no longer leave
 the iOS detail page on “Connecting…” forever.** A missing pairing deposit left
 Leti rejecting the create-time local session token with 401; the app classified
