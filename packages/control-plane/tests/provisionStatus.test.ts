@@ -37,7 +37,7 @@ async function seedOrderWithOwner(
       providerToken: "https://push.example/endpoint",
       pushX25519PubHex: "dd".repeat(32),
       registrationSignatureHex: "ee".repeat(64),
-      label: "Owner phone",
+      deviceId: "d1".repeat(16),
       registeredAt: 2_000,
       lastSeenAt: 2_000,
     });

@@ -35,7 +35,7 @@ function pushRow(overrides: Partial<PushTokenRecord> = {}): PushTokenRecord {
     providerToken: "ptoken",
     pushX25519PubHex: "aa".repeat(32),
     registrationSignatureHex: "bb".repeat(64),
-    label: "iPhone 15",
+    deviceId: "aa".repeat(16),
     registeredAt: 1_700_000_000_000,
     lastSeenAt: 1_700_000_000_000,
     ...overrides,
