@@ -101,6 +101,12 @@ export async function runDemoProvisioningPoller(
         activeServerFqdn: fqdn,
         activeServerIp: live.ipv4,
         lastActivityAt: nowMs(deps),
+        // The install is over. Leaving the last in-flight phase behind makes a
+        // running server advertise mid-install progress forever — especially
+        // when the provider server was ADOPTED and never replayed the later
+        // phases at all.
+        provisionPhase: null,
+        provisionPhaseAt: null,
       },
     );
     if (!ready) continue;
@@ -134,12 +140,17 @@ export interface DemoServerBlock {
 }
 
 export function demoServerBlockFromRow(row: DemoUserRecord): DemoServerBlock {
+  const status = publicStatus(row);
   return {
     fqdn: row.activeServerFqdn ?? demoServerFqdn(row.username),
-    status: publicStatus(row),
+    status,
     ttlIdleMinutes: row.ttlIdleMinutes,
-    phase: row.provisionPhase ?? null,
-    phaseAt: row.provisionPhaseAt ?? null,
+    // `phase` describes provisioning PROGRESS. Once the server is up it is
+    // meaningless, and reporting a stale one contradicts the status beside it.
+    // Suppressed defensively here too, so rows written before the transition
+    // learned to clear it don't keep lying.
+    phase: status === "up" ? null : (row.provisionPhase ?? null),
+    phaseAt: status === "up" ? null : (row.provisionPhaseAt ?? null),
     ...(row.provisionLastError ? { lastError: row.provisionLastError } : {}),
     ...(row.activeServerIp ? { ip: row.activeServerIp } : {}),
     ...(row.region ? { region: row.region } : {}),

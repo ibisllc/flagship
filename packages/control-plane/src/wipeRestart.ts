@@ -32,8 +32,12 @@ import {
   type WipeRestart,
 } from "@flagship/protocol";
 import type {
+  AccountDirectoryKeyGrantStorage,
+  AccountProfileStorage,
   AuditEventStorage,
   DeviceCapabilityGrantStorage,
+  DeviceManagedProfileStorage,
+  DeviceSelfProfileStorage,
   PushTokenStorage,
   UsernameStorage,
   WebauthnRecoveryStorage,
@@ -70,6 +74,21 @@ export interface WipeRestartDeps {
    * matches v1.1 (no grant accounting).
    */
   deviceCapabilityGrants?: DeviceCapabilityGrantStorage;
+  /**
+   * The encrypted account/device names are sealed under keys DERIVED FROM THE
+   * UMK. Wipe-restart installs a NEW UMK, so every stored ciphertext becomes
+   * permanently undecryptable the instant the rotation lands — no client will
+   * ever read it again. Leaving it behind makes names fall back to opaque
+   * forever while dead ciphertext accumulates against the account.
+   *
+   * When wired, wipe-restart deletes those records so the account comes back
+   * cleanly unnamed and can be renamed under the new key. Same deploy-safe
+   * degrade as the grant stores: absent dep ⇒ v1.1 behavior.
+   */
+  accountProfiles?: AccountProfileStorage;
+  deviceSelfProfiles?: DeviceSelfProfileStorage;
+  deviceManagedProfiles?: DeviceManagedProfileStorage;
+  accountDirectoryKeyGrants?: AccountDirectoryKeyGrantStorage;
   maxAgeMs?: number;
   rateLimitMs?: number;
   idempotencyWindowMs?: number;
@@ -296,6 +315,28 @@ export async function handleWipeRestart(
     } catch {
       // Same. The cloud is still wiped at the IRK level; family
       // devices will be forced to re-onboard.
+    }
+  }
+
+  // 2b. Drop the UMK-derived encrypted names. The new UMK derives different
+  //     keys, so the stored ciphertext is cryptographically dead — keeping it
+  //     would only guarantee every name renders opaque forever. Best-effort,
+  //     exactly like the grant revocation above: the IRK has already rotated
+  //     and the audit row must land regardless.
+  let clearedProfiles = 0;
+  for (const store of [
+    deps.accountProfiles,
+    deps.deviceSelfProfiles,
+    deps.deviceManagedProfiles,
+    // Directory-key grants seal the OLD directory key to a device; after the
+    // rotation they hand out a key that decrypts nothing.
+    deps.accountDirectoryKeyGrants,
+  ]) {
+    if (!store) continue;
+    try {
+      clearedProfiles += await store.purgeForAccount(r.username);
+    } catch {
+      // Same rationale as the grant loop: never fail-stop the rotation.
     }
   }
 

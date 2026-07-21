@@ -2507,12 +2507,26 @@ export type ProfileWriteResult<T> =
 export interface AccountProfileStorage {
   get(accountId: string): Promise<AccountProfileRecord | undefined>;
   put(rec: AccountProfileRecord, expectedRevision: number): Promise<ProfileWriteResult<AccountProfileRecord>>;
+  /**
+   * Remove every record for the account. Used when the account's UMK rotates
+   * (wipe-restart): these payloads are sealed under UMK-derived keys, so after
+   * the rotation they are undecryptable by anyone, forever. Returns the number
+   * of rows removed.
+   */
+  purgeForAccount(accountId: string): Promise<number>;
 }
 
 export interface DeviceSelfProfileStorage {
   get(accountId: string, deviceId: string): Promise<DeviceSelfProfileRecord | undefined>;
   listForAccount(accountId: string): Promise<DeviceSelfProfileRecord[]>;
   put(rec: DeviceSelfProfileRecord, expectedRevision: number): Promise<ProfileWriteResult<DeviceSelfProfileRecord>>;
+  /**
+   * Remove every record for the account. Used when the account's UMK rotates
+   * (wipe-restart): these payloads are sealed under UMK-derived keys, so after
+   * the rotation they are undecryptable by anyone, forever. Returns the number
+   * of rows removed.
+   */
+  purgeForAccount(accountId: string): Promise<number>;
 }
 
 export interface DeviceManagedProfileStorage {
@@ -2520,6 +2534,13 @@ export interface DeviceManagedProfileStorage {
   listForAccount(accountId: string): Promise<DeviceManagedProfileRecord[]>;
   put(rec: DeviceManagedProfileRecord, expectedRevision: number): Promise<ProfileWriteResult<DeviceManagedProfileRecord>>;
   delete(accountId: string, deviceId: string, expectedRevision: number): Promise<boolean>;
+  /**
+   * Remove every record for the account. Used when the account's UMK rotates
+   * (wipe-restart): these payloads are sealed under UMK-derived keys, so after
+   * the rotation they are undecryptable by anyone, forever. Returns the number
+   * of rows removed.
+   */
+  purgeForAccount(accountId: string): Promise<number>;
 }
 
 export type AccountDirectoryKeyKind = "account-profile" | "device-directory";
@@ -2542,6 +2563,13 @@ export interface AccountDirectoryKeyGrantStorage {
   get(grantId: string): Promise<AccountDirectoryKeyGrantRecord | undefined>;
   listActiveForDevice(accountId: string, deviceId: string, now: number): Promise<AccountDirectoryKeyGrantRecord[]>;
   revoke(grantId: string, at: number): Promise<boolean>;
+  /**
+   * Remove every record for the account. Used when the account's UMK rotates
+   * (wipe-restart): these payloads are sealed under UMK-derived keys, so after
+   * the rotation they are undecryptable by anyone, forever. Returns the number
+   * of rows removed.
+   */
+  purgeForAccount(accountId: string): Promise<number>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

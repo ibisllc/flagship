@@ -423,3 +423,88 @@ describe("handleWipeRestart — concurrency", () => {
     expect([403, 409]).toContain(res.status);
   });
 });
+
+/**
+ * Wipe-restart installs a NEW UMK. The account and device names are sealed
+ * under keys DERIVED from the UMK, so the instant the rotation lands every
+ * stored ciphertext is undecryptable — by the owner, by any device, forever.
+ * Leaving it in place means names render opaque permanently while dead
+ * ciphertext sits against the account.
+ */
+describe("handleWipeRestart — UMK rotation clears the now-undecryptable names", () => {
+  const DEVICE_ID = "00112233445566778899aabbccddeeff";
+
+  async function seedEncryptedNames(s: InMemoryStorage): Promise<void> {
+    await s.deviceIdentities.put({
+      accountId: USERNAME, deviceId: DEVICE_ID, devicePubHex: "aa".repeat(32),
+      platformClass: "ios", createdAt: 1, lastSeenAt: 1, revokedAt: null,
+    });
+    await s.accountProfiles.put({
+      accountId: USERNAME, revision: 1, keyVersion: 1,
+      nonceHex: "11".repeat(12), ciphertextHex: "deadbeef",
+      signerPubHex: "bb".repeat(32), signatureHex: "cc".repeat(64),
+      issuedAt: 1, updatedAt: 1,
+    }, 0);
+    await s.deviceSelfProfiles.put({
+      accountId: USERNAME, deviceId: DEVICE_ID, revision: 1, keyVersion: 1,
+      nonceHex: "22".repeat(12), ciphertextHex: "feedface",
+      signerPubHex: "aa".repeat(32), signatureHex: "dd".repeat(64),
+      issuedAt: 1, updatedAt: 1,
+    }, 0);
+    await s.deviceManagedProfiles.put({
+      accountId: USERNAME, deviceId: DEVICE_ID, revision: 1, keyVersion: 1,
+      nonceHex: "33".repeat(12), ciphertextHex: "cafebabe", locked: true,
+      signerPubHex: "bb".repeat(32), signatureHex: "ee".repeat(64),
+      issuedAt: 1, updatedAt: 1,
+    }, 0);
+    await s.accountDirectoryKeyGrants.put({
+      grantId: "grant-1", accountId: USERNAME, recipientDeviceId: DEVICE_ID,
+      keyKind: "device-directory", sealedKeyHex: "0badc0de",
+      signerPubHex: "bb".repeat(32), signatureHex: "ff".repeat(64),
+      issuedAt: 1, expiresAt: 9_999_999_999_999, revokedAt: null,
+    });
+  }
+
+  function depsWithProfiles(s: InMemoryStorage) {
+    return {
+      ...deps(s),
+      deviceCapabilityGrants: s.deviceCapabilityGrants,
+      accountProfiles: s.accountProfiles,
+      deviceSelfProfiles: s.deviceSelfProfiles,
+      deviceManagedProfiles: s.deviceManagedProfiles,
+      accountDirectoryKeyGrants: s.accountDirectoryKeyGrants,
+    };
+  }
+
+  it("purges account, self, managed profiles and directory key grants", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const s = await setup(oldIrk);
+    await seedEncryptedNames(s);
+    // Precondition: the ciphertext really is there before the rotation.
+    expect(await s.accountProfiles.get(USERNAME)).toBeDefined();
+    expect(await s.deviceSelfProfiles.get(USERNAME, DEVICE_ID)).toBeDefined();
+    expect(await s.deviceManagedProfiles.get(USERNAME, DEVICE_ID)).toBeDefined();
+
+    const res = await handleWipeRestart(
+      depsWithProfiles(s), USERNAME, await makeBody({ oldIrk, newIrk }), undefined,
+    );
+    expect(res.status).toBe(200);
+
+    // Nothing sealed under the dead UMK survives.
+    expect(await s.accountProfiles.get(USERNAME)).toBeUndefined();
+    expect(await s.deviceSelfProfiles.get(USERNAME, DEVICE_ID)).toBeUndefined();
+    expect(await s.deviceManagedProfiles.get(USERNAME, DEVICE_ID)).toBeUndefined();
+    expect(await s.accountDirectoryKeyGrants.listActiveForDevice(USERNAME, DEVICE_ID, 2)).toEqual([]);
+  });
+
+  it("still rotates when the profile stores are not wired (deploy-safe degrade)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const s = await setup(oldIrk);
+    await seedEncryptedNames(s);
+    const res = await handleWipeRestart(deps(s), USERNAME, await makeBody({ oldIrk, newIrk }), undefined);
+    expect(res.status).toBe(200);
+    expect((await s.usernames.get(USERNAME))?.irkPubHex).toBe(bytesToHex(newIrk.publicKey));
+  });
+});

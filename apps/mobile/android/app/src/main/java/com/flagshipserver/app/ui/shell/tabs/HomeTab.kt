@@ -244,6 +244,8 @@ fun HomeTab() {
             HomeScreen(
                 state = vm.state.collectAsState().value,
                 username = app.currentUser.collectAsState().value ?: "",
+                accountDisplayName = app.activeProfile?.accountDisplayName,
+                deviceDisplayName = app.activeProfile?.deviceDisplayName,
                 pods = pods,
                 leaderPodId = app.leaderPodId.collectAsState().value,
                 onOpenPod = { pod ->

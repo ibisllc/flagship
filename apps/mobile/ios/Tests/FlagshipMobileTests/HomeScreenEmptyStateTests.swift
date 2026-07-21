@@ -39,3 +39,39 @@ final class HomeScreenEmptyStateTests: XCTestCase {
         XCTAssertFalse(HomeScreen.shouldShowLoadError(pods: pods))
     }
 }
+
+/// The account's CHOSEN name is what Home leads with. It is ciphertext on the
+/// wire, decrypted locally, so it can legitimately be unavailable — locked
+/// account, offline, or never set — and Home must degrade to the routing
+/// handle rather than showing nothing or leaking a placeholder.
+@MainActor
+final class HomeWelcomeHierarchyTests: XCTestCase {
+
+    func test_decryptedAccountName_leads() {
+        XCTAssertEqual(
+            HomeScreen.welcomeLine(accountDisplayName: "Johnson Family", username: "jolly-quince"),
+            "Welcome back to Johnson Family."
+        )
+    }
+
+    func test_noAccountName_fallsBackToHandle() {
+        XCTAssertEqual(
+            HomeScreen.welcomeLine(accountDisplayName: nil, username: "jolly-quince"),
+            "Welcome back, jolly-quince."
+        )
+    }
+
+    func test_emptyAccountName_isTreatedAsAbsent() {
+        XCTAssertEqual(
+            HomeScreen.welcomeLine(accountDisplayName: "", username: "jolly-quince"),
+            "Welcome back, jolly-quince."
+        )
+    }
+
+    func test_neitherAvailable_staysGeneric() {
+        XCTAssertEqual(
+            HomeScreen.welcomeLine(accountDisplayName: nil, username: ""),
+            "Welcome back."
+        )
+    }
+}

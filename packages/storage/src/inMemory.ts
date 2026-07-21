@@ -629,6 +629,16 @@ abstract class InMemoryProfileStorage<T extends AccountProfileRecord> {
     this.rows.set(key, stored);
     return { ok: true as const, record: this.clone(stored) };
   }
+  async purgeForAccount(accountId: string): Promise<number> {
+    const account = accountId.toLowerCase();
+    let removed = 0;
+    for (const [key, row] of [...this.rows.entries()]) {
+      if (row.accountId.toLowerCase() !== account) continue;
+      this.rows.delete(key);
+      removed += 1;
+    }
+    return removed;
+  }
 }
 
 export class InMemoryAccountProfileStorage
@@ -678,6 +688,16 @@ export class InMemoryDeviceManagedProfileStorage
 export class InMemoryAccountDirectoryKeyGrantStorage
   implements AccountDirectoryKeyGrantStorage {
   private rows = new Map<string, AccountDirectoryKeyGrantRecord>();
+  async purgeForAccount(accountId: string): Promise<number> {
+    const account = accountId.toLowerCase();
+    let removed = 0;
+    for (const [key, row] of [...this.rows.entries()]) {
+      if (row.accountId.toLowerCase() !== account) continue;
+      this.rows.delete(key);
+      removed += 1;
+    }
+    return removed;
+  }
   async put(rec: AccountDirectoryKeyGrantRecord) {
     if (this.rows.has(rec.grantId)) return { ok: false as const, reason: "duplicate grant id" };
     this.rows.set(rec.grantId, {

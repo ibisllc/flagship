@@ -2579,6 +2579,14 @@ export async function tryControlPlane(
           // v2 — wipe also revokes every active DeviceCapabilityGrant
           // on the cloud (their old-IRK signatures are now dead anyway).
           deviceCapabilityGrants: storage.deviceCapabilityGrants,
+          // The encrypted names are sealed under UMK-derived keys. The new UMK
+          // derives different keys, so these become undecryptable the moment
+          // the rotation lands — clear them instead of leaving every name
+          // permanently opaque with dead ciphertext behind it.
+          accountProfiles: storage.accountProfiles,
+          deviceSelfProfiles: storage.deviceSelfProfiles,
+          deviceManagedProfiles: storage.deviceManagedProfiles,
+          accountDirectoryKeyGrants: storage.accountDirectoryKeyGrants,
         },
         decodeURIComponent(m[1]!),
         await readJson(request),

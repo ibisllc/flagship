@@ -246,6 +246,40 @@ then verifies the signed daemon certificate report, so a real live certificate
 no longer remains hidden as “No certificate yet.” **Remaining (owner):** rebuild
 the metal box from current `main` and validate TLS detail + one Vibe Code build.
 
+**2026-07-21 (private naming SHIPPED + post-review gap closure) — merged,
+deployed, and live in production.** `main` carries the cutover (merge
+`5a367d9d`); prod D1 was wiped (58 tables), migration **0083** applied and
+stamped, `.com` deployed, and `@openai-build` recreated through the new
+provisioner (server up, valid LE cert). The signed + notarized Flagship Studio
+build is published at `flagshipserver.com/download/mac` (live bytes
+sha-verified). An independent review then found four blocking gaps, all now
+closed:
+- **UMK reset orphaned the encrypted names.** Wipe-restart installs a new UMK,
+  and every profile ciphertext is sealed under UMK-derived keys — so the
+  rotation made them permanently undecryptable while they sat in the database,
+  leaving names opaque forever. Wipe-restart now purges account/self/managed
+  profiles and directory-key grants via a new `purgeForAccount` on each store
+  (both adapters), fail-soft and deploy-safe-degrading like the grant
+  revocation beside it.
+- **Home never showed the hierarchy.** All three clients led with the routing
+  handle, so the feature was invisible where it matters most. Home now reads
+  "Welcome back to &lt;account name&gt;" + "This device: &lt;device name&gt;" from the
+  LOCALLY decrypted directory, degrading to the handle when locked/offline.
+- **Demo status contradicted itself.** A running demo advertised a mid-install
+  phase (`status: up` + `phase: downloading`) because promotion to `ready`
+  never cleared it and the projection emitted it regardless — very visible on
+  an ADOPTED provider server that never replays later phases. Cleared at the
+  transition and suppressed whenever status is `up`.
+- **Migration 0083 was stamped 2025-07-21**, a year early (a hardcoded
+  timestamp). Corrected in prod to 2026-07-21.
+**Still open (not done):** restricted-device profile-key delivery is
+server-only — storage, route, and authorization exist, but NO client seals or
+unseals `sealedKeyHex`, and its test uses dummy ciphertext rather than a real
+round trip. Treat that capability as unimplemented until a client path lands.
+Also: several native rename/lock UI tests were deleted without equivalent
+replacements, and some active tests still carry obsolete plaintext display
+fixtures.
+
 **2026-07-21 (private-name audit continued) — the audit slice is complete
 and the whole TypeScript/native matrix is green; branch is still local and
 production untouched.** Work continues in `/private/tmp/flagship-private-names`
@@ -304,7 +338,8 @@ recreate `@openai-build` with encrypted account name `OpenAI Build Week`. No
 merge, push, deployment, production mutation, or demo teardown has occurred.
 
 **2026-07-20 (later, resumable checkpoint) — private-name audit is partly
-complete; branch remains local and production untouched.** Work continues in
+complete; branch was local at the time of writing (SUPERSEDED — see the entry
+above: this work is now merged, deployed, and live).** Work continued in
 the isolated `/private/tmp/flagship-private-names` worktree on
 `feat/private-account-device-names`; the primary worktree and concurrent
 Codex/Claude changes remain untouched. Commits are kept as reviewable protocol,
@@ -331,7 +366,8 @@ Only after those gates: rebase/merge to current `main`, push, resolve exact
 production D1/provider targets, apply the clean schema/wipe, deploy `.com`
 (`.services` only if required), rebuild clients, and administratively tear down
 then recreate `@openai-build` with encrypted account name `OpenAI Build Week`.
-No merge, push, deployment, production mutation, or demo teardown has occurred.
+(Accurate when written; superseded — the merge, deploy, wipe, and demo
+recreation have all since happened. See the 2026-07-21 entry above.)
 
 **2026-07-20 (feature branch checkpoint) — private account/device naming and
 atomic demo provisioning are build-complete in the core path; rollout is NOT
