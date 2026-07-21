@@ -163,7 +163,9 @@ checkpoint, log changes, and warn after three silent minutes; no raw syslog,
 package output, recipe bytes, keys, identifiers, or content leave the guest.
 The capability is cleared after install success; Unix VM bundle directories and
 config/disk/installer/EFI artifacts are owner-only, including existing bundles
-hardened on load. Design decision:
+hardened on load. The updated Developer-ID Mac app is signed, notarized, stapled,
+installed in `/Applications`, and byte-verified against the live download; the
+pushed Linux source passed pytest + GTK render smoke in CI. Design decision:
 Host-here will use a signed dual-arch generalized LUKS appliance, downloaded once
 then APFS-cloned (Mac) / qcow2-overlaid (Linux/Windows) and specialized/rekeyed on
 first boot; the per-server Debian install remains only a compatibility path and
