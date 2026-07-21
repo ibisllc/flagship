@@ -28,13 +28,12 @@ describe("add-paired-session PhoneOrder vector", () => {
       type: "add-paired-session",
       serverId: SERVER,
       token: "deadbeef",
-      label: "Harry's iPhone",
       issuedAt: 1700,
     };
     const psk = makeKey(9);
     const sig = signPhoneOrder(order, psk);
     const expected = new TextEncoder().encode(
-      `flagship/order/add-paired-session/v1|${SERVER}|deadbeef|Harry's iPhone|1700`,
+      `flagship/order/add-paired-session/v2|${SERVER}|deadbeef|1700`,
     );
     expect(ed.verify(sig, expected, psk.publicKey)).toBe(true);
   });
@@ -45,25 +44,23 @@ describe("add-paired-session PhoneOrder vector", () => {
       type: "add-paired-session",
       serverId: SERVER,
       token: "abc123",
-      label: "iPhone",
       issuedAt: 42,
     };
     const sig = signPhoneOrder(order, psk);
     expect(verifyPhoneOrder(order, sig, psk.publicKey)).toBe(true);
   });
 
-  it("a renamed label fails the signature (label is committed)", () => {
+  it("a changed token fails the signature", () => {
     const psk = makeKey(13);
     const order: PhoneOrder = {
       type: "add-paired-session",
       serverId: SERVER,
       token: "t",
-      label: "iPhone",
       issuedAt: 1,
     };
     const sig = signPhoneOrder(order, psk);
-    const renamed: PhoneOrder = { ...order, label: "iPad" };
-    expect(verifyPhoneOrder(renamed, sig, psk.publicKey)).toBe(false);
+    const changed: PhoneOrder = { ...order, token: "other" };
+    expect(verifyPhoneOrder(changed, sig, psk.publicKey)).toBe(false);
   });
 
   it("a captured add-paired-session sig does not verify as remove-paired-session", () => {
@@ -72,7 +69,6 @@ describe("add-paired-session PhoneOrder vector", () => {
       type: "add-paired-session",
       serverId: SERVER,
       token: "t",
-      label: "iPhone",
       issuedAt: 5,
     };
     const sig = signPhoneOrder(add, psk);

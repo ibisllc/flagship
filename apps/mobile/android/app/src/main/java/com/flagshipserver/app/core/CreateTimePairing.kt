@@ -24,7 +24,7 @@ import java.security.SecureRandom
  * cross-platform vector (`packages/protocol/tests/pairingOrder.test.ts`).
  */
 object CreateTimePairing {
-    const val ORDER_TAG = "flagship/order/add-paired-session/v1"
+    const val ORDER_TAG = "flagship/order/add-paired-session/v2"
 
     data class Built(
         /** The plaintext `{request, signature}` JSON (PairingOrderEnvelope shape)
@@ -42,8 +42,8 @@ object CreateTimePairing {
         return HexUtil.encode(b)
     }
 
-    private fun orderCanonicalBytes(serverDomain: String, token: String, label: String, issuedAt: Long): ByteArray =
-        listOf(ORDER_TAG, serverDomain, token, label, issuedAt.toString()).joinToString("|").toByteArray(Charsets.UTF_8)
+    private fun orderCanonicalBytes(serverDomain: String, token: String, issuedAt: Long): ByteArray =
+        listOf(ORDER_TAG, serverDomain, token, issuedAt.toString()).joinToString("|").toByteArray(Charsets.UTF_8)
 
     /**
      * @param irk    the account IRK signer (reused from the create-server
@@ -53,20 +53,14 @@ object CreateTimePairing {
      */
     fun build(
         serverDomain: String,
-        label: String,
         irk: Ed25519Sign,
         now: Long = System.currentTimeMillis(),
         token: String = randomHex(32),
     ): Built {
-        // The label is committed to the order's canonical bytes, which the daemon
-        // re-derives under a fieldGuard that rejects '|' + control chars.
-        val cleaned = label.replace(Regex("[| -]"), " ").trim().ifEmpty { "Android" }
-
-        val orderSig = irk.sign(orderCanonicalBytes(serverDomain, token, cleaned, now))
+        val orderSig = irk.sign(orderCanonicalBytes(serverDomain, token, now))
         val json = PairingOrderEnvelope.toJson(
             serverId = serverDomain,
             token = token,
-            label = cleaned,
             issuedAt = now,
             signatureHex = HexUtil.encode(orderSig),
         )

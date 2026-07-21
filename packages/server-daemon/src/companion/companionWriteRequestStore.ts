@@ -51,8 +51,6 @@ export interface CompanionWriteRequestRow {
   requestId: string;
   /** First 12 chars of the companion's paired-session token. */
   companionTokenPrefix: string;
-  /** Human label captured at redeem time (e.g. "Library iMac"). */
-  companionLabel: string | null;
   kind: CompanionWriteRequestKind;
   /**
    * The unsigned intent body. v1 is `release-server` / `revoke-server`,

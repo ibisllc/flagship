@@ -4,7 +4,7 @@
 // Settings → Companion requests. Surfaces the queue of pending
 // write-requests forwarded by docked companion browsers.
 //
-// Per row: companion label + kind ("release-server" | "revoke-server")
+// Per row: opaque companion code + kind ("release-server" | "revoke-server")
 // + intent summary (serverDomain for release; serverId + reason for
 // revoke) + queuedAt + Approve / Deny buttons.
 //
@@ -65,15 +65,13 @@ function timeLeft(expiresAt, nowMs = Date.now()) {
  * a JSDOM dependency.
  */
 export function renderPendingRowHtml(row, nowMs = Date.now()) {
-  const label = row.companionLabel ?? "(no label)";
   const prefix = row.companionTokenPrefix ?? "";
   const summary = intentSummary(row.kind, row.intent);
   return `
       <div class="card" data-row="${escapeHtml(row.requestId ?? "")}">
         <div class="row row-top">
           <div>
-            <div class="weight-600">${escapeHtml(label)}</div>
-            <div class="value text-xs">${escapeHtml(prefix)}…</div>
+            <div class="weight-600">Session ${escapeHtml(prefix)}</div>
             <div class="faint-sm">queued ${escapeHtml(fmtDate(row.queuedAt))} · ${escapeHtml(timeLeft(row.expiresAt, nowMs))}</div>
           </div>
           <span class="pill">${escapeHtml(row.kind ?? "?")}</span>

@@ -180,7 +180,6 @@ data class BrowserTabsListResponse(val tabs: List<BrowserTab>)
 @Serializable
 data class PairedSessionSummary(
     val tokenPrefix: String,
-    val label: String,
     val addedAt: Long,
     val current: Boolean,
 )
@@ -683,7 +682,7 @@ data class AppInviteRevokeResponse(
 // companions per pod.
 
 @Serializable
-data class CompanionMintTicketRequest(val label: String?)
+class CompanionMintTicketRequest
 
 @Serializable
 data class CompanionMintTicketResponse(
@@ -695,7 +694,6 @@ data class CompanionMintTicketResponse(
 @Serializable
 data class CompanionSummary(
     val tokenPrefix: String,
-    val label: String?,
     val redeemedAt: Long,
     val lastSeenMs: Long,
     val expiresAt: Long,
@@ -728,7 +726,6 @@ data class CompanionRevokeResponse(val ok: Boolean)
 data class CompanionPendingWrite(
     val requestId: String,
     val companionTokenPrefix: String,
-    val companionLabel: String? = null,
     val kind: String,
     val intent: JsonObject,
     val queuedAt: Long,

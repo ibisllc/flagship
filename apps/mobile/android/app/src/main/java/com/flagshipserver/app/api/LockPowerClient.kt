@@ -26,7 +26,6 @@ data class AddPairedSessionInner(
     val type: String = "add-paired-session",
     val serverId: String,
     val token: String,
-    val label: String,
     val issuedAt: Long,
 )
 

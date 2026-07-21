@@ -52,7 +52,6 @@ class CompanionDockViewModelTest {
                 companions = listOf(
                     CompanionSummary(
                         tokenPrefix = "a1b2c3d4",
-                        label = "Living-room laptop",
                         redeemedAt = 1_700_000_000_000L,
                         lastSeenMs = 1_700_000_500_000L,
                         expiresAt = 1_700_014_400_000L,
@@ -67,7 +66,6 @@ class CompanionDockViewModelTest {
         assertEquals(1, s.value.companions.size)
         val c = s.value.companions.first()
         assertEquals("a1b2c3d4", c.tokenPrefix)
-        assertEquals("Living-room laptop", c.label)
         assertEquals(1_700_000_500_000L, c.lastSeenMs)
         assertEquals("Mozilla/5.0", c.userAgent)
     }
@@ -75,30 +73,13 @@ class CompanionDockViewModelTest {
     @Test fun mint_recordsRequestAndSurfacesTicket() = runTest {
         val client = MockScreensClient(simulatedLatencyMs = 0)
         val vm = CompanionDockViewModel(client, scope = backgroundScope)
-        vm.mint("Kitchen tablet").join()
+        vm.mint().join()
         assertEquals(1, client.companionMintCalls.size)
-        assertEquals("Kitchen tablet", client.companionMintCalls.first().label)
         val ticket = vm.mintedTicket.first()
         assertNotNull(ticket)
         assertTrue(ticket!!.ticketId.isNotEmpty())
         assertTrue(ticket.ticketSecret.isNotEmpty())
         assertTrue(ticket.expiresAt > System.currentTimeMillis())
-    }
-
-    @Test fun mint_emptyLabel_isSentAsNull() = runTest {
-        val client = MockScreensClient(simulatedLatencyMs = 0)
-        val vm = CompanionDockViewModel(client, scope = backgroundScope)
-        vm.mint("   ").join()
-        assertEquals(1, client.companionMintCalls.size)
-        assertNull(client.companionMintCalls.first().label)
-    }
-
-    @Test fun mint_nullLabel_isSentAsNull() = runTest {
-        val client = MockScreensClient(simulatedLatencyMs = 0)
-        val vm = CompanionDockViewModel(client, scope = backgroundScope)
-        vm.mint(null).join()
-        assertEquals(1, client.companionMintCalls.size)
-        assertNull(client.companionMintCalls.first().label)
     }
 
     @Test fun mint_transportError_surfacesAsMintError() = runTest {
@@ -107,7 +88,7 @@ class CompanionDockViewModelTest {
                 throw ScreensError.Http(503, "no can do")
         }
         val vm = CompanionDockViewModel(throwing, scope = backgroundScope)
-        vm.mint("anything").join()
+        vm.mint().join()
         val err = vm.mintError.first()
         assertNotNull(err)
         // UX-B: the raw status / body is humanized away.
@@ -122,12 +103,10 @@ class CompanionDockViewModelTest {
                 companions = listOf(
                     CompanionSummary(
                         tokenPrefix = "deadbeef",
-                        label = "Laptop",
                         redeemedAt = 0L, lastSeenMs = 0L, expiresAt = 1L, userAgent = null,
                     ),
                     CompanionSummary(
                         tokenPrefix = "feedface",
-                        label = null,
                         redeemedAt = 0L, lastSeenMs = 0L, expiresAt = 1L, userAgent = null,
                     ),
                 ),
@@ -162,7 +141,7 @@ class CompanionDockViewModelTest {
             companionListFixture = CompanionListResponse(
                 companions = listOf(
                     CompanionSummary(
-                        tokenPrefix = "deadbeef", label = null,
+                        tokenPrefix = "deadbeef",
                         redeemedAt = 0L, lastSeenMs = 0L, expiresAt = 1L, userAgent = null,
                     ),
                 ),
@@ -180,7 +159,7 @@ class CompanionDockViewModelTest {
     @Test fun dismissTicket_clearsBothTicketAndError() = runTest {
         val client = MockScreensClient(simulatedLatencyMs = 0)
         val vm = CompanionDockViewModel(client, scope = backgroundScope)
-        vm.mint("foo").join()
+        vm.mint().join()
         assertNotNull(vm.mintedTicket.first())
         vm.dismissTicket()
         assertNull(vm.mintedTicket.first())

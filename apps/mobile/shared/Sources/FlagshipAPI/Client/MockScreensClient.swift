@@ -184,8 +184,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         return PairedSessionsListResponse(sessions: [
-            .init(tokenPrefix: "a1b2c3d4", label: "iPhone — Harry", addedAt: now - 60_000 * 60 * 24 * 14, current: true),
-            .init(tokenPrefix: "f9e8d7c6", label: "MacBook Pro", addedAt: now - 60_000 * 60 * 24 * 3, current: false)
+            .init(tokenPrefix: "a1b2c3d4", addedAt: now - 60_000 * 60 * 24 * 14, current: true),
+            .init(tokenPrefix: "f9e8d7c6", addedAt: now - 60_000 * 60 * 24 * 3, current: false)
         ])
     }
 

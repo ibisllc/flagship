@@ -909,8 +909,7 @@ struct ServerDetailContainer: View {
         let vm = PodPairViewModel(
             client: lockPower,
             store: sessionStore,
-            serverDomain: fqdn,
-            label: UIDevice.current.name
+            serverDomain: fqdn
         )
         pairVm = vm
         // This affordance is shown only after the detail BFF proved the current
@@ -972,7 +971,7 @@ struct PairedSessionRow: View {
                 Image(systemName: session.current ? "iphone.gen3" : "laptopcomputer")
                     .foregroundColor(session.current ? c.success : c.textMuted)
                 VStack(alignment: .leading) {
-                    Text(session.label).foregroundColor(c.text)
+                    Text("Session \(session.tokenPrefix)").foregroundColor(c.text)
                     Text("token: \(session.tokenPrefix)…")
                         .font(FS.font.mono())
                         .foregroundColor(c.textMuted)

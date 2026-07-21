@@ -45,10 +45,9 @@ class CompanionDockViewModel(
             )
     }
 
-    fun mint(label: String?): Job = scope.launch {
+    fun mint(): Job = scope.launch {
         _mintError.value = null
-        val trimmed = label?.trim()?.ifEmpty { null }
-        runCatching { client.companionMintTicket(CompanionMintTicketRequest(label = trimmed)) }
+        runCatching { client.companionMintTicket(CompanionMintTicketRequest()) }
             .fold(
                 onSuccess = { _mintedTicket.value = it },
                 onFailure = { t -> _mintError.value = failureMessage(t) },

@@ -26,14 +26,13 @@ class CreateTimePairingTest {
     private val pinnedIrkPub =
         "3e4a50e7afdfae54c86e1ccd70a8691d48155e9613cbdbf4d17bad5b6ba68045"
     private val pinnedSignature =
-        "6e63a086d673fa6e5dd8010aba6367a2aba1861210d21a63bce5dc1331b02f64" +
-        "566120c1647b355a51b10a334e01203d48c4d4c279d21d135203d415a70fe109"
+        "f3813a580fae693e082c12b04675da146d59092bc90386da00b88e25d2a6774cb" +
+        "ba99331ac717c617062f17617cb3d41443874f168bf495d43fb2060dabd7707"
     private val token = "a".repeat(64)
-    private val label = "Alice's iPhone"
     private val pinnedJson =
         "{\"request\":{\"type\":\"add-paired-session\"," +
         "\"serverId\":\"$host\",\"token\":\"$token\"," +
-        "\"label\":\"$label\",\"issuedAt\":$issuedAt}," +
+        "\"issuedAt\":$issuedAt}," +
         "\"signature\":\"$pinnedSignature\"}"
 
     private fun irkKeyPair(): Ed25519Sign.KeyPair =
@@ -44,7 +43,7 @@ class CreateTimePairingTest {
         val kp = irkKeyPair()
         assertEquals(pinnedIrkPub, HexUtil.encode(kp.publicKey))
         val built = CreateTimePairing.build(
-            serverDomain = host, label = label, irk = Ed25519Sign(kp.privateKey),
+            serverDomain = host, irk = Ed25519Sign(kp.privateKey),
             now = issuedAt, token = token,
         )
         // Tink Ed25519 is deterministic (RFC 8032) → the order JSON is byte-stable.
@@ -53,7 +52,7 @@ class CreateTimePairingTest {
         // The pinned signature verifies under the pinned IRK pub over the order
         // canonical bytes (verify() throws on mismatch).
         val canonical = listOf(
-            "flagship/order/add-paired-session/v1", host, token, label, issuedAt.toString(),
+            "flagship/order/add-paired-session/v2", host, token, issuedAt.toString(),
         ).joinToString("|").toByteArray(Charsets.UTF_8)
         Ed25519Verify(kp.publicKey).verify(HexUtil.decode(pinnedSignature)!!, canonical)
     }
@@ -63,7 +62,7 @@ class CreateTimePairingTest {
         val irkKp = Ed25519Sign.KeyPair.newKeyPair()
         val irk = Ed25519Sign(irkKp.privateKey)
         val built = CreateTimePairing.build(
-            serverDomain = host, label = "iPhone", irk = irk, now = issuedAt, token = "cd".repeat(32),
+            serverDomain = host, irk = irk, now = issuedAt, token = "cd".repeat(32),
         )
         val boxKp = Ed25519Sign.KeyPair.newKeyPair()
 
@@ -94,7 +93,7 @@ class CreateTimePairingTest {
     fun wrongIdentityCannotOpenDeposit() {
         val irkKp = Ed25519Sign.KeyPair.newKeyPair()
         val irk = Ed25519Sign(irkKp.privateKey)
-        val built = CreateTimePairing.build(serverDomain = host, label = "x", irk = irk)
+        val built = CreateTimePairing.build(serverDomain = host, irk = irk)
         val boxKp = Ed25519Sign.KeyPair.newKeyPair()
         val body = PairingOrderDeposit.buildDeposit(
             username = "alice", serverDomain = host,

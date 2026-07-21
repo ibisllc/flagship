@@ -162,9 +162,7 @@ public struct CompanionRequestsScreen: View {
     }
 
     private func title(for row: CompanionPendingWrite) -> String {
-        let who = row.companionLabel?.isEmpty == false
-            ? row.companionLabel!
-            : row.companionTokenPrefix
+        let who = row.companionTokenPrefix
         switch row.kind {
         case "release-server": return "Release server name — from \(who)"
         case "revoke-server":  return "Revoke server — from \(who)"

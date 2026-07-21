@@ -104,13 +104,11 @@ export type PhoneOrder =
        * daemon stores it in its PairedSessionStore so subsequent calls
        * carrying `Authorization: Flagship-Session <token>` are accepted.
        *
-       * `label` is a human-readable name the host can use to revoke a
-       * specific paired browser later (e.g. "Harry's iPhone").
+       * Sessions are presented and revoked using an opaque token-derived code.
        */
       type: "add-paired-session";
       serverId: ServerId;
       token: string;
-      label: string;
       issuedAt: number;
     }
   | {
@@ -170,7 +168,7 @@ const TAG_ORDER_DELIVER_BAK = "flagship/order/deliver-bak/v1";
 const TAG_ORDER_BROWSER_INPUT = "flagship/order/browser-input-response/v1";
 const TAG_ORDER_ADD_SUBSCRIBER = "flagship/order/add-subscriber/v1";
 const TAG_ORDER_REMOVE_SUBSCRIBER = "flagship/order/remove-subscriber/v1";
-const TAG_ORDER_ADD_PAIRED_SESSION = "flagship/order/add-paired-session/v1";
+const TAG_ORDER_ADD_PAIRED_SESSION = "flagship/order/add-paired-session/v2";
 const TAG_ORDER_REMOVE_PAIRED_SESSION = "flagship/order/remove-paired-session/v1";
 const TAG_ORDER_BACKUP_APP = "flagship/order/backup-app/v1";
 const TAG_ORDER_SET_FRONT_PAGE = "flagship/order/set-front-page/v1";
@@ -230,9 +228,8 @@ function canonicalPhoneOrder(o: PhoneOrder): Bytes {
       );
     case "add-paired-session":
       legacyFieldGuard("token", o.token);
-      legacyFieldGuard("label", o.label);
       return enc.encode(
-        [TAG_ORDER_ADD_PAIRED_SESSION, o.serverId, o.token, o.label, o.issuedAt].join("|"),
+        [TAG_ORDER_ADD_PAIRED_SESSION, o.serverId, o.token, o.issuedAt].join("|"),
       );
     case "remove-paired-session":
       legacyFieldGuard("token", o.token);

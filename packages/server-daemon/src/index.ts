@@ -3041,9 +3041,9 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
         }
       : undefined,
     addPairedSession: deps.pairedSessions
-      ? async ({ token, label }) => {
-          await deps.pairedSessions!.add(token, label);
-          console.log(`[daemon] order: add-paired-session label=${JSON.stringify(label)}`);
+      ? async ({ token }) => {
+          await deps.pairedSessions!.add(token);
+          console.log(`[daemon] order: add-paired-session tokenPrefix=${token.slice(0, 12)}`);
         }
       : undefined,
     removePairedSession: deps.pairedSessions

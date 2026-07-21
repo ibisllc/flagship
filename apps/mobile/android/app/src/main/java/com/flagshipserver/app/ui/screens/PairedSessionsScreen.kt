@@ -110,7 +110,7 @@ fun PairedSessionsScreen(nav: NavController) {
             FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
                     Text(
-                        session.label,
+                        "Session ${session.tokenPrefix}",
                         color = FS.colors.text,
                         style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
                     )
@@ -156,7 +156,7 @@ fun PairedSessionsScreen(nav: NavController) {
                 TextButton(onClick = { revokeTarget = null }) { Text("Cancel") }
             },
             title = { Text("Revoke this session?") },
-            text = { Text("The browser docked from ${target.label} loses access to this account.") },
+            text = { Text("Session ${target.tokenPrefix} loses access to this account.") },
         )
     }
 }

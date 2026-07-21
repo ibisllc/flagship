@@ -15,7 +15,7 @@ import Foundation
 /// The box re-derives canonical bytes from the field VALUES, so key order is
 /// irrelevant to verification — but we reproduce the pinned cross-platform
 /// vector's key order
-/// (`{request:{type,serverId,token,label,issuedAt}, signature}`) byte-for-byte
+/// (`{request:{type,serverId,token,issuedAt}, signature}`) byte-for-byte
 /// (`packages/protocol/tests/pairingOrder.test.ts`), so the embedded sibling +
 /// the sealed deposit payload are identical to the TS / webapp / Kotlin twins.
 public enum PairingOrderEnvelope {
@@ -27,12 +27,10 @@ public enum PairingOrderEnvelope {
         // JSON.stringify emits no whitespace, strings double-quoted with the
         // standard JS escapes, and `issuedAt` as a bare number. The order's
         // string fields are field-guarded at sign time (no '|'/control chars);
-        // serverId/token are hostname/hex; label is the cleaned device name —
-        // so the only JSON-significant escapes are `"` and `\` in the label.
+        // serverId/token are hostname/hex.
         let req = "{\"type\":\"add-paired-session\","
             + "\"serverId\":\(jsonString(order.serverId)),"
             + "\"token\":\(jsonString(order.token)),"
-            + "\"label\":\(jsonString(order.label)),"
             + "\"issuedAt\":\(order.issuedAt)}"
         return "{\"request\":\(req),\"signature\":\(jsonString(signatureHex))}"
     }

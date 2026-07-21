@@ -151,14 +151,13 @@ describe("companion-requests view — pure helpers", () => {
     const html = mod.renderPendingRowHtml({
       requestId: "req-1",
       companionTokenPrefix: "abcdef",
-      companionLabel: "Library iMac",
       kind: "release-server",
       intent: { username: "alice", serverDomain: "home.alice.flagship.services", issuedAt: 1 },
       queuedAt: 1700000000000,
       expiresAt: 1700000600000,
     }, 1700000000000);
     expect(html).toContain('data-row="req-1"');
-    expect(html).toContain("Library iMac");
+    expect(html).toContain("Session abcdef");
     expect(html).toContain("release-server");
     expect(html).toContain("home.alice.flagship.services");
     expect(html).toContain('data-action="approve"');

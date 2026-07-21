@@ -29,15 +29,14 @@ function randomTokenHex(byteLen = 32) {
  * Canonical bytes for an `add-paired-session` PhoneOrder. The pod
  * dispatcher (auth.ts canonicalPhoneOrder) parses this same shape —
  * keep them in sync. Format:
- *   flagship/order/add-paired-session/v1|<serverId>|<token>|<label>|<issuedAt>
+ *   flagship/order/add-paired-session/v2|<serverId>|<token>|<issuedAt>
  */
-function canonicalAddPairedSession({ serverId, token, label, issuedAt }) {
+function canonicalAddPairedSession({ serverId, token, issuedAt }) {
   return new TextEncoder().encode(
     [
-      "flagship/order/add-paired-session/v1",
+      "flagship/order/add-paired-session/v2",
       serverId,
       token,
-      label,
       issuedAt,
     ].join("|"),
   );
@@ -58,17 +57,15 @@ export async function pairWithPod(args) {
   // The serverId the pod expects in the order body equals its FQDN —
   // i.e. the host portion of the baseUrl.
   const serverId = new URL(baseUrl).host;
-  const label = args.label || "webapp";
   const token = randomTokenHex();
   const issuedAt = Date.now();
-  const canonical = canonicalAddPairedSession({ serverId, token, label, issuedAt });
+  const canonical = canonicalAddPairedSession({ serverId, token, issuedAt });
   const sig = await signWithIrk(session.umk, canonical);
   const orderBody = {
     request: {
       type: "add-paired-session",
       serverId,
       token,
-      label,
       issuedAt,
     },
     signature: bytesToHex(sig),

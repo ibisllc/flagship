@@ -452,9 +452,6 @@ public final class CreateServerViewModel {
             let pairing = try CreateTimePairing.build(
                 username: username,
                 serverDomain: serverDomain,
-                // Matches PodPairViewModel's default; the owner can rename the
-                // session later. (A real UIDevice.current.name is a follow-up.)
-                label: "iPhone",
                 irk: irk
             )
             // Persist under THIS box's pod id (Fix B) so creating a 2nd box doesn't

@@ -185,6 +185,40 @@ then verifies the signed daemon certificate report, so a real live certificate
 no longer remains hidden as “No certificate yet.” **Remaining (owner):** rebuild
 the metal box from current `main` and validate TLS detail + one Vibe Code build.
 
+**2026-07-20 (feature branch checkpoint) — private account/device naming and
+atomic demo provisioning are build-complete in the core path; rollout is NOT
+started.** Work lives only on `feat/private-account-device-names`, developed in
+the isolated `/private/tmp/flagship-private-names` worktree and rebased onto
+current `main` so concurrent Codex/Claude work in the primary worktree stays
+untouched. The branch introduces account-scoped random `deviceId` capability
+identity; UMK/HKDF-derived account-profile and device-directory keys; strict
+AES-GCM AAD, revisions, signer authority, key grants, and cross-language golden
+vectors; separate encrypted account/self/administrator-managed profiles; signed
+active-device directory reads and profile writes; administrator locks
+and opaque support codes; deviceId-owned push tokens; local-decryption UI on
+web/iOS/Android; and atomic account bootstrap. Public username resolution no
+longer exposes device data and the username-only device-list route is gone. The
+demo flow is now one idempotent server-owned state machine whose identity,
+grants, primary device, and encrypted standard account profile commit before
+cloud provisioning; the CLI uses `--account-name`, and the obsolete demo
+creation modules and plaintext `demo_users.display` path are removed. A final
+privacy pass is removing plaintext names from paired browser/companion sessions
+too: add-paired-session is v2 without `label`, and daemon/client companion rows
+use opaque session codes. TypeScript builds and focused protocol/daemon/web
+tests pass; Android production compilation + its full unit suite pass; the iOS
+simulator app build passes. **Remaining before merge:** finish stale iOS paired-
+session test fixtures; complete repository-wide legacy-name classification and
+strengthen the release guard; run the complete TS/mobile test and build matrix;
+close any missing authorization/privacy/cross-account/UI cases from the work
+order; and review the final branch diff for feature-branch impact. **Rollout
+remains owner-gated:** apply the clean D1 migration/wipe, deploy `.com` (and
+`.services` only if the final daemon delta requires it), rebuild clients, and
+exercise the full account create/join/rename/lock/recovery flows. Do not convert
+the deployed `@openai-build` row in place: after local gates pass, resolve its
+exact D1/provider identifiers, tear it down through the administrative cleanup
+path, then recreate the same public username with encrypted account name
+`OpenAI Build Week`; no production data or server has been touched yet.
+
 **2026-07-20 (VM install rethink) — Ezra proved install-per-VM is the wrong
 default; cross-platform privacy-safe progress landed and clone-and-specialize is
 the locked replacement.** `ezra.jolly-quince` on VZ/Debian 13.6 reached

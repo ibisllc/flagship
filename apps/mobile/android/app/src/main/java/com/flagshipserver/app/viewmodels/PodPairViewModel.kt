@@ -50,7 +50,6 @@ class PodPairViewModel(
     /** Biometric-gated owner-IRK signer. */
     private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
     private val client: LockPowerClient = LockPowerClient(),
-    private val label: String = "Android",
     private val now: () -> Long = { System.currentTimeMillis() },
     private val makeToken: () -> String = { AddPairedSessionOrder.freshToken() },
 ) {
@@ -78,11 +77,10 @@ class PodPairViewModel(
         }
 
         val token = makeToken()
-        val cleaned = AddPairedSessionOrder.sanitizeLabel(label)
         val issuedAt = now()
         val signature: ByteArray
         try {
-            signature = irk.sign(AddPairedSessionOrder.canonicalBytes(serverDomain, token, cleaned, issuedAt))
+            signature = irk.sign(AddPairedSessionOrder.canonicalBytes(serverDomain, token, issuedAt))
         } catch (e: Throwable) {
             _phase.value = PodPairPhase.Failed("Couldn't sign: ${e.message}")
             return
@@ -93,7 +91,7 @@ class PodPairViewModel(
             client.pairSession(
                 serverDomain,
                 AddPairedSessionRequest(
-                    request = AddPairedSessionInner(serverId = serverDomain, token = token, label = cleaned, issuedAt = issuedAt),
+                    request = AddPairedSessionInner(serverId = serverDomain, token = token, issuedAt = issuedAt),
                     signature = HexUtil.encode(signature),
                 ),
             )
@@ -135,7 +133,6 @@ class PodPairViewModel(
 class PodAutoPairCoordinator(
     private val store: SessionStoring,
     private val client: LockPowerClient = LockPowerClient(),
-    private val label: String = "Android",
     private val now: () -> Long = { System.currentTimeMillis() },
     private val makeToken: () -> String = { AddPairedSessionOrder.freshToken() },
 ) {
@@ -163,17 +160,16 @@ class PodAutoPairCoordinator(
         } catch (_: Throwable) {
             return emptyList()
         }
-        val cleaned = AddPairedSessionOrder.sanitizeLabel(label)
         val paired = mutableListOf<String>()
         for (fqdn in targets) {
             try {
                 val token = makeToken()
                 val issuedAt = now()
-                val sig = irk.sign(AddPairedSessionOrder.canonicalBytes(fqdn, token, cleaned, issuedAt))
+                val sig = irk.sign(AddPairedSessionOrder.canonicalBytes(fqdn, token, issuedAt))
                 client.pairSession(
                     fqdn,
                     AddPairedSessionRequest(
-                        request = AddPairedSessionInner(serverId = fqdn, token = token, label = cleaned, issuedAt = issuedAt),
+                        request = AddPairedSessionInner(serverId = fqdn, token = token, issuedAt = issuedAt),
                         signature = HexUtil.encode(sig),
                     ),
                 )

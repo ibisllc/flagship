@@ -42,7 +42,6 @@ class PodPairViewModelTest {
             serverDomain = server,
             signer = { Ed25519Sign(kp.privateKey) },
             client = LockPowerClient(transport = transport, podBaseUrl = { "https://$it" }),
-            label = "Pixel 9",
             now = { 1_700L },
             makeToken = { "00".repeat(32) },
         )
@@ -55,7 +54,7 @@ class PodPairViewModelTest {
         assertEquals("00".repeat(32), body.request.token)
         Ed25519Verify(kp.publicKey).verify(
             HexUtil.decode(body.signature)!!,
-            AddPairedSessionOrder.canonicalBytes(server, "00".repeat(32), "Pixel 9", 1_700L),
+            AddPairedSessionOrder.canonicalBytes(server, "00".repeat(32), 1_700L),
         )
         assertEquals("00".repeat(32), store.sessionToken(forPodId = PodInfo.podId(server)))
         assertEquals("00".repeat(32), store.sessionToken.value)     // active slot mirrored

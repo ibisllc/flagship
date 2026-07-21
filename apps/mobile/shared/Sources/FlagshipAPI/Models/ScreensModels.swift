@@ -234,7 +234,6 @@ public struct BrowserTabsListResponse: Codable, Equatable, Sendable {
 
 public struct PairedSessionSummary: Codable, Equatable, Sendable {
     public let tokenPrefix: String
-    public let label: String
     public let addedAt: Int64
     public let current: Bool
 }
@@ -454,8 +453,7 @@ public struct AppBackupStartResponse: Codable, Equatable, Sendable {
 // revoke; the browser owns redeem (out of scope for iOS).
 
 public struct CompanionMintTicketRequest: Codable, Equatable, Sendable {
-    public let label: String?
-    public init(label: String? = nil) { self.label = label }
+    public init() {}
 }
 
 public struct CompanionMintTicketResponse: Codable, Equatable, Sendable {
@@ -471,7 +469,6 @@ public struct CompanionMintTicketResponse: Codable, Equatable, Sendable {
 
 public struct CompanionSummary: Codable, Equatable, Sendable, Identifiable {
     public let tokenPrefix: String
-    public let label: String?
     public let redeemedAt: Int64
     public let lastSeenMs: Int64
     public let expiresAt: Int64
@@ -481,14 +478,12 @@ public struct CompanionSummary: Codable, Equatable, Sendable, Identifiable {
 
     public init(
         tokenPrefix: String,
-        label: String? = nil,
         redeemedAt: Int64,
         lastSeenMs: Int64,
         expiresAt: Int64,
         userAgent: String? = nil
     ) {
         self.tokenPrefix = tokenPrefix
-        self.label = label
         self.redeemedAt = redeemedAt
         self.lastSeenMs = lastSeenMs
         self.expiresAt = expiresAt
@@ -529,7 +524,6 @@ public struct CompanionRevokeResponse: Codable, Equatable, Sendable {
 public struct CompanionPendingWrite: Codable, Equatable, Identifiable {
     public let requestId: String
     public let companionTokenPrefix: String
-    public let companionLabel: String?
     public let kind: String
     public let intent: [String: AnyCodable]
     public let queuedAt: Int64
@@ -540,7 +534,6 @@ public struct CompanionPendingWrite: Codable, Equatable, Identifiable {
     public init(
         requestId: String,
         companionTokenPrefix: String,
-        companionLabel: String?,
         kind: String,
         intent: [String: AnyCodable],
         queuedAt: Int64,
@@ -548,7 +541,6 @@ public struct CompanionPendingWrite: Codable, Equatable, Identifiable {
     ) {
         self.requestId = requestId
         self.companionTokenPrefix = companionTokenPrefix
-        self.companionLabel = companionLabel
         self.kind = kind
         self.intent = intent
         self.queuedAt = queuedAt

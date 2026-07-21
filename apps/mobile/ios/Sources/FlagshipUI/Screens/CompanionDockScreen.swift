@@ -12,7 +12,6 @@ public struct CompanionDockScreen: View {
     let podBaseUrl: String?
     let username: String
 
-    @State private var labelDraft: String = ""
     @State private var pendingRevoke: CompanionSummary?
     @State private var nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
 
@@ -100,9 +99,6 @@ public struct CompanionDockScreen: View {
                 Text("Mint a pairing QR")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(c.text)
-                TextField("Label (optional, e.g. \"My laptop\")", text: $labelDraft)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityIdentifier("companion-dock-label")
                 if let mintError = vm.mintError {
                     Text(mintError)
                         .font(FS.font.caption())
@@ -110,8 +106,7 @@ public struct CompanionDockScreen: View {
                 }
                 FSPrimaryButton("Mint pairing QR", block: true) {
                     Task {
-                        await vm.mint(label: labelDraft)
-                        if vm.mintedTicket != nil { labelDraft = "" }
+                        await vm.mint()
                     }
                 }
                 .accessibilityIdentifier("companion-dock-mint")
@@ -203,8 +198,7 @@ public struct CompanionDockScreen: View {
     }
 
     private func displayLabel(for c: CompanionSummary) -> String {
-        if let label = c.label, !label.isEmpty { return label }
-        return c.tokenPrefix
+        return "Session \(c.tokenPrefix)"
     }
 
     private func expiresLabel(for c: CompanionSummary) -> String {

@@ -40,7 +40,6 @@ class AddControlDeviceViewModel(
     /** Biometric-gated owner-IRK signer; mirrors PowerOffViewModel. */
     private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
     private val client: LockPowerClient = LockPowerClient(),
-    private val label: String = "Android",
     private val now: () -> Long = { System.currentTimeMillis() },
     private val makeToken: () -> String = { AddPairedSessionOrder.freshToken() },
 ) {
@@ -95,11 +94,10 @@ class AddControlDeviceViewModel(
         }
 
         val token = makeToken()
-        val cleaned = AddPairedSessionOrder.sanitizeLabel(label)
         val issuedAt = now()
         val signature: ByteArray
         try {
-            signature = irk.sign(AddPairedSessionOrder.canonicalBytes(serverDomain, token, cleaned, issuedAt))
+            signature = irk.sign(AddPairedSessionOrder.canonicalBytes(serverDomain, token, issuedAt))
         } catch (e: Throwable) {
             _phase.value = AddControlDevicePhase.Failed("Couldn't sign: ${e.message}")
             return
@@ -113,7 +111,6 @@ class AddControlDeviceViewModel(
                     request = AddPairedSessionInner(
                         serverId = serverDomain,
                         token = token,
-                        label = cleaned,
                         issuedAt = issuedAt,
                     ),
                     signature = HexUtil.encode(signature),

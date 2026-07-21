@@ -30,10 +30,9 @@ const ORDER_SHAPES = {
     fields: [{ name: "reason", type: "string" }],
   },
   "add-paired-session": {
-    tag: "flagship/order/add-paired-session/v1",
+    tag: "flagship/order/add-paired-session/v2",
     fields: [
       { name: "token", type: "string" },
-      { name: "label", type: "string" },
     ],
   },
   "remove-paired-session": {

@@ -22,7 +22,7 @@ export async function renderPairedSessions() {
       <div class="card">
         <div class="row row-top">
           <div>
-            <div class="weight-600">${escapeHtml(s.label)} ${s.current ? '<span class="pill ok">this device</span>' : ""}</div>
+            <div class="weight-600">Session ${escapeHtml(s.tokenPrefix)} ${s.current ? '<span class="pill ok">this device</span>' : ""}</div>
             <div class="value text-xs">${escapeHtml(s.tokenPrefix)}…</div>
             <div class="faint-sm">added ${escapeHtml(formatWhen(s.addedAt))}</div>
           </div>

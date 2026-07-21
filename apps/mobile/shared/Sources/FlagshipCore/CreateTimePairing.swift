@@ -36,21 +36,11 @@ public enum CreateTimePairing {
     public static func build(
         username: String,
         serverDomain: String,
-        label: String,
         irk: Curve25519.Signing.PrivateKey,
         now: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
         token: String = AddPairedSessionOrder.freshToken()
     ) throws -> Built {
-        // The label is committed to the order's canonical bytes, which the
-        // daemon re-derives under a fieldGuard that rejects '|' + control chars.
-        // Strip them so any UIDevice name pairs cleanly; fall back to "iPhone".
-        let cleaned = label
-            .components(separatedBy: CharacterSet(charactersIn: "|").union(.controlCharacters))
-            .joined(separator: " ")
-            .trimmingCharacters(in: .whitespaces)
-        let safeLabel = cleaned.isEmpty ? "iPhone" : cleaned
-
-        let order = AddPairedSessionOrder(serverId: serverDomain, token: token, label: safeLabel, issuedAt: now)
+        let order = AddPairedSessionOrder(serverId: serverDomain, token: token, issuedAt: now)
         let orderSig = try order.sign(with: irk)
         let json = PairingOrderEnvelope.toJson(order: order, signatureHex: HexUtil.encode(orderSig))
         return Built(pairingOrderJson: json, token: token)

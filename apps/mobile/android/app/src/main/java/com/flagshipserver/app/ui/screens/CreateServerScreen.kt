@@ -1211,7 +1211,6 @@ internal suspend fun mintRecipeBundle(
     try {
         val pairing = CreateTimePairing.build(
             serverDomain = serverDomain,
-            label = "Android",
             irk = irk,
         )
         // MULTI-POD (Fix B): persist under THIS pod's id (`pod-<lowercased-fqdn>`)

@@ -257,14 +257,16 @@ public struct SettingsScreen: View {
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
+        let profileName = accountDisplayName ?? "@\(username)"
+        let profileDetail = accountDisplayName == nil ? profileSubtitle : "@\(username) · \(profileSubtitle)"
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
                 // Account hero — teal monogram + username + account-type
                 // subtitle. Drills into Account security (the most relevant
                 // account-level destination).
                 FSProfileCard(
-                    name: accountDisplayName ?? "@\(username)",
-                    subtitle: accountDisplayName == nil ? profileSubtitle : "@\(username) · \(profileSubtitle)",
+                    name: profileName,
+                    subtitle: profileDetail,
                     action: onOpenAccountSecurity
                 )
                 .padding(.top, FS.space.s2)
@@ -322,13 +324,7 @@ public struct SettingsScreen: View {
             presenting: disconnectTarget
         ) { target in
             Button("Revoke \(target.displayName)", role: .destructive) {
-                Task {
-                    let success = await onDisconnectTrustedDevice(target)
-                    if !success {
-                        disconnectMessage = "Couldn't disconnect — check your connection and try again."
-                    }
-                    disconnectTarget = nil
-                }
+                disconnect(target)
             }
             Button("Cancel", role: .cancel) { disconnectTarget = nil }
         } message: { target in
@@ -376,7 +372,7 @@ public struct SettingsScreen: View {
             WipeComingSoonSheet { showWipeComingSoon = false }
         }
         .confirmationDialog(
-            revokeSessionTarget.map { "Revoke \($0.label)?" } ?? "Revoke this session?",
+            revokeSessionTarget.map { "Revoke session \($0.tokenPrefix)?" } ?? "Revoke this session?",
             isPresented: Binding(
                 get: { revokeSessionTarget != nil },
                 set: { if !$0 { revokeSessionTarget = nil } }
@@ -390,7 +386,7 @@ public struct SettingsScreen: View {
             }
             Button("Cancel", role: .cancel) { revokeSessionTarget = nil }
         } message: { target in
-            Text("The browser docked from \(target.label) loses access to this account.")
+            Text("Session \(target.tokenPrefix) loses access to this account.")
         }
         .confirmationDialog(
             "Replace this device?",
@@ -430,6 +426,16 @@ public struct SettingsScreen: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This erases this device's account key and data so nothing sensitive is left at rest. Your account and your servers are untouched — sign back in with your recovery passkey and the same key is restored, no re-pair.")
+        }
+    }
+
+    private func disconnect(_ target: SettingsViewModel.DirectoryDevice) {
+        Task {
+            let success = await onDisconnectTrustedDevice(target)
+            if !success {
+                disconnectMessage = "Couldn't disconnect — check your connection and try again."
+            }
+            disconnectTarget = nil
         }
     }
 
@@ -746,7 +752,7 @@ public struct SettingsScreen: View {
                 Image(systemName: s.current ? "iphone.gen3" : "laptopcomputer")
                     .foregroundColor(s.current ? c.success : c.textMuted)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(s.label).foregroundColor(c.text)
+                    Text("Session \(s.tokenPrefix)").foregroundColor(c.text)
                     Text("paired \(relative(ms: s.addedAt))")
                         .font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
