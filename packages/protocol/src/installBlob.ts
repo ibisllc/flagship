@@ -29,6 +29,22 @@ export interface AuthCode {
   userPubKey: Bytes;
   issuedAt: number;
   expiresAt: number;
+  /**
+   * Slice D (docs/device-admin-tier-spec.md §1.3, decision D-1) — the account's
+   * pinned ADMIN MASTER ROOT pubkey (32 bytes). Rides INSIDE the signed
+   * AuthCode (not loose on the InstallBlob) so it is signature-covered by
+   * `authCodeUserSignature` and `.com`'s registration gate: a compromised
+   * network/.com cannot swap the box's admin anchor in transit. The box reads
+   * it at first boot into `ServerConfig.adminRootPub`, mirroring the existing
+   * pinned `ownerAidPubHex`.
+   *
+   * OPTIONAL + backward-compatible: an AuthCode WITHOUT this field canonicalizes
+   * EXACTLY as before (existing signatures still verify); when present it is
+   * appended, so the signer commits to it. For a clean-slate D burn it is
+   * required-present (a Phase-2 client concern; Phase 0 keeps it optional so
+   * existing flows compile + pass).
+   */
+  adminRootPubKey?: Bytes;
 }
 
 export interface AuthCodeRevocation {
@@ -108,7 +124,7 @@ export interface InstallBlob {
   /**
    * Disk-encryption policy chosen at server creation. The phone signs over it
    * so a compromised network/.com can't DOWNGRADE an encrypted box to plaintext
-   * by tampering with the recipe in transit (the burner verifies the blob
+   * by tampering with the recipe in transit (the builder verifies the blob
    * signature, so a flipped value would fail to verify).
    *
    *   - "luks" (DEFAULT): the root is LUKS-encrypted; the unlock key is sealed
@@ -138,20 +154,28 @@ function canonicalAuthCode(c: AuthCode): Bytes {
   legacyFieldGuard("username", c.username);
   legacyFieldGuard("serverName", c.serverName);
   legacyFieldGuard("serverDomain", c.serverDomain);
-  return new TextEncoder().encode(
-    [
-      TAG_AUTH_CODE,
-      c.version,
-      c.serial,
-      c.username,
-      c.serverName,
-      c.serverDomain,
-      hex(c.delegatedPubKey),
-      hex(c.userPubKey),
-      c.issuedAt,
-      c.expiresAt,
-    ].join("|"),
-  );
+  const parts: (string | number)[] = [
+    TAG_AUTH_CODE,
+    c.version,
+    c.serial,
+    c.username,
+    c.serverName,
+    c.serverDomain,
+    hex(c.delegatedPubKey),
+    hex(c.userPubKey),
+    c.issuedAt,
+    c.expiresAt,
+  ];
+  // Slice D backward-compatible extension: an AuthCode WITHOUT adminRootPubKey
+  // produces the EXACT pre-existing canonical bytes (old signatures keep
+  // verifying). When present it is appended with an `ar=` prefix (can't
+  // collide with the fixed-length hex/number tokens above), so the signer
+  // commits to it — a relay can neither strip it (sig fails) nor swap the
+  // admin anchor.
+  if (c.adminRootPubKey !== undefined) {
+    parts.push(`ar=${hex(c.adminRootPubKey)}`);
+  }
+  return new TextEncoder().encode(parts.join("|"));
 }
 
 function canonicalInstallBlob(b: InstallBlob): Bytes {

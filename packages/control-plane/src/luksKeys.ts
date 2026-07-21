@@ -10,11 +10,13 @@ import {
 } from "@flagship/protocol";
 import type {
   AutoUnlockLeaseStorage,
+  DeviceCapabilityGrantStorage,
   LuksKeyStorage,
   ServerStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
 /**
@@ -43,6 +45,10 @@ export interface LuksKeyDeps {
    * available, and /consume serves from the lease store.
    */
   autoUnlockLeases?: AutoUnlockLeaseStorage;
+  /** Slice D — device-grant store for the master-admin authority gate (§2 rows
+   *  21 [deposit] + 22 [revoke] of an auto-unlock lease). Optional: absent ⇒
+   *  only the bare admin root satisfies the open gate. */
+  grants?: DeviceCapabilityGrantStorage;
   maxAgeMs?: number;
   now?: () => number;
 }
@@ -288,7 +294,17 @@ export async function handleDepositAutoUnlockLease(
     multiUse: r.multiUse,
     issuedAt: r.issuedAt,
   };
-  if (!verifyAutoUnlockLease(claim, sig, hexToBytes(userRec.irkPubHex))) {
+  // Slice D §2 row 21 — SENSITIVE: master-admin authority (legacy owner-IRK when
+  // no admin root is pinned).
+  const authz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: reg.username.toLowerCase(),
+      userRec,
+      verifyWith: (pub) => verifyAutoUnlockLease(claim, sig, hexToBytes(pub)),
+    },
+  );
+  if (!authz.ok) {
     return forbidden("invalid signature");
   }
 
@@ -356,7 +372,17 @@ export async function handleRevokeAutoUnlockLease(
     leaseId: r.leaseId,
     issuedAt: r.issuedAt,
   };
-  if (!verifyRevokeAutoUnlockLease(claim, sig, hexToBytes(userRec.irkPubHex))) {
+  // Slice D §2 row 22 — SENSITIVE: master-admin authority (legacy owner-IRK when
+  // no admin root is pinned).
+  const authz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: reg.username.toLowerCase(),
+      userRec,
+      verifyWith: (pub) => verifyRevokeAutoUnlockLease(claim, sig, hexToBytes(pub)),
+    },
+  );
+  if (!authz.ok) {
     return forbidden("invalid signature");
   }
 

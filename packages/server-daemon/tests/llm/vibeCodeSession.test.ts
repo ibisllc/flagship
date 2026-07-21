@@ -92,6 +92,21 @@ describe("VibeCodeSession", () => {
     expect(events.find((e) => e.kind === "deployed")).toBeTruthy();
   });
 
+  it("fail() persists the reason on meta so a re-attaching client can recover it", () => {
+    const s = new VibeCodeSession({ username: "alice", serverFqdn: "home.alice.flagship.services" });
+    const events: VibeCodeEvent[] = [];
+    s.on("event", (e: VibeCodeEvent) => events.push(e));
+    s.fail("no AI credential set for this session", true);
+    expect(s.meta.status).toBe("failed");
+    // The live error event still carries the reason...
+    const err = events.find((e) => e.kind === "error");
+    expect(err && err.kind === "error" ? err.message : "").toBe(
+      "no AI credential set for this session",
+    );
+    // ...AND it survives on meta for clients that attach after the event fired.
+    expect(s.meta.failureReason).toBe("no AI credential set for this session");
+  });
+
   it("cancel halts further feeds", () => {
     const s = new VibeCodeSession({ username: "alice", serverFqdn: "home.alice.flagship.services" });
     s.cancel();

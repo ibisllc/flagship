@@ -40,14 +40,14 @@ final class WatchDelegateKeyTests: XCTestCase {
         let env = DeviceCapabilityGrantEnvelope(
             grantId: "550e8400-e29b-41d4-a716-446655440000",
             username: "trent",
-            deviceLabel: "ipad",
+            deviceId: "00112233445566778899aabbccddeeff",
             devicePubKeyHex: HexUtil.encode(pub),
             scopes: ["admin", "browse", "add-device"], // scrambled input on purpose
             issuedAt: 1_780_000_000_000,
             expiresAt: 1_787_776_000_000
         )
-        let expected = "flagship/device-capability-grant/v1"
-            + "|550e8400-e29b-41d4-a716-446655440000|trent|ipad|"
+        let expected = "flagship/device-capability-grant/v2"
+            + "|550e8400-e29b-41d4-a716-446655440000|trent|00112233445566778899aabbccddeeff|"
             + "0b0e1114171a1d202326292c2f3235383b3e4144474a4d505356595c5f626568"
             + "|browse,add-device,admin|1780000000000|1787776000000"
         let canon = String(data: env.canonicalBytes(), encoding: .utf8)
@@ -57,7 +57,7 @@ final class WatchDelegateKeyTests: XCTestCase {
         // And the SHA-256 must match the pinned id shared with TS + Kotlin.
         let digest = SHA256.hash(data: env.canonicalBytes())
         let idHex = digest.map { String(format: "%02x", $0) }.joined()
-        XCTAssertEqual(idHex, "cdf24b718bec2cc7fda2d07abbdf57252b4b3f6de12ebe56a61ce65bd6ab9bf6")
+        XCTAssertEqual(idHex, "7310f7d71e11f74561a20e47fdf2d68c9f6d36abff97df2cb706c422d19bcbd7")
     }
 
     func test_deviceCapabilityGrant_multiScope_signVerify_roundTrip() throws {
@@ -67,7 +67,7 @@ final class WatchDelegateKeyTests: XCTestCase {
         let env = DeviceCapabilityGrantEnvelope(
             grantId: "550e8400-e29b-41d4-a716-446655440000",
             username: "trent",
-            deviceLabel: "ipad",
+            deviceId: "00112233445566778899aabbccddeeff",
             devicePubKeyHex: HexUtil.encode(pub),
             scopes: ["admin", "browse", "add-device"],
             issuedAt: 1_780_000_000_000,

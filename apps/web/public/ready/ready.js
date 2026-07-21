@@ -2,7 +2,7 @@
 // the phone delivered through the relay, stashes it in sessionStorage, and
 // sends the browser here. This page hands the recipe to the user — copy it
 // (preferred; nothing touches the disk) or download the .json — and points
-// at the Flagship Assembler for their OS. flagshipserver.com never saw the
+// at the Flagship Studio for their OS. flagshipserver.com never saw the
 // plaintext: the recipe lived only in this tab's memory.
 
 // MUST match heroQr.js's RECIPE_HANDOFF_KEY.
@@ -40,7 +40,7 @@ function detectOS() {
   const plat = ((navigator.userAgentData && navigator.userAgentData.platform) ||
     navigator.platform || "").toLowerCase();
   const s = `${plat} ${ua}`;
-  // Mobile can't run the desktop Assembler — fall through to "pick a platform".
+  // Mobile can't run the desktop Builder — fall through to "pick a platform".
   if (/android|iphone|ipad|ipod/.test(s)) return null;
   if (/mac/.test(s)) return "mac";
   if (/win/.test(s)) return "windows";
@@ -82,7 +82,7 @@ function downloadRecipe(text, filename) {
 async function copyRecipe(text) {
   try {
     await navigator.clipboard.writeText(text);
-    banner("Recipe copied — paste it into the Assembler.");
+    banner("Recipe copied — paste it into the Builder.");
   } catch {
     // Fallback for browsers that block the async clipboard API.
     try {
@@ -94,7 +94,7 @@ async function copyRecipe(text) {
       ta.select();
       const ok = document.execCommand("copy");
       ta.remove();
-      if (ok) banner("Recipe copied — paste it into the Assembler.");
+      if (ok) banner("Recipe copied — paste it into the Builder.");
       else banner("Couldn't copy automatically — use Download .json instead.", false);
     } catch {
       banner("Couldn't copy automatically — use Download .json instead.", false);
@@ -125,15 +125,15 @@ function renderInstaller(detected) {
     primary.innerHTML = OS_ORDER.map((o) =>
       `<a class="btn-link" href="${OS_INFO[o].href}">${escapeHtml(OS_INFO[o].label)}</a>`
     ).join(" ");
-    others.textContent = "The Assembler is a desktop app — pick your platform.";
+    others.textContent = "The Builder is a desktop app — pick your platform.";
   }
 
-  // No-recipe view: point the "get the burner ahead of time" link at the
-  // detected OS so the Assembler is reachable even without a pending recipe.
+  // No-recipe view: point the "get the builder ahead of time" link at the
+  // detected OS so the Builder is reachable even without a pending recipe.
   const noRecipeLink = $("noRecipeInstaller");
   if (noRecipeLink && detected && OS_INFO[detected]) {
     noRecipeLink.href = OS_INFO[detected].href;
-    noRecipeLink.textContent = `Download the Flagship Assembler for ${OS_INFO[detected].label}`;
+    noRecipeLink.textContent = `Download the Flagship Studio for ${OS_INFO[detected].label}`;
   }
 }
 
@@ -174,7 +174,7 @@ function main() {
   $("copyRecipe")?.addEventListener("click", () => copyRecipe(recipeText));
   $("downloadRecipe")?.addEventListener("click", () => {
     downloadRecipe(recipeText, filename);
-    banner("Recipe downloaded — open it in the Assembler.");
+    banner("Recipe downloaded — open it in the Builder.");
   });
 
   // Clear the handoff so a refresh / back-forward doesn't resurface a stale

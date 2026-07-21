@@ -15,6 +15,19 @@
 -- stripe_events (0053), app_purchases (0054). Keep this list in sync as
 -- migrations land, until the mass-wipe is disarmed before real users (see
 -- CLAUDE.md open-work #11).
+-- Re-audited 2026-06-19 through 0057: added trust_exceptions (0055),
+-- service_invites + service_invite_bindings (0056/0057). build_tickets stays
+-- OUT (dropped in 0033). The runner now requires WIPE_CONFIRM=<env> + --yes and
+-- prints a row-count preview (scripts/wipe-all-users.sh) — see CLAUDE.md GA
+-- close-out TODO item 1.
+-- Re-audited 2026-07-05 through 0082: added username_offer (0062) +
+-- username_suggest_throttle (0061), server_transfers (0059), server_evictions
+-- (0063), admin_root_rotations (0066), peer_backup_manifests (0080),
+-- server_migrations (0081). username_suggestion_queue (0061) is PRESERVED —
+-- it's a .com-generated pre-validated name pool (infrastructure, expensive to
+-- refill via DoH), not user data. schema_version is PRESERVED (the migration
+-- ledger the predeploy drift gate reads). 0082 only adds columns to
+-- server_transfers (already listed).
 --
 -- ⚠️ DO NOT run this file via `wrangler d1 execute --file`. Prod D1's schema
 -- DRIFTS from the repo (migrations are applied by hand; e.g. nfc_rendezvous/0040
@@ -32,6 +45,8 @@ DELETE FROM name_claims;
 DELETE FROM service_aliases;
 DELETE FROM user_service_aliases;
 DELETE FROM voici_links;
+DELETE FROM username_offer;
+DELETE FROM username_suggest_throttle;
 
 -- Servers + routing + registration
 DELETE FROM servers;
@@ -44,6 +59,12 @@ DELETE FROM install_events;
 DELETE FROM install_policy_fanout;
 DELETE FROM custom_domain_orders;
 DELETE FROM nfc_rendezvous;
+DELETE FROM service_invites;
+DELETE FROM service_invite_bindings;
+DELETE FROM server_transfers;
+DELETE FROM server_evictions;
+DELETE FROM server_migrations;
+DELETE FROM peer_backup_manifests;
 
 -- Cert authority + mint
 DELETE FROM acme_account_key_grants;
@@ -64,11 +85,20 @@ DELETE FROM boot_nonces;
 DELETE FROM webauthn_recovery_records;
 DELETE FROM recovery_shards;
 DELETE FROM pending_re_pairs;
+DELETE FROM trust_exceptions;
+DELETE FROM admin_root_rotations;
 
--- Devices + delegation + push
+-- Devices + delegation + push. Order matters: the private-naming tables
+-- (migration 0083) hang off device_identities by foreign key, so they are
+-- cleared before the identities they reference.
 DELETE FROM device_capability_grants;
-DELETE FROM watch_delegates;
+DELETE FROM device_self_profiles;
+DELETE FROM device_managed_profiles;
+DELETE FROM account_directory_key_grants;
+DELETE FROM account_profiles;
 DELETE FROM push_tokens;
+DELETE FROM device_identities;
+DELETE FROM watch_delegates;
 
 -- Demo sandbox
 DELETE FROM demo_users;

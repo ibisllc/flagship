@@ -51,7 +51,10 @@ class DeveloperSettings(prefs: SharedPreferences) {
         }
     }
 
-    private val _useLiveClient = MutableStateFlow(store.getBoolean(KEY_LIVE, false))
+    // Default to the LIVE client in every build (owner request 2026-06-19):
+    // the app targets a real pod out of the box; the mock is opt-in via the
+    // 3-tap Developer toggle. Once flipped, the persisted value wins.
+    private val _useLiveClient = MutableStateFlow(store.getBoolean(KEY_LIVE, true))
     val useLiveClient: StateFlow<Boolean> = _useLiveClient.asStateFlow()
 
     /// "Developer" subsection in Settings is gated behind a 3-tap easter
@@ -92,6 +95,17 @@ class DeveloperSettings(prefs: SharedPreferences) {
     fun setUseLiveClient(value: Boolean) {
         _useLiveClient.value = value
         store.edit().putBoolean(KEY_LIVE, value).apply()
+    }
+
+    /** GYM-ONLY (mirror of iOS DeveloperSettings' `-smoke-mode` override):
+     *  a smoke-mode launch is NO-BACKEND by contract — it must render from the
+     *  MOCK client and must NOT run the live maintainer-trust check (which
+     *  would clobber a seeded untrusted verdict). In-memory only — never
+     *  persisted, so a later non-smoke launch on the same device keeps the
+     *  live default. Called from MainActivity only on a debuggable build with
+     *  the `flagship.smokeMode` extra set. */
+    fun forceMockForSmokeRun() {
+        _useLiveClient.value = false
     }
 
     fun setUnlocked(value: Boolean) {

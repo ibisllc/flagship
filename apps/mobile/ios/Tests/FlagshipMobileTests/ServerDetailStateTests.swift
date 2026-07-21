@@ -31,6 +31,30 @@ final class ServerDetailStateTests: XCTestCase {
         // on refresh, NOT the "not paired" dead-end.
         XCTAssertNil(vm.detail.value)
         XCTAssertNotNil(vm.detail.failure)
+        XCTAssertFalse(vm.needsPairing)
+    }
+
+    func test_bffRejectsStaleToken_surfacesPairingInsteadOfConnectingForever() async {
+        let mock = MockScreensClient()
+        mock.simulatedLatency = 0
+        mock.simulatedFailureStatus = 401
+        let vm = HomeViewModel(client: mock, podContext: "home")
+
+        await vm.load()
+
+        XCTAssertTrue(vm.needsPairing)
+        XCTAssertNotNil(vm.detail.failure)
+    }
+
+    func test_forbiddenResponse_doesNotDiscardSessionAsStale() async {
+        let mock = MockScreensClient()
+        mock.simulatedLatency = 0
+        mock.simulatedFailureStatus = 403
+        let vm = HomeViewModel(client: mock, podContext: "home")
+
+        await vm.load()
+
+        XCTAssertFalse(vm.needsPairing)
     }
 
     func test_notPairedString_isNeverWhatServerDetailShows() {

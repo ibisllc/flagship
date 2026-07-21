@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Flagship
 import FlagshipCore
 import FlagshipAPI
 import FlagshipUI
@@ -12,8 +13,19 @@ struct ContentView: View {
     @Environment(TrustCenter.self) private var trust
     @Environment(DeveloperSettings.self) private var dev
     @Environment(\.flagshipServerClient) private var serverClient
+    @Environment(\.secretMailboxClient) private var mailbox
     @Environment(\.sessionStore) private var sessionStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var pendingWatchers: PendingPodWatcherRegistry?
+    /// #91 — foreground long-poll for AI-chat alerts → local notification +
+    /// operations sliver. Lazily built once a pod is paired; gated on
+    /// paired+unlocked so nothing surfaces over the lock.
+    @State private var aiChatPoller: AiChatAlertPoller?
+    /// The single app-scope live-update canal — ONE `/stream` long-poll that
+    /// feeds AppState (pods + Box Request Inbox). Lazily built; foreground-only
+    /// via `scenePhase` + paired+unlocked, started/stopped at the shell so it
+    /// spans every tab (home / install checklist / server-detail).
+    @State private var liveSync: LiveSyncCoordinator?
 
     var body: some View {
         ZStack {
@@ -40,10 +52,30 @@ struct ContentView: View {
         }
         .onChange(of: app.isPaired) { _, paired in
             if paired { Task { await registerPush() } }
+            // Signing out ends the authenticated session — drop the cached UMK.
+            else { Keystore.clearSessionKeyCache() }
             PodStatusPublisher(app: app).publish()
             syncPendingWatchers()
+            syncAiChatPoller()
+            syncLiveSync()
             operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
             syncPodSession()
+        }
+        .onChange(of: app.isUnlocked) { _, unlocked in
+            // Trust-the-session model: the unwrapped UMK lives in memory only
+            // while the app is unlocked. The instant it re-locks (background
+            // relock or an explicit lock), drop the cached key so the next
+            // session re-authenticates once — the biometric still gates each
+            // session, it just no longer fires again mid-session. This is what
+            // stops the "random Face ID on the Home screen" the periodic
+            // deposit refresh used to trigger.
+            if !unlocked { Keystore.clearSessionKeyCache() }
+        }
+        .onChange(of: scenePhase) { _, _ in
+            // Foreground-only: pause the live-update canal when the app leaves
+            // .active (background/inactive), resume on return. The coordinator's
+            // own isActive gate also folds in paired+unlocked.
+            syncLiveSync()
         }
         .onChange(of: app.pods) { _, _ in
             PodStatusPublisher(app: app).publish()
@@ -63,6 +95,8 @@ struct ContentView: View {
         .task {
             PodStatusPublisher(app: app).publish()
             syncPendingWatchers()
+            syncAiChatPoller()
+            syncLiveSync()
             operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
             // Cold-launch restore: point the screens client at the
             // already-selected online server before the first load.
@@ -92,9 +126,56 @@ struct ContentView: View {
     /// detached write captures a value, not the AppState.
     @MainActor
     private func syncPodSession() {
-        let pod = app.isPaired ? app.currentPod : nil
+        // Anchor on a LIVE pod (`sessionPod`), not `currentPod` — the latter
+        // defaults to the leader = oldest pod, which may be a dead zombie that
+        // would null the base URL and brick the box surface for every pod.
+        let pod = app.isPaired ? app.sessionPod : nil
         let store = sessionStore
         Task { await PodSessionSync.sync(currentPod: pod, store: store) }
+    }
+
+    /// Lazily build + lifecycle the single live-update canal. Foreground-only:
+    /// started when `scenePhase == .active` AND the user is paired; stopped
+    /// otherwise. The coordinator long-polls `/stream` and feeds AppState (pods
+    /// + Box Request Inbox), so the per-screen watchers no longer need their own
+    /// fetch timers. App-scope (built here at the shell), so it spans every tab.
+    @MainActor
+    private func syncLiveSync() {
+        if liveSync == nil {
+            let app = self.app
+            let mailbox = self.mailbox
+            liveSync = LiveSyncCoordinator(
+                app: app,
+                mailbox: mailbox,
+                isActive: { [weak app] in (app?.isPaired ?? false) && (app?.isUnlocked ?? false) },
+                makeReconciler: { fetch in
+                    // Same reconcile path Home uses: surface registered/pending
+                    // pods, drop ghosts, and run the secret-free SWK deposit for
+                    // newly-registered boxes (idempotent, best-effort).
+                    let swkDeposit: SwkDepositCoordinator? = (app.currentUser.map {
+                        SwkDepositCoordinator(username: $0, mailbox: mailbox)
+                    })
+                    let trust = self.trust
+                    return PendingServerReconciler(
+                        app: app,
+                        fetchPods: fetch,
+                        onRegistered: { fqdn, identityPubKeyHex in
+                            await swkDeposit?.depositIfNeeded(serverDomain: fqdn, identityPubKeyHex: identityPubKeyHex)
+                        },
+                        // Per-cert relay-trust aggregation (maintainer-trust Layer 3):
+                        // verify each box's STK-signed box-trust-status and aggregate
+                        // the untrusted ones BY failing relay cert-hash into the red
+                        // sliver — one line + one override per DISTINCT authority. A
+                        // warning + override source; it never gates `.com` I/O.
+                        onDirectory: { pods in
+                            trust.setRelayFailures(RelayTrustAggregator.aggregate(pods: pods))
+                        }
+                    )
+                }
+            )
+        }
+        let shouldRun = app.isPaired && scenePhase == .active
+        if shouldRun { liveSync?.start() } else { liveSync?.stop() }
     }
 
     /// Lazily wire the registry on first use, then re-sync on every
@@ -106,6 +187,37 @@ struct ContentView: View {
             pendingWatchers = PendingPodWatcherRegistry(app: app, server: serverClient)
         }
         pendingWatchers?.sync()
+    }
+
+    /// #91 — lazily build + start the AI-chat alert poller on first paint after
+    /// pairing. Live-client only: the mock/demo client has no real box to drain
+    /// `/api/phone/alerts` from. The poller self-gates on paired+unlocked, so
+    /// it drains only while the app is usable (mirrors the sliver's
+    /// hide-under-lock). The notifier routes through the App-scope
+    /// `PushNotifications` so a tap deep-links to the chat, exactly like a real
+    /// Web-Push wake.
+    @MainActor
+    private func syncAiChatPoller() {
+        guard dev.useLiveClient else { return }
+        if aiChatPoller == nil {
+            let pinned = BoxPinnedURLSession.make(pinFor: { CertPinRegistry.shared.pinFor(host: $0) })
+            let client = LivePhoneAlertClient(urlSession: pinned, store: sessionStore)
+            let poller = AiChatAlertPoller(
+                operations: operations,
+                client: client,
+                isActive: { [weak app] in (app?.isPaired ?? false) && (app?.isUnlocked ?? false) },
+                notify: { sessionId, request in
+                    guard let delegate = UIApplication.shared.delegate as? AppDelegate,
+                          let push = delegate.push else { return }
+                    push.notifyAiChatNeedsYou(
+                        sessionId: sessionId,
+                        isEnvVar: request == .requestEnvVar
+                    )
+                }
+            )
+            aiChatPoller = poller
+            poller.start()
+        }
     }
 
     /// Lazy push registration — only after the user has a paired pod

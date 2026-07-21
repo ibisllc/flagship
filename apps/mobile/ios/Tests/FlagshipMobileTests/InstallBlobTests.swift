@@ -207,25 +207,25 @@ final class InstallBlobTests: XCTestCase {
         XCTAssertEqual(s, "flagship/claim-username/v1|harry|abcd|42")
     }
 
-    func test_pushTokenRegisterCanonicalBytes_followsV1Format() {
+    func test_pushTokenRegisterCanonicalBytes_followsV2Format() {
         let s = String(
             data: PushTokenRegister.canonicalBytes(
                 username: "harry",
+                deviceId: "00112233445566778899aabbccddeeff",
                 platform: "apns",
                 providerToken: "deadbeef",
                 pushX25519PubHex: String(repeating: "ab", count: 32),
-                label: "Harry's iPhone",
                 issuedAt: 1700000000
             ),
             encoding: .utf8
         )!
-        // Field order: tag | username | platform | providerToken |
-        // pushX25519Pub | label | issuedAt. Mirrors the Worker side
+        // Field order: tag | username | deviceId | platform | providerToken |
+        // pushX25519Pub | issuedAt. Mirrors the Worker side
         // in packages/protocol/src/auth.ts.
         XCTAssertEqual(
             s,
-            "flagship/push-token-register/v1|harry|apns|deadbeef|" +
-            String(repeating: "ab", count: 32) + "|Harry's iPhone|1700000000"
+            "flagship/push-token-register/v2|harry|00112233445566778899aabbccddeeff|apns|deadbeef|" +
+            String(repeating: "ab", count: 32) + "|1700000000"
         )
     }
 

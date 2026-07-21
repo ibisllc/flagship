@@ -74,6 +74,42 @@ class SignOutPolicyTest {
         assertEquals(SignOutPolicy.ALLOWED, SignOutPolicy.evaluate(hasCloudRecovery = true))
     }
 
+    /** No recovery + LAST device ⇒ account DEATH: the UI runs the deletion
+     *  ceremony (typed-username + biometric → owner-IRK self-delete bundle),
+     *  NOT a silent orphaning wipe. */
+    @Test fun deletionCeremony_whenNoRecoveryAndLastDevice() {
+        assertEquals(
+            SignOutPolicy.DELETION_CEREMONY,
+            SignOutPolicy.evaluate(hasCloudRecovery = false, isDemoAccount = false, isLastDevice = true),
+        )
+    }
+
+    /** No recovery but ANOTHER device exists ⇒ the key survives elsewhere, so
+     *  it stays "set up recovery first", not account death. */
+    @Test fun blocked_whenNoRecoveryButNotLastDevice() {
+        assertEquals(
+            SignOutPolicy.BLOCKED_NO_RECOVERY,
+            SignOutPolicy.evaluate(hasCloudRecovery = false, isDemoAccount = false, isLastDevice = false),
+        )
+    }
+
+    /** Recovery present ⇒ allowed even on the last device (the key returns via
+     *  the recovery passkey, so it isn't death). */
+    @Test fun allowed_withRecovery_evenOnLastDevice() {
+        assertEquals(
+            SignOutPolicy.ALLOWED,
+            SignOutPolicy.evaluate(hasCloudRecovery = true, isDemoAccount = false, isLastDevice = true),
+        )
+    }
+
+    /** Demo is exempt even as the last device. */
+    @Test fun demo_lastDevice_stillAllowed() {
+        assertEquals(
+            SignOutPolicy.ALLOWED,
+            SignOutPolicy.evaluate(hasCloudRecovery = false, isDemoAccount = true, isLastDevice = true),
+        )
+    }
+
     // ─── The action-layer guard (the exact pipeline SettingsScreen runs) ─
 
     /** Mirrors the SettingsScreen confirm handler: evaluate the policy

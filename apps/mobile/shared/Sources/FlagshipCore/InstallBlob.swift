@@ -118,6 +118,13 @@ public struct AuthCode: Equatable, Sendable {
     public var userPubKey: Data        // Ed25519 (IRK)
     public var issuedAt: Int64
     public var expiresAt: Int64
+    /// Slice D (docs/device-admin-tier-spec.md §1.3, D-1) — the account's pinned
+    /// ADMIN MASTER ROOT pubkey (32 bytes Ed25519). Optional + backward-compatible:
+    /// absent ⇒ canonical bytes are byte-identical to pre-D (old signatures still
+    /// verify); present ⇒ appended `ar=<hex>` LAST so the IRK signs over it and a
+    /// relay can neither strip nor swap the box's admin anchor. Mirrors the TS
+    /// `canonicalAuthCode` in packages/protocol/src/installBlob.ts byte-for-byte.
+    public var adminRootPubKey: Data?
 
     public init(
         version: Int = 1,
@@ -128,16 +135,18 @@ public struct AuthCode: Equatable, Sendable {
         delegatedPubKey: Data,
         userPubKey: Data,
         issuedAt: Int64,
-        expiresAt: Int64
+        expiresAt: Int64,
+        adminRootPubKey: Data? = nil
     ) {
         self.version = version; self.serial = serial; self.username = username
         self.serverName = serverName; self.serverDomain = serverDomain
         self.delegatedPubKey = delegatedPubKey; self.userPubKey = userPubKey
         self.issuedAt = issuedAt; self.expiresAt = expiresAt
+        self.adminRootPubKey = adminRootPubKey
     }
 
     public func canonicalBytes() -> Data {
-        let parts: [String] = [
+        var parts: [String] = [
             AuthCode.canonicalTag,
             String(version),
             serial,
@@ -149,6 +158,13 @@ public struct AuthCode: Equatable, Sendable {
             String(issuedAt),
             String(expiresAt),
         ]
+        // Slice D backward-compatible extension — MUST match TS canonicalAuthCode:
+        // an AuthCode WITHOUT adminRootPubKey yields the EXACT pre-D bytes; present
+        // ⇒ appended with an `ar=` prefix (can't collide with the fixed hex/number
+        // tokens above), committing the signer to it.
+        if let ar = adminRootPubKey {
+            parts.append("ar=\(HexUtil.encode(ar))")
+        }
         return Data(parts.joined(separator: "|").utf8)
     }
 }
@@ -353,21 +369,17 @@ public enum WipeRestartClaim {
 /// signed. Platform is one of `apns`, `fcm`, `webpush`; `providerToken`
 /// is opaque to .com (APNs hex token or FCM registration ID).
 public enum PushTokenRegister {
-    public static let canonicalTag = "flagship/push-token-register/v1"
+    public static let canonicalTag = "flagship/push-token-register/v2"
     public static func canonicalBytes(
         username: String,
+        deviceId: String,
         platform: String,
         providerToken: String,
         pushX25519PubHex: String,
-        label: String,
         issuedAt: Int64
     ) -> Data {
-        // Field order must match the Worker's canonicalPushTokenRegister
-        // in packages/protocol/src/auth.ts. The `label` field was added
-        // pre-launch (no v2 bump needed); it slots between pushX25519Pub
-        // and issuedAt on both sides.
         Data([
-            canonicalTag, username, platform, providerToken, pushX25519PubHex, label, String(issuedAt)
+            canonicalTag, username, deviceId, platform, providerToken, pushX25519PubHex, String(issuedAt)
         ].joined(separator: "|").utf8)
     }
 }

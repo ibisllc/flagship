@@ -47,6 +47,7 @@ import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
 import com.flagshipserver.app.core.ServerSettingsStore
+import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -63,6 +64,7 @@ fun SecretRequestsScreen(nav: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val username by app.currentUser.collectAsState()
+    val pods by app.pods.collectAsState()
 
     val store = remember { ServerSettingsStore.from(context) }
     var state by remember {
@@ -72,7 +74,15 @@ fun SecretRequestsScreen(nav: NavController) {
 
     val coordinator = remember(username, mailbox) {
         username?.let {
-            SecretRequestCoordinator(mailbox = mailbox, username = it, irk = KeystoreIrkAccess())
+            // Slice D — the entitlement/lease orders minted in the ceremony sign
+            // with the admin master root when this device holds one (transport
+            // envelopes stay IRK).
+            SecretRequestCoordinator(
+                mailbox = mailbox,
+                username = it,
+                irk = KeystoreIrkAccess(),
+                adminSigner = { r -> if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null },
+            )
         }
     }
 
@@ -129,8 +139,18 @@ fun SecretRequestsScreen(nav: NavController) {
                     }
                 } else {
                     s.value.forEach { req ->
+                        // First boot vs established reboot: a box that has never
+                        // come online (no check-in, no cert) is on its FIRST boot,
+                        // where this approval also authorizes serving — show the
+                        // full copy. A box that has come online before is just
+                        // re-unlocking. Unknown (pod not in the list yet) defaults
+                        // to first-boot = the fuller copy (today's wording).
+                        val isFirstBoot = pods
+                            .firstOrNull { it.fqdn.equals(req.serverDomain, ignoreCase = true) }
+                            ?.cameOnline?.not() ?: true
                         SecretRequestCard(
                             req = req,
+                            isFirstBoot = isFirstBoot,
                             inFlight = inFlightId == req.id,
                             onApprove = {
                                 val coord = coordinator ?: return@SecretRequestCard
@@ -166,12 +186,22 @@ fun SecretRequestsScreen(nav: NavController) {
 @Composable
 private fun SecretRequestCard(
     req: SecretRequestCoordinator.VerifiedRequest,
+    /** The box behind this request has never come online — its FIRST boot. */
+    isFirstBoot: Boolean,
     inFlight: Boolean,
     onApprove: () -> Unit,
 ) {
+    // On a FIRST boot the unlock approval ALSO deposits the box's entitlement
+    // (consent to boot ⇒ consent to serve), so it both unlocks AND authorizes the
+    // box to join the cloud — the fuller copy. On an established reboot the box is
+    // already authorized, so the approval is purely a disk unlock; the "…join your
+    // cloud" phrase is just noise. (The deposit still fires on every approval —
+    // harmless on reboots — so this is copy only.)
     val purposeLabel = when (req.purpose) {
-        SecretPurpose.UNLOCK_KEY -> "Unlock its encrypted disk"
-        SecretPurpose.ENTITLEMENT -> "Authorize it to serve your account"
+        SecretPurpose.UNLOCK_KEY ->
+            if (isFirstBoot) "Unlock device and authorize it to join your cloud"
+            else "Unlock device"
+        SecretPurpose.ENTITLEMENT -> "Authorize device to join your cloud"
         null -> "Boot secret"
     }
     FSCard(padding = PaddingValues(FS.space.s4)) {

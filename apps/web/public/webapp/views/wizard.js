@@ -37,6 +37,7 @@ import { trademarkClaimMailto } from "../lib/trademarkClaim.js";
 import { addProfile } from "../lib/profiles.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
+import { inlinePrompt } from "../lib/modal.js";
 import {
   get as profileGet,
   set as profileSet,
@@ -151,13 +152,13 @@ async function handleOpenAccount() {
   const username = (input?.value || "").trim().toLowerCase();
   renderTakenState(null); // clear any prior taken-state on a fresh attempt
   if (!isValidUsername(username)) {
-    toast("username must be 3–30 lowercase letters and digits, no hyphens", "err");
+    toast("Username must be 3–30 lowercase letters and digits, no hyphens", "err");
     input?.focus();
     return false;
   }
   const session = getSession();
   if (!session.umk || !session.irk) {
-    toast("generate a device key first", "err");
+    toast("Generate a device key first", "err");
     return false;
   }
   const btn = document.getElementById("wizard-go-username");
@@ -178,6 +179,23 @@ async function handleOpenAccount() {
     // ignore — fall through to the claim, which is authoritative.
   }
   try {
+    const suggestedAccountName = username.split("-")
+      .map((part) => part ? part[0].toUpperCase() + part.slice(1) : part)
+      .join(" ");
+    const accountDisplayName = await inlinePrompt({
+      title: "Name this account",
+      message: `This private name appears above @${username} and is never used in links.`,
+      initial: suggestedAccountName,
+      validate: (value) => value?.trim() ? null : "Enter an account name",
+    });
+    if (!accountDisplayName) return false;
+    const deviceDisplayName = await inlinePrompt({
+      title: "Name this device",
+      message: "This private name applies only inside this Flagship account.",
+      initial: "This browser",
+      validate: (value) => value?.trim() ? null : "Enter a device name",
+    });
+    if (!deviceDisplayName) return false;
     await openAccount(username, {
       session,
       signWithIrk,
@@ -193,11 +211,13 @@ async function handleOpenAccount() {
       // own keystore record so a second account never clobbers the first.
       persistSeedForProfile,
       addProfile,
+      accountDisplayName,
+      deviceDisplayName,
       // No dispatchInitialView — the wizard advances to the recovery
       // step itself. The account is open; the app shell comes after the
       // remaining (skippable) wizard steps.
     });
-    toast(`account opened — ${username}`, "ok");
+    toast(`Account opened — ${username}`, "ok");
     return true;
   } catch (e) {
     const msg = String(e.message || e);
@@ -226,7 +246,7 @@ async function handleOpenAccount() {
 async function handleSecureAccount() {
   const session = getSession();
   if (!session.umk || !session.irk) {
-    toast("open your account first", "err");
+    toast("Open your account first", "err");
     return false;
   }
   const username =
@@ -239,7 +259,7 @@ async function handleSecureAccount() {
     if (useCloud) {
       const { setupCloudRecovery } = await import("../lib/recovery.js");
       await setupCloudRecovery(username);
-      toast(`cloud backup on for ${username}`, "ok");
+      toast(`Cloud backup on for ${username}`, "ok");
       return true;
     }
     // File path: run the same `.flagshipkey` export ceremony the
@@ -248,7 +268,7 @@ async function handleSecureAccount() {
     const saved = await runKeyfileExportCeremony();
     return saved === true;
   } catch (e) {
-    toast(`backup failed: ${e?.message ?? e}`, "err");
+    toast(`Backup failed: ${e?.message ?? e}`, "err");
     return false;
   } finally {
     if (btn) btn.disabled = false;

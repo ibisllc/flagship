@@ -77,23 +77,33 @@ data class AuthCode(
     var userPubKey: ByteArray,
     var issuedAt: Long,
     var expiresAt: Long,
+    // Slice D (D-1) — the account's ADMIN MASTER ROOT pubkey (32 bytes). Null ⇒
+    // the canonical bytes are byte-identical to a pre-D AuthCode. When present
+    // it is appended LAST with an `ar=` prefix, so the signer commits to it (a
+    // relay can neither strip nor swap the admin anchor). MUST match the TS
+    // canonicalAuthCode `ar=${hex(adminRootPubKey)}`.
+    var adminRootPubKey: ByteArray? = null,
 ) {
     companion object {
         const val CANONICAL_TAG = "flagship/auth-code/v1"
     }
 
-    fun canonicalBytes(): ByteArray = listOf(
-        CANONICAL_TAG,
-        version.toString(),
-        serial,
-        username,
-        serverName,
-        serverDomain,
-        HexUtil.encode(delegatedPubKey),
-        HexUtil.encode(userPubKey),
-        issuedAt.toString(),
-        expiresAt.toString(),
-    ).joinToString("|").toByteArray()
+    fun canonicalBytes(): ByteArray {
+        val parts = mutableListOf(
+            CANONICAL_TAG,
+            version.toString(),
+            serial,
+            username,
+            serverName,
+            serverDomain,
+            HexUtil.encode(delegatedPubKey),
+            HexUtil.encode(userPubKey),
+            issuedAt.toString(),
+            expiresAt.toString(),
+        )
+        adminRootPubKey?.let { parts.add("ar=${HexUtil.encode(it)}") }
+        return parts.joinToString("|").toByteArray()
+    }
 }
 
 object UsernameClaim {
@@ -261,7 +271,7 @@ object WipeRestartClaim {
 }
 
 object PushTokenRegister {
-    const val CANONICAL_TAG = "flagship/push-token-register/v1"
+    const val CANONICAL_TAG = "flagship/push-token-register/v2"
 
     /**
      * Field order must match the Worker's canonicalPushTokenRegister
@@ -271,13 +281,13 @@ object PushTokenRegister {
      */
     fun canonicalBytes(
         username: String,
+        deviceId: String,
         platform: String,
         providerToken: String,
         pushX25519PubHex: String,
-        label: String,
         issuedAt: Long,
     ): ByteArray = listOf(
-        CANONICAL_TAG, username, platform, providerToken, pushX25519PubHex, label, issuedAt.toString()
+        CANONICAL_TAG, username, deviceId, platform, providerToken, pushX25519PubHex, issuedAt.toString()
     ).joinToString("|").toByteArray()
 }
 

@@ -40,7 +40,7 @@ import type {
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
 import { recordAuditEvent } from "./auditEvents.js";
-import { computeDevicesEtag } from "./usersDevices.js";
+import { computeDevicesEtag } from "./deviceDirectoryEtag.js";
 import {
   conflict,
   forbidden,
@@ -174,14 +174,11 @@ export async function handleWipeRestart(
     const currentEtag = await computeDevicesEtag(
       rows
         .map((p) => ({
-          tokenId: p.tokenId,
-          tokenPrefix: p.tokenId.slice(0, 8),
-          label: p.label || `Untitled ${p.platform}`,
+          deviceId: p.deviceId,
           platform: p.platform,
           addedAt: p.registeredAt,
-          lastSeenAt: p.lastSeenAt,
         }))
-        .sort((a, b) => a.addedAt - b.addedAt || a.tokenId.localeCompare(b.tokenId)),
+        .sort((a, b) => a.addedAt - b.addedAt || a.deviceId.localeCompare(b.deviceId)),
     );
     if (currentEtag !== ifMatch) {
       return {
@@ -325,14 +322,11 @@ export async function handleWipeRestart(
     freshEtag = await computeDevicesEtag(
       rows
         .map((p) => ({
-          tokenId: p.tokenId,
-          tokenPrefix: p.tokenId.slice(0, 8),
-          label: p.label || `Untitled ${p.platform}`,
+          deviceId: p.deviceId,
           platform: p.platform,
           addedAt: p.registeredAt,
-          lastSeenAt: p.lastSeenAt,
         }))
-        .sort((a, b) => a.addedAt - b.addedAt || a.tokenId.localeCompare(b.tokenId)),
+        .sort((a, b) => a.addedAt - b.addedAt || a.deviceId.localeCompare(b.deviceId)),
     );
   }
 

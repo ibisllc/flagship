@@ -87,10 +87,10 @@ test-vectors
 # ---- mobile clients (iOS + Android — never used by the Fly Fastify) ---------
 apps/mobile
 
-# ---- native burners (Mac Swift, Linux, Windows) -----------------------------
-apps/burner-mac
-apps/burner-linux
-apps/burner-windows
+# ---- native builders (Mac Swift, Linux, Windows) -----------------------------
+apps/builder-mac
+apps/builder-linux
+apps/builder-windows
 
 # ---- other Cloudflare Workers (deployed separately via wrangler) ------------
 apps/boot
@@ -105,7 +105,7 @@ apps/com/wrangler.jsonc
 installer
 scripts
 
-# ---- Swift / Xcode artifacts (defensive — apps/mobile + apps/burner-mac
+# ---- Swift / Xcode artifacts (defensive — apps/mobile + apps/builder-mac
 #      are already excluded but these patterns guard against future moves) ----
 **/.build
 **/DerivedData

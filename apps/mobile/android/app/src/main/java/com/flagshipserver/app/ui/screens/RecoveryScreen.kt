@@ -162,6 +162,8 @@ fun RecoveryScreen(nav: NavController) {
                                     passphraseConfirm = passphraseConfirm,
                                     acmeScalar = acmeScalar,
                                     now = System.currentTimeMillis(),
+                                    // Slice D (D-3) — escrow the admin master root.
+                                    adminRootSeed = Keystore.adminRootSeed(),
                                 )
                             }
                             // Keep the Android Block Store copy so a new device
@@ -198,7 +200,7 @@ fun RecoveryScreen(nav: NavController) {
                         working = true; error = null
                         try {
                             val envelope = blockStore.fetch()
-                                ?: throw IllegalStateException("no envelope on this device; cross-device restore not wired yet")
+                                ?: throw IllegalStateException("no encrypted backup on this device; cross-device restore isn't available yet")
                             val username = app.currentUser.value ?: "you"
                             // The Block Store blob was sealed with the
                             // passphrase-derived prfSalt, so re-derive it here

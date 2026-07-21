@@ -29,8 +29,8 @@ public struct FSPrimaryButton: View {
             Text(label)
                 .font(.system(size: large ? 16 : 14, weight: .semibold))
                 .frame(maxWidth: block ? .infinity : nil)
-                .frame(height: large ? 48 : 40)
-                .padding(.horizontal, large ? 28 : 20)
+                .frame(minHeight: large ? 48 : 44)
+                .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
                 .background(c.primary.opacity(enabled ? 1 : 0.4))
                 .foregroundColor(.white)
                 .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
@@ -55,8 +55,8 @@ public struct FSSecondaryButton: View {
             Text(label)
                 .font(.system(size: large ? 16 : 14, weight: .semibold))
                 .frame(maxWidth: block ? .infinity : nil)
-                .frame(height: large ? 48 : 40)
-                .padding(.horizontal, large ? 28 : 20)
+                .frame(minHeight: large ? 48 : 44)
+                .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
                 .background(c.surface)
                 .foregroundColor(c.text)
                 .overlay(
@@ -83,8 +83,8 @@ public struct FSGhostButton: View {
             Text(label)
                 .font(.system(size: large ? 16 : 14, weight: .semibold))
                 .frame(maxWidth: block ? .infinity : nil)
-                .frame(height: large ? 48 : 40)
-                .padding(.horizontal, large ? 28 : 20)
+                .frame(minHeight: large ? 48 : 44)
+                .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
                 .foregroundColor(c.text)
         }
     }
@@ -111,8 +111,8 @@ public struct FSDangerButton: View {
             Text(label)
                 .font(.system(size: large ? 16 : 14, weight: .semibold))
                 .frame(maxWidth: block ? .infinity : nil)
-                .frame(height: large ? 48 : 40)
-                .padding(.horizontal, large ? 28 : 20)
+                .frame(minHeight: large ? 48 : 44)
+                .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
                 .foregroundColor(fg)
                 .overlay(
                     RoundedRectangle(cornerRadius: FS.radius.md)
@@ -195,7 +195,7 @@ public struct FSField: View {
     }
 }
 
-public enum FSPillKind { case online, renewing, offline, provisioning, idle }
+public enum FSPillKind { case online, renewing, offline, provisioning, pending, idle }
 
 public struct FSPill: View {
     @Environment(\.colorScheme) private var scheme
@@ -220,6 +220,7 @@ public struct FSPill: View {
         case .renewing:     return (c.warning, c.warning.opacity(0.12))
         case .offline:      return (c.danger, c.danger.opacity(0.12))
         case .provisioning: return (c.primary, c.primary.opacity(0.12))
+        case .pending:      return (c.warning, c.warning.opacity(0.12))
         case .idle:         return (c.textMuted, c.surfaceSunken)
         }
     }

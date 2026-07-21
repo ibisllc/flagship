@@ -1,3 +1,4 @@
+import { swkOps } from "../helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import { ed, deriveIRK, deriveSWK } from "@flagship/protocol";
 import { AppMembership } from "../../src/membership.js";
@@ -47,7 +48,7 @@ function fakeGate(allowToken = "tok-good") {
   };
 }
 
-function fakePairedSessions(sessions: Array<{ token: string; label: string; addedAt: number }>) {
+function fakePairedSessions(sessions: Array<{ token: string; addedAt: number }>) {
   const map = new Map(sessions.map((s) => [s.token, s]));
   return {
     list: () => [...map.values()],
@@ -79,7 +80,7 @@ function fakeUrlController(initial: string[] = []): UrlControllerLike & { claime
 function makeMembership(): AppMembership {
   const umk = { seed: new Uint8Array(32).fill(7) };
   const irk = deriveIRK(umk);
-  const swk = deriveSWK(umk, "srv-1");
+  const swk = swkOps(deriveSWK(umk, "srv-1"));
   return new AppMembership("habits", USERNAME, irk.publicKey, swk);
 }
 
@@ -169,6 +170,7 @@ describe("screens HTTP — P1.1 server-detail", () => {
         sans: [SERVER_FQDN, `*.${SERVER_FQDN}`],
       }),
       installEventLog,
+      currentCommit: () => "9f2c1ab3de4567890abcdef1234567890abcdef1",
     });
     const r = await handle(req({
       path: "/api/screens/server-detail",
@@ -184,6 +186,7 @@ describe("screens HTTP — P1.1 server-detail", () => {
     expect(body.certNotAfter).toBe(9_000);
     expect(body.certSans).toEqual([SERVER_FQDN, `*.${SERVER_FQDN}`]);
     expect(body.recentInstallEvents).toHaveLength(1);
+    expect(body.currentCommit).toBe("9f2c1ab3de4567890abcdef1234567890abcdef1");
   });
 
   it("degrades cleanly when subsystems are null (no app-platform / no certs / no event log)", async () => {
@@ -201,6 +204,8 @@ describe("screens HTTP — P1.1 server-detail", () => {
     expect(body.pairedSessionCount).toBe(0);
     expect(body.recentInstallEvents).toEqual([]);
     expect(body.certNotAfter).toBeUndefined();
+    // No provider wired (not a git checkout) ⇒ honest null, never a guess.
+    expect(body.currentCommit).toBeNull();
   });
 });
 
@@ -306,8 +311,8 @@ describe("screens HTTP — P1.12 paired-sessions/list", () => {
       // The phone is the caller, so the gate must accept its full token.
       gate: fakeGate(PHONE_TOKEN),
       pairedSessions: fakePairedSessions([
-        { token: PHONE_TOKEN, label: "phone", addedAt: 100 },
-        { token: LAPTOP_TOKEN, label: "laptop", addedAt: 200 },
+        { token: PHONE_TOKEN, addedAt: 100 },
+        { token: LAPTOP_TOKEN, addedAt: 200 },
       ]),
     });
     const r = await handle(req({
@@ -317,10 +322,10 @@ describe("screens HTTP — P1.12 paired-sessions/list", () => {
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
     expect(body.sessions).toHaveLength(2);
-    const phone = body.sessions.find((s: { label: string }) => s.label === "phone");
+    const phone = body.sessions.find((s: { tokenPrefix: string }) => s.tokenPrefix === PHONE_TOKEN.slice(0, 12));
     expect(phone.tokenPrefix).toBe(PHONE_TOKEN.slice(0, 12));
     expect(phone.current).toBe(true);
-    const laptop = body.sessions.find((s: { label: string }) => s.label === "laptop");
+    const laptop = body.sessions.find((s: { tokenPrefix: string }) => s.tokenPrefix === LAPTOP_TOKEN.slice(0, 12));
     expect(laptop.current).toBe(false);
     // Full tokens are never returned
     expect(JSON.stringify(body)).not.toContain(PHONE_TOKEN);
@@ -1081,4 +1086,3 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
     expect(r?.status).toBe(502);
   });
 });
-

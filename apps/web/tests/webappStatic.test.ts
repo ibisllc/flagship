@@ -101,7 +101,7 @@ describe("/webapp PWA static surface", () => {
     const r = await app.inject({ method: "GET", url: "/webapp/lib/podPair.js" });
     expect(r.statusCode).toBe(200);
     // Same canonical-bytes tag the pod's auth.ts uses to verify.
-    expect(r.body).toContain("flagship/order/add-paired-session/v1");
+    expect(r.body).toContain("flagship/order/add-paired-session/v2");
     // POSTs to the daemon's orders endpoint.
     expect(r.body).toContain("/api/orders-from-user");
     expect(r.body).toContain("signWithIrk");
@@ -175,7 +175,7 @@ describe("/webapp PWA static surface", () => {
       "flagship/order/shut-down/v1",
       "flagship/order/set-backup-policy/v1",
       "flagship/order/revoke-self/v1",
-      "flagship/order/add-paired-session/v1",
+      "flagship/order/add-paired-session/v2",
       "flagship/order/remove-paired-session/v1",
       "flagship/order/backup-app/v1",
     ]) {
@@ -257,13 +257,36 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("recovery-cloud-setup");
   });
 
-  it("/webapp/views/bootstrap.js offers the recover-from-passkey path", async () => {
+  it("/webapp/views/bootstrap.js is username-first and offers the access pathways", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/views/bootstrap.js" });
     expect(r.statusCode).toBe(200);
-    expect(r.body).toContain("recoverFromCloud");
+    // Random-by-default cover: a "Create account" action (random handle) +
+    // a SIGN-IN-only username field that resolves to the access options.
+    expect(r.body).toContain("createAccount");
+    // One throttled suggestion at a time (no batch shuffle); regenerate is the
+    // only edit affordance + a device-key for the per-device cooldown.
+    expect(r.body).toContain("/api/username/suggest");
+    expect(r.body).toContain("inlineSuggestUsername");
+    expect(r.body).toContain("deviceKey");
+    expect(r.body).toContain("bootstrap-continue");
+    expect(r.body).toContain("resolveAccount");
+    expect(r.body).toContain("accessOptions");
+    // Taken-name access pathways still route to the real flows.
+    expect(r.body).toContain("recoverFromCloud"); // recover
     expect(r.body).toContain("bootstrapFromExistingSeed");
-    expect(r.body).toContain("bootstrap-recover");
+    expect(r.body).toContain("enterRecovery"); // keyfile import
+    expect(r.body).toContain("enterJoin"); // scan a pairing code
+  });
+
+  it("/webapp/lib/modal.js ships the rate-limited username suggestion step", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/modal.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("inlineSuggestUsername");
+    expect(r.body).toContain("Try again in"); // the escalating-cooldown countdown
+    expect(r.body).toContain("data-suggest-regen"); // the regenerate button
+    expect(r.body).toContain("change your username later"); // the subtext
   });
 
   it("/webapp/keystore.js exposes bootstrapFromExistingSeed for the recovery flow", async () => {
@@ -318,7 +341,7 @@ describe("/webapp PWA static surface", () => {
     // endpoint the iOS/Android paths use (apns/fcm). Pinned to the
     // protocol-side canonical-bytes tag.
     expect(r.body).toContain('platform: "webpush"');
-    expect(r.body).toContain("flagship/push-token-register/v1");
+    expect(r.body).toContain("flagship/push-token-register/v2");
     expect(r.body).toContain("/api/push/register");
     expect(r.body).toContain("/api/push/vapid-public-key");
     // userVisibleOnly is required by the spec for push subscriptions.

@@ -96,14 +96,27 @@ final class FlagshipServerClientTests: XCTestCase {
         XCTAssertEqual(r.reason, "already claimed")
     }
 
-    func test_usernameAvailable_rejectsHyphen() async throws {
-        // Usernames are hyphen-free so serviceId `<creator>-<slug>` parses
-        // unambiguously. Worker's labels.ts USERNAME_RE is
-        // /^[a-z0-9]{3,30}$/ — the iOS Mock must agree.
+    func test_suggestUsername_returnsAValidRandomHandle() async throws {
+        // The Mock suggests a fresh <adjective>-<noun> with a positive cooldown
+        // and never throttles (offline/dev convenience).
         let c = makeClient()
-        let r = try await c.usernameAvailable("play-q2")
-        XCTAssertFalse(r.available)
-        XCTAssertTrue((r.reason ?? "").lowercased().contains("hyphen"))
+        let s = try await c.suggestUsername(deviceKey: "abcd")
+        XCTAssertNotNil(s.name)
+        XCTAssertFalse(s.throttled)
+        XCTAssertGreaterThan(s.retryAfterMs, 0)
+        XCTAssertNotNil(s.name?.range(of: "^[a-z]+-[a-z]+$", options: .regularExpression))
+    }
+
+    func test_usernameAvailable_acceptsInteriorDashRejectsDoubleDash() async throws {
+        // Interior single dashes are now allowed; `--` is the reserved
+        // `<slug>--<creator>` delimiter and must be rejected. Worker's labels.ts
+        // USERNAME_RE is /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/ + a `--` ban — the
+        // iOS Mock must agree (docs/service-addressing-double-dash.md).
+        let c = makeClient()
+        let single = try await c.usernameAvailable("play-q2")
+        XCTAssertTrue(single.available)
+        let double = try await c.usernameAvailable("play--q2")
+        XCTAssertFalse(double.available)
     }
 
     func test_usernameAvailable_rejectsLeadingOrTrailingHyphen() async throws {
@@ -120,10 +133,10 @@ final class FlagshipServerClientTests: XCTestCase {
         let c = makeClient()
         let short = try await c.usernameAvailable("ab")
         XCTAssertFalse(short.available)
-        XCTAssertEqual(short.reason, "username must be 3–30 lowercase letters or digits (no hyphens)")
+        XCTAssertEqual(short.reason, "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)")
         let long = try await c.usernameAvailable(String(repeating: "a", count: 31))
         XCTAssertFalse(long.available)
-        XCTAssertEqual(long.reason, "username must be 3–30 lowercase letters or digits (no hyphens)")
+        XCTAssertEqual(long.reason, "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)")
         let okMin = try await c.usernameAvailable("abc")
         XCTAssertTrue(okMin.available)
     }
@@ -166,10 +179,10 @@ final class FlagshipServerClientTests: XCTestCase {
         let resp = try await c.registerPushToken(.init(
             request: .init(
                 username: "harry",
+                deviceId: "00112233445566778899aabbccddeeff",
                 platform: "apns",
                 providerToken: "deadbeef",
                 pushX25519Pub: String(repeating: "ab", count: 32),
-                label: "Harry's iPhone",
                 issuedAt: 7
             ),
             signature: "sig"
@@ -178,7 +191,10 @@ final class FlagshipServerClientTests: XCTestCase {
         XCTAssertFalse(resp.tokenId.isEmpty)
         XCTAssertEqual(c.registeredPushTokens[resp.tokenId]?.username, "harry")
         XCTAssertEqual(c.registeredPushTokens[resp.tokenId]?.platform, "apns")
-        XCTAssertEqual(c.registeredPushTokens[resp.tokenId]?.label, "Harry's iPhone")
+        XCTAssertEqual(
+            c.registeredPushTokens[resp.tokenId]?.deviceId,
+            "00112233445566778899aabbccddeeff"
+        )
     }
 
     // MARK: - Install-events poller
@@ -234,79 +250,6 @@ final class FlagshipServerClientTests: XCTestCase {
         StubURLProtocol.handler = nil
     }
 
-    // MARK: - listDevices
-
-    func test_listDevices_returnsEmptyForUnknownUser() async throws {
-        let c = makeClient()
-        let r = try await c.listDevices(username: "ghost")
-        XCTAssertTrue(r.devices.isEmpty)
-        XCTAssertNotNil(r.etag)
-    }
-
-    func test_listDevices_returnsScriptedDevicesInAddedAtOrder() async throws {
-        let c = makeClient()
-        c.devicesByUser["harry"] = [
-            .init(tokenId: "tokB", tokenPrefix: "tokB", label: "iPad", platform: "apns",  addedAt: 200, lastSeenAt: 200),
-            .init(tokenId: "tokA", tokenPrefix: "tokA", label: "iPhone", platform: "apns", addedAt: 100, lastSeenAt: 100),
-        ]
-        let r = try await c.listDevices(username: "harry")
-        XCTAssertEqual(r.devices.map(\.label), ["iPhone", "iPad"])
-    }
-
-    func test_listDevices_etagStableUnderSameData() async throws {
-        let c = makeClient()
-        c.devicesByUser["harry"] = [.init(tokenId: "t1", tokenPrefix: "t1", label: "iPhone", platform: "apns", addedAt: 1, lastSeenAt: 1)]
-        let a = try await c.listDevices(username: "harry")
-        let b = try await c.listDevices(username: "harry")
-        XCTAssertEqual(a.etag, b.etag)
-    }
-
-    func test_listDevices_etagChangesWhenLabelRotates() async throws {
-        let c = makeClient()
-        c.devicesByUser["harry"] = [.init(tokenId: "t1", tokenPrefix: "t1", label: "First", platform: "apns", addedAt: 1, lastSeenAt: 1)]
-        let a = try await c.listDevices(username: "harry")
-        c.devicesByUser["harry"] = [.init(tokenId: "t1", tokenPrefix: "t1", label: "Renamed", platform: "apns", addedAt: 1, lastSeenAt: 1)]
-        let b = try await c.listDevices(username: "harry")
-        XCTAssertNotEqual(a.etag, b.etag)
-    }
-
-    func test_listDevices_etagFormat_isWeakSlashQuoted16Hex() async throws {
-        let c = makeClient()
-        c.devicesByUser["harry"] = [.init(tokenId: "t1", tokenPrefix: "t1", label: "Test", platform: "apns", addedAt: 1, lastSeenAt: 1)]
-        let r = try await c.listDevices(username: "harry")
-        let etag = r.etag ?? ""
-        XCTAssertTrue(etag.hasPrefix("W/\""))
-        XCTAssertTrue(etag.hasSuffix("\""))
-    }
-
-    func test_liveClient_listDevices_decodesBodyAndExtractsEtag() async throws {
-        StubURLProtocol.handler = { req in
-            XCTAssertEqual(req.httpMethod, "GET")
-            XCTAssertEqual(req.url?.path, "/api/users/harry/devices")
-            let resp = HTTPURLResponse(
-                url: req.url!,
-                statusCode: 200,
-                httpVersion: "HTTP/2",
-                headerFields: ["Content-Type": "application/json", "ETag": "W/\"abc123\""]
-            )!
-            let body = """
-            {"devices":[{"tokenId":"t1","tokenPrefix":"t1","label":"iPhone","platform":"apns","addedAt":100,"lastSeenAt":110}]}
-            """.data(using: .utf8)!
-            return (resp, body)
-        }
-        defer { StubURLProtocol.handler = nil }
-        let cfg = URLSessionConfiguration.ephemeral
-        cfg.protocolClasses = [StubURLProtocol.self]
-        let client = LiveFlagshipServerClient(
-            urlSession: URLSession(configuration: cfg),
-            baseUrl: URL(string: "https://flagshipserver.com")!
-        )
-        let r = try await client.listDevices(username: "harry")
-        XCTAssertEqual(r.devices.count, 1)
-        XCTAssertEqual(r.devices[0].label, "iPhone")
-        XCTAssertEqual(r.etag, "W/\"abc123\"")
-    }
-
     func test_liveClient_registerPushToken_postsToApiPushRegister() async throws {
         StubURLProtocol.handler = { req in
             XCTAssertEqual(req.httpMethod, "POST")
@@ -332,9 +275,9 @@ final class FlagshipServerClientTests: XCTestCase {
         )
         let resp = try await client.registerPushToken(.init(
             request: .init(
-                username: "harry", platform: "apns", providerToken: "deadbeef",
+                username: "harry", deviceId: "00112233445566778899aabbccddeeff",
+                platform: "apns", providerToken: "deadbeef",
                 pushX25519Pub: String(repeating: "ab", count: 32),
-                label: "test-label",
                 issuedAt: 7
             ),
             signature: "sig"

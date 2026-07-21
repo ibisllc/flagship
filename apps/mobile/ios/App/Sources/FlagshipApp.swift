@@ -57,6 +57,9 @@ struct FlagshipApp: App {
         // `.com` cert can't intercept a power-off / affirmation either.
         self.liveLockPower = LiveLockPowerClient(urlSession: pinnedSession)
         self.liveFrontPage = LiveFrontPageClient(urlSession: pinnedSession)
+        // Box-direct leadership read (`GET /api/leads`) rides the SAME box-pinned
+        // session so a rogue `.com` cert can't feed a forged direct view.
+        self.liveLeads = LiveLeadsClient(urlSession: pinnedSession)
         // Owner-signed service uninstall (`DELETE /api/services/:id`) rides the
         // SAME box-pinned session so a rogue `.com` cert can't intercept it.
         self.liveServiceUninstall = LiveServiceUninstallClient(urlSession: pinnedSession)
@@ -156,6 +159,18 @@ struct FlagshipApp: App {
                 target: .vibeCodeChat(sessionId: "gym-smoke")
             )
         }
+        // `-smoke-admin-root` treats this device as holding the admin master
+        // root (GymSeams.forceAdminRoot) so the Slice-D admin-gated surfaces
+        // (Account-security Rotate-admin card; the add-device promote toggle)
+        // render offline. Assigned BOTH ways so a prior same-process launch's
+        // seed can never leak into an unflagged run. Gym-only.
+        GymSeams.forceAdminRoot = args.contains("-smoke-admin-root")
+        // Smoke launches bypass the UI-level Face-ID consent prompts (no
+        // enrolled biometric on a Simulator) — consent-only, no crypto
+        // emitted; see GymSeams. EXCEPT under -smoke-locked: the launch lock
+        // screen AUTO-prompts, and a bypassed prompt would auto-unlock the
+        // very trap that scenario asserts (D4-E1).
+        GymSeams.bypassBiometricGates = !wantLocked
         // `-smoke-trust-untrusted` seeds a positively-untrusted maintainer-trust
         // verdict so the red GlobalTrustBar (`global-trust-bar`) renders (D4-E7).
         // The live path derives this from a real `.com` blessing check
@@ -311,10 +326,25 @@ struct FlagshipApp: App {
     // session and live/mock split as lock/power.
     private let mockFrontPage = MockFrontPageClient()
     private let liveFrontPage: any FrontPageClient
+    // Direct (box-read) per-service leadership — `GET /api/leads` over the SAME
+    // box-pinned session, preferred over the `.com` `/pods` relay when a box is
+    // reachable. The Mock returns nil ("no fresher source") so dev/preview/demo
+    // keep the relay value untouched.
+    private let mockLeads = MockLeadsClient()
+    private let liveLeads: any LeadsClient
     // Service-uninstall box-direct client — same pinned session and live/mock
     // split as lock/power + front-page.
     private let mockServiceUninstall = MockServiceUninstallClient()
     private let liveServiceUninstall: any ServiceUninstallClient
+    // Transfer-a-box broker client — hits `.com` (the namespace-migration
+    // broker), not a box-pinned pipe, so it's a plain live client; live/mock
+    // split as the others.
+    private let mockServerTransfer = MockServerTransferClient()
+    private let liveServerTransfer: any ServerTransferClient = LiveServerTransferClient()
+    // Server-migration lane client — hits `.com` (the migration orchestration
+    // lane), not a box-pinned pipe; live/mock split as transfer.
+    private let mockServerMigration = MockServerMigrationClient()
+    private let liveServerMigration: any ServerMigrationClient = LiveServerMigrationClient()
     // Per-service access gating (#92): box calls ride the SAME box-pinned
     // session (set-mode + redeem are signature-authed daemon endpoints); the
     // invite create/list/revoke calls hit `.com` over the default public-CA
@@ -346,11 +376,20 @@ struct FlagshipApp: App {
     private var activeFrontPage: any FrontPageClient {
         dev.useLiveClient ? liveFrontPage : mockFrontPage
     }
+    private var activeLeads: any LeadsClient {
+        dev.useLiveClient ? liveLeads : mockLeads
+    }
     private var activeServiceUninstall: any ServiceUninstallClient {
         dev.useLiveClient ? liveServiceUninstall : mockServiceUninstall
     }
     private var activeServiceAccess: any ServiceAccessClient {
         dev.useLiveClient ? liveServiceAccess : mockServiceAccess
+    }
+    private var activeServerTransfer: any ServerTransferClient {
+        dev.useLiveClient ? liveServerTransfer : mockServerTransfer
+    }
+    private var activeServerMigration: any ServerMigrationClient {
+        dev.useLiveClient ? liveServerMigration : mockServerMigration
     }
 
     var body: some Scene {
@@ -371,8 +410,11 @@ struct FlagshipApp: App {
                 .environment(\.secretMailboxClient, activeMailbox)
                 .environment(\.lockPowerClient, activeLockPower)
                 .environment(\.frontPageClient, activeFrontPage)
+                .environment(\.leadsClient, activeLeads)
                 .environment(\.serviceUninstallClient, activeServiceUninstall)
                 .environment(\.serviceAccessClient, activeServiceAccess)
+                .environment(\.serverTransferClient, activeServerTransfer)
+                .environment(\.serverMigrationClient, activeServerMigration)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)
@@ -416,6 +458,15 @@ struct FlagshipApp: App {
                 }
                 .onOpenURL { url in
                     if let link = DeepLink.parse(url) { linker.enqueue(link) }
+                }
+                // Universal links (AASA) — the native Camera opening a
+                // `https://flagshipserver.com/{join,transfer,…}` link arrives as a
+                // web-browsing user activity, NOT via onOpenURL. Route it through
+                // the same DeepLink parser (Slice C take-over relies on this).
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    if let url = activity.webpageURL, let link = DeepLink.parse(url) {
+                        linker.enqueue(link)
+                    }
                 }
         }
     }

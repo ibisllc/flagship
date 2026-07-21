@@ -20,7 +20,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -33,12 +35,14 @@ import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
+import com.flagshipserver.app.ui.components.PodSwitcher
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.ActivityFeed
+import com.flagshipserver.app.viewmodels.ActivityFeedFilter
 import com.flagshipserver.app.viewmodels.ActivityItem
 import com.flagshipserver.app.viewmodels.ActivityViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
-import java.text.SimpleDateFormat
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -57,6 +61,15 @@ fun ActivityScreen(nav: NavController) {
     val state by vm.state.collectAsState()
 
     LaunchedEffect(Unit) { vm.load() }
+
+    // Server filter (the PodSwitcher). null == "All servers".
+    val pods by app.pods.collectAsState()
+    val leaderPodId by app.leaderPodId.collectAsState()
+    var serverFilter by remember { mutableStateOf<String?>(null) }
+    // A pod the user no longer owns can't stay selected; treat a stale
+    // selection as "All servers". Derived (no state write during composition).
+    val effectiveServerFilter = serverFilter?.takeIf { id -> pods.any { it.podId == id } }
+    val filterPodName = pods.firstOrNull { it.podId == effectiveServerFilter }?.name
 
     val scroll = rememberScrollState()
     Column(
@@ -85,10 +98,34 @@ fun ActivityScreen(nav: NavController) {
             FSGhostButton(label = "Refresh", onClick = { vm.load() })
         }
 
+        // Server filter — shown only when the user owns more than one pod
+        // (matches the Services list rule). "All servers" shows the full feed;
+        // a specific server narrows the pod-attributable rows (install events)
+        // while account-wide rows (audit, recovery) always stay visible.
+        if (pods.size > 1) {
+            Spacer(Modifier.height(FS.space.s4))
+            PodSwitcher(
+                pods = pods,
+                currentPodId = effectiveServerFilter,
+                leaderPodId = leaderPodId,
+                onPick = { serverFilter = it.podId },
+                allLabel = "All servers",
+                onPickAll = { serverFilter = null },
+            )
+        }
+
         Spacer(Modifier.height(FS.space.s4))
 
+        // ALWAYS visible, OUTSIDE the loaded-state branch: a box waiting for an
+        // unlock/entitlement approval is exactly when the daemon BFF (this feed)
+        // can't load, so gating it behind Loaded hid it precisely when needed.
+        ApprovalsEntryCard(nav)
+
         when (val s = state) {
-            is LoadingState.Loaded -> FeedBody(s.value, nav)
+            is LoadingState.Loaded -> FeedBody(
+                ActivityFeed(items = ActivityFeedFilter.apply(s.value.items, filterPodName)),
+                nav,
+            )
             is LoadingState.Failed -> ErrorCard(s.message, onRetry = { vm.load() })
             else -> ServerCardSkeleton()
         }
@@ -97,10 +134,9 @@ fun ActivityScreen(nav: NavController) {
 }
 
 @Composable
-private fun FeedBody(feed: ActivityFeed, nav: NavController) {
-    // Always-available entry into the relay approval list. A box set to
-    // "authorize each boot" posts a sealed-key request and pushes the phone;
-    // this is the in-app way to reach the same screen.
+private fun ApprovalsEntryCard(nav: NavController) {
+    // The in-app way to reach the relay approval list — ALWAYS available, since a
+    // box waiting on an unlock/entitlement approval can't load its BFF feed.
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text(
@@ -117,7 +153,10 @@ private fun FeedBody(feed: ActivityFeed, nav: NavController) {
         }
     }
     Spacer(Modifier.height(FS.space.s3))
+}
 
+@Composable
+private fun FeedBody(feed: ActivityFeed, nav: NavController) {
     if (feed.items.any { it is ActivityItem.RecoverySnapshot }) {
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
@@ -127,7 +166,7 @@ private fun FeedBody(feed: ActivityFeed, nav: NavController) {
                     style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
                 )
                 Text(
-                    "Membership re-attach snapshot from the most recent IRK swap.",
+                    "Membership re-attach snapshot from the most recent account key swap.",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp),
                 )
@@ -170,7 +209,6 @@ private fun FeedBody(feed: ActivityFeed, nav: NavController) {
             Text("No recent activity.", color = FS.colors.textMuted)
         }
     } else {
-        val fmt = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
         recentRows.forEach { item ->
             FSCard(padding = PaddingValues(FS.space.s3)) {
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -187,7 +225,7 @@ private fun FeedBody(feed: ActivityFeed, nav: NavController) {
                         )
                     }
                     Text(
-                        fmt.format(Date(item.at)),
+                        FlagshipDateFormat.format(item.at, includeTime = true),
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 11.sp),
                     )

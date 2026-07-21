@@ -42,6 +42,11 @@ data class ServerDetailResponse(
     val serverFqdn: String,
     val username: String,
     val daemonVersion: String,
+    /** The box's code-checkout HEAD (full git SHA, lowercase) — the
+     *  applied-commit truth the self-update consumer enforces `fromCommit`
+     *  against. Defaults null so an old box's daemon (pre-field) still
+     *  parses; the update action is disabled without it. */
+    val currentCommit: String? = null,
     val startedAt: Long,
     val uptimeMs: Long,
     val certNotAfter: Long? = null,
@@ -111,6 +116,11 @@ data class VibeCodeStartRequest(
     val model: String? = null,
     /** Optional BYOK credential. Omitted ⇒ box uses promo/credits. */
     val credential: BuildCredential? = null,
+    /** Owner-chosen service name/slug (the web-address label) from the
+     *  Describe form. A hint the daemon uses for the deployed slug. */
+    val name: String? = null,
+    /** Owner-chosen reach: "just-me" or "link". Applied at install. */
+    val visibility: String? = null,
 )
 
 @Serializable
@@ -170,7 +180,6 @@ data class BrowserTabsListResponse(val tabs: List<BrowserTab>)
 @Serializable
 data class PairedSessionSummary(
     val tokenPrefix: String,
-    val label: String,
     val addedAt: Long,
     val current: Boolean,
 )
@@ -673,7 +682,7 @@ data class AppInviteRevokeResponse(
 // companions per pod.
 
 @Serializable
-data class CompanionMintTicketRequest(val label: String?)
+class CompanionMintTicketRequest
 
 @Serializable
 data class CompanionMintTicketResponse(
@@ -685,7 +694,6 @@ data class CompanionMintTicketResponse(
 @Serializable
 data class CompanionSummary(
     val tokenPrefix: String,
-    val label: String?,
     val redeemedAt: Long,
     val lastSeenMs: Long,
     val expiresAt: Long,
@@ -718,7 +726,6 @@ data class CompanionRevokeResponse(val ok: Boolean)
 data class CompanionPendingWrite(
     val requestId: String,
     val companionTokenPrefix: String,
-    val companionLabel: String? = null,
     val kind: String,
     val intent: JsonObject,
     val queuedAt: Long,

@@ -32,6 +32,13 @@ final class ServiceInviteVectorTests: XCTestCase {
         let knock: [String: Any]
         let removeAllow: [String: Any]
         let bundle: [String: Any]
+        // v2 (gating Wave 3): AID-signed create/revoke, pairwise contact AID,
+        // the manual-approve acceptance, and the group/multi-use create.
+        let createAid: [String: Any]
+        let revokeAid: [String: Any]
+        let contactAid: [String: Any]
+        let accept: [String: Any]
+        let createMaxN: [String: Any]
     }
 
     private func locateFixture() -> URL? {
@@ -66,7 +73,12 @@ final class ServiceInviteVectorTests: XCTestCase {
             visit: root["visit"] as! [String: Any],
             knock: root["knock"] as! [String: Any],
             removeAllow: root["removeAllow"] as! [String: Any],
-            bundle: root["bundle"] as! [String: Any]
+            bundle: root["bundle"] as! [String: Any],
+            createAid: root["createAid"] as! [String: Any],
+            revokeAid: root["revokeAid"] as! [String: Any],
+            contactAid: root["contactAid"] as! [String: Any],
+            accept: root["accept"] as! [String: Any],
+            createMaxN: root["createMaxN"] as! [String: Any]
         )
     }
 
@@ -84,6 +96,17 @@ final class ServiceInviteVectorTests: XCTestCase {
     }
     private func friendAidKey(_ v: Vectors) -> Curve25519.Signing.PrivateKey {
         ServiceInvite.deriveAccountId(umkSeed: friendUmk(v))!
+    }
+    /// The author's stable AID signing key — the v2 (Wave 3) create/revoke signer
+    /// (the box-as-authority verifies against the owner AID; `.com` dual-accepts).
+    private func authorAidKey(_ v: Vectors) -> Curve25519.Signing.PrivateKey {
+        ServiceInvite.deriveAccountId(umkSeed: authorUmk(v))!
+    }
+    /// The friend's PER-AUTHOR contact AID — `deriveContactAccountId(friendUmk,
+    /// authorAid.pub)` — the consumer's manual-approve acceptance signer.
+    private func friendContactAidKey(_ v: Vectors) -> Curve25519.Signing.PrivateKey {
+        let authorAidPub = ServiceInvite.deriveAccountIdPub(umkSeed: authorUmk(v))!
+        return ServiceInvite.deriveContactAccountId(umkSeed: friendUmk(v), authorAidPub: authorAidPub)!
     }
 
     // MARK: derivations
@@ -323,5 +346,114 @@ final class ServiceInviteVectorTests: XCTestCase {
         let opened = try ServiceInvite.openBundle(sealed, householdKey: household, inviteId: inviteId)
         XCTAssertEqual(opened.name, "A\"x\\y/z")
         XCTAssertEqual(opened.photo, "data:,\u{00e9}")
+    }
+
+    // MARK: v2 (gating Wave 3) — AID-signed create/revoke, pairwise contact AID,
+    // manual-approve acceptance, group/multi-use create.
+
+    /// The CONSUMER's per-author pseudonym: `deriveContactAccountId(friendUmk,
+    /// authorAid.pub)` must reproduce the pinned `contactAidPubHex` — the identity
+    /// the box binds (NOT the global friend AID). Mirrors keys.ts.
+    func testContactAccountIdMatchesFixture() throws {
+        let v = try load()
+        let authorAidPub = HexUtil.decode(v.contactAid["authorAidPubHex"] as! String)!
+        // The pinned author AID pub must equal the one we derive from authorUMK.
+        XCTAssertEqual(
+            HexUtil.encode(ServiceInvite.deriveAccountIdPub(umkSeed: authorUmk(v))!),
+            (v.contactAid["authorAidPubHex"] as! String),
+            "contactAid.authorAidPubHex drift"
+        )
+        XCTAssertEqual(
+            HexUtil.encode(ServiceInvite.deriveContactAccountIdPub(umkSeed: friendUmk(v), authorAidPub: authorAidPub)!),
+            (v.contactAid["contactAidPubHex"] as! String),
+            "contact AID drift"
+        )
+    }
+
+    /// Wave-3 create signing SWITCHES from IRK to the author's stable AID — the
+    /// SAME create pre-image as the v1 `create` vector but signed by authorAID.
+    func testCreateAidSignatureVerifies() throws {
+        let v = try load()
+        let authorAid = ServiceInvite.deriveAccountIdPub(umkSeed: authorUmk(v))!
+        let bytes = try ServiceInvite.canonicalCreate(
+            inviteId: v.createAid["inviteId"] as! String,
+            authorAID: authorAid,
+            serviceRef: v.root["serviceRef"] as! String,
+            secretHash: v.root["secretHash"] as! String,
+            encryptedBundle: v.createAid["encryptedBundlePlaceholder"] as! String,
+            issuedAt: (v.createAid["issuedAt"] as! NSNumber).int64Value
+        )
+        let sig = HexUtil.decode(v.createAid["sigHex"] as! String)!
+        // The pinned (noble RFC-8032) AID sig verifies under OUR canonical bytes +
+        // the author AID pub ⇒ our pre-image is byte-identical.
+        XCTAssertTrue(ServiceInvite.verify(sig, bytes, pub: authorAid), "pinned createAid sig must verify under authorAID")
+        XCTAssertTrue(ServiceInvite.verify(try ServiceInvite.sign(bytes, with: authorAidKey(v)), bytes, pub: authorAid), "our createAid sig must verify under authorAID")
+    }
+
+    /// Wave-3 revoke signing also SWITCHES to the author's stable AID.
+    func testRevokeAidSignatureVerifies() throws {
+        let v = try load()
+        let authorAid = ServiceInvite.deriveAccountIdPub(umkSeed: authorUmk(v))!
+        let bytes = try ServiceInvite.canonicalRevoke(
+            inviteId: v.root["inviteId"] as! String,
+            issuedAt: (v.revokeAid["issuedAt"] as! NSNumber).int64Value
+        )
+        let sig = HexUtil.decode(v.revokeAid["sigHex"] as! String)!
+        XCTAssertTrue(ServiceInvite.verify(sig, bytes, pub: authorAid), "pinned revokeAid sig must verify under authorAID")
+        XCTAssertTrue(ServiceInvite.verify(try ServiceInvite.sign(bytes, with: authorAidKey(v)), bytes, pub: authorAid), "our revokeAid sig must verify under authorAID")
+    }
+
+    /// The MANUAL-approve acceptance is signed by the friend's PER-AUTHOR contact
+    /// AID over `canonicalAccept`. The pinned sig must verify under that pseudonym.
+    func testAcceptSignatureVerifies() throws {
+        let v = try load()
+        let contactAidPub = HexUtil.decode(v.contactAid["contactAidPubHex"] as! String)!
+        let bytes = try ServiceInvite.canonicalAccept(
+            inviteId: v.accept["inviteId"] as! String,
+            serviceRef: v.accept["serviceRef"] as! String,
+            contactAID: contactAidPub,
+            acceptedAt: (v.accept["acceptedAt"] as! NSNumber).int64Value
+        )
+        let sig = HexUtil.decode(v.accept["sigHex"] as! String)!
+        XCTAssertTrue(ServiceInvite.verify(sig, bytes, pub: contactAidPub), "pinned accept sig must verify under the contact AID")
+        // Our own signAcceptServiceInvite over the SAME bytes verifies too.
+        let mine = try ServiceInvite.signAcceptServiceInvite(
+            inviteId: v.accept["inviteId"] as! String,
+            serviceRef: v.accept["serviceRef"] as! String,
+            contactAID: contactAidPub,
+            acceptedAt: (v.accept["acceptedAt"] as! NSNumber).int64Value,
+            contactAid: friendContactAidKey(v)
+        )
+        XCTAssertTrue(ServiceInvite.verify(mine, bytes, pub: contactAidPub), "our accept sig must verify under the contact AID")
+    }
+
+    /// A GROUP/multi-use create appends `maxN`+`exp` to the canonical bytes; the
+    /// pinned authorIRK sig must verify under OUR canonical bytes with the caps.
+    func testCreateMaxNSignatureVerifies() throws {
+        let v = try load()
+        let authorAid = ServiceInvite.deriveAccountIdPub(umkSeed: authorUmk(v))!
+        let bytes = try ServiceInvite.canonicalCreate(
+            inviteId: v.createMaxN["inviteId"] as! String,
+            authorAID: authorAid,
+            serviceRef: v.root["serviceRef"] as! String,
+            secretHash: v.root["secretHash"] as! String,
+            encryptedBundle: v.createMaxN["encryptedBundlePlaceholder"] as! String,
+            issuedAt: (v.createMaxN["issuedAt"] as! NSNumber).int64Value,
+            maxRedemptions: (v.createMaxN["maxRedemptions"] as! NSNumber).intValue,
+            expiresAt: (v.createMaxN["expiresAt"] as! NSNumber).int64Value
+        )
+        let sig = HexUtil.decode(v.createMaxN["sigHex"] as! String)!
+        let irkPub = HexUtil.decode(v.derived["authorIrkPubHex"] as! String)!
+        XCTAssertTrue(ServiceInvite.verify(sig, bytes, pub: irkPub), "pinned createMaxN sig must verify under authorIRK")
+        XCTAssertTrue(ServiceInvite.verify(try ServiceInvite.sign(bytes, with: authorIrkKey(v)), bytes, pub: irkPub), "our createMaxN sig must verify under authorIRK")
+        // And a create WITHOUT caps signs byte-identically to the v1 `create` vector
+        // (backward-compat — the v1 sig must still verify).
+        let v1Bytes = try ServiceInvite.canonicalCreate(
+            inviteId: v.root["inviteId"] as! String, authorAID: authorAid,
+            serviceRef: v.root["serviceRef"] as! String, secretHash: v.root["secretHash"] as! String,
+            encryptedBundle: v.create["encryptedBundlePlaceholder"] as! String,
+            issuedAt: (v.create["issuedAt"] as! NSNumber).int64Value)
+        XCTAssertTrue(ServiceInvite.verify(HexUtil.decode(v.create["sigHex"] as! String)!, v1Bytes, pub: irkPub),
+                      "a no-caps create must remain byte-identical to v1")
     }
 }

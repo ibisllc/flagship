@@ -18,6 +18,7 @@ import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { getSession } from "../lib/state.js";
 import { signWithIrk } from "../keystore.js";
+import { sensitiveSigner } from "../lib/adminRoot.js";
 import { releaseServerName } from "../lib/releaseServer.js";
 import { get as profileGet, set as profileSet } from "../lib/profilesStore.js";
 import { PROVISION_PHASE_TITLES } from "../lib/provisionProgress.js";
@@ -127,7 +128,8 @@ async function runCancel() {
     const serverDomain = currentOrder.fqdn || currentOrder.serverDomain;
     if (session.umk && session.irk && username && serverDomain) {
       try {
-        const out = await releaseServerName({ username, serverDomain, umk: session.umk, signWithIrk });
+        // Slice D: release-server-name is a SENSITIVE order (admin root when present).
+        const out = await releaseServerName({ username, serverDomain, umk: session.umk, signWithIrk: sensitiveSigner() });
         if (out && out.pending) {
           // P14 Phase 2 — companion path: surface the pending sheet so
           // the user knows the request is queued (release will happen
@@ -145,7 +147,7 @@ async function runCancel() {
         // Don't fail the whole cancel — the auth-code is already revoked,
         // which voids the install. Surface a soft warning so the user
         // knows the name may still be reserved until a retry/release.
-        toast(`name release deferred: ${e.message ?? e}`, "warn");
+        toast(`Name release deferred: ${e.message ?? e}`, "warn");
       }
     }
     // Drop from local order list so home / activity stop showing it.
@@ -154,12 +156,12 @@ async function runCancel() {
       "pendingOrders",
       JSON.stringify(list.filter((o) => o.serial !== currentOrder.serial)),
     );
-    toast(`order cancelled (${escapeHtml(currentOrder.name)})`);
+    toast(`Order cancelled (${escapeHtml(currentOrder.name)})`);
     clearStatusPoll();
     currentOrder = null;
     show("view-home");
   } catch (e) {
-    toast(`cancel failed: ${e.message ?? e}`, "err");
+    toast(`Cancel failed: ${e.message ?? e}`, "err");
     if (btn) { btn.disabled = false; btn.textContent = "Cancel order"; }
   }
 }

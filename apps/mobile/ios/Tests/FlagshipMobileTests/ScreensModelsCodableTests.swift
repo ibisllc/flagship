@@ -8,6 +8,7 @@ final class ScreensModelsCodableTests: XCTestCase {
             serverFqdn: "home.harry.flagship.services",
             username: "harry",
             daemonVersion: "0.18.4",
+            currentCommit: "9f2c1ab3de4567890abcdef1234567890abcdef1",
             startedAt: 1_700_000_000_000,
             uptimeMs: 86_400_000,
             certNotAfter: 1_710_000_000_000,
@@ -22,6 +23,16 @@ final class ScreensModelsCodableTests: XCTestCase {
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(ServerDetailResponse.self, from: data)
         XCTAssertEqual(decoded, original)
+    }
+
+    func test_serverDetailResponse_toleratesMissingCurrentCommit() throws {
+        // An un-reburned box's daemon predates the field — the detail must
+        // still decode, with a nil currentCommit (update action disabled).
+        let json = """
+        {"serverFqdn":"home.harry.flagship.services","username":"harry","daemonVersion":"0.1.0","startedAt":1,"uptimeMs":2,"serviceCount":0,"pairedSessionCount":0,"recentInstallEvents":[]}
+        """
+        let decoded = try JSONDecoder().decode(ServerDetailResponse.self, from: Data(json.utf8))
+        XCTAssertNil(decoded.currentCommit)
     }
 
     func test_vibeCodeFrame_roundTripsAllVariants() throws {

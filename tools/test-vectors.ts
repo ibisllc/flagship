@@ -35,6 +35,8 @@ import {
   deriveSWK,
   ed,
   signAccountRecovery,
+  signAdminRootRotation,
+  signAdminRootTransfer,
   signAuthCode,
   signDaemonStatusReport,
   signDeviceCapabilityGrant,
@@ -55,10 +57,13 @@ import {
   signRevocation,
   signRevokeDeviceCapabilityGrant,
   signServerRegister,
+  signServerTransferClaim,
   signSetRoutingTarget,
   signTunnelHello,
   signWatchDelegateKey,
   type AccountRecovery,
+  type AdminRootRotation,
+  type AdminRootTransfer,
   type AuthCode,
   type DaemonStatusReport,
   type DeviceCapabilityGrant,
@@ -80,6 +85,7 @@ import {
   type RevokeDeviceCapabilityGrant,
   type ServerRegisterRequest,
   type ServerRevocation,
+  type ServerTransferClaim,
   type SetRoutingTarget,
   type TunnelHello,
   type WatchDelegateKey,
@@ -114,6 +120,14 @@ const oldIrk = deriveIRK({ seed: OLD_UMK_SEED });
 // UMK-derived); a fixed seed keeps the SetRoutingTarget vector reproducible.
 const rck = seedKeypair(0x33);
 
+// Slice D — the ADMIN MASTER ROOT is a fresh RANDOM keypair minted at account
+// creation, explicitly NOT UMK-derived (that's the whole point of the two-root
+// split). Fixed seeds here keep the admin-root-rotation vector reproducible:
+// `adminRoot` is the OLD root (signs the rotation proof), `newAdminRoot` is the
+// freshly-minted root it rotates to.
+const adminRoot = seedKeypair(0x77);
+const newAdminRoot = seedKeypair(0x88);
+
 // A fixed server-identity keypair (ServerRegister is signed by the box's
 // identity key, not the owner IRK).
 const identity = seedKeypair(0x55);
@@ -127,7 +141,15 @@ const NO_WEBAPP: Client[] = ["ts", "swift", "kotlin"];
 interface Vector {
   name: string;
   /** `"none"` for canonical-bytes-only fixtures (no signature). */
-  signedBy: "irk" | "bak" | "stk" | "old-irk" | "rck" | "identity" | "none";
+  signedBy:
+    | "irk"
+    | "bak"
+    | "stk"
+    | "old-irk"
+    | "rck"
+    | "identity"
+    | "admin-root"
+    | "none";
   input: unknown;
   /** Clients expected to assert this vector. */
   clients: Client[];
@@ -605,7 +627,7 @@ function buildVectors(): Vector[] {
   const dcg: DeviceCapabilityGrant = {
     grantId: "550e8400-e29b-41d4-a716-446655440000",
     username: "harry",
-    deviceLabel: "ipad",
+    deviceId: "00112233445566778899aabbccddeeff",
     devicePubKey: DEMO_DEVICE_PUB,
     scopes: ["install-service", "browse"],
     issuedAt: ISSUED_AT,
@@ -744,6 +766,91 @@ function buildVectors(): Vector[] {
     ),
   );
 
+  // ---- AdminRootRotation (OLD admin master root) — Slice D recovery rotation
+  // proof. The old admin root signs `{old → new}`; the box re-pins iff the
+  // proof verifies against its pinned old root (NOT `.com`'s word). ----
+  const adminRotation: AdminRootRotation = {
+    username: "harry",
+    oldAdminRootPub: adminRoot.publicKey,
+    newAdminRootPub: newAdminRoot.publicKey,
+    issuedAt: ISSUED_AT,
+  };
+  const adminRotationInput = {
+    username: adminRotation.username,
+    oldAdminRootPub: hex(adminRotation.oldAdminRootPub),
+    newAdminRootPub: hex(adminRotation.newAdminRootPub),
+    issuedAt: adminRotation.issuedAt,
+  };
+  vectors.push(
+    makeVector(
+      "admin-root-rotation",
+      "admin-root",
+      adminRotationInput,
+      signAdminRootRotation(adminRotation, adminRoot),
+      payloadByName("admin-root-rotation", adminRotationInput),
+      NO_WEBAPP,
+    ),
+  );
+
+  // ---- ServerTransferClaim v2 (acquirer IRK) — transfer-a-box. v2 folds the
+  // acquirer's ADMIN MASTER ROOT into the canonical (Slice D §9.8) so a rogue
+  // `.com` cannot swap the acquirer's admin anchor on a real claim. Here the
+  // fixture `irk` plays the ACQUIRER; `newAdminRoot` is the acquirer's admin
+  // root the box will re-pin to. ----
+  const transferClaim: ServerTransferClaim = {
+    serverDomain: "home.harry.flagship.services",
+    transferNonce: hex(FIXED_NONCE),
+    acquirerUsername: "sarah",
+    acquirerIrkPub: irk.publicKey,
+    acquirerAdminRootPubHex: hex(newAdminRoot.publicKey),
+    issuedAt: ISSUED_AT,
+  };
+  const transferClaimInput = {
+    serverDomain: transferClaim.serverDomain,
+    transferNonce: transferClaim.transferNonce,
+    acquirerUsername: transferClaim.acquirerUsername,
+    acquirerIrkPub: hex(transferClaim.acquirerIrkPub),
+    acquirerAdminRootPubHex: transferClaim.acquirerAdminRootPubHex,
+    issuedAt: transferClaim.issuedAt,
+  };
+  vectors.push(
+    makeVector(
+      "server-transfer-claim",
+      "irk",
+      transferClaimInput,
+      signServerTransferClaim(transferClaim, irk),
+      payloadByName("server-transfer-claim", transferClaimInput),
+      ["ts", "webapp"],
+    ),
+  );
+
+  // ---- AdminRootTransfer (GIVER's admin master root) — Slice D §9.8 transfer
+  // handoff proof. The giver's root (`adminRoot`, the box's pinned anchor)
+  // signs (this box, this offer's nonce, old giver root → new acquirer root);
+  // the box re-pins ONLY on this proof, never `.com`'s word. Deliberately a
+  // DISTINCT tag from admin-root-rotation (a transfer proof must not replay as
+  // an account rotation of the giver). ----
+  const adminTransfer: AdminRootTransfer = {
+    serverDomain: "home.harry.flagship.services",
+    giverUsername: "harry",
+    acquirerUsername: "sarah",
+    oldAdminRootPubHex: hex(adminRoot.publicKey),
+    newAdminRootPubHex: hex(newAdminRoot.publicKey),
+    transferNonce: hex(FIXED_NONCE),
+    issuedAt: ISSUED_AT,
+  };
+  const adminTransferInput = { ...adminTransfer };
+  vectors.push(
+    makeVector(
+      "admin-root-transfer",
+      "admin-root",
+      adminTransferInput,
+      signAdminRootTransfer(adminTransfer, adminRoot),
+      payloadByName("admin-root-transfer", adminTransferInput as unknown as Record<string, unknown>),
+      ["ts"],
+    ),
+  );
+
   return vectors;
 }
 
@@ -765,6 +872,8 @@ export function buildFile(): { json: string } {
       stkPubHex: hex(stk.publicKey),
       rckPubHex: hex(rck.publicKey),
       identityPubHex: hex(identity.publicKey),
+      adminRootPubHex: hex(adminRoot.publicKey),
+      newAdminRootPubHex: hex(newAdminRoot.publicKey),
       version: 2,
       generatedAt: ISSUED_AT,
       note:
@@ -791,6 +900,7 @@ function selfCheck(vectors: Vector[]): void {
     "old-irk": oldIrk,
     rck,
     identity,
+    "admin-root": adminRoot,
   };
   for (const v of vectors) {
     const got = hex(payloadByName(v.name, v.input as Record<string, unknown>));
@@ -939,15 +1049,16 @@ function payloadByName(name: string, i: Record<string, unknown>): Uint8Array {
         "revoke-others",
         "demo-provision",
         "admin",
+        "view-directory",
       ];
       const idx = (s: string) => order.indexOf(s);
       const sorted = [...(i.scopes as string[])].sort((a, b) => idx(a) - idx(b)).join(",");
       return enc(
         [
-          "flagship/device-capability-grant/v1",
+          "flagship/device-capability-grant/v2",
           i.grantId,
           i.username,
-          i.deviceLabel,
+          i.deviceId,
           i.devicePubKey,
           sorted,
           i.issuedAt,
@@ -963,6 +1074,41 @@ function payloadByName(name: string, i: Record<string, unknown>): Uint8Array {
       return enc(["flagship/re-pair-initiate/v1", i.username, i.newIrkPub, i.oldIrkPub, i.issuedAt].join("|"));
     case "re-pair-object":
       return enc(["flagship/re-pair-object/v1", i.username, i.newIrkPub, i.issuedAt].join("|"));
+    case "admin-root-rotation":
+      return enc(
+        [
+          "flagship/admin-root-rotation/v1",
+          i.username,
+          i.oldAdminRootPub,
+          i.newAdminRootPub,
+          i.issuedAt,
+        ].join("|"),
+      );
+    case "server-transfer-claim":
+      return enc(
+        [
+          "flagship/server-transfer-claim/v2",
+          (i.serverDomain as string).toLowerCase(),
+          (i.transferNonce as string).toLowerCase(),
+          (i.acquirerUsername as string).toLowerCase(),
+          i.acquirerIrkPub,
+          (i.acquirerAdminRootPubHex as string).toLowerCase(),
+          i.issuedAt,
+        ].join("|"),
+      );
+    case "admin-root-transfer":
+      return enc(
+        [
+          "flagship/admin-root-transfer/v1",
+          (i.serverDomain as string).toLowerCase(),
+          (i.giverUsername as string).toLowerCase(),
+          (i.acquirerUsername as string).toLowerCase(),
+          (i.oldAdminRootPubHex as string).toLowerCase(),
+          (i.newAdminRootPubHex as string).toLowerCase(),
+          (i.transferNonce as string).toLowerCase(),
+          i.issuedAt,
+        ].join("|"),
+      );
     case "daemon-status":
     case "daemon-status-liveness": {
       const apps = [...(i.appsServed as string[])].sort().join(",");

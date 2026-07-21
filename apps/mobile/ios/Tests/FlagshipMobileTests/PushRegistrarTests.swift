@@ -7,6 +7,17 @@ import CryptoKit
 
 @MainActor
 final class PushRegistrarTests: XCTestCase {
+    private let deviceId = "00112233445566778899aabbccddeeff"
+
+    private func pairedState(username: String = "harry") -> AppState {
+        let profile = Profile(cloudName: username, accountId: username, deviceId: deviceId)
+        return AppState(
+            isPaired: true,
+            currentUser: username,
+            profiles: [profile],
+            activeProfileCloudName: username
+        )
+    }
 
     override func setUp() async throws {
         try await super.setUp()
@@ -18,12 +29,7 @@ final class PushRegistrarTests: XCTestCase {
     }
 
     func test_handle_signsCanonicalBytes_postsRequest_savesTokenId() async throws {
-        let state = AppState(
-            isPaired: true,
-            currentUser: "harry",
-            pods: [],
-            leaderPodId: nil
-        )
+        let state = pairedState()
         let mock = MockFlagshipServerClient()
         mock.simulatedLatency = 0
         let registrar = PushRegistrar(appState: state, client: mock)
@@ -49,42 +55,14 @@ final class PushRegistrarTests: XCTestCase {
         let irk = try await Keystore.deriveIRK(reason: "test")
         let bytes = PushTokenRegister.canonicalBytes(
             username: inner.username,
+            deviceId: inner.deviceId,
             platform: inner.platform,
             providerToken: inner.providerToken,
             pushX25519PubHex: inner.pushX25519Pub,
-            label: inner.label,
             issuedAt: inner.issuedAt
         )
         let sig = try irk.signature(for: bytes)
         XCTAssertTrue(irk.publicKey.isValidSignature(sig, for: bytes))
-    }
-
-    // MARK: - sanitizeLabel
-
-    func test_sanitizeLabel_passesThroughNormalText() {
-        XCTAssertEqual(PushRegistrar.sanitizeLabel("Harry's iPhone"), "Harry's iPhone")
-    }
-
-    func test_sanitizeLabel_stripsControlChars() {
-        let raw = "Bad\u{07}Label\u{7f}!"
-        XCTAssertEqual(PushRegistrar.sanitizeLabel(raw), "BadLabel!")
-    }
-
-    func test_sanitizeLabel_trimsWhitespace() {
-        XCTAssertEqual(PushRegistrar.sanitizeLabel("  spacey  "), "spacey")
-    }
-
-    func test_sanitizeLabel_capsAt64Bytes() {
-        let long = String(repeating: "a", count: 200)
-        let result = PushRegistrar.sanitizeLabel(long)
-        XCTAssertLessThanOrEqual(result.utf8.count, 64)
-    }
-
-    func test_sanitizeLabel_truncatesMultibyteSafely() {
-        let long = String(repeating: "🚀", count: 30)
-        let result = PushRegistrar.sanitizeLabel(long)
-        XCTAssertLessThanOrEqual(result.utf8.count, 64)
-        XCTAssertNotNil(result.data(using: .utf8))
     }
 
     func test_handle_skipsWhenNoUsername() async throws {
@@ -98,7 +76,7 @@ final class PushRegistrarTests: XCTestCase {
     }
 
     func test_handle_skipsOnEmptyToken() async throws {
-        let state = AppState(isPaired: true, currentUser: "harry", pods: [])
+        let state = pairedState()
         let mock = MockFlagshipServerClient()
         mock.simulatedLatency = 0
         let registrar = PushRegistrar(appState: state, client: mock)
@@ -114,7 +92,7 @@ final class PushRegistrarTests: XCTestCase {
     }
 
     func test_revoke_deletesTokenIdAndWipesKeychain() async throws {
-        let state = AppState(isPaired: true, currentUser: "harry", pods: [])
+        let state = pairedState()
         let mock = MockFlagshipServerClient()
         mock.simulatedLatency = 0
         let registrar = PushRegistrar(appState: state, client: mock)
@@ -134,7 +112,7 @@ final class PushRegistrarTests: XCTestCase {
     }
 
     func test_revoke_isNoOpWhenNothingRegistered() async {
-        let state = AppState(isPaired: true, currentUser: "harry", pods: [])
+        let state = pairedState()
         let mock = MockFlagshipServerClient()
         mock.simulatedLatency = 0
         let registrar = PushRegistrar(appState: state, client: mock)

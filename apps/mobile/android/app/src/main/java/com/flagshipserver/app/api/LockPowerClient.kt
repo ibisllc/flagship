@@ -19,6 +19,23 @@ import com.flagshipserver.app.core.OkHttpJsonTransport
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+// ---------- add-paired-session PhoneOrder (owner-IRK-signed) -----------
+
+@Serializable
+data class AddPairedSessionInner(
+    val type: String = "add-paired-session",
+    val serverId: String,
+    val token: String,
+    val issuedAt: Long,
+)
+
+@Serializable
+data class AddPairedSessionRequest(
+    val request: AddPairedSessionInner,
+    /** Hex Ed25519 signature over AddPairedSessionOrder.canonicalBytes. */
+    val signature: String,
+)
+
 // ---------- power-off PhoneOrder (owner-IRK-signed) --------------------
 
 @Serializable
@@ -147,5 +164,16 @@ class LockPowerClient(
             body,
             JournalRequestBody.serializer(),
             JournalAck.serializer(),
+        )
+
+    /** Mirror of iOS LockPowerClient.pairSession — POSTs the owner-IRK-signed
+     *  add-paired-session order straight to the box's /api/orders-from-user.
+     *  The daemon stores `token` verbatim as the x-flagship-session token. */
+    suspend fun pairSession(serverDomain: String, body: AddPairedSessionRequest): OrderAck =
+        transport.postJsonForResponse(
+            "${podBaseUrl(serverDomain)}/api/orders-from-user",
+            body,
+            AddPairedSessionRequest.serializer(),
+            OrderAck.serializer(),
         )
 }

@@ -157,6 +157,15 @@ export interface ScreensHttpDeps {
    * cert chain itself (no PEM parsing in the BFF).
    */
   certInfo?: (() => { notAfter?: number; notBefore?: number; sans?: string[] } | null) | null;
+  /**
+   * The box's own code-checkout HEAD — the applied-commit truth the
+   * self-update consumer enforces `fromCommit` against (production:
+   * `buildCurrentCommitProvider` over FLAGSHIP_SELF_REPO). Unset/null
+   * when the daemon isn't running from a git checkout; server-detail
+   * then reports `currentCommit: null` and clients disable the
+   * update action.
+   */
+  currentCommit?: (() => string | null) | null;
   /** Recent install/uninstall events for server-detail. */
   installEventLog?: InstallEventLog | null;
   /** Tab ownership for app-detail / browser-tabs. */
@@ -545,7 +554,6 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       const callerToken = (deps.resolveCallerToken ?? defaultResolveCallerToken)(req);
       const sessions = deps.pairedSessions.list().map((s) => ({
         tokenPrefix: s.token.slice(0, 12),
-        label: s.label,
         addedAt: s.addedAt,
         current: callerToken !== null && s.token === callerToken,
       }));
@@ -649,6 +657,17 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (!attach.ok) return jerr(400, attach.reason);
       const cred = parseCredential((body as { credential?: unknown }).credential);
       if (cred === "invalid") return jerr(400, "malformed credential");
+      // Owner choices from the Describe form (no longer fixed). `name` is a
+      // slug hint — sanitize to the safe address charset; `visibility` is the
+      // reach. Both optional (legacy clients omit them).
+      const preferredName =
+        typeof body.name === "string"
+          ? body.name.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 63)
+          : undefined;
+      const visibility =
+        body.visibility === "just-me" || body.visibility === "link"
+          ? body.visibility
+          : undefined;
       const session = deps.vibeCode.registry.create({
         username: deps.vibeCode.username,
         serverFqdn: deps.vibeCode.serverFqdn,
@@ -686,6 +705,8 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
           prompt: body.prompt,
           model: body.model,
           ...(attach.attachments.length > 0 ? { attachments: attach.attachments } : {}),
+          ...(preferredName ? { preferredName } : {}),
+          ...(visibility ? { visibility } : {}),
         }).catch((e: Error) => {
           session.fail(e.message ?? "stream failed", true);
         });
@@ -713,6 +734,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         transcript: [...session.conversation()],
         files: session.files(),
         deployedUrl: session.meta.url,
+        errorReason: session.meta.failureReason,
       };
       return jok(out);
     }
@@ -1301,6 +1323,7 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     serverFqdn: deps.serverFqdn,
     username: deps.username,
     daemonVersion: deps.daemonVersion,
+    currentCommit: deps.currentCommit?.() ?? null,
     startedAt: deps.startedAt,
     uptimeMs: now() - deps.startedAt,
     certNotAfter: cert?.notAfter,
@@ -1427,8 +1450,10 @@ function parseCredential(raw: unknown): LlmCredential | null | "invalid" {
   if (typeof o.provider !== "string" || o.provider.length === 0) return "invalid";
   if (typeof o.apiKey !== "string" || o.apiKey.length === 0) return "invalid";
   if (o.baseUrl !== undefined && typeof o.baseUrl !== "string") return "invalid";
+  if (o.source !== undefined && o.source !== "byok" && o.source !== "promo") return "invalid";
   const out: LlmCredential = { provider: o.provider, apiKey: o.apiKey };
   if (typeof o.baseUrl === "string" && o.baseUrl.length > 0) out.baseUrl = o.baseUrl;
+  if (o.source === "byok" || o.source === "promo") out.source = o.source;
   return out;
 }
 

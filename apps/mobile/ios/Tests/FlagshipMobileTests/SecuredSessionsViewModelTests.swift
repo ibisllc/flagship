@@ -11,7 +11,7 @@ final class SecuredSessionsViewModelTests: XCTestCase {
         SecuredSession(
             secretId: secret,
             serverId: server,
-            serviceRef: "alice-notes",
+            serviceRef: "alice--notes",
             serviceUrl: "https://notes.\(server)",
             browserAgent: "Mozilla/5.0",
             startedAt: started)

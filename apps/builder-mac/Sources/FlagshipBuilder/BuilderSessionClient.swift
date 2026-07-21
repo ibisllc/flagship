@@ -1,0 +1,161 @@
+import Foundation
+import FlagshipBuilderCore
+
+/// WebSocket transport for a phone↔builder pairing session. Wraps a
+/// `URLSessionWebSocketTask` to the relay (`/builder-pipe/<sid>?role=builder`)
+/// and a `BuilderPairingEngine` (the pure protocol logic). Decoded relay
+/// frames are fed to the engine; the engine's actions are carried out
+/// (send frames upstream, report stage/recipe/log to the model).
+///
+/// The link is a ONE-SHOT recipe deposit. A socket `.failure`, a relay
+/// `expired` or relay failure ends the session. `peer-gone` is advisory: the
+/// engine holds long enough for the phone to reclaim its relay slot. If a
+/// recipe was already delivered the model keeps it; only an undelivered
+/// terminal failure relocks. An app-level ping keeps the relay's idle TTL
+/// pushed forward while we wait for the phone.
+///
+/// Callbacks fire on a background queue; the model hops to the main actor.
+final class BuilderSessionClient: NSObject {
+
+    let engine: BuilderPairingEngine
+    private let host: String
+    private var task: URLSessionWebSocketTask?
+    private var urlSession: URLSession?
+    private var closed = false
+    private var recipeReceiptQueued = false
+
+    var onStage: ((BuilderPairingEngine.Stage) -> Void)?
+    var onRecipe: ((Data) -> Void)?
+    var onRecipeReceiptQueued: (() -> Void)?
+    var onLog: ((String) -> Void)?
+
+    var qrPayload: String { engine.qrPayload }
+    var humanCodeDisplay: String { engine.humanCodeDisplay }
+
+    init(engine: BuilderPairingEngine = BuilderPairingEngine(),
+         host: String = "flagshipserver.com") {
+        self.engine = engine
+        self.host = host
+        super.init()
+    }
+
+    func connect() {
+        guard !closed else { return }
+        guard let url = URL(string: "wss://\(host)/builder-pipe/\(engine.sessionId)?role=builder") else {
+            onStage?(.ended(reason: "Couldn't build the relay URL."))
+            return
+        }
+        let cfg = URLSessionConfiguration.default
+        cfg.waitsForConnectivity = true
+        let s = URLSession(configuration: cfg)
+        urlSession = s
+        let t = s.webSocketTask(with: url)
+        task = t
+        t.resume()
+        receiveLoop()
+        startPing()
+    }
+
+    private func receiveLoop() {
+        task?.receive { [weak self] result in
+            guard let self = self, !self.closed else { return }
+            switch result {
+            case .failure:
+                self.fail("Lost the connection to the relay.")
+            case .success(let message):
+                let text: String?
+                switch message {
+                case .string(let s): text = s
+                case .data(let d): text = String(data: d, encoding: .utf8)
+                @unknown default: text = nil
+                }
+                if let text = text { self.handle(text) }
+                if !self.closed { self.receiveLoop() }
+            }
+        }
+    }
+
+    private func handle(_ text: String) {
+        guard let data = text.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return
+        }
+        // The phone closes only after receiving our recipe receipt. Seeing its
+        // departure therefore completes the one-shot handshake; it is not a
+        // connection failure and must not put the builder into reconnect mode.
+        if recipeReceiptQueued, obj["kind"] as? String == "peer-gone" {
+            close()
+            return
+        }
+        for action in engine.onRelayFrame(obj) { apply(action) }
+    }
+
+    private func apply(_ action: BuilderPairingEngine.Action) {
+        switch action {
+        case .send(let out):
+            sendRaw(BuilderPairingEngine.encode(out))
+        case .stage(let stage):
+            onStage?(stage)
+            if case .ended = stage { close() }
+        case .recipe(let data):
+            onRecipe?(data)
+        case .log(let message):
+            onLog?(message)
+        }
+    }
+
+    /// Send a pre-serialized frame to the relay. The relay forwards it verbatim
+    /// to the phone.
+    func sendRaw(_ text: String) {
+        task?.send(.string(text)) { _ in }
+    }
+
+    func acknowledgeRecipe() {
+        guard let task else {
+            fail("Couldn't return the recipe receipt to the phone.")
+            return
+        }
+        task.send(.string(BuilderPairingEngine.encode(.recipeAccepted))) { [weak self] error in
+            guard let self else { return }
+            if error != nil {
+                self.fail("Couldn't return the recipe receipt to the phone.")
+            } else {
+                // `send` completion means URLSession accepted the frame, not
+                // that the relay has forwarded it. Keep the socket alive until
+                // the phone receives the receipt and leaves; cancelling here
+                // races the relay and strands the phone on "Sending".
+                self.recipeReceiptQueued = true
+                self.onRecipeReceiptQueued?()
+                Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 10_000_000_000)
+                    self?.close()
+                }
+            }
+        }
+    }
+
+    private func startPing() {
+        Task { [weak self] in
+            while true {
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+                guard let self = self, !self.closed else { return }
+                self.sendRaw("{\"kind\":\"ping\"}")
+            }
+        }
+    }
+
+    private func fail(_ reason: String) {
+        if closed { return }
+        onStage?(.ended(reason: reason))
+        close()
+    }
+
+    func close() {
+        if closed { return }
+        closed = true
+        task?.cancel(with: .goingAway, reason: nil)
+        task = nil
+        urlSession?.invalidateAndCancel()
+        urlSession = nil
+    }
+}

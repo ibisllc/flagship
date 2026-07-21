@@ -2,7 +2,7 @@
 
 Durable cross-machine handoff (memory is machine-local; this doc travels). Read
 top-to-bottom. Most of the app/web/cloud work shipped + **deployed**; the
-hardware/burner thread is mid-investigation.
+hardware/builder thread is mid-investigation.
 
 ## Shipped + DEPLOYED to production this session
 Worker `flagship-com` + Fly `flagship-services` both deployed (health 200 on both).
@@ -19,7 +19,7 @@ Worker `flagship-com` + Fly `flagship-services` both deployed (health 200 on bot
   `recoveredKeyMatchesRegistered()` helper + Mock parity (consumer wiring is
   still TODO — see Open #1).
 - **`/og`** social-card mark flipped to teal; **`/ready`** rewritten (recommended
-  = recipe + burner in one box; advanced = bring-your-own ISO; the website-built
+  = recipe + builder in one box; advanced = bring-your-own ISO; the website-built
   image path removed).
 - **Webapp no-server states**: empty home instead of "couldn't load"; "please add
   your first server" on build-a-service; marketplace "coming soon".
@@ -38,7 +38,7 @@ Gates: web 978 · apps/com+control-plane 1108 · iOS 755 · Android (CertValidit
   with `xorriso -boot_image any replay` → true BIOS+UEFI hybrid + apkovl injected.
   **Empirically verified** on a locally-built ISO (`xorriso -report_el_torito`
   shows both BIOS + UEFI; apkovl present). NOT yet: re-run the reproducible-build
-  CI, rebuild + upload to R2, bump the burner's pinned sha (see Open #5).
+  CI, rebuild + upload to R2, bump the builder's pinned sha (see Open #5).
 
 ## OPEN tasks (the to-do)
 1. **Recovery Phase B — re-pair branch (needs on-device validation).** Wire
@@ -55,7 +55,7 @@ Gates: web 978 · apps/com+control-plane 1108 · iOS 755 · Android (CertValidit
    `xhci_pci`/`xhci_hcd`/`uas` to the cmdline, re-burn, observe how far it gets.
    May need a module Alpine's initramfs doesn't ship (real stopping point) or a
    different test box.
-3. **Burner "Quick" mode points at the DEAD Alpine path** (`BurnerMode.swift`:
+3. **Builder "Quick" mode points at the DEAD Alpine path** (`BuilderMode.swift`:
    quick → `AlpinePersonalize` + a base ISO that's BIOS-only / not rebuilt). Until
    Alpine boots on real hardware, retire/repoint Quick to the working
    Debian-preseed flow so it isn't the default.
@@ -68,14 +68,14 @@ Gates: web 978 · apps/com+control-plane 1108 · iOS 755 · Android (CertValidit
    registered + got a cert.)
 5. **Ship the Alpine UEFI fix**: reproducible-build CI re-run → rebuild ISO →
    upload to R2 (`flagship-alpine-base.iso`) → bump `BaseIsoCache.version` +
-   `sha256Hex` → rebuild + reinstall the signed Mac burner.
+   `sha256Hex` → rebuild + reinstall the signed Mac builder.
 6. **`/ready` copy** still frames "the Flagship base image" (Alpine) as
    recommended — stale; the working recommended path is Debian-preseed. Update.
 
 ## Bare-metal box state (reference)
 - Internal disk holds a half-installed Flagship-Debian under LUKS. If it was
   preseed-installed, the placeholder passphrase is
-  `flagship-burn-time-luks-rekey-me-immediately` (Mac burner) or
+  `flagship-build-time-luks-rekey-me-immediately` (Mac builder) or
   `flagship-firstboot-placeholder` (installer-netboot). It's still the
   placeholder ⇒ first-boot never completed (it re-keys on first boot). The disk
   gets wiped on the next install regardless — no passphrase needed to move on.
@@ -85,9 +85,9 @@ Gates: web 978 · apps/com+control-plane 1108 · iOS 755 · Android (CertValidit
   initramfs USB-driver layer on real hardware; Debian boots + autoinstalls + has
   reached a login. Decide: keep Debian as the shipping default and treat Alpine
   as a later footprint optimization, or invest in the Alpine initramfs USB work?
-- **Burner UX.** Retire "Quick"/Alpine as the default until USB-driver is solved;
+- **Builder UX.** Retire "Quick"/Alpine as the default until USB-driver is solved;
   make Debian-preseed the recommended path; reconcile recommended-vs-advanced on
-  `/ready` and in the burner accordingly.
+  `/ready` and in the builder accordingly.
 - **Personalized-ISO trailer vs GPT.** Appending the recipe trailer past the
   isohybrid backup-GPT may break strict UEFI. Decide: relocate the backup GPT
   after append (`sgdisk -e`) vs inject the recipe as an in-ISO file (needs the

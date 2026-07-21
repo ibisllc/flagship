@@ -69,4 +69,22 @@ public struct TrustException: Equatable, Sendable {
             "signature": signatureHex,
         ]
     }
+
+    /// The WIRE envelope `POST /api/users/:u/trust-exceptions` expects — the
+    /// same shape the webapp posts and `handleStoreTrustException` +
+    /// `verifyTrustException` read (`kind`/`version`/fields/`signatures[]`).
+    /// This is the shape that FANS OUT: `.com` stores it, and every box pulls
+    /// it via resolveTrustExceptions, so one phone override silences the
+    /// warning on all affected servers.
+    public func wireEnvelope(signatureHex: String) -> [String: Any] {
+        [
+            "kind": "TrustException",
+            "version": 1,
+            "certClass": certClass.rawValue,
+            "certHash": certHash,
+            "grantedAt": grantedAt,
+            "grantedByDevicePub": grantedByDevicePub,
+            "signatures": [["pubkey": grantedByDevicePub, "sig": signatureHex]],
+        ]
+    }
 }

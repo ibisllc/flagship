@@ -1,14 +1,12 @@
 // Unit tests for the /api/users/check handler.
 //
-// Three behaviors to pin:
+// Two behaviors to pin:
 //   1. Label rules + reserved-username allowlist
 //   2. D1 claim lookup → "already claimed"
-//   3. Test-account env-secret hit → testAccount block in response
 
 import { describe, expect, it } from "vitest";
 import {
   handleUsersCheck,
-  parseTestAccountsEnv,
   type UsersCheckResponse,
 } from "../src/usersCheck.js";
 import { caKeypairFromEnv } from "../src/pubkeyCert.js";
@@ -57,7 +55,6 @@ describe("handleUsersCheck", () => {
     const body = r.body as UsersCheckResponse;
     expect(body.available).toBe(false);
     expect(body.reason).toMatch(/reserved/);
-    expect(body.testAccount).toBeUndefined();
   });
 
   it("marks a fresh username available", async () => {
@@ -65,21 +62,15 @@ describe("handleUsersCheck", () => {
     expect((r.body as UsersCheckResponse).available).toBe(true);
   });
 
-  it("rejects usernames containing a hyphen (no-hyphen rule) — REAL accounts only", async () => {
-    // Hyphens are banned from REAL usernames so the composite app id
-    // `<creator>-<slug>` parses unambiguously. A hyphenated handle
-    // with NO demo/test-account row backing it must come back
-    // available=false with a clear reason.
-    //
-    // NOTE: hyphenated usernames that ARE registered as demo accounts
-    // get a separate, demo-aware response — see the test below
-    // "hyphenated DEMO username returns demoServer block before
-    // validateUserLabel rejection."
+  it("accepts a hyphenated REAL username (interior dashes are valid now)", async () => {
+    // Usernames now allow interior single dashes (the composite app id uses the
+    // `--` delimiter — docs/service-addressing-double-dash.md), so a hyphenated
+    // handle with no backing row is simply AVAILABLE, not a shape rejection.
     const r = await handleUsersCheck({ storage: fakeStorage() }, { username: "maria-jose" });
     expect(r.status).toBe(200);
     const body = r.body as UsersCheckResponse;
-    expect(body.available).toBe(false);
-    expect(body.reason).toMatch(/no hyphens/i);
+    expect(body.available).toBe(true);
+    expect(body.reason ?? "").not.toMatch(/no hyphens/i);
   });
 
   it("hyphenated DEMO username returns demoServer block before validateUserLabel rejection", async () => {
@@ -185,216 +176,20 @@ describe("handleUsersCheck", () => {
     expect(body.demoDirective).toBeUndefined();
   });
 
-  it("returns testAccount metadata when the username is in the secret", async () => {
-    const r = await handleUsersCheck(
-      {
-        storage: fakeStorage(),
-        testAccounts: { "playreviewq2": { display: "Play Reviewer (Q2)", ttlHours: 6 } },
-      },
-      { username: "playreviewq2" },
-    );
-    const body = r.body as UsersCheckResponse;
-    expect(body.available).toBe(false);
-    expect(body.testAccount).toEqual({ display: "Play Reviewer (Q2)", ttlHours: 6 });
-  });
-
-  it("does NOT leak the full test-account list", async () => {
-    const r = await handleUsersCheck(
-      {
-        storage: fakeStorage(),
-        testAccounts: {
-          "playreviewq2": { display: "Play Reviewer (Q2)", ttlHours: 6 },
-          "internaltester": { display: "Internal", ttlHours: 24 },
-        },
-      },
-      { username: "harry" },
-    );
-    const body = r.body as UsersCheckResponse;
-    expect(body.testAccount).toBeUndefined();
-    expect(body.available).toBe(true);
-    // No reference to either configured test-account name in the body.
-    const serialized = JSON.stringify(body);
-    expect(serialized).not.toContain("playreview");
-    expect(serialized).not.toContain("internaltester");
-  });
-
-  it("is case-insensitive on the username", async () => {
-    const r = await handleUsersCheck(
-      {
-        storage: fakeStorage(),
-        testAccounts: { "playreviewq2": { display: "Play Reviewer", ttlHours: 6 } },
-      },
-      { username: "PlayReviewQ2" },
-    );
-    expect((r.body as UsersCheckResponse).testAccount?.display).toBe("Play Reviewer");
-  });
 });
 
-// ──────────────────────────────────────────────────────────────────────
-// v2 device-addressing: `<u>.<device-label>` syntax (S3.3)
-// ──────────────────────────────────────────────────────────────────────
-
-describe("handleUsersCheck — <u>.<device-label> v2 syntax", () => {
-  it.concurrent("with a matching grant: response embeds deviceCapability + demoServer", async () => {
-    const { InMemoryDemoUsersStorage, InMemoryDeviceCapabilityGrantStorage } = await import(
-      "@flagship/storage"
-    );
-    const demoUsers = new InMemoryDemoUsersStorage();
-    await demoUsers.insert({
-      username: "demoalice",
-      display: "Demo Alice",
-      snapshotId: null,
-      isoR2Key: null,
-      ttlIdleMinutes: 30,
-      region: "fsn1",
-      size: "cx22",
-      activeServerId: null,
-      activeServerFqdn: null,
-      lastActivityAt: 0,
-      state: "none",
-      createdAt: 1,
-    });
-    const deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
-    await deviceCapabilityGrants.put({
-      grantId: "g-uuid-1",
-      username: "demoalice",
-      deviceLabel: "reviewer",
-      devicePubHex: "cc".repeat(32),
-      scopesJson: JSON.stringify(["browse"]),
-      issuedAt: 1,
-      expiresAt: 9_999_999_999,
-      signatureHex: "ab".repeat(64),
-      revokedAt: null,
-    });
-    const r = await handleUsersCheck(
-      { storage: fakeStorage(), demoUsers, deviceCapabilityGrants },
+describe("public username privacy", () => {
+  it("does not resolve dot-form device identities", async () => {
+    const response = await handleUsersCheck(
+      { storage: fakeStorage() },
       { username: "demoalice.reviewer" },
     );
-    expect(r.status).toBe(200);
-    const body = r.body as UsersCheckResponse;
-    expect(body.available).toBe(false);
-    expect(body.deviceCapability).toBeDefined();
-    expect(body.deviceCapability!.label).toBe("reviewer");
-    expect(body.deviceCapability!.scopes).toEqual(["browse"]);
-    expect(body.deviceCapability!.devicePubKey).toBe("cc".repeat(32));
-    expect(body.deviceCapability!.grantId).toBe("g-uuid-1");
-    expect(body.demoServer).toBeDefined();
-  });
-
-  it.concurrent("without a matching grant: returns 404", async () => {
-    const { InMemoryDemoUsersStorage, InMemoryDeviceCapabilityGrantStorage } = await import(
-      "@flagship/storage"
-    );
-    const demoUsers = new InMemoryDemoUsersStorage();
-    await demoUsers.insert({
-      username: "demoalice",
-      display: "Demo Alice",
-      snapshotId: null,
-      isoR2Key: null,
-      ttlIdleMinutes: 30,
-      region: "fsn1",
-      size: "cx22",
-      activeServerId: null,
-      activeServerFqdn: null,
-      lastActivityAt: 0,
-      state: "none",
-      createdAt: 1,
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      username: "demoalice.reviewer",
+      available: false,
+      reason: "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
     });
-    const deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
-    const r = await handleUsersCheck(
-      { storage: fakeStorage(), demoUsers, deviceCapabilityGrants },
-      { username: "demoalice.nope" },
-    );
-    expect(r.status).toBe(404);
-    expect((r.body as { error?: string }).error).toBe("unknown demo device label");
-  });
-
-  it.concurrent("revoked grant: returns 404 (excluded from active lookup)", async () => {
-    const { InMemoryDemoUsersStorage, InMemoryDeviceCapabilityGrantStorage } = await import(
-      "@flagship/storage"
-    );
-    const demoUsers = new InMemoryDemoUsersStorage();
-    await demoUsers.insert({
-      username: "demoalice",
-      display: "Demo Alice",
-      snapshotId: null,
-      isoR2Key: null,
-      ttlIdleMinutes: 30,
-      region: "fsn1",
-      size: "cx22",
-      activeServerId: null,
-      activeServerFqdn: null,
-      lastActivityAt: 0,
-      state: "none",
-      createdAt: 1,
-    });
-    const deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
-    await deviceCapabilityGrants.put({
-      grantId: "g-uuid-rev",
-      username: "demoalice",
-      deviceLabel: "reviewer",
-      devicePubHex: "dd".repeat(32),
-      scopesJson: JSON.stringify(["browse"]),
-      issuedAt: 1,
-      expiresAt: 9_999_999_999,
-      signatureHex: "ab".repeat(64),
-      revokedAt: 100,
-    });
-    const r = await handleUsersCheck(
-      { storage: fakeStorage(), demoUsers, deviceCapabilityGrants },
-      { username: "demoalice.reviewer" },
-    );
-    expect(r.status).toBe(404);
-  });
-
-  it.concurrent("plain `<u>` without a dot: unchanged legacy response (no deviceCapability)", async () => {
-    const { InMemoryDemoUsersStorage, InMemoryDeviceCapabilityGrantStorage } = await import(
-      "@flagship/storage"
-    );
-    const demoUsers = new InMemoryDemoUsersStorage();
-    const deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
-    const r = await handleUsersCheck(
-      { storage: fakeStorage(), demoUsers, deviceCapabilityGrants },
-      { username: "harry" },
-    );
-    expect(r.status).toBe(200);
-    const body = r.body as UsersCheckResponse;
-    expect(body.deviceCapability).toBeUndefined();
-    expect(body.available).toBe(true);
-  });
-});
-
-describe("parseTestAccountsEnv", () => {
-  it("returns null on missing or non-string input", () => {
-    expect(parseTestAccountsEnv(undefined)).toBeNull();
-    expect(parseTestAccountsEnv("")).toBeNull();
-    expect(parseTestAccountsEnv(null)).toBeNull();
-    expect(parseTestAccountsEnv(42)).toBeNull();
-  });
-
-  it("returns null on invalid JSON", () => {
-    expect(parseTestAccountsEnv("{not json")).toBeNull();
-  });
-
-  it("parses a valid object", () => {
-    const m = parseTestAccountsEnv(JSON.stringify({
-      "play-q2": { display: "Play Q2", ttlHours: 6 },
-    }));
-    expect(m).toEqual({ "play-q2": { display: "Play Q2", ttlHours: 6 } });
-  });
-
-  it("lowercases keys + defaults ttlHours when missing", () => {
-    const m = parseTestAccountsEnv(JSON.stringify({
-      "PLAY-Q2": { display: "Play Q2" },
-    }));
-    expect(m).toEqual({ "play-q2": { display: "Play Q2", ttlHours: 24 } });
-  });
-
-  it("skips malformed entries (no display)", () => {
-    const m = parseTestAccountsEnv(JSON.stringify({
-      "good": { display: "OK", ttlHours: 6 },
-      "bad": { ttlHours: 6 },
-    }));
-    expect(m).toEqual({ "good": { display: "OK", ttlHours: 6 } });
+    expect(JSON.stringify(response.body)).not.toMatch(/device|grant|ciphertext/i);
   });
 });

@@ -24,6 +24,8 @@ import {
   deriveSWK,
   deriveSTK,
   verifyAccountRecovery,
+  verifyAdminRootRotation,
+  verifyAdminRootTransfer,
   verifyAuthCode,
   verifyDaemonStatusReport,
   verifyDeviceCapabilityGrant,
@@ -45,6 +47,7 @@ import {
   verifyRevocation,
   verifyRevokeDeviceCapabilityGrant,
   verifyServerRegister,
+  verifyServerTransferClaim,
   verifySetRoutingTarget,
   verifyTunnelHello,
   verifyWatchDelegateKey,
@@ -55,7 +58,15 @@ const PATH = resolve(__dirname, "..", "..", "..", "test-vectors", "canonical-byt
 
 interface Vector {
   name: string;
-  signedBy: "irk" | "bak" | "stk" | "old-irk" | "rck" | "identity" | "none";
+  signedBy:
+    | "irk"
+    | "bak"
+    | "stk"
+    | "old-irk"
+    | "rck"
+    | "identity"
+    | "admin-root"
+    | "none";
   input: Record<string, unknown>;
   clients: string[];
   signatureHex: string;
@@ -72,6 +83,8 @@ interface File {
     stkPubHex: string;
     rckPubHex: string;
     identityPubHex: string;
+    adminRootPubHex: string;
+    newAdminRootPubHex: string;
     version: number;
   };
   vectors: Vector[];
@@ -98,6 +111,7 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
   const stkPub = hexToBytes(file.metadata.stkPubHex);
   const rckPub = hexToBytes(file.metadata.rckPubHex);
   const identityPub = hexToBytes(file.metadata.identityPubHex);
+  const adminRootPub = hexToBytes(file.metadata.adminRootPubHex);
 
   const pubFor = (signedBy: Vector["signedBy"]): Uint8Array => {
     switch (signedBy) {
@@ -113,6 +127,8 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
         return rckPub;
       case "identity":
         return identityPub;
+      case "admin-root":
+        return adminRootPub;
       case "none":
         return new Uint8Array(0);
     }
@@ -399,7 +415,7 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
           {
             grantId: i.grantId as string,
             username: i.username as string,
-            deviceLabel: i.deviceLabel as string,
+            deviceId: i.deviceId as string,
             devicePubKey: fromHex("devicePubKey"),
             scopes: i.scopes as DeviceScope[],
             issuedAt: i.issuedAt as number,
@@ -445,6 +461,44 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
           },
           sig,
           oldIrkPub,
+        );
+      case "admin-root-rotation":
+        return verifyAdminRootRotation(
+          {
+            username: i.username as string,
+            oldAdminRootPub: fromHex("oldAdminRootPub"),
+            newAdminRootPub: fromHex("newAdminRootPub"),
+            issuedAt: i.issuedAt as number,
+          },
+          sig,
+          adminRootPub,
+        );
+      case "server-transfer-claim":
+        return verifyServerTransferClaim(
+          {
+            serverDomain: i.serverDomain as string,
+            transferNonce: i.transferNonce as string,
+            acquirerUsername: i.acquirerUsername as string,
+            acquirerIrkPub: fromHex("acquirerIrkPub"),
+            acquirerAdminRootPubHex: i.acquirerAdminRootPubHex as string,
+            issuedAt: i.issuedAt as number,
+          },
+          sig,
+          irkPub,
+        );
+      case "admin-root-transfer":
+        return verifyAdminRootTransfer(
+          {
+            serverDomain: i.serverDomain as string,
+            giverUsername: i.giverUsername as string,
+            acquirerUsername: i.acquirerUsername as string,
+            oldAdminRootPubHex: i.oldAdminRootPubHex as string,
+            newAdminRootPubHex: i.newAdminRootPubHex as string,
+            transferNonce: i.transferNonce as string,
+            issuedAt: i.issuedAt as number,
+          },
+          sig,
+          adminRootPub,
         );
       case "daemon-status":
       case "daemon-status-liveness":

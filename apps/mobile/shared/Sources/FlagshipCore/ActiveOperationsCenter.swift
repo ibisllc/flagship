@@ -120,35 +120,27 @@ public final class ActiveOperationsCenter {
 
     // MARK: - Deploy operations (derived from pending pods)
 
-    /// Reconcile deploy operations against the current pods. A pod in
-    /// `.pending` gets (or keeps) a deploy op; a pod that has left `.pending`
-    /// — went live, was cancelled, was removed — drops its op. Existing ops
-    /// keep their `seq` so a steady re-sync never reorders the sliver, and the
-    /// whole `operations` array is only reassigned when something actually
-    /// changed (so calling this on every pod-list tick is free). Build
-    /// operations are untouched.
+    /// Reconcile deploy operations against the current pods.
+    ///
+    /// **Bug-3 decision — SUPPRESS deploy ops for pending pods.** A
+    /// freshly-created server is `.pending` the moment its recipe is minted —
+    /// i.e. while it is merely AWAITING A BURN, long before any box boots. The
+    /// in-list `PodInfo` for a `.pending` pod carries NO install-phase/liveness
+    /// signal that distinguishes "awaiting burn / not booted yet" from
+    /// "actually booting/installing" (real USB-burn pods only gain a phase via a
+    /// separate timeline poller, not on this model; and once a box registers it
+    /// LEAVES `.pending`). With no reliable signal to gate on, showing a
+    /// spinning "deploying server <name>" for an unburned recipe is wrong — so
+    /// we emit nothing for pending pods. Home's status pill already shows
+    /// "Pending" / "coming online" for these.
+    ///
+    /// This therefore PRUNES any deploy ops and never creates new ones, while
+    /// leaving build operations completely untouched. Existing build ops keep
+    /// their `seq`, and `operations` is only reassigned when something actually
+    /// changed (so calling this on every pod-list tick is free).
     public func syncDeployOperations(pods: [PodInfo]) {
-        let pending = pods.filter { $0.status == .pending }
-        let desiredIds = Set(pending.map { Self.deployId($0.podId) })
-
-        // Start from everything that isn't a now-defunct deploy op.
-        var next = operations.filter { $0.kind != .deploy || desiredIds.contains($0.id) }
-
-        for pod in pending {
-            let opId = Self.deployId(pod.podId)
-            let keptSeq = next.first(where: { $0.id == opId })?.seq
-            let op = ActiveOperation(
-                id: opId, kind: .deploy, subject: pod.name,
-                target: .serverDetail(podId: pod.podId),
-                seq: keptSeq ?? bump()
-            )
-            if let idx = next.firstIndex(where: { $0.id == opId }) {
-                next[idx] = op
-            } else {
-                next.append(op)
-            }
-        }
-
+        // Drop every deploy op; keep build ops as-is.
+        let next = operations.filter { $0.kind != .deploy }
         if next != operations { operations = next }
     }
 
@@ -161,6 +153,5 @@ public final class ActiveOperationsCenter {
 
     /// Namespaced ids keep the two feeders from ever colliding (a pod and a
     /// build session could share a raw string).
-    private static func deployId(_ podId: String) -> String { "deploy:\(podId)" }
     private static func buildId(_ id: String) -> String { "build:\(id)" }
 }

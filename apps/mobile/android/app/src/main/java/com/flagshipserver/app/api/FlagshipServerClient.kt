@@ -16,9 +16,18 @@ import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.JsonHttpTransport
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 
 interface FlagshipServerClient {
+    suspend fun bootstrapAccount(req: AccountBootstrapRequest): AccountBootstrapResponse =
+        error("account bootstrap unavailable")
     suspend fun claimUsername(req: UsernameClaimRequest)
+    /** POST /api/account/self-delete — the last-device account-death bundle.
+     *  accountSelfDelete is always sent; serversSelfDelete rides only for the
+     *  opt-in content-wipe (atomic §5 bundle, never standalone). A 200 means
+     *  the username row is hard-deleted on .com and the name is free; a 403
+     *  ("not the last device …") / 404 throws so the caller never wipes. */
+    suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest)
     suspend fun issueAuthCode(req: AuthCodeIssueRequest)
     suspend fun registerRck(req: RckRegisterRequest)
     /** Revoke an outstanding auth-code so a never-booted server can't
@@ -37,6 +46,11 @@ interface FlagshipServerClient {
      *  `revokeServer` + the iOS `revokeServer` shape. */
     suspend fun revokeServer(req: ServerRevocationRequest)
     suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse
+    /** Sign-up handle suggestion. POST /api/username/suggest with a throwaway
+     *  `deviceKey` (the per-device regenerate throttle, NOT the account IRK). A
+     *  200 carries a name + retryAfterMs cooldown; a 429 carries throttled + the
+     *  cooldown remaining. See docs/username-suggestion-queue.md. */
+    suspend fun suggestUsername(deviceKey: String): UsernameSuggestion
 
     /** Canonical provisioning-progress poll — GET /api/order/<serial>/status
      *  on flagshipserver.com (the control plane; NOT session-gated — the
@@ -76,12 +90,15 @@ interface FlagshipServerClient {
      *  cleaned up" as an error. */
     suspend fun revokePushToken(req: PushTokenRevokeRequest)
 
-    /** List the peer-class trusted devices on the user's account.
-     *  Returns the ETag the Worker computed so the caller can pass
-     *  it as `If-Match` on revocation / rotation requests, fencing
-     *  the device-list-changed-mid-action race (cf. Worker A3).
-     *  Worker side: GET /api/users/:u/devices. */
-    suspend fun listDevices(username: String): TrustedDevicesListResponse
+    suspend fun accountDirectory(
+        accountId: String,
+        authorization: AccountDirectoryAuthorization,
+    ): AccountDirectoryResponse = error("account directory unavailable")
+    suspend fun putAccountProfile(accountId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest): Unit = error("account directory unavailable")
+    suspend fun putDeviceSelfProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest): Unit = error("account directory unavailable")
+    suspend fun putDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryManagedProfileWriteRequest): Unit = error("account directory unavailable")
+    suspend fun deleteDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, expectedRevision: Long): Unit = error("account directory unavailable")
+    suspend fun revokeAccountDevice(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization): Unit = error("account directory unavailable")
 
     /** Account-level audit log surfaced via /api/users/:u/audit. Used
      *  by the Activity feed to render device-disconnect / device-
@@ -214,6 +231,15 @@ interface FlagshipServerClient {
     suspend fun listWatchDelegates(username: String): WatchDelegatesListResponse
     /** POST /api/users/:u/watch-delegates/revoke */
     suspend fun revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest)
+
+    /** Slice D (docs/device-admin-tier-spec.md §5) — submit an admin master-root
+     *  rotation proof. The OLD admin root signed `{old → new}`; `.com` records
+     *  the new `admin_root_pub_hex` (advisory) + relays the signed proof to each
+     *  box, which re-pins ONLY after verifying it against its pinned old root
+     *  (never `.com`'s word). Rotation EXCLUDES other admin devices holding the
+     *  old bare root (the revoke semantic).
+     *    POST /api/users/:username/admin-root-rotation */
+    suspend fun rotateAdminRoot(username: String, req: AdminRootRotationRequest)
 }
 
 /** Phase 3b — POST /api/users/:u/devices/admit body. Mirrors the Worker
@@ -226,13 +252,28 @@ data class DeviceAdmitRequest(
     /** Ed25519 over the admit, signed by the account's CURRENT IRK,
      *  lowercased hex (64 bytes). */
     val admitSig: String,
+    val grant: Grant,
+    val grantSignature: String,
+    val profile: AccountBootstrapRequest.Profile,
     val request: PushTokenRegisterRequest.Inner,
     /** PushTokenRegister signature, carried for storage. Hex. */
     val signature: String,
 ) {
     @Serializable
+    data class Grant(
+        val grantId: String,
+        val username: String,
+        val deviceId: String,
+        val devicePubHex: String,
+        val scopes: List<String>,
+        val issuedAt: Long,
+        val expiresAt: Long,
+        val signerRoot: String,
+    )
+    @Serializable
     data class AdmitEnvelope(
         val username: String,
+        val deviceId: String,
         /** The incoming device's freshly-minted pubkey, lowercased hex
          *  (32 bytes). */
         val newDevicePubHex: String,
@@ -324,7 +365,6 @@ data class AccountResolution(
     val kind: String,
     val recovery: RecoveryState,
     val totpEnrolled: Boolean,
-    val trustedDeviceCount: Int,
     /** Present only for demo accounts — the single sandbox device. */
     val demoServer: DemoServerBlock? = null,
     /** Server-derived recovery-speed hint:
@@ -492,6 +532,24 @@ data class RePairInitiateResponse(
     val graceMs: Long,
 )
 
+/** Slice D (§5) — POST /api/users/:username/admin-root-rotation body. Mirrors
+ *  the TS/iOS/webapp contract: the rotation payload + the OLD-root signature
+ *  over its canonical bytes (`AdminRootRotationClaim`). The pubkeys are
+ *  lowercased hex; `signatureHex` is the 64-byte Ed25519 sig, lowercased hex. */
+@Serializable
+data class AdminRootRotationRequest(
+    val rotation: Rotation,
+    val signatureHex: String,
+) {
+    @Serializable
+    data class Rotation(
+        val username: String,
+        val oldAdminRootPub: String,
+        val newAdminRootPub: String,
+        val issuedAt: Long,
+    )
+}
+
 @Serializable
 data class RePairCompleteResponse(
     val ok: Boolean,
@@ -530,28 +588,136 @@ data class AuditEventListResponse(
     val events: List<AuditEvent>,
 )
 
+data class AccountDirectoryAuthorization(
+    val deviceId: String,
+    val signerPubHex: String,
+    val requestId: String,
+    val issuedAt: Long,
+    val signatureHex: String,
+)
+
 @Serializable
-data class TrustedDevice(
-    val tokenId: String,
-    val tokenPrefix: String,
-    val label: String,
-    val platform: String,        // "apns" | "fcm" | "webpush"
-    val addedAt: Long,
+data class DirectoryProfileEnvelope(
+    val accountId: String,
+    val deviceId: String? = null,
+    val revision: Long,
+    val keyVersion: Long,
+    val nonceHex: String,
+    val ciphertextHex: String,
+    val issuedAt: Long,
+    val signerPubHex: String,
+    val signatureHex: String,
+)
+
+@Serializable
+data class DirectoryManagedProfileEnvelope(
+    val accountId: String,
+    val deviceId: String,
+    val revision: Long,
+    val keyVersion: Long,
+    val nonceHex: String,
+    val ciphertextHex: String,
+    val locked: Boolean,
+    val issuedAt: Long,
+    val signerPubHex: String,
+    val signatureHex: String,
+)
+
+@Serializable
+data class DirectoryProfileWriteRequest(
+    val profile: DirectoryProfileEnvelope,
+    val expectedRevision: Long,
+)
+
+@Serializable
+data class DirectoryManagedProfileWriteRequest(
+    val profile: DirectoryManagedProfileEnvelope,
+    val expectedRevision: Long,
+)
+
+@Serializable
+private data class DirectoryDeleteRequest(val expectedRevision: Long)
+
+@Serializable
+data class AccountDirectoryAccountProfile(
+    val accountId: String,
+    val revision: Long,
+    val keyVersion: Long,
+    val nonceHex: String,
+    val ciphertextHex: String,
+    val signerPubHex: String,
+    val signatureHex: String,
+    val issuedAt: Long,
+    val updatedAt: Long,
+)
+
+@Serializable
+data class AccountDirectoryDevice(
+    val accountId: String,
+    val deviceId: String,
+    val devicePubHex: String,
+    val platformClass: String? = null,
+    val createdAt: Long,
     val lastSeenAt: Long,
-    /** v1.2 Phase 4 — wall-clock ms before which this device cannot
-     *  revoke another device on the account. Null / 0 / past = the
-     *  14-day quarantine has elapsed (or never applied). A future
-     *  value tells the UI to show a clock indicator + disable the
-     *  Remove / Replace actions. */
-    val quarantineUntil: Long? = null,
+    val revokedAt: Long? = null,
+    val supportCode: String,
+)
+
+@Serializable
+data class AccountDirectoryGrant(
+    val grantId: String,
+    val username: String,
+    val deviceId: String,
+    val devicePubHex: String,
+    val scopesJson: String,
+    val issuedAt: Long,
+    val expiresAt: Long,
+    val signatureHex: String,
+    val revokedAt: Long? = null,
+    val signerRoot: String,
 ) {
-    /** Convenience for the UI; returns true iff the quarantine window
-     *  is in the future relative to [now]. */
-    fun isQuarantined(now: Long = System.currentTimeMillis()): Boolean {
-        val until = quarantineUntil ?: return false
-        return until > 0 && until > now
-    }
+    fun scopes(json: kotlinx.serialization.json.Json): Set<String> =
+        runCatching { json.decodeFromString<List<String>>(scopesJson).toSet() }.getOrDefault(emptySet())
 }
+
+@Serializable
+data class AccountDirectorySelfProfile(
+    val accountId: String,
+    val deviceId: String,
+    val revision: Long,
+    val keyVersion: Long,
+    val nonceHex: String,
+    val ciphertextHex: String,
+    val signerPubHex: String,
+    val signatureHex: String,
+    val issuedAt: Long,
+    val updatedAt: Long,
+)
+
+@Serializable
+data class AccountDirectoryManagedProfile(
+    val accountId: String,
+    val deviceId: String,
+    val revision: Long,
+    val keyVersion: Long,
+    val nonceHex: String,
+    val ciphertextHex: String,
+    val locked: Boolean,
+    val signerPubHex: String,
+    val signatureHex: String,
+    val issuedAt: Long,
+    val updatedAt: Long,
+)
+
+@Serializable
+data class AccountDirectoryResponse(
+    val accountId: String,
+    val accountProfile: AccountDirectoryAccountProfile? = null,
+    val devices: List<AccountDirectoryDevice> = emptyList(),
+    val grants: List<AccountDirectoryGrant> = emptyList(),
+    val selfProfiles: List<AccountDirectorySelfProfile> = emptyList(),
+    val managedProfiles: List<AccountDirectoryManagedProfile> = emptyList(),
+)
 
 /**
  * v1.2 Phase 4 — GET /api/users/:u response shape. Mirrors the iOS
@@ -642,33 +808,88 @@ data class TotpDisableResponse(
     val accountType: String,
 )
 
-/**
- * Response wrapper that surfaces the ETag header alongside the body.
- * Callers feed the ETag to subsequent /re-pair and /api/push/<id>
- * requests as If-Match so a Worker-side device-list change between
- * fetch and action yields a 412 instead of a half-applied rotation.
- */
-data class TrustedDevicesListResponse(
-    val devices: List<TrustedDevice>,
-    /** Server-supplied ETag for the snapshot (form `W/"hex"`).
-     *  Null only when the Mock impl didn't compute one. */
-    val etag: String?,
-)
-
-/** On-wire shape — separate from TrustedDevicesListResponse so the
- *  header-only ETag doesn't bleed into the @Serializable body type. */
-@Serializable
-private data class TrustedDevicesWireBody(val devices: List<TrustedDevice>)
-
 @Serializable
 data class UsernameClaimRequest(
     val request: Inner,
     val signature: String,           // hex, IRK over canonical bytes
+    /** Slice D — the account's ADMIN MASTER ROOT pubkey (hex), a top-level
+     *  sibling `.com` stores at `usernames.admin_root_pub_hex` (usernameClaim.ts).
+     *  NOT signature-covered (the claim sig is over username|irkPub|issuedAt);
+     *  the admin root's authority is anchored on the box via the signed AuthCode.
+     *  Omitted (null) on a legacy claim ⇒ `.com` stores no admin root. */
+    val adminRootPub: String? = null,
 ) {
     @Serializable
     data class Inner(
         val username: String,
         val irkPub: String,          // hex
+        val issuedAt: Long,
+    )
+}
+
+@Serializable
+data class AccountBootstrapRequest(
+    val claim: Claim,
+    val aidPub: String,
+    val adminRootPub: String,
+    val device: Device,
+    val grant: Grant,
+    val accountProfile: Profile,
+    val deviceProfile: Profile,
+) {
+    @Serializable data class Claim(val request: UsernameClaimRequest.Inner, val signature: String)
+    @Serializable data class Device(val deviceId: String, val devicePubHex: String, val platformClass: String)
+    @Serializable data class Grant(
+        val grantId: String,
+        val username: String,
+        val deviceId: String,
+        val devicePubHex: String,
+        val scopes: List<String>,
+        val issuedAt: Long,
+        val expiresAt: Long,
+        val signatureHex: String,
+    )
+    @Serializable data class Profile(
+        val accountId: String,
+        val deviceId: String? = null,
+        val revision: Long,
+        val keyVersion: Long,
+        val nonceHex: String,
+        val ciphertextHex: String,
+        val issuedAt: Long,
+        val signerPubHex: String,
+        val signatureHex: String,
+    )
+}
+
+@Serializable
+data class AccountBootstrapResponse(
+    val ok: Boolean,
+    val username: String,
+    val accountId: String,
+    val deviceId: String,
+    val created: Boolean,
+)
+
+/** Body for POST /api/account/self-delete. `accountSelfDelete` is always
+ *  present; `serversSelfDelete` is included ONLY for the opt-in content-wipe
+ *  (the atomic §5 bundle — `.com` rejects the whole request if a serversSelfDelete
+ *  arrives without a valid last-device accountSelfDelete). Both orders carry the
+ *  same lowercased username + issuedAt; signatures are IRK over the
+ *  account-self-delete / servers-self-delete canonical bytes. */
+@Serializable
+data class AccountSelfDeleteBundleRequest(
+    val accountSelfDelete: Order,
+    val serversSelfDelete: Order? = null,
+) {
+    @Serializable
+    data class Order(
+        val request: Inner,
+        val signature: String,       // hex, IRK over canonical bytes
+    )
+    @Serializable
+    data class Inner(
+        val username: String,
         val issuedAt: Long,
     )
 }
@@ -690,6 +911,13 @@ data class AuthCodeWire(
     val userPubKey: String,          // hex
     val issuedAt: Long,
     val expiresAt: Long,
+    /** Slice D (D-1) — the account's ADMIN MASTER ROOT pubkey (hex). Rides
+     *  INSIDE the AuthCode so it is signature-covered by `authCodeUserSignature`
+     *  and `.com`'s registration gate (a compromised network can't swap the
+     *  admin anchor). The box pins it at first boot into
+     *  `ServerConfig.adminRootPub`. Backward-compatible: null ⇒ the canonical
+     *  bytes are byte-identical to a pre-D AuthCode (no `ar=` segment). */
+    val adminRootPubKey: String? = null,
 )
 
 @Serializable
@@ -758,6 +986,16 @@ data class RckRegisterRequest(
     )
 }
 
+/** One sign-up handle suggestion. On a 200 `name` is set + `throttled` is false;
+ *  on a 429 `name` is null + `throttled` is true. `retryAfterMs` is the cooldown
+ *  until the next regenerate is allowed either way. */
+@Serializable
+data class UsernameSuggestion(
+    val name: String? = null,
+    val retryAfterMs: Int = 0,
+    val throttled: Boolean = false,
+)
+
 @Serializable
 data class UsernameAvailabilityResponse(
     val username: String,
@@ -775,13 +1013,6 @@ data class UsernameAvailabilityResponse(
      *  legacy (testAccount-only) behaviour preserved. See
      *  docs/sample-users.md §10.9. */
     val demoServer: DemoServerBlock? = null,
-    /** v2 device-addressing — present when the typed username matched
-     *  the `<u>.<device-label>` syntax AND a matching active
-     *  DeviceCapabilityGrant exists. The mobile client greys out
-     *  actions absent from `scopes` and renders the device-label chip
-     *  below the username. See
-     *  docs/v2-device-addressing-and-real-ticket.md §5.1. */
-    val deviceCapability: DeviceCapabilityBlock? = null,
 )
 
 @Serializable
@@ -850,20 +1081,14 @@ data class DemoServerBlock(
 /** v2 device-addressing — mirror of the Worker's `deviceCapability`
  *  block in `packages/control-plane/src/usersCheck.ts`. Embedded into
  *  the `/api/users/check` response when the typed username matched
- *  the `<u>.<device-label>` syntax AND a matching active
- *  DeviceCapabilityGrant exists. See
- *  docs/v2-device-addressing-and-real-ticket.md §2 + §5.1.
+ *  a matching active DeviceCapabilityGrant exists.
  *
  *  Note: `scopes` is a wire-format list of strings. Use [scopeSet]
  *  for the typed forward-compat parse (unknown future scope strings
  *  are silently dropped). */
 @Serializable
 data class DeviceCapabilityBlock(
-    /** Human-meaningful label the user typed after the dot
-     *  ("reviewer", "ipad", "work-laptop"). RFC-1035-ish (a-z, 0-9,
-     *  hyphen; not at start/end; ≤24 chars). Used in the chip below
-     *  the username. */
-    val label: String,
+    val deviceId: String,
     /** Device's Ed25519 pubkey, 32 bytes hex. Identifies the device
      *  across re-issuance. */
     val devicePubKey: String,
@@ -905,6 +1130,7 @@ enum class DeviceScope(val wire: String) {
     ADD_DEVICE("add-device"),
     MANAGE_SERVICES("manage-services"),
     REVOKE_OTHERS("revoke-others"),
+    VIEW_DIRECTORY("view-directory"),
     DEMO_PROVISION("demo-provision");
 
     companion object {
@@ -942,6 +1168,12 @@ data class RecoveryEnvelopeRequest(
         // ciphertext only — never in the signed canonical, so tampering
         // breaks recovery of the account key but can never forge it.
         val wrappedAcmeAccountKey: String? = null,
+        // Slice D (D-3) — the ADMIN MASTER ROOT escrowed alongside the UMK.
+        // Single self-contained base64 blob (nonce‖ct‖tag) from
+        // AdminRootEscrow.wrapForEscrow, read verbatim by the Worker. Optional +
+        // ciphertext-only (never in the signed canonical), so tampering can
+        // break admin recovery but never forge the root.
+        val wrappedAdminRoot: String? = null,
         // Task #74 — passphrase-gate hashes. Both are lowercase SHA-256 hex
         // of the Argon2id-derived fetchToken / prfSalt (see
         // RecoveryDerivation). Optional on the wire (NOT in the signed
@@ -968,6 +1200,8 @@ data class RecoveryEnvelope(
     // Decoded by the recovery-restore path (LoginViewModel) and imported via
     // Keystore.importAcmeAccountKeyScalar.
     val wrappedAcmeAccountKey: String? = null,
+    // Slice D (D-3) — present when the account escrowed its admin master root.
+    val wrappedAdminRoot: String? = null,
 )
 
 /** `POST /api/recovery/by-username/<u>/fetch` — the body the passphrase-
@@ -991,14 +1225,14 @@ data class GatedRecoveryEnvelope(
     val credentialId: String,
     val wrappedUmk: String,
     val wrappedAcmeAccountKey: String? = null,
+    // Slice D (D-3) — the escrowed admin master root, unwrapped on restore and
+    // re-established via Keystore.importAdminRoot.
+    val wrappedAdminRoot: String? = null,
     val prfSaltHash: String? = null,
     val updatedAt: Long? = null,
 )
 
-/** POST /api/push/register canonical-bytes envelope. Inner shape mirrors
- *  the protocol tag `flagship/push-token-register/v1` exactly. The
- *  `label` field slots between `pushX25519Pub` and `issuedAt`, matching
- *  the Worker side (packages/protocol/src/auth.ts). */
+/** POST /api/push/register canonical-bytes envelope. */
 @Serializable
 data class PushTokenRegisterRequest(
     val request: Inner,
@@ -1007,13 +1241,10 @@ data class PushTokenRegisterRequest(
     @Serializable
     data class Inner(
         val username: String,
+        val deviceId: String,
         val platform: String,        // "apns" | "fcm" | "webpush"
         val providerToken: String,   // FCM token (verbatim) / APNs hex (lowercased)
         val pushX25519Pub: String,   // hex
-        /** User-facing device label ("Pixel 8 — kitchen"). Surfaced in
-         *  the Trusted-devices list on .com. Part of the canonical
-         *  bytes the IRK signs over. */
-        val label: String,
         val issuedAt: Long,
     )
 }
@@ -1066,7 +1297,6 @@ class MockFlagshipServerClient(
      *  row, the response carries the `deviceCapability` block + the
      *  `demoServer` block from the user-part row. See
      *  docs/v2-device-addressing-and-real-ticket.md §5.1. */
-    var deviceCapabilities: MutableMap<String, DeviceCapabilityBlock> = mutableMapOf(),
     /** Canonical provisioning channel — mirror of the Worker's
      *  `provision_status` table, keyed by auth-code SERIAL. When a serial
      *  is present here, [fetchProvisionStatus] returns the record; absent ⇒
@@ -1084,6 +1314,7 @@ class MockFlagshipServerClient(
         val credentialId: String,
         val wrappedUmk: String,
         val wrappedAcmeAccountKey: String?,
+        val wrappedAdminRoot: String?,
         val fetchTokenHashHex: String?,
         val prfSaltHashHex: String?,
         val updatedAt: Long,
@@ -1091,6 +1322,7 @@ class MockFlagshipServerClient(
     private val recoveryByUsername = mutableMapOf<String, MockRecoveryRecord>()
 
     private val _claimedUsernames = mutableMapOf<String, String>()       // username → irkPub
+    private val _bootstrappedAccounts = mutableMapOf<String, AccountBootstrapRequest>()
     private val _issuedAuthCodes = mutableMapOf<String, AuthCodeWire>()  // serial → wire
     private val _revokedAuthCodes = mutableSetOf<String>()
     private val _releasedServerNames = mutableListOf<ReleaseServerNameRequest>()
@@ -1125,6 +1357,22 @@ class MockFlagshipServerClient(
         _claimedUsernames[u] = req.request.irkPub
     }
 
+    override suspend fun bootstrapAccount(req: AccountBootstrapRequest): AccountBootstrapResponse {
+        tick()
+        val username = req.claim.request.username.lowercase()
+        val prior = _bootstrappedAccounts[username]
+        if (prior != null && prior != req) throw HttpException(409, "username taken")
+        _bootstrappedAccounts[username] = req
+        _claimedUsernames[username] = req.claim.request.irkPub
+        return AccountBootstrapResponse(true, username, username, req.device.deviceId, prior == null)
+    }
+
+    override suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest) {
+        tick()
+        // Mock: hard-delete frees the name (mirrors .com dropping the row).
+        _claimedUsernames.remove(req.accountSelfDelete.request.username.lowercase())
+    }
+
     override suspend fun issueAuthCode(req: AuthCodeIssueRequest) {
         tick()
         _issuedAuthCodes[req.code.serial] = req.code
@@ -1150,32 +1398,18 @@ class MockFlagshipServerClient(
         _revokedServers += req
     }
 
+    /** Mock suggestion — a fresh random `<adjective>-<noun>` each call, fixed
+     *  2 s cooldown, never throttled (offline/dev convenience; no DNS). */
+    override suspend fun suggestUsername(deviceKey: String): UsernameSuggestion {
+        tick()
+        val adj = listOf("happy", "brave", "calm", "clever", "lucky", "swift", "sunny", "witty", "golden", "jolly").random()
+        val noun = listOf("otter", "panda", "fox", "heron", "robin", "finch", "badger", "beaver", "gecko", "comet").random()
+        return UsernameSuggestion(name = "$adj-$noun", retryAfterMs = 2000, throttled = false)
+    }
+
     override suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse {
         tick()
         val lower = username.lowercase()
-        // v2 device-addressing — `<u>.<label>` syntax precedes every
-        // other rule. The Worker behaves the same way: when a typed
-        // dot-form matches both a demo_users row AND an active
-        // device_capability_grants row, the response carries the
-        // `deviceCapability` block + the underlying demoServer. Any
-        // other dot-form returns 404 — the live client throws an
-        // HttpException(404) which the Mock mirrors so callers see
-        // the same failure mode.
-        if (lower.contains('.')) {
-            val cap = deviceCapabilities[lower]
-            if (cap != null) {
-                val userPart = lower.substringBefore('.')
-                val underlyingDemo = demoServers[userPart]
-                return UsernameAvailabilityResponse(
-                    username = lower,
-                    available = false,
-                    reason = "device capability",
-                    demoServer = underlyingDemo,
-                    deviceCapability = cap,
-                )
-            }
-            throw HttpException(404, "unknown demo device label")
-        }
         // Plan A — every return branch folds in the demoServer block
         // when present. Independent of testAccount / claim branches;
         // the Worker behaves the same way.
@@ -1193,16 +1427,17 @@ class MockFlagshipServerClient(
                 demoServer = demoBlock,
             )
         }
-        // Mirrors the Worker's USERNAME_RE in labels.ts: 3–30 lowercase
-        // alphanumerics, no hyphens. Keep in sync.
+        // Mirrors the Worker's USERNAME_RE in labels.ts: 3–30 lowercase chars,
+        // interior single dashes OK, no leading/trailing dash, and no `--` (the
+        // `<slug>--<creator>` delimiter — docs/service-addressing-double-dash.md).
         if (lower.length < 3 || lower.length > 30) {
             return UsernameAvailabilityResponse(lower, false, "Must be 3–30 chars.", demoServer = demoBlock)
         }
         if (lower in reservedUsernames) {
             return UsernameAvailabilityResponse(lower, false, "Reserved.", demoServer = demoBlock)
         }
-        if (!lower.matches(Regex("^[a-z0-9]+$"))) {
-            return UsernameAvailabilityResponse(lower, false, "Letters and digits only.", demoServer = demoBlock)
+        if (!lower.matches(Regex("^[a-z0-9][a-z0-9-]*[a-z0-9]$")) || lower.contains("--")) {
+            return UsernameAvailabilityResponse(lower, false, "Letters, digits, and interior dashes only (no double dash).", demoServer = demoBlock)
         }
         val prior = _claimedUsernames[lower]
         if (prior != null && prior != "_self") {
@@ -1224,20 +1459,24 @@ class MockFlagshipServerClient(
         // omits it, mirroring the control-plane upsert (#28).
         val priorAcme = recoveryStore[r.credentialId]?.wrappedAcmeAccountKey
         val resolvedAcme = r.wrappedAcmeAccountKey ?: priorAcme
+        val priorAdminRoot = recoveryStore[r.credentialId]?.wrappedAdminRoot
+        val resolvedAdminRoot = r.wrappedAdminRoot ?: priorAdminRoot
         recoveryStore[r.credentialId] = RecoveryEnvelope(
             credentialId = r.credentialId,
             wrappedUmk = r.wrappedUmk,
             wrappedAcmeAccountKey = resolvedAcme,
+            wrappedAdminRoot = resolvedAdminRoot,
         )
         // Also mirror the by-username row the gated /fetch endpoint reads,
         // carrying the passphrase-gate hashes (Task #74). Preserve a prior
-        // ACME escrow / hashes the same way the Worker's upsert does.
+        // ACME / admin-root escrow / hashes the same way the Worker's upsert does.
         val key = r.username.lowercase()
         val prior = recoveryByUsername[key]
         recoveryByUsername[key] = MockRecoveryRecord(
             credentialId = r.credentialId,
             wrappedUmk = r.wrappedUmk,
             wrappedAcmeAccountKey = resolvedAcme ?: prior?.wrappedAcmeAccountKey,
+            wrappedAdminRoot = resolvedAdminRoot ?: prior?.wrappedAdminRoot,
             fetchTokenHashHex = r.fetchTokenHash?.lowercase() ?: prior?.fetchTokenHashHex,
             prfSaltHashHex = r.prfSaltHash?.lowercase() ?: prior?.prfSaltHashHex,
             updatedAt = nowMs(),
@@ -1271,6 +1510,7 @@ class MockFlagshipServerClient(
             credentialId = rec.credentialId,
             wrappedUmk = rec.wrappedUmk,
             wrappedAcmeAccountKey = rec.wrappedAcmeAccountKey,
+            wrappedAdminRoot = rec.wrappedAdminRoot,
             prfSaltHash = rec.prfSaltHashHex,
             updatedAt = rec.updatedAt,
         )
@@ -1289,7 +1529,7 @@ class MockFlagshipServerClient(
     }
 
     /** Scripted devices listing per username for tests + dev mode. */
-    var devicesByUser: Map<String, List<TrustedDevice>> = emptyMap()
+    var accountDirectories: Map<String, AccountDirectoryResponse> = emptyMap()
 
     /** Scripted audit log per username — tests configure to drive
      *  Activity feed renders without hitting the Worker. The default
@@ -1304,7 +1544,7 @@ class MockFlagshipServerClient(
             "harry" to listOf(
                 AuditEvent(
                     seq = 4, eventKind = "device-added",
-                    detail = "Added iPad (kitchen)",
+                    detail = "A device joined the account",
                     devicePrefix = "f9e8d7c6",
                     postedAt = now - 2 * hour,
                 ),
@@ -1322,7 +1562,7 @@ class MockFlagshipServerClient(
                 ),
                 AuditEvent(
                     seq = 1, eventKind = "device-disconnected",
-                    detail = "Disconnected iPhone (old)",
+                    detail = "A device left the account",
                     devicePrefix = "deadbeef",
                     postedAt = now - 30 * 24 * hour,
                 ),
@@ -1484,15 +1724,16 @@ class MockFlagshipServerClient(
         tick()
         val alias = appAliasByUser[username.lowercase()]?.get(serviceId)
         // Mirrors @flagship/protocol deriveUrlFragment: serviceId is
-        // `<creator>-<slug>` (FIRST hyphen splits — usernames are
-        // hyphen-free). Fragment is CONDITIONAL: `<slug>` when the
-        // running user authored it, else `<slug>-<creator>`.
+        // `<creator>--<slug>` (the `--` delimiter splits — both halves may
+        // carry single dashes; docs/service-addressing-double-dash.md).
+        // Fragment is CONDITIONAL: `<slug>` when the running user authored
+        // it, else `<slug>--<creator>`.
         val defaultLabel = run {
-            val i = serviceId.indexOf('-')
-            if (i > 0 && i < serviceId.length - 1) {
+            val i = serviceId.indexOf("--")
+            if (i > 0 && i < serviceId.length - 2) {
                 val creator = serviceId.substring(0, i).lowercase()
-                val slug = serviceId.substring(i + 1).lowercase()
-                if (creator == username.lowercase()) slug else "$slug-$creator"
+                val slug = serviceId.substring(i + 2).lowercase()
+                if (creator == username.lowercase()) slug else "$slug--$creator"
             } else {
                 serviceId.lowercase()
             }
@@ -1583,11 +1824,12 @@ class MockFlagshipServerClient(
         return AuditEventListResponse(events = filtered.take(cappedLimit))
     }
 
-    override suspend fun listDevices(username: String): TrustedDevicesListResponse {
+    override suspend fun accountDirectory(
+        accountId: String,
+        authorization: AccountDirectoryAuthorization,
+    ): AccountDirectoryResponse {
         tick()
-        val rows = devicesByUser[username.lowercase()] ?: emptyList()
-        val sorted = rows.sortedWith(compareBy({ it.addedAt }, { it.tokenId }))
-        return TrustedDevicesListResponse(devices = sorted, etag = etagFor(sorted))
+        return accountDirectories[accountId.lowercase()] ?: AccountDirectoryResponse(accountId.lowercase())
     }
 
     // ── v1.2 Phase 4 — account-type + TOTP scripted state ─────────
@@ -1709,7 +1951,6 @@ class MockFlagshipServerClient(
                 kind = "demo",
                 recovery = AccountResolution.RecoveryState(present = false, hasFetchGate = false),
                 totpEnrolled = false,
-                trustedDeviceCount = 0,
                 demoServer = block,
                 graceModel = "instant",
             )
@@ -1727,7 +1968,6 @@ class MockFlagshipServerClient(
                 kind = "unknown",
                 recovery = AccountResolution.RecoveryState(present = false, hasFetchGate = false),
                 totpEnrolled = false,
-                trustedDeviceCount = 0,
                 graceModel = "none",
             )
         }
@@ -1740,7 +1980,6 @@ class MockFlagshipServerClient(
         val hasRecovery = (cloudRecoveryByUser[u] ?: false) || record != null
         val hasFetchGate = record?.fetchTokenHashHex != null
         val credentialId = record?.credentialId
-        val devices = devicesByUser[u]?.size ?: 0
         return AccountResolution(
             username = u,
             exists = true,
@@ -1751,7 +1990,6 @@ class MockFlagshipServerClient(
                 credentialId = credentialId,
             ),
             totpEnrolled = totpEnrolledAtByUser[u] != null,
-            trustedDeviceCount = devices,
             graceModel = if (kind == "multi") "24h-totp" else "3d",
             // Recovery Phase A vs B — surface the account's currently
             // registered IRK so the single-device takeover can tell a
@@ -1829,33 +2067,29 @@ class MockFlagshipServerClient(
         watchDelegatesByUser[u]?.removeAll { it.grantId == body.request.grantId }
     }
 
-    private fun etagFor(devices: List<TrustedDevice>): String {
-        // Identity-significant subset only; lastSeenAt deliberately
-        // excluded so test push-delivery doesn't flutter the ETag.
-        // FNV-1a over a byte-feed of the identity fields. Mirrors the
-        // Swift MockFlagshipServerClient.etagFor exactly so a future
-        // cross-client test can verify byte-for-byte parity.
-        var h: ULong = 14695981039346656037uL
-        fun feedString(s: String) {
-            for (b in s.toByteArray(Charsets.UTF_8)) {
-                h = h xor (b.toInt() and 0xff).toULong()
-                h *= 1099511628211uL
-            }
-            h = h xor 0x1fuL; h *= 1099511628211uL
+    /** Slice D (§5) — record the rotated admin root against the mock account so
+     *  a subsequent getUsernameRecord could reflect it. Verifies the carried
+     *  proof against the old root byte-for-byte so a test can't pass a bogus
+     *  signature. */
+    val rotatedAdminRootByUser = mutableMapOf<String, String>()
+    override suspend fun rotateAdminRoot(username: String, req: AdminRootRotationRequest) {
+        tick()
+        val r = com.flagshipserver.app.core.AdminRootRotation(
+            username = req.rotation.username,
+            oldAdminRootPub = req.rotation.oldAdminRootPub,
+            newAdminRootPub = req.rotation.newAdminRootPub,
+            issuedAt = req.rotation.issuedAt,
+        )
+        val sig = com.flagshipserver.app.core.HexUtil.decode(req.signatureHex)
+            ?: throw IllegalArgumentException("bad signature hex")
+        val oldPub = com.flagshipserver.app.core.HexUtil.decode(req.rotation.oldAdminRootPub)
+            ?: throw IllegalArgumentException("bad old admin root pub hex")
+        if (!com.flagshipserver.app.core.AdminRootRotationClaim.verify(r, sig, oldPub)) {
+            throw IllegalArgumentException("admin-root-rotation proof does not verify")
         }
-        fun feedLong(n: Long) {
-            for (shift in 0 until 64 step 8) {
-                h = h xor ((n.toULong() shr shift) and 0xffuL)
-                h *= 1099511628211uL
-            }
-            h = h xor 0x1fuL; h *= 1099511628211uL
-        }
-        for (d in devices) {
-            feedString(d.tokenId); feedString(d.label); feedString(d.platform); feedLong(d.addedAt)
-        }
-        val hex = h.toString(16).padStart(16, '0').takeLast(16)
-        return "W/\"$hex\""
+        rotatedAdminRootByUser[username.lowercase()] = req.rotation.newAdminRootPub.lowercase()
     }
+
 }
 
 // ── Live ──────────────────────────────────────────────────────────
@@ -1877,6 +2111,24 @@ class LiveFlagshipServerClient(
             "$base/api/username/claim", req,
             serializer = UsernameClaimRequest.serializer(),
             accept = setOf(200, 201, 204, 409),
+        )
+    }
+
+    override suspend fun bootstrapAccount(req: AccountBootstrapRequest): AccountBootstrapResponse =
+        transport.postJsonForResponse(
+            "$base/api/accounts",
+            req,
+            serializer = AccountBootstrapRequest.serializer(),
+            responseSerializer = AccountBootstrapResponse.serializer(),
+        )
+
+    override suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest) {
+        // Only 200 is success; 403 (not last device / bad sig) + 404 throw
+        // HttpException so the caller surfaces it and never wipes locally.
+        transport.postJson(
+            "$base/api/account/self-delete", req,
+            serializer = AccountSelfDeleteBundleRequest.serializer(),
+            accept = setOf(200),
         )
     }
 
@@ -1928,6 +2180,28 @@ class LiveFlagshipServerClient(
             serializer = UsernameAvailabilityCheckBody.serializer(),
             responseSerializer = UsernameAvailabilityResponse.serializer(),
         )
+
+    override suspend fun suggestUsername(deviceKey: String): UsernameSuggestion {
+        val bodyBytes = transport.json
+            .encodeToString(SuggestUsernameBody.serializer(), SuggestUsernameBody(deviceKey))
+            .encodeToByteArray()
+        // accept 429 so the throttle is a normal outcome, not an exception.
+        val resp = transport.execute(
+            method = "POST",
+            url = "$base/api/username/suggest",
+            body = bodyBytes,
+            contentType = "application/json",
+            accept = setOf(200, 429),
+        )
+        val wire = transport.json.decodeFromString(
+            SuggestUsernameWire.serializer(), resp.body.decodeToString(),
+        )
+        return if (resp.status == 429) {
+            UsernameSuggestion(name = null, retryAfterMs = wire.retryAfterMs ?: 3000, throttled = true)
+        } else {
+            UsernameSuggestion(name = wire.name, retryAfterMs = wire.retryAfterMs ?: 2000, throttled = false)
+        }
+    }
 
     override suspend fun fetchProvisionStatus(serial: String): ProvisionStatusRecord? {
         // GET /api/order/<serial>/status — 200 carries the record; 404
@@ -2000,21 +2274,87 @@ class LiveFlagshipServerClient(
         )
     }
 
-    override suspend fun listDevices(username: String): TrustedDevicesListResponse {
-        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
-        // execute(...) so we can read the ETag header. The
-        // convenience getJson(...) only surfaces the body.
+    override suspend fun accountDirectory(
+        accountId: String,
+        authorization: AccountDirectoryAuthorization,
+    ): AccountDirectoryResponse {
+        val normalized = accountId.lowercase()
+        val encoded = java.net.URLEncoder.encode(normalized, "UTF-8")
         val resp = transport.execute(
             method = "GET",
-            url = "$base/api/users/$encoded/devices",
+            url = "$base/api/accounts/$encoded/directory",
+            extraHeaders = mapOf(
+                "x-flagship-device-id" to authorization.deviceId,
+                "x-flagship-device-pub" to authorization.signerPubHex,
+                "x-flagship-request-id" to authorization.requestId,
+                "x-flagship-issued-at" to authorization.issuedAt.toString(),
+                "x-flagship-signature" to authorization.signatureHex,
+                "cache-control" to "no-store",
+            ),
             accept = setOf(200),
         )
-        val body = transport.json.decodeFromString(
-            TrustedDevicesWireBody.serializer(),
+        return transport.json.decodeFromString(
+            AccountDirectoryResponse.serializer(),
             resp.body.decodeToString(),
         )
-        val etag = resp.headers.entries.firstOrNull { it.key.equals("etag", ignoreCase = true) }?.value
-        return TrustedDevicesListResponse(devices = body.devices, etag = etag)
+    }
+
+    override suspend fun putAccountProfile(accountId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) {
+        directoryMutation(
+            "PUT", "/api/accounts/${accountId.lowercase()}/profile", authorization,
+            transport.json.encodeToString(DirectoryProfileWriteRequest.serializer(), body).toByteArray(),
+        )
+    }
+
+    override suspend fun putDeviceSelfProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) {
+        directoryMutation(
+            "PUT", "/api/accounts/${accountId.lowercase()}/devices/${deviceId.lowercase()}/profile", authorization,
+            transport.json.encodeToString(DirectoryProfileWriteRequest.serializer(), body).toByteArray(),
+        )
+    }
+
+    override suspend fun putDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryManagedProfileWriteRequest) {
+        directoryMutation(
+            "PUT", "/api/accounts/${accountId.lowercase()}/devices/${deviceId.lowercase()}/managed-profile", authorization,
+            transport.json.encodeToString(DirectoryManagedProfileWriteRequest.serializer(), body).toByteArray(),
+        )
+    }
+
+    override suspend fun deleteDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, expectedRevision: Long) {
+        directoryMutation(
+            "DELETE", "/api/accounts/${accountId.lowercase()}/devices/${deviceId.lowercase()}/managed-profile", authorization,
+            transport.json.encodeToString(DirectoryDeleteRequest.serializer(), DirectoryDeleteRequest(expectedRevision)).toByteArray(),
+        )
+    }
+
+    override suspend fun revokeAccountDevice(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization) {
+        directoryMutation(
+            "DELETE", "/api/accounts/${accountId.lowercase()}/devices/${deviceId.lowercase()}", authorization,
+            transport.json.encodeToString(DirectoryDeleteRequest.serializer(), DirectoryDeleteRequest(0)).toByteArray(),
+        )
+    }
+
+    private suspend fun directoryMutation(
+        method: String,
+        path: String,
+        authorization: AccountDirectoryAuthorization,
+        body: ByteArray,
+    ) {
+        transport.execute(
+            method = method,
+            url = "$base$path",
+            body = body,
+            contentType = "application/json; charset=utf-8",
+            extraHeaders = mapOf(
+                "x-flagship-device-id" to authorization.deviceId,
+                "x-flagship-device-pub" to authorization.signerPubHex,
+                "x-flagship-request-id" to authorization.requestId,
+                "x-flagship-issued-at" to authorization.issuedAt.toString(),
+                "x-flagship-signature" to authorization.signatureHex,
+                "cache-control" to "no-store",
+            ),
+            accept = setOf(200),
+        )
     }
 
     override suspend fun listAuditEvents(username: String, sinceSeq: Int, limit: Int): AuditEventListResponse {
@@ -2246,7 +2586,25 @@ class LiveFlagshipServerClient(
             serializer = WatchDelegateRevokeRequest.serializer(),
         )
     }
+
+    override suspend fun rotateAdminRoot(username: String, req: AdminRootRotationRequest) {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        transport.postJson(
+            url = "$base/api/users/$encoded/admin-root-rotation",
+            body = req,
+            serializer = AdminRootRotationRequest.serializer(),
+        )
+    }
 }
 
 @Serializable
 private data class UsernameAvailabilityCheckBody(@SerialName("username") val username: String)
+
+@Serializable
+private data class SuggestUsernameBody(@SerialName("deviceKey") val deviceKey: String)
+
+@Serializable
+private data class SuggestUsernameWire(
+    val name: String? = null,
+    val retryAfterMs: Int? = null,
+)

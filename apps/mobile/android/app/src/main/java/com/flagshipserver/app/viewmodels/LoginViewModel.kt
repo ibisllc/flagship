@@ -19,7 +19,7 @@
 //   single (recovery.present)  → passkey-PRF unwrap (Mock) → TAKEOVER:
 //       3-day-grace explainer → on confirm: installUmk(seed),
 //       INITIATE re-pair (POST /api/users/:u/re-pair), label this
-//       device "admin", complete onboarding with the RESOLVED username
+//       complete onboarding with the RESOLVED username
 //       (no "recovered-user" placeholder) + empty pods.
 //
 //   multi (recovery.present, totpEnrolled) → passkey-PRF unwrap (Mock)
@@ -42,6 +42,7 @@ import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RePairInitiateRequest
 import com.flagshipserver.app.core.AcmeAccountKey
+import com.flagshipserver.app.core.AdminRootEscrow
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
@@ -62,7 +63,6 @@ import kotlinx.coroutines.withContext
  *  Reach (`ukey.*`) is what makes it special, not the id — but the label
  *  is the user-visible marker of the no-lockout guarantee. See
  *  docs/login-and-account-redesign.md "The admin label". */
-const val ADMIN_DEVICE_LABEL = "admin"
 
 /** The login state machine's terminal + transient phases. The single
  *  and multi branches share most states; the difference is the gate
@@ -153,6 +153,12 @@ class LoginViewModel(
      *  profile's Keystore slot. Null when the account never escrowed one. */
     private var recoveredAcmeScalar: ByteArray? = null
 
+    /** Slice D (D-3) — recovered admin master root seed (32 bytes), unwrapped
+     *  from the envelope's escrowed `wrappedAdminRoot` if present. Held in
+     *  memory until [confirmTakeover] imports it, re-establishing admin on the
+     *  recovered device. Null when the account never escrowed one. */
+    private var recoveredAdminRootSeed: ByteArray? = null
+
     /** MULTI second factor captured by [submitSecondFactor], threaded
      *  into the re-pair `totpProof`. */
     private var secondFactor: RePairInitiateRequest.TotpProof? = null
@@ -208,6 +214,7 @@ class LoginViewModel(
             require(result.umkSeed.size == 32) { "recovered UMK isn't 32 bytes" }
             recoveredSeed = result.umkSeed
             recoveredAcmeScalar = result.acmeScalar
+            recoveredAdminRootSeed = result.adminRootSeed
             _phase.value = if (isMulti) {
                 LoginPhase.AwaitingSecondFactor
             } else {
@@ -273,6 +280,14 @@ class LoginViewModel(
                 null
             }
         }
+        // Slice D (D-3) — same treatment for the escrowed admin master root.
+        recoveredAdminRootSeed = envelope.wrappedAdminRoot?.let { wrapped ->
+            try {
+                AdminRootEscrow.unwrapFromEscrow(wrapped, prfSecret)
+            } catch (_: Throwable) {
+                null
+            }
+        }
         return Recovery.unwrap(
             wrappedUmkBase64 = envelope.wrappedUmk,
             prfSecret = prfSecret,
@@ -308,9 +323,9 @@ class LoginViewModel(
      *      UMK; deriveIRK now derives the recovered identity's IRK.
      *   2. INITIATE re-pair (POST /api/users/:u/re-pair) signed by the
      *      NEW IRK — for MULTI, carrying the collected `totpProof`.
-     *   3. Stamp this device "admin" on the active profile (the
-     *      no-lockout marker).
-     *   4. completeOnboarding(resolved username, empty pods).
+     *   3. completeOnboarding(resolved username, empty pods). The device
+     *      is left unnamed: administrator reach is a capability decided
+     *      server-side, not a display name written here.
      *
      * Phase 4 wires the grace countdown + completion polling; here we
      * only START the clock. We DON'T flip the local IRK version to the
@@ -352,6 +367,17 @@ class LoginViewModel(
                 } catch (_: Throwable) { /* recoverable via a surviving admin device */ }
             }
 
+            // 1c. Slice D (D-3) — re-establish admin authority from the escrowed
+            //     admin master root (credential recovery is the remedy for
+            //     losing every admin device). Non-fatal. The rotation-proof
+            //     re-pinning of boxes (old-root-signs-new-root) is a deferred
+            //     follow-up; this restores the root itself.
+            recoveredAdminRootSeed?.let { seed ->
+                try {
+                    Keystore.importAdminRoot(seed)
+                } catch (_: Throwable) { /* recoverable via a surviving admin device */ }
+            }
+
             // 2. Recovery Phase A vs B (single-device only) — the decision
             //    the whole sign-out → recover → instant-repair round-trip
             //    rests on. Derive the IRK from the JUST-installed (recovered)
@@ -383,13 +409,12 @@ class LoginViewModel(
             if (!isMulti && recoveredKeyMatchesRegistered(recoveredPubHex)) {
                 // Phase A — instant pair. The recovered key matches the
                 // registered identity (or the Worker didn't surface one):
-                // open the account directly, stamp this device admin, and
-                // finish. No server-side re-pair, no grace clock, no
-                // staged rotation.
+                // open the account directly and finish. No server-side
+                // re-pair, no grace clock, no staged rotation. The device is
+                // NOT named here: administrator status is a capability in its
+                // signed grant, not a display name, and any name it shows is
+                // an encrypted self-profile its owner writes later.
                 app.completeOnboarding(username = username, pods = emptyList())
-                app.activeProfile?.let { active ->
-                    app.addProfile(active.copy(deviceLabel = ADMIN_DEVICE_LABEL), setActive = true)
-                }
                 _phase.value = LoginPhase.Opened
                 return
             }
@@ -473,7 +498,7 @@ class LoginViewModel(
      * signature (we POST an empty body via [FlagshipServerClient.
      * completeRePair]). On success we activate the staged IRK rotation
      * locally (pending → current), open the account as the resolved user,
-     * and stamp this device "admin".
+     * leaving the device unnamed.
      */
     suspend fun completeTakeover() {
         if (_phase.value !is LoginPhase.Grace) return
@@ -485,11 +510,9 @@ class LoginViewModel(
                 Keystore.setCurrentIrkVersion(pending)
                 Keystore.setPendingIrkRotationVersion(null)
             }
-            // Open as the RESOLVED user with ZERO pods, then stamp admin.
+            // Open as the RESOLVED user with ZERO pods. The device is left
+            // unnamed — administrator status is a capability, not a label.
             app.completeOnboarding(username = username, pods = emptyList())
-            app.activeProfile?.let { active ->
-                app.addProfile(active.copy(deviceLabel = ADMIN_DEVICE_LABEL), setActive = true)
-            }
             _phase.value = LoginPhase.Opened
         } catch (t: Throwable) {
             _phase.value = LoginPhase.Failed(humanizedError(t))

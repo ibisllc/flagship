@@ -151,7 +151,7 @@ public struct VibeCodeChatScreen: View {
             }
             await reload()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = ScreensClientError.userFacing(error)
         }
     }
 
@@ -339,7 +339,7 @@ public struct VibeCodeChatScreen: View {
         do {
             state = try await client.vibeCodeSessionState(sessionId: sessionId)
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = ScreensClientError.userFacing(error)
         }
     }
 
@@ -375,7 +375,7 @@ public struct VibeCodeChatScreen: View {
             replyDraft = ""
             await reload()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = ScreensClientError.userFacing(error)
         }
     }
 
@@ -384,14 +384,15 @@ public struct VibeCodeChatScreen: View {
             errorMessage = "Session has no app id yet — wait for the manifest to emit."
             return
         }
-        // Derive (creator, slug) from the appId. appId = "<creator>-<slug>"
-        // single-dash; creator is hyphen-free → split at first '-'.
-        guard let dashIdx = appId.firstIndex(of: "-") else {
+        // Derive (creator, slug) from the appId. appId = "<creator>--<slug>";
+        // split on the `--` delimiter (both halves may carry single dashes —
+        // docs/service-addressing-double-dash.md).
+        guard let delim = appId.range(of: "--") else {
             errorMessage = "Invalid app id shape"
             return
         }
-        let creator = String(appId[..<dashIdx])
-        let slug = String(appId[appId.index(after: dashIdx)...])
+        let creator = String(appId[..<delim.lowerBound])
+        let slug = String(appId[delim.upperBound...])
         submitting = true
         defer { submitting = false }
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
@@ -418,7 +419,7 @@ public struct VibeCodeChatScreen: View {
             envValueDraft = ""
             await reload()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = ScreensClientError.userFacing(error)
         }
     }
 
@@ -432,7 +433,7 @@ public struct VibeCodeChatScreen: View {
             )
             await reload()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = ScreensClientError.userFacing(error)
         }
     }
 }

@@ -26,7 +26,7 @@
 // Canonical username rule (mirror of control-plane labels.ts): lower
 // alphanumerics only, no hyphens, 3–30 chars. Hyphen-free usernames
 // keep `<creator>-<slug>` app ids unambiguous.
-const USERNAME_RE = /^[a-z0-9]{3,30}$/;
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 const SLUG_RE = /^[a-z0-9](-?[a-z0-9])*$/;
 const SLUG_MAX = 32;
 /** Legacy DNS label regex retained for callers that do raw subdomain validation. */
@@ -81,6 +81,13 @@ const RESERVED_USER_LABELS = new Set([
   "qa",
   "ci",
   "staging",
+  // Per-account gossip fan-out reserved names (Phase 4) — mirror of
+  // control-plane labels.ts. `broadcast` is the reserved fan-out label
+  // `broadcast--<user>.flagship.services` the hub mirrors gossip through;
+  // `servers`/`all` are reserved collective addresses for the same regime.
+  "broadcast",
+  "servers",
+  "all",
 ]);
 
 export type LabelValidation =
@@ -89,10 +96,10 @@ export type LabelValidation =
 
 export function validateUserLabel(input: string): LabelValidation {
   const norm = String(input).toLowerCase();
-  if (!USERNAME_RE.test(norm)) {
+  if (!USERNAME_RE.test(norm) || norm.includes("--")) {
     return {
       ok: false,
-      reason: "username must match [a-z0-9]{3,30} (no dashes — the dash is reserved as the slug-creator separator in app URLs)",
+      reason: "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash — `--` is the slug-creator separator)",
     };
   }
   if (RESERVED_USER_LABELS.has(norm)) {
@@ -118,33 +125,29 @@ export function validateAppSlug(input: string): LabelValidation {
 }
 
 /**
- * Validate the leftmost DNS label of an app URL — for an app authored
- * by `<creator>`, this is `<slug>-<creator>`. The `<creator>` half is a
- * username so its rules apply (dashless); the `<slug>` half follows the
- * slug rules (dashes ok, no leading/trailing/double). Together they
- * have exactly one separating dash followed by the creator suffix.
+ * Validate the leftmost DNS label of a QUALIFIED app URL — for an app authored
+ * by `<creator>`, this is `<slug>--<creator>` (docs/service-addressing-double-dash.md).
+ * Both halves may carry interior single dashes; the single `--` is the boundary.
+ * (A bare self-authored `<slug>` has no creator suffix and is not a parse target.)
  */
 export function parseAppLabel(label: string): { slug: string; creator: string } | { ok: false; reason: string } {
   const norm = String(label).toLowerCase();
-  // Find the LAST dash. Everything before is the slug; everything after is
-  // the creator. This works because creators are dashless; the slug is
-  // free to contain interior dashes.
-  const idx = norm.lastIndexOf("-");
-  if (idx < 0) {
-    return { ok: false, reason: "app label must include a dash separating slug from creator" };
+  // Split on the single `--` delimiter. Both slug and creator forbid `--`, so
+  // there is exactly one — the unambiguous slug/creator boundary.
+  const parts = norm.split("--");
+  if (parts.length !== 2) {
+    return { ok: false, reason: "app label must be <slug>--<creator>" };
   }
-  const slugPart = norm.slice(0, idx);
-  const creatorPart = norm.slice(idx + 1);
-  const slug = validateAppSlug(slugPart);
+  const slug = validateAppSlug(parts[0]!);
   if (!slug.ok) return { ok: false, reason: `bad slug part: ${slug.reason}` };
-  const creator = validateUserLabel(creatorPart);
+  const creator = validateUserLabel(parts[1]!);
   if (!creator.ok) return { ok: false, reason: `bad creator part: ${creator.reason}` };
   return { slug: slug.label, creator: creator.label };
 }
 
 /**
  * The class a leftmost label resolves to under the ONE per-user resolver.
- * App labels, box-coordination names, and device labels all share the same
+ * App labels and box-coordination names share the same
  * `*.<user>` leftmost-label space and MUST be mutually unique within a user
  * (the storage invariant); this resolver applies the deterministic
  * PRECEDENCE so the class is well-defined even if that invariant is ever
@@ -156,13 +159,11 @@ export function parseAppLabel(label: string): { slug: string; creator: string } 
  * zone and is routed by its `<server>.<user>` suffix — it never reaches
  * this user-zone resolver.
  */
-export type LabelClass = "box-apex" | "device" | "app" | "none";
+export type LabelClass = "box-apex" | "app" | "none";
 
 export interface ResolverLookups {
   /** Is `label` a registered box (server) name for this user? */
   isBoxName(label: string): boolean;
-  /** Is `label` a registered device label (v2 device-addressing)? */
-  isDeviceLabel(label: string): boolean;
   /** Is `label` an app installed in this user's install table? */
   isAppLabel(label: string): boolean;
 }
@@ -177,10 +178,9 @@ export interface ResolvedLabel {
  * The per-user leftmost-label resolver (names directly under the USER zone,
  * i.e. tier 2 `<label>.<user>.flagship.services`). Resolution PRECEDENCE:
  *   1. registered box name → box-coordination apex (`/.flagship/*`).
- *   2. registered device label → device view (capability scopes apply).
- *   3. in the install table → leader-route to that service (tier 2,
+ *   2. in the install table → leader-route to that service (tier 2,
  *      hardware-agnostic).
- *   4. else → the disambiguation / "not an app" page.
+ *   3. else → the disambiguation / "not an app" page.
  *
  * Box-pinned access is NOT a tier here: it is the hierarchical canonical
  * name `<service>.<server>.<user>` under the box zone, routed by suffix
@@ -192,7 +192,6 @@ export interface ResolvedLabel {
 export function resolveLeftmostLabel(leftmostLabel: string, lookups: ResolverLookups): ResolvedLabel {
   const norm = String(leftmostLabel).toLowerCase();
   if (lookups.isBoxName(norm)) return { cls: "box-apex", label: norm };
-  if (lookups.isDeviceLabel(norm)) return { cls: "device", label: norm };
   if (lookups.isAppLabel(norm)) return { cls: "app", label: norm };
   return { cls: "none", label: norm };
 }

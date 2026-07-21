@@ -92,7 +92,7 @@ final class UIRedesignComponentsTests: XCTestCase {
     // ─── AppsOwnerFilter ───────────────────────────────────────────────────
 
     private func app(creator: String, slug: String = "notes") -> AppSummary {
-        AppSummary(serviceId: "\(creator)-\(slug)", creator: creator, slug: slug,
+        AppSummary(serviceId: "\(creator)--\(slug)", creator: creator, slug: slug,
                    urlLabel: slug, summary: nil, url: "https://\(slug).flagship.services",
                    status: "running", version: "1", installedAt: 0)
     }
@@ -134,6 +134,8 @@ final class UIRedesignComponentsTests: XCTestCase {
         XCTAssertEqual(PodStatusStyle.pillKind(liveness: .dead, status: .unknown), .offline)
         XCTAssertEqual(PodStatusStyle.pillKind(liveness: .waitingForApproval, status: .offline), .provisioning)
         XCTAssertEqual(PodStatusStyle.pillKind(liveness: .online, status: .unknown), .idle)
+        XCTAssertEqual(PodStatusStyle.pillKind(liveness: .comingOnline, status: .pending), .pending)
+        XCTAssertEqual(PodStatusStyle.pillKind(liveness: .dead, status: .pending), .pending)
     }
 
     func test_podStatusStyle_accessibilityIds_matchLegacyPodCard() {

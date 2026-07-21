@@ -1,9 +1,8 @@
 /**
  * DeviceCapabilityGrant envelope tests.
  *
- * The grant binds a per-device IRK to a user under a human-meaningful
- * label with explicit capability scopes (v2 device-addressing — see
- * docs/v2-device-addressing-and-real-ticket.md §2). Modeled on
+ * The grant binds a per-device IRK to an opaque account-scoped device ID
+ * with explicit capability scopes. Modeled on
  * ServiceGrant; tests mirror serviceGrant.test.ts in shape.
  */
 import { describe, expect, it } from "vitest";
@@ -23,6 +22,7 @@ import { deriveIRK } from "../src/keys.js";
 
 const umk = { seed: new Uint8Array(32).fill(7) };
 const otherUmk = { seed: new Uint8Array(32).fill(8) };
+const DEVICE_ID = "00112233445566778899aabbccddeeff";
 
 const FIXED_DEVICE_PUB = new Uint8Array(32);
 for (let i = 0; i < 32; i++) FIXED_DEVICE_PUB[i] = (i * 3 + 11) & 0xff;
@@ -31,7 +31,7 @@ function baseGrant(overrides: Partial<DeviceCapabilityGrant> = {}): DeviceCapabi
   return {
     grantId: "550e8400-e29b-41d4-a716-446655440000",
     username: "trent",
-    deviceLabel: "ipad",
+    deviceId: DEVICE_ID,
     devicePubKey: FIXED_DEVICE_PUB,
     scopes: ["browse", "install-service"],
     issuedAt: 1_780_000_000_000,
@@ -111,14 +111,14 @@ describe("DeviceCapabilityGrant — sign + verify", () => {
   });
 
   it("canonical bytes are order-independent on scopes (DEVICE_SCOPES index order, not alphabetical)", async () => {
-    // DEVICE_SCOPES order = [browse, install-service, vibe-code, add-device, manage-services, revoke-others, demo-provision, admin]
+    // DEVICE_SCOPES order is append-only; canonicalization follows that order.
     // Alphabetical would put 'add-device' first; DEVICE_SCOPES-index puts 'browse' first.
     const all: DeviceScope[] = [...DEVICE_SCOPES];
     const reversed = [...all].reverse();
     const a = await deviceCapabilityGrantId(baseGrant({ scopes: all }));
     const b = await deviceCapabilityGrantId(baseGrant({ scopes: reversed }));
     const c = await deviceCapabilityGrantId(
-      baseGrant({ scopes: ["revoke-others", "browse", "admin", "vibe-code", "manage-services", "add-device", "demo-provision", "install-service"] }),
+      baseGrant({ scopes: ["view-directory", "revoke-others", "browse", "admin", "vibe-code", "manage-services", "add-device", "demo-provision", "install-service"] }),
     );
     expect(a).toBe(b);
     expect(a).toBe(c);
@@ -129,10 +129,10 @@ describe("DeviceCapabilityGrant — sign + verify", () => {
     const sortedScopes = "browse,install-service"; // DEVICE_SCOPES-index sort
     const expected = await sha256Hex(
       [
-        "flagship/device-capability-grant/v1",
+        "flagship/device-capability-grant/v2",
         g.grantId,
         g.username,
-        g.deviceLabel,
+        g.deviceId,
         hex(g.devicePubKey),
         sortedScopes,
         g.issuedAt,
@@ -159,17 +159,17 @@ describe("DeviceCapabilityGrant — sign + verify", () => {
   const MULTI_SCOPE_GRANT = (): DeviceCapabilityGrant => ({
     grantId: "550e8400-e29b-41d4-a716-446655440000",
     username: "trent",
-    deviceLabel: "ipad",
+    deviceId: DEVICE_ID,
     devicePubKey: MULTI_SCOPE_PUB,
     scopes: ["admin", "browse", "add-device"], // scrambled input on purpose
     issuedAt: 1_780_000_000_000,
     expiresAt: 1_787_776_000_000,
   });
   const MULTI_SCOPE_CANON =
-    "flagship/device-capability-grant/v1|550e8400-e29b-41d4-a716-446655440000|trent|ipad|" +
+    `flagship/device-capability-grant/v2|550e8400-e29b-41d4-a716-446655440000|trent|${DEVICE_ID}|` +
     "0b0e1114171a1d202326292c2f3235383b3e4144474a4d505356595c5f626568|" +
     "browse,add-device,admin|1780000000000|1787776000000";
-  const MULTI_SCOPE_ID = "cdf24b718bec2cc7fda2d07abbdf57252b4b3f6de12ebe56a61ce65bd6ab9bf6";
+  const MULTI_SCOPE_ID = "7310f7d71e11f74561a20e47fdf2d68c9f6d36abff97df2cb706c422d19bcbd7";
 
   it("multi-scope canonical bytes sort by DEVICE_SCOPES index, NOT alphabetically (pinned cross-platform vector)", async () => {
     const g = MULTI_SCOPE_GRANT();
@@ -205,11 +205,9 @@ describe("DeviceCapabilityGrant — separator + control-char rejection (H1 harde
     );
   });
 
-  it("rejects '|' in deviceLabel at sign time", () => {
+  it("rejects '|' in deviceId at sign time", () => {
     const irk = deriveIRK(umk);
-    // The label regex would reject this BEFORE the separator check, so we
-    // assert it throws — either separator or regex reason is acceptable.
-    expect(() => signDeviceCapabilityGrant(baseGrant({ deviceLabel: "ip|ad" }), irk)).toThrow();
+    expect(() => signDeviceCapabilityGrant(baseGrant({ deviceId: `${"00".repeat(8)}|${"11".repeat(8)}` }), irk)).toThrow(/separator/);
   });
 
   it("rejects newline in username at sign time", () => {
@@ -253,39 +251,12 @@ describe("DeviceCapabilityGrant — well-formedness", () => {
     ).toThrow(/duplicate/);
   });
 
-  it("rejects reserved deviceLabel", () => {
+  it("rejects malformed device IDs", () => {
     const irk = deriveIRK(umk);
-    for (const reserved of ["admin", "user", "root", "home", "service", "services"]) {
-      expect(() =>
-        signDeviceCapabilityGrant(baseGrant({ deviceLabel: reserved }), irk),
-      ).toThrow(/reserved/);
-    }
-  });
-
-  it("rejects leading-hyphen deviceLabel", () => {
-    const irk = deriveIRK(umk);
-    expect(() => signDeviceCapabilityGrant(baseGrant({ deviceLabel: "-ipad" }), irk)).toThrow(
-      /start or end/,
-    );
-  });
-
-  it("rejects trailing-hyphen deviceLabel", () => {
-    const irk = deriveIRK(umk);
-    expect(() => signDeviceCapabilityGrant(baseGrant({ deviceLabel: "ipad-" }), irk)).toThrow(
-      /start or end/,
-    );
-  });
-
-  it("rejects deviceLabel with disallowed chars", () => {
-    const irk = deriveIRK(umk);
-    expect(() => signDeviceCapabilityGrant(baseGrant({ deviceLabel: "iPad" }), irk)).toThrow(
-      /must match/,
-    );
-    expect(() => signDeviceCapabilityGrant(baseGrant({ deviceLabel: "ip ad" }), irk)).toThrow();
-    expect(() => signDeviceCapabilityGrant(baseGrant({ deviceLabel: "" }), irk)).toThrow();
-    expect(() =>
-      signDeviceCapabilityGrant(baseGrant({ deviceLabel: "a".repeat(25) }), irk),
-    ).toThrow();
+    expect(() => signDeviceCapabilityGrant(baseGrant({ deviceId: "A".repeat(32) }), irk)).toThrow(/lowercase hex/);
+    expect(() => signDeviceCapabilityGrant(baseGrant({ deviceId: "g".repeat(32) }), irk)).toThrow(/lowercase hex/);
+    expect(() => signDeviceCapabilityGrant(baseGrant({ deviceId: "" }), irk)).toThrow();
+    expect(() => signDeviceCapabilityGrant(baseGrant({ deviceId: "a".repeat(31) }), irk)).toThrow();
   });
 
   it("rejects devicePubKey of wrong length", () => {

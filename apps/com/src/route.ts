@@ -25,6 +25,7 @@ import {
 } from "./qrPipeMetrics.js";
 import {
   checkQrPipeUpgrade,
+  checkBuilderPipeUpgrade,
   checkRateLimit,
   clientIp,
   endpointFor,
@@ -101,7 +102,7 @@ const RECOVERY_ORIGIN = `https://${RECOVERY_HOST}`;
  * operations now run HERE, host-dispatched, backed by `flagship-state`, with
  * the directory + owner push resolved in-process — no second worker, no second
  * mailbox, no shared secret. The hostname + the `/api/boot/*` contract are
- * unchanged, so the box, burner, and phone need no change. apps/boot stays as
+ * unchanged, so the box, builder, and phone need no change. apps/boot stays as
  * an optional cloneable target for an enterprise running its own identity
  * plane. See docs/boot-worker-consolidation.md.
  */
@@ -173,6 +174,15 @@ export interface RouteEnv {
    * POST /api/iso-manifest. See ControlPlaneEnv.FLAGSHIP_ISO_MANIFEST.
    */
   FLAGSHIP_ISO_MANIFEST?: string;
+  /**
+   * Blessed in-house inference endpoint (JSON `{baseUrl, model}`) that
+   * backs the free-credits `flagship` provider. See
+   * ControlPlaneEnv.FLAGSHIP_INFERENCE_ENDPOINT.
+   */
+  FLAGSHIP_INFERENCE_ENDPOINT?: string;
+  /** HMAC secret the promo minter signs scoped inference tokens with, and
+   *  the metering shim verifies + reports usage under. See ControlPlaneEnv. */
+  FLAGSHIP_INFERENCE_TOKEN_SECRET?: string;
   /** WebSocket URL daemons dial for the tunnel hub (discovery endpoint). */
   TUNNEL_HUB_URL?: string;
   /** Control-plane apex — a test env (gym) sets "gym.flagshipserver.com"; unset
@@ -198,6 +208,12 @@ export interface RouteEnv {
    * lightweight stub; production wiring is in wrangler.toml.
    */
   BUILD_RELAY?: BuildRelayNamespaceLike;
+  /**
+   * Builder-pairing Durable Object namespace — the phone↔desktop-builder
+   * live session (sibling of BUILD_RELAY). Tests pass a stub; production
+   * wiring is in wrangler.toml.
+   */
+  BUILDER_RELAY?: BuildRelayNamespaceLike;
 }
 
 export interface BuildRelayNamespaceLike {
@@ -221,14 +237,14 @@ export interface R2ObjectLike {
 
 const PROXY_PREFIX = "/api/";
 
-// Flagship Assembler installer targets, keyed by the OS slug used in
+// Flagship Studio installer targets, keyed by the OS slug used in
 // /download/<os>. The /ready/ page links to /download/<os> (on-brand, so the
 // storage URL never shows in the UI); we 302 to wherever the binary actually
 // lives (GitHub Releases asset, R2 object, …) — swappable here without
-// touching the page. Empty → the /docs#burn explainer ("get the Assembler",
+// touching the page. Empty → the /docs#burn explainer ("get the Builder",
 // i.e. coming soon). Set each once that platform's build is published.
 const INSTALLER_DOWNLOADS: Record<string, string> = {
-  mac: "",
+  mac: "/downloads/FlagshipStudio.dmg",
   windows: "",
   linux: "",
 };
@@ -247,6 +263,8 @@ const BUILD_ISO_STREAM_PREFIX = "/build/iso/";
 const BUILD_RELAY_SESSIONS_PATH = "/api/build-relay/sessions";
 /** v2: WebSocket pipe for the QR relay. /qr-pipe/<sid>?role=browser|phone */
 const QR_PIPE_WS_PREFIX = "/qr-pipe/";
+/** Phone↔desktop-builder live session. /builder-pipe/<sid>?role=builder|phone */
+const BUILDER_PIPE_WS_PREFIX = "/builder-pipe/";
 
 /**
  * Default tunnel hub URL when TUNNEL_HUB_URL env var isn't set. Matches
@@ -475,6 +493,12 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     return forwardQrPipeUpgrade(request, env, url);
   }
 
+  // Phone↔desktop-builder live session WS upgrade.
+  // /builder-pipe/<sid>?role=builder|phone → the DO addressed by idFromName(sid).
+  if (url.pathname.startsWith(BUILDER_PIPE_WS_PREFIX)) {
+    return forwardBuilderPipeUpgrade(request, env, url);
+  }
+
   // P3.6 — /og?title=...&subtitle=...
   // Returns an SVG poster with the title baked in. SVG is acceptable
   // for Twitter / Discord previews; some OG validators want PNG —
@@ -522,6 +546,25 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     return new Response(null, {
       status: 308,
       headers: { location: target },
+    });
+  }
+
+  // `/transfer?o=<b64url>` — the transfer-a-box take-over universal link.
+  // When the native app is installed iOS/Android intercept this URL at the OS
+  // level (AASA `/transfer` component + Android App-Links `/transfer` path) and
+  // open the in-app acquirer claim flow — the request never reaches the Worker.
+  // When the app is NOT installed the browser lands here; we 308-redirect to the
+  // webapp's own origin, preserving the `?o=` offer payload. The webapp boots,
+  // `dispatchInitialView()` reads `?o=` (lib/deepLink.js → serverTransfer.js) and
+  // opens the claim view. Placed with the other webapp redirects — BEFORE the
+  // coming-soon gate — so the fallback works for a real acquirer with no preview
+  // cookie. The webapp is on a different associated domain (web.flagshipserver.com
+  // is not in the app's applinks), so the redirect target won't re-trigger a
+  // universal-link bounce.
+  if (url.pathname === "/transfer" || url.pathname === "/transfer/") {
+    return new Response(null, {
+      status: 308,
+      headers: { location: `${WEBAPP_ORIGIN}/transfer${url.search}` },
     });
   }
 
@@ -604,11 +647,11 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     return proxyToServices(buffered, env, url);
   }
 
-  // /download/<os> → the Flagship Assembler installer for that OS. The
+  // /download/<os> → the Flagship Studio installer for that OS. The
   // /ready/ page links here so the storage URL never shows in the UI; we
   // 302 to wherever the binary lives. Placed BEFORE the coming-soon gate
   // so the download link works regardless of the preview cookie / launch
-  // state. Unset or unknown OS → the /docs#burn "get the Assembler"
+  // state. Unset or unknown OS → the /docs#burn "get the Builder"
   // explainer (coming soon) rather than a dead 404.
   if (url.pathname === "/download" || url.pathname.startsWith("/download/")) {
     const os = url.pathname.slice("/download/".length).replace(/\/+$/, "");
@@ -627,7 +670,23 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   }
 
   // Static asset path — let the assets binding handle it.
-  return env.ASSETS.fetch(request);
+  const assetResponse = await env.ASSETS.fetch(request);
+  // Deploy-flash guard: the assets binding runs `not_found_handling =
+  // "single-page-application"`, so a MISSING file falls back to index.html
+  // (200 + text/html). For a stylesheet/script that's the wrong answer —
+  // the browser tries to parse the marketing HTML as CSS/JS, flashing the
+  // page unstyled mid-deploy. A `.css`/`.js` miss must read as a real 404
+  // so the browser treats it as a failed asset, not a document, and retries.
+  if (/\.(?:css|js|mjs)$/.test(url.pathname)) {
+    const contentType = assetResponse.headers.get("content-type") ?? "";
+    if (assetResponse.ok && contentType.includes("text/html")) {
+      return new Response("Not found", {
+        status: 404,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
+  }
+  return assetResponse;
 }
 
 interface ProbeResult {
@@ -824,6 +883,38 @@ async function forwardQrPipeUpgrade(
   await recordUpgrade(env.DB);
   const id = env.BUILD_RELAY.idFromName(sid);
   const stub = env.BUILD_RELAY.get(id);
+  return stub.fetch(request);
+}
+
+/**
+ * Phone↔desktop-builder live session: forward a /builder-pipe/<sid>?role=…
+ * upgrade to the BuilderRelaySession DO addressed by idFromName(sid). Same
+ * shape as the QR-relay forwarder (length-bounded URL-safe sid, per-IP
+ * upgrade gate, spawn metric); the DO arbitrates roles + presence.
+ */
+async function forwardBuilderPipeUpgrade(
+  request: Request,
+  env: RouteEnv,
+  url: URL,
+): Promise<Response> {
+  if (!env.BUILDER_RELAY) {
+    return jsonResponse({ error: "builder-pipe not configured" }, 503);
+  }
+  if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+    return jsonResponse({ error: "websocket upgrade required" }, 426);
+  }
+  const sid = url.pathname.slice(BUILDER_PIPE_WS_PREFIX.length).split("/")[0] ?? "";
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(sid)) {
+    return jsonResponse({ error: "sid must be 16-64 base64url chars" }, 400);
+  }
+  const rl = await checkBuilderPipeUpgrade(env, clientIp(request));
+  if (rl.limited) {
+    await recordRateLimited(env.DB);
+    return rateLimitedResponse(rl);
+  }
+  await recordUpgrade(env.DB);
+  const id = env.BUILDER_RELAY.idFromName(sid);
+  const stub = env.BUILDER_RELAY.get(id);
   return stub.fetch(request);
 }
 
@@ -1099,8 +1190,8 @@ function applyCors(request: Request, url: URL, res: Response, env: RouteEnv): Re
 function corsPreflight(request: Request, env: RouteEnv): Response {
   const origin = originHeader(request);
   const headers = new Headers({
-    "access-control-allow-methods": "GET, HEAD, POST, DELETE, OPTIONS",
-    "access-control-allow-headers": "content-type, x-flagship-session, authorization, x-flagship-effective-host",
+    "access-control-allow-methods": "GET, HEAD, POST, PUT, DELETE, OPTIONS",
+    "access-control-allow-headers": "content-type, x-flagship-session, authorization, x-flagship-effective-host, x-flagship-device-id, x-flagship-device-pub, x-flagship-request-id, x-flagship-issued-at, x-flagship-signature",
     "access-control-max-age": "600",
     vary: "origin",
   });
@@ -1386,7 +1477,7 @@ const COMING_SOON_EXEMPT_PATHS = new Set<string>([
   "/theme.js",
   "/motion.js",
 ]);
-const COMING_SOON_EXEMPT_PREFIXES = ["/.well-known/", "/ready/"];
+const COMING_SOON_EXEMPT_PREFIXES = ["/.well-known/", "/ready/", "/downloads/"];
 
 function hasPreviewCookie(request: Request): boolean {
   const header = request.headers.get("cookie");

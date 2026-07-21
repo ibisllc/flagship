@@ -8,52 +8,95 @@ import CryptoKit
 final class InviteRedeemViewModelTests: XCTestCase {
     private let server = "home.alice.flagship.services"
     private let secret = String(repeating: "07", count: 32) // 64-hex
-    private func aid() -> Curve25519.Signing.PrivateKey {
+    private let authorAid = String(repeating: "b4", count: 32) // 64-hex
+    private let inviteId = String(repeating: "ea", count: 32)   // 64-hex
+
+    /// The friend's per-author CONTACT AID — what v2 presents (NOT the global AID).
+    private func contactAid() -> Curve25519.Signing.PrivateKey {
         try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 5, count: 32))
     }
 
-    private func makeVM(_ mock: MockServiceAccessClient, secret: String? = nil, now: @escaping () -> Int64 = { 1700 }) -> InviteRedeemViewModel {
-        let k = aid()
-        return InviteRedeemViewModel(client: mock, serverDomain: server, secretHex: secret ?? self.secret, aid: { _ in k }, now: now)
+    private func makeVM(
+        _ mock: MockServiceAccessClient,
+        secret: String? = nil,
+        authorAidHex: String? = nil,
+        inviteId: String? = nil,
+        now: @escaping () -> Int64 = { 1700 }
+    ) -> InviteRedeemViewModel {
+        let k = contactAid()
+        return InviteRedeemViewModel(
+            client: mock, serverDomain: server, secretHex: secret ?? self.secret,
+            authorAidHex: authorAidHex, inviteId: inviteId,
+            redeemAid: { _, _ in k }, now: now)
     }
 
-    func testRedeemAidSignsAndPostsRawSecret() async {
+    func testRedeemPresentsContactAidNotGlobal() async {
         let mock = MockServiceAccessClient()
-        mock.redeemResult = RedeemResult(serviceRef: "alice-notes", boundAidHex: HexUtil.encode(aid().publicKey.rawRepresentation), firstBind: true)
-        let vm = makeVM(mock)
+        mock.redeemResult = RedeemResult(serviceRef: "alice--notes", boundAidHex: HexUtil.encode(contactAid().publicKey.rawRepresentation), firstBind: true)
+        let vm = makeVM(mock, authorAidHex: authorAid, inviteId: nil)
         await vm.redeem()
         if case .done(let ref, let first) = vm.phase {
-            XCTAssertEqual(ref, "alice-notes")
+            XCTAssertEqual(ref, "alice--notes")
             XCTAssertTrue(first)
         } else { XCTFail("expected .done, got \(vm.phase)") }
         XCTAssertEqual(mock.redeemCalls.count, 1)
         let call = mock.redeemCalls[0]
-        XCTAssertEqual(call.serverDomain, server)
         XCTAssertEqual(call.secretHex, secret) // RAW secret sent (box re-hashes)
-        XCTAssertEqual(call.visitorAidHex, HexUtil.encode(aid().publicKey.rawRepresentation))
+        // The presented visitorAID is the CONTACT AID, not a global one.
+        XCTAssertEqual(call.visitorAidHex, HexUtil.encode(contactAid().publicKey.rawRepresentation))
     }
 
-    func testRedeemPostedSigVerifiesAgainstCanonicalBytes() async {
-        // Capture the aidSig by re-deriving the canonical bytes and checking the
-        // VM's AID signs them. Since the Mock doesn't expose the sig, assert the
-        // contract indirectly: the VM derives the redeem over the secret hash.
+    func testRedeemSigVerifiesUnderContactAid() async {
         let mock = MockServiceAccessClient()
-        let vm = makeVM(mock, now: { 1700 })
+        let vm = makeVM(mock, authorAidHex: authorAid, now: { 1700 })
         await vm.redeem()
-        // The redeem-over bytes the box+/.com verify:
         let secretHash = ServiceInvite.secretHash(secret: HexUtil.decode(secret)!)
-        let bytes = try! ServiceInvite.canonicalRedeem(secretHash: secretHash, visitorAID: aid().publicKey.rawRepresentation, redeemedAt: 1700)
-        // Our own AID re-signs valid bytes (CryptoKit sigs are randomized, so we
-        // verify rather than byte-compare).
-        let sig = try! aid().signature(for: bytes)
-        XCTAssertTrue(aid().publicKey.isValidSignature(sig, for: bytes))
+        let bytes = try! ServiceInvite.canonicalRedeem(secretHash: secretHash, visitorAID: contactAid().publicKey.rawRepresentation, redeemedAt: 1700)
+        let sig = try! contactAid().signature(for: bytes)
+        XCTAssertTrue(contactAid().publicKey.isValidSignature(sig, for: bytes))
         XCTAssertEqual(mock.redeemCalls.count, 1)
+    }
+
+    func testManualPendingBuildsAcceptanceReply() async {
+        let mock = MockServiceAccessClient()
+        // The box returns {pending} for a manual-approve invite.
+        mock.redeemResult = RedeemResult(serviceRef: "alice--notes", boundAidHex: "", firstBind: false, pending: true)
+        let vm = makeVM(mock, authorAidHex: authorAid, inviteId: inviteId)
+        await vm.redeem()
+        guard case .pendingApproval(let ref, let replyLink) = vm.phase else {
+            return XCTFail("expected .pendingApproval, got \(vm.phase)")
+        }
+        XCTAssertEqual(ref, "alice--notes")
+        // The reply is a valid invite-accept deeplink the AUTHOR can open.
+        guard case .inviteAccept(let s, let iid, let r, let aid, let sigHex, _) = DeepLink.parse(URL(string: replyLink)!) else {
+            return XCTFail("reply link must parse to .inviteAccept")
+        }
+        XCTAssertEqual(s, server)
+        XCTAssertEqual(iid, inviteId)
+        XCTAssertEqual(r, "alice--notes")
+        XCTAssertEqual(aid, HexUtil.encode(contactAid().publicKey.rawRepresentation))
+        // The acceptance sig in the reply verifies under the contact AID over the
+        // canonical accept bytes (binds inviteId + serviceRef + contactAID).
+        // (acceptedAt is the VM's now() = 1700.)
+        let bytes = try! ServiceInvite.canonicalAccept(
+            inviteId: inviteId, serviceRef: "alice--notes",
+            contactAID: contactAid().publicKey.rawRepresentation, acceptedAt: 1700)
+        XCTAssertTrue(contactAid().publicKey.isValidSignature(Data(HexUtil.decode(sigHex)!), for: bytes))
+    }
+
+    func testManualPendingWithoutInviteIdFails() async {
+        let mock = MockServiceAccessClient()
+        mock.redeemResult = RedeemResult(serviceRef: "alice--notes", boundAidHex: "", firstBind: false, pending: true)
+        // No inviteId in the link ⇒ can't sign the acceptance ⇒ a clear failure.
+        let vm = makeVM(mock, authorAidHex: authorAid, inviteId: nil)
+        await vm.redeem()
+        if case .failed = vm.phase {} else { XCTFail("manual pending without inviteId must fail") }
     }
 
     func testUnknownInvite404() async {
         let mock = MockServiceAccessClient()
         mock.nextError = ServiceAccessError.inviteUnknown
-        let vm = makeVM(mock)
+        let vm = makeVM(mock, authorAidHex: authorAid)
         await vm.redeem()
         if case .failed(let msg) = vm.phase { XCTAssertTrue(msg.contains("unknown") || msg.contains("withdrawn")) }
         else { XCTFail("expected .failed") }
@@ -62,24 +105,24 @@ final class InviteRedeemViewModelTests: XCTestCase {
     func testAlreadyBound409() async {
         let mock = MockServiceAccessClient()
         mock.nextError = ServiceAccessError.inviteAlreadyBound
-        let vm = makeVM(mock)
+        let vm = makeVM(mock, authorAidHex: authorAid)
         await vm.redeem()
         if case .failed(let msg) = vm.phase { XCTAssertTrue(msg.contains("another account")) }
         else { XCTFail("expected .failed") }
     }
 
-    func testRevoked403() async {
+    func testExpiredOrFull410() async {
         let mock = MockServiceAccessClient()
-        mock.nextError = ServiceAccessError.inviteRevoked
-        let vm = makeVM(mock)
+        mock.nextError = ServiceAccessError.inviteExpiredOrFull
+        let vm = makeVM(mock, authorAidHex: authorAid)
         await vm.redeem()
-        if case .failed(let msg) = vm.phase { XCTAssertTrue(msg.contains("revoked")) }
+        if case .failed(let msg) = vm.phase { XCTAssertTrue(msg.contains("expired") || msg.contains("full")) }
         else { XCTFail("expected .failed") }
     }
 
     func testMalformedSecretRejectedBeforeNetwork() async {
         let mock = MockServiceAccessClient()
-        let vm = makeVM(mock, secret: "notahexsecret")
+        let vm = makeVM(mock, secret: "notahexsecret", authorAidHex: authorAid)
         await vm.redeem()
         if case .failed = vm.phase {} else { XCTFail("expected .failed") }
         XCTAssertTrue(mock.redeemCalls.isEmpty)

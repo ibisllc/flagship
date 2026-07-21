@@ -64,8 +64,10 @@ class DevicePairingTest {
     @Test fun pairingBundle_jsonRoundTrips() {
         val bundle = PairingBundle(
             umkSeedHex = "11".repeat(32),
-            admit = DeviceAdmit("hilton", "aa".repeat(32), 1_700_000_000_000L),
+            admit = DeviceAdmit("hilton", "00".repeat(16), "aa".repeat(32), 1_700_000_000_000L),
             admitSig = "cc".repeat(64),
+            grant = PairingGrant("g-1", "hilton", "00".repeat(16), "aa".repeat(32), listOf("view-directory"), 1, 2, "membership"),
+            grantSignature = "dd".repeat(64),
         )
         val bytes = bundle.toJsonBytes()
         val back = PairingBundle.fromJsonBytes(bytes)
@@ -86,8 +88,10 @@ class DevicePairingTest {
 
         val bundle = PairingBundle(
             umkSeedHex = "22".repeat(32),
-            admit = DeviceAdmit("acme", "dd".repeat(32), 42L),
+            admit = DeviceAdmit("acme", "11".repeat(16), "dd".repeat(32), 42L),
             admitSig = "ee".repeat(64),
+            grant = PairingGrant("g-2", "acme", "11".repeat(16), "dd".repeat(32), listOf("view-directory"), 42, 84, "membership"),
+            grantSignature = "ff".repeat(64),
         )
         val sealed = admin.seal(bundle.toJsonBytes())
         val opened = incoming.open(sealed.ciphertextB64u, sealed.nonceB64u)
@@ -129,7 +133,7 @@ class DevicePairingTest {
     //    Worker verifier) ─────────────────────────────────────────────
     //
     // The Worker verifies under canonical bytes
-    //   flagship/device-admit/v1|<username>|<newDevicePubHex>|<issuedAt>
+    //   flagship/device-admit/v2|<username>|<deviceId>|<newDevicePubHex>|<issuedAt>
     // Drift in tag, separator, field order, or `issuedAt` rendering
     // breaks every cross-device admit. Mirrors
     // ios/Sources/Flagship/DeviceAdmit.swift `canonicalBytes()`.
@@ -137,12 +141,14 @@ class DevicePairingTest {
     @Test fun deviceAdmit_canonicalBytes_matchesWorkerString() {
         val admit = DeviceAdmit(
             username = "techstars",
+            deviceId = "00".repeat(16),
             newDevicePubHex = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
             issuedAt = 1_700_000_000_000L,
         )
         val expected =
-            "flagship/device-admit/v1|" +
+            "flagship/device-admit/v2|" +
                 "techstars|" +
+                "${"00".repeat(16)}|" +
                 "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20|" +
                 "1700000000000"
         val actual = DeviceAdmitClaim.canonicalBytes(admit).toString(Charsets.UTF_8)
@@ -152,7 +158,7 @@ class DevicePairingTest {
     @Test fun deviceAdmit_canonicalTag_isExact() {
         // The tag itself is load-bearing: changing it silently swaps the
         // verification domain. Pin it independently.
-        assertEquals("flagship/device-admit/v1", DeviceAdmitClaim.CANONICAL_TAG)
+        assertEquals("flagship/device-admit/v2", DeviceAdmitClaim.CANONICAL_TAG)
     }
 
     @Test fun deviceAdmit_signThenVerify_underAccountIrk() {
@@ -160,6 +166,7 @@ class DevicePairingTest {
         val pair = Ed25519Sign.KeyPair.newKeyPairFromSeed(seed)
         val admit = DeviceAdmit(
             username = "acme",
+            deviceId = "11".repeat(16),
             newDevicePubHex = HexUtil.encode(ByteArray(32) { 0x42 }),
             issuedAt = 42L,
         )

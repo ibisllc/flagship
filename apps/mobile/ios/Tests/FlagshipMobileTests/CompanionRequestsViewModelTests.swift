@@ -33,13 +33,11 @@ final class CompanionRequestsViewModelTests: XCTestCase {
         requestId: String = "req-rel-1",
         serverDomain: String = "home.alice.flagship.services",
         queuedAt: Int64 = 1_700_000_000_000,
-        expiresAt: Int64 = 1_700_000_600_000,
-        label: String? = "Library iMac"
+        expiresAt: Int64 = 1_700_000_600_000
     ) -> CompanionPendingWrite {
         return CompanionPendingWrite(
             requestId: requestId,
             companionTokenPrefix: "deadbeef0000",
-            companionLabel: label,
             kind: "release-server",
             intent: [
                 "username": AnyCodable("alice"),
@@ -60,7 +58,6 @@ final class CompanionRequestsViewModelTests: XCTestCase {
         return CompanionPendingWrite(
             requestId: requestId,
             companionTokenPrefix: "f00dcafe1111",
-            companionLabel: nil,
             kind: "revoke-server",
             intent: [
                 "userId": AnyCodable("alice"),
@@ -220,7 +217,6 @@ final class CompanionRequestsViewModelTests: XCTestCase {
         let row = CompanionPendingWrite(
             requestId: "req-unsupported",
             companionTokenPrefix: "0000feed",
-            companionLabel: "Library iMac",
             kind: "mystery-kind",
             intent: ["whatever": AnyCodable("blob")],
             queuedAt: 1_700_000_000_000,
@@ -241,6 +237,105 @@ final class CompanionRequestsViewModelTests: XCTestCase {
         XCTAssertNotNil(vm.rowError[row.requestId])
     }
 
+    // MARK: - background poll (L8 webapp parity)
+
+    /// The background poll re-fetches on its interval — webapp `pollPending`
+    /// runs a first tick immediately then loops every 10s. A tiny interval
+    /// drives several ticks fast; the call count must climb past the first.
+    func test_startPolling_refetchesRepeatedly() async {
+        let (screens, server) = makeClients()
+        screens.companionPendingWritesFixture = CompanionPendingWritesResponse(pending: [releaseRow()])
+        let vm = CompanionRequestsViewModel(
+            client: screens,
+            server: server,
+            username: { "alice" },
+            signer: makeSigner(),
+            pollIntervalNanos: 1_000_000 // 1ms — fast ticks for the test
+        )
+        vm.startPolling()
+        // Yield until the loop has ticked a few times.
+        let deadline = Date().addingTimeInterval(2)
+        while screens.companionPendingWritesCallCount < 3 && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 2_000_000)
+        }
+        vm.stopPolling()
+        XCTAssertGreaterThanOrEqual(
+            screens.companionPendingWritesCallCount, 3,
+            "poll should re-fetch repeatedly while started"
+        )
+    }
+
+    /// stopPolling() halts the loop — no further fetches after teardown.
+    func test_stopPolling_haltsTheLoop() async {
+        let (screens, server) = makeClients()
+        screens.companionPendingWritesFixture = CompanionPendingWritesResponse(pending: [])
+        let vm = CompanionRequestsViewModel(
+            client: screens,
+            server: server,
+            username: { "alice" },
+            signer: makeSigner(),
+            pollIntervalNanos: 1_000_000
+        )
+        vm.startPolling()
+        let deadline = Date().addingTimeInterval(2)
+        while screens.companionPendingWritesCallCount < 2 && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 2_000_000)
+        }
+        vm.stopPolling()
+        // Let any in-flight tick settle, then snapshot.
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        let after = screens.companionPendingWritesCallCount
+        try? await Task.sleep(nanoseconds: 30_000_000)
+        XCTAssertEqual(
+            screens.companionPendingWritesCallCount, after,
+            "no fetches should occur after stopPolling()"
+        )
+    }
+
+    /// A silent refresh tick must NOT flash `.loading` over already-loaded
+    /// rows — matches the webapp swallow-and-replace per-tick behaviour.
+    func test_refresh_doesNotFlashLoadingOverLoadedRows() async {
+        let (screens, server) = makeClients()
+        screens.companionPendingWritesFixture = CompanionPendingWritesResponse(pending: [releaseRow()])
+        let vm = CompanionRequestsViewModel(
+            client: screens,
+            server: server,
+            username: { "alice" },
+            signer: makeSigner()
+        )
+        await vm.load()
+        guard case .loaded = vm.state else { XCTFail("expected loaded"); return }
+        await vm.refresh()
+        // Still loaded — refresh() never sets .loading.
+        guard case .loaded = vm.state else {
+            XCTFail("refresh should keep .loaded, got \(vm.state)"); return
+        }
+    }
+
+    /// A transient poll failure keeps the last-good rows (webapp swallows
+    /// per-tick transport blips); it only surfaces `.failed` when we have
+    /// nothing loaded yet.
+    func test_refresh_failure_keepsLastGoodRows() async {
+        let (screens, server) = makeClients()
+        screens.companionPendingWritesFixture = CompanionPendingWritesResponse(pending: [releaseRow()])
+        let vm = CompanionRequestsViewModel(
+            client: screens,
+            server: server,
+            username: { "alice" },
+            signer: makeSigner()
+        )
+        await vm.load()
+        guard case .loaded(let rows) = vm.state, !rows.isEmpty else {
+            XCTFail("expected loaded with rows"); return
+        }
+        screens.shouldFail = true
+        await vm.refresh()
+        guard case .loaded(let after) = vm.state else {
+            XCTFail("failed tick should keep last-good .loaded, got \(vm.state)"); return
+        }
+        XCTAssertEqual(after.map { $0.requestId }, rows.map { $0.requestId })
+    }
+
     // MARK: - Wire-shape codable round-trip
 
     func test_pendingWritesResponse_codable_roundTrips() throws {
@@ -248,7 +343,6 @@ final class CompanionRequestsViewModelTests: XCTestCase {
             CompanionPendingWrite(
                 requestId: "req-1",
                 companionTokenPrefix: "deadbeef",
-                companionLabel: "Library iMac",
                 kind: "release-server",
                 intent: [
                     "username": AnyCodable("alice"),

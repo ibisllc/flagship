@@ -1,0 +1,53 @@
+name: Admin-authority guard (Slice D)
+
+# Slice D §3.4 (docs/device-admin-tier-spec.md): every SENSITIVE `.com` op must
+# authorize the order through the master-admin gate (authorizeSensitiveComOp /
+# requireMasterAdmin), never by verifying against a raw owner-IRK. This gate is
+# the correctness invariant that stops a new/regressed sensitive handler from
+# silently re-introducing a raw owner-IRK verify and bypassing the authority
+# split.
+#
+# ENFORCEMENT (v1-sec GAP 7 — now ALWAYS blocking):
+#   Every sensitive `.com` op is gated today, so the guard is green — which makes
+#   it safe to enforce everywhere. This job now runs with
+#   ADMIN_AUTHORITY_ENFORCE=1 on PRs and pushes too (not just release tags), so a
+#   gate-drop regression FAILS the build at PR time instead of merging green and
+#   only tripping at release. (Unlike release-guard, which stays advisory in dev
+#   because its Bucket-C constants are present BY DESIGN, this guard has nothing
+#   intentionally red.)
+#
+# The guard logic + its self-test live at scripts/admin-authority-guard.sh and
+# scripts/admin-authority-guard.test.ts (the unit test runs in the main CI suite).
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "release-*"
+      - "v*"
+  pull_request:
+    paths:
+      - "scripts/admin-authority-guard.sh"
+      - "scripts/admin-authority-guard.test.ts"
+      - ".github/workflows/admin-authority-guard.yml"
+      - "packages/control-plane/src/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  admin-authority-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run the admin-authority guard (blocking)
+        env:
+          # v1-sec GAP 7 — always enforce: a sensitive .com op that skips the
+          # master-admin gate FAILS this job on any event.
+          ADMIN_AUTHORITY_ENFORCE: "1"
+        run: bash scripts/admin-authority-guard.sh

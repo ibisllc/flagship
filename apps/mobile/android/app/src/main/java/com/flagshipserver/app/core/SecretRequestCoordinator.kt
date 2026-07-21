@@ -28,6 +28,7 @@ package com.flagshipserver.app.core
 import com.flagshipserver.app.api.BoxSealedLeaseWire
 import com.flagshipserver.app.api.LeaseRevokeWire
 import com.flagshipserver.app.api.MailboxAuthEnvelope
+import com.flagshipserver.app.api.PairingDepositBody
 import com.flagshipserver.app.api.PendingSecretRequest
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.SecretResponseBody
@@ -58,6 +59,18 @@ class SecretRequestCoordinator(
     private val mailbox: SecretMailboxClient,
     private val username: String,
     private val irk: IrkAccess,
+    /**
+     * Slice D — resolves the ADMIN MASTER ROOT signer for the SENSITIVE orders
+     * this boot-approval ceremony mints (the RootEntitlement + the box-sealed
+     * auto-unlock lease), or null when this device holds no admin root (legacy /
+     * non-admin). Injected from the keystore-aware UI layer so `core` stays free
+     * of a Keystore dependency (like [irk]). Null (the test/legacy default) keeps
+     * every order IRK-signed. The mailbox-auth + boot-auth transport envelopes
+     * ALWAYS stay IRK-signed regardless — only the ORDER signing key changes, and
+     * the box gate resolves the signer by trial (`authorizeSensitiveOrder`), so a
+     * reburned admin-pinned box accepts the admin-root RootEntitlement it demands.
+     */
+    private val adminSigner: (suspend (reason: String) -> Ed25519Sign?)? = null,
     private val now: () -> Long = { System.currentTimeMillis() },
     private val nonceGen: () -> ByteArray = { randomNonce() },
 ) {
@@ -154,6 +167,11 @@ class SecretRequestCoordinator(
             ?: throw CoordinatorException.DirectoryMissingServer(verified.serverDomain)
 
         val material = irk.resolve("Approve your box's boot secret")
+        // Slice D — resolve the admin master root ONCE for this ceremony (silent
+        // within the biometric-freshness window opened by irk.resolve above). The
+        // RootEntitlement + auto-unlock lease are SENSITIVE orders that sign with
+        // it; null ⇒ this device is non-admin/legacy ⇒ they stay IRK-signed.
+        val orderKey: Ed25519Sign? = adminSigner?.invoke("Authorize your box to serve")
 
         var unlockKey: ByteArray? = null
         val sealedHex = when (purpose) {
@@ -162,7 +180,7 @@ class SecretRequestCoordinator(
                 unlockKey = key
                 hex
             }
-            SecretPurpose.ENTITLEMENT -> buildEntitlementReply(verified, stkPub, material)
+            SecretPurpose.ENTITLEMENT -> buildEntitlementReply(verified, stkPub, material, orderKey)
         }
 
         val body = SecretResponseBody(
@@ -185,11 +203,38 @@ class SecretRequestCoordinator(
         )
         mailbox.postResponse(body, respAuth)
 
+        // Fold "authorize it to serve" INTO this unlock approval: pre-deposit an
+        // owner-IRK-signed entitlement for the box's STK so it comes online with
+        // no second tap (consent to boot ⇒ consent to serve). Best-effort — a
+        // failure never fails the unlock; the box can still fetch one via relay.
+        if (purpose == SecretPurpose.UNLOCK_KEY) {
+            try {
+                val carrierHex = buildEntitlementReply(verified, stkPub, material, orderKey)
+                val auth = buildMailboxAuth(material)
+                mailbox.depositEntitlement(
+                    verified.serverDomain,
+                    PairingDepositBody(
+                        auth = auth.auth,
+                        authSignature = auth.authSignature,
+                        deposit = PairingDepositBody.Deposit(
+                            serverDomain = verified.serverDomain,
+                            requestNonceHex = HexUtil.encode(nonceGen()),
+                            stkPub = HexUtil.encode(stkPub),
+                            sealed = carrierHex,
+                            issuedAt = now(),
+                        ),
+                    ),
+                )
+            } catch (_: Throwable) {
+                // best-effort — the box can still fetch one via the relay
+            }
+        }
+
         // "auto" mode: deposit a box-sealed lease (the user's IRK authorizes
         // it here — I2) using the key we just recovered (never .com-visible).
         val key = unlockKey
         if (depositAutoLease && purpose == SecretPurpose.UNLOCK_KEY && key != null) {
-            return depositAutoUnlockLease(verified.serverDomain, stkPub, key, material)
+            return depositAutoUnlockLease(verified.serverDomain, stkPub, key, material, orderKey)
         }
         return null
     }
@@ -215,6 +260,24 @@ class SecretRequestCoordinator(
         val live = mine.firstOrNull { now() <= it.pending.expiresAt }
             ?: throw CoordinatorException.NoPendingRequest(serverDomain)
         return confirmAndRespond(live, depositAutoLease = depositAutoLease)
+    }
+
+    /** One-tap approval for the directory-driven ENTITLEMENT card — the Box
+     *  Request Inbox's serve-authorization lane (docs/box-request-inbox.md).
+     *  Detected by the pod's cheap `awaitingEntitlement` flag (no biometric);
+     *  fetch + re-verify the live `entitlement` request and respond (mint the
+     *  owner-IRK RootEntitlement carrier) under ONE biometric. No lease.
+     *  Mirror of iOS SecretRequestCoordinator.approvePendingEntitlement. */
+    suspend fun approvePendingEntitlement(serverDomain: String): String? {
+        val mine = fetchVerifiedRequests()
+            .filter {
+                it.serverDomain.equals(serverDomain, ignoreCase = true) &&
+                    it.purpose == SecretPurpose.ENTITLEMENT
+            }
+            .sortedByDescending { it.pending.postedAt }
+        val live = mine.firstOrNull { now() <= it.pending.expiresAt }
+            ?: throw CoordinatorException.NoPendingRequest(serverDomain)
+        return confirmAndRespond(live, depositAutoLease = false)
     }
 
     /** Kill switch — revoke a server's auto-unlock lease. The box can no
@@ -245,6 +308,11 @@ class SecretRequestCoordinator(
         stkPub: ByteArray,
         luksKey: ByteArray,
         material: IrkMaterial,
+        // Slice D — the lease is a SENSITIVE order (luksKeys.ts deposit): sign it
+        // with the admin master root when this device holds one, else the IRK. The
+        // boot-auth PUT header below STAYS IRK-signed (the owner transport
+        // credential). Canonical bytes unchanged.
+        orderKey: Ed25519Sign? = null,
     ): String {
         val issuedAt = now()
         val leaseId = AutoUnlockLeaseV2.randomLeaseId()
@@ -276,7 +344,7 @@ class SecretRequestCoordinator(
                 expiresAt = lease.expiresAt,
                 maxUses = lease.maxUses,
             ),
-            HexUtil.encode(lease.sign(material.signer)),
+            HexUtil.encode(lease.sign(orderKey ?: material.signer)),
             depositAuth,
         )
         return leaseId
@@ -331,11 +399,18 @@ class SecretRequestCoordinator(
         verified: VerifiedRequest,
         stkPub: ByteArray,
         material: IrkMaterial,
+        // Slice D — issuing a RootEntitlement ("authorize this box under my
+        // account") is SENSITIVE and the owner decision is ADMIN-ROOT: a reburned
+        // admin-pinned box REJECTS an IRK-signed RootEntitlement at HELLO
+        // (entitlementRelay.ts gates on the admin root). Sign with the admin
+        // master root when this device holds one, else the IRK (legacy). Only the
+        // signing key changes — the carrier bytes are byte-identical.
+        orderKey: Ed25519Sign? = null,
     ): String {
         val stkPubHex = HexUtil.encode(stkPub)
         val issuedAt = now()
         val sig = RootEntitlement.sign(
-            irk = material.signer,
+            irk = orderKey ?: material.signer,
             username = username,
             podPubKeyHex = stkPubHex,
             podCanonical = verified.serverDomain,

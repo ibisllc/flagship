@@ -5,12 +5,15 @@
  * screenshots).
  *
  *   gym every-merge [--surface web|ios|android] [--tier every-merge|total]
- *   gym total       [--surface ...]
+ *   gym total       [--surface ...] [--mock-only]
  *   gym live        [--surface ...]   # ONLY the live Tier-2 slice (§12-G6)
  *
  * `every-merge` / `total` select the suite (the tier). `total` also folds in the
  * LIVE Tier-2 slice, which SKIPS cleanly when the `gym.` env isn't reachable
  * (`gym:total` stays green with no env). `live` runs ONLY the live slice.
+ * `--mock-only` EXCLUDES the live slice entirely — the run is purely the
+ * deterministic fixture matrix with NO backend + NO env probe (this is what the
+ * `gym:locked` one-liner uses for the fast, no-cloud comprehensive gate).
  * `--surface` narrows to one (or more, comma-separated) surface; default = all
  * surfaces with a scenario. `--tier` can override the suite's implied tier.
  *
@@ -46,6 +49,7 @@ interface ParsedArgs {
   suite: string;
   tier: Tier;
   surfaces?: Surface[];
+  mockOnly: boolean;
 }
 
 function parseArgs(argv: readonly string[]): ParsedArgs {
@@ -55,6 +59,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   // `live` additionally narrows the SELECTION to live-only (see main()).
   let tier: Tier = suite === "total" || suite === "live" ? "total" : "every-merge";
   let surfaces: Surface[] | undefined;
+  // --mock-only drops the live slice entirely (no backend, no env probe) — the
+  // `gym:locked` no-cloud gate. Ignored for `live` (which IS the live slice).
+  const mockOnly = argv.includes("--mock-only");
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -70,7 +77,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       surfaces = parseSurfaces(a.slice("--surface=".length));
     }
   }
-  return surfaces ? { suite, tier, surfaces } : { suite, tier };
+  return surfaces ? { suite, tier, surfaces, mockOnly } : { suite, tier, mockOnly };
 }
 
 function parseSurfaces(v: string | undefined): Surface[] | undefined {
@@ -88,11 +95,17 @@ async function main(): Promise<void> {
   const repoRoot = findRepoRoot();
 
   // Scenario set per suite:
+  //  - live: ONLY the live slice.
+  //  - --mock-only: the fixture tranches ALONE (no live slice → no backend, no env
+  //    probe). The `gym:locked` no-cloud comprehensive gate.
   //  - every-merge / total: the fixture tranches (ALL_SCENARIOS) + the live slice,
   //    which the runner SKIPS cleanly when the `gym.` env is unreachable (§12-G6).
-  //  - live: ONLY the live slice.
   const scenarios: readonly Scenario[] =
-    args.suite === "live" ? LIVE_SCENARIOS : [...ALL_SCENARIOS, ...LIVE_SCENARIOS];
+    args.suite === "live"
+      ? LIVE_SCENARIOS
+      : args.mockOnly
+        ? [...ALL_SCENARIOS]
+        : [...ALL_SCENARIOS, ...LIVE_SCENARIOS];
 
   const summary = await runGym(scenarios, {
     repoRoot,

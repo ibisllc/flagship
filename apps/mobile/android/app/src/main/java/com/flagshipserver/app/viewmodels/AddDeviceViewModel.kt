@@ -27,11 +27,13 @@ package com.flagshipserver.app.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flagshipserver.app.core.AdminPairingRelay
+import com.flagshipserver.app.core.GymSeams
 import com.flagshipserver.app.core.DeviceAdmit
 import com.flagshipserver.app.core.DeviceAdmitClaim
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.JoinLink
 import com.flagshipserver.app.core.PairingBundle
+import com.flagshipserver.app.core.PairingGrant
 import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.keystore.Keystore
 import kotlinx.coroutines.delay
@@ -94,12 +96,39 @@ class AddDeviceViewModel(
     /** Anti-double-tap window (ms) before Confirm un-gates. Injectable so
      *  tests can drive the gate without a real 600ms wait. */
     private val confirmGateMs: Long = SAS_CONFIRM_GATE_MS,
+    /** Slice D (D-4) — true iff THIS device holds the admin master root, so it
+     *  can seal it to the joining device. Only then is the "Also make this
+     *  device an admin" toggle offered. Defaults to the live Keystore. */
+    private val canPromote: () -> Boolean = { GymSeams.forceAdminRoot || Keystore.hasAdminRoot() },
+    /** Slice D (D-4) — reads the 32-byte admin master-root seed to seal into the
+     *  bundle when promote is ON. Null when this device holds no root. */
+    private val adminRootSeed: () -> ByteArray? = { Keystore.adminRootSeed() },
 ) : ViewModel() {
 
     private val _phase = MutableStateFlow<AddDevicePhase>(
         AddDevicePhase.Failed("not started"),
     )
     val phase: StateFlow<AddDevicePhase> = _phase.asStateFlow()
+
+    /** Slice D (D-4) — whether this device CAN offer the promote-to-admin
+     *  toggle (it holds the admin master root). Read once at construction so
+     *  the UI can gate the toggle's visibility. */
+    val canOfferPromote: Boolean = canPromote()
+
+    /** Slice D (D-4) — the promote-to-admin toggle state. DEFAULT OFF. Only
+     *  honored in THIS synchronous, admin-initiated, SAS-confirmed ceremony
+     *  (never on an async approve-a-request join). When ON at seal time the
+     *  admin master root is sealed into the bundle → the joining device becomes
+     *  a bare-root admin. */
+    private val _promoteToAdmin = MutableStateFlow(false)
+    val promoteToAdmin: StateFlow<Boolean> = _promoteToAdmin.asStateFlow()
+
+    /** Toggle the promote-to-admin choice. A no-op when this device can't
+     *  offer it (holds no admin root). */
+    fun setPromoteToAdmin(on: Boolean) {
+        if (!canOfferPromote) return
+        _promoteToAdmin.value = on
+    }
 
     /** The relay session id (for the deliver leg). */
     private lateinit var sid: String
@@ -111,6 +140,7 @@ class AddDeviceViewModel(
     /** The incoming device's FRESH device pubkey (Ed25519, hex) the admit
      *  binds. Captured from the peer hello. */
     private var incomingDevicePubHex: String? = null
+    private var incomingDeviceId: String? = null
 
     /** The join URL rendered as the QR. */
     val joinUrl: String by lazy {
@@ -128,12 +158,14 @@ class AddDeviceViewModel(
         _phase.value = AddDevicePhase.ShowingQr(joinUrl)
         try {
             val helloBytes = relay.awaitPeerHello(sid)
-            require(helloBytes.size == 64) {
-                "peer hello must be 64 bytes (x25519 pub || device pub)"
+            require(helloBytes.size == 80) {
+                "peer hello must be 80 bytes (x25519 pub || device pub || device id)"
             }
             val peerX25519 = helloBytes.copyOfRange(0, 32)
             val peerDevicePub = helloBytes.copyOfRange(32, 64)
+            val peerDeviceId = helloBytes.copyOfRange(64, 80)
             incomingDevicePubHex = HexUtil.encode(peerDevicePub)
+            incomingDeviceId = HexUtil.encode(peerDeviceId)
             val matchCode = session.pair(peerX25519)
             _phase.value = AddDevicePhase.ConfirmSas(matchCode, gateExpired = false)
             // Un-gate Confirm after the anti-double-tap window (parity with
@@ -166,20 +198,68 @@ class AddDeviceViewModel(
             _phase.value = AddDevicePhase.Failed("Incoming device key missing — start over.")
             return
         }
+        val deviceId = incomingDeviceId ?: run {
+            _phase.value = AddDevicePhase.Failed("Incoming device identity missing — start over.")
+            return
+        }
         _phase.value = AddDevicePhase.Delivering
         try {
             val admit = DeviceAdmit(
                 username = username,
+                deviceId = deviceId,
                 newDevicePubHex = devicePubHex.lowercase(),
                 issuedAt = now(),
             )
             val sig = signAdmit(admit)
             val seed = umkSeed()
             require(seed.size == 32) { "account UMK seed must be 32 bytes" }
+            // Slice D (D-4) — seal the admin master root into the bundle ONLY
+            // when the admin explicitly toggled promote ON in this ceremony AND
+            // this device actually holds the root. Off ⇒ the joining device is a
+            // plain non-admin member (the default). Sealed the same way the UMK
+            // is (rides inside the AEAD-sealed bundle).
+            val wrappedAdminRoot: String? =
+                if (_promoteToAdmin.value && canOfferPromote) {
+                    val rootSeed = adminRootSeed()
+                    require(rootSeed != null && rootSeed.size == 32) {
+                        "admin root seed must be 32 bytes to promote"
+                    }
+                    HexUtil.encode(rootSeed)
+                } else {
+                    null
+                }
+            val promoted = wrappedAdminRoot != null
+            val scopes = if (promoted) {
+                com.flagshipserver.app.core.DeviceCapabilityGrant.DEVICE_SCOPE_ORDER
+            } else {
+                listOf("browse", "install-service", "vibe-code", "view-directory")
+            }
+            val grantId = java.util.UUID.randomUUID().toString()
+            val expiresAt = admit.issuedAt + 90L * 24 * 3_600_000
+            val grantBytes = com.flagshipserver.app.core.DeviceCapabilityGrant.canonicalBytes(
+                grantId, username, deviceId, devicePubHex, scopes, admit.issuedAt, expiresAt,
+            )
+            val grantSigner = if (promoted) {
+                com.google.crypto.tink.subtle.Ed25519Sign(requireNotNull(adminRootSeed()))
+            } else {
+                Keystore.deriveIRK("Authorize the new device")
+            }
             val bundle = PairingBundle(
                 umkSeedHex = HexUtil.encode(seed),
                 admit = admit,
                 admitSig = HexUtil.encode(sig),
+                grant = PairingGrant(
+                    grantId = grantId,
+                    username = username,
+                    deviceId = deviceId,
+                    devicePubHex = devicePubHex,
+                    scopes = scopes,
+                    issuedAt = admit.issuedAt,
+                    expiresAt = expiresAt,
+                    signerRoot = if (promoted) "admin-root" else "membership",
+                ),
+                grantSignature = HexUtil.encode(grantSigner.sign(grantBytes)),
+                wrappedAdminRoot = wrappedAdminRoot,
             )
             val sealed = session.seal(bundle.toJsonBytes())
             relay.deliver(sealed.ciphertextB64u, sealed.nonceB64u)

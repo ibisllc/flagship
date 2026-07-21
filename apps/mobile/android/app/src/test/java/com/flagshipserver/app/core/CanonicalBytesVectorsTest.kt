@@ -149,7 +149,7 @@ class CanonicalBytesVectorsTest {
         },
         "device-capability-grant" to { i ->
             DeviceCapabilityGrant.canonicalBytes(
-                i.str("grantId"), i.str("username"), i.str("deviceLabel"), i.str("devicePubKey"),
+                i.str("grantId"), i.str("username"), i.str("deviceId"), i.str("devicePubKey"),
                 i.strList("scopes"), i.long("issuedAt"), i.long("expiresAt"),
             )
         },
@@ -163,6 +163,11 @@ class CanonicalBytesVectorsTest {
         },
         "daemon-status" to { i -> daemonBytes(i) },
         "daemon-status-liveness" to { i -> daemonBytes(i) },
+        "admin-root-rotation" to { i ->
+            AdminRootRotationClaim.canonicalBytes(
+                i.str("username"), i.str("oldAdminRootPub"), i.str("newAdminRootPub"), i.long("issuedAt"),
+            )
+        },
     )
 
     private fun powerMode(wire: String): PowerMode =
@@ -194,6 +199,7 @@ class CanonicalBytesVectorsTest {
         "stk" -> unhex(meta.str("stkPubHex"))
         "rck" -> unhex(meta.str("rckPubHex"))
         "identity" -> unhex(meta.str("identityPubHex"))
+        "admin-root" -> unhex(meta.str("adminRootPubHex"))
         else -> ByteArray(0)
     }
 

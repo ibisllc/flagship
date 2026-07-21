@@ -45,6 +45,8 @@ public final class OpenAccountViewModel {
     /// Human-readable device name. Pre-filled with a sensible default;
     /// the user may edit it before opening the account.
     public var deviceName: String
+    public var accountName: String
+    public private(set) var createdDeviceId: String?
 
     private let username: String
     private let server: any FlagshipServerClient
@@ -56,6 +58,9 @@ public final class OpenAccountViewModel {
     ) {
         self.username = username
         self.server = server
+        self.accountName = username.split(separator: "-")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
         self.deviceName = OpenAccountViewModel.resolveDefaultDeviceName(
             username: username,
             provided: defaultDeviceName
@@ -83,6 +88,10 @@ public final class OpenAccountViewModel {
         return trimmed.isEmpty
             ? OpenAccountViewModel.resolveDefaultDeviceName(username: username, provided: nil)
             : trimmed
+    }
+
+    public var effectiveAccountName: String {
+        (try? AccountMetadata.validateDisplayName(accountName)) ?? username
     }
 
     public var canOpen: Bool {
@@ -127,29 +136,110 @@ public final class OpenAccountViewModel {
             // recovery — we never silently fork a real identity.) A real
             // biometric cancel (.biometricFailed) rethrows untouched so we don't
             // destroy a usable key just because the user dismissed Face ID.
+            // Slice D — the FIRST device also mints the ADMIN MASTER ROOT (a
+            // fresh random Ed25519, NOT UMK-derived) alongside the UMK/IRK, in the
+            // SAME single-Face-ID ceremony (`openAccountRoots`), and publishes its
+            // pubkey to `.com` in the claim. Holding the root ⇒ this device is
+            // admin by default. The retry path (a UMK already exists from a prior
+            // partial run) reuses it + backfills an admin root if one is missing.
             let irk: Curve25519.Signing.PrivateKey
+            let adminRoot: Curve25519.Signing.PrivateKey
+            var adminRootPubHex: String?
             if !Keystore.hasWrappedUMK {
-                irk = try await Keystore.generateUMKAndDeriveIRK(reason: "Open your Flagship account")
+                let roots = try await Keystore.openAccountRoots(reason: "Open your Flagship account")
+                irk = roots.irk
+                adminRoot = roots.adminRoot
+                adminRootPubHex = roots.adminRootPubHex
             } else {
                 do {
                     irk = try await Keystore.deriveIRK(reason: "Open account \(username)")
                 } catch Keystore.KeystoreError.unwrapFailed {
                     Keystore.wipe()
-                    irk = try await Keystore.generateUMKAndDeriveIRK(reason: "Open your Flagship account")
+                    let roots = try await Keystore.openAccountRoots(reason: "Open your Flagship account")
+                    irk = roots.irk
+                    adminRootPubHex = roots.adminRootPubHex
                 }
+                // Backfill: a partial prior run may have made the UMK but not the
+                // admin root. Publish the existing root, or mint one now.
+                if adminRootPubHex == nil {
+                    if let existing = Keystore.adminRootPubHex() {
+                        adminRootPubHex = existing
+                    } else {
+                        adminRootPubHex = try? await Keystore.generateAdminRoot()
+                    }
+                }
+                adminRoot = try await Keystore.adminRootKey(reason: "Authorize your private account name")
             }
+            guard let adminRootPubHex else { throw Keystore.KeystoreError.keyNotFound }
             let irkPubHex = HexUtil.encode(irk.publicKey.rawRepresentation)
             let now = Int64(Date().timeIntervalSince1970 * 1000)
+            let umkKey = try await Keystore.currentUMK(reason: "Create your private account directory")
+            let umk = umkKey.withUnsafeBytes { Data($0) }
+            let deviceId = try AccountMetadata.generateDeviceId()
+            let deviceKey = try AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: username, deviceId: deviceId)
+            let devicePubHex = HexUtil.encode(deviceKey.publicKey.rawRepresentation)
+            guard let aidPub = ServiceInvite.deriveAccountIdPub(umkSeed: umk) else {
+                throw AccountMetadataError.invalidKey
+            }
 
             let claimBytes = UsernameClaim.canonicalBytes(
                 username: username, irkPubHex: irkPubHex, issuedAt: now
             )
             let claimSig = try irk.signature(for: claimBytes)
-            try await server.claimUsername(.init(
-                request: .init(username: username, irkPub: irkPubHex, issuedAt: now),
-                signature: HexUtil.encode(claimSig)
+            let accountCiphertext = try AccountMetadata.encrypt(
+                displayName: effectiveAccountName,
+                keyBytes: AccountMetadata.deriveAccountProfileKey(umk: umk),
+                coordinates: .init(accountId: username, recordType: .accountProfile, revision: 1, keyVersion: 1)
+            )
+            let accountSignature = try adminRoot.signature(for: AccountMetadata.canonicalAccountProfile(
+                accountId: username, revision: 1, keyVersion: 1, ciphertext: accountCiphertext,
+                issuedAt: now, signerPubHex: adminRootPubHex
+            ))
+            let deviceCiphertext = try AccountMetadata.encrypt(
+                displayName: effectiveDeviceName,
+                keyBytes: AccountMetadata.deriveDeviceDirectoryKey(umk: umk),
+                coordinates: .init(accountId: username, deviceId: deviceId, recordType: .deviceSelfProfile, revision: 1, keyVersion: 1)
+            )
+            let deviceSignature = try deviceKey.signature(for: AccountMetadata.canonicalDeviceSelfProfile(
+                accountId: username, deviceId: deviceId, revision: 1, keyVersion: 1,
+                ciphertext: deviceCiphertext, issuedAt: now, signerPubHex: devicePubHex
+            ))
+            let scopes = [
+                "browse", "install-service", "vibe-code", "add-device", "manage-services",
+                "revoke-others", "admin", "view-directory",
+            ]
+            let grant = DeviceCapabilityGrantEnvelope(
+                grantId: UUID().uuidString.lowercased(), username: username, deviceId: deviceId,
+                devicePubKeyHex: devicePubHex, scopes: scopes, issuedAt: now,
+                expiresAt: now + 90 * 24 * 3_600_000
+            )
+            let grantSignature = try adminRoot.signature(for: grant.canonicalBytes())
+            _ = try await server.bootstrapAccount(.init(
+                claim: .init(
+                    request: .init(username: username, irkPub: irkPubHex, issuedAt: now),
+                    signature: HexUtil.encode(claimSig)
+                ),
+                aidPub: HexUtil.encode(aidPub),
+                adminRootPub: adminRootPubHex,
+                device: .init(deviceId: deviceId, devicePubHex: devicePubHex, platformClass: "ios"),
+                grant: .init(
+                    grantId: grant.grantId, username: username, deviceId: deviceId,
+                    devicePubHex: devicePubHex, scopes: scopes, issuedAt: grant.issuedAt,
+                    expiresAt: grant.expiresAt, signatureHex: HexUtil.encode(grantSignature)
+                ),
+                accountProfile: .init(
+                    accountId: username, revision: 1, keyVersion: 1,
+                    nonceHex: accountCiphertext.nonceHex, ciphertextHex: accountCiphertext.ciphertextHex,
+                    issuedAt: now, signerPubHex: adminRootPubHex, signatureHex: HexUtil.encode(accountSignature)
+                ),
+                deviceProfile: .init(
+                    accountId: username, deviceId: deviceId, revision: 1, keyVersion: 1,
+                    nonceHex: deviceCiphertext.nonceHex, ciphertextHex: deviceCiphertext.ciphertextHex,
+                    issuedAt: now, signerPubHex: devicePubHex, signatureHex: HexUtil.encode(deviceSignature)
+                )
             ))
 
+            createdDeviceId = deviceId
             phase = .opened(deviceName: effectiveDeviceName)
         } catch {
             phase = .failed(error.localizedDescription)

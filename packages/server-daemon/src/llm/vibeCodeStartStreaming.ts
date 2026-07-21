@@ -41,6 +41,36 @@ import {
 } from "./systemPrompt.js";
 import { TOOL_USE_PROMPT_SUPPLEMENT, VIBE_CODE_TOOLS } from "./vibeCodeTools.js";
 
+/**
+ * Owner choices from the Describe form, rendered as a prompt supplement so the
+ * generated manifest honors them. `manifest.name` becomes the deployed
+ * service's slug + web-address label (see deploySession), so steering the model
+ * to the owner's name is how the form's "Name" field reaches the address. The
+ * visibility line steers the access posture the build assumes. Empty when the
+ * owner made no explicit choice (legacy clients) — adds nothing to the prompt.
+ */
+export function ownerChoiceSupplement(
+  preferredName?: string,
+  visibility?: "just-me" | "link",
+): string {
+  const lines: string[] = [];
+  if (preferredName && preferredName.length > 0) {
+    lines.push(
+      `The owner named this service "${preferredName}". Use exactly this as the manifest \`name\` (the service's slug and web address) unless it is technically impossible.`,
+    );
+  }
+  if (visibility === "just-me") {
+    lines.push(
+      "The owner wants this service PRIVATE (visible to just them) — build it to assume only the authenticated owner reaches it; do not add public sign-up or open endpoints.",
+    );
+  } else if (visibility === "link") {
+    lines.push(
+      "The owner wants this service reachable by anyone with the link — build it to be safe for unauthenticated visitors.",
+    );
+  }
+  return lines.length > 0 ? "\n\n" + lines.join("\n") : "";
+}
+
 export interface BuildVibeCodeStartStreamingArgs {
   registry: VibeCodeSessionRegistry;
   /** The harness holds no key — it opens the credential per-call. */
@@ -71,6 +101,30 @@ export interface StartStreamingArgs {
    * w.r.t. secrets by contract.
    */
   attachments?: Attachment[];
+  /**
+   * Owner-chosen service name/slug from the Describe form. Threaded into the
+   * system prompt so the generated `manifest.name` — which becomes the
+   * deployed service's slug + web-address label (deploySession) — honors the
+   * owner's choice instead of one the model invents. Already sanitized
+   * (`[a-z0-9-]`) by the caller. Absent ⇒ the model names it.
+   */
+  preferredName?: string;
+  /**
+   * Owner-chosen reach: "just-me" (private to the owner) or "link" (anyone
+   * with the link). Surfaced to the model so the build reflects the intended
+   * access posture. Absent ⇒ owner-only default.
+   */
+  visibility?: "just-me" | "link";
+}
+
+export function modelForProvider(
+  provider: string,
+  requested: string | undefined,
+  fallback: string,
+): string {
+  if (requested) return requested;
+  if (provider === "openrouter") return "openrouter/auto";
+  return fallback;
 }
 
 /**
@@ -104,10 +158,11 @@ export function buildVibeCodeStartStreaming(
         existingApps: args.existingAppsSnapshot(),
         appEnvNames,
       }) +
+      ownerChoiceSupplement(s.preferredName, s.visibility) +
       "\n\n" +
       TOOL_USE_PROMPT_SUPPLEMENT;
     const request: ChatRequest = {
-      model: s.model ?? args.defaultModel,
+      model: modelForProvider(credential.provider, s.model, args.defaultModel),
       messages: [
         { role: "system", content: systemMessage },
         {
@@ -206,7 +261,7 @@ export function buildVibeCodeResumeStreaming(
       })),
     ];
     const request: ChatRequest = {
-      model: model ?? args.defaultModel,
+      model: modelForProvider(credential.provider, model, args.defaultModel),
       messages,
       tools: VIBE_CODE_TOOLS.map((t) => ({ ...t })),
     };

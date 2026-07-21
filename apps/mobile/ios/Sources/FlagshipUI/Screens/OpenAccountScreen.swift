@@ -22,13 +22,13 @@ public struct OpenAccountScreen: View {
     let username: String
     /// Called once the account is open. Carries the chosen device name
     /// so the host can complete onboarding with `pods: []`.
-    var onOpened: (_ deviceName: String) -> Void
+    var onOpened: (_ accountName: String, _ deviceName: String, _ deviceId: String) -> Void
 
     @State private var vm: OpenAccountViewModel?
 
     public init(
         username: String,
-        onOpened: @escaping (_ deviceName: String) -> Void = { _ in }
+        onOpened: @escaping (_ accountName: String, _ deviceName: String, _ deviceId: String) -> Void = { _, _, _ in }
     ) {
         self.username = username
         self.onOpened = onOpened
@@ -45,6 +45,18 @@ public struct OpenAccountScreen: View {
                     .foregroundColor(c.textMuted)
 
                 if let vm {
+                    FSField(
+                        value: Binding(
+                            get: { vm.accountName },
+                            set: { vm.accountName = $0 }
+                        ),
+                        label: "Account display name",
+                        placeholder: "Johnson Family",
+                        helper: "Encrypted and shown above @\(username). It is never used in links."
+                    )
+                    .textInputAutocapitalization(.words)
+                    .accessibilityIdentifier("open-account-account-name")
+
                     FSField(
                         value: Binding(
                             get: { vm.deviceName },
@@ -91,8 +103,8 @@ public struct OpenAccountScreen: View {
     private func open() async {
         guard let vm else { return }
         await vm.openAccount()
-        if case .opened(let deviceName) = vm.phase {
-            onOpened(deviceName)
+        if case .opened(let deviceName) = vm.phase, let deviceId = vm.createdDeviceId {
+            onOpened(vm.effectiveAccountName, deviceName, deviceId)
         }
     }
 

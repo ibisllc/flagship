@@ -29,10 +29,10 @@ test("S2 — pair the webapp with the pod-sim", async ({ page, identity, podSim 
   await syncWebappPubkey(page, podSim);
 
   // 2. Pod pairing.
+  await page.locator("#view-home .advanced-disclosure").evaluate((d) => { d.open = true; });
   await page.click("#open-pod-pair");
   await expect(page.locator("#view-pod-pair")).toBeVisible();
   await page.fill("#pod-pair-base", podSim.baseUrl);
-  await page.fill("#pod-pair-label", `e2e-${identity.username}`);
   await page.click("#pod-pair-go");
 
   // 3. Wait for the pod-sim to receive the order. The webapp shows

@@ -147,6 +147,130 @@ the code → app Settings → **"Process URL"** paste. Never deactivate the page
 - The service (or the harness) can stop a session anytime.
 - Settings → **"Open secured sessions"** lists `{serviceUrl, browserAgent, startTime}` per held secretId + Stop.
 
+## v2 hardening — STATUS: BUILT on main (2026-06-19)
+The full v2 redesign is integrated + green on main (protocol `21a9de5d` → backend `6280ec88` → clients
+Android/iOS/webapp → link reconciliation `189d93e2`). Closes the verified critique findings: **C1** (box
+verifies the owner's signed create + secretHash-match — `.com` can't forge a binding), **C2** (owner-auth on
+the invite list), **H3** (pairwise contact AIDs — no cleartext friend-graph on `.com`), **H4** (revocation
+convergence poller + instant prune), **H1** (3 invite tiers incl. the manual out-of-band accept-loop), plus
+M2/M3/M4/M5/L. All 3 clients interop on the canonical invite link `<secret>&a=<authorAID>&i=<inviteId>`
+(fixed-string round-trip tests per surface). Gates: protocol 682 · backend 3137 · iOS 1146 · Android 989 ·
+webapp 1392 · tsc clean.
+
+**Follow-ups — DONE (`f7ad7a7d`):**
+- ✅ **Manual-finalize is now device-independent** — the box re-fetches + verifies the signed create from
+  `.com` by inviteId at `/api/service-access/accept` (STK-signed `GET …/service-invites/:inviteId/create`,
+  mirroring `revoked-since`); the author submits only `{accept, acceptSig}`, and the per-client create caches
+  (webapp `CREATE_STORE_KEY`, iOS `InviteCreateStore`, Android) were deleted. Finalize from any of the author's
+  devices.
+- ✅ **Acceptance-reply link** canonicalized — `flagship://invite-accept?server=&iid=&ref=&aid=&sig=&at=`, all
+  3 surfaces build+parse the identical frozen string (round-trip tests); legacy forms still decode.
+- ✅ **`/invite` web page** parses + forwards the canonical `#<secret>&a=<authorAID>&i=<inviteId>` (verified +
+  test-pinned).
+
+**Remaining (low-priority / owner):** retire the dual-accept IRK-create path once nothing needs it (safe to
+keep); deploy `.com` (the new by-inviteId fetch route) + rebuild the builder/apps to ship to real boxes/devices.
+
+## v2 hardening — box-as-authority + pairwise AIDs + author-confirmed binding (2026-06-19, from the design critique)
+
+A skeptical design review (findings verified against the code) surfaced the v1 gap: the design
+DECLARES `.com` untrusted but OPERATIONALLY trusts it for the binding that grants access, and the
+"content-blind" claim doesn't extend to the friend graph. Owner approved an architectural redesign.
+Already shipped as defense-in-depth: the redeem `serviceInstalled` gate (`7b80ea15`, C1-partial).
+
+### Phase 1 — Box is the binding authority (fixes C1, C2-trust, H4) — highest leverage
+Today `handleRedeem` relays to `.com` and trusts `.com`'s `{serviceRef, boundAID}` — a rogue/compromised
+`.com` can grant any AID access to any *hosted* service (the `serviceInstalled` gate only bounds it to
+hosted services). Change:
+- `.com` PERSISTS the create's IRK **signature** (storage: add `createSig` to `service_invites` +
+  migration; `handleCreateServiceInvite` already receives `body.signature` — store it).
+- Redeem returns the signed create (envelope + sig). The box VERIFIES that signature against its
+  config-pinned **owner IRK** + that `serviceRef` is hosted, BEFORE binding. A rogue `.com` cannot forge
+  the owner's IRK sig → cannot fabricate a binding. `.com` is demoted to a blind store + first-bind arbiter.
+- **Revocation convergence:** the box POLLS `.com` for revoked invites (reuse the daemon-status cadence)
+  and self-prunes — so a `.com` revoke is SUFFICIENT and multi-box self-heals. Supersedes the just-built
+  owner-prune-only model (which stays as the immediate path + the manual override).
+- Surfaces: storage (migration + create stores sig), control-plane (redeem returns create+sig; a
+  revoked-since-cursor list), daemon `serviceAccess.ts` (verify create sig + a revocation poller), tests.
+- **⚠️ OPEN DESIGN QUESTION (resolve before implementing):** the create is currently **IRK-signed**, but the
+  IRK ROTATES (re-pair / recovery / device-takeover), so a create signed by the old IRK won't verify against
+  the box's *current* config-pinned IRK after a rotation — box-as-authority would break exactly when the owner
+  rotates a device. Resolution options: (a) **AID-sign (or AID-co-sign) the create + revoke** so the box
+  verifies against the stable AID (this is the cleanest, and it COUPLES Phase 1 with Phase 2 — do them
+  together: the box pins the owner's AID, verifies AID-signed create/revoke); (b) the create carries its
+  IRK-version + the box keeps the owner's IRK history (more state, still rotation-fragile); (c) `.com` vouches
+  for the signing IRK (re-introduces trusting `.com` — rejected). **Recommendation: (a)** — pin the owner AID
+  on the box at provision, switch create/revoke to AID-signed, and land Phase 1+2's signing change as one unit.
+  This is why Phase 1 is NOT yet in flight: the trust-model change needs this decision first.
+
+### Phase 2 — Pairwise AIDs (fixes H3: cross-box linkability + the cleartext friend-graph)
+Today one GLOBAL AID identifies a person across every box/author, and `.com` stores
+`authorAID→boundAID→serviceRef` in cleartext (the bundle is content-blind; the GRAPH is not). Change:
+`deriveContactAccountId(UMK, authorAID)` — a per-author friend identity (HKDF over UMK + the author's AID,
+parallel to the existing per-service `deriveServiceMemberStableId`). The friend presents a per-author AID;
+two authors can't cross-link; `.com` sees unlinkable pseudonyms. Cross-app reuse still works (deterministic
+derivation). Decide: the owner's own multi-box identity stays global vs per-box. Migration: applies to NEW
+invites; existing global-AID bindings grandfathered. Surfaces: protocol (`deriveContactAccountId` + redeem/
+visit/knock sign with it), all 3 clients, `.com` (already stores opaque AIDs).
+
+### Phase 3 — Invite tiers + approval (fixes H1; owner-refined 2026-06-19)
+Three tiers, chosen at create/add time, all on the box-as-authority + pairwise-AID foundation. Across ALL
+tiers the consumer's Flagship username/domain is **never disclosed to the author** — the author sees only the
+private label they themselves assigned (personal) or a group label (group). (The owner explicitly rejected
+verifying by the consumer's username/domain on exactly this privacy ground.)
+
+1. **Personal, auto-approve** — first-bind (the original fast flow): send link → first redeemer binds. Accept
+   the casual-leak window; for low-sensitivity grants.
+2. **Personal, manual-approve (sensitive)** — closes the link-theft race WITHOUT disclosing the consumer's
+   identity, via an **out-of-band acceptance loop**: author sends the link → the friend's app accepts + emits
+   an **AID-signed acceptance** token (binds the inviteId + the friend's pairwise contact AID) → the friend
+   replies it back through the SAME private channel → the author's app opens it + submits it to the **author's
+   box**, which verifies the owner's create AND the friend's signature, then binds. The author FINALIZES the
+   loop. A thief who only grabbed the link can't produce an acceptance the author will open from their
+   friend-channel. NOTE the honest bound: this is channel-trust + author-finalization (defeats a casual
+   link-leak), NOT cryptographic against an attacker already inside the author↔friend private channel — which
+   matches the threat model. The acceptance reply is itself a link/QR (symmetric to the invite).
+3. **Group / multi-use** — one link, `maxN` redemptions (0 = unlimited), **auto-approve only** (per-person
+   confirm is impractical when you don't know who'll redeem). Lower-trust BY CONSTRUCTION (a leaked link admits
+   up to N) → must be clearly labeled in the UI. Guest list shows ONE entry ("Chess club — 4/10"); revoke the
+   whole group in one op (the box prunes all AIDs bound to that inviteId); per-member removal is a cheap bonus
+   (the group is a labeled set of bound AIDs). The live count is a leak signal; an **optional expiry** is
+   recommended (a forever-link is a standing liability).
+
+Surfaces: protocol (the AID-signed acceptance envelope; `maxN`/expiry on the create), `.com` (pending state
+for manual; redemption-count enforcement for group), box (verify + bind on the author's submission; group
+prune), client UX (the create-time tier picker, the accept→reply→open loop, the group guest-list entry).
+
+### Convenience — QR in the share (owner-requested 2026-06-19)
+When sending an invite (or an acceptance reply), populate the share (share-sheet / iMessage / email) with an
+inline **base64 QR image** of the link, IN ADDITION to the link text. Caveat: email clients (Gmail/Outlook)
+commonly STRIP data-URI `<img>` for security → the QR may not render in email; the **link text is the reliable
+fallback**, rich channels (share-sheet/iMessage) render the image, and for email an actual attachment beats a
+data-URI. Reuse the existing `qrSvg.ts` / `qrEncoder.js`.
+
+### Contained hardenings (fold in alongside the phases)
+- **Owner-IRK-auth the invite `list`** (C2 — `handleListServiceInvites` is currently unauthenticated: anyone
+  with a username + a 64-hex authorAID dumps that author's whole invite graph). Sign it like create/revoke.
+- **Random 128-bit invite ids** (M2 — drop the `hash(devicePub)` device-fingerprint leak baked into the id).
+- **Nonce-challenge + client-bind the establish-session cookie** (M3 — a captured 5-min visit proof currently
+  mints a 12h freely-transferable bearer cookie).
+- **Fail-open alert** (M4 — owner-facing signal when access-state reverts to `open` unexpectedly).
+- **Allow-list size cap + redeem/establish/knock rate-limits** (M5). **Poll `unknown`→`pending`** (L — kill
+  the pageId oracle).
+
+### Web-path trust tier (H2)
+The QR-login web path is structurally lower-trust (the browser isn't cert-pinned — CAA+CT only). The phone
+must DISPLAY what it's authorizing from its OWN trusted state (not the deeplink's claimed serverId/serviceRef)
+and ideally channel-bind the knock to the box's pinned cert hash, so a rogue-cert look-alike can't get a
+signed authorization. The browser EXTENSION (`feat/browser-extension`) is the path to closing the
+browser-pinning gap. Until then, label web sessions as the convenience tier.
+
+### Sequencing
+Phase 1 first (it alone closes C1 fully + C2-trust + H4 — the biggest posture change), then the contained
+hardenings (cheap, low-tradeoff), then Phase 2 (privacy; touches all signing), then Phase 3 (UX). Each phase
+is multi-surface (protocol → `.com` → daemon → 3 clients) + fixture-pinned, suited to a parallel-worker fan-out
+per phase.
+
 ### Maps to the built backend (extends, doesn't replace)
 On main already: AID binding (redeem), the `Flagship-App-Session` cookie, `establish-session` (phone
 AID-signed visit-proof → box mints a cookie). This ADDS: (a) the **pageId correlation** (the phone authorizes

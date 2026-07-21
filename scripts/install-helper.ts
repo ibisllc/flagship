@@ -121,6 +121,7 @@ function signRegister(argv: string[]): void {
       userPubKey: string;
       issuedAt: number;
       expiresAt: number;
+      adminRootPubKey?: string;
     };
     authCodeUserSignature: string;
   };
@@ -134,6 +135,9 @@ function signRegister(argv: string[]): void {
     userPubKey: hexToBytes(blob.authCode.userPubKey),
     issuedAt: blob.authCode.issuedAt,
     expiresAt: blob.authCode.expiresAt,
+    ...(blob.authCode.adminRootPubKey
+      ? { adminRootPubKey: hexToBytes(blob.authCode.adminRootPubKey) }
+      : {}),
   };
   const userSig = hexToBytes(blob.authCodeUserSignature);
 
@@ -163,6 +167,9 @@ function signRegister(argv: string[]): void {
           userPubKey: bytesToHex(ac.userPubKey),
           issuedAt: ac.issuedAt,
           expiresAt: ac.expiresAt,
+          ...(ac.adminRootPubKey
+            ? { adminRootPubKey: bytesToHex(ac.adminRootPubKey) }
+            : {}),
         },
         authCodeUserSignature: bytesToHex(userSig),
         serverIdentityPubKey: bytesToHex(identity.publicKey),

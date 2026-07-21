@@ -8,7 +8,7 @@ import CryptoKit
 final class KnockAuthorizeViewModelTests: XCTestCase {
     private let server = "home.alice.flagship.services"
     private let svc = "notes"
-    private let ref = "alice-notes"
+    private let ref = "alice--notes"
     private let page = "cb2421036efeb738c6017d8ee92e7b89"
 
     private func aid() -> Curve25519.Signing.PrivateKey {

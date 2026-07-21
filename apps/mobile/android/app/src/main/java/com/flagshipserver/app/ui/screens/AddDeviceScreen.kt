@@ -22,11 +22,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -113,14 +115,26 @@ fun AddDeviceScreen(
 
         when (val p = phase) {
             is AddDevicePhase.ShowingQr -> QrPanel(joinUrl = p.joinUrl)
-            is AddDevicePhase.ConfirmSas -> ConfirmPanel(
-                matchCode = p.matchCode,
-                // L10 — Confirm stays disabled for the anti-double-tap window
-                // after the SAS appears (parity with iOS `gateExpired`).
-                confirmEnabled = p.gateExpired,
-                onConfirm = { scope.launch { vm.confirmAndSeal() } },
-                onCancel = { vm.cancel(); onCancel() },
-            )
+            is AddDevicePhase.ConfirmSas -> {
+                // Slice D (D-4) — the promote-to-admin toggle appears ONLY here,
+                // in this synchronous admin-initiated SAS ceremony, and ONLY when
+                // this device can seal the admin root. DEFAULT OFF + hard warning.
+                if (vm.canOfferPromote) {
+                    val promote by vm.promoteToAdmin.collectAsState()
+                    AdminPromoteToggle(
+                        checked = promote,
+                        onCheckedChange = { vm.setPromoteToAdmin(it) },
+                    )
+                }
+                ConfirmPanel(
+                    matchCode = p.matchCode,
+                    // L10 — Confirm stays disabled for the anti-double-tap window
+                    // after the SAS appears (parity with iOS `gateExpired`).
+                    confirmEnabled = p.gateExpired,
+                    onConfirm = { scope.launch { vm.confirmAndSeal() } },
+                    onCancel = { vm.cancel(); onCancel() },
+                )
+            }
             AddDevicePhase.Delivering -> StatusPanel("Sharing keys securely…", spinner = true)
             AddDevicePhase.Delivered -> DeliveredPanel(onDone = onDone)
             is AddDevicePhase.Failed -> StatusPanel(p.message, danger = true)
@@ -234,6 +248,44 @@ private fun StatusPanel(message: String, spinner: Boolean = false, danger: Boole
                 color = if (danger) FS.colors.danger else FS.colors.textMuted,
                 style = TextStyle(fontSize = 14.sp),
             )
+        }
+    }
+}
+
+/** Slice D (D-4) — the "Also make this device an admin" toggle. DEFAULT OFF,
+ *  with a hard warning that admin can wipe / transfer / decommission the cloud.
+ *  Rendered ONLY in the synchronous admin-initiated SAS ceremony. */
+@Composable
+private fun AdminPromoteToggle(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "add-device-promote-admin-toggle" },
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Also make this device an admin",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    Text(
+                        "This device will be able to wipe, transfer, or decommission " +
+                            "your cloud. Only turn this on for a device you fully trust. " +
+                            "Off by default — leave it off to add a normal, non-admin " +
+                            "device.",
+                        color = FS.colors.warning,
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp),
+                    )
+                }
+                Switch(checked = checked, onCheckedChange = onCheckedChange)
+            }
         }
     }
 }

@@ -46,8 +46,8 @@ function baseIso(bytes = 4096): { stream: ReadableStream<Uint8Array>; size: numb
   return { stream, size: bytes, buf };
 }
 
-describe("parseRecipeEnvelope — accepts every shape the burner/webapp emit", () => {
-  it("flat InstallBlobJson + blobSignatureHex (the webapp/burner recipe)", () => {
+describe("parseRecipeEnvelope — accepts every shape the builder/webapp emit", () => {
+  it("flat InstallBlobJson + blobSignatureHex (the webapp/builder recipe)", () => {
     const { sig, json } = signedRecipe();
     const text = JSON.stringify({ ...json, blobSignatureHex: Buffer.from(sig).toString("hex") });
     const r = parseRecipeEnvelope(text);

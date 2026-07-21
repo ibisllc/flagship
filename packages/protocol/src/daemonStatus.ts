@@ -19,7 +19,8 @@
  */
 import { ed } from "./edSync.js";
 import { legacyFieldGuard } from "./auth.js";
-import type { Bytes, Keypair } from "./types.js";
+import { resolveMsgSigner, type MsgSigner } from "./canonicalBase.js";
+import type { Bytes } from "./types.js";
 
 export interface DaemonStatusReport {
   serverDomain: string;
@@ -58,9 +59,11 @@ export function canonicalDaemonStatusReport(r: DaemonStatusReport): Bytes {
 
 export function signDaemonStatusReport(
   r: DaemonStatusReport,
-  identity: Keypair,
+  identity: MsgSigner,
 ): Bytes {
-  return ed.sign(canonicalDaemonStatusReport(r), identity.privateKey);
+  // Accepts the STK `Keypair` or a `sign(msg)` closure (custodian-backed);
+  // signature bytes are identical either way.
+  return resolveMsgSigner(identity)(canonicalDaemonStatusReport(r));
 }
 
 export function verifyDaemonStatusReport(

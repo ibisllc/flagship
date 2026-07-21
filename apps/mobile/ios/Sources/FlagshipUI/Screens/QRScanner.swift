@@ -48,6 +48,9 @@ public final class QRScannerController: UIViewController {
     private var previewLayer: AVCaptureVideoPreviewLayer?
     private var reticle: UIView?
     private var didEmit = false
+    private var wantsCapture = false
+    private var isConfigured = false
+    private let sessionQueue = DispatchQueue(label: "com.flagshipserver.qr-scanner")
     /// When a frame fails validation we throttle further "bad QR"
     /// haptics for a short window so the scanner doesn't buzz on
     /// every video frame while the user is still aiming.
@@ -62,22 +65,22 @@ public final class QRScannerController: UIViewController {
         #if targetEnvironment(simulator)
         showSimulatorPlaceholder()
         #else
-        setupCapture()
+        prepareCapture()
         #endif
     }
 
     public override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        if let session, !session.isRunning {
-            DispatchQueue.global(qos: .userInitiated).async { session.startRunning() }
-        }
+        wantsCapture = true
+        startCaptureIfReady()
         successHaptic.prepare()
         errorHaptic.prepare()
     }
 
     public override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        session?.stopRunning()
+        wantsCapture = false
+        stopCapture()
     }
 
     public override func viewDidLayoutSubviews() {
@@ -85,26 +88,73 @@ public final class QRScannerController: UIViewController {
         previewLayer?.frame = view.bounds
     }
 
-    private func setupCapture() {
+    private func prepareCapture() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            configureCapture()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    if granted {
+                        self.configureCapture()
+                    } else {
+                        self.showUnavailablePlaceholder("Camera access is off. Enable it in Settings to scan the builder QR.")
+                        self.onError?("Camera access is off.")
+                    }
+                }
+            }
+        case .denied, .restricted:
+            showUnavailablePlaceholder("Camera access is off. Enable it in Settings to scan the builder QR.")
+            onError?("Camera access is off.")
+        @unknown default:
+            showUnavailablePlaceholder("The camera isn't available right now.")
+            onError?("No camera available.")
+        }
+    }
+
+    private func configureCapture() {
+        guard !isConfigured else {
+            startCaptureIfReady()
+            return
+        }
+        isConfigured = true
+        sessionQueue.async { [weak self] in
+            self?.buildCaptureSession()
+        }
+    }
+
+    private func buildCaptureSession() {
         let session = AVCaptureSession()
-        self.session = session
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
               let input = try? AVCaptureDeviceInput(device: device),
               session.canAddInput(input) else {
-            onError?("No camera available.")
+            reportCaptureFailure("No camera available.")
             return
         }
+        session.beginConfiguration()
         session.addInput(input)
 
         let metadata = AVCaptureMetadataOutput()
         guard session.canAddOutput(metadata) else {
-            onError?("Couldn't attach metadata output.")
+            session.commitConfiguration()
+            reportCaptureFailure("Couldn't attach metadata output.")
             return
         }
         session.addOutput(metadata)
         metadata.setMetadataObjectsDelegate(self, queue: .main)
         metadata.metadataObjectTypes = [.qr]
+        session.commitConfiguration()
 
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.session = session
+            self.installPreview(for: session)
+            self.startCaptureIfReady()
+        }
+    }
+
+    private func installPreview(for session: AVCaptureSession) {
         let preview = AVCaptureVideoPreviewLayer(session: session)
         preview.videoGravity = .resizeAspectFill
         preview.frame = view.bounds
@@ -126,9 +176,35 @@ public final class QRScannerController: UIViewController {
         self.reticle = reticle
     }
 
+    private func startCaptureIfReady() {
+        guard wantsCapture, let session else { return }
+        sessionQueue.async {
+            if !session.isRunning { session.startRunning() }
+        }
+    }
+
+    private func stopCapture() {
+        guard let session else { return }
+        sessionQueue.async {
+            if session.isRunning { session.stopRunning() }
+        }
+    }
+
+    private func reportCaptureFailure(_ message: String) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.showUnavailablePlaceholder(message)
+            self.onError?(message)
+        }
+    }
+
     private func showSimulatorPlaceholder() {
+        showUnavailablePlaceholder("Camera isn't available in the simulator.\nUse the \"copy the QR link instead\" path below.")
+    }
+
+    private func showUnavailablePlaceholder(_ message: String) {
         let label = UILabel()
-        label.text = "Camera isn't available in the simulator.\nUse the \"copy the QR link instead\" path below."
+        label.text = message
         label.textColor = .white.withAlphaComponent(0.85)
         label.numberOfLines = 0
         label.textAlignment = .center
@@ -150,7 +226,7 @@ public final class QRScannerController: UIViewController {
             didEmit = true
             successHaptic.notificationOccurred(.success)
             AudioServicesPlaySystemSound(SystemSoundID(1057))
-            session?.stopRunning()
+            stopCapture()
             onScan?(payload)
         } else {
             // Stay live. Throttle the buzz so a steadily-aimed bad QR

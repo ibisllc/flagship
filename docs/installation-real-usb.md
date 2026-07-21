@@ -18,11 +18,11 @@ fastest way to try Flagship without committing hardware. This document is the
 
 ### 1. Download the stock Ubuntu Server ISO (once)
 
-Go to https://releases.ubuntu.com/22.04.5/ on your burner computer and grab
+Go to https://releases.ubuntu.com/22.04.5/ on your builder computer and grab
 `ubuntu-22.04.5-live-server-amd64.iso` (~2 GB). Save it somewhere stable;
 you can reuse it for many Flagship installs.
 
-The Burner will refuse any ISO that doesn't match Canonical's published
+The Builder will refuse any ISO that doesn't match Canonical's published
 SHA-256 — this is the trust boundary for the operating-system layer.
 
 ### 2. Mint a recipe on your phone
@@ -55,7 +55,7 @@ machine, ideally in a directory only you can read.
 
 #### Option A: Mac
 
-Open the **Flagship Burner.app** in `apps/burner-mac/` (run `swift run`
+Open the **Flagship Studio.app** in `apps/builder-mac/` (run `swift run`
 inside that directory if you don't have a release build yet). Drag in:
 
 1. The recipe `.json`
@@ -67,12 +67,12 @@ the drive is ready.
 
 #### Option B: Linux
 
-Open the **Flagship Burner** (GTK4 app at `apps/burner-linux/`). Same
+Open the **Flagship Studio** (GTK4 app at `apps/builder-linux/`). Same
 wizard as the Mac app:
 
 ```sh
-cd apps/burner-linux
-python flagship-burner.py
+cd apps/builder-linux
+python flagship-builder.py
 ```
 
 The app asks for sudo via PolicyKit when it needs to do the raw write.
@@ -80,7 +80,7 @@ The app asks for sudo via PolicyKit when it needs to do the raw write.
 #### Option C: CLI (any OS)
 
 ```sh
-cd packages/flagship-burner
+cd packages/flagship-builder
 node src/cli.ts verify ~/Downloads/flagship-recipe-*.json
 # Confirm server-domain + expiry match what you minted
 
@@ -90,19 +90,19 @@ sudo node src/cli.ts write \
 # Picks a USB interactively. Refuses any drive that looks internal.
 ```
 
-The Burner auto-shreds the recipe `.json` after a successful write (the
+The Builder auto-shreds the recipe `.json` after a successful write (the
 phone-signed token is single-use; leaving it on disk extends the attack
 window). Pass `--keep-recipe` if you want to keep it.
 
 #### Option D: "Burn elsewhere"
 
-If your burner machine isn't where you want to do the raw write — say,
+If your builder machine isn't where you want to do the raw write — say,
 you mint on a laptop and burn on a desktop — use `prepare` to build a
 flashable ISO, then use whatever burning tool you like (`balenaEtcher`,
 Rufus, `dd`):
 
 ```sh
-node packages/flagship-burner/src/cli.ts prepare \
+node packages/flagship-builder/src/cli.ts prepare \
     ~/Downloads/flagship-recipe-*.json \
     ~/Downloads/ubuntu-22.04.5-live-server-amd64.iso \
     ~/Downloads/flagship-ready.iso
@@ -131,15 +131,15 @@ state, the IP, the cert expiry.
 
 ## Troubleshooting
 
-**Burner refuses my ISO.**
+**Builder refuses my ISO.**
 Check the SHA-256 — `shasum -a 256 ubuntu-22.04.5-live-server-amd64.iso`
 must match Canonical's published value. If you downloaded from a mirror
 it may have been re-released.
 
-**Burner refuses my recipe.**
+**Builder refuses my recipe.**
 Recipes expire (your phone showed how long when you minted). If you've
 been sitting on it past `authCode.expiresAt`, mint a fresh one. The
-Burner refuses early so you don't burn a USB that wouldn't register
+Builder refuses early so you don't burn a USB that wouldn't register
 anyway.
 
 **Pod doesn't appear on phone after install.**
@@ -149,16 +149,16 @@ Check `journalctl -u flagship-bootstrap` and
 repo timeout (re-run the bootstrap manually) or DNS not resolving
 `flagshipserver.com` (check `/etc/resolv.conf`).
 
-**Burner refuses the drive I picked.**
+**Builder refuses the drive I picked.**
 Either it looks like an internal drive (size > 500 GB, vendor
 matches a known internal-drive signature) or you targeted `/dev/sda` /
 `/dev/disk0` (always refused, no matter the flags). Pick a removable
-USB. The Burner errs aggressively on the "don't wipe the user's
+USB. The Builder errs aggressively on the "don't wipe the user's
 laptop" side — this is intentional.
 
 ## Threat model
 
-See `packages/flagship-burner/README.md` § threat model.
+See `packages/flagship-builder/README.md` § threat model.
 
 Tl;dr: phone is the trust root, recipe is a one-shot signed token,
-Burner refuses tampered ISOs by SHA, never calls flagshipserver.com.
+Builder refuses tampered ISOs by SHA, never calls flagshipserver.com.

@@ -64,16 +64,79 @@ public actor KeychainSessionStore {
     public func clear() {
         defaults.removeObject(forKey: podBaseKey)
         defaults.removeObject(forKey: tokenFallbackKey)
+        defaults.removeObject(forKey: podTokensFallbackKey)
         deleteKeychain()
+        deleteKeychain(account: podTokensAccount)
+    }
+
+    // MARK: - Per-pod token store (Fix B)
+    //
+    // The per-pod tokens are a SINGLE JSON `{ [podId]: token }` blob held in
+    // Keychain (own account), with the same UserDefaults shadow fallback the
+    // single token uses for the unsigned-sim/UITest case. Secrets never land in
+    // UserDefaults on a real signed device.
+
+    private let podTokensAccount = "session-pod-tokens"
+    private let podTokensFallbackKey = "flagship.podTokens.fallback"
+
+    private func readPodTokens() -> [String: String] {
+        let data: Data?
+        if let kc = readKeychain(account: podTokensAccount) {
+            data = kc
+        } else if let raw = defaults.data(forKey: podTokensFallbackKey) {
+            data = raw
+        } else {
+            data = nil
+        }
+        guard let d = data, let map = try? JSONDecoder().decode([String: String].self, from: d) else { return [:] }
+        return map
+    }
+
+    private func writePodTokens(_ map: [String: String]) {
+        guard let data = try? JSONEncoder().encode(map) else { return }
+        let ok = writeKeychain(account: podTokensAccount, data: data)
+        if ok {
+            defaults.removeObject(forKey: podTokensFallbackKey)
+        } else {
+            defaults.set(data, forKey: podTokensFallbackKey)
+        }
+    }
+
+    public func sessionToken(forPodId podId: String) -> String? {
+        guard !podId.isEmpty else { return nil }
+        return readPodTokens()[podId.lowercased()]
+    }
+
+    public func setSessionToken(_ token: String?, forPodId podId: String) {
+        guard !podId.isEmpty else { return }
+        var map = readPodTokens()
+        let key = podId.lowercased()
+        if let token { map[key] = token } else { map.removeValue(forKey: key) }
+        writePodTokens(map)
+    }
+
+    public func podTokenIds() -> [String] {
+        Array(readPodTokens().keys)
+    }
+
+    public func migrateSingleTokenToPod(_ anchorPodId: String) {
+        let key = anchorPodId.lowercased()
+        guard !key.isEmpty else { return }
+        var map = readPodTokens()
+        guard map[key] == nil else { return }
+        // The legacy single token lives in Keychain (or its sim shadow).
+        guard let legacy = sessionToken, !legacy.isEmpty else { return }
+        map[key] = legacy
+        writePodTokens(map)
     }
 
     // MARK: - Keychain primitives
 
-    private func readKeychain() -> Data? {
+    private func readKeychain(account: String? = nil) -> Data? {
         let q: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: tokenAccount,
+            kSecAttrAccount as String: account ?? tokenAccount,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -86,11 +149,11 @@ public actor KeychainSessionStore {
     /// non-success status (e.g. `errSecMissingEntitlement` on an unsigned sim)
     /// signals the caller to use the UserDefaults shadow instead.
     @discardableResult
-    private func writeKeychain(data: Data) -> Bool {
+    private func writeKeychain(account: String? = nil, data: Data) -> Bool {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: tokenAccount
+            kSecAttrAccount as String: account ?? tokenAccount
         ]
         SecItemDelete(base as CFDictionary)
         var add = base
@@ -100,11 +163,11 @@ public actor KeychainSessionStore {
         return status == errSecSuccess
     }
 
-    private func deleteKeychain() {
+    private func deleteKeychain(account: String? = nil) {
         let q: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: tokenAccount
+            kSecAttrAccount as String: account ?? tokenAccount
         ]
         SecItemDelete(q as CFDictionary)
     }

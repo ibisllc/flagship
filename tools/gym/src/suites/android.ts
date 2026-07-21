@@ -124,13 +124,12 @@ const EVERY_MERGE: readonly Scenario[] = [
   ),
   android(
     "android-create-server-form",
-    "Home → add-server → chooser → Provision opens the create-server form (name field + disk-encryption control).",
+    "Home → add-server goes STRAIGHT to the create-server form (name field + disk-encryption control) — the chooser screen was removed.",
     `${PKG}.GymEveryMergeTest#createServerFormReachable`,
     {
       steps: [
         { kind: "launch", describe: "Launch smokeTab=home." },
-        { kind: "tap", describe: "Add a server.", handle: "home-add-server" },
-        { kind: "tap", describe: "Provision a new box.", handle: "chooser-provision" },
+        { kind: "tap", describe: "Add a server (a NavHost push straight to the form).", handle: "home-add-server" },
         { kind: "assert", describe: "Name field.", handle: "cs-name-field" },
         { kind: "assert", describe: "Disk-encryption control.", handle: "cs-encrypt-disk-toggle" },
       ],
@@ -140,7 +139,6 @@ const EVERY_MERGE: readonly Scenario[] = [
       ],
       screenshots: [
         shot("home-ready", "Home."),
-        shot("add-server-chooser", "The add-server chooser."),
         shot("create-server-form", "The create-server form."),
       ],
       dimension: "D1",
@@ -279,5 +277,137 @@ const TOTAL: readonly Scenario[] = [
   ),
 ];
 
+// ──── total-gym Tier-1: webapp feature-tranche mirrors (GymFeatureMirrorTest) ────
+// Android twins of web-total-transfer-offer / -box-inbox / -pod-switcher /
+// -cs-advanced-toggles / -admin-root-state / -rotate-admin-ceremony. The
+// Slice-D admin surfaces ride the new `flagship.smokeAdminRoot` extra
+// (GymSeams.forceAdminRoot). NOT mirrored on Android:
+//   - web-total-transfer-claim — deep-link/QR-only entry on mobile; verify
+//     needs a REAL signed offer (a signed-offer fixture seam is
+//     disproportionate for a render assert);
+//   - web-total-promote-admin-toggle — the toggle renders only at ConfirmSas,
+//     which needs a scripted peer hello the in-composable
+//     MockDevicePairingRelay can't provide from instrumentation (iOS mirrors
+//     it — its promote card renders pre-peer).
+
+const FEATURE_MIRRORS: readonly Scenario[] = [
+  androidTotal(
+    "android-total-transfer-offer-entry",
+    "D1 (transfer-a-box, giver): server-detail's transfer entry opens the giver ceremony — the type-the-FQDN confirm field + the danger CTA (confirm stage only; nothing signed).",
+    `${PKG}.GymFeatureMirrorTest#transferOfferEntryOpensCeremony`,
+    {
+      steps: [
+        { kind: "launch", describe: "Open the Home pod's detail (tap its description row)." },
+        { kind: "tap", describe: "Transfer to another account.", handle: "sd-transfer-server" },
+        { kind: "assert", describe: "Type-to-confirm field.", handle: "transfer-confirm-field" },
+      ],
+      assertions: [
+        { describe: "Confirm field present", handle: "transfer-confirm-field", expect: "present" },
+        { describe: "Transfer CTA present", handle: "transfer-start", expect: "present" },
+      ],
+      screenshots: [shot("transfer-entry", "The entry card."), shot("transfer-confirm-gate", "The type-to-confirm gate.")],
+      dimension: "D1",
+    },
+  ),
+  androidTotal(
+    "android-total-box-inbox-approve",
+    "D5 (box-request inbox): a box awaiting boot-unlock (smokePods=awaiting-unlock) surfaces the one-tap Approve/Deny card on its detail (never fired).",
+    `${PKG}.GymFeatureMirrorTest#boxInboxApproveCard`,
+    {
+      steps: [
+        { kind: "launch", describe: "Open the waiting box (Cabin) detail (smokePods=awaiting-unlock)." },
+        { kind: "assert", describe: "Approve card.", handle: "sd-approve-unlock" },
+      ],
+      assertions: [
+        { describe: "Approve affordance present", handle: "sd-approve-unlock", expect: "present" },
+        { describe: "Deny affordance present", handle: "sd-deny-unlock", expect: "present" },
+      ],
+      screenshots: [shot("inbox-approve-card", "The one-tap approve card.")],
+      dimension: "D5",
+    },
+  ),
+  androidTotal(
+    "android-total-pod-switcher",
+    "D5 (multi-pod): the Services tab renders the PodSwitcher (3 seeded pods); opening it lists the per-pod items.",
+    `${PKG}.GymFeatureMirrorTest#podSwitcherOpensMenu`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=apps." },
+        { kind: "tap", describe: "The pod switcher.", handle: "pod-switcher" },
+        { kind: "assert", describe: "Per-pod items listed.", handle: "pod-switcher-item-*" },
+      ],
+      assertions: [
+        { describe: "Switcher present", handle: "pod-switcher", expect: "present" },
+        { describe: "Pod items listed", handle: "pod-switcher-item-*", expect: "present" },
+      ],
+      screenshots: [shot("pod-switcher", "The switcher."), shot("pod-switcher-menu", "The open menu.")],
+      dimension: "D5",
+    },
+  ),
+  androidTotal(
+    "android-total-cs-advanced-toggles",
+    "D4 (one-shot pairing security choices): the create-server Advanced section — default OFF, children hidden; open → embed-secrets + debug-friendly default OFF; closing RESETS an armed debug-friendly.",
+    `${PKG}.GymFeatureMirrorTest#createServerAdvancedTogglesResetRule`,
+    {
+      steps: [
+        { kind: "launch", describe: "Home → add-server (single-page form)." },
+        { kind: "assert", describe: "Advanced default OFF.", handle: "cs-advanced-toggle" },
+        { kind: "tap", describe: "Open Advanced; arm debug-friendly.", handle: "cs-debug-friendly-toggle" },
+        { kind: "tap", describe: "Close + reopen Advanced.", handle: "cs-advanced-toggle" },
+        { kind: "assert", describe: "Debug-friendly RESET to off.", handle: "cs-debug-friendly-toggle" },
+      ],
+      assertions: [
+        { describe: "Advanced toggle present + default OFF", handle: "cs-advanced-toggle", expect: "present" },
+        { describe: "Embed-secrets toggle revealed", handle: "cs-embed-secrets-toggle", expect: "present" },
+        { describe: "Debug-friendly reset on close", handle: "cs-debug-friendly-toggle", expect: "present" },
+      ],
+      screenshots: [shot("cs-advanced-open", "The opened Advanced section."), shot("cs-advanced-reset", "The reset-on-close rule.")],
+      dimension: "D4",
+    },
+  ),
+  androidTotal(
+    "android-total-admin-root-state",
+    "D3 (Slice D §5): Account security reports THIS device's admin standing — non-admin (demo default) shows NO rotate card; smokeAdminRoot renders the Admin-key card + Rotate.",
+    `${PKG}.GymFeatureMirrorTest#adminRootStateGatesRotateCard`,
+    {
+      steps: [
+        { kind: "launch", describe: "Settings → Account security (no admin seed)." },
+        { kind: "assert", describe: "No rotate control.", handle: "admin-root-rotate-btn" },
+        { kind: "launch", describe: "Relaunch with smokeAdminRoot." },
+        { kind: "assert", describe: "Rotate control present.", handle: "admin-root-rotate-btn" },
+      ],
+      assertions: [
+        { describe: "Rotate absent on a non-admin device", handle: "admin-root-rotate-btn", expect: "absent" },
+        { describe: "Rotate present on an admin device", handle: "admin-root-rotate-btn", expect: "present" },
+      ],
+      screenshots: [shot("admin-root-non-admin", "The non-admin state."), shot("admin-root-admin", "The admin card with Rotate.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-total-rotate-admin-ceremony",
+    "D4 (Slice D §5): Rotate admin key opens its warning dialog (revoke semantic + typed-ROTATE gate); Cancel rotates nothing.",
+    `${PKG}.GymFeatureMirrorTest#rotateAdminCeremonyFirstScreen`,
+    {
+      steps: [
+        { kind: "launch", describe: "Account security as an admin device (smokeAdminRoot)." },
+        { kind: "tap", describe: "Rotate admin key.", handle: "admin-root-rotate-btn" },
+        { kind: "assert", describe: "The warning dialog + typed-ROTATE field.", handle: "admin-root-rotate-confirm-field" },
+        { kind: "tap", describe: "Cancel — nothing rotated." },
+      ],
+      assertions: [
+        { describe: "Warning ceremony opens", handle: "admin-root-rotate-confirm-field", expect: "present" },
+        { describe: "No rotation after Cancel", handle: "admin-root-rotate-done", expect: "absent" },
+      ],
+      screenshots: [shot("rotate-admin-ceremony", "The warning dialog."), shot("rotate-admin-cancelled", "Intact after Cancel.")],
+      dimension: "D4",
+    },
+  ),
+];
+
 /** The Android lane of the gym registry (every-merge subset + total tranche). */
-export const ANDROID_GYM_SCENARIOS: readonly Scenario[] = [...EVERY_MERGE, ...TOTAL];
+export const ANDROID_GYM_SCENARIOS: readonly Scenario[] = [
+  ...EVERY_MERGE,
+  ...TOTAL,
+  ...FEATURE_MIRRORS,
+];

@@ -14,11 +14,11 @@
 //   2. single (recovery.present)  → cloud-recovery unwrap → TAKEOVER:
 //        7-day-grace explainer → on confirm: persist the recovered
 //        seed/profile, INITIATE re-pair (POST /api/users/:u/re-pair),
-//        label this device "admin", open the account.
+//        mint a fresh account-scoped device ID, open the account.
 //   3. multi (recovery.present)   → cloud-recovery unwrap + collect a
 //        recovery TOTP (6-digit) OR a recovery code → pass it as the
 //        re-pair `totpProof` (the Worker REQUIRES it for
-//        account_type === "multi") → 24h-grace TAKEOVER → "admin" label.
+//        account_type === "multi") → 24h-grace TAKEOVER.
 //
 // The recovered seed IS the user key (UMK). The currently-registered
 // IRK is the v1 derivation of that seed (`flagship.irk.v1` — what every
@@ -53,7 +53,7 @@ export const TAKEOVER_IRK_VERSION = 2;
  *  whole user namespace (the no-lockout guarantee); the stable id stays
  *  a normal `ukey.dkey`. Reach enforcement is Phase 4+ / server-side —
  *  here we record the label on the local profile. */
-export const ADMIN_LABEL = "admin";
+import { generateDeviceId } from "./accountMetadata.js";
 
 /** Canonical-bytes tag for the re-pair initiate envelope. MUST match
  *  packages/protocol/src/auth.ts TAG_RE_PAIR_INITIATE and the Worker. */
@@ -217,8 +217,9 @@ export function isCredentialRequiredError(err) {
  *    4. INITIATE the re-pair (the grace clock starts server-side; the
  *       swap + countdown are Phase 4). Multi passes the collected
  *       `totpProof` — the Worker rejects a multi initiate without it.
- *    5. Record the device as `admin` on the local profile (reach is
- *       enforced server-side later; this is the local label).
+ *    5. Mint a fresh opaque account-scoped `deviceId` for this
+ *       membership. No label and no capability is recorded locally —
+ *       reach is a server-side decision.
  *    6. Open the account (dispatch to Home).
  *
  *  Multi-profile keying: when `setActiveKeystoreProfile` is injected the
@@ -247,7 +248,7 @@ export function isCredentialRequiredError(err) {
  *    baseUrl?: string,
  *    now?: () => number,
  *  }} deps
- *  @returns {Promise<{username: string, seed: Uint8Array, rePair: object, deviceLabel: string}>}
+ *  @returns {Promise<{username: string, seed: Uint8Array, rePair: object, deviceId: string}>}
  */
 export async function runTakeover(resolution, deps) {
   const username = resolution?.username;
@@ -338,12 +339,14 @@ export async function runTakeover(resolution, deps) {
     rePair = await initiateRePair({ ...initiateArgs, totpProof: proof });
   }
 
-  // 5 — record the device as `admin` on the local profile.
+  // 5 — mint an account-scoped opaque identity for this membership.
+  const deviceId = generateDeviceId();
   if (typeof deps.addProfile === "function") {
     deps.addProfile({
       cloudName: username,
       cloudRootPubHex: oldIrkPubHex,
-      deviceLabel: ADMIN_LABEL,
+      accountId: username,
+      deviceId,
       deviceCapability: null,
       demoServer: null,
     });
@@ -354,7 +357,69 @@ export async function runTakeover(resolution, deps) {
     await deps.dispatchInitialView();
   }
 
-  return { username, seed, rePair, deviceLabel: ADMIN_LABEL };
+  return { username, seed, rePair, deviceId };
+}
+
+/** L4 — "Keep my other devices working": bring THIS recovered device into
+ *  the account WITHOUT rotating the identity. Parity with iOS
+ *  PostRecoveryChoiceScreen's default (.keepBothDevices): the device
+ *  derives the SAME account IRK (v1) from the recovered seed, so every
+ *  already-paired device keeps working untouched — no rotation, no grace,
+ *  no /re-pair POST, no network. Strictly does LESS than {@link runTakeover}.
+ *
+ *  @param {object} resolution  a single|multi AccountResolution
+ *  @param {object} deps        the same takeover-deps bundle runTakeover
+ *                              takes (the rotation/re-pair fields go unused)
+ *  @returns {Promise<{username: string, seed: Uint8Array, deviceId: string}>}
+ */
+export async function runKeepBoth(resolution, deps) {
+  const username = resolution?.username;
+  if (!username) throw new Error("runKeepBoth: missing username");
+  if (!resolution?.recovery?.present) {
+    throw new Error("runKeepBoth: account has no cloud backup");
+  }
+  const toHex = deps.bytesToHex || defaultBytesToHex;
+  const makePassphrase = deps.makePassphrase || randomLocalPassphrase;
+
+  // 1 — credentialed unwrap of the cloud-stored UMK seed.
+  const seed = await deps.recoverFromCloud(username);
+  if (!(seed instanceof Uint8Array) || seed.length !== 32) {
+    throw new Error("runKeepBoth: recovered seed is malformed");
+  }
+
+  // 2 — persist + unlock under the resolved username. Point the keystore
+  // at this profile FIRST so the recovered seed is wrapped under its own
+  // record (multi-profile keying — never clobber another profile).
+  if (typeof deps.setActiveKeystoreProfile === "function") {
+    deps.setActiveKeystoreProfile(username);
+  }
+  await deps.bootstrapFromExistingSeed(makePassphrase(), seed);
+  if (typeof deps.setUsername === "function") deps.setUsername(username);
+  await deps.unlockSession(seed, username);
+
+  // 3 — NO rotation: this device's reach IS the account IRK (v1). Record
+  // it on the local profile under a fresh account-scoped ID. We never derive a
+  // rotated key, never sign a re-pair, never touch the network — that is
+  // the whole point of keep-both vs. a takeover.
+  const accountIrk = await deps.deriveIrkFromSeed(seed);
+  const deviceId = generateDeviceId();
+  if (typeof deps.addProfile === "function") {
+    deps.addProfile({
+      cloudName: username,
+      cloudRootPubHex: toHex(accountIrk.publicKey),
+      accountId: username,
+      deviceId,
+      deviceCapability: null,
+      demoServer: null,
+    });
+  }
+
+  // 4 — open the account.
+  if (typeof deps.dispatchInitialView === "function") {
+    await deps.dispatchInitialView();
+  }
+
+  return { username, seed, deviceId };
 }
 
 /** Orchestrate the full single/multi login branch off a resolution.
@@ -386,6 +451,24 @@ export async function loginRealAccount(resolution, deps) {
   if (branch === "no-recovery") {
     await deps.showState(noRecoveryState(resolution));
     return { outcome: "no-recovery" };
+  }
+
+  // L4 — post-recovery device disposition (parity with iOS
+  // PostRecoveryChoiceScreen). When the host injects a chooser, let the
+  // user pick how this recovered device relates to their other devices:
+  //   - "keep-both"    → no rotation; {@link runKeepBoth}. Other devices
+  //                      stay connected.
+  //   - "replace-lost" → the takeover below (rotate + re-pair) — unchanged.
+  // Backward-compatible: with no chooser injected, recovery is the
+  // takeover it has always been.
+  if (typeof deps.chooseDisposition === "function") {
+    const choice = await deps.chooseDisposition({ resolution, branch });
+    if (!choice) return { outcome: "cancelled" };
+    if (choice === "keep-both") {
+      const keepBoth = await runKeepBoth(resolution, deps.takeoverDeps);
+      return { outcome: "keep-both", keepBoth };
+    }
+    // Any other choice ("replace-lost") falls through to the takeover.
   }
 
   // Grace explainer — single is 3-day, multi is 24h + a second factor.

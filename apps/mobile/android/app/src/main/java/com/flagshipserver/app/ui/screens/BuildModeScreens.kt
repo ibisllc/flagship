@@ -321,7 +321,7 @@ private fun VerdictCard(p: BuildGitViewModel.GitPhase.Verdict, vm: BuildGitViewM
             Text(p.reason, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
             Spacer(Modifier.height(FS.space.s3))
             Text(
-                "The AI rewrites this repo into a Flagship app — adds the manifest, removes its own login, and wires it to your box's data layer.",
+                "The AI rewrites this repo into a Flagship app — adds the app config, removes its own login, and wires it to your box's data layer.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
             )
@@ -626,12 +626,7 @@ private fun Badge(text: String) {
 
 private fun fmtTimestamp(ms: Long): String {
     if (ms <= 0) return ""
-    val fmt = java.text.DateFormat.getDateTimeInstance(
-        java.text.DateFormat.SHORT,
-        java.text.DateFormat.SHORT,
-        java.util.Locale.US,
-    )
-    return fmt.format(java.util.Date(ms))
+    return com.flagshipserver.app.core.FlagshipDateFormat.format(ms, includeTime = true)
 }
 
 // ── small shared cards ──────────────────────────────────────────

@@ -20,12 +20,18 @@ public struct PendingServerScreen: View {
     /// directory's `pending[].phase` instead of the per-order endpoint).
     let username: String?
     var onCancelOrder: () -> Void = {}
+    /// Live "this box is waiting for a boot-unlock approval" signal, computed by
+    /// the container from the account-level 5s watcher set (the per-pod flag
+    /// alone is stale between full reconciles). Feeds the on-checklist Approve
+    /// card so a box that asks for its key mid-provision is actually approvable.
+    var awaitingUnlock: Bool = false
 
     @State private var timeline: ProvisionTimelineViewModel?
 
-    public init(pod: PodInfo, username: String? = nil, onCancelOrder: @escaping () -> Void = {}) {
+    public init(pod: PodInfo, username: String? = nil, awaitingUnlock: Bool = false, onCancelOrder: @escaping () -> Void = {}) {
         self.pod = pod
         self.username = username
+        self.awaitingUnlock = awaitingUnlock
         self.onCancelOrder = onCancelOrder
     }
 
@@ -59,7 +65,7 @@ public struct PendingServerScreen: View {
                 // owner can approve without hunting through a buried danger zone;
                 // it renders nothing until a live request for this box exists.
                 if let domain = approvalDomain, !domain.isEmpty {
-                    BootUnlockApprovalCard(serverDomain: domain)
+                    BootUnlockApprovalCard(serverDomain: domain, awaitingUnlock: awaitingUnlock)
                 }
 
                 if let domain = timeline?.status?.serverDomain, !domain.isEmpty {

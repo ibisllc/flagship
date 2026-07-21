@@ -20,6 +20,10 @@ import FlagshipAPI
 @Observable
 public final class CompanionRequestsViewModel {
 
+    /// 10s between polls while the inbox is open — mirrors the webapp's
+    /// `pollPending` default (`companionRequestsClient.js` intervalMs = 10_000).
+    public nonisolated static let pollInterval: UInt64 = 10_000_000_000
+
     public private(set) var state: LoadingState<[CompanionPendingWrite]> = .idle
     /// requestIds whose Approve/Deny is in flight. Drives the per-row
     /// spinner + disables the buttons.
@@ -33,13 +37,17 @@ public final class CompanionRequestsViewModel {
     private let username: () -> String?
     private let signer: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
     private let now: () -> Int64
+    private let pollIntervalNanos: UInt64
+
+    private var pollTask: Task<Void, Never>?
 
     public init(
         client: any ScreensClient,
         server: any FlagshipServerClient,
         username: @escaping () -> String?,
         signer: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
-        now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
+        now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
+        pollIntervalNanos: UInt64 = CompanionRequestsViewModel.pollInterval
     ) {
         self.client = client
         self.server = server
@@ -48,16 +56,50 @@ public final class CompanionRequestsViewModel {
             try await Keystore.deriveIRK(reason: reason)
         }
         self.now = now
+        self.pollIntervalNanos = pollIntervalNanos
     }
 
     public func load() async {
         state = .loading
+        await refresh()
+    }
+
+    /// Silent refresh — fetches the pending list without flashing `.loading`
+    /// (so a poll re-tick doesn't blank the rendered rows) and swallows
+    /// transport blips, keeping the last-good snapshot. Mirrors the webapp
+    /// `pollPending` per-tick behaviour. A first-load `.failed` only surfaces
+    /// from `load()` (which sets `.loading` first); a tick that fails while we
+    /// already have rows leaves them in place.
+    public func refresh() async {
         do {
             let r = try await client.companionPendingWrites()
             state = .loaded(r.pending.sorted { $0.queuedAt < $1.queuedAt })
         } catch {
+            // Keep last-good rows; only surface a failure when we have none.
+            if case .loaded = state { return }
             state = .failed(error.localizedDescription)
         }
+    }
+
+    /// Start the inbox-scoped background poll. Runs a first refresh
+    /// immediately (so the view isn't blank for `pollInterval`), then loops
+    /// every `pollIntervalNanos`, silently re-fetching. Idempotent — a second
+    /// `startPolling()` cancels the prior loop. The screen drives this from
+    /// `.task` and tears it down on disappear.
+    public func startPolling() {
+        stopPolling()
+        pollTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                await self.refresh()
+                try? await Task.sleep(nanoseconds: self.pollIntervalNanos)
+            }
+        }
+    }
+
+    public func stopPolling() {
+        pollTask?.cancel()
+        pollTask = nil
     }
 
     public func approve(_ request: CompanionPendingWrite) async {

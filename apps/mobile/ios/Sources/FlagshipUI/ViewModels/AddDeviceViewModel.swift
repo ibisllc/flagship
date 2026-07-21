@@ -47,7 +47,7 @@ public final class AddDeviceViewModel {
         /// Sealing + delivering the UMK bundle to the incoming device.
         case admitting
         /// The incoming device received the bundle. Done.
-        case admitted(deviceLabelHint: String?)
+        case admitted(deviceDisplayNameHint: String?)
         /// Recoverable failure; the screen offers a retry.
         case failed(String)
         /// The session was invalidated (screenshot / TTL / cancel).
@@ -55,6 +55,22 @@ public final class AddDeviceViewModel {
     }
 
     public private(set) var phase: Phase = .failed("Not started")
+
+    /// D-4 — the assurance-gated "Also make this device an admin" toggle.
+    /// Default OFF. Bound by `AddDeviceScreen`, and offered ONLY here (the
+    /// synchronous, admin-initiated, SAS-confirmed ceremony — join stories
+    /// 1–2). It is NEVER surfaced on the async approve-a-request path
+    /// (`JoinAccountViewModel` incoming / secret-request approvals — story 3),
+    /// which has no `AddDeviceViewModel` and thus no toggle at all: the gate
+    /// is STRUCTURAL. When ON (and this device holds the master root), the
+    /// bundle carries `wrappedAdminRoot` so the new device becomes an admin.
+    public var promoteNewDeviceToAdmin: Bool = false
+
+    /// True iff THIS device currently holds the admin master root — only such
+    /// a device can seal the root to another (§8.2). The screen hides / greys
+    /// the promote toggle when false, and `confirmMatch` refuses to attach
+    /// `wrappedAdminRoot` without it regardless of the toggle.
+    public let canPromoteToAdmin: Bool
 
     private let account: String
     private let relay: any PairingRelayClient
@@ -66,11 +82,17 @@ public final class AddDeviceViewModel {
     /// without piercing the Secure Enclave. Defaults to reading the
     /// active profile's UMK from the Keystore.
     private let currentUMKHex: @MainActor (String) async throws -> String
+    /// Seam so tests can supply the ADMIN MASTER ROOT private seed (lowercased
+    /// hex) without piercing the Secure Enclave. Called ONLY when promote is
+    /// ON + `canPromoteToAdmin`. Defaults to unsealing the active profile's
+    /// admin root (`Keystore.adminRootKey`) and hex-encoding its raw seed.
+    private let adminRootSeedHex: @MainActor (String) async throws -> String
 
     private var ephemeralSk: Curve25519.KeyAgreement.PrivateKey?
     private var aeadKey: SymmetricKey?
     private var sid: String?
     private var incomingDevicePubHex: String?
+    private var incomingDeviceId: String?
     private var ttlTask: Task<Void, Never>?
 
     public init(
@@ -82,12 +104,19 @@ public final class AddDeviceViewModel {
         currentUMKHex: @escaping @MainActor (String) async throws -> String = { reason in
             let umk = try await Keystore.currentUMK(reason: reason)
             return HexUtil.encode(umk.withUnsafeBytes { Data($0) })
+        },
+        canPromoteToAdmin: Bool = GymSeams.forceAdminRoot || Keystore.hasAdminRoot,
+        adminRootSeedHex: @escaping @MainActor (String) async throws -> String = { reason in
+            let key = try await Keystore.adminRootKey(reason: reason)
+            return HexUtil.encode(key.rawRepresentation)
         }
     ) {
         self.account = account
         self.relay = relay
         self.deriveIRK = deriveIRK
         self.currentUMKHex = currentUMKHex
+        self.canPromoteToAdmin = canPromoteToAdmin
+        self.adminRootSeedHex = adminRootSeedHex
     }
 
     /// Mint the session + show the QR, then await the incoming device.
@@ -113,18 +142,22 @@ public final class AddDeviceViewModel {
                 sid: session,
                 aeadKey: SymmetricKey(size: .bits256)
             )
-            guard devicePubRaw.count == 32 else {
+            guard devicePubRaw.count == 80 else {
                 phase = .failed("The other device sent an invalid key.")
                 return
             }
+            let publicKey = Data(devicePubRaw.prefix(32))
+            let deviceSigningPublicKey = Data(devicePubRaw.dropFirst(32).prefix(32))
+            let deviceIdBytes = Data(devicePubRaw.suffix(16))
             // Derive the real shared material against the incoming device
             // pubkey — the SAS the human compares + the AEAD seal key.
             let material = try QrRelay.deriveMaterial(
                 phonePrivateKey: sk,
-                browserPublicKey: devicePubRaw
+                browserPublicKey: publicKey
             )
             aeadKey = material.aeadKey
-            incomingDevicePubHex = HexUtil.encode(devicePubRaw)
+            incomingDevicePubHex = HexUtil.encode(deviceSigningPublicKey)
+            incomingDeviceId = HexUtil.encode(deviceIdBytes)
             phase = .confirmMatch(qrUrl: qr, matchCode: material.matchCode, gateExpired: false)
             // 600ms anti-double-tap gate.
             Task { [weak self] in
@@ -147,13 +180,15 @@ public final class AddDeviceViewModel {
     /// delivers it. No-op until the anti-double-tap gate has elapsed.
     public func confirmMatch() async {
         guard case .confirmMatch(_, _, true) = phase,
-              let sid, let aeadKey, let devicePubHex = incomingDevicePubHex
+              let sid, let aeadKey, let devicePubHex = incomingDevicePubHex,
+              let deviceId = incomingDeviceId
         else { return }
         phase = .admitting
         do {
             let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
             let admit = DeviceAdmit(
                 username: account,
+                deviceId: deviceId,
                 newDevicePubHex: devicePubHex,
                 issuedAt: issuedAt
             )
@@ -161,15 +196,61 @@ public final class AddDeviceViewModel {
             let admitSig = try admit.sign(with: irk)
             let umkHex = try await currentUMKHex("Share your account key with the new device")
 
+            // D-4 promote-at-add: seal the admin master root INTO the bundle
+            // (carried like `umkSeedHex`, wrapped by the outer AEAD seal) ONLY
+            // when the admin flipped the toggle AND this device actually holds
+            // the master root. Absent otherwise ⇒ the new device joins as a
+            // non-admin peer.
+            var wrappedAdminRoot: String? = nil
+            if promoteNewDeviceToAdmin && canPromoteToAdmin {
+                wrappedAdminRoot = try await adminRootSeedHex("Make the new device an admin")
+            }
+
+            let grantId = UUID().uuidString.lowercased()
+            let promoted = wrappedAdminRoot != nil
+            let scopes = promoted
+                ? DeviceCapabilityGrantEnvelope.deviceScopeOrder
+                : ["browse", "install-service", "vibe-code", "view-directory"]
+            let expiresAt = issuedAt + 90 * 24 * 3_600_000
+            let grantEnvelope = DeviceCapabilityGrantEnvelope(
+                grantId: grantId,
+                username: account,
+                deviceId: deviceId,
+                devicePubKeyHex: devicePubHex,
+                scopes: scopes,
+                issuedAt: issuedAt,
+                expiresAt: expiresAt
+            )
+            let grantSigner: Curve25519.Signing.PrivateKey
+            if let wrappedAdminRoot, let rootSeed = HexUtil.decode(wrappedAdminRoot) {
+                grantSigner = try Curve25519.Signing.PrivateKey(rawRepresentation: rootSeed)
+            } else {
+                grantSigner = irk
+            }
+            let grantSignature = try grantSigner.signature(for: grantEnvelope.canonicalBytes())
+
             let bundle = PairingBundle(
                 umkSeedHex: umkHex,
                 admit: .init(
                     username: account,
+                    deviceId: deviceId,
                     newDevicePubHex: devicePubHex,
                     issuedAt: issuedAt
                 ),
                 admitSig: HexUtil.encode(admitSig),
-                irkPubHex: HexUtil.encode(irk.publicKey.rawRepresentation)
+                irkPubHex: HexUtil.encode(irk.publicKey.rawRepresentation),
+                grant: .init(
+                    grantId: grantId,
+                    username: account,
+                    deviceId: deviceId,
+                    devicePubHex: devicePubHex,
+                    scopes: scopes,
+                    issuedAt: issuedAt,
+                    expiresAt: expiresAt,
+                    signerRoot: promoted ? "admin-root" : "membership"
+                ),
+                grantSignature: HexUtil.encode(Data(grantSignature)),
+                wrappedAdminRoot: wrappedAdminRoot
             )
             let payload = try bundle.encoded()
             let sealed = try QrRelay.seal(payload: payload, with: aeadKey)
@@ -179,7 +260,7 @@ public final class AddDeviceViewModel {
                 nonceBase64Url: sealed.nonceBase64Url
             )
             ttlTask?.cancel()
-            phase = .admitted(deviceLabelHint: nil)
+            phase = .admitted(deviceDisplayNameHint: nil)
             await relay.close()
         } catch {
             phase = .failed("Couldn't add the device. \(HumanError.humanize(error))")

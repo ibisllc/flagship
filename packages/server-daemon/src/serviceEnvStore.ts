@@ -30,12 +30,8 @@
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  openLlmPayload,
-  sealLlmPayload,
-  type Bytes,
-  type SealedBlob,
-} from "@flagship/protocol";
+import { type SealedBlob } from "@flagship/protocol";
+import type { SwkOps } from "./keyCustodian.js";
 
 /** The owner's per-app env vars. Values are SECRET. */
 export type AppEnv = Record<string, string>;
@@ -115,10 +111,11 @@ export class InMemoryAppEnvStore implements AppEnvStore {
 export class FileAppEnvStore implements AppEnvStore {
   private cache = new Map<string, AppEnv>();
 
-  /** `swk` derives the same AEAD key the LLM harness uses on the wire. */
+  /** `swk` (the custodian's SwkOps) seals under the same AEAD key the LLM
+   *  harness uses on the wire; the raw SWK never reaches this store. */
   constructor(
     private readonly dir: string,
-    private readonly swk: Bytes,
+    private readonly swk: SwkOps,
   ) {}
 
   /** Read all persisted envs off disk into the cache. Call once on boot. */
@@ -141,9 +138,8 @@ export class FileAppEnvStore implements AppEnvStore {
 
   async put(serviceId: string, env: AppEnv): Promise<void> {
     if (!existsSync(this.dir)) await mkdir(this.dir, { recursive: true });
-    const blob = sealLlmPayload(
+    const blob = this.swk.sealWithSwk(
       new TextEncoder().encode(JSON.stringify(env)),
-      this.swk,
     );
     const file = join(this.dir, `${serviceId}.env`);
     const tmp = `${file}.tmp`;
@@ -170,7 +166,7 @@ export class FileAppEnvStore implements AppEnvStore {
   private unseal(hex: string): AppEnv | null {
     const blob = sealedFromHex(hex);
     if (!blob) return null;
-    const plain = openLlmPayload(blob, this.swk);
+    const plain = this.swk.openWithSwk(blob);
     const obj = JSON.parse(new TextDecoder().decode(plain)) as unknown;
     if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
     const out: AppEnv = {};

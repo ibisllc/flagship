@@ -19,8 +19,13 @@ import {
   sealInviteBundle,
   signCreateServiceInvite,
   signRedeemServiceInvite,
+  signServiceInviteCreateQuery,
+  signServiceInviteListQuery,
   type CreateServiceInvite,
+  type Keypair,
   type RedeemServiceInvite,
+  type ServiceInviteCreateQuery,
+  type ServiceInviteListQuery,
 } from "@flagship/protocol";
 
 const ORIGIN = "https://flagshipserver.com";
@@ -74,6 +79,20 @@ function createPayload() {
   };
 }
 
+/** Build a signed list/revoked-since URL (the owner-signed query, v2 §C2). */
+function signedListUrl(scope: "list" | "revoked-since", cursor = 0): string {
+  const query: ServiceInviteListQuery = {
+    username: "alice",
+    authorAID: hex(authorAid.publicKey),
+    scope,
+    cursor: scope === "list" ? 0 : cursor,
+    issuedAt: NOW,
+  };
+  const sig = hex(signServiceInviteListQuery(query, authorIrk));
+  const base = scope === "list" ? "service-invites" : "service-invites/revoked-since";
+  return `${ORIGIN}/api/users/alice/${base}?authorAID=${query.authorAID}&scope=${scope}&cursor=${query.cursor}&issuedAt=${query.issuedAt}&sig=${sig}`;
+}
+
 describe("service-invite routes — dispatch over real D1", () => {
   it("create → redeem(first-bind) → list → reflects the bind", async () => {
     const { env, close } = await envWithAlice();
@@ -112,18 +131,76 @@ describe("service-invite routes — dispatch over real D1", () => {
       expect(rb.firstBind).toBe(true);
       expect(rb.boundAID).toBe(hex(friendAid.publicKey));
 
-      // list (author-owned)
+      // list (owner-SIGNED — v2 §C2)
       const listed = await tryControlPlane(
-        new Request(
-          `${ORIGIN}/api/users/alice/service-invites?authorAID=${hex(authorAid.publicKey)}`,
-          { method: "GET" },
-        ),
+        new Request(signedListUrl("list"), { method: "GET" }),
         env,
       );
       expect(listed!.status).toBe(200);
       const lb = (await listed!.json()) as { invites: { boundAID: string | null }[] };
       expect(lb.invites).toHaveLength(1);
       expect(lb.invites[0]!.boundAID).toBe(hex(friendAid.publicKey));
+
+      // an UNSIGNED list is rejected (the open graph dump is closed)
+      const unsigned = await tryControlPlane(
+        new Request(`${ORIGIN}/api/users/alice/service-invites?authorAID=${hex(authorAid.publicKey)}`, {
+          method: "GET",
+        }),
+        env,
+      );
+      expect(unsigned!.status).toBe(400);
+    } finally {
+      close();
+    }
+  });
+
+  it("revoke → revoked-since route reflects the revocation (owner-signed)", async () => {
+    const { env, close } = await envWithAlice();
+    try {
+      const { inviteId, body: createBody } = createPayload();
+      await tryControlPlane(
+        new Request(`${ORIGIN}/api/users/alice/service-invites`, {
+          method: "POST",
+          body: JSON.stringify(createBody),
+        }),
+        env,
+      );
+      const redeem: RedeemServiceInvite = { secretHash: SECRET_HASH, visitorAID: friendAid.publicKey, redeemedAt: NOW };
+      await tryControlPlane(
+        new Request(`${ORIGIN}/api/service-invites/redeem`, {
+          method: "POST",
+          body: JSON.stringify({
+            secretHash: SECRET_HASH,
+            visitorAID: hex(friendAid.publicKey),
+            aidSig: hex(signRedeemServiceInvite(redeem, friendAid)),
+            redeemedAt: NOW,
+          }),
+        }),
+        env,
+      );
+      const { signRevokeServiceInvite } = await import("@flagship/protocol");
+      await tryControlPlane(
+        new Request(`${ORIGIN}/api/users/alice/service-invites/revoke`, {
+          method: "POST",
+          body: JSON.stringify({
+            request: { inviteId, issuedAt: NOW },
+            signature: hex(signRevokeServiceInvite({ inviteId, issuedAt: NOW }, authorIrk)),
+          }),
+        }),
+        env,
+      );
+      const since = await tryControlPlane(
+        new Request(signedListUrl("revoked-since", 0), { method: "GET" }),
+        env,
+      );
+      expect(since!.status).toBe(200);
+      const sb = (await since!.json()) as {
+        revoked: { inviteId: string; boundAIDs: string[] }[];
+        cursor: number;
+      };
+      expect(sb.revoked).toHaveLength(1);
+      expect(sb.revoked[0]!.inviteId).toBe(inviteId);
+      expect(sb.revoked[0]!.boundAIDs).toEqual([hex(friendAid.publicKey)]);
     } finally {
       close();
     }
@@ -201,6 +278,46 @@ describe("service-invite routes — dispatch over real D1", () => {
         env,
       );
       expect(r!.status).toBe(404);
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("GET /service-invites/:inviteId/create → returns {create, createSig} for a box STK-signed query", async () => {
+    const sqlite = createSqliteD1();
+    const storage = new D1Storage(sqlite as unknown as D1Database);
+    await storage.usernames.put({ username: "alice", irkPubHex: hex(authorIrk.publicKey), claimedAt: 1 });
+    const stk: Keypair = deriveIRK({ seed: new Uint8Array(32).fill(150) });
+    const serverDomain = "home.alice.flagship.services";
+    await storage.servers.put({
+      serverDomain,
+      username: "alice",
+      identityPubKeyHex: hex(stk.publicKey),
+      registeredAt: 1,
+    });
+    const env: ControlPlaneEnv = { DB: sqlite as unknown as D1Database };
+    try {
+      const { inviteId, body: createBody } = createPayload();
+      await tryControlPlane(
+        new Request(`${ORIGIN}/api/users/alice/service-invites`, { method: "POST", body: JSON.stringify(createBody) }),
+        env,
+      );
+      const query: ServiceInviteCreateQuery = { username: "alice", inviteId, serverDomain, issuedAt: NOW };
+      const sig = hex(signServiceInviteCreateQuery(query, stk));
+      const url = `${ORIGIN}/api/users/alice/service-invites/${inviteId}/create?serverDomain=${encodeURIComponent(serverDomain)}&issuedAt=${NOW}&sig=${sig}`;
+      const res = await tryControlPlane(new Request(url, { method: "GET" }), env);
+      expect(res!.status).toBe(200);
+      const body = (await res!.json()) as { create: { inviteId: string; serviceRef: string }; createSig: string };
+      expect(body.create.inviteId).toBe(inviteId);
+      expect(body.create.serviceRef).toBe("alice-notes");
+      expect(body.createSig).toMatch(/^[0-9a-f]{128}$/);
+
+      // A query NOT signed by the registered STK is rejected (403).
+      const wrong = deriveIRK({ seed: new Uint8Array(32).fill(151) });
+      const badSig = hex(signServiceInviteCreateQuery(query, wrong));
+      const badUrl = `${ORIGIN}/api/users/alice/service-invites/${inviteId}/create?serverDomain=${encodeURIComponent(serverDomain)}&issuedAt=${NOW}&sig=${badSig}`;
+      const denied = await tryControlPlane(new Request(badUrl, { method: "GET" }), env);
+      expect(denied!.status).toBe(403);
     } finally {
       sqlite.close();
     }

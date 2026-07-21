@@ -41,7 +41,10 @@ enum class KeychainSyncClass { CloudRoot, DeviceLocal }
 data class Profile(
     val cloudName: String,
     val cloudRootPubHex: String = "",
-    val deviceLabel: String? = null,
+    val accountId: String = "",
+    val deviceId: String = "",
+    val accountDisplayName: String? = null,
+    val deviceDisplayName: String? = null,
     val deviceCapability: DeviceCapabilityBlock? = null,
     val demoServer: DemoServerBlock? = null,
     val createdAt: Long = System.currentTimeMillis(),
@@ -111,10 +114,9 @@ class AppState(
 
     /**
      * E7 — true once we've observed that this device's local push
-     * tokenId is no longer in /api/users/:u/devices, meaning another
-     * device on the account ran a Disconnect / Replace / Wipe against
-     * us. The Home banner uses this to render a danger card with a
-     * "Sign in again" CTA.
+     * the current account-scoped device identity is rejected by an
+     * authenticated directory read, meaning another device ran a revoke,
+     * replace, or wipe operation against us.
      */
     private val _accountWasReset = MutableStateFlow(accountWasReset)
     val accountWasReset: StateFlow<Boolean> = _accountWasReset.asStateFlow()
@@ -229,30 +231,92 @@ class AppState(
     }
 
     /**
-     * Lowercased fqdns of servers with a LIVE pending boot-unlock request (a
-     * box waiting for the owner's approval). Populated by ONE account-level
-     * poll (BootApprovalWatcher) so the list / card / detail can read a
-     * per-server "is it waiting for me?" without N pollers. Empty ⇒ none
-     * waiting (or not polled yet). Mirror of iOS AppState.serversAwaitingApproval.
+     * The Box Request Inbox (docs/box-request-inbox.md): ONE typed object, keyed
+     * by lowercased fqdn → the list of approvals that box is currently asking its
+     * owner for. Mirrors the backend's `/pods` `pendingRequests` digest —
+     * `unlock-key` and `entitlement` are two `type` values in ONE inbox, not two
+     * parallel sets. Populated by ONE account-level poll (BootApprovalWatcher) so
+     * the list / card / detail read a per-server "what is it asking me?" without N
+     * pollers. Empty ⇒ nothing waiting (or not polled yet). The legacy
+     * hasLiveUnlockRequest / hasLiveEntitlementRequest accessors are DERIVED from
+     * this by filtering on `type`. Mirror of iOS AppState.boxRequestInbox.
      */
-    private val _serversAwaitingApproval = MutableStateFlow<Set<String>>(emptySet())
-    val serversAwaitingApproval: StateFlow<Set<String>> = _serversAwaitingApproval.asStateFlow()
-    fun setServersAwaitingApproval(fqdns: Set<String>) {
-        _serversAwaitingApproval.value = fqdns.map { it.lowercase() }.toSet()
+    private val _boxRequestInbox = MutableStateFlow<Map<String, List<BoxRequest>>>(emptyMap())
+    val boxRequestInbox: StateFlow<Map<String, List<BoxRequest>>> = _boxRequestInbox.asStateFlow()
+    fun setBoxRequestInbox(inbox: Map<String, List<BoxRequest>>) {
+        _boxRequestInbox.value = inbox.mapKeys { it.key.lowercase() }
     }
 
-    /** True iff [fqdn] has a live pending unlock request right now. */
+    /** Every pending request across all of the owner's boxes, newest first —
+     *  the flat inbox the inbox view renders from. */
+    val boxRequests: List<BoxRequest>
+        get() = _boxRequestInbox.value.values.flatten().sortedByDescending { it.issuedAt }
+
+    /** The pending requests for [fqdn] of a given type (case-folds the lookup). */
+    fun boxRequests(fqdn: String, type: SecretPurpose): List<BoxRequest> =
+        (_boxRequestInbox.value[fqdn.lowercase()] ?: emptyList()).filter { it.type == type }
+
+    /** Lowercased fqdns with a live request of [type] — the display set a view
+     *  projects from the unified inbox (mirrors the old serversAwaiting* shape,
+     *  now derived). */
+    fun serversAwaiting(type: SecretPurpose): Set<String> =
+        _boxRequestInbox.value.filterValues { reqs -> reqs.any { it.type == type } }.keys
+
+    /** True iff [fqdn] has a live pending unlock request right now. Derived from
+     *  the unified inbox (`type == UNLOCK_KEY`). */
     fun hasLiveUnlockRequest(fqdn: String): Boolean =
-        _serversAwaitingApproval.value.contains(fqdn.lowercase())
+        boxRequests(fqdn, SecretPurpose.UNLOCK_KEY).isNotEmpty()
+
+    /** True iff [fqdn] is waiting for the owner to authorize it to serve.
+     *  Derived from the unified inbox (`type == ENTITLEMENT`). */
+    fun hasLiveEntitlementRequest(fqdn: String): Boolean =
+        boxRequests(fqdn, SecretPurpose.ENTITLEMENT).isNotEmpty()
 
     /** Liveness for [pod] using the cheap directory `awaitingUnlock` flag OR
-     *  the account-level (biometric-watcher) waiting set — either means the box
-     *  is actively waiting, so it must not read "never came online". */
+     *  the account-level Box Request Inbox — either means the box is actively
+     *  waiting, so it must not read "never came online". */
     fun liveness(pod: PodInfo): PodInfo.LivenessState =
-        pod.livenessState(hasLiveUnlockRequest = pod.awaitingUnlock || hasLiveUnlockRequest(pod.fqdn))
+        pod.livenessState(
+            hasLiveUnlockRequest = pod.awaitingUnlock ||
+                hasLiveUnlockRequest(pod.fqdn) ||
+                hasLiveEntitlementRequest(pod.fqdn),
+        )
 
     val leaderPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _leaderPodId.value }
-    val currentPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _currentPodId.value } ?: leaderPod
+
+    /** DETERMINISTIC FALLBACK (Fix C) — the OLDEST pod. `.com` returns `/pods`
+     *  oldest-first, so `pods.first()` IS the oldest. The UI default pod / leader
+     *  must NEVER silently float to a brand-new box; when an explicit anchor is
+     *  missing or dangling it re-anchors HERE — the stable, oldest pod — so
+     *  adding a server can't seize the default. null only when there are no pods.
+     *  Mirror of iOS AppState.oldestPod. */
+    private val oldestPod: PodInfo? get() = _pods.value.firstOrNull()
+
+    val currentPod: PodInfo?
+        get() {
+            val id = _currentPodId.value
+            if (id != null) {
+                val p = _pods.value.firstOrNull { it.podId == id }
+                if (p != null) return p
+            }
+            // The leader is the UI default. If it resolves use it; otherwise fall
+            // back to the OLDEST pod (deterministic) — never the newest box.
+            return leaderPod ?: oldestPod
+        }
+
+    /** The GLOBAL anchor pod for Home/Services (the default box session). Unlike
+     *  [currentPod] — which resolves to the LEADER and thus, by default, the
+     *  OLDEST pod regardless of liveness — this prefers a genuinely-LIVE pod
+     *  (HONEST LIVENESS, Fix A: `Status.ONLINE` now means a real heartbeat, not
+     *  mere registration). A registered-but-dead/unreachable pod that happens to
+     *  be the leader must NOT anchor the global session. Mirror of iOS
+     *  AppState.sessionPod. */
+    val sessionPod: PodInfo?
+        get() {
+            val cur = currentPod
+            if (cur != null && cur.status == PodInfo.Status.ONLINE) return cur
+            return _pods.value.firstOrNull { it.status == PodInfo.Status.ONLINE }
+        }
 
     /**
      * True when the recovery-setup nudge should be visible on Home.
@@ -277,11 +341,15 @@ class AppState(
         _isPaired.value = true
         // W3 — record the cloud in the durable profile list and mark
         // it active. Idempotent for re-onboarding the same cloud.
+        val existing = _profiles.value.firstOrNull { it.cloudName == username }
         upsertProfile(
             Profile(
                 cloudName = username,
                 cloudRootPubHex = "",
-                deviceLabel = _deviceCapability.value?.label,
+                accountId = username,
+                deviceId = _deviceCapability.value?.deviceId ?: existing?.deviceId ?: AccountMetadata.generateDeviceId(),
+                accountDisplayName = existing?.accountDisplayName,
+                deviceDisplayName = existing?.deviceDisplayName,
                 deviceCapability = _deviceCapability.value,
                 demoServer = null,
                 createdAt = System.currentTimeMillis(),
@@ -340,8 +408,21 @@ class AppState(
         }
     }
 
+    fun cachePresentationNames(accountDisplayName: String, deviceDisplayName: String?) {
+        val active = activeProfile ?: return
+        upsertProfile(active.copy(
+            accountDisplayName = accountDisplayName,
+            deviceDisplayName = deviceDisplayName ?: active.deviceDisplayName,
+        ))
+    }
+
     fun addPod(pod: PodInfo) {
         _pods.value = _pods.value + pod
+        // STICKY LEADERSHIP (Fix C) — a newly-added box must NEVER change the
+        // leader / default pod. A new server auto-seizing leadership was the
+        // reported bug. Seed leader/current ONLY when none is set yet (the genuine
+        // first-pod / cold-restore case); an existing leader is left exactly as it
+        // is, so the new box is just another selectable pod — not the new default.
         if (_leaderPodId.value == null) _leaderPodId.value = pod.podId
         if (_currentPodId.value == null) _currentPodId.value = pod.podId
     }
@@ -362,33 +443,79 @@ class AppState(
         cameOnline: Boolean = true,
         registeredAt: Long = 0,
         awaitingUnlock: Boolean = false,
+        liveness: PodInfo.Liveness? = null,
+        lastSeenMsAgo: Long? = null,
+        lastReported: Long? = null,
+        identityPubKeyHex: String = "",
+        leadsServices: List<String> = emptyList(),
     ): String {
+        // HONEST LIVENESS (Fix A) — derive the pod's status from the
+        // server-authoritative `liveness` field instead of trusting that a
+        // registered box is ONLINE. `live` → ONLINE; `unreachable` → OFFLINE (a
+        // previously-live box now stale); `never` → UNKNOWN (registered, awaiting
+        // its first heartbeat — NOT session-eligible, so it can't anchor a box
+        // session or be picked as a live leader). When `.com` didn't send the
+        // field (a pre-field Worker), fall back to the legacy
+        // registration-is-online behavior so existing tests stay green.
+        val derivedStatus: PodInfo.Status = when (liveness) {
+            PodInfo.Liveness.LIVE -> PodInfo.Status.ONLINE
+            PodInfo.Liveness.UNREACHABLE -> PodInfo.Status.OFFLINE
+            PodInfo.Liveness.NEVER -> PodInfo.Status.UNKNOWN
+            null -> PodInfo.Status.ONLINE
+        }
         val target = fqdn.lowercase()
         val existing = _pods.value
         val idx = existing.indexOfFirst { it.fqdn.lowercase() == target }
         if (idx >= 0) {
             val old = existing[idx]
-            // Already online with a confirmed check-in AND not waiting — nothing
-            // to do (don't clobber a richer name). A previously-dead pod that has
-            // since come online, OR one now waiting for an unlock approval, is
-            // re-flowed below so its pill updates.
-            if (old.status == PodInfo.Status.ONLINE && old.cameOnline && !awaitingUnlock) return old.podId
+            // Already at the derived liveness with a confirmed check-in AND not
+            // waiting AND the liveness signal hasn't changed — nothing to do
+            // (don't clobber a richer name). A box whose reachability changed,
+            // came online, or is now waiting for an approval is re-flowed below.
+            if (old.status == derivedStatus && old.cameOnline && !awaitingUnlock &&
+                old.liveness == liveness && old.lastSeenMsAgo == lastSeenMsAgo &&
+                old.leadsServices == leadsServices
+            ) {
+                return old.podId
+            }
             _pods.value = existing.toMutableList().also {
                 it[idx] = old.copy(
                     name = old.name.ifEmpty { name },
                     description = old.description ?: description,
-                    status = PodInfo.Status.ONLINE,
+                    status = derivedStatus,
                     pendingAuthCodeSerial = null,
                     cameOnline = cameOnline,
                     // Keep a known registration time; never downgrade to 0.
                     registeredAt = if (registeredAt > 0) registeredAt else old.registeredAt,
                     awaitingUnlock = awaitingUnlock,
+                    liveness = liveness,
+                    lastSeenMsAgo = lastSeenMsAgo,
+                    lastReported = lastReported ?: old.lastReported,
+                    // Keep a known STK; never downgrade to empty on a sparse update.
+                    identityPubKeyHex = identityPubKeyHex.ifEmpty { old.identityPubKeyHex },
+                    leadsServices = leadsServices,
                 )
             }
             return old.podId
         }
         val id = PodInfo.podId(fqdn)
-        addPod(PodInfo(podId = id, name = name, description = description, fqdn = fqdn, status = PodInfo.Status.ONLINE, cameOnline = cameOnline, registeredAt = registeredAt, awaitingUnlock = awaitingUnlock))
+        addPod(
+            PodInfo(
+                podId = id,
+                name = name,
+                description = description,
+                fqdn = fqdn,
+                status = derivedStatus,
+                cameOnline = cameOnline,
+                registeredAt = registeredAt,
+                awaitingUnlock = awaitingUnlock,
+                liveness = liveness,
+                lastSeenMsAgo = lastSeenMsAgo,
+                lastReported = lastReported,
+                identityPubKeyHex = identityPubKeyHex,
+                leadsServices = leadsServices,
+            ),
+        )
         return id
     }
 
@@ -448,6 +575,29 @@ class AppState(
         return podId
     }
 
+    /** PREFER a fresher, box-direct leadership view over the `.com` `/pods`
+     *  relay (Phase 6). [directByFqdn] is the inverted per-pod model
+     *  (lowercased fqdn → the slugs that box leads) produced from a box's
+     *  `GET /api/leads` (see DirectLeadsInversion). For each known pod we
+     *  OVERRIDE its `leadsServices` with the direct value — including an empty
+     *  list, so a box that just YIELDED a service stops showing the stale relay
+     *  badge. A pod absent from the map keeps its relay value untouched (we
+     *  learned nothing fresher about it), so this never regresses and is a pure
+     *  no-op when the map is empty. Best-effort: call it only with the result of
+     *  a SUCCESSFUL direct read; on any fetch failure the caller simply doesn't
+     *  call this and the relay value stands. Mirror of iOS AppState.applyDirectLeads. */
+    fun applyDirectLeads(directByFqdn: Map<String, List<String>>) {
+        if (directByFqdn.isEmpty()) return
+        var changed = false
+        val next = _pods.value.map { pod ->
+            val slugs = directByFqdn[pod.fqdn.lowercase()] ?: return@map pod
+            if (pod.leadsServices == slugs) return@map pod
+            changed = true
+            pod.copy(leadsServices = slugs)
+        }
+        if (changed) _pods.value = next
+    }
+
     fun setLeader(podId: String) {
         if (_pods.value.none { it.podId == podId }) return
         _leaderPodId.value = podId
@@ -460,8 +610,13 @@ class AppState(
 
     fun removePod(podId: String) {
         _pods.value = _pods.value.filter { it.podId != podId }
-        if (_leaderPodId.value == podId) _leaderPodId.value = _pods.value.firstOrNull()?.podId
-        if (_currentPodId.value == podId) _currentPodId.value = _leaderPodId.value ?: _pods.value.firstOrNull()?.podId
+        // DETERMINISTIC RE-ANCHOR (Fix C) — when the removed pod WAS the leader,
+        // the leader dangles. Re-anchor explicitly to the OLDEST remaining pod
+        // (`oldestPod`, = `pods.first()` since `.com` returns oldest-first) rather
+        // than letting `currentPod` silently float to whatever happens to be
+        // first. A non-leader removal leaves the leader untouched (sticky).
+        if (_leaderPodId.value == podId) _leaderPodId.value = oldestPod?.podId
+        if (_currentPodId.value == podId) _currentPodId.value = _leaderPodId.value ?: oldestPod?.podId
     }
 
     fun signOut() {
@@ -514,23 +669,100 @@ data class PodInfo(
      *  the decommission/delete stays hidden) instead of "never came online".
      *  Mirror of iOS PodInfo.awaitingUnlock. */
     val awaitingUnlock: Boolean = false,
+    /** HONEST LIVENESS (Fix A) — the server-authoritative reachability
+     *  classification from the `/pods` directory (`liveness: "live" |
+     *  "unreachable" | "never"`). `.com` computes this from the box's
+     *  daemon-status heartbeat against a freshness window — so the phone STOPS
+     *  trusting mere registration as "online". null ⇒ a pre-field Worker response
+     *  that didn't carry the field (the reconciler falls back to the
+     *  registration-derived path). Mirror of iOS PodInfo.liveness. */
+    val liveness: Liveness? = null,
+    /** Wall-clock ms since the box's last daemon-status check-in, from `/pods`
+     *  (`lastSeenMsAgo`). Humanized into "offline — last seen <…>" when the box
+     *  is [Liveness.UNREACHABLE]. null ⇒ never checked in (or a pre-field
+     *  Worker). Mirror of iOS PodInfo.lastSeenMsAgo. */
+    val lastSeenMsAgo: Long? = null,
+    /** Wall-clock ms of the box's last daemon-status check-in (`lastReported`
+     *  from `/pods`), threaded for completeness. null ⇒ never reported. Mirror
+     *  of iOS PodInfo.lastReported. */
+    val lastReported: Long? = null,
+    /** The box's registered STK (its identity pubkey, hex) from `/pods`
+     *  (`identityPubKey`). Threaded onto the model so the "Set as preferred
+     *  server" owner vote can name THIS box's STK (`preferredStkPubHex`) without a
+     *  second directory fetch. Empty for pending/demo pods. Mirror of iOS
+     *  PodInfo.identityPubKeyHex. */
+    val identityPubKeyHex: String = "",
+    /** Per-service leadership (Phase 6) — the service slugs this box currently
+     *  LEADS, relayed verbatim from `/pods` (`leadsServices`). Additive + tolerant
+     *  of absence: empty when `.com` didn't carry it (pre-field Worker) or the box
+     *  leads nothing. Surfaced as a small "lead" indicator on the server card.
+     *  Mirror of iOS PodInfo.leadsServices. */
+    val leadsServices: List<String> = emptyList(),
 ) {
     enum class Status { ONLINE, OFFLINE, UNKNOWN, PENDING }
+
+    /** Server-authoritative reachability, mirroring `.com`'s `/pods` `liveness`
+     *  field. Mirror of iOS PodInfo.Liveness. */
+    enum class Liveness(val wire: String) {
+        LIVE("live"), UNREACHABLE("unreachable"), NEVER("never");
+
+        companion object {
+            /** Decode the wire string; null for absent/unknown (pre-field Worker). */
+            fun fromWire(raw: String?): Liveness? = when (raw) {
+                "live" -> LIVE
+                "unreachable" -> UNREACHABLE
+                "never" -> NEVER
+                else -> null
+            }
+        }
+    }
 
     /** Derived per-server liveness — the single classifier the list, the
      *  detail page, and the post-creation checklist share. Mirror of iOS
      *  PodInfo.LivenessState. */
-    enum class LivenessState { ONLINE, WAITING_FOR_APPROVAL, COMING_ONLINE, DEAD }
+    enum class LivenessState {
+        ONLINE,
+        WAITING_FOR_APPROVAL,
+        COMING_ONLINE,
+        DEAD,
 
-    /** Classify this pod. `ONLINE` short-circuits on [cameOnline]. Otherwise a
-     *  live unlock request wins (WAITING_FOR_APPROVAL); failing that, a recent
-     *  registration is COMING_ONLINE and an old one is DEAD. Pending
-     *  (pre-registration) pods report COMING_ONLINE so they never read dead.
+        /** HONEST LIVENESS — the box HAS checked in before but its heartbeat has
+         *  gone stale (server-authoritative `liveness == "unreachable"`). Unlike
+         *  [DEAD] (never came online) this is a previously-live box that's now
+         *  offline; the UI shows "offline — last seen <…>", NOT the decommission
+         *  path. Reachable again on the next live heartbeat. Mirror of iOS. */
+        OFFLINE,
+    }
+
+    /** Classify this pod. When the server-authoritative [liveness] field is
+     *  present (Fix A) it is TRUSTED — the phone no longer infers "online" from
+     *  mere registration:
+     *   - `LIVE`        → ONLINE.
+     *   - `UNREACHABLE` → OFFLINE (a real heartbeat existed but went stale); a
+     *                     live unlock/entitlement request overrides to
+     *                     WAITING_FOR_APPROVAL (the box is actively trying to come up).
+     *   - `NEVER`       → a live request wins (WAITING_FOR_APPROVAL); else still
+     *                     COMING_ONLINE (awaiting first heartbeat, NOT dead).
+     *  When [liveness] is absent (pre-field Worker / pending / demo), the legacy
+     *  registration-derived path holds: ONLINE short-circuits on [cameOnline]; a
+     *  live unlock request wins; a recent registration is COMING_ONLINE and an
+     *  old one is DEAD; pending pods report COMING_ONLINE so they never read dead.
      *  Mirror of iOS PodInfo.livenessState. */
     fun livenessState(
         hasLiveUnlockRequest: Boolean,
         now: Long = System.currentTimeMillis(),
     ): LivenessState {
+        liveness?.let {
+            return when (it) {
+                Liveness.LIVE -> LivenessState.ONLINE
+                Liveness.UNREACHABLE ->
+                    if (hasLiveUnlockRequest) LivenessState.WAITING_FOR_APPROVAL
+                    else LivenessState.OFFLINE
+                Liveness.NEVER ->
+                    if (hasLiveUnlockRequest) LivenessState.WAITING_FOR_APPROVAL
+                    else LivenessState.COMING_ONLINE
+            }
+        }
         if (status == Status.ONLINE && cameOnline) return LivenessState.ONLINE
         if (hasLiveUnlockRequest) return LivenessState.WAITING_FOR_APPROVAL
         if (status == Status.PENDING) return LivenessState.COMING_ONLINE
@@ -539,7 +771,29 @@ data class PodInfo(
         return LivenessState.DEAD
     }
 
+    /** Humanized "last seen" for an [Liveness.UNREACHABLE] box, e.g. "2 hours
+     *  ago" or "just now" — feeds the "offline — last seen <…>" copy. null ⇒ no
+     *  reachability age available. Mirror of iOS PodInfo.humanizedLastSeen. */
+    fun humanizedLastSeen(): String? {
+        val ms = lastSeenMsAgo ?: return null
+        if (ms < 0) return null
+        return humanizeAge(ms)
+    }
+
     companion object {
+        /** Shared, locale-free age humanizer (mirrors iOS PodInfo.humanizeAge +
+         *  the webapp `formatAge`). */
+        fun humanizeAge(ms: Long): String {
+            val sec = ms / 1000
+            if (sec < 60) return "just now"
+            val min = sec / 60
+            if (min < 60) return "$min minute${if (min == 1L) "" else "s"} ago"
+            val hr = min / 60
+            if (hr < 24) return "$hr hour${if (hr == 1L) "" else "s"} ago"
+            val day = hr / 24
+            return "$day day${if (day == 1L) "" else "s"} ago"
+        }
+
         /** #56 — deterministic, fqdn-derived pod id. Pod identity is UNIFIED
          *  on the normalized fqdn so a registered-`/pods` pod and a pending
          *  order for the same box key on the SAME id — no stuck-pending

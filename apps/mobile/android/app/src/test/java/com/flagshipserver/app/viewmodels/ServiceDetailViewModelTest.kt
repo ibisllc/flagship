@@ -49,7 +49,7 @@ class ServiceDetailViewModelTest {
         client: ScreensClient = MockScreensClient(simulatedLatencyMs = 0),
         leader: String? = "home",
     ) = ServiceDetailViewModel(
-        serviceId = "harry-plants",
+        serviceId = "harry--plants",
         client = client,
         allPods = pods,
         globalLeaderPodId = leader,
@@ -82,7 +82,7 @@ class ServiceDetailViewModelTest {
         val s = m.detail.value
         assertTrue(s is LoadingState.Loaded)
         val resp = (s as LoadingState.Loaded).value
-        assertEquals("harry-plants", resp.app.serviceId)
+        assertEquals("harry--plants", resp.app.serviceId)
         assertTrue(resp.recentLogs.isNotEmpty())
         // No multi-pod policy in the BFF yet → seed run-on to the leader only.
         assertEquals(setOf("home"), m.runOnPodIds.value)
@@ -158,7 +158,7 @@ class ServiceDetailViewModelTest {
         val json = String(java.util.Base64.getDecoder().decode(req.envelope), Charsets.UTF_8)
         val obj = Json.parseToJsonElement(json) as JsonObject
         assertEquals("service-policy/v1", obj["kind"]!!.jsonPrimitive.content)
-        assertEquals("harry-plants", obj["serviceId"]!!.jsonPrimitive.content)
+        assertEquals("harry--plants", obj["serviceId"]!!.jsonPrimitive.content)
         val runOn = obj["runOnPodIds"]!!.jsonArray.map { it.jsonPrimitive.content }
         // Sorted for cross-platform-deterministic canonical bytes.
         assertEquals(runOn.sorted(), runOn)
@@ -178,6 +178,6 @@ class ServiceDetailViewModelTest {
         val json = String(java.util.Base64.getDecoder().decode(req.envelope), Charsets.UTF_8)
         val obj = Json.parseToJsonElement(json) as JsonObject
         assertEquals("service-uninstall/v1", obj["kind"]!!.jsonPrimitive.content)
-        assertEquals("harry-plants", obj["serviceId"]!!.jsonPrimitive.content)
+        assertEquals("harry--plants", obj["serviceId"]!!.jsonPrimitive.content)
     }
 }

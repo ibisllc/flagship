@@ -43,14 +43,17 @@ import {
   runCustomDomainVerificationPass,
   resolveCnameChain,
   pushRedirection,
-  runDemoIdleReaper,
   runDemoProvisioningPoller,
-  runDemoW11SnapshotPoller,
   schedulePendingRePairAlerts,
   scheduleQuarantineAlerts,
   runCtScan,
   createCrtShSource,
   runCaLeaseWarningCheck,
+  replenishSuggestionQueue,
+  comDomainExists,
+  CloudflareDnsClient,
+  THROTTLE_WINDOW_RESET_MS,
+  OFFER_TTL_MS,
 } from "@flagship/control-plane";
 import { createHetznerClient } from "./hetzner.js";
 import { activeCaLeaseNotAfterMs } from "./caTrustChainLoader.js";
@@ -73,6 +76,10 @@ export interface ScheduledEnv {
   /** Plan A — Hetzner API token (idle reaper + provisioning poller).
    *  Unset ⇒ the demo cron branch no-ops. */
   HCLOUD_TOKEN?: string;
+  /** Direct Cloudflare credentials used for stale ACME TXT cleanup. */
+  CLOUDFLARE_DNS_API_TOKEN?: string;
+  CLOUDFLARE_SERVICES_ZONE_ID?: string;
+  SERVICES_APEX?: string;
   /** Plan A — numeric Hetzner SSH key id (set in [vars]). Unused by
    *  the cron itself but plumbed for symmetry with the request path. */
   DEMO_PUBLIC_SSH_KEY_ID?: string;
@@ -369,10 +376,101 @@ export async function scheduled(
     // trusted devices" pings to the owner's other devices while a
     // newly-joined collaborator device is in its 14-day quarantine.
     ctx.waitUntil(runQuarantineAlertsCron(env, now));
+    // Keep the username suggestion queue warm — the DoH `.com` exclusion runs
+    // HERE, off the request path — and prune stale per-device throttle rows.
+    // Independently guarded so a resolver hiccup never breaks the other tasks.
+    ctx.waitUntil(
+      runSuggestionQueueCron(env, now).catch((e) => {
+        console.error("[username-suggest] cron pass failed", e);
+      }),
+    );
+    // Graceful-decommission eviction-chain GC. Drops rows the successor has
+    // acked (newAckedAt set) and that are well past the TTL — a generous 30-day
+    // window is the safe v1 (encryption-conditional GC is a documented
+    // refinement). Independently guarded.
+    ctx.waitUntil(
+      runEvictionGcCron(env, now).catch((e) => {
+        console.error("[decommission] eviction GC pass failed", e);
+      }),
+    );
+    ctx.waitUntil(
+      runDnsChallengeGcCron(env, now).catch((e) => {
+        console.error("[dns] stale ACME TXT GC pass failed", e);
+      }),
+    );
+    ctx.waitUntil(
+      runDnsRouteGcCron(env, now).catch((e) => {
+        console.error("[dns] orphaned server-route GC pass failed", e);
+      }),
+    );
     return;
   }
   // Unknown cron string — be defensive: do nothing rather than mis-
   // dispatch. Cloudflare can't add crons without a deploy.
+}
+
+/** Remove only ACME TXT records older than one hour. */
+export async function runDnsChallengeGcCron(
+  env: ScheduledEnv,
+  now: Date,
+): Promise<import("@flagship/control-plane").StaleAcmeTxtCleanupResult | null> {
+  if (!env.CLOUDFLARE_DNS_API_TOKEN || !env.CLOUDFLARE_SERVICES_ZONE_ID) return null;
+  const dns = new CloudflareDnsClient({
+    apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+    zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+  });
+  return dns.deleteStaleAcmeTxt({
+    apex: env.SERVICES_APEX ?? "flagship.services",
+    cutoffMs: now.getTime() - 60 * 60 * 1000,
+  });
+}
+
+/** Reconcile old generated A/AAAA records against active D1 server rows. */
+export async function runDnsRouteGcCron(
+  env: ScheduledEnv,
+  now: Date,
+): Promise<import("@flagship/control-plane").OrphanedServerRouteCleanupResult | null> {
+  if (!env.DB || !env.CLOUDFLARE_DNS_API_TOKEN || !env.CLOUDFLARE_SERVICES_ZONE_ID) return null;
+  const storage = new D1Storage(env.DB);
+  const servers = await storage.servers.listAll();
+  const dns = new CloudflareDnsClient({
+    apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+    zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+  });
+  return dns.deleteOrphanedServerRoutes({
+    apex: env.SERVICES_APEX ?? "flagship.services",
+    activeServerDomains: servers.filter((server) => !server.revokedAt).map((server) => server.serverDomain),
+    cutoffMs: now.getTime() - 60 * 60 * 1000,
+    maxDeletes: 20,
+  });
+}
+
+/** Top the username suggestion queue up to its warm target (the slow DoH `.com`
+ *  exclusion happens here, not on the request path) and prune throttle rows that
+ *  are well past their reset window. Best-effort; guarded by the caller. */
+async function runSuggestionQueueCron(env: ScheduledEnv, now: Date): Promise<void> {
+  if (!env.DB) return;
+  const storage = new D1Storage(env.DB);
+  const nowMs = now.getTime();
+  const f = globalThis.fetch as unknown as Parameters<typeof comDomainExists>[1];
+  await replenishSuggestionQueue({
+    queue: storage.suggestionQueue,
+    usernames: storage.usernames,
+    comExists: (name) => comDomainExists(name, f),
+    now: nowMs,
+  });
+  await storage.suggestThrottle.prune(nowMs - 2 * THROTTLE_WINDOW_RESET_MS);
+  // Drop offers well past their claimable window (the gate uses OFFER_TTL_MS).
+  await storage.usernameOffers.prune(nowMs - 2 * OFFER_TTL_MS);
+}
+
+/** GC the graceful-decommission eviction chain: drop successor-acked rows that
+ *  are past a generous TTL. No-ops without a DB. Best-effort; guarded by caller. */
+const EVICTION_GC_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+async function runEvictionGcCron(env: ScheduledEnv, now: Date): Promise<void> {
+  if (!env.DB) return;
+  const storage = new D1Storage(env.DB);
+  await storage.serverEvictions.gcEvictions(now.getTime(), EVICTION_GC_TTL_MS);
 }
 
 /**
@@ -386,12 +484,7 @@ export async function runDemoCron(
   env: ScheduledEnv,
   now: Date,
 ): Promise<{
-  reaped: number;
-  stuck: number;
   promoted: number;
-  w11Snapshotted: number;
-  w11Finalized: number;
-  w11Failed: number;
 } | null> {
   if (!env.DB || !env.HCLOUD_TOKEN) return null;
   const storage = new D1Storage(env.DB);
@@ -404,7 +497,6 @@ export async function runDemoCron(
     audit: storage.auditEvents,
     now: () => now.getTime(),
   };
-  const reaperResult = await runDemoIdleReaper(deps);
   const pollerResult = await runDemoProvisioningPoller(
     deps,
     async (fqdn, createdAt) => {
@@ -425,39 +517,8 @@ export async function runDemoCron(
       return !!r;
     },
   );
-  // W11 — snapshot + destroy the temp VPS once the daemon registers.
-  // Same Hetzner client; uses the new createImageSnapshot /
-  // getImageStatus / destroyServer methods. isRegistered consults the
-  // SAME install_events table the legacy poller uses but with a
-  // recency filter so we don't snapshot a daemon that registered
-  // hours ago and then died.
-  const w11Result = await runDemoW11SnapshotPoller(
-    {
-      storage: storage.demoUsers,
-      hetzner,
-      audit: storage.auditEvents,
-      now: () => now.getTime(),
-    },
-    async (fqdn, recencyMs) => {
-      const cutoff = now.getTime() - recencyMs;
-      // Same fix as the legacy poller above — daemon_status is the
-      // table that gets a row when the daemon successfully reports.
-      const r = await env
-        .DB!.prepare(
-          "SELECT 1 FROM daemon_status WHERE server_domain = ? AND last_reported > ? LIMIT 1",
-        )
-        .bind(fqdn, cutoff)
-        .first();
-      return !!r;
-    },
-  );
   return {
-    reaped: reaperResult.reaped,
-    stuck: reaperResult.stuck,
     promoted: pollerResult.promoted,
-    w11Snapshotted: w11Result.snapshotted,
-    w11Finalized: w11Result.finalized,
-    w11Failed: w11Result.failed,
   };
 }
 

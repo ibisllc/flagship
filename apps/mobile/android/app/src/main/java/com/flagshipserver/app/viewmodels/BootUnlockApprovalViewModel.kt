@@ -10,6 +10,7 @@
 package com.flagshipserver.app.viewmodels
 
 import androidx.lifecycle.ViewModel
+import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +26,9 @@ interface ApprovalSource {
      *  SINGLE biometric. Returns the deposited lease id (auto mode) or null.
      *  Throws when no live request is waiting. */
     suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean): String?
+    /** One-tap approval for the directory-driven ENTITLEMENT card (serve-auth) —
+     *  fetch + verify the live `entitlement` request and respond. */
+    suspend fun approvePendingEntitlement(serverDomain: String): String?
 }
 
 /** [SecretRequestCoordinator] already IS the production approval source — this
@@ -34,6 +38,8 @@ class CoordinatorApprovalSource(
 ) : ApprovalSource {
     override suspend fun approvePendingUnlock(serverDomain: String, depositAutoLease: Boolean): String? =
         coordinator.approvePendingUnlock(serverDomain, depositAutoLease)
+    override suspend fun approvePendingEntitlement(serverDomain: String): String? =
+        coordinator.approvePendingEntitlement(serverDomain)
 }
 
 class BootUnlockApprovalViewModel(
@@ -46,6 +52,10 @@ class BootUnlockApprovalViewModel(
      *  do not. Resolved from the per-server ServerSettingsStore so the approval
      *  matches the create-time choice. */
     private val depositAutoLease: () -> Boolean,
+    /** Which Box Request Inbox lane this card approves: UNLOCK_KEY (release the
+     *  disk key) or ENTITLEMENT (authorize the box to serve). The approve
+     *  dispatch keys off this so ONE card type serves both lanes. */
+    private val purpose: SecretPurpose = SecretPurpose.UNLOCK_KEY,
 ) : ViewModel() {
 
     sealed interface State {
@@ -109,7 +119,10 @@ class BootUnlockApprovalViewModel(
         }
         _state.value = State.Approving
         _state.value = try {
-            source.approvePendingUnlock(serverDomain, depositAutoLease())
+            when (purpose) {
+                SecretPurpose.UNLOCK_KEY -> source.approvePendingUnlock(serverDomain, depositAutoLease())
+                SecretPurpose.ENTITLEMENT -> source.approvePendingEntitlement(serverDomain)
+            }
             State.Approved
         } catch (t: Throwable) {
             State.Failed(t.message ?: "Approval failed. Try again.")

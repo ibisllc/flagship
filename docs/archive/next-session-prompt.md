@@ -2,9 +2,9 @@
 
 The 2026-05-21 session shipped the protocol cleanup (`v2`), the buildTicket
 removal (QR-pipe is the only flow), the recipe-TTL knob (6h default), the
-Burner CLI Phase-1, the Mac SwiftUI GUI, and a fully-green vitest. This
+Builder CLI Phase-1, the Mac SwiftUI GUI, and a fully-green vitest. This
 session's job: ship the last mile — real-metal USB install, native Windows +
-Linux Burner GUIs, iOS / Android store uploads, vibecode "hello world" demo,
+Linux Builder GUIs, iOS / Android store uploads, vibecode "hello world" demo,
 and a polished public-facing flagshipserver.com.
 
 Style we've kept (and you should keep):
@@ -44,28 +44,28 @@ Style we've kept (and you should keep):
   (`CreateServerStubScreen.swift` design page slider), Android (`CreateServerScreen.kt`
   Compose slider), webapp (`#cs-ttl-hours` number input). Worker enforces
   the 24h cap unilaterally in `serverRegister.ts` (defense in depth).
-- **Burner CLI** at `packages/flagship-burner/` — `verify` /
+- **Builder CLI** at `packages/flagship-builder/` — `verify` /
   `verify-iso` / `user-data` / `prepare` / **`write`** / `distros`
   subcommands. Never calls `flagshipserver.com`; verifies the phone-
   signed Ed25519 locally. Auto-shreds the recipe file after successful
   consume. Pinned distro allowlist (Ubuntu Server 22.04 only at
-  launch). 59/59 burner tests pass.
-- **Mac SwiftUI Burner GUI** at `apps/burner-mac/` — single-screen
+  launch). 59/59 builder tests pass.
+- **Mac SwiftUI Builder GUI** at `apps/builder-mac/` — single-screen
   redesign with 3 compact drop-rows (Recipe / ISO / USB), one-click
   Bake (admin prompt via `osascript do shell script ... with
   administrator privileges`), live expiry countdown on the recipe
   row, log drawer collapsed by default. 28/28 swift tests pass.
   `make release` produces a codesigned + notarized + stapled DMG once
   Developer ID Application cert is in env.
-- **Linux GTK4 + Python Burner GUI** at `apps/burner-linux/` — same
+- **Linux GTK4 + Python Builder GUI** at `apps/builder-linux/` — same
   3-row layout, PolicyKit elevation for the write step. 62/62 pytest
   pass. AppImage + Flatpak manifests included.
-- **Windows WPF + .NET 8 Burner GUI** at `apps/burner-windows/` — same
+- **Windows WPF + .NET 8 Builder GUI** at `apps/builder-windows/` — same
   layout, `requireAdministrator` UAC manifest, single-file self-
   contained publish. Builds on any box with the .NET 8 SDK; this
   Mac doesn't have it so gates run on the build host.
 - **Webapp "Download recipe" button** — emits a `.json` file matching
-  the Burner's `loadBlobFromFile()` schema verbatim, for cross-
+  the Builder's `loadBlobFromFile()` schema verbatim, for cross-
   device flows.
 
 ### Test gates as of session end
@@ -77,9 +77,9 @@ Style we've kept (and you should keep):
 - iOS xcodebuild test → **300/300** (incl. 8 new TTL + v2 canonical-
   bytes regression tests)
 - Android `./gradlew test` → BUILD SUCCESSFUL
-- `apps/burner-mac/` `swift test` → **28/28** (+7 expiry tests)
-- `apps/burner-linux/` `pytest` → **62/62**
-- `apps/burner-windows/` → source ships; gates run on a Windows host
+- `apps/builder-mac/` `swift test` → **28/28** (+7 expiry tests)
+- `apps/builder-linux/` `pytest` → **62/62**
+- `apps/builder-windows/` → source ships; gates run on a Windows host
   with `dotnet build` + `dotnet test`
 
 ### Operator follow-ups (irreducible — needs human shell + credentials)
@@ -96,12 +96,12 @@ Style we've kept (and you should keep):
 
 ### P0 (gate for opening flagshipserver.com to the public)
 
-1. **Real-metal USB install proof point.** Use today's Burner CLI to write a
+1. **Real-metal USB install proof point.** Use today's Builder CLI to write a
    stock Ubuntu Server ISO + a real recipe (minted from your phone) onto a
    USB stick. Boot a laptop from it. Confirm the daemon registers from your
    home network (not Hetzner). This is the single proof point that says
    "the install path actually works for real users."
-2. **`flagship-burn write` subcommand.** Direct raw-disk write. The other
+2. **`flagship-build write` subcommand.** Direct raw-disk write. The other
    parallel worktree (`.claude/worktrees/agent-ae04553a499422f1d/`) was
    building this; merge it in, run gates, ship. Phase-2 alternative to the
    `prepare`-then-`dd` two-step.
@@ -111,10 +111,10 @@ Style we've kept (and you should keep):
 
 ### P1 (broader reach)
 
-4. **Windows Burner GUI.** Same shape as `apps/burner-mac/` but in
+4. **Windows Builder GUI.** Same shape as `apps/builder-mac/` but in
    WinUI or Tauri-on-Rust (your call). Bundles a signed `node` runtime so
    end users don't need to install one.
-5. **Linux Burner GUI.** AppImage or Flatpak. Same architecture as Mac.
+5. **Linux Builder GUI.** AppImage or Flatpak. Same architecture as Mac.
 6. **iOS TestFlight upload.** Substantial work — Xcode project setup,
    Apple Developer cert wrangling, App Store Connect metadata, 5 external
    testers. See memory `project-testflight-blockers.md`.
@@ -140,7 +140,7 @@ Style we've kept (and you should keep):
 
 - **Recipe file at rest** is a real attack surface. The current mitigations
   (auto-shred, 5min-24h TTL, copy-paste flow on same-device) are documented
-  in `packages/flagship-burner/README.md` § threat model. Don't widen the
+  in `packages/flagship-builder/README.md` § threat model. Don't widen the
   TTL ceiling without weighing the cost.
 - **CA endorsement** must be re-signed before `2026-06-02T22:40:29.858Z`.
 - **No Co-Authored-By trailer** on commits.
@@ -152,9 +152,9 @@ Style we've kept (and you should keep):
 | Recipe schema | `docs/recipe-schema-v2.md` |
 | Cloud-init demo design | `docs/cloud-init-direct-provisioning.md` |
 | W13 handler | `packages/control-plane/src/demoUsersAdminCloudInit.ts` |
-| Burner CLI | `packages/flagship-burner/` + `README.md` |
-| Mac Burner GUI | `apps/burner-mac/` + `README.md` |
+| Builder CLI | `packages/flagship-builder/` + `README.md` |
+| Mac Builder GUI | `apps/builder-mac/` + `README.md` |
 | Cron fixes | `apps/com/src/scheduled.ts`, `packages/control-plane/src/demoUsers.ts` |
 | Old W12 d-i path (kept for reference) | `packages/installer-netboot/` |
-| Memory: Burner spec | `project-flagship-burner.md` |
+| Memory: Builder spec | `project-flagship-builder.md` |
 | Memory: this session's progress | the latest `MEMORY.md` entry |

@@ -357,10 +357,11 @@ We are **not** starting from zero. Per-surface reality, with file paths:
   reaper in `packages/control-plane/src/demoUsers.ts` /
   `demoUsersAdmin*.ts`; Worker routes `/api/dev/sample-user/{create,delete,
   admin-claim-and-issue,…}` (`apps/com/src/controlPlaneRoutes.ts`).
-- **Operator CLIs:** `scripts/sample-user.mjs` (W11 — per-user; the laptop needs
-  **only `FLAGSHIP_ADMIN_SECRET`**, the Worker holds `HCLOUD_TOKEN` and runs all
-  Hetzner ops) and `scripts/demo-account.mjs` (shared live demo account;
-  registered-operator-key-signed, dry-run default, manual teardown only).
+- **Operator CLI:** `scripts/sample-user.mjs` — the only one (the laptop needs
+  **only `FLAGSHIP_ADMIN_SECRET`**; the Worker holds `HCLOUD_TOKEN` and runs all
+  Hetzner ops). Subcommands: `create <user> --account-name "<name>"`, `cleanup`,
+  `list`, `status`. The account name is stored as an ENCRYPTED account profile —
+  there is no plaintext display column, and `--display` is rejected.
 - **Guardrails today:** `MAX_CONCURRENT_DEMO_VPS` cap (429 over budget); a
   `*/10` cron reaper destroys idle VPS and promotes `provisioning → up`. Demo
   vars + KEKs in `apps/com/wrangler.toml` (`DEMO_IRK_KEK` derives deterministic
@@ -959,7 +960,7 @@ verified this survey):**
 | **`.services` data plane** | `fly.toml` (repo ROOT, not `apps/web/fly.toml`) — `app = "flagship-services"`, `primary_region = "iad"`, SNI passthrough :443 + tunnel hub :8443, `[env] FLAGSHIP_SURFACE = "services"`, `Dockerfile` builds it | a SECOND Fly app, e.g. `flagship-services-gym` (its own `fly.gym.toml` / `flyctl -a`), same Dockerfile/image, its own anycast IPs; its `[env]` sets the apex var to **`gym.flagship.services`** (§12-G1) |
 | **Worker→Fly wiring** | `SERVICES_BASE_URL = https://flagship-services.fly.dev:8443`, `TUNNEL_HUB_URL = wss://…:8443/tunnel`, `SERVICES_PASSTHROUGH_IPV4/6` | repoint all three at the test Fly app + its anycast IPs |
 | **DNS / zone** | `flagshipserver.com` (identity) + `flagship.services` (`CLOUDFLARE_SERVICES_ZONE_ID = 51f3…`); per-box `<server>.<user>.flagship.services` A/AAAA published by the Worker | **the SAME two zones** — the test env lives under the `gym.` label: identity at `gym.flagshipserver.com`, data at `gym.flagship.services`, per-box `<server>.<user>.gym.flagship.services` A/AAAA published by the test Worker into the existing services zone. No new zone (rev4). |
-| **Demo / Hetzner provisioning** | `apps/com/src/hetzner.ts` (pure-fetch REST), state machine `packages/control-plane/src/demoUsers*.ts`, routes `/api/dev/sample-user/*` in `controlPlaneRoutes.ts`, CLIs `scripts/sample-user.mjs` + `scripts/demo-account.mjs`, `MAX_CONCURRENT_DEMO_VPS` + `*/10` reaper | a **test Hetzner project** with its own `HCLOUD_TOKEN` + budget (so test boxes never count against prod's demo cap or bill) |
+| **Demo / Hetzner provisioning** | `apps/com/src/hetzner.ts` (pure-fetch REST), state machine `packages/control-plane/src/demoUsers*.ts`, routes `/api/dev/sample-user/*` in `controlPlaneRoutes.ts`, CLI `scripts/sample-user.mjs`, `MAX_CONCURRENT_DEMO_VPS` + `*/10` reaper | a **test Hetzner project** with its own `HCLOUD_TOKEN` + budget (so test boxes never count against prod's demo cap or bill) |
 | **D5 test-control hooks** | n/a (pre-GA = admin-induction) | the clean per-event hooks (§7-A: force-dead, bump-usage, cert-mismatch, near-expiry, CT-alert, generic set-state) live HERE, gated on the **test** admin secret, against **test** endpoints |
 
 > **RESOLVED (rev4) — reuse the existing zones under `gym.`; the "separate

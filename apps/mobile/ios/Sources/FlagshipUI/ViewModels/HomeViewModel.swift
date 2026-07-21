@@ -6,6 +6,12 @@ import FlagshipAPI
 @MainActor
 public final class HomeViewModel {
     public private(set) var detail: LoadingState<ServerDetailResponse> = .idle
+    /// True when the LAST load failed because this device has no usable
+    /// paired-session token. That includes both a missing local token and a 401
+    /// from the box rejecting a stale token. The server-detail container reads
+    /// this to surface the one-tap "Pair this server" affordance instead of the
+    /// transient "Connecting…" placeholder (which would otherwise retry forever).
+    public private(set) var needsPairing = false
 
     private let client: any ScreensClient
     private let podContext: String?
@@ -30,7 +36,20 @@ public final class HomeViewModel {
             }
             let resp = try await client.serverDetail()
             detail = .loaded(resp)
+            needsPairing = false
         } catch {
+            // A missing OR box-rejected paired-session token is NOT transient —
+            // retrying never helps until the owner pairs. A 403 is deliberately
+            // excluded: it can be an operation-level authorization decision,
+            // whereas the BFF's session gate reports an absent token as 401.
+            switch error {
+            case ScreensClientError.noSessionToken:
+                needsPairing = true
+            case ScreensClientError.http(status: 401, message: _):
+                needsPairing = true
+            default:
+                needsPairing = false
+            }
             // Keep showing the last successful detail on a transient refresh
             // failure; only fall back to the "Connecting…" state when we never
             // had detail to begin with.

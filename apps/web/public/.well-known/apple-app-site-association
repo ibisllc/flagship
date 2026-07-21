@@ -13,6 +13,16 @@
             "/": "/qr/",
             "?": { "s": "?*", "k": "?*" },
             "comment": "Trailing-slash variant of the same QR-relay URL."
+          },
+          {
+            "/": "/transfer",
+            "?": { "o": "?*" },
+            "comment": "Transfer-a-box take-over offer. /transfer?o=<b64url> is the acquirer universal link — a phone Camera opening the giver's offer (or an in-app deep link). The OS routes it into the installed Flagship app so the take-over claim flow opens natively before Safari loads the webapp fallback."
+          },
+          {
+            "/": "/transfer/",
+            "?": { "o": "?*" },
+            "comment": "Trailing-slash variant of the same transfer take-over URL."
           }
         ]
       }

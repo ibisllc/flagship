@@ -28,11 +28,13 @@ import {
   deriveIrkFromSeed,
   signWithIrk,
   persistSeedForProfile,
+  persistAdminRootSeed,
   setActiveKeystoreProfile,
   verifyWithEd25519Pub,
 } from "../keystore.js";
 import { unlockSession } from "../lib/state.js";
 import { addProfile } from "../lib/profiles.js";
+import { generateDeviceId } from "../lib/accountMetadata.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -67,7 +69,7 @@ function setStatus(kind, text) {
 async function mintDeviceKey() {
   const seed = crypto.getRandomValues(new Uint8Array(32));
   const irk = await deriveIrkFromSeed(seed);
-  return { seed, pubHex: bytesToHex(irk.publicKey) };
+  return { seed, pubHex: bytesToHex(irk.publicKey), deviceId: generateDeviceId() };
 }
 
 /** Register THIS device's push token, signed by its fresh device key.
@@ -75,7 +77,7 @@ async function mintDeviceKey() {
  *  The server skips verifying this signature (the admit is the IRK
  *  consent), but we sign it anyway for storage/forward-compat. */
 function makeRegisterPush(deviceSeed) {
-  return async ({ username, deviceIrkPubHex }) => {
+  return async ({ username, deviceId, deviceIrkPubHex }) => {
     void deviceIrkPubHex;
     const issuedAt = Date.now();
     // Web Push needs a real subscription; we don't force the permission
@@ -86,16 +88,17 @@ function makeRegisterPush(deviceSeed) {
     const pushX25519Pub = crypto.getRandomValues(new Uint8Array(32));
     const request = {
       username,
+      deviceId,
       platform: "webpush",
       providerToken,
       pushX25519Pub: bytesToHex(pushX25519Pub),
-      label: "Web (paired)",
       issuedAt,
     };
     const canonical = new TextEncoder().encode(
       [
-        "flagship/push-token-register/v1",
+        "flagship/push-token-register/v2",
         request.username,
+        request.deviceId,
         request.platform,
         request.providerToken,
         request.pushX25519Pub,
@@ -125,7 +128,12 @@ async function startJoin() {
 
   let session;
   try {
-    session = await relay.connect({ sid, adminPkB64u: pk, deviceIrkPubHex: device.pubHex });
+    session = await relay.connect({
+      sid,
+      adminPkB64u: pk,
+      deviceIrkPubHex: device.pubHex,
+      deviceId: device.deviceId,
+    });
   } catch (e) {
     setStatus("error", String(e?.message || e));
     return;
@@ -155,8 +163,10 @@ async function startJoin() {
     const result = await runIncomingJoin({
       bundlePlaintext,
       deviceIrkPubHex: device.pubHex,
+      deviceId: device.deviceId,
       setActiveKeystoreProfile,
       persistSeedForProfile,
+      persistAdminRootSeed,
       unlockSession,
       verifyEd25519: verifyWithEd25519Pub,
       registerPush: makeRegisterPush(device.seed),
@@ -167,7 +177,7 @@ async function startJoin() {
     });
     relay.close?.();
     renderQuarantine(result);
-    toast(`joined ${result.username} — device under review`, "ok");
+    toast(`Joined ${result.username} — device under review`, "ok");
   } catch (e) {
     setStatus("error", `couldn't join: ${String(e?.message || e)}`);
   } finally {

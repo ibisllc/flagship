@@ -1,5 +1,7 @@
 import SwiftUI
+import UIKit
 import Flagship
+import FlagshipAPI
 import FlagshipCore
 
 /// Phone-side v2 create-server flow.
@@ -22,6 +24,12 @@ public struct CreateServerStubScreen: View {
     /// status with the just-minted serial — the page used to show a
     /// hardcoded "Status: pending" that never moved.
     @State private var deliveredTimeline: ProvisionTimelineViewModel?
+    // Delivery-chooser state.
+    @State private var pairVM: BuilderPairViewModel?
+    @State private var shareURL: URL?
+    @State private var showShare = false
+    @State private var deliveryBusy = false
+    @State private var copiedToast = false
     /// Fires the moment the delivered page APPEARS (vs `onDelivered`,
     /// which waits for the "Done" tap) so the host can surface the new
     /// pending pod on the Home list immediately.
@@ -48,6 +56,7 @@ public struct CreateServerStubScreen: View {
                 Spacer().frame(height: FS.space.s8)
                 switch vm.phase {
                 case .design:                designPage(c: c)
+                case .deliveryChooser:       deliveryChooserPage(c: c)
                 case .scanQr:                scanPage(c: c)
                 case .pasteQr:               pastePage(c: c)
                 case .connecting:
@@ -69,8 +78,131 @@ public struct CreateServerStubScreen: View {
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
+            .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
+        .sheet(item: $pairVM) { presentedVM in
+            NavigationStack {
+                BuilderPairScreen(
+                    vm: presentedVM,
+                    onDelivered: { domain, _ in
+                        // Surface it only after the builder has successfully
+                        // staged the recipe and returned its receipt.
+                        onDeliveredVisible(domain, vm.name, vm.description)
+                    },
+                    onClose: {
+                        let serial = presentedVM.lastDeliveredSerial ?? ""
+                        let dom = presentedVM.deliveredDomain
+                        pairVM = nil
+                        vm.lastDeliveredSerial = serial
+                        if let dom { vm.phase = .delivered(serial: serial, serverDomain: dom) }
+                    },
+                    onCancel: { pairVM = nil }
+                )
+                .navigationTitle("Pair with builder")
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
+        .sheet(isPresented: $showShare) {
+            if let shareURL { ShareSheet(items: [shareURL]) }
+        }
+    }
+
+    // MARK: - Delivery chooser
+
+    private func deliveryChooserPage(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s4) {
+            phaseHeader("Get it to a builder", subtitle: "Your recipe is ready. Pick how to send it to the Flagship builder that writes your USB stick.", c: c)
+
+            Button { startPair() } label: {
+                deliveryCard(icon: "qrcode.viewfinder", accent: c.primary,
+                             title: "Pair with the builder app",
+                             body: "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you.",
+                             c: c)
+            }
+            .buttonStyle(.plain)
+            .disabled(deliveryBusy)
+
+            Button { Task { await shareRecipe() } } label: {
+                deliveryCard(icon: "square.and.arrow.up", accent: c.text,
+                             title: "Save / share recipe file",
+                             body: "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the box opens it in the builder. No secrets in the file.",
+                             c: c)
+            }
+            .buttonStyle(.plain)
+            .disabled(deliveryBusy)
+
+            Button { Task { await copyRecipe() } } label: {
+                deliveryCard(icon: "doc.on.clipboard", accent: c.text,
+                             title: copiedToast ? "Copied!" : "Copy recipe to clipboard",
+                             body: "Copy the recipe text, then paste it into the builder's “I have a recipe” box.",
+                             c: c)
+            }
+            .buttonStyle(.plain)
+            .disabled(deliveryBusy)
+
+            // MOCK mode only: drive the whole create flow end-to-end with no
+            // desktop/builder via the legacy demo-QR relay path. Keeps the
+            // mock onboarding smoke test exercising a real mint+deliver.
+            if !dev.useLiveClient {
+                FSGhostButton("Use a demo QR (mock)", block: true) {
+                    Task { await vm.qrDetected(QrRelay.makeDemoQrUrl()) }
+                }
+                .accessibilityIdentifier("cs-demo-qr-button")
+            }
+
+            if deliveryBusy { spinnerCard(c: c) }
+        }
+    }
+
+    private func deliveryCard(icon: String, accent: Color, title: String, body: String, c: FSColors) -> some View {
+        FSCard(padding: FS.space.s6) {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: FS.radius.sm).fill(accent.opacity(0.12))
+                    Image(systemName: icon).foregroundColor(accent).font(.system(size: 22, weight: .semibold))
+                }
+                .frame(width: 44, height: 44)
+                Text(title).font(FS.font.h3()).foregroundColor(c.text)
+                Text(body).font(FS.font.body()).foregroundColor(c.textMuted)
+            }
+        }
+    }
+
+    private func startPair() {
+        pairVM = BuilderPairViewModel(client: LiveBuilderPairClient(), minter: vm)
+    }
+
+    private func shareRecipe() async {
+        guard !deliveryBusy else { return }
+        deliveryBusy = true
+        defer { deliveryBusy = false }
+        do {
+            let minted = try await vm.mintRecipeJSON()
+            let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            let url = dir.appendingPathComponent("\(SlugUtil.slugify(vm.name)).flagship-recipe.json")
+            try minted.json.data(using: .utf8)?.write(to: url, options: [.atomic])
+            shareURL = url
+            showShare = true
+            // The recipe is out — surface the pending pod via the delivered page.
+            vm.phase = .delivered(serial: minted.serial, serverDomain: minted.serverDomain)
+        } catch {
+            vm.phase = .failed(error.localizedDescription)
+        }
+    }
+
+    private func copyRecipe() async {
+        guard !deliveryBusy else { return }
+        deliveryBusy = true
+        defer { deliveryBusy = false }
+        do {
+            let minted = try await vm.mintRecipeJSON()
+            UIPasteboard.general.string = minted.json
+            copiedToast = true
+            vm.phase = .delivered(serial: minted.serial, serverDomain: minted.serverDomain)
+        } catch {
+            vm.phase = .failed(error.localizedDescription)
+        }
     }
 
     // MARK: - Phase 1: Design
@@ -101,6 +233,8 @@ public struct CreateServerStubScreen: View {
                         bootUnlockPicker(c: c)
                         Divider().background(c.border)
                         diskEncryptionToggle(c: c)
+                        Divider().background(c.border)
+                        advancedSection(c: c)
                     default:
                         backupPolicyPicker(c: c)
                     }
@@ -137,7 +271,7 @@ public struct CreateServerStubScreen: View {
                 .accessibilityIdentifier("cs-next-button")
             } else {
                 FSPrimaryButton("Continue", enabled: vm.canAdvanceFromDesign, block: true, large: true) {
-                    vm.continueToScan()
+                    vm.proceedToDelivery()
                 }
                 .accessibilityIdentifier("cs-continue-button")
             }
@@ -270,6 +404,60 @@ public struct CreateServerStubScreen: View {
                  : "Less safe — the disk is left unencrypted. Only for boxes that can't keep network at boot (e.g. Wi-Fi-only), where the boot-time unlock can't run.")
                 .font(.caption)
                 .foregroundColor(c.textMuted)
+        }
+    }
+
+    // MARK: - Advanced mode
+    //
+    // ONE toggle, OFF by default, "for people who know what they're doing".
+    // It gates the offline path: embed-secrets (the box SWK in the recipe), so a
+    // box can install fully offline with no post-registration phone step. The
+    // DEFAULT (Advanced off) is the secret-free recipe — the phone deposits the
+    // SWK after the box registers. (Choose-your-own-ISO + debug/local-CLI have no
+    // mobile analogue; they live on the website/webapp.)
+    @ViewBuilder
+    private func advancedSection(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Toggle(isOn: $vm.advancedMode) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Advanced mode")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(c.text)
+                    Text("For people who know what they're doing.")
+                        .font(.caption)
+                        .foregroundColor(c.textMuted)
+                }
+            }
+            .tint(c.primary)
+            .accessibilityIdentifier("cs-advanced-toggle")
+
+            if vm.advancedMode {
+                Toggle(isOn: $vm.embedSecrets) {
+                    Text("Embed secrets for offline install")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(c.text)
+                }
+                .tint(c.primary)
+                .accessibilityIdentifier("cs-embed-secrets-toggle")
+                .padding(.leading, FS.space.s3)
+                Text("This embeds security keys directly in the recipe. Hence, the server will be able to boot even if the phone is offline.")
+                    .font(.caption)
+                    .foregroundColor(c.textMuted)
+                    .padding(.leading, FS.space.s3)
+
+                Toggle(isOn: $vm.debugFriendly) {
+                    Text("Debug-friendly server")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(c.text)
+                }
+                .tint(c.primary)
+                .accessibilityIdentifier("cs-debug-friendly-toggle")
+                .padding(.leading, FS.space.s3)
+                Text("Anyone with physical access to this server can log into its console. Only turn this on for a server you're actively debugging.")
+                    .font(.caption)
+                    .foregroundColor(c.textMuted)
+                    .padding(.leading, FS.space.s3)
+            }
         }
     }
 

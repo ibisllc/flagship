@@ -1,3 +1,4 @@
+import { swkOps } from "./helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import { deriveIRK, deriveSWK, type AppManifest } from "@flagship/protocol";
 import type { FetchLike } from "@flagship/llm-providers";
@@ -9,7 +10,7 @@ import { ForgejoAppAdmin } from "../src/forgejoServiceAdmin.js";
 
 const umk = { seed: new Uint8Array(32).fill(11) };
 const ownerIrk = deriveIRK(umk);
-const swk = deriveSWK(umk, "srv-1");
+const swk = swkOps(deriveSWK(umk, "srv-1"));
 
 class NopRunner implements CommandRunner {
   async run(): Promise<void> {}

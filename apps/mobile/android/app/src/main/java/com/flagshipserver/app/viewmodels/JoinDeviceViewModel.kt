@@ -31,6 +31,9 @@ import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.DeviceAdmitRequest
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.PushTokenRegisterRequest
+import com.flagshipserver.app.core.AccountMetadata
+import com.flagshipserver.app.core.AccountMetadataCoordinates
+import com.flagshipserver.app.core.AccountMetadataRecordType
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.DeviceAdmit
 import com.flagshipserver.app.core.DeviceAdmitClaim
@@ -38,6 +41,7 @@ import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.IncomingPairingRelay
 import com.flagshipserver.app.core.JoinLink
 import com.flagshipserver.app.core.PairingBundle
+import com.flagshipserver.app.core.DeviceCapabilityGrant
 import com.flagshipserver.app.core.Profile
 import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.keystore.Keystore
@@ -93,6 +97,12 @@ class JoinDeviceViewModel(
      *  genuinely new device. */
     private val deviceKeyPair = Ed25519Sign.KeyPair.newKeyPair()
     private val devicePubHex: String get() = HexUtil.encode(deviceKeyPair.publicKey)
+    private val deviceId = AccountMetadata.generateDeviceId()
+    private var confirmedDisplayName: String? = null
+
+    fun confirmDisplayName(name: String) {
+        confirmedDisplayName = AccountMetadata.validateDisplayName(name)
+    }
 
     /**
      * Connect to the relay, send the hello (x25519 pub || device pub),
@@ -101,7 +111,7 @@ class JoinDeviceViewModel(
     suspend fun start() {
         _phase.value = JoinDevicePhase.Connecting
         try {
-            val hello = session.phonePubKey + deviceKeyPair.publicKey  // 32 || 32
+            val hello = session.phonePubKey + deviceKeyPair.publicKey + requireNotNull(HexUtil.decode(deviceId))
             relay.connectAndHello(joinLink.sid, hello)
             val matchCode = session.pair(joinLink.adminPubKey)
             _phase.value = JoinDevicePhase.VerifySas(matchCode)
@@ -118,6 +128,9 @@ class JoinDeviceViewModel(
     suspend fun verifyAndJoin() {
         _phase.value = JoinDevicePhase.Joining
         try {
+            val deviceDisplayName = requireNotNull(confirmedDisplayName) {
+                "Confirm this device's account-specific name before joining."
+            }
             val (ct, nonce) = relay.awaitDelivery()
             // AEAD-open under the relay kEnc. A bad tag throws — that's a
             // MitM / wrong-peer; we surface it as a failure (NOT a join).
@@ -126,7 +139,8 @@ class JoinDeviceViewModel(
 
             // 1. The admit MUST bind OUR fresh device pubkey — a captured
             //    admit can't be re-aimed at us.
-            if (!bundle.admit.newDevicePubHex.equals(devicePubHex, ignoreCase = true)) {
+            if (!bundle.admit.newDevicePubHex.equals(devicePubHex, ignoreCase = true) ||
+                bundle.admit.deviceId != deviceId) {
                 _phase.value = JoinDevicePhase.Failed(
                     "This invite was issued for a different device. Start over.",
                 )
@@ -143,12 +157,41 @@ class JoinDeviceViewModel(
                 ?: throw IllegalStateException("admit signature is not valid hex")
             val admitForVerify = DeviceAdmit(
                 username = bundle.admit.username,
+                deviceId = bundle.admit.deviceId,
                 newDevicePubHex = bundle.admit.newDevicePubHex.lowercase(),
                 issuedAt = bundle.admit.issuedAt,
             )
             if (!DeviceAdmitClaim.verify(admitForVerify, admitSig, irkPub)) {
                 _phase.value = JoinDevicePhase.Failed(
                     "Couldn't verify the invite. This device was NOT added.",
+                )
+                return
+            }
+
+            val grant = bundle.grant
+            val grantSig = HexUtil.decode(bundle.grantSignature)
+                ?: throw IllegalStateException("device grant signature is not valid hex")
+            if (!grant.username.equals(bundle.admit.username, ignoreCase = true) ||
+                grant.deviceId != deviceId ||
+                !grant.devicePubHex.equals(devicePubHex, ignoreCase = true) ||
+                "view-directory" !in grant.scopes) {
+                _phase.value = JoinDevicePhase.Failed("The device permission grant was malformed.")
+                return
+            }
+            val grantAuthority = when (grant.signerRoot) {
+                "membership" -> irkPub
+                "admin-root" -> bundle.wrappedAdminRoot?.let(HexUtil::decode)?.let {
+                    Ed25519Sign.KeyPair.newKeyPairFromSeed(it).publicKey
+                }
+                else -> null
+            }
+            if (grantAuthority == null || !DeviceCapabilityGrant.verify(
+                    grantSig, grantAuthority, grant.grantId, grant.username,
+                    grant.deviceId, grant.devicePubHex, grant.scopes,
+                    grant.issuedAt, grant.expiresAt,
+                )) {
+                _phase.value = JoinDevicePhase.Failed(
+                    "The device permission grant couldn't be verified. Don't continue.",
                 )
                 return
             }
@@ -164,6 +207,20 @@ class JoinDeviceViewModel(
             val cloudName = bundle.admit.username
             Keystore.setActiveProfile(cloudName)
             Keystore.installUmk(umkSeed)
+            Keystore.storeAccountDeviceSeed(deviceId, deviceKeyPair.privateKey)
+
+            // 3b. Slice D (D-4) — if the admin PROMOTED this device (sealed the
+            //     admin master root into the bundle), unwrap + store it
+            //     device-local so this device becomes a bare-root admin. Mirrors
+            //     the UMK-in-bundle path above; the seal is the AEAD around the
+            //     whole bundle, so a valid decrypt here IS the proof the admin
+            //     authorized it. Absent (the default) ⇒ a plain non-admin join.
+            bundle.wrappedAdminRoot?.let { rootHex ->
+                val rootSeed = HexUtil.decode(rootHex)
+                    ?: throw IllegalStateException("admin root seed is not valid hex")
+                require(rootSeed.size == 32) { "admin root seed must be 32 bytes" }
+                Keystore.importAdminRoot(rootSeed)
+            }
 
             // 4. Register push for the new profile, then POST the admit to
             //    .com. The Worker verifies the admit under the account IRK
@@ -172,33 +229,72 @@ class JoinDeviceViewModel(
             val push = Keystore.loadOrCreatePushX25519()
             val pushPubHex = HexUtil.encode(push.publicKey)
             val issuedAt = now()
-            val label = "${cloudName} (new device)"
             val canonical = com.flagshipserver.app.core.PushTokenRegister.canonicalBytes(
                 username = cloudName,
+                deviceId = deviceId,
                 platform = "fcm",
                 providerToken = providerToken,
                 pushX25519PubHex = pushPubHex,
-                label = label,
                 issuedAt = issuedAt,
             )
-            val irk = Keystore.deriveIRK("Register this device")
-            val registerSig = HexUtil.encode(irk.sign(canonical))
+            val registerSig = HexUtil.encode(Ed25519Sign(deviceKeyPair.privateKey).sign(canonical))
+            val profileIssuedAt = now()
+            val profileCiphertext = AccountMetadata.encrypt(
+                displayName = deviceDisplayName,
+                keyBytes = AccountMetadata.deriveDeviceDirectoryKey(umkSeed),
+                coordinates = AccountMetadataCoordinates(
+                    accountId = cloudName,
+                    deviceId = deviceId,
+                    recordType = AccountMetadataRecordType.DEVICE_SELF_PROFILE,
+                    revision = 1,
+                    keyVersion = 1,
+                ),
+            )
+            val profileSignature = Ed25519Sign(deviceKeyPair.privateKey).sign(
+                AccountMetadata.canonicalDeviceSelfProfile(
+                    cloudName, deviceId, 1, 1, profileCiphertext,
+                    profileIssuedAt, devicePubHex,
+                ),
+            )
 
             val resp = server.admitDevice(
                 account = cloudName,
                 req = DeviceAdmitRequest(
                     admit = DeviceAdmitRequest.AdmitEnvelope(
                         username = bundle.admit.username,
+                        deviceId = bundle.admit.deviceId,
                         newDevicePubHex = bundle.admit.newDevicePubHex.lowercase(),
                         issuedAt = bundle.admit.issuedAt,
                     ),
                     admitSig = bundle.admitSig.lowercase(),
+                    grant = DeviceAdmitRequest.Grant(
+                        grantId = grant.grantId,
+                        username = grant.username,
+                        deviceId = grant.deviceId,
+                        devicePubHex = grant.devicePubHex,
+                        scopes = grant.scopes,
+                        issuedAt = grant.issuedAt,
+                        expiresAt = grant.expiresAt,
+                        signerRoot = grant.signerRoot,
+                    ),
+                    grantSignature = bundle.grantSignature.lowercase(),
+                    profile = com.flagshipserver.app.api.AccountBootstrapRequest.Profile(
+                        accountId = cloudName,
+                        deviceId = deviceId,
+                        revision = 1,
+                        keyVersion = 1,
+                        nonceHex = profileCiphertext.nonceHex,
+                        ciphertextHex = profileCiphertext.ciphertextHex,
+                        issuedAt = profileIssuedAt,
+                        signerPubHex = devicePubHex,
+                        signatureHex = HexUtil.encode(profileSignature),
+                    ),
                     request = PushTokenRegisterRequest.Inner(
                         username = cloudName,
+                        deviceId = deviceId,
                         platform = "fcm",
                         providerToken = providerToken,
                         pushX25519Pub = pushPubHex,
-                        label = label,
                         issuedAt = issuedAt,
                     ),
                     signature = registerSig,
@@ -212,7 +308,8 @@ class JoinDeviceViewModel(
             app.addProfile(
                 Profile(
                     cloudName = cloudName,
-                    deviceLabel = label,
+                    accountId = cloudName,
+                    deviceId = deviceId,
                     createdAt = now(),
                 ),
                 setActive = true,

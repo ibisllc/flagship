@@ -68,7 +68,9 @@ fun ServicesTab() {
                 deepLinker.consume()
                 val s = java.net.URLEncoder.encode(link.serverDomain, "UTF-8")
                 val k = java.net.URLEncoder.encode(link.secretHex, "UTF-8")
-                nav.navigate("invite-redeem/$s/$k")
+                val a = java.net.URLEncoder.encode(link.authorAidHex.orEmpty(), "UTF-8")
+                val i = java.net.URLEncoder.encode(link.inviteIdHex.orEmpty(), "UTF-8")
+                nav.navigate("invite-redeem/$s/$k?a=$a&i=$i")
             }
             // Web-experience gating — authorize a browser's QR-login for a
             // restricted service's website. All four params URL-encoded into
@@ -93,13 +95,14 @@ fun ServicesTab() {
             ServiceDetailScreen(nav, serviceId = id)
         }
         // W10 — per-app env-var KV editor, reachable from the detail screen's
-        // "Configure environment" row. serviceId = "<creator>-<slug>"; split at
-        // the FIRST '-' (creator is hyphen-free) for the ServiceEnvScreen args.
+        // "Configure environment" row. serviceId = "<creator>--<slug>"; split on
+        // the `--` delimiter (both halves may carry single dashes —
+        // docs/service-addressing-double-dash.md) for the ServiceEnvScreen args.
         composable("service-env/{serviceId}") { entry ->
             val id = entry.arguments?.getString("serviceId") ?: return@composable
-            val dashIdx = id.indexOf('-')
-            val creator = if (dashIdx > 0) id.substring(0, dashIdx) else ""
-            val slug = if (dashIdx > 0) id.substring(dashIdx + 1) else id
+            val delimIdx = id.indexOf("--")
+            val creator = if (delimIdx > 0) id.substring(0, delimIdx) else ""
+            val slug = if (delimIdx > 0) id.substring(delimIdx + 2) else id
             ServiceEnvScreen(nav, appId = id, creator = creator, slug = slug)
         }
         composable("build/source") { BuildSourceChooserScreen(nav) }
@@ -172,13 +175,27 @@ fun ServicesTab() {
             val sid = entry.arguments?.getString("serviceId") ?: return@composable
             ServiceAccessScreen(nav, serviceId = sid)
         }
-        // #92 — friend redeem of a service-access invite (deep-link target).
-        composable("invite-redeem/{server}/{secret}") { entry ->
+        // #92 — friend redeem of a service-access invite (deep-link target). v2:
+        // the optional `a` query carries the author AID so the friend redeems with
+        // a per-author contact AID (empty ⇒ legacy global-AID fallback).
+        composable(
+            route = "invite-redeem/{server}/{secret}?a={a}&i={i}",
+            arguments = listOf(
+                navArgument("server") { type = NavType.StringType },
+                navArgument("secret") { type = NavType.StringType },
+                navArgument("a") { type = NavType.StringType; defaultValue = "" },
+                navArgument("i") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
             val server = java.net.URLDecoder.decode(entry.arguments?.getString("server") ?: "", "UTF-8")
             val secret = java.net.URLDecoder.decode(entry.arguments?.getString("secret") ?: "", "UTF-8")
+            val authorAid = java.net.URLDecoder.decode(entry.arguments?.getString("a") ?: "", "UTF-8").ifEmpty { null }
+            val inviteId = java.net.URLDecoder.decode(entry.arguments?.getString("i") ?: "", "UTF-8").ifEmpty { null }
             InviteRedeemScreen(
                 serverDomain = server,
                 secretHex = secret,
+                authorAidHex = authorAid,
+                inviteIdHex = inviteId,
                 onOpenService = { nav.popBackStack() },
                 onDone = { nav.popBackStack() },
             )

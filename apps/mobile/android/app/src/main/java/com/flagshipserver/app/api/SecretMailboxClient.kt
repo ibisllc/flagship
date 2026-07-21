@@ -33,6 +33,15 @@ interface SecretMailboxClient {
      *  box's STK INDEPENDENTLY of the mailbox echo from here. Identity plane. */
     suspend fun fetchPods(username: String): PodsDirectoryResponse
 
+    /** GET /api/users/:u/stream?cursor=<hex> — the unified live-update channel
+     *  (the hanging GET). A SUPERSET of `/pods` (same `pods`/`pending`) plus an
+     *  opaque `cursor`: pass the last cursor, the server returns immediately if
+     *  anything meaningful changed (or you sent none / a stale one), else HOLDS
+     *  up to ~25s and returns on the next change (or a timeout, same cursor).
+     *  Unauthenticated, exactly like `/pods`. The single foreground canal that
+     *  feeds AppState; the caller falls back to [fetchPods] if this errors. */
+    suspend fun fetchLiveSync(username: String, cursor: String?): LiveSyncResponse
+
     /** PUT {boot}/api/boot/lease — deposit a box-sealed auto-unlock lease on
      *  the boot worker (owner-IRK via `bootAuth`). The `lease` body keeps its
      *  own IRK signature so the box re-verifies it; the worker stores
@@ -43,6 +52,259 @@ interface SecretMailboxClient {
      *  via `bootAuth`). Drops the lease so the box falls back to phone-gated
      *  approval (downgrade, not brick). */
     suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String)
+
+    /** POST /api/server/:domain/pairing-deposit — phone, IRK mailbox-auth.
+     *  Create-time pairing: pre-register a sealed `add-paired-session` order on
+     *  `.com` the moment the recipe is minted, so the booting box claims it on
+     *  first boot and comes online ALREADY paired (no "Pair this server" tap).
+     *  `.com` stores only the OPAQUE sealed blob — it never sees the token (I1). */
+    suspend fun depositPairing(serverDomain: String, body: PairingDepositBody)
+
+    /** POST /api/server/:domain/entitlement-deposit — phone, IRK mailbox-auth.
+     *  Fold "authorize to serve" into the first-boot unlock: the phone deposits
+     *  an owner-IRK-signed entitlement for the box's STK so it claims it on boot
+     *  with no separate tap. `deposit.sealed` is the PUBLIC entitlement carrier
+     *  (what the box presents at HELLO), not a secret. Reuses [PairingDepositBody]
+     *  — identical wire shape. */
+    suspend fun depositEntitlement(serverDomain: String, body: PairingDepositBody)
+
+    /** POST /api/server/:domain/decommission — phone, IRK mailbox-auth (the SAME
+     *  `DeviceEndpointClaim` shape the self-delete / pairing / entitlement deposits
+     *  use). Deposits an owner-IRK-signed `ServerDecommission` eviction order for
+     *  the retiring box instance (docs/server-replacement-graceful-decommission.md
+     *  §6). `.com` mailbox-auths the depositor as the domain's registered owner,
+     *  re-verifies the order under that owner's IRK, and records the eviction so
+     *  the box self-retires on its next outbound poll. Throws on non-2xx. */
+    /** POST /api/server/:domain/swk-deposit — phone, IRK mailbox-auth. Secret-free
+     * recipe: after the box registers, the phone seals the SWK to its registered
+     * identity and IRK-signs the wrapper, depositing the sealed carrier for the box
+     * to claim on boot. Reuses PairingDepositBody. */
+    suspend fun depositSwk(serverDomain: String, body: PairingDepositBody)
+
+    /** POST /api/server/:domain/cgk-deposit — phone, IRK mailbox-auth. The EXACT
+     *  twin of [depositSwk] for the Cloud Gossip Key (per-service leadership Phase
+     *  6): the recipe carries NO CGK; after the box registers, the phone seals the
+     *  per-cloud CGK to the box's REGISTERED identity + IRK-signs the wrapper and
+     *  deposits the sealed carrier here for the box to claim post-boot. `.com`
+     *  holds ciphertext only. Reuses [PairingDepositBody]. */
+    suspend fun depositCgk(serverDomain: String, body: PairingDepositBody)
+
+    /** POST /api/server/:domain/set-leader — phone, IRK mailbox-auth. Deposits the
+     *  owner's PUBLIC preferred-server vote (`flagship/set-leader/v1`) addressed to
+     *  a box domain. `.com` verifies the owner-IRK signature before storing; the
+     *  box fetches the vote meant for it and rides it on its gossip frame (clout).
+     *  Uses its own [SetLeaderDepositBody] (the `{auth, deposit, vote, signature}`
+     *  shape from the TS rail). */
+    suspend fun depositSetLeader(serverDomain: String, body: SetLeaderDepositBody)
+
+    suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody)
+
+    /** POST /api/server/:domain/update — phone, IRK mailbox-auth + ADMIN-authority
+     *  order signature (docs/server-update-mechanism.md). Deposits the PUBLIC
+     *  admin-signed `flagship/server-update/v1` order on `.com`'s update lane; the
+     *  box claims it on its heartbeat, re-verifies it under the pinned admin
+     *  master root AND separately confirms the target commit is maintainer-
+     *  ENDORSED (the daemon's ReleaseGate) before applying — 2-of-2, so this
+     *  deposit alone can never push code. Uses its own [UpdateDepositBody]
+     *  (`{auth, authSignature, deposit, order, signature}`). */
+    suspend fun depositUpdate(serverDomain: String, body: UpdateDepositBody)
+
+    /** POST /api/server/:domain/migration — phone, IRK mailbox-auth. Phase 1 of
+     *  "Migrate to new hardware" (docs/server-migration.md): deposits the
+     *  admin-signed ServerMigrationOrder. Throws on non-2xx (409 ⇒ a different
+     *  migration is already in progress). */
+    suspend fun depositMigrationStart(serverDomain: String, body: MigrationStartBody)
+
+    /** GET /api/server/:domain/migration — PUBLIC phase state for the progress
+     *  timeline. Returns null when no session exists (404). */
+    suspend fun fetchMigration(serverDomain: String): MigrationSession?
+
+    /** POST /api/server/:domain/migration/confirm-ready — phone, admin-signed
+     *  control (409 unless the session is pre-seeded). */
+    suspend fun depositMigrationConfirmReady(serverDomain: String, body: MigrationControlBody)
+
+    /** POST /api/server/:domain/migration/freeze — phone. Phase 5: EXACTLY the
+     *  graceful-decommission deposit (the eviction lane reused verbatim), posted
+     *  to the session-validated freeze route (409 unless ready/freezing). */
+    suspend fun depositMigrationFreeze(serverDomain: String, body: DecommissionDepositBody)
+
+    /** POST /api/server/:domain/migration/abort — phone, admin-signed control.
+     *  Allowed at every phase before take-over; 409 after (the point of no
+     *  return). */
+    suspend fun depositMigrationAbort(serverDomain: String, body: MigrationControlBody)
+}
+
+/** The server-update deposit body. `auth`/`authSignature` are the SAME IRK
+ *  mailbox-auth shape as the other phone-mailbox calls; `deposit` addresses the
+ *  order to a box domain; `order` is the `ServerUpdateOrder` field set and
+ *  `signature` is the ADMIN-authority signature over its canonical bytes (admin
+ *  master root when pinned, owner IRK legacy). Field names match the Worker
+ *  handler (`handlePostUpdateDeposit`) exactly: `{ auth, authSignature,
+ *  deposit:{serverDomain,requestNonceHex}, order:{serverDomain,targetCommit,
+ *  fromCommit,nonce,issuedAt}, signature }`. */
+@Serializable
+data class UpdateDepositBody(
+    val auth: MailboxAuthEnvelope.Auth,
+    val authSignature: String,
+    val deposit: Deposit,
+    val order: Order,
+    val signature: String,   // hex (64 bytes) — admin authority over the order canonical bytes
+) {
+    @Serializable
+    data class Deposit(
+        val serverDomain: String,
+        val requestNonceHex: String,   // hex (32 bytes)
+    )
+
+    @Serializable
+    data class Order(
+        val serverDomain: String,
+        val targetCommit: String,
+        val fromCommit: String,
+        val nonce: String,
+        val issuedAt: Long,
+    )
+}
+
+/** The server-migration initiate deposit — `{ auth, authSignature, order,
+ *  signature }`. `auth`/`authSignature` are the SAME IRK mailbox-auth shape as
+ *  the other phone-mailbox calls; `order` is the ServerMigrationOrder field set
+ *  and `signature` is the admin-root (legacy IRK) signature over its canonical
+ *  bytes. Field names match the Worker handler (`handlePostMigrationStart`)
+ *  exactly. */
+@Serializable
+data class MigrationStartBody(
+    val auth: MailboxAuthEnvelope.Auth,
+    val authSignature: String,
+    val order: Order,
+    val signature: String,
+) {
+    @Serializable
+    data class Order(
+        val serverDomain: String,
+        val oldStkPubHex: String,     // hex (32 bytes) — the CURRENT instance's STK
+        val diskDisposition: String,  // "keep" | "wipe-after-handoff" (never "wipe-now")
+        val nonce: String,            // hex (32 bytes)
+        val issuedAt: Long,
+    )
+}
+
+/** The confirm-ready / abort deposit — `{ auth, authSignature, control,
+ *  signature }`. */
+@Serializable
+data class MigrationControlBody(
+    val auth: MailboxAuthEnvelope.Auth,
+    val authSignature: String,
+    val control: Control,
+    val signature: String,
+) {
+    @Serializable
+    data class Control(
+        val serverDomain: String,
+        val action: String,   // "confirm-ready" | "abort"
+        val nonce: String,    // hex (32 bytes)
+        val issuedAt: Long,
+    )
+}
+
+/** The GET body — the session's phase state + the 8-step timeline stamps.
+ *  `finalDeltaAt`/`oldClosedOutAt` are joined live from the eviction row by the
+ *  Worker. Every stamp is defaulted so an absent field never breaks the poll
+ *  (mixed-deploy tolerance, like the /pods decode). */
+@Serializable
+data class MigrationSession(
+    val serverDomain: String,
+    /** initiated | provisioned | pre-seeded | ready | freezing | taken-over | aborted */
+    val phase: String,
+    val disposition: String = "",
+    val oldStkPubHex: String = "",
+    val newServerDomain: String? = null,
+    val newStkPubHex: String? = null,
+    val initiatedAt: Long? = null,
+    val attachedAt: Long? = null,
+    val preSeededAt: Long? = null,
+    val readyAt: Long? = null,
+    val freezeAt: Long? = null,
+    val finalDeltaAt: Long? = null,
+    val takenOverAt: Long? = null,
+    val abortedAt: Long? = null,
+    val oldClosedOutAt: Long? = null,
+    /** Derived by the Worker: taken over AND the old box closed out. */
+    val done: Boolean = false,
+)
+
+/** The set-leader deposit body. `auth`/`authSignature` are the SAME IRK
+ *  mailbox-auth shape as the other phone-mailbox calls; `deposit` addresses the
+ *  vote to a box domain; `vote` is the set-leader vote field set and `signature`
+ *  is the owner-IRK signature over its canonical bytes. Field names match the
+ *  Worker handler (`handlePostSetLeaderDeposit`) exactly:
+ *  `{ auth, authSignature, deposit:{serverDomain,requestNonceHex}, vote:{user,
+ *  preferredStkPubHex,issuedAt,nonce}, signature }`. */
+@Serializable
+data class SetLeaderDepositBody(
+    val auth: MailboxAuthEnvelope.Auth,
+    val authSignature: String,
+    val deposit: Deposit,
+    val vote: Vote,
+    val signature: String,   // hex (64 bytes) — owner IRK over the vote canonical bytes
+) {
+    @Serializable
+    data class Deposit(
+        val serverDomain: String,
+        val requestNonceHex: String,   // hex (32 bytes)
+    )
+
+    @Serializable
+    data class Vote(
+        val user: String,
+        val preferredStkPubHex: String,   // hex (32 bytes) or "none"
+        val issuedAt: Long,
+        val nonce: String,
+    )
+}
+
+/** The decommission deposit body. `auth`/`authSignature` are the SAME IRK
+ *  mailbox-auth shape as the other phone-mailbox calls; `order` is the
+ *  `ServerDecommission` field set and `signature` is the owner-IRK signature over
+ *  its canonical bytes. Field names match the Worker handler
+ *  (`handlePostDecommission`) exactly: `{ auth, authSignature, order, signature }`. */
+@Serializable
+data class DecommissionDepositBody(
+    val auth: MailboxAuthEnvelope.Auth,
+    val authSignature: String,
+    val order: Order,
+    val signature: String,
+) {
+    @Serializable
+    data class Order(
+        val podCanonical: String,
+        val retiredStkPubHex: String,
+        val finalBackup: Boolean,
+        val diskDisposition: String,
+        val backupEpoch: Long,
+        val nonce: String,
+        val issuedAt: Long,
+    )
+}
+
+/** The create-time pairing deposit body. `auth`/`authSignature` are the SAME IRK
+ *  mailbox-auth shape as the other phone-mailbox calls; `deposit` carries the
+ *  sealed `{request,signature}` blob (sealed FOR the recipe pairing key the phone
+ *  embedded). Field names match the Worker handler (`handlePostPairingDeposit`). */
+@Serializable
+data class PairingDepositBody(
+    val auth: MailboxAuthEnvelope.Auth,
+    val authSignature: String,
+    val deposit: Deposit,
+) {
+    @Serializable
+    data class Deposit(
+        val serverDomain: String,
+        val requestNonceHex: String,  // hex (32 bytes)
+        val stkPub: String,           // hex (32 bytes) — pairing key pub (seal recipient)
+        val sealed: String,           // hex — sealed `{request,signature}` JSON
+        val issuedAt: Long,
+    )
 }
 
 // MARK: - Wire types
@@ -173,6 +435,50 @@ data class SignedDaemonStatus(
     val signatureHex: String = "",
 )
 
+/** PER-BOX relay-trust verdict tuple, relayed VERBATIM by `/pods`. Field names
+ *  match the daemon's wire JSON (what the STK signature commits to via the
+ *  canonical bytes in core.BoxTrustStatusReport). `relayVerdict` stays a raw
+ *  String on the wire; the aggregator maps it to the enum. Every field is
+ *  defaulted so a garbled relay still DECODES (then fails VERIFICATION). */
+@Serializable
+data class BoxTrustStatusReportWire(
+    val serverDomain: String = "",
+    val relayVerdict: String = "",
+    val lockedDown: Boolean = false,
+    val failingCertHash: String? = null,
+    val coveringExceptionCertHash: String? = null,
+    val nonce: String = "",
+    val issuedAt: Long = 0,
+)
+
+/** `trustStatus` on a `/pods` pod: the verbatim box-trust-status report + the
+ *  box's STK signature over its canonical bytes. `.com` can relay or drop this
+ *  but cannot forge it — the phone re-verifies under the pod's identityPubKey
+ *  (the registered STK). Consumed by core.RelayTrustAggregator. */
+@Serializable
+data class SignedBoxTrustStatus(
+    val report: BoxTrustStatusReportWire? = null,
+    val signatureHex: String = "",
+)
+
+/** One un-answered box→owner approval request, from the cheap UNAUTHENTICATED
+ *  `/pods` digest that drives the Box Request Inbox (docs/box-request-inbox.md).
+ *  Detection tier only: `type` is the secret-request purpose; the full signed
+ *  request is fetched over the authenticated mailbox path when the owner taps to
+ *  satisfy it. Mirrors control-plane `PendingRequestSummary` / iOS
+ *  `PendingRequestSummaryWire`. */
+@Serializable
+data class PendingRequestSummaryWire(
+    /** requestNonceHex — the box's reply is keyed by (serverDomain, this). */
+    val id: String,
+    /** Secret-request purpose: "unlock-key" | "entitlement" | …future types. */
+    val type: String,
+    /** issuedAt from the signed SecretRequest (ms). */
+    val issuedAt: Long = 0,
+    /** Row TTL (ms). */
+    val expiresAt: Long = 0,
+)
+
 @Serializable
 data class PodDirectoryEntry(
     val serverDomain: String,
@@ -196,11 +502,36 @@ data class PodDirectoryEntry(
      *  null when the daemon never reported (or `.com` dropped it). Consumed by
      *  core.CertPinRegistry; defaulted for mixed-deploy tolerance. */
     val signedStatus: SignedDaemonStatus? = null,
-    /** Cheap directory signal: the box has a LIVE boot-unlock request parked
-     *  right now. Lets the phone show "waiting for approval" for a locked box
-     *  (instead of "never came online") without the biometric mailbox read.
-     *  Defaulted ⇒ absent on a pre-field Worker is false. Mirror of iOS. */
-    val awaitingUnlock: Boolean = false,
+    /** PER-BOX relay-trust verdict — the box's separately STK-signed
+     *  box-trust-status envelope, relayed VERBATIM. The phone re-verifies it
+     *  under `identityPubKey` and aggregates the untrusted ones BY
+     *  `failingCertHash` across all pods (core.RelayTrustAggregator). null when
+     *  the box reports no trust status (old daemon). Defaulted for
+     *  mixed-deploy tolerance. Mirror of iOS PodDirectoryEntry.trustStatus. */
+    val trustStatus: SignedBoxTrustStatus? = null,
+    /** The typed Box Request Inbox digest for this pod (docs/box-request-inbox.md)
+     *  — the list of approvals this box is currently asking its owner for
+     *  (`unlock-key`, `entitlement`, …future types). The unified client inbox is
+     *  the flatMap of this across pods; it replaced the old compat
+     *  `awaitingUnlock` / `awaitingEntitlement` booleans (dropped from /pods once
+     *  every surface read this). Defaulted ⇒ absent is empty. Mirror of iOS. */
+    val pendingRequests: List<PendingRequestSummaryWire> = emptyList(),
+    /** HONEST LIVENESS (Fix A) — the server-authoritative reachability for this
+     *  box, computed by `.com` from the daemon-status heartbeat against a
+     *  freshness window: `"live"` | `"unreachable"` | `"never"`. null ⇒ a
+     *  pre-field Worker (the reconciler falls back to the registration-derived
+     *  `cameOnline` path). Mirror of iOS PodDirectoryEntry.liveness. */
+    val liveness: String? = null,
+    /** Wall-clock ms since the box's last heartbeat (`lastSeenMsAgo`), or null
+     *  if it never checked in / a pre-field Worker. Humanized into "offline —
+     *  last seen <…>" for an `unreachable` box. Mirror of iOS. */
+    val lastSeenMsAgo: Long? = null,
+    /** Per-service leadership (Phase 6) — the service slugs this box currently
+     *  LEADS, relayed verbatim from `/pods` (`leadsServices`). Additive; absent ⇒
+     *  empty (a pre-field Worker, or the box leads nothing). Defaulted so a
+     *  garbled/absent value yields [] rather than failing the whole pods-list
+     *  decode. Mirror of iOS PodDirectoryEntry.leadsServices. */
+    val leadsServices: List<String> = emptyList(),
 ) {
     /** A box that has reported daemon status OR holds a cert has come online
      *  at least once. Mirror of iOS PodDirectoryEntry.cameOnline. */
@@ -249,6 +580,26 @@ data class PodsDirectoryResponse(
             it.serverDomain.lowercase() == target && it.revokedAt == null
         }?.identityPubKey
     }
+}
+
+/** The wire shape of `GET /api/users/:u/stream` — the live-update channel. A
+ *  SUPERSET of [PodsDirectoryResponse] (same `pods`/`pending`) plus the opaque
+ *  `cursor` the client echoes back to detect change. Decodes with the SAME
+ *  lenient defaults, so the projection into AppState is identical whether the
+ *  data arrived via the stream or the fallback fetch. */
+@Serializable
+data class LiveSyncResponse(
+    /** Opaque change-detection cursor — store it, echo it back next request. */
+    val cursor: String = "",
+    val username: String,
+    val pods: List<PodDirectoryEntry> = emptyList(),
+    val pending: List<PendingPodEntry> = emptyList(),
+) {
+    /** Project to the `/pods`-shaped directory the reconciler consumes (it
+     *  doesn't need the cursor). Lets the same reconcile path serve both the
+     *  live stream and the fallback fetch with no branching. */
+    val directory: PodsDirectoryResponse
+        get() = PodsDirectoryResponse(username, pods, pending)
 }
 
 // MARK: - Live
@@ -317,6 +668,24 @@ class LiveSecretMailboxClient(
         return response
     }
 
+    override suspend fun fetchLiveSync(username: String, cursor: String?): LiveSyncResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        var url = "$base/api/users/$encoded/stream"
+        if (!cursor.isNullOrEmpty()) {
+            url += "?cursor=${java.net.URLEncoder.encode(cursor, "UTF-8")}"
+        }
+        // The hanging GET holds up to ~25s server-side; the transport's read
+        // timeout must allow that (the caller falls back to /pods on a real
+        // error). The stream carries the same `signedStatus` as /pods, so reuse
+        // the A′-pin observer off the projected directory.
+        val response = transport.getJson(
+            url,
+            responseSerializer = LiveSyncResponse.serializer(),
+        )
+        onPods?.let { observe -> runCatching { observe(response.directory) } }
+        return response
+    }
+
     override suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) {
         val bytes = transport.json
             .encodeToString(LeaseDepositPost.serializer(), LeaseDepositPost(lease, signatureHex))
@@ -341,6 +710,174 @@ class LiveSecretMailboxClient(
             contentType = null,
             extraHeaders = mapOf("Authorization" to bootAuth),
             accept = setOf(200, 204),
+        )
+    }
+
+    override suspend fun depositPairing(serverDomain: String, body: PairingDepositBody) {
+        // The pairing deposit is on `.com` (identity plane), not the boot worker.
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(PairingDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/pairing-deposit",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun depositEntitlement(serverDomain: String, body: PairingDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(PairingDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/entitlement-deposit",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun depositSwk(serverDomain: String, body: PairingDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(PairingDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/swk-deposit",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun depositCgk(serverDomain: String, body: PairingDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(PairingDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/cgk-deposit",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(SetLeaderDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/set-leader",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(DecommissionDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/decommission",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun depositUpdate(serverDomain: String, body: UpdateDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(UpdateDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/update",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun depositMigrationStart(serverDomain: String, body: MigrationStartBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(MigrationStartBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/migration",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun fetchMigration(serverDomain: String): MigrationSession? {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val resp = transport.execute(
+            method = "GET",
+            url = "$base/api/server/$encoded/migration",
+            accept = setOf(200, 404),
+        )
+        if (resp.status == 404) return null
+        return transport.json.decodeFromString(
+            MigrationSession.serializer(), String(resp.body, Charsets.UTF_8),
+        )
+    }
+
+    override suspend fun depositMigrationConfirmReady(serverDomain: String, body: MigrationControlBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(MigrationControlBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/migration/confirm-ready",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun depositMigrationFreeze(serverDomain: String, body: DecommissionDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(DecommissionDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/migration/freeze",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun depositMigrationAbort(serverDomain: String, body: MigrationControlBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(MigrationControlBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/migration/abort",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
         )
     }
 }
@@ -380,11 +917,123 @@ class MockSecretMailboxClient : SecretMailboxClient {
     override suspend fun fetchPods(username: String): PodsDirectoryResponse =
         PodsDirectoryResponse(username, directory, pendingOrders)
 
+    /** Scripted live-sync responses for tests: each [fetchLiveSync] call pops the
+     *  next entry; once exhausted it returns a DETERMINISTIC snapshot built from
+     *  [directory]/[pendingOrders] with a content-stable cursor (so a loop keeps
+     *  a stable cursor and never hangs). Set [liveSyncError] to make the next
+     *  call throw (exercising the /pods fallback). */
+    var liveSyncScript: MutableList<LiveSyncResponse> = mutableListOf()
+    var liveSyncError: Throwable? = null
+    /** Cursors observed across calls — lets a test assert the cursor is echoed. */
+    val liveSyncCursors: MutableList<String?> = mutableListOf()
+
+    override suspend fun fetchLiveSync(username: String, cursor: String?): LiveSyncResponse {
+        liveSyncCursors.add(cursor)
+        liveSyncError?.let { err ->
+            liveSyncError = null
+            throw err
+        }
+        if (liveSyncScript.isNotEmpty()) return liveSyncScript.removeAt(0)
+        val stableCursor = "mock-${directory.size}-${pendingOrders.size}"
+        return LiveSyncResponse(stableCursor, username, directory, pendingOrders)
+    }
+
     override suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) {
         deposited.add(Triple(lease, signatureHex, bootAuth))
     }
 
     override suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) {
         revoked.add(request to bootAuth)
+    }
+
+    val pairingDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
+    override suspend fun depositPairing(serverDomain: String, body: PairingDepositBody) {
+        pairingDeposits.add(serverDomain to body)
+    }
+
+    val entitlementDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
+    override suspend fun depositEntitlement(serverDomain: String, body: PairingDepositBody) {
+        entitlementDeposits.add(serverDomain to body)
+    }
+
+    val swkDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
+    /** When set, the next [depositSwk] throws this, then clears it. */
+    var swkDepositError: Throwable? = null
+    override suspend fun depositSwk(serverDomain: String, body: PairingDepositBody) {
+        swkDepositError?.let { swkDepositError = null; throw it }
+        swkDeposits.add(serverDomain to body)
+    }
+
+    val cgkDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
+    /** When set, the next [depositCgk] throws this, then clears it (best-effort
+     *  retry path). */
+    var cgkDepositError: Throwable? = null
+    override suspend fun depositCgk(serverDomain: String, body: PairingDepositBody) {
+        cgkDepositError?.let { cgkDepositError = null; throw it }
+        cgkDeposits.add(serverDomain to body)
+    }
+
+    val setLeaderDeposits: MutableList<Pair<String, SetLeaderDepositBody>> = mutableListOf()
+    /** When set, the next [depositSetLeader] throws this, then clears it. */
+    var setLeaderError: Throwable? = null
+    override suspend fun depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) {
+        setLeaderError?.let { setLeaderError = null; throw it }
+        setLeaderDeposits.add(serverDomain to body)
+    }
+
+    /** When set, the next [depositDecommission] throws this, then clears it. */
+    var nextDecommissionError: Throwable? = null
+    val decommissionDeposits: MutableList<Pair<String, DecommissionDepositBody>> = mutableListOf()
+    override suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody) {
+        nextDecommissionError?.let { nextDecommissionError = null; throw it }
+        decommissionDeposits.add(serverDomain to body)
+    }
+
+    /** When set, the next [depositUpdate] throws this, then clears it. */
+    var nextUpdateError: Throwable? = null
+    val updateDeposits: MutableList<Pair<String, UpdateDepositBody>> = mutableListOf()
+    override suspend fun depositUpdate(serverDomain: String, body: UpdateDepositBody) {
+        nextUpdateError?.let { nextUpdateError = null; throw it }
+        updateDeposits.add(serverDomain to body)
+    }
+
+    /** Scripted GET result for [fetchMigration] (null ⇒ 404 / no session). */
+    var migrationSession: MigrationSession? = null
+    /** When set, the next call of that kind throws it once. */
+    var nextMigrationStartError: Throwable? = null
+    var nextMigrationFetchError: Throwable? = null
+    var nextMigrationConfirmError: Throwable? = null
+    var nextMigrationFreezeError: Throwable? = null
+    var nextMigrationAbortError: Throwable? = null
+    val migrationStarts: MutableList<Pair<String, MigrationStartBody>> = mutableListOf()
+    val migrationConfirms: MutableList<Pair<String, MigrationControlBody>> = mutableListOf()
+    val migrationFreezes: MutableList<Pair<String, DecommissionDepositBody>> = mutableListOf()
+    val migrationAborts: MutableList<Pair<String, MigrationControlBody>> = mutableListOf()
+    val migrationFetches: MutableList<String> = mutableListOf()
+
+    override suspend fun depositMigrationStart(serverDomain: String, body: MigrationStartBody) {
+        nextMigrationStartError?.let { nextMigrationStartError = null; throw it }
+        migrationStarts.add(serverDomain to body)
+    }
+
+    override suspend fun fetchMigration(serverDomain: String): MigrationSession? {
+        migrationFetches.add(serverDomain)
+        nextMigrationFetchError?.let { nextMigrationFetchError = null; throw it }
+        return migrationSession
+    }
+
+    override suspend fun depositMigrationConfirmReady(serverDomain: String, body: MigrationControlBody) {
+        nextMigrationConfirmError?.let { nextMigrationConfirmError = null; throw it }
+        migrationConfirms.add(serverDomain to body)
+    }
+
+    override suspend fun depositMigrationFreeze(serverDomain: String, body: DecommissionDepositBody) {
+        nextMigrationFreezeError?.let { nextMigrationFreezeError = null; throw it }
+        migrationFreezes.add(serverDomain to body)
+    }
+
+    override suspend fun depositMigrationAbort(serverDomain: String, body: MigrationControlBody) {
+        nextMigrationAbortError?.let { nextMigrationAbortError = null; throw it }
+        migrationAborts.add(serverDomain to body)
     }
 }

@@ -44,16 +44,28 @@ public final class DeveloperSettings {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        // On first launch the key is absent; apply build-config
-        // defaults so Release builds talk to a real pod out of the
-        // box (TestFlight testers can't reach the dev settings until
-        // they pair) while Debug builds keep the mock for fast
-        // iteration. Once the user flips the toggle, the persisted
-        // value wins.
+        // On first launch the key is absent; default to the LIVE client
+        // in EVERY build (owner request: the apps talk to a real pod out
+        // of the box; the mock is opt-in via the 3-tap Developer toggle).
+        // Once the user flips the toggle, the persisted value wins — so a
+        // tester who taps over to mock stays on mock across launches.
         if defaults.object(forKey: useLiveKey) != nil {
             self.useLiveClient = defaults.bool(forKey: useLiveKey)
         } else {
             self.useLiveClient = DeveloperSettings.releaseDefaultUseLive
+        }
+        // GYM-ONLY: `-smoke-mode` scenarios are NO-BACKEND by contract — they
+        // seed DemoFixtures and must render from the MOCK client (GymLiveTests
+        // documents this split: live tests launch WITHOUT `-smoke-mode`).
+        // Since `releaseDefaultUseLive` flipped to true (2026-06-19), a smoke
+        // launch would otherwise ride the LIVE client with no session token —
+        // every BFF read fails `noSessionToken` ("not paired" / "connection
+        // expired"). Assigned in init, so `didSet` does NOT fire: the override
+        // is in-memory only and never persists onto the simulator (a later
+        // live-tier launch on the same simulator keeps its own default).
+        // Production never passes `-smoke-mode`.
+        if ProcessInfo.processInfo.arguments.contains("-smoke-mode") {
+            self.useLiveClient = false
         }
         self.unlocked = defaults.bool(forKey: revealedKey)
         let raw = defaults.integer(forKey: mockLatencyKey)
@@ -77,15 +89,11 @@ public final class DeveloperSettings {
         }
     }
 
-    /// Build-config default for `useLiveClient` when the user has
-    /// never touched the toggle. Release builds default ON; Debug
-    /// keeps the mock client so SwiftUI previews + simulator runs
-    /// don't require a paired pod.
-    public static let releaseDefaultUseLive: Bool = {
-        #if DEBUG
-        return false
-        #else
-        return true
-        #endif
-    }()
+    /// Default for `useLiveClient` when the user has never touched the
+    /// toggle. LIVE in every build (owner request 2026-06-19): the app
+    /// targets a real pod out of the box. Flip to the mock via the 3-tap
+    /// Developer section. Tests/the gym set the mode explicitly, so this
+    /// default never decides their behavior. SwiftUI previews that need
+    /// the mock construct their own mock-backed clients directly.
+    public static let releaseDefaultUseLive: Bool = true
 }

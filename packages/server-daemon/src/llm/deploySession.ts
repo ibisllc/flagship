@@ -23,20 +23,21 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  signInstallService,
   verifyInstallService,
   type InstallServiceRequest,
-  type Keypair,
 } from "@flagship/protocol";
-import type { CommandRunner } from "../serviceRunner.js";
+import { runDockerBuild, type CommandRunner } from "../serviceRunner.js";
 import type { ServicePlatform } from "../servicePlatform.js";
+import type { BoxSigner } from "../keyCustodian.js";
 import type { ForgejoAppAdmin } from "../forgejoServiceAdmin.js";
 import type { VibeCodeSession } from "./vibeCodeSession.js";
 
 export interface DeploySessionDeps {
   servicePlatform: ServicePlatform;
-  /** The host's IRK keypair — signs the InstallServiceRequest. */
-  hostIrk: Keypair;
+  /** Box-identity signer (custodian slice) — signs the InstallServiceRequest
+   *  as the box (the owner IRK private half is phone-held; ServicePlatform
+   *  accepts the box identity as an additive host signer). Never a raw key. */
+  signer: Pick<BoxSigner, "signInstallService">;
   /** Daemon username (the creator/host of vibe-coded apps). */
   hostUsername: string;
   /**
@@ -91,7 +92,7 @@ export function buildDeploySession(deps: DeploySessionDeps) {
     // Kept inline rather than importing ServicePlatform as a value just
     // for the static; the format is pinned by servicePlatform.serviceId +
     // its test.
-    const serviceId = `${creator}-${slug}`;
+    const serviceId = `${creator}--${slug}`; // docs/service-addressing-double-dash.md
     const appDir = join(deps.workingDir, serviceId);
 
     // 1. Write the source tree. We blow away any prior working tree
@@ -142,7 +143,7 @@ export function buildDeploySession(deps: DeploySessionDeps) {
     // restart).
     const image = `flagship-vibe-${serviceId}:${revision}`.toLowerCase();
     try {
-      await deps.cmd.run("docker", ["build", "-t", image, appDir]);
+      await runDockerBuild(deps.cmd, image, appDir);
     } catch (e) {
       return { ok: false, reason: `docker build failed: ${(e as Error).message}` };
     }
@@ -163,7 +164,7 @@ export function buildDeploySession(deps: DeploySessionDeps) {
       addOwnerToMembership: true,
       issuedAt: now(),
     };
-    const signature = signInstallService(request, deps.hostIrk);
+    const signature = deps.signer.signInstallService(request);
 
     // 6. Install via ServicePlatform — provisions data, mints token,
     // deploys the container. Owner-set env vars (if any) are applied
@@ -181,7 +182,7 @@ export function buildDeploySession(deps: DeploySessionDeps) {
 
     // 7. Compose the canonical URL. ServicePlatform exposes urlLabel via
     // its static helper; we rebuild it here to avoid coupling.
-    const urlLabel = creator === deps.hostUsername ? slug : `${slug}-${creator}`;
+    const urlLabel = creator === deps.hostUsername ? slug : `${slug}--${creator}`;
     const url = `https://${urlLabel}.${session.meta.serverFqdn}`;
     return { ok: true, serviceId, url, image };
   };

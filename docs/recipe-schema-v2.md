@@ -3,7 +3,7 @@
 A **recipe** is a signed `InstallBlob` envelope that authorizes one Flagship pod
 to register with `.com` under a specific username + server-domain. It's the
 wire-form the phone produces, the desktop forwards via QR-pipe (or downloads
-as a `.json` file), and the Burner consumes when writing a USB drive.
+as a `.json` file), and the Builder consumes when writing a USB drive.
 
 ## Schema
 
@@ -35,7 +35,7 @@ as a `.json` file), and the Burner consumes when writing a USB drive.
 
 ## Canonical bytes (signature input)
 
-The Burner verifies `blobSignatureHex` against the bytes produced by joining
+The Builder verifies `blobSignatureHex` against the bytes produced by joining
 these 12 fields with `|`:
 
 ```
@@ -61,23 +61,23 @@ enforce it:
 
 1. **Phone picker** clamps to `[5min, 24h]` (default 6h). iOS / Android /
    webapp UI all share these bounds.
-2. **Burner** refuses to consume a recipe whose `authCode.expiresAt < now`
-   (see `packages/flagship-burner/src/loadBlob.ts`).
+2. **Builder** refuses to consume a recipe whose `authCode.expiresAt < now`
+   (see `packages/flagship-builder/src/loadBlob.ts`).
 3. **Worker** at `/api/server/register` refuses when
    `now > authCode.expiresAt` **and** when
    `authCode.expiresAt - authCode.issuedAt > 24h` (anti-spam cap; defense
    in depth against an outdated client signing arbitrarily long expiries).
 
-## Verification flow (Burner)
+## Verification flow (Builder)
 
 1. Read the JSON.
 2. Parse + extract `blobSignatureHex`.
 3. Reconstruct the canonical-bytes from the 12 fields above.
 4. `ed25519_verify(canonicalBytes, blobSignatureHex, authCode.userPubKey)`.
 5. If verify fails or `now > authCode.expiresAt`, refuse with a specific
-   `BurnerLoadError` code.
+   `BuilderLoadError` code.
 
-The Burner **never** calls `flagshipserver.com` to verify — the embedded
+The Builder **never** calls `flagshipserver.com` to verify — the embedded
 phone signature is the sole trust root. `.com`'s only involvement in the
 recipe→install pipeline is the daemon's POST to `/api/server/register`
 after first boot.
@@ -90,19 +90,19 @@ after first boot.
 | iOS / shared canonical-bytes | `apps/mobile/shared/Sources/FlagshipCore/InstallBlob.swift` |
 | Android canonical-bytes | `apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/InstallBlob.kt` |
 | Webapp canonical-bytes | `apps/web/public/webapp/lib/buildDraft.js` |
-| Burner verify (TS / CLI) | `packages/flagship-burner/src/loadBlob.ts` (delegates to `verifyInstallBlob`) |
-| Burner verify (Mac app) | `apps/burner-mac/Sources/FlagshipBurnerCore/Recipe.swift` (`canonicalBytes`) |
-| Burner verify (Windows app) | `apps/burner-windows/src/Recipe.cs` (`CanonicalBytes`) |
+| Builder verify (TS / CLI) | `packages/flagship-builder/src/loadBlob.ts` (delegates to `verifyInstallBlob`) |
+| Builder verify (Mac app) | `apps/builder-mac/Sources/FlagshipBuilderCore/Recipe.swift` (`canonicalBytes`) |
+| Builder verify (Windows app) | `apps/builder-windows/src/Recipe.cs` (`CanonicalBytes`) |
 | Worker enforce | `packages/control-plane/src/serverRegister.ts` |
 
 All of these MUST produce byte-identical canonical-bytes given identical input.
 The cross-platform tests in `apps/mobile/ios/Tests/.../InstallBlobTests.swift`
 and `apps/mobile/android/.../InstallBlobTest.kt` lock in the bytes; the
 canonical-bytes regression in `CreateServerTtlTests.swift` re-asserts the
-12-field shape; the burner golden vectors live in
-`apps/burner-mac/Tests/.../RecipeTests.swift` + `apps/burner-windows/tests/RecipeTests.cs`.
+12-field shape; the builder golden vectors live in
+`apps/builder-mac/Tests/.../RecipeTests.swift` + `apps/builder-windows/tests/RecipeTests.cs`.
 
-> ⚠️ **Two commitment points per burner — easy to miss.** A burner not only
+> ⚠️ **Two commitment points per builder — easy to miss.** A builder not only
 > *verifies* the canonical bytes, it also *re-serializes* the blob into the ISO
 > trailer (`installBlobToJson` in `packages/iso-personalizer/src/trailer.ts`;
 > the hand-rolled `installBlobJSON` in the Mac/Windows `AlpinePersonalize`). Any
@@ -111,5 +111,5 @@ canonical-bytes regression in `CreateServerTtlTests.swift` re-asserts the
 > canonical-bytes builder and the trailer serializer, or the daemon's POST to
 > `/api/server/register` fails the Worker's re-verify even though the local burn
 > "succeeded". (This is exactly the `certAutonomy` regression that broke the
-> native burners while the TS path — which reuses the protocol helpers — stayed
+> native builders while the TS path — which reuses the protocol helpers — stayed
 > correct.)

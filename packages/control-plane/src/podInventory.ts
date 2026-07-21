@@ -24,6 +24,8 @@
 
 import {
   verifyDaemonStatusReport,
+  verifyBoxTrustStatusReport,
+  type BoxTrustStatusReport,
   type DaemonStatusReport,
 } from "@flagship/protocol";
 import { sha256 } from "@noble/hashes/sha256";
@@ -34,6 +36,8 @@ import type {
   AuthCodeStorage,
   ProvisionStatusStorage,
   SecretMailboxStorage,
+  SecretMailboxPurpose,
+  UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, bytesToHex, hexToBytes } from "./hex.js";
 import {
@@ -56,10 +60,57 @@ export interface PodInventoryDeps {
    *  500 the authoritative list. */
   provisionStatus?: ProvisionStatusStorage;
   /** The phone-as-unlock-endpoint mailbox. Used ONLY to derive the cheap,
-   *  unauthenticated `awaitingUnlock` flag (a box with a live boot-unlock
-   *  request) so a locked box isn't misclassified "never came online". */
+   *  unauthenticated `pendingRequests` digest (the typed list of approvals a
+   *  box has live) so a locked/awaiting box isn't misclassified "never came
+   *  online" — the Box Request Inbox detection tier. */
   secretMailbox?: SecretMailboxStorage;
+  /**
+   * Account-deletion / name-reclaim (migration 0058) — when wired,
+   * `handlePostDaemonStatus` coarsely bumps `usernames.last_active` for the
+   * owning account after a VERIFIED heartbeat (a live box is the strongest
+   * "account in use" signal for the reclaim tool). Coarse: only when the
+   * stored value is older than ~1 day, so the 5-minutely heartbeat doesn't
+   * hot-write the row. Optional + best-effort: a bump failure never blocks the
+   * heartbeat. NOT consulted on the unauthenticated GET /pods read (that's any
+   * knower-of-a-username and must not keep a name "active").
+   */
+  usernames?: UsernameStorage;
   now?: () => number;
+}
+
+/** Coarse last_active bump cadence: at most once per day. */
+const LAST_ACTIVE_BUMP_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How long a real daemon heartbeat remains fresh. The daemon posts at ~5 min
+ * cadence; 3× that tolerates 2 missed beats before declaring unreachable.
+ * A box bridged from provision-status (static timestamp, never refreshed) is
+ * NOT subject to this window — see `bridgedLastReported` below.
+ */
+export const FRESHNESS_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Classify a pod's liveness based on its daemon-status heartbeat.
+ *
+ *   "live"        — real heartbeat received within FRESHNESS_WINDOW_MS.
+ *   "unreachable" — had a real heartbeat but it's now stale.
+ *   "never"       — registered but never sent a real heartbeat (including
+ *                   boxes whose only `lastReported` came from the provision-
+ *                   status bridge — a one-time static timestamp that would
+ *                   wrongly flip to "unreachable" after 15 min otherwise).
+ */
+function computeLiveness(
+  realLastReported: number | null,
+  now: number,
+): { liveness: "live" | "unreachable" | "never"; lastSeenMsAgo: number | null } {
+  if (realLastReported === null) {
+    return { liveness: "never", lastSeenMsAgo: null };
+  }
+  const age = now - realLastReported;
+  if (age < FRESHNESS_WINDOW_MS) {
+    return { liveness: "live", lastSeenMsAgo: age };
+  }
+  return { liveness: "unreachable", lastSeenMsAgo: age };
 }
 
 /**
@@ -75,6 +126,24 @@ export function orderRefForSerial(serial: string): string {
   return bytesToHex(
     sha256(new TextEncoder().encode(`flagship/order-ref/v1|${serial}`)),
   );
+}
+
+/**
+ * One un-answered box→owner approval request, for the cheap UNAUTHENTICATED
+ * `/pods` digest that drives the Box Request Inbox (docs/box-request-inbox.md).
+ * This is the detection tier only: `type` is the secret-request purpose; the
+ * full signed request + deviceInfo is fetched over the authenticated
+ * `/api/secret-requests` path when the owner taps to satisfy it.
+ */
+export interface PendingRequestSummary {
+  /** requestNonceHex — the box's reply is keyed by (serverDomain, this). */
+  id: string;
+  /** Secret-request purpose: "unlock-key" | "entitlement" | …future types. */
+  type: SecretMailboxPurpose;
+  /** issuedAt from the signed SecretRequest (ms). */
+  issuedAt: number;
+  /** Row TTL (ms). */
+  expiresAt: number;
 }
 
 /** A still-in-flight install order, shaped for the merged `/pods` list. */
@@ -94,10 +163,59 @@ export interface PendingPodEntry {
   state: "pending";
 }
 
-export async function handleGetUserPods(
+/** A registered, online pod, shaped for the merged `/pods` list. */
+export interface OnlinePodEntry {
+  serverDomain: string;
+  identityPubKey: string;
+  registeredAt: number;
+  revokedAt: number | null;
+  routingTarget: string | null;
+  lastReported: number | null;
+  /** Server-side liveness classification from the daemon-status heartbeat
+   *  cadence (multi-pod work); set alongside `lastReported` in the builder. */
+  liveness: "live" | "unreachable" | "never";
+  lastSeenMsAgo: number | null;
+  currentCert: { sha256: string | null; validUntil: number | null; issuer: string | null } | null;
+  signedStatus: { report: unknown; signatureHex: string } | null;
+  /**
+   * PER-BOX relay-trust verdict — the box's separately-signed
+   * `flagship/box-trust-status/v1` envelope, relayed verbatim so a client
+   * re-verifies it under the locally-derived STK. Null when the box reports no
+   * trust status (old daemon / never evaluated). Clients aggregate warnings by
+   * `report.failingCertHash` ACROSS all a user's pods: one sliver line + one
+   * biometric override per DISTINCT faulty authority, not one per box.
+   */
+  trustStatus: { report: unknown; signatureHex: string } | null;
+  appsServed: string[];
+  /**
+   * The service slugs this box currently LEADS (Phase 6 Part 3) — sourced from the
+   * UNSIGNED `leadsServices` the daemon-status heartbeat carries inside the relayed
+   * report. Additive + tolerant of absence: an empty array when the box doesn't
+   * report leads (old daemon / no gossip / no CGK). Clients badge "lead" from this.
+   */
+  leadsServices: string[];
+  pendingRequests: PendingRequestSummary[];
+  state: "online";
+}
+
+/** The full pod-inventory projection (the `/pods` payload, sans HTTP wrapper). */
+export interface PodInventory {
+  username: string;
+  pods: OnlinePodEntry[];
+  pending: PendingPodEntry[];
+  fetchedAt: number;
+}
+
+/**
+ * Build the consolidated pod inventory for a user. This is the SINGLE source
+ * of the `/pods` payload — both `handleGetUserPods` (the unauthenticated GET)
+ * and `handleUserStream` (the long-poll) call it, so they never drift. Cheap
+ * to re-call in a loop: a handful of indexed storage reads, no external I/O.
+ */
+export async function buildPodInventory(
   deps: PodInventoryDeps,
   username: string,
-): Promise<HandlerResponseWithHeaders> {
+): Promise<PodInventory> {
   const servers = await deps.servers.listForUser(username);
   const statuses = await deps.daemonStatus.listForUser(username);
   const statusByDomain = new Map<string, (typeof statuses)[number]>();
@@ -107,30 +225,41 @@ export async function handleGetUserPods(
 
   const now = (deps.now ?? (() => Date.now()))();
 
-  // Cheap, non-biometric "is this box waiting for a boot-unlock approval?"
-  // signal. A locked box can't reach its daemon BFF (the disk is sealed) and
-  // won't POST a daemon-status heartbeat, so without this it falls through to
-  // "never came online" past the grace window — and the phone's only other
-  // signal (the IRK-signed mailbox read) is biometric and can't run unattended,
-  // so it can't repopulate after an app restart. Reading the mailbox here needs
-  // no auth: listPendingForUser already returns only un-consumed, un-expired,
-  // un-answered rows. Guarded so a failure never drops or fails the list.
-  const awaitingUnlock = new Set<string>();
+  // Cheap, non-biometric digest of "what is each box asking its owner to
+  // approve right now?" — the detection tier of the Box Request Inbox
+  // (docs/box-request-inbox.md). A locked/awaiting box can't reach its daemon
+  // BFF (disk sealed) and won't POST a daemon-status heartbeat, so without this
+  // it falls through to "never came online" past the grace window — and the
+  // phone's only other signal (the IRK-signed mailbox read) is biometric and
+  // can't poll. Reading the mailbox here needs no auth: listPendingForUser
+  // returns ONLY un-consumed, un-expired, un-answered REQUEST lanes (deposit
+  // lanes are answered-by-construction and never surface), so this set is
+  // exactly the inbox. Guarded so a failure never drops or fails the list.
+  const pendingByDomain = new Map<string, PendingRequestSummary[]>();
   if (deps.secretMailbox) {
     try {
       const pendingReqs = await deps.secretMailbox.listPendingForUser(username, now);
       for (const r of pendingReqs) {
-        if (r.purpose === "unlock-key") awaitingUnlock.add(r.serverDomain.toLowerCase());
+        const key = r.serverDomain.toLowerCase();
+        const list = pendingByDomain.get(key) ?? [];
+        list.push({
+          id: r.requestNonceHex,
+          type: r.purpose,
+          issuedAt: r.requestIssuedAt,
+          expiresAt: r.expiresAt,
+        });
+        pendingByDomain.set(key, list);
       }
     } catch {
       /* enrichment failure must never empty or 500 the authoritative list */
     }
   }
 
-  const pods = await Promise.all(
-    servers.map(async (s) => {
+  const pods: OnlinePodEntry[] = await Promise.all(
+    servers.map(async (s): Promise<OnlinePodEntry> => {
       const routing = await deps.routing.get(s.serverDomain);
       const status = statusByDomain.get(s.serverDomain.toLowerCase());
+      const pendingRequests = pendingByDomain.get(s.serverDomain.toLowerCase()) ?? [];
       let appsServed: string[] = [];
       if (status?.servicesServedJson) {
         try {
@@ -154,7 +283,14 @@ export async function handleGetUserPods(
       // NEVER drops a server or fails the list. Only runs when daemon_status is
       // absent — adds up to 2 extra queries per daemon_status-less server
       // (fine for small N; remove once daemons POST real heartbeats).
+      // `realLastReported` is the heartbeat timestamp from an actual STK-signed
+      // daemon-status POST — the only value that should be subject to the
+      // FRESHNESS_WINDOW liveness check. The provision-status bridge below sets
+      // `lastReported` for wire compat but is flagged separately so the liveness
+      // classifier can treat bridged boxes as "never" (awaiting first heartbeat)
+      // rather than wrongly flipping them to "unreachable" after 15 min.
       let lastReported = status?.lastReported ?? null;
+      let realLastReported: number | null = status?.lastReported ?? null;
       if (!status && deps.authCodes && deps.provisionStatus) {
         try {
           const code = await deps.authCodes.latestByServerDomain(s.serverDomain);
@@ -162,6 +298,8 @@ export async function handleGetUserPods(
             const ps = await deps.provisionStatus.getProvisionStatus(code.serial);
             if (ps?.phase === "live") {
               lastReported = ps.updatedAt ?? now;
+              // Keep realLastReported null — this is a bridge value, not a real
+              // heartbeat. The liveness classifier must not apply the window to it.
             }
           }
         } catch {
@@ -174,16 +312,50 @@ export async function handleGetUserPods(
       // drop it but not forge it). Parse is guarded: a corrupt row degrades
       // to null, never fails the list.
       let signedStatus: { report: unknown; signatureHex: string } | null = null;
+      // Phase 6 Part 3 — the per-pod "services I lead" set, relayed from the UNSIGNED
+      // `leadsServices` the daemon stashed inside the report JSON. Parsed alongside
+      // signedStatus; absent/corrupt → empty (additive, never fails the list).
+      let leadsServices: string[] = [];
+      // PER-BOX relay-trust verdict — the separately-signed box-trust-status
+      // sibling the daemon stashed inside the report JSON. Relayed verbatim as
+      // `trustStatus` ({ report, signatureHex }) so a client re-verifies the
+      // box's own verdict under the locally-derived STK; a client then
+      // aggregates warnings by `failingCertHash` ACROSS all a user's pods (one
+      // sliver line + one override per DISTINCT faulty authority, not per box).
+      let trustStatus: { report: unknown; signatureHex: string } | null = null;
       if (status?.reportJson && status.signatureHex) {
         try {
+          const parsedReport = JSON.parse(status.reportJson) as unknown;
           signedStatus = {
-            report: JSON.parse(status.reportJson) as unknown,
+            report: parsedReport,
             signatureHex: status.signatureHex,
           };
+          const ls = (parsedReport as { leadsServices?: unknown })?.leadsServices;
+          if (Array.isArray(ls)) {
+            leadsServices = ls.filter((x): x is string => typeof x === "string");
+          }
+          const rawTs = (
+            parsedReport as {
+              trustStatus?: { report?: unknown; signatureHex?: unknown };
+            }
+          )?.trustStatus;
+          if (
+            rawTs &&
+            typeof rawTs === "object" &&
+            rawTs.report &&
+            typeof rawTs.signatureHex === "string"
+          ) {
+            trustStatus = {
+              report: rawTs.report,
+              signatureHex: rawTs.signatureHex,
+            };
+          }
         } catch {
           signedStatus = null;
+          trustStatus = null;
         }
       }
+      const { liveness, lastSeenMsAgo } = computeLiveness(realLastReported, now);
       return {
         serverDomain: s.serverDomain,
         identityPubKey: s.identityPubKeyHex,
@@ -191,6 +363,11 @@ export async function handleGetUserPods(
         revokedAt: s.revokedAt ?? null,
         routingTarget: routing?.currentTargetHex ?? null,
         lastReported,
+        // Computed server-side from daemon-status heartbeat cadence (~5 min).
+        // Distinguishes a real heartbeat (subject to FRESHNESS_WINDOW_MS) from a
+        // provision-bridge timestamp (classified "never" regardless of age).
+        liveness,
+        lastSeenMsAgo,
         currentCert: status
           ? {
               sha256: status.certSha256,
@@ -199,19 +376,29 @@ export async function handleGetUserPods(
             }
           : null,
         signedStatus,
+        trustStatus,
         appsServed,
-        // Cheap directory-level "this box is waiting for a boot-unlock
-        // approval right now" flag, so the client shows "waiting for approval"
-        // (and suppresses the dangerous decommission/delete) for a locked box
-        // instead of "never came online" — without needing the biometric
-        // mailbox read.
-        awaitingUnlock: awaitingUnlock.has(s.serverDomain.toLowerCase()),
+        leadsServices,
+        // The Box Request Inbox digest for this pod (docs/box-request-inbox.md):
+        // the typed list of approvals this box is currently asking its owner
+        // for. The generic client inbox is the flatMap of this across pods.
+        // Every surface (webapp + iOS + Android) reads `pendingRequests`; the
+        // old compat booleans (`awaitingUnlock` / `awaitingEntitlement`, a
+        // `some(r.type === …)` projection of this) were dropped once all
+        // surfaces cut over — a new request type is now one more entry here,
+        // no boolean to add.
+        pendingRequests,
         // #56 — registered servers are always online; lets the unified client
         // reconciler key on `state` without a second authenticated fetch.
         state: "online" as const,
       };
     }),
   );
+
+  // Deterministic oldest-first order so /pods is stable across fetches.
+  // The storage listForUser has no guaranteed order (D1 query lacks ORDER BY);
+  // sort here rather than changing the storage layer so this stays within scope.
+  pods.sort((a, b) => a.registeredAt - b.registeredAt);
 
   // #56 — outstanding install orders, merged into the same unauthenticated
   // list. The per-order phase enrichment is individually try/catch-guarded:
@@ -252,7 +439,14 @@ export async function handleGetUserPods(
     }
   }
 
-  return ok({ username, pods, pending, fetchedAt: now });
+  return { username, pods, pending, fetchedAt: now };
+}
+
+export async function handleGetUserPods(
+  deps: PodInventoryDeps,
+  username: string,
+): Promise<HandlerResponseWithHeaders> {
+  return ok(await buildPodInventory(deps, username));
 }
 
 interface DaemonStatusBody {
@@ -266,6 +460,23 @@ interface DaemonStatusBody {
     issuedAt?: number;
   };
   signature?: string;
+  /**
+   * UNSIGNED advisory field (Phase 6 Part 3) — the service slugs this box currently
+   * LEADS. NOT part of the canonical daemon-status bytes (the pinned vector + native
+   * mirrors stay byte-identical), so it can't be verified; `.com` stores it inside
+   * the relayed reportJson and surfaces it on /pods as `leadsServices` for display.
+   * Tolerant of absence: an old daemon omits it ⇒ no leads relayed.
+   */
+  leadsServices?: string[];
+  /**
+   * SIBLING signed envelope — the box's PER-BOX relay-trust verdict
+   * (`flagship/box-trust-status/v1`). Signed independently of the daemon-status
+   * report with the SAME STK. `.com` verifies + stashes it verbatim inside the
+   * relayed reportJson and surfaces it on /pods as `trustStatus` so a client
+   * re-verifies the box's own "this server appears unauthorized" verdict under
+   * the locally-derived STK. Tolerant of absence: an old daemon omits it.
+   */
+  trustStatus?: { report: BoxTrustStatusReport; signatureHex: string };
 }
 
 /**
@@ -310,6 +521,13 @@ export async function handlePostDaemonStatus(
         r.appsServed.some((x) => typeof x !== "string"))) {
     return malformed("appsServed must be a string array");
   }
+  // Phase 6 Part 3 — the UNSIGNED advisory "services I lead" set. Tolerant: an
+  // absent/malformed value is dropped (treated as no leads), never rejecting the
+  // heartbeat (an old daemon never sends it; the field is not signed).
+  const leadsServices: string[] =
+    Array.isArray(body.leadsServices)
+      ? body.leadsServices.filter((x): x is string => typeof x === "string")
+      : [];
   const server = await deps.servers.get(r.serverDomain);
   if (!server) return forbidden("unknown serverDomain");
   if (server.revokedAt) return forbidden("server revoked");
@@ -336,6 +554,40 @@ export async function handlePostDaemonStatus(
     return forbidden("invalid signature");
   }
 
+  // SIBLING box-trust-status envelope — verify its OWN signature against the
+  // same registered STK (defense-in-depth so a corrupt/forged block never gets
+  // stored) and stash it verbatim for relay. Its serverDomain must match this
+  // box. A bad/mismatched block is simply dropped: the heartbeat still lands
+  // (never reject the whole report over the advisory trust sibling). The client
+  // re-verifies again against the locally-derived STK — `.com` is not trusted.
+  let trustStatusForStore:
+    | { report: BoxTrustStatusReport; signatureHex: string }
+    | null = null;
+  const ts = body?.trustStatus;
+  if (
+    ts &&
+    typeof ts === "object" &&
+    ts.report &&
+    typeof ts.report === "object" &&
+    typeof ts.signatureHex === "string" &&
+    HEX128.test(ts.signatureHex) &&
+    ts.report.serverDomain === report.serverDomain &&
+    verifyBoxTrustStatusReport(ts.report, hexToBytes(ts.signatureHex), stkPub)
+  ) {
+    trustStatusForStore = { report: ts.report, signatureHex: ts.signatureHex };
+  }
+
+  // Store the verbatim signed report PLUS the unsigned `leadsServices` sibling and
+  // the signed `trustStatus` sibling. The `report` object's canonical-bytes (what
+  // clients re-verify) IGNORE extra keys, so appending siblings to the relayed JSON
+  // is signature-safe and needs no migration (they ride the existing reportJson
+  // column). Only attach each when present so the verbatim tuple is unchanged for
+  // boxes that don't report them.
+  const reportForStore = {
+    ...report,
+    ...(leadsServices.length > 0 ? { leadsServices } : {}),
+    ...(trustStatusForStore ? { trustStatus: trustStatusForStore } : {}),
+  };
   await deps.daemonStatus.put({
     serverDomain: r.serverDomain.toLowerCase(),
     certSha256: report.certSha256,
@@ -343,8 +595,29 @@ export async function handlePostDaemonStatus(
     certIssuer: report.certIssuer,
     servicesServedJson: JSON.stringify(report.appsServed),
     lastReported: (deps.now ?? (() => Date.now()))(),
-    reportJson: JSON.stringify(report),
+    reportJson: JSON.stringify(reportForStore),
     signatureHex: body.signature,
   });
+
+  // Coarse "account in use" bump for the reclaim tool (migration 0058). A
+  // verified heartbeat from a live box is the strongest signal the account is
+  // alive. Best-effort + rate-limited to ≤ once/day so the 5-minutely
+  // heartbeat doesn't hot-write the row; never blocks the heartbeat.
+  if (deps.usernames) {
+    try {
+      const nowMs = (deps.now ?? (() => Date.now()))();
+      const owner = await deps.usernames.get(server.username);
+      if (
+        owner &&
+        (owner.lastActive === undefined ||
+          nowMs - owner.lastActive >= LAST_ACTIVE_BUMP_MIN_INTERVAL_MS)
+      ) {
+        await deps.usernames.touchLastActive(server.username, nowMs);
+      }
+    } catch {
+      // swallow — the heartbeat already landed.
+    }
+  }
+
   return ok({ ok: true });
 }

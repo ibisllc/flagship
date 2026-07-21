@@ -115,6 +115,13 @@ export function adaptRegistryToStorage(
       });
       return true;
     },
+    async swapAdminRootPub() {
+      // Slice D — admin-root rotation is .com (Worker)-side only. The legacy
+      // sync UsernameRegistry has no admin_root_pub_hex slot and no Fastify
+      // route calls this; required only to satisfy the UsernameStorage
+      // interface (same story as swapIrkPub above).
+      return false;
+    },
     async setDemo() {
       // Same story as swapIrkPub: the demo-account flag (#84) is set
       // only by the operator-gated provisioning path, which is .com
@@ -137,6 +144,16 @@ export function adaptRegistryToStorage(
       return false;
     },
     async casRecoveryCodes() {
+      return false;
+    },
+    // Account-deletion / name-reclaim (migration 0058) live exclusively on
+    // .com (Worker). The legacy Fastify UsernameRegistry has no last_active
+    // column and no Fastify route drives deletion/reclaim; required only to
+    // satisfy the UsernameStorage interface.
+    async touchLastActive() {
+      return false;
+    },
+    async delete() {
       return false;
     },
   };

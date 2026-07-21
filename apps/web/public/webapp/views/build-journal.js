@@ -4,9 +4,10 @@
 //   enterBuildJournal(buildId) → that build's timeline directly
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError } from "../lib/api.js";
+import { screensFetch, ScreensError, buildEntryError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatDateTime } from "../lib/dateFormat.js";
 
 registerView("view-build-journal");
 
@@ -46,7 +47,9 @@ async function renderList() {
       el.addEventListener("click", () => renderDetail(el.getAttribute("data-build")));
     }
   } catch (e) {
-    toast(e instanceof ScreensError ? e.message : String(e), "err");
+    // The sessions list is a build-platform ENTRY call — a 404 means the box
+    // can't build services (unlike renderDetail's session-scoped 404).
+    toast(buildEntryError(e), "err");
   }
 }
 
@@ -63,7 +66,7 @@ async function renderDetail(buildId) {
           ${entries
             .map(
               (e) => `<li>
-                <span class="note">${new Date(e.ts).toLocaleString()}</span>
+                <span class="note">${escapeHtml(formatDateTime(e.ts))}</span>
                 <span class="badge">${escapeHtml(e.kind)}</span>
                 <span class="badge">${escapeHtml(e.actor)}</span>
                 <div>${escapeHtml(e.summary)}</div>

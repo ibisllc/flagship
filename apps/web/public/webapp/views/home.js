@@ -1,4 +1,5 @@
 import { bytesToHex, signWithIrk } from "../keystore.js";
+import { sensitiveSigner } from "../lib/adminRoot.js";
 import { decorateHomeGrid, serverIcon, alertCircleIcon, keyIcon } from "../lib/icons.js";
 import {
   chipRow,
@@ -11,6 +12,7 @@ import { activeOperations } from "../lib/activeOperations.js";
 import { $, registerView, show, setSubtitle, currentViewId } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatDuration as formatAge, formatDays } from "../lib/dateFormat.js";
 import { toast } from "../lib/toast.js";
 import { releaseServerName } from "../lib/releaseServer.js";
 import { getActiveProfile } from "../lib/profiles.js";
@@ -26,25 +28,25 @@ import {
   remove as profileRemove,
 } from "../lib/profilesStore.js";
 import { controlApex } from "../lib/apex.js";
+import { isServerDecommissioned } from "../lib/serverReplacement.js";
+import { depositSwkIfNeeded } from "../lib/swkDeposit.js";
+import { depositCgkIfNeeded } from "../lib/cgkDeposit.js";
+import { depositPairingIfNeeded } from "../lib/pairingDeposit.js";
+import { liveSync } from "../lib/liveSync.js";
+import { fetchLeads, invertLeadsMap } from "../lib/directLeads.js";
+import { fetchDecryptedDirectory } from "../lib/accountDirectory.js";
 
 registerView("view-home", { tab: "home" });
 
-// #36 — empty-state pennant illustration. Inline SVG so we don't add
-// a network round-trip for a single decorative asset; sized to ~140px
-// tall so it reads as "illustration", not "icon", on mobile.
-const PENNANT_SVG = `
-<svg viewBox="0 0 240 160" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="empty-pennant">
-  <defs>
-    <linearGradient id="pennant-flag" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="var(--accent)" stop-opacity="0.95" />
-      <stop offset="1" stop-color="var(--accent-press)" stop-opacity="0.85" />
-    </linearGradient>
-  </defs>
-  <line x1="60" y1="20" x2="60" y2="150" stroke="var(--ink-muted)" stroke-width="3" stroke-linecap="round" />
-  <circle cx="60" cy="20" r="4" fill="var(--ink-muted)" />
-  <path d="M60 32 L180 38 L150 64 L180 90 L60 96 Z" fill="url(#pennant-flag)"
-        stroke="var(--accent-press)" stroke-width="1.5" stroke-linejoin="round" />
-  <line x1="40" y1="150" x2="200" y2="150" stroke="var(--border)" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 6" />
+// #36 — empty-state brand mark. The flag-on-mast pennant is RETIRED;
+// the empty state now shows the current brand mark (a rounded square
+// containing a circle) in teal so it reads as "a moment", not a missing
+// asset. Inline SVG to avoid a network round-trip for one decorative glyph.
+const EMPTY_MARK_SVG = `
+<svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="empty-mark">
+  <rect x="8" y="8" width="80" height="80" rx="22" fill="var(--accent-soft)"
+        stroke="var(--accent)" stroke-width="2" />
+  <circle cx="48" cy="48" r="20" fill="none" stroke="var(--accent)" stroke-width="4" />
 </svg>
 `;
 
@@ -73,6 +75,21 @@ const PENNANT_SVG = `
 export async function fetchPodInventory(username) {
   const out = { statusByDomain: new Map(), pending: [] };
   if (!username) return out;
+  // Prefer the LiveSync canal: while it's running it holds a fresh `{ pods,
+  // pending }` snapshot fed by the /stream long-poll, so we read THAT instead
+  // of a second /pods fetch. A cold start (LiveSync not yet started, or no
+  // snapshot) falls through to a one-shot /pods read (today's behavior — the
+  // safety net).
+  const snap = liveSync.get?.();
+  if (snap && (snap.pods?.length || snap.pending?.length)) {
+    for (const p of snap.pods ?? []) {
+      out.statusByDomain.set(String(p.serverDomain ?? "").toLowerCase(), p);
+    }
+    out.pending = (snap.pending ?? []).filter(
+      (p) => p && typeof p.fqdn === "string" && p.fqdn.length > 0,
+    );
+    return out;
+  }
   try {
     const r = await fetch(
       `${controlApex()}/api/users/${encodeURIComponent(username)}/pods`,
@@ -133,9 +150,9 @@ export function renderPendingCard(order) {
   const row = listRow({
     leading: { kind: "icon", svg: serverIcon, tone: "warning" },
     title: String(label),
-    subtitle: "installing",
+    subtitle: "Installing",
     detail: String(order.fqdn),
-    trailing: `<span class="pill warn">pending</span>`,
+    trailing: `<span class="pill warn">Pending</span>`,
   });
   return `
     ${row}
@@ -161,56 +178,83 @@ export const COMING_ONLINE_GRACE_MS = 20 * 60 * 1000;
  *     window → genuinely dead, offer the free-the-name delete.
  *
  * @param {object} server  registered server (may carry `revoked`)
- * @param {object} pod      directory pod entry (lastReported / registeredAt / currentCert / awaitingUnlock)
+ * @param {object} pod      directory pod entry (lastReported / registeredAt / currentCert / pendingRequests)
  * @param {{ hasLiveUnlockRequest?: boolean, now?: number }} [opts]
  */
 export function classifyServer(server, pod, opts = {}) {
-  if (server.revoked) return { kind: "revoked", label: `revoked: ${server.revoked.reason}` };
+  if (server.revoked) return { kind: "revoked", label: `Revoked: ${server.revoked.reason}` };
   const now = opts.now ?? Date.now();
+
+  // Fix A — honor the new /pods `liveness` field when present.
+  //
+  // The .com control plane now emits `liveness: "live"|"unreachable"|"never"`
+  // on each pod entry (alongside the existing `lastReported`). When present,
+  // trust it as the authoritative signal — it folds in the latest HELLO
+  // timestamps and avoids the client computing stale ages off a cached
+  // `lastReported`. When absent (pre-update Worker / test fixture), the
+  // existing `lastReported`-age logic acts as the faithful fallback.
+  //
+  // Mapping:
+  //   "live"        → online (cert-expiry sub-checks still apply)
+  //   "unreachable" → offline, using `lastSeenMsAgo` for the human age
+  //   "never"       → "still coming up" / awaiting first heartbeat
+  //
+  // Approval / grace-window states take precedence over `liveness === "never"`
+  // so a box stuck on serve-authorization still reads "waiting for approval".
+  const liveness = pod?.liveness;
+
+  if (liveness === "unreachable") {
+    // The box has checked in before but is not reachable right now.
+    const msAgo = typeof pod.lastSeenMsAgo === "number" ? pod.lastSeenMsAgo : null;
+    const ageLabel = msAgo != null ? formatAge(msAgo) : "unknown";
+    return { kind: "offline", label: `Offline (last seen ${ageLabel} ago)` };
+  }
+
+  if (liveness === "never") {
+    // Box registered but never sent a heartbeat. Check approval / grace states
+    // first — they override "never" (same logic as the no-lastReported path).
+    if (opts.hasLiveUnlockRequest || (pod?.pendingRequests?.length ?? 0) > 0) {
+      return { kind: "waiting-for-approval", label: "Waiting for approval" };
+    }
+    return { kind: "never-seen", label: "Still coming up" };
+  }
+
   if (!pod || pod.lastReported == null) {
-    // Registered but never checked in. A live unlock request means it's
-    // actively waiting for the owner — not dead. `awaitingUnlock` is the cheap,
-    // unauthenticated directory signal (a live parked unlock request); the
-    // explicit opt is the biometric-read fallback. Either one ⇒ waiting.
-    if (opts.hasLiveUnlockRequest || pod?.awaitingUnlock) {
-      return { kind: "waiting-for-approval", label: "waiting for approval" };
+    // No liveness field AND no lastReported — fall back to the existing logic.
+    // Registered but never checked in. ANY live request (unlock OR entitlement
+    // OR a future type) means it's actively waiting for the owner — not dead.
+    // `pendingRequests` is the cheap, unauthenticated Box Request Inbox digest
+    // off /pods (the typed list of parked requests); the explicit opt is the
+    // biometric-read fallback. A non-empty digest ⇒ waiting (folding every type
+    // in is what stops a box stuck on serve-authorization from reading "never
+    // came online").
+    if (opts.hasLiveUnlockRequest || (pod?.pendingRequests?.length ?? 0) > 0) {
+      return { kind: "waiting-for-approval", label: "Waiting for approval" };
     }
     // Within the grace window after registration ⇒ still coming online.
     const registeredAt = pod?.registeredAt;
     if (registeredAt != null && now - registeredAt <= COMING_ONLINE_GRACE_MS) {
-      return { kind: "coming-online", label: "coming online…" };
+      return { kind: "coming-online", label: "Coming online…" };
     }
-    return { kind: "never-seen", label: "never seen" };
+    return { kind: "never-seen", label: "Never seen" };
   }
   const ageMs = now - pod.lastReported;
   // Daemons HELLO at least every 5 minutes; tolerate a 15-minute
   // staleness before flipping the dot off — handles a transient
   // tunnel hiccup without lighting up the home screen.
-  if (ageMs > 15 * 60 * 1000) return { kind: "offline", label: `offline (${formatAge(ageMs)} ago)` };
+  if (ageMs > 15 * 60 * 1000) return { kind: "offline", label: `Offline (${formatAge(ageMs)} ago)` };
   // Cert expiry within 30d — surface as warning even when daemon is online.
   if (pod.currentCert?.validUntil) {
     const msToExpiry = pod.currentCert.validUntil - Date.now();
-    if (msToExpiry < 0) return { kind: "cert-expired", label: "cert expired" };
+    if (msToExpiry < 0) return { kind: "cert-expired", label: "Cert expired" };
     if (msToExpiry < 30 * 86400_000) {
-      return { kind: "cert-expiring-soon", label: `cert renews in ${formatDays(msToExpiry)}` };
+      return { kind: "cert-expiring-soon", label: `Cert renews in ${formatDays(msToExpiry)}` };
     }
   }
-  return { kind: "online", label: "online" };
+  return { kind: "online", label: "Online" };
 }
 
-function formatAge(ms) {
-  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
-  if (ms < 3600_000) return `${Math.round(ms / 60_000)}m`;
-  if (ms < 86400_000) return `${Math.round(ms / 3600_000)}h`;
-  return `${Math.round(ms / 86400_000)}d`;
-}
-
-function formatDays(ms) {
-  const d = Math.max(1, Math.round(ms / 86400_000));
-  return `${d}d`;
-}
-
-/** The short server label for the operations-sliver "deploying server <name>"
+/** The short server label for the operations-sliver "preparing <name>"
  *  line — the first DNS segment of `<server>.<user>.flagship.services` (the
  *  home cards still show the full fqdn). Falls back to the raw value. */
 function serverShortName(serverIdOrFqdn) {
@@ -289,6 +333,46 @@ export function homeSearchMatches(query, fields) {
  * leases mean the daemon is reachable without phone tap) and otherwise
  * label the row as "phone-tap only" — accurate to the default.
  */
+/** The services this pod currently LEADS, from `/pods` `leadsServices` (Phase 6).
+ *  Tolerant of absence (the field is additive; a `.com`/box that doesn't relay it
+ *  yields []). Returns a clean string[] of slugs. */
+export function leadsOf(pod) {
+  const raw = pod?.leadsServices;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((s) => String(s ?? "").trim()).filter(Boolean);
+}
+
+/**
+ * Apply a direct-leads inverted map (from `invertLeadsMap`) to the pod
+ * status map returned by `fetchPodInventory`. Returns a NEW Map whose
+ * pod entries have `leadsServices` overlaid from the direct source when
+ * the inverted map has data for that pod's FQDN; pods not in the inverted
+ * map keep the relay's `leadsServices` as-is (fall-back).
+ *
+ * This is the prefer-then-fallback logic: direct read is fresher than the
+ * ~5-min-stale relay snapshot, but any failure in the direct read leaves
+ * an empty invertedMap and the relay data passes through untouched.
+ *
+ * @param {Map<string, object>} podStatusByDomain  fqdn → pod entry (from fetchPodInventory)
+ * @param {Map<string, string[]>} invertedMap       fqdn → slug[] (from invertLeadsMap)
+ * @returns {Map<string, object>}
+ */
+export function applyDirectLeads(podStatusByDomain, invertedMap) {
+  if (!invertedMap || invertedMap.size === 0) return podStatusByDomain;
+  const out = new Map();
+  for (const [fqdn, pod] of podStatusByDomain) {
+    const directSlugs = invertedMap.get(fqdn);
+    if (directSlugs !== undefined) {
+      // Prefer direct read: overlay leadsServices from the fresh box response.
+      out.set(fqdn, { ...pod, leadsServices: directSlugs });
+    } else {
+      // No direct data for this pod — keep the relay's leadsServices (or none).
+      out.set(fqdn, pod);
+    }
+  }
+  return out;
+}
+
 export function renderServerCard(server, pod, opts = {}) {
   const c = classifyServer(server, pod, opts);
   const pillClass = c.kind === "online" ? "pill ok"
@@ -308,7 +392,14 @@ export function renderServerCard(server, pod, opts = {}) {
     : "phone-tap only";
   // Subtitle folds the app count + auto-unlock state into one muted line; the
   // cert countdown (when <30d) rides the mono detail line.
-  const subtitle = `${serviceCount} service${serviceCount === 1 ? "" : "s"} · ${autoUnlock}`;
+  let subtitle = `${serviceCount} service${serviceCount === 1 ? "" : "s"} · ${autoUnlock}`;
+  // Per-service leadership (Phase 6): `/pods` relays `leadsServices: [slug]` —
+  // the services THIS box currently leads (highest-clout live runner). Additive
+  // + tolerant of absence: only append when the box actually leads ≥1 service.
+  const leads = leadsOf(pod);
+  if (leads.length) {
+    subtitle += ` · leads ${leads.length === 1 ? leads[0] : `${leads.length} services`}`;
+  }
   // A box that registered during install but whose daemon never checked in
   // (`never-seen`) is a dead install — offer the decommission / free-the-name
   // delete via the RELEASE flow (NOT the lost/stolen revoke). A live server is
@@ -331,7 +422,13 @@ export function renderServerCard(server, pod, opts = {}) {
     detail: certCountdown ? String(certCountdown) : "",
     // Status pill stacks UNDER the text — labels like "never came online" need a
     // full line rather than being crushed into the right margin against the title.
-    trailing: `<span class="${pillClass}">${escapeHtml(c.label)}</span>`,
+    // Per-service leadership (Phase 6): a "lead" pill rides alongside when this
+    // box currently leads ≥1 service (additive; absent ⇒ no pill).
+    trailing: `<span class="${pillClass}">${escapeHtml(c.label)}</span>${
+      leads.length
+        ? ` <span class="pill ok" title="leads ${escapeHtml(leads.join(", "))}">lead</span>`
+        : ""
+    }`,
     trailingBelow: true,
   });
   return `
@@ -369,25 +466,36 @@ function renderEmptyServersList(root, { reason, username } = {}) {
     ? `Signed in as ${username}. Your account has no servers yet — add your first one whenever you're ready. You can run zero, one, or many.`
     : reason === "unpaired"
       ? "Pair the webapp to your phone or pod first, or jump straight in and build a fresh server."
-      : "Mint a recipe, write it to a USB drive with the Flagship burner, and boot a spare machine — you're a few taps from your own cloud.";
+      : "Mint a recipe, write it to a USB drive with the Flagship builder, and boot a spare machine — you're a few taps from your own cloud.";
   const ctaLabel = accountOpen ? "Add your first server" : "Create a server";
   root.innerHTML = `
     <div class="card empty-state">
-      ${PENNANT_SVG}
+      ${EMPTY_MARK_SVG}
       <h3 class="empty-headline">${escapeHtml(headline)}</h3>
       <p class="note empty-message">${escapeHtml(hint)}</p>
       <button class="primary full-width" id="empty-create-server">${escapeHtml(ctaLabel)}</button>
+      ${accountOpen ? '<button class="linklike mt-2" id="empty-take-over">Someone handing you a box? Take over →</button>' : ""}
       <a class="pill mt-2" href="https://flagshipserver.com/" target="_blank" rel="noopener">
         Open flagshipserver.com →
       </a>
     </div>
   `;
+  $("empty-take-over")?.addEventListener("click", async () => {
+    const { enterTransferClaim } = await import("./transfer-claim.js");
+    enterTransferClaim().catch((e) => {
+      if (e?.code !== "cancelled") {
+        console.error("transfer claim failed", e);
+        toast(e?.message ?? String(e), "err");
+      }
+    });
+  });
   $("empty-create-server")?.addEventListener("click", async () => {
-    // The account is already open, so this is "Add a server" — a
-    // separate, repeatable resource. Jump straight into the reusable
-    // create-server flow (it skips the username claim since the account
-    // is already opened). When the account isn't open yet, fall back to
-    // the wizard's create-server step (which opens the account first).
+    // The account is already open, so this is "Add a server" — a separate,
+    // repeatable resource. "Add a server" now means PROVISION directly
+    // (Slice A: the three-way chooser is gone — pairing is automatic via
+    // auto-pair, and take-over is the /transfer deep-link + camera claim).
+    // When the account isn't open yet, fall back to the wizard's
+    // create-server step (which opens the account first).
     if (accountOpen) {
       const { enterCreateServer } = await import("./create-server.js");
       await enterCreateServer();
@@ -419,7 +527,6 @@ function isPromoEntry(e) {
   return e?.label?.startsWith(FLAGSHIP_PROMO_LABEL_PREFIX);
 }
 
-const COM_BASE_FOR_E7 = controlApex();
 const ACCOUNT_RESET_BANNER_ID = "home-account-reset-banner";
 
 // Mirrors wizard.js's `recoveryWarn` slot — the wizard SETs this to "true"
@@ -511,8 +618,8 @@ function renderRecoveryBanner() {
 /**
  * E7 — peer "your account was reset on another device" detector.
  *
- * Signal: this device's local `flagship.pushTokenId` is no longer
- * in `/api/users/:u/devices`. That can only happen if another device
+ * Signal: this profile's immutable account-scoped device ID is no longer
+ * present in the signed directory. That can only happen if another device
  * on the account ran a Disconnect / Replace / Wipe against us, or
  * the Worker GC'd us as an orphan post-rotation.
  *
@@ -527,21 +634,15 @@ function renderRecoveryBanner() {
  */
 async function detectAccountReset(username) {
   if (!username) return;
-  const localToken = recoveryStoreGet("pushTokenId");
-  if (!localToken) return; // fresh install, no token → never orphaned
+  const localDeviceId = getActiveProfile()?.deviceId;
+  if (!localDeviceId) return;
   let devices = [];
   try {
-    const r = await fetch(
-      `${COM_BASE_FOR_E7}/api/users/${encodeURIComponent(username)}/devices`,
-      { cache: "no-store" },
-    );
-    if (!r.ok) return;
-    const body = await r.json();
-    devices = body.devices ?? [];
+    devices = (await fetchDecryptedDirectory()).devices;
   } catch {
     return;
   }
-  const present = devices.some((d) => d.tokenId === localToken);
+  const present = devices.some((device) => device.deviceId === localDeviceId && device.revokedAt == null);
   const banner = document.getElementById(ACCOUNT_RESET_BANNER_ID);
   if (present) {
     // Recovered (or never lost) — clean up the banner if previous
@@ -581,9 +682,8 @@ async function detectAccountReset(username) {
 }
 
 /**
- * v2 device-addressing — read the active profile's deviceCapability
- * block (the `<u>.<device-label>` restricted sub-identity). Returns
- * null for a legacy single-IRK session (no chip, all actions enabled),
+ * Read the active profile's opaque deviceCapability block. Returns
+ * null when the session has no restricted grant (no chip, all actions enabled),
  * mirroring iOS AppState.deviceCapability. The block is stored on the
  * profile descriptor by openAccount / accountResolve at sign-in.
  */
@@ -596,7 +696,7 @@ export function activeDeviceCapability() {
 }
 
 /**
- * Render (or clear) the "Device: <label> · browse-only" chip below the
+ * Render (or clear) the restricted-device scope chip below the
  * username, mirroring iOS HomeScreen.deviceChip. The chip suppresses
  * for a fully-scoped device or a legacy single-IRK session (chipText
  * returns null) — same rule as iOS `!cap.isFullyScoped`.
@@ -652,7 +752,15 @@ function renderServerCards() {
 
   const cardsHtml = visible.length
     ? visible
-        .map((e) => `<div class="card ${e.cardClass}">${e.html}</div>`)
+        .map((e) => {
+          // A registered (non-pending) card is tappable → opens server-detail.
+          const openable = e.bucket !== "pending" && e.fields.fqdn;
+          const attrs = openable
+            ? ` data-open-fqdn="${escapeHtml(e.fields.fqdn)}"`
+            : "";
+          const cls = openable ? `${e.cardClass} is-tappable` : e.cardClass;
+          return `<div class="card ${cls}"${attrs}>${e.html}</div>`;
+        })
         .join("")
     : `<div class="card placeholder">${
         homeQuery || homeFilter !== "all"
@@ -666,6 +774,8 @@ function renderServerCards() {
       <h2 class="fs-hero-title" data-home-title>Servers</h2>
       ${searchField({ value: homeQuery, placeholder: "Search servers", id: "home-search" })}
       ${chipRow({ items: chips, selected: homeFilter, ariaLabel: "Filter servers" })}
+      <button class="secondary mt-2" id="home-add-server">+ Add a server</button>
+      <button class="linklike mt-1" id="home-take-over">Someone handing you a box? Take over →</button>
     </div>
     <div data-server-cards>${cardsHtml}</div>
   `;
@@ -679,6 +789,36 @@ function renderServerCards() {
  * old nodes + their listeners, so re-binding can't stack handlers).
  */
 function wireHomeListControls(list) {
+  // "+ Add a server" — provision a brand-new box directly (Slice A: no more
+  // chooser). Pairing is automatic (auto-pair); take-over is the separate
+  // "Take over" link + the /transfer deep-link + camera claim.
+  list.querySelector("#home-add-server")?.addEventListener("click", async () => {
+    const { enterCreateServer } = await import("./create-server.js");
+    await enterCreateServer();
+  });
+  // Tap a registered server card → open its detail screen. Clicks that
+  // land on an inner control (approve / delete / links) are ignored so the
+  // card tap never hijacks a button.
+  list.querySelectorAll("[data-open-fqdn]").forEach((card) => {
+    card.addEventListener("click", async (ev) => {
+      if (ev.target.closest("button, a, input, label, select, textarea")) return;
+      const fqdn = card.getAttribute("data-open-fqdn");
+      if (!fqdn) return;
+      const { enterServerDetail } = await import("./server-detail.js");
+      await enterServerDetail(fqdn);
+    });
+  });
+  // "Take over a box" — the standalone acquirer claim (paste / scan a
+  // transfer link). The same view a `/transfer?o=` deep link routes into.
+  list.querySelector("#home-take-over")?.addEventListener("click", async () => {
+    const { enterTransferClaim } = await import("./transfer-claim.js");
+    enterTransferClaim().catch((e) => {
+      if (e?.code !== "cancelled") {
+        console.error("transfer claim failed", e);
+        toast(e?.message ?? String(e), "err");
+      }
+    });
+  });
   // Filter chips — narrow the visible set, no re-fetch.
   list.querySelectorAll("[data-chip]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -781,8 +921,8 @@ export async function renderHome() {
   );
 
   // E7 — fire-and-forget account-reset detection. Renders a danger
-  // banner above the server list if our locally-stored push tokenId
-  // is no longer in /api/users/:u/devices. Silent on failure so a
+  // banner above the server list if our account-scoped device ID
+  // is no longer in the signed directory. Silent on failure so a
   // transient network blip doesn't flash a banner.
   detectAccountReset(session.username).catch(() => {});
 
@@ -796,7 +936,7 @@ export async function renderHome() {
   const list = $("servers-list");
   list.innerHTML = "";
   if (!sid) {
-    sessionStatusEl.textContent = "unpaired";
+    sessionStatusEl.textContent = "Unpaired";
     sessionStatusEl.classList.remove("ok");
     // #36 — real empty state, not a "no paired session" stub. Phase 2:
     // if the account is already open (username claimed), this is the
@@ -811,7 +951,7 @@ export async function renderHome() {
     const r = await fetch(`/api/me/servers?sessionId=${encodeURIComponent(sid)}`);
     if (!r.ok) throw new Error(`status ${r.status}`);
     const body = await r.json();
-    sessionStatusEl.textContent = "paired";
+    sessionStatusEl.textContent = "Paired";
     sessionStatusEl.classList.add("ok");
     // #31 / #56 — ONE unauthenticated fan-out to /api/users/:u/pods on .com
     // returns BOTH the registered pods (liveness/cert enrichment) AND the
@@ -819,12 +959,41 @@ export async function renderHome() {
     // just-created, not-yet-registered server rides this same call.
     // Failures here are non-fatal: registered cards fall back to the bare
     // label + active/revoked pill and pending simply doesn't surface.
-    const { statusByDomain: podStatusByDomain, pending } = await fetchPodInventory(
+    let { statusByDomain: podStatusByDomain, pending } = await fetchPodInventory(
       session.username,
+    );
+    // Direct lead-read (Phase 6 follow-on): if any box is reachable, fetch
+    // /api/leads directly for a fresher snapshot than the ~5-min relay.
+    // Best-effort: any failure leaves podStatusByDomain untouched (fall back
+    // to relay). We pick the first "live" pod as the source — its /api/leads
+    // response covers the GLOBAL map for all boxes in this account.
+    {
+      let firstLiveFqdn = null;
+      for (const [fqdn, pod] of podStatusByDomain) {
+        if (pod?.liveness === "live" || (pod?.lastReported != null && Date.now() - pod.lastReported <= 15 * 60 * 1000)) {
+          firstLiveFqdn = fqdn;
+          break;
+        }
+      }
+      if (firstLiveFqdn) {
+        const leadsMap = await fetchLeads(firstLiveFqdn).catch(() => null);
+        if (leadsMap) {
+          podStatusByDomain = applyDirectLeads(podStatusByDomain, invertLeadsMap(leadsMap));
+        }
+      }
+    }
+    // L3 (docs §8b) — a box retired by "Replace this server" is suppressed from
+    // the list so the phone never re-surfaces or re-approves the zombie instance
+    // (the replacement re-registers under the same FQDN with a fresh STK; until
+    // it does the old FQDN simply doesn't appear).
+    body.servers = (body.servers ?? []).filter(
+      (s) => !isServerDecommissioned(s.serverId),
     );
     // Registered server always supersedes a pending order with the same
     // fqdn (identity unified on the normalized fqdn).
-    const pendingOrders = pendingWithoutRegisteredTwin(body.servers, pending);
+    const pendingOrders = pendingWithoutRegisteredTwin(body.servers, pending).filter(
+      (o) => !isServerDecommissioned(o.fqdn),
+    );
 
     // Zero registered AND zero pending → the honest empty zero-state.
     if (!body.servers.length && !pendingOrders.length) {
@@ -859,6 +1028,29 @@ export async function renderHome() {
         String(s.serverId ?? "").toLowerCase(),
       );
       const pod = podStatusByDomain.get(s.serverId.toLowerCase());
+      // Secret-free recipe: a registered box now has a directory identity to
+      // seal the SWK to. No-ops unless a deposit is owed (idempotent via
+      // swkDeposit.js); best-effort + non-blocking so it never delays a render.
+      if (pod?.identityPubKey) {
+        depositSwkIfNeeded({
+          serverDomain: String(s.serverId),
+          identityPubKeyHex: String(pod.identityPubKey),
+        }).catch(() => {});
+        // Secret-free CGK (Phase 6): every registered box is owed the per-cloud
+        // gossip key so it can run per-service leadership. Seal + deposit it to
+        // the box identity; no-ops once deposited (idempotent via cgkDeposit.js).
+        depositCgkIfNeeded({
+          serverDomain: String(s.serverId),
+          identityPubKeyHex: String(pod.identityPubKey),
+        }).catch(() => {});
+        // Secret-free pairing: seal + deposit the stashed create-time order to
+        // the box's directory identity so it pairs with no manual tap. No-ops
+        // unless a deposit is owed (idempotent via pairingDeposit.js).
+        depositPairingIfNeeded({
+          serverDomain: String(s.serverId),
+          identityPubKeyHex: String(pod.identityPubKey),
+        }).catch(() => {});
+      }
       const cls = classifyServer(s, pod, { hasLiveUnlockRequest });
       const bucket = statusBucketForKind(cls.kind);
       entries.push({
@@ -872,6 +1064,10 @@ export async function renderHome() {
           podId: String(s.serverId ?? ""),
           name: serverShortName(s.serverId),
           status: "pending",
+          // A REGISTERED-but-not-yet-live server has already booted +
+          // registered, so it is genuinely provisioning — flag it started so
+          // it surfaces a "preparing <name>" sliver op.
+          started: true,
         });
       }
     }
@@ -889,6 +1085,11 @@ export async function renderHome() {
         podId: String(order.fqdn ?? ""),
         name: String(order.serverName || serverShortName(order.fqdn)),
         status: "pending",
+        // Only a pending ORDER whose box has actually started booting/installing
+        // (a real ladder phase, posted by the install beacons) gets a spinning
+        // sliver op. An order merely AWAITING A BURN has no phase yet → no op
+        // (the card's "pending" pill is the right, non-spinning signal).
+        phase: order.phase ?? null,
       });
     }
     homeServerEntries = entries;
@@ -896,11 +1097,13 @@ export async function renderHome() {
     // Reconcile the sliver's deploy operations against this tick's pending
     // set. Build operations (vibe-code) are untouched.
     activeOperations.syncDeployOperations(deployPods);
-    // L9 — arm the 5s account-level approval poll (parity with iOS/Android) so
-    // a box that starts waiting AFTER this paint surfaces its Approve
-    // affordance on its own. Seeded with THIS tick's set so it only repaints on
-    // a genuine change; cleared on navigation away (flagship:view-shown) + lock.
-    startApprovalPoll(awaitingApproval);
+    // LiveSync canal — instead of a standalone 5s `/pods` approval poll, Home
+    // re-paints when the app-scope LiveSync stream reports a change (a box
+    // starts/stops waiting, a pending order advances, a new pod appears). The
+    // /stream long-poll returns the instant state changes, so a waiting box
+    // lights up its Approve affordance with no separate poller. The
+    // subscription is cleared on navigation away (flagship:view-shown) + lock.
+    armHomeLiveSync();
     // Silent auto-renewal of long-lived leases. Fires on every home
     // enter (cheap — no-ops when no leases are close to expiry) and
     // refreshes the timer so the cadence resets each time the user
@@ -915,7 +1118,7 @@ export async function renderHome() {
     // show when the list comes back empty. Keep the failure in the
     // console for debugging, but leave the surface clean.
     console.warn("home: servers list failed to load", e);
-    sessionStatusEl.textContent = "no servers";
+    sessionStatusEl.textContent = "No servers";
     sessionStatusEl.classList.remove("ok");
     renderEmptyServersList(list, { reason: "no-servers", username: session.username });
     activeOperations.syncDeployOperations([]);
@@ -965,7 +1168,7 @@ async function deleteDeadServer(serverDomain, btn) {
   const session = getSession();
   const username = session.username;
   if (!username) {
-    toast("unlock the webapp first", "warn");
+    toast("Unlock the webapp first", "warn");
     return;
   }
   const ok = confirm(
@@ -978,7 +1181,8 @@ async function deleteDeadServer(serverDomain, btn) {
       username,
       serverDomain,
       umk: session.umk,
-      signWithIrk,
+      // Slice D: release-server-name is a SENSITIVE order (admin root when present).
+      signWithIrk: sensitiveSigner(),
     });
     if (out && out.pending) {
       // P14 Phase 2 — companion profile (no local UMK): the release is queued
@@ -995,12 +1199,12 @@ async function deleteDeadServer(serverDomain, btn) {
         return;
       }
     }
-    toast(`deleted — "${serverDomain}" is free again`);
+    toast(`Deleted — "${serverDomain}" is free again`);
     await renderHome();
   } catch (e) {
     // Keep the card: the name is still reserved, so re-render would just hide
     // a name the user can't reuse. Surface the error + re-enable the button.
-    toast(`delete failed: ${e.message ?? e}`, "err");
+    toast(`Delete failed: ${e.message ?? e}`, "err");
     if (btn) { btn.disabled = false; btn.textContent = "Delete server (free name)"; }
   }
 }
@@ -1087,64 +1291,84 @@ export function stopRenewals() {
   stopApprovalPoll();
 }
 
-// ── L9 — account-level boot-approval poll (parity with iOS/Android) ──
+// ── Home live updates via the LiveSync canal (replaces the L9 approval poll) ──
 //
 // iOS runs BootApprovalWatcher's ~5s `/pods`-driven loop while Home is on
-// screen (HomeTab.swift `.onAppear` start / `.onDisappear` stop); Android
-// runs the same cadence in a `LaunchedEffect` on HomeTab. The webapp used to
-// fetch the awaiting-approval set ONCE per renderHome(), so a box that started
-// waiting AFTER Home painted never surfaced its "Approve unlock" affordance
-// until the next manual refresh. This adds the matching 5s poll: while Home is
-// visible we re-fetch the awaiting set and, only when it actually changes,
-// repaint Home so a waiting box lights up (and a now-unlocked one clears) on
-// its own. The interval is cleared the moment we navigate away (and on lock).
+// screen; Android runs the same cadence in a `LaunchedEffect`. The webapp used
+// to arm its OWN 5s `/pods` interval on Home so a box that started waiting
+// AFTER the paint surfaced its "Approve unlock" affordance. That standalone
+// poll is now SUPERSEDED by the app-scope LiveSync stream: the /stream
+// long-poll returns the instant ANY meaningful state changes (a box starts/
+// stops waiting, a pending order advances a phase, a new pod appears), so Home
+// simply subscribes to LiveSync and repaints on change — one canal, no second
+// poller. The subscription is dropped the moment we navigate away (and on lock).
+//
+// `APPROVAL_POLL_MS` is retained as the documented cadence reference (iOS/
+// Android still poll on it as their fallback) and `stopApprovalPoll` is kept as
+// the lock-time teardown hook other modules call.
 export const APPROVAL_POLL_MS = 5_000;
-let approvalPollTimer = null;
-// Churn-free change detection: a stable sorted-key signature of the last
-// awaiting set we acted on, so a steady re-poll never triggers a needless
-// repaint (mirrors iOS comparing the published Set before re-rendering).
-let approvalPollLastSig = null;
+/** Unsubscribe handle for the Home LiveSync subscription, or null when idle. */
+let homeLiveSyncUnsub = null;
+// Churn-free change detection: a stable signature of the last snapshot we
+// repainted for, so a re-emit with identical pod/pending state never triggers
+// a needless repaint (mirrors the iOS Set compare before re-rendering).
+let homeLiveSyncLastSig = null;
 
-/** A stable signature for an awaiting-approval Set (sorted, joined). */
-function approvalSetSignature(set) {
-  return [...set].sort().join("|");
+/** A stable signature for a LiveSync snapshot — the bits that change a card's
+ *  classification (liveness, cert, the pendingRequests digest, pending phases). */
+function liveSyncSnapshotSignature(snap) {
+  const pods = (snap?.pods ?? [])
+    .map((p) => {
+      const reqs = (p.pendingRequests ?? [])
+        .map((r) => `${r.id}:${r.type}:${r.expiresAt}`)
+        .sort()
+        .join(",");
+      return [
+        p.serverDomain,
+        p.lastReported ?? "",
+        p.currentCert?.sha256 ?? "",
+        reqs,
+      ].join("|");
+    })
+    .sort();
+  const pending = (snap?.pending ?? [])
+    .map((o) => `${o.fqdn}|${o.phase ?? ""}`)
+    .sort();
+  return JSON.stringify({ pods, pending });
 }
 
-/** Re-fetch the awaiting set; repaint Home only if it changed. Best-effort —
- *  a failure yields an empty set from fetchAwaitingApprovalSet, which the
- *  signature compare treats as "no waiting box" (cards fall back to the
- *  age-based grace classification on the next paint). */
-async function pollApprovalsOnce() {
-  const set = await fetchAwaitingApprovalSet();
-  const sig = approvalSetSignature(set);
-  if (sig === approvalPollLastSig) return;
-  approvalPollLastSig = sig;
-  // Only repaint while Home is still the active view (the interval may fire
-  // once more in flight as we navigate away).
-  if (currentViewId() === "view-home") await renderHome();
+/** Subscribe Home to the LiveSync canal. On a snapshot change (and only a real
+ *  change) repaint Home — but only while Home is still the active view. The
+ *  subscription replaces the old 5s setInterval; LiveSync runs app-scope so the
+ *  stream is already live, we just react to it. Idempotent. */
+function armHomeLiveSync() {
+  if (homeLiveSyncUnsub) return;
+  // Seed the signature with the current snapshot so the immediate replay the
+  // subscribe fires doesn't trigger a redundant repaint of the paint we just did.
+  homeLiveSyncLastSig = liveSyncSnapshotSignature(liveSync.get?.());
+  homeLiveSyncUnsub = liveSync.subscribe((snap) => {
+    const sig = liveSyncSnapshotSignature(snap);
+    if (sig === homeLiveSyncLastSig) return;
+    homeLiveSyncLastSig = sig;
+    if (currentViewId() === "view-home") void renderHome().catch(() => {});
+  });
 }
 
-/** Arm the 5s approval poll. Seeds the change-detection signature with the
- *  current set so the first interval only repaints on a genuine change. */
-function startApprovalPoll(initialSet) {
-  approvalPollLastSig = approvalSetSignature(initialSet ?? new Set());
-  if (approvalPollTimer) clearInterval(approvalPollTimer);
-  approvalPollTimer = setInterval(() => {
-    void pollApprovalsOnce().catch(() => {});
-  }, APPROVAL_POLL_MS);
-}
-
-/** Disarm the approval poll (navigation away from Home, or lock). */
+/** Disarm the Home LiveSync subscription (navigation away from Home, or lock).
+ *  Kept under the original `stopApprovalPoll` name so the lock-time teardown +
+ *  the navigate-away listener that call it keep working unchanged. */
 export function stopApprovalPoll() {
-  if (approvalPollTimer) clearInterval(approvalPollTimer);
-  approvalPollTimer = null;
-  approvalPollLastSig = null;
+  if (homeLiveSyncUnsub) {
+    homeLiveSyncUnsub();
+    homeLiveSyncUnsub = null;
+  }
+  homeLiveSyncLastSig = null;
 }
 
-// Clear the poll the moment any view OTHER than Home takes the stage. renderHome
-// (re-)arms it on entry, so this only needs to handle leaving Home. Guarded for
-// the headless unit environment (home.js is imported for its pure functions in
-// `node` vitest, where there's no `document`).
+// Drop the Home subscription the moment any view OTHER than Home takes the
+// stage. renderHome (re-)arms it on entry, so this only needs to handle leaving
+// Home. Guarded for the headless unit environment (home.js is imported for its
+// pure functions in `node` vitest, where there's no `document`).
 if (typeof document !== "undefined") {
   document.addEventListener("flagship:view-shown", (ev) => {
     if (ev.detail?.id !== "view-home") stopApprovalPoll();

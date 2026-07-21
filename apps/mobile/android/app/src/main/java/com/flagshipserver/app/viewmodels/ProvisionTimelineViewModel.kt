@@ -75,15 +75,21 @@ class ProvisionTimelineViewModel private constructor(private val mode: Mode) {
                 false
             } else {
                 val target = m.fqdn.lowercase()
-                val registered = directory.pods.any {
+                val registeredEntry = directory.pods.firstOrNull {
                     it.serverDomain.lowercase() == target && it.revokedAt == null
                 }
-                if (registered) {
-                    // A registered fqdn is the terminal good outcome — the
-                    // box made it all the way; the reconciler flips the
-                    // list pod online.
+                if (registeredEntry != null && registeredEntry.cameOnline) {
+                    // Only an actually-serving box (a cert landed OR it heartbeats
+                    // — `cameOnline`) is the terminal LIVE rung. Registered alone
+                    // is NOT: the box may still be sealing, rebooting into its
+                    // encrypted root, or waiting for a boot-unlock approval.
                     apply(synthesized(ProvisionStatusPhase.LIVE.wire))
                 } else {
+                    // Registered-but-not-serving (no cert yet) OR not yet
+                    // registered → keep the box on a non-terminal "coming online"
+                    // rung from its pending phase; never force LIVE on mere
+                    // registration (the office.harry2 bug: registered, no cert,
+                    // awaitingUnlock, yet the ladder read "complete").
                     val raw = directory.pending
                         .firstOrNull { it.fqdn.lowercase() == target }
                         ?.phase

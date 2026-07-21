@@ -4,7 +4,7 @@
 // Settings → Companion requests. Surfaces the queue of pending
 // write-requests forwarded by docked companion browsers.
 //
-// Per row: companion label + kind ("release-server" | "revoke-server")
+// Per row: opaque companion code + kind ("release-server" | "revoke-server")
 // + intent summary (serverDomain for release; serverId + reason for
 // revoke) + queuedAt + Approve / Deny buttons.
 //
@@ -40,12 +40,14 @@ import { releaseServerName } from "../lib/releaseServer.js";
 import { revokeServer } from "../lib/revokeServer.js";
 import { getSession } from "../lib/state.js";
 import { signWithIrk } from "../keystore.js";
+import { sensitiveSigner } from "../lib/adminRoot.js";
+import { formatWhen } from "../lib/dateFormat.js";
 
 registerView("view-companion-requests");
 
 function fmtDate(unixMs) {
   if (typeof unixMs !== "number" || unixMs <= 0) return "—";
-  return new Date(unixMs).toLocaleString();
+  return formatWhen(unixMs);
 }
 
 function timeLeft(expiresAt, nowMs = Date.now()) {
@@ -63,15 +65,13 @@ function timeLeft(expiresAt, nowMs = Date.now()) {
  * a JSDOM dependency.
  */
 export function renderPendingRowHtml(row, nowMs = Date.now()) {
-  const label = row.companionLabel ?? "(no label)";
   const prefix = row.companionTokenPrefix ?? "";
   const summary = intentSummary(row.kind, row.intent);
   return `
       <div class="card" data-row="${escapeHtml(row.requestId ?? "")}">
         <div class="row row-top">
           <div>
-            <div class="weight-600">${escapeHtml(label)}</div>
-            <div class="value text-xs">${escapeHtml(prefix)}…</div>
+            <div class="weight-600">Session ${escapeHtml(prefix)}</div>
             <div class="faint-sm">queued ${escapeHtml(fmtDate(row.queuedAt))} · ${escapeHtml(timeLeft(row.expiresAt, nowMs))}</div>
           </div>
           <span class="pill">${escapeHtml(row.kind ?? "?")}</span>
@@ -220,7 +220,11 @@ export async function runApprove(row, deps = {}) {
   const revoke = deps.revokeServer || revokeServer;
   const resolve = deps.resolvePending || resolvePending;
   const session = (deps.getSession || getSession)();
-  const sign = deps.signWithIrk || ((umk, bytes) => signWithIrk(umk, bytes));
+  // Slice D: the owner approving a queued companion request signs the SENSITIVE
+  // order (release-server-name) with the admin master root when present; the
+  // gated signer tag-routes so the non-sensitive revoke-server (flagship/revoke/v1)
+  // still signs with the owner IRK. Legacy accounts sign everything with the IRK.
+  const sign = deps.signWithIrk || sensitiveSigner();
   if (!session?.umk || typeof sign !== "function") {
     setRowError(row.requestId, "unlock the webapp first");
     return { ok: false, error: "locked" };
@@ -274,7 +278,7 @@ export async function runApprove(row, deps = {}) {
     setRowError(row.requestId, humanError(e));
     return { ok: false, error: String(e?.message ?? e) };
   }
-  toast(`approved ${row.kind}`, "ok");
+  toast(`Approved ${row.kind}`, "ok");
   // Refresh the list — non-fatal if the DOM isn't here (test env).
   if (typeof document !== "undefined") {
     await renderCompanionRequests(deps).catch(() => { /* swallow */ });
@@ -296,7 +300,7 @@ export async function runDeny(row, deps = {}) {
     setRowError(row.requestId, humanError(e));
     return { ok: false, error: String(e?.message ?? e) };
   }
-  toast(`denied`, "ok");
+  toast(`Denied`, "ok");
   if (typeof document !== "undefined") {
     await renderCompanionRequests(deps).catch(() => { /* swallow */ });
   }

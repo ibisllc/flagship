@@ -127,7 +127,7 @@ object RevokeWatchDelegate {
 
 /** Kotlin mirror of `canonicalDeviceCapabilityGrant` in
  *  packages/protocol/src/auth.ts. The grant binds a per-device key to a user
- *  under a human label with explicit capability scopes (v2 device addressing).
+ *  under an opaque account-scoped device ID with explicit capability scopes.
  *
  *  Grants are minted + signed by the Worker (admin path) today, so the mobile
  *  app only RECEIVES them as the read-only DeviceCapabilityBlock wire DTO.
@@ -137,7 +137,7 @@ object RevokeWatchDelegate {
  *  by FIXED INDEX (DEVICE_SCOPES order, NOT alphabetical); an alphabetical
  *  sort diverges for any set spanning add-device/admin/browse. */
 object DeviceCapabilityGrant {
-    const val CANONICAL_TAG = "flagship/device-capability-grant/v1"
+    const val CANONICAL_TAG = "flagship/device-capability-grant/v2"
 
     /** Canonical scope ordering — mirrors DEVICE_SCOPES in
      *  packages/protocol/src/auth.ts. APPEND new scopes; never reorder. The
@@ -151,12 +151,13 @@ object DeviceCapabilityGrant {
         "revoke-others",
         "demo-provision",
         "admin",
+        "view-directory",
     )
 
     fun canonicalBytes(
         grantId: String,
         username: String,
-        deviceLabel: String,
+        deviceId: String,
         devicePubKeyHex: String,
         scopes: List<String>,
         issuedAt: Long,
@@ -165,7 +166,7 @@ object DeviceCapabilityGrant {
         CANONICAL_TAG,
         grantId,
         username,
-        deviceLabel,
+        deviceId,
         devicePubKeyHex.lowercase(),
         ScopeOrdering.sort(scopes, DEVICE_SCOPE_ORDER).joinToString(","),
         issuedAt.toString(),
@@ -179,7 +180,7 @@ object DeviceCapabilityGrant {
         irkPub: ByteArray,
         grantId: String,
         username: String,
-        deviceLabel: String,
+        deviceId: String,
         devicePubKeyHex: String,
         scopes: List<String>,
         issuedAt: Long,
@@ -187,7 +188,7 @@ object DeviceCapabilityGrant {
     ): Boolean = try {
         Ed25519Verify(irkPub).verify(
             signature,
-            canonicalBytes(grantId, username, deviceLabel, devicePubKeyHex, scopes, issuedAt, expiresAt),
+            canonicalBytes(grantId, username, deviceId, devicePubKeyHex, scopes, issuedAt, expiresAt),
         )
         true
     } catch (_: Throwable) {

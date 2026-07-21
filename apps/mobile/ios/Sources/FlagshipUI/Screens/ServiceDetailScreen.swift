@@ -80,6 +80,7 @@ public struct ServiceDetailScreen: View {
             }
             .padding(.horizontal, FS.space.s6)
             .padding(.top, FS.space.s4)
+            .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
         .navigationTitle(vm.detail.value?.app.slug.capitalized ?? "Service")
@@ -100,10 +101,10 @@ public struct ServiceDetailScreen: View {
                 // renamed the URL stem (display label hides the
                 // package name elsewhere). `urlLabel` is the canonical
                 // package handle: `scratchpad` if the user is the
-                // creator, `scratchpad-meta` / `scratchpad-harry`
+                // creator, `scratchpad--meta` / `scratchpad--harry`
                 // otherwise.
                 // V9 — `id:` is the IMMUTABLE composite package id
-                // (`<creator>-<slug>`, single dash), NOT the URL
+                // (`<creator>--<slug>`, double dash), NOT the URL
                 // label. urlLabel rotates whenever the user hits
                 // Replace stem; serviceId stays put for the life of
                 // the package — it's what the manifest, the membership
@@ -648,9 +649,6 @@ public struct ServiceDetailScreen: View {
     }
 
     private func relative(ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = RelativeDateTimeFormatter()
-        fmt.unitsStyle = .abbreviated
-        return fmt.localizedString(for: date, relativeTo: Date())
+        Date.flagshipFormatted(epochMs: ms)
     }
 }

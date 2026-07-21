@@ -28,7 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -82,7 +82,13 @@ fun CompanionRequestsScreen(nav: NavController) {
     val resolvePending by vm.resolvePending.collectAsState()
     val rowError by vm.rowError.collectAsState()
 
-    LaunchedEffect(Unit) { vm.load() }
+    // First load flashes the spinner; then poll silently every 10s while the
+    // inbox is mounted (mirrors iOS startPolling + the webapp pollPending).
+    DisposableEffect(Unit) {
+        vm.load()
+        vm.startPolling()
+        onDispose { vm.stopPolling() }
+    }
 
     val scroll = rememberScrollState()
     Column(
@@ -206,7 +212,7 @@ private fun RequestCard(
 }
 
 private fun title(row: CompanionPendingWrite): String {
-    val who = row.companionLabel?.takeIf { it.isNotEmpty() } ?: row.companionTokenPrefix
+    val who = row.companionTokenPrefix
     return when (row.kind) {
         "release-server" -> "Release server name — from $who"
         "revoke-server" -> "Revoke server — from $who"
@@ -288,15 +294,15 @@ private fun HoldToApproveButton(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 40.dp)
+                .heightIn(min = 44.dp)
                 .clip(RoundedCornerShape(FS.radius.md))
                 .background(if (enabled) FS.colors.primary else FS.colors.textMuted)
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+                .padding(horizontal = FS.space.s5, vertical = FS.space.s2),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = label,
-                color = Color.White,
+                color = FS.colors.onAccent,
                 style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
             )
         }

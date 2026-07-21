@@ -29,6 +29,31 @@ public struct ServiceAccessScreen: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var photoDataUri: String?
     @State private var confirmRemove: ServiceAccessViewModel.Person?
+    /// The create-time invite tier (docs §v2 Phase 3).
+    @State private var tierKind: TierKind = .personalAuto
+    @State private var groupMaxText = "10"
+    @State private var groupExpires = false
+
+    /// UI-only enum (the VM's InviteTier carries the assoc. values). The group
+    /// picker fields (`groupMaxText`/`groupExpires`) supply the rest.
+    private enum TierKind: String, CaseIterable, Identifiable {
+        case personalAuto, personalManual, group
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .personalAuto:   return "One person"
+            case .personalManual: return "One person — I approve"
+            case .group:          return "A group"
+            }
+        }
+        var blurb: String {
+            switch self {
+            case .personalAuto:   return "A private link for one person. The first account to open it gets in."
+            case .personalManual: return "Most secure. They accept, send a reply back to you, and you approve it — so a leaked link alone can't get in."
+            case .group:          return "One link several people can use. Lower-trust: anyone the link reaches (up to the limit) gets in."
+            }
+        }
+    }
 
     public init(serverDomain: String, serviceRef: String, serviceLabel: String, username: String) {
         self.serverDomain = serverDomain
@@ -67,7 +92,9 @@ public struct ServiceAccessScreen: View {
             }
             Button("Cancel", role: .cancel) { confirmRemove = nil }
         } message: {
-            Text("They'll lose access the next time they try to open it. You can re-add them later with a new link.")
+            Text(confirmRemove?.isGroup == true
+                 ? "Everyone in this group loses access the next time they try to open it. The link stops working. You can create a new group later."
+                 : "They'll lose access the next time they try to open it. You can re-add them later with a new link.")
         }
     }
 
@@ -136,15 +163,20 @@ public struct ServiceAccessScreen: View {
     private func addPersonCard(c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text("Add a person")
+                Text(tierKind == .group ? "Add a group" : "Add a person")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(c.text)
-                Text("Names & photos stay encrypted to your account — flagshipserver.com stores only ciphertext and never sees them. The link is a bearer capability: send it over a private channel. It locks to the first account that opens it.")
+                Text("Names & photos stay encrypted to your account — flagshipserver.com stores only ciphertext and never sees them. The link is a bearer capability: send it over a private channel.")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
-                FSField(value: $name, label: "Name (only you + your servers see it)", placeholder: "Alex")
+                tierPicker(c: c)
+                FSField(
+                    value: $name,
+                    label: tierKind == .group ? "Group name (only you see it)" : "Name (only you + your servers see it)",
+                    placeholder: tierKind == .group ? "Chess club" : "Alex")
                     .accessibilityIdentifier("service-access-name-field")
-                photoRow(c: c)
+                if tierKind == .group { groupFields(c: c) }
+                else { photoRow(c: c) }
                 FSPrimaryButton(vm?.busyAdd == true ? "Creating…" : "Create invite link", block: true, large: true) {
                     Task { await addPerson() }
                 }
@@ -154,6 +186,40 @@ public struct ServiceAccessScreen: View {
                     resultBlock(c: c, link: link)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func tierPicker(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Picker("Invite type", selection: $tierKind) {
+                ForEach(TierKind.allCases) { t in
+                    Text(t.label).tag(t)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("service-access-tier-picker")
+            Text(tierKind.blurb)
+                .font(FS.font.caption())
+                .foregroundColor(tierKind == .group ? c.warning : c.textMuted)
+                .accessibilityIdentifier("service-access-tier-blurb")
+        }
+    }
+
+    @ViewBuilder
+    private func groupFields(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            FSField(value: $groupMaxText, label: "How many people can use it? (0 = no limit)", placeholder: "10")
+                .keyboardType(.numberPad)
+                .accessibilityIdentifier("service-access-group-max")
+            Toggle(isOn: $groupExpires) {
+                Text("Expire this link in 7 days").foregroundColor(c.text)
+            }
+            .tint(c.primary)
+            .accessibilityIdentifier("service-access-group-expires")
+            Text("A group link is a standing liability — set a limit and an expiry.")
+                .font(FS.font.caption())
+                .foregroundColor(c.textMuted)
         }
     }
 
@@ -181,36 +247,22 @@ public struct ServiceAccessScreen: View {
 
     @ViewBuilder
     private func resultBlock(c: FSColors, link: String) -> some View {
-        VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text("Shareable link")
-                .font(FS.font.caption())
-                .foregroundColor(c.text)
-            Text(link)
-                .font(FS.font.mono())
-                .foregroundColor(c.text)
-                .textSelection(.enabled)
-                .padding(.vertical, FS.space.s2)
-                .padding(.horizontal, FS.space.s3)
-                .background(c.surfaceSunken)
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
-                .accessibilityIdentifier("service-access-share-url")
-            HStack(spacing: FS.space.s3) {
-                if let url = URL(string: link) {
-                    ShareLink(item: url) {
-                        Label("Share…", systemImage: "square.and.arrow.up")
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("service-access-share-sheet")
-                }
-                Button {
-                    UIPasteboard.general.string = link
-                    toasts.success("Link copied.")
-                } label: {
-                    Label("Copy link", systemImage: "doc.on.doc")
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("service-access-copy-btn")
-            }
+        InviteShareCard(
+            title: "Shareable link",
+            subtitle: shareSubtitle,
+            link: link,
+            idPrefix: "service-access-share")
+    }
+
+    /// Tier-specific guidance shown under the freshly-created link.
+    private var shareSubtitle: String {
+        switch vm?.lastInviteTier {
+        case .some(.personalManual):
+            return "They'll accept, then send a reply back to you — open it to approve them."
+        case .some(.group):
+            return "Anyone with this link (up to the limit) gets in. Share it carefully."
+        default:
+            return "Send it over a private channel. It locks to the first account that opens it."
         }
     }
 
@@ -242,21 +294,40 @@ public struct ServiceAccessScreen: View {
                 avatar(p, c: c)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(p.name).font(FS.font.body()).foregroundColor(c.text)
-                    Text(p.bound ? "active" : "invite sent — not opened yet")
+                    Text(statusLine(p))
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
+                        .accessibilityIdentifier("service-access-status-\(p.inviteId)")
                 }
                 Spacer()
-                Button("Remove", role: .destructive) { confirmRemove = p }
+                Button(p.isGroup ? "Remove group" : "Remove", role: .destructive) { confirmRemove = p }
                     .buttonStyle(.bordered)
                     .accessibilityIdentifier("service-access-remove-\(p.inviteId)")
             }
         }
     }
 
+    /// The per-row status line: a group shows "k/N" (N = cap, 0 = ∞); a manual
+    /// invite says it's owner-approved; a personal invite shows bound/pending.
+    private func statusLine(_ p: ServiceAccessViewModel.Person) -> String {
+        if p.isGroup {
+            let used = p.groupBoundAIDs.count
+            let cap = p.groupMax ?? 0
+            let capStr = cap == 0 ? "no limit" : "\(cap)"
+            return "group · \(used)/\(capStr)"
+        }
+        if p.manual && !p.bound { return "you approve · not yet in" }
+        return p.bound ? "active" : "invite sent — not opened yet"
+    }
+
     @ViewBuilder
     private func avatar(_ p: ServiceAccessViewModel.Person, c: FSColors) -> some View {
-        if let photo = p.photo, let img = imageFromDataUri(photo) {
+        if p.isGroup {
+            Circle()
+                .fill(c.surfaceSunken)
+                .frame(width: 36, height: 36)
+                .overlay(Image(systemName: "person.3.fill").font(.system(size: 14)).foregroundColor(c.textMuted))
+        } else if let photo = p.photo, let img = imageFromDataUri(photo) {
             Image(uiImage: img)
                 .resizable()
                 .scaledToFill()
@@ -310,14 +381,34 @@ public struct ServiceAccessScreen: View {
     @MainActor
     private func addPerson() async {
         guard let vm else { return }
-        let link = await vm.addPerson(name: name, photo: photoDataUri)
+        let tier = currentTier()
+        // The group tier carries no per-person photo.
+        let photo = tierKind == .group ? nil : photoDataUri
+        let link = await vm.addPerson(name: name, photo: photo, tier: tier)
         if link != nil {
-            toasts.success("Invite for \(name.trimmingCharacters(in: .whitespacesAndNewlines)) created.")
+            toasts.success(tierKind == .group ? "Group invite created." : "Invite for \(name.trimmingCharacters(in: .whitespacesAndNewlines)) created.")
             name = ""
             photoDataUri = nil
             photoItem = nil
         } else if case .failed(let msg) = vm.phase {
             toasts.error(msg)
+        }
+    }
+
+    /// Build the VM's `InviteTier` from the picker + group fields.
+    private func currentTier() -> ServiceAccessViewModel.InviteTier {
+        switch tierKind {
+        case .personalAuto:
+            return .personalAuto
+        case .personalManual:
+            return .personalManual
+        case .group:
+            let maxN = max(0, Int(groupMaxText.trimmingCharacters(in: .whitespaces)) ?? 0)
+            // 7 days from now, in epoch-ms, when the owner opted into an expiry.
+            let expiresAt: Int64? = groupExpires
+                ? Int64(Date().addingTimeInterval(7 * 24 * 60 * 60).timeIntervalSince1970 * 1000)
+                : nil
+            return .group(maxRedemptions: maxN, expiresAt: expiresAt)
         }
     }
 

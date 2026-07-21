@@ -31,7 +31,14 @@
 // reachable only from same-origin code — means an apex XSS literally
 // cannot invoke the passkey.
 
-import { bytesToHex, hexToBytes, signWithIrk } from "../keystore.js";
+import {
+  bytesToHex,
+  hexToBytes,
+  signWithIrk,
+  loadAdminRootSeed,
+  persistAdminRootSeed,
+  profileIdFromCloudName,
+} from "../keystore.js";
 import { getSession } from "./state.js";
 import { controlApex, recoveryOrigin } from "./apex.js";
 
@@ -50,14 +57,34 @@ export async function setupCloudRecovery(username) {
   if (!session.umk) throw new Error("unlock first");
   if (!username) throw new Error("username required");
 
+  // Slice D (D-3): escrow the admin master root UNDER the recovery credential
+  // too, so credential recovery can later re-establish it (the admin root is NOT
+  // UMK-derived — a UMK backup alone can't reconstruct it). We hand the
+  // sub-origin the admin-root seed alongside the UMK; it wraps each secret as
+  // its OWN mobile-identical blob (UMK under `flagship/recovery-wrap/v1`, admin
+  // root under `flagship/recovery-admin-root-wrap/v1`) and returns a SEPARATE
+  // `wrappedAdminRootB64` we escrow in the `wrappedAdminRoot` column — so an
+  // iOS/Android device can unwrap it verbatim. Best-effort: an account with no
+  // admin root (legacy) escrows the UMK alone.
+  let adminRootSeed = null;
+  try {
+    adminRootSeed = session.adminRootSeed ?? (await loadAdminRootSeed(session.umk));
+  } catch {
+    adminRootSeed = null;
+  }
+
   // Drive the sub-origin popup. It will receive the UMK seed +
-  // username, prompt the user for a passphrase (Task #74), and
-  // postMessage back the wrap result.
-  const result = await runSubOriginFlow("enroll", { umk: session.umk, username });
+  // username (+ admin root, when present), prompt the user for a passphrase
+  // (Task #74), and postMessage back the wrap result.
+  const result = await runSubOriginFlow("enroll", {
+    umk: session.umk,
+    username,
+    ...(adminRootSeed ? { adminRootSeed } : {}),
+  });
   if (result.type !== "flagship-recovery-enroll-result") {
     throw new Error(`enroll: ${result.reason ?? "no result"}`);
   }
-  const { credentialIdHex, wrappedUmkB64, fetchTokenHashHex, prfSaltHashHex } = result;
+  const { credentialIdHex, wrappedUmkB64, wrappedAdminRootB64, fetchTokenHashHex, prfSaltHashHex } = result;
   if (typeof credentialIdHex !== "string" || typeof wrappedUmkB64 !== "string") {
     throw new Error("enroll: bad payload from sub-origin");
   }
@@ -70,7 +97,7 @@ export async function setupCloudRecovery(username) {
     throw new Error("enroll: sub-origin omitted the passphrase hashes");
   }
   return await uploadRecord({
-    session, username, credentialIdHex, wrappedUmkB64,
+    session, username, credentialIdHex, wrappedUmkB64, wrappedAdminRootB64,
     fetchTokenHashHex, prfSaltHashHex,
   });
 }
@@ -89,7 +116,47 @@ export async function recoverFromCloud(username) {
   if (!Array.isArray(result.umk) || result.umk.length !== 32) {
     throw new Error("recover: malformed UMK payload");
   }
-  return new Uint8Array(result.umk);
+  const seed = new Uint8Array(result.umk);
+
+  // Slice D (D-3 restore side): the sub-origin split `umk || adminRootSeed` back
+  // out and returns the admin root as `adminRootSeed` when the escrow carried
+  // one. Store it device-local NOW, under THIS account's profile record, so the
+  // subsequent unlockSession (which loads the admin root from the keystore)
+  // brings the recovered browser up as an ADMIN device (D-4 story 4). Keyed to
+  // profileIdFromCloudName(username) — the SAME profile the recovered UMK lands
+  // under in the takeover/keep-both flows — so the two records stay together.
+  // Best-effort: a legacy escrow (UMK alone) simply has no admin root to store.
+  if (Array.isArray(result.adminRootSeed) && result.adminRootSeed.length === 32) {
+    await persistRecoveredAdminRoot({
+      umkSeed: seed,
+      adminRootSeed: new Uint8Array(result.adminRootSeed),
+      username,
+    });
+  }
+  return seed;
+}
+
+/**
+ * Persist a recovered admin master-root seed device-local, keyed to the
+ * account's own profile record. Extracted (with injectable deps) so the
+ * restore-side store is unit-testable without the sub-origin popup.
+ *
+ * @param {{
+ *   umkSeed: Uint8Array,
+ *   adminRootSeed: Uint8Array,
+ *   username: string,
+ *   persist?: (umkSeed: Uint8Array, adminSeed: Uint8Array, profileId: string) => Promise<void>,
+ *   profileId?: string,
+ * }} args
+ */
+export async function persistRecoveredAdminRoot({
+  umkSeed, adminRootSeed, username, persist = persistAdminRootSeed, profileId,
+}) {
+  if (!(adminRootSeed instanceof Uint8Array) || adminRootSeed.length !== 32) {
+    throw new Error("recovered admin root seed must be 32 bytes");
+  }
+  const pid = profileId ?? profileIdFromCloudName(username);
+  await persist(umkSeed, adminRootSeed, pid);
 }
 
 /**
@@ -229,6 +296,10 @@ async function runSubOriginFlow(mode, payload) {
             type: "flagship-recovery-enroll-payload",
             umk: Array.from(payload.umk),
             username: payload.username,
+            // Slice D (D-3): the admin master root, escrowed alongside the UMK.
+            ...(payload.adminRootSeed
+              ? { adminRootSeed: Array.from(payload.adminRootSeed) }
+              : {}),
           }, RECOVERY_ORIGIN);
         }
         return;
@@ -258,7 +329,7 @@ async function runSubOriginFlow(mode, payload) {
 }
 
 async function uploadRecord({
-  session, username, credentialIdHex, wrappedUmkB64,
+  session, username, credentialIdHex, wrappedUmkB64, wrappedAdminRootB64,
   fetchTokenHashHex, prfSaltHashHex,
 }) {
   const wrappedBytes = base64ToBytes(wrappedUmkB64);
@@ -289,6 +360,10 @@ async function uploadRecord({
         credentialId: credentialIdHex,
         wrappedUmk: wrappedUmkB64,
         issuedAt,
+        // Slice D (D-3): the admin master root's SEPARATE escrow blob →
+        // `.com`'s wrapped_admin_root_b64 column (control-plane already accepts
+        // + preserves it). Absent for a UMK-only / legacy account.
+        ...(wrappedAdminRootB64 ? { wrappedAdminRoot: wrappedAdminRootB64 } : {}),
         ...(fetchTokenHashHex ? { fetchTokenHash: fetchTokenHashHex } : {}),
         ...(prfSaltHashHex ? { prfSaltHash: prfSaltHashHex } : {}),
       },

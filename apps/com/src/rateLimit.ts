@@ -49,19 +49,11 @@ export interface RateLimitEnv {
 /** Endpoint identifier — drives the per-endpoint thresholds + 429 body. */
 export type RateLimitEndpoint =
   | "username-claim"
+  | "username-suggest"
   | "auth-code-issue"
   | "server-register"
   | "recovery-by-username"
   | "qr-pipe-upgrade"
-  // v2 device-addressing (S3.3). The five buckets:
-  //   admin-* are admin-bearer gated, so per-IP only — there's no
-  //   per-IRK identifier on the admin side.
-  //   device-grants-list is a public read; cheap + per-IP.
-  //   device-grants-revoke is IRK-signed; per-IRK + per-IP.
-  //   device-grants-mint is IRK-signed; per-IRK + per-IP.
-  | "admin-claim-and-issue"
-  | "admin-mint-device-grant"
-  | "device-grants-list"
   | "device-grants-revoke"
   | "device-grants-mint"
   // Watch delegate keys (Phase 2c) — same shape as device grants:
@@ -85,8 +77,8 @@ export type RateLimitEndpoint =
   // grant mint) but the RELEASE is a PUBLIC box poll (per-IP only, generous —
   // a box may poll a few times across a boot). The delivery-revoke is IRK-signed.
   | "acme-key-deposit"
-  // Desktop-burner base-ISO manifest poll. Public (the burner has no
-  // session) + unsigned, so per-IP only. The burner calls this once per
+  // Desktop-builder base-ISO manifest poll. Public (the builder has no
+  // session) + unsigned, so per-IP only. The builder calls this once per
   // launch; 30/min is generous for a human relaunching while letting us
   // fence a tight-loop client.
   | "iso-manifest"
@@ -109,11 +101,6 @@ export type RateLimitEndpoint =
   | "mint-reservation-acquire"
   | "mint-reservation-release"
   | "account-resolve"
-  // "Cancel this device" on the install-progress page. Public (a demo
-  // account is a no-auth capability), so per-IP only at the edge. Tight
-  // so a captured demo name can't be used to flap a VPS in a loop; the
-  // handler is idempotent + scoped to demo_users.
-  | "demo-cancel"
   // Phase 3b — vouched cross-device admit. The body carries the admit
   // (admit.username + newDevicePubHex), not the account IRK pub, so we
   // throttle per-IP only; the handler does the full DeviceAdmit
@@ -162,6 +149,13 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 5, windowSec: 3600 },
     { axis: "irk", limit: 1, windowSec: 60 },
   ],
+  // Coarse abuse backstop for the suggestion endpoint. The honest-user
+  // escalating cooldown is the per-device throttle in control-plane; this just
+  // caps a single IP draining/polling the queue (device keys are free to mint).
+  "username-suggest": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "ip", limit: 200, windowSec: 3600 },
+  ],
   "auth-code-issue": [
     { axis: "ip", limit: 20, windowSec: 3600 },
     { axis: "irk", limit: 10, windowSec: 3600 },
@@ -179,20 +173,6 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   // general LIMITS table, but the discriminated-union completeness
   // forces a key here.
   "qr-pipe-upgrade": [{ axis: "ip", limit: 30, windowSec: 60 }],
-  // v2 device-addressing (S3.3). Per-IP only for the admin tier
-  // (admin-bearer already gates; the per-IP cap stops a credential-
-  // theft from being used to mint a huge backlog of grants in tight
-  // succession). The public read path is generous (60/min). Mutating
-  // public paths get the same per-IP+per-IRK shape as auth-code-issue.
-  "admin-claim-and-issue": [
-    { axis: "ip", limit: 10, windowSec: 60 },
-    { axis: "ip", limit: 100, windowSec: 3600 },
-  ],
-  "admin-mint-device-grant": [
-    { axis: "ip", limit: 30, windowSec: 60 },
-    { axis: "ip", limit: 200, windowSec: 3600 },
-  ],
-  "device-grants-list": [{ axis: "ip", limit: 60, windowSec: 60 }],
   "device-grants-revoke": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 20, windowSec: 3600 },
@@ -229,7 +209,7 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "irk", limit: 50, windowSec: 3600 },
   ],
   "acme-key-release": [{ axis: "ip", limit: 120, windowSec: 60 }],
-  // Desktop-burner base-ISO manifest poll. Per-IP only (no session, no
+  // Desktop-builder base-ISO manifest poll. Per-IP only (no session, no
   // signed body). 30/min is plenty for once-per-launch; the cap fences a
   // tight-loop client from hammering the route.
   "iso-manifest": [{ axis: "ip", limit: 30, windowSec: 60 }],
@@ -259,13 +239,6 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "account-resolve": [
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "usernameHash", limit: 10, windowSec: 900 },
-  ],
-  // Cancel-this-device. Per-IP only (no IRK at the edge; demo is
-  // capability-by-name). 6/min is plenty for a real tap-to-cancel; the
-  // 30/h ceiling stops a flap loop.
-  "demo-cancel": [
-    { axis: "ip", limit: 6, windowSec: 60 },
-    { axis: "ip", limit: 30, windowSec: 3600 },
   ],
   // Phase 3b — vouched cross-device admit. Per-IP only (the body has no
   // IRK pub at the edge). A real admin admits a handful of devices; the
@@ -400,6 +373,8 @@ export function rateLimitedResponse(result: RateLimitedResult): Response {
 export function endpointFor(method: string, pathname: string): RateLimitEndpoint | null {
   const m = method.toUpperCase();
   if (m === "POST" && pathname === "/api/username/claim") return "username-claim";
+  if (m === "POST" && pathname === "/api/accounts") return "username-claim";
+  if (m === "POST" && pathname === "/api/username/suggest") return "username-suggest";
   if (m === "POST" && pathname === "/api/auth-code/issue") return "auth-code-issue";
   if (m === "POST" && pathname === "/api/server/register") return "server-register";
   if (
@@ -420,23 +395,11 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   }
   // v2 device-addressing (S3.3). Order matters: the longer `/revoke`
   // suffix must hit BEFORE the bare `/device-grants` literal.
-  if (m === "POST" && pathname === "/api/dev/sample-user/admin-claim-and-issue") {
-    return "admin-claim-and-issue";
-  }
-  if (
-    m === "POST" &&
-    /^\/api\/dev\/sample-user\/[^/]+\/admin-mint-device-grant$/.test(pathname)
-  ) {
-    return "admin-mint-device-grant";
-  }
   if (
     m === "POST" &&
     /^\/api\/users\/[^/]+\/device-grants\/revoke$/.test(pathname)
   ) {
     return "device-grants-revoke";
-  }
-  if (m === "GET" && /^\/api\/users\/[^/]+\/device-grants$/.test(pathname)) {
-    return "device-grants-list";
   }
   if (m === "POST" && /^\/api\/users\/[^/]+\/device-grants$/.test(pathname)) {
     return "device-grants-mint";
@@ -491,17 +454,11 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "GET" && /^\/api\/account\/resolve\/[^/]+$/.test(pathname)) {
     return "account-resolve";
   }
-  if (
-    m === "POST" &&
-    /^\/api\/dev\/sample-user\/[^/]+\/cancel$/.test(pathname)
-  ) {
-    return "demo-cancel";
-  }
   // Phase 3b — vouched cross-device admit.
   if (m === "POST" && /^\/api\/users\/[^/]+\/devices\/admit$/.test(pathname)) {
     return "device-admit";
   }
-  // Desktop-burner base-ISO manifest poll.
+  // Desktop-builder base-ISO manifest poll.
   if (m === "POST" && pathname === "/api/iso-manifest") {
     return "iso-manifest";
   }
@@ -635,6 +592,33 @@ export async function checkQrPipeUpgrade(
     return {
       limited: true,
       endpoint: "qr-pipe-upgrade",
+      axis: "ip",
+      retryAfterSec: 60,
+    };
+  }
+  return { limited: false };
+}
+
+/**
+ * Per-IP gate on /builder-pipe upgrades — same DO-spawn concern as the QR
+ * relay (each accepted upgrade materialises a Durable Object). Reuses the
+ * `RATE_LIMITER_QR_PIPE` binding with a DISTINCT key prefix so the two
+ * budgets are independent without provisioning a second namespace. Fails
+ * open when the binding is absent (dev / tests), matching the module's
+ * posture for missing bindings.
+ */
+export async function checkBuilderPipeUpgrade(
+  env: RateLimitEnv,
+  ip: string | null,
+): Promise<RateLimitedResult | AllowedResult> {
+  if (!env.RATE_LIMITER_QR_PIPE) return { limited: false };
+  if (!ip) return { limited: false };
+  const key = `builder-pipe-upgrade|ip|${ip}`;
+  const outcome = await env.RATE_LIMITER_QR_PIPE.limit({ key });
+  if (!outcome.success) {
+    return {
+      limited: true,
+      endpoint: "builder-pipe-upgrade",
       axis: "ip",
       retryAfterSec: 60,
     };

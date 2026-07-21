@@ -194,6 +194,7 @@ export const openaiStreaming: StreamingLLMProvider = {
         if (!payload) continue;
         if (payload === "[DONE]") break;
         let parsed: {
+          error?: { message?: string; code?: string | number };
           choices?: Array<{
             delta?: {
               content?: string;
@@ -211,6 +212,13 @@ export const openaiStreaming: StreamingLLMProvider = {
           parsed = JSON.parse(payload);
         } catch {
           continue;
+        }
+        if (parsed.error) {
+          onEvent({
+            kind: "error",
+            message: parsed.error.message ?? "provider stream failed",
+          });
+          return;
         }
         const choice = parsed.choices?.[0];
         if (!choice) continue;

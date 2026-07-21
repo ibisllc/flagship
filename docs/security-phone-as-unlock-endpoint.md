@@ -13,7 +13,7 @@ Boot-time secrets currently pass through `.com` in the clear:
   **deposits the plaintext to `.com`**, which relays it one-shot to the box.
   So `.com` sees the disk key for that window — weaker than the platform's
   "flagship.services literally cannot read user content."
-- **Entitlement** — the burner box currently *self-signs* its admission
+- **Entitlement** — the builder box currently *self-signs* its admission
   credential because the user's IRK (which should sign it) lives only on the
   phone, and there's no channel for the phone to sign the box's freshly-minted
   STK at first boot.
@@ -139,10 +139,11 @@ it** (§7). The visual device-info confirm at unlock time is the human backstop.
    registration attempt for a name.
 4. **TOFU binding.** STK→user is trust-on-first-registration. Mandate the
    one-tap confirm on first unlock (not skippable) so a race is always caught.
-5. **Endpoint naming + multi-device.** `device.<username>` vs
-   `<deviceLabel>.<username>`; which device answers when the user has several;
-   how the box discovers the right endpoint (likely: `.com` directory returns
-   the user's currently-claimable endpoint).
+5. **Endpoint naming + multi-device.** Devices are not addressable by name,
+   so `<deviceLabel>.<username>` is off the table; the open question is only
+   which device answers when the user has several, and how the box discovers
+   the right endpoint (likely: `.com` directory returns the user's
+   currently-claimable endpoint).
 
 ## 7a. Unattended reboot without trusting `.com` — the rogue-operator bound
 

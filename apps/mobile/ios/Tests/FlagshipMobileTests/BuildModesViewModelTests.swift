@@ -117,6 +117,41 @@ final class BuildModesViewModelTests: XCTestCase {
         XCTAssertNotNil(vm.errorMessage)
     }
 
+    /// A 404 on "Check repo" means the box has no service/build platform — the
+    /// user should see the platform-absent copy, not the generic "couldn't find
+    /// that / may have moved" 404 string.
+    func test_gitVM_check_404_showsPlatformAbsentMessage() async {
+        let client = makeClient()
+        client.simulatedFailureStatus = 404
+        let vm = BuildGitViewModel(client: client)
+        vm.gitUrl = "https://x/y"
+        await vm.checkRepo()
+        let msg = vm.errorMessage ?? ""
+        XCTAssertTrue(msg.contains("isn't set up to build services"),
+                      "expected platform-absent copy, got: \(msg)")
+        XCTAssertFalse(msg.contains("moved or been removed"))
+    }
+
+    func test_mcpVM_create_404_showsPlatformAbsentMessage() async {
+        let client = makeClient()
+        client.simulatedFailureStatus = 404
+        let vm = BuildMcpViewModel(client: client)
+        await vm.createConnection()
+        let msg = vm.errorMessage ?? ""
+        XCTAssertTrue(msg.contains("isn't set up to build services"),
+                      "expected platform-absent copy, got: \(msg)")
+    }
+
+    func test_journalVM_loadList_404_showsPlatformAbsentMessage() async {
+        let client = makeClient()
+        client.simulatedFailureStatus = 404
+        let vm = BuildJournalViewModel(client: client)
+        await vm.loadList()
+        let msg = vm.list.failure ?? ""
+        XCTAssertTrue(msg.contains("isn't set up to build services"),
+                      "expected platform-absent copy, got: \(msg)")
+    }
+
     // MARK: - BuildMcpViewModel
 
     func test_mcpVM_create_populatesConnectionAndEnvRequests() async {

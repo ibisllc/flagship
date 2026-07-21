@@ -2,13 +2,14 @@ import SwiftUI
 import FlagshipAPI
 import FlagshipCore
 
-/// Settings tab. Sections:
-///   - ACCOUNT — username
-///   - BROWSER SESSIONS — computers you've docked a browser from to
-///                        manage this account (temporary, NOT pods).
-///                        Hidden entirely when none are active.
-///   - RECOVERY + ABOUT — recovery setup, version/license
-///   - Sign out
+/// Settings tab, organised into the spec S1 six-group taxonomy:
+///   - ACCOUNT — account security · AI keys · Recovery · Back up account key · Profiles
+///   - DEVICES — trusted devices · browser sessions · companions (dock / requests)
+///   - WEB ACCESS — open secured sessions · process URL
+///   - BACKUP & PEERS — peer-backup
+///   - APP — appearance · privacy · about
+///   - DANGER ZONE — remove this device · delete account
+///   - DEVELOPER — hidden behind the mock/live toggle
 ///
 /// The server list intentionally lives only on Home — having it here
 /// too was redundant.
@@ -20,8 +21,12 @@ public struct SettingsScreen: View {
     /// Appearance choice (Light / Dark / Auto) — read + written by the
     /// APPEARANCE segmented control; applied app-wide by RootShell.
     @Environment(PrivacySettings.self) private var privacy
-    @State private var disconnectTarget: TrustedDevice?
+    @State private var disconnectTarget: SettingsViewModel.DirectoryDevice?
     @State private var disconnectMessage: String?
+    /// Browser-session revoke awaiting its confirm step. A revoke is
+    /// destructive (the docked computer loses access), so it gates behind
+    /// a grey Cancel / red Revoke dialog like every other destructive action.
+    @State private var revokeSessionTarget: PairedSessionSummary?
     /// Drives the v1 "Wipe & restart — coming soon" info sheet. The
     /// menu entry stays visible (rather than hidden) so users
     /// understand the option exists and is being designed; tapping
@@ -43,19 +48,27 @@ public struct SettingsScreen: View {
     /// severity adapt on `hasCloudRecovery` (a wipe without recovery is
     /// permanent account loss, so it gets the danger-zone framing).
     @State private var signOutConfirm: Bool = false
+    @State private var nameEditor: NameEditor?
+    @State private var nameEditMessage: String?
     let username: String
+    let accountDisplayName: String?
     let controlDevices: LoadingState<[PairedSessionSummary]>
     /// Peer-class devices on this user's account (push-token holders).
     /// The new "Trusted devices" section. Empty list renders an
     /// explainer; .failed renders an error card.
-    let trustedDevices: LoadingState<[TrustedDevice]>
+    let trustedDevices: LoadingState<[SettingsViewModel.DirectoryDevice]>
     /// M4 — the pending re-pair snapshot (GET /re-pair). When a row is
     /// present + un-objected, the Trusted-devices section shows a
     /// grace-gated "Replace pending" banner; a "Finalize now" tap routes
     /// into the existing finalize screen via `onFinalizeReplace`. Mirrors
     /// the webapp banner. nil → no banner.
     var pendingRePair: PendingRePairSnapshot? = nil
-    var onDisconnectTrustedDevice: (TrustedDevice) async -> Bool = { _ in false }
+    var onDisconnectTrustedDevice: (SettingsViewModel.DirectoryDevice) async -> Bool = { _ in false }
+    var canManageNames: Bool = false
+    var onRenameAccount: (String) async -> Bool = { _ in false }
+    var onRenameCurrentDevice: (String) async -> Bool = { _ in false }
+    var onSetManagedDeviceName: (String, String, Bool) async -> Bool = { _, _, _ in false }
+    var onRemoveManagedDeviceName: (String) async -> Bool = { _ in false }
     let showDeveloper: Bool
     /// v1.2 Phase 4 — "Multi-device + 2FA" badge state read out of the
     /// Worker `usernames` row. Nil while the load is in flight or if
@@ -141,18 +154,31 @@ public struct SettingsScreen: View {
     /// "Set up account recovery to use this." — rather than running the
     /// destructive path.
     var onRecoveryRequired: () -> Void = {}
+    /// Fired when the action is account DEATH (`signOutPolicy ==
+    /// .deletionCeremony` — no cloud recovery AND this is the last device).
+    /// Both the tier-2 "Lock with passkey" and the danger-zone "Remove this
+    /// device" confirm into the SAME ceremony: this routes the container to
+    /// push the full-page irreversible warning (typed-username + biometric →
+    /// owner-IRK self-delete bundle → local wipe → Welcome).
+    var onDeleteAccount: () -> Void = {}
 
     public init(
         username: String,
+        accountDisplayName: String? = nil,
         controlDevices: LoadingState<[PairedSessionSummary]>,
-        trustedDevices: LoadingState<[TrustedDevice]> = .loaded([]),
+        trustedDevices: LoadingState<[SettingsViewModel.DirectoryDevice]> = .loaded([]),
         pendingRePair: PendingRePairSnapshot? = nil,
         showDeveloper: Bool = false,
         accountType: String? = nil,
         onAddDevice: @escaping () -> Void = {},
         onScanPairingCode: @escaping () -> Void = {},
         onRevokeDevice: @escaping (PairedSessionSummary) -> Void = { _ in },
-        onDisconnectTrustedDevice: @escaping (TrustedDevice) async -> Bool = { _ in false },
+        onDisconnectTrustedDevice: @escaping (SettingsViewModel.DirectoryDevice) async -> Bool = { _ in false },
+        canManageNames: Bool = false,
+        onRenameAccount: @escaping (String) async -> Bool = { _ in false },
+        onRenameCurrentDevice: @escaping (String) async -> Bool = { _ in false },
+        onSetManagedDeviceName: @escaping (String, String, Bool) async -> Bool = { _, _, _ in false },
+        onRemoveManagedDeviceName: @escaping (String) async -> Bool = { _ in false },
         onLock: @escaping () -> Void = {},
         onSignOut: @escaping () -> Void = {},
         onOpenProviders: @escaping () -> Void = {},
@@ -177,13 +203,20 @@ public struct SettingsScreen: View {
         onWipeRestart: @escaping () async -> Void = {},
         hasCloudRecovery: Bool = true,
         signOutPolicy: SignOutPolicy = .allowed,
-        onRecoveryRequired: @escaping () -> Void = {}
+        onRecoveryRequired: @escaping () -> Void = {},
+        onDeleteAccount: @escaping () -> Void = {}
     ) {
         self.username = username
+        self.accountDisplayName = accountDisplayName
         self.controlDevices = controlDevices
         self.trustedDevices = trustedDevices
         self.pendingRePair = pendingRePair
         self.onDisconnectTrustedDevice = onDisconnectTrustedDevice
+        self.canManageNames = canManageNames
+        self.onRenameAccount = onRenameAccount
+        self.onRenameCurrentDevice = onRenameCurrentDevice
+        self.onSetManagedDeviceName = onSetManagedDeviceName
+        self.onRemoveManagedDeviceName = onRemoveManagedDeviceName
         self.showDeveloper = showDeveloper
         self.accountType = accountType
         self.onAddDevice = onAddDevice
@@ -214,6 +247,7 @@ public struct SettingsScreen: View {
         self.hasCloudRecovery = hasCloudRecovery
         self.signOutPolicy = signOutPolicy
         self.onRecoveryRequired = onRecoveryRequired
+        self.onDeleteAccount = onDeleteAccount
     }
 
     /// Optional promo announcement at the top of Settings. Wired but empty by
@@ -223,14 +257,16 @@ public struct SettingsScreen: View {
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
+        let profileName = accountDisplayName ?? "@\(username)"
+        let profileDetail = accountDisplayName == nil ? profileSubtitle : "@\(username) · \(profileSubtitle)"
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
                 // Account hero — teal monogram + username + account-type
                 // subtitle. Drills into Account security (the most relevant
                 // account-level destination).
                 FSProfileCard(
-                    name: username,
-                    subtitle: profileSubtitle,
+                    name: profileName,
+                    subtitle: profileDetail,
                     action: onOpenAccountSecurity
                 )
                 .padding(.top, FS.space.s2)
@@ -245,17 +281,19 @@ public struct SettingsScreen: View {
                     )
                 }
 
-                // v1.2 Phase 4 — account-security badge + entry. Placed
-                // immediately after Account so the "Single-device" /
-                // "Multi-device + 2FA" state is one of the first
-                // things the user sees.
-                accountSecuritySection(c: c)
+                // Settings taxonomy (spec S1): Account · Devices · Web access ·
+                // Backup & peers · App · Danger zone · Developer (hidden). One
+                // tap to any row; account security leads the Account group.
+                accountGroup(c: c)
                 trustedDevicesSection(c: c)
                 browserSessionsSection(c: c)
-                links(c: c)
-                appearanceSection(c: c)
+                deviceExtrasGroup(c: c)
+                webAccessGroup(c: c)
+                backupPeersGroup(c: c)
+                appSection(c: c)
                 sessionActions(c: c)
                 dangerZone(c: c)
+                developerGroup(c: c)
                 about(c: c)
 
                 Spacer().frame(height: FS.space.s12)
@@ -277,7 +315,7 @@ public struct SettingsScreen: View {
         .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
         .refreshable { await onRefresh() }
         .confirmationDialog(
-            disconnectTarget.map { "Disconnect \($0.label)?" } ?? "Disconnect device?",
+            disconnectTarget.map { "Revoke \($0.displayName)?" } ?? "Revoke device?",
             isPresented: Binding(
                 get: { disconnectTarget != nil },
                 set: { if !$0 { disconnectTarget = nil } }
@@ -285,18 +323,12 @@ public struct SettingsScreen: View {
             titleVisibility: .visible,
             presenting: disconnectTarget
         ) { target in
-            Button("Disconnect \(target.label)", role: .destructive) {
-                Task {
-                    let success = await onDisconnectTrustedDevice(target)
-                    if !success {
-                        disconnectMessage = "Couldn't disconnect — check your connection and try again."
-                    }
-                    disconnectTarget = nil
-                }
+            Button("Revoke \(target.displayName)", role: .destructive) {
+                disconnect(target)
             }
             Button("Cancel", role: .cancel) { disconnectTarget = nil }
         } message: { target in
-            Text("We'll stop sending alerts to \(target.label). It can sign back in with your passkey.")
+            Text("This revokes the device's account access. Its presentation name is never sent to Flagship's control plane in plaintext.")
         }
         .alert(
             "Disconnect failed",
@@ -309,8 +341,52 @@ public struct SettingsScreen: View {
         } message: {
             Text(disconnectMessage ?? "")
         }
+        .sheet(item: $nameEditor) { editor in
+            DeviceNameEditor(
+                title: editor.title,
+                initialName: editor.initialName,
+                supportsLock: editor.supportsLock,
+                initiallyLocked: editor.initiallyLocked
+            ) { name, locked in
+                let success: Bool
+                switch editor.kind {
+                case .account:
+                    success = await onRenameAccount(name)
+                case .selfDevice:
+                    success = await onRenameCurrentDevice(name)
+                case .managed(let deviceId):
+                    success = await onSetManagedDeviceName(deviceId, name, locked)
+                }
+                if !success { nameEditMessage = "Couldn't save the encrypted name. Check the name and try again." }
+                return success
+            }
+        }
+        .alert(
+            "Name not saved",
+            isPresented: Binding(
+                get: { nameEditMessage != nil },
+                set: { if !$0 { nameEditMessage = nil } }
+            )
+        ) { Button("OK") { nameEditMessage = nil } } message: { Text(nameEditMessage ?? "") }
         .sheet(isPresented: $showWipeComingSoon) {
             WipeComingSoonSheet { showWipeComingSoon = false }
+        }
+        .confirmationDialog(
+            revokeSessionTarget.map { "Revoke session \($0.tokenPrefix)?" } ?? "Revoke this session?",
+            isPresented: Binding(
+                get: { revokeSessionTarget != nil },
+                set: { if !$0 { revokeSessionTarget = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: revokeSessionTarget
+        ) { target in
+            Button("Revoke", role: .destructive) {
+                onRevokeDevice(target)
+                revokeSessionTarget = nil
+            }
+            Button("Cancel", role: .cancel) { revokeSessionTarget = nil }
+        } message: { target in
+            Text("Session \(target.tokenPrefix) loses access to this account.")
         }
         .confirmationDialog(
             "Replace this device?",
@@ -353,6 +429,16 @@ public struct SettingsScreen: View {
         }
     }
 
+    private func disconnect(_ target: SettingsViewModel.DirectoryDevice) {
+        Task {
+            let success = await onDisconnectTrustedDevice(target)
+            if !success {
+                disconnectMessage = "Couldn't disconnect — check your connection and try again."
+            }
+            disconnectTarget = nil
+        }
+    }
+
     /// Account-type one-liner under the username on the profile hero.
     private var profileSubtitle: String {
         switch accountType {
@@ -362,22 +448,37 @@ public struct SettingsScreen: View {
         }
     }
 
-    /// v1.2 Phase 4 — Account-security entry. Badge surfaces the
-    /// current account type ("Single-device" / "Multi-device + 2FA");
-    /// the row drills into AccountSecurityScreen for enroll / disable.
-    private func accountSecuritySection(c: FSColors) -> some View {
-        FSSettingsGroup("ACCOUNT SECURITY", rows: [
+    /// The ACCOUNT group (spec S1 group 1): account security, AI keys,
+    /// recovery, key backup, profiles. The lead row still surfaces the
+    /// account-type state (single-device vs multi-device + 2FA) in its
+    /// subtitle and drills into AccountSecurityScreen.
+    private func accountGroup(c: FSColors) -> some View {
+        FSSettingsGroup("ACCOUNT", rows: [
+            FSSettingsRow(
+                icon: "person.text.rectangle",
+                title: "Display name",
+                subtitle: accountDisplayName ?? "Encrypted account presentation name",
+                accessibilityId: "settings-edit-account-name",
+                action: {
+                    guard canManageNames else { return }
+                    nameEditor = NameEditor(kind: .account, title: "Edit account name", initialName: accountDisplayName ?? "")
+                }
+            ),
             FSSettingsRow(
                 icon: accountType == "multi" ? "checkmark.shield.fill" : "shield.lefthalf.filled",
                 iconTint: accountType == "multi" ? c.success : c.primary,
-                title: accountType == "multi" ? "Multi-device + 2FA" : "Single-device account",
+                title: "Account security",
                 subtitle: accountType == "multi"
-                    ? "Recovery requires a 6-digit code + 24-hour grace."
-                    : "Recovery is a 3-day waiting period.",
+                    ? "Multi-device + 2FA — recovery needs a code."
+                    : "Single-device — recovery is a 3-day wait.",
+                accessibilityId: "settings-open-account-security",
                 action: onOpenAccountSecurity
-            )
+            ),
+            FSSettingsRow(icon: "sparkles", title: "AI keys", subtitle: "Bring-your-own keys for building apps", action: onOpenAiKeys),
+            FSSettingsRow(icon: "key.horizontal.fill", title: "Recovery", subtitle: "Recover on a new device", action: onOpenRecovery),
+            FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: "Back up account key", subtitle: "Save an encrypted key file", action: onOpenKeyfileBackup),
+            FSSettingsRow(icon: "person.2.circle.fill", title: "Profiles", subtitle: "Switch between your clouds", action: onOpenProfiles),
         ])
-        .accessibilityIdentifier("settings-open-account-security")
     }
 
     private func trustedDevicesSection(c: FSColors) -> some View {
@@ -499,89 +600,101 @@ public struct SettingsScreen: View {
     /// freshly-admitted window), surface a clock icon + tooltip and
     /// disable the destructive menu entries. Tapping a disabled
     /// entry surfaces a toast explaining why.
-    private func trustedDeviceRow(_ d: TrustedDevice, c: FSColors) -> some View {
-        let quarantined = d.isQuarantined()
+    private func trustedDeviceRow(_ d: SettingsViewModel.DirectoryDevice, c: FSColors) -> some View {
         return FSCard {
             HStack(alignment: .top, spacing: FS.space.s3) {
-                Image(systemName: platformIcon(d.platform))
+                Image(systemName: platformIcon(d.platformClass))
                     .foregroundColor(c.primary)
                     .imageScale(.large)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(d.label)
+                        Text(d.displayName)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(c.text)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                        if quarantined {
-                            Image(systemName: "clock.badge.exclamationmark")
-                                .foregroundColor(c.danger)
-                                .imageScale(.small)
-                                .accessibilityIdentifier("trusted-device-quarantine-icon-\(d.tokenPrefix)")
-                                .help(quarantineTooltip(for: d))
-                        }
+                        if d.isCurrent { Text("This device").font(FS.font.caption()).foregroundColor(c.primary) }
+                        if d.isLocked { Image(systemName: "lock.fill").foregroundColor(c.textMuted) }
                     }
                     HStack(spacing: 4) {
-                        Text(platformDisplay(d.platform))
+                        Text(platformDisplay(d.platformClass))
                         Text("·").foregroundColor(c.textMuted)
-                        Text("added \(relative(ms: d.addedAt))")
+                        Text("Device \(d.supportCode)")
                     }
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
-                    if quarantined {
-                        Text(quarantineTooltip(for: d))
-                            .font(FS.font.caption())
-                            .foregroundColor(c.danger)
-                            .accessibilityIdentifier("trusted-device-quarantine-msg-\(d.tokenPrefix)")
-                    } else if d.lastSeenAt > d.addedAt {
+                    if d.isManaged {
+                        Text(d.isLocked ? "Administrator-managed · locked" : "Administrator-managed")
+                            .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    } else if d.lastSeenAt > d.createdAt {
                         Text("last seen \(relative(ms: d.lastSeenAt))")
                             .font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
                 }
                 Spacer()
                 Menu {
-                    Button(role: .destructive) {
-                        if quarantined {
-                            disconnectMessage = quarantineTooltip(for: d)
-                        } else {
-                            disconnectTarget = d
+                    if d.isCurrent {
+                        Button {
+                            nameEditor = NameEditor(kind: .selfDevice, title: "Rename this device", initialName: d.displayName)
+                        } label: {
+                            Label("Rename this device", systemImage: "pencil")
                         }
+                    }
+                    if canManageNames {
+                        Button {
+                            nameEditor = NameEditor(
+                                kind: .managed(d.deviceId),
+                                title: d.isManaged ? "Edit managed name" : "Set managed name",
+                                initialName: d.displayName,
+                                supportsLock: true,
+                                initiallyLocked: d.isLocked
+                            )
+                        } label: {
+                            Label(d.isManaged ? "Edit managed name" : "Set managed name", systemImage: "lock.shield")
+                        }
+                        if d.isManaged {
+                            Button(role: .destructive) {
+                                Task {
+                                    if !(await onRemoveManagedDeviceName(d.deviceId)) {
+                                        nameEditMessage = "Couldn't remove the managed name."
+                                    }
+                                }
+                            } label: {
+                                Label("Remove managed name", systemImage: "lock.open")
+                            }
+                        }
+                        Divider()
+                    }
+                    Button(role: .destructive) {
+                        disconnectTarget = d
                     } label: {
                         Label("Disconnect", systemImage: "wifi.slash")
                     }
-                    .disabled(quarantined)
+                    .disabled(d.isCurrent)
                     // B7 — Replace device. Tap opens a two-stage scare
                     // sheet; the container drives the actual IRK
                     // rotation ceremony through ReplaceDeviceViewModel.
                     Button(role: .destructive) {
-                        if quarantined {
-                            disconnectMessage = quarantineTooltip(for: d)
-                        } else {
-                            replaceConfirm = true
-                        }
+                        replaceConfirm = true
                     } label: {
                         Label("Replace device", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    .disabled(quarantined)
+                    .disabled(d.isCurrent)
                     Divider()
                     // E2/E3 — Wipe & restart. Live ceremony. The
                     // container observes onWipeRestart and routes
                     // through WipeRestartViewModel.
                     Button(role: .destructive) {
-                        if quarantined {
-                            disconnectMessage = quarantineTooltip(for: d)
-                        } else {
-                            wipeConfirm = true
-                        }
+                        wipeConfirm = true
                     } label: {
                         Label("Wipe & restart…", systemImage: "trash")
                     }
-                    .disabled(quarantined)
+                    .disabled(d.isCurrent)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .foregroundColor(c.textMuted)
                         .imageScale(.large)
                 }
-                .accessibilityIdentifier("trusted-device-menu-\(d.tokenPrefix)")
+                .accessibilityIdentifier("trusted-device-menu-\(d.deviceId)")
             }
         }
     }
@@ -589,32 +702,23 @@ public struct SettingsScreen: View {
     /// Tooltip + toast copy for a quarantined device. Surfaced both
     /// next to the clock icon AND on a disabled-menu tap. Kept
     /// here (not inline) so the test asserts on the exact string.
-    private func quarantineTooltip(for d: TrustedDevice) -> String {
-        guard let until = d.quarantineUntil else {
-            return "This device is in quarantine. Use another device."
-        }
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .none
-        let when = f.string(from: Date(timeIntervalSince1970: TimeInterval(until) / 1000))
-        return "Quarantined until \(when). Use another device."
-    }
-
-    private func platformIcon(_ raw: String) -> String {
+    private func platformIcon(_ raw: String?) -> String {
         switch raw {
-        case "apns":    return "iphone"
-        case "fcm":     return "antenna.radiowaves.left.and.right"
-        case "webpush": return "globe"
+        case "ios": return "iphone"
+        case "android": return "antenna.radiowaves.left.and.right"
+        case "web": return "globe"
+        case "macos": return "laptopcomputer"
         default:        return "questionmark.circle"
         }
     }
 
-    private func platformDisplay(_ raw: String) -> String {
+    private func platformDisplay(_ raw: String?) -> String {
         switch raw {
-        case "apns":    return "iPhone / iPad"
-        case "fcm":     return "Android"
-        case "webpush": return "Web"
-        default:        return raw
+        case "ios": return "iPhone / iPad"
+        case "android": return "Android"
+        case "web": return "Web"
+        case "macos": return "Mac"
+        default: return "Device"
         }
     }
 
@@ -648,7 +752,7 @@ public struct SettingsScreen: View {
                 Image(systemName: s.current ? "iphone.gen3" : "laptopcomputer")
                     .foregroundColor(s.current ? c.success : c.textMuted)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(s.label).foregroundColor(c.text)
+                    Text("Session \(s.tokenPrefix)").foregroundColor(c.text)
                     Text("paired \(relative(ms: s.addedAt))")
                         .font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
@@ -656,23 +760,20 @@ public struct SettingsScreen: View {
                 if s.current {
                     FSPill("This device", kind: .online)
                 } else {
-                    Button("Revoke") { onRevokeDevice(s) }
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(c.danger)
+                    FSDangerButton("Revoke") { revokeSessionTarget = s }
+                        .accessibilityIdentifier("settings-revoke-browser-\(s.tokenPrefix)")
                 }
             }
         }
     }
 
-    private func links(c: FSColors) -> some View {
-        var rows: [FSSettingsRow] = [
-            FSSettingsRow(icon: "sparkles", title: "AI keys", subtitle: "Bring-your-own keys for building apps", action: onOpenAiKeys),
-            FSSettingsRow(icon: "key.horizontal.fill", title: "Recovery setup", subtitle: "Recover on a new device", action: onOpenRecovery),
-            FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: "Back up your account key", subtitle: "Save an encrypted key file", action: onOpenKeyfileBackup),
-            FSSettingsRow(icon: "person.2.circle.fill", title: "Profiles", subtitle: "Switch between your clouds", action: onOpenProfiles),
+    /// Devices continuation (spec S1 group 2): the browser/companion device
+    /// ops that aren't the trusted-device list or browser sessions. Rendered
+    /// right after those two sections so all device management reads as one
+    /// area.
+    private func deviceExtrasGroup(c: FSColors) -> some View {
+        FSSettingsGroup("COMPANIONS", rows: [
             FSSettingsRow(icon: "laptopcomputer", title: "Dock a browser", subtitle: "Read-only desktop companion (4h)", action: onOpenCompanionDock),
-            FSSettingsRow(icon: "lock.open.laptopcomputer", title: "Open secured sessions", subtitle: "Sites you've signed a browser into", action: onOpenSecuredSessions),
-            FSSettingsRow(icon: "link", title: "Process URL", subtitle: "Open a sign-in link you copied", action: onOpenProcessUrl),
             FSSettingsRow(
                 icon: "tray.full",
                 title: "Companion requests",
@@ -680,14 +781,33 @@ public struct SettingsScreen: View {
                 badge: pendingCompanionWritesCount > 0 ? pendingCompanionWritesCount : nil,
                 action: onOpenCompanionRequests
             ),
+        ])
+    }
+
+    /// Web-access group (spec S1 group 3).
+    private func webAccessGroup(c: FSColors) -> some View {
+        FSSettingsGroup("WEB ACCESS", rows: [
+            FSSettingsRow(icon: "lock.open.laptopcomputer", title: "Open secured sessions", subtitle: "Sites you've signed a browser into", accessibilityId: "settings-open-secured-sessions", action: onOpenSecuredSessions),
+            FSSettingsRow(icon: "link", title: "Process URL", subtitle: "Open a sign-in link you copied", action: onOpenProcessUrl),
+        ])
+    }
+
+    /// Backup-&-peers group (spec S1 group 4).
+    private func backupPeersGroup(c: FSColors) -> some View {
+        FSSettingsGroup("BACKUP & PEERS", rows: [
             FSSettingsRow(icon: "externaldrive.connected.to.line.below.fill", title: "Peer-backup", subtitle: "Shard health across peers", action: onOpenPeerBackup),
-            FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "Face ID lock, app-level gating", action: onOpenPrivacy),
-            FSSettingsRow(icon: "info.circle.fill", title: "About Flagship", subtitle: "Version, license, source", action: onOpenAbout),
-        ]
+        ])
+    }
+
+    /// Developer group (spec S1 group 7) — hidden behind the 3-tap / mock
+    /// toggle. The one place technical terms are allowed to stay.
+    @ViewBuilder
+    private func developerGroup(c: FSColors) -> some View {
         if showDeveloper {
-            rows.append(FSSettingsRow(icon: "hammer.fill", title: "Developer", subtitle: "Mock/live toggle, latency knob", action: onOpenDeveloper))
+            FSSettingsGroup("DEVELOPER", rows: [
+                FSSettingsRow(icon: "hammer.fill", title: "Developer", subtitle: "Mock/live toggle, latency knob", action: onOpenDeveloper),
+            ])
         }
-        return FSSettingsGroup("RECOVERY", rows: rows)
     }
 
     /// The three-tier "leave the app" cluster, ordered by increasing
@@ -719,7 +839,9 @@ public struct SettingsScreen: View {
                 Text("Erases account key and deletes data. Sign back in with your recovery passkey.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                 FSDangerButton("Lock with passkey", muted: gated, block: true, large: true) {
-                    if gated { onRecoveryRequired() } else { signOutConfirm = true }
+                    if gated { onRecoveryRequired() }
+                    else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
+                    else { signOutConfirm = true }
                 }
                 .accessibilityIdentifier("settings-sign-out-btn")
             }
@@ -741,9 +863,17 @@ public struct SettingsScreen: View {
                 Text("Remove this device from your account. You may need account recovery to resume.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                 FSDangerButton("Remove this device from account", muted: gated, block: true) {
-                    if gated { onRecoveryRequired() } else { showRemoveConfirm = true }
+                    if gated { onRecoveryRequired() }
+                    else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
+                    else { showRemoveConfirm = true }
                 }
                 .accessibilityIdentifier("remove-from-account-btn")
+
+                Text("Permanently delete your account, its username, and every server's data. This cannot be undone.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    .padding(.top, FS.space.s2)
+                FSDangerButton("Delete account", block: true, action: onDeleteAccount)
+                    .accessibilityIdentifier("settings-delete-account-btn")
             }
         }
         .confirmationDialog(
@@ -764,15 +894,21 @@ public struct SettingsScreen: View {
         }
     }
 
-    /// Light / Dark / Auto appearance — one horizontal segmented control:
-    /// a sun for Light, a moon for Dark, and a small "AUTO" for system-derived.
-    /// Writes straight to PrivacySettings; RootShell applies it app-wide.
-    private func appearanceSection(c: FSColors) -> some View {
-        section("APPEARANCE", c: c) {
-            HStack(spacing: FS.space.s2) {
-                appearanceOption(.light, systemImage: "sun.max.fill", text: nil, c: c)
-                appearanceOption(.dark, systemImage: "moon.fill", text: nil, c: c)
-                appearanceOption(.auto, systemImage: nil, text: "AUTO", c: c)
+    /// APP group (spec S1 group 5): appearance (Light / Dark / Auto segmented
+    /// control), Privacy, and About under one header. Appearance writes
+    /// straight to PrivacySettings; RootShell applies it app-wide.
+    private func appSection(c: FSColors) -> some View {
+        section("APP", c: c) {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                HStack(spacing: FS.space.s2) {
+                    appearanceOption(.light, systemImage: "sun.max.fill", text: nil, c: c)
+                    appearanceOption(.dark, systemImage: "moon.fill", text: nil, c: c)
+                    appearanceOption(.auto, systemImage: nil, text: "AUTO", c: c)
+                }
+                FSSettingsGroup(rows: [
+                    FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "Face ID lock, app-level gating", action: onOpenPrivacy),
+                    FSSettingsRow(icon: "info.circle.fill", title: "About Flagship", subtitle: "Version, license, source", action: onOpenAbout),
+                ])
             }
         }
     }
@@ -829,20 +965,88 @@ public struct SettingsScreen: View {
     }
 
     private func relative(ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = RelativeDateTimeFormatter()
-        fmt.unitsStyle = .abbreviated
-        return fmt.localizedString(for: date, relativeTo: Date())
+        Date.flagshipFormatted(epochMs: ms)
     }
 
     /// M4 — absolute locale timestamp for the pending-re-pair banner's
     /// unlock time (mirrors the webapp's `formatCompletesAt`).
     private func absolute(ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = DateFormatter()
-        fmt.dateStyle = .medium
-        fmt.timeStyle = .short
-        return fmt.string(from: date)
+        Date.flagshipFormatted(epochMs: ms, includeTime: true)
+    }
+}
+
+private struct NameEditor: Identifiable {
+    enum Kind {
+        case account
+        case selfDevice
+        case managed(String)
+    }
+
+    let id = UUID()
+    let kind: Kind
+    let title: String
+    let initialName: String
+    var supportsLock = false
+    var initiallyLocked = false
+}
+
+private struct DeviceNameEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var locked: Bool
+    @State private var saving = false
+    let title: String
+    let supportsLock: Bool
+    let onSave: (String, Bool) async -> Bool
+
+    init(
+        title: String,
+        initialName: String,
+        supportsLock: Bool,
+        initiallyLocked: Bool,
+        onSave: @escaping (String, Bool) async -> Bool
+    ) {
+        self.title = title
+        self.supportsLock = supportsLock
+        self.onSave = onSave
+        _name = State(initialValue: initialName)
+        _locked = State(initialValue: initiallyLocked)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Display name", text: $name)
+                    .textInputAutocapitalization(.words)
+                if supportsLock {
+                    Toggle("Lock managed name", isOn: $locked)
+                    Text("The device may retain its own suggestion, but the managed name remains visible until an administrator removes it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text("Names are encrypted and apply only inside this Flagship account.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(saving ? "Saving…" : "Save") {
+                        saving = true
+                        Task {
+                            if await onSave(name, locked) { dismiss() }
+                            saving = false
+                        }
+                    }
+                    .disabled(saving || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 
@@ -870,7 +1074,7 @@ struct WipeComingSoonSheet: View {
                 .foregroundColor(c.textMuted)
             Text("This rotates your account's identity and recovery passkey in one shot — every other device gets disconnected and you re-pair each one fresh. Pods stay running, services stay installed.")
                 .foregroundColor(c.text)
-            Text("For v1 you can still Disconnect a single device, and Replace device will land alongside the Keystore-rotation primitives. The full Wipe ceremony needs the new-IRK + new-UMK + new-passkey generation paths exercised end-to-end before we ship it.")
+            Text("For v1 you can still Disconnect a single device, and Replace device will land alongside the account-key rotation tools. The full Wipe ceremony needs more testing before we ship it.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
             FSPrimaryButton("Got it", block: true, action: onClose)

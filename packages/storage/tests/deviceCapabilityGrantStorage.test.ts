@@ -4,7 +4,7 @@
  * Same suite runs against BOTH adapters via a shared factory: the
  * in-memory implementation under test directly, and a minimal D1 fake
  * that models the exact SQL the D1 adapter issues (incl. the unique-
- * partial-index constraint on `(username, device_label) WHERE
+ * partial-index constraint on `(username, device_id) WHERE
  * revoked_at IS NULL`). The fake is deliberately query-pattern-matched
  * rather than a full SQL engine — that keeps the file dependency-free
  * AND lets the test fail loudly the moment the D1 adapter starts
@@ -30,7 +30,7 @@ import type {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MIGRATION_PATH = resolve(
   HERE,
-  "../migrations/0031_device_capability_grants.sql",
+  "../migrations/0083_private_account_device_directory.sql",
 );
 const MIGRATION_SQL = readFileSync(MIGRATION_PATH, "utf8");
 
@@ -40,7 +40,7 @@ function rec(
   return {
     grantId: "g-" + (overrides.grantId ?? "primary"),
     username: "alice",
-    deviceLabel: "primary",
+    deviceId: "01".repeat(16),
     devicePubHex: "aa".repeat(32),
     scopesJson: JSON.stringify(["browse", "install-service"]),
     issuedAt: 1_700_000_000_000,
@@ -58,13 +58,14 @@ function rec(
 interface FakeRow {
   grant_id: string;
   username: string;
-  device_label: string;
+  device_id: string;
   device_pub_hex: string;
   scopes_json: string;
   issued_at: number;
   expires_at: number;
   signature_hex: string;
   revoked_at: number | null;
+  signer_root: string;
 }
 
 function makeD1(): D1Database {
@@ -101,7 +102,7 @@ function makeD1(): D1Database {
         // ORDER BY issued_at DESC
         if (
           /WHERE username = \?1\s+ORDER BY issued_at DESC$/m.test(query) &&
-          !/device_label/.test(query)
+          !/device_id/.test(query)
         ) {
           const u = String(bound[0]);
           const out = [...rows.values()]
@@ -110,9 +111,9 @@ function makeD1(): D1Database {
           return { results: out as unknown as T[], success: true, meta: {} };
         }
         // SELECT * FROM device_capability_grants WHERE username = ?1
-        // AND device_label = ?2 AND revoked_at IS NULL
+        // AND device_id = ?2 AND revoked_at IS NULL
         if (
-          /WHERE username = \?1 AND device_label = \?2 AND revoked_at IS NULL/.test(
+          /WHERE username = \?1 AND device_id = \?2 AND revoked_at IS NULL/.test(
             query,
           )
         ) {
@@ -120,7 +121,7 @@ function makeD1(): D1Database {
           const l = String(bound[1]);
           const out = [...rows.values()].filter(
             (r) =>
-              r.username === u && r.device_label === l && r.revoked_at === null,
+              r.username === u && r.device_id === l && r.revoked_at === null,
           );
           return { results: out as unknown as T[], success: true, meta: {} };
         }
@@ -132,13 +133,14 @@ function makeD1(): D1Database {
           const [
             grantId,
             username,
-            deviceLabel,
+            deviceId,
             devicePubHex,
             scopesJson,
             issuedAt,
             expiresAt,
             signatureHex,
             revokedAt,
+            signerRoot,
           ] = bound as [
             string,
             string,
@@ -149,6 +151,7 @@ function makeD1(): D1Database {
             number,
             string,
             number | null,
+            string | undefined,
           ];
           // Enforce the unique partial index at insert time.
           if (revokedAt === null) {
@@ -156,11 +159,11 @@ function makeD1(): D1Database {
               if (
                 other.grant_id !== grantId &&
                 other.username === username &&
-                other.device_label === deviceLabel &&
+                other.device_id === deviceId &&
                 other.revoked_at === null
               ) {
                 throw new Error(
-                  "UNIQUE constraint failed: idx_dcg_username_label_active",
+                  "UNIQUE constraint failed: idx_dcg_username_device_active",
                 );
               }
             }
@@ -174,13 +177,16 @@ function makeD1(): D1Database {
           rows.set(grantId, {
             grant_id: grantId,
             username,
-            device_label: deviceLabel,
+            device_id: deviceId,
             device_pub_hex: devicePubHex,
             scopes_json: scopesJson,
             issued_at: issuedAt,
             expires_at: expiresAt,
             signature_hex: signatureHex,
             revoked_at: revokedAt,
+            // Models the `signer_root TEXT NOT NULL DEFAULT 'membership'`
+            // column (migration 0064): DEFAULT applies when the bind is absent.
+            signer_root: signerRoot ?? "membership",
           });
           return { success: true, meta: { changes: 1 } };
         }
@@ -224,30 +230,30 @@ const adapters: Adapter[] = [
   },
 ];
 
-describe("migration 0031 (device_capability_grants)", () => {
+describe("clean private-device migration (device_capability_grants)", () => {
   it("creates the table with grant_id PRIMARY KEY", () => {
     expect(MIGRATION_SQL).toMatch(
-      /CREATE TABLE IF NOT EXISTS device_capability_grants/,
+      /CREATE TABLE device_capability_grants/,
     );
     expect(MIGRATION_SQL).toMatch(/grant_id\s+TEXT PRIMARY KEY/);
   });
-  it("creates the unique partial index on (username, device_label) WHERE revoked_at IS NULL", () => {
+  it("creates the unique partial index on (username, device_id) WHERE revoked_at IS NULL", () => {
     expect(MIGRATION_SQL).toMatch(
-      /CREATE UNIQUE INDEX IF NOT EXISTS idx_dcg_username_label_active/,
+      /CREATE UNIQUE INDEX idx_dcg_username_device_active/,
     );
     expect(MIGRATION_SQL).toMatch(
-      /ON device_capability_grants\(username, device_label\)\s+WHERE revoked_at IS NULL/,
+      /ON device_capability_grants\(username, device_id\)\s+WHERE revoked_at IS NULL/,
     );
   });
   it("creates the username + device_pub + expires_at lookup indexes", () => {
     expect(MIGRATION_SQL).toMatch(
-      /CREATE INDEX IF NOT EXISTS idx_dcg_username\s+ON device_capability_grants\(username\)/,
+      /CREATE INDEX idx_dcg_username\s+ON device_capability_grants\(username\)/,
     );
     expect(MIGRATION_SQL).toMatch(
-      /CREATE INDEX IF NOT EXISTS idx_dcg_device_pub\s+ON device_capability_grants\(device_pub_hex\)/,
+      /CREATE INDEX idx_dcg_device_pub\s+ON device_capability_grants\(device_pub_hex\)/,
     );
     expect(MIGRATION_SQL).toMatch(
-      /CREATE INDEX IF NOT EXISTS idx_dcg_expires_at\s+ON device_capability_grants\(expires_at\)/,
+      /CREATE INDEX idx_dcg_expires_at\s+ON device_capability_grants\(expires_at\)/,
     );
   });
 });
@@ -266,7 +272,7 @@ for (const a of adapters) {
       expect(got).toBeDefined();
       expect(got?.grantId).toBe("g-1");
       expect(got?.username).toBe("alice");
-      expect(got?.deviceLabel).toBe("primary");
+      expect(got?.deviceId).toBe("01".repeat(16));
       expect(got?.devicePubHex).toBe("aa".repeat(32));
       expect(got?.scopesJson).toBe(
         JSON.stringify(["browse", "demo-provision"]),
@@ -277,12 +283,22 @@ for (const a of adapters) {
       expect(got?.revokedAt).toBeNull();
     });
 
+    it("Slice D — signer_root defaults to 'membership' and round-trips 'admin-root'", async () => {
+      const s = a.make();
+      await s.put(rec({ grantId: "g-mem" }));
+      expect((await s.get("g-mem"))?.signerRoot).toBe("membership");
+      await s.put(
+        rec({ grantId: "g-admin", deviceId: "ipad", signerRoot: "admin-root" }),
+      );
+      expect((await s.get("g-admin"))?.signerRoot).toBe("admin-root");
+    });
+
     it("get on an unknown grantId returns undefined", async () => {
       const s = a.make();
       expect(await s.get("nope")).toBeUndefined();
     });
 
-    it("put rejects a duplicate ACTIVE (username, deviceLabel) with ok:false + the documented reason", async () => {
+    it("put rejects a duplicate ACTIVE (username, deviceId) with ok:false + the documented reason", async () => {
       const s = a.make();
       await s.put(rec({ grantId: "g-1" }));
       const dup = await s.put(
@@ -290,7 +306,7 @@ for (const a of adapters) {
       );
       expect(dup).toEqual({
         ok: false,
-        reason: "duplicate active grant for (username, device_label)",
+        reason: "duplicate active grant for (username, device_id)",
       });
     });
 
@@ -315,11 +331,11 @@ for (const a of adapters) {
 
     it("listForUser returns rows sorted by issuedAt DESC (newest first)", async () => {
       const s = a.make();
-      await s.put(rec({ grantId: "g-a", deviceLabel: "ipad", issuedAt: 100 }));
+      await s.put(rec({ grantId: "g-a", deviceId: "ipad", issuedAt: 100 }));
       await s.put(
         rec({
           grantId: "g-b",
-          deviceLabel: "laptop",
+          deviceId: "laptop",
           devicePubHex: "cc".repeat(32),
           issuedAt: 300,
         }),
@@ -327,7 +343,7 @@ for (const a of adapters) {
       await s.put(
         rec({
           grantId: "g-c",
-          deviceLabel: "phone",
+          deviceId: "phone",
           devicePubHex: "dd".repeat(32),
           issuedAt: 200,
         }),
@@ -359,13 +375,13 @@ for (const a of adapters) {
       expect(list.map((r) => r.grantId)).toEqual(["g-a"]);
     });
 
-    it("revoke sets revokedAt; the row is retained (still in get + listForUser); getActiveForUserLabel skips it", async () => {
+    it("revoke sets revokedAt; the row is retained (still in get + listForUser); getActiveForUserDevice skips it", async () => {
       const s = a.make();
       await s.put(rec({ grantId: "g-1" }));
       await s.revoke("g-1", 1_700_000_900_000);
       const got = await s.get("g-1");
       expect(got?.revokedAt).toBe(1_700_000_900_000);
-      const active = await s.getActiveForUserLabel("alice", "primary");
+      const active = await s.getActiveForUserDevice("alice", "primary");
       expect(active).toBeUndefined();
       const list = await s.listForUser("alice");
       expect(list).toHaveLength(1);
@@ -378,13 +394,13 @@ for (const a of adapters) {
       );
     });
 
-    it("getActiveForUserLabel returns the single matching active row, or undefined", async () => {
+    it("getActiveForUserDevice returns the single matching active row, or undefined", async () => {
       const s = a.make();
       expect(
-        await s.getActiveForUserLabel("alice", "primary"),
+        await s.getActiveForUserDevice("alice", "primary"),
       ).toBeUndefined();
       await s.put(rec({ grantId: "g-1" }));
-      const got = await s.getActiveForUserLabel("alice", "primary");
+      const got = await s.getActiveForUserDevice("alice", "01".repeat(16));
       expect(got?.grantId).toBe("g-1");
     });
 
@@ -395,7 +411,7 @@ for (const a of adapters) {
       await s.put(
         rec({
           grantId: "g-old",
-          deviceLabel: "ipad",
+          deviceId: "ipad",
           devicePubHex: sharedPub,
           issuedAt: 100,
         }),
@@ -404,7 +420,7 @@ for (const a of adapters) {
       await s.put(
         rec({
           grantId: "g-new",
-          deviceLabel: "ipad-2",
+          deviceId: "ipad-2",
           devicePubHex: sharedPub,
           issuedAt: 200,
         }),

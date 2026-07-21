@@ -6,7 +6,18 @@ import type {
   AutoUnlockLeaseStorage,
   SecretMailboxRecord,
   SecretMailboxStorage,
+  PeerBackupManifestRecord,
+  PeerBackupManifestStorage,
   SecretMailboxPurpose,
+  PairingDepositRecord,
+  ServerTransferRecord,
+  ServerTransferStorage,
+  ServerEvictionRecord,
+  ServerEvictionStorage,
+  ServerMigrationRecord,
+  ServerMigrationStorage,
+  AdminRootRotationRecord,
+  AdminRootRotationStorage,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
   PendingRePairRecord,
@@ -29,6 +40,16 @@ import type {
   LuksKeyStorage,
   PushTokenRecord,
   PushTokenStorage,
+  DeviceIdentityRecord,
+  DeviceIdentityStorage,
+  AccountProfileRecord,
+  AccountProfileStorage,
+  DeviceSelfProfileRecord,
+  DeviceSelfProfileStorage,
+  DeviceManagedProfileRecord,
+  DeviceManagedProfileStorage,
+  AccountDirectoryKeyGrantRecord,
+  AccountDirectoryKeyGrantStorage,
   RoutingRecord,
   RoutingStorage,
   SealedLuksKeyRecord,
@@ -57,18 +78,30 @@ import type {
   DemoUserRecord,
   DemoUserState,
   DemoUsersStorage,
+  DemoAccountInitialization,
+  DemoAccountInitializationResult,
+  DemoAccountProvisioningStorage,
+  AccountInitialization,
+  AccountInitializationResult,
+  AccountProvisioningStorage,
   InstallPolicyFanoutRecord,
   InstallPolicyFanoutStorage,
   DeviceCapabilityGrantRecord,
   DeviceCapabilityGrantStorage,
   SchemaVersionRecord,
   SchemaVersionStorage,
+  SuggestionQueueStorage,
+  SuggestThrottleStorage,
+  SuggestThrottleRecord,
+  UsernameOfferStorage,
   CtAlertStorage,
   TrustExceptionRecord,
   TrustExceptionStorage,
   ServiceInviteRecord,
   ServiceInviteStorage,
   ServiceInviteRedeemResult,
+  ServiceInviteApprovalMode,
+  RevokedInviteRecord,
   WatchDelegateRecord,
   WatchDelegateStorage,
   AcmeAccountKeyGrantRecord,
@@ -130,6 +163,15 @@ interface UsernameRow {
   // v2.1 — recovery-wipe policy column (migration 0032). Nullable for
   // pre-migration safety; the rowTo* helper defaults to 'graceful'.
   recovery_wipe_policy?: string | null;
+  // gating v2 — stable AID pubkey (migration 0057). Nullable; absent ⇒
+  // .com verifies service-invite create/revoke against the IRK only.
+  aid_pub_hex?: string | null;
+  // account-deletion / name-reclaim (migration 0058). Coarse "last seen"
+  // epoch-ms; nullable so a pre-migration SELECT decodes safely.
+  last_active?: number | null;
+  // Slice D — pinned admin master-root pubkey (migration 0064). Nullable;
+  // absent ⇒ the account has no admin authority anchor (deny sensitive ops).
+  admin_root_pub_hex?: string | null;
 }
 interface AuthCodeRow {
   serial: string;
@@ -145,6 +187,7 @@ interface AuthCodeRow {
   recorded_at: number;
   used_at: number | null;
   revoked_at: number | null;
+  admin_root_pub_key_hex: string | null;
 }
 interface ServerRow {
   server_domain: string;
@@ -182,6 +225,11 @@ function rowToUsername(r: UsernameRow): UsernameRecord {
       ? { recoveryCodesHashesJson: r.recovery_codes_hashes_json }
       : {}),
     ...(r.totp_enrolled_at != null ? { totpEnrolledAt: r.totp_enrolled_at } : {}),
+    ...(r.aid_pub_hex != null ? { aidPubHex: r.aid_pub_hex } : {}),
+    ...(r.last_active != null ? { lastActive: r.last_active } : {}),
+    ...(r.admin_root_pub_hex != null
+      ? { adminRootPubHex: r.admin_root_pub_hex }
+      : {}),
   };
 }
 function rowToAuthCode(r: AuthCodeRow): AuthCodeRecord {
@@ -199,6 +247,9 @@ function rowToAuthCode(r: AuthCodeRow): AuthCodeRecord {
     recordedAt: r.recorded_at,
     usedAt: r.used_at ?? undefined,
     revokedAt: r.revoked_at ?? undefined,
+    ...(r.admin_root_pub_key_hex != null
+      ? { adminRootPubKeyHex: r.admin_root_pub_key_hex }
+      : {}),
   };
 }
 function rowToServer(r: ServerRow): ServerRecord {
@@ -232,8 +283,11 @@ export class D1UsernameStorage implements UsernameStorage {
     await this.db
       .prepare(
         "INSERT INTO usernames " +
-          "(username, irk_pub_hex, claimed_at, is_demo, account_type, totp_secret_encrypted, recovery_codes_hashes_json, totp_enrolled_at, recovery_wipe_policy) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+          "(username, irk_pub_hex, claimed_at, is_demo, account_type, totp_secret_encrypted, recovery_codes_hashes_json, totp_enrolled_at, recovery_wipe_policy, aid_pub_hex, last_active, admin_root_pub_hex) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+          // ON CONFLICT updates only claimed_at — like is_demo / the v1.2
+          // cascade fields, aid_pub_hex + admin_root_pub_hex survive a benign
+          // re-claim (a fresh value is set via the claim path, not a re-put).
           "ON CONFLICT(username) DO UPDATE SET claimed_at = excluded.claimed_at",
       )
       .bind(
@@ -246,6 +300,9 @@ export class D1UsernameStorage implements UsernameStorage {
         rec.recoveryCodesHashesJson ?? null,
         rec.totpEnrolledAt ?? null,
         rec.recoveryWipePolicy ?? "graceful",
+        rec.aidPubHex ?? null,
+        rec.lastActive ?? null,
+        rec.adminRootPubHex ?? null,
       )
       .run();
     return { ok: true as const };
@@ -271,6 +328,26 @@ export class D1UsernameStorage implements UsernameStorage {
         "WHERE username = ? AND lower(irk_pub_hex) = lower(?)",
       )
       .bind(newIrkPubHex, at, username.toLowerCase(), expectedOldIrkPubHex)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+  async swapAdminRootPub(
+    username: string,
+    expectedOldAdminRootPubHex: string,
+    newAdminRootPubHex: string,
+  ) {
+    // Conditional CAS: swap ONLY when the row's current admin_root_pub_hex
+    // matches `expectedOldAdminRootPubHex` (case-insensitive) AND is non-NULL
+    // (a fresh proof can only chain FROM an existing anchor). meta.changes
+    // reports whether the swap happened.
+    const r = await this.db
+      .prepare(
+        "UPDATE usernames SET admin_root_pub_hex = ? " +
+        "WHERE username = ? AND admin_root_pub_hex IS NOT NULL " +
+        "AND lower(admin_root_pub_hex) = lower(?)",
+      )
+      .bind(newAdminRootPubHex.toLowerCase(), username.toLowerCase(), expectedOldAdminRootPubHex)
       .run();
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
@@ -345,6 +422,22 @@ export class D1UsernameStorage implements UsernameStorage {
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
   }
+  async touchLastActive(username: string, atMs: number) {
+    const r = await this.db
+      .prepare("UPDATE usernames SET last_active = ? WHERE username = ?")
+      .bind(atMs, username.toLowerCase())
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+  async delete(username: string) {
+    const r = await this.db
+      .prepare("DELETE FROM usernames WHERE username = ?")
+      .bind(username.toLowerCase())
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
 }
 
 export class D1UsernameAliasStorage implements UsernameAliasStorage {
@@ -406,8 +499,8 @@ export class D1AuthCodeStorage implements AuthCodeStorage {
           `INSERT INTO auth_codes (
             serial, username, server_name, server_domain,
             delegated_pubkey_hex, user_pubkey_hex, user_signature_hex,
-            issued_at, expires_at, status, recorded_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            issued_at, expires_at, status, recorded_at, admin_root_pub_key_hex
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           rec.serial,
@@ -421,6 +514,7 @@ export class D1AuthCodeStorage implements AuthCodeStorage {
           rec.expiresAt,
           rec.status,
           rec.recordedAt,
+          rec.adminRootPubKeyHex ?? null,
         )
         .run();
       return { ok: true as const };
@@ -1325,6 +1419,1013 @@ export class D1SecretMailboxStorage implements SecretMailboxStorage {
     if (meta?.changes !== undefined && meta.changes === 0) return undefined;
     return rowToSecretMailbox({ ...r, consumed_at: now });
   }
+
+  // ── Deposit-on-unlock pairing lane (purpose:"pairing") ────────────────
+  async putPairingDeposit(rec: PairingDepositRecord) {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO secret_mailbox
+             (server_domain, username, request_nonce_hex, stk_pub_hex,
+              purpose, request_issued_at, request_signature_hex,
+              device_info_json, posted_at, expires_at, last_push_at,
+              response_sealed_hex, response_issued_at, responded_at,
+              consumed_at)
+           VALUES (?1, ?2, ?3, ?4, 'pairing', ?5, '',
+                   NULL, ?5, ?6, 0, ?7, ?5, ?5, NULL)`,
+        )
+        .bind(
+          rec.serverDomain,
+          rec.username.toLowerCase(),
+          rec.requestNonceHex,
+          rec.stkPubHex.toLowerCase(),
+          rec.issuedAt,
+          rec.expiresAt,
+          rec.sealedHex.toLowerCase(),
+        )
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE|PRIMARY KEY/i.test(msg)) {
+        return { ok: false as const, reason: "duplicate nonce" };
+      }
+      throw e;
+    }
+  }
+
+  async consumePairingDeposit(serverDomain: string, now: number) {
+    // GC expired pairing rows for this domain first (best-effort).
+    await this.db
+      .prepare(
+        "DELETE FROM secret_mailbox WHERE server_domain = ?1 AND purpose = 'pairing' AND expires_at <= ?2",
+      )
+      .bind(serverDomain, now)
+      .run();
+    // Freshest un-consumed, un-expired pairing deposit.
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM secret_mailbox
+         WHERE server_domain = ?1 AND purpose = 'pairing'
+           AND expires_at > ?2 AND consumed_at IS NULL
+           AND response_sealed_hex IS NOT NULL
+         ORDER BY posted_at DESC LIMIT 1`,
+      )
+      .bind(serverDomain, now)
+      .first<SecretMailboxRow>();
+    if (!r || r.response_sealed_hex === null) return undefined;
+    // Single-use release — the conditional WHERE consumed_at IS NULL makes a
+    // concurrent double-consume return at-most-once.
+    const w = await this.db
+      .prepare(
+        `UPDATE secret_mailbox SET consumed_at = ?1
+         WHERE server_domain = ?2 AND request_nonce_hex = ?3 AND consumed_at IS NULL`,
+      )
+      .bind(now, serverDomain, r.request_nonce_hex)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    if (meta?.changes !== undefined && meta.changes === 0) return undefined;
+    return {
+      serverDomain: r.server_domain,
+      username: r.username,
+      requestNonceHex: r.request_nonce_hex,
+      stkPubHex: r.stk_pub_hex,
+      sealedHex: r.response_sealed_hex,
+      issuedAt: r.request_issued_at,
+      expiresAt: r.expires_at,
+    };
+  }
+
+  async putEntitlementDeposit(rec: PairingDepositRecord) {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO secret_mailbox
+             (server_domain, username, request_nonce_hex, stk_pub_hex,
+              purpose, request_issued_at, request_signature_hex,
+              device_info_json, posted_at, expires_at, last_push_at,
+              response_sealed_hex, response_issued_at, responded_at,
+              consumed_at)
+           VALUES (?1, ?2, ?3, ?4, 'entitlement-deposit', ?5, '',
+                   NULL, ?5, ?6, 0, ?7, ?5, ?5, NULL)`,
+        )
+        .bind(
+          rec.serverDomain,
+          rec.username.toLowerCase(),
+          rec.requestNonceHex,
+          rec.stkPubHex.toLowerCase(),
+          rec.issuedAt,
+          rec.expiresAt,
+          // PUBLIC IRK-signed entitlement carrier (not sealed) — see types.ts.
+          rec.sealedHex.toLowerCase(),
+        )
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE|PRIMARY KEY/i.test(msg)) {
+        return { ok: false as const, reason: "duplicate nonce" };
+      }
+      throw e;
+    }
+  }
+
+  async consumeEntitlementDeposit(serverDomain: string, now: number) {
+    // GC expired entitlement-deposit rows for this domain first (best-effort).
+    await this.db
+      .prepare(
+        "DELETE FROM secret_mailbox WHERE server_domain = ?1 AND purpose = 'entitlement-deposit' AND expires_at <= ?2",
+      )
+      .bind(serverDomain, now)
+      .run();
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM secret_mailbox
+         WHERE server_domain = ?1 AND purpose = 'entitlement-deposit'
+           AND expires_at > ?2 AND consumed_at IS NULL
+           AND response_sealed_hex IS NOT NULL
+         ORDER BY posted_at DESC LIMIT 1`,
+      )
+      .bind(serverDomain, now)
+      .first<SecretMailboxRow>();
+    if (!r || r.response_sealed_hex === null) return undefined;
+    const w = await this.db
+      .prepare(
+        `UPDATE secret_mailbox SET consumed_at = ?1
+         WHERE server_domain = ?2 AND request_nonce_hex = ?3 AND consumed_at IS NULL`,
+      )
+      .bind(now, serverDomain, r.request_nonce_hex)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    if (meta?.changes !== undefined && meta.changes === 0) return undefined;
+    return {
+      serverDomain: r.server_domain,
+      username: r.username,
+      requestNonceHex: r.request_nonce_hex,
+      stkPubHex: r.stk_pub_hex,
+      sealedHex: r.response_sealed_hex,
+      issuedAt: r.request_issued_at,
+      expiresAt: r.expires_at,
+    };
+  }
+
+  // ── Account-death content-wipe lane (purpose:"self-delete") ───────────
+  async putSelfDeleteDeposit(rec: PairingDepositRecord) {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO secret_mailbox
+             (server_domain, username, request_nonce_hex, stk_pub_hex,
+              purpose, request_issued_at, request_signature_hex,
+              device_info_json, posted_at, expires_at, last_push_at,
+              response_sealed_hex, response_issued_at, responded_at,
+              consumed_at)
+           VALUES (?1, ?2, ?3, ?4, 'self-delete', ?5, '',
+                   NULL, ?5, ?6, 0, ?7, ?5, ?5, NULL)`,
+        )
+        .bind(
+          rec.serverDomain,
+          rec.username.toLowerCase(),
+          rec.requestNonceHex,
+          rec.stkPubHex.toLowerCase(),
+          rec.issuedAt,
+          rec.expiresAt,
+          // PUBLIC owner-IRK-signed servers-self-delete order carrier — see types.ts.
+          rec.sealedHex.toLowerCase(),
+        )
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE|PRIMARY KEY/i.test(msg)) {
+        return { ok: false as const, reason: "duplicate nonce" };
+      }
+      throw e;
+    }
+  }
+
+  async consumeSelfDeleteDeposit(serverDomain: string, now: number) {
+    // GC expired self-delete rows for this domain first (best-effort).
+    await this.db
+      .prepare(
+        "DELETE FROM secret_mailbox WHERE server_domain = ?1 AND purpose = 'self-delete' AND expires_at <= ?2",
+      )
+      .bind(serverDomain, now)
+      .run();
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM secret_mailbox
+         WHERE server_domain = ?1 AND purpose = 'self-delete'
+           AND expires_at > ?2 AND consumed_at IS NULL
+           AND response_sealed_hex IS NOT NULL
+         ORDER BY posted_at DESC LIMIT 1`,
+      )
+      .bind(serverDomain, now)
+      .first<SecretMailboxRow>();
+    if (!r || r.response_sealed_hex === null) return undefined;
+    const w = await this.db
+      .prepare(
+        `UPDATE secret_mailbox SET consumed_at = ?1
+         WHERE server_domain = ?2 AND request_nonce_hex = ?3 AND consumed_at IS NULL`,
+      )
+      .bind(now, serverDomain, r.request_nonce_hex)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    if (meta?.changes !== undefined && meta.changes === 0) return undefined;
+    return {
+      serverDomain: r.server_domain,
+      username: r.username,
+      requestNonceHex: r.request_nonce_hex,
+      stkPubHex: r.stk_pub_hex,
+      sealedHex: r.response_sealed_hex,
+      issuedAt: r.request_issued_at,
+      expiresAt: r.expires_at,
+    };
+  }
+
+  // ── Secret-free-recipe SWK delivery lane (purpose:"swk") ──────────────
+  async putSwkDeposit(rec: PairingDepositRecord) {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO secret_mailbox
+             (server_domain, username, request_nonce_hex, stk_pub_hex,
+              purpose, request_issued_at, request_signature_hex,
+              device_info_json, posted_at, expires_at, last_push_at,
+              response_sealed_hex, response_issued_at, responded_at,
+              consumed_at)
+           VALUES (?1, ?2, ?3, ?4, 'swk', ?5, '',
+                   NULL, ?5, ?6, 0, ?7, ?5, ?5, NULL)`,
+        )
+        .bind(
+          rec.serverDomain,
+          rec.username.toLowerCase(),
+          rec.requestNonceHex,
+          rec.stkPubHex.toLowerCase(),
+          rec.issuedAt,
+          rec.expiresAt,
+          // SEALED SWK-delivery carrier — the box unseals it with its identity key.
+          rec.sealedHex.toLowerCase(),
+        )
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE|PRIMARY KEY/i.test(msg)) {
+        return { ok: false as const, reason: "duplicate nonce" };
+      }
+      throw e;
+    }
+  }
+
+  async consumeSwkDeposit(serverDomain: string, now: number) {
+    // GC expired swk rows for this domain first (best-effort).
+    await this.db
+      .prepare(
+        "DELETE FROM secret_mailbox WHERE server_domain = ?1 AND purpose = 'swk' AND expires_at <= ?2",
+      )
+      .bind(serverDomain, now)
+      .run();
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM secret_mailbox
+         WHERE server_domain = ?1 AND purpose = 'swk'
+           AND expires_at > ?2 AND consumed_at IS NULL
+           AND response_sealed_hex IS NOT NULL
+         ORDER BY posted_at DESC LIMIT 1`,
+      )
+      .bind(serverDomain, now)
+      .first<SecretMailboxRow>();
+    if (!r || r.response_sealed_hex === null) return undefined;
+    const w = await this.db
+      .prepare(
+        `UPDATE secret_mailbox SET consumed_at = ?1
+         WHERE server_domain = ?2 AND request_nonce_hex = ?3 AND consumed_at IS NULL`,
+      )
+      .bind(now, serverDomain, r.request_nonce_hex)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    if (meta?.changes !== undefined && meta.changes === 0) return undefined;
+    return {
+      serverDomain: r.server_domain,
+      username: r.username,
+      requestNonceHex: r.request_nonce_hex,
+      stkPubHex: r.stk_pub_hex,
+      sealedHex: r.response_sealed_hex,
+      issuedAt: r.request_issued_at,
+      expiresAt: r.expires_at,
+    };
+  }
+
+  // ── CGK delivery lane (purpose:"cgk") — Phase 6 ───────────────────────
+  async putCgkDeposit(rec: PairingDepositRecord) {
+    return this.putGenericDeposit(rec, "cgk");
+  }
+
+  async consumeCgkDeposit(serverDomain: string, now: number) {
+    return this.consumeGenericDeposit(serverDomain, now, "cgk");
+  }
+
+  // ── Owner preferred-server vote lane (purpose:"set-leader") — Phase 6 ──
+  async putSetLeaderDeposit(rec: PairingDepositRecord) {
+    return this.putGenericDeposit(rec, "set-leader");
+  }
+
+  async consumeSetLeaderDeposit(serverDomain: string, now: number) {
+    return this.consumeGenericDeposit(serverDomain, now, "set-leader");
+  }
+
+  // ── Admin-authorized server-update order lane (purpose:"update") ───────
+  async putUpdateDeposit(rec: PairingDepositRecord) {
+    return this.putGenericDeposit(rec, "update");
+  }
+
+  async consumeUpdateDeposit(serverDomain: string, now: number) {
+    return this.consumeGenericDeposit(serverDomain, now, "update");
+  }
+
+  // Shared deposit-lane helpers — the SWK/cgk/set-leader lanes are identical
+  // store-and-forward shapes on `secret_mailbox`, distinguished only by purpose
+  // (no migration — the column is plain TEXT, the SWK lane already inserts a
+  // literal). Parameterized so a new lane is one purpose string.
+  private async putGenericDeposit(
+    rec: PairingDepositRecord,
+    purpose: "cgk" | "set-leader" | "update",
+  ) {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO secret_mailbox
+             (server_domain, username, request_nonce_hex, stk_pub_hex,
+              purpose, request_issued_at, request_signature_hex,
+              device_info_json, posted_at, expires_at, last_push_at,
+              response_sealed_hex, response_issued_at, responded_at,
+              consumed_at)
+           VALUES (?1, ?2, ?3, ?4, ?8, ?5, '',
+                   NULL, ?5, ?6, 0, ?7, ?5, ?5, NULL)`,
+        )
+        .bind(
+          rec.serverDomain,
+          rec.username.toLowerCase(),
+          rec.requestNonceHex,
+          rec.stkPubHex.toLowerCase(),
+          rec.issuedAt,
+          rec.expiresAt,
+          rec.sealedHex.toLowerCase(),
+          purpose,
+        )
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE|PRIMARY KEY/i.test(msg)) {
+        return { ok: false as const, reason: "duplicate nonce" };
+      }
+      throw e;
+    }
+  }
+
+  private async consumeGenericDeposit(
+    serverDomain: string,
+    now: number,
+    purpose: "cgk" | "set-leader" | "update",
+  ) {
+    await this.db
+      .prepare(
+        "DELETE FROM secret_mailbox WHERE server_domain = ?1 AND purpose = ?3 AND expires_at <= ?2",
+      )
+      .bind(serverDomain, now, purpose)
+      .run();
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM secret_mailbox
+         WHERE server_domain = ?1 AND purpose = ?3
+           AND expires_at > ?2 AND consumed_at IS NULL
+           AND response_sealed_hex IS NOT NULL
+         ORDER BY posted_at DESC LIMIT 1`,
+      )
+      .bind(serverDomain, now, purpose)
+      .first<SecretMailboxRow>();
+    if (!r || r.response_sealed_hex === null) return undefined;
+    const w = await this.db
+      .prepare(
+        `UPDATE secret_mailbox SET consumed_at = ?1
+         WHERE server_domain = ?2 AND request_nonce_hex = ?3 AND consumed_at IS NULL`,
+      )
+      .bind(now, serverDomain, r.request_nonce_hex)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    if (meta?.changes !== undefined && meta.changes === 0) return undefined;
+    return {
+      serverDomain: r.server_domain,
+      username: r.username,
+      requestNonceHex: r.request_nonce_hex,
+      stkPubHex: r.stk_pub_hex,
+      sealedHex: r.response_sealed_hex,
+      issuedAt: r.request_issued_at,
+      expiresAt: r.expires_at,
+    };
+  }
+}
+
+interface ServerTransferRow {
+  server_domain: string;
+  giver_username: string;
+  transfer_nonce: string;
+  giver_irk_pub_hex: string;
+  issued_at: number;
+  expires_at: number;
+  offer_signature_hex: string;
+  claimed_at: number | null;
+  acquirer_username: string | null;
+  acquirer_irk_pub_hex: string | null;
+  claim_issued_at: number | null;
+  claim_signature_hex: string | null;
+  disk_key_handoff_hex: string | null;
+  disk_key_handoff_at: number | null;
+  acquirer_admin_root_pub_hex: string | null;
+  admin_handoff_old_root_hex: string | null;
+  admin_handoff_new_root_hex: string | null;
+  admin_handoff_issued_at: number | null;
+  admin_handoff_sig_hex: string | null;
+  rehome_auth_issued_at: number | null;
+  rehome_auth_sig_hex: string | null;
+}
+
+function rowToServerTransfer(r: ServerTransferRow): ServerTransferRecord {
+  return {
+    serverDomain: r.server_domain,
+    giverUsername: r.giver_username,
+    transferNonce: r.transfer_nonce,
+    giverIrkPubHex: r.giver_irk_pub_hex,
+    issuedAt: r.issued_at,
+    expiresAt: r.expires_at,
+    offerSignatureHex: r.offer_signature_hex,
+    claimedAt: r.claimed_at,
+    acquirerUsername: r.acquirer_username,
+    acquirerIrkPubHex: r.acquirer_irk_pub_hex,
+    claimIssuedAt: r.claim_issued_at,
+    claimSignatureHex: r.claim_signature_hex,
+    diskKeyHandoffHex: r.disk_key_handoff_hex ?? null,
+    diskKeyHandoffAt: r.disk_key_handoff_at ?? null,
+    acquirerAdminRootPubHex: r.acquirer_admin_root_pub_hex ?? null,
+    adminHandoffOldRootHex: r.admin_handoff_old_root_hex ?? null,
+    adminHandoffNewRootHex: r.admin_handoff_new_root_hex ?? null,
+    adminHandoffIssuedAt: r.admin_handoff_issued_at ?? null,
+    adminHandoffSigHex: r.admin_handoff_sig_hex ?? null,
+    rehomeAuthIssuedAt: r.rehome_auth_issued_at ?? null,
+    rehomeAuthSigHex: r.rehome_auth_sig_hex ?? null,
+  };
+}
+
+export class D1ServerTransferStorage implements ServerTransferStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async putOffer(rec: ServerTransferRecord): Promise<void> {
+    // One offer per box — INSERT OR REPLACE on the server_domain PK so a
+    // re-issued offer overwrites any prior unclaimed row.
+    await this.db
+      .prepare(
+        `INSERT OR REPLACE INTO server_transfers
+           (server_domain, giver_username, transfer_nonce, giver_irk_pub_hex,
+            issued_at, expires_at, offer_signature_hex,
+            claimed_at, acquirer_username, acquirer_irk_pub_hex,
+            claim_issued_at, claim_signature_hex, acquirer_admin_root_pub_hex,
+            admin_handoff_old_root_hex, admin_handoff_new_root_hex,
+            admin_handoff_issued_at, admin_handoff_sig_hex)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`,
+      )
+      .bind(
+        rec.serverDomain,
+        rec.giverUsername.toLowerCase(),
+        rec.transferNonce.toLowerCase(),
+        rec.giverIrkPubHex.toLowerCase(),
+        rec.issuedAt,
+        rec.expiresAt,
+        rec.offerSignatureHex.toLowerCase(),
+        rec.claimedAt,
+        rec.acquirerUsername === null ? null : rec.acquirerUsername.toLowerCase(),
+        rec.acquirerIrkPubHex === null ? null : rec.acquirerIrkPubHex.toLowerCase(),
+        rec.claimIssuedAt,
+        rec.claimSignatureHex === null ? null : rec.claimSignatureHex.toLowerCase(),
+        rec.acquirerAdminRootPubHex === null ? null : rec.acquirerAdminRootPubHex.toLowerCase(),
+        rec.adminHandoffOldRootHex === null ? null : rec.adminHandoffOldRootHex.toLowerCase(),
+        rec.adminHandoffNewRootHex === null ? null : rec.adminHandoffNewRootHex.toLowerCase(),
+        rec.adminHandoffIssuedAt,
+        rec.adminHandoffSigHex === null ? null : rec.adminHandoffSigHex.toLowerCase(),
+      )
+      .run();
+  }
+
+  async getOffer(serverDomain: string, now: number): Promise<ServerTransferRecord | undefined> {
+    const r = await this.db
+      .prepare("SELECT * FROM server_transfers WHERE server_domain = ?1")
+      .bind(serverDomain)
+      .first<ServerTransferRow>();
+    if (!r) return undefined;
+    // GC an unclaimed offer past its TTL; keep a claimed row so the giver's
+    // phone can still complete the re-seal after expiry.
+    if (r.claimed_at === null && r.expires_at <= now) {
+      await this.db
+        .prepare("DELETE FROM server_transfers WHERE server_domain = ?1 AND claimed_at IS NULL")
+        .bind(serverDomain)
+        .run();
+      return undefined;
+    }
+    return rowToServerTransfer(r);
+  }
+
+  async claim(
+    serverDomain: string,
+    transferNonce: string,
+    acquirerUsername: string,
+    acquirerIrkPubHex: string,
+    acquirerAdminRootPubHex: string,
+    claimIssuedAt: number,
+    claimSignatureHex: string,
+    now: number,
+  ): Promise<{ ok: true; record: ServerTransferRecord } | { ok: false; reason: string }> {
+    const r = await this.db
+      .prepare("SELECT * FROM server_transfers WHERE server_domain = ?1")
+      .bind(serverDomain)
+      .first<ServerTransferRow>();
+    if (!r) return { ok: false as const, reason: "no offer" };
+    if (r.claimed_at !== null) return { ok: false as const, reason: "already claimed" };
+    if (r.expires_at <= now) return { ok: false as const, reason: "expired" };
+    if (r.transfer_nonce !== transferNonce.toLowerCase()) {
+      return { ok: false as const, reason: "nonce mismatch" };
+    }
+    // Conditional UPDATE (CAS on claimed_at IS NULL) so two racing claims
+    // can't both win.
+    const w = await this.db
+      .prepare(
+        `UPDATE server_transfers
+           SET claimed_at = ?1, acquirer_username = ?2, acquirer_irk_pub_hex = ?3,
+               claim_issued_at = ?4, claim_signature_hex = ?5,
+               acquirer_admin_root_pub_hex = ?6
+         WHERE server_domain = ?7 AND claimed_at IS NULL`,
+      )
+      .bind(
+        now,
+        acquirerUsername.toLowerCase(),
+        acquirerIrkPubHex.toLowerCase(),
+        claimIssuedAt,
+        claimSignatureHex.toLowerCase(),
+        acquirerAdminRootPubHex.toLowerCase(),
+        serverDomain,
+      )
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    if (meta?.changes !== undefined && meta.changes === 0) {
+      return { ok: false as const, reason: "already claimed" };
+    }
+    return {
+      ok: true as const,
+      record: {
+        serverDomain: r.server_domain,
+        giverUsername: r.giver_username,
+        transferNonce: r.transfer_nonce,
+        giverIrkPubHex: r.giver_irk_pub_hex,
+        issuedAt: r.issued_at,
+        expiresAt: r.expires_at,
+        offerSignatureHex: r.offer_signature_hex,
+        claimedAt: now,
+        acquirerUsername: acquirerUsername.toLowerCase(),
+        acquirerIrkPubHex: acquirerIrkPubHex.toLowerCase(),
+        claimIssuedAt,
+        claimSignatureHex: claimSignatureHex.toLowerCase(),
+        acquirerAdminRootPubHex: acquirerAdminRootPubHex.toLowerCase(),
+        diskKeyHandoffHex: r.disk_key_handoff_hex ?? null,
+        diskKeyHandoffAt: r.disk_key_handoff_at ?? null,
+        adminHandoffOldRootHex: r.admin_handoff_old_root_hex ?? null,
+        adminHandoffNewRootHex: r.admin_handoff_new_root_hex ?? null,
+        adminHandoffIssuedAt: r.admin_handoff_issued_at ?? null,
+        adminHandoffSigHex: r.admin_handoff_sig_hex ?? null,
+        rehomeAuthIssuedAt: r.rehome_auth_issued_at ?? null,
+        rehomeAuthSigHex: r.rehome_auth_sig_hex ?? null,
+      },
+    };
+  }
+
+  async putDiskKeyHandoff(
+    serverDomain: string,
+    diskKeyHandoffHex: string,
+    now: number,
+  ): Promise<boolean> {
+    // Only a CLAIMED row accepts the disk-key handoff (the giver re-seals to
+    // the acquirer IRK learned from the claim).
+    const w = await this.db
+      .prepare(
+        `UPDATE server_transfers
+           SET disk_key_handoff_hex = ?1, disk_key_handoff_at = ?2
+         WHERE server_domain = ?3 AND claimed_at IS NOT NULL`,
+      )
+      .bind(diskKeyHandoffHex.toLowerCase(), now, serverDomain)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
+  }
+
+  async putAdminHandoff(
+    serverDomain: string,
+    handoff: { oldRootHex: string; newRootHex: string; issuedAt: number; sigHex: string },
+  ): Promise<boolean> {
+    // Only a CLAIMED row accepts the admin-root handoff (the giver signs the
+    // proof for the acquirer root learned from the claim). Idempotent replace.
+    const w = await this.db
+      .prepare(
+        `UPDATE server_transfers
+           SET admin_handoff_old_root_hex = ?1, admin_handoff_new_root_hex = ?2,
+               admin_handoff_issued_at = ?3, admin_handoff_sig_hex = ?4
+         WHERE server_domain = ?5 AND claimed_at IS NOT NULL`,
+      )
+      .bind(
+        handoff.oldRootHex.toLowerCase(),
+        handoff.newRootHex.toLowerCase(),
+        handoff.issuedAt,
+        handoff.sigHex.toLowerCase(),
+        serverDomain,
+      )
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
+  }
+
+  async putRehomeAuth(
+    serverDomain: string,
+    auth: { issuedAt: number; sigHex: string },
+  ): Promise<boolean> {
+    // Only a CLAIMED row accepts the legacy re-home authorization (the giver
+    // signs it for the acquirer IRK learned from the claim). Idempotent replace.
+    const w = await this.db
+      .prepare(
+        `UPDATE server_transfers
+           SET rehome_auth_issued_at = ?1, rehome_auth_sig_hex = ?2
+         WHERE server_domain = ?3 AND claimed_at IS NOT NULL`,
+      )
+      .bind(auth.issuedAt, auth.sigHex.toLowerCase(), serverDomain)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
+  }
+
+  async remove(serverDomain: string): Promise<void> {
+    await this.db
+      .prepare("DELETE FROM server_transfers WHERE server_domain = ?1")
+      .bind(serverDomain)
+      .run();
+  }
+}
+
+interface ServerEvictionRow {
+  pod_canonical: string;
+  retired_stk_pub_hex: string;
+  order_json: string;
+  order_signature_hex: string;
+  issued_at: number;
+  old_acked_at: number | null;
+  new_acked_at: number | null;
+  epoch_complete_at: number | null;
+}
+
+function rowToServerEviction(r: ServerEvictionRow): ServerEvictionRecord {
+  return {
+    podCanonical: r.pod_canonical,
+    retiredStkPubHex: r.retired_stk_pub_hex,
+    orderJson: r.order_json,
+    orderSignatureHex: r.order_signature_hex,
+    issuedAt: r.issued_at,
+    oldAckedAt: r.old_acked_at,
+    newAckedAt: r.new_acked_at,
+    epochCompleteAt: r.epoch_complete_at,
+  };
+}
+
+export class D1ServerEvictionStorage implements ServerEvictionStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async recordEviction(rec: ServerEvictionRecord): Promise<void> {
+    // One row per retired instance — INSERT OR REPLACE on the
+    // (pod_canonical, retired_stk_pub_hex) PK so re-issuing the same order
+    // upserts. Store hex lowercase.
+    await this.db
+      .prepare(
+        `INSERT OR REPLACE INTO server_evictions
+           (pod_canonical, retired_stk_pub_hex, order_json, order_signature_hex,
+            issued_at, old_acked_at, new_acked_at, epoch_complete_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+      )
+      .bind(
+        rec.podCanonical.toLowerCase(),
+        rec.retiredStkPubHex.toLowerCase(),
+        rec.orderJson,
+        rec.orderSignatureHex.toLowerCase(),
+        rec.issuedAt,
+        rec.oldAckedAt,
+        rec.newAckedAt,
+        rec.epochCompleteAt,
+      )
+      .run();
+  }
+
+  async getEviction(
+    podCanonical: string,
+    retiredStkPubHex: string,
+  ): Promise<ServerEvictionRecord | undefined> {
+    const r = await this.db
+      .prepare(
+        "SELECT * FROM server_evictions WHERE pod_canonical = ?1 AND retired_stk_pub_hex = ?2",
+      )
+      .bind(podCanonical.toLowerCase(), retiredStkPubHex.toLowerCase())
+      .first<ServerEvictionRow>();
+    return r ? rowToServerEviction(r) : undefined;
+  }
+
+  async listEvictions(podCanonical: string): Promise<ServerEvictionRecord[]> {
+    const res = await this.db
+      .prepare(
+        "SELECT * FROM server_evictions WHERE pod_canonical = ?1 ORDER BY issued_at ASC",
+      )
+      .bind(podCanonical.toLowerCase())
+      .all<ServerEvictionRow>();
+    return (res.results ?? []).map(rowToServerEviction);
+  }
+
+  async markOldAcked(
+    podCanonical: string,
+    retiredStkPubHex: string,
+    now: number,
+  ): Promise<boolean> {
+    const w = await this.db
+      .prepare(
+        `UPDATE server_evictions SET old_acked_at = ?1
+         WHERE pod_canonical = ?2 AND retired_stk_pub_hex = ?3`,
+      )
+      .bind(now, podCanonical.toLowerCase(), retiredStkPubHex.toLowerCase())
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
+  }
+
+  async markNewAcked(podCanonical: string, now: number): Promise<number> {
+    // Marks every row for the pod (the successor acks the whole chain at once).
+    const w = await this.db
+      .prepare("UPDATE server_evictions SET new_acked_at = ?1 WHERE pod_canonical = ?2")
+      .bind(now, podCanonical.toLowerCase())
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes ?? 0;
+  }
+
+  async markEpochComplete(
+    podCanonical: string,
+    retiredStkPubHex: string,
+    now: number,
+  ): Promise<boolean> {
+    const w = await this.db
+      .prepare(
+        `UPDATE server_evictions SET epoch_complete_at = ?1
+         WHERE pod_canonical = ?2 AND retired_stk_pub_hex = ?3`,
+      )
+      .bind(now, podCanonical.toLowerCase(), retiredStkPubHex.toLowerCase())
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
+  }
+
+  async gcEvictions(now: number, ttlMs: number): Promise<number> {
+    // Delete rows acked by the successor past their TTL.
+    const w = await this.db
+      .prepare(
+        "DELETE FROM server_evictions WHERE new_acked_at IS NOT NULL AND new_acked_at <= ?1",
+      )
+      .bind(now - ttlMs)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes ?? 0;
+  }
+
+  async deleteEviction(podCanonical: string, retiredStkPubHex: string): Promise<boolean> {
+    const w = await this.db
+      .prepare(
+        "DELETE FROM server_evictions WHERE pod_canonical = ?1 AND retired_stk_pub_hex = ?2",
+      )
+      .bind(podCanonical.toLowerCase(), retiredStkPubHex.toLowerCase())
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return (meta?.changes ?? 0) > 0;
+  }
+}
+
+interface ServerMigrationRow {
+  server_domain: string;
+  username: string;
+  old_stk_pub_hex: string;
+  order_json: string;
+  order_signature_hex: string;
+  disposition: string;
+  phase: string;
+  initiated_at: number;
+  new_server_domain: string | null;
+  new_stk_pub_hex: string | null;
+  attached_at: number | null;
+  pre_seeded_at: number | null;
+  ready_at: number | null;
+  freeze_at: number | null;
+  taken_over_at: number | null;
+  aborted_at: number | null;
+}
+
+function rowToServerMigration(r: ServerMigrationRow): ServerMigrationRecord {
+  return {
+    serverDomain: r.server_domain,
+    username: r.username,
+    oldStkPubHex: r.old_stk_pub_hex,
+    orderJson: r.order_json,
+    orderSignatureHex: r.order_signature_hex,
+    disposition: r.disposition,
+    phase: r.phase as ServerMigrationRecord["phase"],
+    initiatedAt: r.initiated_at,
+    newServerDomain: r.new_server_domain,
+    newStkPubHex: r.new_stk_pub_hex,
+    attachedAt: r.attached_at,
+    preSeededAt: r.pre_seeded_at,
+    readyAt: r.ready_at,
+    freezeAt: r.freeze_at,
+    takenOverAt: r.taken_over_at,
+    abortedAt: r.aborted_at,
+  };
+}
+
+/**
+ * D1 ServerMigrationStorage (migration 0081) — one session row per migrating
+ * FQDN (docs/server-migration.md). The `phase` column is the authoritative
+ * cursor; each mark* stamps its timestamp column + the phase, mirroring the
+ * server_evictions handshake style. The handlers own the transition legality.
+ */
+export class D1ServerMigrationStorage implements ServerMigrationStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async putSession(rec: ServerMigrationRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT OR REPLACE INTO server_migrations
+           (server_domain, username, old_stk_pub_hex, order_json,
+            order_signature_hex, disposition, phase, initiated_at,
+            new_server_domain, new_stk_pub_hex, attached_at, pre_seeded_at,
+            ready_at, freeze_at, taken_over_at, aborted_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)`,
+      )
+      .bind(
+        rec.serverDomain.toLowerCase(),
+        rec.username.toLowerCase(),
+        rec.oldStkPubHex.toLowerCase(),
+        rec.orderJson,
+        rec.orderSignatureHex.toLowerCase(),
+        rec.disposition,
+        rec.phase,
+        rec.initiatedAt,
+        rec.newServerDomain?.toLowerCase() ?? null,
+        rec.newStkPubHex?.toLowerCase() ?? null,
+        rec.attachedAt,
+        rec.preSeededAt,
+        rec.readyAt,
+        rec.freezeAt,
+        rec.takenOverAt,
+        rec.abortedAt,
+      )
+      .run();
+  }
+
+  async getSession(serverDomain: string): Promise<ServerMigrationRecord | undefined> {
+    const r = await this.db
+      .prepare("SELECT * FROM server_migrations WHERE server_domain = ?1")
+      .bind(serverDomain.toLowerCase())
+      .first<ServerMigrationRow>();
+    return r ? rowToServerMigration(r) : undefined;
+  }
+
+  async listForUser(username: string): Promise<ServerMigrationRecord[]> {
+    const res = await this.db
+      .prepare(
+        "SELECT * FROM server_migrations WHERE username = ?1 ORDER BY initiated_at ASC",
+      )
+      .bind(username.toLowerCase())
+      .all<ServerMigrationRow>();
+    return (res.results ?? []).map(rowToServerMigration);
+  }
+
+  async attachNewBox(
+    serverDomain: string,
+    newServerDomain: string,
+    newStkPubHex: string,
+    at: number,
+  ): Promise<boolean> {
+    const w = await this.db
+      .prepare(
+        `UPDATE server_migrations
+           SET new_server_domain = ?1, new_stk_pub_hex = ?2, attached_at = ?3,
+               phase = 'provisioned'
+         WHERE server_domain = ?4`,
+      )
+      .bind(newServerDomain.toLowerCase(), newStkPubHex.toLowerCase(), at, serverDomain.toLowerCase())
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
+  }
+
+  private async stamp(
+    serverDomain: string,
+    phase: string,
+    column: string,
+    at: number,
+  ): Promise<boolean> {
+    // `column` is one of a fixed internal set — never caller input.
+    const w = await this.db
+      .prepare(
+        `UPDATE server_migrations SET ${column} = ?1, phase = ?2 WHERE server_domain = ?3`,
+      )
+      .bind(at, phase, serverDomain.toLowerCase())
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
+  }
+
+  async markPreSeeded(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "pre-seeded", "pre_seeded_at", at);
+  }
+  async markReady(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "ready", "ready_at", at);
+  }
+  async markFreeze(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "freezing", "freeze_at", at);
+  }
+  async markTakenOver(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "taken-over", "taken_over_at", at);
+  }
+  async markAborted(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "aborted", "aborted_at", at);
+  }
+}
+
+interface AdminRootRotationRow {
+  username: string;
+  seq: number;
+  old_admin_root_pub_hex: string;
+  new_admin_root_pub_hex: string;
+  issued_at: number;
+  signature_hex: string;
+}
+
+function rowToAdminRootRotation(r: AdminRootRotationRow): AdminRootRotationRecord {
+  return {
+    username: r.username,
+    seq: r.seq,
+    oldAdminRootPubHex: r.old_admin_root_pub_hex,
+    newAdminRootPubHex: r.new_admin_root_pub_hex,
+    issuedAt: r.issued_at,
+    signatureHex: r.signature_hex,
+  };
+}
+
+export class D1AdminRootRotationStorage implements AdminRootRotationStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async append(rec: Omit<AdminRootRotationRecord, "seq">): Promise<number> {
+    const username = rec.username.toLowerCase();
+    // Next seq = current max + 1 (or 1). One writer per account at a time in
+    // practice (a rotation is a rare recovery event), so a read-then-insert is
+    // safe; the (username, seq) PK would surface any genuine collision.
+    const maxRow = await this.db
+      .prepare("SELECT MAX(seq) AS max_seq FROM admin_root_rotations WHERE username = ?1")
+      .bind(username)
+      .first<{ max_seq: number | null }>();
+    const seq = (maxRow?.max_seq ?? 0) + 1;
+    await this.db
+      .prepare(
+        `INSERT INTO admin_root_rotations
+           (username, seq, old_admin_root_pub_hex, new_admin_root_pub_hex, issued_at, signature_hex)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+      )
+      .bind(
+        username,
+        seq,
+        rec.oldAdminRootPubHex.toLowerCase(),
+        rec.newAdminRootPubHex.toLowerCase(),
+        rec.issuedAt,
+        rec.signatureHex.toLowerCase(),
+      )
+      .run();
+    return seq;
+  }
+
+  async list(username: string): Promise<AdminRootRotationRecord[]> {
+    const res = await this.db
+      .prepare("SELECT * FROM admin_root_rotations WHERE username = ?1 ORDER BY seq ASC")
+      .bind(username.toLowerCase())
+      .all<AdminRootRotationRow>();
+    return (res.results ?? []).map(rowToAdminRootRotation);
+  }
 }
 
 interface BoxSealedLeaseRow {
@@ -1589,8 +2690,8 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
         `INSERT INTO webauthn_recovery_records
            (username, credential_id_hex, wrapped_umk_b64, irk_pub_hex,
             fetch_token_hash, prf_salt_hash, wrapped_acme_account_key_b64,
-            created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?)
+            wrapped_admin_root_b64, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(username) DO UPDATE SET
            credential_id_hex = excluded.credential_id_hex,
            wrapped_umk_b64 = excluded.wrapped_umk_b64,
@@ -1598,6 +2699,7 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
            fetch_token_hash = excluded.fetch_token_hash,
            prf_salt_hash = excluded.prf_salt_hash,
            wrapped_acme_account_key_b64 = excluded.wrapped_acme_account_key_b64,
+           wrapped_admin_root_b64 = excluded.wrapped_admin_root_b64,
            updated_at = excluded.updated_at`,
       )
       .bind(
@@ -1608,6 +2710,7 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
         rec.fetchTokenHashHex ?? null,
         rec.prfSaltHashHex ?? null,
         rec.wrappedAcmeAccountKeyB64 ?? null,
+        rec.wrappedAdminRootB64 ?? null,
         rec.createdAt,
         rec.updatedAt,
       )
@@ -1626,6 +2729,7 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
         fetch_token_hash: string | null;
         prf_salt_hash: string | null;
         wrapped_acme_account_key_b64: string | null;
+        wrapped_admin_root_b64: string | null;
         created_at: number;
         updated_at: number;
       }>();
@@ -1639,6 +2743,9 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
       ...(r.prf_salt_hash ? { prfSaltHashHex: r.prf_salt_hash } : {}),
       ...(r.wrapped_acme_account_key_b64
         ? { wrappedAcmeAccountKeyB64: r.wrapped_acme_account_key_b64 }
+        : {}),
+      ...(r.wrapped_admin_root_b64
+        ? { wrappedAdminRootB64: r.wrapped_admin_root_b64 }
         : {}),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
@@ -1666,18 +2773,17 @@ export class D1PushTokenStorage implements PushTokenStorage {
     // device-admit handler bumps quarantine_until via a dedicated
     // UPDATE.
     await this.db.prepare(
-      `INSERT INTO push_tokens (token_id, username, platform, provider_token, push_x25519_pub_hex, registration_signature_hex, label, registered_at, last_seen_at, quarantine_until, quarantine_alerts_fired_bitmap)
+      `INSERT INTO push_tokens (token_id, username, device_id, platform, provider_token, push_x25519_pub_hex, registration_signature_hex, registered_at, last_seen_at, quarantine_until, quarantine_alerts_fired_bitmap)
        VALUES (?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(token_id) DO UPDATE SET
          provider_token=excluded.provider_token,
          push_x25519_pub_hex=excluded.push_x25519_pub_hex,
          registration_signature_hex=excluded.registration_signature_hex,
-         label=excluded.label,
+         device_id=excluded.device_id,
          last_seen_at=excluded.last_seen_at`,
     ).bind(
-      rec.tokenId, rec.username, rec.platform, rec.providerToken,
+      rec.tokenId, rec.username, rec.deviceId, rec.platform, rec.providerToken,
       rec.pushX25519PubHex, rec.registrationSignatureHex,
-      rec.label,
       rec.registeredAt, rec.lastSeenAt,
       rec.quarantineUntil ?? 0,
       rec.quarantineAlertsFiredBitmap ?? 0,
@@ -1737,10 +2843,286 @@ export class D1PushTokenStorage implements PushTokenStorage {
   }
 }
 
+interface DeviceIdentityRow {
+  account_id: string;
+  device_id: string;
+  device_pub_hex: string;
+  platform_class: string | null;
+  created_at: number;
+  last_seen_at: number;
+  revoked_at: number | null;
+}
+
+function rowToDeviceIdentity(row: DeviceIdentityRow): DeviceIdentityRecord {
+  return {
+    accountId: row.account_id,
+    deviceId: row.device_id,
+    devicePubHex: row.device_pub_hex,
+    platformClass: row.platform_class,
+    createdAt: row.created_at,
+    lastSeenAt: row.last_seen_at,
+    revokedAt: row.revoked_at,
+  };
+}
+
+export class D1DeviceIdentityStorage implements DeviceIdentityStorage {
+  constructor(private readonly db: D1Database) {}
+  async put(rec: DeviceIdentityRecord) {
+    const accountId = rec.accountId.toLowerCase();
+    const deviceId = rec.deviceId.toLowerCase();
+    const pub = rec.devicePubHex.toLowerCase();
+    const existing = await this.get(accountId, deviceId);
+    if (existing) {
+      return existing.devicePubHex === pub
+        ? { ok: true as const }
+        : { ok: false as const, reason: "deviceId already bound to another key" };
+    }
+    const byPub = await this.getByPub(accountId, pub);
+    if (byPub) return { ok: false as const, reason: "device key already bound to another deviceId" };
+    try {
+      await this.db.prepare(
+        `INSERT INTO device_identities
+          (account_id, device_id, device_pub_hex, platform_class, created_at, last_seen_at, revoked_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(accountId, deviceId, pub, rec.platformClass, rec.createdAt, rec.lastSeenAt, rec.revokedAt).run();
+      return { ok: true as const };
+    } catch (error) {
+      if (/UNIQUE/i.test(String((error as Error).message ?? error))) {
+        return { ok: false as const, reason: "device identity already exists" };
+      }
+      throw error;
+    }
+  }
+  async get(accountId: string, deviceId: string) {
+    const row = await this.db.prepare(
+      "SELECT * FROM device_identities WHERE account_id = ? AND device_id = ?",
+    ).bind(accountId.toLowerCase(), deviceId.toLowerCase()).first<DeviceIdentityRow>();
+    return row ? rowToDeviceIdentity(row) : undefined;
+  }
+  async getByPub(accountId: string, devicePubHex: string) {
+    const row = await this.db.prepare(
+      "SELECT * FROM device_identities WHERE account_id = ? AND device_pub_hex = ?",
+    ).bind(accountId.toLowerCase(), devicePubHex.toLowerCase()).first<DeviceIdentityRow>();
+    return row ? rowToDeviceIdentity(row) : undefined;
+  }
+  async listForAccount(accountId: string) {
+    const rows = await this.db.prepare(
+      "SELECT * FROM device_identities WHERE account_id = ? ORDER BY created_at, device_id",
+    ).bind(accountId.toLowerCase()).all<DeviceIdentityRow>();
+    return (rows.results ?? []).map(rowToDeviceIdentity);
+  }
+  async touch(accountId: string, deviceId: string, at: number) {
+    const result = await this.db.prepare(
+      "UPDATE device_identities SET last_seen_at = ? WHERE account_id = ? AND device_id = ?",
+    ).bind(at, accountId.toLowerCase(), deviceId.toLowerCase()).run();
+    return (result.meta.changes ?? 1) > 0;
+  }
+  async revoke(accountId: string, deviceId: string, at: number) {
+    const result = await this.db.prepare(
+      "UPDATE device_identities SET revoked_at = ? WHERE account_id = ? AND device_id = ?",
+    ).bind(at, accountId.toLowerCase(), deviceId.toLowerCase()).run();
+    return (result.meta.changes ?? 1) > 0;
+  }
+}
+
+interface ProfileRow {
+  account_id: string;
+  device_id?: string;
+  revision: number;
+  key_version: number;
+  nonce_hex: string;
+  ciphertext_hex: string;
+  signer_pub_hex: string;
+  signature_hex: string;
+  issued_at: number;
+  updated_at: number;
+  locked?: number;
+}
+
+function baseProfile(row: ProfileRow): AccountProfileRecord {
+  return {
+    accountId: row.account_id,
+    revision: row.revision,
+    keyVersion: row.key_version,
+    nonceHex: row.nonce_hex,
+    ciphertextHex: row.ciphertext_hex,
+    signerPubHex: row.signer_pub_hex,
+    signatureHex: row.signature_hex,
+    issuedAt: row.issued_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function profileBinds(rec: AccountProfileRecord): unknown[] {
+  return [
+    rec.accountId.toLowerCase(), rec.revision, rec.keyVersion, rec.nonceHex,
+    rec.ciphertextHex, rec.signerPubHex, rec.signatureHex, rec.issuedAt, rec.updatedAt,
+  ];
+}
+
+export class D1AccountProfileStorage implements AccountProfileStorage {
+  constructor(private readonly db: D1Database) {}
+  async get(accountId: string) {
+    const row = await this.db.prepare("SELECT * FROM account_profiles WHERE account_id = ?")
+      .bind(accountId.toLowerCase()).first<ProfileRow>();
+    return row ? baseProfile(row) : undefined;
+  }
+  async put(rec: AccountProfileRecord, expectedRevision: number) {
+    const result = await this.db.prepare(
+      `INSERT INTO account_profiles
+        (account_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+       WHERE ? = 0 OR EXISTS (SELECT 1 FROM account_profiles WHERE account_id = ? AND revision = ?)
+       ON CONFLICT(account_id) DO UPDATE SET
+         revision=excluded.revision, key_version=excluded.key_version, nonce_hex=excluded.nonce_hex,
+         ciphertext_hex=excluded.ciphertext_hex, signer_pub_hex=excluded.signer_pub_hex,
+         signature_hex=excluded.signature_hex, issued_at=excluded.issued_at, updated_at=excluded.updated_at
+       WHERE account_profiles.revision = ? AND excluded.revision = ? + 1`,
+    ).bind(...profileBinds(rec), expectedRevision, rec.accountId.toLowerCase(), expectedRevision, expectedRevision, expectedRevision).run();
+    if ((result.meta.changes ?? 0) === 0 || rec.revision !== expectedRevision + 1) {
+      return { ok: false as const, reason: "revision-conflict" as const };
+    }
+    return { ok: true as const, record: (await this.get(rec.accountId))! };
+  }
+}
+
+abstract class D1DeviceProfileStorage<T extends DeviceSelfProfileRecord> {
+  constructor(protected readonly db: D1Database, protected readonly table: "device_self_profiles" | "device_managed_profiles") {}
+  protected fromRow(row: ProfileRow): T {
+    return { ...baseProfile(row), deviceId: row.device_id! } as T;
+  }
+  async get(accountId: string, deviceId: string) {
+    const row = await this.db.prepare(`SELECT * FROM ${this.table} WHERE account_id = ? AND device_id = ?`)
+      .bind(accountId.toLowerCase(), deviceId.toLowerCase()).first<ProfileRow>();
+    return row ? this.fromRow(row) : undefined;
+  }
+  async listForAccount(accountId: string) {
+    const rows = await this.db.prepare(`SELECT * FROM ${this.table} WHERE account_id = ? ORDER BY device_id`)
+      .bind(accountId.toLowerCase()).all<ProfileRow>();
+    return (rows.results ?? []).map((row) => this.fromRow(row));
+  }
+  protected async putRecord(rec: T, expectedRevision: number, locked?: boolean) {
+    const managed = this.table === "device_managed_profiles";
+    const columns = managed
+      ? "account_id, device_id, revision, key_version, nonce_hex, ciphertext_hex, locked, signer_pub_hex, signature_hex, issued_at, updated_at"
+      : "account_id, device_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at";
+    const placeholders = managed ? "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?" : "?, ?, ?, ?, ?, ?, ?, ?, ?, ?";
+    const values: unknown[] = [rec.accountId.toLowerCase(), rec.deviceId.toLowerCase(), rec.revision, rec.keyVersion, rec.nonceHex, rec.ciphertextHex];
+    if (managed) values.push(locked ? 1 : 0);
+    values.push(rec.signerPubHex, rec.signatureHex, rec.issuedAt, rec.updatedAt);
+    const lockedUpdate = managed ? ", locked=excluded.locked" : "";
+    const result = await this.db.prepare(
+      `INSERT INTO ${this.table} (${columns})
+       SELECT ${placeholders}
+       WHERE ? = 0 OR EXISTS (SELECT 1 FROM ${this.table} WHERE account_id = ? AND device_id = ? AND revision = ?)
+       ON CONFLICT(account_id, device_id) DO UPDATE SET
+         revision=excluded.revision, key_version=excluded.key_version, nonce_hex=excluded.nonce_hex,
+         ciphertext_hex=excluded.ciphertext_hex${lockedUpdate}, signer_pub_hex=excluded.signer_pub_hex,
+         signature_hex=excluded.signature_hex, issued_at=excluded.issued_at, updated_at=excluded.updated_at
+       WHERE ${this.table}.revision = ? AND excluded.revision = ? + 1`,
+    ).bind(...values, expectedRevision, rec.accountId.toLowerCase(), rec.deviceId.toLowerCase(), expectedRevision, expectedRevision, expectedRevision).run();
+    if ((result.meta.changes ?? 0) === 0 || rec.revision !== expectedRevision + 1) {
+      return { ok: false as const, reason: "revision-conflict" as const };
+    }
+    return { ok: true as const, record: (await this.get(rec.accountId, rec.deviceId))! };
+  }
+}
+
+export class D1DeviceSelfProfileStorage
+  extends D1DeviceProfileStorage<DeviceSelfProfileRecord>
+  implements DeviceSelfProfileStorage {
+  constructor(db: D1Database) { super(db, "device_self_profiles"); }
+  async put(rec: DeviceSelfProfileRecord, expectedRevision: number) { return this.putRecord(rec, expectedRevision); }
+}
+
+export class D1DeviceManagedProfileStorage
+  extends D1DeviceProfileStorage<DeviceManagedProfileRecord>
+  implements DeviceManagedProfileStorage {
+  constructor(db: D1Database) { super(db, "device_managed_profiles"); }
+  protected override fromRow(row: ProfileRow): DeviceManagedProfileRecord {
+    return { ...baseProfile(row), deviceId: row.device_id!, locked: row.locked === 1 };
+  }
+  async put(rec: DeviceManagedProfileRecord, expectedRevision: number) { return this.putRecord(rec, expectedRevision, rec.locked); }
+  async delete(accountId: string, deviceId: string, expectedRevision: number) {
+    const result = await this.db.prepare(
+      "DELETE FROM device_managed_profiles WHERE account_id = ? AND device_id = ? AND revision = ?",
+    ).bind(accountId.toLowerCase(), deviceId.toLowerCase(), expectedRevision).run();
+    return (result.meta.changes ?? 0) > 0;
+  }
+}
+
+interface DirectoryKeyGrantRow {
+  grant_id: string;
+  account_id: string;
+  recipient_device_id: string;
+  key_kind: "account-profile" | "device-directory";
+  sealed_key_hex: string;
+  signer_pub_hex: string;
+  signature_hex: string;
+  issued_at: number;
+  expires_at: number;
+  revoked_at: number | null;
+}
+
+function rowToDirectoryKeyGrant(row: DirectoryKeyGrantRow): AccountDirectoryKeyGrantRecord {
+  return {
+    grantId: row.grant_id,
+    accountId: row.account_id,
+    recipientDeviceId: row.recipient_device_id,
+    keyKind: row.key_kind,
+    sealedKeyHex: row.sealed_key_hex,
+    signerPubHex: row.signer_pub_hex,
+    signatureHex: row.signature_hex,
+    issuedAt: row.issued_at,
+    expiresAt: row.expires_at,
+    revokedAt: row.revoked_at,
+  };
+}
+
+export class D1AccountDirectoryKeyGrantStorage implements AccountDirectoryKeyGrantStorage {
+  constructor(private readonly db: D1Database) {}
+  async put(rec: AccountDirectoryKeyGrantRecord) {
+    try {
+      await this.db.prepare(
+        `INSERT INTO account_directory_key_grants
+          (grant_id, account_id, recipient_device_id, key_kind, sealed_key_hex, signer_pub_hex, signature_hex, issued_at, expires_at, revoked_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        rec.grantId, rec.accountId.toLowerCase(), rec.recipientDeviceId.toLowerCase(), rec.keyKind,
+        rec.sealedKeyHex, rec.signerPubHex, rec.signatureHex, rec.issuedAt, rec.expiresAt, rec.revokedAt,
+      ).run();
+      return { ok: true as const };
+    } catch (error) {
+      if (/UNIQUE/i.test(String((error as Error).message ?? error))) {
+        return { ok: false as const, reason: "duplicate grant id" };
+      }
+      throw error;
+    }
+  }
+  async get(grantId: string) {
+    const row = await this.db.prepare("SELECT * FROM account_directory_key_grants WHERE grant_id = ?")
+      .bind(grantId).first<DirectoryKeyGrantRow>();
+    return row ? rowToDirectoryKeyGrant(row) : undefined;
+  }
+  async listActiveForDevice(accountId: string, deviceId: string, now: number) {
+    const rows = await this.db.prepare(
+      `SELECT * FROM account_directory_key_grants
+       WHERE account_id = ? AND recipient_device_id = ? AND revoked_at IS NULL AND expires_at > ?
+       ORDER BY issued_at DESC`,
+    ).bind(accountId.toLowerCase(), deviceId.toLowerCase(), now).all<DirectoryKeyGrantRow>();
+    return (rows.results ?? []).map(rowToDirectoryKeyGrant);
+  }
+  async revoke(grantId: string, at: number) {
+    const result = await this.db.prepare(
+      "UPDATE account_directory_key_grants SET revoked_at = ? WHERE grant_id = ? AND revoked_at IS NULL",
+    ).bind(at, grantId).run();
+    return (result.meta.changes ?? 0) > 0;
+  }
+}
+
 interface RawPushRow {
-  token_id: string; username: string; platform: string; provider_token: string;
+  token_id: string; username: string; device_id: string; platform: string; provider_token: string;
   push_x25519_pub_hex: string; registration_signature_hex: string;
-  label: string | null;
   registered_at: number; last_seen_at: number;
   // v1.2 — nullable so a SELECT against a pre-migration database
   // decodes safely; rowToRecord defaults absence to 0.
@@ -1752,11 +3134,11 @@ function pushRowToRecord(r: RawPushRow): PushTokenRecord {
   return {
     tokenId: r.token_id,
     username: r.username,
+    deviceId: r.device_id,
     platform: r.platform as "apns" | "fcm" | "webpush",
     providerToken: r.provider_token,
     pushX25519PubHex: r.push_x25519_pub_hex,
     registrationSignatureHex: r.registration_signature_hex,
-    label: r.label ?? "",
     registeredAt: r.registered_at,
     lastSeenAt: r.last_seen_at,
     quarantineUntil: r.quarantine_until ?? 0,
@@ -1807,6 +3189,26 @@ export class D1LlmPromoStorage implements LlmPromoStorage {
          updated_at = excluded.updated_at`,
     ).bind(u, i, o, now).run();
     return (await this.getLifetime(u))!;
+  }
+  async recordMeteredUsage(u: string, d: number, i: number, o: number, now: number): Promise<void> {
+    // Add TRUE token usage to daily + lifetime WITHOUT bumping call counts.
+    await this.db.batch([
+      this.db.prepare(
+        `INSERT INTO llm_promo_usage (username, day, daily_count, daily_input_tokens, daily_output_tokens)
+         VALUES (?,?,0,?,?)
+         ON CONFLICT(username, day) DO UPDATE SET
+           daily_input_tokens = daily_input_tokens + excluded.daily_input_tokens,
+           daily_output_tokens = daily_output_tokens + excluded.daily_output_tokens`,
+      ).bind(u, d, i, o),
+      this.db.prepare(
+        `INSERT INTO llm_promo_lifetime (username, lifetime_count, lifetime_input_tokens, lifetime_output_tokens, updated_at)
+         VALUES (?,0,?,?,?)
+         ON CONFLICT(username) DO UPDATE SET
+           lifetime_input_tokens = lifetime_input_tokens + excluded.lifetime_input_tokens,
+           lifetime_output_tokens = lifetime_output_tokens + excluded.lifetime_output_tokens,
+           updated_at = excluded.updated_at`,
+      ).bind(u, i, o, now),
+    ]);
   }
 }
 
@@ -2245,7 +3647,7 @@ export class D1InstallPolicyFanoutStorage
 
 interface DemoUserRow {
   username: string;
-  display: string;
+  idempotency_key: string;
   snapshot_id: string | null;
   iso_r2_key: string | null;
   ttl_idle_minutes: number;
@@ -2266,7 +3668,7 @@ interface DemoUserRow {
 function rowToDemoUser(r: DemoUserRow): DemoUserRecord {
   return {
     username: r.username,
-    display: r.display,
+    idempotencyKey: r.idempotency_key,
     snapshotId: r.snapshot_id,
     isoR2Key: r.iso_r2_key,
     ttlIdleMinutes: r.ttl_idle_minutes,
@@ -2296,7 +3698,7 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
       await this.db
         .prepare(
           "INSERT INTO demo_users " +
-            "(username, display, snapshot_id, iso_r2_key, ttl_idle_minutes, " +
+            "(username, idempotency_key, snapshot_id, iso_r2_key, ttl_idle_minutes, " +
             "region, size, active_server_id, active_server_ip, image, " +
             "active_server_fqdn, " +
             "last_activity_at, state, created_at, " +
@@ -2305,7 +3707,7 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
         )
         .bind(
           u,
-          rec.display,
+          rec.idempotencyKey,
           rec.snapshotId,
           rec.isoR2Key,
           rec.ttlIdleMinutes,
@@ -2348,7 +3750,7 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
     const setClauses: string[] = [];
     const binds: unknown[] = [];
     const map: Record<string, string> = {
-      display: "display",
+      idempotencyKey: "idempotency_key",
       snapshotId: "snapshot_id",
       isoR2Key: "iso_r2_key",
       ttlIdleMinutes: "ttl_idle_minutes",
@@ -2393,7 +3795,7 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
     // CAS in one UPDATE so two concurrent /connect handlers can't both
     // win the none→provisioning race (docs/sample-users.md §4.4).
     const map: Record<string, string> = {
-      display: "display",
+      idempotencyKey: "idempotency_key",
       snapshotId: "snapshot_id",
       isoR2Key: "iso_r2_key",
       ttlIdleMinutes: "ttl_idle_minutes",
@@ -2438,7 +3840,7 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
     const r = await this.db
       .prepare(
         "SELECT * FROM demo_users " +
-          "WHERE state IN ('up', 'provisioning', 'idle-pending-teardown') " +
+          "WHERE state IN ('ready', 'provisioning', 'idle-pending-teardown') " +
           "AND last_activity_at < ? " +
           "ORDER BY last_activity_at ASC LIMIT 50",
       )
@@ -2450,7 +3852,7 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
     const r = await this.db
       .prepare(
         "SELECT COUNT(*) AS n FROM demo_users " +
-          "WHERE state IN ('provisioning', 'up', 'idle-pending-teardown')",
+          "WHERE state IN ('provisioning', 'ready', 'idle-pending-teardown')",
       )
       .first<{ n: number }>();
     return r?.n ?? 0;
@@ -2476,16 +3878,267 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
   }
 }
 
+export class D1AccountProvisioningStorage implements AccountProvisioningStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async initialize(input: AccountInitialization): Promise<AccountInitializationResult> {
+    const u = input.username.username.toLowerCase();
+    const existing = await this.db.prepare(
+      `SELECT u.irk_pub_hex, u.admin_root_pub_hex, d.device_pub_hex
+         FROM usernames u
+         LEFT JOIN device_identities d ON d.account_id = u.username AND d.device_id = ?
+        WHERE u.username = ?`,
+    ).bind(input.primaryDevice.deviceId, u).first<{
+      irk_pub_hex: string;
+      admin_root_pub_hex: string | null;
+      device_pub_hex: string | null;
+    }>();
+    if (existing) {
+      // Matching IRK + admin root IS the proof of ownership — the same proof
+      // every other account operation rests on. Anyone else presenting this
+      // name fails here and gets the generic "unavailable".
+      const authorized = existing.irk_pub_hex.toLowerCase() === input.username.irkPubHex.toLowerCase() &&
+        existing.admin_root_pub_hex?.toLowerCase() === input.username.adminRootPubHex?.toLowerCase();
+      if (!authorized) return { ok: false, reason: "username-unavailable" };
+      if (existing.device_pub_hex !== null) {
+        if (existing.device_pub_hex.toLowerCase() !== input.primaryDevice.devicePubHex.toLowerCase()) {
+          return { ok: false, reason: "username-unavailable" };
+        }
+        const [grant, account, profile] = await Promise.all([
+          this.db.prepare("SELECT 1 AS hit FROM device_capability_grants WHERE grant_id = ? AND username = ? AND device_id = ?")
+            .bind(input.primaryGrant.grantId, u, input.primaryDevice.deviceId).first<{ hit: number }>(),
+          this.db.prepare("SELECT 1 AS hit FROM account_profiles WHERE account_id = ?")
+            .bind(u).first<{ hit: number }>(),
+          this.db.prepare("SELECT 1 AS hit FROM device_self_profiles WHERE account_id = ? AND device_id = ?")
+            .bind(u, input.primaryDevice.deviceId).first<{ hit: number }>(),
+        ]);
+        return grant && account && profile
+          ? { ok: true, created: false }
+          : { ok: false, reason: "initialization-conflict" };
+      }
+      // The account exists but has no device layer — the state a clean-schema
+      // cutover leaves behind. Re-establish it rather than stranding the owner
+      // with a name they can never use again. INSERT OR IGNORE so a surviving
+      // profile is never clobbered.
+      const d = input.primaryDevice;
+      const g = input.primaryGrant;
+      const ap = input.accountProfile;
+      const dp = input.primaryDeviceProfile;
+      try {
+        await this.db.batch([
+          this.db.prepare(
+            `INSERT INTO device_identities
+              (account_id, device_id, device_pub_hex, platform_class, created_at, last_seen_at, revoked_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(u, d.deviceId, d.devicePubHex, d.platformClass, d.createdAt, d.lastSeenAt, d.revokedAt),
+          this.db.prepare(
+            `INSERT OR IGNORE INTO device_capability_grants
+              (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            g.grantId, u, g.deviceId, g.devicePubHex, g.scopesJson,
+            g.issuedAt, g.expiresAt, g.signatureHex, g.revokedAt, g.signerRoot,
+          ),
+          this.db.prepare(
+            `INSERT OR IGNORE INTO account_profiles
+              (account_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            u, ap.revision, ap.keyVersion, ap.nonceHex, ap.ciphertextHex,
+            ap.signerPubHex, ap.signatureHex, ap.issuedAt, ap.updatedAt,
+          ),
+          this.db.prepare(
+            `INSERT OR IGNORE INTO device_self_profiles
+              (account_id, device_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            u, dp.deviceId, dp.revision, dp.keyVersion, dp.nonceHex, dp.ciphertextHex,
+            dp.signerPubHex, dp.signatureHex, dp.issuedAt, dp.updatedAt,
+          ),
+        ]);
+        return { ok: true, created: true };
+      } catch {
+        return { ok: false, reason: "initialization-conflict" };
+      }
+    }
+
+    const username = input.username;
+    const device = input.primaryDevice;
+    const grant = input.primaryGrant;
+    const account = input.accountProfile;
+    const profile = input.primaryDeviceProfile;
+    try {
+      await this.db.batch([
+        this.db.prepare(
+          `INSERT INTO usernames
+            (username, irk_pub_hex, claimed_at, is_demo, account_type, recovery_wipe_policy, aid_pub_hex, last_active, admin_root_pub_hex)
+           VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, username.irkPubHex, username.claimedAt, username.accountType ?? "single",
+          username.recoveryWipePolicy ?? "graceful", username.aidPubHex ?? null,
+          username.lastActive ?? username.claimedAt, username.adminRootPubHex ?? null,
+        ),
+        this.db.prepare(
+          `INSERT INTO device_identities
+            (account_id, device_id, device_pub_hex, platform_class, created_at, last_seen_at, revoked_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(u, device.deviceId, device.devicePubHex, device.platformClass, device.createdAt, device.lastSeenAt, device.revokedAt),
+        this.db.prepare(
+          `INSERT INTO device_capability_grants
+            (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          grant.grantId, u, grant.deviceId, grant.devicePubHex, grant.scopesJson,
+          grant.issuedAt, grant.expiresAt, grant.signatureHex, grant.revokedAt, grant.signerRoot,
+        ),
+        this.db.prepare(
+          `INSERT INTO account_profiles
+            (account_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, account.revision, account.keyVersion, account.nonceHex, account.ciphertextHex,
+          account.signerPubHex, account.signatureHex, account.issuedAt, account.updatedAt,
+        ),
+        this.db.prepare(
+          `INSERT INTO device_self_profiles
+            (account_id, device_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, profile.deviceId, profile.revision, profile.keyVersion, profile.nonceHex, profile.ciphertextHex,
+          profile.signerPubHex, profile.signatureHex, profile.issuedAt, profile.updatedAt,
+        ),
+      ]);
+      return { ok: true, created: true };
+    } catch {
+      const after = await this.db.prepare("SELECT irk_pub_hex FROM usernames WHERE username = ?")
+        .bind(u).first<{ irk_pub_hex: string }>();
+      return { ok: false, reason: after ? "username-unavailable" : "initialization-conflict" };
+    }
+  }
+}
+
+export class D1DemoAccountProvisioningStorage implements DemoAccountProvisioningStorage {
+  constructor(private readonly db: D1Database) {}
+  async initialize(input: DemoAccountInitialization): Promise<DemoAccountInitializationResult> {
+    const u = input.username.username.toLowerCase();
+    const existing = await this.db.prepare("SELECT * FROM demo_users WHERE username = ? OR idempotency_key = ?")
+      .bind(u, input.demo.idempotencyKey).first<DemoUserRow>();
+    if (existing) {
+      if (existing.username === u && existing.idempotency_key === input.demo.idempotencyKey) {
+        return { ok: true, created: false, record: rowToDemoUser(existing) };
+      }
+      return { ok: false, reason: "idempotency-conflict" };
+    }
+    const username = input.username;
+    const device = input.primaryDevice;
+    const grant = input.primaryGrant;
+    const account = input.accountProfile;
+    const profile = input.primaryDeviceProfile;
+    const authCode = input.authCode;
+    const demo = input.demo;
+    try {
+      await this.db.batch([
+        this.db.prepare(
+          `INSERT INTO usernames
+            (username, irk_pub_hex, claimed_at, is_demo, account_type, recovery_wipe_policy, aid_pub_hex, last_active, admin_root_pub_hex)
+           VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, username.irkPubHex, username.claimedAt, username.accountType ?? "demo",
+          username.recoveryWipePolicy ?? "graceful", username.aidPubHex ?? null,
+          username.lastActive ?? username.claimedAt, username.adminRootPubHex ?? null,
+        ),
+        this.db.prepare(
+          `INSERT INTO device_identities
+            (account_id, device_id, device_pub_hex, platform_class, created_at, last_seen_at, revoked_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(u, device.deviceId, device.devicePubHex, device.platformClass, device.createdAt, device.lastSeenAt, device.revokedAt),
+        this.db.prepare(
+          `INSERT INTO device_capability_grants
+            (grant_id, username, device_id, device_pub_hex, scopes_json, issued_at, expires_at, signature_hex, revoked_at, signer_root)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          grant.grantId, u, grant.deviceId, grant.devicePubHex, grant.scopesJson,
+          grant.issuedAt, grant.expiresAt, grant.signatureHex, grant.revokedAt, grant.signerRoot,
+        ),
+        this.db.prepare(
+          `INSERT INTO account_profiles
+            (account_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, account.revision, account.keyVersion, account.nonceHex, account.ciphertextHex,
+          account.signerPubHex, account.signatureHex, account.issuedAt, account.updatedAt,
+        ),
+        this.db.prepare(
+          `INSERT INTO device_self_profiles
+            (account_id, device_id, revision, key_version, nonce_hex, ciphertext_hex, signer_pub_hex, signature_hex, issued_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, profile.deviceId, profile.revision, profile.keyVersion, profile.nonceHex, profile.ciphertextHex,
+          profile.signerPubHex, profile.signatureHex, profile.issuedAt, profile.updatedAt,
+        ),
+        this.db.prepare(
+          `INSERT INTO auth_codes
+            (serial, username, server_name, server_domain, delegated_pubkey_hex, user_pubkey_hex, user_signature_hex,
+             issued_at, expires_at, status, recorded_at, admin_root_pub_key_hex)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          authCode.serial, u, authCode.serverName, authCode.serverDomain, authCode.delegatedPubKeyHex,
+          authCode.userPubKeyHex, authCode.userSignatureHex, authCode.issuedAt, authCode.expiresAt,
+          authCode.status, authCode.recordedAt, authCode.adminRootPubKeyHex ?? null,
+        ),
+        this.db.prepare(
+          `INSERT INTO demo_users
+            (username, idempotency_key, snapshot_id, iso_r2_key, ttl_idle_minutes, region, size,
+             active_server_id, active_server_ip, image, active_server_fqdn, last_activity_at, state, created_at,
+             provision_phase, provision_phase_at, provision_last_error)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          u, demo.idempotencyKey, demo.snapshotId, demo.isoR2Key, demo.ttlIdleMinutes, demo.region, demo.size,
+          demo.activeServerId, demo.activeServerIp, demo.image, demo.activeServerFqdn, demo.lastActivityAt,
+          demo.state, demo.createdAt, demo.provisionPhase, demo.provisionPhaseAt, demo.provisionLastError,
+        ),
+      ]);
+      return { ok: true, created: true, record: { ...demo, username: u } };
+    } catch (error) {
+      const after = await this.db.prepare("SELECT * FROM demo_users WHERE username = ? OR idempotency_key = ?")
+        .bind(u, demo.idempotencyKey).first<DemoUserRow>();
+      if (after && after.username === u && after.idempotency_key === demo.idempotencyKey) {
+        return { ok: true, created: false, record: rowToDemoUser(after) };
+      }
+      const usernameTaken = await this.db.prepare("SELECT 1 AS hit FROM usernames WHERE username = ?")
+        .bind(u).first<{ hit: number }>();
+      return { ok: false, reason: usernameTaken ? "username-unavailable" : "initialization-conflict" };
+    }
+  }
+  async cleanup(username: string, idempotencyKey: string) {
+    const u = username.toLowerCase();
+    const exact = await this.db.prepare(
+      "SELECT 1 AS hit FROM demo_users WHERE username = ? AND idempotency_key = ?",
+    ).bind(u, idempotencyKey).first<{ hit: number }>();
+    if (!exact) return false;
+    await this.db.batch([
+      this.db.prepare("DELETE FROM auth_codes WHERE username = ?").bind(u),
+      this.db.prepare("DELETE FROM demo_users WHERE username = ? AND idempotency_key = ?").bind(u, idempotencyKey),
+      this.db.prepare("DELETE FROM usernames WHERE username = ?").bind(u),
+    ]);
+    return true;
+  }
+}
+
 interface DeviceCapabilityGrantRow {
   grant_id: string;
   username: string;
-  device_label: string;
+  device_id: string;
   device_pub_hex: string;
   scopes_json: string;
   issued_at: number;
   expires_at: number;
   signature_hex: string;
   revoked_at: number | null;
+  // Slice D (migration 0064). 'membership' | 'admin-root'. Nullable so a
+  // SELECT against a DB that hasn't applied 0064 decodes safely; the helper
+  // narrows to 'membership' on absence (matching the column DEFAULT).
+  signer_root?: string | null;
 }
 function rowToDeviceCapabilityGrant(
   r: DeviceCapabilityGrantRow,
@@ -2493,13 +4146,14 @@ function rowToDeviceCapabilityGrant(
   return {
     grantId: r.grant_id,
     username: r.username,
-    deviceLabel: r.device_label,
+    deviceId: r.device_id,
     devicePubHex: r.device_pub_hex,
     scopesJson: r.scopes_json,
     issuedAt: r.issued_at,
     expiresAt: r.expires_at,
     signatureHex: r.signature_hex,
     revokedAt: r.revoked_at,
+    signerRoot: r.signer_root === "admin-root" ? "admin-root" : "membership",
   };
 }
 
@@ -2508,8 +4162,8 @@ export class D1DeviceCapabilityGrantStorage
 {
   constructor(private readonly db: D1Database) {}
   async put(rec: DeviceCapabilityGrantRecord) {
-    // The unique partial index `idx_dcg_username_label_active`
-    // enforces "at most one ACTIVE grant per (username, device_label)"
+    // The unique partial index `idx_dcg_username_device_active`
+    // enforces "at most one ACTIVE grant per (username, device_id)"
     // at the DB level — re-issuance MUST revoke the old row first.
     // We catch the surfaced UNIQUE-constraint message rather than
     // pre-checking, both to avoid the read-then-write race and to keep
@@ -2518,20 +4172,22 @@ export class D1DeviceCapabilityGrantStorage
       await this.db
         .prepare(
           `INSERT INTO device_capability_grants
-            (grant_id, username, device_label, device_pub_hex,
-             scopes_json, issued_at, expires_at, signature_hex, revoked_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+            (grant_id, username, device_id, device_pub_hex,
+             scopes_json, issued_at, expires_at, signature_hex, revoked_at,
+             signer_root)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
         )
         .bind(
           rec.grantId,
           rec.username.toLowerCase(),
-          rec.deviceLabel.toLowerCase(),
+          rec.deviceId.toLowerCase(),
           rec.devicePubHex.toLowerCase(),
           rec.scopesJson,
           rec.issuedAt,
           rec.expiresAt,
           rec.signatureHex,
           rec.revokedAt,
+          rec.signerRoot ?? "membership",
         )
         .run();
       return { ok: true as const };
@@ -2540,7 +4196,7 @@ export class D1DeviceCapabilityGrantStorage
       if (/UNIQUE/i.test(msg)) {
         return {
           ok: false as const,
-          reason: "duplicate active grant for (username, device_label)",
+          reason: "duplicate active grant for (username, device_id)",
         };
       }
       throw e;
@@ -2566,13 +4222,13 @@ export class D1DeviceCapabilityGrantStorage
       .all<DeviceCapabilityGrantRow>();
     return (r.results ?? []).map(rowToDeviceCapabilityGrant);
   }
-  async getActiveForUserLabel(username: string, deviceLabel: string) {
+  async getActiveForUserDevice(username: string, deviceId: string) {
     const r = await this.db
       .prepare(
         `SELECT * FROM device_capability_grants
-         WHERE username = ?1 AND device_label = ?2 AND revoked_at IS NULL`,
+         WHERE username = ?1 AND device_id = ?2 AND revoked_at IS NULL`,
       )
-      .bind(username.toLowerCase(), deviceLabel.toLowerCase())
+      .bind(username.toLowerCase(), deviceId.toLowerCase())
       .all<DeviceCapabilityGrantRow>();
     const rows = r.results ?? [];
     if (rows.length > 1) {
@@ -2580,8 +4236,8 @@ export class D1DeviceCapabilityGrantStorage
       // unreachable. Fail loudly so a misconfigured DB is impossible
       // to silently keep using.
       throw new Error(
-        `getActiveForUserLabel: more than one active grant for ` +
-          `${username}/${deviceLabel}`,
+        `getActiveForUserDevice: more than one active grant for ` +
+          `${username}/${deviceId}`,
       );
     }
     return rows[0] ? rowToDeviceCapabilityGrant(rows[0]) : undefined;
@@ -2619,6 +4275,9 @@ export class D1DeviceCapabilityGrantStorage
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   schemaVersion: SchemaVersionStorage;
+  suggestionQueue: SuggestionQueueStorage;
+  suggestThrottle: SuggestThrottleStorage;
+  usernameOffers: UsernameOfferStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;
@@ -2630,10 +4289,19 @@ export class D1Storage implements Storage {
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
   secretMailbox: SecretMailboxStorage;
+  serverTransfers: ServerTransferStorage;
+  serverEvictions: ServerEvictionStorage;
+  serverMigrations: ServerMigrationStorage;
+  adminRootRotations: AdminRootRotationStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   pushTokens: PushTokenStorage;
+  deviceIdentities: DeviceIdentityStorage;
+  accountProfiles: AccountProfileStorage;
+  deviceSelfProfiles: DeviceSelfProfileStorage;
+  deviceManagedProfiles: DeviceManagedProfileStorage;
+  accountDirectoryKeyGrants: AccountDirectoryKeyGrantStorage;
   llmPromo: LlmPromoStorage;
   tiers: TierStorage;
   entitlementRevocations: EntitlementRevocationStorage;
@@ -2644,6 +4312,8 @@ export class D1Storage implements Storage {
   demoLlmLedger: DemoLlmLedgerStorage;
   installPolicyFanout: InstallPolicyFanoutStorage;
   demoUsers: DemoUsersStorage;
+  accountProvisioning: AccountProvisioningStorage;
+  demoAccountProvisioning: DemoAccountProvisioningStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
   watchDelegates: WatchDelegateStorage;
   mintReservations: MintReservationStorage;
@@ -2653,9 +4323,13 @@ export class D1Storage implements Storage {
   trustExceptions: TrustExceptionStorage;
   serviceInvites: ServiceInviteStorage;
   namespace: NamespaceStorage;
+  peerBackupManifests: PeerBackupManifestStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.schemaVersion = new D1SchemaVersionStorage(db);
+    this.suggestionQueue = new D1SuggestionQueueStorage(db);
+    this.suggestThrottle = new D1SuggestThrottleStorage(db);
+    this.usernameOffers = new D1UsernameOfferStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
     this.daemonStatus = new D1DaemonStatusStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
@@ -2667,10 +4341,19 @@ export class D1Storage implements Storage {
     this.luksKeys = new D1LuksKeyStorage(db);
     this.autoUnlockLeases = new D1AutoUnlockLeaseStorage(db);
     this.secretMailbox = new D1SecretMailboxStorage(db);
+    this.serverTransfers = new D1ServerTransferStorage(db);
+    this.serverEvictions = new D1ServerEvictionStorage(db);
+    this.serverMigrations = new D1ServerMigrationStorage(db);
+    this.adminRootRotations = new D1AdminRootRotationStorage(db);
     this.boxSealedLeases = new D1BoxSealedLeaseStorage(db);
     this.pendingRePairs = new D1PendingRePairStorage(db);
     this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);
     this.pushTokens = new D1PushTokenStorage(db);
+    this.deviceIdentities = new D1DeviceIdentityStorage(db);
+    this.accountProfiles = new D1AccountProfileStorage(db);
+    this.deviceSelfProfiles = new D1DeviceSelfProfileStorage(db);
+    this.deviceManagedProfiles = new D1DeviceManagedProfileStorage(db);
+    this.accountDirectoryKeyGrants = new D1AccountDirectoryKeyGrantStorage(db);
     this.llmPromo = new D1LlmPromoStorage(db);
     this.tiers = new D1TierStorage(db);
     this.entitlementRevocations = new D1EntitlementRevocationStorage(db);
@@ -2681,6 +4364,8 @@ export class D1Storage implements Storage {
     this.demoLlmLedger = new D1DemoLlmLedgerStorage(db);
     this.installPolicyFanout = new D1InstallPolicyFanoutStorage(db);
     this.demoUsers = new D1DemoUsersStorage(db);
+    this.accountProvisioning = new D1AccountProvisioningStorage(db);
+    this.demoAccountProvisioning = new D1DemoAccountProvisioningStorage(db);
     this.deviceCapabilityGrants = new D1DeviceCapabilityGrantStorage(db);
     this.watchDelegates = new D1WatchDelegateStorage(db);
     this.mintReservations = new D1MintReservationStorage(db);
@@ -2690,6 +4375,7 @@ export class D1Storage implements Storage {
     this.trustExceptions = new D1TrustExceptionStorage(db);
     this.serviceInvites = new D1ServiceInviteStorage(db);
     this.namespace = new D1NamespaceStorage(db);
+    this.peerBackupManifests = new D1PeerBackupManifestStorage(db);
   }
 }
 
@@ -2730,6 +4416,141 @@ export class D1SchemaVersionStorage implements SchemaVersionStorage {
       .bind(version)
       .first();
     return !!r;
+  }
+}
+
+/** D1 username suggestion queue (migration 0061). Pop order matches the
+ *  (enqueued_at, name) index, so D1 ↔ InMemory agree exactly. */
+export class D1SuggestionQueueStorage implements SuggestionQueueStorage {
+  constructor(private readonly db: D1Database) {}
+  async enqueue(names: string[], at: number): Promise<number> {
+    let added = 0;
+    for (const raw of names) {
+      const name = raw.toLowerCase();
+      const r = await this.db
+        .prepare(
+          `INSERT OR IGNORE INTO username_suggestion_queue (name, enqueued_at) VALUES (?1, ?2)`,
+        )
+        .bind(name, at)
+        .run();
+      // D1 surfaces affected-row count via meta.changes (1 = inserted, 0 = dup).
+      if ((r.meta?.changes ?? 0) > 0) added += 1;
+    }
+    return added;
+  }
+  async popOldest(): Promise<string | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT name FROM username_suggestion_queue ORDER BY enqueued_at ASC, name ASC LIMIT 1`,
+      )
+      .first<{ name: string }>();
+    if (!row) return null;
+    await this.db
+      .prepare(`DELETE FROM username_suggestion_queue WHERE name = ?1`)
+      .bind(row.name)
+      .run();
+    return row.name;
+  }
+  async count(): Promise<number> {
+    const r = await this.db
+      .prepare(`SELECT COUNT(*) AS n FROM username_suggestion_queue`)
+      .first<{ n: number }>();
+    return r?.n ?? 0;
+  }
+  async list(): Promise<string[]> {
+    const r = await this.db
+      .prepare(
+        `SELECT name FROM username_suggestion_queue ORDER BY enqueued_at ASC, name ASC`,
+      )
+      .all<{ name: string }>();
+    return (r.results ?? []).map((row) => row.name);
+  }
+}
+
+/** D1 per-device regenerate throttle (migration 0061). */
+export class D1SuggestThrottleStorage implements SuggestThrottleStorage {
+  constructor(private readonly db: D1Database) {}
+  async get(deviceKey: string): Promise<SuggestThrottleRecord | undefined> {
+    const r = await this.db
+      .prepare(
+        `SELECT device_key, count, window_start, last_at, next_allowed_at
+           FROM username_suggest_throttle WHERE device_key = ?1`,
+      )
+      .bind(deviceKey)
+      .first<{
+        device_key: string;
+        count: number;
+        window_start: number;
+        last_at: number;
+        next_allowed_at: number;
+      }>();
+    if (!r) return undefined;
+    return {
+      deviceKey: r.device_key,
+      count: r.count,
+      windowStart: r.window_start,
+      lastAt: r.last_at,
+      nextAllowedAt: r.next_allowed_at,
+    };
+  }
+  async upsert(rec: SuggestThrottleRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO username_suggest_throttle
+           (device_key, count, window_start, last_at, next_allowed_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(device_key) DO UPDATE SET
+           count = excluded.count,
+           window_start = excluded.window_start,
+           last_at = excluded.last_at,
+           next_allowed_at = excluded.next_allowed_at`,
+      )
+      .bind(rec.deviceKey, rec.count, rec.windowStart, rec.lastAt, rec.nextAllowedAt)
+      .run();
+  }
+  async prune(olderThan: number): Promise<number> {
+    const r = await this.db
+      .prepare(`DELETE FROM username_suggest_throttle WHERE last_at < ?1`)
+      .bind(olderThan)
+      .run();
+    return r.meta?.changes ?? 0;
+  }
+}
+
+/** D1 recently-offered-handles roster (migration 0062) — the claim gate. */
+export class D1UsernameOfferStorage implements UsernameOfferStorage {
+  constructor(private readonly db: D1Database) {}
+  async record(name: string, deviceKey: string, at: number): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO username_offer (name, device_key, offered_at)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(name) DO UPDATE SET device_key = excluded.device_key, offered_at = excluded.offered_at`,
+      )
+      .bind(name.toLowerCase(), deviceKey, at)
+      .run();
+  }
+  async isOffered(name: string, notBefore: number): Promise<boolean> {
+    const r = await this.db
+      .prepare(
+        `SELECT 1 FROM username_offer WHERE name = ?1 AND offered_at >= ?2 LIMIT 1`,
+      )
+      .bind(name.toLowerCase(), notBefore)
+      .first();
+    return !!r;
+  }
+  async consume(name: string): Promise<void> {
+    await this.db
+      .prepare(`DELETE FROM username_offer WHERE name = ?1`)
+      .bind(name.toLowerCase())
+      .run();
+  }
+  async prune(olderThan: number): Promise<number> {
+    const r = await this.db
+      .prepare(`DELETE FROM username_offer WHERE offered_at < ?1`)
+      .bind(olderThan)
+      .run();
+    return r.meta?.changes ?? 0;
   }
 }
 
@@ -2796,9 +4617,16 @@ interface ServiceInviteRow {
   bound_at: number | null;
   created_at: number;
   revoked_at: number | null;
+  // v2 (migration 0057). Nullable so a SELECT against a pre-0057 DB decodes.
+  create_sig?: string | null;
+  create_issued_at?: number | null;
+  max_redemptions?: number | null;
+  expires_at?: number | null;
+  redemptions?: number | null;
+  approval_mode?: string | null;
 }
 
-function rowToServiceInvite(r: ServiceInviteRow): ServiceInviteRecord {
+function rowToServiceInvite(r: ServiceInviteRow, boundAIDs: string[]): ServiceInviteRecord {
   return {
     inviteId: r.invite_id,
     authorAID: r.author_aid,
@@ -2809,20 +4637,49 @@ function rowToServiceInvite(r: ServiceInviteRow): ServiceInviteRecord {
     boundAt: r.bound_at,
     createdAt: r.created_at,
     revokedAt: r.revoked_at,
+    createSig: r.create_sig ?? null,
+    createIssuedAt: r.create_issued_at ?? null,
+    maxRedemptions: r.max_redemptions ?? null,
+    expiresAt: r.expires_at ?? null,
+    redemptions: r.redemptions ?? 0,
+    approvalMode: r.approval_mode === "manual" ? "manual" : "auto",
+    boundAIDs,
   };
 }
+
+const SERVICE_INVITE_COLS =
+  `invite_id, author_aid, service_ref, encrypted_bundle, secret_hash,
+   bound_aid, bound_at, created_at, revoked_at,
+   create_sig, create_issued_at, max_redemptions, expires_at, redemptions, approval_mode`;
 
 /**
  * D1 ServiceInviteStorage — bearer-link service-access capability invites
  * bound to the redeemer's stable AID (docs/service-access-gating.md). PRIMARY
- * KEY invite_id; UNIQUE secret_hash (the redeem lookup key). `redeem` is the
- * first-bind / same-AID-idempotent / reject-different-AID primitive, made
- * atomic by a conditional `UPDATE ... WHERE bound_aid IS NULL` whose
- * `meta.changes` distinguishes the winning first-binder from a concurrent
- * loser (which then re-reads to classify idempotent vs. already-bound).
+ * KEY invite_id; UNIQUE secret_hash (the redeem lookup key). `redeem` binds
+ * via the `service_invite_bindings` ledger (`INSERT OR IGNORE`, whose
+ * `meta.changes` distinguishes a new bind from an idempotent re-redeem),
+ * supporting GROUP / multi-use invites (the `bound_aid`/`bound_at` columns
+ * stay the FIRST bind for v1-compatible reads). v2 adds the create signature,
+ * maxRedemptions/expiry caps, approval mode, and `revokedSince`.
  */
 export class D1ServiceInviteStorage implements ServiceInviteStorage {
   constructor(private readonly db: D1Database) {}
+
+  /** Bound AIDs for an invite (bind order), from the ledger. */
+  private async boundAIDsFor(inviteId: string): Promise<string[]> {
+    const rs = await this.db
+      .prepare(
+        `SELECT aid FROM service_invite_bindings
+           WHERE invite_id = ?1 ORDER BY bound_at ASC, aid ASC`,
+      )
+      .bind(inviteId)
+      .all<{ aid: string }>();
+    return (rs.results ?? []).map((r) => r.aid);
+  }
+
+  private async hydrate(row: ServiceInviteRow): Promise<ServiceInviteRecord> {
+    return rowToServiceInvite(row, await this.boundAIDsFor(row.invite_id));
+  }
 
   async create(rec: {
     inviteId: string;
@@ -2831,6 +4688,11 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
     encryptedBundle: string;
     secretHash: string;
     createdAt: number;
+    createSig?: string;
+    createIssuedAt?: number;
+    maxRedemptions?: number;
+    expiresAt?: number;
+    approvalMode?: ServiceInviteApprovalMode;
   }): Promise<{ ok: true } | { ok: false; reason: string }> {
     // INSERT OR IGNORE so a byte-identical re-create is idempotent; a
     // DIFFERENT invite reusing the id (or the same secret_hash via the
@@ -2839,8 +4701,10 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
       .prepare(
         `INSERT OR IGNORE INTO service_invites
            (invite_id, author_aid, service_ref, encrypted_bundle,
-            secret_hash, bound_aid, bound_at, created_at, revoked_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6, NULL)`,
+            secret_hash, bound_aid, bound_at, created_at, revoked_at,
+            create_sig, create_issued_at, max_redemptions, expires_at,
+            redemptions, approval_mode)
+         VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6, NULL, ?7, ?8, ?9, ?10, 0, ?11)`,
       )
       .bind(
         rec.inviteId,
@@ -2849,6 +4713,11 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
         rec.encryptedBundle,
         rec.secretHash.toLowerCase(),
         rec.createdAt,
+        rec.createSig ?? null,
+        rec.createIssuedAt ?? null,
+        rec.maxRedemptions ?? null,
+        rec.expiresAt ?? null,
+        rec.approvalMode ?? "auto",
       )
       .run();
     if ((res.meta.changes ?? 0) > 0) return { ok: true };
@@ -2875,33 +4744,53 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
     const current = await this.getBySecretHash(sh);
     if (!current) return { ok: false, reason: "unknown secret" };
     if (current.revokedAt !== null) return { ok: false, reason: "revoked" };
-
-    if (current.boundAID === null) {
-      // Atomic first-bind: only the row that is still unbound + unrevoked.
-      const res = await this.db
-        .prepare(
-          `UPDATE service_invites
-             SET bound_aid = ?2, bound_at = ?3
-           WHERE secret_hash = ?1 AND bound_aid IS NULL AND revoked_at IS NULL`,
-        )
-        .bind(sh, aid, now)
-        .run();
-      if ((res.meta.changes ?? 0) > 0) {
-        const rec = await this.getBySecretHash(sh);
-        return { ok: true, firstBind: true, record: rec! };
-      }
-      // Lost the race (or got revoked between read + write) — reclassify.
-      const after = await this.getBySecretHash(sh);
-      if (!after) return { ok: false, reason: "unknown secret" };
-      if (after.revokedAt !== null) return { ok: false, reason: "revoked" };
-      if (after.boundAID === aid) return { ok: true, firstBind: false, record: after };
-      return { ok: false, reason: "already bound" };
+    if (current.expiresAt !== null && now > current.expiresAt) {
+      return { ok: false, reason: "expired" };
     }
-
-    if (current.boundAID === aid) {
+    // Already bound to this AID ⇒ idempotent (personal AND group).
+    if (current.boundAIDs.includes(aid)) {
       return { ok: true, firstBind: false, record: current };
     }
-    return { ok: false, reason: "already bound" };
+    // A NEW AID — enforce the cap before binding. Single-use (max NULL) with
+    // an existing bind ⇒ already bound to someone else; group ⇒ count < cap.
+    if (current.maxRedemptions === null) {
+      if (current.boundAIDs.length > 0) return { ok: false, reason: "already bound" };
+    } else if (
+      current.maxRedemptions > 0 &&
+      current.boundAIDs.length >= current.maxRedemptions
+    ) {
+      return { ok: false, reason: "max redemptions reached" };
+    }
+    // Atomic bind: INSERT OR IGNORE into the ledger; meta.changes>0 ⇒ we won.
+    const ins = await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO service_invite_bindings (invite_id, aid, bound_at)
+         VALUES (?1, ?2, ?3)`,
+      )
+      .bind(current.inviteId, aid, now)
+      .run();
+    if ((ins.meta.changes ?? 0) === 0) {
+      // Lost the race to another concurrent redeem of the SAME AID — idempotent.
+      const after = await this.get(current.inviteId);
+      return after
+        ? { ok: true, firstBind: false, record: after }
+        : { ok: false, reason: "unknown secret" };
+    }
+    // Set bound_aid/bound_at to the FIRST bind (only when still unset), and
+    // keep the redemptions counter in step with the ledger size.
+    const count = (await this.boundAIDsFor(current.inviteId)).length;
+    await this.db
+      .prepare(
+        `UPDATE service_invites
+           SET bound_aid = COALESCE(bound_aid, ?2),
+               bound_at  = COALESCE(bound_at, ?3),
+               redemptions = ?4
+         WHERE invite_id = ?1`,
+      )
+      .bind(current.inviteId, aid, now, count)
+      .run();
+    const rec = await this.get(current.inviteId);
+    return { ok: true, firstBind: true, record: rec! };
   }
 
   async revoke(inviteId: string, now: number): Promise<boolean> {
@@ -2923,39 +4812,52 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
 
   async get(inviteId: string): Promise<ServiceInviteRecord | undefined> {
     const r = await this.db
-      .prepare(
-        `SELECT invite_id, author_aid, service_ref, encrypted_bundle,
-                secret_hash, bound_aid, bound_at, created_at, revoked_at
-           FROM service_invites WHERE invite_id = ?1 LIMIT 1`,
-      )
+      .prepare(`SELECT ${SERVICE_INVITE_COLS} FROM service_invites WHERE invite_id = ?1 LIMIT 1`)
       .bind(inviteId)
       .first<ServiceInviteRow>();
-    return r ? rowToServiceInvite(r) : undefined;
+    return r ? this.hydrate(r) : undefined;
   }
 
   async getBySecretHash(secretHash: string): Promise<ServiceInviteRecord | undefined> {
     const r = await this.db
-      .prepare(
-        `SELECT invite_id, author_aid, service_ref, encrypted_bundle,
-                secret_hash, bound_aid, bound_at, created_at, revoked_at
-           FROM service_invites WHERE secret_hash = ?1 LIMIT 1`,
-      )
+      .prepare(`SELECT ${SERVICE_INVITE_COLS} FROM service_invites WHERE secret_hash = ?1 LIMIT 1`)
       .bind(secretHash.toLowerCase())
       .first<ServiceInviteRow>();
-    return r ? rowToServiceInvite(r) : undefined;
+    return r ? this.hydrate(r) : undefined;
   }
 
   async listForAuthor(authorAID: string): Promise<ServiceInviteRecord[]> {
     const rs = await this.db
       .prepare(
-        `SELECT invite_id, author_aid, service_ref, encrypted_bundle,
-                secret_hash, bound_aid, bound_at, created_at, revoked_at
-           FROM service_invites WHERE author_aid = ?1
+        `SELECT ${SERVICE_INVITE_COLS} FROM service_invites WHERE author_aid = ?1
            ORDER BY created_at DESC`,
       )
       .bind(authorAID.toLowerCase())
       .all<ServiceInviteRow>();
-    return (rs.results ?? []).map(rowToServiceInvite);
+    const out: ServiceInviteRecord[] = [];
+    for (const row of rs.results ?? []) out.push(await this.hydrate(row));
+    return out;
+  }
+
+  async revokedSince(authorAID: string, cursor: number): Promise<RevokedInviteRecord[]> {
+    const rs = await this.db
+      .prepare(
+        `SELECT invite_id, service_ref, revoked_at FROM service_invites
+           WHERE author_aid = ?1 AND revoked_at IS NOT NULL AND revoked_at > ?2
+           ORDER BY revoked_at ASC`,
+      )
+      .bind(authorAID.toLowerCase(), cursor)
+      .all<{ invite_id: string; service_ref: string; revoked_at: number }>();
+    const out: RevokedInviteRecord[] = [];
+    for (const r of rs.results ?? []) {
+      out.push({
+        inviteId: r.invite_id,
+        serviceRef: r.service_ref,
+        boundAIDs: await this.boundAIDsFor(r.invite_id),
+        revokedAt: r.revoked_at,
+      });
+    }
+    return out;
   }
 }
 
@@ -3424,7 +5326,7 @@ function rowToNameClaim(r: NameClaimRow): NameClaimRecord {
 
 /** D1 NamespaceStorage — the merged per-user leftmost-label uniqueness
  *  invariant (§3.4; per-user-cert design). The unique index
- *  `idx_name_claims_username_label` enforces "at most one claim per
+ *  `idx_name_claims_username_device` enforces "at most one claim per
  *  (username, label)" at the DB level. `claim` first reads the existing
  *  row: an identical (kind, ref_id) is idempotent (ok, original claimed_at
  *  preserved); otherwise it INSERTs and translates a surfaced UNIQUE
@@ -3490,5 +5392,79 @@ export class D1NamespaceStorage implements NamespaceStorage {
       .bind(username.toLowerCase())
       .all<NameClaimRow>();
     return (r.results ?? []).map(rowToNameClaim);
+  }
+}
+
+/**
+ * D1 PeerBackupManifestStorage (migration 0080) — one row per server,
+ * latest-wins by the box-signed `generation`. The upsert's conflict
+ * clause carries `WHERE excluded.generation > generation` so a replayed
+ * older deposit is a 0-change no-op (`meta.changes` drives the stale
+ * signal), atomically — no read-then-write race.
+ */
+export class D1PeerBackupManifestStorage implements PeerBackupManifestStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async put(rec: PeerBackupManifestRecord) {
+    const r = await this.db
+      .prepare(
+        `INSERT INTO peer_backup_manifests
+           (server_domain, username, generation, updated_at, ciphertext_hex, nonce_hex)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(server_domain) DO UPDATE SET
+           username = excluded.username,
+           generation = excluded.generation,
+           updated_at = excluded.updated_at,
+           ciphertext_hex = excluded.ciphertext_hex,
+           nonce_hex = excluded.nonce_hex
+         WHERE excluded.generation > peer_backup_manifests.generation`,
+      )
+      .bind(
+        rec.serverDomain.toLowerCase(),
+        rec.username.toLowerCase(),
+        rec.generation,
+        rec.updatedAt,
+        rec.ciphertextHex,
+        rec.nonceHex,
+      )
+      .run();
+    if ((r.meta?.changes ?? 0) === 0) {
+      return { ok: false as const, reason: "stale generation" };
+    }
+    return { ok: true as const };
+  }
+
+  async get(serverDomain: string) {
+    const r = await this.db
+      .prepare(
+        `SELECT server_domain, username, generation, updated_at, ciphertext_hex, nonce_hex
+         FROM peer_backup_manifests WHERE server_domain = ?1`,
+      )
+      .bind(serverDomain.toLowerCase())
+      .first<{
+        server_domain: string;
+        username: string;
+        generation: number;
+        updated_at: number;
+        ciphertext_hex: string;
+        nonce_hex: string;
+      }>();
+    if (!r) return undefined;
+    return {
+      serverDomain: r.server_domain,
+      username: r.username,
+      generation: r.generation,
+      updatedAt: r.updated_at,
+      ciphertextHex: r.ciphertext_hex,
+      nonceHex: r.nonce_hex,
+    };
+  }
+
+  async delete(serverDomain: string) {
+    const r = await this.db
+      .prepare(`DELETE FROM peer_backup_manifests WHERE server_domain = ?1`)
+      .bind(serverDomain.toLowerCase())
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
   }
 }

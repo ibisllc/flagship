@@ -9,7 +9,7 @@ import XCTest
 final class KnockAuthorizeDeepLinkTests: XCTestCase {
     private let server = "home.alice.flagship.services"
     private let svc = "notes"
-    private let ref = "alice-notes"
+    private let ref = "alice--notes"
     private let page = "cb2421036efeb738c6017d8ee92e7b89"
 
     private func accessUrl(server: String, svc: String, ref: String, page: String) -> URL {
@@ -85,7 +85,7 @@ final class KnockAuthorizeDeepLinkTests: XCTestCase {
         let raw = "flagship://invite?server=\(server)&k=\(secret)"
         XCTAssertEqual(
             DeepLink.parsePastedString(raw),
-            .inviteRedeem(serverDomain: server, secretHex: secret)
+            .inviteRedeem(serverDomain: server, secretHex: secret, authorAidHex: nil, inviteId: nil)
         )
     }
 }

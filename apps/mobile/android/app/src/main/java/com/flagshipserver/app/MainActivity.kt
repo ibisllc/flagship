@@ -3,10 +3,16 @@ package com.flagshipserver.app
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
@@ -29,6 +35,10 @@ import com.flagshipserver.app.api.LiveBuildClient
 import com.flagshipserver.app.api.LiveScreensClient
 import com.flagshipserver.app.api.MockBuildClient
 import com.flagshipserver.app.api.LiveSecretMailboxClient
+import com.flagshipserver.app.api.LiveServerTransferClient
+import com.flagshipserver.app.api.MockServerTransferClient
+import com.flagshipserver.app.api.ServerTransferClient
+import com.flagshipserver.app.core.LocalServerTransferClient
 import com.flagshipserver.app.api.LiveFlagshipServerClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
@@ -56,6 +66,7 @@ import com.flagshipserver.app.core.LocalBuildClient
 import com.flagshipserver.app.core.LocalQrRelayClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
+import com.flagshipserver.app.core.LocalSessionStore
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.OkHttpJsonTransport
 import com.flagshipserver.app.core.LocalTrustCenter
@@ -98,6 +109,7 @@ class MainActivity : FragmentActivity() {
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         // FIRST: apply a backend-apex override from the launch intent, BEFORE
         // the OkHttp client / clients are built below (the pinner + the live
         // clients read Endpoints at construction). The gym test build launches
@@ -161,6 +173,13 @@ class MainActivity : FragmentActivity() {
         }
 
         val devSettings = DeveloperSettings.create(applicationContext)
+        // GYM: a smoke-mode launch is NO-BACKEND by contract — force the MOCK
+        // client (in-memory only) so the shell renders from MockScreensClient
+        // and the live maintainer-trust check never runs (it would clobber the
+        // seeded untrusted verdict). Debug-gated with the smoke seam above.
+        if (isDebuggable && smokeInitialTab != null) {
+            devSettings.forceMockForSmokeRun()
+        }
         AiKeyStore.attach(applicationContext)
         com.flagshipserver.app.core.SecuredSessionStore.attach(applicationContext)
         val okHttp = buildOkHttp()
@@ -181,10 +200,22 @@ class MainActivity : FragmentActivity() {
 
         val mockScreens = MockScreensClient()
         val liveScreens = LiveScreensClient(client = okHttp, store = sessionStore)
+        // #91 — drains the box's phone-pollable AlertInbox (GET /api/phone/alerts)
+        // for AI-chat-needs-you events. Shares the box-pinned OkHttp + session
+        // store with the screens client. The poller is built + started in
+        // setContent (where the live/session pivot + operations center are in
+        // scope), mirroring the deploy-sync LaunchedEffect.
+        val livePhoneAlerts = com.flagshipserver.app.api.LivePhoneAlertClient(
+            client = okHttp,
+            store = sessionStore,
+        )
+        val appContext = applicationContext
         val mockBuild = MockBuildClient()
         val liveBuild = LiveBuildClient(client = okHttp, store = sessionStore)
         val mockRelay = MockQrRelayClient()
         val liveRelay = LiveQrRelayClient(client = okHttp)
+        val mockTransfer = MockServerTransferClient()
+        val liveTransfer = LiveServerTransferClient(OkHttpJsonTransport(okHttp))
         val mockMailbox = MockSecretMailboxClient()
         // A′ pinning — every live /pods fetch reconciles the cert-pin
         // registry under STKs derived from THIS device's UMK. Live-only by
@@ -234,6 +265,8 @@ class MainActivity : FragmentActivity() {
                 if (useLive) liveRelay else mockRelay
             val effectiveMailbox: SecretMailboxClient =
                 if (useLive) liveMailbox else mockMailbox
+            val effectiveTransfer: ServerTransferClient =
+                if (useLive) liveTransfer else mockTransfer
             // Identity calls are IRK-signed (not session-token gated), so this
             // pivots on the toggle alone — like relay/mailbox above.
             val effectiveFlagshipServer: FlagshipServerClient =
@@ -250,6 +283,102 @@ class MainActivity : FragmentActivity() {
                     is TrustChecker.Outcome.Untrusted -> trustCenter.markUntrusted(listOf(outcome.failure))
                     is TrustChecker.Outcome.NoVerdict -> trustCenter.markNoVerdict()
                 }
+            }
+
+            // #91 — AI-chat alert foreground poll. Live + paired only: the mock
+            // client has no real box to drain. The poller self-gates on
+            // paired+unlocked (mirrors the sliver's hide-under-lock). The
+            // notifier routes through the FCM-channel local notification so a
+            // tap deep-links to the chat, exactly like a real push wake.
+            val aiChatPoller = remember {
+                com.flagshipserver.app.core.AiChatAlertPoller(
+                    operations = operations,
+                    client = livePhoneAlerts,
+                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value },
+                    notify = { sessionId, request ->
+                        FlagshipFcmService.showAiChatNotification(
+                            appContext,
+                            sessionId,
+                            isEnvVar = request == com.flagshipserver.app.api.AiChatRequest.REQUEST_ENV_VAR,
+                        )
+                    },
+                )
+            }
+            LaunchedEffect(useLive, sessionToken != null) {
+                if (useLive && sessionToken != null) {
+                    aiChatPoller.start(this)
+                } else {
+                    aiChatPoller.stop()
+                }
+            }
+
+            // MULTI-POD (Fix B) — PodSessionSync. When the current/leader pod
+            // changes, point the single active base-URL + token slots at THAT
+            // pod's per-pod token (deterministic base URL `https://<fqdn>`).
+            // First-activation also runs the legacy-single-token migration so a
+            // box paired before the per-pod store attributes its existing token
+            // to its pod (idempotent). A pod with no stored token activates with a
+            // null token → the BFF 401s → "pair this device", never borrowing
+            // another pod's token. Mirror of iOS PodSessionSync.
+            val currentPodId by appState.currentPodId.collectAsState()
+            val pods by appState.pods.collectAsState()
+            LaunchedEffect(currentPodId, pods) {
+                val pod = pods.firstOrNull { it.podId == currentPodId }
+                if (pod != null && pod.fqdn.isNotEmpty()) {
+                    sessionStore.migrateSingleTokenToPod(pod.podId)
+                    sessionStore.activatePod(pod.podId, "https://${pod.fqdn}")
+                }
+            }
+
+            // LiveSync — the single app-scope live-update canal. ONE /stream
+            // long-poll feeds AppState (pods + Box Request Inbox), collapsing the
+            // per-screen Home pollers into one channel. It is wired HERE (at the
+            // shell, not a tab) so it spans every screen, and self-gates on
+            // paired+unlocked — locking on onStop (which clears isUnlocked) pauses
+            // it, matching the iOS .background semantics (foreground-only). Falls
+            // back to /pods when /stream is down, so behavior never degrades.
+            val liveSync = remember(effectiveMailbox) {
+                com.flagshipserver.app.core.LiveSyncCoordinator(
+                    app = appState,
+                    mailbox = effectiveMailbox,
+                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value },
+                    makeReconciler = {
+                        // Same reconcile path Home uses, incl. the secret-free
+                        // SWK/pairing deposit for newly-registered boxes
+                        // (idempotent, best-effort, no-op unless owed).
+                        val swkStore = com.flagshipserver.app.core.PendingSwkDepositStore.from(appContext)
+                        val pairingStore = com.flagshipserver.app.core.PendingPairingDepositStore.from(appContext)
+                        val cgkStore = com.flagshipserver.app.core.PendingCgkDepositStore.from(appContext)
+                        val holdStore = com.flagshipserver.app.core.MigrationHoldStore.from(appContext)
+                        com.flagshipserver.app.core.PendingServerReconciler(
+                            app = appState,
+                            mailbox = effectiveMailbox,
+                            onRegistered = { fqdn, identityPubKeyHex ->
+                                val user = appState.currentUser.value
+                                if (!user.isNullOrEmpty()) {
+                                    com.flagshipserver.app.core.SwkDepositCoordinator
+                                        .live(user, effectiveMailbox, swkStore, pairingStore, cgkStore, holdStore)
+                                        .depositIfNeeded(fqdn, identityPubKeyHex)
+                                }
+                            },
+                            // Per-cert relay-trust aggregation (maintainer-trust
+                            // Layer 3): verify each box's STK-signed box-trust-status
+                            // and aggregate the untrusted ones BY failing relay
+                            // cert-hash into the red sliver — one line + one override
+                            // per DISTINCT authority. A warning + override source; it
+                            // never gates `.com` I/O.
+                            onDirectory = { pods ->
+                                trustCenter.setRelayFailures(
+                                    com.flagshipserver.app.core.RelayTrustAggregator.aggregate(pods),
+                                )
+                            },
+                        )
+                    },
+                )
+            }
+            val liveSyncPaired by appState.isPaired.collectAsState()
+            LaunchedEffect(liveSyncPaired) {
+                if (liveSyncPaired) liveSync.start(this) else liveSync.stop()
             }
 
             val sizeClass = calculateWindowSizeClass(this)
@@ -271,6 +400,8 @@ class MainActivity : FragmentActivity() {
                     LocalFlagshipServerClient provides effectiveFlagshipServer,
                     LocalQrRelayClient provides effectiveRelay,
                     LocalSecretMailboxClient provides effectiveMailbox,
+                    LocalServerTransferClient provides effectiveTransfer,
+                    LocalSessionStore provides sessionStore,
                     LocalToastCenter provides toasts,
                     LocalActiveOperationsCenter provides operations,
                     LocalTrustCenter provides trustCenter,
@@ -368,7 +499,46 @@ private fun AppRoot(
         operations.syncDeployOperations(if (isPaired) pods else emptyList())
     }
 
-    Box(Modifier.fillMaxSize()) {
+    // Trust-the-session model (mirror of iOS ContentView clearing the UMK cache
+    // on isUnlocked/isPaired -> false): the biometric freshness latch lives only
+    // while the app is unlocked + paired. The instant it re-locks (background
+    // relock / explicit lock) or signs out, drop the latch so the next session
+    // re-authenticates once — the biometric still gates each session, it just no
+    // longer fires again mid-session (which is what stopped the random Face ID /
+    // fingerprint prompts the periodic deposit refresh used to trigger).
+    LaunchedEffect(isUnlocked, isPaired) {
+        if (!isUnlocked || !isPaired) BiometricAuthority.current()?.invalidate()
+    }
+
+    // Slice B — AUTO-PAIR. On unlock (with pods loaded), silently provision this
+    // device's per-box BFF session token for every ONLINE pod that lacks one,
+    // behind ONE biometric (the coordinator derives the owner IRK once + reuses
+    // it, and no-ops without a prompt when nothing is pending). A per-pod failure
+    // retries on the next unlock. Removes the manual "Pair this device" step;
+    // pairing-for-use is not sensitive, so it's admin-independent.
+    val sessionStore = LocalSessionStore.current
+    LaunchedEffect(isPaired, isUnlocked, pods) {
+        if (!isPaired || !isUnlocked) return@LaunchedEffect
+        val onlinePods = pods.filter {
+            it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE && it.fqdn.isNotEmpty()
+        }
+        if (onlinePods.isEmpty()) return@LaunchedEffect
+        com.flagshipserver.app.viewmodels.PodAutoPairCoordinator(store = sessionStore)
+            .pairAll(onlinePods) { reason -> Keystore.deriveIRK(reason) }
+    }
+
+    // Edge-to-edge (targetSdk 35 forces it): pad the status bar + landscape
+    // side bars ONCE here so the slivers, shell, onboarding, and overlays all
+    // clear them. The padding CONSUMES those insets, so inner Scaffolds don't
+    // double-pad; the bottom is deliberately left to NavigationBar/Rail, which
+    // pad their own systemBars insets.
+    Box(
+        Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(
+                WindowInsets.systemBars.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+            ),
+    ) {
         if (isPaired) {
             // The teal sliver sits ABOVE the shell in a Column so revealing it
             // physically pushes the whole shell down (it animates its own

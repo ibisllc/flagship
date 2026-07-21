@@ -24,16 +24,17 @@ final class ActiveOperationsCenterTests: XCTestCase {
         XCTAssertTrue(c.operations.isEmpty)
     }
 
-    // MARK: - Deploy operations (derived from pods)
+    // MARK: - Deploy operations (Bug-3: SUPPRESSED for pending pods)
 
-    func test_pendingPod_becomesDeployOperation_withCanonicalLabelAndTarget() {
+    func test_pendingPod_doesNotShowDeployOperation() {
+        // Bug 3: a freshly-created server is `.pending` while it is merely
+        // AWAITING A BURN — there is no reliable on-model signal distinguishing
+        // that from "actually installing", so we never emit a spinning
+        // "deploying server <name>" op for a pending pod.
         let c = ActiveOperationsCenter()
         c.syncDeployOperations(pods: [pendingPod("p1", name: "Home")])
-        let op = try? XCTUnwrap(c.primary)
-        XCTAssertEqual(op?.kind, .deploy)
-        XCTAssertEqual(op?.label, "deploying server Home")
-        XCTAssertEqual(op?.target, .serverDetail(podId: "p1"))
-        XCTAssertEqual(c.operations.count, 1)
+        XCTAssertTrue(c.operations.isEmpty)
+        XCTAssertNil(c.primary)
         XCTAssertEqual(c.additionalCount, 0)
     }
 
@@ -44,34 +45,13 @@ final class ActiveOperationsCenterTests: XCTestCase {
         XCTAssertNil(c.primary)
     }
 
-    func test_syncDeploy_isIdempotent_andDoesNotReorder() {
-        let c = ActiveOperationsCenter()
-        let pods = [pendingPod("p1", name: "Home"), pendingPod("p2", name: "Work")]
-        c.syncDeployOperations(pods: pods)
-        let first = c.operations
-        // A steady re-sync with the same pods must not churn the list (same
-        // ids AND same seq) so the sliver never flickers or reorders.
-        c.syncDeployOperations(pods: pods)
-        XCTAssertEqual(c.operations, first)
-    }
-
-    func test_podLeavingPending_dropsItsDeployOperation() {
-        let c = ActiveOperationsCenter()
-        c.syncDeployOperations(pods: [pendingPod("p1", name: "Home")])
-        XCTAssertEqual(c.operations.count, 1)
-        // The box came online → the deploy op disappears.
-        c.syncDeployOperations(pods: [onlinePod("p1", name: "Home")])
-        XCTAssertTrue(c.operations.isEmpty)
-    }
-
-    func test_deployRename_updatesLabel_butKeepsOrder() {
+    func test_manyPendingPods_stillEmitNoDeployOps() {
         let c = ActiveOperationsCenter()
         c.syncDeployOperations(pods: [pendingPod("p1", name: "Home"), pendingPod("p2", name: "Work")])
-        let seqBefore = c.operations.first(where: { $0.id == "deploy:p2" })?.seq
-        c.syncDeployOperations(pods: [pendingPod("p1", name: "Home"), pendingPod("p2", name: "Workstation")])
-        let renamed = c.operations.first(where: { $0.id == "deploy:p2" })
-        XCTAssertEqual(renamed?.label, "deploying server Workstation")
-        XCTAssertEqual(renamed?.seq, seqBefore, "a rename must not jump the op's position")
+        XCTAssertTrue(c.operations.isEmpty)
+        // Idempotent: a steady re-sync stays empty.
+        c.syncDeployOperations(pods: [pendingPod("p1", name: "Home"), pendingPod("p2", name: "Work")])
+        XCTAssertTrue(c.operations.isEmpty)
     }
 
     // MARK: - Build operations (imperative)
@@ -105,44 +85,28 @@ final class ActiveOperationsCenterTests: XCTestCase {
         XCTAssertNil(c.primary)
     }
 
-    // MARK: - Ordering & mixing the two feeders
+    // MARK: - Mixing: builds survive deploy reconciliation, pending stays hidden
 
-    func test_primaryIsMostRecentlyStarted() {
+    func test_buildIsPrimary_andDeploySyncNeverAddsPending() {
         let c = ActiveOperationsCenter()
-        c.syncDeployOperations(pods: [pendingPod("p1", name: "Home")]) // seq 1
-        c.upsertBuild(id: "s1", subject: "blog", onServer: "Home", target: .vibeCodeChat(sessionId: "s1")) // seq 2
-        XCTAssertEqual(c.primary?.kind, .build, "the newest op is the one the sliver shows")
-        XCTAssertEqual(c.additionalCount, 1)
-
-        // When the build finishes the deploy is primary again.
-        c.removeBuild(id: "s1")
-        XCTAssertEqual(c.primary?.kind, .deploy)
+        c.upsertBuild(id: "s1", subject: "blog", onServer: "Home", target: .vibeCodeChat(sessionId: "s1"))
+        XCTAssertEqual(c.primary?.kind, .build, "build ops still drive the sliver")
         XCTAssertEqual(c.additionalCount, 0)
     }
 
-    func test_deploySync_preservesBuildOperations() {
+    func test_deploySync_preservesBuildOperations_andAddsNothingForPending() {
         let c = ActiveOperationsCenter()
         c.upsertBuild(id: "s1", subject: "blog", onServer: "Home", target: .vibeCodeChat(sessionId: "s1"))
         c.syncDeployOperations(pods: [pendingPod("p1", name: "Home")])
-        XCTAssertEqual(c.operations.count, 2, "reconciling deploys must not wipe build ops")
-        XCTAssertTrue(c.operations.contains { $0.kind == .build })
-        XCTAssertTrue(c.operations.contains { $0.kind == .deploy })
+        XCTAssertEqual(c.operations.count, 1, "reconciling deploys must not wipe build ops nor add pending ops")
+        XCTAssertTrue(c.operations.allSatisfy { $0.kind == .build })
     }
 
-    func test_mixedOperations_countAndAdditional() {
+    func test_mixedOperations_onlyBuildsCount() {
         let c = ActiveOperationsCenter()
         c.syncDeployOperations(pods: [pendingPod("p1", name: "Home"), pendingPod("p2", name: "Work")])
         c.upsertBuild(id: "s1", subject: "blog", onServer: "Home", target: .vibeCodeChat(sessionId: "s1"))
-        XCTAssertEqual(c.operations.count, 3)
-        XCTAssertEqual(c.additionalCount, 2)
-    }
-
-    func test_deployAndBuildIds_neverCollide() {
-        // A pod and a build session could share a raw id; the center
-        // namespaces them so both ops coexist.
-        let c = ActiveOperationsCenter()
-        c.syncDeployOperations(pods: [pendingPod("x", name: "Home")])
-        c.upsertBuild(id: "x", subject: "blog", onServer: "Home", target: .vibeCodeChat(sessionId: "x"))
-        XCTAssertEqual(c.operations.count, 2)
+        XCTAssertEqual(c.operations.count, 1)
+        XCTAssertEqual(c.additionalCount, 0)
     }
 }

@@ -245,7 +245,16 @@ async function main(): Promise<void> {
   const irk = keypairFromSeed(randomBytes(32)); // the app's OWN IRK, NOT the demo IRK
   const irkPubHex = bytesToHex(irk.publicKey);
   const irkPrivHex = bytesToHex(irk.privateKey);
-  const user = "rcp" + Date.now().toString(36).slice(-6);
+  // Names are claimable ONLY if the server recently SUGGESTED them
+  // (docs/username-suggestion-queue.md), so take one from /api/username/suggest.
+  const suggestDeviceKey = bytesToHex(keypairFromSeed(randomBytes(32)).publicKey);
+  const sug = await http(`https://${CONTROL}/api/username/suggest`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ deviceKey: suggestDeviceKey }),
+  });
+  const user: string = sug.json?.name;
+  if (!user) throw new Error(`username suggest failed (${sug.status}): ${sug.text.slice(0, 140)}`);
   const serverName = "home";
   const serverDomain = `${serverName}.${user}.${SERVICES}`;
   const fqdn = serverDomain;

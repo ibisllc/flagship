@@ -12,7 +12,7 @@ The control plane (`flagshipserver.com` — Cloudflare Worker + D1 + R2)
 stores only:
 
 - A **username** of the user's choice. Users pick handles, pseudonyms, or
-  one-time burner names. The username is a routing label, not an identity.
+  one-time builder names. The username is a routing label, not an identity.
 - An **IRK public key** — cryptographic identity. The pubkey is a 32-byte
   Ed25519 point; it does not derive from anything humans recognize.
 - **Opaque encrypted recovery data** (the wrapped UMK under WebAuthn-PRF

@@ -198,7 +198,7 @@ describe("loginTakeover completeRePair — outcomes by status", () => {
 
 describe("loginTakeover finishTakeover — gate + finalize + open", () => {
   function takeoverObj(completesAt: number) {
-    return { username: "harry", rePair: singleRePair(completesAt), deviceLabel: "admin" };
+    return { username: "harry", rePair: singleRePair(completesAt), deviceId: "11".repeat(16) };
   }
 
   it("before the deadline → too-early, no POST, no finalize", async () => {

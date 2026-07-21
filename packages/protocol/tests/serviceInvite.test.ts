@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveAccountId,
+  deriveContactAccountId,
   deriveHouseholdKey,
   deriveIRK,
 } from "../src/keys.js";
@@ -23,6 +24,10 @@ import {
   verifyKnockAuthorization,
   signRemoveServiceAllow,
   verifyRemoveServiceAllow,
+  signAcceptServiceInvite,
+  verifyAcceptServiceInvite,
+  randomServiceInviteId,
+  type AcceptServiceInvite,
   type CreateServiceInvite,
   type RedeemServiceInvite,
   type RevokeServiceInvite,
@@ -360,5 +365,102 @@ describe("remove-from-allow-list (owner-IRK-signed prune)", () => {
   it("does not verify under a stranger key (only the owner IRK can prune)", () => {
     const sig = signRemoveServiceAllow(remove, authorIrk);
     expect(verifyRemoveServiceAllow(remove, sig, friendAid.publicKey)).toBe(false);
+  });
+});
+
+describe("v2 — pairwise contact AID (deriveContactAccountId)", () => {
+  it("is stable per (consumer, author) and matches the pinned vector", () => {
+    const c1 = deriveContactAccountId(friendUmk, authorAid.publicKey);
+    const c2 = deriveContactAccountId(friendUmk, authorAid.publicKey);
+    expect(hexOf(c1.publicKey)).toBe(hexOf(c2.publicKey));
+    expect(hexOf(c1.publicKey)).toBe(
+      "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a",
+    );
+  });
+
+  it("is UNLINKABLE across authors (same friend, different author ⇒ different id)", () => {
+    const author2 = deriveAccountId({ seed: new Uint8Array(32).fill(0x0c) });
+    const a = hexOf(deriveContactAccountId(friendUmk, authorAid.publicKey).publicKey);
+    const b = hexOf(deriveContactAccountId(friendUmk, author2.publicKey).publicKey);
+    expect(a).not.toBe(b);
+  });
+
+  it("differs from the friend's global AID (the consumer presents a pseudonym, not their account id)", () => {
+    const contact = deriveContactAccountId(friendUmk, authorAid.publicKey);
+    expect(hexOf(contact.publicKey)).not.toBe(hexOf(friendAid.publicKey));
+  });
+});
+
+describe("v2 — manual-approve acceptance (AID-signed by the friend's contact AID)", () => {
+  const contact = deriveContactAccountId(friendUmk, authorAid.publicKey);
+  const accept: AcceptServiceInvite = {
+    inviteId: "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890",
+    serviceRef: "alice-notes",
+    contactAID: contact.publicKey,
+    acceptedAt: 1700006000000,
+  };
+
+  it("signs + verifies under the contact AID + matches the pinned vector", () => {
+    const sig = signAcceptServiceInvite(accept, contact);
+    expect(verifyAcceptServiceInvite(accept, sig, contact.publicKey)).toBe(true);
+    expect(hexOf(sig)).toBe(
+      "1c54021039b6698f5d8d9d5b002c0528f5f82d90fb2de05ecde79082a9f5838c445e23907f4826ec53a061cec8581baaf0fc7fb7ee5234873bfe18ebea81f808",
+    );
+  });
+
+  it("rejects a different inviteId / serviceRef (both are in the signature)", () => {
+    const sig = signAcceptServiceInvite(accept, contact);
+    expect(verifyAcceptServiceInvite({ ...accept, inviteId: "00".repeat(32) }, sig, contact.publicKey)).toBe(false);
+    expect(verifyAcceptServiceInvite({ ...accept, serviceRef: "alice-secret" }, sig, contact.publicKey)).toBe(false);
+  });
+
+  it("does not verify under a stranger key", () => {
+    const sig = signAcceptServiceInvite(accept, contact);
+    expect(verifyAcceptServiceInvite(accept, sig, friendAid.publicKey)).toBe(false);
+  });
+});
+
+describe("v2 — create maxN/expiry (group links, backward-compatible bytes)", () => {
+  const base: CreateServiceInvite = {
+    inviteId: "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890",
+    authorAID: authorAid.publicKey,
+    serviceRef: "alice-notes",
+    secretHash: "4bb06f8e4e3a7715d201d573d0aa423762e55dabd61a2c02278fa56cc6d294e0",
+    encryptedBundle: "00",
+    issuedAt: 1700000000000,
+  };
+
+  it("a create WITHOUT maxN/exp signs byte-identically to the v1 create vector", () => {
+    expect(hexOf(signCreateServiceInvite(base, authorIrk))).toBe(
+      "90359a5a49f1da7272850e991b03e2533b12d42b90dd26cf62cd77a0dcae23464d683d3d92aa4374a476b4029e0639a63864ed10104b4ffd2f0a2f9fba780700",
+    );
+  });
+
+  it("a create WITH maxN+exp matches the pinned createMaxN vector", () => {
+    const grp: CreateServiceInvite = { ...base, maxRedemptions: 10, expiresAt: 1700009999999 };
+    const sig = signCreateServiceInvite(grp, authorIrk);
+    expect(verifyCreateServiceInvite(grp, sig, authorIrk.publicKey)).toBe(true);
+    expect(hexOf(sig)).toBe(
+      "785641620cb5378afa127819a19f4e1ff110c0bea35678da3365327cf539aa3e148e3eab2246245c9ede4270dec85c4e166b88887a9988fa065f5d7ded06ce02",
+    );
+  });
+
+  it("a maxN-bearing sig does NOT verify against the no-maxN create (the cap is signed)", () => {
+    const grp: CreateServiceInvite = { ...base, maxRedemptions: 10, expiresAt: 1700009999999 };
+    const sig = signCreateServiceInvite(grp, authorIrk);
+    expect(verifyCreateServiceInvite(base, sig, authorIrk.publicKey)).toBe(false);
+  });
+
+  it("rejects a negative / non-integer maxRedemptions at sign time", () => {
+    expect(() => signCreateServiceInvite({ ...base, maxRedemptions: -1 }, authorIrk)).toThrow();
+  });
+});
+
+describe("v2 — randomServiceInviteId", () => {
+  it("is 64-char lowercase hex and unique per call", () => {
+    const a = randomServiceInviteId();
+    const b = randomServiceInviteId();
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
+    expect(a).not.toBe(b);
   });
 });

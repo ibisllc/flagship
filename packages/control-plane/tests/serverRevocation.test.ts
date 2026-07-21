@@ -396,6 +396,7 @@ function depsWithGrants(storage: InMemoryStorage) {
     ...deps(storage),
     grants: {
       storage: storage.deviceCapabilityGrants,
+      identities: storage.deviceIdentities,
       usernames: storage.usernames,
     },
   };
@@ -409,7 +410,7 @@ async function mintDeviceGrant(
   device: Keypair,
   opts: {
     scopes: DeviceScope[];
-    deviceLabel?: string;
+    deviceId?: string;
     grantId?: string;
     issuedAt?: number;
     expiresAt?: number;
@@ -418,10 +419,20 @@ async function mintDeviceGrant(
   const issuedAt = opts.issuedAt ?? Date.now();
   const expiresAt = opts.expiresAt ?? issuedAt + 90 * 24 * 3_600_000;
   const grantId = opts.grantId ?? `grant-${Math.random().toString(36).slice(2)}`;
+  const deviceId = opts.deviceId ?? bytesToHex(device.publicKey.slice(0, 16));
+  await storage.deviceIdentities.put({
+    accountId: USERNAME,
+    deviceId,
+    devicePubHex: bytesToHex(device.publicKey),
+    platformClass: null,
+    createdAt: issuedAt,
+    lastSeenAt: issuedAt,
+    revokedAt: null,
+  });
   const grant: DeviceCapabilityGrant = {
     grantId,
     username: USERNAME,
-    deviceLabel: opts.deviceLabel ?? "ipad",
+    deviceId,
     devicePubKey: device.publicKey,
     scopes: opts.scopes,
     issuedAt,
@@ -429,12 +440,16 @@ async function mintDeviceGrant(
   };
   const sig = signDeviceCapabilityGrant(grant, harryIrk);
   const r = await handleMintDeviceGrant(
-    { storage: storage.deviceCapabilityGrants, usernames: storage.usernames },
+    {
+      storage: storage.deviceCapabilityGrants,
+      identities: storage.deviceIdentities,
+      usernames: storage.usernames,
+    },
     {
       grant: {
         grantId,
         username: USERNAME,
-        deviceLabel: grant.deviceLabel,
+        deviceId: grant.deviceId,
         devicePubKey: bytesToHex(device.publicKey),
         scopes: opts.scopes,
         issuedAt,
@@ -481,15 +496,13 @@ describe("POST /api/server-registry/revoke — device-authorized path (signerPub
     expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeGreaterThan(0);
   });
 
-  it("owner via signerPubHex (owner IRK pubkey) → 200 (user-IRK fast path)", async () => {
+  it("owner IRK presented as a device signer is rejected without an active device grant", async () => {
     const storage = await setUpClaimedHarry();
     await seedServer(storage);
-    // No grant minted: the owner's own IRK pubkey satisfies requireDeviceScope
-    // directly (the user-IRK fast path), AND the envelope is owner-signed.
     const body = deviceRevokeBody(harryIrk);
     const r = await handleRevokeServer(depsWithGrants(storage), body);
-    expect(r.status).toBe(200);
-    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeGreaterThan(0);
+    expect(r.status).toBe(403);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeUndefined();
   });
 
   it("device WITH an active revoke-others grant → 200", async () => {
@@ -584,6 +597,7 @@ describe("POST /api/server-registry/revoke — device-authorized path (signerPub
     const later = mintAt + 10_000;
     const grantsDeps = {
       storage: storage.deviceCapabilityGrants,
+      identities: storage.deviceIdentities,
       usernames: storage.usernames,
       now: () => later,
     };
@@ -679,19 +693,23 @@ describe("POST /api/server-registry/revoke — device-authorized path (signerPub
     const grant: DeviceCapabilityGrant = {
       grantId: "bob-grant",
       username: "bob",
-      deviceLabel: "ipad",
+      deviceId: bytesToHex(bobDevice.publicKey.slice(0, 16)),
       devicePubKey: bobDevice.publicKey,
       scopes: ["revoke-others"],
       issuedAt: Date.now(),
       expiresAt: Date.now() + 90 * 24 * 3_600_000,
     };
     await handleMintDeviceGrant(
-      { storage: storage.deviceCapabilityGrants, usernames: storage.usernames },
+      {
+        storage: storage.deviceCapabilityGrants,
+        identities: storage.deviceIdentities,
+        usernames: storage.usernames,
+      },
       {
         grant: {
           grantId: grant.grantId,
           username: "bob",
-          deviceLabel: grant.deviceLabel,
+          deviceId: grant.deviceId,
           devicePubKey: bytesToHex(bobDevice.publicKey),
           scopes: ["revoke-others"],
           issuedAt: grant.issuedAt,

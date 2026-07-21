@@ -87,7 +87,7 @@ fun PendingServerScreen(pod: PodInfo, username: String? = null, onCancel: () -> 
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
-        FSPill("Pending", kind = FSPillKind.Provisioning)
+        FSPill("Pending", kind = FSPillKind.Pending)
         Spacer(Modifier.height(FS.space.s4))
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column {

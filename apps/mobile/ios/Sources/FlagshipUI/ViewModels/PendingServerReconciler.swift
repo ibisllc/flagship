@@ -52,21 +52,40 @@ public struct PendingServerReconciler {
     /// couldn't reach the directory this pass; leave existing state as-is.
     public typealias PodsFetcher = @MainActor (_ username: String) async -> PodsDirectoryResponse?
 
+    /// Fired ONCE per registered (non-revoked) box surfaced this pass, with its
+    /// FQDN + REGISTERED identity pubkey (hex). The secret-free-recipe SWK
+    /// deposit hangs off this: a box that registered without an embedded SWK now
+    /// has a directory identity to seal the SWK to. Best-effort + idempotent in
+    /// the handler (it no-ops unless a deposit is owed). Default no-op.
+    public typealias RegisteredHandler = @MainActor (_ fqdn: String, _ identityPubKeyHex: String) async -> Void
+
+    /// Fired ONCE per reconcile with the raw `/pods` entries, BEFORE any
+    /// per-pod mapping — the seam the per-cert relay-trust aggregation hangs off
+    /// (it needs each box's STK-signed `trustStatus` + `identityPubKey`, which
+    /// the mapped `PodInfo` doesn't carry). Default no-op.
+    public typealias DirectoryHandler = @MainActor (_ pods: [PodDirectoryEntry]) -> Void
+
     private let app: AppState
     private let store: PendingServerStore
     private let fetchPods: PodsFetcher
+    private let onRegistered: RegisteredHandler
+    private let onDirectory: DirectoryHandler
     private let now: () -> Int64
 
     public init(
         app: AppState,
         store: PendingServerStore = PendingServerStore(),
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
-        fetchPods: @escaping PodsFetcher
+        fetchPods: @escaping PodsFetcher,
+        onRegistered: @escaping RegisteredHandler = { _, _ in },
+        onDirectory: @escaping DirectoryHandler = { _ in }
     ) {
         self.app = app
         self.store = store
         self.now = now
         self.fetchPods = fetchPods
+        self.onRegistered = onRegistered
+        self.onDirectory = onDirectory
     }
 
     /// Run the full reconcile from the single merged `/pods` fetch. Best-effort:
@@ -81,11 +100,19 @@ public struct PendingServerReconciler {
         // A nil (couldn't reach the directory) leaves all state untouched.
         guard let directory = await fetchPods(username) else { return }
 
-        // Surface every registered server as `.online` — REGARDLESS of
-        // lastReported/cert (the channel `.com` returns null for a
-        // content-blind / just-live box). A registered fqdn matching a pending
-        // pod flips it online in place (identity unified on the fqdn); a new
-        // fqdn is added fresh.
+        // Per-cert relay-trust aggregation (maintainer-trust Layer 3): hand the
+        // raw entries to the aggregation seam BEFORE mapping, since it verifies
+        // each box's STK-signed `trustStatus` under `identityPubKey`.
+        onDirectory(directory.pods)
+
+        // HONEST LIVENESS (Fix A) — surface every registered server with its
+        // server-authoritative `liveness` (`live`/`unreachable`/`never`), NOT a
+        // blanket `.online`. The phone STOPS trusting mere registration: a box
+        // that registered its STK but never heartbeats reads "still coming up",
+        // a previously-live box that's now stale reads "offline — last seen <…>",
+        // and only a `live` box anchors a session / qualifies as a live leader.
+        // A registered fqdn matching a pending pod flips it in place (identity
+        // unified on the fqdn); a new fqdn is added fresh.
         let registeredEntries = directory.pods.filter { $0.revokedAt == nil }
         for entry in registeredEntries where !entry.serverDomain.isEmpty {
             let fqdn = entry.serverDomain
@@ -101,8 +128,23 @@ public struct PendingServerReconciler {
                 name: pendingName ?? Self.serverNameFromFqdn(fqdn),
                 cameOnline: entry.cameOnline,
                 registeredAt: entry.registeredAt ?? 0,
-                awaitingUnlock: entry.awaitingUnlock
+                // Derived from the Box Request Inbox digest (the `awaitingUnlock`
+                // boolean was dropped from /pods): this per-pod flag is the
+                // "from the last full reconcile" unlock signal, OR'd at read-time
+                // with the live watcher inbox in `AppState.isAwaitingUnlock`.
+                awaitingUnlock: entry.pendingRequests.contains { $0.type == SecretPurpose.unlockKey.rawValue },
+                liveness: PodInfo.Liveness(rawValue: entry.liveness ?? ""),
+                lastSeenMsAgo: entry.lastSeenMsAgo,
+                lastReported: entry.lastReported,
+                identityPubKeyHex: entry.identityPubKey,
+                leadsServices: entry.leadsServices
             )
+            // Secret-free recipe: a registered box now has a directory identity
+            // to seal the SWK to. The handler no-ops unless a deposit is owed
+            // for this fqdn (idempotent via PendingSwkDepositStore).
+            if !entry.identityPubKey.isEmpty {
+                await onRegistered(fqdn, entry.identityPubKey)
+            }
         }
 
         // The registered servers are the non-pending pods now (including the

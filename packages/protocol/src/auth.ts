@@ -45,6 +45,8 @@ export * from "./push.js";
 export * from "./llmPromo.js";
 export * from "./entitlements.js";
 export * from "./deviceCapability.js";
+export * from "./adminRootRotation.js";
+export * from "./adminRootTransfer.js";
 export * from "./watchDelegate.js";
 export * from "./acmeCustody.js";
 export * from "./certRevocation.js";

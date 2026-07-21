@@ -1,9 +1,10 @@
 import {
-  signSecretRequest,
   verifyRootEntitlement,
-  type Keypair,
+  type AdminGrantView,
   type SecretRequest,
 } from "@flagship/protocol";
+import type { BoxSigner } from "./keyCustodian.js";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import {
   parseEntitlementBundle,
@@ -42,12 +43,21 @@ const HEX_NONCE = /^[0-9a-f]{64}$/;
 export interface FetchEntitlementViaRelayOptions {
   /** This box's canonical FQDN (= the daemon's serverFqdn). */
   serverDomain: string;
-  /** The daemon identity keypair — signs the SecretRequest with the STK. */
-  identity: Keypair;
+  /** Box-identity signer (custodian slice) — signs the SecretRequest as the
+   *  STK + supplies its pubkey; never the raw keypair. */
+  signer: BoxSigner;
   /** The user's IRK pubkey (baked into the install config) — verifies the
    *  RootEntitlement signature. The relay reply is checked against THIS,
    *  not against anything `.com` asserts. */
   ownerIrkPub: Uint8Array;
+  /** Slice D — the pinned admin master root (`ServerConfig.adminRootPub`);
+   *  present ⇒ the RootEntitlement is gated by `requireMasterAdmin`, absent ⇒
+   *  legacy owner-IRK verification (a strict no-op on pre-wipe boxes). */
+  adminRootPub?: Uint8Array;
+  /** This box's owner account (cfg.userId) — for the delegated-grant check. */
+  username?: string;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
   /** `.com` base URL. */
   controlPlaneBaseUrl: string;
   /** Where to persist the fetched bundle once verified. */
@@ -96,18 +106,18 @@ function defaultRandomNonce(): Uint8Array {
  */
 export function buildEntitlementSecretRequest(args: {
   serverDomain: string;
-  identity: Keypair;
+  signer: BoxSigner;
   nonce: Uint8Array;
   issuedAt: number;
 }): { request: SecretRequest; signatureHex: string } {
   const request: SecretRequest = {
     serverDomain: args.serverDomain,
-    stkPub: args.identity.publicKey,
+    stkPub: args.signer.boxPublicKey(),
     purpose: "entitlement",
     nonce: args.nonce,
     issuedAt: args.issuedAt,
   };
-  const sig = signSecretRequest(request, args.identity);
+  const sig = args.signer.signSecretRequest(request);
   return { request, signatureHex: bytesToHex(sig) };
 }
 
@@ -128,6 +138,12 @@ export function decodeAndVerifyEntitlementCarrier(args: {
   ownerIrkPub: Uint8Array;
   serverDomain: string;
   stkPub: Uint8Array;
+  /** Slice D — pinned admin master root; present ⇒ authority gate, absent ⇒ legacy owner-IRK. */
+  adminRootPub?: Uint8Array;
+  /** Account name for the delegated-grant check (unused on the bare-root path). */
+  username?: string;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
 }): EntitlementBundle {
   const hex = args.sealedHex.toLowerCase();
   if (!/^[0-9a-f]+$/.test(hex) || hex.length % 2 !== 0) {
@@ -148,16 +164,22 @@ export function decodeAndVerifyEntitlementCarrier(args: {
   // parseEntitlementBundle throws on any structural defect.
   const bundle = parseEntitlementBundle(parsed);
 
-  // The signature MUST verify under the user's IRK — `.com` is not a
-  // trust anchor, so re-verify everything the relay returns.
+  // Slice D — the RootEntitlement is an administrative "authorize this box"
+  // order, so it verifies under the pinned admin master root when present
+  // (falling back to the owner IRK on a pre-wipe box). `.com` is not a trust
+  // anchor, so re-verify everything the relay returns.
   if (
-    !verifyRootEntitlement(
-      bundle.rootEntitlement,
-      bundle.rootEntitlementSig,
-      args.ownerIrkPub,
-    )
+    !authorizeSensitiveOrder({
+      order: bundle.rootEntitlement,
+      signature: bundle.rootEntitlementSig,
+      verify: verifyRootEntitlement,
+      ownerIrkPub: args.ownerIrkPub,
+      adminRootPub: args.adminRootPub,
+      username: args.username ?? "",
+      activeGrants: args.activeGrants,
+    })
   ) {
-    throw new Error("entitlement RootEntitlement signature does not verify under the owner IRK");
+    throw new Error("entitlement RootEntitlement signature is not authorized (admin root / owner IRK)");
   }
 
   // Bind to THIS box: a relay (or anyone) cannot hand us a bundle minted
@@ -213,7 +235,7 @@ export async function fetchEntitlementViaRelay(
 
   const { request, signatureHex } = buildEntitlementSecretRequest({
     serverDomain: opts.serverDomain,
-    identity: opts.identity,
+    signer: opts.signer,
     nonce,
     issuedAt: now(),
   });
@@ -294,7 +316,10 @@ export async function fetchEntitlementViaRelay(
           sealedHex,
           ownerIrkPub: opts.ownerIrkPub,
           serverDomain: opts.serverDomain,
-          stkPub: opts.identity.publicKey,
+          stkPub: opts.signer.boxPublicKey(),
+          ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
+          ...(opts.username ? { username: opts.username } : {}),
+          ...(opts.activeGrants ? { activeGrants: opts.activeGrants } : {}),
         });
       } catch (e) {
         log(`[entitlement-relay] carrier rejected: ${(e as Error).message}`);
@@ -328,4 +353,111 @@ async function safeText(res: { text(): Promise<string> }): Promise<string> {
   } catch {
     return "";
   }
+}
+
+export interface ClaimEntitlementDepositOptions {
+  /** This box's canonical FQDN. */
+  serverDomain: string;
+  /** The user's IRK pubkey (baked into the config) — the carrier is verified
+   *  against THIS, never against anything `.com` asserts. */
+  ownerIrkPub: Uint8Array;
+  /** Slice D — the pinned admin master root (`ServerConfig.adminRootPub`);
+   *  present ⇒ the RootEntitlement is gated by `requireMasterAdmin`, absent ⇒
+   *  legacy owner-IRK verification (a strict no-op on pre-wipe boxes). */
+  adminRootPub?: Uint8Array;
+  /** This box's owner account (cfg.userId) — for the delegated-grant check. */
+  username?: string;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
+  /** This box's STK pubkey — the entitlement must bind to it. */
+  stkPub: Uint8Array;
+  /** `.com` base URL. */
+  controlPlaneBaseUrl: string;
+  /** Where to persist the claimed bundle. */
+  entitlementBundlePath: string;
+  /** GET attempts before giving up. The phone deposits at unlock-approval —
+   *  the same gesture that hands the box its disk key — so the deposit is
+   *  almost always already waiting by the time the daemon checks; a few
+   *  retries only cover a slightly-late deposit. Default 4. */
+  attempts?: number;
+  /** Sleep between attempts (ms). Default 5000. */
+  retryMs?: number;
+  fetchImpl?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+  onLog?: (m: string) => void;
+}
+
+/**
+ * Claim a phone-DEPOSITED entitlement before falling back to a relay request.
+ *
+ * The phone pre-deposits an IRK-signed RootEntitlement for this box's STK at
+ * the moment it approves the first-boot unlock (it already holds the STK from
+ * the unlock request), so an encrypted box comes online with a SINGLE owner
+ * approval — no separate "authorize it to serve" tap. The daemon checks for
+ * that deposit FIRST; only if there is none does it issue a relay request.
+ *
+ * `.com` is a blind store-and-forward: the deposited carrier is the same
+ * public, IRK-signed entitlement the box presents at the hub HELLO (NOT a
+ * secret), so a public consume-once GET reveals nothing usable without the STK
+ * private key. We verify the carrier under the OWNER IRK + bind it to our STK
+ * and podCanonical before trusting it. Returns null on no-deposit / any
+ * mismatch so the caller falls back to the relay — never a brick.
+ */
+export async function claimEntitlementDeposit(
+  opts: ClaimEntitlementDepositOptions,
+): Promise<EntitlementBundle | null> {
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  const sleep =
+    opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const log = opts.onLog ?? (() => {});
+  const attempts = opts.attempts ?? 4;
+  const retryMs = opts.retryMs ?? 5000;
+  const base = opts.controlPlaneBaseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/server/${encodeURIComponent(opts.serverDomain)}/entitlement-deposit`;
+
+  for (let i = 0; i < attempts; i += 1) {
+    if (i > 0) await sleep(retryMs);
+    let sealedHex: string | undefined;
+    try {
+      const res = await fetchImpl(url, { method: "GET" });
+      if (res.status === 404) continue; // not deposited (yet) — keep trying
+      if (!res.ok) {
+        log(`[entitlement-deposit] GET ${res.status}; falling back to relay`);
+        return null;
+      }
+      const body = (await res.json()) as { sealed?: string };
+      sealedHex = body?.sealed;
+    } catch (e) {
+      log(`[entitlement-deposit] GET failed: ${(e as Error).message}; retrying`);
+      continue; // transient — keep trying within the bounded window
+    }
+    if (typeof sealedHex !== "string" || sealedHex.length === 0) {
+      log("[entitlement-deposit] reply missing carrier; falling back to relay");
+      return null;
+    }
+    let bundle: EntitlementBundle;
+    try {
+      bundle = decodeAndVerifyEntitlementCarrier({
+        sealedHex,
+        ownerIrkPub: opts.ownerIrkPub,
+        serverDomain: opts.serverDomain,
+        stkPub: opts.stkPub,
+        ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
+        ...(opts.username ? { username: opts.username } : {}),
+        ...(opts.activeGrants ? { activeGrants: opts.activeGrants } : {}),
+      });
+    } catch (e) {
+      log(`[entitlement-deposit] carrier rejected: ${(e as Error).message}; falling back to relay`);
+      return null;
+    }
+    try {
+      await writeEntitlementBundle(opts.entitlementBundlePath, bundle);
+    } catch (e) {
+      // Serve now even if the on-disk persist failed; it re-claims next boot.
+      log(`[entitlement-deposit] persist failed (continuing): ${(e as Error).message}`);
+    }
+    log("[entitlement-deposit] claimed a phone-deposited entitlement");
+    return bundle;
+  }
+  return null; // no deposit within the window → caller issues a relay request
 }

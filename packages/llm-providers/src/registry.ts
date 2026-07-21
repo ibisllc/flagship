@@ -1,19 +1,21 @@
 import { anthropic, anthropicStreaming } from "./providers/anthropic.js";
 import { openai, openaiStreaming } from "./providers/openai.js";
 import { google, googleStreaming } from "./providers/google.js";
-import { openrouter } from "./providers/openrouter.js";
+import { openrouter, openrouterStreaming } from "./providers/openrouter.js";
 import { ollama } from "./providers/ollama.js";
+import { flagship, flagshipStreaming } from "./providers/flagship.js";
 import type { LLMProvider, StreamingLLMProvider } from "./types.js";
 
-const builtins: LLMProvider[] = [anthropic, openai, google, openrouter, ollama];
+const builtins: LLMProvider[] = [anthropic, openai, google, openrouter, ollama, flagship];
 
-// Only providers with a real SSE streaming adapter. openrouter (an
-// OpenAI-compatible proxy) + ollama are intentionally excluded for now —
-// they fall back to the non-streaming `chat()` path.
+// Only providers with a real streaming adapter. Ollama is intentionally
+// excluded for now and falls back to the non-streaming `chat()` path.
 const streamingBuiltins: StreamingLLMProvider[] = [
   anthropicStreaming,
   openaiStreaming,
   googleStreaming,
+  openrouterStreaming,
+  flagshipStreaming,
 ];
 
 export class ProviderRegistry {
@@ -49,7 +51,7 @@ export const defaultRegistry = new ProviderRegistry();
  * but keyed on `StreamingLLMProvider`. The harness resolves a streaming
  * adapter by provider name from this; `has()` lets a caller fall back to
  * the non-streaming `chat()` path when a provider has no streaming
- * adapter (openrouter / ollama).
+ * adapter (ollama).
  */
 export class StreamingProviderRegistry {
   private providers = new Map<string, StreamingLLMProvider>();

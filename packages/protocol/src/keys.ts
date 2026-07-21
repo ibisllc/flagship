@@ -10,6 +10,7 @@ const INFO_STK = "flagship.stk.v1";
 const INFO_APP_SECRET = "flagship.app-secret.v1";
 const INFO_APP_MEMBER = "flagship.app-member.v1";
 const INFO_ACCOUNT_ID = "flagship/account-id/v1";
+const INFO_CONTACT_ID = "flagship/contact-aid/v1";
 const INFO_HOUSEHOLD_KEY = "flagship/household-key/v1";
 
 export function generateUMK(rng: () => Bytes = randomBytes): UserMasterKey {
@@ -54,6 +55,32 @@ export function deriveIRK(umk: UserMasterKey): Keypair {
  */
 export function deriveAccountId(umk: UserMasterKey): Keypair {
   return seedToKeypair(derive(umk, INFO_ACCOUNT_ID));
+}
+
+/**
+ * Contact Account Id — a PER-AUTHOR pseudonymous identity the consumer (friend)
+ * presents when redeeming / visiting / authorizing a given author's services.
+ * Derived from the consumer's UMK + the AUTHOR's AID pubkey, so:
+ *  - it is STABLE with that author (survives the consumer's IRK rotations + new
+ *    devices, and re-redeem is idempotent — same UMK + same author ⇒ same id),
+ *  - two DIFFERENT authors get UNLINKABLE ids for the same consumer, so neither
+ *    the authors nor flagshipserver.com can cross-link the same person across
+ *    hosts (privacy by construction — closes the cleartext-friend-graph gap,
+ *    docs/service-access-gating.md v2 §H3), and
+ *  - it stays per-AUTHOR (not per-service), so cross-app reuse within one author
+ *    still works (add the friend to another of your services with the same id,
+ *    no new link).
+ * The v2 redemption identity replaces the GLOBAL AID for the CONSUMER side; the
+ * author still uses their own (global) AID for create/revoke attribution.
+ */
+export function deriveContactAccountId(umk: UserMasterKey, authorAidPub: Bytes): Keypair {
+  return seedToKeypair(derive(umk, `${INFO_CONTACT_ID}|${hexOf(authorAidPub)}`));
+}
+
+function hexOf(b: Bytes): string {
+  let s = "";
+  for (const x of b) s += x.toString(16).padStart(2, "0");
+  return s;
 }
 
 /**

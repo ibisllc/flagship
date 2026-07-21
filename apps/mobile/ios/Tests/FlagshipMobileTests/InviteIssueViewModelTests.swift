@@ -24,7 +24,7 @@ final class InviteIssueViewModelTests: XCTestCase {
         )
         let book = InMemoryInviteLabelBook()
         let vm = InviteIssueViewModel(
-            serviceId: "harry-plants",
+            serviceId: "harry--plants",
             appUrl: "https://plants.harry.flagship.services",
             client: client,
             labelBook: book,
@@ -45,7 +45,7 @@ final class InviteIssueViewModelTests: XCTestCase {
         XCTAssertEqual(expiresAt, 1_800_000_000_000)
         XCTAssertEqual(
             shareUrl,
-            "https://plants.harry.flagship.services/invite#k=\(secret)&a=harry-plants"
+            "https://plants.harry.flagship.services/invite#k=\(secret)&a=harry--plants"
         )
 
         // Privacy: the wire request carries only the daemon-visible
@@ -53,13 +53,13 @@ final class InviteIssueViewModelTests: XCTestCase {
         // local label fields stay in the label book.
         XCTAssertEqual(client.appInviteIssueCalls.count, 1)
         let req = client.appInviteIssueCalls[0]
-        XCTAssertEqual(req.serviceId, "harry-plants")
+        XCTAssertEqual(req.serviceId, "harry--plants")
         XCTAssertEqual(req.role, "admin")
         XCTAssertEqual(req.opaqueTag, "00112233445566778899aabbccddeeff")
         XCTAssertEqual(req.contextNote, "from harry's phone")
 
         // Local row written under the same tag.
-        let row = book.get(serviceId: "harry-plants", opaqueTagHex: "00112233445566778899aabbccddeeff")
+        let row = book.get(serviceId: "harry--plants", opaqueTagHex: "00112233445566778899aabbccddeeff")
         XCTAssertEqual(row?.displayName, "John (work)")
         XCTAssertEqual(row?.channel, "imessage")
         XCTAssertEqual(row?.sentTo, "+1 555 0142")
@@ -69,7 +69,7 @@ final class InviteIssueViewModelTests: XCTestCase {
         let client = makeClient()
         let book = InMemoryInviteLabelBook()
         let vm = InviteIssueViewModel(
-            serviceId: "harry-plants",
+            serviceId: "harry--plants",
             appUrl: "https://plants.harry.flagship.services",
             client: client,
             labelBook: book,
@@ -88,7 +88,7 @@ final class InviteIssueViewModelTests: XCTestCase {
         let client = makeClient()
         let book = InMemoryInviteLabelBook()
         let vm = InviteIssueViewModel(
-            serviceId: "harry-plants",
+            serviceId: "harry--plants",
             appUrl: "https://plants.harry.flagship.services",
             client: client,
             labelBook: book
@@ -107,7 +107,7 @@ final class InviteIssueViewModelTests: XCTestCase {
         let client = makeClient()
         let book = InMemoryInviteLabelBook()
         let vm = InviteIssueViewModel(
-            serviceId: "harry-plants",
+            serviceId: "harry--plants",
             appUrl: "https://plants.harry.flagship.services",
             client: client,
             labelBook: book
@@ -129,7 +129,7 @@ final class InviteIssueViewModelTests: XCTestCase {
         let client = makeClient()
         client.shouldFail = true
         let vm = InviteIssueViewModel(
-            serviceId: "harry-plants",
+            serviceId: "harry--plants",
             appUrl: "https://x.flagship.services",
             client: client,
             labelBook: InMemoryInviteLabelBook()

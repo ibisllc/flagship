@@ -33,8 +33,8 @@ import {
   type InstallBlob,
 } from "@flagship/protocol";
 import type { AuthCodeStorage, UsernameStorage } from "@flagship/storage";
-import { buildCloudConfigUserData } from "./demoUsersAdminCloudInit.js";
-import type { ProvisioningHetznerClient } from "./demoUsersAdminProvision.js";
+import { buildCloudConfigUserData } from "./demoCloudConfig.js";
+import type { ProvisioningHetznerClient } from "./demoProvisioningProvider.js";
 import { HEX64, HEX128, equalHex, hexToBytes, bytesToHex } from "./hex.js";
 import { SERIAL_RE } from "./authCode.js";
 import {

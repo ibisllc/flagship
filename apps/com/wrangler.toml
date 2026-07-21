@@ -49,7 +49,7 @@ routes = [
   # prod when the secret drifted, hanging the LUKS unlock with no error.
   # The boot operations now run on THIS worker, backed by `flagship-state`,
   # with the directory + owner push resolved in-process. The hostname +
-  # contract are unchanged so the box/burner/phone need no change. This
+  # contract are unchanged so the box/builder/phone need no change. This
   # route must point at flagship-com (and NOT at the old flagship-boot
   # worker) for the consolidation to take effect — apps/boot stays only as
   # an optional cloneable target. See docs/boot-worker-consolidation.md.
@@ -174,6 +174,14 @@ migrations_dir = "../../packages/storage/migrations"
 name = "BUILD_RELAY"
 class_name = "BuildRelaySession"
 
+# Phone↔desktop-builder live pairing session (sibling of BUILD_RELAY).
+# Long-lived bidirectional pipe; the live socket gates the builder UI.
+# Like BUILD_RELAY it is a dumb pipe — no keys, no plaintext, no state
+# beyond presence + an idle TTL alarm.
+[[durable_objects.bindings]]
+name = "BUILDER_RELAY"
+class_name = "BuilderRelaySession"
+
 [[migrations]]
 tag = "v1"
 # Cloudflare's free plan requires SQLite-backed Durable Objects (not the
@@ -183,6 +191,22 @@ tag = "v1"
 # a free plan, you must create a namespace using a new_sqlite_classes
 # migration. [code: 10097]".
 new_sqlite_classes = ["BuildRelaySession"]
+
+[[migrations]]
+tag = "v2"
+# Adds the phone↔builder pairing DO. SQLite-backed for the same free-plan
+# reason as v1. NOTE: the class was deployed under its original name
+# `BurnerRelaySession`; migration history must reflect what actually ran, so
+# this name is preserved verbatim and renamed forward in v3 below.
+new_sqlite_classes = ["BurnerRelaySession"]
+
+[[migrations]]
+tag = "v3"
+# Rename the pairing DO class burner→builder (the desktop tool was renamed to
+# Flagship Studio / com.flagshipserver.Builder). Sessions are ephemeral (~1h
+# TTL), so an in-place class rename is safe. The `from` name is the only place
+# "Burner" must survive — it's a deployment fact, not a live identifier.
+renamed_classes = [{ from = "BurnerRelaySession", to = "BuilderRelaySession" }]
 
 [vars]
 # Apex roots, as CONFIG (docs/ui-test-gym.md §6.5 / §12-G1). PROD VALUES =
@@ -225,19 +249,23 @@ BASE_ISO_SHA256 = "52bbb7432dade2b6a86be483d00edd95df02a34b84bb4d9ca9a8dfddd71cc
 FLAGSHIP_NETBOOT_ISO_URL = "https://flagshipserver.com/build/iso/flagship-netboot-trixie-amd64-v5.iso"
 FLAGSHIP_NETBOOT_ISO_KEY = "flagship-netboot-trixie-amd64-v5.iso"
 
-# Blessed base ISO for the desktop burner's Simple mode, served by
-# POST /api/iso-manifest (see docs/iso-manifest.md). The burner is a dumb
+# Blessed base ISO for the desktop builder's Simple mode, served by
+# POST /api/iso-manifest (see docs/iso-manifest.md). The builder is a dumb
 # executor: it reports the ISO it has and downloads this one if the sha
 # differs. NON-SECRET (public Debian facts) — lives in [vars], not a secret.
 #   - `sha256` is the OFFICIAL value from Debian's signed SHA256SUMS
 #     (the `attestation` url; verify the sums file against SHA256SUMS.sign).
-#   - `url` is version-pinned (NOT the rotating current/ symlink) so url+sha
-#     stay consistent. When Debian ships a new point release, re-pin all
-#     three (version/url/sha256) HERE and deploy — no burner reship. Once
-#     13.5.0 is archived, swap the host to cdimage's /cdimage/archive/ path
-#     or to our own R2 copy of the same bytes (sha is unchanged).
+#   - `url` uses Debian's versioned release tree rather than rotating current/.
+#     Re-pin both arches as soon as Debian publishes a new point release so the
+#     installer media stays aligned with the live stable package mirror; move
+#     an older version to /cdimage/archive only when intentionally retaining it.
 #   - TOML literal string (single quotes): inner JSON double-quotes are kept verbatim.
-FLAGSHIP_ISO_MANIFEST = '{"version":"debian-13.5.0","url":"https://cdimage.debian.org/debian-cd/13.5.0/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso","sha256":"95838884f5ea6c82421dfe6baaa5a639dbbe6756c1e380f9fe7a7cb0c1949d2a","sizeBytes":791674880,"attestation":"https://cdimage.debian.org/debian-cd/13.5.0/amd64/iso-cd/SHA256SUMS"}'
+FLAGSHIP_ISO_MANIFEST = '{"version":"debian-13.6.0","url":"https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso","sha256":"65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7","sizeBytes":791674880,"attestation":"https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/SHA256SUMS"}'
+# The arm64 twin — served only to `arch:"arm64"` manifest requests (the desktop
+# apps' HOST-a-VM path on Apple-silicon Macs / arm64 Linux hosts, which boot
+# native-arch guests only). Burning stays amd64. Same re-pin rule on a Debian
+# point release: version/url/sha256 together, both arches at once.
+FLAGSHIP_ISO_MANIFEST_ARM64 = '{"version":"debian-13.6.0","url":"https://cdimage.debian.org/cdimage/release/13.6.0/arm64/iso-cd/debian-13.6.0-arm64-netinst.iso","sha256":"ffa590beb3ae9158c354e00ebc4bf45421f4720bb3a8ddf2db3cbfc0374cf480","sizeBytes":735358976,"attestation":"https://cdimage.debian.org/cdimage/release/13.6.0/arm64/iso-cd/SHA256SUMS"}'
 
 # W11 — `[varname]` block consumed by the admin-snapshot-now handler.
 # `FLAGSHIP_R2_TEMP_PUBLIC_BASE` is the public dev-url host for the

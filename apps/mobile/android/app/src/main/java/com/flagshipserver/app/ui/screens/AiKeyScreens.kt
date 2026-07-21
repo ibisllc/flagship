@@ -276,7 +276,7 @@ private fun ProviderPickChip(
     modifier: Modifier = Modifier,
 ) {
     val bg = if (selected) FS.colors.primary else FS.colors.surfaceSunken
-    val fg = if (selected) Color.White else FS.colors.textMuted
+    val fg = if (selected) FS.colors.onAccent else FS.colors.textMuted
     Box(
         modifier
             .clip(RoundedCornerShape(FS.radius.pill))

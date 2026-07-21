@@ -76,8 +76,13 @@ test-results/
 # transparency is the checkpoints repo, and operators use the CLI.
 /maintainers/
 out/
-apps/burner-mac/.build/
+apps/builder-mac/.build/
 __pycache__/
+
+# .NET build output (apps/builder-windows)
+apps/builder-windows/**/bin/
+apps/builder-windows/**/obj/
+apps/builder-windows/dist/
 
 # Snapshot of the previous website — a build artifact, not source.
 old_website.zip
@@ -87,3 +92,7 @@ old_website.zip
 apps/web/e2e/live/.live-out/
 apps/web/e2e/live/.recovery-out/
 apps/web/e2e/live/.pairing-out/
+
+# private patent filing package - do not publish
+patent-filing/
+artifacts/

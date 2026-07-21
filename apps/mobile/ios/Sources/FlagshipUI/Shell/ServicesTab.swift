@@ -87,8 +87,10 @@ public struct ServicesTab: View {
                 .navigationTitle("Services")
                 .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
                 .searchable(text: searchBinding(vm: vm), placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search services")
+                // Server filter: top-right, above the large title. The
+                // PodSwitcher presents its panel as a popover, so it is not
+                // clipped by the nav bar (the earlier in-hierarchy overlay was).
                 .toolbar {
-                    // V8 — server filter stays as the top-right PodSwitcher.
                     if app.pods.count > 1 {
                         ToolbarItem(placement: .topBarTrailing) {
                             PodSwitcher(
@@ -229,7 +231,7 @@ public struct ServicesTab: View {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
                         Text("Build your first service").font(FS.font.h3()).foregroundColor(c.text)
-                        Text("Describe it in plain English. The AI writes it, the daemon runs it.")
+                        Text("Describe it in plain English. The AI writes it, your server runs it.")
                             .font(FS.font.body()).foregroundColor(c.textMuted)
                         FSPrimaryButton("Build a service", block: true) {
                             path.append(.buildSource)
@@ -411,11 +413,12 @@ struct ServiceDetailContainer: View {
                 Menu {
                     Button {
                         // W10 — open the per-app env-var KV editor.
-                        // serviceId = "<creator>-<slug>"; split at the
-                        // first '-' (creator is hyphen-free).
-                        if let dashIdx = serviceId.firstIndex(of: "-") {
-                            let creator = String(serviceId[..<dashIdx])
-                            let slug = String(serviceId[serviceId.index(after: dashIdx)...])
+                        // serviceId = "<creator>--<slug>"; split on the `--`
+                        // delimiter (both halves may carry single dashes —
+                        // docs/service-addressing-double-dash.md).
+                        if let delim = serviceId.range(of: "--") {
+                            let creator = String(serviceId[..<delim.lowerBound])
+                            let slug = String(serviceId[delim.upperBound...])
                             path.append(.serviceEnv(appId: serviceId, creator: creator, slug: slug))
                         }
                     } label: {
@@ -518,17 +521,23 @@ struct VibeCodeDescribeContainer: View {
     @Binding var path: [AppsRoute]
     let holder: BuildCredentialHolder
     @Environment(\.screensClient) private var client
+    @Environment(\.secretMailboxClient) private var mailbox
     @Environment(ToastCenter.self) private var toasts
+    @Environment(AppState.self) private var app
     var body: some View {
-        VibeCodeDescribeScreen(onBuild: { prompt in
+        VibeCodeDescribeScreen(onBuild: { prompt, name, visibility in
             Task {
                 do {
                     // Seed the box's model with the credential chosen at the
                     // AI-key step (kept on the holder so the describe screen
-                    // could re-render without losing it).
-                    let cred = holder.credential
+                    // could re-render without losing it). Name + visibility are
+                    // the owner's choices on the form (no longer fixed).
+                    let selection = VibeCodeCredentialSelection.compatible(with: holder.credential)
                     let resp = try await client.vibeCodeStart(
-                        VibeCodeStartRequest(prompt: prompt, model: nil, credential: cred)
+                        VibeCodeStartRequest(
+                            prompt: prompt, model: selection.model, credential: selection.credential,
+                            name: name, visibility: visibility
+                        )
                     )
                     if resp.needsCredential == true {
                         // The box still has no usable model — route BACK into
@@ -538,6 +547,16 @@ struct VibeCodeDescribeContainer: View {
                     }
                     path.append(.vibeCodeGenerating(sessionId: resp.sessionId))
                 } catch {
+                    switch await repairMissingServicePlatform(for: error) {
+                    case .accepted:
+                        toasts.warning("This server was missing its app key. We sent it again; the server will restart within a few minutes. Then retry the build.")
+                        return
+                    case .deferred:
+                        toasts.warning("This server still needs its app key. Return Home, unlock the app if asked, and pull down to refresh before retrying.")
+                        return
+                    case .notApplicable:
+                        break
+                    }
                     // Don't swallow — a tap that does nothing with no feedback
                     // is a dead control. Surface the failure so the owner knows
                     // the build didn't start (and a test can see why).
@@ -545,6 +564,38 @@ struct VibeCodeDescribeContainer: View {
                 }
             }
         })
+    }
+
+    private enum ServicePlatformRepair {
+        case accepted, deferred, notApplicable
+    }
+
+    /// A platform-less secret-free box answers the vibe entry route with this
+    /// exact 503. Re-arm the deterministic SWK delivery and immediately run the
+    /// same owner-sealed deposit path Home uses; no key is exposed to `.com`.
+    private func repairMissingServicePlatform(for error: Error) async -> ServicePlatformRepair {
+        guard case let ScreensClientError.http(status, message) = error,
+              status == 503,
+              message.lowercased().contains("vibe-code not configured"),
+              let username = app.currentUser,
+              let pod = app.sessionPod,
+              !pod.fqdn.isEmpty,
+              !pod.identityPubKeyHex.isEmpty
+        else { return .notApplicable }
+
+        let store = PendingSwkDepositStore()
+        store.markPending(for: pod.fqdn)
+        let coordinator = SwkDepositCoordinator(
+            username: username,
+            mailbox: mailbox,
+            store: store
+        )
+        await coordinator.depositIfNeeded(
+            serverDomain: pod.fqdn,
+            identityPubKeyHex: pod.identityPubKeyHex,
+            allowAuthentication: true
+        )
+        return store.isDeposited(for: pod.fqdn) ? .accepted : .deferred
     }
 }
 
@@ -835,8 +886,8 @@ struct InviteManageContainer: View {
     }
 
     private func appLabel(for serviceId: String) -> String {
-        if let dashIdx = serviceId.firstIndex(of: "-") {
-            return String(serviceId[serviceId.index(after: dashIdx)...]).capitalized
+        if let delim = serviceId.range(of: "--") {
+            return String(serviceId[delim.upperBound...]).capitalized
         }
         return serviceId
     }
@@ -855,8 +906,8 @@ struct ServiceAccessContainer: View {
     }
 
     private var serviceLabel: String {
-        if let dashIdx = serviceId.firstIndex(of: "-") {
-            return String(serviceId[serviceId.index(after: dashIdx)...]).capitalized
+        if let delim = serviceId.range(of: "--") {
+            return String(serviceId[delim.upperBound...]).capitalized
         }
         return serviceId
     }
@@ -920,8 +971,8 @@ struct InviteIssueContainer: View {
     }
 
     private func appLabel(for serviceId: String) -> String {
-        if let dashIdx = serviceId.firstIndex(of: "-") {
-            return String(serviceId[serviceId.index(after: dashIdx)...]).capitalized
+        if let delim = serviceId.range(of: "--") {
+            return String(serviceId[delim.upperBound...]).capitalized
         }
         return serviceId
     }

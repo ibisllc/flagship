@@ -9,7 +9,7 @@ final class SecuredSessionStoreTests: XCTestCase {
         SecuredSession(
             secretId: secret,
             serverId: "home.alice.flagship.services",
-            serviceRef: "alice-notes",
+            serviceRef: "alice--notes",
             serviceUrl: "https://notes.home.alice.flagship.services",
             browserAgent: "Mozilla/5.0",
             startedAt: started)

@@ -43,14 +43,19 @@ function renderEmpty(root) {
   $("profiles-set-up")?.addEventListener("click", () => show("view-bootstrap"));
 }
 
+// Rows are keyed by the PUBLIC handle. A chosen account name is ciphertext
+// server-side and can only be read with that account's key, so a locked
+// profile genuinely has no name to show — `@handle` is the honest label.
+// The active profile fills its name in afterwards, once the directory is
+// fetched and decrypted in memory (see `decorateActiveRow`).
 function rowMarkup(profile, active) {
   const isActive = profile.cloudName === active;
   return `
     <div class="card profiles-row${isActive ? " profiles-row-active" : ""}" data-cloud="${escapeHtml(profile.cloudName)}">
       <div class="row row-top">
         <div>
-          <div class="weight-600">${escapeHtml(profile.cloudName)}</div>
-          ${profile.deviceLabel ? `<div class="muted-sm">Device: ${escapeHtml(profile.deviceLabel)}</div>` : ""}
+          <div class="weight-600" data-profile-name>@${escapeHtml(profile.cloudName)}</div>
+          <div class="muted-sm" data-profile-handle hidden>@${escapeHtml(profile.cloudName)}</div>
         </div>
         ${isActive
           ? '<span class="pill ok">ACTIVE</span>'
@@ -58,6 +63,28 @@ function rowMarkup(profile, active) {
       </div>
     </div>
   `;
+}
+
+/** Fill the active row's name from the DECRYPTED directory, if this browser
+ *  currently holds the account key. Best-effort and non-blocking: a locked
+ *  or offline account simply keeps showing its handle. */
+async function decorateActiveRow(root, active) {
+  if (!active) return;
+  const row = [...root.querySelectorAll(".profiles-row")]
+    .find((el) => el.getAttribute("data-cloud") === active);
+  if (!row) return;
+  try {
+    const { fetchDecryptedDirectory } = await import("../lib/accountDirectory.js");
+    const directory = await fetchDecryptedDirectory();
+    const name = directory?.accountDisplayName;
+    if (!name) return;
+    const nameEl = row.querySelector("[data-profile-name]");
+    const handleEl = row.querySelector("[data-profile-handle]");
+    if (nameEl) nameEl.textContent = name;
+    if (handleEl) handleEl.hidden = false;
+  } catch {
+    /* locked, offline, or not yet provisioned — the handle stands alone */
+  }
 }
 
 export function renderProfiles() {
@@ -79,6 +106,8 @@ export function renderProfiles() {
     ${profiles.map((p) => rowMarkup(p, active)).join("")}
   `;
 
+  void decorateActiveRow(root, active);
+
   for (const btn of root.querySelectorAll('[data-action="switch"]')) {
     btn.addEventListener("click", (e) => {
       const target = (e.currentTarget instanceof HTMLElement)
@@ -95,7 +124,7 @@ async function switchTo(cloudName) {
     ensureProfile(cloudName);
     setActiveProfile(cloudName);
     setActiveCloudName(cloudName);
-    toast(`switched to ${cloudName}`);
+    toast(`Switched to ${cloudName}`);
     renderProfiles();
     try { onProfileSwitch(cloudName); } catch { /* swallow */ }
   } catch (e) {

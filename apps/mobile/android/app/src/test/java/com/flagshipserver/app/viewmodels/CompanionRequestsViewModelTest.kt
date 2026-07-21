@@ -14,7 +14,12 @@ import com.flagshipserver.app.api.CompanionPendingWrite
 import com.flagshipserver.app.api.CompanionPendingWritesResponse
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
+import com.flagshipserver.app.api.ScreensClient
 import com.google.crypto.tink.subtle.Ed25519Sign
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -24,6 +29,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class CompanionRequestsViewModelTest {
 
     private fun makeSigner(): suspend (String) -> Ed25519Sign {
@@ -36,11 +42,9 @@ class CompanionRequestsViewModelTest {
         requestId: String = "req-rel-1",
         serverDomain: String = "home.alice.flagship.services",
         queuedAt: Long = 1_700_000_000_000L,
-        label: String? = "Library iMac",
     ): CompanionPendingWrite = CompanionPendingWrite(
         requestId = requestId,
         companionTokenPrefix = "deadbeef0000",
-        companionLabel = label,
         kind = "release-server",
         intent = JsonObject(
             mapOf(
@@ -61,7 +65,6 @@ class CompanionRequestsViewModelTest {
     ): CompanionPendingWrite = CompanionPendingWrite(
         requestId = requestId,
         companionTokenPrefix = "f00dcafe1111",
-        companionLabel = null,
         kind = "revoke-server",
         intent = JsonObject(
             mapOf(
@@ -200,7 +203,6 @@ class CompanionRequestsViewModelTest {
         val row = CompanionPendingWrite(
             requestId = "req-unsupported",
             companionTokenPrefix = "0000feed",
-            companionLabel = "Library iMac",
             kind = "mystery-kind",
             intent = JsonObject(mapOf("whatever" to JsonPrimitive("blob"))),
             queuedAt = 1_700_000_000_000L,
@@ -219,5 +221,85 @@ class CompanionRequestsViewModelTest {
         assertEquals(0, server.revokedServers.size)
         assertEquals(0, screens.companionResolveCalls.size)
         assertNotNull(vm.rowError.value[row.requestId])
+    }
+
+    // ---- background poll (L8 parity with the webapp / iOS) ----
+
+    @Test fun startPolling_refetchesEveryInterval() = runTest {
+        var calls = 0
+        // Count each fetch so every tick is observable.
+        val counting = object : ScreensClient by MockScreensClient(simulatedLatencyMs = 0) {
+            override suspend fun companionPendingWrites(): CompanionPendingWritesResponse {
+                calls += 1
+                return CompanionPendingWritesResponse(pending = listOf(releaseRow()))
+            }
+        }
+        val vm = CompanionRequestsViewModel(
+            client = counting,
+            server = MockFlagshipServerClient(simulatedLatencyMs = 0),
+            username = { "alice" },
+            signer = makeSigner(),
+            scope = CoroutineScope(this.coroutineContext),
+        )
+        vm.startPolling(intervalMs = 10_000L)
+        runCurrent()
+        assertEquals(1, calls) // first tick fires immediately
+        advanceTimeBy(10_001L); runCurrent()
+        assertEquals(2, calls)
+        advanceTimeBy(10_001L); runCurrent()
+        assertEquals(3, calls)
+        vm.stopPolling()
+        advanceTimeBy(30_000L); runCurrent()
+        assertEquals(3, calls) // no more ticks after stop
+    }
+
+    @Test fun stopPolling_cancelsTheLoop() = runTest {
+        var calls = 0
+        val counting = object : ScreensClient by MockScreensClient(simulatedLatencyMs = 0) {
+            override suspend fun companionPendingWrites(): CompanionPendingWritesResponse {
+                calls += 1
+                return CompanionPendingWritesResponse(pending = emptyList())
+            }
+        }
+        val vm = CompanionRequestsViewModel(
+            client = counting,
+            server = MockFlagshipServerClient(simulatedLatencyMs = 0),
+            username = { "alice" },
+            signer = makeSigner(),
+            scope = CoroutineScope(this.coroutineContext),
+        )
+        vm.startPolling(intervalMs = 10_000L)
+        runCurrent()
+        assertEquals(1, calls)
+        vm.stopPolling()
+        advanceTimeBy(50_000L); runCurrent()
+        assertEquals(1, calls)
+    }
+
+    @Test fun pollTick_failureKeepsLastGoodRows_noLoadingFlash() = runTest {
+        var failNext = false
+        val flaky = object : ScreensClient by MockScreensClient(simulatedLatencyMs = 0) {
+            override suspend fun companionPendingWrites(): CompanionPendingWritesResponse {
+                if (failNext) throw com.flagshipserver.app.api.ScreensError.Http(503, "blip")
+                return CompanionPendingWritesResponse(pending = listOf(releaseRow()))
+            }
+        }
+        val vm = CompanionRequestsViewModel(
+            client = flaky,
+            server = MockFlagshipServerClient(simulatedLatencyMs = 0),
+            username = { "alice" },
+            signer = makeSigner(),
+            scope = CoroutineScope(this.coroutineContext),
+        )
+        vm.startPolling(intervalMs = 10_000L)
+        runCurrent()
+        val loaded = vm.state.value as LoadingState.Loaded
+        assertEquals(1, loaded.value.size)
+        // A failing tick must NOT blank the rows or flash Failed/Loading.
+        failNext = true
+        advanceTimeBy(10_001L); runCurrent()
+        val stillLoaded = vm.state.value as LoadingState.Loaded
+        assertEquals(1, stillLoaded.value.size)
+        vm.stopPolling()
     }
 }

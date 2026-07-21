@@ -1,3 +1,5 @@
+import { validateServerLabel, validateUserLabel } from "./labels.js";
+
 /**
  * Cloudflare DNS API client for `.com` (Worker-resident).
  *
@@ -27,6 +29,24 @@ export interface CloudflareDnsRecord {
   content: string;
   proxied: boolean;
   ttl: number;
+  created_on?: string;
+  modified_on?: string;
+}
+
+export interface StaleAcmeTxtCleanupResult {
+  scanned: number;
+  eligible: number;
+  deleted: number;
+  names: string[];
+}
+
+export interface OrphanedServerRouteCleanupResult {
+  scanned: number;
+  eligible: number;
+  deleted: number;
+  remaining: number;
+  names: string[];
+  dryRun: boolean;
 }
 
 /**
@@ -204,6 +224,119 @@ export class CloudflareDnsClient {
       throw new Error(`Cloudflare DNS list failed: ${JSON.stringify(body.errors ?? body)}`);
     }
     return body.result ?? [];
+  }
+
+  /** List every record of an optional type, following Cloudflare pagination. */
+  async listAll(type?: string): Promise<CloudflareDnsRecord[]> {
+    const records: CloudflareDnsRecord[] = [];
+    const perPage = 500;
+    let page = 1;
+    while (true) {
+      const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+      if (type) params.set("type", type);
+      const resp = await fetch(
+        `${CF_API}/zones/${this.cfg.zoneId}/dns_records?${params.toString()}`,
+        { headers: this.headers() },
+      );
+      const body = (await resp.json()) as {
+        success: boolean;
+        result?: CloudflareDnsRecord[];
+        result_info?: { total_pages?: number };
+        errors?: unknown;
+      };
+      if (!body.success) {
+        throw new Error(`Cloudflare DNS listAll failed: ${JSON.stringify(body.errors ?? body)}`);
+      }
+      const batch = body.result ?? [];
+      records.push(...batch);
+      const totalPages = body.result_info?.total_pages;
+      if (typeof totalPages === "number" ? page >= totalPages : batch.length < perPage) break;
+      page += 1;
+    }
+    return records;
+  }
+
+  /**
+   * Delete abandoned ACME DNS-01 challenges without touching any routing or
+   * policy records. Records with missing/invalid timestamps fail closed and
+   * remain in place for operator inspection.
+   */
+  async deleteStaleAcmeTxt(opts: {
+    apex: string;
+    cutoffMs: number;
+  }): Promise<StaleAcmeTxtCleanupResult> {
+    const apex = opts.apex.toLowerCase().replace(/\.$/, "");
+    const challengeRoot = `_acme-challenge.${apex}`;
+    const records = await this.listAll("TXT");
+    const eligible = records.filter((record) => {
+      if (record.type !== "TXT") return false;
+      const name = record.name.toLowerCase().replace(/\.$/, "");
+      if (name !== challengeRoot && !name.startsWith("_acme-challenge.")) return false;
+      if (name !== challengeRoot && !name.endsWith(`.${apex}`)) return false;
+      const timestamp = Date.parse(record.modified_on ?? record.created_on ?? "");
+      return Number.isFinite(timestamp) && timestamp < opts.cutoffMs;
+    });
+    let deleted = 0;
+    for (const record of eligible) {
+      if (await this.deleteById(record.id)) deleted += 1;
+    }
+    return {
+      scanned: records.length,
+      eligible: eligible.length,
+      deleted,
+      names: [...new Set(eligible.map((record) => record.name))].sort(),
+    };
+  }
+
+  /**
+   * Reconcile generated per-server A/AAAA routes against active D1 servers.
+   * The two-label server/user shape, shared validators, age floor, and apex
+   * fence keep unrelated zone records outside this cleanup surface.
+   */
+  async deleteOrphanedServerRoutes(opts: {
+    apex: string;
+    activeServerDomains: string[];
+    cutoffMs: number;
+    dryRun?: boolean;
+    maxDeletes?: number;
+  }): Promise<OrphanedServerRouteCleanupResult> {
+    const apex = opts.apex.toLowerCase().replace(/\.$/, "");
+    const keep = new Set<string>();
+    for (const domain of opts.activeServerDomains) {
+      const normalized = domain.toLowerCase().replace(/\.$/, "");
+      keep.add(normalized);
+      keep.add(`*.${normalized}`);
+    }
+    const records = [...await this.listAll("A"), ...await this.listAll("AAAA")];
+    const eligible = records.filter((record) => {
+      if (record.type !== "A" && record.type !== "AAAA") return false;
+      const name = record.name.toLowerCase().replace(/\.$/, "");
+      if (keep.has(name)) return false;
+      const baseName = name.startsWith("*.") ? name.slice(2) : name;
+      const suffix = `.${apex}`;
+      if (!baseName.endsWith(suffix)) return false;
+      const labels = baseName.slice(0, -suffix.length).split(".");
+      if (labels.length !== 2) return false;
+      const [serverLabel, userLabel] = labels;
+      if (!validateServerLabel(serverLabel!).ok || !validateUserLabel(userLabel!).ok) return false;
+      const timestamp = Date.parse(record.modified_on ?? record.created_on ?? "");
+      return Number.isFinite(timestamp) && timestamp < opts.cutoffMs;
+    });
+    const selected = opts.dryRun ? eligible : eligible.slice(0, opts.maxDeletes ?? 20);
+    let deleted = 0;
+    if (!opts.dryRun) {
+      for (const record of selected) {
+        if (await this.deleteById(record.id)) deleted += 1;
+      }
+    }
+    return {
+      scanned: records.length,
+      eligible: eligible.length,
+      deleted,
+      remaining: Math.max(0, eligible.length - deleted),
+      names: [...new Set(selected.map((record) => record.name))].sort(),
+      dryRun: opts.dryRun ?? false,
+    };
   }
 
   async deleteByName(name: string, type: string): Promise<number> {

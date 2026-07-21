@@ -1,15 +1,16 @@
 // Box- AND `.com`-direct client for per-service access gating
 // (docs/service-access-gating.md). Mirrors FrontPageClient / LockPowerClient.
 //
-// BOX (pod-direct, owner-IRK or friend-AID signed):
+// BOX (pod-direct, owner-AID/IRK or friend-contact-AID signed):
 //   GET  https://<pod>/api/service-access/<serviceRef>   → { mode, allowCount }
-//   POST https://<pod>/api/service-access                ({ request, signature })  (IRK)
-//   POST https://<pod>/api/service-invites/redeem        ({ secret, visitorAID, aidSig, redeemedAt })  (AID)
+//   POST https://<pod>/api/service-access                ({ request, signature })  (owner)
+//   POST https://<pod>/api/service-invites/redeem        ({ secret, visitorAID, aidSig, redeemedAt })  (contact-AID)
+//   POST https://<pod>/api/service-access/accept         ({ accept, acceptSig, create, createSig })  (manual-approve finalize)
 //
-// `.com` (public CA), author IRK-signed create/revoke + metadata list:
-//   POST https://<control>/api/users/<u>/service-invites          ({ request, signature })
-//   GET  https://<control>/api/users/<u>/service-invites?authorAID=…
-//   POST https://<control>/api/users/<u>/service-invites/revoke    ({ request, signature })
+// `.com` (public CA), author AID/IRK-signed create/revoke + SIGNED metadata list:
+//   POST https://<control>/api/users/<u>/service-invites          ({ request, signature })  (v2: AID-signed)
+//   GET  https://<control>/api/users/<u>/service-invites?authorAID=…&scope=list&cursor=0&issuedAt=…&sig=…  (v2: owner-signed)
+//   POST https://<control>/api/users/<u>/service-invites/revoke    ({ request, signature })  (v2: AID-signed)
 
 package com.flagshipserver.app.api
 
@@ -33,7 +34,21 @@ data class ServiceAccessState(val mode: String, val allowCount: Int) {
     val isRestricted: Boolean get() = mode == "restricted"
 }
 
-data class RedeemResult(val serviceRef: String, val boundAidHex: String, val firstBind: Boolean)
+/** The redeem outcome. AUTO-approve → `pending=false`, `boundAidHex` set. A
+ *  MANUAL-approve invite → `pending=true` with NO bind (the author finalizes via
+ *  the AcceptServiceInvite loop); the box returns the owner-signed `create` +
+ *  `createSig` so the friend's app can present them back to the author, who
+ *  submits them (with the friend's acceptance) to their OWN box. */
+data class RedeemResult(
+    val serviceRef: String,
+    val boundAidHex: String,
+    val firstBind: Boolean,
+    val pending: Boolean = false,
+    /** The owner's signed create the box relayed (manual-approve loop); the
+     *  author re-submits it verbatim with the acceptance. JSON, NOT decoded. */
+    val createJson: JsonObject? = null,
+    val createSigHex: String? = null,
+)
 
 /** The box's response to a successful knock authorize — the phone-held
  *  `secretId` is the only handle to the new browser session. */
@@ -53,7 +68,11 @@ sealed class KnockAuthorizeError(message: String) : RuntimeException(message) {
 }
 
 /** A `.com` invite row (metadata only — `.com` never stores the secret). The
- *  bundle is ciphertext; decrypt it locally with the household key. */
+ *  bundle is ciphertext; decrypt it locally with the household key. v2 adds the
+ *  group/multi-use fields: a `maxRedemptions != null` invite is a GROUP link
+ *  (one entry, "<label> — k/N") with N=`maxRedemptions` (0 = unlimited), the
+ *  live `redemptions` count, and the bound member set `boundAidsHex` (for
+ *  per-member removal); `approvalMode` is "auto"|"manual". */
 data class ServiceInviteRow(
     val inviteId: String,
     val serviceRef: String,
@@ -62,13 +81,22 @@ data class ServiceInviteRow(
     val boundAt: Long?,
     val createdAt: Long?,
     val revokedAt: Long?,
-)
+    val maxRedemptions: Int? = null,
+    val expiresAt: Long? = null,
+    val redemptions: Int = 0,
+    val boundAidsHex: List<String> = emptyList(),
+    val approvalMode: String? = null,
+) {
+    /** A group / multi-use invite (has a redemption cap). */
+    val isGroup: Boolean get() = maxRedemptions != null
+}
 
 /** Distinct errors the redeem surfaces so the UI can speak plainly. */
 sealed class ServiceAccessError(message: String) : RuntimeException(message) {
     object InviteUnknown : ServiceAccessError("unknown invite")          // 404
     object InviteAlreadyBound : ServiceAccessError("already bound")      // 409
     object InviteRevoked : ServiceAccessError("invite revoked")          // 403
+    object InviteExpiredOrFull : ServiceAccessError("invite expired or full") // 410
 }
 
 /** Box calls ride the box transport (the pod-pinned OkHttp — set-mode/redeem
@@ -148,18 +176,60 @@ class ServiceAccessClient(
             "POST", "${podBaseUrl(serverDomain)}/api/service-invites/redeem",
             body = body.toString().toByteArray(Charsets.UTF_8),
             contentType = "application/json",
-            accept = setOf(200, 403, 404, 409),
+            accept = setOf(200, 403, 404, 409, 410),
         )
         when (resp.status) {
             404 -> throw ServiceAccessError.InviteUnknown
             409 -> throw ServiceAccessError.InviteAlreadyBound
             403 -> throw ServiceAccessError.InviteRevoked
+            410 -> throw ServiceAccessError.InviteExpiredOrFull
+        }
+        val obj = json.parseToJsonElement(String(resp.body, Charsets.UTF_8)).jsonObject
+        val pending = obj["pending"]?.jsonPrimitive?.contentOrNull == "true" ||
+            obj["approvalMode"]?.jsonPrimitive?.contentOrNull == "manual"
+        return RedeemResult(
+            serviceRef = obj["serviceRef"]?.jsonPrimitive?.contentOrNull ?: "",
+            boundAidHex = obj["boundAID"]?.jsonPrimitive?.contentOrNull ?: "",
+            firstBind = obj["firstBind"]?.jsonPrimitive?.contentOrNull == "true",
+            pending = pending,
+            createJson = obj["create"] as? JsonObject,
+            createSigHex = obj["createSig"]?.jsonPrimitive?.contentOrNull,
+        )
+    }
+
+    /**
+     * AUTHOR-side finalize of a MANUAL-approve invite (v2 Phase 3 tier 2). POSTs
+     * ONLY the friend's AID-signed `AcceptServiceInvite` (`accept` + `acceptSig`)
+     * to the AUTHOR's OWN box. The box FETCHES the owner's signed create from .com
+     * by the acceptance's inviteId (STK-signed), verifies both, then binds the
+     * contact AID — so the author can finalize from ANY device. Runs on
+     * Dispatchers.IO.
+     */
+    suspend fun acceptInvite(
+        serverDomain: String,
+        accept: JsonObject,
+        acceptSigHex: String,
+    ): RedeemResult {
+        val body = buildJsonObject {
+            put("accept", accept)
+            put("acceptSig", JsonPrimitive(acceptSigHex.lowercase()))
+        }
+        val resp = boxTransport.execute(
+            "POST", "${podBaseUrl(serverDomain)}/api/service-access/accept",
+            body = body.toString().toByteArray(Charsets.UTF_8),
+            contentType = "application/json",
+            accept = setOf(200, 400, 403, 409),
+        )
+        when (resp.status) {
+            400 -> throw ServiceAccessError.InviteUnknown
+            403 -> throw ServiceAccessError.InviteRevoked
+            409 -> throw ServiceAccessError.InviteExpiredOrFull
         }
         val obj = json.parseToJsonElement(String(resp.body, Charsets.UTF_8)).jsonObject
         return RedeemResult(
             serviceRef = obj["serviceRef"]?.jsonPrimitive?.contentOrNull ?: "",
             boundAidHex = obj["boundAID"]?.jsonPrimitive?.contentOrNull ?: "",
-            firstBind = obj["firstBind"]?.jsonPrimitive?.contentOrNull == "true",
+            firstBind = obj["bound"]?.jsonPrimitive?.contentOrNull == "true",
         )
     }
 
@@ -257,11 +327,26 @@ class ServiceAccessClient(
         )
     }
 
-    suspend fun listInvites(username: String, authorAidHex: String): List<ServiceInviteRow> {
-        val resp = comTransport.execute(
-            "GET", comUrl(username, "", "authorAID=${authorAidHex.lowercase()}"),
-            accept = setOf(200),
-        )
+    /**
+     * OWNER-SIGNED invite listing (v2 §C2 — the v1 unsigned GET was an open graph
+     * dump). The caller signs a `ServiceInviteListQuery` (scope "list", cursor 0)
+     * with the account AID (or IRK); `.com` dual-accepts. The group/multi-use
+     * fields (`maxRedemptions`/`expiresAt`/`redemptions`/`boundAIDs`/`approvalMode`)
+     * are parsed for the group guest-list entry. Runs on Dispatchers.IO.
+     */
+    suspend fun listInvites(
+        username: String,
+        authorAidHex: String,
+        issuedAt: Long,
+        sigHex: String,
+    ): List<ServiceInviteRow> {
+        val q = buildString {
+            append("authorAID=").append(authorAidHex.lowercase())
+            append("&scope=list&cursor=0")
+            append("&issuedAt=").append(issuedAt)
+            append("&sig=").append(sigHex.lowercase())
+        }
+        val resp = comTransport.execute("GET", comUrl(username, "", q), accept = setOf(200))
         val obj = json.parseToJsonElement(String(resp.body, Charsets.UTF_8)).jsonObject
         val rows = obj["invites"]?.jsonArray ?: return emptyList()
         return rows.mapNotNull { el ->
@@ -269,6 +354,8 @@ class ServiceAccessClient(
             val inviteId = r["inviteId"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
             val serviceRef = r["serviceRef"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
             val bundle = r["encryptedBundle"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val boundAids = (r["boundAIDs"] as? kotlinx.serialization.json.JsonArray)
+                ?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
             ServiceInviteRow(
                 inviteId = inviteId,
                 serviceRef = serviceRef,
@@ -277,6 +364,11 @@ class ServiceAccessClient(
                 boundAt = r["boundAt"]?.jsonPrimitive?.longOrNull,
                 createdAt = r["createdAt"]?.jsonPrimitive?.longOrNull,
                 revokedAt = r["revokedAt"]?.jsonPrimitive?.longOrNull,
+                maxRedemptions = r["maxRedemptions"]?.jsonPrimitive?.longOrNull?.toInt(),
+                expiresAt = r["expiresAt"]?.jsonPrimitive?.longOrNull,
+                redemptions = r["redemptions"]?.jsonPrimitive?.longOrNull?.toInt() ?: 0,
+                boundAidsHex = boundAids,
+                approvalMode = r["approvalMode"]?.jsonPrimitive?.contentOrNull,
             )
         }
     }

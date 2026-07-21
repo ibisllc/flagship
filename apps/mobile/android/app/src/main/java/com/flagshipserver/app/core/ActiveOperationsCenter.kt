@@ -111,34 +111,29 @@ class ActiveOperationsCenter {
 
     // ── Deploy operations (derived from pending pods) ──────────────
 
-    /** Reconcile deploy operations against the current pods. A pod in
-     *  [PodInfo.Status.PENDING] gets (or keeps) a deploy op; a pod that has
-     *  left pending — went live, was cancelled, was removed — drops its op.
-     *  Existing ops keep their [seq] so a steady re-sync never reorders the
-     *  sliver, and the whole list is only reassigned when something actually
-     *  changed (so calling this on every pod-list tick is free). Build
-     *  operations are untouched. */
+    /**
+     * Reconcile deploy operations against the current pods.
+     *
+     * **Bug-3 decision — SUPPRESS deploy ops for pending pods.** A freshly-
+     * created server is [PodInfo.Status.PENDING] the moment its recipe is minted
+     * — i.e. while it is merely AWAITING A BURN, long before any box boots. The
+     * in-list [PodInfo] for a pending pod carries NO install-phase/liveness
+     * signal that distinguishes "awaiting burn / not booted yet" from "actually
+     * booting/installing" (real USB-burn pods only gain a phase via a separate
+     * timeline poller, not on this model; once a box registers it LEAVES
+     * pending). With no reliable signal to gate on, showing a spinning
+     * "deploying server <name>" for an unburned recipe is wrong — so we emit
+     * nothing for pending pods. Home's status pill already shows "Pending" /
+     * "coming online" for these.
+     *
+     * This therefore PRUNES any deploy ops and never creates new ones, while
+     * leaving build operations completely untouched. Mirror of iOS
+     * ActiveOperationsCenter.syncDeployOperations.
+     */
+    @Suppress("UNUSED_PARAMETER")
     fun syncDeployOperations(pods: List<PodInfo>) {
-        val pending = pods.filter { it.status == PodInfo.Status.PENDING }
-        val desiredIds = pending.map { deployId(it.podId) }.toSet()
-
-        // Start from everything that isn't a now-defunct deploy op.
-        val next = _operations.value
-            .filter { it.kind != ActiveOperation.Kind.DEPLOY || it.id in desiredIds }
-            .toMutableList()
-
-        for (pod in pending) {
-            val opId = deployId(pod.podId)
-            val keptSeq = next.firstOrNull { it.id == opId }?.seq
-            val op = ActiveOperation(
-                id = opId, kind = ActiveOperation.Kind.DEPLOY, subject = pod.name,
-                target = DeepLink.ServerDetail(pod.podId),
-                seq = keptSeq ?: bump(),
-            )
-            val idx = next.indexOfFirst { it.id == opId }
-            if (idx >= 0) next[idx] = op else next.add(op)
-        }
-
+        // Drop every deploy op; keep build ops as-is.
+        val next = _operations.value.filter { it.kind != ActiveOperation.Kind.DEPLOY }
         if (next != _operations.value) _operations.value = next
     }
 

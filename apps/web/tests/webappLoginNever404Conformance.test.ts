@@ -63,7 +63,6 @@ function demoResolution(username = "demoalice") {
     kind: "demo" as const,
     recovery: { present: false, hasFetchGate: false },
     totpEnrolled: false,
-    trustedDeviceCount: 0,
     demoServer: { fqdn: `home.${username}.flagship.services`, status: "up", ttlIdleMinutes: 30 },
     graceModel: "instant" as const,
   };
@@ -75,7 +74,6 @@ function unknownResolution(username = "ghost") {
     kind: "unknown" as const,
     recovery: { present: false, hasFetchGate: false },
     totpEnrolled: false,
-    trustedDeviceCount: 0,
     graceModel: "none" as const,
   };
 }
@@ -88,7 +86,6 @@ function singleResolution(username = "harry", withRecovery = true) {
       ? { present: true, hasFetchGate: true, credentialId: "abc123" }
       : { present: false, hasFetchGate: false },
     totpEnrolled: false,
-    trustedDeviceCount: 1,
     graceModel: "3d" as const,
   };
 }
@@ -101,7 +98,6 @@ function multiResolution(username = "hilton", withRecovery = true) {
       ? { present: true, hasFetchGate: true, credentialId: "def456" }
       : { present: false, hasFetchGate: false },
     totpEnrolled: true,
-    trustedDeviceCount: 3,
     graceModel: "24h-totp" as const,
   };
 }
@@ -310,7 +306,7 @@ describe("Phase 5 conformance — credentialed takeover matrix (single vs multi)
     expect(confirm.mock.calls[0]![0].message).toMatch(/3-day grace/);
     expect(prompt).not.toHaveBeenCalled();
     expect(out.outcome).toBe("takeover");
-    expect(out.takeover.deviceLabel).toBe("admin");
+    expect(out.takeover.deviceId).toMatch(/^[0-9a-f]{32}$/);
     const body = JSON.parse(fetchMock.mock.calls[0]![1].body);
     expect(body.totpProof).toBeUndefined();
   });

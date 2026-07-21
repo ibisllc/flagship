@@ -9,12 +9,18 @@ import Foundation
 public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public var simulatedLatency: TimeInterval = 0.18
     public var shouldFail: Bool = false
+    /// When set, `tick()` throws an `.http` error with this status (used to
+    /// exercise status-specific handling, e.g. a 404 build-platform-absent).
+    public var simulatedFailureStatus: Int? = nil
 
     public init() {}
 
     private func tick() async throws {
         if simulatedLatency > 0 {
             try? await Task.sleep(nanoseconds: UInt64(simulatedLatency * 1_000_000_000))
+        }
+        if let status = simulatedFailureStatus {
+            throw ScreensClientError.http(status: status, message: "simulated failure")
         }
         if shouldFail {
             throw ScreensClientError.http(status: 503, message: "simulated failure")
@@ -40,6 +46,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             serverFqdn: "\(podName).harry.flagship.services",
             username: "harry",
             daemonVersion: "0.18.4",
+            currentCommit: "9f2c1ab3de4567890abcdef1234567890abcdef1",
             startedAt: now - Int64(abs(podContext.hashValue) % 30 + 1) * oneDay,
             uptimeMs: Int64(abs(podContext.hashValue) % 30 + 1) * oneDay,
             certNotAfter: now + 67 * oneDay,
@@ -48,9 +55,9 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             serviceCount: serviceCount,
             pairedSessionCount: 2,
             recentInstallEvents: [
-                RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", serviceId: "harry-plants", detail: "via vibe-code"),
-                RecentInstallEvent(at: now - 60_000 * 60 * 6, kind: "deploy", serviceId: "harry-wiki", detail: "v1.4.0"),
-                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", serviceId: "harry-wiki", detail: "via vibe-code"),
+                RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", serviceId: "harry--plants", detail: "via vibe-code"),
+                RecentInstallEvent(at: now - 60_000 * 60 * 6, kind: "deploy", serviceId: "harry--wiki", detail: "v1.4.0"),
+                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", serviceId: "harry--wiki", detail: "via vibe-code"),
             ]
         )
     }
@@ -66,7 +73,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let fqdn = "\(podContext).harry.flagship.services"
         return AppsListResponse(apps: [
             AppSummary(
-                serviceId: "harry-plants",
+                serviceId: "harry--plants",
                 creator: "harry",
                 slug: "plants",
                 urlLabel: "plants",
@@ -77,7 +84,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 installedAt: now - 60_000 * 30
             ),
             AppSummary(
-                serviceId: "harry-wiki",
+                serviceId: "harry--wiki",
                 creator: "harry",
                 slug: "wiki",
                 urlLabel: "wiki",
@@ -88,10 +95,10 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 installedAt: now - 60_000 * 60 * 26
             ),
             AppSummary(
-                serviceId: "trent-scratchpad",
+                serviceId: "trent--scratchpad",
                 creator: "trent",
                 slug: "scratchpad",
-                urlLabel: "scratchpad-trent",
+                urlLabel: "scratchpad--trent",
                 summary: "Markdown scratchpad",
                 url: "https://scratchpad-trent.\(fqdn)/",
                 status: "stopped",
@@ -177,8 +184,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         return PairedSessionsListResponse(sessions: [
-            .init(tokenPrefix: "a1b2c3d4", label: "iPhone — Harry", addedAt: now - 60_000 * 60 * 24 * 14, current: true),
-            .init(tokenPrefix: "f9e8d7c6", label: "MacBook Pro", addedAt: now - 60_000 * 60 * 24 * 3, current: false)
+            .init(tokenPrefix: "a1b2c3d4", addedAt: now - 60_000 * 60 * 24 * 14, current: true),
+            .init(tokenPrefix: "f9e8d7c6", addedAt: now - 60_000 * 60 * 24 * 3, current: false)
         ])
     }
 
@@ -409,8 +416,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// mock's in-memory map. Never echoed in any response (mirrors the
     /// daemon's "values never leave" invariant).
     private var mockEnvNames: [String: [String]] = [
-        "harry-plants": ["WEATHER_API_KEY"],
-        "harry-wiki": []
+        "harry--plants": ["WEATHER_API_KEY"],
+        "harry--wiki": []
     ]
 
     public func serviceEnvList(appId: String) async throws -> ServiceEnvListResponse {
@@ -437,7 +444,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         return VibeCodeSessionPublicState(
             id: sessionId,
-            appId: "harry-plants",
+            appId: "harry--plants",
             status: "awaiting-tool-response",
             messages: [
                 VibeCodeSessionMessage(role: "user", text: "Build me a plants tracker", timestamp: now - 30_000),
@@ -673,8 +680,13 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// assert which request was resolved + with what outcome.
     public private(set) var companionResolveCalls: [CompanionResolvePendingRequest] = []
 
+    /// Counts `companionPendingWrites()` invocations so tests can assert the
+    /// background poll ticks (and stops on teardown).
+    public private(set) var companionPendingWritesCallCount: Int = 0
+
     public func companionPendingWrites() async throws -> CompanionPendingWritesResponse {
         try await tick()
+        companionPendingWritesCallCount += 1
         if let fixture = companionPendingWritesFixture { return fixture }
         return CompanionPendingWritesResponse(pending: [])
     }
@@ -855,7 +867,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             BuildSummary(
                 buildId: "bld-plants01",
                 mode: "scratch",
-                serviceId: "harry-plants",
+                serviceId: "harry--plants",
                 startedAt: now - 60_000 * 60,
                 lastAt: now - 60_000 * 58,
                 entryCount: 9,
@@ -891,7 +903,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             BuildJournalEntry(
                 seq: 3, ts: now - 60_000 * 58, buildId: buildId,
                 mode: "scratch", kind: "deployed", actor: "system",
-                summary: "deployed to home pod", serviceId: "harry-plants"
+                summary: "deployed to home pod", serviceId: "harry--plants"
             ),
         ])
     }

@@ -41,6 +41,7 @@ import {
   registerLlmPromo,
   InMemoryPromoLedger,
   ConsoleSmsSender,
+  buildFlagshipInferenceIssuer,
   type PromoLedger,
   type PromoIssuer,
   type SmsSender,
@@ -76,10 +77,12 @@ import {
 import { TunnelRegistry } from "./tunnel/registry.js";
 import { RemoteUsernameResolver } from "./lib/remoteUsernameResolver.js";
 import { RevocationCache } from "./tunnel/revocationCache.js";
+import { EvictionCache } from "./tunnel/evictionCache.js";
 import {
   registerControlRedirections,
   coldStartRedirections,
 } from "./routes/controlRedirections.js";
+import { registerGossipFanout } from "./routes/gossipFanout.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -303,20 +306,24 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   app.decorate("reciprocityLedger", reciprocityLedger);
   app.decorate("peerCandidatePool", peerCandidatePool);
 
-  if (
-    isCom &&
-    opts.resolveUserIrk &&
-    opts.promoIssuer &&
-    opts.promoIdentityPepper
-  ) {
+  // The promo issuer is either injected (tests) or built from the blessed
+  // inference env (production) — the free-credits flow is one
+  // `wrangler secret put FLAGSHIP_INFERENCE_ENDPOINT` +
+  // `FLAGSHIP_INFERENCE_TOKEN_SECRET` away from live. The identity pepper
+  // likewise defaults from env. `resolveUserIrk` is still caller-supplied
+  // (it resolves username → IRK for signature checks); absent ⇒ the promo
+  // routes stay unregistered (they 404) rather than accept unsigned issue.
+  const promoIssuer = opts.promoIssuer ?? buildFlagshipInferenceIssuer(process.env);
+  const promoPepper = opts.promoIdentityPepper ?? pepperFromEnv(process.env.FLAGSHIP_PROMO_IDENTITY_PEPPER);
+  if (isCom && opts.resolveUserIrk && promoIssuer && promoPepper) {
     const ledger = opts.promoLedger ?? new InMemoryPromoLedger();
     const sms = opts.promoSms ?? new ConsoleSmsSender();
     registerLlmPromo(app, {
       resolveUserIrk: opts.resolveUserIrk,
       ledger,
-      issuer: opts.promoIssuer,
+      issuer: promoIssuer,
       sms,
-      identityPepper: opts.promoIdentityPepper,
+      identityPepper: promoPepper,
     });
     app.decorate("promoLedger", ledger);
   }
@@ -332,6 +339,18 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   });
 
   return app;
+}
+
+/**
+ * Parse the promo identity pepper from env: a 64-char hex string (32
+ * bytes). Absent / malformed ⇒ null (promo routes stay unregistered
+ * rather than salting identities with a weak/degenerate pepper).
+ */
+function pepperFromEnv(raw: string | undefined): Uint8Array | null {
+  if (!raw || !/^[0-9a-fA-F]{64}$/.test(raw)) return null;
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) out[i] = parseInt(raw.slice(i * 2, i * 2 + 2), 16);
+  return out;
 }
 
 declare module "fastify" {
@@ -378,6 +397,13 @@ export async function start(opts: {
   // #87 — custom-domain control channel. Must register before listen.
   const servicesControlSecret = process.env.SERVICES_CONTROL_SECRET;
   registerControlRedirections(app, { registry, secret: servicesControlSecret });
+  // Per-account gossip fan-out (Phase 4): recognize
+  // `broadcast--<user>.<apex>` at this TLS-terminating surface and mirror the
+  // verbatim opaque body to every connected box of that account. Only on the
+  // data plane (it needs the live tunnel registry).
+  if (surface === "services" || surface === "both") {
+    registerGossipFanout(app, { registry, apex: servicesApex });
+  }
   await app.listen({ port: httpPort, host });
   // Authenticate tunnel HELLOs against .com's server registry over HTTPS.
   // 5-minute cache so reconnects don't hammer the API.
@@ -416,6 +442,8 @@ export async function start(opts: {
   const irkResolver = new RemoteUsernameResolver({ comBaseUrl });
   const irkLookup = (username: string): Promise<Uint8Array | null> =>
     irkResolver.lookup(username);
+  const authorityLookup = (username: string) =>
+    irkResolver.lookupAuthority(username);
   // Per-user revoked-entitlement-cert set, pulled from .com's
   // phone-signed list and re-verified locally (the cache trusts the
   // IRK signature, not the Worker). Fail-open on a transient fetch
@@ -426,6 +454,17 @@ export async function start(opts: {
   });
   const revocationLookup = (username: string): Promise<Set<string> | null> =>
     revocationCache.lookup(username);
+
+  // Per-podCanonical eviction chain, pulled from .com's
+  // `/api/server/:pod/eviction-chain` (graceful decommission §8). After
+  // entitlement/STK verification, the hub asks whether THIS box instance's
+  // STK has been retired for its podCanonical; if so it NACKs "replaced".
+  // 30s TTL so it's not a per-HELLO round trip. Fail-OPEN: a fetch failure
+  // returns null so a .com blip can't brick fleet-wide registration (the
+  // durable order / zombie-poll still closes the fight).
+  const evictionCache = new EvictionCache({ controlPlaneBaseUrl: comBaseUrl });
+  const evictionLookup = (podCanonical: string): Promise<Set<string> | null> =>
+    evictionCache.lookup(podCanonical);
 
   // Relay blessing (docs/maintainer-trust-enforcement.md): on the data
   // plane, self-generate a hub key and fetch a `.com`-CA-signed
@@ -454,7 +493,9 @@ export async function start(opts: {
     apex: servicesApex,
     authLookup: remoteAuthLookup,
     irkLookup,
+    authorityLookup,
     revocationLookup,
+    evictionLookup,
     ...(blessingProvider ? { blessingSource: blessingProvider } : {}),
   });
 

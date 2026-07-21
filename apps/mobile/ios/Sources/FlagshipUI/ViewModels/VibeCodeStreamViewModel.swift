@@ -19,6 +19,14 @@ public final class VibeCodeStreamViewModel {
 
     public enum Status: Sendable { case streaming, building, deployed, failed, done }
 
+    /// Tail cap on `buildLogs`. The stream emits a `.buildLog` frame per
+    /// build step for as long as a build runs, and the logs card renders
+    /// every retained line as a live row — so an uncapped append grows
+    /// memory for the whole life of the tab's nav stack (a TabView keeps
+    /// this VM alive while the user works elsewhere). The card is a tail
+    /// view; keep only the newest lines.
+    public nonisolated static let buildLogCap = 500
+
     public let sessionId: String
     private let client: any ScreensClient
     private var streamTask: Task<Void, Never>?
@@ -65,17 +73,17 @@ public final class VibeCodeStreamViewModel {
         operations?.removeBuild(id: sessionId)
     }
 
-    private func apply(_ frame: VibeCodeFrame) {
+    func apply(_ frame: VibeCodeFrame) {
         switch frame {
         case .token(let text):
             transcript += text
         case .manifestEmit(let json):
             manifestJson = json
         case .repoCreate:
-            buildLogs.append("Created git repo.")
+            appendBuildLog("Created git repo.")
         case .buildStart:
             status = .building
-            buildLogs.append("── BUILD START ──")
+            appendBuildLog("── BUILD START ──")
             operations?.upsertBuild(
                 id: sessionId,
                 subject: serviceLabel ?? "a service",
@@ -83,7 +91,7 @@ public final class VibeCodeStreamViewModel {
                 target: .vibeCodeChat(sessionId: sessionId)
             )
         case .buildLog(let line):
-            buildLogs.append(line)
+            appendBuildLog(line)
         case .deploy(let serviceId, let url):
             deployedServiceId = serviceId
             deployedUrl = url
@@ -96,6 +104,14 @@ public final class VibeCodeStreamViewModel {
             errorMessage = m
             status = .failed
             operations?.removeBuild(id: sessionId)
+        }
+    }
+
+    /// Single append chokepoint enforcing the sliding tail window.
+    private func appendBuildLog(_ line: String) {
+        buildLogs.append(line)
+        if buildLogs.count > Self.buildLogCap {
+            buildLogs.removeFirst(buildLogs.count - Self.buildLogCap)
         }
     }
 }

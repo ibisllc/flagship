@@ -5,6 +5,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.api.AccountSelfDeleteBundleRequest
+import com.flagshipserver.app.api.AdminRootRotationRequest
 import com.flagshipserver.app.api.AppLinksResponse
 import com.flagshipserver.app.api.AppRenameRequest
 import com.flagshipserver.app.api.AppRenameResponse
@@ -42,8 +44,8 @@ import com.flagshipserver.app.api.TotpEnrollBeginRequest
 import com.flagshipserver.app.api.TotpEnrollBeginResponse
 import com.flagshipserver.app.api.TotpEnrollConfirmRequest
 import com.flagshipserver.app.api.TotpEnrollConfirmResponse
-import com.flagshipserver.app.api.TrustedDevicesListResponse
 import com.flagshipserver.app.api.UsernameAvailabilityResponse
+import com.flagshipserver.app.api.UsernameSuggestion
 import com.flagshipserver.app.api.UsernameClaimRequest
 import com.flagshipserver.app.api.UsernameLookupResponse
 import com.flagshipserver.app.api.WipeRestartRequest
@@ -174,19 +176,20 @@ class RevokeServerViewModelTest {
     /// without an HTTP transport. Mirrors the iOS `ThrowingServer` shape.
     private class ThrowingServer(private val error: Throwable) : FlagshipServerClient {
         override suspend fun claimUsername(req: UsernameClaimRequest) { throw error }
+        override suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest) { throw error }
         override suspend fun issueAuthCode(req: AuthCodeIssueRequest) { throw error }
         override suspend fun registerRck(req: RckRegisterRequest) { throw error }
         override suspend fun revokeAuthCode(req: AuthCodeRevokeRequest) { throw error }
         override suspend fun releaseServerName(req: ReleaseServerNameRequest) { throw error }
         override suspend fun revokeServer(req: ServerRevocationRequest) { throw error }
         override suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse = throw error
+        override suspend fun suggestUsername(deviceKey: String): UsernameSuggestion = throw error
         override suspend fun fetchProvisionStatus(serial: String): ProvisionStatusRecord? = throw error
         override suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse = throw error
         override suspend fun fetchRecoveryEnvelope(credentialId: String): RecoveryEnvelope = throw error
         override suspend fun fetchWrappedUmkWithToken(username: String, fetchTokenHex: String, issuedAt: Long): GatedRecoveryEnvelope = throw error
         override suspend fun registerPushToken(req: PushTokenRegisterRequest): PushTokenRegisterResponse = throw error
         override suspend fun revokePushToken(req: PushTokenRevokeRequest) { throw error }
-        override suspend fun listDevices(username: String): TrustedDevicesListResponse = throw error
         override suspend fun listAuditEvents(username: String, sinceSeq: Int, limit: Int): AuditEventListResponse = throw error
         override suspend fun hasCloudRecovery(username: String): Boolean = throw error
         override suspend fun initiateRePair(username: String, body: RePairInitiateRequest, ifMatch: String?): RePairInitiateResponse = throw error
@@ -204,6 +207,7 @@ class RevokeServerViewModelTest {
         override suspend fun mintWatchDelegate(username: String, body: WatchDelegateMintRequest): WatchDelegateMintResponse = throw error
         override suspend fun listWatchDelegates(username: String): WatchDelegatesListResponse = throw error
         override suspend fun revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest) { throw error }
+        override suspend fun rotateAdminRoot(username: String, req: AdminRootRotationRequest) { throw error }
         override suspend fun resolveAccount(username: String): AccountResolution = throw error
     }
 }

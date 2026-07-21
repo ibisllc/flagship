@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.ServiceEnvSetEnvelope
 import com.flagshipserver.app.api.ServiceEnvSetRequest
+import com.flagshipserver.app.api.userFacing
 import com.flagshipserver.app.api.VibeCodePendingRequest
 import com.flagshipserver.app.api.VibeCodeReplyRequest
 import com.flagshipserver.app.api.VibeCodeSessionPublicState
@@ -80,7 +81,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
         try {
             state = client.vibeCodeSessionState(sessionId)
         } catch (t: Throwable) {
-            errorMessage = t.message
+            errorMessage = t.userFacing()
         }
     }
 
@@ -201,7 +202,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                             replyDraft = ""
                                             reload()
                                         } catch (t: Throwable) {
-                                            errorMessage = t.message
+                                            errorMessage = t.userFacing()
                                         } finally {
                                             submitting = false
                                         }
@@ -245,13 +246,15 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                 modifier = Modifier.semantics { testTag = "vibecode-envvar-send-btn" },
                                 onClick = {
                                     val appId = s.appId ?: return@FSPrimaryButton
-                                    val dashIdx = appId.indexOf('-')
-                                    if (dashIdx <= 0) {
+                                    // serviceId = "<creator>--<slug>"; split on `--`
+                                    // (docs/service-addressing-double-dash.md).
+                                    val delimIdx = appId.indexOf("--")
+                                    if (delimIdx <= 0) {
                                         errorMessage = "Invalid app id shape"
                                         return@FSPrimaryButton
                                     }
-                                    val creator = appId.substring(0, dashIdx)
-                                    val slug = appId.substring(dashIdx + 1)
+                                    val creator = appId.substring(0, delimIdx)
+                                    val slug = appId.substring(delimIdx + 2)
                                     scope.launch(Dispatchers.Main) {
                                         submitting = true
                                         try {
@@ -277,7 +280,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                             envValueDraft = ""
                                             reload()
                                         } catch (t: Throwable) {
-                                            errorMessage = t.message
+                                            errorMessage = t.userFacing()
                                         } finally {
                                             submitting = false
                                         }
@@ -297,7 +300,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                             )
                                             reload()
                                         } catch (t: Throwable) {
-                                            errorMessage = t.message
+                                            errorMessage = t.userFacing()
                                         }
                                     }
                                 },
@@ -365,7 +368,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                     }
                                     reload()
                                 } catch (t: Throwable) {
-                                    errorMessage = t.message
+                                    errorMessage = t.userFacing()
                                 } finally {
                                     deploying = false
                                 }

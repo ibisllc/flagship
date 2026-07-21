@@ -22,11 +22,27 @@
 // without IndexedDB / the DOM / the network.
 
 import { controlApex } from "./apex.js";
+import { ensureAdminRoot as defaultEnsureAdminRoot } from "./adminRoot.js";
+import {
+  canonicalAccountProfile,
+  canonicalDeviceSelfProfile,
+  deriveAccountProfileKey,
+  deriveDeviceDirectoryKey,
+  encryptProfile,
+  generateDeviceId,
+  validateProfileDisplayName,
+} from "./accountMetadata.js";
+import {
+  deriveAccountDeviceKeyFromSeed,
+  deriveAccountIdFromSeed,
+  signWithAdminRoot,
+} from "../keystore.js";
 
 /** Login/identity handle is a bare label: 3–30 lowercase letters/digits,
- *  no dots, no hyphens. Mirror of state.js / bootstrap.js / control-plane
- *  labels.ts. */
-const USERNAME_RE = /^[a-z0-9]{3,30}$/;
+ *  3–30, interior single dashes OK (no leading/trailing), no `--` (the
+ *  slug↔creator delimiter). Mirror of control-plane labels.ts
+ *  (docs/service-addressing-double-dash.md). The `--` ban is checked separately. */
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 /** Canonical-bytes tag for the standalone username claim. MUST match
  *  `views/create-server.js` (TAG_CLAIM) and the Worker. */
@@ -40,7 +56,11 @@ function canonical(parts) {
 
 /** True iff `username` is a syntactically valid bare account handle. */
 export function isValidUsername(username) {
-  return typeof username === "string" && USERNAME_RE.test(username);
+  return (
+    typeof username === "string" &&
+    USERNAME_RE.test(username) &&
+    !username.includes("--")
+  );
 }
 
 /** POST the standalone, idempotent username claim. A 409 means the name
@@ -61,6 +81,15 @@ export async function claimUsername(username, irkPub, sign, deps = {}) {
   const irkPubHex = toHex(irkPub);
   const issuedAt = Date.now();
   const sig = await sign(canonical([TAG_CLAIM, username, irkPubHex, issuedAt]));
+  // Slice D (docs/device-admin-tier-spec.md §8.1) — publish the account's pinned
+  // admin master-root pubkey alongside the claim. `.com` stores it on the
+  // usernames row (`admin_root_pub_hex`); the claim signature covers only the
+  // membership fields (the admin root rides the body like `.com` already
+  // accepts). Omitted → a legacy claim with no admin root (byte-identical body).
+  const adminRootPubHex =
+    typeof deps.adminRootPubHex === "string" && deps.adminRootPubHex
+      ? deps.adminRootPubHex.toLowerCase()
+      : null;
   // ABSOLUTE control-plane URL (controlApex), not a relative path: the webapp is
   // served from web.<apex>, whose origin only serves GET/HEAD static assets — a
   // relative POST 405s there (and never reaches the control plane). Mirrors the
@@ -72,6 +101,7 @@ export async function claimUsername(username, irkPub, sign, deps = {}) {
     body: JSON.stringify({
       request: { username, irkPub: irkPubHex, issuedAt },
       signature: toHex(sig),
+      ...(adminRootPubHex ? { adminRootPub: adminRootPubHex } : {}),
     }),
   });
   if (!resp.ok && resp.status !== 409) {
@@ -121,12 +151,103 @@ export async function openAccount(username, deps) {
   }
 
   const sign = (bytes) => deps.signWithIrk(session.umk, bytes);
-  const { alreadyClaimed } = await claimUsername(
+
+  const accountDisplayName = validateProfileDisplayName(deps.accountDisplayName);
+  const deviceDisplayName = validateProfileDisplayName(deps.deviceDisplayName);
+
+  const ensureAdminRoot = deps.ensureAdminRoot || defaultEnsureAdminRoot;
+  const adminRootPubHex = await ensureAdminRoot(session);
+  if (!adminRootPubHex || !(session.adminRootSeed instanceof Uint8Array)) {
+    throw new Error("administrator key unavailable");
+  }
+  const toHex = deps.bytesToHex || defaultBytesToHex;
+  const deviceId = (deps.generateDeviceId || generateDeviceId)();
+  const deriveDeviceKey = deps.deriveAccountDeviceKeyFromSeed || deriveAccountDeviceKeyFromSeed;
+  const deriveAid = deps.deriveAccountIdFromSeed || deriveAccountIdFromSeed;
+  const signAdmin = deps.signWithAdminRoot || signWithAdminRoot;
+  const deviceKey = await deriveDeviceKey(session.umk, username, deviceId);
+  const aid = await deriveAid(session.umk);
+  const issuedAt = Date.now();
+  const grant = {
+    grantId: (deps.randomUUID || crypto.randomUUID.bind(crypto))(),
     username,
-    session.irk.publicKey,
-    sign,
-    { fetch: deps.fetch, bytesToHex: deps.bytesToHex },
+    deviceId,
+    devicePubHex: toHex(deviceKey.publicKey),
+    scopes: [
+      "browse", "install-service", "vibe-code", "add-device", "manage-services",
+      "revoke-others", "admin", "view-directory",
+    ],
+    issuedAt,
+    expiresAt: issuedAt + 90 * 24 * 3_600_000,
+  };
+  const claimSig = await sign(canonical([TAG_CLAIM, username, toHex(session.irk.publicKey), issuedAt]));
+  const accountEncrypted = await encryptProfile(accountDisplayName, await deriveAccountProfileKey(session.umk), {
+    accountId: username,
+    recordType: "account-profile",
+    revision: 1,
+    keyVersion: 1,
+  });
+  const accountUnsigned = {
+    accountId: username,
+    revision: 1,
+    keyVersion: 1,
+    ...accountEncrypted,
+    issuedAt,
+    signerPubHex: adminRootPubHex,
+  };
+  const accountProfile = {
+    ...accountUnsigned,
+    signatureHex: toHex(await signAdmin(session.adminRootSeed, canonicalAccountProfile(accountUnsigned))),
+  };
+  const deviceEncrypted = await encryptProfile(deviceDisplayName, await deriveDeviceDirectoryKey(session.umk), {
+    accountId: username,
+    deviceId,
+    recordType: "device-self-profile",
+    revision: 1,
+    keyVersion: 1,
+  });
+  const deviceUnsigned = {
+    accountId: username,
+    deviceId,
+    revision: 1,
+    keyVersion: 1,
+    ...deviceEncrypted,
+    issuedAt,
+    signerPubHex: toHex(deviceKey.publicKey),
+  };
+  const deviceProfile = {
+    ...deviceUnsigned,
+    signatureHex: toHex(await (deps.signWithDevice
+      ? deps.signWithDevice(deviceKey, canonicalDeviceSelfProfile(deviceUnsigned))
+      : new Uint8Array(await crypto.subtle.sign(
+          { name: "Ed25519" },
+          deviceKey.privateKey,
+          canonicalDeviceSelfProfile(deviceUnsigned),
+        )))),
+  };
+  const grantSignature = await signAdmin(
+    session.adminRootSeed,
+    canonicalDeviceGrant(grant),
   );
+  const f = deps.fetch || fetch;
+  const response = await f(`${controlApex()}/api/accounts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      claim: {
+        request: { username, irkPub: toHex(session.irk.publicKey), issuedAt },
+        signature: toHex(claimSig),
+      },
+      aidPub: toHex(aid.publicKey),
+      adminRootPub: adminRootPubHex,
+      device: { deviceId, devicePubHex: grant.devicePubHex, platformClass: "web" },
+      grant: { ...grant, signatureHex: toHex(grantSignature) },
+      accountProfile,
+      deviceProfile,
+    }),
+  });
+  if (!response.ok) throw new Error(`account bootstrap failed (${response.status}): ${await safeText(response)}`);
+  const created = await response.json().catch(() => ({}));
 
   // Bind the identity locally: username persisted + a server-less
   // profile (the device key IS the binding — the claim above tied the
@@ -144,11 +265,13 @@ export async function openAccount(username, deps) {
   }
 
   if (typeof deps.addProfile === "function") {
-    const toHex = deps.bytesToHex || defaultBytesToHex;
     deps.addProfile({
       cloudName: username,
       cloudRootPubHex: toHex(session.irk.publicKey),
-      deviceLabel: null,
+      accountId: username,
+      deviceId,
+      // Deliberately NOT the chosen names: they were just encrypted above
+      // and belong in the directory, not in localStorage.
       deviceCapability: null,
       demoServer: null,
     });
@@ -160,7 +283,20 @@ export async function openAccount(username, deps) {
     await deps.dispatchInitialView();
   }
 
-  return { username, alreadyClaimed };
+  return { username, alreadyClaimed: created.created === false, deviceId };
+}
+
+function canonicalDeviceGrant(grant) {
+  return canonical([
+    "flagship/device-capability-grant/v2",
+    grant.grantId,
+    grant.username,
+    grant.deviceId,
+    grant.devicePubHex,
+    grant.scopes.join(","),
+    grant.issuedAt,
+    grant.expiresAt,
+  ]);
 }
 
 function defaultBytesToHex(b) {

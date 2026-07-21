@@ -30,9 +30,9 @@ class MockScreensClientTest {
 
     @Test fun appsList_returnsKnownApps() = runTest {
         val r = makeClient().appsList()
-        // serviceId is the immutable composite `<creator>-<slug>`.
+        // serviceId is the immutable composite `<creator>--<slug>`.
         assertEquals(
-            listOf("harry-plants", "harry-wiki", "trent-scratchpad").sorted(),
+            listOf("harry--plants", "harry--wiki", "trent--scratchpad").sorted(),
             r.apps.map { it.serviceId }.sorted(),
         )
     }
@@ -50,9 +50,9 @@ class MockScreensClientTest {
         // The Mock must return the SAME AppDetailResponse shape the live
         // daemon serves (screensHttp app-detail → BFF types.ts), so the
         // ServiceDetailViewModel renders identically against either client.
-        val r = makeClient().appDetail("harry-plants")
+        val r = makeClient().appDetail("harry--plants")
         // app summary — the tier-1 url is the live `https://<urlLabel>.<fqdn>` form.
-        assertEquals("harry-plants", r.app.serviceId)
+        assertEquals("harry--plants", r.app.serviceId)
         assertEquals("harry", r.app.creator)
         assertEquals("plants", r.app.slug)
         assertTrue(r.app.url.startsWith("https://plants."))
@@ -138,7 +138,7 @@ class MockScreensClientTest {
 
     @Test fun serviceEnvList_returnsSortedNamesOnly() = runTest {
         val c = makeClient()
-        val r = c.serviceEnvList("harry-plants")
+        val r = c.serviceEnvList("harry--plants")
         assertTrue(r.names.contains("WEATHER_API_KEY"))
     }
 
@@ -151,10 +151,10 @@ class MockScreensClientTest {
             issuedAt = 1L,
         )
         c.serviceEnvSet(
-            "harry-plants",
+            "harry--plants",
             ServiceEnvSetRequest(name = "FOO", value = "bar-NEVER-LEAKED", request = envelope, signature = "00"),
         )
-        val r = c.serviceEnvList("harry-plants")
+        val r = c.serviceEnvList("harry--plants")
         assertTrue(r.names.contains("FOO"))
     }
 
@@ -167,10 +167,10 @@ class MockScreensClientTest {
             issuedAt = 1L,
         )
         c.serviceEnvUnset(
-            "harry-plants",
+            "harry--plants",
             ServiceEnvUnsetRequest(name = "WEATHER_API_KEY", request = envelope, signature = "00"),
         )
-        val r = c.serviceEnvList("harry-plants")
+        val r = c.serviceEnvList("harry--plants")
         assertTrue(!r.names.contains("WEATHER_API_KEY"))
     }
 

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Flagship.Builder.E2E</RootNamespace>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The exact production sources the WPF app ships — the point of this
+         runner is to prove THAT stack boots a real guest, headless (the app's
+         requireAdministrator manifest makes unattended UI runs awkward; the VM
+         path itself needs no elevation). -->
+    <Compile Include="..\..\src\Recipe.cs"/>
+    <Compile Include="..\..\src\Ed25519Verify.cs"/>
+    <Compile Include="..\..\src\VM\HostResources.cs"/>
+    <Compile Include="..\..\src\VM\VMResourcePlan.cs"/>
+    <Compile Include="..\..\src\VM\ServerTier.cs"/>
+    <Compile Include="..\..\src\VM\RecipeSiblings.cs"/>
+    <Compile Include="..\..\src\VM\VMConfig.cs"/>
+    <Compile Include="..\..\src\VM\VMLifecycle.cs"/>
+    <Compile Include="..\..\src\VM\VMInventoryStore.cs"/>
+    <Compile Include="..\..\src\VM\QemuLocator.cs"/>
+    <Compile Include="..\..\src\VM\QemuCommandLine.cs"/>
+    <Compile Include="..\..\src\VM\WhpxProbe.cs"/>
+    <Compile Include="..\..\src\VM\QmpClient.cs"/>
+    <Compile Include="..\..\src\VM\QemuHost.cs"/>
+    <Compile Include="..\..\src\VM\VMManager.cs"/>
+  </ItemGroup>
+
+</Project>

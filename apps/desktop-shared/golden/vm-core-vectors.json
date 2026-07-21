@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "notes": "Cross-language contract for the desktop VM core (apps/builder-mac FlagshipBuilderCore/VM <-> apps/builder-windows src/VM). Both test suites MUST consume this file so the cores cannot drift — the same role engine/golden/preseed-vectors.json plays for the preseed engine. States: created | installing | installed | awaitingPhoneUnlock | running | stopped | failed:install | failed:run. Events: startInstall | installSucceeded | installFailed | powerOn | guestUnlocked | powerOff | runtimeFailed. Effects: attachInstallerISO | detachInstallerISO | startVirtualMachine | stopVirtualMachine. 'sealed' mirrors VMConfig.awaitsPhoneUnlockAtBoot; transitions listing no 'sealed' key must hold for BOTH values.",
+  "lifecycle": {
+    "transitions": [
+      { "start": "created", "event": "startInstall", "next": "installing", "effects": ["attachInstallerISO", "startVirtualMachine"] },
+      { "start": "failed:install", "event": "startInstall", "next": "installing", "effects": ["attachInstallerISO", "startVirtualMachine"] },
+      { "start": "installing", "event": "installSucceeded", "next": "installed", "effects": ["detachInstallerISO"] },
+      { "start": "installing", "event": "installFailed", "reason": "guest error", "next": "failed:install", "effects": ["stopVirtualMachine", "detachInstallerISO"] },
+      { "start": "installed", "event": "powerOn", "sealed": true, "next": "awaitingPhoneUnlock", "effects": ["startVirtualMachine"] },
+      { "start": "installed", "event": "powerOn", "sealed": false, "next": "running", "effects": ["startVirtualMachine"] },
+      { "start": "stopped", "event": "powerOn", "sealed": true, "next": "awaitingPhoneUnlock", "effects": ["startVirtualMachine"] },
+      { "start": "stopped", "event": "powerOn", "sealed": false, "next": "running", "effects": ["startVirtualMachine"] },
+      { "start": "failed:run", "event": "powerOn", "sealed": true, "next": "awaitingPhoneUnlock", "effects": ["startVirtualMachine"] },
+      { "start": "failed:run", "event": "powerOn", "sealed": false, "next": "running", "effects": ["startVirtualMachine"] },
+      { "start": "awaitingPhoneUnlock", "event": "guestUnlocked", "next": "running", "effects": [] },
+      { "start": "awaitingPhoneUnlock", "event": "powerOff", "next": "stopped", "effects": ["stopVirtualMachine"] },
+      { "start": "running", "event": "powerOff", "next": "stopped", "effects": ["stopVirtualMachine"] },
+      { "start": "awaitingPhoneUnlock", "event": "runtimeFailed", "reason": "died", "next": "failed:run", "effects": [] },
+      { "start": "running", "event": "runtimeFailed", "reason": "crashed", "next": "failed:run", "effects": [] }
+    ],
+    "invalid": [
+      { "start": "created", "event": "powerOn" },
+      { "start": "created", "event": "installSucceeded" },
+      { "start": "created", "event": "powerOff" },
+      { "start": "created", "event": "guestUnlocked" },
+      { "start": "installing", "event": "powerOn" },
+      { "start": "installing", "event": "guestUnlocked" },
+      { "start": "installing", "event": "startInstall" },
+      { "start": "installed", "event": "startInstall" },
+      { "start": "installed", "event": "guestUnlocked" },
+      { "start": "installed", "event": "powerOff" },
+      { "start": "running", "event": "powerOn" },
+      { "start": "running", "event": "guestUnlocked" },
+      { "start": "running", "event": "startInstall" },
+      { "start": "stopped", "event": "guestUnlocked" },
+      { "start": "stopped", "event": "startInstall" },
+      { "start": "stopped", "event": "powerOff" },
+      { "start": "awaitingPhoneUnlock", "event": "powerOn" },
+      { "start": "awaitingPhoneUnlock", "event": "startInstall" },
+      { "start": "failed:install", "event": "powerOn" },
+      { "start": "failed:install", "event": "guestUnlocked" },
+      { "start": "failed:run", "event": "startInstall" }
+    ]
+  },
+  "installVerdict": {
+    "notes": "A hypervisor-level clean guest-stop during install is ambiguous (success poweroff / completed-install reboot / never-booted all look identical), so the verdict is duration-gated: elapsed >= minPlausibleInstallSeconds => installSucceeded, else installFailed with an actionable reason. Edge: exactly the minimum counts as success. Verdict tokens pin the EVENT chosen, not the failure prose (messages are per-platform).",
+    "minPlausibleInstallSeconds": 90,
+    "cases": [
+      { "elapsedSeconds": 0, "verdict": "installFailed" },
+      { "elapsedSeconds": 5, "verdict": "installFailed" },
+      { "elapsedSeconds": 45, "verdict": "installFailed" },
+      { "elapsedSeconds": 89, "verdict": "installFailed" },
+      { "elapsedSeconds": 89.5, "verdict": "installFailed" },
+      { "elapsedSeconds": 90, "verdict": "installSucceeded" },
+      { "elapsedSeconds": 91, "verdict": "installSucceeded" },
+      { "elapsedSeconds": 600, "verdict": "installSucceeded" },
+      { "elapsedSeconds": 5400, "verdict": "installSucceeded" }
+    ]
+  },
+  "resourcePlan": {
+    "notes": "gib = 2^30. Constants: default 6 GiB, floor 4 GiB, host reserve 4 GiB, absolute max 8 VMs, default main disk 64 GiB.",
+    "cases": [
+      { "hostCpus": 1, "hostRamGiB": 8, "vmCpus": 1, "vmMemGiB": 4, "maxVMs": 1 },
+      { "hostCpus": 2, "hostRamGiB": 2, "vmCpus": 2, "vmMemGiB": 4, "maxVMs": 0 },
+      { "hostCpus": 2, "hostRamGiB": 4, "vmCpus": 2, "vmMemGiB": 4, "maxVMs": 0 },
+      { "hostCpus": 2, "hostRamGiB": 7, "vmCpus": 2, "vmMemGiB": 4, "maxVMs": 0 },
+      { "hostCpus": 2, "hostRamGiB": 8, "vmCpus": 2, "vmMemGiB": 4, "maxVMs": 1 },
+      { "hostCpus": 4, "hostRamGiB": 8, "vmCpus": 2, "vmMemGiB": 4, "maxVMs": 1 },
+      { "hostCpus": 4, "hostRamGiB": 9, "vmCpus": 2, "vmMemGiB": 5, "maxVMs": 1 },
+      { "hostCpus": 4, "hostRamGiB": 16, "vmCpus": 2, "vmMemGiB": 6, "maxVMs": 2 },
+      { "hostCpus": 5, "hostRamGiB": 16, "vmCpus": 3, "vmMemGiB": 6, "maxVMs": 2 },
+      { "hostCpus": 8, "hostRamGiB": 12, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 1 },
+      { "hostCpus": 8, "hostRamGiB": 16, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 2 },
+      { "hostCpus": 10, "hostRamGiB": 32, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 4 },
+      { "hostCpus": 12, "hostRamGiB": 32, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 4 },
+      { "hostCpus": 16, "hostRamGiB": 16, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 2 },
+      { "hostCpus": 32, "hostRamGiB": 128, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 8 }
+    ]
+  },
+  "nameValidation": {
+    "notes": "Bundle names are server FQDNs. Allowed: lowercase a-z, 0-9, '.', '-'; non-empty; not '.' or '..'; no LEADING dot; no TRAILING dot (the trailing-dot rejection is one deliberate tightening over the original Mac validate() — Win32 silently strips trailing dots and no real FQDN ends in one; the Mac side should adopt it).",
+    "valid": [
+      "home.harry.flagship.services",
+      "a",
+      "a-b.c",
+      "0server.x9",
+      "-leading-dash-is-allowed",
+      "a..b"
+    ],
+    "invalid": [
+      "",
+      ".",
+      "..",
+      ".hidden",
+      "a.",
+      "Upper.example",
+      "spa ce",
+      "under_score",
+      "a/b",
+      "a\\b",
+      "héllo"
+    ]
+  }
+}

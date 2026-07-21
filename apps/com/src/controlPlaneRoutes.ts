@@ -27,12 +27,13 @@ import {
   handleStoreTrustException,
   handleListTrustExceptions,
   handleCreateServiceInvite,
+  handleFetchServiceInviteCreate,
   handleRedeemServiceInvite,
   handleRevokeServiceInvite,
   handleListServiceInvites,
+  handleRevokedSinceServiceInvites,
   handleCleanupApex,
   handleCompleteRePair,
-  handleDeviceDisconnect,
   handleConsumeUnlockKey,
   handleDepositAutoUnlockLease,
   handleGetRePair,
@@ -46,6 +47,46 @@ import {
   handleReleaseBoxSealedLease,
   handleRevokeBoxSealedLease,
   handleListBoxSealedLeases,
+  handlePostPairingDeposit,
+  handleConsumePairingDeposit,
+  handlePbRequestPeers,
+  handlePeerStkLookup,
+  handlePutBackupManifest,
+  handleGetBackupManifest,
+  handlePostEntitlementDeposit,
+  handleConsumeEntitlementDeposit,
+  handlePostSwkDeposit,
+  handleConsumeSwkDeposit,
+  handlePostCgkDeposit,
+  handleConsumeCgkDeposit,
+  handlePostSetLeaderDeposit,
+  handleConsumeSetLeaderDeposit,
+  handlePostUpdateDeposit,
+  handleConsumeUpdateDeposit,
+  handleConsumeSelfDeleteDeposit,
+  handlePostDecommission,
+  handleGetDecommission,
+  handleGetEvictionChain,
+  handlePostEpochComplete,
+  handlePostAckOld,
+  handlePostAckNew,
+  handlePostMigrationStart,
+  handleGetMigration,
+  handleGetMigrationAssignment,
+  handlePostMigrationAttach,
+  handlePostMigrationPreSeeded,
+  handlePostMigrationConfirmReady,
+  handlePostMigrationFreeze,
+  handlePostMigrationTakeOver,
+  handlePostMigrationAbort,
+  handlePostTransferOffer,
+  handlePostTransferClaim,
+  handleGetTransferClaim,
+  handleGetTransferRehome,
+  handlePostTransferRehomeAuth,
+  handlePostTransferDiskKey,
+  handleGetTransferDiskKey,
+  handlePostTransferAdminHandoff,
   handleDepositAcmeAccountKey,
   handleReleaseAcmeAccountKey,
   handleRevokeAcmeAccountKeyDelivery,
@@ -83,18 +124,29 @@ import {
   handleServerRegister,
   handleRevokeServer,
   handleServerReleaseName,
+  handleAccountDeletionBundle,
+  handleAdminUsernameReclaim,
   handleServerRevokeBySelf,
   handleSetRoutingTarget,
+  handleSuggestUsername,
   handleUsernameClaim,
+  handleAccountBootstrap,
   handleUsersCheck,
-  parseTestAccountsEnv,
   handleUsernameLookup,
   handlePostUsernameRename,
   handleGetUsernameAlias,
   handleGetUserPods,
+  handleUserStream,
   handleListOutstandingOrders,
-  handleGetUsersDevices,
   handleAccountResolve,
+  handleGetAccountProfile,
+  handleGetAccountDirectory,
+  handlePutAccountProfile,
+  handlePutDeviceSelfProfile,
+  handlePutDeviceManagedProfile,
+  handleDeleteDeviceManagedProfile,
+  handleRevokeAccountDevice,
+  handlePutAccountDirectoryKeyGrant,
   handleGetAuditEvents,
   handlePostDaemonStatus,
   handleUserPubKeyCert,
@@ -111,28 +163,25 @@ import {
   handleVouchedDeviceAdmit,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
+  handleLlmPromoUsage,
+  parseBlessedInferenceEndpoint,
+  mintScopedInferenceToken,
+  verifyScopedInferenceToken,
   handleDeleteWebauthnRecovery,
   handleFetchWebauthnRecovery,
   handleFetchWrappedUmkWithToken,
   handleUploadWebauthnRecovery,
   handleGetUserIdentity,
   handlePutUserIdentity,
-  handleCreateDemoUser,
-  handleDeleteDemoUser,
-  handleDemoUserConnect,
-  handleDemoUserCancel,
-  handleDemoUserHeartbeat,
-  handleDemoUserInstallComplete,
+  handleCreateDemoAccount,
+  handleCleanupDemoAccount,
   handleGetDemoUser,
   handleListDemoUsers,
-  handleAdminClaimAndIssue,
-  handleAdminMintDeviceGrant,
-  handleAdminCloudInitNow,
   handleGymProvision,
-  handleAdminSnapshotNow,
   handleMintDeviceGrant,
-  handleListDeviceGrants,
   handleRevokeDeviceGrant,
+  handleApplyAdminRootRotation,
+  handleListAdminRootRotations,
   handleMintWatchDelegate,
   handleListWatchDelegates,
   handleRevokeWatchDelegate,
@@ -225,7 +274,7 @@ export interface ControlPlaneEnv {
   FLAGSHIP_ADMIN_SECRET?: string;
 
   /**
-   * The blessed Debian base-ISO manifest the desktop burner should hold,
+   * The blessed Debian base-ISO manifest the desktop builder should hold,
    * as a JSON string of the `IsoManifest` shape:
    *   {"version","url","sha256","sizeBytes","attestation"}
    * Unset / unparseable / shape-invalid ⇒ treated as unconfigured, and
@@ -233,11 +282,45 @@ export interface ControlPlaneEnv {
    * value server-side IS the "ship a new release / hold an old one"
    * lever — there is no action/keep/urgent field on the wire. The
    * `sha256` MUST be pinned to Debian's official signed SHA256SUMS (the
-   * `attestation` URL) so the burner can verify the download end-to-end.
+   * `attestation` URL) so the builder can verify the download end-to-end.
    * Set via `wrangler secret put FLAGSHIP_ISO_MANIFEST` (or a [vars]
    * entry once values are public).
    */
   FLAGSHIP_ISO_MANIFEST?: string;
+
+  /**
+   * The blessed arm64 Debian base-ISO manifest, same JSON shape as
+   * `FLAGSHIP_ISO_MANIFEST`. Served only to `arch: "arm64"` manifest
+   * requests — the desktop apps' HOST-a-VM path on arm64 hardware
+   * (Apple-silicon Macs, arm64 Linux/Chromebook KVM hosts), which can
+   * only boot a native-arch guest. Burning stays amd64. Unset ⇒ arm64
+   * requests get `{ download: null }` and the apps direct the user to
+   * Advanced mode.
+   */
+  FLAGSHIP_ISO_MANIFEST_ARM64?: string;
+
+  /**
+   * The blessed in-house inference endpoint that backs the free-credits
+   * ("flagship") provider posture, as a JSON string of the
+   * `InferenceEndpoint` shape: {"baseUrl","model"}. `baseUrl` is the
+   * OpenAI-compatible RunPod/vLLM URL; `model` the served model id.
+   * Unset / unparseable / non-https ⇒ treated as unconfigured, and a
+   * `flagship` promo issue is refused (503) rather than minting a dead
+   * key. Rotating the RunPod endpoint is purely a matter of changing this
+   * value server-side — it never appears in a recipe or client build.
+   * Set via `wrangler secret put FLAGSHIP_INFERENCE_ENDPOINT`.
+   */
+  FLAGSHIP_INFERENCE_ENDPOINT?: string;
+
+  /**
+   * HMAC-SHA256 secret used to sign the scoped inference tokens the promo
+   * minter hands out for `provider:"flagship"`, and which the metering
+   * shim in front of the RunPod endpoint verifies (and reports usage back
+   * under, to POST /api/llm-promo/usage). Unset ⇒ a `flagship` issue is
+   * refused (503). NOT in git — `wrangler secret put
+   * FLAGSHIP_INFERENCE_TOKEN_SECRET`.
+   */
+  FLAGSHIP_INFERENCE_TOKEN_SECRET?: string;
 
   /**
    * Shared bearer secret for the dedicated boot worker's NOTIFY PIPE
@@ -278,18 +361,6 @@ export interface ControlPlaneEnv {
   FCM_PROJECT_ID?: string;
 
   /**
-   * Test-account list. JSON object: `{ "<username>": { "display": "...",
-   * "ttlHours": 6 } }`. NOT in git — set via `wrangler secret put
-   * TEST_ACCOUNTS`. Matching usernames return testAccount metadata on
-   * POST /api/users/check so mobile clients enter a sandboxed demo
-   * mode. The full list is never exposed; the handler only returns
-   * the entry the caller asked about. See
-   * packages/control-plane/src/usersCheck.ts and the
-   * future-test-account-architecture memory note.
-   */
-  TEST_ACCOUNTS?: string;
-
-  /**
    * Hetzner Cloud API token (Plan A — sample-user / on-connect VPS).
    * Worker uses it to provision / destroy demo-user servers from
    * pre-baked snapshots. NOT in git — set via `wrangler secret put
@@ -326,66 +397,19 @@ export interface ControlPlaneEnv {
    */
   FLAGSHIP_TOTP_KEK?: string;
 
-  /**
-   * v2 device-addressing (S3.3) — 32-byte hex Worker secret used as
-   * the KEK from which `admin-claim-and-issue` derives a deterministic
-   * User IRK for a demo username (HKDF salt="flagship-demo-irk-v1",
-   * info="user-irk"; see packages/control-plane/src/demoUsersAdmin.ts).
-   * Generate once via `openssl rand -hex 32` and set via
-   * `wrangler secret put DEMO_IRK_KEK`. When unset, both new admin
-   * endpoints (admin-claim-and-issue + admin-mint-device-grant) return
-   * 503; legacy demo handlers (create/connect/heartbeat) keep working.
-   * NEVER appears in code, logs, or D1.
-   */
+  /** Worker-only KEK for deterministic demo key custody. Demo accounts use
+   * the standard encrypted profile and account-scoped device protocols. */
   DEMO_IRK_KEK?: string;
 
-  /**
-   * W11 — base Alpine ISO bucket binding. Holds the unmodified
-   * Alpine + apkovl ISO that the build-relay serves to the browser
-   * AND the W11 admin-snapshot-now handler streams through
-   * `streamPersonalize` into ISO_TEMP_BUCKET. Bound via
-   * `[[r2_buckets]] binding = "ISO_BUCKET"`.
-   */
+  /** Base installer ISO bucket used by the build relay. */
   ISO_BUCKET?: ProvisioningBaseBucket;
 
-  /**
-   * W11 — temp bucket for personalized demo ISOs. The cloud-init
-   * `user_data` script wgets from this bucket's public dev-url.
-   * Bound via `[[r2_buckets]] binding = "ISO_TEMP_BUCKET"`.
-   */
+  /** Temporary operational-artifact bucket used by gym diagnostics. */
   ISO_TEMP_BUCKET?: ProvisioningTempBucket;
-
-  /**
-   * W11 — public dev-url base for `ISO_TEMP_BUCKET`. Set in
-   * `wrangler.toml [vars]` once the bucket has public access enabled
-   * via `wrangler r2 bucket dev-url enable flagship-iso-temp`. The
-   * cloud-init script wgets `${base}/${key}`.
-   */
-  FLAGSHIP_R2_TEMP_PUBLIC_BASE?: string;
-
-  /**
-   * W11 — base ISO key inside `ISO_BUCKET`. Defaults to the
-   * `flagship-base-alpine-…iso` path the build-relay serves. Set in
-   * `wrangler.toml [vars]` if you bump Alpine versions.
-   */
-  FLAGSHIP_BASE_ISO_KEY?: string;
-
-  /**
-   * W12 — public URL of the Debian-12-netinst-based netboot ISO used
-   * by the cloud demo (admin-snapshot-now) path. Cloud-init wgets
-   * this directly from the VPS. Build with
-   *   scripts/build-flagship-netboot-iso.sh out/flagship-netboot.iso
-   * and upload to R2. Falls back to FLAGSHIP_NETBOOT_ISO_URL → the
-   * pinned default below.
-   */
-  FLAGSHIP_NETBOOT_ISO_URL?: string;
-  /** R2 object key for the netboot ISO inside `ISO_BUCKET`. */
-  FLAGSHIP_NETBOOT_ISO_KEY?: string;
 }
 
-// Structural shapes for the R2 bindings the W11 handler uses. Kept
-// inline so the control-plane package's structural types stay
-// decoupled from @cloudflare/workers-types.
+// Structural R2 shapes kept inline so control-plane remains decoupled from
+// @cloudflare/workers-types.
 interface ProvisioningBaseBucket {
   get(key: string): Promise<{
     body: ReadableStream<Uint8Array> | null;
@@ -412,6 +436,8 @@ const ROUTE_RE = {
   USAGE_REPORT: /^\/api\/usage\/report$/,
   USAGE_STATUS: /^\/api\/usage\/status$/,
   USERNAME_CLAIM: /^\/api\/username\/claim$/,
+  ACCOUNT_BOOTSTRAP: /^\/api\/accounts$/,
+  USERNAME_SUGGEST: /^\/api\/username\/suggest$/,
   USERS_CHECK: /^\/api\/users\/check$/,
   ACCOUNT_RESOLVE: /^\/api\/account\/resolve\/([^/]+)$/,
   USERNAME_RENAME: /^\/api\/username\/rename$/,
@@ -440,13 +466,15 @@ const ROUTE_RE = {
   // create (POST) + list (GET) on the base path; revoke is a distinct sub-path
   // checked first; redeem is account-agnostic (the friend may be a stranger).
   SERVICE_INVITE_REVOKE: /^\/api\/users\/([^/]+)\/service-invites\/revoke$/,
+  SERVICE_INVITE_REVOKED_SINCE: /^\/api\/users\/([^/]+)\/service-invites\/revoked-since$/,
+  SERVICE_INVITE_CREATE_FETCH: /^\/api\/users\/([^/]+)\/service-invites\/([^/]+)\/create$/,
   SERVICE_INVITES: /^\/api\/users\/([^/]+)\/service-invites$/,
   SERVICE_INVITE_REDEEM: /^\/api\/service-invites\/redeem$/,
   RCK_REGISTER: /^\/api\/routing\/register-rck$/,
   RCK_SET_TARGET: /^\/api\/routing\/set-target$/,
   ROUTING_LOOKUP: /^\/api\/routing\/lookup$/,
   INSTALL_EVENTS: /^\/api\/install-events\/([^/]+)$/,
-  // Desktop-burner base-ISO manifest channel. The burner POSTs what it
+  // Desktop-builder base-ISO manifest channel. The builder POSTs what it
   // currently holds on every launch; the server decides whether/where to
   // fetch the blessed Debian base ISO. Unauthenticated, rate-limited.
   ISO_MANIFEST: /^\/api\/iso-manifest$/,
@@ -478,6 +506,93 @@ const ROUTE_RE = {
   LEASE_V2_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key\/lease-v2$/,
   LEASE_V2_REVOKE: /^\/api\/server\/([^/]+)\/unlock-key\/lease-v2\/([^/]+)$/,
   LEASE_V2_LIST: /^\/api\/server\/([^/]+)\/unlock-key\/leases-v2$/,
+  // Deposit-on-unlock pairing. ONE path discriminated by method:
+  //   POST  phone deposit (IRK mailbox-auth, sealed for the box STK)
+  //   GET   box consume-once read (public — sealed blob only)
+  PAIRING_DEPOSIT: /^\/api\/server\/([^/]+)\/pairing-deposit$/,
+  // Entitlement deposit-on-unlock: POST phone deposit (IRK mailbox-auth, the
+  // PUBLIC IRK-signed entitlement) / GET box consume-once read.
+  ENTITLEMENT_DEPOSIT: /^\/api\/server\/([^/]+)\/entitlement-deposit$/,
+  // Secret-free-recipe SWK delivery: POST phone deposit (IRK mailbox-auth, the
+  // SEALED SWK-delivery carrier) / GET box consume-once read (sealed only).
+  SWK_DEPOSIT: /^\/api\/server\/([^/]+)\/swk-deposit$/,
+  // Post-boot CGK delivery (Phase 6): POST phone deposit (IRK mailbox-auth, the
+  // SEALED CGK-delivery carrier) / GET box consume-once read (sealed only).
+  CGK_DEPOSIT: /^\/api\/server\/([^/]+)\/cgk-deposit$/,
+  // Owner preferred-server vote (Phase 6): POST phone deposit (IRK mailbox-auth,
+  // owner-IRK set-leader vote, verified before storing) / GET box consume-once read.
+  SET_LEADER_DEPOSIT: /^\/api\/server\/([^/]+)\/set-leader$/,
+  // Admin-authorized in-place server-update order (docs/server-update-mechanism.md):
+  //   POST  phone deposits the admin-signed UpdateOrder (mailbox-auth + Slice-D
+  //         admin-authority gate — the sensitive-op check)
+  //   GET   the box fetches its own order (PUBLIC consume-once; re-verifies box-side)
+  UPDATE_DEPOSIT: /^\/api\/server\/([^/]+)\/update$/,
+  SELF_DELETE_DEPOSIT: /^\/api\/server\/([^/]+)\/self-delete$/,
+  // Peer-backup (server-migration Layer 0). request-peers is the STK-signed
+  // matchmaker (same-account pods, v0); stk is the exact-match directory
+  // lookup a receiving peer resolves a shard-caller's STK with; the
+  // backup-manifest path is method-discriminated:
+  //   PUT  box deposits its SWK-sealed shard-placement manifest (STK-signed,
+  //        monotonic generation — latest-wins)
+  //   GET  public non-consuming read (ciphertext only; a fresh replacement
+  //        box re-derives the SWK and opens it)
+  PB_REQUEST_PEERS: /^\/api\/peer-backup\/request-peers$/,
+  PB_STK_LOOKUP: /^\/api\/peer-backup\/stk\/([^/]+)$/,
+  BACKUP_MANIFEST: /^\/api\/server\/([^/]+)\/backup-manifest$/,
+  // Graceful server-replacement decommission (docs/server-replacement-graceful-
+  // decommission.md). The bare `decommission` path is method-discriminated:
+  //   POST  owner deposits the IRK-signed ServerDecommission order (mailbox-auth)
+  //   GET   the retiring box fetches its own order by ?stk= (PUBLIC, revoke-tolerant)
+  // The sub-path literals (epoch-complete / ack-old / ack-new) are anchored with
+  // `$` so they can't collide with the bare matcher; the eviction-chain is the
+  // successor's full-chain read.
+  DECOMMISSION_EPOCH_COMPLETE: /^\/api\/server\/([^/]+)\/decommission\/epoch-complete$/,
+  DECOMMISSION_ACK_OLD: /^\/api\/server\/([^/]+)\/decommission\/ack-old$/,
+  DECOMMISSION_ACK_NEW: /^\/api\/server\/([^/]+)\/decommission\/ack-new$/,
+  DECOMMISSION: /^\/api\/server\/([^/]+)\/decommission$/,
+  EVICTION_CHAIN: /^\/api\/server\/([^/]+)\/eviction-chain$/,
+  // Server-migration orchestration (docs/server-migration.md). The bare
+  // `migration` path is method-discriminated (POST admin-signed initiate /
+  // GET public phase state); the sub-path literals are anchored with `$` and
+  // matched BEFORE the bare path. `migration-assignment` is the NEW box's
+  // discovery read, keyed by ITS OWN registered pod FQDN.
+  MIGRATION_ATTACH: /^\/api\/server\/([^/]+)\/migration\/attach$/,
+  MIGRATION_PRE_SEEDED: /^\/api\/server\/([^/]+)\/migration\/pre-seeded$/,
+  MIGRATION_CONFIRM_READY: /^\/api\/server\/([^/]+)\/migration\/confirm-ready$/,
+  MIGRATION_FREEZE: /^\/api\/server\/([^/]+)\/migration\/freeze$/,
+  MIGRATION_TAKE_OVER: /^\/api\/server\/([^/]+)\/migration\/take-over$/,
+  MIGRATION_ABORT: /^\/api\/server\/([^/]+)\/migration\/abort$/,
+  MIGRATION: /^\/api\/server\/([^/]+)\/migration$/,
+  MIGRATION_ASSIGNMENT: /^\/api\/server\/([^/]+)\/migration-assignment$/,
+  // Transfer-a-box broker (docs/account-deletion-and-name-reclaim.md §4). ONE
+  // path discriminated by method:
+  //   POST .../transfer/offer       giver deposit (IRK mailbox-auth, signed offer)
+  //   POST .../transfer/claim       acquirer claim (signed ServerTransferClaim)
+  //   POST .../transfer/claim-poll  giver claim-poll (IRK mailbox-auth → acquirer
+  //                                 IRK for the disk-key re-seal). POST (not GET)
+  //                                 because the IRK mailbox-auth rides the body
+  //                                 (a GET-with-body is non-portable) — mirrors
+  //                                 the secret-requests listing's POST alias.
+  TRANSFER_OFFER: /^\/api\/server\/([^/]+)\/transfer\/offer$/,
+  TRANSFER_CLAIM: /^\/api\/server\/([^/]+)\/transfer\/claim$/,
+  TRANSFER_CLAIM_POLL: /^\/api\/server\/([^/]+)\/transfer\/claim-poll$/,
+  // Box-side re-home read (Layer A): the BOX polls its OLD canonical to learn
+  // "did my owner change?". PUBLIC (the payload is already-public identity); the
+  // box re-verifies the fresh acquirer-IRK entitlement + the giver-signed
+  // re-sealed lease before serving. 404 when never transferred.
+  TRANSFER_REHOME: /^\/api\/server\/([^/]+)\/transfer\/rehome$/,
+  // Layer B disk-key handoff: giver deposits the re-sealed-to-acquirer-IRK disk
+  // key (POST, giver IRK mailbox-auth); acquirer reads it (POST, acquirer IRK
+  // mailbox-auth — the auth rides the body, mirroring claim-poll).
+  TRANSFER_DISK_KEY: /^\/api\/server\/([^/]+)\/transfer\/disk-key$/,
+  TRANSFER_DISK_KEY_CLAIM: /^\/api\/server\/([^/]+)\/transfer\/disk-key-claim$/,
+  // Slice D §9.8 — the giver deposits the admin-root handoff proof (the
+  // giver-admin-root SIGNATURE is the auth; the box re-verifies vs its pin).
+  TRANSFER_ADMIN_HANDOFF: /^\/api\/server\/([^/]+)\/transfer\/admin-handoff$/,
+  // v1-sec GAP 3 — the LEGACY (no-admin-root) sibling: the giver deposits the
+  // giver-owner-IRK-signed re-home authorization (the SIGNATURE is the auth; a
+  // box with no pinned admin root re-verifies it vs its pinned owner IRK).
+  TRANSFER_REHOME_AUTH: /^\/api\/server\/([^/]+)\/transfer\/rehome-auth$/,
   // #28 Option B — seal-to-box ACME account-key delivery. ONE path
   // (singular `acme-account-key`) discriminated by method:
   //   POST   deposit (IRK-signed grant, sealed to the box STK)
@@ -485,10 +600,13 @@ const ROUTE_RE = {
   //   DELETE delivery-revoke (IRK-signed)
   ACME_ACCOUNT_KEY_DELIVERY: /^\/api\/server\/([^/]+)\/acme-account-key$/,
   USER_PODS: /^\/api\/users\/([^/]+)\/pods$/,
+  // Unified live-update channel — a single foreground long-poll that returns
+  // the same payload as /pods PLUS a change-detection `cursor`, holding until
+  // the user's meaningful state changes (or ~25s). Unauthenticated, like /pods.
+  USER_STREAM: /^\/api\/users\/([^/]+)\/stream$/,
   // #43 — IRK-signed list of the account's IN-FLIGHT install orders, the
   // authority the phone reconciles its local pending-server cache against.
   USER_OUTSTANDING_ORDERS: /^\/api\/users\/([^/]+)\/outstanding-orders$/,
-  USER_DEVICES: /^\/api\/users\/([^/]+)\/devices$/,
   // Phase 3b — vouched cross-device admit. The admin signs a
   // DeviceAdmit (under the account IRK) binding the incoming device's
   // fresh pubkey; the incoming device presents it here on register and
@@ -497,7 +615,6 @@ const ROUTE_RE = {
   USER_DEVICE_ADMIT: /^\/api\/users\/([^/]+)\/devices\/admit$/,
   // v1.2 Phase 2 — IRK-signed disconnect-a-sibling. Quarantine-gated
   // on the caller's push_token row.
-  USER_DEVICE_DISCONNECT: /^\/api\/users\/([^/]+)\/devices\/([^/]+)\/disconnect$/,
   USER_AUDIT: /^\/api\/users\/([^/]+)\/audit$/,
   DAEMON_STATUS: /^\/api\/daemon-status$/,
   RE_PAIR_INITIATE: /^\/api\/users\/([^/]+)\/re-pair$/,
@@ -517,15 +634,20 @@ const ROUTE_RE = {
   VOICI_SHORTEN: /^\/api\/voici\/shorten$/,
   ADMIN_REPUBLISH: /^\/api\/admin\/republish-server-dns$/,
   ADMIN_CLEANUP_APEX: /^\/api\/admin\/cleanup-apex$/,
+  ADMIN_DNS_CHALLENGE_GC: /^\/api\/admin\/dns-challenge-gc$/,
+  ADMIN_DNS_ROUTE_GC: /^\/api\/admin\/dns-route-gc$/,
   ADMIN_SCHEMA_STATUS: /^\/api\/admin\/schema-status$/,
   ADMIN_SCHEMA_STAMP: /^\/api\/admin\/schema-version\/([^/]+)$/,
   ADMIN_CA_LEASE_STATUS: /^\/api\/admin\/ca-lease-status$/,
+  ADMIN_USERNAME_RECLAIM: /^\/api\/admin\/username\/([^/]+)\/reclaim$/,
+  ACCOUNT_SELF_DELETE: /^\/api\/account\/self-delete$/,
   PUSH_REGISTER: /^\/api\/push\/register$/,
   PUSH_RELAY: /^\/api\/push\/relay$/,
   PUSH_VAPID_KEY: /^\/api\/push\/vapid-public-key$/,
   PUSH_REVOKE: /^\/api\/push\/([^/]+)$/,
   LLM_PROMO_ISSUE: /^\/api\/llm-promo\/issue$/,
   LLM_PROMO_STATUS: /^\/api\/llm-promo\/status\/([^/]+)$/,
+  LLM_PROMO_USAGE: /^\/api\/llm-promo\/usage$/,
   CERT_REVOCATIONS_POST: /^\/api\/cert-revocations$/,
   CERT_REVOCATIONS_GET: /^\/api\/cert-revocations\/([^/]+)$/,
   REVOCATIONS_LIST: /^\/api\/revocations$/,
@@ -536,33 +658,9 @@ const ROUTE_RE = {
   USER_IDENTITY_GET: /^\/api\/user-identity\/([^/]+)$/,
   INTERNAL_ACTIVE_REDIRECTIONS: /^\/api\/internal\/active-redirections$/,
   INTERNAL_REDIRECTION_LOOKUP: /^\/api\/internal\/redirection-lookup$/,
-  // Plan A — demo-user / Hetzner on-connect provisioning. The two
-  // public-rate-limited endpoints (connect, heartbeat) live above the
-  // bare GET in matching order so `/connect` and `/heartbeat` win
-  // over the `/:u` matcher.
+  // Idempotent demo creation, exact-ID cleanup, and admin status reads.
   DEMO_USER_CREATE: /^\/api\/dev\/sample-user\/create$/,
-  DEMO_USER_DELETE: /^\/api\/dev\/sample-user\/delete$/,
-  // v2 device-addressing admin endpoints (S3.3). The
-  // `/admin-claim-and-issue` literal must hit BEFORE the bare
-  // `/sample-user/{u}` GET (since "admin-claim-and-issue" would
-  // otherwise be parsed as a username); the per-user
-  // `/admin-mint-device-grant` matches similarly to /install-complete.
-  DEMO_USER_ADMIN_CLAIM_AND_ISSUE: /^\/api\/dev\/sample-user\/admin-claim-and-issue$/,
-  DEMO_USER_ADMIN_MINT_DEVICE_GRANT: /^\/api\/dev\/sample-user\/([^/]+)\/admin-mint-device-grant$/,
-  // W11 — Worker-side provisioning kickoff. Replaces the laptop's
-  // SSH+dd dance with a cloud-init `user_data` script the Worker
-  // hands to Hetzner. Path must be matched BEFORE the bare
-  // `/sample-user/{u}` GET below.
-  DEMO_USER_ADMIN_SNAPSHOT_NOW: /^\/api\/dev\/sample-user\/([^/]+)\/admin-snapshot-now$/,
-  // W13 — cloud-init-direct alternative to admin-snapshot-now. Uses
-  // Hetzner's pre-built debian-12 image (no custom ISO, no trailer,
-  // no rescue mode); cloud-init's user_data carries the install-blob
-  // and the bootstrap that does the install work.
-  DEMO_USER_ADMIN_CLOUD_INIT_NOW: /^\/api\/dev\/sample-user\/([^/]+)\/admin-cloud-init-now$/,
-  DEMO_USER_INSTALL_COMPLETE: /^\/api\/dev\/sample-user\/([^/]+)\/install-complete$/,
-  DEMO_USER_CONNECT: /^\/api\/dev\/sample-user\/([^/]+)\/connect$/,
-  DEMO_USER_CANCEL: /^\/api\/dev\/sample-user\/([^/]+)\/cancel$/,
-  DEMO_USER_HEARTBEAT: /^\/api\/dev\/sample-user\/([^/]+)\/heartbeat$/,
+  DEMO_USER_CLEANUP: /^\/api\/dev\/sample-user\/cleanup$/,
   DEMO_USER_GET: /^\/api\/dev\/sample-user\/([^/]+)$/,
   DEMO_USER_LIST: /^\/api\/dev\/sample-user$/,
   // Phase 1 of the gym recipe→Hetzner pipeline. GYM-ONLY: provisions a box
@@ -572,6 +670,15 @@ const ROUTE_RE = {
   // v2 device-addressing public endpoints (S3.3).
   DEVICE_GRANTS_LIST: /^\/api\/users\/([^/]+)\/device-grants$/,
   DEVICE_GRANTS_REVOKE: /^\/api\/users\/([^/]+)\/device-grants\/revoke$/,
+  ACCOUNT_PROFILE: /^\/api\/accounts\/([^/]+)\/profile$/,
+  ACCOUNT_DIRECTORY: /^\/api\/accounts\/([^/]+)\/directory$/,
+  DEVICE_SELF_PROFILE: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/profile$/,
+  DEVICE_MANAGED_PROFILE: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/managed-profile$/,
+  DEVICE_DIRECTORY_KEY_GRANT: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/directory-key-grant$/,
+  ACCOUNT_DEVICE: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)$/,
+  // Slice D §5 — admin master-root recovery rotation.
+  ADMIN_ROOT_ROTATION_APPLY: /^\/api\/users\/([^/]+)\/admin-root-rotation$/,
+  ADMIN_ROOT_ROTATIONS_LIST: /^\/api\/users\/([^/]+)\/admin-root-rotations$/,
   // Watch delegate keys (Phase 2c) — opt-in quick-approve from the Watch.
   WATCH_DELEGATES_LIST: /^\/api\/users\/([^/]+)\/watch-delegates$/,
   WATCH_DELEGATES_REVOKE: /^\/api\/users\/([^/]+)\/watch-delegates\/revoke$/,
@@ -609,7 +716,7 @@ const ROUTE_RE = {
  * (boot.flagshipserver.com collapsed onto flagship-com — see
  * docs/boot-worker-consolidation.md). The hostname + every path/shape is
  * byte-identical to the standalone `apps/boot` worker, so the box, the
- * burner, and the phone are wire-transparent; only the backing changes:
+ * builder, and the phone are wire-transparent; only the backing changes:
  *
  *   - storage → `flagship-state` (the `secret_mailbox` / `box_sealed_leases`
  *     / `boot_nonces` tables — the SAME D1 the rest of `.com` uses).
@@ -731,14 +838,46 @@ export async function tryControlPlane(
   }
 
   if (method === "POST" && ROUTE_RE.USERNAME_CLAIM.test(path)) {
-    return finish(await handleUsernameClaim({ storage: storage.usernames }, await readJson(request)));
+    return finish(
+      await handleUsernameClaim(
+        { storage: storage.usernames, offers: storage.usernameOffers },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && ROUTE_RE.ACCOUNT_BOOTSTRAP.test(path)) {
+    return finish(
+      await handleAccountBootstrap(
+        {
+          provisioning: storage.accountProvisioning,
+          usernames: storage.usernames,
+          offers: storage.usernameOffers,
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  // MUST precede USERNAME_LOOKUP (`/api/username/:u`) — "suggest" would otherwise
+  // be read as a username lookup. Hands ONE random handle for sign-up, popped from
+  // the pre-validated queue + escalating per-device throttle.
+  if (method === "POST" && ROUTE_RE.USERNAME_SUGGEST.test(path)) {
+    return finish(
+      await handleSuggestUsername(
+        {
+          queue: storage.suggestionQueue,
+          usernames: storage.usernames,
+          throttle: storage.suggestThrottle,
+          offers: storage.usernameOffers,
+        },
+        await readJson(request),
+      ),
+    );
   }
   if (method === "POST" && ROUTE_RE.USERS_CHECK.test(path)) {
     return finish(
       await handleUsersCheck(
         {
           storage: storage.usernames,
-          testAccounts: parseTestAccountsEnv(env.TEST_ACCOUNTS),
           ca,
           caGate,
           // Plan A — when demo-user storage is wired, /users/check
@@ -746,11 +885,6 @@ export async function tryControlPlane(
           // storage call is cheap (PK lookup) so we don't gate it
           // behind HCLOUD_TOKEN presence.
           demoUsers: storage.demoUsers,
-          // v2 device-addressing — wires the <u>.<device-label> dot-split
-          // path in handleUsersCheck. Without this, the dot-form falls
-          // through to the legacy validateUserLabel which rejects it.
-          // See docs/v2-device-addressing-and-real-ticket.md §5.1.
-          deviceCapabilityGrants: storage.deviceCapabilityGrants,
         },
         await readJson(request),
       ),
@@ -867,6 +1001,7 @@ export async function tryControlPlane(
           authCodes: storage.authCodes,
           servers: storage.servers,
           luksKeys: storage.luksKeys,
+          grants: storage.deviceCapabilityGrants,
           apex: env.SERVICES_APEX,
         },
         await readJson(request),
@@ -923,11 +1058,90 @@ export async function tryControlPlane(
           // here immediately. Absent `signerPubHex` → owner-IRK path.
           grants: {
             storage: storage.deviceCapabilityGrants,
+            identities: storage.deviceIdentities,
             usernames: storage.usernames,
           },
           ...(revokeDns ? { dns: revokeDns } : {}),
         },
         await readJson(request),
+      ),
+    );
+  }
+
+  // POST /api/account/self-delete — last-device account-death bundle-ingest.
+  // Verifies the owner-IRK account-self-delete (+ enforces last-device: zero
+  // active device grants), hard-deletes the username row (the name frees
+  // immediately) and tears down every owned server. An optional bundled
+  // servers-self-delete content-wipe order is accepted ONLY atomically with a
+  // valid account-self-delete (§5 invariant) — a bad/absent companion or a
+  // non-last-device caller rejects the WHOLE bundle.
+  if (method === "POST" && ROUTE_RE.ACCOUNT_SELF_DELETE.test(path)) {
+    const delDns =
+      env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+        ? new CloudflareDnsClient({
+            apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+            zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+          })
+        : undefined;
+    return finish(
+      await handleAccountDeletionBundle(
+        {
+          usernames: storage.usernames,
+          servers: storage.servers,
+          routing: storage.routing,
+          authCodes: storage.authCodes,
+          deviceCapabilityGrants: storage.deviceCapabilityGrants,
+          auditEvents: storage.auditEvents,
+          autoUnlockLeases: storage.autoUnlockLeases,
+          boxSealedLeases: storage.boxSealedLeases,
+          luksKeys: storage.luksKeys,
+          webauthnRecovery: storage.webauthnRecovery,
+          pushTokens: storage.pushTokens,
+          // §5 box-side delivery: deposit the content-wipe order for each owned
+          // server so an online box consumes it on its heartbeat and wipes.
+          secretMailbox: storage.secretMailbox,
+          ...(delDns ? { dns: delDns } : {}),
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  // POST /api/admin/username/:u/reclaim[?dryRun=1] — admin-gated reclaim of a
+  // ≥90-day-inactive name (same teardown as account-self-delete). Never bulk.
+  if (method === "POST" && (m = path.match(ROUTE_RE.ADMIN_USERNAME_RECLAIM))) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    const reclaimDns =
+      env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+        ? new CloudflareDnsClient({
+            apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+            zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+          })
+        : undefined;
+    const dryRun =
+      url.searchParams.get("dryRun") === "1" ||
+      url.searchParams.get("dryRun") === "true";
+    return finish(
+      await handleAdminUsernameReclaim(
+        {
+          usernames: storage.usernames,
+          servers: storage.servers,
+          routing: storage.routing,
+          authCodes: storage.authCodes,
+          deviceCapabilityGrants: storage.deviceCapabilityGrants,
+          auditEvents: storage.auditEvents,
+          autoUnlockLeases: storage.autoUnlockLeases,
+          boxSealedLeases: storage.boxSealedLeases,
+          luksKeys: storage.luksKeys,
+          webauthnRecovery: storage.webauthnRecovery,
+          pushTokens: storage.pushTokens,
+          ...(reclaimDns ? { dns: reclaimDns } : {}),
+        },
+        decodeURIComponent(m[1]!),
+        { dryRun },
       ),
     );
   }
@@ -972,7 +1186,20 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.TRUST_EXCEPTIONS))) {
     return finish(
       await handleStoreTrustException(
-        { storage: storage.trustExceptions },
+        {
+          storage: storage.trustExceptions,
+          // IRK-anchored roster: the account IRK (registered at claim, the
+          // `registeredIrkPubHex` from the wrapped-UMK path) is the single
+          // anchor — every one of the user's devices signs a TrustException
+          // with the shared account IRK, so the roster is exactly that key.
+          // Wiring it here rejects a granter outside the roster AT STORE TIME,
+          // closing the directory's spam-surface fail-open (previously `.com`
+          // stored any self-consistent envelope). The consuming box re-checks.
+          resolveDeviceRoster: async (u) => {
+            const rec = await storage.usernames.get(u);
+            return rec?.irkPubHex ? [rec.irkPubHex] : null;
+          },
+        },
         decodeURIComponent(m[1]!),
         await readJson(request),
       ),
@@ -1002,7 +1229,11 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.SERVICE_INVITE_REVOKE))) {
     return finish(
       await handleRevokeServiceInvite(
-        { invites: storage.serviceInvites, usernames: storage.usernames },
+        {
+          invites: storage.serviceInvites,
+          usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
+        },
         decodeURIComponent(m[1]!),
         await readJson(request),
       ),
@@ -1011,9 +1242,50 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.SERVICE_INVITES))) {
     return finish(
       await handleCreateServiceInvite(
-        { invites: storage.serviceInvites, usernames: storage.usernames },
+        {
+          invites: storage.serviceInvites,
+          usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
+        },
         decodeURIComponent(m[1]!),
         await readJson(request),
+      ),
+    );
+  }
+  // revoked-since (GET) — the box revocation poller; owner-signed. Checked
+  // BEFORE the base list path (it's a longer sub-path of the same prefix).
+  if (method === "GET" && (m = path.match(ROUTE_RE.SERVICE_INVITE_REVOKED_SINCE))) {
+    return finish(
+      await handleRevokedSinceServiceInvites(
+        { invites: storage.serviceInvites, usernames: storage.usernames, servers: storage.servers },
+        decodeURIComponent(m[1]!),
+        {
+          authorAID: url.searchParams.get("authorAID"),
+          scope: url.searchParams.get("scope"),
+          cursor: url.searchParams.get("cursor"),
+          issuedAt: url.searchParams.get("issuedAt"),
+          sig: url.searchParams.get("sig"),
+          serverDomain: url.searchParams.get("serverDomain"),
+        },
+      ),
+    );
+  }
+  // create fetch (GET) — the author's box re-fetches the OWNER's signed create by
+  // inviteId to verify it at manual-finalize (box-as-authority, any-device). Box
+  // STK-signed; checked BEFORE the base list path (a longer sub-path of the same
+  // prefix). The `[^/]+` inviteId segment can't collide with `revoke` /
+  // `revoked-since` (those are exact sub-paths already matched above).
+  if (method === "GET" && (m = path.match(ROUTE_RE.SERVICE_INVITE_CREATE_FETCH))) {
+    return finish(
+      await handleFetchServiceInviteCreate(
+        { invites: storage.serviceInvites, usernames: storage.usernames, servers: storage.servers },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+        {
+          serverDomain: url.searchParams.get("serverDomain"),
+          issuedAt: url.searchParams.get("issuedAt"),
+          sig: url.searchParams.get("sig"),
+        },
       ),
     );
   }
@@ -1022,7 +1294,13 @@ export async function tryControlPlane(
       await handleListServiceInvites(
         { invites: storage.serviceInvites, usernames: storage.usernames },
         decodeURIComponent(m[1]!),
-        url.searchParams.get("authorAID"),
+        {
+          authorAID: url.searchParams.get("authorAID"),
+          scope: url.searchParams.get("scope"),
+          cursor: url.searchParams.get("cursor"),
+          issuedAt: url.searchParams.get("issuedAt"),
+          sig: url.searchParams.get("sig"),
+        },
       ),
     );
   }
@@ -1030,7 +1308,12 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.RCK_REGISTER.test(path)) {
     return finish(
       await handleRegisterRck(
-        { routing: storage.routing, usernames: storage.usernames, apex: env.SERVICES_APEX },
+        {
+          routing: storage.routing,
+          usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
+          apex: env.SERVICES_APEX,
+        },
         await readJson(request),
       ),
     );
@@ -1139,6 +1422,7 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           luksKeys: storage.luksKeys,
           autoUnlockLeases: storage.autoUnlockLeases,
+          grants: storage.deviceCapabilityGrants,
         },
         host,
         await readJson(request),
@@ -1155,6 +1439,7 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           luksKeys: storage.luksKeys,
           autoUnlockLeases: storage.autoUnlockLeases,
+          grants: storage.deviceCapabilityGrants,
         },
         host,
         leaseId,
@@ -1185,6 +1470,7 @@ export async function tryControlPlane(
         usernames: storage.usernames,
         secretMailbox: storage.secretMailbox,
         boxSealedLeases: storage.boxSealedLeases,
+        grants: storage.deviceCapabilityGrants,
         ...(forwarder
           ? { pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder) }
           : {}),
@@ -1256,6 +1542,429 @@ export async function tryControlPlane(
           await readJson(request),
         ),
       );
+    }
+    // Peer-backup matchmaker + manifest lane (server-migration Layer 0).
+    if (method === "POST" && path.match(ROUTE_RE.PB_REQUEST_PEERS)) {
+      return finishPlain(
+        await handlePbRequestPeers(
+          { servers: storage.servers, daemonStatus: storage.daemonStatus },
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.PB_STK_LOOKUP))) {
+      return finishPlain(
+        await handlePeerStkLookup({ servers: storage.servers }, decodeURIComponent(m[1]!)),
+      );
+    }
+    if (method === "PUT" && (m = path.match(ROUTE_RE.BACKUP_MANIFEST))) {
+      return finishPlain(
+        await handlePutBackupManifest(
+          { servers: storage.servers, peerBackupManifests: storage.peerBackupManifests },
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.BACKUP_MANIFEST))) {
+      return finishPlain(
+        await handleGetBackupManifest(
+          { peerBackupManifests: storage.peerBackupManifests },
+          decodeURIComponent(m[1]!),
+        ),
+      );
+    }
+    // Deposit-on-unlock pairing — phone deposit (IRK mailbox-auth) +
+    // box consume-once read (public, sealed-for-STK).
+    if (method === "POST" && (m = path.match(ROUTE_RE.PAIRING_DEPOSIT))) {
+      return finishPlain(
+        await handlePostPairingDeposit(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.PAIRING_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumePairingDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Entitlement deposit-on-unlock — phone deposit (IRK mailbox-auth, the
+    // PUBLIC IRK-signed entitlement) + box consume-once read.
+    if (method === "POST" && (m = path.match(ROUTE_RE.ENTITLEMENT_DEPOSIT))) {
+      return finishPlain(
+        await handlePostEntitlementDeposit(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.ENTITLEMENT_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumeEntitlementDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Secret-free-recipe SWK delivery — phone deposit (IRK mailbox-auth, the
+    // SEALED SWK-delivery carrier) + box consume-once read (sealed-only, public).
+    if (method === "POST" && (m = path.match(ROUTE_RE.SWK_DEPOSIT))) {
+      return finishPlain(
+        await handlePostSwkDeposit(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.SWK_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumeSwkDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Post-boot CGK delivery (Phase 6) — phone deposit (IRK mailbox-auth, the
+    // SEALED CGK-delivery carrier) + box consume-once read (sealed-only, public).
+    if (method === "POST" && (m = path.match(ROUTE_RE.CGK_DEPOSIT))) {
+      return finishPlain(
+        await handlePostCgkDeposit(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.CGK_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumeCgkDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Owner preferred-server vote (Phase 6) — phone deposit (IRK mailbox-auth, the
+    // owner-IRK set-leader vote, signature-verified before storing) + box
+    // consume-once read (the box re-verifies under the owner IRK).
+    if (method === "POST" && (m = path.match(ROUTE_RE.SET_LEADER_DEPOSIT))) {
+      return finishPlain(
+        await handlePostSetLeaderDeposit(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.SET_LEADER_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumeSetLeaderDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Admin-authorized in-place server-update order — phone deposit (IRK mailbox-
+    // auth + the Slice-D admin-authority gate, the sensitive-op check) + box
+    // consume-once read (the box re-verifies the order under its pinned admin root).
+    if (method === "POST" && (m = path.match(ROUTE_RE.UPDATE_DEPOSIT))) {
+      return finishPlain(
+        await handlePostUpdateDeposit(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.UPDATE_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumeUpdateDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Account-death content-wipe — box consume-once read of the owner-IRK-signed
+    // servers-self-delete order .com deposited at the last-device deletion (the
+    // consume is revoke-tolerant; the box re-verifies the order under the owner IRK).
+    if (method === "GET" && (m = path.match(ROUTE_RE.SELF_DELETE_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumeSelfDeleteDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Graceful server-replacement decommission (docs/server-replacement-graceful-
+    // decommission.md). The deposit is owner mailbox-authed; the box-fetch +
+    // chain-fetch + epoch/ack reports are public (the order is owner-IRK-signed
+    // and re-verified box-side). The sub-path matchers run BEFORE the bare
+    // `decommission` matcher so a method-discriminated bare path can't swallow them.
+    const buildDecommissionDeps = () => ({
+      servers: storage.servers,
+      usernames: storage.usernames,
+      serverEvictions: storage.serverEvictions,
+      mailbox: buildSecretMailboxDeps(),
+      grants: storage.deviceCapabilityGrants,
+    });
+    if (method === "POST" && (m = path.match(ROUTE_RE.DECOMMISSION_EPOCH_COMPLETE))) {
+      return finishPlain(
+        await handlePostEpochComplete(
+          buildDecommissionDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.DECOMMISSION_ACK_OLD))) {
+      return finishPlain(
+        await handlePostAckOld(
+          buildDecommissionDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.DECOMMISSION_ACK_NEW))) {
+      return finishPlain(
+        await handlePostAckNew(buildDecommissionDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.DECOMMISSION))) {
+      return finishPlain(
+        await handlePostDecommission(
+          buildDecommissionDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.DECOMMISSION))) {
+      return finishPlain(
+        await handleGetDecommission(
+          buildDecommissionDeps(),
+          decodeURIComponent(m[1]!),
+          url.searchParams.get("stk"),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.EVICTION_CHAIN))) {
+      return finishPlain(
+        await handleGetEvictionChain(buildDecommissionDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Server-migration orchestration (docs/server-migration.md). Initiate /
+    // confirm-ready / abort are admin-signed + owner mailbox-authed (SENSITIVE);
+    // attach / pre-seeded / take-over are the new box's STK-signed phase acks;
+    // freeze delegates into the eviction lane after session validation. The
+    // GETs are public — everything served is admin-signed or phase state, and
+    // both boxes re-verify the order under their pinned authority.
+    const buildMigrationDeps = () => ({
+      servers: storage.servers,
+      usernames: storage.usernames,
+      serverMigrations: storage.serverMigrations,
+      serverEvictions: storage.serverEvictions,
+      mailbox: buildSecretMailboxDeps(),
+      grants: storage.deviceCapabilityGrants,
+    });
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION_ATTACH))) {
+      return finishPlain(
+        await handlePostMigrationAttach(
+          buildMigrationDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION_PRE_SEEDED))) {
+      return finishPlain(
+        await handlePostMigrationPreSeeded(
+          buildMigrationDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION_CONFIRM_READY))) {
+      return finishPlain(
+        await handlePostMigrationConfirmReady(
+          buildMigrationDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION_FREEZE))) {
+      return finishPlain(
+        await handlePostMigrationFreeze(
+          { ...buildMigrationDeps(), decommission: buildDecommissionDeps() },
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION_TAKE_OVER))) {
+      return finishPlain(
+        await handlePostMigrationTakeOver(
+          buildMigrationDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION_ABORT))) {
+      return finishPlain(
+        await handlePostMigrationAbort(
+          buildMigrationDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION))) {
+      return finishPlain(
+        await handlePostMigrationStart(
+          buildMigrationDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.MIGRATION))) {
+      return finishPlain(
+        await handleGetMigration(buildMigrationDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.MIGRATION_ASSIGNMENT))) {
+      return finishPlain(
+        await handleGetMigrationAssignment(buildMigrationDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Box-side re-home read (Layer A) — the box polls its OLD canonical to
+    // learn its new owner/namespace after a completed transfer. PUBLIC read; no
+    // DNS deps needed (it only reads the transfer row + re-derives the FQDN).
+    if (method === "GET" && (m = path.match(ROUTE_RE.TRANSFER_REHOME))) {
+      return finishPlain(
+        await handleGetTransferRehome(
+          {
+            servers: storage.servers,
+            usernames: storage.usernames,
+            routing: storage.routing,
+            serverTransfers: storage.serverTransfers,
+            apex: env.SERVICES_APEX,
+          },
+          decodeURIComponent(m[1]!),
+        ),
+      );
+    }
+    // Layer B disk-key handoff — the giver deposits the disk key re-sealed to
+    // the acquirer IRK; the acquirer reads it. Both IRK mailbox-auth in the body;
+    // no DNS deps needed (content-blind blob store on the transfer row).
+    if (
+      method === "POST" &&
+      (m = path.match(ROUTE_RE.TRANSFER_DISK_KEY) || path.match(ROUTE_RE.TRANSFER_DISK_KEY_CLAIM))
+    ) {
+      const isClaim = ROUTE_RE.TRANSFER_DISK_KEY_CLAIM.test(path);
+      const xferDeps = {
+        servers: storage.servers,
+        usernames: storage.usernames,
+        routing: storage.routing,
+        serverTransfers: storage.serverTransfers,
+        apex: env.SERVICES_APEX,
+      };
+      const domain = decodeURIComponent(m[1]!);
+      return finishPlain(
+        isClaim
+          ? await handleGetTransferDiskKey(xferDeps, domain, await readJson(request))
+          : await handlePostTransferDiskKey(xferDeps, domain, await readJson(request)),
+      );
+    }
+    // Slice D §9.8 — the giver deposits the admin-root handoff proof. No
+    // mailbox-auth: the giver-admin-root signature IS the authorization (the
+    // handler verifies it against the giver account's registered admin root as
+    // a garbage filter; the box re-verifies against its PINNED root).
+    if (method === "POST" && (m = path.match(ROUTE_RE.TRANSFER_ADMIN_HANDOFF))) {
+      return finishPlain(
+        await handlePostTransferAdminHandoff(
+          {
+            servers: storage.servers,
+            usernames: storage.usernames,
+            routing: storage.routing,
+            serverTransfers: storage.serverTransfers,
+            apex: env.SERVICES_APEX,
+          },
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    // v1-sec GAP 3 — the giver deposits the LEGACY owner-IRK re-home
+    // authorization. No mailbox-auth: the giver-owner-IRK signature IS the
+    // authorization (the handler verifies it against the giver account's
+    // registered owner IRK as a garbage filter; the box re-verifies against its
+    // PINNED owner IRK). No DNS deps — a content-blind proof store on the row.
+    if (method === "POST" && (m = path.match(ROUTE_RE.TRANSFER_REHOME_AUTH))) {
+      return finishPlain(
+        await handlePostTransferRehomeAuth(
+          {
+            servers: storage.servers,
+            usernames: storage.usernames,
+            routing: storage.routing,
+            serverTransfers: storage.serverTransfers,
+            apex: env.SERVICES_APEX,
+          },
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    // Transfer-a-box broker — the cross-account ownership handoff. The claim
+    // handler does the .com-side NAMESPACE MIGRATION (servers + routing + DNS).
+    // DNS uses the same per-box upsert posture as registration (direct
+    // CloudflareDnsClient when no broker is configured).
+    if (
+      method &&
+      (path.match(ROUTE_RE.TRANSFER_OFFER) ||
+        path.match(ROUTE_RE.TRANSFER_CLAIM) ||
+        path.match(ROUTE_RE.TRANSFER_CLAIM_POLL))
+    ) {
+      const xferM =
+        path.match(ROUTE_RE.TRANSFER_OFFER) ??
+        path.match(ROUTE_RE.TRANSFER_CLAIM) ??
+        path.match(ROUTE_RE.TRANSFER_CLAIM_POLL);
+      const isOffer = ROUTE_RE.TRANSFER_OFFER.test(path);
+      const isPoll = ROUTE_RE.TRANSFER_CLAIM_POLL.test(path);
+      const xferCfDns =
+        !env.DNS_BROKER_URL && env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+          ? new CloudflareDnsClient({
+              apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+              zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+            })
+          : null;
+      const xferDnsClient = env.DNS_BROKER_URL
+        ? new BrokerDnsClient({ brokerUrl: env.DNS_BROKER_URL })
+        : xferCfDns;
+      const buildTransferDeps = () => ({
+        servers: storage.servers,
+        usernames: storage.usernames,
+        routing: storage.routing,
+        serverTransfers: storage.serverTransfers,
+        auditEvents: storage.auditEvents,
+        grants: storage.deviceCapabilityGrants,
+        ...(xferDnsClient && env.SERVICES_PASSTHROUGH_IPV4
+          ? {
+              dns: {
+                client: xferDnsClient,
+                servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
+                servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6,
+              },
+            }
+          : {}),
+        apex: env.SERVICES_APEX,
+      });
+      const domain = decodeURIComponent(xferM![1]!);
+      if (method === "POST" && isOffer) {
+        return finishPlain(
+          await handlePostTransferOffer(buildTransferDeps(), domain, await readJson(request)),
+        );
+      }
+      if (method === "POST" && isPoll) {
+        // Giver re-seal discovery — IRK mailbox-auth in the body.
+        return finishPlain(
+          await handleGetTransferClaim(buildTransferDeps(), domain, await readJson(request)),
+        );
+      }
+      if (method === "POST") {
+        // The acquirer claim (TRANSFER_CLAIM).
+        return finishPlain(
+          await handlePostTransferClaim(buildTransferDeps(), domain, await readJson(request)),
+        );
+      }
     }
     // #28 Option B — seal-to-box ACME account-key delivery (deposit / release
     // / revoke). Same deposit-and-release shape as the box-sealed lease above;
@@ -1453,6 +2162,22 @@ export async function tryControlPlane(
       ),
     );
   }
+  if (method === "GET" && (m = path.match(ROUTE_RE.USER_STREAM))) {
+    return finish(
+      await handleUserStream(
+        {
+          daemonStatus: storage.daemonStatus,
+          servers: storage.servers,
+          routing: storage.routing,
+          authCodes: storage.authCodes,
+          provisionStatus: storage.provisionStatus,
+          secretMailbox: storage.secretMailbox,
+        },
+        decodeURIComponent(m[1]!),
+        url.searchParams.get("cursor"),
+      ),
+    );
+  }
   if (
     method === "POST" &&
     (m = path.match(ROUTE_RE.USER_OUTSTANDING_ORDERS))
@@ -1469,14 +2194,6 @@ export async function tryControlPlane(
       ),
     );
   }
-  if (method === "GET" && (m = path.match(ROUTE_RE.USER_DEVICES))) {
-    return finish(
-      await handleGetUsersDevices(
-        { pushTokens: storage.pushTokens },
-        decodeURIComponent(m[1]!),
-      ),
-    );
-  }
   // Login/join preflight — 200 always; a missing account is
   // kind:"unknown", never a 404. Drives the username-first login
   // state machine. See docs/login-and-account-redesign.md.
@@ -1487,13 +2204,86 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           webauthnRecovery: storage.webauthnRecovery,
           demoUsers: storage.demoUsers,
-          pushTokens: storage.pushTokens,
         },
         decodeURIComponent(m[1]!),
       ),
     );
   }
-  // v2 device-addressing public endpoints (S3.3). The revoke route's
+  if (method === "GET" && (m = path.match(ROUTE_RE.ACCOUNT_PROFILE))) {
+    const accountId = decodeURIComponent(m[1]!);
+    return finish(await handleGetAccountProfile(
+      accountDirectoryDeps(storage, env.DB),
+      accountId,
+      directoryAuthorization(request, accountId, path),
+    ));
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.ACCOUNT_DIRECTORY))) {
+    const accountId = decodeURIComponent(m[1]!);
+    return finish(await handleGetAccountDirectory(
+      accountDirectoryDeps(storage, env.DB),
+      accountId,
+      directoryAuthorization(request, accountId, path),
+    ));
+  }
+  if (method === "PUT" && (m = path.match(ROUTE_RE.ACCOUNT_PROFILE))) {
+    const accountId = decodeURIComponent(m[1]!);
+    return finish(await handlePutAccountProfile(
+      accountDirectoryDeps(storage, env.DB),
+      accountId,
+      directoryAuthorization(request, accountId, path),
+      await readJson(request),
+    ));
+  }
+  if (method === "PUT" && (m = path.match(ROUTE_RE.DEVICE_SELF_PROFILE))) {
+    const accountId = decodeURIComponent(m[1]!);
+    return finish(await handlePutDeviceSelfProfile(
+      accountDirectoryDeps(storage, env.DB),
+      accountId,
+      decodeURIComponent(m[2]!),
+      directoryAuthorization(request, accountId, path),
+      await readJson(request),
+    ));
+  }
+  if (method === "PUT" && (m = path.match(ROUTE_RE.DEVICE_MANAGED_PROFILE))) {
+    const accountId = decodeURIComponent(m[1]!);
+    return finish(await handlePutDeviceManagedProfile(
+      accountDirectoryDeps(storage, env.DB),
+      accountId,
+      decodeURIComponent(m[2]!),
+      directoryAuthorization(request, accountId, path),
+      await readJson(request),
+    ));
+  }
+  if (method === "PUT" && (m = path.match(ROUTE_RE.DEVICE_DIRECTORY_KEY_GRANT))) {
+    const accountId = decodeURIComponent(m[1]!);
+    return finish(await handlePutAccountDirectoryKeyGrant(
+      accountDirectoryDeps(storage, env.DB),
+      accountId,
+      decodeURIComponent(m[2]!),
+      directoryAuthorization(request, accountId, path),
+      await readJson(request),
+    ));
+  }
+  if (method === "DELETE" && (m = path.match(ROUTE_RE.DEVICE_MANAGED_PROFILE))) {
+    const accountId = decodeURIComponent(m[1]!);
+    return finish(await handleDeleteDeviceManagedProfile(
+      accountDirectoryDeps(storage, env.DB),
+      accountId,
+      decodeURIComponent(m[2]!),
+      directoryAuthorization(request, accountId, path),
+      await readJson(request),
+    ));
+  }
+  if (method === "DELETE" && (m = path.match(ROUTE_RE.ACCOUNT_DEVICE))) {
+    const accountId = decodeURIComponent(m[1]!);
+    return finish(await handleRevokeAccountDevice(
+      accountDirectoryDeps(storage, env.DB),
+      accountId,
+      decodeURIComponent(m[2]!),
+      directoryAuthorization(request, accountId, path),
+    ));
+  }
+  // Device capability mutation endpoints. The revoke route's
   // `/revoke` suffix must hit BEFORE the bare DEVICE_GRANTS_LIST match
   // for the same path prefix.
   if (method === "POST" && (m = path.match(ROUTE_RE.DEVICE_GRANTS_REVOKE))) {
@@ -1501,6 +2291,7 @@ export async function tryControlPlane(
       await handleRevokeDeviceGrant(
         {
           storage: storage.deviceCapabilityGrants,
+          identities: storage.deviceIdentities,
           usernames: storage.usernames,
         },
         await readJson(request),
@@ -1512,18 +2303,35 @@ export async function tryControlPlane(
       await handleMintDeviceGrant(
         {
           storage: storage.deviceCapabilityGrants,
+          identities: storage.deviceIdentities,
           usernames: storage.usernames,
         },
         await readJson(request),
       ),
     );
   }
-  if (method === "GET" && (m = path.match(ROUTE_RE.DEVICE_GRANTS_LIST))) {
+  // Slice D §5 — admin master-root recovery rotation. The apply endpoint
+  // verifies the OLD-root-signed proof against the account's STORED admin root
+  // (never `.com`'s own prior word), swaps it, and appends to the served lane a
+  // box replays. The list is the ordered chain.
+  if (method === "POST" && (m = path.match(ROUTE_RE.ADMIN_ROOT_ROTATION_APPLY))) {
     return finish(
-      await handleListDeviceGrants(
+      await handleApplyAdminRootRotation(
         {
-          storage: storage.deviceCapabilityGrants,
           usernames: storage.usernames,
+          rotations: storage.adminRootRotations,
+        },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.ADMIN_ROOT_ROTATIONS_LIST))) {
+    return finish(
+      await handleListAdminRootRotations(
+        {
+          usernames: storage.usernames,
+          rotations: storage.adminRootRotations,
         },
         decodeURIComponent(m[1]!),
       ),
@@ -1537,6 +2345,7 @@ export async function tryControlPlane(
         {
           storage: storage.watchDelegates,
           usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
         },
         await readJson(request),
       ),
@@ -1548,6 +2357,7 @@ export async function tryControlPlane(
         {
           storage: storage.watchDelegates,
           usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
         },
         await readJson(request),
       ),
@@ -1629,26 +2439,6 @@ export async function tryControlPlane(
       ),
     );
   }
-  if (method === "POST" && (m = path.match(ROUTE_RE.USER_DEVICE_DISCONNECT))) {
-    const ddFanout = buildOptionalV12PushFanout(env);
-    return finishPlain(
-      await handleDeviceDisconnect(
-        {
-          pushTokens: storage.pushTokens,
-          usernames: storage.usernames,
-          auditEvents: storage.auditEvents,
-          // v1.2 Phase 5 — when a quarantined device's
-          // disconnect attempt is blocked, the user's OTHER trusted
-          // devices get a push alert (and the audit log captures
-          // the attempt under accountTypeAtEvent).
-          ...(ddFanout ? { pushFanout: ddFanout } : {}),
-        },
-        decodeURIComponent(m[1]!),
-        decodeURIComponent(m[2]!),
-        await readJson(request),
-      ),
-    );
-  }
   if (method === "GET" && (m = path.match(ROUTE_RE.USER_AUDIT))) {
     const since = parseInt(url.searchParams.get("since") ?? "0", 10) || 0;
     const limit = parseInt(url.searchParams.get("limit") ?? "50", 10) || 50;
@@ -1668,6 +2458,8 @@ export async function tryControlPlane(
           daemonStatus: storage.daemonStatus,
           servers: storage.servers,
           routing: storage.routing,
+          // 0058 — coarse "account in use" bump for the username-reclaim tool.
+          usernames: storage.usernames,
         },
         await readJson(request),
       ),
@@ -1837,6 +2629,7 @@ export async function tryControlPlane(
         {
           usernames: storage.usernames,
           customDomainOrders: storage.customDomainOrders,
+          grants: storage.deviceCapabilityGrants,
           // Replace-time DELETE(old fqdn): only wired when the control
           // channel is configured (same gate as the verifier cron).
           ...(env.SERVICES_BASE_URL && env.SERVICES_CONTROL_SECRET
@@ -1908,7 +2701,13 @@ export async function tryControlPlane(
     );
   }
 
-  if (method === "POST" && (ROUTE_RE.ADMIN_REPUBLISH.test(path) || ROUTE_RE.ADMIN_CLEANUP_APEX.test(path))) {
+  if (
+    method === "POST" &&
+    (ROUTE_RE.ADMIN_REPUBLISH.test(path) ||
+      ROUTE_RE.ADMIN_CLEANUP_APEX.test(path) ||
+      ROUTE_RE.ADMIN_DNS_CHALLENGE_GC.test(path) ||
+      ROUTE_RE.ADMIN_DNS_ROUTE_GC.test(path))
+  ) {
     const auth = authorizeAdmin({
       expected: env.FLAGSHIP_ADMIN_SECRET,
       provided: request.headers.get("x-admin-secret"),
@@ -1924,6 +2723,24 @@ export async function tryControlPlane(
       apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
       zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
     });
+    if (ROUTE_RE.ADMIN_DNS_CHALLENGE_GC.test(path)) {
+      const result = await dns.deleteStaleAcmeTxt({
+        apex: env.SERVICES_APEX ?? "flagship.services",
+        cutoffMs: Date.now() - 60 * 60 * 1000,
+      });
+      return jsonResponse({ ok: true, ...result });
+    }
+    if (ROUTE_RE.ADMIN_DNS_ROUTE_GC.test(path)) {
+      const servers = await storage.servers.listAll();
+      const result = await dns.deleteOrphanedServerRoutes({
+        apex: env.SERVICES_APEX ?? "flagship.services",
+        activeServerDomains: servers.filter((server) => !server.revokedAt).map((server) => server.serverDomain),
+        cutoffMs: Date.now() - 60 * 60 * 1000,
+        dryRun: url.searchParams.get("dryRun") === "true",
+        maxDeletes: 20,
+      });
+      return jsonResponse({ ok: true, ...result });
+    }
     if (ROUTE_RE.ADMIN_REPUBLISH.test(path)) {
       if (!env.SERVICES_PASSTHROUGH_IPV4) {
         return jsonResponse({ error: "SERVICES_PASSTHROUGH_IPV4 not set" }, 503);
@@ -2009,14 +2826,19 @@ export async function tryControlPlane(
     );
   }
 
-  // ── Desktop-burner base-ISO manifest ──────────────────────────
+  // ── Desktop-builder base-ISO manifest ──────────────────────────
   // Unauthenticated + rate-limited (the "iso-manifest" bucket lives in
   // rateLimit.ts and is applied at the edge in route.ts). The server is
-  // the sole decider; the burner is a dumb executor.
+  // the sole decider; the builder is a dumb executor.
   if (method === "POST" && ROUTE_RE.ISO_MANIFEST.test(path)) {
     return finish(
       handleIsoManifest(
-        { blessedManifest: parseBlessedIsoManifest(env.FLAGSHIP_ISO_MANIFEST) },
+        {
+          blessedManifest: parseBlessedIsoManifest(env.FLAGSHIP_ISO_MANIFEST),
+          blessedManifestArm64: parseBlessedIsoManifest(
+            env.FLAGSHIP_ISO_MANIFEST_ARM64,
+          ),
+        },
         await readJson(request),
       ),
     );
@@ -2081,6 +2903,9 @@ export async function tryControlPlane(
       await handleVouchedDeviceAdmit(
         {
           pushTokens: storage.pushTokens,
+          deviceIdentities: storage.deviceIdentities,
+          deviceCapabilityGrants: storage.deviceCapabilityGrants,
+          deviceSelfProfiles: storage.deviceSelfProfiles,
           usernames: storage.usernames,
           auditEvents: storage.auditEvents,
         },
@@ -2092,7 +2917,11 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.PUSH_REGISTER.test(path)) {
     return finish(
       await handlePushRegister(
-        { pushTokens: storage.pushTokens, usernames: storage.usernames },
+        {
+          pushTokens: storage.pushTokens,
+          deviceIdentities: storage.deviceIdentities,
+          usernames: storage.usernames,
+        },
         await readJson(request),
       ),
     );
@@ -2106,6 +2935,7 @@ export async function tryControlPlane(
       await handlePushRelay(
         {
           pushTokens: storage.pushTokens,
+          deviceIdentities: storage.deviceIdentities,
           usernames: storage.usernames,
           servers: storage.servers,
           ...(forwarder ? { forwardToProviders: forwarder } : {}),
@@ -2125,7 +2955,11 @@ export async function tryControlPlane(
       authorizeAdmin({ expected: env.FLAGSHIP_ADMIN_SECRET, provided: adminHeader }) === null;
     return finish(
       await handlePushRevoke(
-        { pushTokens: storage.pushTokens, usernames: storage.usernames },
+        {
+          pushTokens: storage.pushTokens,
+          deviceIdentities: storage.deviceIdentities,
+          usernames: storage.usernames,
+        },
         decodeURIComponent(m[1]!),
         await readJson(request),
         { isAdmin },
@@ -2135,6 +2969,8 @@ export async function tryControlPlane(
 
   // ── LLM promo ──────────────────────────────────────────────
   if (method === "POST" && ROUTE_RE.LLM_PROMO_ISSUE.test(path)) {
+    const inferenceEndpoint = parseBlessedInferenceEndpoint(env.FLAGSHIP_INFERENCE_ENDPOINT);
+    const inferenceSecret = env.FLAGSHIP_INFERENCE_TOKEN_SECRET;
     return finish(
       await handleLlmPromoIssue(
         {
@@ -2143,12 +2979,38 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           // #85 — enforce the demo rolling-token ceiling in production.
           demoLlmLedger: storage.demoLlmLedger,
-          // Stub minter: returns a deterministic fake key. Real Worker
-          // wiring calls the upstream provider's scoped-key API.
-          mintProviderKey: async (args) => ({
-            key: `fk-${args.provider}-${args.username}-${args.expiresAt}`,
-            providerKeyId: `pkid-${args.expiresAt}`,
-          }),
+          // Both the endpoint AND the signing secret must be present for
+          // a `flagship` issue; missing either ⇒ the handler's 503.
+          inferenceEndpoint: inferenceSecret ? inferenceEndpoint : null,
+          // For `provider:"flagship"` mint a scoped, short-lived (1h)
+          // `.com`-signed token the metering shim verifies — NOT a real
+          // upstream key. Refuse if the signing secret is unset (belt to
+          // the handler's endpoint-configured check). Upstream providers
+          // (anthropic/openai/google) keep the deterministic stub until
+          // their real scoped-key APIs are wired.
+          mintProviderKey: async (args) => {
+            if (args.provider === "flagship") {
+              if (!inferenceSecret) throw new Error("inference token secret not configured");
+              const keyId = `fp-${crypto.randomUUID()}`;
+              const key = await mintScopedInferenceToken(
+                {
+                  username: args.username,
+                  keyId,
+                  iat: Date.now(),
+                  exp: args.expiresAt,
+                  dailyInputTokenCap: args.dailyInputTokenCap,
+                  dailyOutputTokenCap: args.dailyOutputTokenCap,
+                  serverFqdn: args.serverFqdn,
+                },
+                inferenceSecret,
+              );
+              return { key, providerKeyId: keyId };
+            }
+            return {
+              key: `fk-${args.provider}-${args.username}-${args.expiresAt}`,
+              providerKeyId: `pkid-${args.expiresAt}`,
+            };
+          },
         },
         await readJson(request),
       ),
@@ -2167,6 +3029,27 @@ export async function tryControlPlane(
       ),
     );
   }
+  // Metering webhook — the in-house inference shim reports TRUE token
+  // usage (model (b)). Authenticated by the scoped token the shim
+  // re-presents; refused if the signing secret is unset.
+  if (method === "POST" && ROUTE_RE.LLM_PROMO_USAGE.test(path)) {
+    const inferenceSecret = env.FLAGSHIP_INFERENCE_TOKEN_SECRET;
+    if (!inferenceSecret) {
+      return finishPlain({ status: 503, body: { error: "in-house inference not configured" } });
+    }
+    return finish(
+      await handleLlmPromoUsage(
+        {
+          llmPromo: storage.llmPromo,
+          verifyToken: async (token) => {
+            const v = await verifyScopedInferenceToken(token, inferenceSecret);
+            return v.ok ? { ok: true, username: v.claims.username } : { ok: false };
+          },
+        },
+        await readJson(request),
+      ),
+    );
+  }
 
   // ── Entitlement revocation lists (N12c) ───────────────────────
   if (method === "POST" && ROUTE_RE.CERT_REVOCATIONS_POST.test(path)) {
@@ -2175,6 +3058,7 @@ export async function tryControlPlane(
         {
           storage: storage.entitlementRevocations,
           usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
         },
         await readJson(request),
       ),
@@ -2212,33 +3096,8 @@ export async function tryControlPlane(
   }
 
   // ──────────────────────────────────────────────────────────────────
-  // Plan A — demo-user / on-connect Hetzner provisioning
-  //
-  // The 5 admin endpoints (create / delete / install-complete / GET /
-  // LIST) gate behind FLAGSHIP_ADMIN_SECRET. The 2 public endpoints
-  // (connect / heartbeat) are rate-limited at the edge by the
-  // Worker's main fetch handler (see apps/com/src/index.ts); we only
-  // dispatch here.
-  //
-  // Important matching order: `/create`, `/delete`, `/sample-user`
-  // (list) must hit BEFORE the bare `/sample-user/{u}` GET (which
-  // would otherwise swallow the literal "create" as a username).
-  //
-  // Lazy-construct Hetzner deps so the bootstrap path works:
-  //   - `create` writes a D1 row; doesn't touch Hetzner at all.
-  //   - `install-complete` updates the D1 row with snapshot_id;
-  //     also doesn't touch Hetzner.
-  //   - `delete` / `connect` / `heartbeat` / `get` / `list` need
-  //     Hetzner only when an active server actually exists.
-  //
-  // The operator's first `create-sample-user` run is the chicken-
-  // and-egg break: the CLI uses its OWN HCLOUD_TOKEN to upload an
-  // SSH key to Hetzner and gets back the numeric DEMO_PUBLIC_SSH_KEY_ID,
-  // which the operator THEN sets in wrangler.toml [vars] + redeploys.
-  // A pre-deploy gate that required DEMO_PUBLIC_SSH_KEY_ID would block
-  // the first create — bootstrap-impossible. Instead the deps stub
-  // throws lazily if a request actually tries to use the Worker-side
-  // Hetzner client without configuration.
+  // One admin-owned demo lifecycle: create-or-resume, status, and exact-ID
+  // cleanup. There are no public connect, wake, heartbeat, or snapshot routes.
   if (path.startsWith("/api/dev/sample-user")) {
     const lazyHetzner = env.HCLOUD_TOKEN
       ? createHetznerClient(env.HCLOUD_TOKEN)
@@ -2277,137 +3136,6 @@ export async function tryControlPlane(
       ...(demoDns ? { dns: demoDns } : {}),
       apex: env.SERVICES_APEX ?? "flagship.services",
     };
-    // The v2 admin routes additionally need the auth-codes, build-tickets,
-    // and device-capability-grants storages PLUS the DEMO_IRK_KEK
-    // worker-secret. Built lazily so the legacy demo endpoints don't
-    // fail-closed when the new KEK isn't configured.
-    const adminDeps = env.DEMO_IRK_KEK
-      ? {
-          ...demoDeps,
-          authCodes: storage.authCodes,
-          buildTickets: storage.buildTickets,
-          deviceCapabilityGrants: storage.deviceCapabilityGrants,
-          demoIrkKek: hexDecode(env.DEMO_IRK_KEK),
-          apex: env.SERVICES_APEX ?? "flagship.services",
-        }
-      : null;
-    if (
-      method === "POST" &&
-      ROUTE_RE.DEMO_USER_ADMIN_CLAIM_AND_ISSUE.test(path)
-    ) {
-      {
-        const _adminAuth = authorizeAdmin({
-          expected: env.FLAGSHIP_ADMIN_SECRET,
-          provided: request.headers.get("x-admin-secret"),
-        });
-        if (_adminAuth) return finishPlain(_adminAuth);
-      }
-      if (!adminDeps) {
-        return jsonResponse(
-          { error: "DEMO_IRK_KEK not configured on this Worker" },
-          503,
-        );
-      }
-      return finishPlain(await handleAdminClaimAndIssue(adminDeps, await readJson(request)));
-    }
-    if (
-      method === "POST" &&
-      (m = path.match(ROUTE_RE.DEMO_USER_ADMIN_MINT_DEVICE_GRANT))
-    ) {
-      {
-        const _adminAuth = authorizeAdmin({
-          expected: env.FLAGSHIP_ADMIN_SECRET,
-          provided: request.headers.get("x-admin-secret"),
-        });
-        if (_adminAuth) return finishPlain(_adminAuth);
-      }
-      if (!adminDeps) {
-        return jsonResponse(
-          { error: "DEMO_IRK_KEK not configured on this Worker" },
-          503,
-        );
-      }
-      return finishPlain(
-        await handleAdminMintDeviceGrant(
-          adminDeps,
-          decodeURIComponent(m[1]!),
-          await readJson(request),
-        ),
-      );
-    }
-    // W11 — admin-snapshot-now. Worker-side provisioning kickoff
-    // (replaces the laptop's HCLOUD_TOKEN + SSH+dd dance with a
-    // cloud-init `user_data` script). Fails closed when the W11 deps
-    // (DEMO_IRK_KEK + HCLOUD_TOKEN + ISO_BUCKET + ISO_TEMP_BUCKET +
-    // FLAGSHIP_R2_TEMP_PUBLIC_BASE) aren't all configured.
-    if (
-      method === "POST" &&
-      (m = path.match(ROUTE_RE.DEMO_USER_ADMIN_SNAPSHOT_NOW))
-    ) {
-      {
-        const _adminAuth = authorizeAdmin({
-          expected: env.FLAGSHIP_ADMIN_SECRET,
-          provided: request.headers.get("x-admin-secret"),
-        });
-        if (_adminAuth) return finishPlain(_adminAuth);
-      }
-      if (!adminDeps) {
-        return jsonResponse(
-          { error: "DEMO_IRK_KEK not configured on this Worker" },
-          503,
-        );
-      }
-      if (
-        !env.HCLOUD_TOKEN ||
-        !env.ISO_TEMP_BUCKET ||
-        !env.FLAGSHIP_R2_TEMP_PUBLIC_BASE
-      ) {
-        return jsonResponse(
-          {
-            error:
-              "W11 admin-snapshot-now requires HCLOUD_TOKEN + ISO_TEMP_BUCKET + FLAGSHIP_R2_TEMP_PUBLIC_BASE on the Worker",
-          },
-          503,
-        );
-      }
-      const provisionHetzner = createHetznerClient(env.HCLOUD_TOKEN);
-      const provisionDeps = {
-        storage: adminDeps.storage,
-        usernames: adminDeps.usernames,
-        authCodes: adminDeps.authCodes,
-        buildTickets: adminDeps.buildTickets,
-        deviceCapabilityGrants: adminDeps.deviceCapabilityGrants,
-        isoTempBucket: env.ISO_TEMP_BUCKET,
-        isoTempPublicBase: env.FLAGSHIP_R2_TEMP_PUBLIC_BASE,
-        // Public URL of the base ISO; cloud-init wgets it directly,
-        // bypassing the Worker. W12: prefer the Debian-12-netinst-based
-        // netboot ISO (Alpine apkovl-mode doesn't load kernel modules on
-        // Hetzner cloud VMs). Falls back to the netboot default URL,
-        // then to the legacy Alpine BASE_ISO_URL.
-        baseIsoUrl:
-          env.FLAGSHIP_NETBOOT_ISO_URL ??
-          env.BASE_ISO_URL ??
-          "https://flagshipserver.com/build/iso/flagship-netboot-trixie-amd64.iso",
-        hetzner: provisionHetzner,
-        demoIrkKek: adminDeps.demoIrkKek,
-        apex: env.SERVICES_APEX ?? "flagship.services",
-        controlApex: env.CONTROL_APEX ?? "flagshipserver.com",
-        ...(sshKeyId ? { demoSshKeyId: sshKeyId } : {}),
-        defaultRegion: "fsn1",
-        defaultSize: "cpx11",
-        // Server types known available + non-deprecated in fsn1 as of
-        // 2026-05-21. cx22 + cx32 are deprecated; cx23 is the in-place
-        // upgrade and is what worked on the legacy CLI's live runs.
-        fallbackServerTypes: ["cx23", "cpx21", "cpx22"] as const,
-      };
-      return finishPlain(
-        await handleAdminSnapshotNow(
-          provisionDeps,
-          decodeURIComponent(m[1]!),
-          await readJson(request),
-        ),
-      );
-    }
     if (method === "POST" && ROUTE_RE.DEMO_USER_CREATE.test(path)) {
       {
         const _adminAuth = authorizeAdmin({
@@ -2416,70 +3144,24 @@ export async function tryControlPlane(
         });
         if (_adminAuth) return finishPlain(_adminAuth);
       }
-      return finishPlain(await handleCreateDemoUser(demoDeps, await readJson(request)));
-    }
-    if (method === "POST" && ROUTE_RE.DEMO_USER_DELETE.test(path)) {
-      {
-        const _adminAuth = authorizeAdmin({
-          expected: env.FLAGSHIP_ADMIN_SECRET,
-          provided: request.headers.get("x-admin-secret"),
-        });
-        if (_adminAuth) return finishPlain(_adminAuth);
+      if (!env.DEMO_IRK_KEK || !env.HCLOUD_TOKEN) {
+        return jsonResponse({ error: "demo creation requires DEMO_IRK_KEK + HCLOUD_TOKEN" }, 503);
       }
-      return finishPlain(await handleDeleteDemoUser(demoDeps, await readJson(request)));
-    }
-    // W13 — cloud-init-direct provisioning. Same admin gate +
-    // DEMO_IRK_KEK requirement as snapshot-now; does NOT need R2 or
-    // a base ISO URL (no ISO is involved). Fails closed if HCLOUD_TOKEN
-    // isn't configured.
-    if (
-      method === "POST" &&
-      (m = path.match(ROUTE_RE.DEMO_USER_ADMIN_CLOUD_INIT_NOW))
-    ) {
-      {
-        const _adminAuth = authorizeAdmin({
-          expected: env.FLAGSHIP_ADMIN_SECRET,
-          provided: request.headers.get("x-admin-secret"),
-        });
-        if (_adminAuth) return finishPlain(_adminAuth);
-      }
-      if (!adminDeps) {
-        return jsonResponse(
-          { error: "DEMO_IRK_KEK not configured on this Worker" },
-          503,
-        );
-      }
-      if (!env.HCLOUD_TOKEN) {
-        return jsonResponse(
-          { error: "W13 admin-cloud-init-now requires HCLOUD_TOKEN on the Worker" },
-          503,
-        );
-      }
-      const cloudInitHetzner = createHetznerClient(env.HCLOUD_TOKEN);
-      const cloudInitDeps = {
-        storage: adminDeps.storage,
-        usernames: adminDeps.usernames,
-        authCodes: adminDeps.authCodes,
-        buildTickets: adminDeps.buildTickets,
-        deviceCapabilityGrants: adminDeps.deviceCapabilityGrants,
-        hetzner: cloudInitHetzner,
-        demoIrkKek: adminDeps.demoIrkKek,
-        apex: env.SERVICES_APEX ?? "flagship.services",
-        controlApex: env.CONTROL_APEX ?? "flagshipserver.com",
-        ...(sshKeyId ? { demoSshKeyId: sshKeyId } : {}),
+      return finishPlain(await handleCreateDemoAccount({
+        provisioning: storage.demoAccountProvisioning,
+        demos: storage.demoUsers,
+        authCodes: storage.authCodes,
+        hetzner: createHetznerClient(env.HCLOUD_TOKEN),
+        demoIrkKek: hexDecode(env.DEMO_IRK_KEK),
         defaultRegion: "fsn1",
         defaultSize: "cpx11",
         fallbackServerTypes: ["cx23", "cpx21", "cpx22"] as const,
-      };
-      return finishPlain(
-        await handleAdminCloudInitNow(
-          cloudInitDeps,
-          decodeURIComponent(m[1]!),
-          await readJson(request),
-        ),
-      );
+        ...(sshKeyId ? { demoSshKeyId: sshKeyId } : {}),
+        apex: env.SERVICES_APEX ?? "flagship.services",
+        controlApex: env.CONTROL_APEX ?? "flagshipserver.com",
+      }, await readJson(request)));
     }
-    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_INSTALL_COMPLETE))) {
+    if (method === "POST" && ROUTE_RE.DEMO_USER_CLEANUP.test(path)) {
       {
         const _adminAuth = authorizeAdmin({
           expected: env.FLAGSHIP_ADMIN_SECRET,
@@ -2487,18 +3169,13 @@ export async function tryControlPlane(
         });
         if (_adminAuth) return finishPlain(_adminAuth);
       }
-      return finishPlain(
-        await handleDemoUserInstallComplete(demoDeps, decodeURIComponent(m[1]!), await readJson(request)),
-      );
-    }
-    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_CONNECT))) {
-      return finishPlain(await handleDemoUserConnect(demoDeps, decodeURIComponent(m[1]!)));
-    }
-    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_CANCEL))) {
-      return finishPlain(await handleDemoUserCancel(demoDeps, decodeURIComponent(m[1]!)));
-    }
-    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_HEARTBEAT))) {
-      return finishPlain(await handleDemoUserHeartbeat(demoDeps, decodeURIComponent(m[1]!)));
+      if (!env.HCLOUD_TOKEN) return jsonResponse({ error: "HCLOUD_TOKEN is required for cleanup" }, 503);
+      const cleanupHetzner = createHetznerClient(env.HCLOUD_TOKEN);
+      return finishPlain(await handleCleanupDemoAccount({
+        provisioning: storage.demoAccountProvisioning,
+        demos: storage.demoUsers,
+        destroyServer: (serverId) => cleanupHetzner.destroyServer(serverId),
+      }, await readJson(request)));
     }
     if (method === "GET" && ROUTE_RE.DEMO_USER_LIST.test(path)) {
       {
@@ -2828,7 +3505,7 @@ async function readJson(request: Request): Promise<any> {
  * IsoManifest shape) into a manifest, or null when unset / unparseable /
  * shape-invalid. NEVER throws — a bad config simply degrades to
  * "unconfigured", and POST /api/iso-manifest then answers
- * `{ download: null }` rather than failing the burner's launch.
+ * `{ download: null }` rather than failing the builder's launch.
  */
 function parseBlessedIsoManifest(raw: string | undefined): IsoManifest | null {
   if (!raw) return null;
@@ -2871,6 +3548,44 @@ function finishPlain(r: HandlerResponse): Response {
     status: r.status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function accountDirectoryDeps(storage: D1Storage, db: D1Database) {
+  return {
+    usernames: storage.usernames,
+    identities: storage.deviceIdentities,
+    grants: storage.deviceCapabilityGrants,
+    accountProfiles: storage.accountProfiles,
+    selfProfiles: storage.deviceSelfProfiles,
+    managedProfiles: storage.deviceManagedProfiles,
+    keyGrants: storage.accountDirectoryKeyGrants,
+    pushTokens: storage.pushTokens,
+    nonces: new D1NonceStore(db),
+  };
+}
+
+function directoryAuthorization(request: Request, accountId: string, path: string) {
+  const deviceId = request.headers.get("x-flagship-device-id");
+  const signerPubHex = request.headers.get("x-flagship-device-pub");
+  const requestId = request.headers.get("x-flagship-request-id");
+  const issuedAtRaw = request.headers.get("x-flagship-issued-at");
+  const signature = request.headers.get("x-flagship-signature");
+  const issuedAt = issuedAtRaw === null ? Number.NaN : Number(issuedAtRaw);
+  if (!deviceId || !signerPubHex || !requestId || !Number.isFinite(issuedAt) || !signature) {
+    return undefined;
+  }
+  return {
+    request: {
+      accountId: accountId.toLowerCase(),
+      deviceId: deviceId.toLowerCase(),
+      signerPubHex: signerPubHex.toLowerCase(),
+      method: request.method.toUpperCase(),
+      path,
+      requestId,
+      issuedAt,
+    },
+    signature,
+  };
 }
 
 /**

@@ -58,6 +58,13 @@ export const downloadIcon = `<svg ${COMMON}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 
 
 export const activityIcon = `<svg ${COMMON}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
 
+// Small functional "leader / main server" marker for the pod switcher
+// (parity with iOS/Android, which flag the leader pod). A filled flag with a
+// swallowtail notch on a thin pole. NOT the retired brand pennant logo —
+// this is a tinted inline marker rendered next to the leader option.
+// fill="currentColor" so the tint cascades from the surrounding span.
+export const flagIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><line x1="6" y1="3" x2="6" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6.8 4 L19 4 L15 8.5 L19 13 L6.8 13 Z"/></svg>`;
+
 export const unlockIcon = `<svg ${COMMON}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`;
 
 // Search / chevron-right / x — used by the WhatsApp-inspired uikit

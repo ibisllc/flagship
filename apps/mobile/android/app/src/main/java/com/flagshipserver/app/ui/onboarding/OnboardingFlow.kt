@@ -29,7 +29,7 @@ import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.JoinLink
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.screens.BiometricSetupScreen
-import com.flagshipserver.app.ui.screens.ChooseUsernameScreen
+import com.flagshipserver.app.ui.screens.SuggestUsernameScreen
 import com.flagshipserver.app.ui.screens.JoinDeviceScreen
 import com.flagshipserver.app.ui.screens.OpenAccountScreen
 import com.flagshipserver.app.ui.screens.WelcomeScreen
@@ -62,7 +62,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             // CREATE path. Picking a username opens the ACCOUNT, not a
             // server — thread the chosen handle forward to the
             // biometric + open-account steps.
-            ChooseUsernameScreen(
+            SuggestUsernameScreen(
                 onContinue = { username ->
                     nav.navigate("biometric/" + URLEncoder.encode(username, "UTF-8"))
                 },
@@ -161,7 +161,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             // No-cloud-backup renders a STATE (not a 404); single does a
             // 3-day-grace takeover; multi collects the recovery TOTP /
             // code then a 24h-grace takeover. Both install the recovered
-            // UMK + initiate re-pair + label this device "admin" with the
+            // UMK + initiate re-pair, opening the account with the
             // resolved username (no "recovered-user" placeholder).
             RealAccountLoginContainer(
                 resolution = resolution,

@@ -3,10 +3,12 @@ import type { DeadManController } from "./deadMan.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import {
   verifyPhoneOrder,
+  type AdminGrantView,
   type DeadManAffirmation,
   type PhoneOrder,
   type SetDeadManPolicy,
 } from "@flagship/protocol";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 
 /**
  * Dead-man delivery surface — rides the same daemon HTTP plane as the
@@ -92,6 +94,14 @@ export function buildDeadManHttp(controller: DeadManController) {
 export interface PowerHttpOptions {
   serverId: string;
   ownerIrkPub: Uint8Array;
+  /** Slice D — the pinned admin master root (`ServerConfig.adminRootPub`);
+   *  present ⇒ the power order is gated by `requireMasterAdmin`, absent ⇒ legacy
+   *  owner-IRK verification (a strict no-op on pre-wipe boxes). */
+  adminRootPub?: Uint8Array;
+  /** This box's owner account (cfg.userId) — for the delegated-grant check. */
+  username?: string;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
   suppressor: AutoUnlockSuppressor;
   runner: HostPowerRunner;
   now?: () => number;
@@ -137,7 +147,17 @@ export function buildPowerHttp(opts: PowerHttpOptions) {
     } catch {
       return { status: 400, headers: H, body: JSON.stringify({ error: "invalid signature hex" }) };
     }
-    if (!verifyPhoneOrder(order, sig, opts.ownerIrkPub)) {
+    if (
+      !authorizeSensitiveOrder({
+        order,
+        signature: sig,
+        verify: verifyPhoneOrder,
+        ownerIrkPub: opts.ownerIrkPub,
+        adminRootPub: opts.adminRootPub,
+        username: opts.username ?? "",
+        activeGrants: opts.activeGrants,
+      })
+    ) {
       return { status: 403, headers: H, body: JSON.stringify({ error: "invalid signature" }) };
     }
     await executeLockAndPower({ mode: order.mode, suppressor: opts.suppressor, runner: opts.runner });

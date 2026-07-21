@@ -5,6 +5,7 @@ import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 
 registerView("view-paired-sessions");
 
@@ -21,9 +22,9 @@ export async function renderPairedSessions() {
       <div class="card">
         <div class="row row-top">
           <div>
-            <div class="weight-600">${escapeHtml(s.label)} ${s.current ? '<span class="pill ok">this device</span>' : ""}</div>
+            <div class="weight-600">Session ${escapeHtml(s.tokenPrefix)} ${s.current ? '<span class="pill ok">this device</span>' : ""}</div>
             <div class="value text-xs">${escapeHtml(s.tokenPrefix)}…</div>
-            <div class="faint-sm">added ${escapeHtml(new Date(s.addedAt).toLocaleString())}</div>
+            <div class="faint-sm">added ${escapeHtml(formatWhen(s.addedAt))}</div>
           </div>
           ${s.current
             ? '<button class="secondary" disabled>can\'t revoke self</button>'
@@ -57,7 +58,7 @@ async function revoke(prefix) {
       `/api/screens/paired-sessions/${encodeURIComponent(prefix)}`,
       { method: "DELETE" },
     );
-    toast("revoked");
+    toast("Revoked");
     await renderPairedSessions();
   } catch (e) {
     toast(e.message, "err");

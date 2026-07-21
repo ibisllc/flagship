@@ -91,8 +91,8 @@ class GymEveryMergeTest : GymBase() {
 
     // ─── Navigation: Home → create-server form ───────────────────────────────
 
-    /** From the seeded Home, the add-server affordance opens the chooser; the
-     *  Provision card opens the create-server form, which carries the name
+    /** From the seeded Home, the add-server affordance opens the create-server
+     *  form directly (Slice A — the chooser is gone), which carries the name
      *  field + the disk-encryption control (the A4 create-server controls).
      *  Mirror of iOS test_createServerFormReachable (Android's create-server is
      *  a single-step form, so the name + encrypt control are on one screen). */
@@ -102,11 +102,8 @@ class GymEveryMergeTest : GymBase() {
         composeRule.onNodeWithTag("home-add-server").assertIsDisplayed()
         gymShot("home-ready")
         composeRule.onNodeWithTag("home-add-server").performClick()
-        // Add-server (in-app) opens the chooser — wait for the nav-settle.
-        waitUntilExists("chooser-provision")
-        gymShot("add-server-chooser")
-        composeRule.onNodeWithTag("chooser-provision").performClick()
-        // Provision opens the create-server form (a NavHost push) — wait for it.
+        // Add-server goes STRAIGHT to the create-server form (a NavHost push,
+        // no chooser) — wait for it.
         waitUntilExists("cs-name-field")
         // The form renders top-to-bottom; the encryption toggle sits below the
         // fold on a phone viewport. Assert the controls RENDER (exist), not

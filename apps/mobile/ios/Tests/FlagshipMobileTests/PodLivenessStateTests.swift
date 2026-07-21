@@ -59,7 +59,9 @@ final class PodLivenessStateTests: XCTestCase {
         // No waiting set ⇒ dead (old registration, no check-in).
         XCTAssertEqual(s.liveness(for: s.pods[0]), .dead)
         // Mark it waiting ⇒ waitingForApproval, never dead.
-        s.serversAwaitingApproval = [fqdn]
+        s.boxRequestInbox = [fqdn: [BoxRequest(
+            nonceHex: "n", serverDomain: fqdn, type: .unlockKey, issuedAt: 1, expiresAt: now + 60_000
+        )]]
         XCTAssertEqual(s.liveness(for: s.pods[0]), .waitingForApproval)
     }
 

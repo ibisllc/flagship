@@ -19,25 +19,26 @@ import CryptoKit
 /// different device. The canonical bytes + the `|`-joined field order
 /// MUST match the Worker byte-for-byte or the server verify fails.
 public struct DeviceAdmit: Equatable, Sendable {
-    /// `flagship/device-admit/v1`, same tag the Worker uses.
-    public static let canonicalTag = "flagship/device-admit/v1"
+    public static let canonicalTag = "flagship/device-admit/v2"
 
     public let username: String
+    public let deviceId: String
     /// The incoming device's freshly-minted pubkey, lowercased hex
     /// (32 bytes → 64 hex chars).
     public let newDevicePubHex: String
     public let issuedAt: Int64
 
-    public init(username: String, newDevicePubHex: String, issuedAt: Int64) {
+    public init(username: String, deviceId: String, newDevicePubHex: String, issuedAt: Int64) {
         self.username = username
+        self.deviceId = deviceId
         self.newDevicePubHex = newDevicePubHex
         self.issuedAt = issuedAt
     }
 
-    /// `flagship/device-admit/v1|<username>|<newDevicePubHex>|<issuedAt>`.
+    /// `flagship/device-admit/v2|<username>|<deviceId>|<newDevicePubHex>|<issuedAt>`.
     public func canonicalBytes() -> Data {
         Data(
-            [Self.canonicalTag, username, newDevicePubHex, String(issuedAt)]
+            [Self.canonicalTag, username, deviceId, newDevicePubHex, String(issuedAt)]
                 .joined(separator: "|").utf8
         )
     }

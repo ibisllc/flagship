@@ -42,8 +42,9 @@ import {
   type CertSoftRevoke,
   type CertHardRevoke,
 } from "@flagship/protocol";
-import type { UsernameStorage } from "@flagship/storage";
+import type { DeviceCapabilityGrantStorage, UsernameStorage } from "@flagship/storage";
 import { HEX128, hexToBytes } from "./hex.js";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import {
   forbidden,
   malformed,
@@ -53,10 +54,14 @@ import {
 } from "./types.js";
 
 export interface CertRevocationDeps {
-  /** Account directory — the ONLY storage interface here, used to fetch the
-   *  IRK pubkey that authorizes the revoke. No cert/revocation state lives in
-   *  storage; this module stays `packages/storage`-free. */
+  /** Account directory — used to fetch the authority pubkey(s) that authorize
+   *  the revoke (the pinned admin master root under Slice D, else the legacy
+   *  owner IRK). No cert/revocation state lives in storage. */
   usernames: UsernameStorage;
+  /** Slice D — device-grant store for the master-admin authority gate (§2 rows
+   *  23–24). Optional: absent ⇒ only the bare admin root satisfies the open
+   *  gate. Keeps this module otherwise `packages/storage`-state-free. */
+  grants?: DeviceCapabilityGrantStorage;
   /**
    * Debounce state for hard re-mints, keyed by normalized username → the ms
    * timestamp of the last accepted hard revoke. INJECTABLE: production wires
@@ -133,10 +138,8 @@ export async function handleSoftRevoke(
   const userRec = await deps.usernames.get(usernameNorm);
   if (!userRec) return notFound("username not registered");
 
-  let irkPub: Uint8Array;
   let sig: Uint8Array;
   try {
-    irkPub = hexToBytes(userRec.irkPubHex);
     sig = hexToBytes(body.signature);
   } catch {
     return malformed("invalid hex");
@@ -148,9 +151,14 @@ export async function handleSoftRevoke(
     wiped: body.wiped,
     issuedAt: body.issuedAt,
   };
-  // A malformed envelope (separator / control char in a field) folds to a
-  // single 403 alongside a genuinely bad signature — no oracle.
-  if (!verifyCertSoftRevoke(envelope, sig, irkPub)) {
+  // Slice D §2 row 23 — SENSITIVE: master-admin authority (legacy owner-IRK when
+  // no admin root is pinned). A malformed envelope folds to the same 403.
+  const authz = await authorizeSensitiveComOp(deps, {
+    username: usernameNorm,
+    userRec,
+    verifyWith: (pub) => verifyCertSoftRevoke(envelope, sig, hexToBytes(pub)),
+  });
+  if (!authz.ok) {
     return forbidden("invalid signature");
   }
 
@@ -202,10 +210,8 @@ export async function handleHardRevoke(
   const userRec = await deps.usernames.get(usernameNorm);
   if (!userRec) return notFound("username not registered");
 
-  let irkPub: Uint8Array;
   let sig: Uint8Array;
   try {
-    irkPub = hexToBytes(userRec.irkPubHex);
     sig = hexToBytes(body.signature);
   } catch {
     return malformed("invalid hex");
@@ -216,7 +222,14 @@ export async function handleHardRevoke(
     serverDomain: body.serverDomain,
     issuedAt: body.issuedAt,
   };
-  if (!verifyCertHardRevoke(envelope, sig, irkPub)) {
+  // Slice D §2 row 24 — SENSITIVE: master-admin authority (legacy owner-IRK when
+  // no admin root is pinned).
+  const authz = await authorizeSensitiveComOp(deps, {
+    username: usernameNorm,
+    userRec,
+    verifyWith: (pub) => verifyCertHardRevoke(envelope, sig, hexToBytes(pub)),
+  });
+  if (!authz.ok) {
     return forbidden("invalid signature");
   }
 

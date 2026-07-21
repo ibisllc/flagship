@@ -159,7 +159,7 @@ b64url() {
 # Epoch milliseconds, PORTABLE. GNU date supports %3N; busybox date (the
 # initramfs copy of this routine) prints %N literally, corrupting the signed
 # envelope + body issuedAt. Keep this helper in sync with the initramfs premount
-# in packages/flagship-burner/src/userdata.ts.
+# in packages/flagship-builder/src/userdata.ts.
 now_ms() {
     _ms=$(date +%s%3N 2>/dev/null)
     case "$_ms" in
@@ -307,13 +307,20 @@ unlock_via_relay() {
         [ "$POST_CODE" = "200" ]
     }
 
+    # DEBUG builds expose a console "manual" passphrase fallback at the unlock
+    # prompt; PRODUCTION builds suppress it entirely — there is no offline bypass
+    # of the phone-approval unlock. Gated on /boot/flagship-debug-mode, a marker
+    # the bootstrap drops ONLY for a debug burn (absent ⇒ production).
+    MANUAL_HINT=""
+    [ -f /boot/flagship-debug-mode ] && MANUAL_HINT=" (type 'manual' then Enter to unlock by passphrase)"
+
     # Initial announce. A failed FIRST announce is fatal (fall through to manual);
     # later heartbeat re-announce failures are non-fatal — we keep polling.
     if ! post_request; then
         echo "flagship: relay boot-request HTTP $POST_CODE; body: $(head -c 200 "$POST_RESP" 2>/dev/null)"
         return 1
     fi
-    echo "flagship: posted unlock-key boot-request; waiting for phone approval (type 'manual' then Enter to unlock by passphrase)"
+    echo "flagship: posted unlock-key boot-request; waiting for phone approval${MANUAL_HINT}"
 
     # GET /api/boot/response/:serverDomain/:nonce — box-STK gated, polled. The
     # nonce is a PATH segment now (not a query), and is bound into the signed
@@ -382,13 +389,18 @@ unlock_via_relay() {
         fi
 
         BACKOFF=$((ATTEMPT < 6 ? ATTEMPT * 3 : 15))
-        echo "flagship: no phone reply yet (attempt $ATTEMPT); waiting $BACKOFF (type 'manual' then Enter to unlock by passphrase)"
-        # Interruptible wait: any line typed on the console (e.g. Enter) drops to
-        # the manual disk passphrase prompt. On a headless box read -t blocks for
-        # BACKOFF and times out (acts as the sleep) — so it waits forever.
-        if read -t "$BACKOFF" -r _key < /dev/console 2>/dev/null && [ "$_key" = "manual" ]; then
-            echo "flagship: manual unlock selected — falling through to the disk passphrase prompt"
-            return 1
+        echo "flagship: no phone reply yet (attempt $ATTEMPT); waiting $BACKOFF${MANUAL_HINT}"
+        if [ -n "$MANUAL_HINT" ]; then
+            # DEBUG: interruptible wait — any line typed on the console (e.g.
+            # "manual") drops to the manual disk passphrase prompt. On a headless
+            # box read -t blocks for BACKOFF and times out (acts as the sleep).
+            if read -t "$BACKOFF" -r _key < /dev/console 2>/dev/null && [ "$_key" = "manual" ]; then
+                echo "flagship: manual unlock selected — falling through to the disk passphrase prompt"
+                return 1
+            fi
+        else
+            # PRODUCTION: no console bypass — just wait the backoff and keep polling.
+            sleep "$BACKOFF"
         fi
     done
 

@@ -7,26 +7,29 @@ import CryptoKit
 @MainActor
 final class ServiceAccessViewModelTests: XCTestCase {
     private let server = "home.alice.flagship.services"
-    private let serviceRef = "alice-notes"
+    private let serviceRef = "alice--notes"
     private let username = "alice"
     private let control = URL(string: "https://flagshipserver.com")!
 
     private func irk() -> Curve25519.Signing.PrivateKey {
         try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 9, count: 32))
     }
+    /// The author's stable AID — the v2 create/revoke/list signer.
     private func aid() -> Curve25519.Signing.PrivateKey {
         try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 5, count: 32))
     }
     private let household = Data(repeating: 0x33, count: 32)
 
-    private func makeVM(_ mock: MockServiceAccessClient, now: @escaping () -> Int64 = { 1700 }, counter: @escaping () -> Int = { 0 }) -> ServiceAccessViewModel {
+    private func makeVM(
+        _ mock: MockServiceAccessClient,
+        now: @escaping () -> Int64 = { 1700 }
+    ) -> ServiceAccessViewModel {
         let k = irk(); let a = aid(); let hh = household
         return ServiceAccessViewModel(
             client: mock, serverDomain: server, serviceRef: serviceRef, username: username, controlBase: control,
-            authorKeys: { _ in (k, a.publicKey.rawRepresentation, hh) },
+            authorAidKeys: { _ in (a, hh) },
             irkSigner: { _ in k },
-            readKeys: { _ in (a.publicKey.rawRepresentation, hh) },
-            now: now, counter: counter
+            now: now
         )
     }
 
@@ -40,63 +43,104 @@ final class ServiceAccessViewModelTests: XCTestCase {
         XCTAssertEqual(vm.allowCount, 3)
     }
 
-    func testSetModeSignsValidEnvelope() async {
+    func testSetModeSignsValidEnvelopeUnderIrk() async {
         let mock = MockServiceAccessClient()
         let vm = makeVM(mock, now: { 1700 })
         await vm.setMode(restricted: true)
         XCTAssertTrue(vm.restricted)
         XCTAssertEqual(mock.setModeCalls.count, 1)
         let call = mock.setModeCalls[0]
-        XCTAssertEqual(call.serverDomain, server)
-        XCTAssertEqual(call.request["serviceRef"], serviceRef)
         XCTAssertEqual(call.request["mode"], "restricted")
-        // The posted sig verifies against the exact canonical bytes.
+        // The box mode toggle stays owner-IRK signed (the box pins the IRK).
         let bytes = try! ServiceInvite.canonicalSetAccessMode(serverId: server, serviceRef: serviceRef, mode: "restricted", issuedAt: 1700)
         let sig = Data(HexUtil.decode(call.signatureHex)!)
         XCTAssertTrue(irk().publicKey.isValidSignature(sig, for: bytes))
     }
 
-    func testAddPersonSealsBundleSignsCreateAndReturnsLink() async {
+    func testAddPersonAidSignsCreateAndReturnsV2Link() async {
         let mock = MockServiceAccessClient()
-        let vm = makeVM(mock, now: { 1700 }, counter: { 0 })
+        let vm = makeVM(mock, now: { 1700 })
         let link = await vm.addPerson(name: "Alex", photo: nil)
         XCTAssertNotNil(link)
-        XCTAssertTrue(link!.hasPrefix("https://\(server)/invite#"))
-        // The secret in the link is 64-hex.
-        let frag = String(link!.split(separator: "#").last!)
-        XCTAssertEqual(frag.count, 64)
-        XCTAssertNotNil(HexUtil.decode(frag))
+        // Canonical v2 link: BARE leading secret (no k=) + the author AID, no
+        // inviteId for an auto invite.
+        XCTAssertNotNil(link!.range(of: "https://\(server)/invite#[0-9a-f]{64}&a=", options: .regularExpression))
+        XCTAssertTrue(link!.contains("&a=\(HexUtil.encode(aid().publicKey.rawRepresentation))"))
+        XCTAssertFalse(link!.contains("&i="), "auto invite link omits the inviteId")
+        XCTAssertFalse(link!.contains("k="), "canonical link has a bare secret, no k= prefix")
 
         XCTAssertEqual(mock.createCalls.count, 1)
         let call = mock.createCalls[0]
-        XCTAssertEqual(call.username, username)
         XCTAssertEqual(call.request["serviceRef"], serviceRef)
-        // inviteId is the deterministic id for (AID, devicePub=IRK, counter 0).
-        let expectedId = ServiceInvite.inviteId(
-            authorAidPub: aid().publicKey.rawRepresentation,
-            authorDevicePub: irk().publicKey.rawRepresentation,
-            counter: 0)!
-        XCTAssertEqual(call.request["inviteId"], expectedId)
         XCTAssertEqual(call.request["authorAID"], HexUtil.encode(aid().publicKey.rawRepresentation))
-        // secretHash = sha256(secret in the link).
-        XCTAssertEqual(call.request["secretHash"], ServiceInvite.secretHash(secret: HexUtil.decode(frag)!))
-        // The create sig verifies under the IRK over the exact canonical bytes.
+        // No approvalMode / maxRedemptions for a personal-auto invite.
+        XCTAssertNil(call.request["approvalMode"])
+        XCTAssertNil(call.request["maxRedemptions"])
+        // The create sig verifies under the AID (v2 switch from IRK) over the bytes.
+        let inviteId = call.request["inviteId"]!
         let encBundle = call.request["encryptedBundle"]!
         let bytes = try! ServiceInvite.canonicalCreate(
-            inviteId: expectedId, authorAID: aid().publicKey.rawRepresentation, serviceRef: serviceRef,
+            inviteId: inviteId, authorAID: aid().publicKey.rawRepresentation, serviceRef: serviceRef,
             secretHash: call.request["secretHash"]!, encryptedBundle: encBundle, issuedAt: 1700)
         let sig = Data(HexUtil.decode(call.signatureHex)!)
-        XCTAssertTrue(irk().publicKey.isValidSignature(sig, for: bytes))
-        // The sealed bundle opens back to the typed name under the household key.
-        let opened = try! ServiceInvite.openBundle(encBundle, householdKey: household, inviteId: expectedId)
-        XCTAssertEqual(opened.name, "Alex")
-        XCTAssertNil(opened.photo)
+        XCTAssertTrue(aid().publicKey.isValidSignature(sig, for: bytes), "v2 create must be AID-signed")
+        XCTAssertFalse(irk().publicKey.isValidSignature(sig, for: bytes), "v2 create must NOT be IRK-signed")
+        // inviteId is a random 128-bit hex (NOT the structured devicePub form).
+        XCTAssertEqual(inviteId.count, 64)
+    }
+
+    func testAddManualInviteSetsApprovalModeAndInviteIdInLink() async {
+        let mock = MockServiceAccessClient()
+        let vm = makeVM(mock, now: { 1700 })
+        let link = await vm.addPerson(name: "Sam", photo: nil, tier: .personalManual)
+        XCTAssertNotNil(link)
+        let call = mock.createCalls[0]
+        XCTAssertEqual(call.request["approvalMode"], "manual")
+        // The manual link carries the inviteId as the canonical `&i=` (the friend
+        // needs it to sign the acceptance). No local create cache — the author's
+        // box fetches the signed create from .com at finalize (any-device).
+        let inviteId = call.request["inviteId"]!
+        XCTAssertTrue(link!.contains("&i=\(inviteId)"))
+    }
+
+    func testAddGroupInviteSetsCapsAndExpiry() async {
+        let mock = MockServiceAccessClient()
+        let vm = makeVM(mock, now: { 1700 })
+        let link = await vm.addPerson(name: "Chess club", photo: nil, tier: .group(maxRedemptions: 10, expiresAt: 1_700_009_999_999))
+        XCTAssertNotNil(link)
+        let call = mock.createCalls[0]
+        XCTAssertEqual(call.request["maxRedemptions"], "10")
+        XCTAssertEqual(call.request["expiresAt"], "1700009999999")
+        XCTAssertNil(call.request["approvalMode"], "group is auto-approve")
+        // The create sig (with caps appended) verifies under the AID.
+        let inviteId = call.request["inviteId"]!
+        let bytes = try! ServiceInvite.canonicalCreate(
+            inviteId: inviteId, authorAID: aid().publicKey.rawRepresentation, serviceRef: serviceRef,
+            secretHash: call.request["secretHash"]!, encryptedBundle: call.request["encryptedBundle"]!,
+            issuedAt: 1700, maxRedemptions: 10, expiresAt: 1_700_009_999_999)
+        XCTAssertTrue(aid().publicKey.isValidSignature(Data(HexUtil.decode(call.signatureHex)!), for: bytes))
+    }
+
+    func testRefreshPeopleSignsListQueryUnderAid() async {
+        let mock = MockServiceAccessClient()
+        mock.state = ServiceAccessState(mode: "restricted", allowCount: 1)
+        let vm = makeVM(mock, now: { 1700 })
+        await vm.load()
+        XCTAssertGreaterThanOrEqual(mock.listCalls.count, 1)
+        let call = mock.listCalls.last!
+        XCTAssertEqual(call.query["authorAID"], HexUtil.encode(aid().publicKey.rawRepresentation))
+        XCTAssertEqual(call.query["scope"], "list")
+        XCTAssertEqual(call.query["cursor"], "0")
+        // The list query is OWNER-SIGNED (v2 §C2) under the AID.
+        let bytes = try! ServiceInvite.canonicalListQuery(
+            username: username, authorAID: HexUtil.encode(aid().publicKey.rawRepresentation),
+            scope: "list", cursor: 0, issuedAt: 1700)
+        XCTAssertTrue(aid().publicKey.isValidSignature(Data(HexUtil.decode(call.signatureHex)!), for: bytes))
     }
 
     func testListPeopleDecryptsBundlesAndFiltersRevoked() async {
         let mock = MockServiceAccessClient()
         mock.state = ServiceAccessState(mode: "restricted", allowCount: 1)
-        // Seal two bundles under the household key for two invite ids.
         let id1 = "aa" + String(repeating: "0", count: 62)
         let id2 = "bb" + String(repeating: "0", count: 62)
         let b1 = try! ServiceInvite.sealBundle(.init(name: "Alex", photo: nil), householdKey: household, inviteId: id1)
@@ -110,11 +154,34 @@ final class ServiceAccessViewModelTests: XCTestCase {
         XCTAssertEqual(vm.people.count, 1)
         XCTAssertEqual(vm.people[0].name, "Alex")
         XCTAssertTrue(vm.people[0].bound)
+        XCTAssertFalse(vm.people[0].isGroup)
     }
 
-    func testRemoveUnredeemedInviteRevokesComOnly() async {
-        // No people loaded ⇒ no bound AID ⇒ `.com` revoke only, NO box prune
-        // (the allow-list never held an unredeemed invite).
+    func testGroupRowSurfacesBoundSetAndCap() async {
+        let mock = MockServiceAccessClient()
+        mock.state = ServiceAccessState(mode: "restricted", allowCount: 2)
+        let id = "cc" + String(repeating: "0", count: 62)
+        let sealed = try! ServiceInvite.sealBundle(.init(name: "Chess club", photo: nil), householdKey: household, inviteId: id)
+        let m1 = "a1" + String(repeating: "0", count: 62)
+        let m2 = "a2" + String(repeating: "0", count: 62)
+        mock.rows = [
+            ServiceInviteRow(
+                inviteId: id, serviceRef: serviceRef, encryptedBundleHex: sealed,
+                boundAidHex: nil, boundAt: nil, createdAt: 1, revokedAt: nil,
+                boundAidsHex: [m1, m2], maxRedemptions: 10, expiresAt: nil, redemptions: 2, approvalMode: "auto"),
+        ]
+        let vm = makeVM(mock)
+        await vm.load()
+        XCTAssertEqual(vm.people.count, 1)
+        let g = vm.people[0]
+        XCTAssertTrue(g.isGroup)
+        XCTAssertEqual(g.groupMax, 10)
+        XCTAssertEqual(Set(g.groupBoundAIDs), Set([m1, m2]))
+        XCTAssertTrue(g.bound)
+    }
+
+    func testRemoveUnredeemedInviteRevokesComOnlyUnderAid() async {
+        // No people loaded ⇒ no bound AID ⇒ `.com` revoke only, NO box prune.
         let mock = MockServiceAccessClient()
         let vm = makeVM(mock, now: { 1700 })
         await vm.remove(inviteId: "deadbeef")
@@ -137,20 +204,36 @@ final class ServiceAccessViewModelTests: XCTestCase {
         XCTAssertEqual(vm.people.count, 1)
 
         await vm.remove(inviteId: id)
-        // BOTH legs fire: the `.com` revoke AND the box allow-list prune.
+        // The `.com` revoke is AID-signed; the box prune is IRK-signed.
         XCTAssertEqual(mock.revokeCalls.count, 1)
-        XCTAssertEqual(mock.revokeCalls[0].inviteId, id)
         XCTAssertEqual(mock.removeAllowCalls.count, 1, "a redeemed friend must be pruned from the box")
         let call = mock.removeAllowCalls[0]
-        XCTAssertEqual(call.serverDomain, server)
-        XCTAssertEqual(call.request["serverId"], server)
-        XCTAssertEqual(call.request["serviceRef"], serviceRef)
         XCTAssertEqual(call.request["aid"], friendAID)
-        // The prune sig verifies under the owner IRK over the exact canonical bytes.
-        let bytes = try! ServiceInvite.canonicalRemoveServiceAllow(
-            serverId: server, serviceRef: serviceRef, aid: friendAID, issuedAt: 1700)
-        let sig = Data(HexUtil.decode(call.signatureHex)!)
-        XCTAssertTrue(irk().publicKey.isValidSignature(sig, for: bytes), "box prune must be owner-IRK signed over the canonical bytes")
+        let bytes = try! ServiceInvite.canonicalRemoveServiceAllow(serverId: server, serviceRef: serviceRef, aid: friendAID, issuedAt: 1700)
+        XCTAssertTrue(irk().publicKey.isValidSignature(Data(HexUtil.decode(call.signatureHex)!), for: bytes), "box prune must be owner-IRK signed")
+    }
+
+    func testRemoveGroupPrunesEveryBoundAid() async {
+        let mock = MockServiceAccessClient()
+        mock.state = ServiceAccessState(mode: "restricted", allowCount: 3)
+        let id = "cc" + String(repeating: "0", count: 62)
+        let sealed = try! ServiceInvite.sealBundle(.init(name: "Chess club", photo: nil), householdKey: household, inviteId: id)
+        let m1 = "a1" + String(repeating: "0", count: 62)
+        let m2 = "a2" + String(repeating: "0", count: 62)
+        let m3 = "a3" + String(repeating: "0", count: 62)
+        mock.rows = [
+            ServiceInviteRow(
+                inviteId: id, serviceRef: serviceRef, encryptedBundleHex: sealed,
+                boundAidHex: nil, boundAt: nil, createdAt: 1, revokedAt: nil,
+                boundAidsHex: [m1, m2, m3], maxRedemptions: 10, expiresAt: nil, redemptions: 3, approvalMode: "auto"),
+        ]
+        let vm = makeVM(mock, now: { 1700 })
+        await vm.load()
+        await vm.remove(inviteId: id)
+        // One `.com` revoke + a box prune for EVERY bound member.
+        XCTAssertEqual(mock.revokeCalls.count, 1)
+        XCTAssertEqual(mock.removeAllowCalls.count, 3, "group revoke prunes every member")
+        XCTAssertEqual(Set(mock.removeAllowCalls.map { $0.request["aid"] }), Set([m1, m2, m3]))
     }
 
     func testRemoveBoxPruneFailureSurfaces() async {
@@ -163,8 +246,6 @@ final class ServiceAccessViewModelTests: XCTestCase {
         ]
         let vm = makeVM(mock)
         await vm.load()
-        // Fail ONLY the box prune — the `.com` revoke still succeeds, but the
-        // friend would keep box access, so this must surface.
         mock.removeAllowError = ScreensClientError.http(status: 403, message: "bad sig")
         await vm.remove(inviteId: id)
         XCTAssertEqual(mock.revokeCalls.count, 1)

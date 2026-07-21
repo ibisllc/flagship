@@ -57,13 +57,16 @@ describe("webapp boot-approval relay (parity with iOS SecretRequestsScreen)", ()
     expect(r.body).toContain("Flagship-Boot-v1");
   });
 
-  it("views/boot-approval.js registers the view + wires fetch + approve + the device-info backstop", async () => {
+  it("views/boot-approval.js registers the view + wires fetch + generic satisfy + the device-info backstop", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/views/boot-approval.js" });
     expect(r.statusCode).toBe(200);
     expect(r.body).toContain('registerView("view-boot-approval")');
     expect(r.body).toContain("fetchVerifiedRequests");
-    expect(r.body).toContain("approveUnlock");
+    // The inbox now dispatches ANY type through the registry's `satisfy`
+    // (not just unlock), and titles come from BOX_REQUEST_TYPES.
+    expect(r.body).toContain("satisfy");
+    expect(r.body).toContain("BOX_REQUEST_TYPES");
     expect(r.body).toContain("export async function enterBootApproval");
     expect(r.body).toContain("export function initBootApprovalView");
     // The "is this my box?" device-info confirm + the one-tap CTA.

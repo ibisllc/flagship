@@ -30,9 +30,9 @@ test("S13 — orders/send queued while offline + SW carries the replay patterns"
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
   await syncWebappPubkey(page, podSim);
 
+  await page.locator("#view-home .advanced-disclosure").evaluate((d) => { d.open = true; });
   await page.click("#open-pod-pair");
   await page.fill("#pod-pair-base", podSim.baseUrl);
-  await page.fill("#pod-pair-label", "e2e-s13");
   await page.click("#pod-pair-go");
   await expect.poll(() => podSim.orders.filterByType("add-paired-session").length).toBe(1);
   await page.click("#pod-pair-back");

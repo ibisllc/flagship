@@ -138,7 +138,7 @@ async function poll() {
 
 function start() {
   const serial = $("ip-serial").value.trim();
-  if (!serial) return toast("enter the serial first", "err");
+  if (!serial) return toast("Enter the serial first", "err");
   clearPoll();
   activeSerial = serial;
   latest = null;

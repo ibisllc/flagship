@@ -28,18 +28,26 @@ import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.BootApprovalWatcher
+import com.flagshipserver.app.core.BoxRequest
+import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.PendingServerReconciler
+import com.flagshipserver.app.core.PendingSwkDepositStore
+import com.flagshipserver.app.core.PendingPairingDepositStore
+import com.flagshipserver.app.core.SwkDepositCoordinator
 import com.flagshipserver.app.core.decommissionServer
+import com.flagshipserver.app.core.LocalServerTransferClient
 import com.flagshipserver.app.core.RecoveryBannerStore
-import com.flagshipserver.app.ui.screens.AddServerChooserScreen
-import com.flagshipserver.app.ui.screens.AddServerMode
 import com.flagshipserver.app.ui.screens.DemoInstallProgressScreen
 import com.flagshipserver.app.ui.screens.HomeScreen
 import com.flagshipserver.app.ui.screens.PendingServerScreen
 import com.flagshipserver.app.ui.screens.ServerDetailScreen
 import com.flagshipserver.app.ui.screens.CreateServerScreen
 import com.flagshipserver.app.ui.screens.InstallProgressScreen
+import com.flagshipserver.app.ui.screens.TransferAcquirerScreen
 import com.flagshipserver.app.viewmodels.HomeViewModel
+import com.flagshipserver.app.viewmodels.TransferAcquirerViewModel
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import java.net.URLDecoder
@@ -59,30 +67,100 @@ fun HomeTab() {
     // fetch (registered servers + active orders). Surfaces in-flight orders
     // (the never-ported "home2" fix) and ages out dead pending ghosts. A pure
     // read — NO biometric prompt; Face ID stays only on mutations.
-    val reconciler = remember(mailbox) { PendingServerReconciler(app, mailbox) }
-    // Account-level "which boxes are waiting for my unlock approval?" poller.
-    // Populates app.serversAwaitingApproval so the list / detail / checklist
-    // read a per-server waiting state from ONE fetch (no N pollers).
-    val approvalWatcher = remember(mailbox) {
-        BootApprovalWatcher(
+    val reconcilerContext = LocalContext.current
+    val reconciler = remember(mailbox) {
+        // Secret-free recipe: deposit the SWK + the secret-free PAIRING order once
+        // a box registered without them embedded. The coordinator no-ops unless a
+        // deposit is owed (idempotent via the two stores), so this is safe on
+        // every reconcile.
+        val swkStore = PendingSwkDepositStore.from(reconcilerContext)
+        val pairingStore = PendingPairingDepositStore.from(reconcilerContext)
+        // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in
+        // the recipe, so it is always deposited post-registration (on the same
+        // biometric pass as the SWK). Idempotent via the store.
+        val cgkStore = com.flagshipserver.app.core.PendingCgkDepositStore.from(reconcilerContext)
+        val holdStore = com.flagshipserver.app.core.MigrationHoldStore.from(reconcilerContext)
+        PendingServerReconciler(
             app = app,
-            // DIRECTORY-DRIVEN, no biometric: read the cheap `awaitingUnlock`
-            // flag straight from the unauthenticated `/pods` directory. (The old
-            // path derived the IRK to read the mailbox, firing Face ID on a
-            // timer.) Best-effort: a blip returns the prior set.
-            pollAwaiting = pollAwaiting@{
+            mailbox = mailbox,
+            onRegistered = { fqdn, identityPubKeyHex ->
                 val user = app.currentUser.value
-                if (user.isNullOrEmpty()) return@pollAwaiting app.serversAwaitingApproval.value
-                val dir = runCatching { mailbox.fetchPods(user) }
-                    .getOrElse { return@pollAwaiting app.serversAwaitingApproval.value }
-                dir.pods
-                    .filter { it.awaitingUnlock }
-                    .map { it.serverDomain.lowercase() }
-                    .toSet()
+                if (!user.isNullOrEmpty()) {
+                    SwkDepositCoordinator.live(user, mailbox, swkStore, pairingStore, cgkStore, holdStore)
+                        .depositIfNeeded(fqdn, identityPubKeyHex)
+                }
             },
         )
     }
-    val awaitingApproval by app.serversAwaitingApproval.collectAsState()
+    // Account-level "what is each box asking me to approve?" poller. Populates
+    // app.boxRequestInbox (the unified Box Request Inbox, docs/box-request-inbox.md)
+    // so the list / detail / checklist read a per-server waiting state from ONE
+    // fetch (no N pollers).
+    val approvalWatcher = remember(mailbox) {
+        BootApprovalWatcher(
+            app = app,
+            // DIRECTORY-DRIVEN, no biometric: build the unified inbox from the
+            // cheap `pendingRequests` digest straight off the unauthenticated
+            // `/pods` directory. (The old path derived the IRK to read the
+            // mailbox, firing Face ID on a timer.) Best-effort: a blip returns the
+            // prior inbox. Unknown/future purposes a not-yet-updated client can't
+            // satisfy are dropped here, so the inbox only holds actionable rows.
+            pollAwaiting = pollAwaiting@{
+                val prior = app.boxRequestInbox.value
+                val user = app.currentUser.value
+                if (user.isNullOrEmpty()) return@pollAwaiting prior
+                val dir = runCatching { mailbox.fetchPods(user) }.getOrElse { return@pollAwaiting prior }
+                val inbox = mutableMapOf<String, List<BoxRequest>>()
+                for (pod in dir.pods) {
+                    val reqs = pod.pendingRequests.mapNotNull { r ->
+                        val purpose = SecretPurpose.fromWire(r.type) ?: return@mapNotNull null
+                        BoxRequest(
+                            nonceHex = r.id,
+                            serverDomain = pod.serverDomain,
+                            type = purpose,
+                            issuedAt = r.issuedAt,
+                            expiresAt = r.expiresAt,
+                        )
+                    }
+                    if (reqs.isNotEmpty()) inbox[pod.serverDomain.lowercase()] = reqs
+                }
+                inbox
+            },
+        )
+    }
+    // Direct (box-read) per-service leadership — `GET /api/leads` over the SAME
+    // box-pinned pipe, preferred over the `.com` `/pods` relay when a box is
+    // reachable. Best-effort + on-demand (the appearance reconcile + pull-to-
+    // refresh, NOT a new always-on poller); the Live client rides
+    // HttpClientFactory.build() (box cert-fingerprint pinning) under the hood.
+    val leads = remember { com.flagshipserver.app.api.LiveLeadsClient() }
+    // PREFER a live box-direct leadership read over the relay value the relay
+    // reconcile just applied. For each ONLINE box, fetch `GET /api/leads`; the
+    // FIRST box that answers gives a GLOBAL (slug → leaderFqdn) view of the whole
+    // account, so one successful read covers every pod. Invert it into the per-pod
+    // ("fqdn → slugs") model the badge renders and apply it, overriding the relay
+    // value for matched pods. Any failure / 404 / gossip-off yields null and the
+    // relay value stands — never a regression. Mirror of iOS HomeTab.preferDirectLeads.
+    val preferDirectLeads: suspend () -> Unit = preferDirectLeads@{
+        val current = app.pods.value
+        val onlineFqdns = current
+            .filter { it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE }
+            .map { it.fqdn }
+        if (onlineFqdns.isEmpty()) return@preferDirectLeads
+        val knownFqdns = current.map { it.fqdn }
+        for (fqdn in onlineFqdns) {
+            val map = leads.fetchLeads(fqdn) ?: continue
+            // A successful read is a complete account-wide view — invert + apply
+            // and we're done (no need to poll the other boxes this pass).
+            app.applyDirectLeads(
+                com.flagshipserver.app.api.DirectLeadsInversion.invert(map.leads, knownFqdns),
+            )
+            return@preferDirectLeads
+        }
+    }
+    val boxInbox by app.boxRequestInbox.collectAsState()
+    val awaitingApproval = app.serversAwaiting(SecretPurpose.UNLOCK_KEY)
+    val awaitingEntitlement = app.serversAwaiting(SecretPurpose.ENTITLEMENT)
     val ctx = LocalContext.current
     // Persistent dismiss for the post-creation backup-reminder banner
     // (mirror of webapp's flagship.recovery.banner.dismissed.v1). The
@@ -92,18 +170,20 @@ fun HomeTab() {
 
     LaunchedEffect(app.currentPodId.value) { vm.load() }
 
-    // Reconcile the server list against `/pods` on first appearance and
-    // whenever the signed-in account changes. Best-effort + silent.
-    LaunchedEffect(app.currentUser.value) { reconciler.reconcile() }
-
-    // Account-level approval poll: keep app.serversAwaitingApproval fresh so a
-    // box waiting for unlock surfaces its Approve affordance on the list /
-    // checklist without a push or a per-card poller. 5s cadence, matching iOS.
+    // The pod-list reconcile + the account-level "which boxes are waiting for
+    // approval?" feed now ride the app-scope LiveSync canal (the `/stream`
+    // long-poll feeds BOTH app.pods — via the reconciler — and
+    // app.boxRequestInbox). So HomeTab no longer runs its own one-shot
+    // reconcile on user-change NOR the standalone 5s approval poll — those would
+    // be redundant second polls of the same data. One immediate reconcile on
+    // sign-in keeps the first paint fresh even before LiveSync's first tick
+    // lands; the `reconciler`/`approvalWatcher` objects stay for pull-to-refresh
+    // (`onRefresh` below forces one immediate directory read).
     LaunchedEffect(app.currentUser.value) {
-        while (true) {
-            approvalWatcher.pollOnce()
-            kotlinx.coroutines.delay(5_000)
-        }
+        reconciler.reconcile()
+        // Prefer a live box-direct leadership read over the relay value the
+        // reconcile applied — best-effort, on-demand (no new poller).
+        preferDirectLeads()
     }
 
     // Refresh cloud-recovery enrolment state AND E7 account-reset
@@ -117,23 +197,6 @@ fun HomeTab() {
         if (!u.isNullOrEmpty()) {
             runCatching { server.hasCloudRecovery(u) }
                 .onSuccess { app.setHasCloudRecovery(it) }
-            // E7 — check whether our local push tokenId is still in
-            // the trusted-devices list. Absent = another device
-            // ran Disconnect/Replace/Wipe and we're orphaned.
-            runCatching { server.listDevices(u).devices }
-                .onSuccess { devices ->
-                    val localToken = com.flagshipserver.app.keystore.Keystore.pushTokenId()
-                    if (!localToken.isNullOrEmpty()) {
-                        val present = devices.any { it.tokenId == localToken }
-                        if (!present) {
-                            app.setAccountWasReset(true)
-                        } else if (app.accountWasReset.value) {
-                            // Recovered — clear the flag so the
-                            // banner disappears.
-                            app.setAccountWasReset(false)
-                        }
-                    }
-                }
         }
     }
 
@@ -149,6 +212,14 @@ fun HomeTab() {
             DeepLink.CreateServer -> {
                 deepLinker.consume()
                 nav.navigate("create-server")
+            }
+            is DeepLink.TransferOffer -> {
+                // Slice C — a `/transfer?o=…` take-over link. Open the acquirer
+                // flow with the giver's offer JSON pre-ingested (the VM verifies
+                // the signature + expiry before the claim biometric).
+                deepLinker.consume()
+                val enc = URLEncoder.encode(link.offerJson, "UTF-8")
+                nav.navigate("transfer-acquirer?offer=$enc")
             }
             else -> { /* not for this tab */ }
         }
@@ -178,7 +249,11 @@ fun HomeTab() {
                 onOpenPod = { pod ->
                     nav.navigate("server-detail/${pod.podId}")
                 },
-                onAddServer = { nav.navigate("add-server-chooser") },
+                // Slice A — "Add a server" goes STRAIGHT to provisioning a new
+                // box (no chooser). Pairing an existing box is automatic
+                // (Slice B); taking over a transferred box is a link/QR
+                // ingestion (Slice C, via the deep link / "Process a link").
+                onAddServer = { nav.navigate("create-server") },
                 onSetLeader = { app.setLeader(it.podId) },
                 onDeleteServer = { pod ->
                     // Decommission a pending or registered-but-dead server via
@@ -188,7 +263,16 @@ fun HomeTab() {
                     // failure the pod is kept so the name never strands.
                     scope.launch { decommissionServer(pod, app, server, toasts) }
                 },
-                onRefresh = { scope.launch { vm.load(); reconciler.reconcile(); approvalWatcher.pollOnce() } },
+                onRefresh = {
+                    scope.launch {
+                        vm.load()
+                        reconciler.reconcile()
+                        // Prefer a fresher box-direct leadership read over the
+                        // relay value the reconcile just applied (best-effort).
+                        preferDirectLeads()
+                        approvalWatcher.pollOnce()
+                    }
+                },
                 showRecoveryNudge = showNudge,
                 onSetUpRecovery = { deepLinker.enqueue(DeepLink.RecoverySetup) },
                 onDismissRecoveryNudge = { app.dismissRecoveryNudgeForSession() },
@@ -198,6 +282,7 @@ fun HomeTab() {
                 onSignInAgain = { app.signOut() },
                 deviceCapability = capability,
                 awaitingApproval = awaitingApproval,
+                awaitingEntitlement = awaitingEntitlement,
             )
         }
         composable("server-detail/{podId}") { entry ->
@@ -230,6 +315,12 @@ fun HomeTab() {
                     )
                 }
             } else {
+                // The unified Box Request Inbox (docs/box-request-inbox.md),
+                // refreshed by the watcher — collected so the serve-auth card
+                // arms/clears on its own as the entitlement lane changes.
+                val inbox by app.boxRequestInbox.collectAsState()
+                val awaitingEnt = inbox[pod.fqdn.lowercase()]
+                    ?.any { it.type == SecretPurpose.ENTITLEMENT } ?: false
                 ServerDetailScreen(
                     podId = podId,
                     // The directory's cheap `awaitingUnlock` flag (no biometric)
@@ -238,28 +329,40 @@ fun HomeTab() {
                     // page even when its BFF can't load (a locked box can't
                     // answer its daemon).
                     awaitingUnlock = pod.awaitingUnlock,
+                    awaitingEntitlement = awaitingEnt,
                     serverFqdn = pod.fqdn,
                     onBack = { nav.popBackStack() },
                 )
             }
         }
-        composable("add-server-chooser") {
-            AddServerChooserScreen(
-                mode = AddServerMode.IN_APP,
-                onProvision = { nav.navigate("create-server") },
-                // The old onPair → "pod-pair" route claimed you could
-                // pair to an existing pod by scanning a QR. That's
-                // semantically wrong: a fresh device can only recover
-                // its own account. Pair as no-op for now; the
-                // "Add another phone" flow lives in Settings →
-                // Trusted devices once Phase E (Wipe & restart) ships
-                // the full multi-device story.
-                onPair = { /* disabled — use Settings → Trusted devices */ },
-                onCancel = { nav.popBackStack() },
-            )
+        composable(
+            "transfer-acquirer?offer={offer}",
+            arguments = listOf(navArgument("offer") { type = NavType.StringType; nullable = true; defaultValue = null }),
+        ) { entry ->
+            // Slice C — take over a transferred box. Mounted with the giver's
+            // signed offer JSON pre-ingested (from a `/transfer?o=…` deep link or
+            // the "Process a link" paste); the VM Ed25519-verifies the offer
+            // signature + expiry before the claim biometric.
+            val offer = entry.arguments?.getString("offer")?.let { URLDecoder.decode(it, "UTF-8") }
+            val transferClient = LocalServerTransferClient.current
+            val user = app.currentUser.collectAsState().value ?: ""
+            val acquirerVm = remember(user) { TransferAcquirerViewModel(username = user, client = transferClient) }
+            TransferAcquirerScreen(vm = acquirerVm, preIngestedOffer = offer)
         }
         composable("create-server") {
             CreateServerScreen(
+                onDeliveredVisible = { serverDomain, serial, name, description ->
+                    // The recipe is out (builder-pair delivered) but the pairing
+                    // screen stays open for consent prompts — surface the pending
+                    // pod on Home now WITHOUT navigating away. Mirrors iOS
+                    // CreateServerStubScreen.onDeliveredVisible.
+                    app.upsertPendingPod(
+                        name = name,
+                        description = description,
+                        fqdn = serverDomain,
+                        serial = serial,
+                    )
+                },
                 onDelivered = { serverDomain, serial, name, description ->
                     // QR-relay delivered. Surface the pod on Home RIGHT NOW
                     // (pending, keyed on the fqdn, carrying this device's

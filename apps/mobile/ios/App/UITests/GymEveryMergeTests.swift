@@ -102,9 +102,9 @@ final class GymEveryMergeTests: XCTestCase {
 
     // ─── Navigation: Home → create-server form ───────────────────────────────
 
-    /// From the seeded Home, the add-server affordance opens the create-server
-    /// form directly (in-app add-server is always "provision a new box" — the
-    /// chooser is onboarding-only). The form is a 3-step design wizard: step 0
+    /// From the seeded Home, the add-server affordance goes STRAIGHT to the
+    /// create-server form (the provision-vs-pair chooser was removed; parity
+    /// with the webapp + Android). The form is a 3-step design wizard: step 0
     /// is name + description, step 1 carries the disk-encryption toggle (the A4
     /// create-server control). Assert step 0 renders, then advance to step 1
     /// and assert the disk-encryption toggle. Renders against the mock client;
@@ -116,6 +116,7 @@ final class GymEveryMergeTests: XCTestCase {
         gymShot(app, "home-ready")
         addServer.tap()
 
+        // Add-server goes straight into the create flow — no chooser.
         let name = app.textFields["cs-name-field"]
         XCTAssertTrue(
             name.waitForExistence(timeout: 15),

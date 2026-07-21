@@ -45,7 +45,7 @@ function factoryFor(ws: FakeWS): WebSocketFactory {
 function commonOpts(): TunnelClientOptions {
   return {
     hubUrl: "wss://hub.example/tunnel",
-    signingKey: { privateKey: new Uint8Array(32), publicKey: new Uint8Array(32) },
+    sign: () => new Uint8Array(64),
     getEntitlements: async () => ({
       rootEntitlement: {
         username: "alice",

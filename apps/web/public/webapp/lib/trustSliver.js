@@ -47,12 +47,16 @@ export function trustSliverLines(certs) {
   for (const c of certs ?? []) {
     if (!c || !c.certHash || seen.has(c.certHash)) continue;
     seen.add(c.certHash);
+    const certClass = c.certClass === "relay" ? "relay" : "control";
     lines.push({
       certHash: c.certHash,
-      certClass: c.certClass === "relay" ? "relay" : "control",
+      certClass,
       slug: certSlug(c.certHash),
       label: trustLineLabel(c),
       overridden: !!c.overridden,
+      // How many servers a relay-cert failure spans (aggregated across pods).
+      // 0 for the control-CA class (a single app-scope authority).
+      serverCount: certClass === "relay" ? Number(c.serverCount ?? 0) : 0,
     });
   }
   return lines;
@@ -142,6 +146,7 @@ export function renderTrustSliver() {
               aria-label="${escapeText(l.label)}${l.overridden ? ` (${TRUST_OVERRIDE_LABEL})` : ""}">
         <span class="trust-bar-icon" aria-hidden="true">&#9888;</span>
         <span class="trust-bar-label">${escapeText(l.label)}</span>
+        ${l.serverCount > 1 ? `<span class="trust-bar-count">${l.serverCount} servers</span>` : ""}
         ${l.overridden ? `<span class="trust-bar-accepted">${TRUST_OVERRIDE_LABEL}</span>` : ""}
       </button>`,
     )

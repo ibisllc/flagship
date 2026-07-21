@@ -119,7 +119,7 @@ async function handlePinUnlock() {
     await unlockSession(seed);
     input.value = "";
     await dispatchInitialView();
-    toast("unlocked");
+    toast("Unlocked");
   } catch (e) {
     input.value = "";
     if (e && e.lockedOut) {

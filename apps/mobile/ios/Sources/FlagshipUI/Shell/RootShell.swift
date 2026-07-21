@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import FlagshipCore
 import FlagshipAPI
 
@@ -18,8 +19,14 @@ public struct RootShell: View {
     @Environment(DeepLinker.self) private var linker
     @Environment(AppState.self) private var app
     @Environment(PrivacySettings.self) private var privacy
+    // Slice B — auto-pair needs the box-pinned orders client + the per-pod token
+    // store to self-provision a session token for every visible pod on unlock.
+    @Environment(\.lockPowerClient) private var lockPower
+    @Environment(\.sessionStore) private var sessionStore
 
     @State private var selected: RootDestination
+    /// Slice B — the auto-pair batch coordinator (built lazily, once).
+    @State private var autoPair: AutoPairCoordinator?
     /// #92 — a friend redeem invite is presented as a full-screen cover
     /// (account-agnostic, independent of the tab nav stacks).
     @State private var pendingRedeem: RedeemTarget?
@@ -27,11 +34,26 @@ public struct RootShell: View {
     /// site) is presented the same way: a full-screen cover, account-agnostic,
     /// gated behind the lock screen until the visitor unlocks (they AID-sign).
     @State private var pendingKnock: KnockTarget?
+    /// v2 manual-approve — the AUTHOR finalizing a consumer's acceptance reply
+    /// (`flagship://invite-accept?…`), presented as a full-screen cover.
+    @State private var pendingAccept: AcceptTarget?
 
     private struct RedeemTarget: Identifiable, Equatable {
         let serverDomain: String
         let secretHex: String
+        let authorAidHex: String?
+        let inviteId: String?
         var id: String { "\(serverDomain)#\(secretHex)" }
+    }
+
+    private struct AcceptTarget: Identifiable, Equatable {
+        let serverDomain: String
+        let inviteId: String
+        let serviceRef: String
+        let contactAidHex: String
+        let acceptSigHex: String
+        let acceptedAt: Int64
+        var id: String { "\(serverDomain)#\(inviteId)#\(contactAidHex)" }
     }
 
     private struct KnockTarget: Identifiable, Equatable {
@@ -100,12 +122,33 @@ public struct RootShell: View {
                 InviteRedeemScreen(
                     serverDomain: target.serverDomain,
                     secretHex: target.secretHex,
+                    authorAidHex: target.authorAidHex,
+                    inviteId: target.inviteId,
                     onOpenService: { _ in pendingRedeem = nil },
                     onDone: { pendingRedeem = nil }
                 )
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button("Close") { pendingRedeem = nil }
+                    }
+                }
+            }
+        }
+        .fullScreenCover(item: $pendingAccept) { target in
+            NavigationStack {
+                InviteAcceptScreen(
+                    serverDomain: target.serverDomain,
+                    inviteId: target.inviteId,
+                    serviceRef: target.serviceRef,
+                    contactAidHex: target.contactAidHex,
+                    acceptSigHex: target.acceptSigHex,
+                    acceptedAt: target.acceptedAt,
+                    username: app.currentUser ?? "",
+                    onDone: { pendingAccept = nil }
+                )
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Close") { pendingAccept = nil }
                     }
                 }
             }
@@ -139,9 +182,24 @@ public struct RootShell: View {
         }
         // #92 — a redeem invite that arrived while locked is held in the
         // linker; replay it once the friend unlocks (they sign with their AID).
+        // Slice B — also kick an auto-pair pass on unlock (one biometric covers
+        // every not-yet-paired pod); re-arm it when the app re-locks.
         .onChange(of: app.isUnlocked) { _, unlocked in
-            if unlocked, let link = linker.pending { route(link) }
+            if unlocked {
+                if let link = linker.pending { route(link) }
+                runAutoPair()
+            } else {
+                autoPair?.resetForNewUnlock()
+            }
         }
+        // Slice B — the pod list loads asynchronously (after unlock on a cold
+        // launch), so re-run the pass when it first populates / changes. The
+        // coordinator's guards make this cheap + biometric-free once all pods are
+        // paired.
+        .onChange(of: app.pods.map { $0.fqdn }) { _, _ in
+            runAutoPair()
+        }
+        .task { runAutoPair() }
         // Appearance override (Settings → Appearance). `auto` ⇒ nil ⇒ follow the
         // system; light/dark force the scheme app-wide. Every view that reads
         // `@Environment(\.colorScheme)` + `FSColors.scheme(scheme)` then resolves
@@ -149,16 +207,40 @@ public struct RootShell: View {
         .preferredColorScheme(privacy.themeMode.preferredColorScheme)
     }
 
+    /// Slice B — fire one auto-pair pass over the currently-visible pods. Guarded
+    /// so it only runs while unlocked + paired; the coordinator itself skips
+    /// already-tokened pods and derives the IRK (one biometric) only when there's
+    /// at least one unpaired pod. Safe to call repeatedly.
+    private func runAutoPair() {
+        guard app.isUnlocked, app.isPaired, !(app.currentUser ?? "").isEmpty else { return }
+        let coord = autoPair ?? AutoPairCoordinator(
+            client: lockPower,
+            store: sessionStore
+        )
+        autoPair = coord
+        let pods = app.pods
+        Task { await coord.pairVisiblePods(pods) }
+    }
+
     /// Route a freshly-arrived deep link. The friend-redeem invite is consumed
     /// here into a full-screen cover (account-agnostic); every other link
     /// selects the owning tab and is consumed by that tab's own router.
     private func route(_ link: DeepLink) {
-        if case let .inviteRedeem(serverDomain, secretHex) = link {
+        if case let .inviteRedeem(serverDomain, secretHex, authorAidHex, inviteId) = link {
             // Hold the link behind the lock screen until the friend is
-            // unlocked (they sign the redeem with their own AID).
+            // unlocked (they sign the redeem with their own contact AID).
             guard app.isUnlocked else { return }
             _ = linker.consume()
-            pendingRedeem = RedeemTarget(serverDomain: serverDomain, secretHex: secretHex)
+            pendingRedeem = RedeemTarget(serverDomain: serverDomain, secretHex: secretHex, authorAidHex: authorAidHex, inviteId: inviteId)
+            return
+        }
+        if case let .inviteAccept(serverDomain, inviteId, serviceRef, contactAidHex, acceptSigHex, acceptedAt) = link {
+            // v2 manual-approve — THIS phone is the AUTHOR finalizing the
+            // consumer's reply. Hold behind the lock (the author IRK/AID signs +
+            // the lookup is biometric).
+            guard app.isUnlocked else { return }
+            _ = linker.consume()
+            pendingAccept = AcceptTarget(serverDomain: serverDomain, inviteId: inviteId, serviceRef: serviceRef, contactAidHex: contactAidHex, acceptSigHex: acceptSigHex, acceptedAt: acceptedAt)
             return
         }
         if case let .knockAuthorize(serverDomain, svc, serviceRef, pageId) = link {
@@ -167,6 +249,15 @@ public struct RootShell: View {
             guard app.isUnlocked else { return }
             _ = linker.consume()
             pendingKnock = KnockTarget(serverDomain: serverDomain, svc: svc, serviceRef: serviceRef, pageId: pageId)
+            return
+        }
+        if case .transferOffer = link {
+            // Slice C — take over a transferred box. Hold behind the lock like
+            // invite/knock (the claim rides the acquirer-IRK biometric); once
+            // unlocked, switch to Home WITHOUT consuming — HomeTab reads the same
+            // pending link and pushes the TransferAcquirer route into its stack.
+            guard app.isUnlocked else { return }
+            selected = .home
             return
         }
         selected = tab(for: link)
@@ -181,7 +272,8 @@ public struct RootShell: View {
         case .serverDetail, .createServer:            return .home
         case .appDetail, .vibeCodeChat, .startVibeCode: return .apps
         case .recoverySetup, .joinAccount:            return .settings
-        case .inviteRedeem, .knockAuthorize:          return selected
+        case .transferOffer:                          return .home
+        case .inviteRedeem, .inviteAccept, .knockAuthorize: return selected
         }
     }
 }

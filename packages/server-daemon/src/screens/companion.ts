@@ -72,9 +72,7 @@ export interface CompanionBffDeps {
   writeRequestTtlMs?: number;
 }
 
-export interface MintTicketRequest {
-  label?: string | null;
-}
+export interface MintTicketRequest {}
 
 export interface MintTicketResponse {
   ticketId: string;
@@ -92,12 +90,10 @@ export interface RedeemTicketResponse {
   expiresAt: number;
   podBaseUrl: string;
   username: string;
-  label?: string;
 }
 
 export interface CompanionSummary {
   tokenPrefix: string;
-  label?: string;
   redeemedAt: number;
   lastSeenMs: number;
   expiresAt: number;
@@ -128,15 +124,7 @@ export async function handleMintTicket(
   const rand = deps.randomBytes ?? ((n: number) => new Uint8Array(randomBytes(n)));
   const ttl = deps.ticketTtlMs ?? DEFAULT_TICKET_TTL_MS;
 
-  const body = parseJson(req.body) as MintTicketRequest | null;
-  let label: string | null = null;
-  if (body && body.label !== undefined && body.label !== null) {
-    if (typeof body.label !== "string") {
-      return jerr(400, "label must be a string or null");
-    }
-    if (body.label.length > 64) return jerr(400, "label too long (max 64 chars)");
-    label = body.label;
-  }
+  parseJson(req.body);
 
   const ticketId = bytesToHex(rand(16));
   const secret = bytesToHex(rand(32));
@@ -147,7 +135,6 @@ export async function handleMintTicket(
   const row: CompanionTicketRow = {
     ticketId,
     secretHash,
-    label,
     issuedAt,
     expiresAt,
     status: "pending",
@@ -213,7 +200,6 @@ export async function handleRedeemTicket(
 
   await deps.pairedSessions.addCompanion({
     token: sessionToken,
-    label: result.row.label,
     addedAt: redeemedAt,
     expiresAt,
     userAgent,
@@ -225,7 +211,6 @@ export async function handleRedeemTicket(
     podBaseUrl: `https://${deps.serverFqdn}`,
     username: deps.username,
   };
-  if (result.row.label) out.label = result.row.label;
   return jok(out);
 }
 
@@ -250,7 +235,6 @@ export async function handleListCompanions(
       lastSeenMs: r.addedAt,
       expiresAt: r.expiresAt,
     };
-    if (r.label) out.label = r.label;
     if (r.userAgent) out.userAgent = r.userAgent;
     return out;
   });

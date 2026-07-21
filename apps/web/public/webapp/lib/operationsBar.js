@@ -1,8 +1,8 @@
 // The global "operations" sliver — the DOM half of the active-operations
 // feature. A teal strip pinned at the very top that the whole shell slides
 // DOWN to reveal (modelled on WhatsApp's active-call bar). It shows the most
-// recently started running operation ("deploying server Home", "building blog
-// on Home") with a spinner; clicking it routes to that operation's own view.
+// recently started running operation ("preparing Home", "building blog on
+// Home") with a spinner; clicking it routes to that operation's own view.
 //
 // Renders nothing (zero height, no push) when there are no operations or the
 // app is locked — the latter so operation names (the user's own data) never
@@ -48,6 +48,13 @@ async function navigateToTarget(target) {
       // Resume the live chat (don't reset it) when tapping a running build.
       const { resumeVibeCode } = await import("../views/vibe-code.js");
       await resumeVibeCode(params);
+      return;
+    }
+    if (target.view === "view-vibecode-chat") {
+      // #91 — an AI-chat-needs-you alert: open the W10 chat at that session
+      // so the owner can answer the AI's question / set the env var.
+      const { enterVibeCodeChat } = await import("../views/vibecode-chat.js");
+      await enterVibeCodeChat(params.sessionId);
       return;
     }
     // Fallback — just show the view id if it's a plain router target.

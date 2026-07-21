@@ -110,8 +110,12 @@ fun HomeScreen(
     /** Lowercased fqdns of servers with a LIVE pending boot-unlock request
      *  (the box is waiting for the owner's approval). Drives the per-card
      *  liveness classification — a waiting box reads "Waiting for approval",
-     *  never "Never came online". Source: AppState.serversAwaitingApproval. */
+     *  never "Never came online". Source: AppState.serversAwaiting(UNLOCK_KEY). */
     awaitingApproval: Set<String> = emptySet(),
+    /** The entitlement (serve-auth) waiting set — same role for the other inbox
+     *  lane, so a box waiting on entitlement reads "Waiting for approval", not
+     *  "Never came online". Source: AppState.serversAwaiting(ENTITLEMENT). */
+    awaitingEntitlement: Set<String> = emptySet(),
 ) {
     val scroll = rememberScrollState()
     // Search text over the server list (name / fqdn / description). Pure
@@ -124,7 +128,11 @@ fun HomeScreen(
     // Derived liveness per pod (folds in the cheap directory awaitingUnlock
     // flag OR the account-level biometric-watcher waiting signal).
     fun livenessOf(pod: PodInfo): PodInfo.LivenessState =
-        pod.livenessState(hasLiveUnlockRequest = pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercase()))
+        pod.livenessState(
+            hasLiveUnlockRequest = pod.awaitingUnlock ||
+                awaitingApproval.contains(pod.fqdn.lowercase()) ||
+                awaitingEntitlement.contains(pod.fqdn.lowercase()),
+        )
 
     // Per-filter counts off the full pod set (search-independent) so the chip
     // badges read the account-wide totals.
@@ -320,7 +328,7 @@ private fun DeviceCapabilityChip(cap: DeviceCapabilityBlock) {
     } else {
         "${cap.scopes.size} scopes"
     }
-    val label = "Device: ${cap.label} · $summary"
+    val label = "Restricted device · $summary"
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -373,6 +381,7 @@ private fun statusIconColor(liveness: PodInfo.LivenessState, status: PodInfo.Sta
         FSPillKind.Renewing -> FS.colors.warning
         FSPillKind.Offline -> FS.colors.danger
         FSPillKind.Provisioning -> FS.colors.primary
+        FSPillKind.Pending -> FS.colors.warning
         FSPillKind.Idle -> FS.colors.textMuted
     }
 
@@ -412,6 +421,7 @@ fun ServerRow(
 
     val pillTag: String? = when (liveness) {
         PodInfo.LivenessState.DEAD -> "pod-card-never-online"
+        PodInfo.LivenessState.OFFLINE -> "pod-card-offline"
         PodInfo.LivenessState.WAITING_FOR_APPROVAL -> "pod-card-waiting-approval"
         PodInfo.LivenessState.COMING_ONLINE ->
             if (pod.status == PodInfo.Status.PENDING) null else "pod-card-coming-online"
@@ -437,9 +447,12 @@ fun ServerRow(
                 ) {
                     // Leader = the daemon the screens point at; only badge a
                     // server that actually came online.
-                    if (isLeader && pod.cameOnline) FSPill("Leader", kind = FSPillKind.Online)
+                    if (isLeader && pod.cameOnline && pod.status != PodInfo.Status.PENDING) FSPill("Leader", kind = FSPillKind.Online)
+                    // Per-service leadership (Phase 6): the services this box leads
+                    // (from /pods `leadsServices`). Tolerant of absence.
+                    LeadServicesPill(pod)
                     FSPill(
-                        label = PodStatusStyle.label(liveness, pod.status),
+                        label = PodStatusStyle.label(pod, liveness),
                         kind = PodStatusStyle.pillKind(liveness, pod.status),
                         modifier = if (pillTag != null) Modifier.testTag(pillTag) else Modifier,
                     )
@@ -538,7 +551,10 @@ fun PodCard(
                         color = FS.colors.text,
                         style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
                     )
-                    if (isLeader && pod.cameOnline) FSPill("Leader", kind = FSPillKind.Online)
+                    if (isLeader && pod.cameOnline && pod.status != PodInfo.Status.PENDING) FSPill("Leader", kind = FSPillKind.Online)
+                    // Per-service leadership (Phase 6): "Leads N" badge, tolerant
+                    // of absence (renders nothing when the box leads nothing).
+                    LeadServicesPill(pod)
                 }
                 if (!pod.description.isNullOrEmpty()) {
                     Text(
@@ -551,7 +567,7 @@ fun PodCard(
                 }
                 Spacer(Modifier.height(FS.space.s1))
                 FSPill(
-                    label = PodStatusStyle.label(liveness, pod.status),
+                    label = PodStatusStyle.label(pod, liveness),
                     kind = PodStatusStyle.pillKind(liveness, pod.status),
                 )
                 val demo = pod.demoServer
@@ -612,7 +628,7 @@ private fun ServerOverviewCard(detail: ServerDetailResponse, onRefresh: () -> Un
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium),
             )
             Text(
-                "${detail.serviceCount} services · daemon ${detail.daemonVersion}",
+                "${detail.serviceCount} services · server ${detail.daemonVersion}",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp),
             )
@@ -640,4 +656,17 @@ fun ErrorCard(message: String, onRetry: (() -> Unit)? = null) {
             if (onRetry != null) FSGhostButton(label = "Retry", onClick = onRetry)
         }
     }
+}
+
+/// Per-service leadership (Phase 6) — a small "Leads N" indicator for a box that
+/// is the current lead for one or more services (`PodInfo.leadsServices` from
+/// `/pods`). Tolerant of absence: renders nothing when the list is empty or the
+/// box never came online (a dead box is never badged as leading). Mirror of iOS
+/// LeadServicesBadge.
+@Composable
+fun LeadServicesPill(pod: PodInfo) {
+    val services = pod.leadsServices
+    if (!pod.cameOnline || services.isEmpty()) return
+    val label = if (services.size == 1) "Leads ${services[0]}" else "Leads ${services.size} services"
+    FSPill(label, kind = FSPillKind.Online, modifier = Modifier.testTag("pod-leads-badge"))
 }

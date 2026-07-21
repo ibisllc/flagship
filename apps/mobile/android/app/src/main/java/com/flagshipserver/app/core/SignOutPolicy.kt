@@ -18,10 +18,28 @@ package com.flagshipserver.app.core
 enum class SignOutPolicy {
     ALLOWED,
     BLOCKED_NO_RECOVERY,
+
+    // Account DEATH: no cloud recovery AND this is the LAST device, so wiping
+    // the local key destroys the only copy of the identity. A plain Tier-2/3
+    // wipe would silently orphan the account; instead the UI runs the deletion
+    // ceremony (docs/account-deletion-and-name-reclaim.md §2): full-page
+    // irreversible warning → typed-username + biometric → owner-IRK self-delete
+    // bundle → local wipe → Welcome. The founding device never appears in the
+    // device roster (docs §0), so callers derive last-device from
+    // trustedDevices.count <= 1.
+    DELETION_CEREMONY,
     ;
 
     companion object {
-        fun evaluate(hasCloudRecovery: Boolean, isDemoAccount: Boolean = false): SignOutPolicy =
-            if (isDemoAccount || hasCloudRecovery) ALLOWED else BLOCKED_NO_RECOVERY
+        fun evaluate(
+            hasCloudRecovery: Boolean,
+            isDemoAccount: Boolean = false,
+            isLastDevice: Boolean = false,
+        ): SignOutPolicy =
+            when {
+                isDemoAccount || hasCloudRecovery -> ALLOWED
+                isLastDevice -> DELETION_CEREMONY
+                else -> BLOCKED_NO_RECOVERY
+            }
     }
 }

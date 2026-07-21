@@ -41,6 +41,17 @@ import com.flagshipserver.app.api.SecretMailboxClient
 class PendingServerReconciler(
     private val app: AppState,
     private val mailbox: SecretMailboxClient,
+    /** Fired ONCE per registered (non-revoked) box surfaced this pass, with its
+     *  FQDN + REGISTERED identity pubkey (hex). The secret-free-recipe SWK
+     *  deposit hangs off this — a box that registered without an embedded SWK now
+     *  has a directory identity to seal it to. Best-effort + idempotent in the
+     *  handler (it no-ops unless a deposit is owed). Default no-op. */
+    private val onRegistered: suspend (fqdn: String, identityPubKeyHex: String) -> Unit = { _, _ -> },
+    /** Fired ONCE per reconcile with the raw `/pods` entries, BEFORE any
+     *  per-pod mapping — the seam the per-cert relay-trust aggregation hangs off
+     *  (it needs each box's STK-signed `trustStatus` + `identityPubKey`, which
+     *  the mapped PodInfo doesn't carry). Default no-op. Mirror of iOS. */
+    private val onDirectory: (pods: List<com.flagshipserver.app.api.PodDirectoryEntry>) -> Unit = { },
 ) {
     /** Run the full reconcile from the single merged `/pods` fetch.
      *  Best-effort: a network failure (or no signed-in user) leaves the
@@ -48,11 +59,25 @@ class PendingServerReconciler(
     suspend fun reconcile() {
         val username = app.currentUser.value
         if (username.isNullOrEmpty()) return
-
         // ONE unauthenticated fetch — registered servers AND active orders.
         // A throw (couldn't reach the directory) leaves all state untouched.
         val directory: PodsDirectoryResponse =
             runCatching { mailbox.fetchPods(username) }.getOrNull() ?: return
+        reconcile(directory)
+    }
+
+    /** Reconcile from a directory the caller ALREADY fetched — the LiveSync
+     *  path hands the `/stream` snapshot here so the same projection runs with
+     *  no second round-trip. Identical logic to [reconcile]; only the data
+     *  source differs. No-ops on no signed-in user. */
+    suspend fun reconcile(directory: PodsDirectoryResponse) {
+        val username = app.currentUser.value
+        if (username.isNullOrEmpty()) return
+
+        // Per-cert relay-trust aggregation (maintainer-trust Layer 3): hand the
+        // raw entries to the aggregation seam BEFORE mapping, since it verifies
+        // each box's STK-signed `trustStatus` under `identityPubKey`.
+        onDirectory(directory.pods)
 
         // Surface every registered server as ONLINE — REGARDLESS of any
         // heartbeat/cert side-channel. A registered fqdn matching a pending pod
@@ -73,8 +98,30 @@ class PendingServerReconciler(
                 name = pendingName ?: serverNameFromFqdn(fqdn),
                 cameOnline = entry.cameOnline,
                 registeredAt = entry.registeredAt ?: 0,
-                awaitingUnlock = entry.awaitingUnlock,
+                // Derived from the Box Request Inbox digest (the `awaitingUnlock`
+                // boolean was dropped from /pods): this per-pod flag is the "from
+                // the last full reconcile" unlock signal, OR'd at read-time with
+                // the live watcher inbox in AppState.liveness.
+                awaitingUnlock = entry.pendingRequests.any { it.type == SecretPurpose.UNLOCK_KEY.wire },
+                // HONEST LIVENESS (Fix A) — the server-authoritative reachability;
+                // null on a pre-field Worker so upsertRegisteredPod falls back to
+                // the legacy registration-is-online path.
+                liveness = PodInfo.Liveness.fromWire(entry.liveness),
+                lastSeenMsAgo = entry.lastSeenMsAgo,
+                lastReported = entry.lastReported,
+                // Thread the registered STK so the "Set as preferred server" vote
+                // can name THIS box without a second directory fetch.
+                identityPubKeyHex = entry.identityPubKey,
+                // Per-service leadership (Phase 6) — the services this box leads
+                // (additive; empty when absent).
+                leadsServices = entry.leadsServices,
             )
+            // Secret-free recipe: a registered box now has a directory identity
+            // to seal the SWK to. The handler no-ops unless a deposit is owed for
+            // this fqdn (idempotent via PendingSwkDepositStore).
+            if (entry.identityPubKey.isNotEmpty()) {
+                onRegistered(fqdn, entry.identityPubKey)
+            }
         }
 
         // The non-pending pods are the live ones now (including the ones we

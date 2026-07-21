@@ -28,6 +28,7 @@ import {
   type UninstallServiceRequest,
 } from "@flagship/protocol";
 import type { AppEnv } from "./serviceEnvStore.js";
+import type { SwkOps } from "./keyCustodian.js";
 import { AppRunner, type AppSpec } from "./serviceRunner.js";
 import { AppMembership } from "./membership.js";
 import {
@@ -59,8 +60,10 @@ export interface InstalledService {
 }
 
 export interface ServicePlatformDeps {
-  /** Whose box this is — used for the host-vs-creator URL collapse + as IRK-mutation owner. */
-  host: { username: string; irkPub: Bytes };
+  /** Whose box this is — used for the host-vs-creator URL collapse + as IRK-mutation owner.
+   *  `adminRootPub` (Slice D, D-2): when present, service-collaborator membership
+   *  invite-create + mutation are admin-gated; absent ⇒ legacy owner-IRK. */
+  host: { username: string; irkPub: Bytes; adminRootPub?: Bytes };
   /**
    * The box's OWN daemon identity pubkey — an ADDITIONAL accepted signer for
    * host-authority mutations (install / setEnv / uninstall). The owner IRK
@@ -73,13 +76,13 @@ export interface ServicePlatformDeps {
    */
   hostIdentityPub?: Bytes;
   /**
-   * Server Working Key — derives per-app secrets for member stable-id
-   * derivation. Per `key_hierarchy.md` this is provisioned by the
-   * phone at first boot. Until that's wired, callers pass an env-
-   * derived placeholder; per-app derivation still works (the values
-   * just rotate when SWK rotates).
+   * SWK-derived operations (the KeyCustodian's `SwkOps` slice) used to derive
+   * per-app secrets for member stable-id derivation. The platform holds only
+   * the operation surface, never the raw SWK. Per `key_hierarchy.md` the SWK
+   * is provisioned by the phone at first boot; per-app derivation rotates when
+   * the SWK rotates.
    */
-  swk: Bytes;
+  swk: SwkOps;
   appRunner: AppRunner;
   dataProvisioner: DataProvisioner | null;
   /**
@@ -127,6 +130,17 @@ export interface ServicePlatformDeps {
    * owner-set env vars (just the FLAGSHIP_* / data-layer ones).
    */
   envStore?: import("./serviceEnvStore.js").AppEnvStore | null;
+  /**
+   * Fired after a service is successfully uninstalled (the container is stopped
+   * + the data/env/token/route state is torn down locally). The per-service
+   * leadership gossip wires this to RELEASE the box's `<slug>.<user>` route at
+   * the hub (so a stale claim doesn't outlive the service + the next request
+   * re-resolves) and to trigger a gossip re-announce (so siblings recompute
+   * leads without this service). Best-effort — invoked only on a real removal
+   * (NOT on the idempotent already-gone path), awaited, never allowed to fail
+   * the uninstall.
+   */
+  onServiceRemoved?: ((slug: string) => void | Promise<void>) | null;
   /** Reject mutations whose `issuedAt` is more than this old (ms). Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -356,6 +370,8 @@ export class ServicePlatform {
       this.deps.host.username,
       this.deps.host.irkPub,
       this.deps.swk,
+      {},
+      this.deps.host.adminRootPub,
     );
 
     const installed: InstalledService = {
@@ -555,6 +571,17 @@ export class ServicePlatform {
     }
     this.apps.delete(serviceId);
     this.byUrlLabel.delete(app.urlLabel.toLowerCase());
+    // Per-service leadership teardown: release the box's `<slug>.<user>` route
+    // at the hub + re-announce so the claim doesn't outlive the service. The
+    // route is keyed by the bare slug (the gossip claimer maps slug → the tier-2
+    // FQDN), so pass the slug. Best-effort — never fail the uninstall.
+    if (this.deps.onServiceRemoved) {
+      try {
+        await this.deps.onServiceRemoved(r.slug);
+      } catch {
+        // gossip release/re-announce is advisory; the local removal already succeeded.
+      }
+    }
     return { ok: true };
   }
 

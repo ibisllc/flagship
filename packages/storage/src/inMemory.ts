@@ -1,6 +1,10 @@
 import type {
   SchemaVersionRecord,
   SchemaVersionStorage,
+  SuggestionQueueStorage,
+  SuggestThrottleStorage,
+  SuggestThrottleRecord,
+  UsernameOfferStorage,
   CtAlertRecord,
   CtAlertStorage,
   TrustExceptionRecord,
@@ -8,6 +12,8 @@ import type {
   ServiceInviteRecord,
   ServiceInviteStorage,
   ServiceInviteRedeemResult,
+  ServiceInviteApprovalMode,
+  RevokedInviteRecord,
   WatchDelegateRecord,
   WatchDelegateStorage,
   AcmeAccountKeyGrantRecord,
@@ -21,7 +27,20 @@ import type {
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
   SecretMailboxRecord,
+  SecretMailboxPurpose,
   SecretMailboxStorage,
+  PeerBackupManifestRecord,
+  PeerBackupManifestStorage,
+  PairingDepositRecord,
+  ServerTransferRecord,
+  ServerTransferStorage,
+  ServerEvictionRecord,
+  ServerEvictionStorage,
+  ServerMigrationPhase,
+  ServerMigrationRecord,
+  ServerMigrationStorage,
+  AdminRootRotationRecord,
+  AdminRootRotationStorage,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
   PendingRePairRecord,
@@ -43,6 +62,16 @@ import type {
   LuksKeyStorage,
   PushTokenRecord,
   PushTokenStorage,
+  DeviceIdentityRecord,
+  DeviceIdentityStorage,
+  AccountProfileRecord,
+  AccountProfileStorage,
+  DeviceSelfProfileRecord,
+  DeviceSelfProfileStorage,
+  DeviceManagedProfileRecord,
+  DeviceManagedProfileStorage,
+  AccountDirectoryKeyGrantRecord,
+  AccountDirectoryKeyGrantStorage,
   RoutingRecord,
   RoutingStorage,
   SealedLuksKeyRecord,
@@ -69,6 +98,12 @@ import type {
   DemoUserRecord,
   DemoUserState,
   DemoUsersStorage,
+  DemoAccountInitialization,
+  DemoAccountInitializationResult,
+  DemoAccountProvisioningStorage,
+  AccountInitialization,
+  AccountInitializationResult,
+  AccountProvisioningStorage,
   InstallPolicyFanoutRecord,
   InstallPolicyFanoutStorage,
   DeviceCapabilityGrantRecord,
@@ -113,6 +148,15 @@ export class InMemoryUsernameStorage implements UsernameStorage {
         rec.recoveryWipePolicy ??
         existing?.recoveryWipePolicy ??
         "graceful",
+      // gating v2 — the stable AID survives a benign re-put, mirroring the
+      // demo/TOTP fields (a recovery-flow re-claim must not drop it).
+      aidPubHex: rec.aidPubHex ?? existing?.aidPubHex,
+      // 0058 — last_active survives a benign re-put (only the explicit
+      // touchLastActive path advances it).
+      lastActive: rec.lastActive ?? existing?.lastActive,
+      // Slice D (0064) — the pinned admin master root survives a benign
+      // re-put, mirroring the AID (a recovery-flow re-claim must not drop it).
+      adminRootPubHex: rec.adminRootPubHex ?? existing?.adminRootPubHex,
     });
     return { ok: true as const };
   }
@@ -129,6 +173,23 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     if (!r) return false;
     if (r.irkPubHex.toLowerCase() !== expectedOldIrkPubHex.toLowerCase()) return false;
     this.byName.set(norm, { ...r, irkPubHex: newIrkPubHex, claimedAt: at });
+    return true;
+  }
+  async swapAdminRootPub(
+    username: string,
+    expectedOldAdminRootPubHex: string,
+    newAdminRootPubHex: string,
+  ) {
+    const norm = username.toLowerCase();
+    const r = this.byName.get(norm);
+    if (!r) return false;
+    // No admin root pinned ⇒ nothing to rotate (a fresh proof can only chain
+    // FROM an existing anchor).
+    if (!r.adminRootPubHex) return false;
+    if (r.adminRootPubHex.toLowerCase() !== expectedOldAdminRootPubHex.toLowerCase()) {
+      return false;
+    }
+    this.byName.set(norm, { ...r, adminRootPubHex: newAdminRootPubHex.toLowerCase() });
     return true;
   }
   async setDemo(username: string, isDemo: boolean) {
@@ -176,6 +237,10 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     if (r.recoveryWipePolicy !== undefined) {
       next.recoveryWipePolicy = r.recoveryWipePolicy;
     }
+    // Slice D — the admin authority anchor is independent of TOTP. Preserve it.
+    if (r.adminRootPubHex !== undefined) {
+      next.adminRootPubHex = r.adminRootPubHex;
+    }
     this.byName.set(norm, next);
     return true;
   }
@@ -193,6 +258,16 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     if (current !== expectedJson) return false;
     this.byName.set(norm, { ...r, recoveryCodesHashesJson: newJson });
     return true;
+  }
+  async touchLastActive(username: string, atMs: number) {
+    const norm = username.toLowerCase();
+    const r = this.byName.get(norm);
+    if (!r) return false;
+    this.byName.set(norm, { ...r, lastActive: atMs });
+    return true;
+  }
+  async delete(username: string) {
+    return this.byName.delete(username.toLowerCase());
   }
 }
 
@@ -490,6 +565,148 @@ export class InMemoryPushTokenStorage implements PushTokenStorage {
   }
 }
 
+export class InMemoryDeviceIdentityStorage implements DeviceIdentityStorage {
+  private rows = new Map<string, DeviceIdentityRecord>();
+  private key(accountId: string, deviceId: string) { return `${accountId.toLowerCase()}|${deviceId}`; }
+  async put(rec: DeviceIdentityRecord) {
+    const accountId = rec.accountId.toLowerCase();
+    const deviceId = rec.deviceId.toLowerCase();
+    const devicePubHex = rec.devicePubHex.toLowerCase();
+    const existing = this.rows.get(this.key(accountId, deviceId));
+    if (existing && existing.devicePubHex !== devicePubHex) {
+      return { ok: false as const, reason: "deviceId already bound to another key" };
+    }
+    for (const row of this.rows.values()) {
+      if (row.accountId === accountId && row.devicePubHex === devicePubHex && row.deviceId !== deviceId) {
+        return { ok: false as const, reason: "device key already bound to another deviceId" };
+      }
+    }
+    this.rows.set(this.key(accountId, deviceId), { ...rec, accountId, deviceId, devicePubHex });
+    return { ok: true as const };
+  }
+  async get(accountId: string, deviceId: string) {
+    const row = this.rows.get(this.key(accountId, deviceId));
+    return row ? { ...row } : undefined;
+  }
+  async getByPub(accountId: string, devicePubHex: string) {
+    const account = accountId.toLowerCase();
+    const pub = devicePubHex.toLowerCase();
+    const row = [...this.rows.values()].find((item) => item.accountId === account && item.devicePubHex === pub);
+    return row ? { ...row } : undefined;
+  }
+  async listForAccount(accountId: string) {
+    const account = accountId.toLowerCase();
+    return [...this.rows.values()]
+      .filter((row) => row.accountId === account)
+      .sort((a, b) => a.createdAt - b.createdAt || a.deviceId.localeCompare(b.deviceId))
+      .map((row) => ({ ...row }));
+  }
+  async touch(accountId: string, deviceId: string, at: number) {
+    const row = this.rows.get(this.key(accountId, deviceId));
+    if (!row) return false;
+    row.lastSeenAt = at;
+    return true;
+  }
+  async revoke(accountId: string, deviceId: string, at: number) {
+    const row = this.rows.get(this.key(accountId, deviceId));
+    if (!row) return false;
+    row.revokedAt = at;
+    return true;
+  }
+}
+
+abstract class InMemoryProfileStorage<T extends AccountProfileRecord> {
+  protected rows = new Map<string, T>();
+  protected abstract key(rec: Pick<T, "accountId">): string;
+  protected clone(rec: T): T { return { ...rec }; }
+  protected async putRecord(rec: T, expectedRevision: number) {
+    const key = this.key(rec);
+    const current = this.rows.get(key);
+    if ((current?.revision ?? 0) !== expectedRevision || rec.revision !== expectedRevision + 1) {
+      return { ok: false as const, reason: "revision-conflict" as const };
+    }
+    const stored = this.clone({ ...rec, accountId: rec.accountId.toLowerCase() });
+    this.rows.set(key, stored);
+    return { ok: true as const, record: this.clone(stored) };
+  }
+}
+
+export class InMemoryAccountProfileStorage
+  extends InMemoryProfileStorage<AccountProfileRecord>
+  implements AccountProfileStorage {
+  protected key(rec: Pick<AccountProfileRecord, "accountId">) { return rec.accountId.toLowerCase(); }
+  async get(accountId: string) {
+    const row = this.rows.get(accountId.toLowerCase());
+    return row ? this.clone(row) : undefined;
+  }
+  async put(rec: AccountProfileRecord, expectedRevision: number) { return this.putRecord(rec, expectedRevision); }
+}
+
+abstract class InMemoryDeviceProfileStorage<T extends DeviceSelfProfileRecord>
+  extends InMemoryProfileStorage<T> {
+  protected key(rec: Pick<T, "accountId"> & { deviceId?: string }) {
+    return `${rec.accountId.toLowerCase()}|${rec.deviceId ?? ""}`;
+  }
+  async get(accountId: string, deviceId: string) {
+    const row = this.rows.get(`${accountId.toLowerCase()}|${deviceId}`);
+    return row ? this.clone(row) : undefined;
+  }
+  async listForAccount(accountId: string) {
+    const prefix = `${accountId.toLowerCase()}|`;
+    return [...this.rows.entries()].filter(([key]) => key.startsWith(prefix)).map(([, row]) => this.clone(row));
+  }
+}
+
+export class InMemoryDeviceSelfProfileStorage
+  extends InMemoryDeviceProfileStorage<DeviceSelfProfileRecord>
+  implements DeviceSelfProfileStorage {
+  async put(rec: DeviceSelfProfileRecord, expectedRevision: number) { return this.putRecord(rec, expectedRevision); }
+}
+
+export class InMemoryDeviceManagedProfileStorage
+  extends InMemoryDeviceProfileStorage<DeviceManagedProfileRecord>
+  implements DeviceManagedProfileStorage {
+  async put(rec: DeviceManagedProfileRecord, expectedRevision: number) { return this.putRecord(rec, expectedRevision); }
+  async delete(accountId: string, deviceId: string, expectedRevision: number) {
+    const key = `${accountId.toLowerCase()}|${deviceId}`;
+    const current = this.rows.get(key);
+    if (!current || current.revision !== expectedRevision) return false;
+    return this.rows.delete(key);
+  }
+}
+
+export class InMemoryAccountDirectoryKeyGrantStorage
+  implements AccountDirectoryKeyGrantStorage {
+  private rows = new Map<string, AccountDirectoryKeyGrantRecord>();
+  async put(rec: AccountDirectoryKeyGrantRecord) {
+    if (this.rows.has(rec.grantId)) return { ok: false as const, reason: "duplicate grant id" };
+    this.rows.set(rec.grantId, {
+      ...rec,
+      accountId: rec.accountId.toLowerCase(),
+      recipientDeviceId: rec.recipientDeviceId.toLowerCase(),
+    });
+    return { ok: true as const };
+  }
+  async get(grantId: string) {
+    const row = this.rows.get(grantId);
+    return row ? { ...row } : undefined;
+  }
+  async listActiveForDevice(accountId: string, deviceId: string, now: number) {
+    const account = accountId.toLowerCase();
+    const device = deviceId.toLowerCase();
+    return [...this.rows.values()]
+      .filter((row) => row.accountId === account && row.recipientDeviceId === device && row.revokedAt === null && row.expiresAt > now)
+      .sort((a, b) => b.issuedAt - a.issuedAt)
+      .map((row) => ({ ...row }));
+  }
+  async revoke(grantId: string, at: number) {
+    const row = this.rows.get(grantId);
+    if (!row) return false;
+    row.revokedAt = at;
+    return true;
+  }
+}
+
 export class InMemoryLlmPromoStorage implements LlmPromoStorage {
   private daily = new Map<string, LlmPromoUsageRecord>();
   private lifetime = new Map<string, LlmPromoLifetimeRecord>();
@@ -508,6 +725,13 @@ export class InMemoryLlmPromoStorage implements LlmPromoStorage {
     const next = { ...cur, lifetimeCount: cur.lifetimeCount + 1, lifetimeInputTokens: cur.lifetimeInputTokens + i, lifetimeOutputTokens: cur.lifetimeOutputTokens + o, updatedAt: now };
     this.lifetime.set(u, next);
     return { ...next };
+  }
+  async recordMeteredUsage(u: string, d: number, i: number, o: number, now: number): Promise<void> {
+    const dk = this.dailyKey(u, d);
+    const dcur = this.daily.get(dk) ?? { username: u, day: d, dailyCount: 0, dailyInputTokens: 0, dailyOutputTokens: 0 };
+    this.daily.set(dk, { ...dcur, dailyInputTokens: dcur.dailyInputTokens + i, dailyOutputTokens: dcur.dailyOutputTokens + o });
+    const lcur = this.lifetime.get(u) ?? { username: u, lifetimeCount: 0, lifetimeInputTokens: 0, lifetimeOutputTokens: 0, updatedAt: now };
+    this.lifetime.set(u, { ...lcur, lifetimeInputTokens: lcur.lifetimeInputTokens + i, lifetimeOutputTokens: lcur.lifetimeOutputTokens + o, updatedAt: now });
   }
 }
 
@@ -677,6 +901,603 @@ export class InMemorySecretMailboxStorage implements SecretMailboxStorage {
     if (r.consumedAt !== null) return undefined;
     r.consumedAt = now;
     return { ...r };
+  }
+
+  // ── Deposit-on-unlock pairing lane (purpose:"pairing") ────────────────
+  // Phone-deposited box-sealed blob; the box consumes-once by domain. Stored
+  // as a same-table row whose `responseSealedHex` holds the blob, so it never
+  // appears in `listPendingForUser` (that filters responseSealedHex !== null).
+
+  async putPairingDeposit(rec: PairingDepositRecord) {
+    const key = this.k(rec.serverDomain, rec.requestNonceHex);
+    if (this.rows.has(key)) {
+      return { ok: false as const, reason: "duplicate nonce" };
+    }
+    this.rows.set(key, {
+      serverDomain: rec.serverDomain,
+      username: rec.username,
+      requestNonceHex: rec.requestNonceHex,
+      stkPubHex: rec.stkPubHex,
+      purpose: "pairing",
+      requestIssuedAt: rec.issuedAt,
+      requestSignatureHex: "",
+      deviceInfoJson: null,
+      postedAt: rec.issuedAt,
+      expiresAt: rec.expiresAt,
+      lastPushAt: 0,
+      responseSealedHex: rec.sealedHex,
+      responseIssuedAt: rec.issuedAt,
+      respondedAt: rec.issuedAt,
+      consumedAt: null,
+    });
+    return { ok: true as const };
+  }
+
+  async consumePairingDeposit(serverDomain: string, now: number) {
+    let bestKey: string | undefined;
+    let best: SecretMailboxRecord | undefined;
+    const expired: string[] = [];
+    for (const [k, r] of this.rows) {
+      if (r.purpose !== "pairing") continue;
+      if (r.serverDomain !== serverDomain) continue;
+      if (r.consumedAt !== null) continue;
+      if (r.expiresAt <= now) {
+        expired.push(k);
+        continue;
+      }
+      if (!best || r.postedAt > best.postedAt) {
+        best = r;
+        bestKey = k;
+      }
+    }
+    for (const k of expired) this.rows.delete(k);
+    if (!best || !bestKey || best.responseSealedHex === null) return undefined;
+    best.consumedAt = now;
+    return {
+      serverDomain: best.serverDomain,
+      username: best.username,
+      requestNonceHex: best.requestNonceHex,
+      stkPubHex: best.stkPubHex,
+      sealedHex: best.responseSealedHex,
+      issuedAt: best.requestIssuedAt,
+      expiresAt: best.expiresAt,
+    };
+  }
+
+  async putEntitlementDeposit(rec: PairingDepositRecord) {
+    const key = this.k(rec.serverDomain, rec.requestNonceHex);
+    if (this.rows.has(key)) {
+      return { ok: false as const, reason: "duplicate nonce" };
+    }
+    this.rows.set(key, {
+      serverDomain: rec.serverDomain,
+      username: rec.username,
+      requestNonceHex: rec.requestNonceHex,
+      stkPubHex: rec.stkPubHex,
+      purpose: "entitlement-deposit",
+      requestIssuedAt: rec.issuedAt,
+      requestSignatureHex: "",
+      deviceInfoJson: null,
+      postedAt: rec.issuedAt,
+      expiresAt: rec.expiresAt,
+      lastPushAt: 0,
+      // PUBLIC IRK-signed entitlement carrier (not sealed) — see types.ts.
+      responseSealedHex: rec.sealedHex,
+      responseIssuedAt: rec.issuedAt,
+      respondedAt: rec.issuedAt,
+      consumedAt: null,
+    });
+    return { ok: true as const };
+  }
+
+  async consumeEntitlementDeposit(serverDomain: string, now: number) {
+    let bestKey: string | undefined;
+    let best: SecretMailboxRecord | undefined;
+    const expired: string[] = [];
+    for (const [k, r] of this.rows) {
+      if (r.purpose !== "entitlement-deposit") continue;
+      if (r.serverDomain !== serverDomain) continue;
+      if (r.consumedAt !== null) continue;
+      if (r.expiresAt <= now) {
+        expired.push(k);
+        continue;
+      }
+      if (!best || r.postedAt > best.postedAt) {
+        best = r;
+        bestKey = k;
+      }
+    }
+    for (const k of expired) this.rows.delete(k);
+    if (!best || !bestKey || best.responseSealedHex === null) return undefined;
+    best.consumedAt = now;
+    return {
+      serverDomain: best.serverDomain,
+      username: best.username,
+      requestNonceHex: best.requestNonceHex,
+      stkPubHex: best.stkPubHex,
+      sealedHex: best.responseSealedHex,
+      issuedAt: best.requestIssuedAt,
+      expiresAt: best.expiresAt,
+    };
+  }
+
+  async putSelfDeleteDeposit(rec: PairingDepositRecord) {
+    const key = this.k(rec.serverDomain, rec.requestNonceHex);
+    if (this.rows.has(key)) {
+      return { ok: false as const, reason: "duplicate nonce" };
+    }
+    this.rows.set(key, {
+      serverDomain: rec.serverDomain,
+      username: rec.username,
+      requestNonceHex: rec.requestNonceHex,
+      stkPubHex: rec.stkPubHex,
+      purpose: "self-delete",
+      requestIssuedAt: rec.issuedAt,
+      requestSignatureHex: "",
+      deviceInfoJson: null,
+      postedAt: rec.issuedAt,
+      expiresAt: rec.expiresAt,
+      lastPushAt: 0,
+      // PUBLIC owner-IRK-signed servers-self-delete order carrier (not sealed).
+      responseSealedHex: rec.sealedHex,
+      responseIssuedAt: rec.issuedAt,
+      respondedAt: rec.issuedAt,
+      consumedAt: null,
+    });
+    return { ok: true as const };
+  }
+
+  async consumeSelfDeleteDeposit(serverDomain: string, now: number) {
+    let bestKey: string | undefined;
+    let best: SecretMailboxRecord | undefined;
+    const expired: string[] = [];
+    for (const [k, r] of this.rows) {
+      if (r.purpose !== "self-delete") continue;
+      if (r.serverDomain !== serverDomain) continue;
+      if (r.consumedAt !== null) continue;
+      if (r.expiresAt <= now) {
+        expired.push(k);
+        continue;
+      }
+      if (!best || r.postedAt > best.postedAt) {
+        best = r;
+        bestKey = k;
+      }
+    }
+    for (const k of expired) this.rows.delete(k);
+    if (!best || !bestKey || best.responseSealedHex === null) return undefined;
+    best.consumedAt = now;
+    return {
+      serverDomain: best.serverDomain,
+      username: best.username,
+      requestNonceHex: best.requestNonceHex,
+      stkPubHex: best.stkPubHex,
+      sealedHex: best.responseSealedHex,
+      issuedAt: best.requestIssuedAt,
+      expiresAt: best.expiresAt,
+    };
+  }
+
+  // ── Secret-free-recipe SWK delivery lane (purpose:"swk") ──────────────
+  async putSwkDeposit(rec: PairingDepositRecord) {
+    const key = this.k(rec.serverDomain, rec.requestNonceHex);
+    if (this.rows.has(key)) {
+      return { ok: false as const, reason: "duplicate nonce" };
+    }
+    this.rows.set(key, {
+      serverDomain: rec.serverDomain,
+      username: rec.username,
+      requestNonceHex: rec.requestNonceHex,
+      stkPubHex: rec.stkPubHex,
+      purpose: "swk",
+      requestIssuedAt: rec.issuedAt,
+      requestSignatureHex: "",
+      deviceInfoJson: null,
+      postedAt: rec.issuedAt,
+      expiresAt: rec.expiresAt,
+      lastPushAt: 0,
+      // SEALED SWK-delivery carrier (the box unseals it with its identity key).
+      responseSealedHex: rec.sealedHex,
+      responseIssuedAt: rec.issuedAt,
+      respondedAt: rec.issuedAt,
+      consumedAt: null,
+    });
+    return { ok: true as const };
+  }
+
+  async consumeSwkDeposit(serverDomain: string, now: number) {
+    let bestKey: string | undefined;
+    let best: SecretMailboxRecord | undefined;
+    const expired: string[] = [];
+    for (const [k, r] of this.rows) {
+      if (r.purpose !== "swk") continue;
+      if (r.serverDomain !== serverDomain) continue;
+      if (r.consumedAt !== null) continue;
+      if (r.expiresAt <= now) {
+        expired.push(k);
+        continue;
+      }
+      if (!best || r.postedAt > best.postedAt) {
+        best = r;
+        bestKey = k;
+      }
+    }
+    for (const k of expired) this.rows.delete(k);
+    if (!best || !bestKey || best.responseSealedHex === null) return undefined;
+    best.consumedAt = now;
+    return {
+      serverDomain: best.serverDomain,
+      username: best.username,
+      requestNonceHex: best.requestNonceHex,
+      stkPubHex: best.stkPubHex,
+      sealedHex: best.responseSealedHex,
+      issuedAt: best.requestIssuedAt,
+      expiresAt: best.expiresAt,
+    };
+  }
+
+  // ── CGK delivery lane (purpose:"cgk") — Phase 6 ───────────────────────
+  async putCgkDeposit(rec: PairingDepositRecord) {
+    return this.putGenericDeposit(rec, "cgk");
+  }
+
+  async consumeCgkDeposit(serverDomain: string, now: number) {
+    return this.consumeGenericDeposit(serverDomain, now, "cgk");
+  }
+
+  // ── Owner preferred-server vote lane (purpose:"set-leader") — Phase 6 ──
+  async putSetLeaderDeposit(rec: PairingDepositRecord) {
+    return this.putGenericDeposit(rec, "set-leader");
+  }
+
+  async consumeSetLeaderDeposit(serverDomain: string, now: number) {
+    return this.consumeGenericDeposit(serverDomain, now, "set-leader");
+  }
+
+  // ── Admin-authorized server-update order lane (purpose:"update") ───────
+  async putUpdateDeposit(rec: PairingDepositRecord) {
+    return this.putGenericDeposit(rec, "update");
+  }
+
+  async consumeUpdateDeposit(serverDomain: string, now: number) {
+    return this.consumeGenericDeposit(serverDomain, now, "update");
+  }
+
+  // Shared deposit-lane helpers (the SWK/cgk/set-leader lanes are identical
+  // store-and-forward shapes; factored so a new lane is one purpose string).
+  private putGenericDeposit(rec: PairingDepositRecord, purpose: SecretMailboxPurpose) {
+    const key = this.k(rec.serverDomain, rec.requestNonceHex);
+    if (this.rows.has(key)) {
+      return { ok: false as const, reason: "duplicate nonce" };
+    }
+    this.rows.set(key, {
+      serverDomain: rec.serverDomain,
+      username: rec.username,
+      requestNonceHex: rec.requestNonceHex,
+      stkPubHex: rec.stkPubHex,
+      purpose,
+      requestIssuedAt: rec.issuedAt,
+      requestSignatureHex: "",
+      deviceInfoJson: null,
+      postedAt: rec.issuedAt,
+      expiresAt: rec.expiresAt,
+      lastPushAt: 0,
+      responseSealedHex: rec.sealedHex,
+      responseIssuedAt: rec.issuedAt,
+      respondedAt: rec.issuedAt,
+      consumedAt: null,
+    });
+    return { ok: true as const };
+  }
+
+  private consumeGenericDeposit(
+    serverDomain: string,
+    now: number,
+    purpose: SecretMailboxPurpose,
+  ): PairingDepositRecord | undefined {
+    let bestKey: string | undefined;
+    let best: SecretMailboxRecord | undefined;
+    const expired: string[] = [];
+    for (const [k, r] of this.rows) {
+      if (r.purpose !== purpose) continue;
+      if (r.serverDomain !== serverDomain) continue;
+      if (r.consumedAt !== null) continue;
+      if (r.expiresAt <= now) {
+        expired.push(k);
+        continue;
+      }
+      if (!best || r.postedAt > best.postedAt) {
+        best = r;
+        bestKey = k;
+      }
+    }
+    for (const k of expired) this.rows.delete(k);
+    if (!best || !bestKey || best.responseSealedHex === null) return undefined;
+    best.consumedAt = now;
+    return {
+      serverDomain: best.serverDomain,
+      username: best.username,
+      requestNonceHex: best.requestNonceHex,
+      stkPubHex: best.stkPubHex,
+      sealedHex: best.responseSealedHex,
+      issuedAt: best.requestIssuedAt,
+      expiresAt: best.expiresAt,
+    };
+  }
+}
+
+export class InMemoryServerTransferStorage implements ServerTransferStorage {
+  // Keyed by serverDomain — one offer per box (a new offer replaces).
+  private rows = new Map<string, ServerTransferRecord>();
+
+  async putOffer(rec: ServerTransferRecord): Promise<void> {
+    this.rows.set(rec.serverDomain, { ...rec });
+  }
+
+  async getOffer(serverDomain: string, now: number): Promise<ServerTransferRecord | undefined> {
+    const r = this.rows.get(serverDomain);
+    if (!r) return undefined;
+    // GC an unclaimed offer past its TTL; keep a claimed row so the giver's
+    // phone can still complete the re-seal after expiry.
+    if (r.claimedAt === null && r.expiresAt <= now) {
+      this.rows.delete(serverDomain);
+      return undefined;
+    }
+    return { ...r };
+  }
+
+  async claim(
+    serverDomain: string,
+    transferNonce: string,
+    acquirerUsername: string,
+    acquirerIrkPubHex: string,
+    acquirerAdminRootPubHex: string,
+    claimIssuedAt: number,
+    claimSignatureHex: string,
+    now: number,
+  ): Promise<{ ok: true; record: ServerTransferRecord } | { ok: false; reason: string }> {
+    const r = this.rows.get(serverDomain);
+    if (!r) return { ok: false as const, reason: "no offer" };
+    if (r.claimedAt !== null) return { ok: false as const, reason: "already claimed" };
+    if (r.expiresAt <= now) return { ok: false as const, reason: "expired" };
+    if (r.transferNonce !== transferNonce) return { ok: false as const, reason: "nonce mismatch" };
+    r.claimedAt = now;
+    r.acquirerUsername = acquirerUsername;
+    r.acquirerIrkPubHex = acquirerIrkPubHex;
+    r.acquirerAdminRootPubHex = acquirerAdminRootPubHex.toLowerCase();
+    r.claimIssuedAt = claimIssuedAt;
+    r.claimSignatureHex = claimSignatureHex;
+    return { ok: true as const, record: { ...r } };
+  }
+
+  async putDiskKeyHandoff(
+    serverDomain: string,
+    diskKeyHandoffHex: string,
+    now: number,
+  ): Promise<boolean> {
+    const r = this.rows.get(serverDomain);
+    if (!r || r.claimedAt === null) return false;
+    r.diskKeyHandoffHex = diskKeyHandoffHex;
+    r.diskKeyHandoffAt = now;
+    return true;
+  }
+
+  async putAdminHandoff(
+    serverDomain: string,
+    handoff: { oldRootHex: string; newRootHex: string; issuedAt: number; sigHex: string },
+  ): Promise<boolean> {
+    const r = this.rows.get(serverDomain);
+    if (!r || r.claimedAt === null) return false;
+    r.adminHandoffOldRootHex = handoff.oldRootHex.toLowerCase();
+    r.adminHandoffNewRootHex = handoff.newRootHex.toLowerCase();
+    r.adminHandoffIssuedAt = handoff.issuedAt;
+    r.adminHandoffSigHex = handoff.sigHex.toLowerCase();
+    return true;
+  }
+
+  async putRehomeAuth(
+    serverDomain: string,
+    auth: { issuedAt: number; sigHex: string },
+  ): Promise<boolean> {
+    const r = this.rows.get(serverDomain);
+    if (!r || r.claimedAt === null) return false;
+    r.rehomeAuthIssuedAt = auth.issuedAt;
+    r.rehomeAuthSigHex = auth.sigHex.toLowerCase();
+    return true;
+  }
+
+  async remove(serverDomain: string): Promise<void> {
+    this.rows.delete(serverDomain);
+  }
+}
+
+export class InMemoryServerEvictionStorage implements ServerEvictionStorage {
+  // Composite key: `${podCanonical} ${retiredStkPubHex}` — one row per
+  // retired instance under a pod FQDN.
+  private rows = new Map<string, ServerEvictionRecord>();
+  private k(pod: string, stk: string): string {
+    return `${pod.toLowerCase()} ${stk.toLowerCase()}`;
+  }
+
+  async recordEviction(rec: ServerEvictionRecord): Promise<void> {
+    // Upsert on (podCanonical, retiredStkPubHex) — re-issuing the same order
+    // replaces. Store hex lowercase.
+    this.rows.set(this.k(rec.podCanonical, rec.retiredStkPubHex), {
+      ...rec,
+      podCanonical: rec.podCanonical.toLowerCase(),
+      retiredStkPubHex: rec.retiredStkPubHex.toLowerCase(),
+      orderSignatureHex: rec.orderSignatureHex.toLowerCase(),
+    });
+  }
+
+  async getEviction(
+    podCanonical: string,
+    retiredStkPubHex: string,
+  ): Promise<ServerEvictionRecord | undefined> {
+    const r = this.rows.get(this.k(podCanonical, retiredStkPubHex));
+    return r ? { ...r } : undefined;
+  }
+
+  async listEvictions(podCanonical: string): Promise<ServerEvictionRecord[]> {
+    const pod = podCanonical.toLowerCase();
+    const out: ServerEvictionRecord[] = [];
+    for (const r of this.rows.values()) {
+      if (r.podCanonical === pod) out.push({ ...r });
+    }
+    // The full chain, ordered by issuedAt asc.
+    return out.sort((a, b) => a.issuedAt - b.issuedAt);
+  }
+
+  async markOldAcked(
+    podCanonical: string,
+    retiredStkPubHex: string,
+    now: number,
+  ): Promise<boolean> {
+    const r = this.rows.get(this.k(podCanonical, retiredStkPubHex));
+    if (!r) return false;
+    r.oldAckedAt = now;
+    return true;
+  }
+
+  async markNewAcked(podCanonical: string, now: number): Promise<number> {
+    const pod = podCanonical.toLowerCase();
+    let count = 0;
+    for (const r of this.rows.values()) {
+      if (r.podCanonical !== pod) continue;
+      r.newAckedAt = now;
+      count += 1;
+    }
+    return count;
+  }
+
+  async markEpochComplete(
+    podCanonical: string,
+    retiredStkPubHex: string,
+    now: number,
+  ): Promise<boolean> {
+    const r = this.rows.get(this.k(podCanonical, retiredStkPubHex));
+    if (!r) return false;
+    r.epochCompleteAt = now;
+    return true;
+  }
+
+  async gcEvictions(now: number, ttlMs: number): Promise<number> {
+    const cutoff = now - ttlMs;
+    let count = 0;
+    for (const [k, r] of this.rows) {
+      if (r.newAckedAt !== null && r.newAckedAt <= cutoff) {
+        this.rows.delete(k);
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  async deleteEviction(podCanonical: string, retiredStkPubHex: string): Promise<boolean> {
+    return this.rows.delete(this.k(podCanonical, retiredStkPubHex));
+  }
+}
+
+export class InMemoryServerMigrationStorage implements ServerMigrationStorage {
+  // One row per migrating FQDN (v1: at most one session per name at a time;
+  // the handler gates when replacing a terminal session is legal).
+  private rows = new Map<string, ServerMigrationRecord>();
+
+  async putSession(rec: ServerMigrationRecord): Promise<void> {
+    this.rows.set(rec.serverDomain.toLowerCase(), {
+      ...rec,
+      serverDomain: rec.serverDomain.toLowerCase(),
+      username: rec.username.toLowerCase(),
+      oldStkPubHex: rec.oldStkPubHex.toLowerCase(),
+      orderSignatureHex: rec.orderSignatureHex.toLowerCase(),
+      newServerDomain: rec.newServerDomain?.toLowerCase() ?? null,
+      newStkPubHex: rec.newStkPubHex?.toLowerCase() ?? null,
+    });
+  }
+
+  async getSession(serverDomain: string): Promise<ServerMigrationRecord | undefined> {
+    const r = this.rows.get(serverDomain.toLowerCase());
+    return r ? { ...r } : undefined;
+  }
+
+  async listForUser(username: string): Promise<ServerMigrationRecord[]> {
+    const u = username.toLowerCase();
+    const out: ServerMigrationRecord[] = [];
+    for (const r of this.rows.values()) {
+      if (r.username === u) out.push({ ...r });
+    }
+    return out.sort((a, b) => a.initiatedAt - b.initiatedAt);
+  }
+
+  async attachNewBox(
+    serverDomain: string,
+    newServerDomain: string,
+    newStkPubHex: string,
+    at: number,
+  ): Promise<boolean> {
+    const r = this.rows.get(serverDomain.toLowerCase());
+    if (!r) return false;
+    r.newServerDomain = newServerDomain.toLowerCase();
+    r.newStkPubHex = newStkPubHex.toLowerCase();
+    r.attachedAt = at;
+    r.phase = "provisioned";
+    return true;
+  }
+
+  private stamp(
+    serverDomain: string,
+    phase: ServerMigrationPhase,
+    field: "preSeededAt" | "readyAt" | "freezeAt" | "takenOverAt" | "abortedAt",
+    at: number,
+  ): boolean {
+    const r = this.rows.get(serverDomain.toLowerCase());
+    if (!r) return false;
+    r[field] = at;
+    r.phase = phase;
+    return true;
+  }
+
+  async markPreSeeded(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "pre-seeded", "preSeededAt", at);
+  }
+  async markReady(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "ready", "readyAt", at);
+  }
+  async markFreeze(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "freezing", "freezeAt", at);
+  }
+  async markTakenOver(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "taken-over", "takenOverAt", at);
+  }
+  async markAborted(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "aborted", "abortedAt", at);
+  }
+}
+
+export class InMemoryAdminRootRotationStorage implements AdminRootRotationStorage {
+  // Per-account ordered chain. Slice D §5 (recovery admin-root rotation).
+  private byUser = new Map<string, AdminRootRotationRecord[]>();
+
+  async append(rec: Omit<AdminRootRotationRecord, "seq">): Promise<number> {
+    const u = rec.username.toLowerCase();
+    const chain = this.byUser.get(u) ?? [];
+    const seq = (chain[chain.length - 1]?.seq ?? 0) + 1;
+    chain.push({
+      username: u,
+      seq,
+      oldAdminRootPubHex: rec.oldAdminRootPubHex.toLowerCase(),
+      newAdminRootPubHex: rec.newAdminRootPubHex.toLowerCase(),
+      issuedAt: rec.issuedAt,
+      signatureHex: rec.signatureHex.toLowerCase(),
+    });
+    this.byUser.set(u, chain);
+    return seq;
+  }
+
+  async list(username: string): Promise<AdminRootRotationRecord[]> {
+    const chain = this.byUser.get(username.toLowerCase()) ?? [];
+    // Ordered by seq asc; return copies so callers can't mutate our rows.
+    return chain.map((r) => ({ ...r })).sort((a, b) => a.seq - b.seq);
   }
 }
 
@@ -935,7 +1756,7 @@ export class InMemoryInstallPolicyFanoutStorage
 
 const ACTIVE_DEMO_STATES = new Set<DemoUserState>([
   "provisioning",
-  "up",
+  "ready",
   "idle-pending-teardown",
 ]);
 
@@ -986,7 +1807,7 @@ export class InMemoryDemoUsersStorage implements DemoUsersStorage {
     return [...this.byUsername.values()]
       .filter(
         (r) =>
-          (r.state === "up" ||
+          (r.state === "ready" ||
             r.state === "provisioning" ||
             r.state === "idle-pending-teardown") &&
           r.lastActivityAt < cutoffMs,
@@ -1023,6 +1844,117 @@ export class InMemoryDemoUsersStorage implements DemoUsersStorage {
   }
 }
 
+export class InMemoryAccountProvisioningStorage implements AccountProvisioningStorage {
+  constructor(
+    private readonly usernames: UsernameStorage,
+    private readonly identities: DeviceIdentityStorage,
+    private readonly grants: DeviceCapabilityGrantStorage,
+    private readonly accountProfiles: AccountProfileStorage,
+    private readonly deviceProfiles: DeviceSelfProfileStorage,
+  ) {}
+
+  async initialize(input: AccountInitialization): Promise<AccountInitializationResult> {
+    const username = input.username.username.toLowerCase();
+    const existing = await this.usernames.get(username);
+    if (existing) {
+      // Matching IRK + admin root IS the proof of ownership — the same proof
+      // every other account operation rests on. Anyone else presenting this
+      // name fails here and gets the generic "unavailable".
+      const authorized = existing.irkPubHex.toLowerCase() === input.username.irkPubHex.toLowerCase() &&
+        existing.adminRootPubHex?.toLowerCase() === input.username.adminRootPubHex?.toLowerCase();
+      if (!authorized) return { ok: false, reason: "username-unavailable" };
+      const identity = await this.identities.get(username, input.primaryDevice.deviceId);
+      if (identity) {
+        if (identity.devicePubHex.toLowerCase() !== input.primaryDevice.devicePubHex.toLowerCase()) {
+          return { ok: false, reason: "username-unavailable" };
+        }
+        const grant = await this.grants.get(input.primaryGrant.grantId);
+        const account = await this.accountProfiles.get(username);
+        const profile = await this.deviceProfiles.get(username, input.primaryDevice.deviceId);
+        return grant && account && profile
+          ? { ok: true, created: false }
+          : { ok: false, reason: "initialization-conflict" };
+      }
+      // The account exists but has no device layer — the state a clean-schema
+      // cutover leaves behind. Re-establish it rather than stranding the owner
+      // with a name they can never use again. Only records that are actually
+      // missing are written, so this can never clobber a surviving profile.
+      const reIdentity = await this.identities.put({ ...input.primaryDevice, accountId: username });
+      if (!reIdentity.ok) return { ok: false, reason: "initialization-conflict" };
+      const reGrant = await this.grants.get(input.primaryGrant.grantId)
+        ? { ok: true as const }
+        : await this.grants.put({ ...input.primaryGrant, username });
+      const reAccount = await this.accountProfiles.get(username)
+        ? { ok: true as const }
+        : await this.accountProfiles.put({ ...input.accountProfile, accountId: username }, 0);
+      const reProfile = await this.deviceProfiles.get(username, input.primaryDevice.deviceId)
+        ? { ok: true as const }
+        : await this.deviceProfiles.put({ ...input.primaryDeviceProfile, accountId: username }, 0);
+      return reGrant.ok && reAccount.ok && reProfile.ok
+        ? { ok: true, created: true }
+        : { ok: false, reason: "initialization-conflict" };
+    }
+    const claimed = await this.usernames.put({ ...input.username, username });
+    if (!claimed.ok) return { ok: false, reason: "username-unavailable" };
+    const identity = await this.identities.put({ ...input.primaryDevice, accountId: username });
+    const grant = await this.grants.put({ ...input.primaryGrant, username });
+    const account = await this.accountProfiles.put({ ...input.accountProfile, accountId: username }, 0);
+    const profile = await this.deviceProfiles.put({ ...input.primaryDeviceProfile, accountId: username }, 0);
+    return identity.ok && grant.ok && account.ok && profile.ok
+      ? { ok: true, created: true }
+      : { ok: false, reason: "initialization-conflict" };
+  }
+}
+
+export class InMemoryDemoAccountProvisioningStorage implements DemoAccountProvisioningStorage {
+  constructor(
+    private readonly usernames: UsernameStorage,
+    private readonly identities: DeviceIdentityStorage,
+    private readonly grants: DeviceCapabilityGrantStorage,
+    private readonly accountProfiles: AccountProfileStorage,
+    private readonly selfProfiles: DeviceSelfProfileStorage,
+    private readonly authCodes: AuthCodeStorage,
+    private readonly demos: DemoUsersStorage,
+  ) {}
+  async initialize(input: DemoAccountInitialization): Promise<DemoAccountInitializationResult> {
+    const existingDemo = await this.demos.get(input.demo.username);
+    if (existingDemo) {
+      return existingDemo.idempotencyKey === input.demo.idempotencyKey
+        ? { ok: true, created: false, record: existingDemo }
+        : { ok: false, reason: "idempotency-conflict" };
+    }
+    if (await this.usernames.get(input.username.username)) return { ok: false, reason: "username-unavailable" };
+    const [identityBefore, grantBefore, accountBefore, profileBefore, authCodeBefore] = await Promise.all([
+      this.identities.get(input.primaryDevice.accountId, input.primaryDevice.deviceId),
+      this.grants.get(input.primaryGrant.grantId),
+      this.accountProfiles.get(input.accountProfile.accountId),
+      this.selfProfiles.get(input.primaryDeviceProfile.accountId, input.primaryDeviceProfile.deviceId),
+      this.authCodes.get(input.authCode.serial),
+    ]);
+    if (identityBefore || grantBefore || accountBefore || profileBefore || authCodeBefore) {
+      return { ok: false, reason: "initialization-conflict" };
+    }
+    const claim = await this.usernames.put(input.username);
+    const identity = await this.identities.put(input.primaryDevice);
+    const grant = await this.grants.put(input.primaryGrant);
+    const account = await this.accountProfiles.put(input.accountProfile, 0);
+    const profile = await this.selfProfiles.put(input.primaryDeviceProfile, 0);
+    const authCode = await this.authCodes.put(input.authCode);
+    const demo = await this.demos.insert(input.demo);
+    if (!claim.ok || !identity.ok || !grant.ok || !account.ok || !profile.ok || !authCode.ok || !demo.ok) {
+      return { ok: false, reason: "initialization-conflict" };
+    }
+    return { ok: true, created: true, record: input.demo };
+  }
+  async cleanup(username: string, idempotencyKey: string) {
+    const row = await this.demos.get(username);
+    if (!row || row.idempotencyKey !== idempotencyKey) return false;
+    await this.demos.delete(username);
+    await this.usernames.delete(username);
+    return true;
+  }
+}
+
 export class InMemoryDeviceCapabilityGrantStorage
   implements DeviceCapabilityGrantStorage
 {
@@ -1039,22 +1971,27 @@ export class InMemoryDeviceCapabilityGrantStorage
     // grant — that's the re-issuance flow.
     if (rec.revokedAt === null) {
       const u = rec.username.toLowerCase();
-      const l = rec.deviceLabel.toLowerCase();
+      const l = rec.deviceId.toLowerCase();
       for (const other of this.byId.values()) {
         if (
           other.grantId !== rec.grantId &&
           other.revokedAt === null &&
           other.username.toLowerCase() === u &&
-          other.deviceLabel.toLowerCase() === l
+          other.deviceId.toLowerCase() === l
         ) {
           return {
             ok: false as const,
-            reason: "duplicate active grant for (username, device_label)",
+            reason: "duplicate active grant for (username, device_id)",
           };
         }
       }
     }
-    this.byId.set(rec.grantId, this.clone(rec));
+    // Slice D — normalize signer_root to the column DEFAULT ('membership')
+    // on absence, so reads match the D1 adapter (which COALESCEs on SELECT).
+    this.byId.set(rec.grantId, this.clone({
+      ...rec,
+      signerRoot: rec.signerRoot ?? "membership",
+    }));
     return { ok: true as const };
   }
   async get(grantId: string) {
@@ -1070,15 +2007,15 @@ export class InMemoryDeviceCapabilityGrantStorage
     out.sort((a, b) => b.issuedAt - a.issuedAt);
     return out;
   }
-  async getActiveForUserLabel(username: string, deviceLabel: string) {
+  async getActiveForUserDevice(username: string, deviceId: string) {
     const u = username.toLowerCase();
-    const l = deviceLabel.toLowerCase();
+    const l = deviceId.toLowerCase();
     const matches: DeviceCapabilityGrantRecord[] = [];
     for (const r of this.byId.values()) {
       if (
         r.revokedAt === null &&
         r.username.toLowerCase() === u &&
-        r.deviceLabel.toLowerCase() === l
+        r.deviceId.toLowerCase() === l
       ) {
         matches.push(r);
       }
@@ -1086,7 +2023,7 @@ export class InMemoryDeviceCapabilityGrantStorage
     if (matches.length > 1) {
       // Defensive — the put-time guard should make this unreachable.
       throw new Error(
-        `getActiveForUserLabel: more than one active grant for ${u}/${l}`,
+        `getActiveForUserDevice: more than one active grant for ${u}/${l}`,
       );
     }
     return matches[0] ? this.clone(matches[0]) : undefined;
@@ -1114,6 +2051,9 @@ export class InMemoryDeviceCapabilityGrantStorage
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   schemaVersion = new InMemorySchemaVersionStorage();
+  suggestionQueue = new InMemorySuggestionQueueStorage();
+  suggestThrottle = new InMemorySuggestThrottleStorage();
+  usernameOffers = new InMemoryUsernameOfferStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
   daemonStatus = new InMemoryDaemonStatusStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -1125,10 +2065,19 @@ export class InMemoryStorage implements Storage {
   luksKeys = new InMemoryLuksKeyStorage();
   autoUnlockLeases = new InMemoryAutoUnlockLeaseStorage();
   secretMailbox = new InMemorySecretMailboxStorage();
+  serverTransfers = new InMemoryServerTransferStorage();
+  serverEvictions = new InMemoryServerEvictionStorage();
+  serverMigrations = new InMemoryServerMigrationStorage();
+  adminRootRotations = new InMemoryAdminRootRotationStorage();
   boxSealedLeases = new InMemoryBoxSealedLeaseStorage();
   pendingRePairs = new InMemoryPendingRePairStorage();
   webauthnRecovery = new InMemoryWebauthnRecoveryStorage();
   pushTokens = new InMemoryPushTokenStorage();
+  deviceIdentities = new InMemoryDeviceIdentityStorage();
+  accountProfiles = new InMemoryAccountProfileStorage();
+  deviceSelfProfiles = new InMemoryDeviceSelfProfileStorage();
+  deviceManagedProfiles = new InMemoryDeviceManagedProfileStorage();
+  accountDirectoryKeyGrants = new InMemoryAccountDirectoryKeyGrantStorage();
   llmPromo = new InMemoryLlmPromoStorage();
   tiers = new InMemoryTierStorage();
   entitlementRevocations = new InMemoryEntitlementRevocationStorage();
@@ -1140,6 +2089,13 @@ export class InMemoryStorage implements Storage {
   installPolicyFanout = new InMemoryInstallPolicyFanoutStorage();
   demoUsers = new InMemoryDemoUsersStorage();
   deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
+  accountProvisioning = new InMemoryAccountProvisioningStorage(
+    this.usernames,
+    this.deviceIdentities,
+    this.deviceCapabilityGrants,
+    this.accountProfiles,
+    this.deviceSelfProfiles,
+  );
   watchDelegates = new InMemoryWatchDelegateStorage();
   mintReservations = new InMemoryMintReservationStorage();
   acmeAccountKeyGrants = new InMemoryAcmeAccountKeyGrantStorage();
@@ -1148,6 +2104,44 @@ export class InMemoryStorage implements Storage {
   trustExceptions = new InMemoryTrustExceptionStorage();
   serviceInvites = new InMemoryServiceInviteStorage();
   namespace = new InMemoryNamespaceStorage();
+  peerBackupManifests = new InMemoryPeerBackupManifestStorage();
+  demoAccountProvisioning = new InMemoryDemoAccountProvisioningStorage(
+    this.usernames,
+    this.deviceIdentities,
+    this.deviceCapabilityGrants,
+    this.accountProfiles,
+    this.deviceSelfProfiles,
+    this.authCodes,
+    this.demoUsers,
+  );
+}
+
+/**
+ * In-memory PeerBackupManifestStorage — one row per server, latest-wins
+ * by the box-signed `generation` (a replayed older deposit can never
+ * roll the recovery root back). Reads are non-consuming (recovery root).
+ */
+export class InMemoryPeerBackupManifestStorage implements PeerBackupManifestStorage {
+  private byDomain = new Map<string, PeerBackupManifestRecord>();
+
+  async put(rec: PeerBackupManifestRecord) {
+    const key = rec.serverDomain.toLowerCase();
+    const existing = this.byDomain.get(key);
+    if (existing && rec.generation <= existing.generation) {
+      return { ok: false as const, reason: "stale generation" };
+    }
+    this.byDomain.set(key, { ...rec, serverDomain: key });
+    return { ok: true as const };
+  }
+
+  async get(serverDomain: string) {
+    const r = this.byDomain.get(serverDomain.toLowerCase());
+    return r ? { ...r } : undefined;
+  }
+
+  async delete(serverDomain: string) {
+    return this.byDomain.delete(serverDomain.toLowerCase());
+  }
 }
 
 /**
@@ -1282,6 +2276,88 @@ export class InMemorySchemaVersionStorage implements SchemaVersionStorage {
   }
   async has(version: string): Promise<boolean> {
     return this.byVersion.has(version);
+  }
+}
+
+/**
+ * In-memory username suggestion queue. Pop order = (enqueuedAt ASC, name ASC)
+ * so it matches the D1 index ordering exactly (parity).
+ */
+export class InMemorySuggestionQueueStorage implements SuggestionQueueStorage {
+  private byName = new Map<string, number>();
+  async enqueue(names: string[], at: number): Promise<number> {
+    let added = 0;
+    for (const raw of names) {
+      const name = raw.toLowerCase();
+      if (this.byName.has(name)) continue;
+      this.byName.set(name, at);
+      added += 1;
+    }
+    return added;
+  }
+  private ordered(): string[] {
+    return [...this.byName.entries()]
+      .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+      .map(([name]) => name);
+  }
+  async popOldest(): Promise<string | null> {
+    const first = this.ordered()[0];
+    if (first === undefined) return null;
+    this.byName.delete(first);
+    return first;
+  }
+  async count(): Promise<number> {
+    return this.byName.size;
+  }
+  async list(): Promise<string[]> {
+    return this.ordered();
+  }
+}
+
+/** In-memory recently-offered-handles roster (claim gate). */
+export class InMemoryUsernameOfferStorage implements UsernameOfferStorage {
+  private byName = new Map<string, { deviceKey: string; offeredAt: number }>();
+  async record(name: string, deviceKey: string, at: number): Promise<void> {
+    this.byName.set(name.toLowerCase(), { deviceKey, offeredAt: at });
+  }
+  async isOffered(name: string, notBefore: number): Promise<boolean> {
+    const r = this.byName.get(name.toLowerCase());
+    return r !== undefined && r.offeredAt >= notBefore;
+  }
+  async consume(name: string): Promise<void> {
+    this.byName.delete(name.toLowerCase());
+  }
+  async prune(olderThan: number): Promise<number> {
+    let removed = 0;
+    for (const [k, v] of [...this.byName.entries()]) {
+      if (v.offeredAt < olderThan) {
+        this.byName.delete(k);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+}
+
+/** In-memory per-device regenerate throttle (dumb CRUD). */
+export class InMemorySuggestThrottleStorage implements SuggestThrottleStorage {
+  private byKey = new Map<string, SuggestThrottleRecord>();
+  async get(deviceKey: string): Promise<SuggestThrottleRecord | undefined> {
+    const r = this.byKey.get(deviceKey);
+    return r ? { ...r } : undefined;
+  }
+  async upsert(rec: SuggestThrottleRecord): Promise<void> {
+    this.byKey.set(rec.deviceKey, { ...rec });
+  }
+  async prune(olderThan: number): Promise<number> {
+    let removed = 0;
+    for (const [k, v] of [...this.byKey.entries()]) {
+      if (v.lastAt < olderThan) {
+        this.byKey.delete(k);
+        removed += 1;
+      }
+    }
+    return removed;
   }
 }
 
@@ -1533,6 +2609,11 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
     encryptedBundle: string;
     secretHash: string;
     createdAt: number;
+    createSig?: string;
+    createIssuedAt?: number;
+    maxRedemptions?: number;
+    expiresAt?: number;
+    approvalMode?: ServiceInviteApprovalMode;
   }): Promise<{ ok: true } | { ok: false; reason: string }> {
     const sh = rec.secretHash.toLowerCase();
     const existing = this.byId.get(rec.inviteId);
@@ -1562,6 +2643,13 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
       boundAt: null,
       createdAt: rec.createdAt,
       revokedAt: null,
+      createSig: rec.createSig ?? null,
+      createIssuedAt: rec.createIssuedAt ?? null,
+      maxRedemptions: rec.maxRedemptions ?? null,
+      expiresAt: rec.expiresAt ?? null,
+      redemptions: 0,
+      approvalMode: rec.approvalMode ?? "auto",
+      boundAIDs: [],
     });
     return { ok: true };
   }
@@ -1576,15 +2664,28 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
     const rec = [...this.byId.values()].find((r) => r.secretHash === sh);
     if (!rec) return { ok: false, reason: "unknown secret" };
     if (rec.revokedAt !== null) return { ok: false, reason: "revoked" };
+    if (rec.expiresAt !== null && now > rec.expiresAt) {
+      return { ok: false, reason: "expired" };
+    }
+    // Already bound to this AID ⇒ idempotent (personal AND group).
+    if (rec.boundAIDs.includes(aid)) {
+      return { ok: true, firstBind: false, record: { ...rec, boundAIDs: [...rec.boundAIDs] } };
+    }
+    // A NEW AID. Single-use (maxRedemptions null) with an existing bind ⇒
+    // already bound to someone else. Group ⇒ enforce the cap (0 = unlimited).
+    if (rec.maxRedemptions === null) {
+      if (rec.boundAIDs.length > 0) return { ok: false, reason: "already bound" };
+    } else if (rec.maxRedemptions > 0 && rec.boundAIDs.length >= rec.maxRedemptions) {
+      return { ok: false, reason: "max redemptions reached" };
+    }
+    rec.boundAIDs.push(aid);
+    rec.redemptions = rec.boundAIDs.length;
+    // The main row's boundAID/boundAt stay the FIRST bind (v1-compatible reads).
     if (rec.boundAID === null) {
       rec.boundAID = aid;
       rec.boundAt = now;
-      return { ok: true, firstBind: true, record: { ...rec } };
     }
-    if (rec.boundAID === aid) {
-      return { ok: true, firstBind: false, record: { ...rec } };
-    }
-    return { ok: false, reason: "already bound" };
+    return { ok: true, firstBind: true, record: { ...rec, boundAIDs: [...rec.boundAIDs] } };
   }
 
   async revoke(inviteId: string, now: number): Promise<boolean> {
@@ -1596,13 +2697,13 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
 
   async get(inviteId: string): Promise<ServiceInviteRecord | undefined> {
     const r = this.byId.get(inviteId);
-    return r ? { ...r } : undefined;
+    return r ? { ...r, boundAIDs: [...r.boundAIDs] } : undefined;
   }
 
   async getBySecretHash(secretHash: string): Promise<ServiceInviteRecord | undefined> {
     const sh = secretHash.toLowerCase();
     const r = [...this.byId.values()].find((x) => x.secretHash === sh);
-    return r ? { ...r } : undefined;
+    return r ? { ...r, boundAIDs: [...r.boundAIDs] } : undefined;
   }
 
   async listForAuthor(authorAID: string): Promise<ServiceInviteRecord[]> {
@@ -1610,6 +2711,19 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
     return [...this.byId.values()]
       .filter((r) => r.authorAID === a)
       .sort((x, y) => y.createdAt - x.createdAt)
-      .map((r) => ({ ...r }));
+      .map((r) => ({ ...r, boundAIDs: [...r.boundAIDs] }));
+  }
+
+  async revokedSince(authorAID: string, cursor: number): Promise<RevokedInviteRecord[]> {
+    const a = authorAID.toLowerCase();
+    return [...this.byId.values()]
+      .filter((r) => r.authorAID === a && r.revokedAt !== null && r.revokedAt > cursor)
+      .sort((x, y) => (x.revokedAt ?? 0) - (y.revokedAt ?? 0))
+      .map((r) => ({
+        inviteId: r.inviteId,
+        serviceRef: r.serviceRef,
+        boundAIDs: [...r.boundAIDs],
+        revokedAt: r.revokedAt!,
+      }));
   }
 }

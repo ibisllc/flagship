@@ -74,7 +74,7 @@ fun FSPrimaryButton(
     block = block,
     large = large,
     bg = FS.colors.primary,
-    fg = Color.White,
+    fg = FS.colors.onAccent,
     border = null,
 )
 
@@ -155,8 +155,10 @@ private fun FSButtonBase(
     fg: Color,
     border: Color?,
 ) {
-    val height = if (large) 48.dp else 40.dp
-    val padH = if (large) 28.dp else 20.dp
+    // Min touch target 44dp (spec S3). A short label still gets 44; a wrapped
+    // label grows instead of clipping. On-grid horizontal padding only (S4).
+    val height = if (large) 48.dp else 44.dp
+    val padH = if (large) FS.space.s6 else FS.space.s5
     val interaction = remember { MutableInteractionSource() }
     val alpha by animateFloatAsState(if (enabled) 1f else 0.4f, tween(durationMillis = 200), label = "btn-alpha")
     Box(
@@ -274,7 +276,7 @@ fun FSField(
 
 // ── Pill ───────────────────────────────────────────────────────
 
-enum class FSPillKind { Online, Renewing, Offline, Provisioning, Idle }
+enum class FSPillKind { Online, Renewing, Offline, Provisioning, Pending, Idle }
 
 @Composable
 fun FSPill(label: String, kind: FSPillKind, modifier: Modifier = Modifier) {
@@ -283,6 +285,7 @@ fun FSPill(label: String, kind: FSPillKind, modifier: Modifier = Modifier) {
         FSPillKind.Renewing -> FS.colors.warning to FS.colors.warning.copy(alpha = 0.12f)
         FSPillKind.Offline -> FS.colors.danger to FS.colors.danger.copy(alpha = 0.12f)
         FSPillKind.Provisioning -> FS.colors.primary to FS.colors.primary.copy(alpha = 0.12f)
+        FSPillKind.Pending -> FS.colors.warning to FS.colors.warning.copy(alpha = 0.12f)
         FSPillKind.Idle -> FS.colors.textMuted to FS.colors.surfaceSunken
     }
     Row(

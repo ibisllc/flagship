@@ -31,12 +31,8 @@
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  openLlmPayload,
-  sealLlmPayload,
-  type Bytes,
-  type SealedBlob,
-} from "@flagship/protocol";
+import { type SealedBlob } from "@flagship/protocol";
+import type { SwkOps } from "../keyCustodian.js";
 import type { LlmCredential } from "../llmHarness.js";
 
 export interface BuildCredentialStore {
@@ -77,8 +73,10 @@ function validate(obj: unknown): LlmCredential | null {
   if (typeof o.provider !== "string" || o.provider.length === 0) return null;
   if (typeof o.apiKey !== "string" || o.apiKey.length === 0) return null;
   if (o.baseUrl !== undefined && typeof o.baseUrl !== "string") return null;
+  if (o.source !== undefined && o.source !== "byok" && o.source !== "promo") return null;
   const out: LlmCredential = { provider: o.provider, apiKey: o.apiKey };
   if (typeof o.baseUrl === "string" && o.baseUrl.length > 0) out.baseUrl = o.baseUrl;
+  if (o.source === "byok" || o.source === "promo") out.source = o.source;
   return out;
 }
 
@@ -118,7 +116,7 @@ export class FileBuildCredentialStore implements BuildCredentialStore {
 
   constructor(
     private readonly dir: string,
-    private readonly swk: Bytes,
+    private readonly swk: SwkOps,
   ) {}
 
   async load(): Promise<void> {
@@ -142,9 +140,8 @@ export class FileBuildCredentialStore implements BuildCredentialStore {
     if (!ok) throw new Error("invalid credential");
     if (!existsSync(this.dir)) await mkdir(this.dir, { recursive: true });
     const file = credFilePath(this.dir, id);
-    const blob = sealLlmPayload(
+    const blob = this.swk.sealWithSwk(
       new TextEncoder().encode(JSON.stringify(ok)),
-      this.swk,
     );
     const tmp = `${file}.tmp`;
     await writeFile(tmp, sealedToHex(blob), { mode: 0o600 });
@@ -177,7 +174,7 @@ export class FileBuildCredentialStore implements BuildCredentialStore {
   private unseal(hex: string): LlmCredential | null {
     const blob = sealedFromHex(hex);
     if (!blob) return null;
-    const plain = openLlmPayload(blob, this.swk);
+    const plain = this.swk.openWithSwk(blob);
     return validate(JSON.parse(new TextDecoder().decode(plain)) as unknown);
   }
 }

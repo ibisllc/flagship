@@ -20,11 +20,12 @@ const jsonReport = process.env.GYM_PW_JSON ?? join(outputDir, "report.json");
 
 export default defineConfig({
   testDir: ".",
-  // The every-merge smoke spec, the total-gym Tier-1 tranche, AND the D7-quality
-  // sweeps (gym-quality); the adapter `--grep`s the exact scenario title, so a
-  // `total`/quality spec is only run when a `total` scenario selects it (the
-  // every-merge gym never greps them).
-  testMatch: /gym-(smoke|total|quality)\.spec\.ts$/,
+  // The every-merge smoke spec, the total-gym Tier-1 tranche, the D7-quality
+  // sweeps (gym-quality), AND the feature-coverage tranche (gym-features);
+  // the adapter `--grep`s the exact scenario title, so a `total`/quality spec
+  // is only run when a `total` scenario selects it (the every-merge gym never
+  // greps them).
+  testMatch: /gym-(smoke|total|quality|features)\.spec\.ts$/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,

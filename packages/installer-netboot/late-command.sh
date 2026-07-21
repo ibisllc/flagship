@@ -192,7 +192,14 @@ Requires=docker.service
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/opt/flagship/installer/data-services/init.sh
+# ExecStop makes `systemctl stop flagship-data-services` ACTUALLY stop the
+# compose containers. Without it (Type=oneshot + RemainAfterExit) the unit only
+# marks itself inactive while postgres/minio/redis/forgejo keep running — so a
+# migration/decommission "freeze" walked live, torn data. `stop` (not `down`)
+# preserves the data volumes; this is a write-freeze, not a wipe.
+ExecStop=/usr/bin/docker compose -f /opt/flagship/installer/data-services/docker-compose.yml --env-file /var/flagship/data-services.env stop
 TimeoutStartSec=300
+TimeoutStopSec=120
 
 [Install]
 WantedBy=multi-user.target
@@ -226,12 +233,17 @@ Description=Flagship server daemon
 After=flagship-data-services.service flagship-boot-stage.service network-online.target
 Wants=network-online.target
 Requires=flagship-data-services.service
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 WorkingDirectory=/opt/flagship
 ExecStart=/usr/bin/npx --workspace=@flagship/server-daemon run start
-Restart=on-failure
+# `always`, NOT `on-failure`: the daemon exits 0 to request a self-restart after
+# provisioning a post-boot secret (SWK/CGK deposit), rotating the admin root, or
+# committing an update. `on-failure` treats exit 0 as success and would leave the
+# box dead after it consumes its SWK, before it ever serves HTTPS.
+Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal

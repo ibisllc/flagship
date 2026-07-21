@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { boxSigner, swkOps } from "../helpers/keyCustody.js";
+import type { SwkOps } from "../../src/keyCustodian.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,10 +25,10 @@ function makeKey(): Keypair {
   crypto.getRandomValues(priv);
   return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
 }
-function fakeSwk(): Uint8Array {
+function fakeSwk(): SwkOps {
   const b = new Uint8Array(32);
   crypto.getRandomValues(b);
-  return b;
+  return swkOps(b);
 }
 function jsonReply(status: number, body: unknown) {
   return {
@@ -45,7 +47,9 @@ function recordingCmd(): { cmd: CommandRunner; calls: string[] } {
   const calls: string[] = [];
   const cmd: CommandRunner = {
     run: async (c, args) => { calls.push(`${c} ${args.join(" ")}`); },
-    capture: async () => ({ stdout: "", stderr: "" }),
+    // docker build goes through capture when available (runDockerBuild), so
+    // record those calls too.
+    capture: async (c, args) => { calls.push(`${c} ${args.join(" ")}`); return { stdout: "", stderr: "" }; },
   };
   return { cmd, calls };
 }
@@ -104,7 +108,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
@@ -121,9 +125,9 @@ describe("buildDeploySession", () => {
         // surface the actual reason in the failure message for debugging
         throw new Error(`deploy failed: ${r.reason}`);
       }
-      expect(r.serviceId).toBe("alice-habits");
+      expect(r.serviceId).toBe("alice--habits");
       expect(r.url).toBe(`https://habits.${SERVER}`);
-      expect(r.image).toMatch(/^flagship-vibe-alice-habits:\d+$/);
+      expect(r.image).toMatch(/^flagship-vibe-alice--habits:\d+$/);
       // docker build was invoked at the working dir
       expect(calls.some((c) => c.startsWith("docker build "))).toBe(true);
       expect(calls.some((c) => c.includes(wd.dir))).toBe(true);
@@ -131,9 +135,9 @@ describe("buildDeploySession", () => {
       expect(calls.some((c) => c.startsWith("docker run ") && c.includes(r.image))).toBe(true);
 
       // source tree was actually written
-      const dockerfile = await readFile(join(wd.dir, "alice-habits", "Dockerfile"), "utf8");
+      const dockerfile = await readFile(join(wd.dir, "alice--habits", "Dockerfile"), "utf8");
       expect(dockerfile).toContain("FROM busybox");
-      const main = await readFile(join(wd.dir, "alice-habits", "src", "main.js"), "utf8");
+      const main = await readFile(join(wd.dir, "alice--habits", "src", "main.js"), "utf8");
       expect(main).toContain("console.log");
     } finally {
       await wd.cleanup();
@@ -158,7 +162,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
@@ -191,7 +195,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
@@ -249,7 +253,7 @@ describe("buildDeploySession", () => {
       };
       const forgejoAdmin = new ForgejoAppAdmin({
         baseUrl: "http://forgejo.local",
-        orgName: "alice-flagship",
+        orgName: "alice--flagship",
         serviceToken: "tk",
         fetchImpl: fakeFetch as never,
       });
@@ -260,7 +264,10 @@ describe("buildDeploySession", () => {
           if (c === "docker" && args[0] === "build") events.push("dockerBuild");
           return cmd.run(c, args);
         },
-        capture: cmd.capture,
+        capture: async (c, args) => {
+          if (c === "docker" && args[0] === "build") events.push("dockerBuild");
+          return cmd.capture!(c, args);
+        },
       };
 
       const platform = new ServicePlatform({
@@ -280,7 +287,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd: teeingCmd,
@@ -323,7 +330,7 @@ describe("buildDeploySession", () => {
       };
       const forgejoAdmin = new ForgejoAppAdmin({
         baseUrl: "http://forgejo.local",
-        orgName: "alice-flagship",
+        orgName: "alice--flagship",
         serviceToken: "tk",
         fetchImpl: failingFetch as never,
       });
@@ -340,7 +347,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
@@ -383,7 +390,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
@@ -426,7 +433,7 @@ describe("buildDeploySession", () => {
       };
       const forgejoAdmin = new ForgejoAppAdmin({
         baseUrl: "http://forgejo.local",
-        orgName: "alice-flagship",
+        orgName: "alice--flagship",
         serviceToken: "tk",
         fetchImpl: fakeFetch as never,
       });
@@ -448,7 +455,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
@@ -482,7 +489,7 @@ describe("buildDeploySession", () => {
 
       const r = await deploy(session);
       if (!r.ok) throw new Error(`deploy failed: ${r.reason}`);
-      expect(r.serviceId).toBe("alice-habits");
+      expect(r.serviceId).toBe("alice--habits");
       expect(r.url).toBe(`https://habits.${SERVER}`);
 
       // The container was actually launched (docker run with the patched image).
@@ -500,7 +507,18 @@ describe("buildDeploySession", () => {
         run: async (c, args) => {
           if (c === "docker" && args[0] === "build") throw new Error("Dockerfile syntax error");
         },
-        capture: async () => ({ stdout: "", stderr: "" }),
+        // Mirrors realCommandRunner.capture: the rejection message carries the
+        // builder's stderr tail (the remote 502 reason must be diagnosable —
+        // the gating live-e2e regression was an opaque "exited with code 1").
+        capture: async (c, args) => {
+          if (c === "docker" && args[0] === "build") {
+            throw Object.assign(
+              new Error("docker exited with code 1: COPY failed: stat index.html: file does not exist"),
+              { stdout: "", stderr: "COPY failed: stat index.html: file does not exist\n" },
+            );
+          }
+          return { stdout: "", stderr: "" };
+        },
       };
       const platform = new ServicePlatform({
         host: { username: HOST, irkPub: irk.publicKey },
@@ -515,7 +533,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
@@ -528,6 +546,9 @@ describe("buildDeploySession", () => {
       expect(r.ok).toBe(false);
       if (r.ok) return;
       expect(r.reason).toMatch(/docker build failed/);
+      // The builder's actual error must reach the caller (phone / e2e driver),
+      // not just "exited with code 1".
+      expect(r.reason).toMatch(/COPY failed: stat index\.html/);
     } finally {
       await wd.cleanup();
     }

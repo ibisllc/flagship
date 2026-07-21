@@ -1,0 +1,232 @@
+/**
+ * Per-service election + claim/yield decision.
+ *
+ * Each round builds the member list (self + live siblings) and, for every
+ * service THIS box runs, elects the leader via `electLeadForService`
+ * (@flagship/protocol — highest clout among the live runners). Then applies the
+ * claim/yield rule against the injected `RouteClaimer`.
+ *
+ * This is the pure DECISION layer: it takes a snapshot of members + the local
+ * holdings and returns the actions to apply, then applies them. It is fully unit-
+ * testable with a mock RouteClaimer and a synthetic member list — independent of
+ * any transport, timers, or the live UrlController.
+ */
+import { type CloutMember, electLeadForService } from "@flagship/protocol";
+import type { RouteClaimer } from "./routeClaimer.js";
+import type { ViewMember } from "./siblingView.js";
+
+export interface SelfMember {
+  id: string;
+  domain: string;
+  /** This box's STK pub hex (its birth-cert authority hex), lowercased. */
+  stkHex: string;
+  birthDate: number;
+  voteIssuedAt: number | null;
+  /** The slugs THIS box runs (drives both eligibility and which services to elect). */
+  services: string[];
+}
+
+/** One service's elected leader, as `leadsSnapshot` exposes it. */
+export interface ServiceLead {
+  /** The elected lead's box fqdn/podCanonical (so a client can match it to a pod). */
+  leaderFqdn: string;
+  /** The elected lead's STK/birthAuth pub hex (lowercased). */
+  leaderStkHex: string;
+  /** Always true today — only live-hosted services appear (a live runner was elected). */
+  live: boolean;
+}
+
+/**
+ * The FULL per-service leadership map over {self-as-live} ∪ {live siblings}.
+ *
+ * Unlike `selfLeadsForRound` (which answers only "which of MY services do I
+ * lead"), this computes the leader for the UNION of every live member's service
+ * slugs — so a box answers for services it doesn't itself host (a service hosted
+ * only by a sibling still resolves a leader). A slug with no live runner never
+ * appears. Pure + deterministic.
+ */
+export function leadsSnapshot(deps: {
+  self: SelfMember;
+  liveSiblings: ViewMember[];
+}): Record<string, ServiceLead> {
+  const { self, liveSiblings } = deps;
+  const selfClout: CloutMember = {
+    id: self.id,
+    domain: self.domain,
+    birthDate: self.birthDate,
+    voteIssuedAt: self.voteIssuedAt,
+    liveness: "live",
+    services: self.services,
+  };
+  const members: CloutMember[] = [
+    selfClout,
+    ...liveSiblings.map((s) => ({
+      id: s.id,
+      domain: s.domain,
+      birthDate: s.birthDate,
+      voteIssuedAt: s.voteIssuedAt,
+      liveness: s.liveness,
+      services: s.services,
+    })),
+  ];
+  // STK hex per member id (the elector returns a CloutMember whose `id` is the
+  // fqdn; map back to the STK hex the member announced).
+  const stkById = new Map<string, string>();
+  stkById.set(self.id, self.stkHex);
+  for (const s of liveSiblings) stkById.set(s.id, s.stkHex);
+
+  // Union of slugs across all LIVE members (self is always live in its round).
+  const slugs = new Set<string>(self.services);
+  for (const s of liveSiblings) {
+    if (s.liveness === "live") for (const slug of s.services) slugs.add(slug);
+  }
+
+  const out: Record<string, ServiceLead> = {};
+  for (const slug of slugs) {
+    const lead = electLeadForService(members, slug);
+    if (lead === null) continue; // no live runner — absent
+    out[slug] = {
+      leaderFqdn: lead.domain,
+      leaderStkHex: stkById.get(lead.id) ?? "",
+      live: true,
+    };
+  }
+  return out;
+}
+
+export type ClaimAction =
+  | { kind: "claim"; service: string }
+  | { kind: "release"; service: string };
+
+/**
+ * The subset of the services THIS box runs where it is the elected lead among
+ * {self-as-live} ∪ {live siblings}. Pure — the source of the "services I lead"
+ * set the daemon-status heartbeat reports (Phase 6 Part 3). Sorted.
+ */
+export function selfLeadsForRound(deps: {
+  self: SelfMember;
+  liveSiblings: ViewMember[];
+}): string[] {
+  const { self, liveSiblings } = deps;
+  const selfClout: CloutMember = {
+    id: self.id,
+    domain: self.domain,
+    birthDate: self.birthDate,
+    voteIssuedAt: self.voteIssuedAt,
+    liveness: "live",
+    services: self.services,
+  };
+  const members: CloutMember[] = [
+    selfClout,
+    ...liveSiblings.map((s) => ({
+      id: s.id,
+      domain: s.domain,
+      birthDate: s.birthDate,
+      voteIssuedAt: s.voteIssuedAt,
+      liveness: s.liveness,
+      services: s.services,
+    })),
+  ];
+  const leads: string[] = [];
+  for (const service of self.services) {
+    const lead = electLeadForService(members, service);
+    if (lead !== null && lead.id === self.id) leads.push(service);
+  }
+  return leads.sort();
+}
+
+/**
+ * Compute the claim/yield actions for one round WITHOUT applying them. Pure.
+ *
+ * For each service this box runs:
+ *   - elect the leader among {self-as-live} ∪ {live siblings};
+ *   - if self is the elected lead and doesn't hold the route → claim;
+ *   - if self is NOT the lead and currently holds it → release.
+ *
+ * `claimer.holds` is consulted to make claim/release idempotent (a steady leader
+ * that already holds its route emits no action).
+ */
+export function decideClaimActions(deps: {
+  self: SelfMember;
+  liveSiblings: ViewMember[];
+  claimer: Pick<RouteClaimer, "holds">;
+}): ClaimAction[] {
+  const { self, liveSiblings, claimer } = deps;
+
+  // Self is always LIVE in its own election round (it is the one running it).
+  const selfClout: CloutMember = {
+    id: self.id,
+    domain: self.domain,
+    birthDate: self.birthDate,
+    voteIssuedAt: self.voteIssuedAt,
+    liveness: "live",
+    services: self.services,
+  };
+  const siblingClout: CloutMember[] = liveSiblings.map((s) => ({
+    id: s.id,
+    domain: s.domain,
+    birthDate: s.birthDate,
+    voteIssuedAt: s.voteIssuedAt,
+    liveness: s.liveness,
+    services: s.services,
+  }));
+  const members: CloutMember[] = [selfClout, ...siblingClout];
+
+  const actions: ClaimAction[] = [];
+  for (const service of self.services) {
+    const lead = electLeadForService(members, service);
+    const selfIsLead = lead !== null && lead.id === self.id;
+    const held = claimer.holds(service);
+    if (selfIsLead && !held) {
+      actions.push({ kind: "claim", service });
+    } else if (!selfIsLead && held) {
+      actions.push({ kind: "release", service });
+    }
+  }
+  return actions;
+}
+
+/**
+ * Run one election round and APPLY the resulting claim/yield actions through the
+ * RouteClaimer. Returns the actions taken (for logging/tests). Each apply is
+ * best-effort: a claim/release that throws is swallowed so one bad route can't
+ * stall the round (the next round re-derives + retries).
+ */
+export async function runElectionRound(deps: {
+  self: SelfMember;
+  liveSiblings: ViewMember[];
+  claimer: RouteClaimer;
+  /**
+   * Cert pre-warm hook — fired with the service slug just BEFORE this box
+   * claims a route it newly leads, so the `<slug>.<user>` cert is loaded/ensured
+   * before the route is serveable (the lead must not first discover it needs a
+   * cert at request time). Best-effort; a throw/rejection never blocks the
+   * claim.
+   */
+  prewarmLead?: (service: string) => Promise<void>;
+  onLog?: (m: string) => void;
+}): Promise<ClaimAction[]> {
+  const actions = decideClaimActions({
+    self: deps.self,
+    liveSiblings: deps.liveSiblings,
+    claimer: deps.claimer,
+  });
+  for (const a of actions) {
+    try {
+      if (a.kind === "claim") {
+        if (deps.prewarmLead) {
+          await deps.prewarmLead(a.service).catch(() => {});
+        }
+        await deps.claimer.claim(a.service);
+      } else {
+        await deps.claimer.release(a.service);
+      }
+      deps.onLog?.(`[gossip] ${a.kind} route for service "${a.service}"`);
+    } catch (e) {
+      deps.onLog?.(
+        `[gossip] ${a.kind} route for "${a.service}" failed: ${(e as Error).message}`,
+      );
+    }
+  }
+  return actions;
+}

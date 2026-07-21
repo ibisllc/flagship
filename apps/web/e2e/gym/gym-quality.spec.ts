@@ -45,9 +45,19 @@ async function coldLaunch(page: Page): Promise<void> {
 }
 
 async function generateIdentity(page: Page): Promise<void> {
-  await page.fill("#bootstrap-passphrase", PASSPHRASE);
-  await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-  await page.click("#bootstrap-go");
+  // Username-first cover: "Create a new account" opens an inline passphrase +
+  // confirm, mints the device identity client-side (wrapped UMK → IndexedDB)
+  // BEFORE the random-handle suggestion fetch (which 404s in the backendless
+  // gym → toast). The identity persists regardless, so reachShell's
+  // reload→unlock works.
+  await page.click("#bootstrap-create");
+  await expect(page.locator(".modal-title")).toHaveText("Create your account");
+  await page.fill(".modal-input", PASSPHRASE);
+  await page.click("[data-modal-ok]");
+  await expect(page.locator(".modal-title")).toHaveText("Confirm passphrase");
+  await page.fill(".modal-input", PASSPHRASE);
+  await page.click("[data-modal-ok]");
+  await expect(page.locator("#toast")).toBeVisible({ timeout: 10_000 });
 }
 
 /**
@@ -58,7 +68,8 @@ async function generateIdentity(page: Page): Promise<void> {
 async function reachShell(page: Page, viewAlias: string): Promise<void> {
   await coldLaunch(page);
   await generateIdentity(page);
-  await expect(page.locator("#view-wizard")).toBeVisible({ timeout: 10_000 });
+  // generateIdentity waited for the post-mint toast → the wrapped UMK is
+  // persisted; reload with the deep-link → boot routes to the unlock screen.
   await page.goto(`/index.html?view=${viewAlias}`);
   await expect(page.locator("#view-unlock")).toBeVisible({ timeout: 10_000 });
   await page.fill("#unlock-passphrase", PASSPHRASE);

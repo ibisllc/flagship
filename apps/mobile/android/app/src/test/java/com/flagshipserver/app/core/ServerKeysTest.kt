@@ -6,12 +6,91 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ServerKeysTest {
+
+    // Pinned cross-platform SWK vector (packages/protocol/tests/keys.test.ts):
+    //   umk.seed = 32 × 0x07, serverId = "srv-vector-1"
+    //   → SWK = HKDF-SHA256(seed, info="flagship.swk.v1|srv-vector-1", 32)
+    private val swkVectorSeed = ByteArray(32) { 0x07 }
+    private val swkVectorServerId = "srv-vector-1"
+    private val swkVectorHex =
+        "55c865a17c9106f0cb6847da659706ed7601e6769253f9b11d851e013b421377"
+
+    @Test fun deriveSwkReproducesThePinnedVector() {
+        // The BOX SWK (DOTS info "flagship.swk.v1|<serverId>") — the
+        // protocol/daemon derivation, NOT the app-backup slash form.
+        val swk = ServerKeys.deriveSwk(swkVectorSeed, swkVectorServerId)
+        assertEquals(swkVectorHex, HexUtil.encode(swk))
+    }
+
+    @Test fun deriveSwkDiffersPerServerId() {
+        val a = ServerKeys.deriveSwk(swkVectorSeed, "srv-A")
+        val b = ServerKeys.deriveSwk(swkVectorSeed, "srv-B")
+        assertNotEquals(HexUtil.encode(a), HexUtil.encode(b))
+    }
+
+    @Test fun createBundleEmbeds64HexSwkSiblingFromBoxDerivation() {
+        val swkHex = HexUtil.encode(ServerKeys.deriveSwk(swkVectorSeed, swkVectorServerId))
+        assertEquals(64, swkHex.length)
+        val bundle = InstallBlobBundle(
+            blob = WireBlob(
+                serverDomain = "home.harry.flagship.services",
+                username = "harry",
+                serverName = "home",
+                phoneDelegatedPubKey = "11".repeat(32),
+                authCode = WireAuthCode(
+                    serial = "01ABCD",
+                    username = "harry",
+                    serverName = "home",
+                    serverDomain = "home.harry.flagship.services",
+                    delegatedPubKey = "11".repeat(32),
+                    userPubKey = "22".repeat(32),
+                    issuedAt = 1_000,
+                    expiresAt = 2_000,
+                ),
+                authCodeUserSignature = "44".repeat(64),
+                rckPubKey = "55".repeat(32),
+            ),
+            blobSignature = "ab",
+            swkHex = swkHex,
+        )
+        val json = Json.encodeToString(InstallBlobBundle.serializer(), bundle)
+        assertTrue(json.contains("\"swkHex\":\"$swkHex\""))
+    }
+
+    @Test fun absentSwkOmitsSiblingFromWire() {
+        val bundle = InstallBlobBundle(
+            blob = WireBlob(
+                serverDomain = "home.harry.flagship.services",
+                username = "harry",
+                serverName = "home",
+                phoneDelegatedPubKey = "11".repeat(32),
+                authCode = WireAuthCode(
+                    serial = "01ABCD",
+                    username = "harry",
+                    serverName = "home",
+                    serverDomain = "home.harry.flagship.services",
+                    delegatedPubKey = "11".repeat(32),
+                    userPubKey = "22".repeat(32),
+                    issuedAt = 1_000,
+                    expiresAt = 2_000,
+                ),
+                authCodeUserSignature = "44".repeat(64),
+                rckPubKey = "55".repeat(32),
+            ),
+            blobSignature = "ab",
+        )
+        val json = Json.encodeToString(InstallBlobBundle.serializer(), bundle)
+        assertFalse(json.contains("swkHex"))
+    }
 
     @Test fun derivesThePinnedStkPubFromThePinnedUmkAndServerId() {
         val pub = ServerKeys.deriveStkPub(

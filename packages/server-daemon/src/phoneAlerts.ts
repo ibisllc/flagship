@@ -63,4 +63,33 @@ export type ReissuanceAlert = {
   undoWindowExpiresAt: number;
 };
 
-export type PhoneAlert = PhoneUpdateAlert | BrowserAlert | ReissuanceAlert;
+/**
+ * #91 — the AI build chat (vibe-code) paused and is waiting on the owner.
+ * Emitted on the streaming → awaiting-tool-response transition (the same
+ * point the W10 `notifyOwner` push-relay hook fires). The phone-paired
+ * foreground poll drains this from the AlertInbox, raises an app-initiated
+ * LOCAL notification, and surfaces the session in the global operations
+ * sliver with a deep link into the chat.
+ *
+ * Value-free by construction — it carries ONLY the session id (here as the
+ * uniform `serviceId` so dedup + filtering work like every other variant),
+ * the pending tool kind, and the tool-use id. No model output, no env-var
+ * value, no chat text. The phone fetches the human-readable pending request
+ * (the question / the env-var name) over the paired-session BFF when the
+ * owner opens the chat.
+ */
+export type AiChatAlert = {
+  kind: "ai-chat-needs-you";
+  /** The vibe-code session id, carried as `serviceId` for uniform dedup. */
+  serviceId: string;
+  /** What the AI is waiting on — drives the notification copy + chat UI. */
+  request: "requestEnvVar" | "talkToUser";
+  /** The pending tool-use id (matched when the owner replies). */
+  toolUseId: string;
+};
+
+export type PhoneAlert =
+  | PhoneUpdateAlert
+  | BrowserAlert
+  | ReissuanceAlert
+  | AiChatAlert;

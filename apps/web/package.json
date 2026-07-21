@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@fastify/static": "^7.0.4",
+    "@flagship/control-plane": "*",
     "@flagship/protocol": "*",
     "@flagship/tunnel-protocol": "*",
     "fastify": "^4.28.1",

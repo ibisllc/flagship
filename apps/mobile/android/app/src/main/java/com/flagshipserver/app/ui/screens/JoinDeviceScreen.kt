@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,7 +54,7 @@ import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.JoinDevicePhase
 import com.flagshipserver.app.viewmodels.JoinDeviceViewModel
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -76,6 +77,7 @@ fun JoinDeviceScreen(
 
     var link by remember { mutableStateOf(initialLink) }
     var scanError by remember { mutableStateOf<String?>(null) }
+    var deviceName by remember { mutableStateOf("This Android device") }
 
     if (link == null) {
         ScannerEntry(
@@ -134,7 +136,12 @@ fun JoinDeviceScreen(
             JoinDevicePhase.Connecting -> StatusPanel("Connecting…", spinner = true)
             is JoinDevicePhase.VerifySas -> VerifyPanel(
                 matchCode = p.matchCode,
-                onConfirm = { scope.launch { vm.verifyAndJoin() } },
+                deviceName = deviceName,
+                onDeviceNameChange = { deviceName = it },
+                onConfirm = {
+                    vm.confirmDisplayName(deviceName)
+                    scope.launch { vm.verifyAndJoin() }
+                },
                 onCancel = { vm.cancel(); onCancel() },
             )
             JoinDevicePhase.Joining -> StatusPanel("Joining the account…", spinner = true)
@@ -180,7 +187,13 @@ private fun ScannerEntry(error: String?, onScanned: (String) -> Unit, onCancel: 
 }
 
 @Composable
-private fun VerifyPanel(matchCode: String, onConfirm: () -> Unit, onCancel: () -> Unit) {
+private fun VerifyPanel(
+    matchCode: String,
+    deviceName: String,
+    onDeviceNameChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -206,7 +219,21 @@ private fun VerifyPanel(matchCode: String, onConfirm: () -> Unit, onCancel: () -
         }
     }
     Spacer(Modifier.height(FS.space.s2))
-    FSPrimaryButton(label = "Codes match — join", onClick = onConfirm, block = true, large = true)
+    OutlinedTextField(
+        value = deviceName,
+        onValueChange = onDeviceNameChange,
+        label = { Text("Name in this account") },
+        supportingText = { Text("This encrypted name applies only inside the account you are joining.") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    FSPrimaryButton(
+        label = "Confirm name and join",
+        onClick = onConfirm,
+        enabled = deviceName.isNotBlank(),
+        block = true,
+        large = true,
+    )
     FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
 }
 
@@ -252,7 +279,7 @@ internal fun quarantineCopy(quarantineUntil: Long?, now: Long = System.currentTi
         return "This device is now on the account. It starts as a non-admin device."
     }
     val days = ((quarantineUntil - now) + 86_399_999) / 86_400_000  // ceil to days
-    val until = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(quarantineUntil))
+    val until = FlagshipDateFormat.format(quarantineUntil, nowMs = now)
     return "This device is a non-admin device for about $days more day" +
         (if (days == 1L) "" else "s") +
         " (until $until). The account owner is being reminded to review trusted devices."

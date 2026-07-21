@@ -12,6 +12,16 @@ import CryptoKit
 @MainActor
 final class KeyfileViewModelsTests: XCTestCase {
 
+    override func tearDown() async throws {
+        // Import installs a UMK and rotates the IRK (persisting the version
+        // + pending slots in the real keychain). Clear them so later tests
+        // don't inherit a stale IRK version — same hygiene as
+        // ReplaceDeviceViewModelTests.
+        Keystore.wipe()
+        try? Keystore.setPendingIrkRotationVersion(nil)
+        try await super.tearDown()
+    }
+
     private func makeServer() -> MockFlagshipServerClient {
         let s = MockFlagshipServerClient()
         s.simulatedLatency = 0
@@ -130,6 +140,72 @@ final class KeyfileViewModelsTests: XCTestCase {
             return XCTFail("expected .finalized, got \(vm.phase)")
         }
         XCTAssertEqual(finalUser, "harry")
+    }
+
+    /// #86 — the keyfile-import re-pair must ROTATE the IRK: it used to send
+    /// newIrkPub == oldIrkPub (both = the registered key), which the .com
+    /// re-pair handler rejects with 400 "newIrkPub equals current IRK", so
+    /// the takeover never started. This pins the rotating envelope (old !=
+    /// new), proves the envelope is signed by the NEW key, and that the
+    /// rotation is finalized locally on completion — matching the webapp fix
+    /// + Android + ReplaceDeviceViewModel.
+    func test_import_rotatesIrk_newNeqOld_envelopeVerifies_andFinalizes() async throws {
+        let server = makeServer()
+        try await server.claimUsername(.init(
+            request: .init(username: "harry", irkPub: "ab", issuedAt: 1), signature: "s"
+        ))
+        let umk = SymmetricKey(size: .bits256)
+        let file = try makeKeyfile(username: "harry", passphrase: "the-right-pass", umk: umk)
+        // Drive the REAL Keystore install (resets the IRK lineage to v1
+        // under the imported UMK) so the rotation is exercised end to end.
+        let vm = KeyfileImportViewModel(server: server, installUMK: { seed, reason in
+            try await Keystore.installUMK(seed, reason: reason)
+        })
+        vm.passphrase = "the-right-pass"
+
+        await vm.importBackup(fileText: file)
+
+        guard case .completed = vm.phase else {
+            return XCTFail("expected .completed, got \(vm.phase)")
+        }
+
+        let last = try XCTUnwrap(server.lastRePairInitiate)
+        let req = last.body.request
+        XCTAssertFalse(req.newIrkPub.isEmpty)
+        // The bug: old == new. The fix rotates.
+        XCTAssertNotEqual(req.newIrkPub, req.oldIrkPub,
+                          "keyfile-import re-pair must rotate the IRK (old != new)")
+        // The OLD pubkey is the registered (v1) key under the recovered UMK.
+        let v1 = try await Keystore.deriveIRK(reason: "v1", version: 1)
+        XCTAssertEqual(req.oldIrkPub, HexUtil.encode(v1.publicKey.rawRepresentation),
+                       "oldIrkPub must be the currently-registered v1 key")
+
+        // The envelope verifies against the NEW pubkey it carries (signed by
+        // the rotated key, exactly as the .com handler checks).
+        let canonical = RePairInitiate.canonicalBytes(
+            username: req.username,
+            newIrkPubHex: req.newIrkPub,
+            oldIrkPubHex: req.oldIrkPub,
+            issuedAt: req.issuedAt
+        )
+        let newPubKey = try Curve25519.Signing.PublicKey(
+            rawRepresentation: try XCTUnwrap(HexUtil.decode(req.newIrkPub)))
+        let sig = try XCTUnwrap(HexUtil.decode(last.body.signature))
+        XCTAssertTrue(newPubKey.isValidSignature(sig, for: canonical),
+                      "the re-pair envelope must verify under the NEW (rotated) IRK")
+
+        // A rotation is staged but NOT yet promoted (promotion is at complete).
+        XCTAssertEqual(Keystore.pendingIrkRotationVersion(), 2)
+        XCTAssertEqual(Keystore.currentIrkVersion(), 1)
+
+        // Completing the takeover promotes the rotated version locally.
+        await vm.completeTakeover()
+        guard case .finalized = vm.phase else {
+            return XCTFail("expected .finalized, got \(vm.phase)")
+        }
+        XCTAssertEqual(Keystore.currentIrkVersion(), 2,
+                       "completion must finalize the rotated IRK version")
+        XCTAssertNil(Keystore.pendingIrkRotationVersion())
     }
 
     func test_import_wrongPassphrase_failsBeforeInstall() async throws {

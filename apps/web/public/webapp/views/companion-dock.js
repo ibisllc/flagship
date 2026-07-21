@@ -23,6 +23,7 @@ import { humanError } from "../lib/humanError.js";
 import { ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 import {
   buildCompanionReceiverUrl,
   companionList,
@@ -34,7 +35,7 @@ registerView("view-companion-dock");
 
 function fmtDate(unixMs) {
   if (typeof unixMs !== "number" || unixMs <= 0) return "—";
-  return new Date(unixMs).toLocaleString();
+  return formatWhen(unixMs);
 }
 
 function timeLeft(expiresAt, nowMs = Date.now()) {
@@ -82,7 +83,6 @@ export async function renderCompanionDock() {
         can view your dashboards but can't sign — to approve a change,
         come back to this device.
       </p>
-      <input id="companion-mint-label" type="text" placeholder="Label (e.g. 'Library iMac')" autocomplete="off" maxlength="64" />
       <button id="companion-mint-btn" class="full-width mt-2">Mint a QR</button>
     </div>
   `;
@@ -98,7 +98,7 @@ export async function renderCompanionDock() {
         <div class="card">
           <div class="row row-top">
             <div>
-              <div class="weight-600">${escapeHtml(c.label ?? "(no label)")}</div>
+              <div class="weight-600">Session ${escapeHtml(c.tokenPrefix)}</div>
               <div class="value text-xs">${escapeHtml(c.tokenPrefix)}…</div>
               <div class="faint-sm">
                 docked ${escapeHtml(fmtDate(c.redeemedAt))}
@@ -121,11 +121,9 @@ export async function renderCompanionDock() {
 
 async function runMint() {
   const btn = $("companion-mint-btn");
-  const labelInput = $("companion-mint-label");
-  const label = (labelInput?.value ?? "").trim().slice(0, 64) || null;
   if (btn) { btn.disabled = true; btn.textContent = "minting…"; }
   try {
-    const mint = await companionMintTicket({ label });
+    const mint = await companionMintTicket({});
     // Resolve the pod base URL + username for the QR payload. We get them
     // from the api.js + active profile so the receiver knows where to land.
     const { getPodBaseUrl } = await import("../lib/api.js");
@@ -146,7 +144,6 @@ async function runMint() {
     await showQrDialog({
       url: qrUrl,
       expiresAt: mint.expiresAt,
-      label,
     });
     await renderCompanionDock();
   } catch (e) {
@@ -156,7 +153,7 @@ async function runMint() {
   }
 }
 
-async function showQrDialog({ url, expiresAt, label }) {
+async function showQrDialog({ url, expiresAt }) {
   // Render an inline <dialog> with the QR SVG + the URL as fallback.
   // The qrEncoder module is the same one heroQr.js uses on the
   // marketing landing page; importing the absolute path keeps the
@@ -192,7 +189,6 @@ async function showQrDialog({ url, expiresAt, label }) {
         open will not extend it.
       </p>
       <div class="qr-box" style="background:#fff;padding:12px;border-radius:8px;display:flex;justify-content:center">${qrSvg}</div>
-      ${label ? `<p class="note">Label: <strong>${escapeHtml(label)}</strong></p>` : ""}
       <p class="note">Link (fallback):</p>
       <code class="break-all faint-sm" id="companion-qr-url">${escapeHtml(url)}</code>
       <div class="row-2 mt-2">
@@ -211,9 +207,9 @@ async function showQrDialog({ url, expiresAt, label }) {
     dialog.querySelector("#companion-qr-copy")?.addEventListener("click", async () => {
       try {
         await navigator.clipboard?.writeText?.(url);
-        toast("copied");
+        toast("Copied");
       } catch {
-        toast("copy not supported in this browser", "err");
+        toast("Copy not supported in this browser", "err");
       }
     });
     dialog.addEventListener("close", () => resolve(undefined), { once: true });
@@ -232,7 +228,7 @@ async function runRevoke(prefix) {
   if (!ok) return;
   try {
     await companionRevoke(prefix);
-    toast("revoked");
+    toast("Revoked");
     await renderCompanionDock();
   } catch (e) {
     toast(e.message ?? String(e), "err");

@@ -53,6 +53,16 @@ const TAG_PUBLISH_SERVER_DNS = "flagship/publish-server-dns/v1";
 const TAG_DNS01_PUBLISH = "flagship/dns01-publish/v1";
 const TAG_DNS01_DELETE = "flagship/dns01-delete/v1";
 const TAG_CLAIM_USERNAME = "flagship/claim-username/v1";
+const TAG_ACCOUNT_SELF_DELETE = "flagship/account-self-delete/v1";
+const TAG_SERVERS_SELF_DELETE = "flagship/servers-self-delete/v1";
+const TAG_SERVER_DECOMMISSION = "flagship/server-decommission/v1";
+const TAG_SERVER_TRANSFER_OFFER = "flagship/server-transfer-offer/v1";
+// v2: the claim canonical gained `acquirerAdminRootPubHex` (Slice D §9.8) so a
+// rogue `.com` cannot swap the acquirer's admin anchor on a real claim without
+// breaking the acquirer's signature. Clean-slate replacement — no dual-accept;
+// every client in this repo signs/verifies v2.
+const TAG_SERVER_TRANSFER_CLAIM = "flagship/server-transfer-claim/v2";
+const TAG_SERVER_REHOME_AUTH = "flagship/server-rehome-auth/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -165,6 +175,149 @@ export interface PublishServerDns {
 export interface ClaimUsername {
   username: string;
   irkPub: Bytes;
+  issuedAt: number;
+}
+
+/**
+ * IRK-signed LAST-DEVICE account-death order. Issued only inside the deletion
+ * ceremony (typed-username + biometric) when the account is removing its final
+ * device. `.com` verifies it against the username's currently-registered IRK,
+ * enforces "no other active device", then HARD-DELETES the username row (so the
+ * name frees immediately) and tears down every server the account owns. The
+ * signature commits to (username, issuedAt) so a captured order can't be
+ * re-aimed at a different name; `issuedAt` bounds the replay window.
+ */
+export interface AccountSelfDelete {
+  username: string;
+  issuedAt: number;
+}
+
+/**
+ * IRK-signed opt-in "ask all my servers to delete their content" order. NEVER a
+ * standalone command: `.com` accepts/records it ONLY when it arrives atomically
+ * bundled with a valid last-device {@link AccountSelfDelete} (the bundle-ingest
+ * invariant — docs/account-deletion-and-name-reclaim.md §5). A standalone
+ * servers-self-delete, or one bundled with an absent/invalid account-self-delete,
+ * is rejected and neither order is recorded/forwarded. The signature commits to
+ * (username, issuedAt).
+ */
+export interface ServersSelfDelete {
+  username: string;
+  issuedAt: number;
+}
+
+/**
+ * Owner-IRK-signed "this box instance is replaced — retire yourself" order
+ * (docs/server-replacement-graceful-decommission.md). The SELF-AUTHORIZING
+ * eviction notice: a box that receives it (by any channel) and verifies the
+ * signature + the STK-match runs the WHOLE closeout directly — no callback.
+ *
+ * - `retiredStkPubHex` (I2) binds the order to ONE specific box instance (its
+ *   STK pubkey). The replacement box has a different STK and ignores it, so a
+ *   replayed old order can never retire the new tenant.
+ * - `diskDisposition`: "keep" | "wipe-after-handoff" | "wipe-now" (§6a). Never
+ *   the unconditional account-deletion wipe — gated on the data being safely
+ *   elsewhere first.
+ * - The successor carries the FULL chain of these (the eviction lineage); the
+ *   hub holds the revoked STKs only ephemerally, rebuilt from what a connecting
+ *   box presents — so no permanent revoked-set on `.com`/the hub (§8b).
+ *
+ * Commits to (podCanonical, retiredStkPubHex, finalBackup, diskDisposition,
+ * backupEpoch, nonce, issuedAt).
+ */
+export type DiskDisposition = "keep" | "wipe-after-handoff" | "wipe-now";
+
+export interface ServerDecommission {
+  /** The FQDN being handed off (`<server>.<user>.flagship.services`). */
+  podCanonical: string;
+  /** The specific retiring instance's STK pubkey (hex). */
+  retiredStkPubHex: string;
+  /** Flush a final peer-backup before releasing routing. */
+  finalBackup: boolean;
+  /** What to do with the disk after release. */
+  diskDisposition: DiskDisposition;
+  /** Monotonic final-flush epoch (§9); 0 when finalBackup is false. */
+  backupEpoch: number;
+  /** Per-order nonce (replay distinctness within the same instance). */
+  nonce: string;
+  issuedAt: number;
+}
+
+/**
+ * Transfer-a-box (docs/account-deletion-and-name-reclaim.md §4) — a cross-account
+ * ownership handoff. Two envelopes, two parties:
+ *
+ * - {@link ServerTransferOffer} is minted by the CURRENT owner's phone (signed
+ *   with the giver's owner IRK) and encoded into the QR shown on the box's
+ *   detail page. It commits to (serverDomain, transferNonce, issuedAt,
+ *   expiresAt) — a one-time, short-TTL authorization. It does NOT name the
+ *   acquirer (unknown until they scan).
+ * - {@link ServerTransferClaim} is minted by the ACQUIRER's phone (signed with
+ *   the acquirer's owner IRK) after scanning the QR. It binds the acquirer's
+ *   identity (username + IRK pub) to the offer's nonce, so `.com` can move
+ *   ownership to a SPECIFIC new account, one-time.
+ *
+ * `.com` verifies the offer against the server's CURRENT registered owner IRK
+ * and the claim against the acquirer's registered IRK, then moves the
+ * server-ownership + routing records to the acquirer. The disk-key re-seal is a
+ * separate giver-phone step (only the giver's phone can unseal the LUKS key to
+ * re-seal it for the acquirer IRK) deposited via the box-sealed-lease lane.
+ */
+export interface ServerTransferOffer {
+  serverDomain: string;
+  /** 32-byte random nonce, hex — the one-time handle binding offer↔claim. */
+  transferNonce: string;
+  issuedAt: number;
+  /** Absolute expiry (ms) — a short TTL bounds a captured QR. */
+  expiresAt: number;
+}
+
+export interface ServerTransferClaim {
+  serverDomain: string;
+  /** The offer's nonce — ties this claim to a specific offer. */
+  transferNonce: string;
+  /** The acquirer's account name (the new owner). */
+  acquirerUsername: string;
+  /** The acquirer's owner IRK pubkey — ownership re-binds to this. */
+  acquirerIrkPub: Bytes;
+  /**
+   * Slice D §9.8 — the acquirer's ADMIN MASTER ROOT pubkey, hex, or "" when the
+   * acquirer account has no admin root (legacy). IN-CANONICAL (v2) so a rogue
+   * `.com` cannot swap the acquirer's admin anchor on a real claim without
+   * breaking the acquirer's signature: the giver's phone reads it back from the
+   * claim row and folds it into the giver-root-signed `AdminRootTransfer` the
+   * box independently verifies.
+   */
+  acquirerAdminRootPubHex: string;
+  issuedAt: number;
+}
+
+/**
+ * GIVER-owner-IRK-signed re-home authorization (transfer-a-box LEGACY path —
+ * docs/account-deletion-and-name-reclaim.md §4). This is the box-verifiable
+ * proof that closes v1-sec GAP 3: a box with NO pinned admin master root used
+ * to write its re-home marker (new FQDN + acquirer IRK) purely on `.com`'s
+ * unauthenticated word, so a rogue `.com` could move a legacy box's
+ * FQDN/cert/routing into an attacker namespace.
+ *
+ * The box pins the GIVER's owner IRK (its config `irkPublicKey` is still the
+ * giver's until it re-homes), and the giver's phone — which alone holds that
+ * IRK — signs this after the acquirer scans, naming the acquirer explicitly.
+ * The box verifies it against its pinned owner IRK before writing the marker;
+ * `.com` merely relays it and cannot forge it. It commits to
+ * (oldServerDomain, newServerDomain, acquirerIrkPub, issuedAt) so a captured
+ * signature can't be re-aimed at a different box, namespace, or acquirer.
+ *
+ * The admin-tier path keeps its stronger, separate `AdminRootTransfer` proof;
+ * this envelope is ONLY the legacy (no-admin-root) authority.
+ */
+export interface RehomeAuthorization {
+  /** The box's OLD canonical FQDN (`<server>.<giver>.<apex>`). */
+  oldServerDomain: string;
+  /** The NEW canonical FQDN to re-home to (`<server>.<acquirer>.<apex>`). */
+  newServerDomain: string;
+  /** The acquirer's owner-IRK pubkey — ownership re-binds to this. */
+  acquirerIrkPub: Bytes;
   issuedAt: number;
 }
 
@@ -475,6 +628,97 @@ function canonicalClaimUsername(c: ClaimUsername): Bytes {
   );
 }
 
+function canonicalAccountSelfDelete(c: AccountSelfDelete): Bytes {
+  legacyFieldGuard("username", c.username);
+  return new TextEncoder().encode(
+    [TAG_ACCOUNT_SELF_DELETE, c.username.toLowerCase(), c.issuedAt].join("|"),
+  );
+}
+
+function canonicalServersSelfDelete(c: ServersSelfDelete): Bytes {
+  legacyFieldGuard("username", c.username);
+  return new TextEncoder().encode(
+    [TAG_SERVERS_SELF_DELETE, c.username.toLowerCase(), c.issuedAt].join("|"),
+  );
+}
+
+function canonicalServerDecommission(c: ServerDecommission): Bytes {
+  legacyFieldGuard("podCanonical", c.podCanonical);
+  legacyFieldGuard("retiredStkPubHex", c.retiredStkPubHex);
+  legacyFieldGuard("diskDisposition", c.diskDisposition);
+  legacyFieldGuard("nonce", c.nonce);
+  return new TextEncoder().encode(
+    [
+      TAG_SERVER_DECOMMISSION,
+      c.podCanonical.toLowerCase(),
+      c.retiredStkPubHex.toLowerCase(),
+      c.finalBackup ? "1" : "0",
+      c.diskDisposition,
+      c.backupEpoch,
+      c.nonce.toLowerCase(),
+      c.issuedAt,
+    ].join("|"),
+  );
+}
+
+function canonicalServerTransferOffer(c: ServerTransferOffer): Bytes {
+  legacyFieldGuard("serverDomain", c.serverDomain);
+  legacyFieldGuard("transferNonce", c.transferNonce);
+  return new TextEncoder().encode(
+    [
+      TAG_SERVER_TRANSFER_OFFER,
+      c.serverDomain.toLowerCase(),
+      c.transferNonce.toLowerCase(),
+      c.issuedAt,
+      c.expiresAt,
+    ].join("|"),
+  );
+}
+
+function canonicalServerTransferClaim(c: ServerTransferClaim): Bytes {
+  legacyFieldGuard("serverDomain", c.serverDomain);
+  legacyFieldGuard("transferNonce", c.transferNonce);
+  legacyFieldGuard("acquirerUsername", c.acquirerUsername);
+  legacyFieldGuard("acquirerAdminRootPubHex", c.acquirerAdminRootPubHex);
+  return new TextEncoder().encode(
+    [
+      TAG_SERVER_TRANSFER_CLAIM,
+      c.serverDomain.toLowerCase(),
+      c.transferNonce.toLowerCase(),
+      c.acquirerUsername.toLowerCase(),
+      hex(c.acquirerIrkPub),
+      c.acquirerAdminRootPubHex.toLowerCase(),
+      c.issuedAt,
+    ].join("|"),
+  );
+}
+
+function canonicalRehomeAuthorization(c: RehomeAuthorization): Bytes {
+  legacyFieldGuard("oldServerDomain", c.oldServerDomain);
+  legacyFieldGuard("newServerDomain", c.newServerDomain);
+  return new TextEncoder().encode(
+    [
+      TAG_SERVER_REHOME_AUTH,
+      c.oldServerDomain.toLowerCase(),
+      c.newServerDomain.toLowerCase(),
+      hex(c.acquirerIrkPub),
+      c.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signRehomeAuthorization(c: RehomeAuthorization, giverIrk: Keypair): Bytes {
+  return ed.sign(canonicalRehomeAuthorization(c), giverIrk.privateKey);
+}
+
+export function verifyRehomeAuthorization(c: RehomeAuthorization, sig: Bytes, giverIrkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalRehomeAuthorization(c), giverIrkPub);
+  } catch {
+    return false;
+  }
+}
+
 export function signRebuildRequest(r: ImageRebuildRequest, irk: Keypair): Bytes {
   return ed.sign(canonicalRebuild(r), irk.privateKey);
 }
@@ -746,6 +990,66 @@ export function signClaimUsername(c: ClaimUsername, irk: Keypair): Bytes {
 export function verifyClaimUsername(c: ClaimUsername, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalClaimUsername(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signAccountSelfDelete(c: AccountSelfDelete, irk: Keypair): Bytes {
+  return ed.sign(canonicalAccountSelfDelete(c), irk.privateKey);
+}
+
+export function verifyAccountSelfDelete(c: AccountSelfDelete, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalAccountSelfDelete(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signServersSelfDelete(c: ServersSelfDelete, irk: Keypair): Bytes {
+  return ed.sign(canonicalServersSelfDelete(c), irk.privateKey);
+}
+
+export function signServerDecommission(c: ServerDecommission, irk: Keypair): Bytes {
+  return ed.sign(canonicalServerDecommission(c), irk.privateKey);
+}
+
+export function verifyServerDecommission(c: ServerDecommission, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalServerDecommission(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function verifyServersSelfDelete(c: ServersSelfDelete, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalServersSelfDelete(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signServerTransferOffer(c: ServerTransferOffer, irk: Keypair): Bytes {
+  return ed.sign(canonicalServerTransferOffer(c), irk.privateKey);
+}
+
+export function verifyServerTransferOffer(c: ServerTransferOffer, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalServerTransferOffer(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signServerTransferClaim(c: ServerTransferClaim, irk: Keypair): Bytes {
+  return ed.sign(canonicalServerTransferClaim(c), irk.privateKey);
+}
+
+export function verifyServerTransferClaim(c: ServerTransferClaim, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalServerTransferClaim(c), irkPub);
   } catch {
     return false;
   }

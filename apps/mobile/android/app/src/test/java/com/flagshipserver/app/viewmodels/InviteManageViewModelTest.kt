@@ -32,7 +32,7 @@ class InviteManageViewModelTest {
     @Test fun load_idleToLoaded_withEmptyDefaults() = runTest {
         val client = MockScreensClient(simulatedLatencyMs = 0)
         val vm = InviteManageViewModel(
-            serviceId = "harry-plants",
+            serviceId = "harry--plants",
             client = client,
             labelBook = InMemoryInviteLabelBook(),
             scope = backgroundScope,
@@ -59,13 +59,13 @@ class InviteManageViewModelTest {
         }
         val book = InMemoryInviteLabelBook().apply {
             put(
-                "harry-plants",
+                "harry--plants",
                 "aa".repeat(16),
                 InviteLabel("John (work)", "imessage", "x", "", 1),
             )
         }
         val vm = InviteManageViewModel(
-            serviceId = "harry-plants",
+            serviceId = "harry--plants",
             client = client,
             labelBook = book,
             scope = backgroundScope,
@@ -89,13 +89,13 @@ class InviteManageViewModelTest {
         }
         val book = InMemoryInviteLabelBook().apply {
             put(
-                "harry-plants",
+                "harry--plants",
                 tag,
                 InviteLabel("x", "other", "", "", 1),
             )
         }
         val vm = InviteManageViewModel(
-            serviceId = "harry-plants",
+            serviceId = "harry--plants",
             client = client,
             labelBook = book,
             scope = backgroundScope,
@@ -106,11 +106,11 @@ class InviteManageViewModelTest {
         assertEquals(1, client.appInviteRevokeCalls.size)
         val revoke = client.appInviteRevokeCalls[0]
         assertEquals("invite", revoke.scope)
-        assertEquals("harry-plants", revoke.serviceId)
+        assertEquals("harry--plants", revoke.serviceId)
         assertEquals("inv-99", revoke.inviteId)
         assertNull(revoke.irkPubKey)
 
-        assertNull(book.get("harry-plants", tag))
+        assertNull(book.get("harry--plants", tag))
         assertEquals("revoked", vm.lastRevokeOutcome.first())
     }
 
@@ -123,7 +123,7 @@ class InviteManageViewModelTest {
             )
         }
         val vm = InviteManageViewModel(
-            serviceId = "harry-plants",
+            serviceId = "harry--plants",
             client = client,
             labelBook = InMemoryInviteLabelBook(),
             scope = backgroundScope,
@@ -141,7 +141,7 @@ class InviteManageViewModelTest {
     @Test fun revokeInvite_idempotentReportsAlreadyRevoked() = runTest {
         val client = MockScreensClient(simulatedLatencyMs = 0)
         val vm = InviteManageViewModel(
-            serviceId = "harry-plants",
+            serviceId = "harry--plants",
             client = client,
             labelBook = InMemoryInviteLabelBook(),
             scope = backgroundScope,
@@ -155,7 +155,7 @@ class InviteManageViewModelTest {
     @Test fun load_clientFailure_landsInFailed() = runTest {
         val client = MockScreensClient(simulatedLatencyMs = 0).apply { shouldFail = true }
         val vm = InviteManageViewModel(
-            serviceId = "harry-plants",
+            serviceId = "harry--plants",
             client = client,
             labelBook = InMemoryInviteLabelBook(),
             scope = backgroundScope,
@@ -167,7 +167,7 @@ class InviteManageViewModelTest {
 
     @Test fun appInviteRevokeRequest_serializesUnionShape() {
         val json = Json { encodeDefaults = true; explicitNulls = false }
-        val req = AppInviteRevokeRequest.invite("harry-plants", "inv-7")
+        val req = AppInviteRevokeRequest.invite("harry--plants", "inv-7")
         val encoded = json.encodeToString(AppInviteRevokeRequest.serializer(), req)
         assertTrue(encoded.contains("\"scope\":\"invite\""))
         assertTrue(encoded.contains("\"inviteId\":\"inv-7\""))

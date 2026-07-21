@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import android.app.Activity
 import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.compose.foundation.Image
@@ -36,12 +37,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -50,14 +53,24 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
+import com.flagshipserver.app.core.GymSeams
+import com.flagshipserver.app.keystore.Keystore
+import com.flagshipserver.app.keystore.KeystoreIrkAccess
+import com.flagshipserver.app.keystore.PasskeyCeremonyAdapter
+import com.flagshipserver.app.keystore.PasskeyRecoveryManager
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.AccountSecurityPhase
 import com.flagshipserver.app.viewmodels.AccountSecurityViewModel
+import com.flagshipserver.app.viewmodels.RotateAdminRootPhase
+import com.flagshipserver.app.viewmodels.RotateAdminRootViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
+import kotlinx.coroutines.withContext
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -166,6 +179,12 @@ fun AccountSecurityScreen(nav: NavController) {
                 modifier = Modifier.semantics { contentDescription = "account-security-failed-msg" },
             )
         }
+
+        // Slice D (§5) — "Rotate admin key". Shown ONLY on a device that holds
+        // the admin master root (greyed/absent otherwise).
+        if (GymSeams.forceAdminRoot || Keystore.hasAdminRoot()) {
+            AdminRootRotateCard(server = server, username = app.currentUser.value ?: "")
+        }
     }
 
     if (showEnableSheet) {
@@ -212,6 +231,214 @@ fun AccountSecurityScreen(nav: NavController) {
                     disableCode = ""
                     showDisableDialog = false
                 }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+/** Slice D (§5) — the owner-facing "Rotate admin key" control. Mints a fresh
+ *  admin master root, signs the old→new proof, submits it, and re-pins the new
+ *  root locally. Type-to-confirm gate + a hard warning that rotation cuts off
+ *  every OTHER admin device that held only the old bare root. When cloud
+ *  recovery is enrolled, a follow-up step collects the recovery passphrase and
+ *  re-wraps the NEW root under the existing credential (D-3 re-escrow) —
+ *  otherwise a post-rotation recovery would restore the dead OLD root. */
+@Composable
+private fun AdminRootRotateCard(
+    server: com.flagshipserver.app.api.FlagshipServerClient,
+    username: String,
+) {
+    val ctx = LocalContext.current
+    val activity = ctx as? Activity
+    val passkeys = remember(ctx) { PasskeyRecoveryManager(ctx.applicationContext) }
+    val vm: RotateAdminRootViewModel = viewModel(
+        key = "rotate-admin-root",
+        factory = viewModelFactory {
+            initializer {
+                RotateAdminRootViewModel(
+                    server = server,
+                    username = username,
+                    // D-3 re-escrow — same ceremony wiring as RecoveryScreen's
+                    // enroll(): biometric IRK consent up front, Argon2id + the
+                    // wrap math off the main thread, the passkey PRF assert via
+                    // the Activity-bound adapter.
+                    reEscrow = { passphrase, newSeed ->
+                        val act = activity
+                            ?: throw IllegalStateException("Open this screen from the foreground to use a passkey.")
+                        val irkMaterial = KeystoreIrkAccess().resolve("Update your recovery backup")
+                        withContext(Dispatchers.Default) {
+                            CloudRecoveryEnrollment.reEscrowAdminRoot(
+                                server = server,
+                                passkeys = PasskeyCeremonyAdapter(passkeys, act),
+                                irk = irkMaterial.signer,
+                                username = username,
+                                passphrase = passphrase,
+                                newAdminRootSeed = newSeed,
+                                now = System.currentTimeMillis(),
+                            )
+                        }
+                    },
+                )
+            }
+        },
+    )
+    val phase = vm.phase.collectAsState().value
+    val scope = rememberCoroutineScope()
+    var showConfirm by remember { mutableStateOf(false) }
+    var confirmText by remember { mutableStateOf("") }
+    var reEscrowPassphrase by remember { mutableStateOf("") }
+    var skippedRecoveryUpdate by remember { mutableStateOf(false) }
+
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Admin key",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.semantics { contentDescription = "admin-root-rotate-title" },
+            )
+            Text(
+                "Rotating your admin key mints a new one and cuts off every OTHER " +
+                    "admin device that held the old key. Use this if an admin device " +
+                    "was lost or you want to revoke another admin. Your other data and " +
+                    "devices stay signed in.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp),
+            )
+            when (phase) {
+                is RotateAdminRootPhase.Rotating -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                ) {
+                    CircularProgressIndicator()
+                    Text("Rotating…", color = FS.colors.textMuted)
+                }
+                is RotateAdminRootPhase.Done -> {
+                    Text(
+                        "Admin key rotated. Your boxes adopt the new key on their next check-in.",
+                        color = FS.colors.success,
+                        style = TextStyle(fontSize = 13.sp),
+                        modifier = Modifier.semantics { contentDescription = "admin-root-rotate-done" },
+                    )
+                    if (skippedRecoveryUpdate) {
+                        Text(
+                            "Your recovery backup still holds your old admin key. " +
+                                "Re-run recovery setup to fix this.",
+                            color = FS.colors.danger,
+                            style = TextStyle(fontSize = 13.sp),
+                            modifier = Modifier.semantics { contentDescription = "admin-root-reescrow-skipped-warning" },
+                        )
+                    }
+                }
+                is RotateAdminRootPhase.DoneNeedsRecoveryUpdate -> {
+                    Text(
+                        "Your admin key changed. Enter your recovery passphrase to update " +
+                            "your recovery backup — otherwise recovery would restore the " +
+                            "OLD admin key.",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 13.sp),
+                        modifier = Modifier.semantics { contentDescription = "admin-root-reescrow-explainer" },
+                    )
+                    OutlinedTextField(
+                        value = reEscrowPassphrase,
+                        onValueChange = { reEscrowPassphrase = it },
+                        label = { Text("Recovery passphrase") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        enabled = !phase.updating,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = "admin-root-reescrow-passphrase" },
+                    )
+                    if (phase.errorMessage != null) {
+                        Text(
+                            phase.errorMessage,
+                            color = FS.colors.danger,
+                            style = TextStyle(fontSize = 13.sp),
+                            modifier = Modifier.semantics { contentDescription = "admin-root-reescrow-error" },
+                        )
+                    }
+                    if (phase.updating) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                        ) {
+                            CircularProgressIndicator()
+                            Text("Updating recovery backup…", color = FS.colors.textMuted)
+                        }
+                    } else {
+                        FSPrimaryButton(
+                            label = "Update recovery backup",
+                            onClick = {
+                                val passphrase = reEscrowPassphrase
+                                scope.launch {
+                                    vm.updateRecoveryBackup(passphrase)
+                                    if (vm.phase.value is RotateAdminRootPhase.Done) {
+                                        reEscrowPassphrase = ""
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics { contentDescription = "admin-root-reescrow-btn" },
+                        )
+                        TextButton(
+                            onClick = {
+                                reEscrowPassphrase = ""
+                                skippedRecoveryUpdate = true
+                                vm.skipRecoveryUpdate()
+                            },
+                            modifier = Modifier.semantics { contentDescription = "admin-root-reescrow-skip" },
+                        ) { Text("Skip for now") }
+                    }
+                }
+                is RotateAdminRootPhase.Failed -> Text(
+                    phase.message,
+                    color = FS.colors.danger,
+                    style = TextStyle(fontSize = 13.sp),
+                    modifier = Modifier.semantics { contentDescription = "admin-root-rotate-failed" },
+                )
+                RotateAdminRootPhase.Idle -> Unit
+            }
+            FSDangerButton(
+                label = "Rotate admin key",
+                onClick = { showConfirm = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "admin-root-rotate-btn" },
+            )
+        }
+    }
+
+    if (showConfirm) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false; confirmText = "" },
+            title = { Text("Rotate admin key?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    Text(
+                        "This cuts off every other admin device that held the old key. " +
+                            "It can't be undone. Type ROTATE to confirm.",
+                    )
+                    OutlinedTextField(
+                        value = confirmText,
+                        onValueChange = { confirmText = it },
+                        label = { Text("Type ROTATE") },
+                        modifier = Modifier.semantics { contentDescription = "admin-root-rotate-confirm-field" },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = confirmText.trim().equals("ROTATE", ignoreCase = true),
+                    onClick = {
+                        showConfirm = false
+                        confirmText = ""
+                        scope.launch { vm.rotate() }
+                    },
+                ) { Text("Rotate", color = FS.colors.danger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false; confirmText = "" }) { Text("Cancel") }
             },
         )
     }
@@ -449,8 +676,7 @@ private fun decodeBase64Png(base64: String): android.graphics.Bitmap? {
 
 private fun formatDate(ms: Long?): String {
     if (ms == null) return "an unknown date"
-    val f = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
-    return f.format(Date(ms))
+    return FlagshipDateFormat.format(ms)
 }
 
 private fun Int.dp(): androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp(this.toFloat())

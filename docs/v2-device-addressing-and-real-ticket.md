@@ -1,6 +1,34 @@
 # v2 device-addressing + real-ticket integration
 
-**Status:** spec. Source of truth for sub-phases S3.1 → S3.5.
+> **⚠️ PARTLY SUPERSEDED — read this first.**
+>
+> The **real-ticket** half shipped and is current: `sample-user.mjs` mints a
+> registered auth code via `admin-claim-and-issue` and personalizes with
+> `--blob-json`. The `DeviceCapabilityGrant` envelope + scopes + revocation
+> chain described below are also still live, and
+> `packages/control-plane/src/deviceCapabilityGrants.ts` still points here for
+> that chain.
+>
+> Two ideas in this document are **DEAD** and must not be built from:
+>
+> 1. **`deviceLabel` as identity.** A device is identified by an immutable,
+>    random, account-scoped `deviceId`. No human label appears anywhere in
+>    canonical bytes, capability identity, storage, or the wire. Whatever name
+>    a device shows comes from an **encrypted** self-profile it writes for
+>    itself (or an administrator-managed profile), decrypted locally by clients
+>    holding the UMK-derived directory key. `.com` stores ciphertext only.
+> 2. **`<user>.<device-label>` / `<device-label>.<user>` dot-form device
+>    routing.** Devices are not addressable by name. Routing has no
+>    device-label level; the device list is readable ONLY over the signed
+>    active-device directory API, and the username-only device-list route is
+>    gone.
+>
+> Wherever the text below says "label", read "opaque `deviceId` + an encrypted
+> profile". The `--display` and `grant-device` CLI surfaces referenced here no
+> longer exist — see `docs/sample-users.md` §14 for the current CLI.
+
+**Status:** spec, partly superseded (see banner). Source of truth for the
+real-ticket path and the `DeviceCapabilityGrant` chain only.
 
 **Scope:** the engineering contract every downstream PR is implemented
 against. Solves two blockers exposed by the 2026-05-20 live Phase F

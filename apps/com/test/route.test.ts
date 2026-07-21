@@ -77,6 +77,60 @@ describe("flagshipserver.com Worker — routing", () => {
     expect(await r3.text()).toBe("asset:/deck/");
   });
 
+  it("a missing .css/.js 404s instead of falling through to the SPA HTML", async () => {
+    // The assets binding runs `not_found_handling = single-page-application`,
+    // so a MISSING file resolves to index.html (200 + text/html). For a
+    // stylesheet/script that must read as a real 404 — otherwise the browser
+    // parses marketing HTML as CSS/JS and flashes the page unstyled mid-deploy.
+    const cookie = { cookie: "flagship_preview=1" };
+    const spaFallbackEnv = makeEnv({
+      ASSETS: {
+        async fetch(req) {
+          const path = new URL(req.url).pathname;
+          // A real asset the binding can resolve.
+          if (path === "/site.css") {
+            return new Response("body{color:red}", {
+              status: 200,
+              headers: { "content-type": "text/css" },
+            });
+          }
+          // Everything else "misses" → the SPA fallback (index.html).
+          return new Response("<!doctype html><title>Flagship</title>", {
+            status: 200,
+            headers: { "content-type": "text/html; charset=utf-8" },
+          });
+        },
+      },
+    });
+    // A missing stylesheet → real 404, NOT the 200-with-HTML fallback.
+    const missing = await route(
+      new Request("https://flagshipserver.com/theme-ui.css", { headers: cookie }),
+      spaFallbackEnv,
+    );
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get("content-type")).toContain("text/plain");
+    expect(await missing.text()).not.toContain("<!doctype");
+    const missingJs = await route(
+      new Request("https://flagshipserver.com/theme.js", { headers: cookie }),
+      spaFallbackEnv,
+    );
+    expect(missingJs.status).toBe(404);
+    // A real asset is still served untouched.
+    const realCss = await route(
+      new Request("https://flagshipserver.com/site.css", { headers: cookie }),
+      spaFallbackEnv,
+    );
+    expect(realCss.status).toBe(200);
+    expect(realCss.headers.get("content-type")).toContain("text/css");
+    // An SPA route (no file extension) still gets the HTML fallback.
+    const spaRoute = await route(
+      new Request("https://flagshipserver.com/ready/"),
+      spaFallbackEnv,
+    );
+    expect(spaRoute.status).toBe(200);
+    expect((spaRoute.headers.get("content-type") ?? "")).toContain("text/html");
+  });
+
   it("/api/* is forwarded to SERVICES_BASE_URL preserving method + path + query", async () => {
     await route(
       new Request("https://flagshipserver.com/api/me/servers?sessionId=abc"),
@@ -969,6 +1023,68 @@ describe("webapp host — client-route SPA fallback (the /join pairing bug)", ()
   });
 });
 
+describe("/transfer — take-over universal-link browser fallback", () => {
+  // On the CONTROL apex the app (when installed) intercepts /transfer?o=… as a
+  // universal link / App-Link and never hits the Worker. When it's NOT installed
+  // the browser lands here; the Worker 308-redirects to the webapp's own origin,
+  // preserving ?o= so the PWA boots into the claim view. Placed before the
+  // coming-soon gate → works with no preview cookie (a real acquirer's case).
+
+  it("308-redirects /transfer?o=… to the webapp origin, preserving the offer payload", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/transfer?o=eyJhIjoxfQ"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe(
+      "https://web.flagshipserver.com/transfer?o=eyJhIjoxfQ",
+    );
+  });
+
+  it("redirects the trailing-slash variant too", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/transfer/?o=abc"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe(
+      "https://web.flagshipserver.com/transfer?o=abc",
+    );
+  });
+
+  it("fires WITHOUT the preview cookie (ungated — before the coming-soon gate)", async () => {
+    // A real acquirer opening the link has no preview cookie; the fallback
+    // must still reach the webapp, not the coming-soon page.
+    const r = await route(
+      new Request("https://flagshipserver.com/transfer?o=xyz"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe(
+      "https://web.flagshipserver.com/transfer?o=xyz",
+    );
+  });
+
+  it("does not hit the proxy fall-through (no upstream fetch)", async () => {
+    await route(
+      new Request("https://flagshipserver.com/transfer?o=xyz"),
+      makeEnv(),
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it("/transfer on the web. host serves the webapp index.html (client route → SPA boots)", async () => {
+    // The redirect target: an extensionless client route on the webapp host
+    // hands back the webapp shell so dispatchInitialView() can read ?o=.
+    const r = await route(
+      new Request("https://web.flagshipserver.com/transfer?o=xyz"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/index.html");
+  });
+});
+
 describe("CORS — cross-origin webapp → apex /api/* calls", () => {
   it("answers OPTIONS preflight from web. with the right ACL headers", async () => {
     const r = await route(
@@ -1797,11 +1913,18 @@ describe("Pre-launch stealth gate (/wip_ + /alpha + coming-soon)", () => {
 });
 
 describe("/download/<os> — on-brand installer redirect", () => {
-  it("302s to the /docs#burn explainer while a platform's target is unset", async () => {
-    // No INSTALLER_DOWNLOADS target wired yet → coming-soon explainer,
-    // never a dead 404. (The /ready/ page links to /download/<os> so the
-    // storage URL never shows in the UI.)
-    for (const os of ["mac", "windows", "linux"]) {
+  it("302s macOS to the notarized DMG, and unset platforms to the /docs#burn explainer", async () => {
+    // macOS is wired to the staged DMG; the rest have no target yet → the
+    // coming-soon explainer, never a dead 404. (The /ready/ page links to
+    // /download/<os> so the storage path never shows in the UI.)
+    const mac = await route(
+      new Request("https://flagshipserver.com/download/mac"),
+      makeEnv(),
+    );
+    expect(mac.status).toBe(302);
+    expect(mac.headers.get("location")).toBe("/downloads/FlagshipStudio.dmg");
+
+    for (const os of ["windows", "linux"]) {
       const r = await route(
         new Request(`https://flagshipserver.com/download/${os}`),
         makeEnv(),
@@ -1856,7 +1979,7 @@ describe("/how-to + /how-to.html — folded into /docs", () => {
   });
 });
 
-describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
+describe("/api/iso-manifest — desktop-builder base-ISO manifest", () => {
   // The control-plane dispatch only runs when DB is bound; the handler
   // itself needs no DB, so a no-op stub is enough to reach it.
   function stubDb(): import("@flagship/storage").D1Database {
@@ -1888,7 +2011,7 @@ describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           platform: "mac",
-          burnerVersion: "1.2.3",
+          builderVersion: "1.2.3",
           current: null,
         }),
       }),
@@ -1900,14 +2023,14 @@ describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("returns the download block when FLAGSHIP_ISO_MANIFEST is set + burner has nothing", async () => {
+  it("returns the download block when FLAGSHIP_ISO_MANIFEST is set + builder has nothing", async () => {
     const r = await route(
       new Request("https://flagshipserver.com/api/iso-manifest", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           platform: "linux",
-          burnerVersion: "1.2.3",
+          builderVersion: "1.2.3",
           current: null,
         }),
       }),
@@ -1917,14 +2040,14 @@ describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
     expect(await r.json()).toEqual({ download: BLESSED });
   });
 
-  it("returns { download: null } when the burner already holds the blessed sha", async () => {
+  it("returns { download: null } when the builder already holds the blessed sha", async () => {
     const r = await route(
       new Request("https://flagshipserver.com/api/iso-manifest", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           platform: "windows",
-          burnerVersion: "1.2.3",
+          builderVersion: "1.2.3",
           current: { version: "debian-12.7.0-amd64", sha256: "a".repeat(64) },
         }),
       }),
@@ -1941,7 +2064,7 @@ describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           platform: "mac",
-          burnerVersion: "1.2.3",
+          builderVersion: "1.2.3",
           current: null,
         }),
       }),
@@ -1958,7 +2081,7 @@ describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           platform: "freebsd",
-          burnerVersion: "1.2.3",
+          builderVersion: "1.2.3",
           current: null,
         }),
       }),

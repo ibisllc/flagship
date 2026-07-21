@@ -1,0 +1,150 @@
+import Foundation
+import Observation
+import CryptoKit
+import Flagship
+import FlagshipAPI
+import FlagshipCore
+
+/// ACQUIRER side of transfer-a-box (docs/account-deletion-and-name-reclaim.md §4).
+///
+/// From Home → Add a server → "Take over a transferred box", the camera scans
+/// the giver's QR. This VM parses it, then on confirm:
+///   1. derives the acquirer owner IRK behind the biometric,
+///   2. builds + signs a `ServerTransferClaim` binding the acquirer's username +
+///      IRK pub to the offer's nonce (`ServerTransferFlow.buildClaim`),
+///   3. POSTs it (`client.postClaim`) — `.com` re-homes the box to the
+///      acquirer's namespace.
+///
+/// The disk-key pick-up (`claimDiskKey` → open with the acquirer IRK → deposit
+/// the box-sealed lease) is a follow-on the box-side reburn validates; this VM
+/// exposes `pickUpDiskKey()` for it but the claim itself is the headline action.
+@Observable
+@MainActor
+public final class TransferAcquirerViewModel {
+    public enum Phase: Equatable, Sendable {
+        case idle
+        /// A QR was scanned + parsed; awaiting the user's confirm.
+        case scanned(serverDomain: String)
+        case signing
+        case posting
+        /// Claimed; `newServerDomain` is the box's new canonical under this account.
+        case claimed(newServerDomain: String?)
+        case failed(String)
+    }
+
+    public private(set) var phase: Phase = .idle
+    public private(set) var offer: ServerTransferFlow.OfferQR?
+
+    private let client: any ServerTransferClient
+    private let username: String
+    private let signer: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
+    private let now: () -> Int64
+    /// This account's admin master root pub, hex (biometric-free); nil ⇒ the
+    /// account has no admin root and the claim carries "" (§9.8). Injectable
+    /// seam over `Keystore.adminRootPubHex`.
+    private let adminRootPubHex: @MainActor () -> String?
+
+    public init(
+        client: any ServerTransferClient,
+        username: String,
+        signer: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
+        adminRootPubHex: @escaping @MainActor () -> String? = { Keystore.adminRootPubHex() }
+    ) {
+        self.client = client
+        self.username = username
+        self.now = now
+        self.signer = signer ?? { reason in try await Keystore.deriveIRK(reason: reason) }
+        self.adminRootPubHex = adminRootPubHex
+    }
+
+    /// Reset to the scanner after a failure so the user can re-aim.
+    public func resetForRescan() {
+        offer = nil
+        phase = .idle
+    }
+
+    /// Validate a scanned/pasted/deep-linked offer string. Accepts EITHER the raw
+    /// offer JSON OR a `flagship://transfer?o=` / `https://…/transfer?o=` link.
+    /// Returns true only when it parses AND the giver-IRK signature + expiry
+    /// verify — a deep-linked/scanned offer is attacker-supplied, so we NEVER
+    /// surface a confirm on an unverified offer. Failure is reported via `.failed`.
+    @discardableResult
+    public func ingest(_ qrText: String) -> Bool {
+        let parsed: ServerTransferFlow.OfferQR
+        do {
+            parsed = try ServerTransferFlow.parseScanned(qrText)
+        } catch {
+            offer = nil
+            phase = .failed("That isn't a Flagship transfer code.")
+            return false
+        }
+        // SECURITY (Slice C) — verify BEFORE surfacing the confirm / building a claim.
+        do {
+            try ServerTransferFlow.verifyOffer(parsed, now: now())
+        } catch ServerTransferFlow.TransferError.expired {
+            offer = nil
+            phase = .failed("This transfer code has expired. Ask the owner for a new one.")
+            return false
+        } catch {
+            offer = nil
+            phase = .failed("This transfer code couldn't be verified. Ask the current owner for a fresh one.")
+            return false
+        }
+        offer = parsed
+        phase = .scanned(serverDomain: parsed.serverDomain)
+        return true
+    }
+
+    /// Sign + POST the claim (biometric). Advances to `.claimed` on success.
+    public func confirm() async {
+        guard let parsed = offer else {
+            phase = .failed("Scan a transfer code first.")
+            return
+        }
+        // Re-verify the signature + expiry RIGHT before the claim biometric — the
+        // offer must never have been mutated between ingest and confirm, and the
+        // TTL may have lapsed while the user typed the confirmation.
+        do {
+            try ServerTransferFlow.verifyOffer(parsed, now: now())
+        } catch ServerTransferFlow.TransferError.expired {
+            phase = .failed("This transfer code has expired. Ask the owner for a new one.")
+            return
+        } catch {
+            phase = .failed("This transfer code couldn't be verified. Ask the current owner for a fresh one.")
+            return
+        }
+        phase = .signing
+        let key: Curve25519.Signing.PrivateKey
+        do {
+            key = try await signer("Take over \(parsed.serverDomain)")
+        } catch {
+            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            return
+        }
+        do {
+            // Slice D — the transfer CLAIM is SENSITIVE ⇒ sign with the acquirer's
+            // admin master root when present (`.com` gates against it); the
+            // `acquirerIrkPub` identity field stays the registered IRK (`key`).
+            // §9.8: the v2 claim also commits to THIS account's admin root pub
+            // ("" when none) — the box re-pins that anchor at re-home, so it
+            // rides inside the signed canonical, never as a `.com`-editable field.
+            let orderKey = Keystore.hasAdminRoot
+                ? try await Keystore.adminRootKey(reason: "Take over \(parsed.serverDomain)")
+                : nil
+            let body = try ServerTransferFlow.buildClaim(
+                offer: parsed, acquirerUsername: username, acquirerIrk: key, orderKey: orderKey,
+                acquirerAdminRootPubHex: adminRootPubHex() ?? "", issuedAt: now()
+            )
+            phase = .posting
+            let result = try await client.postClaim(serverDomain: parsed.serverDomain, body: body)
+            phase = .claimed(newServerDomain: result.newServerDomain)
+        } catch ServerTransferFlow.TransferError.expired {
+            phase = .failed("This transfer code has expired. Ask the owner for a new one.")
+        } catch let e as ScreensClientError {
+            phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")
+        } catch {
+            phase = .failed("Couldn't reach the broker. Check your connection and try again.")
+        }
+    }
+}

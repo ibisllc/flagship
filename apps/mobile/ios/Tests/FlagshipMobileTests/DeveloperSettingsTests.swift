@@ -14,11 +14,12 @@ final class DeveloperSettingsTests: XCTestCase {
         return d
     }
 
-    func test_firstLaunch_appliesBuildConfigDefault() {
-        // No key set yet → DeveloperSettings should pick up the
-        // build-config default (DEBUG=false, RELEASE=true).
+    func test_firstLaunch_defaultsToLive() {
+        // No key set yet → DeveloperSettings defaults to the LIVE client
+        // in every build (owner request 2026-06-19); mock is opt-in.
         let s = DeveloperSettings(defaults: freshDefaults())
         XCTAssertEqual(s.useLiveClient, DeveloperSettings.releaseDefaultUseLive)
+        XCTAssertTrue(s.useLiveClient)
     }
 
     func test_persistedTrue_winsOverBuildDefault() {
@@ -30,8 +31,8 @@ final class DeveloperSettingsTests: XCTestCase {
 
     func test_persistedFalse_winsOverBuildDefault() {
         // Critical: a tester who explicitly flipped to mock must
-        // stay on mock across launches — even on Release, where the
-        // build default is live.
+        // stay on mock across launches — even though the build default
+        // is now live in every configuration.
         let d = freshDefaults()
         d.set(false, forKey: "flagship.dev.useLiveClient")
         let s = DeveloperSettings(defaults: d)
@@ -60,15 +61,10 @@ final class DeveloperSettingsTests: XCTestCase {
         XCTAssertEqual(s.mockLatencyMs, 180)
     }
 
-    func test_releaseDefaultUseLive_matchesBuildConfig() {
-        // Pin the contract: Debug → mock, Release → live. The runtime
-        // value depends on which configuration the tests compiled
-        // under; assert the right one without relying on the # ifdef
-        // expanding identically here.
-        #if DEBUG
-        XCTAssertFalse(DeveloperSettings.releaseDefaultUseLive)
-        #else
+    func test_defaultUseLive_isLiveInEveryBuild() {
+        // Pin the contract: the app defaults to the LIVE client in every
+        // build configuration (owner request 2026-06-19). The mock is
+        // reachable only by explicitly flipping the 3-tap Developer toggle.
         XCTAssertTrue(DeveloperSettings.releaseDefaultUseLive)
-        #endif
     }
 }

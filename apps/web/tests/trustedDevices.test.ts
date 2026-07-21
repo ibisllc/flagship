@@ -7,19 +7,27 @@
 import { describe, expect, it } from "vitest";
 
 interface TrustedDevice {
-  tokenId: string;
-  tokenPrefix: string;
-  label: string;
-  platform: "apns" | "fcm" | "webpush";
-  addedAt: number;
+  deviceId: string;
+  displayName?: string;
+  supportCode: string;
+  platformClass: "ios" | "android" | "web";
+  createdAt: number;
   lastSeenAt: number;
 }
 
 // Mirror of the helpers inside views/trusted-devices.js. If they
 // drift, the assertions below break — the file's the source of
 // truth, this test is the contract check.
-function platformDisplay(p: string): string {
-  return ({ apns: "iPhone / iPad", fcm: "Android", webpush: "Web" } as Record<string, string>)[p] ?? p;
+function platformDisplay(p: string | undefined): string {
+  return ({ ios: "iPhone / iPad", android: "Android", web: "Web" } as Record<string, string>)[p ?? ""] ?? (p || "Unknown platform");
+}
+
+// Mirror of deviceName() inside views/trusted-devices.js — the row's
+// display name must NEVER render the literal string "undefined", even
+// when `label` (and `platform`) are absent from the record.
+function deviceName(device: { displayName?: string; platformClass?: string; supportCode?: string; deviceId: string }): string {
+  if (device.displayName) return device.displayName;
+  return `${platformDisplay(device.platformClass)} · Device ${device.supportCode ?? device.deviceId.slice(0, 8)}`;
 }
 
 function relative(ms: number, now: number): string {
@@ -34,13 +42,25 @@ function relative(ms: number, now: number): string {
 
 describe("trusted-devices helpers", () => {
   it("platformDisplay maps the three known platforms", () => {
-    expect(platformDisplay("apns")).toBe("iPhone / iPad");
-    expect(platformDisplay("fcm")).toBe("Android");
-    expect(platformDisplay("webpush")).toBe("Web");
+    expect(platformDisplay("ios")).toBe("iPhone / iPad");
+    expect(platformDisplay("android")).toBe("Android");
+    expect(platformDisplay("web")).toBe("Web");
   });
 
   it("platformDisplay passes through unknown platforms verbatim", () => {
     expect(platformDisplay("xrOS")).toBe("xrOS");
+  });
+
+  it("platformDisplay never renders 'undefined' for a missing platform", () => {
+    expect(platformDisplay(undefined)).toBe("Unknown platform");
+    expect(platformDisplay("")).toBe("Unknown platform");
+  });
+
+  it("uses decrypted names and otherwise renders only opaque identity", () => {
+    const deviceId = "00112233445566778899aabbccddeeff";
+    expect(deviceName({ displayName: "Erica", platformClass: "ios", supportCode: "7A4F-K9Q2", deviceId })).toBe("Erica");
+    expect(deviceName({ platformClass: "ios", supportCode: "7A4F-K9Q2", deviceId })).toBe("iPhone / iPad · Device 7A4F-K9Q2");
+    expect(deviceName({ platformClass: "web", deviceId })).toBe("Web · Device 00112233");
   });
 
   it("relative() returns 'just now' under 60s", () => {
@@ -60,30 +80,19 @@ describe("trusted-devices helpers", () => {
   });
 });
 
-describe("trusted-devices wire shape", () => {
-  it("matches the Worker's usersDevices.test.ts response keys", () => {
-    // Pin the contract by typing a sample row and asserting the
-    // fields. Any rename on either side breaks the assertion.
+describe("trusted-devices decrypted-directory shape", () => {
+  it("contains opaque metadata plus a locally decrypted name", () => {
     const sample: TrustedDevice = {
-      tokenId: "ab12cd34xx",
-      tokenPrefix: "ab12cd34",
-      label: "Harry's iPhone",
-      platform: "apns",
-      addedAt: 1700000000000,
+      deviceId: "00112233445566778899aabbccddeeff",
+      displayName: "Erica",
+      supportCode: "7A4F-K9Q2",
+      platformClass: "ios",
+      createdAt: 1700000000000,
       lastSeenAt: 1700100000000,
     };
     expect(Object.keys(sample).sort()).toEqual(
-      ["addedAt", "label", "lastSeenAt", "platform", "tokenId", "tokenPrefix"].sort(),
+      ["createdAt", "deviceId", "displayName", "lastSeenAt", "platformClass", "supportCode"].sort(),
     );
-  });
-
-  it("DELETE endpoint shape matches /api/push/<tokenId>", () => {
-    // The webapp's disconnect uses encodeURIComponent on tokenId
-    // before stuffing it into the path; same as iOS + Android. Pin
-    // the expected URL form.
-    const tokenId = "abc 123/!";
-    const url = `/api/push/${encodeURIComponent(tokenId)}`;
-    expect(url).toBe("/api/push/abc%20123%2F!");
   });
 });
 

@@ -30,10 +30,9 @@ const ORDER_SHAPES = {
     fields: [{ name: "reason", type: "string" }],
   },
   "add-paired-session": {
-    tag: "flagship/order/add-paired-session/v1",
+    tag: "flagship/order/add-paired-session/v2",
     fields: [
       { name: "token", type: "string" },
-      { name: "label", type: "string" },
     ],
   },
   "remove-paired-session": {
@@ -122,9 +121,9 @@ function canonicalForOrder(serverId, request, shape) {
 
 async function sendOrder() {
   const session = getSession();
-  if (!session.umk) return toast("unlock first", "err");
+  if (!session.umk) return toast("Unlock first", "err");
   const baseUrl = getPodBaseUrl();
-  if (!baseUrl) return toast("not paired with a pod yet", "err");
+  if (!baseUrl) return toast("Not paired with a server yet", "err");
   const serverId = new URL(baseUrl).host;
 
   let parsed;
@@ -172,7 +171,7 @@ export function enterOrdersDebug() {
   // developer tools OR ?debug=1. Calling enterOrdersDebug() without
   // either set bounces back to Settings with a toast.
   if (!isDebug()) {
-    toast("enable developer tools in Settings → Advanced", "warn");
+    toast("Enable developer tools in Settings → Advanced", "warn");
     show("view-settings-tab");
     return;
   }

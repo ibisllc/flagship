@@ -45,7 +45,7 @@ public struct InviteIssueScreen: View {
                 Text(appLabel)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(c.text)
-                Text("Invites are bearer share-links. Anyone with the link can claim access — the daemon enforces a 24-hour default TTL. Names you type stay on this device.")
+                Text("Invites are share-links — anyone with the link can claim access. Your server expires them after 24 hours by default. Names you type stay on this device.")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
             }

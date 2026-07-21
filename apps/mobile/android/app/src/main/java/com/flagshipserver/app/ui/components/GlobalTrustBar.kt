@@ -47,6 +47,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.flagshipserver.app.api.LiveTrustExceptionClient
+import com.flagshipserver.app.api.TrustExceptionSignature
+import com.flagshipserver.app.api.TrustExceptionWire
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalToastCenter
@@ -69,24 +72,33 @@ fun GlobalTrustBar() {
     val app = LocalAppState.current
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
+    val currentUser by app.currentUser.collectAsState()
+    // Best-effort transmit of the signed exception to `.com` for fleet-wide
+    // fan-out (constructed once; never throws).
+    val trustExceptions = remember { LiveTrustExceptionClient() }
 
     val verdict by trust.verdict.collectAsState()
     val failuresState by trust.failures.collectAsState()
+    val relayFailuresState by trust.relayFailures.collectAsState()
     val overridden by trust.overriddenCertHashes.collectAsState()
     val isUnlocked by app.isUnlocked.collectAsState()
 
-    // Locked ⇒ show nothing (mirror the operations bar). Only show while the
-    // verdict is positively UNTRUSTED.
+    // Two failure SOURCES share the one red sliver. Locked ⇒ show nothing
+    // (mirror the operations bar). The control-CA class shows only while the
+    // verdict is positively UNTRUSTED (the `.com` global halt); the per-cert
+    // RELAY failures aggregated across the user's pods show whenever unlocked
+    // (a warning + override — NOT a halt).
     val failures = if (isUnlocked && verdict == com.flagshipserver.app.core.TrustVerdict.UNTRUSTED) {
         failuresState
     } else {
         emptyList()
     }
+    val relayFailures = if (isUnlocked) relayFailuresState else emptyList()
 
     var overriding by remember { mutableStateOf<TrustFailure?>(null) }
 
     AnimatedVisibility(
-        visible = failures.isNotEmpty(),
+        visible = failures.isNotEmpty() || relayFailures.isNotEmpty(),
         enter = fadeIn() + expandVertically(spring(dampingRatio = 0.9f, stiffness = 420f)),
         exit = fadeOut() + shrinkVertically(spring(dampingRatio = 0.9f, stiffness = 420f)),
     ) {
@@ -94,8 +106,20 @@ fun GlobalTrustBar() {
             failures.forEach { f ->
                 TrustSliverLine(
                     failure = f,
+                    serverCount = 0,
                     overridden = f.certHash in overridden,
                     onTap = { overriding = f },
+                )
+            }
+            // One line per DISTINCT faulty relay authority, spanning all
+            // affected servers; the "continuing" marker is wire-driven (a
+            // covering exception the box relayed) OR a local override.
+            relayFailures.forEach { rf ->
+                TrustSliverLine(
+                    failure = rf.trustFailure,
+                    serverCount = rf.serverCount,
+                    overridden = rf.overridden || rf.certHash in overridden,
+                    onTap = { overriding = rf.trustFailure },
                 )
             }
         }
@@ -129,17 +153,35 @@ fun GlobalTrustBar() {
                                 "Continue with an unverified Flagship control server",
                             )
                             val devicePub = Keystore.irkPubHex()
+                            val grantedAt = System.currentTimeMillis()
                             val bytes = TrustException.canonicalBytes(
                                 certClass = failure.certClass,
                                 certHash = failure.certHash,
-                                grantedAt = System.currentTimeMillis(),
+                                grantedAt = grantedAt,
                                 grantedByDevicePub = devicePub,
                             )
-                            // Sign so the envelope is producible for `.com`
-                            // directory propagation (a follow-up wire); the
-                            // local override is what un-sticks THIS device.
-                            HexUtil.encode(signer.sign(bytes))
+                            val signatureHex = HexUtil.encode(signer.sign(bytes))
+                            // Record the local override FIRST so this device
+                            // un-sticks even if the transmit fails.
                             trust.recordOverride(failure.certHash)
+                            // LOAD-BEARING FAN-OUT: transmit the signed WIRE
+                            // envelope to `.com` so EVERY box the user owns pulls
+                            // this exception and is satisfied on the same
+                            // cert-hash. Previously the signature was computed
+                            // then DISCARDED — the override never propagated.
+                            val wire = TrustExceptionWire(
+                                certClass = failure.certClass.wire,
+                                certHash = failure.certHash,
+                                grantedAt = grantedAt,
+                                grantedByDevicePub = devicePub,
+                                signatures = listOf(
+                                    TrustExceptionSignature(pubkey = devicePub, sig = signatureHex),
+                                ),
+                            )
+                            val user = currentUser
+                            if (!user.isNullOrEmpty()) {
+                                trustExceptions.post(user, wire)
+                            }
                         } catch (t: Throwable) {
                             toasts.error("Couldn't continue: ${t.message}")
                         }
@@ -154,7 +196,14 @@ fun GlobalTrustBar() {
 }
 
 @Composable
-private fun TrustSliverLine(failure: TrustFailure, overridden: Boolean, onTap: () -> Unit) {
+private fun TrustSliverLine(
+    failure: TrustFailure,
+    /** >1 for a relay-cert failure spanning multiple servers; 0 for the
+     *  single-authority control-CA class (no count shown). */
+    serverCount: Int,
+    overridden: Boolean,
+    onTap: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -181,6 +230,21 @@ private fun TrustSliverLine(failure: TrustFailure, overridden: Boolean, onTap: (
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
+        if (serverCount > 1) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(FS.radius.pill))
+                    .background(Color.White.copy(alpha = 0.18f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = "$serverCount servers",
+                    color = Color.White,
+                    style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                )
+            }
+            Box(Modifier.padding(start = FS.space.s2))
+        }
         if (overridden) {
             Box(
                 modifier = Modifier

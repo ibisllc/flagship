@@ -600,8 +600,34 @@ export async function runE2E(
 ): Promise<E2EReport> {
   const startedAt = deps.clock();
   const stages: StageResult[] = [];
+
+  // A username is claimable ONLY if .com recently SUGGESTED it
+  // (docs/username-suggestion-queue.md) — so the harness gets its name like any
+  // other client instead of inventing one. Best-effort: on any failure (a stub
+  // .com in tests / offline) keep the planned username so the harness still runs.
+  let activePlan = plan;
+  try {
+    const deviceKey = bytesToHex(deps.identity.irk.publicKey);
+    const sug = await deps.http.post(`${plan.comBase}/api/username/suggest`, {
+      deviceKey,
+    });
+    const name =
+      sug.status === 200
+        ? (JSON.parse(sug.body) as { name?: string }).name
+        : undefined;
+    if (typeof name === "string" && name.length > 0 && name !== plan.username) {
+      deps.logger.info("username suggested by .com", {
+        from: plan.username,
+        to: name,
+      });
+      activePlan = { ...plan, username: name };
+    }
+  } catch {
+    /* keep the planned username (offline / stub .com) */
+  }
+
   const st: RunState = {
-    serverFqdn: `${plan.serverName}.${plan.username}.flagship.services`,
+    serverFqdn: `${activePlan.serverName}.${activePlan.username}.flagship.services`,
   };
 
   // Ordered, non-gated stages. A StageError aborts the remaining
@@ -630,7 +656,7 @@ export async function runE2E(
         continue;
       }
       try {
-        const res = await stage(plan, deps, st);
+        const res = await stage(activePlan, deps, st);
         stages.push(res);
         if (res.status === "fail") aborted = true;
       } catch (e) {
@@ -652,7 +678,7 @@ export async function runE2E(
     // never flip the run red — they document the gap honestly.
     for (const gatedStage of [assertCaAuthorized]) {
       try {
-        stages.push(await gatedStage(plan, deps, st));
+        stages.push(await gatedStage(activePlan, deps, st));
       } catch (e) {
         // Even an unexpected throw in a gated stage is the gap, not a
         // harness failure.
@@ -673,7 +699,7 @@ export async function runE2E(
       stages.push(
         skipped(tdName, "no VPS was provisioned — nothing to destroy"),
       );
-    } else if (plan.keep) {
+    } else if (activePlan.keep) {
       stages.push(
         skipped(
           tdName,

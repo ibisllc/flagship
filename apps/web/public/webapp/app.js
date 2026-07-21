@@ -18,7 +18,14 @@ import {
   refreshOperationsBar,
   setOperationsBarUnlockedResolver,
 } from "./lib/operationsBar.js";
+import {
+  startAiChatAlertPoll,
+  makeAiChatNotifier,
+} from "./lib/aiChatAlerts.js";
+import { getPodBaseUrl } from "./lib/api.js";
 import { installComFetchGuard } from "./lib/comFetch.js";
+import { liveSync } from "./lib/liveSync.js";
+import { autoPairFromSnapshot } from "./lib/autoPair.js";
 import { refreshServerTrust, serverTrust } from "./lib/serverTrust.js";
 import {
   initTrustSliver,
@@ -27,6 +34,7 @@ import {
   renderTrustSliver,
 } from "./lib/trustSliver.js";
 import { grantTrustException, loadAndApplyExceptions } from "./lib/trustOverride.js";
+import { updateRelayTrustFromPods } from "./lib/relayTrust.js";
 import { inlinePrompt } from "./lib/modal.js";
 import { verifyPin, hasPin } from "./lib/pinLock.js";
 import {
@@ -43,6 +51,9 @@ import {
   hardDriveIcon,
   unlockIcon,
   chevronRightIcon,
+  alertCircleIcon,
+  alertTriangleIcon,
+  downloadIcon,
 } from "./lib/icons.js";
 import { profileCard } from "./lib/uikit.js";
 import { getSession } from "./lib/state.js";
@@ -60,7 +71,7 @@ import { initInviteIssueView } from "./views/invite-issue.js";
 import { initInviteManageView } from "./views/invite-manage.js";
 import { initServiceAccessView } from "./views/service-access.js";
 import { initInviteRedeemView, enterInviteRedeem } from "./views/invite-redeem.js";
-import { inviteSecretFromLocation } from "./lib/serviceInvite.js";
+import { inviteContextFromLocation } from "./lib/serviceInvite.js";
 import { initPairedSessionsView, enterPairedSessions } from "./views/paired-sessions.js";
 import { initSecuredSessionsView, enterSecuredSessions } from "./views/secured-sessions.js";
 import { initAccessAuthorizeView, enterAccessAuthorize } from "./views/access-authorize.js";
@@ -80,6 +91,8 @@ import { initBuildGitView } from "./views/build-git.js";
 import { initBuildMcpView } from "./views/build-mcp.js";
 import { initBuildJournalView } from "./views/build-journal.js";
 import { initRecoveryView, enterRecovery } from "./views/recovery.js";
+import { initPostRecoveryChoiceView } from "./views/post-recovery-choice.js";
+import { initAccountDeleteView, enterAccountDelete } from "./views/account-delete.js";
 import { initInstallProgressView, enterInstallProgress } from "./views/install-progress.js";
 import { initOrdersDebugView, enterOrdersDebug } from "./views/orders-debug.js";
 import { initBrowserViewerView } from "./views/browser-viewer.js";
@@ -106,6 +119,10 @@ import {
 // Register the tab-bar landing sections (#23). They have no per-view
 // module — the tab bar simply toggles them.
 registerView("view-settings-tab", { tab: "settings" });
+// Static App-group sub-screens (no view module of their own).
+registerView("view-appearance", { tab: "settings" });
+registerView("view-privacy", { tab: "settings" });
+registerView("view-about", { tab: "settings" });
 
 // Sub-views inherit a parent tab so the tab bar lights up the right
 // entry when the user drills into a detail screen. Centralised here
@@ -138,6 +155,7 @@ const SUB_VIEW_TABS = {
   "view-add-device": "settings",
   "view-recovery": "settings",
   "view-post-recovery": "settings",
+  "view-post-recovery-choice": "settings",
   "view-paired-sessions": "settings",
   "view-secured-sessions": "settings",
   "view-access-authorize": "settings",
@@ -146,6 +164,14 @@ const SUB_VIEW_TABS = {
   "view-companion-requests": "settings",
   "view-profiles": "settings",
   "view-orders-debug": "settings",
+  // Settings sub-screens that previously left the tab bar dark.
+  "view-trusted-devices": "settings",
+  "view-account-delete": "settings",
+  "view-appearance": "settings",
+  "view-privacy": "settings",
+  "view-about": "settings",
+  // Reached from the Activity tab's audit-log "see all".
+  "view-audit-log": "activity",
 };
 
 async function enterActivityTab() {
@@ -160,6 +186,7 @@ const SETTINGS_ROW_ICONS = {
   push: activityIcon,
   tier: activityIcon,
   recovery: keyIcon,
+  backupkey: downloadIcon,
   devices: usersIcon,
   sessions: monitorIcon,
   secured: shieldIcon,
@@ -168,7 +195,11 @@ const SETTINGS_ROW_ICONS = {
   dock: monitorIcon,
   requests: usersIcon,
   profiles: userIcon,
+  appearance: monitorIcon,
+  privacy: shieldIcon,
+  about: alertCircleIcon,
   reset: unlockIcon,
+  accountdelete: alertTriangleIcon,
   chevron: chevronRightIcon,
 };
 
@@ -275,6 +306,12 @@ function wireSettingsTabEntries() {
     document.querySelector("#push-enable")?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
   wire("settings-tab-recovery", enterRecovery);
+  // "Back up account key" reuses the Recovery screen's `.flagshipkey`
+  // export ceremony — jump there and focus the backup button.
+  wire("settings-tab-backup-key", async () => {
+    await enterRecovery();
+    document.querySelector("#recovery-keyfile-export")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
   wire("settings-tab-trusted-devices", () => show("view-trusted-devices"));
   wire("settings-tab-account-security", () => show("view-account-security"));
   wire("settings-tab-sessions", enterPairedSessions);
@@ -286,6 +323,15 @@ function wireSettingsTabEntries() {
   wire("settings-tab-profiles", enterProfiles);
   wire("settings-tab-orders-debug", enterOrdersDebug);
   wire("settings-tab-create-server", enterCreateServer);
+  // App group — static informational sub-screens.
+  wire("settings-tab-appearance", () => show("view-appearance"));
+  wire("settings-tab-privacy", () => show("view-privacy"));
+  wire("settings-tab-about", () => show("view-about"));
+  wire("appearance-back", () => show("view-settings-tab"));
+  wire("privacy-back", () => show("view-settings-tab"));
+  wire("about-back", () => show("view-settings-tab"));
+  // Danger zone — Delete account.
+  wire("settings-tab-account-delete", enterAccountDelete);
   $("settings-tab-reset")?.addEventListener("click", async () => {
     const { handleReset } = await import("./views/unlock.js");
     await handleReset();
@@ -315,6 +361,61 @@ function wireServicesTabEntries() {
   const wire = (id, fn) =>
     $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   wire("services-list-open-vibe-code", enterBuildSource);
+}
+
+/** #91 — true iff we're paired to a box (so the AI-chat poll has somewhere to
+ *  drain from). Swallows the not-paired case so the poll's `active` gate is a
+ *  cheap boolean. */
+function getPodBaseUrlSafe() {
+  try {
+    return getPodBaseUrl();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * #91 — raise a LOCAL notification for a paused AI build. Prefers the service
+ * worker's `showNotification` so a tap routes through the SW's
+ * `notificationclick` (DEEP_LINK → vibecode-chat); falls back to an inline
+ * `Notification` whose onclick opens the chat directly. Fully best-effort:
+ * no permission / no support is a silent no-op (the operations sliver already
+ * carries the signal). Never the pass/fail path — it's a courtesy wake.
+ * @param {{title:string, body:string, tag:string, sessionId:string}} n
+ */
+function showAiChatNotification(n) {
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+      return;
+    }
+    const data = {
+      kind: "ai-chat-needs-you",
+      sessionId: n.sessionId,
+      deepLink: `/?view=vibecode-chat&sessionId=${encodeURIComponent(n.sessionId)}`,
+    };
+    if ("serviceWorker" in navigator && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready
+        .then((reg) => reg.showNotification(n.title, {
+          body: n.body,
+          tag: n.tag,
+          renotify: true,
+          icon: "/icon.svg",
+          data,
+        }))
+        .catch(() => { /* fall through is not possible post-await; best-effort */ });
+      return;
+    }
+    const notif = new Notification(n.title, { body: n.body, tag: n.tag, icon: "/icon.svg" });
+    notif.onclick = () => {
+      try {
+        window.focus();
+      } catch { /* ignore */ }
+      void enterVibeCodeChat(n.sessionId);
+      notif.close();
+    };
+  } catch {
+    /* notifications are a courtesy — never let one break the poll */
+  }
 }
 
 /**
@@ -430,6 +531,8 @@ async function boot() {
   initServiceEnvView();
   initVibeCodeChatView();
   initRecoveryView();
+  initPostRecoveryChoiceView();
+  initAccountDeleteView();
   // post-recovery is owned by another worker; init it best-effort so
   // the shell loads cleanly whether or not it's on disk yet.
   try {
@@ -490,6 +593,19 @@ async function boot() {
   setOperationsBarUnlockedResolver(sliversUnlocked);
   initOperationsBar();
 
+  // #91 — AI-chat alerts: a foreground long-poll that drains the box's
+  // phone-pollable AlertInbox (GET /api/phone/alerts), surfaces a paused AI
+  // build in the operations sliver, and raises an app-initiated LOCAL
+  // notification. Gated on `sliversUnlocked` (so nothing shows over the lock)
+  // and only drains once paired to a box. The notifier prefers the service
+  // worker's showNotification (a tap then routes via the SW's notificationclick
+  // DEEP_LINK), falling back to an inline Notification whose onclick opens the
+  // chat. Best-effort throughout — a .com/box outage can never wedge the app.
+  startAiChatAlertPoll({
+    active: () => sliversUnlocked() && !!getPodBaseUrlSafe(),
+    notify: makeAiChatNotifier({ show: showAiChatNotification }),
+  });
+
   // ── Maintainer-trust enforcement (docs/maintainer-trust-enforcement.md) ──
   // The persistent ALARMING-RED top sliver: one non-dismissible line per
   // failing cert while the control-server blessing is broken. It pins ABOVE
@@ -500,6 +616,37 @@ async function boot() {
   setTrustSliverUnlockedResolver(sliversUnlocked);
   initTrustSliver();
   setTrustSliverTapHandler((certHash) => runTrustOverride(certHash));
+
+  // ── LiveSync — the single app-scope live-update canal ──
+  // ONE long-poll loop against /api/users/:u/stream feeds the SHARED state the
+  // views read (Home's pod inventory + the Box Request Inbox), collapsing the
+  // many separate foreground pollers into one held request. It runs app-scope,
+  // across every tab (home, install checklist, server-detail) — NOT scoped to
+  // one screen. The singleton self-gates: its `active` check pauses the loop
+  // while the tab is hidden or no user is signed in, and resumes with an
+  // immediate request on focus / sign-in. It falls back to a plain /pods poll
+  // when /stream is down, so behavior never degrades below today's. We `start()`
+  // it once here; a `visibilitychange` re-`start()` makes the resume snappy
+  // (the loop also self-recovers within the fallback cadence regardless).
+  liveSync.start();
+  document.addEventListener("visibilitychange", () => liveSync.start());
+
+  // ── Auto-pair (Slice B) ──
+  // Pairing a control device with a box you already own is not sensitive, so
+  // it should be automatic: on every /pods snapshot, self-provision a per-box
+  // BFF session token for each LIVE pod that lacks one (the browser already
+  // holds the IRK). Idempotent + race-safe; a locked session no-ops. Manual
+  // paste (pod-pair) stays as the fallback for a brand-new pod URL not in /pods.
+  liveSync.subscribe((snap) => { void autoPairFromSnapshot(snap); });
+
+  // ── Per-cert relay-trust aggregation (maintainer-trust Layer 3) ──
+  // On every /pods snapshot, re-verify each box's STK-signed box-trust-status
+  // verdict and aggregate the untrusted ones BY failing relay cert-hash into
+  // the shared trust store — ONE red sliver line + ONE override per DISTINCT
+  // faulty relay authority (not per box). This is a WARNING + override source
+  // that does NOT hard-halt .com I/O (unlike the control-CA class); the box
+  // keeps relaying once an owner exception covers it.
+  liveSync.subscribe((snap) => { void updateRelayTrustFromPods(snap.pods); });
 
   // Re-evaluate BOTH slivers' visibility on every navigation: the lock surfaces
   // hide them; unlocking back into the app reveals any running operations / a
@@ -525,10 +672,15 @@ async function boot() {
   // itself drives the unlock / account-setup detour when the friend isn't
   // ready, and dispatchInitialView() resumes it once they have their key. The
   // secret lives only in the URL fragment — it is never sent to .com.
-  const inviteSecret = inviteSecretFromLocation();
-  if (inviteSecret) {
+  const inviteCtx = inviteContextFromLocation();
+  if (inviteCtx) {
     setSubtitle("invite");
-    await enterInviteRedeem(inviteSecret);
+    // The v2 fragment also carries the author AID + inviteId (for the friend's
+    // per-author contact identity + the manual-approve acceptance) — pass them.
+    await enterInviteRedeem(inviteCtx.secret, undefined, {
+      authorAID: inviteCtx.authorAID,
+      inviteId: inviteCtx.inviteId,
+    });
     return;
   }
 

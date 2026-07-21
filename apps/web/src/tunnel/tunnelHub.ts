@@ -65,6 +65,20 @@ export interface IrkLookup {
   (username: string): Bytes | null | Promise<Bytes | null>;
 }
 
+export interface UsernameAuthority {
+  irkPub: Bytes;
+  adminRootPub: Bytes | null;
+}
+
+export interface UsernameAuthorityLookup {
+  /**
+   * Look up both account authorities. A RootEntitlement is a sensitive
+   * authorize-this-box order, so it verifies under the admin root when one is
+   * pinned and falls back to the IRK only for a legacy account.
+   */
+  (username: string): UsernameAuthority | null | Promise<UsernameAuthority | null>;
+}
+
 export interface TunnelHubOptions {
   /**
    * Which surface the host process is serving. When "services" (the
@@ -83,12 +97,19 @@ export interface TunnelHubOptions {
    */
   authLookup?: TunnelAuthLookup;
   /**
-   * Required in production: lets the hub verify the IRK signature on
-   * each entitlement cert. Tests pass a static map.
+   * Required in production: supplies the account IRK for service
+   * entitlements, grants, and the legacy RootEntitlement fallback. Tests pass
+   * a static map.
    *
    * If omitted, IRK verification is SKIPPED (v0 dev only).
    */
   irkLookup?: IrkLookup;
+  /**
+   * Optional admin-aware authority lookup for RootEntitlements. Production
+   * supplies this from the same cached `.com` username record as `irkLookup`.
+   * When omitted, RootEntitlements retain the legacy IRK-only behavior.
+   */
+  authorityLookup?: UsernameAuthorityLookup;
   /**
    * Optional: list of revoked entitlement cert ids per user. Hub
    * fetches via this callback (caller caches with TTL) on every HELLO.
@@ -97,6 +118,24 @@ export interface TunnelHubOptions {
    * an empty Set means "definitely empty list."
    */
   revocationLookup?: (username: string) => Promise<Set<string> | null>;
+  /**
+   * Optional: per-podCanonical set of EVICTED box STK pubkeys (lowercased
+   * hex) — the graceful-decommission eviction chain's `retiredStkPubHex`
+   * set (docs/server-replacement-graceful-decommission.md §8). The hub
+   * calls this AFTER entitlement/STK verification succeeds; if the
+   * connecting box's own STK pubkey is in the returned set, the HELLO is
+   * rejected with the typed reason "replaced" (the box's `.com` poll then
+   * delivers the signed decommission order).
+   *
+   * Returning `null` means "couldn't fetch — accept anyway" (FAIL-OPEN:
+   * a `.com` outage must NOT brick a box's ability to register
+   * fleet-wide; the worst case is a brief flap the order/zombie-poll
+   * still closes — §8 availability trade-off). This is the deliberate
+   * INVERSE of irkLookup's fail-closed contract above: an unverifiable
+   * *signature* is fatal, but an unreachable *eviction list* is not.
+   * Returning an empty Set means "definitely no evictions for this pod."
+   */
+  evictionLookup?: (podCanonical: string) => Promise<Set<string> | null>;
   /**
    * Optional relay-blessing source. When set, every accepting HELLO_ACK
    * carries the hub's `.com`-CA-signed ServiceBlessing + a `hubSig` over
@@ -274,6 +313,16 @@ function attachTunnel(
         ws.close(auth.closeCode, "auth failed");
         return;
       }
+      // Eviction gate (graceful decommission §8). Consulted ONLY after the
+      // entitlement/STK verification above succeeds — a forged entitlement
+      // is rejected by `authenticateHello` first, so this never adjudicates
+      // an unverified box. Fail-OPEN on a `.com` outage (see checkEvicted).
+      const evicted = await checkEvicted(helloOk, opts);
+      if (evicted) {
+        send(helloAckFrame(false, "replaced"));
+        ws.close(1008, "replaced");
+        return;
+      }
       const built = buildClaimedCanonicals(
         helloOk.rootEntitlement.podCanonical,
         helloOk.serviceEntitlement,
@@ -329,6 +378,15 @@ function attachTunnel(
       const auth = await authenticateHello(helloOk, opts, now, maxHelloAgeMs);
       if (!auth.ok) {
         send(helloAckFrame(false, auth.reason));
+        return;
+      }
+      // Eviction gate on the HELLO refresh too: a box evicted mid-session
+      // self-retires on its next HELLO. Same after-verification ordering +
+      // fail-open contract as the initial accept path.
+      const evicted = await checkEvicted(helloOk, opts);
+      if (evicted) {
+        send(helloAckFrame(false, "replaced"));
+        ws.close(1008, "replaced");
         return;
       }
       const built = buildClaimedCanonicals(
@@ -671,13 +729,21 @@ async function authenticateHello(
       return { ok: false, reason: "serviceEntitlement.podPubKey mismatches root", closeCode: 1008 };
     }
   }
-  // Verify entitlement IRK signatures against the user's IRK.
+  // RootEntitlement is the sensitive authorize-this-box order: on an
+  // admin-pinned account it verifies under that admin root, while a legacy
+  // account falls back to its IRK. ServiceEntitlement remains an IRK-signed
+  // membership credential. Both authorities come from the same `.com`
+  // directory record in production.
   if (opts.irkLookup) {
-    const irkPub = await opts.irkLookup(hello.rootEntitlement.username);
-    if (!irkPub) {
+    const authority = opts.authorityLookup
+      ? await opts.authorityLookup(hello.rootEntitlement.username)
+      : null;
+    const irkPub = authority?.irkPub ?? await opts.irkLookup(hello.rootEntitlement.username);
+    if (!irkPub || (opts.authorityLookup && !authority)) {
       return { ok: false, reason: "username not registered with .com", closeCode: 1008 };
     }
-    if (!verifyRootEntitlement(hello.rootEntitlement, hello.rootEntitlementSig, irkPub)) {
+    const rootAuthority = authority?.adminRootPub ?? irkPub;
+    if (!verifyRootEntitlement(hello.rootEntitlement, hello.rootEntitlementSig, rootAuthority)) {
       return { ok: false, reason: "rootEntitlement signature failed verification", closeCode: 1008 };
     }
     if (hello.serviceEntitlement && hello.serviceEntitlementSig) {
@@ -784,6 +850,35 @@ async function authenticateHello(
     }
   }
   return { ok: true, validatedGrants };
+}
+
+/**
+ * Eviction gate for the graceful-decommission hand-off (§8). Returns
+ * `true` iff the connecting box's own STK pubkey is on the eviction
+ * chain for its podCanonical (so the HELLO must be rejected as
+ * "replaced"), `false` otherwise.
+ *
+ * The box's STK pubkey is `rootEntitlement.podPubKey` — `authenticateHello`
+ * has already bound it to the HELLO-envelope signer (`verifyTunnelHelloV2`)
+ * and, when `authLookup` is wired, to `.com`'s registered STK — so by the
+ * time we get here it is the proven identity of the connecting instance,
+ * not an attacker-asserted field.
+ *
+ * FAIL-OPEN: a `null` from `evictionLookup` (a `.com` outage) is treated
+ * as "not evicted" — registration proceeds. A momentary `.com` blip must
+ * never brick the fleet's ability to register; the worst case is a brief
+ * route flap that the durable order / zombie-poll still closes (§8). This
+ * is the deliberate inverse of the fail-CLOSED signature checks above.
+ */
+async function checkEvicted(
+  hello: ParsedHelloV2,
+  opts: TunnelHubOptions,
+): Promise<boolean> {
+  if (!opts.evictionLookup) return false;
+  const retired = await opts.evictionLookup(hello.rootEntitlement.podCanonical);
+  if (!retired) return false; // null ⇒ outage ⇒ fail-open
+  const myStkHex = bytesToHex(hello.rootEntitlement.podPubKey).toLowerCase();
+  return retired.has(myStkHex);
 }
 
 /**
@@ -935,6 +1030,11 @@ function hexToBytes(hex: string): Uint8Array {
     out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
   return out;
+}
+function bytesToHex(b: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < b.length; i++) s += b[i]!.toString(16).padStart(2, "0");
+  return s;
 }
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
   const out = new Uint8Array(a.length + b.length);

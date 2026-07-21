@@ -61,7 +61,9 @@ public final class DeadManViewModel {
         self.serverName = serverName
         self.store = store
         self.now = now
-        self.signer = signer ?? { reason in try await Keystore.deriveIRK(reason: reason) }
+        // Slice D — dead-man policy + affirmation are SENSITIVE orders: sign with
+        // the admin master root when this device holds one, else the legacy IRK.
+        self.signer = signer ?? { reason in try await Keystore.sensitiveOrderSigningKey(reason: reason) }
         self.scheduleReminders = scheduleReminders ?? { domain, name, expiry in
             #if canImport(UserNotifications)
             DeadManReminders.reschedule(serverDomain: domain, serverName: name, leaseExpiryMs: expiry)

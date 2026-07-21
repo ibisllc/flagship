@@ -41,6 +41,11 @@ data class FlagshipColors(
     val textMuted: Color,
     val primary: Color,
     val primaryHover: Color,
+    // The readable foreground ON a filled accent/primary surface (button label,
+    // selected-segment text). A role token, never a baked literal: white on the
+    // light-theme teal, black on the dark-theme bright teal — mirrors the
+    // Material `onPrimary` the theme already pins.
+    val onAccent: Color,
     val success: Color,
     val warning: Color,
     val danger: Color,
@@ -56,6 +61,7 @@ val LightColors = FlagshipColors(
     // Brand teal (web --teal #14B8A6); pressed/aux = --teal-deep #0F8B7E.
     primary         = Color(0xFF14B8A6),
     primaryHover    = Color(0xFF0F8B7E),
+    onAccent        = Color(0xFFFFFFFF),
     success         = Color(0xFF1F8A4C),
     warning         = Color(0xFFB8651A),
     danger          = Color(0xFFC83A3A),
@@ -72,6 +78,8 @@ val DarkColors = FlagshipColors(
     // pressed/aux = --teal #14B8A6.
     primary         = Color(0xFF2DD4BF),
     primaryHover    = Color(0xFF14B8A6),
+    // Black reads on the lifted dark-theme teal where white would wash out.
+    onAccent        = Color(0xFF000000),
     success         = Color(0xFF4FBE7A),
     warning         = Color(0xFFE5A050),
     danger          = Color(0xFFE86464),

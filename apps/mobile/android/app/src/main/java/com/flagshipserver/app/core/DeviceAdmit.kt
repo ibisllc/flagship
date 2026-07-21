@@ -15,7 +15,7 @@
 // different device. Canonical bytes MUST stay byte-identical to the
 // Worker verifier:
 //
-//     "flagship/device-admit/v1" | username | newDevicePubHex | issuedAt
+//     "flagship/device-admit/v2" | username | deviceId | newDevicePubHex | issuedAt
 
 package com.flagshipserver.app.core
 
@@ -29,16 +29,18 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class DeviceAdmit(
     val username: String,
+    val deviceId: String,
     val newDevicePubHex: String,
     val issuedAt: Long,
 )
 
 object DeviceAdmitClaim {
-    const val CANONICAL_TAG = "flagship/device-admit/v1"
+    const val CANONICAL_TAG = "flagship/device-admit/v2"
 
     fun canonicalBytes(admit: DeviceAdmit): ByteArray = listOf(
         CANONICAL_TAG,
         admit.username,
+        admit.deviceId,
         admit.newDevicePubHex,
         admit.issuedAt.toString(),
     ).joinToString("|").toByteArray(Charsets.UTF_8)

@@ -30,10 +30,14 @@ public struct CompanionRequestsScreen: View {
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Companion requests")
         .navigationBarTitleDisplayMode(.inline)
-        .refreshable { await vm.load() }
+        .refreshable { await vm.refresh() }
         .task {
             if case .idle = vm.state { await vm.load() }
+            // Background poll while the inbox is on screen — matches the
+            // webapp's 10s pollPending; torn down on disappear.
+            vm.startPolling()
         }
+        .onDisappear { vm.stopPolling() }
         .task {
             while !Task.isCancelled {
                 nowMs = Int64(Date().timeIntervalSince1970 * 1000)
@@ -158,9 +162,7 @@ public struct CompanionRequestsScreen: View {
     }
 
     private func title(for row: CompanionPendingWrite) -> String {
-        let who = row.companionLabel?.isEmpty == false
-            ? row.companionLabel!
-            : row.companionTokenPrefix
+        let who = row.companionTokenPrefix
         switch row.kind {
         case "release-server": return "Release server name — from \(who)"
         case "revoke-server":  return "Revoke server — from \(who)"
@@ -182,10 +184,7 @@ public struct CompanionRequestsScreen: View {
     }
 
     private func relativeQueued(_ row: CompanionPendingWrite) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(row.queuedAt) / 1000)
-        let fmt = RelativeDateTimeFormatter()
-        fmt.unitsStyle = .abbreviated
-        let queued = fmt.localizedString(for: date, relativeTo: Date())
+        let queued = Date.flagshipFormatted(epochMs: row.queuedAt)
         let remainingMs = row.expiresAt - nowMs
         if remainingMs <= 0 { return "queued \(queued) · expired" }
         let mins = remainingMs / 60_000

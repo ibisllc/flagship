@@ -30,6 +30,23 @@ private fun friendly(t: Throwable): String = when (t) {
     else -> t.message ?: "Something went wrong."
 }
 
+/**
+ * The build-a-service `/api/build` surface is mounted only when the box has
+ * its service platform wired; when it isn't, the ENTIRE prefix 404s. So a 404
+ * on a build ENTRY call (git "Check repo", MCP create, the build list) means
+ * "this box can't build services", not "that thing was removed" — show the
+ * truth instead of the generic 404 copy. Any other failure falls through to
+ * [friendly]. Session-scoped 404s (a specific build journal id that's genuinely
+ * gone) must NOT use this — they belong to [friendly].
+ */
+private fun friendlyBuildEntry(t: Throwable): String =
+    if (t is ScreensError.Http && t.status == 404) {
+        "This server isn't set up to build services yet. " +
+            "Building services needs the services feature enabled on this box."
+    } else {
+        friendly(t)
+    }
+
 // ---------- git mode ---------------------------------------------------
 
 /**
@@ -85,7 +102,8 @@ class BuildGitViewModel(
             buildId = r.buildId
             _phase.value = GitPhase.Verdict(fit = r.fit, reason = r.reason, fileCount = r.fileCount)
         } catch (t: Throwable) {
-            _phase.value = GitPhase.Failed(friendly(t))
+            // A 404 here means the box has no build platform wired.
+            _phase.value = GitPhase.Failed(friendlyBuildEntry(t))
         }
     }
 
@@ -182,7 +200,8 @@ class BuildMcpViewModel(
             _phase.value = McpPhase.Ready
             refreshEnvRequests().join()
         } catch (t: Throwable) {
-            _phase.value = McpPhase.Failed(friendly(t))
+            // A 404 on this entry call means the box has no build platform.
+            _phase.value = McpPhase.Failed(friendlyBuildEntry(t))
         }
     }
 
@@ -246,7 +265,9 @@ class BuildJournalViewModel(
         try {
             _list.value = LoadingState.Loaded(client.sessions().builds)
         } catch (t: Throwable) {
-            _list.value = LoadingState.Failed(friendly(t))
+            // The sessions list is a build-platform ENTRY call — a 404 means the
+            // box can't build services (unlike loadDetail's session-scoped 404).
+            _list.value = LoadingState.Failed(friendlyBuildEntry(t))
         }
     }
 

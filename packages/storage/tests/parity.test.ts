@@ -114,6 +114,42 @@ describe("D1 ↔ InMemory parity", () => {
       expect(r.d1).toMatchObject({ accountType: "multi", claimedAt: 9 });
     });
 
+    it("gating v2 — aidPubHex round-trips + survives a benign re-claim", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernames.put({
+          username: "dave",
+          irkPubHex: "ab",
+          claimedAt: 1,
+          aidPubHex: "cd".repeat(32),
+        });
+        const set = await s.usernames.get("dave");
+        // re-put WITHOUT aidPubHex must not drop the stored AID
+        await s.usernames.put({ username: "dave", irkPubHex: "ab", claimedAt: 9 });
+        const after = await s.usernames.get("dave");
+        return { set: set?.aidPubHex, after: after?.aidPubHex };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ set: "cd".repeat(32), after: "cd".repeat(32) });
+    });
+
+    it("Slice D — adminRootPubHex round-trips + survives a benign re-claim", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernames.put({
+          username: "dana",
+          irkPubHex: "ab",
+          claimedAt: 1,
+          adminRootPubHex: "ef".repeat(32),
+        });
+        const set = await s.usernames.get("dana");
+        // re-put WITHOUT adminRootPubHex must not drop the pinned admin root
+        await s.usernames.put({ username: "dana", irkPubHex: "ab", claimedAt: 9 });
+        const after = await s.usernames.get("dana");
+        return { set: set?.adminRootPubHex, after: after?.adminRootPubHex };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ set: "ef".repeat(32), after: "ef".repeat(32) });
+    });
+
     it("swapIrkPub CAS: matches old → true; stale old → false", async () => {
       const r = await bothAdapters(async (s) => {
         await s.usernames.put({ username: "dave", irkPubHex: "aa", claimedAt: 1 });
@@ -181,6 +217,153 @@ describe("D1 ↔ InMemory parity", () => {
       });
       expectParity(r);
       expect(r.d1).toEqual(["u1", "u2"]);
+    });
+
+    it("lastActive absent on a fresh row; touchLastActive sets it + survives a benign re-put", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernames.put({ username: "gail", irkPubHex: "aa", claimedAt: 1 });
+        const fresh = (await s.usernames.get("gail"))?.lastActive ?? null;
+        const touched = await s.usernames.touchLastActive("gail", 5_000);
+        const afterTouch = (await s.usernames.get("gail"))?.lastActive ?? null;
+        // a benign re-put (no lastActive) must NOT clear it
+        await s.usernames.put({ username: "gail", irkPubHex: "aa", claimedAt: 9 });
+        const afterReput = (await s.usernames.get("gail"))?.lastActive ?? null;
+        return { fresh, touched, afterTouch, afterReput };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ fresh: null, touched: true, afterTouch: 5_000, afterReput: 5_000 });
+    });
+
+    it("touchLastActive on a missing username is false in both", async () => {
+      const r = await bothAdapters((s) => s.usernames.touchLastActive("ghost", 1));
+      expect(r.mem).toBe(false);
+      expect(r.d1).toBe(false);
+    });
+
+    it("delete hard-removes the row (true), then get is undefined; double-delete is false", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernames.put({ username: "hank", irkPubHex: "aa", claimedAt: 1 });
+        const first = await s.usernames.delete("hank");
+        const afterGet = await s.usernames.get("hank");
+        const second = await s.usernames.delete("hank");
+        return { first, afterGet, second };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ first: true, afterGet: undefined, second: false });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // suggestionQueue (0061) — FIFO pop (enqueued_at, name), idempotent
+  // enqueue, INSERT-OR-IGNORE dedupe counting.
+  // ────────────────────────────────────────────────────────────────────
+  describe("suggestionQueue", () => {
+    it("enqueue counts only NEW rows; dupes are ignored", async () => {
+      const r = await bothAdapters(async (s) => {
+        const a = await s.suggestionQueue.enqueue(["brave-fox", "calm-owl"], 10);
+        const b = await s.suggestionQueue.enqueue(["calm-owl", "wild-hare"], 20);
+        return { a, b, count: await s.suggestionQueue.count() };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ a: 2, b: 1, count: 3 });
+    });
+
+    it("popOldest is FIFO by (enqueued_at, name) and deletes", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.suggestionQueue.enqueue(["wild-hare", "brave-fox"], 5); // same ts → name tiebreak
+        await s.suggestionQueue.enqueue(["calm-owl"], 9);
+        const first = await s.suggestionQueue.popOldest();
+        const second = await s.suggestionQueue.popOldest();
+        return { first, second, remaining: await s.suggestionQueue.list() };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ first: "brave-fox", second: "wild-hare", remaining: ["calm-owl"] });
+    });
+
+    it("popOldest on an empty queue returns null", async () => {
+      const r = await bothAdapters(async (s) => s.suggestionQueue.popOldest());
+      expectParity(r);
+      expect(r.d1).toBeNull();
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // suggestThrottle (0061) — upsert overwrite + prune-by-lastAt.
+  // ────────────────────────────────────────────────────────────────────
+  describe("suggestThrottle", () => {
+    it("upsert inserts then overwrites; get round-trips the record", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.suggestThrottle.upsert({ deviceKey: "dev1", count: 1, windowStart: 100, lastAt: 100, nextAllowedAt: 2100 });
+        await s.suggestThrottle.upsert({ deviceKey: "dev1", count: 2, windowStart: 100, lastAt: 200, nextAllowedAt: 5200 });
+        return s.suggestThrottle.get("dev1");
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ deviceKey: "dev1", count: 2, windowStart: 100, lastAt: 200, nextAllowedAt: 5200 });
+    });
+
+    it("get on an unknown key is undefined; prune drops stale rows by lastAt", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.suggestThrottle.upsert({ deviceKey: "old", count: 1, windowStart: 0, lastAt: 50, nextAllowedAt: 100 });
+        await s.suggestThrottle.upsert({ deviceKey: "fresh", count: 1, windowStart: 0, lastAt: 500, nextAllowedAt: 600 });
+        const removed = await s.suggestThrottle.prune(200);
+        return {
+          missing: await s.suggestThrottle.get("nope"),
+          removed,
+          old: await s.suggestThrottle.get("old"),
+          fresh: await s.suggestThrottle.get("fresh"),
+        };
+      });
+      expectParity(r);
+      expect(r.d1.removed).toBe(1);
+      expect(r.d1.old).toBeUndefined();
+      expect(r.d1.fresh).toMatchObject({ deviceKey: "fresh" });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // usernameOffers (0062) — record/upsert + isOffered recency window +
+  // consume + prune-by-offeredAt (the claim gate roster).
+  // ────────────────────────────────────────────────────────────────────
+  describe("usernameOffers", () => {
+    it("record then isOffered honors the recency window; consume removes it", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernameOffers.record("happy-otter", "devA", 1000);
+        return {
+          fresh: await s.usernameOffers.isOffered("happy-otter", 500), // 1000 >= 500
+          stale: await s.usernameOffers.isOffered("happy-otter", 1500), // 1000 < 1500
+          missing: await s.usernameOffers.isOffered("nope", 0),
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ fresh: true, stale: false, missing: false });
+    });
+
+    it("record upserts (case-insensitive) and consume deletes", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernameOffers.record("Brave-Fox", "d1", 10);
+        await s.usernameOffers.record("brave-fox", "d2", 20); // upsert, refresh offeredAt
+        const before = await s.usernameOffers.isOffered("brave-fox", 15); // 20 >= 15
+        await s.usernameOffers.consume("BRAVE-FOX");
+        const after = await s.usernameOffers.isOffered("brave-fox", 0);
+        return { before, after };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ before: true, after: false });
+    });
+
+    it("prune drops offers older than the cutoff", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernameOffers.record("old-owl", "d", 50);
+        await s.usernameOffers.record("new-elk", "d", 500);
+        const removed = await s.usernameOffers.prune(200);
+        return {
+          removed,
+          old: await s.usernameOffers.isOffered("old-owl", 0),
+          new: await s.usernameOffers.isOffered("new-elk", 0),
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ removed: 1, old: false, new: true });
     });
   });
 
@@ -547,14 +730,27 @@ describe("D1 ↔ InMemory parity", () => {
   // pushTokens — quarantine fields, listQuarantined ordering, bitmap.
   // ────────────────────────────────────────────────────────────────────
   describe("pushTokens", () => {
+    const deviceId = "01".repeat(16);
+    const seedDevice = async (s: Storage, username: string) => {
+      await s.usernames.put({ username, irkPubHex: "11".repeat(32), claimedAt: 1 });
+      await s.deviceIdentities.put({
+        accountId: username,
+        deviceId,
+        devicePubHex: "22".repeat(32),
+        platformClass: "ios",
+        createdAt: 1,
+        lastSeenAt: 1,
+        revokedAt: null,
+      });
+    };
     const mk = (id: string, u: string, reg: number, extra: Partial<import("../src/types.js").PushTokenRecord> = {}) => ({
       tokenId: id,
       username: u,
+      deviceId,
       platform: "apns" as const,
       providerToken: "tok",
       pushX25519PubHex: "pk",
       registrationSignatureHex: "sig",
-      label: "iPhone",
       registeredAt: reg,
       lastSeenAt: reg,
       ...extra,
@@ -562,6 +758,7 @@ describe("D1 ↔ InMemory parity", () => {
 
     it("put / get / listByUser / remove / touchLastSeen parity", async () => {
       const r = await bothAdapters(async (s) => {
+        await seedDevice(s, "alice");
         await s.pushTokens.put(mk("t1", "alice", 1));
         await s.pushTokens.put(mk("t2", "alice", 2));
         await s.pushTokens.touchLastSeen("t1", 50);
@@ -577,6 +774,7 @@ describe("D1 ↔ InMemory parity", () => {
 
     it("setQuarantineUntil + listQuarantined ordering + orInQuarantineAlertBit", async () => {
       const r = await bothAdapters(async (s) => {
+        await seedDevice(s, "alice");
         await s.pushTokens.put(mk("q1", "alice", 10));
         await s.pushTokens.put(mk("q2", "alice", 5));
         await s.pushTokens.put(mk("notq", "alice", 1));
@@ -641,10 +839,15 @@ describe("D1 ↔ InMemory parity", () => {
   // partial index; InMemory checks explicitly).
   // ────────────────────────────────────────────────────────────────────
   describe("deviceCapabilityGrants", () => {
-    const mk = (id: string, label: string, pub: string, issued: number, revokedAt: number | null = null) => ({
+    const ids = {
+      phone: "01".repeat(16),
+      labelA: "02".repeat(16),
+      labelB: "03".repeat(16),
+    } as const;
+    const mk = (id: string, label: keyof typeof ids, pub: string, issued: number, revokedAt: number | null = null) => ({
       grantId: id,
       username: "alice",
-      deviceLabel: label,
+      deviceId: ids[label],
       devicePubHex: pub,
       scopesJson: '["browse"]',
       issuedAt: issued,
@@ -653,23 +856,38 @@ describe("D1 ↔ InMemory parity", () => {
       revokedAt,
     });
 
+    const seedDevice = async (s: Storage, label: keyof typeof ids, pub: string) => {
+      await s.usernames.put({ username: "alice", irkPubHex: "11".repeat(32), claimedAt: 1 });
+      await s.deviceIdentities.put({
+        accountId: "alice",
+        deviceId: ids[label],
+        devicePubHex: pub,
+        platformClass: "test",
+        createdAt: 1,
+        lastSeenAt: 1,
+        revokedAt: null,
+      });
+    };
+
     it("duplicate ACTIVE grant for (user,label) rejected with shared reason", async () => {
       const r = await bothAdapters(async (s) => {
-        const first = await s.deviceCapabilityGrants.put(mk("g1", "phone", "pubA", 1));
-        const dup = await s.deviceCapabilityGrants.put(mk("g2", "phone", "pubB", 2));
+        await seedDevice(s, "phone", "aa".repeat(32));
+        const first = await s.deviceCapabilityGrants.put(mk("g1", "phone", "aa".repeat(32), 1));
+        const dup = await s.deviceCapabilityGrants.put(mk("g2", "phone", "bb".repeat(32), 2));
         return { first, dup };
       });
       expectParity(r);
       expect(r.d1.first).toEqual({ ok: true });
-      expect(r.d1.dup).toEqual({ ok: false, reason: "duplicate active grant for (username, device_label)" });
+      expect(r.d1.dup).toEqual({ ok: false, reason: "duplicate active grant for (username, device_id)" });
     });
 
     it("revoke then re-issue same label is allowed (partial index excludes revoked)", async () => {
       const r = await bothAdapters(async (s) => {
-        await s.deviceCapabilityGrants.put(mk("g1", "phone", "pubA", 1));
+        await seedDevice(s, "phone", "aa".repeat(32));
+        await s.deviceCapabilityGrants.put(mk("g1", "phone", "aa".repeat(32), 1));
         await s.deviceCapabilityGrants.revoke("g1", 5);
-        const reissue = await s.deviceCapabilityGrants.put(mk("g2", "phone", "pubB", 6));
-        const active = await s.deviceCapabilityGrants.getActiveForUserLabel("alice", "phone");
+        const reissue = await s.deviceCapabilityGrants.put(mk("g2", "phone", "bb".repeat(32), 6));
+        const active = await s.deviceCapabilityGrants.getActiveForUserDevice("alice", ids.phone);
         const list = (await s.deviceCapabilityGrants.listForUser("alice")).map((g) => g.grantId);
         return { reissue, activeId: active?.grantId, list };
       });
@@ -689,10 +907,12 @@ describe("D1 ↔ InMemory parity", () => {
 
     it("getByDevicePub returns most-recent active match", async () => {
       const r = await bothAdapters(async (s) => {
-        await s.deviceCapabilityGrants.put(mk("g1", "labelA", "samepub", 1));
+        const samePub = "cc".repeat(32);
+        await seedDevice(s, "labelA", samePub);
+        await s.deviceCapabilityGrants.put(mk("g1", "labelA", samePub, 1));
         await s.deviceCapabilityGrants.revoke("g1", 2);
-        await s.deviceCapabilityGrants.put(mk("g2", "labelB", "samepub", 3));
-        const got = await s.deviceCapabilityGrants.getByDevicePub("samepub");
+        await s.deviceCapabilityGrants.put(mk("g2", "labelA", samePub, 3));
+        const got = await s.deviceCapabilityGrants.getByDevicePub(samePub);
         return got?.grantId;
       });
       expectParity(r);
@@ -716,6 +936,745 @@ describe("D1 ↔ InMemory parity", () => {
       });
       expectParity(r);
       expect(r.d1).toEqual({ first: true, second: false, other: true, has: true, hasNot: false });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // secretMailbox self-delete lane — `.com` writes the owner-IRK-signed
+  // servers-self-delete order at account death; the box consumes it once.
+  // Consume returns the freshest pending row, marks it consumed (so a
+  // re-poll after a crashed wipe returns undefined), and GCs expired rows.
+  // ────────────────────────────────────────────────────────────────────
+  describe("secretMailbox (self-delete lane)", () => {
+    const mk = (nonce: string, sealed: string, expiresAt = 1000) => ({
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      requestNonceHex: nonce,
+      stkPubHex: "ab".repeat(32),
+      sealedHex: sealed,
+      issuedAt: 1,
+      expiresAt,
+    });
+
+    it("deposit → consume-once → second consume returns undefined", async () => {
+      const r = await bothAdapters(async (s) => {
+        const put = await s.secretMailbox.putSelfDeleteDeposit(mk("aa".repeat(16), "deadbeef"));
+        const first = await s.secretMailbox.consumeSelfDeleteDeposit(
+          "home.alice.flagship.services",
+          10,
+        );
+        const second = await s.secretMailbox.consumeSelfDeleteDeposit(
+          "home.alice.flagship.services",
+          11,
+        );
+        return { putOk: put.ok, firstSealed: first?.sealedHex, secondDefined: second !== undefined };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ putOk: true, firstSealed: "deadbeef", secondDefined: false });
+    });
+
+    it("duplicate nonce rejected; expired rows never served", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.secretMailbox.putSelfDeleteDeposit(mk("bb".repeat(16), "one", 1000));
+        const dup = await s.secretMailbox.putSelfDeleteDeposit(mk("bb".repeat(16), "two", 1000));
+        // A separate, already-expired deposit on another domain.
+        await s.secretMailbox.putSelfDeleteDeposit({
+          ...mk("cc".repeat(16), "stale", 5),
+          serverDomain: "old.alice.flagship.services",
+        });
+        const expired = await s.secretMailbox.consumeSelfDeleteDeposit(
+          "old.alice.flagship.services",
+          100,
+        );
+        return { dupOk: dup.ok, expiredDefined: expired !== undefined };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ dupOk: false, expiredDefined: false });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // secretMailbox swk lane — secret-free-recipe SWK delivery: the phone
+  // deposits the sealed SWK-delivery carrier; the box consumes it once on
+  // first boot. Same consume-once + dedup + GC semantics as the other lanes;
+  // the carrier wraps a SEALED secret (not a public order).
+  // ────────────────────────────────────────────────────────────────────
+  describe("secretMailbox (swk lane)", () => {
+    const mk = (nonce: string, sealed: string, expiresAt = 1000) => ({
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      requestNonceHex: nonce,
+      stkPubHex: "ab".repeat(32),
+      sealedHex: sealed,
+      issuedAt: 1,
+      expiresAt,
+    });
+
+    it("deposit → consume-once → second consume returns undefined", async () => {
+      const r = await bothAdapters(async (s) => {
+        const put = await s.secretMailbox.putSwkDeposit(mk("aa".repeat(16), "cafebabe"));
+        const first = await s.secretMailbox.consumeSwkDeposit("home.alice.flagship.services", 10);
+        const second = await s.secretMailbox.consumeSwkDeposit("home.alice.flagship.services", 11);
+        return { putOk: put.ok, firstSealed: first?.sealedHex, secondDefined: second !== undefined };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ putOk: true, firstSealed: "cafebabe", secondDefined: false });
+    });
+
+    it("duplicate nonce rejected; expired rows never served", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.secretMailbox.putSwkDeposit(mk("bb".repeat(16), "one", 1000));
+        const dup = await s.secretMailbox.putSwkDeposit(mk("bb".repeat(16), "two", 1000));
+        await s.secretMailbox.putSwkDeposit({
+          ...mk("cc".repeat(16), "stale", 5),
+          serverDomain: "old.alice.flagship.services",
+        });
+        const expired = await s.secretMailbox.consumeSwkDeposit("old.alice.flagship.services", 100);
+        return { dupOk: dup.ok, expiredDefined: expired !== undefined };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ dupOk: false, expiredDefined: false });
+    });
+
+    it("the swk lane does not bleed into the self-delete lane (lane isolation)", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.secretMailbox.putSwkDeposit(mk("dd".repeat(16), "swkblob"));
+        // A self-delete consume must NOT return the swk row.
+        const cross = await s.secretMailbox.consumeSelfDeleteDeposit(
+          "home.alice.flagship.services",
+          10,
+        );
+        const own = await s.secretMailbox.consumeSwkDeposit("home.alice.flagship.services", 11);
+        return { crossDefined: cross !== undefined, ownSealed: own?.sealedHex };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ crossDefined: false, ownSealed: "swkblob" });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // secretMailbox cgk + set-leader lanes (Phase 6) — same consume-once + dedup
+  // + GC + lane-isolation semantics as the swk lane.
+  // ────────────────────────────────────────────────────────────────────
+  describe("secretMailbox (cgk + set-leader lanes)", () => {
+    const mk = (nonce: string, sealed: string, expiresAt = 1000) => ({
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      requestNonceHex: nonce,
+      stkPubHex: "ab".repeat(32),
+      sealedHex: sealed,
+      issuedAt: 1,
+      expiresAt,
+    });
+
+    it("cgk deposit → consume-once → second consume undefined; dedup; lane isolation", async () => {
+      const r = await bothAdapters(async (s) => {
+        const put = await s.secretMailbox.putCgkDeposit(mk("aa".repeat(16), "cgkblob"));
+        const dup = await s.secretMailbox.putCgkDeposit(mk("aa".repeat(16), "again"));
+        const first = await s.secretMailbox.consumeCgkDeposit("home.alice.flagship.services", 10);
+        const second = await s.secretMailbox.consumeCgkDeposit("home.alice.flagship.services", 11);
+        // A swk consume must NOT see the cgk row.
+        await s.secretMailbox.putCgkDeposit(mk("bb".repeat(16), "cgk2"));
+        const cross = await s.secretMailbox.consumeSwkDeposit("home.alice.flagship.services", 12);
+        return {
+          putOk: put.ok,
+          dupOk: dup.ok,
+          firstSealed: first?.sealedHex,
+          secondDefined: second !== undefined,
+          crossDefined: cross !== undefined,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        putOk: true,
+        dupOk: false,
+        firstSealed: "cgkblob",
+        secondDefined: false,
+        crossDefined: false,
+      });
+    });
+
+    it("set-leader deposit → consume-once → second consume undefined; expired never served", async () => {
+      const r = await bothAdapters(async (s) => {
+        const put = await s.secretMailbox.putSetLeaderDeposit(mk("cc".repeat(16), "voteblob"));
+        const first = await s.secretMailbox.consumeSetLeaderDeposit("home.alice.flagship.services", 10);
+        const second = await s.secretMailbox.consumeSetLeaderDeposit("home.alice.flagship.services", 11);
+        await s.secretMailbox.putSetLeaderDeposit({
+          ...mk("dd".repeat(16), "stale", 5),
+          serverDomain: "old.alice.flagship.services",
+        });
+        const expired = await s.secretMailbox.consumeSetLeaderDeposit("old.alice.flagship.services", 100);
+        return {
+          putOk: put.ok,
+          firstSealed: first?.sealedHex,
+          secondDefined: second !== undefined,
+          expiredDefined: expired !== undefined,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        putOk: true,
+        firstSealed: "voteblob",
+        secondDefined: false,
+        expiredDefined: false,
+      });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // secretMailbox update lane (server-update) — same consume-once + dedup + GC
+  // + lane-isolation semantics as the other deposit lanes.
+  // ────────────────────────────────────────────────────────────────────
+  describe("secretMailbox (update lane)", () => {
+    const mk = (nonce: string, sealed: string, expiresAt = 1000) => ({
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      requestNonceHex: nonce,
+      stkPubHex: "ab".repeat(32),
+      sealedHex: sealed,
+      issuedAt: 1,
+      expiresAt,
+    });
+
+    it("update deposit → consume-once → second consume undefined; dedup; lane isolation; expired never served", async () => {
+      const r = await bothAdapters(async (s) => {
+        const put = await s.secretMailbox.putUpdateDeposit(mk("aa".repeat(16), "updateblob"));
+        const dup = await s.secretMailbox.putUpdateDeposit(mk("aa".repeat(16), "again"));
+        const first = await s.secretMailbox.consumeUpdateDeposit("home.alice.flagship.services", 10);
+        const second = await s.secretMailbox.consumeUpdateDeposit("home.alice.flagship.services", 11);
+        // A cgk consume must NOT see the update row.
+        await s.secretMailbox.putUpdateDeposit(mk("bb".repeat(16), "update2"));
+        const cross = await s.secretMailbox.consumeCgkDeposit("home.alice.flagship.services", 12);
+        // Expired rows are never served.
+        await s.secretMailbox.putUpdateDeposit({
+          ...mk("cc".repeat(16), "stale", 5),
+          serverDomain: "old.alice.flagship.services",
+        });
+        const expired = await s.secretMailbox.consumeUpdateDeposit("old.alice.flagship.services", 100);
+        return {
+          putOk: put.ok,
+          dupOk: dup.ok,
+          firstSealed: first?.sealedHex,
+          secondDefined: second !== undefined,
+          crossDefined: cross !== undefined,
+          expiredDefined: expired !== undefined,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        putOk: true,
+        dupOk: false,
+        firstSealed: "updateblob",
+        secondDefined: false,
+        crossDefined: false,
+        expiredDefined: false,
+      });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // serverTransfers — the transfer-a-box broker lane. One offer per box
+  // (re-issue replaces); claim is a one-time CAS; getOffer GCs an unclaimed
+  // expired offer but keeps a claimed one.
+  // ────────────────────────────────────────────────────────────────────
+  describe("serverTransfers", () => {
+    const dom = "home.alice.flagship.services";
+    const mkOffer = (nonce: string, expiresAt = 1000) => ({
+      serverDomain: dom,
+      giverUsername: "alice",
+      transferNonce: nonce,
+      giverIrkPubHex: "aa".repeat(32),
+      issuedAt: 1,
+      expiresAt,
+      offerSignatureHex: "ff".repeat(64),
+      claimedAt: null,
+      acquirerUsername: null,
+      acquirerIrkPubHex: null,
+      claimIssuedAt: null,
+      claimSignatureHex: null,
+      diskKeyHandoffHex: null,
+      diskKeyHandoffAt: null,
+      acquirerAdminRootPubHex: null,
+      adminHandoffOldRootHex: null,
+      adminHandoffNewRootHex: null,
+      adminHandoffIssuedAt: null,
+      adminHandoffSigHex: null,
+      rehomeAuthIssuedAt: null,
+      rehomeAuthSigHex: null,
+    });
+
+    it("offer → claim → record carries acquirer binding; second claim rejected", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("11".repeat(16)));
+        const first = await s.serverTransfers.claim(
+          dom, "11".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 10,
+        );
+        const second = await s.serverTransfers.claim(
+          dom, "11".repeat(16), "carol", "dd".repeat(32), "", 6, "ee".repeat(64), 11,
+        );
+        const after = await s.serverTransfers.getOffer(dom, 12);
+        return {
+          firstOk: first.ok,
+          firstAcq: first.ok ? first.record.acquirerUsername : null,
+          secondOk: second.ok,
+          secondReason: second.ok ? null : second.reason,
+          afterClaimed: after?.claimedAt !== null && after?.claimedAt !== undefined,
+          afterAcqIrk: after?.acquirerIrkPubHex,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        firstOk: true,
+        firstAcq: "bob",
+        secondOk: false,
+        secondReason: "already claimed",
+        afterClaimed: true,
+        afterAcqIrk: "bb".repeat(32),
+      });
+    });
+
+    it("putDiskKeyHandoff sets the re-sealed key on a claimed row; refuses unclaimed", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("55".repeat(16)));
+        // Unclaimed → refused.
+        const beforeClaim = await s.serverTransfers.putDiskKeyHandoff(dom, "ab".repeat(60), 9);
+        await s.serverTransfers.claim(
+          dom, "55".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 10,
+        );
+        const afterClaim = await s.serverTransfers.putDiskKeyHandoff(dom, "ab".repeat(60), 12);
+        const row = await s.serverTransfers.getOffer(dom, 13);
+        return {
+          beforeClaim,
+          afterClaim,
+          handoff: row?.diskKeyHandoffHex,
+          handoffAt: row?.diskKeyHandoffAt,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        beforeClaim: false,
+        afterClaim: true,
+        handoff: "ab".repeat(60),
+        handoffAt: 12,
+      });
+    });
+
+    it("claim records the acquirer admin root; putAdminHandoff sets the proof on a claimed row (Slice D §9.8)", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("99".repeat(16)));
+        // Unclaimed → refused.
+        const beforeClaim = await s.serverTransfers.putAdminHandoff(dom, {
+          oldRootHex: "1a".repeat(32),
+          newRootHex: "2b".repeat(32),
+          issuedAt: 7,
+          sigHex: "3c".repeat(64),
+        });
+        await s.serverTransfers.claim(
+          dom, "99".repeat(16), "bob", "bb".repeat(32), "1B".repeat(32), 5, "cc".repeat(64), 10,
+        );
+        const afterClaim = await s.serverTransfers.putAdminHandoff(dom, {
+          oldRootHex: "1a".repeat(32),
+          newRootHex: "2b".repeat(32),
+          issuedAt: 7,
+          sigHex: "3c".repeat(64),
+        });
+        // Idempotent re-deposit REPLACES.
+        const redeposit = await s.serverTransfers.putAdminHandoff(dom, {
+          oldRootHex: "1a".repeat(32),
+          newRootHex: "", // unpin shape stores the empty string, not NULL
+          issuedAt: 8,
+          sigHex: "4d".repeat(64),
+        });
+        const row = await s.serverTransfers.getOffer(dom, 13);
+        return {
+          beforeClaim,
+          afterClaim,
+          redeposit,
+          acquirerAdminRoot: row?.acquirerAdminRootPubHex, // lowercased on write
+          oldRoot: row?.adminHandoffOldRootHex,
+          newRoot: row?.adminHandoffNewRootHex,
+          issuedAt: row?.adminHandoffIssuedAt,
+          sig: row?.adminHandoffSigHex,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        beforeClaim: false,
+        afterClaim: true,
+        redeposit: true,
+        acquirerAdminRoot: "1b".repeat(32),
+        oldRoot: "1a".repeat(32),
+        newRoot: "",
+        issuedAt: 8,
+        sig: "4d".repeat(64),
+      });
+    });
+
+    it("putRehomeAuth sets the legacy proof on a claimed row; refuses unclaimed; re-deposit replaces (v1-sec GAP 3)", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("77".repeat(16)));
+        // Unclaimed → refused.
+        const beforeClaim = await s.serverTransfers.putRehomeAuth(dom, {
+          issuedAt: 7,
+          sigHex: "5e".repeat(64),
+        });
+        await s.serverTransfers.claim(
+          dom, "77".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 10,
+        );
+        const afterClaim = await s.serverTransfers.putRehomeAuth(dom, {
+          issuedAt: 7,
+          sigHex: "5E".repeat(64), // stored lowercased
+        });
+        // Idempotent re-deposit REPLACES.
+        const redeposit = await s.serverTransfers.putRehomeAuth(dom, {
+          issuedAt: 8,
+          sigHex: "6f".repeat(64),
+        });
+        const row = await s.serverTransfers.getOffer(dom, 13);
+        return {
+          beforeClaim,
+          afterClaim,
+          redeposit,
+          issuedAt: row?.rehomeAuthIssuedAt,
+          sig: row?.rehomeAuthSigHex,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        beforeClaim: false,
+        afterClaim: true,
+        redeposit: true,
+        issuedAt: 8,
+        sig: "6f".repeat(64),
+      });
+    });
+
+    it("re-issued offer replaces the prior unclaimed row", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("22".repeat(16)));
+        await s.serverTransfers.putOffer(mkOffer("33".repeat(16)));
+        // The old nonce can no longer be claimed; only the freshest stands.
+        const oldClaim = await s.serverTransfers.claim(
+          dom, "22".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 10,
+        );
+        const newClaim = await s.serverTransfers.claim(
+          dom, "33".repeat(16), "bob", "bb".repeat(32), "", 6, "cc".repeat(64), 11,
+        );
+        return {
+          oldOk: oldClaim.ok,
+          oldReason: oldClaim.ok ? null : oldClaim.reason,
+          newOk: newClaim.ok,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ oldOk: false, oldReason: "nonce mismatch", newOk: true });
+    });
+
+    it("claim of an expired offer is rejected; getOffer GCs the expired unclaimed row", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("44".repeat(16), 50));
+        const expiredClaim = await s.serverTransfers.claim(
+          dom, "44".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 100,
+        );
+        const gone = await s.serverTransfers.getOffer(dom, 100);
+        return {
+          claimOk: expiredClaim.ok,
+          claimReason: expiredClaim.ok ? null : expiredClaim.reason,
+          goneDefined: gone !== undefined,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ claimOk: false, claimReason: "expired", goneDefined: false });
+    });
+
+    it("claim of an absent / nonce-mismatched offer is rejected", async () => {
+      const r = await bothAdapters(async (s) => {
+        const absent = await s.serverTransfers.claim(
+          dom, "55".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 10,
+        );
+        await s.serverTransfers.putOffer(mkOffer("66".repeat(16)));
+        const wrongNonce = await s.serverTransfers.claim(
+          dom, "77".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 10,
+        );
+        return {
+          absentReason: absent.ok ? null : absent.reason,
+          wrongNonceReason: wrongNonce.ok ? null : wrongNonce.reason,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ absentReason: "no offer", wrongNonceReason: "nonce mismatch" });
+    });
+
+    it("getOffer keeps a claimed offer even after expiry (re-seal window); remove deletes", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("88".repeat(16), 50));
+        await s.serverTransfers.claim(
+          dom, "88".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 40,
+        );
+        const afterExpiry = await s.serverTransfers.getOffer(dom, 100);
+        await s.serverTransfers.remove(dom);
+        const removed = await s.serverTransfers.getOffer(dom, 100);
+        return {
+          keptAfterExpiry: afterExpiry !== undefined,
+          keptAcq: afterExpiry?.acquirerUsername,
+          removedDefined: removed !== undefined,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ keptAfterExpiry: true, keptAcq: "bob", removedDefined: false });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // serverEvictions — the graceful-decommission lane. One row per retired
+  // instance under a pod FQDN (re-issue upserts); the chain lists by
+  // issuedAt asc; markNewAcked marks the whole pod; gc deletes acked+old.
+  // ────────────────────────────────────────────────────────────────────
+  describe("serverEvictions", () => {
+    const pod = "home.alice.flagship.services";
+    const mkEvict = (stk: string, issuedAt = 100) => ({
+      podCanonical: pod,
+      retiredStkPubHex: stk,
+      orderJson: JSON.stringify({ retire: stk, issuedAt }),
+      orderSignatureHex: "ff".repeat(64),
+      issuedAt,
+      oldAckedAt: null,
+      newAckedAt: null,
+      epochCompleteAt: null,
+    });
+
+    it("record → get returns the order; list returns the chain ordered by issuedAt asc", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverEvictions.recordEviction(mkEvict("bb".repeat(32), 300));
+        await s.serverEvictions.recordEviction(mkEvict("aa".repeat(32), 100));
+        await s.serverEvictions.recordEviction(mkEvict("cc".repeat(32), 200));
+        const got = await s.serverEvictions.getEviction(pod, "aa".repeat(32));
+        const chain = await s.serverEvictions.listEvictions(pod);
+        return {
+          gotStk: got?.retiredStkPubHex,
+          gotJson: got?.orderJson,
+          chainOrder: chain.map((e) => e.issuedAt),
+          chainStks: chain.map((e) => e.retiredStkPubHex),
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        gotStk: "aa".repeat(32),
+        gotJson: JSON.stringify({ retire: "aa".repeat(32), issuedAt: 100 }),
+        chainOrder: [100, 200, 300],
+        chainStks: ["aa".repeat(32), "cc".repeat(32), "bb".repeat(32)],
+      });
+    });
+
+    it("re-recording the same retired STK upserts (one row, latest order)", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverEvictions.recordEviction(mkEvict("aa".repeat(32), 100));
+        await s.serverEvictions.recordEviction({
+          ...mkEvict("aa".repeat(32), 100),
+          orderJson: JSON.stringify({ v: 2 }),
+        });
+        const chain = await s.serverEvictions.listEvictions(pod);
+        return { count: chain.length, json: chain[0]?.orderJson };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ count: 1, json: JSON.stringify({ v: 2 }) });
+    });
+
+    it("markOldAcked / markEpochComplete hit one row; markNewAcked marks the whole pod", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverEvictions.recordEviction(mkEvict("aa".repeat(32), 100));
+        await s.serverEvictions.recordEviction(mkEvict("bb".repeat(32), 200));
+        const oldAck = await s.serverEvictions.markOldAcked(pod, "aa".repeat(32), 10);
+        const epoch = await s.serverEvictions.markEpochComplete(pod, "aa".repeat(32), 11);
+        const newCount = await s.serverEvictions.markNewAcked(pod, 12);
+        const missing = await s.serverEvictions.markOldAcked(pod, "ee".repeat(32), 13);
+        const chain = await s.serverEvictions.listEvictions(pod);
+        return {
+          oldAck,
+          epoch,
+          newCount,
+          missing,
+          rowA: {
+            old: chain[0]?.oldAckedAt,
+            epoch: chain[0]?.epochCompleteAt,
+            new: chain[0]?.newAckedAt,
+          },
+          rowB: {
+            old: chain[1]?.oldAckedAt,
+            epoch: chain[1]?.epochCompleteAt,
+            new: chain[1]?.newAckedAt,
+          },
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        oldAck: true,
+        epoch: true,
+        newCount: 2,
+        missing: false,
+        rowA: { old: 10, epoch: 11, new: 12 },
+        rowB: { old: null, epoch: null, new: 12 },
+      });
+    });
+
+    it("gcEvictions deletes acked+old rows; keeps un-acked and acked-but-recent", async () => {
+      const r = await bothAdapters(async (s) => {
+        // acked long ago → deleted.
+        await s.serverEvictions.recordEviction(mkEvict("aa".repeat(32), 100));
+        await s.serverEvictions.markNewAcked(pod, 1000);
+        // a second pod, never acked → kept.
+        await s.serverEvictions.recordEviction({
+          ...mkEvict("bb".repeat(32), 200),
+          podCanonical: "other.bob.flagship.services",
+        });
+        // gc at now=10000, ttl=5000 → cutoff 5000; pod-1's newAckedAt=1000 ≤ cutoff → gone.
+        const removed = await s.serverEvictions.gcEvictions(10000, 5000);
+        const pod1 = await s.serverEvictions.listEvictions(pod);
+        const pod2 = await s.serverEvictions.listEvictions("other.bob.flagship.services");
+        return { removed, pod1Len: pod1.length, pod2Len: pod2.length };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ removed: 1, pod1Len: 0, pod2Len: 1 });
+    });
+
+    it("gcEvictions keeps an acked row still within its TTL", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverEvictions.recordEviction(mkEvict("aa".repeat(32), 100));
+        await s.serverEvictions.markNewAcked(pod, 9000);
+        // cutoff = 10000 - 5000 = 5000; newAckedAt=9000 > cutoff → kept.
+        const removed = await s.serverEvictions.gcEvictions(10000, 5000);
+        const chain = await s.serverEvictions.listEvictions(pod);
+        return { removed, len: chain.length };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ removed: 0, len: 1 });
+    });
+
+    it("deleteEviction removes exactly one row (migration-abort neutralize)", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverEvictions.recordEviction(mkEvict("aa".repeat(32), 100));
+        await s.serverEvictions.recordEviction(mkEvict("bb".repeat(32), 200));
+        const deleted = await s.serverEvictions.deleteEviction(pod, "AA".repeat(32));
+        const again = await s.serverEvictions.deleteEviction(pod, "aa".repeat(32));
+        const chain = await s.serverEvictions.listEvictions(pod);
+        return { deleted, again, stks: chain.map((e) => e.retiredStkPubHex) };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ deleted: true, again: false, stks: ["bb".repeat(32)] });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // serverMigrations — the server-migration orchestration lane (0081).
+  // One row per migrating FQDN (upsert); listForUser orders by
+  // initiatedAt asc; attach + the mark* stamps advance phase + timestamp.
+  // ────────────────────────────────────────────────────────────────────
+  describe("serverMigrations", () => {
+    const mkSession = (domain: string, initiatedAt = 100) => ({
+      serverDomain: domain,
+      username: "alice",
+      oldStkPubHex: "aa".repeat(32),
+      orderJson: JSON.stringify({ migrate: domain }),
+      orderSignatureHex: "ff".repeat(64),
+      disposition: "wipe-after-handoff",
+      phase: "initiated" as const,
+      initiatedAt,
+      newServerDomain: null,
+      newStkPubHex: null,
+      attachedAt: null,
+      preSeededAt: null,
+      readyAt: null,
+      freezeAt: null,
+      takenOverAt: null,
+      abortedAt: null,
+    });
+
+    it("put → get returns the session (hex/hostnames lowercased); upsert replaces", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverMigrations.putSession({
+          ...mkSession("HOME.Alice.Flagship.Services"),
+          oldStkPubHex: "AA".repeat(32),
+          orderSignatureHex: "FF".repeat(64),
+        });
+        await s.serverMigrations.putSession({
+          ...mkSession("home.alice.flagship.services"),
+          orderJson: JSON.stringify({ v: 2 }),
+        });
+        const got = await s.serverMigrations.getSession("home.alice.flagship.services");
+        const all = await s.serverMigrations.listForUser("ALICE");
+        return { got, count: all.length };
+      });
+      expectParity(r);
+      expect(r.d1.count).toBe(1);
+      expect(r.d1.got?.orderJson).toBe(JSON.stringify({ v: 2 }));
+      expect(r.d1.got?.oldStkPubHex).toBe("aa".repeat(32));
+      expect(r.d1.got?.phase).toBe("initiated");
+    });
+
+    it("listForUser returns sessions ordered by initiatedAt asc, scoped to the account", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverMigrations.putSession(mkSession("b.alice.flagship.services", 300));
+        await s.serverMigrations.putSession(mkSession("a.alice.flagship.services", 100));
+        await s.serverMigrations.putSession({
+          ...mkSession("c.bob.flagship.services", 50),
+          username: "bob",
+        });
+        const list = await s.serverMigrations.listForUser("alice");
+        return list.map((m) => m.serverDomain);
+      });
+      expectParity(r);
+      expect(r.d1).toEqual(["a.alice.flagship.services", "b.alice.flagship.services"]);
+    });
+
+    it("attachNewBox + the mark* stamps advance phase and timestamps; false on a missing row", async () => {
+      const r = await bothAdapters(async (s) => {
+        const pod = "home.alice.flagship.services";
+        await s.serverMigrations.putSession(mkSession(pod));
+        const attached = await s.serverMigrations.attachNewBox(
+          pod,
+          "ATTIC.alice.flagship.services",
+          "BB".repeat(32),
+          10,
+        );
+        const afterAttach = await s.serverMigrations.getSession(pod);
+        await s.serverMigrations.markPreSeeded(pod, 11);
+        await s.serverMigrations.markReady(pod, 12);
+        await s.serverMigrations.markFreeze(pod, 13);
+        await s.serverMigrations.markTakenOver(pod, 14);
+        const final = await s.serverMigrations.getSession(pod);
+        const missing = await s.serverMigrations.markAborted("nope.alice.flagship.services", 15);
+        return {
+          attached,
+          missing,
+          attachPhase: afterAttach?.phase,
+          newDomain: afterAttach?.newServerDomain,
+          newStk: afterAttach?.newStkPubHex,
+          finalPhase: final?.phase,
+          stamps: [final?.preSeededAt, final?.readyAt, final?.freezeAt, final?.takenOverAt],
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        attached: true,
+        missing: false,
+        attachPhase: "provisioned",
+        newDomain: "attic.alice.flagship.services",
+        newStk: "bb".repeat(32),
+        finalPhase: "taken-over",
+        stamps: [11, 12, 13, 14],
+      });
+    });
+
+    it("markAborted is terminal-stamping like the others (abortedAt + phase)", async () => {
+      const r = await bothAdapters(async (s) => {
+        const pod = "home.alice.flagship.services";
+        await s.serverMigrations.putSession(mkSession(pod));
+        const aborted = await s.serverMigrations.markAborted(pod, 42);
+        const got = await s.serverMigrations.getSession(pod);
+        return { aborted, phase: got?.phase, at: got?.abortedAt };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ aborted: true, phase: "aborted", at: 42 });
     });
   });
 
@@ -896,12 +1855,157 @@ describe("D1 ↔ InMemory parity", () => {
       expectParity(r);
       expect(r.d1).toEqual({ mine: ["b", "c", "a"], theirs: ["d"] });
     });
+
+    // v2 hardening (migration 0057): the v2 columns + the bindings ledger +
+    // GROUP multi-bind + expiry + revokedSince must read identically on both.
+    it("v2 fields round-trip + group multi-bind + cap + expiry + revokedSince", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serviceInvites.create(mk("p", "11".repeat(32)));
+        await s.serviceInvites.create({
+          inviteId: "g",
+          authorAID: "aa".repeat(32),
+          serviceRef: "alice-notes",
+          encryptedBundle: "deadbeef",
+          secretHash: "22".repeat(32),
+          createdAt: 1000,
+          createSig: "ab".repeat(64),
+          maxRedemptions: 2,
+          expiresAt: 9000,
+          approvalMode: "manual",
+        });
+        const pDefaults = (await s.serviceInvites.get("p"))!;
+        const gMeta = (await s.serviceInvites.get("g"))!;
+        const b1 = await s.serviceInvites.redeem("22".repeat(32), "bb".repeat(32), 100);
+        const b2 = await s.serviceInvites.redeem("22".repeat(32), "cc".repeat(32), 200);
+        const b3 = await s.serviceInvites.redeem("22".repeat(32), "dd".repeat(32), 300);
+        const dupe = await s.serviceInvites.redeem("22".repeat(32), "bb".repeat(32), 400);
+        const gBound = (await s.serviceInvites.get("g"))!;
+        await s.serviceInvites.create({
+          inviteId: "e",
+          authorAID: "aa".repeat(32),
+          serviceRef: "x",
+          encryptedBundle: "ff",
+          secretHash: "33".repeat(32),
+          createdAt: 1,
+          expiresAt: 1000,
+        });
+        const expired = await s.serviceInvites.redeem("33".repeat(32), "bb".repeat(32), 1001);
+        await s.serviceInvites.revoke("g", 5000);
+        const revoked = await s.serviceInvites.revokedSince("aa".repeat(32), 0);
+        return {
+          pSig: pDefaults.createSig,
+          pMax: pDefaults.maxRedemptions,
+          pMode: pDefaults.approvalMode,
+          gSig: gMeta.createSig,
+          gMax: gMeta.maxRedemptions,
+          gExp: gMeta.expiresAt,
+          gMode: gMeta.approvalMode,
+          b1First: b1.ok && b1.firstBind,
+          b2First: b2.ok && b2.firstBind,
+          b3,
+          dupeFirst: dupe.ok && dupe.firstBind,
+          gBoundFirst: gBound.boundAID,
+          gBoundAt: gBound.boundAt,
+          gBoundAIDs: gBound.boundAIDs,
+          gRedemptions: gBound.redemptions,
+          expired,
+          revoked,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        pSig: null,
+        pMax: null,
+        pMode: "auto",
+        gSig: "ab".repeat(64),
+        gMax: 2,
+        gExp: 9000,
+        gMode: "manual",
+        b1First: true,
+        b2First: true,
+        b3: { ok: false, reason: "max redemptions reached" },
+        dupeFirst: false,
+        gBoundFirst: "bb".repeat(32),
+        gBoundAt: 100,
+        gBoundAIDs: ["bb".repeat(32), "cc".repeat(32)],
+        gRedemptions: 2,
+        expired: { ok: false, reason: "expired" },
+        revoked: [
+          {
+            inviteId: "g",
+            serviceRef: "alice-notes",
+            boundAIDs: ["bb".repeat(32), "cc".repeat(32)],
+            revokedAt: 5000,
+          },
+        ],
+      });
+    });
   });
 
   // ────────────────────────────────────────────────────────────────────
   // Harness self-check: the SQLite DB is the REAL prod schema (every
   // migration applied), with exactly the documented tolerated no-op.
   // ────────────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────
+  // Peer-backup manifests (0080) — latest-wins upsert by generation
+  // ────────────────────────────────────────────────────────────────────
+  describe("peerBackupManifests", () => {
+    const rec = (over: Partial<import("../src/types.js").PeerBackupManifestRecord> = {}) => ({
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      generation: 1,
+      updatedAt: 1000,
+      ciphertextHex: "aa".repeat(64),
+      nonceHex: "bb".repeat(12),
+      ...over,
+    });
+
+    it("put + get round-trips", async () => {
+      const r = await bothAdapters(async (s) => {
+        const put = await s.peerBackupManifests.put(rec());
+        const got = await s.peerBackupManifests.get("HOME.alice.flagship.services");
+        return { put, got };
+      });
+      expect(r.mem).toEqual(r.d1);
+      expect(r.mem.put).toEqual({ ok: true });
+      expect(r.mem.got?.generation).toBe(1);
+    });
+
+    it("newer generation overwrites; stale generation is rejected", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.peerBackupManifests.put(rec({ generation: 2, ciphertextHex: "cc".repeat(4) }));
+        const stale = await s.peerBackupManifests.put(rec({ generation: 2, ciphertextHex: "dd".repeat(4) }));
+        const older = await s.peerBackupManifests.put(rec({ generation: 1 }));
+        const newer = await s.peerBackupManifests.put(rec({ generation: 3, ciphertextHex: "ee".repeat(4) }));
+        const got = await s.peerBackupManifests.get(rec().serverDomain);
+        return { stale, older, newer, got };
+      });
+      expect(r.mem).toEqual(r.d1);
+      expect(r.mem.stale).toEqual({ ok: false, reason: "stale generation" });
+      expect(r.mem.older).toEqual({ ok: false, reason: "stale generation" });
+      expect(r.mem.newer).toEqual({ ok: true });
+      expect(r.mem.got?.generation).toBe(3);
+      expect(r.mem.got?.ciphertextHex).toBe("ee".repeat(4));
+    });
+
+    it("get is non-consuming; delete removes", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.peerBackupManifests.put(rec());
+        const first = await s.peerBackupManifests.get(rec().serverDomain);
+        const second = await s.peerBackupManifests.get(rec().serverDomain);
+        const del = await s.peerBackupManifests.delete(rec().serverDomain);
+        const gone = await s.peerBackupManifests.get(rec().serverDomain);
+        const delAgain = await s.peerBackupManifests.delete(rec().serverDomain);
+        return { first, second, del, gone, delAgain };
+      });
+      expect(r.mem).toEqual(r.d1);
+      expect(r.mem.first).toEqual(r.mem.second);
+      expect(r.mem.del).toBe(true);
+      expect(r.mem.gone).toBeUndefined();
+      expect(r.mem.delAgain).toBe(false);
+    });
+  });
+
   describe("migration application", () => {
     it("applies the whole migration ledger cleanly (0026 is a SELECT 1; no-op)", () => {
       const sqlite = createSqliteD1();

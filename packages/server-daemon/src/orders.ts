@@ -1,4 +1,5 @@
-import { verifyPhoneOrder, type PhoneOrder } from "@flagship/protocol";
+import { verifyPhoneOrder, type AdminGrantView, type PhoneOrder } from "@flagship/protocol";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 
 /**
@@ -50,7 +51,7 @@ export interface OrderExecutor {
   }): Promise<void> | void;
   addSubscriber?(args: { serviceId: string; fqdn: string }): Promise<void> | void;
   removeSubscriber?(args: { serviceId: string; fqdn: string }): Promise<void> | void;
-  addPairedSession?(args: { token: string; label: string }): Promise<void> | void;
+  addPairedSession?(args: { token: string }): Promise<void> | void;
   removePairedSession?(args: { token: string }): Promise<void> | void;
   // (claimUrl / releaseUrl removed in N12d — claims now flow app →
   //  daemon → hub via FRAME_REQUEST_TRANSFER, not via PhoneOrder.)
@@ -78,9 +79,36 @@ export interface OrdersHandlerOptions {
   /** PSK pubkey baked into the install trailer. */
   pskPub: Uint8Array;
   executor: OrderExecutor;
+  /** Slice D — the pinned admin master root (`ServerConfig.adminRootPub`);
+   *  present ⇒ the DESTRUCTIVE order types (spec §2 row 10) are gated by
+   *  `requireMasterAdmin`, absent ⇒ legacy pskPub verification (a strict
+   *  no-op on pre-wipe boxes). */
+  adminRootPub?: Uint8Array;
+  /** This box's owner account (cfg.userId) — for the delegated-grant check. */
+  username?: string;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
   maxAgeMs?: number;
   now?: () => number;
 }
+
+// Slice D (docs/device-admin-tier-spec.md §2 row 10, §9.3): the DESTRUCTIVE
+// order types on this endpoint. The PSK path is dead on real boxes
+// (psk.pub.hex is never written; the endpoint falls back to the owner IRK for
+// pairing), but a revival must not skip the admin boundary — with a pinned
+// admin root these are authorized ONLY by the admin master root / an
+// admin-granted device, never the membership key. Pair-for-use orders
+// (add/remove-paired-session, subscribers, browser input, noop) stay on the
+// legacy verification key by design (spec rows 14-15: non-admins keep using
+// the box).
+const SENSITIVE_ORDER_TYPES: ReadonlySet<PhoneOrder["type"]> = new Set([
+  "set-backup-policy",
+  "shut-down",
+  "revoke-self",
+  "rotate-server-identity",
+  "deliver-bak",
+  "backup-app",
+]);
 
 interface PhoneOrderEnvelope {
   request?: Record<string, unknown>;
@@ -126,7 +154,18 @@ export function buildOrdersHandler(opts: OrdersHandlerOptions) {
     } catch {
       return { status: 400, body: JSON.stringify({ error: "invalid signature hex" }), headers: H };
     }
-    if (!verifyPhoneOrder(order, sig, opts.pskPub)) {
+    const authorized = SENSITIVE_ORDER_TYPES.has(order.type)
+      ? authorizeSensitiveOrder({
+          order,
+          signature: sig,
+          verify: verifyPhoneOrder,
+          ownerIrkPub: opts.pskPub,
+          adminRootPub: opts.adminRootPub,
+          username: opts.username ?? "",
+          activeGrants: opts.activeGrants,
+        })
+      : verifyPhoneOrder(order, sig, opts.pskPub);
+    if (!authorized) {
       return { status: 403, body: JSON.stringify({ error: "invalid signature" }), headers: H };
     }
 
@@ -230,12 +269,11 @@ function parseOrder(r: Record<string, unknown>): PhoneOrder | null {
         issuedAt: r.issuedAt,
       };
     case "add-paired-session":
-      if (typeof r.token !== "string" || typeof r.label !== "string") return null;
+      if (typeof r.token !== "string") return null;
       return {
         type: "add-paired-session",
         serverId: r.serverId,
         token: r.token,
-        label: r.label,
         issuedAt: r.issuedAt,
       };
     case "remove-paired-session":
@@ -313,7 +351,7 @@ async function dispatch(order: PhoneOrder, ex: OrderExecutor): Promise<void> {
       return;
     case "add-paired-session":
       if (!ex.addPairedSession) throw new Error("addPairedSession not implemented");
-      await ex.addPairedSession({ token: order.token, label: order.label });
+      await ex.addPairedSession({ token: order.token });
       return;
     case "remove-paired-session":
       if (!ex.removePairedSession) throw new Error("removePairedSession not implemented");

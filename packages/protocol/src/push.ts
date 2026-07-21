@@ -23,35 +23,29 @@ export type PushPlatform = "apns" | "fcm" | "webpush";
 
 export interface PushTokenRegister {
   username: string;
+  /** Immutable account-scoped device identity owning this transport token. */
+  deviceId: string;
   platform: PushPlatform;
   providerToken: string;        // opaque to .com
   pushX25519Pub: Bytes;         // 32 bytes — encryption key for relays
-  /**
-   * Human-readable device label surfaced in the user's "Trusted devices"
-   * list — e.g. "Harry's iPhone", "Pixel 8 — kitchen". The phone supplies
-   * this at registration; .com persists it so other devices can show a
-   * recognisable name rather than a token-id. Treated as opaque text:
-   * the Worker sanitizes length + control chars but never interprets
-   * the content.
-   */
-  label: string;
   issuedAt: number;
 }
 
-const TAG_PUSH_TOKEN_REGISTER = "flagship/push-token-register/v1";
+const TAG_PUSH_TOKEN_REGISTER = "flagship/push-token-register/v2";
 
 function canonicalPushTokenRegister(r: PushTokenRegister): Bytes {
   legacyFieldGuard("username", r.username);
+  legacyFieldGuard("deviceId", r.deviceId);
   legacyFieldGuard("providerToken", r.providerToken);
-  legacyFieldGuard("label", r.label);
+  if (!/^[0-9a-f]{32}$/.test(r.deviceId)) throw new Error("deviceId must be 16-byte lowercase hex");
   return new TextEncoder().encode(
     [
       TAG_PUSH_TOKEN_REGISTER,
       r.username,
+      r.deviceId,
       r.platform,
       r.providerToken,
       hex(r.pushX25519Pub),
-      r.label,
       r.issuedAt,
     ].join("|"),
   );
@@ -134,18 +128,22 @@ export function verifyPushTokenRevoke(r: PushTokenRevoke, sig: Bytes, irkPub: By
 
 export interface DeviceAdmit {
   username: string;
+  /** Fresh immutable identity for this account membership. */
+  deviceId: string;
   /** The incoming device's freshly-minted pubkey, lowercased hex (32 bytes). */
   newDevicePubHex: string;
   issuedAt: number;
 }
 
-const TAG_DEVICE_ADMIT = "flagship/device-admit/v1";
+const TAG_DEVICE_ADMIT = "flagship/device-admit/v2";
 
 function canonicalDeviceAdmit(a: DeviceAdmit): Bytes {
   legacyFieldGuard("username", a.username);
+  legacyFieldGuard("deviceId", a.deviceId);
   legacyFieldGuard("newDevicePubHex", a.newDevicePubHex);
+  if (!/^[0-9a-f]{32}$/.test(a.deviceId)) throw new Error("deviceId must be 16-byte lowercase hex");
   return new TextEncoder().encode(
-    [TAG_DEVICE_ADMIT, a.username, a.newDevicePubHex, a.issuedAt].join("|"),
+    [TAG_DEVICE_ADMIT, a.username, a.deviceId, a.newDevicePubHex, a.issuedAt].join("|"),
   );
 }
 

@@ -118,6 +118,21 @@ public extension EnvironmentValues {
     }
 }
 
+/// Direct (box-read) per-service leadership — `GET /api/leads` over the box's
+/// pinned canonical pipe, preferred over the `.com` `/pods` `leadsServices`
+/// relay when a box is reachable. Defaults to the in-process Mock (returns nil =
+/// "no fresher source"), so previews/tests keep the relay value untouched.
+private struct LeadsClientKey: EnvironmentKey {
+    static let defaultValue: any LeadsClient = MockLeadsClient()
+}
+
+public extension EnvironmentValues {
+    var leadsClient: any LeadsClient {
+        get { self[LeadsClientKey.self] }
+        set { self[LeadsClientKey.self] = newValue }
+    }
+}
+
 /// Per-service access gating (docs/service-access-gating.md): the owner-IRK
 /// toggle + allow-list manager (box + `.com`) and the friend AID-signed redeem
 /// (box). Box calls ride the pinned canonical pipe; `.com` calls (invite
@@ -147,6 +162,37 @@ public extension EnvironmentValues {
     var serviceUninstallClient: any ServiceUninstallClient {
         get { self[ServiceUninstallClientKey.self] }
         set { self[ServiceUninstallClientKey.self] = newValue }
+    }
+}
+
+/// Transfer-a-box broker client (`.com`): deposits the giver's offer, polls for
+/// the acquirer's claim, and hands off the re-sealed disk key. Hits `.com`
+/// (the namespace-migration broker), not a box-pinned pipe. Defaults to the
+/// in-process Mock so previews/tests are inert.
+private struct ServerTransferClientKey: EnvironmentKey {
+    static let defaultValue: any ServerTransferClient = MockServerTransferClient()
+}
+
+public extension EnvironmentValues {
+    var serverTransferClient: any ServerTransferClient {
+        get { self[ServerTransferClientKey.self] }
+        set { self[ServerTransferClientKey.self] = newValue }
+    }
+}
+
+/// Server-migration lane client (`.com`): deposits the admin-signed initiate /
+/// confirm-ready / freeze / abort and polls the public phase state
+/// (docs/server-migration.md). Hits `.com` (the migration orchestration lane),
+/// not a box-pinned pipe. Defaults to the in-process Mock so previews/tests
+/// are inert.
+private struct ServerMigrationClientKey: EnvironmentKey {
+    static let defaultValue: any ServerMigrationClient = MockServerMigrationClient()
+}
+
+public extension EnvironmentValues {
+    var serverMigrationClient: any ServerMigrationClient {
+        get { self[ServerMigrationClientKey.self] }
+        set { self[ServerMigrationClientKey.self] = newValue }
     }
 }
 

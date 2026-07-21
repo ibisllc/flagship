@@ -13,8 +13,10 @@ import FlagshipCore
 ///   1. The host hands us the picked file's text + the user's passphrase.
 ///   2. `Keyfile.unwrap` decrypts the UMK seed (argon2id + AES-256-GCM).
 ///   3. Point the Keystore at this account's slot + `installUMK`.
-///   4. Initiate the takeover re-pair (new IRK derives from the installed
-///      UMK), then complete it. On `.finalized` the host flips AppState.
+///   4. Initiate the takeover re-pair, ROTATING the IRK (old = the
+///      registered key, new = a fresh rotated device key — the re-pair
+///      handler rejects old==new), then complete it. On `.finalized` the
+///      host flips AppState.
 ///
 /// Errors map to the approved copy: wrong passphrase → "That passphrase
 /// didn't open the file."; not a keyfile → "This isn't a Flagship key
@@ -91,14 +93,18 @@ public final class KeyfileImportViewModel {
             return
         }
 
-        // 3 — Initiate the takeover re-pair. New IRK derives from the
-        // just-installed UMK. On a fresh device we don't hold the
-        // displaced key, so the old-pubkey slot carries the new pubkey
-        // (the Worker keys the takeover on the username row).
+        // 3 — Initiate the takeover re-pair. A fresh device DOES hold the
+        // recovered seed (we just installed it), so it can ROTATE the IRK:
+        // OLD = the currently-registered (v1) key under the recovered UMK,
+        // NEW = a fresh rotated device key (v+1). The re-pair MUST rotate —
+        // the .com handler (control-plane/rePair.ts) rejects new==current
+        // with 400 "newIrkPub equals current IRK", which used to make this
+        // path DEAD (it sent old==new). Mirrors Android's KeyfileImport +
+        // the webapp fix + iOS ReplaceDevice/loginTakeover.
         do {
             let resp = try await initiateTakeoverRePair(username: username)
             phase = .completed(username: username, completesAt: resp.completesAt)
-        } catch ScreensClientError.http(let status, let message) where status == 401 && (message ?? "").contains("totpProof") {
+        } catch ScreensClientError.http(let status, let message) where status == 401 && message.contains("totpProof") {
             // #52 — the account has a second factor enrolled, which the
             // cloud now requires at initiate even for single-device
             // accounts. The keyfile sheet has no second-factor field
@@ -119,8 +125,11 @@ public final class KeyfileImportViewModel {
         phase = .working
         do {
             _ = try await server.completeRePair(username: username)
+            finalizeRotation()
             phase = .finalized(username: username)
         } catch ScreensClientError.http(let status, _) where status == 404 {
+            // Already swapped server-side — the rotation took; persist it.
+            finalizeRotation()
             phase = .finalized(username: username)
         } catch ScreensClientError.http(let status, _) where status == 425 {
             phase = .completed(username: username, completesAt: completesAt)
@@ -134,10 +143,28 @@ public final class KeyfileImportViewModel {
         }
     }
 
+    /// The re-pair ROTATED the IRK to the staged version; once the swap has
+    /// landed server-side, promote it locally so subsequent signing (push,
+    /// orders, …) uses the rotated device key — mirrors ReplaceDeviceViewModel
+    /// + Android's finishTakeover. Best-effort: the swap already succeeded.
+    private func finalizeRotation() {
+        guard let pending = Keystore.pendingIrkRotationVersion() else { return }
+        try? Keystore.setCurrentIrkVersion(pending)
+        try? Keystore.setPendingIrkRotationVersion(nil)
+    }
+
     private func initiateTakeoverRePair(username: String) async throws -> RePairInitiateResponse {
-        let newKey = try await Keystore.deriveIRK(reason: "Authorize this device")
+        // ROTATE the IRK: OLD = the currently-registered version (v1 after
+        // installUMK), NEW = the next version. Both derive from the recovered
+        // UMK this device just installed. We do NOT persist the new version
+        // yet — that happens only after a successful server complete
+        // (completeTakeover), exactly like ReplaceDeviceViewModel.
+        let oldVersion = Keystore.currentIrkVersion()
+        let newVersion = oldVersion + 1
+        let oldKey = try await Keystore.deriveIRK(reason: "Confirm import", version: oldVersion)
+        let newKey = try await Keystore.deriveIRK(reason: "Authorize this device", version: newVersion)
+        let oldPubHex = HexUtil.encode(oldKey.publicKey.rawRepresentation)
         let newPubHex = HexUtil.encode(newKey.publicKey.rawRepresentation)
-        let oldPubHex = newPubHex
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         let canonical = RePairInitiate.canonicalBytes(
             username: username,
@@ -145,8 +172,10 @@ public final class KeyfileImportViewModel {
             oldIrkPubHex: oldPubHex,
             issuedAt: issuedAt
         )
+        // The NEW (rotated) IRK signs — it proves possession of the
+        // recovered+rotated key (the .com handler verifies against newIrkPub).
         let signature = try newKey.signature(for: canonical)
-        return try await server.initiateRePair(
+        let resp = try await server.initiateRePair(
             username: username,
             body: RePairInitiateRequest(
                 request: .init(
@@ -160,6 +189,10 @@ public final class KeyfileImportViewModel {
             ),
             ifMatch: nil
         )
+        // Remember the staged rotation so completeTakeover finalizes the new
+        // version locally once the swap lands server-side.
+        try? Keystore.setPendingIrkRotationVersion(newVersion)
+        return resp
     }
 
     public func reset() {

@@ -148,7 +148,7 @@ describe("POST /api/screens/companion/mint-ticket", () => {
       withOwnerToken({
         method: "POST",
         path: "/api/screens/companion/mint-ticket",
-        body: Buffer.from(JSON.stringify({ label: "Library iMac" })),
+        body: Buffer.from("{}"),
       }, OWNER_TOKEN),
     );
     expect(r?.status).toBe(200);
@@ -163,19 +163,6 @@ describe("POST /api/screens/companion/mint-ticket", () => {
     const all = ticketStore._all();
     expect(all).toHaveLength(1);
     expect(all[0]!.status).toBe("pending");
-    expect(all[0]!.label).toBe("Library iMac");
-  });
-
-  it("400s on label too long", async () => {
-    const { handle } = await buildHarness();
-    const r = await handle(
-      withOwnerToken({
-        method: "POST",
-        path: "/api/screens/companion/mint-ticket",
-        body: Buffer.from(JSON.stringify({ label: "x".repeat(65) })),
-      }, OWNER_TOKEN),
-    );
-    expect(r?.status).toBe(400);
   });
 });
 
@@ -241,13 +228,11 @@ describe("POST /api/companion/redeem (PUBLIC)", () => {
     expect(body.expiresAt - 5_000).toBe(4 * 60 * 60_000);
     expect(body.podBaseUrl).toBe(`https://${SERVER_FQDN}`);
     expect(body.username).toBe(USERNAME);
-    expect(body.label).toBe("iMac");
 
     // The new companion row landed in the paired-session store, flagged.
     const row = pairedSessions.get(body.companionSessionToken);
     expect(row?.companion).toBe(true);
     expect(row?.expiresAt).toBe(body.expiresAt);
-    expect(row?.companionLabel).toBe("iMac");
     expect(row?.companionUserAgent).toContain("Mozilla/5.0");
 
     // The ticket is now consumed.
@@ -363,7 +348,6 @@ describe("GET /api/screens/companion/list", () => {
     const c = body.companions[0];
     expect(typeof c.tokenPrefix).toBe("string");
     expect(c.tokenPrefix.length).toBe(12);
-    expect(c.label).toBe("iPad");
     expect(c.userAgent).toContain("iPad");
     expect(typeof c.expiresAt).toBe("number");
     expect(typeof c.redeemedAt).toBe("number");

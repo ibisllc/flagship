@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Flagship Studio
+GenericName=USB Image Writer
+Comment=Flash a Flagship pod onto a USB drive
+Exec=flagship-builder %F
+Terminal=false
+Icon=com.flagshipserver.Builder
+Categories=Utility;System;
+StartupNotify=true
+StartupWMClass=com.flagshipserver.Builder

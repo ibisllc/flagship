@@ -33,6 +33,16 @@ public protocol SecretMailboxClient: Sendable {
     /// plane (canonical id-cert source).
     func fetchPods(username: String) async throws -> PodsDirectoryResponse
 
+    /// GET /api/users/:u/stream?cursor=<hex> — the unified live-update channel
+    /// (the hanging GET). A SUPERSET of `/pods` (same `pods`/`pending`) plus an
+    /// opaque `cursor`: pass the last cursor, the server returns immediately if
+    /// anything meaningful changed (or you sent none / a stale one), else HOLDS
+    /// up to ~25s and returns on the next change (or a timeout, same cursor).
+    /// Unauthenticated, exactly like `/pods`. The single foreground canal that
+    /// feeds AppState (collapsing the many per-screen pollers); the caller falls
+    /// back to `fetchPods` if this errors / is unreachable.
+    func fetchLiveSync(username: String, cursor: String?) async throws -> LiveSyncResponse
+
     /// PUT {boot}/api/boot/lease — deposit a box-sealed auto-unlock lease on
     /// the boot worker (owner-IRK via the `bootAuth` header). The `lease`
     /// body keeps its own IRK signature so the box re-verifies it. Enables
@@ -43,6 +53,199 @@ public protocol SecretMailboxClient: Sendable {
     /// via `bootAuth`). Drops the lease so the box can no longer self-unlock
     /// — it falls back to phone-gated approval (downgrade, not brick).
     func revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) async throws
+
+    /// POST /api/server/:domain/pairing-deposit — phone, IRK mailbox-auth.
+    /// Create-time pairing: pre-register a sealed `add-paired-session` order on
+    /// `.com` the moment the recipe is minted, so the booting box claims it on
+    /// first boot and comes online ALREADY paired (no "Pair this server" tap).
+    /// `.com` stores only the OPAQUE sealed blob — it never sees the token (I1).
+    func depositPairing(serverDomain: String, body: PairingDepositBody) async throws
+
+    /// POST /api/server/:domain/entitlement-deposit — phone, IRK mailbox-auth.
+    /// Fold "authorize to serve" into the first-boot unlock: the phone deposits an
+    /// owner-IRK-signed entitlement for the box's STK so it claims it on boot with
+    /// no separate tap. `deposit.sealed` is the PUBLIC entitlement carrier (what
+    /// the box presents at HELLO), not a secret. Reuses `PairingDepositBody`.
+    func depositEntitlement(serverDomain: String, body: PairingDepositBody) async throws
+
+    /// POST /api/server/:domain/decommission — phone, IRK mailbox-auth (the SAME
+    /// `DeviceEndpointClaim` shape the self-delete / pairing / entitlement deposits
+    /// use). Deposits an owner-IRK-signed `ServerDecommission` eviction order for
+    /// the retiring box instance (docs/server-replacement-graceful-decommission.md
+    /// §6). `.com` mailbox-auths the depositor as the domain's registered owner,
+    /// re-verifies the order under that owner's IRK, and records the eviction so
+    /// the box self-retires on its next outbound poll. Throws on non-2xx.
+    func depositDecommission(serverDomain: String, body: DecommissionDepositBody) async throws
+
+    /// POST /api/server/:domain/swk-deposit — phone, IRK mailbox-auth. Secret-free
+    /// recipe: the recipe carries NO SWK; after the box registers, the phone seals
+    /// the SWK to the box's REGISTERED identity and IRK-signs the wrapper, depositing
+    /// the sealed carrier here for the box to claim on boot. Reuses `PairingDepositBody`.
+    func depositSwk(serverDomain: String, body: PairingDepositBody) async throws
+
+    /// POST /api/server/:domain/cgk-deposit — phone, IRK mailbox-auth. The EXACT
+    /// twin of `depositSwk` for the Cloud Gossip Key (per-service leadership Phase
+    /// 6): the recipe carries NO CGK; after the box registers, the phone seals the
+    /// per-cloud CGK to the box's REGISTERED identity + IRK-signs the wrapper and
+    /// deposits the sealed carrier here for the box to claim post-boot. `.com`
+    /// holds ciphertext only. Reuses `PairingDepositBody`.
+    func depositCgk(serverDomain: String, body: PairingDepositBody) async throws
+
+    /// POST /api/server/:domain/set-leader — phone, IRK mailbox-auth. Deposits the
+    /// owner's PUBLIC preferred-server vote (`flagship/set-leader/v1`) addressed to
+    /// a box domain. `.com` verifies the owner-IRK signature before storing; the
+    /// box fetches the vote meant for it and rides it on its gossip frame (clout).
+    /// Uses its own `SetLeaderDepositBody` (the `{auth, deposit, vote, signature}`
+    /// shape from the TS rail).
+    func depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) async throws
+
+    /// POST /api/server/:domain/update — phone, IRK mailbox-auth + ADMIN-authority
+    /// order signature (docs/server-update-mechanism.md). Deposits the PUBLIC
+    /// admin-signed `flagship/server-update/v1` order on `.com`'s update lane; the
+    /// box claims it on its heartbeat, re-verifies it under the pinned admin
+    /// master root AND separately confirms the target commit is maintainer-
+    /// ENDORSED (the daemon's ReleaseGate) before applying — 2-of-2, so this
+    /// deposit alone can never push code. Uses its own `UpdateDepositBody`
+    /// (`{auth, authSignature, deposit, order, signature}`).
+    func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws
+}
+
+/// The server-update deposit body. `auth`/`authSignature` are the SAME IRK
+/// mailbox-auth shape as the other phone-mailbox calls; `deposit` addresses the
+/// order to a box domain; `order` is the `ServerUpdateOrder` field set and
+/// `signature` is the ADMIN-authority signature over its canonical bytes (admin
+/// master root when pinned, owner IRK legacy). Field names match the Worker
+/// handler (`handlePostUpdateDeposit`) exactly: `{ auth, authSignature,
+/// deposit:{serverDomain,requestNonceHex}, order:{serverDomain,targetCommit,
+/// fromCommit,nonce,issuedAt}, signature }`.
+public struct UpdateDepositBody: Encodable, Equatable, Sendable {
+    public struct Deposit: Encodable, Equatable, Sendable {
+        public let serverDomain: String
+        public let requestNonceHex: String   // hex (32 bytes)
+        public init(serverDomain: String, requestNonceHex: String) {
+            self.serverDomain = serverDomain; self.requestNonceHex = requestNonceHex
+        }
+    }
+    public struct Order: Encodable, Equatable, Sendable {
+        public let serverDomain: String
+        public let targetCommit: String
+        public let fromCommit: String
+        public let nonce: String
+        public let issuedAt: Int64
+        public init(serverDomain: String, targetCommit: String, fromCommit: String, nonce: String, issuedAt: Int64) {
+            self.serverDomain = serverDomain; self.targetCommit = targetCommit
+            self.fromCommit = fromCommit; self.nonce = nonce; self.issuedAt = issuedAt
+        }
+    }
+    public let auth: MailboxAuthEnvelope.Auth
+    public let authSignature: String
+    public let deposit: Deposit
+    public let order: Order
+    public let signature: String   // hex (64 bytes) — admin authority over the order canonical bytes
+    public init(
+        auth: MailboxAuthEnvelope.Auth, authSignature: String,
+        deposit: Deposit, order: Order, signature: String
+    ) {
+        self.auth = auth; self.authSignature = authSignature
+        self.deposit = deposit; self.order = order; self.signature = signature
+    }
+}
+
+/// The set-leader deposit body. `auth`/`authSignature` are the SAME IRK
+/// mailbox-auth shape as the other phone-mailbox calls; `deposit` addresses the
+/// vote to a box domain; `vote` is the `SetLeaderVote` field set and `signature`
+/// is the owner-IRK signature over its canonical bytes. Field names match the
+/// Worker handler (`handlePostSetLeaderDeposit`) exactly:
+/// `{ auth, authSignature, deposit:{serverDomain,requestNonceHex}, vote:{user,
+/// preferredStkPubHex,issuedAt,nonce}, signature }`.
+public struct SetLeaderDepositBody: Encodable, Equatable, Sendable {
+    public struct Deposit: Encodable, Equatable, Sendable {
+        public let serverDomain: String
+        public let requestNonceHex: String   // hex (32 bytes)
+        public init(serverDomain: String, requestNonceHex: String) {
+            self.serverDomain = serverDomain; self.requestNonceHex = requestNonceHex
+        }
+    }
+    public struct Vote: Encodable, Equatable, Sendable {
+        public let user: String
+        public let preferredStkPubHex: String   // hex (32 bytes) or "none"
+        public let issuedAt: Int64
+        public let nonce: String
+        public init(user: String, preferredStkPubHex: String, issuedAt: Int64, nonce: String) {
+            self.user = user; self.preferredStkPubHex = preferredStkPubHex
+            self.issuedAt = issuedAt; self.nonce = nonce
+        }
+    }
+    public let auth: MailboxAuthEnvelope.Auth
+    public let authSignature: String
+    public let deposit: Deposit
+    public let vote: Vote
+    public let signature: String   // hex (64 bytes) — owner IRK over the vote canonical bytes
+    public init(
+        auth: MailboxAuthEnvelope.Auth, authSignature: String,
+        deposit: Deposit, vote: Vote, signature: String
+    ) {
+        self.auth = auth; self.authSignature = authSignature
+        self.deposit = deposit; self.vote = vote; self.signature = signature
+    }
+}
+
+/// The decommission deposit body. `auth`/`authSignature` are the SAME IRK
+/// mailbox-auth shape as the other phone-mailbox calls; `order` is the
+/// `ServerDecommission` field set and `signature` is the owner-IRK signature
+/// over its canonical bytes. Field names match the Worker handler
+/// (`handlePostDecommission`) exactly: `{ auth, authSignature, order, signature }`.
+public struct DecommissionDepositBody: Encodable, Equatable, Sendable {
+    public struct Order: Encodable, Equatable, Sendable {
+        public let podCanonical: String
+        public let retiredStkPubHex: String
+        public let finalBackup: Bool
+        public let diskDisposition: String
+        public let backupEpoch: Int64
+        public let nonce: String
+        public let issuedAt: Int64
+        public init(
+            podCanonical: String, retiredStkPubHex: String, finalBackup: Bool,
+            diskDisposition: String, backupEpoch: Int64, nonce: String, issuedAt: Int64
+        ) {
+            self.podCanonical = podCanonical; self.retiredStkPubHex = retiredStkPubHex
+            self.finalBackup = finalBackup; self.diskDisposition = diskDisposition
+            self.backupEpoch = backupEpoch; self.nonce = nonce; self.issuedAt = issuedAt
+        }
+    }
+    public let auth: MailboxAuthEnvelope.Auth
+    public let authSignature: String
+    public let order: Order
+    public let signature: String
+    public init(auth: MailboxAuthEnvelope.Auth, authSignature: String, order: Order, signature: String) {
+        self.auth = auth; self.authSignature = authSignature
+        self.order = order; self.signature = signature
+    }
+}
+
+/// The create-time pairing deposit body. `auth`/`authSignature` are the SAME
+/// IRK mailbox-auth shape as the other phone-mailbox calls; `deposit` carries
+/// the sealed `{request,signature}` blob (sealed FOR the recipe pairing key the
+/// phone embedded). Field names match the Worker handler
+/// (`handlePostPairingDeposit`) exactly.
+public struct PairingDepositBody: Encodable, Equatable, Sendable {
+    public struct Deposit: Encodable, Equatable, Sendable {
+        public let serverDomain: String
+        public let requestNonceHex: String   // hex (32 bytes)
+        public let stkPub: String            // hex (32 bytes) — the pairing key pub (seal recipient)
+        public let sealed: String            // hex — sealed `{request,signature}` JSON
+        public let issuedAt: Int64
+        public init(serverDomain: String, requestNonceHex: String, stkPub: String, sealed: String, issuedAt: Int64) {
+            self.serverDomain = serverDomain; self.requestNonceHex = requestNonceHex
+            self.stkPub = stkPub; self.sealed = sealed; self.issuedAt = issuedAt
+        }
+    }
+    public let auth: MailboxAuthEnvelope.Auth
+    public let authSignature: String
+    public let deposit: Deposit
+    public init(auth: MailboxAuthEnvelope.Auth, authSignature: String, deposit: Deposit) {
+        self.auth = auth; self.authSignature = authSignature; self.deposit = deposit
+    }
 }
 
 // MARK: - Wire types
@@ -103,7 +306,7 @@ public struct PendingSecretRequest: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-/// The box's self-reported device-info display hint (the burner / boot
+/// The box's self-reported device-info display hint (the builder / boot
 /// stage posts it alongside the SecretRequest). All fields optional — a
 /// missing field renders as "—" in the confirm sheet.
 public struct DeviceInfoHint: Codable, Equatable, Sendable {
@@ -212,6 +415,26 @@ public struct SignedDaemonStatus: Codable, Equatable, Sendable {
     }
 }
 
+/// One un-answered box→owner approval request, from the cheap UNAUTHENTICATED
+/// `/pods` digest that drives the Box Request Inbox (docs/box-request-inbox.md).
+/// This is the detection tier only: `type` is the secret-request purpose; the
+/// full signed request is fetched over the authenticated mailbox path when the
+/// owner taps to satisfy it. Mirrors control-plane `PendingRequestSummary`.
+public struct PendingRequestSummaryWire: Codable, Equatable, Sendable {
+    /// requestNonceHex — the box's reply is keyed by (serverDomain, this).
+    public let id: String
+    /// Secret-request purpose: "unlock-key" | "entitlement" | …future types.
+    public let type: String
+    /// issuedAt from the signed SecretRequest (ms).
+    public let issuedAt: Int64
+    /// Row TTL (ms).
+    public let expiresAt: Int64
+    public init(id: String, type: String, issuedAt: Int64, expiresAt: Int64) {
+        self.id = id; self.type = type
+        self.issuedAt = issuedAt; self.expiresAt = expiresAt
+    }
+}
+
 /// A directory entry from GET /api/users/:u/pods. `identityPubKey` is the
 /// box's registered STK — the trust anchor the phone re-verifies against.
 public struct PodDirectoryEntry: Codable, Equatable, Sendable {
@@ -242,11 +465,36 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// garbled relay yields nil (⇒ no pin) instead of failing the whole
     /// pods-list decode.
     public let signedStatus: SignedDaemonStatus?
-    /// Cheap directory signal: the box has a LIVE boot-unlock request parked
-    /// right now. Lets the phone show "waiting for approval" for a locked box
-    /// (instead of "never came online") without the biometric mailbox read.
-    /// Decoded leniently — absent on a pre-field Worker ⇒ false.
-    public let awaitingUnlock: Bool
+    /// PER-BOX relay-trust verdict — the box's separately STK-signed
+    /// `flagship/box-trust-status/v1` envelope, relayed VERBATIM. The phone
+    /// re-verifies it under `identityPubKey` (the STK) and aggregates the
+    /// untrusted ones BY `failingCertHash` across all pods into the red trust
+    /// sliver (`FlagshipCore.RelayTrustAggregator`). nil when the box reports no
+    /// trust status (old daemon / never evaluated). Decoded LENIENTLY so a
+    /// garbled relay yields nil rather than failing the whole pods-list decode.
+    public let trustStatus: SignedBoxTrustStatus?
+    /// The typed Box Request Inbox digest for this pod (docs/box-request-inbox.md)
+    /// — the list of approvals this box is currently asking its owner for
+    /// (`unlock-key`, `entitlement`, …future types). The unified client inbox is
+    /// the flatMap of this across pods; it replaced the old compat
+    /// `awaitingUnlock` / `awaitingEntitlement` booleans (dropped from /pods
+    /// once every surface read this). Lenient: absent ⇒ empty.
+    public let pendingRequests: [PendingRequestSummaryWire]
+    /// HONEST LIVENESS (multi-pod Fix A) — `.com`'s server-authoritative
+    /// reachability for this box (`liveness: "live"|"unreachable"|"never"`),
+    /// computed from the daemon-status heartbeat against a freshness window.
+    /// nil ⇒ a pre-field Worker response that didn't carry it. Decoded as a raw
+    /// string (forward-compatible: an unknown future value yields nil rather
+    /// than failing the whole pods-list decode).
+    public let liveness: String?
+    /// Wall-clock ms since the box's last heartbeat (`lastSeenMsAgo`), or nil
+    /// when it never checked in / a pre-field Worker.
+    public let lastSeenMsAgo: Int64?
+    /// Per-service leadership (Phase 6) — the service slugs this box currently
+    /// LEADS, relayed verbatim from `/pods` (`leadsServices`). Additive; absent ⇒
+    /// empty (a pre-field Worker, or the box leads nothing). Decoded LENIENTLY so
+    /// a garbled value yields [] rather than failing the whole pods-list decode.
+    public let leadsServices: [String]
     public init(
         serverDomain: String,
         identityPubKey: String,
@@ -255,13 +503,21 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         registeredAt: Int64? = nil,
         hasCert: Bool = false,
         signedStatus: SignedDaemonStatus? = nil,
-        awaitingUnlock: Bool = false
+        trustStatus: SignedBoxTrustStatus? = nil,
+        pendingRequests: [PendingRequestSummaryWire] = [],
+        liveness: String? = nil,
+        lastSeenMsAgo: Int64? = nil,
+        leadsServices: [String] = []
     ) {
         self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
         self.revokedAt = revokedAt; self.lastReported = lastReported
         self.registeredAt = registeredAt; self.hasCert = hasCert
         self.signedStatus = signedStatus
-        self.awaitingUnlock = awaitingUnlock
+        self.trustStatus = trustStatus
+        self.pendingRequests = pendingRequests
+        self.liveness = liveness
+        self.lastSeenMsAgo = lastSeenMsAgo
+        self.leadsServices = leadsServices
     }
 
     public init(from decoder: Decoder) throws {
@@ -271,12 +527,16 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.revokedAt = try c.decodeIfPresent(Int64.self, forKey: .revokedAt)
         self.lastReported = try c.decodeIfPresent(Int64.self, forKey: .lastReported)
         self.registeredAt = try c.decodeIfPresent(Int64.self, forKey: .registeredAt)
-        self.awaitingUnlock = (try? c.decodeIfPresent(Bool.self, forKey: .awaitingUnlock)) ?? false
+        self.liveness = try c.decodeIfPresent(String.self, forKey: .liveness)
+        self.lastSeenMsAgo = try c.decodeIfPresent(Int64.self, forKey: .lastSeenMsAgo)
+        self.leadsServices = (try? c.decodeIfPresent([String].self, forKey: .leadsServices)) ?? []
+        self.pendingRequests = (try? c.decodeIfPresent([PendingRequestSummaryWire].self, forKey: .pendingRequests)) ?? []
         // `currentCert` is an object-or-null on the wire; decode it as a
         // presence flag (we only need "is there a cert" here).
         let cert = (try? c.decodeIfPresent(CurrentCert.self, forKey: .currentCert)) ?? nil
         self.hasCert = cert != nil
         self.signedStatus = (try? c.decodeIfPresent(SignedDaemonStatus.self, forKey: .signedStatus)) ?? nil
+        self.trustStatus = (try? c.decodeIfPresent(SignedBoxTrustStatus.self, forKey: .trustStatus)) ?? nil
     }
 
     /// Encode mirrors the wire shape (the presence flag round-trips through a
@@ -291,7 +551,11 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         try c.encodeIfPresent(registeredAt, forKey: .registeredAt)
         if hasCert { try c.encode(CurrentCert(sha256: nil), forKey: .currentCert) }
         try c.encodeIfPresent(signedStatus, forKey: .signedStatus)
-        if awaitingUnlock { try c.encode(true, forKey: .awaitingUnlock) }
+        try c.encodeIfPresent(trustStatus, forKey: .trustStatus)
+        try c.encodeIfPresent(liveness, forKey: .liveness)
+        try c.encodeIfPresent(lastSeenMsAgo, forKey: .lastSeenMsAgo)
+        if !leadsServices.isEmpty { try c.encode(leadsServices, forKey: .leadsServices) }
+        if !pendingRequests.isEmpty { try c.encode(pendingRequests, forKey: .pendingRequests) }
     }
 
     /// `cameOnline` derivation, shared by the reconciler. A box that has
@@ -300,7 +564,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, awaitingUnlock
+        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices
     }
 }
 
@@ -374,6 +638,41 @@ public struct PodsDirectoryResponse: Codable, Equatable, Sendable {
         return pods.first(where: {
             $0.serverDomain.lowercased() == target && $0.revokedAt == nil
         })?.identityPubKey
+    }
+}
+
+/// The wire shape of `GET /api/users/:u/stream` — the live-update channel. A
+/// SUPERSET of `PodsDirectoryResponse` (same `pods`/`pending`) plus the opaque
+/// `cursor` the client echoes back to detect change. `pods`/`pending` decode
+/// with the SAME lenient rules as `/pods`, so the projection into AppState is
+/// identical whether the data arrived via the stream or the fallback fetch.
+public struct LiveSyncResponse: Codable, Equatable, Sendable {
+    /// Opaque change-detection cursor — store it, echo it back next request.
+    public let cursor: String
+    public let username: String
+    public let pods: [PodDirectoryEntry]
+    public let pending: [PendingPodEntry]
+    public init(cursor: String, username: String, pods: [PodDirectoryEntry], pending: [PendingPodEntry] = []) {
+        self.cursor = cursor; self.username = username; self.pods = pods; self.pending = pending
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.cursor = try c.decodeIfPresent(String.self, forKey: .cursor) ?? ""
+        self.username = try c.decode(String.self, forKey: .username)
+        self.pods = try c.decode([PodDirectoryEntry].self, forKey: .pods)
+        self.pending = try c.decodeIfPresent([PendingPodEntry].self, forKey: .pending) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case cursor, username, pods, pending
+    }
+
+    /// Project to the `/pods`-shaped directory response the reconciler consumes
+    /// (it doesn't need the cursor). Lets the same reconcile path serve both the
+    /// live stream and the fallback fetch with no branching.
+    public var directory: PodsDirectoryResponse {
+        PodsDirectoryResponse(username: username, pods: pods, pending: pending)
     }
 }
 
@@ -466,6 +765,36 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         return response
     }
 
+    public func fetchLiveSync(username: String, cursor: String?) async throws -> LiveSyncResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var path = "/api/users/\(encoded)/stream"
+        if let cursor, !cursor.isEmpty {
+            let q = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor
+            path += "?cursor=\(q)"
+        }
+        // The hanging GET holds up to ~25s server-side; give the request a
+        // generous timeout so a healthy hold isn't mistaken for a failure (the
+        // caller's loop falls back to /pods on a real error). String-concat the
+        // URL so the `?cursor=` query lands verbatim.
+        guard let url = URL(string: baseUrl.absoluteString + path) else {
+            throw ScreensClientError.http(status: 0, message: "bad stream URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.timeoutInterval = 40
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        let decoded = try JSONDecoder().decode(LiveSyncResponse.self, from: data)
+        // Reuse the A′-pin observer path — the stream carries the same
+        // `signedStatus` as /pods, so the pin registry stays fed off the canal.
+        onPods?(decoded.directory)
+        return decoded
+    }
+
     public func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) async throws {
         let body = try JSONEncoder().encode(LeaseDepositPost(lease: lease, signature: signatureHex))
         try await sendBoot("PUT", "/api/boot/lease", body: body, bootAuth: bootAuth, acceptStatuses: [200, 201])
@@ -476,6 +805,114 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         // path the `bootAuth` signature commits to (the gate binds it exactly).
         let path = "/api/boot/lease/\(request.serverDomain)/\(request.leaseId)"
         try await sendBoot("DELETE", path, body: Data(), bootAuth: bootAuth, acceptStatuses: [200, 204])
+    }
+
+    public func depositPairing(serverDomain: String, body: PairingDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        // String-concat the URL (not appendingPathComponent) so the multi-segment
+        // control-plane path lands verbatim — mirrors `sendBoot`. The deposit is
+        // on `.com` (identity plane), not the boot worker.
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/pairing-deposit") else {
+            throw ScreensClientError.http(status: 0, message: "bad pairing-deposit URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
+    public func depositEntitlement(serverDomain: String, body: PairingDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/entitlement-deposit") else {
+            throw ScreensClientError.http(status: 0, message: "bad entitlement-deposit URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
+    public func depositSwk(serverDomain: String, body: PairingDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/swk-deposit") else {
+            throw ScreensClientError.http(status: 0, message: "bad swk-deposit URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
+    public func depositCgk(serverDomain: String, body: PairingDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/cgk-deposit") else {
+            throw ScreensClientError.http(status: 0, message: "bad cgk-deposit URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
+    public func depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/set-leader") else {
+            throw ScreensClientError.http(status: 0, message: "bad set-leader URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
+    public func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/update") else {
+            throw ScreensClientError.http(status: 0, message: "bad update URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
+    public func depositDecommission(serverDomain: String, body: DecommissionDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/decommission") else {
+            throw ScreensClientError.http(status: 0, message: "bad decommission URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
     }
 
     private struct BootResponsePost: Encodable { let response: SecretResponseBody }
@@ -579,10 +1016,91 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public func fetchPods(username: String) async throws -> PodsDirectoryResponse {
         PodsDirectoryResponse(username: username, pods: directory, pending: directoryPending)
     }
+
+    /// Scripted live-sync responses for tests: each `fetchLiveSync` call pops the
+    /// next entry; once exhausted it returns a DETERMINISTIC snapshot built from
+    /// `directory`/`directoryPending` with a content-stable cursor (so a loop
+    /// keeps a stable cursor and never hangs). Set `liveSyncError` to make the
+    /// next call throw (exercising the /pods fallback).
+    public var liveSyncScript: [LiveSyncResponse] = []
+    public var liveSyncError: Error?
+    /// Cursors observed across calls — lets a test assert the cursor is echoed.
+    public private(set) var liveSyncCursors: [String?] = []
+
+    public func fetchLiveSync(username: String, cursor: String?) async throws -> LiveSyncResponse {
+        liveSyncCursors.append(cursor)
+        if let err = liveSyncError {
+            liveSyncError = nil
+            throw err
+        }
+        if !liveSyncScript.isEmpty {
+            return liveSyncScript.removeFirst()
+        }
+        // Deterministic fallback snapshot — a content-stable cursor so a steady
+        // state holds the same cursor (no churn) and the test loop terminates.
+        let stableCursor = "mock-\(directory.count)-\(directoryPending.count)"
+        return LiveSyncResponse(
+            cursor: stableCursor, username: username,
+            pods: directory, pending: directoryPending
+        )
+    }
+
     public func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) async throws {
         deposited.append((lease, signatureHex, bootAuth))
     }
     public func revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) async throws {
         revoked.append((request, bootAuth))
+    }
+    public private(set) var pairingDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
+    public func depositPairing(serverDomain: String, body: PairingDepositBody) async throws {
+        pairingDeposits.append((serverDomain, body))
+    }
+    public private(set) var entitlementDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
+    public func depositEntitlement(serverDomain: String, body: PairingDepositBody) async throws {
+        entitlementDeposits.append((serverDomain, body))
+    }
+    public private(set) var swkDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
+    /// When set, `depositSwk` throws it once (to exercise best-effort/retry paths).
+    public var swkDepositError: Error?
+    public func depositSwk(serverDomain: String, body: PairingDepositBody) async throws {
+        if let e = swkDepositError {
+            swkDepositError = nil
+            throw e
+        }
+        swkDeposits.append((serverDomain, body))
+    }
+    public private(set) var cgkDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
+    /// When set, `depositCgk` throws it once (to exercise best-effort/retry paths).
+    public var cgkDepositError: Error?
+    public func depositCgk(serverDomain: String, body: PairingDepositBody) async throws {
+        if let e = cgkDepositError {
+            cgkDepositError = nil
+            throw e
+        }
+        cgkDeposits.append((serverDomain, body))
+    }
+    public private(set) var setLeaderDeposits: [(serverDomain: String, body: SetLeaderDepositBody)] = []
+    /// When set, `depositSetLeader` throws it once.
+    public var setLeaderDepositError: Error?
+    public func depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) async throws {
+        if let e = setLeaderDepositError {
+            setLeaderDepositError = nil
+            throw e
+        }
+        setLeaderDeposits.append((serverDomain, body))
+    }
+    public private(set) var updateDeposits: [(serverDomain: String, body: UpdateDepositBody)] = []
+    /// When set, `depositUpdate` throws it once.
+    public var nextUpdateError: Error?
+    public func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws {
+        if let e = nextUpdateError { nextUpdateError = nil; throw e }
+        updateDeposits.append((serverDomain, body))
+    }
+    /// Optional error to throw on the next `depositDecommission`, then cleared.
+    public var nextDecommissionError: Error?
+    public private(set) var decommissionDeposits: [(serverDomain: String, body: DecommissionDepositBody)] = []
+    public func depositDecommission(serverDomain: String, body: DecommissionDepositBody) async throws {
+        if let e = nextDecommissionError { nextDecommissionError = nil; throw e }
+        decommissionDeposits.append((serverDomain, body))
     }
 }

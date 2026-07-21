@@ -101,6 +101,42 @@ class FlagshipFcmService : FirebaseMessagingService() {
                 ).apply { description = "Unlock requests, deploy events, and other phone alerts." }
             )
         }
+
+        /**
+         * #91 — raise an app-initiated LOCAL notification that an AI build chat
+         * is waiting on the owner. Value-free copy (driven only by the pending
+         * tool kind). The tap intent carries `flagship://vibecode/<sessionId>`,
+         * so it routes to [com.flagshipserver.app.core.DeepLink.VibeCodeChat]
+         * exactly like a real FCM `vibecode-needs-you` wake. Best-effort: if the
+         * POST_NOTIFICATIONS permission isn't granted the system drops it
+         * silently — the operations sliver already carries the signal.
+         */
+        fun showAiChatNotification(context: Context, sessionId: String, isEnvVar: Boolean) {
+            ensureChannel(context)
+            val deepLink = "flagship://vibecode/$sessionId"
+            val intent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                data = deepLink.toUri()
+            }
+            val pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            // A per-session request code so distinct sessions don't collide.
+            val pending = PendingIntent.getActivity(context, sessionId.hashCode(), intent, pendingFlags)
+            val body = if (isEnvVar) {
+                "The AI needs an environment variable to continue."
+            } else {
+                "The AI is asking you a question."
+            }
+            val notif = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Flagship")
+                .setContentText(body)
+                .setAutoCancel(true)
+                .setContentIntent(pending)
+                .build()
+            val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            // Per-session id so a re-fire replaces the prior banner.
+            mgr.notify(NOTIF_ID_BASE + sessionId.hashCode(), notif)
+        }
     }
 }
 

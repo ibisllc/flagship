@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "predeploy": "bash ../../scripts/predeploy-com.sh",
+    "predeploy": "FLAGSHIP_CHECK_PROD_MIGRATIONS=1 bash ../../scripts/predeploy-com.sh",
     "deploy": "wrangler deploy",
     "test": "vitest run --dir test"
   },

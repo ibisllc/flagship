@@ -10,9 +10,22 @@ import com.flagshipserver.app.core.PodInfo
  * Pure (no Compose) so it's unit-testable.
  */
 object PodStatusStyle {
+    /** Pod-aware label: an [PodInfo.LivenessState.OFFLINE] (Fix A — previously
+     *  live, now stale) box reads "Offline — last seen <…>" when `lastSeenMsAgo`
+     *  is known. Falls through to [label] for every other state. */
+    fun label(pod: PodInfo, liveness: PodInfo.LivenessState): String {
+        if (liveness == PodInfo.LivenessState.OFFLINE) {
+            val seen = pod.humanizedLastSeen()
+            return if (seen != null) "Offline — last seen $seen" else "Offline"
+        }
+        return label(liveness, pod.status)
+    }
+
     fun label(liveness: PodInfo.LivenessState, status: PodInfo.Status): String =
         when (liveness) {
             PodInfo.LivenessState.DEAD -> "Never came online"
+            // HONEST LIVENESS (Fix A) — a previously-live box that's gone stale.
+            PodInfo.LivenessState.OFFLINE -> "Offline"
             PodInfo.LivenessState.WAITING_FOR_APPROVAL -> "Waiting for approval"
             PodInfo.LivenessState.COMING_ONLINE ->
                 if (status == PodInfo.Status.PENDING) "Pending" else "Coming online…"
@@ -25,15 +38,17 @@ object PodStatusStyle {
         }
 
     fun pillKind(liveness: PodInfo.LivenessState, status: PodInfo.Status): FSPillKind =
+        if (status == PodInfo.Status.PENDING) FSPillKind.Pending else
         when (liveness) {
             PodInfo.LivenessState.DEAD -> FSPillKind.Offline
+            PodInfo.LivenessState.OFFLINE -> FSPillKind.Offline
             PodInfo.LivenessState.WAITING_FOR_APPROVAL -> FSPillKind.Provisioning
             PodInfo.LivenessState.COMING_ONLINE -> FSPillKind.Provisioning
             PodInfo.LivenessState.ONLINE -> when (status) {
                 PodInfo.Status.ONLINE -> FSPillKind.Online
                 PodInfo.Status.OFFLINE -> FSPillKind.Offline
                 PodInfo.Status.UNKNOWN -> FSPillKind.Idle
-                PodInfo.Status.PENDING -> FSPillKind.Provisioning
+                PodInfo.Status.PENDING -> FSPillKind.Pending
             }
         }
 }
@@ -67,10 +82,11 @@ enum class HomeStatusFilter {
                 PodInfo.LivenessState.COMING_ONLINE -> true
                 PodInfo.LivenessState.ONLINE ->
                     status == PodInfo.Status.PENDING || status == PodInfo.Status.UNKNOWN
-                PodInfo.LivenessState.DEAD -> false
+                PodInfo.LivenessState.DEAD, PodInfo.LivenessState.OFFLINE -> false
             }
             OFFLINE -> when (liveness) {
-                PodInfo.LivenessState.DEAD -> true
+                // DEAD (never came online) + OFFLINE (was live, now stale) both bucket here.
+                PodInfo.LivenessState.DEAD, PodInfo.LivenessState.OFFLINE -> true
                 PodInfo.LivenessState.ONLINE -> status == PodInfo.Status.OFFLINE
                 else -> false
             }

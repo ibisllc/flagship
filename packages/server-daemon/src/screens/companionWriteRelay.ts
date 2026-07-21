@@ -67,7 +67,6 @@ export interface RequestWriteResponse {
 export interface PendingWriteSummary {
   requestId: string;
   companionTokenPrefix: string;
-  companionLabel: string | null;
   kind: CompanionWriteRequestKind;
   intent: Record<string, unknown>;
   queuedAt: number;
@@ -126,7 +125,7 @@ export async function handleRequestWrite(
 
   // Resolve the caller's token → companion row. The gate already
   // ran; we know it's authenticated, but we need to confirm it's a
-  // companion + pull the label.
+  // companion.
   const token = extractPairedSessionToken(req);
   if (!token) return jerr(401, "missing paired-session token");
   const row = deps.pairedSessions.get(token);
@@ -158,12 +157,9 @@ export async function handleRequestWrite(
   const queuedAt = now();
   const expiresAt = queuedAt + ttl;
   const tokenPrefix = token.slice(0, 12);
-  const companionLabel = row.companionLabel ?? null;
-
   const persisted: CompanionWriteRequestRow = {
     requestId,
     companionTokenPrefix: tokenPrefix,
-    companionLabel,
     kind: body.kind,
     intent: body.intent,
     queuedAt,
@@ -176,7 +172,7 @@ export async function handleRequestWrite(
   // queued a write. v1 is polling-only; the owner's app/webapp
   // refreshes /api/screens/companion/pending-writes on a timer. When
   // push lands, fire a `notifyOwner({ kind: "companion-write-queued",
-  // requestId, companionLabel, kind: body.kind })` here.
+  // requestId, companionTokenPrefix: tokenPrefix, kind: body.kind })` here.
 
   const out: RequestWriteResponse = { requestId, queuedAt, expiresAt };
   return jok(out);
@@ -198,7 +194,6 @@ export async function handlePendingWrites(
   const pending: PendingWriteSummary[] = rows.map((r) => ({
     requestId: r.requestId,
     companionTokenPrefix: r.companionTokenPrefix,
-    companionLabel: r.companionLabel,
     kind: r.kind,
     intent: r.intent,
     queuedAt: r.queuedAt,

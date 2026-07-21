@@ -18,6 +18,8 @@ import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.JoinLink
 import com.flagshipserver.app.core.MockDevicePairingRelay
 import com.flagshipserver.app.core.PairingBundle
+import com.flagshipserver.app.core.PairingGrant
+import com.flagshipserver.app.core.DeviceCapabilityGrant
 import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.keystore.Keystore
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -113,30 +115,51 @@ class JoinDeviceViewModelTest {
         // The admin completes its half of the ECDH symmetric pair — both
         // sides now hold the same kEnc + the same matchCode.
         val helloPub = relay.admin.awaitPeerHello("sid-test")
-        assertEquals("hello is x25519 pub || device pub", 64, helloPub.size)
+        assertEquals("hello is x25519 pub || device pub || device id", 80, helloPub.size)
         adminEphemeral.pair(helloPub.copyOfRange(0, 32))
 
         return Stage(server, relay, app, adminUmk, adminIrkSeed, adminEphemeral, vm)
+    }
+
+    private fun bundleFor(stage: Stage, admit: DeviceAdmit): PairingBundle {
+        val signer = Ed25519Sign(stage.adminIrkSeed)
+        val grant = PairingGrant(
+            grantId = "grant-test",
+            username = admit.username,
+            deviceId = admit.deviceId,
+            devicePubHex = admit.newDevicePubHex,
+            scopes = listOf("view-directory"),
+            issuedAt = admit.issuedAt,
+            expiresAt = admit.issuedAt + 86_400_000,
+            signerRoot = "membership",
+        )
+        return PairingBundle(
+            umkSeedHex = HexUtil.encode(stage.adminUmk),
+            admit = admit,
+            admitSig = HexUtil.encode(DeviceAdmitClaim.sign(admit, signer)),
+            grant = grant,
+            grantSignature = HexUtil.encode(signer.sign(DeviceCapabilityGrant.canonicalBytes(
+                grant.grantId, grant.username, grant.deviceId, grant.devicePubHex,
+                grant.scopes, grant.issuedAt, grant.expiresAt,
+            ))),
+        )
     }
 
     @Test fun happyPath_admitsAndSurfacesQuarantine() = runTest {
         val s = runUpToVerifySas()
         val helloPub = s.relay.admin.awaitPeerHello("sid-test")
         val devicePubHex = HexUtil.encode(helloPub.copyOfRange(32, 64))
+        val deviceId = HexUtil.encode(helloPub.copyOfRange(64, 80))
 
         // Admin signs the admit + seals the bundle.
-        val admit = DeviceAdmit(account, devicePubHex.lowercase(), 10_000L)
-        val adminSigner = Ed25519Sign(s.adminIrkSeed)
+        val admit = DeviceAdmit(account, deviceId, devicePubHex.lowercase(), 10_000L)
         val sealed = s.adminEphemeral.seal(
-            PairingBundle(
-                umkSeedHex = HexUtil.encode(s.adminUmk),
-                admit = admit,
-                admitSig = HexUtil.encode(DeviceAdmitClaim.sign(admit, adminSigner)),
-            ).toJsonBytes(),
+            bundleFor(s, admit).toJsonBytes(),
         )
         s.relay.admin.deliver(sealed.ciphertextB64u, sealed.nonceB64u)
 
         // Drive the join.
+        s.vm.confirmDisplayName("Reviewer Android")
         s.vm.verifyAndJoin()
         val phase = s.vm.phase.first()
         assertTrue("happy path must JOIN: $phase", phase is JoinDevicePhase.Joined)
@@ -160,17 +183,14 @@ class JoinDeviceViewModelTest {
 
         val helloPub = s.relay.admin.awaitPeerHello("sid-test")
         val devicePubHex = HexUtil.encode(helloPub.copyOfRange(32, 64))
-        val admit = DeviceAdmit(account, devicePubHex.lowercase(), 10_000L)
-        val adminSigner = Ed25519Sign(s.adminIrkSeed)
+        val deviceId = HexUtil.encode(helloPub.copyOfRange(64, 80))
+        val admit = DeviceAdmit(account, deviceId, devicePubHex.lowercase(), 10_000L)
         val sealed = s.adminEphemeral.seal(
-            PairingBundle(
-                umkSeedHex = HexUtil.encode(s.adminUmk),
-                admit = admit,
-                admitSig = HexUtil.encode(DeviceAdmitClaim.sign(admit, adminSigner)),
-            ).toJsonBytes(),
+            bundleFor(s, admit).toJsonBytes(),
         )
         s.relay.admin.deliver(sealed.ciphertextB64u, sealed.nonceB64u)
 
+        s.vm.confirmDisplayName("Reviewer Android")
         s.vm.verifyAndJoin()
         val phase = s.vm.phase.first()
         assertTrue("a 4xx admit must NOT join: $phase", phase is JoinDevicePhase.Failed)
@@ -192,17 +212,15 @@ class JoinDeviceViewModelTest {
         // a captured admit re-aimed at this device. The VM must reject
         // it BEFORE calling .com (no network in the failure branch).
         val wrongDevicePub = "ab".repeat(32)
-        val admit = DeviceAdmit(account, wrongDevicePub, 10_000L)
-        val adminSigner = Ed25519Sign(s.adminIrkSeed)
+        val helloPub = s.relay.admin.awaitPeerHello("sid-test")
+        val deviceId = HexUtil.encode(helloPub.copyOfRange(64, 80))
+        val admit = DeviceAdmit(account, deviceId, wrongDevicePub, 10_000L)
         val sealed = s.adminEphemeral.seal(
-            PairingBundle(
-                umkSeedHex = HexUtil.encode(s.adminUmk),
-                admit = admit,
-                admitSig = HexUtil.encode(DeviceAdmitClaim.sign(admit, adminSigner)),
-            ).toJsonBytes(),
+            bundleFor(s, admit).toJsonBytes(),
         )
         s.relay.admin.deliver(sealed.ciphertextB64u, sealed.nonceB64u)
 
+        s.vm.confirmDisplayName("Reviewer Android")
         s.vm.verifyAndJoin()
         val phase = s.vm.phase.first()
         assertTrue("wrong-device admit must fail closed: $phase", phase is JoinDevicePhase.Failed)

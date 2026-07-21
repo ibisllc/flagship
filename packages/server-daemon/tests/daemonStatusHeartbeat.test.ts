@@ -9,7 +9,7 @@
  *   - a network failure never throws (best-effort).
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ed, type Keypair } from "@flagship/protocol";
 import {
   postDaemonStatus,
@@ -65,7 +65,7 @@ describe("daemon-status heartbeat", () => {
 
     await postDaemonStatus({
       serverDomain: "abc5.harry1.flagship.services",
-      identity: id,
+      sign: id,
       controlPlaneBaseUrl: "https://flagshipserver.com/",
       cert: { certPem: DUMMY_PEM, privateKeyPem: "x" },
       certValidUntil: 1_800_000_000_000,
@@ -92,6 +92,76 @@ describe("daemon-status heartbeat", () => {
     expect(ok).toBe(true);
   });
 
+  it("rides a SEPARATELY-SIGNED box-trust-status sibling when a snapshot is present", async () => {
+    const id = makeKeypair(7);
+    let captured: any = null;
+    const fetchImpl = (async (_url: any, init: any) => {
+      captured = JSON.parse(init.body);
+      return new Response("ok", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    await postDaemonStatus({
+      serverDomain: "abc5.harry1.flagship.services",
+      sign: id,
+      controlPlaneBaseUrl: "https://flagshipserver.com/",
+      cert: { certPem: DUMMY_PEM, privateKeyPem: "x" },
+      certValidUntil: 1_800_000_000_000,
+      appsServed: ["abc5.harry1.flagship.services"],
+      trustStatus: {
+        relayVerdict: "untrusted",
+        lockedDown: false,
+        failingCertHash: "ab".repeat(32),
+        coveringExceptionCertHash: null,
+      },
+      now: () => 1_700_000_000_000,
+      fetchImpl,
+    });
+
+    expect(captured.trustStatus).toBeTruthy();
+    const bts = captured.trustStatus;
+    expect(bts.report.serverDomain).toBe("abc5.harry1.flagship.services");
+    expect(bts.report.relayVerdict).toBe("untrusted");
+    expect(bts.report.failingCertHash).toBe("ab".repeat(32));
+    // Its signature verifies under the box STK over the box-trust-status
+    // canonical bytes — a DISTINCT signature from the daemon-status one.
+    const btsCanonical = new TextEncoder().encode(
+      [
+        "flagship/box-trust-status/v1",
+        bts.report.serverDomain,
+        bts.report.relayVerdict,
+        bts.report.lockedDown ? "1" : "0",
+        bts.report.failingCertHash ?? "",
+        bts.report.coveringExceptionCertHash ?? "",
+        bts.report.nonce,
+        String(bts.report.issuedAt),
+      ].join("|"),
+    );
+    expect(
+      ed.verify(hexToBytes(bts.signatureHex), btsCanonical, id.publicKey),
+    ).toBe(true);
+    expect(bts.signatureHex).not.toBe(captured.signature);
+  });
+
+  it("omits trustStatus when no snapshot is supplied (additive)", async () => {
+    const id = makeKeypair(7);
+    let captured: any = null;
+    const fetchImpl = (async (_url: any, init: any) => {
+      captured = JSON.parse(init.body);
+      return new Response("ok", { status: 200 });
+    }) as unknown as typeof fetch;
+    await postDaemonStatus({
+      serverDomain: "abc5.harry1.flagship.services",
+      sign: id,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      cert: { certPem: DUMMY_PEM, privateKeyPem: "x" },
+      certValidUntil: 1_800_000_000_000,
+      appsServed: [],
+      now: () => 1_700_000_000_000,
+      fetchImpl,
+    });
+    expect(captured.trustStatus).toBeUndefined();
+  });
+
   it("update() fires one report immediately with the served names", async () => {
     const id = makeKeypair(9);
     const calls: any[] = [];
@@ -102,7 +172,7 @@ describe("daemon-status heartbeat", () => {
 
     const hb = startDaemonStatusHeartbeat({
       serverDomain: "home1.harry.flagship.services",
-      identity: id,
+      sign: id,
       controlPlaneBaseUrl: "https://flagshipserver.com",
       intervalMs: 60_000,
       now: () => 1_700_000_000_000,
@@ -128,7 +198,7 @@ describe("daemon-status heartbeat", () => {
     await expect(
       postDaemonStatus({
         serverDomain: "home1.harry.flagship.services",
-        identity: id,
+        sign: id,
         controlPlaneBaseUrl: "https://flagshipserver.com",
         cert: { certPem: DUMMY_PEM, privateKeyPem: "x" },
         certValidUntil: 1_800_000_000_000,
@@ -170,7 +240,7 @@ DI8uD7t+By9uA9EEqQM=
 
     await postDaemonStatus({
       serverDomain: "frank.harry.flagship.services",
-      identity: id,
+      sign: id,
       controlPlaneBaseUrl: "https://flagshipserver.com",
       cert: { certPem: REAL_CERT_PEM, privateKeyPem: "x" },
       certValidUntil: 1_800_000_000_000,
@@ -194,5 +264,126 @@ DI8uD7t+By9uA9EEqQM=
       id.publicKey,
     );
     expect(ok).toBe(true);
+  });
+});
+
+/**
+ * Self-healing: the heartbeat loop CANNOT die. A real box once sent exactly
+ * ONE beat then went silent until a manual reboot; the loop must survive every
+ * failure mode and keep beating on cadence — independent of the tunnel (it
+ * POSTs straight to `.com`). `requestTimeoutMs: 0` disables the per-request
+ * AbortSignal so the fake-timer clock only drives the beat cadence.
+ */
+describe("daemon-status heartbeat — loop resilience", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const cert = { certPem: DUMMY_PEM, privateKeyPem: "x" };
+
+  it("a send that THROWS does not kill the loop — later scheduled beats still fire", async () => {
+    const id = makeKeypair(21);
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      throw new Error("network black hole");
+    }) as unknown as typeof fetch;
+
+    const hb = startDaemonStatusHeartbeat({
+      serverDomain: "hali.harry.flagship.services",
+      sign: id,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      intervalMs: 5 * 60_000,
+      requestTimeoutMs: 0,
+      now: () => 1_700_000_000_000,
+      fetchImpl,
+    });
+
+    // First beat fires immediately on update (the "one beat" the box managed).
+    hb.update(cert, 1_800_000_000_000, ["hali.harry.flagship.services"]);
+    await Promise.resolve();
+    expect(calls).toBe(1);
+
+    // Every send throws — but the loop must keep ticking on cadence.
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(calls).toBe(2);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(calls).toBe(3);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(calls).toBe(4);
+
+    hb.stop();
+  });
+
+  it("a readLeads() that THROWS does not kill the loop — beats keep posting", async () => {
+    const id = makeKeypair(22);
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return new Response("ok", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const hb = startDaemonStatusHeartbeat({
+      serverDomain: "hali.harry.flagship.services",
+      sign: id,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      intervalMs: 5 * 60_000,
+      requestTimeoutMs: 0,
+      now: () => 1_700_000_000_000,
+      // The gossip-loop read explodes on every beat.
+      readLeads: () => {
+        throw new Error("gossip loop exploded");
+      },
+      fetchImpl,
+    });
+
+    hb.update(cert, 1_800_000_000_000, ["hali.harry.flagship.services"]);
+    await Promise.resolve();
+    expect(calls).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(calls).toBe(2);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(calls).toBe(3);
+
+    hb.stop();
+  });
+
+  it("keeps firing on cadence regardless of tunnel state (it POSTs .com directly)", async () => {
+    const id = makeKeypair(23);
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return new Response("ok", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    // No tunnel is ever supplied — the heartbeat takes none. This proves
+    // independence by construction; the cadence assertion proves it keeps
+    // beating while a tunnel would be mid-reconnect.
+    const hb = startDaemonStatusHeartbeat({
+      serverDomain: "hali.harry.flagship.services",
+      sign: id,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      intervalMs: 5 * 60_000,
+      requestTimeoutMs: 0,
+      now: () => 1_700_000_000_000,
+      fetchImpl,
+    });
+
+    hb.update(cert, 1_800_000_000_000, []);
+    await Promise.resolve();
+    expect(calls).toBe(1);
+
+    // Five intervals → five more beats, exactly one per interval.
+    for (let i = 0; i < 5; i++) await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(calls).toBe(6);
+
+    // stop() halts the loop: advancing further fires nothing more.
+    hb.stop();
+    await vi.advanceTimersByTimeAsync(20 * 60_000);
+    expect(calls).toBe(6);
   });
 });

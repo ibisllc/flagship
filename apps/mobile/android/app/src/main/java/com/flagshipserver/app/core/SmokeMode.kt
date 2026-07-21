@@ -31,6 +31,9 @@ data class SmokeModeConfig(
     val seedTrustUntrusted: Boolean,
     /** "awaiting-unlock" | "dead" | null — picks the variant fixture pod set. */
     val podsVariant: String?,
+    /** Treat this device as holding the admin master root (GymSeams twin of
+     *  iOS `-smoke-admin-root`) so the Slice-D admin-gated surfaces render. */
+    val seedAdminRoot: Boolean,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -38,6 +41,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_OPS = "flagship.smokeOps"
         const val EXTRA_SMOKE_TRUST_UNTRUSTED = "flagship.smokeTrustUntrusted"
         const val EXTRA_SMOKE_PODS = "flagship.smokePods"
+        const val EXTRA_SMOKE_ADMIN_ROOT = "flagship.smokeAdminRoot"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -53,6 +57,7 @@ data class SmokeModeConfig(
                 seedOps = intent.getBooleanExtra(EXTRA_SMOKE_OPS, false),
                 seedTrustUntrusted = intent.getBooleanExtra(EXTRA_SMOKE_TRUST_UNTRUSTED, false),
                 podsVariant = intent.getStringExtra(EXTRA_SMOKE_PODS)?.trim()?.lowercase(),
+                seedAdminRoot = intent.getBooleanExtra(EXTRA_SMOKE_ADMIN_ROOT, false),
             )
         }
     }
@@ -103,6 +108,10 @@ object SmokeMode {
         // live path derives this from a real `.com` blessing check; the gym
         // injects a fixed, obviously-fake failure so the degraded-trust
         // experience is exercisable offline.
+        // Treat this device as an admin (Slice D) — set BOTH ways so a prior
+        // same-process launch's seed can never leak into an unflagged run.
+        GymSeams.forceAdminRoot = config.seedAdminRoot
+
         if (config.seedTrustUntrusted) {
             trust.markUntrusted(
                 listOf(

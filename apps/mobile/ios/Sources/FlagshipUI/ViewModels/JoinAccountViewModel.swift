@@ -57,9 +57,15 @@ public final class JoinAccountViewModel {
     /// `phase == .joined` to call `app.addProfile(_, setActive: true)`.
     public private(set) var admittedProfile: AdmittedProfile?
 
+    /// Slice D §4.2 — true iff the bundle carried a `wrappedAdminRoot` that we
+    /// successfully sealed device-local ⇒ this device joined AS an admin. The
+    /// host can surface "you're an admin of <account>" copy off this.
+    public private(set) var becameAdmin: Bool = false
+
     public struct AdmittedProfile: Equatable, Sendable {
         public let cloudName: String
-        public let deviceLabel: String
+        public let deviceId: String
+        public let deviceDisplayName: String
         public let quarantineUntil: Int64?
     }
 
@@ -68,24 +74,44 @@ public final class JoinAccountViewModel {
     /// Seam: install the recovered UMK into the active (new) profile slot.
     /// Defaults to `Keystore.installUMK`; tests inject a spy.
     private let installUMK: @MainActor (SymmetricKey, String) async throws -> Void
-    /// Seam: the device label for the new device (defaults to a generic
-    /// "iPhone"; production wires UIDevice.current.name).
-    private let deviceLabel: String
+    /// Seam: seal an admin master-root seed device-local. Slice D §4.2 — when
+    /// the admin promoted this device at add-time, the bundle carries
+    /// `wrappedAdminRoot`; sealing it here makes THIS device a bare-master-root
+    /// admin. Defaults to `Keystore.importAdminRoot`; tests inject a spy.
+    private let importAdminRoot: @MainActor (Data) async throws -> Void
+    private var confirmedDeviceDisplayName: String?
+    private var deviceNameContinuation: CheckedContinuation<String, Error>?
 
     private var ttlInvalidated = false
 
     public init(
         relay: any PairingRelayClient,
         server: any FlagshipServerClient,
-        deviceLabel: String = "iPhone",
         installUMK: @escaping @MainActor (SymmetricKey, String) async throws -> Void = { seed, reason in
             try await Keystore.installUMK(seed, reason: reason)
+        },
+        importAdminRoot: @escaping @MainActor (Data) async throws -> Void = { seed in
+            _ = try await Keystore.importAdminRoot(seed: seed, reason: "Set up your admin key on this device")
         }
     ) {
         self.relay = relay
         self.server = server
-        self.deviceLabel = deviceLabel
         self.installUMK = installUMK
+        self.importAdminRoot = importAdminRoot
+    }
+
+    public func confirmDeviceDisplayName(_ value: String) throws {
+        let normalized = try AccountMetadata.validateDisplayName(value)
+        confirmedDeviceDisplayName = normalized
+        deviceNameContinuation?.resume(returning: normalized)
+        deviceNameContinuation = nil
+    }
+
+    private func awaitConfirmedDeviceDisplayName() async throws -> String {
+        if let confirmedDeviceDisplayName { return confirmedDeviceDisplayName }
+        return try await withCheckedThrowingContinuation { continuation in
+            deviceNameContinuation = continuation
+        }
     }
 
     /// Mint a fresh device key, send our pubkey to the admin, show the
@@ -115,8 +141,13 @@ public final class JoinAccountViewModel {
         // separate fresh Ed25519 key signs the push register (carried;
         // .com doesn't verify it on the admit path).
         let handshakeSk = Curve25519.KeyAgreement.PrivateKey()
-        let devicePubHex = HexUtil.encode(handshakeSk.publicKey.rawRepresentation)
+        guard let deviceId = try? AccountMetadata.generateDeviceId(),
+              let deviceIdBytes = HexUtil.decode(deviceId) else {
+            phase = .failed("Couldn't create a device identity. Try again.")
+            return
+        }
         let pushSigningKey = Curve25519.Signing.PrivateKey()
+        let devicePubHex = HexUtil.encode(pushSigningKey.publicKey.rawRepresentation)
 
         let material: QrRelay.DerivedMaterial
         do {
@@ -132,7 +163,9 @@ public final class JoinAccountViewModel {
         // Seal + send our handshake/device pubkey (the admin derives the
         // same shared secret from it AND binds it in the admit). The Mock
         // bridge hands the admin the raw pubkey so its await resolves.
-        let devicePubRaw = handshakeSk.publicKey.rawRepresentation
+        var devicePubRaw = handshakeSk.publicKey.rawRepresentation
+        devicePubRaw.append(pushSigningKey.publicKey.rawRepresentation)
+        devicePubRaw.append(deviceIdBytes)
         do {
             let sealed = try QrRelay.seal(payload: devicePubRaw, with: material.aeadKey)
             provideRawPubkeyToRelay?(devicePubRaw)
@@ -146,7 +179,8 @@ public final class JoinAccountViewModel {
                 frame: bundleFrame,
                 aeadKey: material.aeadKey,
                 pushSigningKey: pushSigningKey,
-                devicePubHex: devicePubHex
+                devicePubHex: devicePubHex,
+                deviceId: deviceId
             )
         } catch is PairingRelayError {
             if ttlInvalidated { return }
@@ -160,8 +194,15 @@ public final class JoinAccountViewModel {
         frame: (ciphertextBase64Url: String, nonceBase64Url: String),
         aeadKey: SymmetricKey,
         pushSigningKey: Curve25519.Signing.PrivateKey,
-        devicePubHex: String
+        devicePubHex: String,
+        deviceId: String
     ) async {
+        let deviceDisplayName: String
+        do {
+            deviceDisplayName = try await awaitConfirmedDeviceDisplayName()
+        } catch {
+            return
+        }
         phase = .admitting
         // 1 — AEAD-open the bundle.
         let bundle: PairingBundle
@@ -181,7 +222,8 @@ public final class JoinAccountViewModel {
         // 2 — The admit MUST bind OUR fresh device pubkey. A captured
         // admit aimed at a different device is rejected here (defense in
         // depth — .com also binds it server-side).
-        guard bundle.admit.newDevicePubHex.lowercased() == devicePubHex.lowercased() else {
+        guard bundle.admit.newDevicePubHex.lowercased() == devicePubHex.lowercased(),
+              bundle.admit.deviceId == deviceId else {
             phase = .failed("This pairing was for a different device. Try again.")
             return
         }
@@ -196,11 +238,52 @@ public final class JoinAccountViewModel {
         }
         let admit = DeviceAdmit(
             username: bundle.admit.username,
+            deviceId: bundle.admit.deviceId,
             newDevicePubHex: bundle.admit.newDevicePubHex,
             issuedAt: bundle.admit.issuedAt
         )
         guard admit.verify(signature: admitSig, irkPub: irkPub) else {
             phase = .failed("The admin's authorization couldn't be verified. Don't continue.")
+            return
+        }
+
+        let grant = bundle.grant
+        guard grant.username.lowercased() == bundle.admit.username.lowercased(),
+              grant.deviceId == deviceId,
+              grant.devicePubHex.lowercased() == devicePubHex.lowercased(),
+              grant.scopes.contains("view-directory"),
+              let grantSig = HexUtil.decode(bundle.grantSignature)
+        else {
+            phase = .failed("The device permission grant was malformed.")
+            return
+        }
+        let grantAuthority: Data?
+        switch grant.signerRoot {
+        case "membership":
+            grantAuthority = irkPub
+        case "admin-root":
+            if let rootHex = bundle.wrappedAdminRoot,
+               let rootSeed = HexUtil.decode(rootHex),
+               let rootKey = try? Curve25519.Signing.PrivateKey(rawRepresentation: rootSeed) {
+                grantAuthority = rootKey.publicKey.rawRepresentation
+            } else {
+                grantAuthority = nil
+            }
+        default:
+            grantAuthority = nil
+        }
+        let grantEnvelope = DeviceCapabilityGrantEnvelope(
+            grantId: grant.grantId,
+            username: grant.username,
+            deviceId: grant.deviceId,
+            devicePubKeyHex: grant.devicePubHex,
+            scopes: grant.scopes,
+            issuedAt: grant.issuedAt,
+            expiresAt: grant.expiresAt
+        )
+        guard let grantAuthority,
+              grantEnvelope.verify(signature: grantSig, irkPub: grantAuthority) else {
+            phase = .failed("The device permission grant couldn't be verified. Don't continue.")
             return
         }
 
@@ -215,9 +298,33 @@ public final class JoinAccountViewModel {
         Keystore.setActiveProfile(account)
         do {
             try await installUMK(SymmetricKey(data: umkData), "Join \(account) on this device")
+            try Keystore.storeAccountDeviceSigningKey(
+                pushSigningKey,
+                accountId: account,
+                deviceId: deviceId
+            )
         } catch {
             phase = .failed("Couldn't install the account key. \(HumanError.humanize(error))")
             return
+        }
+
+        // 4b — D-4 promote-at-add: if the admin sealed the master root into
+        // the bundle (`wrappedAdminRoot`), unseal it device-local so THIS
+        // device becomes a bare-master-root admin — the SAME way the UMK above
+        // was carried + installed. The active profile is already this account
+        // (set before the UMK install), so the root lands in the right slot.
+        // Best-effort: the join itself already succeeded (UMK installed), so a
+        // seal failure must NOT unwind it — the device simply joins non-admin
+        // and can be promoted again later.
+        if let wrappedAdminRootHex = bundle.wrappedAdminRoot,
+           let adminSeed = HexUtil.decode(wrappedAdminRootHex),
+           adminSeed.count == 32 {
+            do {
+                try await importAdminRoot(adminSeed)
+                becameAdmin = true
+            } catch {
+                // Non-fatal — see above.
+            }
         }
 
         // 5 — Register push + POST /devices/admit. The incoming device
@@ -228,7 +335,9 @@ public final class JoinAccountViewModel {
             quarantineUntil = try await registerAndAdmit(
                 account: account,
                 bundle: bundle,
-                pushSigningKey: pushSigningKey
+                pushSigningKey: pushSigningKey,
+                umk: umkData,
+                deviceDisplayName: deviceDisplayName
             )
         } catch {
             phase = .failed("Couldn't complete joining \(account). \(HumanError.humanize(error))")
@@ -237,7 +346,8 @@ public final class JoinAccountViewModel {
 
         admittedProfile = AdmittedProfile(
             cloudName: account,
-            deviceLabel: deviceLabel,
+            deviceId: deviceId,
+            deviceDisplayName: deviceDisplayName,
             quarantineUntil: quarantineUntil
         )
         phase = .joined(account: account, quarantineUntil: quarantineUntil)
@@ -247,7 +357,9 @@ public final class JoinAccountViewModel {
     private func registerAndAdmit(
         account: String,
         bundle: PairingBundle,
-        pushSigningKey: Curve25519.Signing.PrivateKey
+        pushSigningKey: Curve25519.Signing.PrivateKey,
+        umk: Data,
+        deviceDisplayName: String
     ) async throws -> Int64? {
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         let pushKeypair = try Keystore.loadOrCreatePushX25519()
@@ -256,34 +368,82 @@ public final class JoinAccountViewModel {
         // use a placeholder provider token (the real token re-registers
         // via PushRegistrar once APNs grants one post-onboarding).
         let providerToken = HexUtil.encode(Data((0..<8).map { _ in UInt8.random(in: 0...255) }))
-        let label = deviceLabel
+        let deviceId = bundle.admit.deviceId
         let inner = PushTokenRegisterRequest.Inner(
             username: account,
+            deviceId: deviceId,
             platform: "apns",
             providerToken: providerToken,
             pushX25519Pub: pushPubHex,
-            label: label,
             issuedAt: issuedAt
         )
-        // Sign the push register with a fresh device-held key (carried;
-        // .com does not verify it on the admit path — skipSignatureVerify).
+        // Sign the push register with the fresh account-scoped device key.
+        // The admission handler binds and verifies this key before accepting
+        // the transport token.
         let bytes = PushTokenRegister.canonicalBytes(
             username: account,
+            deviceId: deviceId,
             platform: "apns",
             providerToken: providerToken,
             pushX25519PubHex: pushPubHex,
-            label: label,
             issuedAt: issuedAt
         )
         let regSig = try pushSigningKey.signature(for: bytes)
 
+        let directoryKey = try AccountMetadata.deriveDeviceDirectoryKey(umk: umk)
+        let profileCiphertext = try AccountMetadata.encrypt(
+            displayName: deviceDisplayName,
+            keyBytes: directoryKey,
+            coordinates: .init(
+                accountId: account,
+                deviceId: deviceId,
+                recordType: .deviceSelfProfile,
+                revision: 1,
+                keyVersion: 1
+            )
+        )
+        let profileIssuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        let profileSignerPub = HexUtil.encode(pushSigningKey.publicKey.rawRepresentation)
+        let profileSignature = try pushSigningKey.signature(for: AccountMetadata.canonicalDeviceSelfProfile(
+            accountId: account,
+            deviceId: deviceId,
+            revision: 1,
+            keyVersion: 1,
+            ciphertext: profileCiphertext,
+            issuedAt: profileIssuedAt,
+            signerPubHex: profileSignerPub
+        ))
+
         let req = DeviceAdmitRequest(
             admit: .init(
                 username: bundle.admit.username,
+                deviceId: bundle.admit.deviceId,
                 newDevicePubHex: bundle.admit.newDevicePubHex,
                 issuedAt: bundle.admit.issuedAt
             ),
             admitSig: bundle.admitSig,
+            grant: .init(
+                grantId: bundle.grant.grantId,
+                username: bundle.grant.username,
+                deviceId: bundle.grant.deviceId,
+                devicePubHex: bundle.grant.devicePubHex,
+                scopes: bundle.grant.scopes,
+                issuedAt: bundle.grant.issuedAt,
+                expiresAt: bundle.grant.expiresAt,
+                signerRoot: bundle.grant.signerRoot
+            ),
+            grantSignature: bundle.grantSignature,
+            profile: .init(
+                accountId: account,
+                deviceId: deviceId,
+                revision: 1,
+                keyVersion: 1,
+                nonceHex: profileCiphertext.nonceHex,
+                ciphertextHex: profileCiphertext.ciphertextHex,
+                issuedAt: profileIssuedAt,
+                signerPubHex: profileSignerPub,
+                signatureHex: HexUtil.encode(Data(profileSignature))
+            ),
             request: inner,
             signature: HexUtil.encode(Data(regSig))
         )
@@ -301,6 +461,8 @@ public final class JoinAccountViewModel {
     }
 
     public func cancel() async {
+        deviceNameContinuation?.resume(throwing: CancellationError())
+        deviceNameContinuation = nil
         await relay.close()
     }
 

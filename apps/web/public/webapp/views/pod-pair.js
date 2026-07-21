@@ -12,13 +12,12 @@ registerView("view-pod-pair");
 
 async function handlePair() {
   const baseUrl = $("pod-pair-base").value.trim();
-  const label = $("pod-pair-label").value.trim() || "webapp";
-  if (!baseUrl) return toast("pod URL required", "err");
+  if (!baseUrl) return toast("Server URL required", "err");
   const btn = $("pod-pair-go");
   btn.disabled = true;
   try {
-    await pairWithPod({ baseUrl, label });
-    toast("paired with pod");
+    await pairWithPod({ baseUrl });
+    toast("Paired with server");
     await enterPodPair(); // re-render the status card
   } catch (e) {
     toast(e.message, "err");
@@ -30,7 +29,7 @@ async function handlePair() {
 async function handleUnpair() {
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
-    title: "Forget this pod?",
+    title: "Forget this server?",
     message: "Removes the paired-session token from this device. You can re-pair anytime.",
     okLabel: "Forget",
     danger: true,
@@ -38,7 +37,7 @@ async function handleUnpair() {
   if (!ok) return;
   setPodBaseUrl("");
   setSessionToken("");
-  toast("unpaired");
+  toast("Unpaired");
   enterPodPair();
 }
 
@@ -56,12 +55,12 @@ export async function enterPodPair() {
   if (baseUrl && tok) {
     status.innerHTML = `
       <div class="row">
-        <span class="value">paired to <strong>${escapeHtml(baseUrl)}</strong></span>
-        <button class="secondary" id="pod-pair-unpair">unpair</button>
+        <span class="value">Paired to <strong>${escapeHtml(baseUrl)}</strong></span>
+        <button class="secondary" id="pod-pair-unpair">Unpair</button>
       </div>
     `;
     $("pod-pair-unpair")?.addEventListener("click", () => handleUnpair());
   } else {
-    status.innerHTML = '<p class="note">not paired with any pod yet</p>';
+    status.innerHTML = '<p class="note">Not paired with any server yet</p>';
   }
 }

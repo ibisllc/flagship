@@ -31,24 +31,41 @@ in incrementally on top of it — each scenario is a small additive entry.
 ## One-command runner
 
 ```sh
-# From the repo root:
+# The two headline one-liners (from the repo root):
+npm run gym:locked                 # FAST, no cloud — the full deterministic frontend
+                                   # matrix across web · iOS · iPad · Android (mock-only)
+npm run gym:total                  # OVERNIGHT — the locked matrix PLUS real-cloud e2e:
+                                   # provisions real gym boxes, drives the backend chain
+                                   # + the gating e2e, then tears them down
+
+# The building blocks the two headlines compose from:
 npm run gym:every-merge            # the fast Tier-1 subset (no backend)
-npm run gym:total                  # the full local run (incl. the live slice + AI passes)
 npm run gym:live                   # ONLY the live Tier-2 slice (§12-G6)
 
-# Narrow to a surface (web | ios | android), or override the tier:
+# Narrow to a surface (web | ios | android), or override the tier / drop the live slice:
 npm run gym -- every-merge --surface web
 npm run gym -- total --surface ios
+npm run gym -- total --mock-only          # the locked matrix (what gym:locked runs)
 npm run gym -- every-merge --surface web,ios
 
 # Or directly via the CLI:
 npx tsx tools/gym/src/cli.ts every-merge --surface web
 ```
 
-`gym:total` folds in the **live Tier-2 slice**, which **detects** whether the
-`gym.` test env is deployed (pings `<control-apex>/api/health`) and **SKIPS
-cleanly** (never fails) when it isn't — so `npm run gym:total` is **green today**
-on a machine that never stood up the env. See "Live Tier-2 slice" below.
+**`gym:locked` (fast, no cloud)** runs `gym total --mock-only` — every fixture-backed
+frontend scenario, all surfaces, with NO backend and NO env probe. This is the
+"have we tested all the frontend features" gate before hand-testing.
+
+**`gym:total` (overnight, real cloud)** is `scripts/gym-total.sh`: it runs the locked
+matrix first, then — if `.gym-secrets.env` has `GYM_ADMIN_SECRET` — provisions REAL
+gym Hetzner boxes and drives the live backend e2e (`tools/live-e2e/run.ts`) + the
+service-access gating e2e (`tools/live-e2e/gating-drive.ts`), each self-tearing-down
+its box. With no secrets it cleanly SKIPS the cloud half and just runs the matrix, so
+it's safe to invoke anywhere.
+
+The standalone **live Tier-2 slice** (`gym:live` / `gym total` without `--mock-only`)
+**detects** whether the `gym.` test env is deployed (pings `<control-apex>/api/health`)
+and **SKIPS cleanly** (never fails) when it isn't. See "Live Tier-2 slice" below.
 
 The command runs the selected suite, then **waits** and prints a pass/fail
 summary + the path to the results artifact. Exit code = the deterministic

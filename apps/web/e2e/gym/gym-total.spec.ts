@@ -32,6 +32,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
+import { formatWhen } from "../../public/webapp/lib/dateFormat.js";
 
 /** A passphrase that satisfies the bootstrap 8+ rule. */
 const PASSPHRASE = "correct-horse-battery-staple-gym";
@@ -48,9 +49,19 @@ async function coldLaunch(page: Page): Promise<void> {
 }
 
 async function generateIdentity(page: Page): Promise<void> {
-  await page.fill("#bootstrap-passphrase", PASSPHRASE);
-  await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-  await page.click("#bootstrap-go");
+  // Username-first cover: "Create a new account" opens an inline passphrase +
+  // confirm, mints the device identity client-side (wrapped UMK → IndexedDB)
+  // BEFORE the random-handle suggestion fetch (which 404s in the backendless
+  // gym → toast). The identity persists regardless, so reachShell's
+  // reload→unlock works.
+  await page.click("#bootstrap-create");
+  await expect(page.locator(".modal-title")).toHaveText("Create your account");
+  await page.fill(".modal-input", PASSPHRASE);
+  await page.click("[data-modal-ok]");
+  await expect(page.locator(".modal-title")).toHaveText("Confirm passphrase");
+  await page.fill(".modal-input", PASSPHRASE);
+  await page.click("[data-modal-ok]");
+  await expect(page.locator("#toast")).toBeVisible({ timeout: 10_000 });
 }
 
 /**
@@ -64,7 +75,8 @@ async function generateIdentity(page: Page): Promise<void> {
 async function reachShell(page: Page, viewAlias: string): Promise<void> {
   await coldLaunch(page);
   await generateIdentity(page);
-  await expect(page.locator("#view-wizard")).toBeVisible({ timeout: 10_000 });
+  // generateIdentity waited for the post-mint toast → the wrapped UMK is
+  // persisted; reload with the deep-link → boot routes to the unlock screen.
   await page.goto(`/index.html?view=${viewAlias}`);
   await expect(page.locator("#view-unlock")).toBeVisible({ timeout: 10_000 });
   await page.fill("#unlock-passphrase", PASSPHRASE);
@@ -96,7 +108,7 @@ async function reachSettingsTab(page: Page): Promise<void> {
 
 /** Reach the Settings DETAIL page (`#view-settings`) — the providers (AI-keys)
  *  section + the session-tier cluster (PIN lock / passkey-lock / remove-device)
- *  live here, reached from the tab's "AI providers" row. `renderProviders()`
+ *  live here, reached from the tab's "AI keys" row. `renderProviders()`
  *  runs on entry, which is what greys the recovery-gated session actions. */
 async function reachSettingsDetail(page: Page): Promise<void> {
   await reachSettingsTab(page);
@@ -210,12 +222,26 @@ test.describe("gym webapp total", () => {
   });
 
   test("gym total webapp a greyed session action shows the set-up-recovery toast", async ({ page }, testInfo) => {
+    // The gated tap consults account/resolve to decide last-device (→ deletion
+    // ceremony) vs another-device (→ the recovery nudge). With no backend that
+    // resolve fails-closed to last-device. Stub a multi-device account so the
+    // policy is "normal" and the recovery NUDGE — the path under test — fires.
+    await page.route(
+      (url) => url.href.includes("/api/account/resolve/"),
+      (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ trustedDeviceCount: 2 }),
+        }),
+    );
     await reachSettingsDetail(page);
     await expect(page.locator("#settings-signout")).toHaveClass(/gated/, { timeout: 10_000 });
     // Tapping the greyed tier-2 action does NOT run the destructive path; it
-    // surfaces a toast routing the user to recovery enrollment.
+    // surfaces a toast routing the user to recovery enrollment. (The "unlocked"
+    // toast from the unlock step queues ahead, so allow the queue to drain.)
     await page.click("#settings-signout");
-    await expect(page.locator("#toast")).toContainText(/set up account recovery/i, { timeout: 5_000 });
+    await expect(page.locator("#toast")).toContainText(/set up account recovery/i, { timeout: 10_000 });
     // It must NOT have left the settings detail page (the wipe never ran).
     await expect(page.locator("#view-settings")).toBeVisible();
     await shot(page, testInfo, "recovery-toast");
@@ -425,7 +451,8 @@ test.describe("gym webapp total", () => {
       await enterServerDetail();
     });
     await expect(page.locator("#view-server-detail")).toBeVisible({ timeout: 10_000 });
-    const expected = new Date(soon).toLocaleString();
+    // server-detail routes cert dates through the shared S2 date helper.
+    const expected = formatWhen(soon);
     await expect(page.locator("#server-detail-content")).toContainText(expected, { timeout: 10_000 });
     await shot(page, testInfo, "cert-near-expiry");
   });
@@ -442,7 +469,7 @@ test.describe("gym webapp total", () => {
       await enterServerDetail();
     });
     await expect(page.locator("#view-server-detail")).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("#server-detail-content")).toContainText(new Date(renewed).toLocaleString(), {
+    await expect(page.locator("#server-detail-content")).toContainText(formatWhen(renewed), {
       timeout: 10_000,
     });
     await shot(page, testInfo, "cert-renewed");

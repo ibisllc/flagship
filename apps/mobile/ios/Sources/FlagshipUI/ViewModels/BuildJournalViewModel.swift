@@ -28,7 +28,11 @@ public final class BuildJournalViewModel {
         do {
             list = .loaded(try await client.buildSessions().builds)
         } catch {
-            list = .failed(ScreensClientError.userFacing(error))
+            // The sessions list is a build-platform ENTRY call — a 404 means the
+            // box can't build services (vs. loadDetail's session-scoped 404,
+            // which legitimately means that one build is gone).
+            list = .failed(ScreensClientError.buildPlatformAbsent(error)
+                ?? ScreensClientError.userFacing(error))
         }
     }
 
