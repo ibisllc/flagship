@@ -142,6 +142,17 @@ set -euo pipefail
 exec > >(tee -a /var/log/flagship-appliance-prepare.log) 2>&1
 export DEBIAN_FRONTEND=noninteractive
 echo "[appliance-factory] preparing generalized ref=${opts.gitRef}"
+mkdir -p /etc/dpkg/dpkg.cfg.d
+cat > /etc/dpkg/dpkg.cfg.d/flagship-appliance-lean <<'DPKGCFG'
+path-exclude=/usr/share/doc/*
+path-exclude=/usr/share/man/*
+path-exclude=/usr/share/info/*
+path-exclude=/usr/share/groff/*
+path-exclude=/usr/share/lintian/*
+path-exclude=/usr/share/locale/*
+path-include=/usr/share/locale/en_US*
+path-include=/usr/share/locale/locale.alias
+DPKGCFG
 timeout -k 10 90 curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
 echo "[appliance-factory] installing Flagship runtime packages"
 timeout -k 15 600 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends nodejs jq git curl ca-certificates cryptsetup cryptsetup-initramfs lvm2 xxd openssl gnupg cloud-guest-utils golang-go docker.io docker-cli docker-compose
@@ -166,10 +177,17 @@ echo "[appliance-factory] compiling initramfs unseal helper"
 ( cd /opt/flagship/installer/unseal-helper && timeout -k 15 300 env HOME=/root GOPATH=/root/go GOMODCACHE=/root/go/pkg/mod CGO_ENABLED=0 GOOS=linux go build -trimpath -buildvcs=false -ldflags '-s -w' -o /usr/local/lib/flagship-appliance/flagship-unseal . )
 chmod 755 /usr/local/lib/flagship-appliance/flagship-unseal
 echo "[appliance-factory] initramfs unseal helper ready"
-rm -rf /root/go /root/.cache/go-build /root/.npm /root/.cache
+[ -x /usr/local/lib/flagship-appliance/flagship-unseal ] || { echo "[appliance-factory] unseal helper missing before Go purge"; exit 1; }
+echo "[appliance-factory] purging Go toolchain (static unseal helper already built)"
+apt-get purge -y golang-go golang-* 2>/dev/null || true
+apt-get autoremove -y --purge
+rm -rf /root/go /root/.cache/go-build /root/.npm /root/.cache /usr/lib/go-* /usr/local/go
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 echo "[appliance-factory] build caches removed"
+echo "[appliance-factory] stripping docs, manuals, and surplus locales"
+rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/* /usr/share/groff/* /usr/share/lintian/*
+find /usr/share/locale -mindepth 1 -maxdepth 1 -type d ! -name 'C' ! -name 'C.UTF-8' ! -name 'en' ! -name 'en_US' -exec rm -rf {} + 2>/dev/null || true
 
 mkdir -p /etc/flagship /var/flagship
 printf '%s' '${BURN_PASSPHRASE}' > /etc/flagship/appliance-build.key
