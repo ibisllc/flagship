@@ -149,31 +149,26 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
-**2026-07-20 (feature branch only — NOT merged or deployed) — the measured VM
-replacement is a custom preinstalled Flagship appliance, built from Debian's
-official generic cloud image.** Ezra2 repeated Ezra's VZ failure: registration
-never happened and the allowlisted stream remained at “Unpacking the Debian
-base system” through 38 minutes after disk writes stopped. The QEMU/HVF factory
-instead converted Debian's SHA-512-pinned arm64 image into an encrypted 8 GiB
-generalized base in 153–196 seconds; independent fresh-firmware boot smoke
-reaches the readiness marker in about five seconds. A later Mac/HVF rebuild
-stopped writing during the encrypted copy for 23 minutes, so Mac is explicitly
-not a release factory: reproducible artifacts must be manufactured and tested
-under Linux/KVM CI. Customer preparation
-(verify the full base SHA-256, make a 64 GiB thin overlay, write the fixed 8 MiB
-read-only seed) takes 3.9–4.2 seconds and initially allocates ~193 KiB; the base
-allocates ~2.7 GiB. Converting the encrypted base to compressed qcow2 took 42
-seconds and produced a valid 2.65 GiB artifact—LUKS ciphertext does not compress
-meaningfully. The factory now uses a two-commit shallow clone and clears Go/npm/
-apt build caches; its final size still needs measuring under Linux/KVM. A first
-real specialization proved the existing privacy-safe status sequence
-(`Specializing prebuilt server` → registering → sealing) and consumed Ezra2's
-one-time production auth, but exposed 24 minutes of avoidable per-customer
-workspace/Go compilation. The factory now preinstalls the pinned workspace and
-compiled unseal helper; the optimized image passes its factory + fresh-boot
-gates, but Ezra2's recipe expired before its final optimized registration→rekey→
-poweroff timing could be rerun. A fresh paired recipe is the only remaining Mac
-end-to-end input.
+**2026-07-21 (prebuilt VM appliance release) — the measured d-i VM replacement
+is merged to `main`, the arm64 appliance is live, and a notarized Studio build
+is published.** Ezra2 repeated Ezra's VZ failure: registration never happened
+and the allowlisted stream remained at “Unpacking the Debian base system”
+through 38 minutes after disk writes stopped. The QEMU/HVF factory instead
+converted Debian's SHA-512-pinned official arm64 generic cloud image into an
+encrypted 8 GiB generalized base in 153–196 seconds; independent fresh-firmware
+boot smoke reaches the readiness marker in about five seconds. A later Mac/HVF
+rebuild stopped writing during the encrypted copy for 23 minutes, so Mac is
+explicitly not a release factory: reproducible artifacts must be manufactured
+and tested under Linux/KVM CI. Customer preparation (verify the full base
+SHA-256, make a 64 GiB thin overlay, write the fixed 8 MiB read-only seed) takes
+3.9–4.2 seconds and initially allocates ~193 KiB; the base allocates ~2.7 GiB.
+The 2.65 GiB compressed qcow2 is published in eleven independently SHA-256-
+pinned, resumable R2 parts, with a live distribution manifest and a checked-in
+Mac fetch/verify/expand helper. The manifest, every live part size, aggregate
+qcow2 hash, expanded raw hash, live DMG bytes, notarization staple, code
+signature, and production health were verified after deploy. The current
+Developer-ID Studio DMG is installed in `/Applications` and live at the Mac
+download route.
 
 Mac verifies arch/ref/size/SHA and APFS-clones (copy fallback); Linux/Windows use
 the same canonical Node verifier/seed generator and thin qcow2 overlays. The
@@ -187,16 +182,20 @@ never recipes, keys, package logs, or raw syslog. Decision: manufacture amd64 +
 arm64 Flagship derivatives in Linux/QEMU-KVM CI from official Debian Cloud
 `generic` inputs; do not put a third-party derivative in the trust chain. Cache
 once, clone/overlay per server; retain d-i for USB/bare metal and a VM fallback.
-Before production, sign/pin the appliance manifest and serve resumable artifacts
-from controlled storage. `FLAGSHIP_VM_APPLIANCE_BASE` opts development Studio
-in; `FLAGSHIP_VM_FORCE_ISO=1` selects the baseline. Gates on this Mac: full
-TypeScript suite (the four sandbox-blocked tunnel tests pass with local-listener
-permission), Mac release build + 172 tests, Linux 286 tests, Android unit tests +
-Kotlin compile. **Windows dev-machine TODO (required before merge/release):**
-run/fix the full .NET/WPF suite, build/sign Windows, and perform a real WHPX
-specialization; then run/fix/package Linux and perform a real KVM specialization.
-Publish neither platform nor appliance artifacts until those tests and the
-fresh-recipe Mac sealed→live comparison pass.
+The trusted hashes are pinned in the signed release source; the appliance is
+served resumably from controlled storage. `FLAGSHIP_VM_APPLIANCE_BASE` opts the
+current Studio into the prebuilt path; `FLAGSHIP_VM_FORCE_ISO=1` selects the
+baseline. Gates on this Mac: TypeScript build plus all local-listener/browser
+tests rerun with listener permission, Mac release build + 172 tests, Linux 286
+tests, and Android unit tests + APK. **Remaining (owner):** pair a fresh recipe
+and run the Mac prebuilt specialization through sealed reboot, phone unlock,
+entitlement/signalling, certificate, and live HTTPS while timing it against d-i;
+then make artifact discovery/download native in Studio rather than the current
+fetch-helper + environment opt-in. **Windows/Linux dev-machine TODO:** run/fix
+the full .NET/WPF suite, build/sign Windows, produce and publish the amd64
+appliance under Linux/KVM, and perform real WHPX + KVM specializations before
+publishing Windows/Linux desktop releases. The shared source path is ported,
+but those native builds and amd64 artifact are not yet released.
 
 **2026-07-21 (OpenRouter Vibe Code streaming) — OpenRouter BYOK sessions now
 reach the agent loop.** OpenRouter was accepted for stored AI keys and blocking
