@@ -166,7 +166,11 @@ echo "[appliance-factory] compiling initramfs unseal helper"
 ( cd /opt/flagship/installer/unseal-helper && timeout -k 15 300 env HOME=/root GOPATH=/root/go GOMODCACHE=/root/go/pkg/mod CGO_ENABLED=0 GOOS=linux go build -trimpath -buildvcs=false -ldflags '-s -w' -o /usr/local/lib/flagship-appliance/flagship-unseal . )
 chmod 755 /usr/local/lib/flagship-appliance/flagship-unseal
 echo "[appliance-factory] initramfs unseal helper ready"
-rm -rf /root/go /root/.cache/go-build /root/.npm /root/.cache
+[ -x /usr/local/lib/flagship-appliance/flagship-unseal ] || { echo "[appliance-factory] unseal helper missing before Go purge"; exit 1; }
+echo "[appliance-factory] purging Go toolchain (static unseal helper already built)"
+apt-get purge -y golang-go golang-* 2>/dev/null || true
+apt-get autoremove -y --purge
+rm -rf /root/go /root/.cache/go-build /root/.npm /root/.cache /usr/lib/go-* /usr/local/go
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 echo "[appliance-factory] build caches removed"

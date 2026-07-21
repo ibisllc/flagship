@@ -67,4 +67,20 @@ describe("generalized VM appliance", () => {
     }
     expect(script).not.toContain("home.alice");
   });
+
+  it("purges the Go toolchain, but only after the static unseal helper is built", () => {
+    const script = buildAppliancePrepareScript({ gitRef: "v-test" });
+    expect(script).toContain("apt-get purge -y golang-go golang-*");
+    expect(script).toContain("apt-get autoremove -y --purge");
+    // The one-shot go build MUST run before the compiler is removed, and the
+    // built static binary is guarded before the purge.
+    const buildAt = script.indexOf("GOMODCACHE=/root/go/pkg/mod");
+    const guardAt = script.indexOf("unseal helper missing before Go purge");
+    const purgeAt = script.indexOf("apt-get purge -y golang-go golang-*");
+    expect(buildAt).toBeGreaterThanOrEqual(0);
+    expect(guardAt).toBeGreaterThanOrEqual(0);
+    expect(purgeAt).toBeGreaterThanOrEqual(0);
+    expect(buildAt).toBeLessThan(guardAt);
+    expect(guardAt).toBeLessThan(purgeAt);
+  });
 });
