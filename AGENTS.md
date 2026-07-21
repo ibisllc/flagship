@@ -149,6 +149,52 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-21 (repo reconciliation + open-work rollup) — after parallel
+work-streams, `origin/main` is the single deployed truth; the merged handover
+branches (`feat/vm-prebuilt-appliance`, `feat/private-account-device-names`,
+`fix/leti-pairing-recovery`, `fix/openrouter-streaming`, `studio-release`,
+`handover`) and the stale local `main`/tmp worktrees were retired — all their
+code was already on `origin/main`. Feature branches kept as future-release gates:
+`feat/browser-extension`, `feat/retail`, `feat/marketplace`,
+`feat/chromebook-fit`, `alpine` (parked installer delta), `gym` (validation/test
+harness, being forward-rebased onto main). Open product work now in flight or
+queued:**
+
+- **Restricted-device profile/directory-key delivery (DoD blocker).** Server
+  stores + authorizes `accountDirectoryKeyGrant`s, but no client seals/unseals
+  `sealedKeyHex` — the `accountDirectory.test.ts` `"001122"` value is dummy, not a
+  round trip. Mirror the shipped `AcmeAccountKeyGrant` envelope (IRK-signed,
+  X25519 seal-to-device-pub; see `SecretSeal.swift` / `SwkDelivery.kt` /
+  `secretMailbox.ts`): seal only the permitted account-profile/directory key to
+  the recipient device pubkey, admin-sign + publish the grant, verify signature
+  before consumption, unseal + install under the correct local account membership.
+  TS/Swift/Kotlin parity + golden vectors in `test-vectors/`; negative tests for
+  wrong recipient, wrong account, tamper, replay, revoked device, missing scope.
+  Control plane must never see plaintext keys or names. **Fresh-start authorized:
+  ship a clean envelope with no live-data migration; wipe + reseed prod D1.**
+- **Native UI test coverage** — iOS + Android tests for account rename, device
+  rename, managed override, lock/unlock, managed-name removal (deleted with the
+  cutover, not yet replaced).
+- **Fixture cleanup** — classify + remove/convert any obsolete plaintext
+  display-name fixtures still in active tests.
+- **Retail iOS build** — `feat/retail` iOS target fails resolving FlagshipCore /
+  FlagshipAPI SwiftPM products; land the general fix on `main`, then merge into
+  retail rather than keeping it retail-only.
+- **VM appliance follow-through** — make appliance discovery/download native in
+  Studio (currently the checked-in fetch helper + `FLAGSHIP_VM_APPLIANCE_BASE`
+  opt-in); shrink the ~2.7 GiB base toward the leanest secure footprint; confirm
+  guest observability/logs and CLI parity. amd64 (Linux/KVM), Windows .NET/WPF +
+  WHPX, and Linux KVM builds are prepared for a Windows/Linux host — see the
+  handoff prompt in `docs/`.
+- **iOS TestFlight** — distribution-signed IPA at
+  `~/Desktop/flagship-builds/FlagshipApp-20260721.ipa`; upload uses the
+  app-specific password in Keychain / `FLAGSHIP_NOTARY_PASSWORD` (see
+  `scripts/release-studio.sh`). App-Store-signed, so not directly sideloadable —
+  on-device debugging needs a separate development-signed build.
+- **Orphaned boxes** — the prod wipe left six stale records (incl.
+  `leti.jolly-quince`); we are starting afresh, so these + their VM files are
+  being deleted/ignored rather than reburned.
+
 **2026-07-21 (prebuilt VM appliance release) — the measured d-i VM replacement
 is merged to `main`, the arm64 appliance is live, and a notarized Studio build
 is published.** Ezra2 repeated Ezra's VZ failure: registration never happened
