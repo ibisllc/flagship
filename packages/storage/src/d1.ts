@@ -2966,6 +2966,11 @@ function profileBinds(rec: AccountProfileRecord): unknown[] {
 
 export class D1AccountProfileStorage implements AccountProfileStorage {
   constructor(private readonly db: D1Database) {}
+  async purgeForAccount(accountId: string): Promise<number> {
+    const result = await this.db.prepare("DELETE FROM account_profiles WHERE account_id = ?")
+      .bind(accountId.toLowerCase()).run();
+    return result.meta.changes ?? 0;
+  }
   async get(accountId: string) {
     const row = await this.db.prepare("SELECT * FROM account_profiles WHERE account_id = ?")
       .bind(accountId.toLowerCase()).first<ProfileRow>();
@@ -2992,6 +2997,11 @@ export class D1AccountProfileStorage implements AccountProfileStorage {
 
 abstract class D1DeviceProfileStorage<T extends DeviceSelfProfileRecord> {
   constructor(protected readonly db: D1Database, protected readonly table: "device_self_profiles" | "device_managed_profiles") {}
+  async purgeForAccount(accountId: string): Promise<number> {
+    const result = await this.db.prepare(`DELETE FROM ${this.table} WHERE account_id = ?`)
+      .bind(accountId.toLowerCase()).run();
+    return result.meta.changes ?? 0;
+  }
   protected fromRow(row: ProfileRow): T {
     return { ...baseProfile(row), deviceId: row.device_id! } as T;
   }
@@ -3084,6 +3094,11 @@ function rowToDirectoryKeyGrant(row: DirectoryKeyGrantRow): AccountDirectoryKeyG
 }
 
 export class D1AccountDirectoryKeyGrantStorage implements AccountDirectoryKeyGrantStorage {
+  async purgeForAccount(accountId: string): Promise<number> {
+    const result = await this.db.prepare("DELETE FROM account_directory_key_grants WHERE account_id = ?")
+      .bind(accountId.toLowerCase()).run();
+    return result.meta.changes ?? 0;
+  }
   constructor(private readonly db: D1Database) {}
   async put(rec: AccountDirectoryKeyGrantRecord) {
     try {

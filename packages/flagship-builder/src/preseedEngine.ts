@@ -21,7 +21,12 @@
 import { parseInstallBlob } from "./installBlobParse.js";
 import type { LoadedBlob } from "./loadBlob.js";
 import { buildDebianPreseed } from "./preseed.js";
-import { buildAutoinstallUserData, type UserDataOptions } from "./userdata.js";
+import {
+  buildAutoinstallUserData,
+  buildBootstrapScript,
+  resolveBootstrapInputs,
+  type UserDataOptions,
+} from "./userdata.js";
 
 /** Burn-time options the recipe doesn't carry (Wi-Fi is never in the recipe). */
 export interface EngineBurnOptions {
@@ -90,6 +95,27 @@ export function buildUserDataFromRecipe(recipeJson: string, burnOptsJson?: strin
   return buildAutoinstallUserData(optionsFromRecipeJson(recipeJson, parseBurn(burnOptsJson)));
 }
 
+/** Generate the per-owner half of appliance specialization. The generalized
+ * image already contains packages + the built repository; first boot runs this
+ * canonical bootstrap with FLAGSHIP_APPLIANCE_PREINSTALLED=1 so identity,
+ * registration, LUKS re-key, initramfs unlock, and units cannot drift from the
+ * installer path. */
+export function buildBootstrapFromRecipe(recipeJson: string, burnOptsJson?: string): string {
+  const opts = optionsFromRecipeJson(recipeJson, parseBurn(burnOptsJson));
+  const { ref, repo, bootHost, encryptRoot, bootUnlockMode } = resolveBootstrapInputs(opts);
+  return buildBootstrapScript({
+    ref,
+    repoUrl: repo,
+    encryptRoot,
+    bootUnlockMode,
+    bootHost,
+    family: "debian",
+    wifiSSID: opts.wifiSSID,
+    wifiPassword: opts.wifiPassword,
+    debugSshAuthorizedKey: opts.debugSshAuthorizedKey,
+  });
+}
+
 function parseBurn(json?: string): EngineBurnOptions {
   if (!json) return {};
   const o = JSON.parse(json) as EngineBurnOptions;
@@ -106,7 +132,8 @@ export function installAsEngineGlobal(): void {
   g.FlagshipPreseed = {
     buildPreseedFromRecipe,
     buildUserDataFromRecipe,
-    version: 1,
+    buildBootstrapFromRecipe,
+    version: 2,
   };
 }
 

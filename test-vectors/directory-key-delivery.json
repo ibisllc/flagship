@@ -1,0 +1,41 @@
+{
+  "note": "Golden OPEN vectors for the sealed directory/profile-key delivery. TS, Swift and Kotlin LOAD this file and assert that each fixed sealed grant verifies under adminRootPubHex and unseals with recipientSeedHex to expectedKeyHex. The seal output is randomized so it is frozen here; regenerate with `npx tsx tools/directory-key-vectors.ts`.",
+  "umkSeedHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "recipientSeedHex": "0909090909090909090909090909090909090909090909090909090909090909",
+  "recipientPubHex": "fd1724385aa0c75b64fb78cd602fa1d991fdebf76b13c58ed702eac835e9f618",
+  "adminRootPubHex": "677a74d964e4a84ffa5025a8b5537b5c4a37ad6d146e854783ac734684a207c4",
+  "accountId": "jolly-ranger",
+  "recipientDeviceId": "00112233445566778899aabbccddeeff",
+  "issuedAt": 1900000000000,
+  "expiresAt": 1900000060000,
+  "vectors": [
+    {
+      "name": "account-profile",
+      "grant": {
+        "accountId": "jolly-ranger",
+        "recipientDeviceId": "00112233445566778899aabbccddeeff",
+        "keyKind": "account-profile",
+        "sealedKeyHex": "0d7e4f92fc455429c8277f9f52bb8fec8757829a62d80865a91ce59512dc5d0a55d08423dbdd85a32a0d618f215f26ff5c9494136693b634c0aa1f7686fdab4b176b7b61aa0315a57c5e8c2ed0bb2c687c37db2edb4c3bd018daf206",
+        "issuedAt": 1900000000000,
+        "expiresAt": 1900000060000,
+        "signerPubHex": "677a74d964e4a84ffa5025a8b5537b5c4a37ad6d146e854783ac734684a207c4"
+      },
+      "signatureHex": "9a2884b80b81781578ff5dc5242c8916b37795bd09d2348041205145e85d651e217fda3afdf7c00c0099d3a4c3e5b5492581c9212d8b6c9e289a80a6168ecc04",
+      "expectedKeyHex": "6704c17878d90b3c9767fecbcbc969c55c4683674c76a6e5f7143fc2f2b5b674"
+    },
+    {
+      "name": "device-directory",
+      "grant": {
+        "accountId": "jolly-ranger",
+        "recipientDeviceId": "00112233445566778899aabbccddeeff",
+        "keyKind": "device-directory",
+        "sealedKeyHex": "80ea5cbbdd0a3e7182160d7cc54eb330b4cc3104ddfdb5bd350cc7d911f9565bc878140392fa26509c8f2586d73fa4c7476f8d30fe62d721adf7125a06ec8226c4ccde57f3a8bee3df855bb19c95eb6b36da3573443b3660ff6fbea7",
+        "issuedAt": 1900000000000,
+        "expiresAt": 1900000060000,
+        "signerPubHex": "677a74d964e4a84ffa5025a8b5537b5c4a37ad6d146e854783ac734684a207c4"
+      },
+      "signatureHex": "1159edf04479da6adb3bc0c0a75885c3408c29a137ad1c2f8cf7ecd24f65fa77cc43f8c6da832da1cdd457ecc1dfbf7dbd6926701de731478717d020e4267605",
+      "expectedKeyHex": "0f64692831c58829479951cca532646137a61c168b9ec9f079bb121694ba0d7f"
+    }
+  ]
+}

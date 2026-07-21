@@ -1,3 +1,33 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# BUILDING THE SIMULATOR APP — read before you run xcodebuild.
+#
+# Use a DESTINATION, never a global -sdk:
+#
+#   xcodebuild -project apps/mobile/ios/App/FlagshipApp.xcodeproj \
+#     -scheme FlagshipApp \
+#     -destination 'generic/platform=iOS Simulator' \
+#     CODE_SIGNING_ALLOWED=NO build            # ✅ builds (this is what the gym uses)
+#
+# Do NOT add `-sdk iphonesimulator`:
+#
+#   xcodebuild ... -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' ...
+#                                                     # ❌ fails: "unable to resolve
+#                                                     #    module dependency: 'FlagshipCore'"
+#
+# Why: FlagshipShared (FlagshipCore + FlagshipAPI) is a MULTIPLATFORM local SPM
+# package linked by BOTH the iOS targets (Flagship / FlagshipUI / the app) AND
+# the watchOS targets (FlagshipWatchApp / FlagshipWatchWidgets, which pin
+# SDKROOT=watchos + SUPPORTED_PLATFORMS="watchsimulator watchos" below). Passing
+# `-sdk iphonesimulator` forces one SDKROOT across the WHOLE build graph, which
+# overrides the watch targets' per-target SDKROOT; Xcode then resolves the shared
+# local package for the watch targets' only remaining supported platform
+# (watchsimulator) and never builds an iphonesimulator slice — so every iOS
+# target that imports FlagshipCore/FlagshipAPI fails to resolve the module.
+# With a `-destination` (and no `-sdk`) the per-target SDKROOTs are honored, each
+# slice of FlagshipShared is built for the platform that needs it, and the app +
+# both watch targets build. This is a build-INVOCATION issue, not a source or
+# package-wiring defect — `feat/retail`'s NFC code was never the cause.
+# ─────────────────────────────────────────────────────────────────────────────
 name: FlagshipApp
 options:
   bundleIdPrefix: com.flagshipserver

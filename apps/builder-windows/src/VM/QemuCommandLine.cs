@@ -88,18 +88,25 @@ public static class QemuCommandLine
 
         if (attachInstallerISO)
         {
-            // USB mass storage matches how the ISO boots on real hardware
-            // (the builder writes it to a USB stick) — the same isohybrid
-            // image, the same EFI boot entry.
-            args.AddRange(new[]
+            if (config.ProvisioningMode == VMProvisioningMode.PrebuiltAppliance)
             {
-                "-device", "qemu-xhci",
-                "-drive", $"id=flagship-installer,if=none,format=raw,readonly=on,file={layout.InstallerIsoPath(name)}",
-                "-device", "usb-storage,drive=flagship-installer",
-                // A completed install ends in poweroff OR reboot; -no-reboot
-                // turns both into a clean exit for the duration-gated verdict.
-                "-no-reboot",
-            });
+                args.AddRange(new[]
+                {
+                    "-drive", $"id=flagship-seed,if=none,format=raw,readonly=on,file={layout.ApplianceSeedPath(name)}",
+                    "-device", "virtio-blk-pci,drive=flagship-seed",
+                    "-no-reboot",
+                });
+            }
+            else
+            {
+                args.AddRange(new[]
+                {
+                    "-device", "qemu-xhci",
+                    "-drive", $"id=flagship-installer,if=none,format=raw,readonly=on,file={layout.InstallerIsoPath(name)}",
+                    "-device", "usb-storage,drive=flagship-installer",
+                    "-no-reboot",
+                });
+            }
         }
 
         // User-mode NAT: outbound-only is all the appliance needs (it dials

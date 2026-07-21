@@ -56,7 +56,8 @@ final class VZHost: NSObject {
     static func makeConfiguration(config: VMConfig,
                                   layout: VMBundleLayout,
                                   attachInstallerISO: Bool,
-                                  consolePipes: (input: Pipe, output: Pipe)?) throws -> VZVirtualMachineConfiguration {
+                                  consolePipes: (input: Pipe, output: Pipe)?,
+                                  additionalWritableDisk: URL? = nil) throws -> VZVirtualMachineConfiguration {
         let name = config.name
         let vz = VZVirtualMachineConfiguration()
         vz.cpuCount = config.cpuCount
@@ -80,24 +81,40 @@ final class VZHost: NSObject {
         }
         let mainDisk = try VZDiskImageStorageDeviceAttachment(url: diskURL, readOnly: false)
         var storage: [VZStorageDeviceConfiguration] = [VZVirtioBlockDeviceConfiguration(attachment: mainDisk)]
-        // Default: attach the installer as USB mass storage (matches how the
+        if let additionalWritableDisk {
+            let attachment = try VZDiskImageStorageDeviceAttachment(
+                url: additionalWritableDisk, readOnly: false)
+            storage.append(VZVirtioBlockDeviceConfiguration(attachment: attachment))
+        }
+        // A generalized appliance attaches its fixed raw seed as the second
+        // virtio disk. It is read-only to the guest and contains only the
+        // one-use recipe + canonical bootstrap; success is signaled by the
+        // specializer's clean shutdown, after which the lifecycle deletes it.
+        //
+        // The ISO path attaches the installer as USB mass storage (matches how the
         // ISO boots on real hardware — the builder writes it to a USB stick).
         // `FLAGSHIP_VM_ISO_MODE=block` is a documented fallback that attaches it
         // as a virtio-block device instead, for a base ISO whose EFI entry the
         // USB path won't boot. Both booted a native-arch (arm64) Debian netinst
         // in Phase-0 bring-up.
         let isoMode = ProcessInfo.processInfo.environment["FLAGSHIP_VM_ISO_MODE"] ?? "usb"
-        if attachInstallerISO {
-            let iso = try VZDiskImageStorageDeviceAttachment(
+        if attachInstallerISO, config.effectiveProvisioningMode == .prebuiltAppliance {
+            let seed = try VZDiskImageStorageDeviceAttachment(
+                url: layout.applianceSeedURL(name), readOnly: true)
+            storage.append(VZVirtioBlockDeviceConfiguration(attachment: seed))
+        } else if attachInstallerISO {
+            let installer = try VZDiskImageStorageDeviceAttachment(
                 url: layout.installerISOURL(name), readOnly: true)
             if isoMode == "block" {
-                storage.append(VZVirtioBlockDeviceConfiguration(attachment: iso))
+                storage.append(VZVirtioBlockDeviceConfiguration(attachment: installer))
             } else {
-                storage.append(VZUSBMassStorageDeviceConfiguration(attachment: iso))
+                storage.append(VZUSBMassStorageDeviceConfiguration(attachment: installer))
             }
         }
         vz.storageDevices = storage
-        if isoMode != "block", #available(macOS 15.0, *) {
+        if attachInstallerISO,
+           config.effectiveProvisioningMode == .installerISO,
+           isoMode != "block", #available(macOS 15.0, *) {
             // VZUSBMassStorageDeviceConfiguration needs an XHCI controller to be
             // enumerated by the guest firmware (macOS 15+).
             vz.usbControllers = [VZXHCIControllerConfiguration()]
@@ -133,7 +150,10 @@ final class VZHost: NSObject {
 
     // MARK: - Control
 
-    func start(config: VMConfig, layout: VMBundleLayout, attachInstallerISO: Bool) async throws {
+    func start(config: VMConfig,
+               layout: VMBundleLayout,
+               attachInstallerISO: Bool,
+               additionalWritableDisk: URL? = nil) async throws {
         var pipes: (input: Pipe, output: Pipe)? = nil
         if config.serialConsoleEnabled {
             let p = (input: Pipe(), output: Pipe())
@@ -147,7 +167,8 @@ final class VZHost: NSObject {
         let vzConfig = try Self.makeConfiguration(config: config,
                                                   layout: layout,
                                                   attachInstallerISO: attachInstallerISO,
-                                                  consolePipes: pipes)
+                                                  consolePipes: pipes,
+                                                  additionalWritableDisk: additionalWritableDisk)
         let vm = VZVirtualMachine(configuration: vzConfig)
         vm.delegate = self
         machine = vm

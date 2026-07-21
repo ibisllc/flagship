@@ -28,6 +28,7 @@ public sealed record VMRecord
 ///     &lt;root&gt;\&lt;name&gt;\config.json     — VMRecord (spec + state)
 ///     &lt;root&gt;\&lt;name&gt;\disk.qcow2      — the guest's main disk (sparse qcow2)
 ///     &lt;root&gt;\&lt;name&gt;\installer.iso   — the remastered installer (install phase only)
+///     &lt;root&gt;\&lt;name&gt;\seed.img        — one-use appliance specialization seed
 ///     &lt;root&gt;\&lt;name&gt;\efi-vars.fd     — OVMF UEFI variable store (per-VM NVRAM copy)
 ///     &lt;root&gt;\&lt;name&gt;\console.log     — serial output (debug-enabled VMs only)
 ///
@@ -50,6 +51,7 @@ public sealed record VMBundleLayout(string Root)
     public string ConfigPath(string name) => Path.Combine(BundleDir(name), "config.json");
     public string DiskImagePath(string name) => Path.Combine(BundleDir(name), "disk.qcow2");
     public string InstallerIsoPath(string name) => Path.Combine(BundleDir(name), "installer.iso");
+    public string ApplianceSeedPath(string name) => Path.Combine(BundleDir(name), "seed.img");
     public string EfiVariableStorePath(string name) => Path.Combine(BundleDir(name), "efi-vars.fd");
     public string ConsoleLogPath(string name) => Path.Combine(BundleDir(name), "console.log");
 }

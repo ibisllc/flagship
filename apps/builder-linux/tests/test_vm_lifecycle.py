@@ -13,6 +13,7 @@ from vm.lifecycle import (
     VMState,
     VMStateKind,
     coming_up_is_stalled,
+    verdict_for_clean_provisioning_stop,
 )
 
 
@@ -59,6 +60,12 @@ def test_verdict_convenience_refuses_outside_installing():
     lc = VMLifecycle(False)
     with pytest.raises(RuntimeError):
         lc.verdict_for_clean_install_stop_now(5.0)
+
+
+def test_prebuilt_specialization_has_short_nonzero_floor():
+    assert verdict_for_clean_provisioning_stop(5.0, prebuilt=True).kind == VMEventKind.INSTALL_SUCCEEDED
+    assert verdict_for_clean_provisioning_stop(0.3, prebuilt=True).kind == VMEventKind.INSTALL_FAILED
+    assert verdict_for_clean_provisioning_stop(5.0, prebuilt=False).kind == VMEventKind.INSTALL_FAILED
 
 
 def test_transition_into_failed_pins_the_event_reason():

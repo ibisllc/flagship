@@ -21,9 +21,25 @@ export {
   type BootUnlockMode,
 } from "./userdata.js";
 export { buildDebianPreseed } from "./preseed.js";
+export {
+  buildDebianApplianceFactoryPreseed,
+  buildDebianCloudApplianceFactoryUserData,
+} from "./applianceFactory.js";
 export { utf8ToBase64 } from "./base64.js";
 export {
+  APPLIANCE_FORBIDDEN_PATHS,
+  APPLIANCE_SEED_HEADER_BYTES,
+  APPLIANCE_SEED_MAGIC,
+  APPLIANCE_SEED_SIZE_BYTES,
+  buildAppliancePrepareScript,
+  buildApplianceSpecializerScript,
+  encodeApplianceSeed,
+  type AppliancePrepareOptions,
+  type ApplianceSeedPayload,
+} from "./appliance.js";
+export {
   buildPreseedFromRecipe,
+  buildBootstrapFromRecipe,
   buildUserDataFromRecipe,
   optionsFromRecipeJson,
   installAsEngineGlobal,
@@ -40,6 +56,7 @@ export {
   editGrubCfgForPreseed,
   editIsolinuxCfgForPreseed,
   buildNocloudSeed,
+  buildNocloudSeedIso,
   resolveXorriso,
   DEBIAN_PRESEED_CMDLINE,
   type RemasterArgs,

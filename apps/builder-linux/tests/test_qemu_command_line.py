@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from vm import qemu_command_line, resource_plan
-from vm.config import VMConfig, VMNetworkMode
+from vm.config import VMConfig, VMNetworkMode, VMProvisioningMode
 from vm.inventory import VMBundleLayout
 
 
@@ -89,6 +89,19 @@ def test_boot_from_disk_has_no_installer_and_no_no_reboot():
     args = build(config(), attach=False)
     assert not any("flagship-installer" in a for a in args)
     assert "-no-reboot" not in args
+
+
+def test_prebuilt_appliance_attaches_read_only_raw_seed_not_iso():
+    from dataclasses import replace
+    args = build(replace(config(), provisioning_mode=VMProvisioningMode.PREBUILT_APPLIANCE), attach=True)
+    assert (
+        "-drive",
+        "id=flagship-seed,if=none,format=raw,readonly=on,"
+        "file=/data/VMs/home.harry.flagship.services/seed.img",
+    ) in pairs(args)
+    assert ("-device", "virtio-blk-pci,drive=flagship-seed") in pairs(args)
+    assert not any("flagship-installer" in a for a in args)
+    assert ("-device", "qemu-xhci") not in pairs(args)
 
 
 def test_production_vm_gets_no_serial_and_no_ssh_forward():

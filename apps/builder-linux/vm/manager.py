@@ -321,6 +321,9 @@ class VMManager:
     def installer_iso_path(self, name: str) -> str:
         return self.store.layout.installer_iso_path(name)
 
+    def appliance_seed_path(self, name: str) -> str:
+        return self.store.layout.appliance_seed_path(name)
+
     # ---- launch normalization ----
 
     def _load_and_normalize(self) -> None:
@@ -486,7 +489,12 @@ class VMManager:
                 # SUCCEEDED; a failed install keeps it so retry can re-attach.
                 if self._current_state_kind(name) == VMStateKind.INSTALLED:
                     try:
-                        os.unlink(self.store.layout.installer_iso_path(name))
+                        media = (
+                            self.store.layout.appliance_seed_path(name)
+                            if config.provisioning_mode.value == "prebuiltAppliance"
+                            else self.store.layout.installer_iso_path(name)
+                        )
+                        os.unlink(media)
                     except OSError:
                         pass
             elif effect == VMEffect.START_VIRTUAL_MACHINE:
@@ -547,13 +555,23 @@ class VMManager:
                 )
                 return
             lc = self._lifecycles.get(name)
-            verdict = (
-                lc.verdict_for_clean_install_stop_now(self._clock())
-                if lc is not None
-                else VMEvent.install_succeeded()
-            )
+            from .config import VMProvisioningMode
+            from .lifecycle import verdict_for_clean_provisioning_stop
+            verdict = VMEvent.install_succeeded()
+            if lc is not None:
+                verdict = verdict_for_clean_provisioning_stop(
+                    self._clock() - lc.state_changed_at,
+                    self.server(name).record.config.provisioning_mode
+                        == VMProvisioningMode.PREBUILT_APPLIANCE,
+                )
             if verdict.kind == VMEventKind.INSTALL_SUCCEEDED:
-                self.log(f"VM {name}: install finished — booting from disk")
+                verb = (
+                    "specialization"
+                    if self.server(name).record.config.provisioning_mode
+                        == VMProvisioningMode.PREBUILT_APPLIANCE
+                    else "install"
+                )
+                self.log(f"VM {name}: {verb} finished — booting sealed disk")
                 self._apply(VMEvent.install_succeeded(), name)
                 # First boot from disk follows immediately; an encrypted guest
                 # then sits sealed in awaiting-phone-unlock.

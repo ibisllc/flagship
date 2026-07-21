@@ -23,6 +23,11 @@ class VMNetworkMode(enum.Enum):
     NAT = "nat"
 
 
+class VMProvisioningMode(enum.Enum):
+    INSTALLER_ISO = "installerISO"
+    PREBUILT_APPLIANCE = "prebuiltAppliance"
+
+
 @dataclass(frozen=True)
 class VMConfig:
     name: str
@@ -47,6 +52,7 @@ class VMConfig:
     # arm64 Chromebooks/SBCs. Legacy bundles (no persisted arch) are amd64.
     arch: str = "amd64"
     provision_status_serial: str | None = None
+    provisioning_mode: VMProvisioningMode = VMProvisioningMode.INSTALLER_ISO
 
     @property
     def awaits_phone_unlock_at_boot(self) -> bool:
@@ -62,6 +68,7 @@ class VMConfig:
         host: HostResources,
         main_disk_size_bytes: int = resource_plan.DEFAULT_MAIN_DISK_SIZE_BYTES,
         arch: str = "amd64",
+        provisioning_mode: VMProvisioningMode = VMProvisioningMode.INSTALLER_ISO,
     ) -> "VMConfig":
         """Build the spec for a verified recipe on this host. Deterministic: the
         same recipe bytes + host always produce the same config.
@@ -82,4 +89,5 @@ class VMConfig:
             disk_encrypted=fields.encrypts_disk,
             arch=arch,
             provision_status_serial=fields.auth_code_serial,
+            provisioning_mode=provisioning_mode,
         )

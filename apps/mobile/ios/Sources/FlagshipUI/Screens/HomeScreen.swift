@@ -14,6 +14,11 @@ public struct HomeScreen: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     let state: LoadingState<ServerDetailResponse>
     let username: String
+    /// Locally-decrypted account name. Nil while locked or not yet set, in
+    /// which case the routing handle stands in.
+    let accountDisplayName: String?
+    /// Locally-decrypted name THIS device chose for itself.
+    let deviceDisplayName: String?
     let pods: [PodInfo]
     let leaderPodId: String?
     /// When true, render the recovery-setup nudge banner above quick
@@ -74,6 +79,8 @@ public struct HomeScreen: View {
     public init(
         state: LoadingState<ServerDetailResponse>,
         username: String,
+        accountDisplayName: String? = nil,
+        deviceDisplayName: String? = nil,
         pods: [PodInfo],
         leaderPodId: String?,
         showRecoveryNudge: Bool = false,
@@ -96,6 +103,8 @@ public struct HomeScreen: View {
     ) {
         self.state = state
         self.username = username
+        self.accountDisplayName = accountDisplayName
+        self.deviceDisplayName = deviceDisplayName
         self.pods = pods
         self.leaderPodId = leaderPodId
         self.showRecoveryNudge = showRecoveryNudge
@@ -233,11 +242,35 @@ public struct HomeScreen: View {
     /// device chip. The big "Home" lives in the navigation bar now (it
     /// collapses on scroll, WhatsApp-style); this keeps the personal
     /// "Welcome back, <user>." beat without a competing 34pt header.
+    /// "Welcome back to <account name>." when we can read it; otherwise the
+    /// handle, and a bare greeting when even that is missing. Pure + static so
+    /// the precedence is testable without building a view.
+    public static func welcomeLine(accountDisplayName: String?, username: String) -> String {
+        if let account = accountDisplayName, !account.isEmpty {
+            return "Welcome back to \(account)."
+        }
+        return username.isEmpty ? "Welcome back." : "Welcome back, \(username)."
+    }
+
+    private var welcomeLine: String {
+        Self.welcomeLine(accountDisplayName: accountDisplayName, username: username)
+    }
+
     private func subheader(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text(username.isEmpty ? "Welcome back." : "Welcome back, \(username).")
+            // The ACCOUNT's chosen name leads — that is what the user named
+            // this cloud. The routing handle is only the fallback for a locked
+            // or not-yet-named account, since its name is ciphertext we may
+            // not be able to read yet.
+            Text(welcomeLine)
                 .font(.system(size: 17))
                 .foregroundColor(c.textMuted)
+            if let device = deviceDisplayName, !device.isEmpty {
+                Text("This device: \(device)")
+                    .font(.system(size: 15))
+                    .foregroundColor(c.textMuted)
+                    .accessibilityIdentifier("home-this-device")
+            }
             if let cap = deviceCapability, !cap.isFullyScoped {
                 deviceChip(cap, c: c)
             }

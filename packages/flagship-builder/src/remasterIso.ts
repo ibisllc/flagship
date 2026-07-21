@@ -233,6 +233,7 @@ function sh(cmd: string, argv: string[]): Promise<void> {
 export async function buildNocloudSeed(
   workDir: string,
   userDataYaml: string,
+  networkConfigYaml?: string,
 ): Promise<string> {
   const seed = join(workDir, "nocloud");
   await mkdir(seed, { recursive: true });
@@ -245,7 +246,45 @@ export async function buildNocloudSeed(
   // vendor-data must exist (even if empty) or some cloud-init versions log
   // a noisy 404; an empty file is the documented inert default.
   await writeFile(join(seed, "vendor-data"), "", "utf-8");
+  if (networkConfigYaml !== undefined) {
+    await writeFile(join(seed, "network-config"), networkConfigYaml, "utf-8");
+  }
   return seed;
+}
+
+export async function buildNocloudSeedIso(args: {
+  outIsoPath: string;
+  userDataYaml: string;
+  networkConfigYaml?: string;
+  xorrisoPath?: string;
+}): Promise<void> {
+  const xorriso = await resolveXorriso(args.xorrisoPath);
+  const work = join(
+    tmpdir(),
+    `flagship-nocloud-${createHash("sha256")
+      .update(args.outIsoPath + args.userDataYaml)
+      .digest("hex")
+      .slice(0, 12)}`,
+  );
+  await rm(work, { recursive: true, force: true });
+  await mkdir(work, { recursive: true });
+  try {
+    const seed = await buildNocloudSeed(work, args.userDataYaml, args.networkConfigYaml);
+    await rm(args.outIsoPath, { force: true }).catch(() => {});
+    await sh(xorriso, [
+      "-as",
+      "mkisofs",
+      "-output",
+      toXorrisoDiskPath(args.outIsoPath),
+      "-volid",
+      "cidata",
+      "-joliet",
+      "-rock",
+      toXorrisoDiskPath(seed),
+    ]);
+  } finally {
+    await rm(work, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 export async function remasterIsoWithAutoinstall(args: RemasterArgs): Promise<void> {

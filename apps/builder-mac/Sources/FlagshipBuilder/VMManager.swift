@@ -76,8 +76,8 @@ final class VMManager: ObservableObject {
     // MARK: - Creation
 
     /// Create the persistent bundle for a planned VM. The caller (wizard)
-    /// then remasters the installer ISO into `installerISOPath(for:)` and
-    /// calls `beginInstall`.
+    /// then writes either the remastered installer ISO or cloned appliance +
+    /// seed into the bundle and calls `beginInstall`.
     func createServer(config: VMConfig) throws {
         let record = VMRecord(config: config, state: .created,
                               createdAt: Date(), tier: .hostedVM)
@@ -89,6 +89,12 @@ final class VMManager: ObservableObject {
     }
 
     func installerISOPath(for name: String) -> URL { store.layout.installerISOURL(name) }
+    func provisioningMediaExists(for server: HostedServer) -> Bool {
+        let url = server.record.config.effectiveProvisioningMode == .prebuiltAppliance
+            ? store.layout.applianceSeedURL(server.id)
+            : store.layout.installerISOURL(server.id)
+        return FileManager.default.fileExists(atPath: url.path)
+    }
 
     /// Drop a hosted server entirely (its disk image included). Stops it
     /// first if live.
@@ -153,10 +159,13 @@ final class VMManager: ObservableObject {
                 attachISO[name] = true
             case .detachInstallerISO:
                 attachISO[name] = false
-                // Reclaim the (large) single-use installer once the install
-                // SUCCEEDED; a failed install keeps it so retry can re-attach.
+                // Reclaim successful one-use provisioning media. A failed run
+                // keeps it so Retry can re-attach the exact verified input.
                 if case .installed = currentState(name) {
-                    try? FileManager.default.removeItem(at: store.layout.installerISOURL(name))
+                    let media = config.effectiveProvisioningMode == .prebuiltAppliance
+                        ? store.layout.applianceSeedURL(name)
+                        : store.layout.installerISOURL(name)
+                    try? FileManager.default.removeItem(at: media)
                 }
             case .startVirtualMachine:
                 await startVM(config: config)
@@ -223,17 +232,26 @@ final class VMManager: ObservableObject {
                 await apply(.installFailed((error as? LocalizedError)?.errorDescription ?? "\(error)"), to: name)
             } else {
                 let startedAt = lifecycles[name]?.stateChangedAt ?? .distantPast
-                switch VMLifecycle.verdictForCleanInstallStop(installStartedAt: startedAt, now: Date()) {
+                switch VMLifecycle.verdictForCleanProvisioningStop(
+                    mode: server(named: name)?.record.config.effectiveProvisioningMode ?? .installerISO,
+                    installStartedAt: startedAt,
+                    now: Date()) {
                 case .installed:
-                    log("VM \(name): install finished — booting from disk")
+                    let verb = server(named: name)?.record.config.effectiveProvisioningMode == .prebuiltAppliance
+                        ? "specialization finished"
+                        : "install finished"
+                    log("VM \(name): \(verb) — booting sealed disk")
                     await apply(.installSucceeded, to: name)
                     // First boot from disk follows immediately; an encrypted
                     // guest then sits sealed in awaiting-phone-unlock.
                     await apply(.powerOn, to: name)
                 case .failedTooFast(let elapsed):
-                    log("VM \(name): stopped after \(Int(elapsed))s, before the install could run")
+                    let operation = server(named: name)?.record.config.effectiveProvisioningMode == .prebuiltAppliance
+                        ? "specialization"
+                        : "install"
+                    log("VM \(name): stopped after \(Int(elapsed))s, before \(operation) could run")
                     await apply(.installFailed(
-                        "The virtual machine stopped after \(Int(elapsed))s, before the install could run. "
+                        "The virtual machine stopped after \(Int(elapsed))s, before \(operation) could run. "
                         + "The base image may be the wrong architecture for this Mac "
                         + "(Apple silicon can only run an arm64 image) or otherwise not bootable."),
                         to: name)

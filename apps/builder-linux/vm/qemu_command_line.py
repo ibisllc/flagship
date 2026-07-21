@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import List
 
 from . import host_arch
-from .config import VMConfig, VMNetworkMode
+from .config import VMConfig, VMNetworkMode, VMProvisioningMode
 from .inventory import VMBundleLayout
 
 
@@ -107,17 +107,24 @@ def build(
         args += ["-device", "ide-hd,drive=flagship-main"]
 
     if attach_installer_iso:
-        # USB mass storage matches how the ISO boots on real hardware (the
-        # builder writes it to a USB stick) — the same isohybrid image, the same
-        # EFI boot entry.
-        args += [
-            "-device", "qemu-xhci",
-            "-drive", f"id=flagship-installer,if=none,format=raw,readonly=on,file={layout.installer_iso_path(name)}",
-            "-device", "usb-storage,drive=flagship-installer",
-            # A completed install ends in poweroff OR reboot; -no-reboot turns
-            # both into a clean exit for the duration-gated verdict.
-            "-no-reboot",
-        ]
+        if config.provisioning_mode == VMProvisioningMode.PREBUILT_APPLIANCE:
+            args += [
+                "-drive", f"id=flagship-seed,if=none,format=raw,readonly=on,file={layout.appliance_seed_path(name)}",
+                "-device", "virtio-blk-pci,drive=flagship-seed",
+                "-no-reboot",
+            ]
+        else:
+            # USB mass storage matches how the ISO boots on real hardware (the
+            # builder writes it to a USB stick) — the same isohybrid image, the same
+            # EFI boot entry.
+            args += [
+                "-device", "qemu-xhci",
+                "-drive", f"id=flagship-installer,if=none,format=raw,readonly=on,file={layout.installer_iso_path(name)}",
+                "-device", "usb-storage,drive=flagship-installer",
+                # A completed install ends in poweroff OR reboot; -no-reboot turns
+                # both into a clean exit for the duration-gated verdict.
+                "-no-reboot",
+            ]
 
     # User-mode NAT: outbound-only is all the appliance needs. For a debug VM we
     # additionally forward a loopback host port to the guest's :22 so "Open in

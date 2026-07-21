@@ -92,6 +92,8 @@ public struct HomeTab: View {
                 HomeScreen(
                     state: vm.detail,
                     username: app.currentUser ?? "",
+                    accountDisplayName: app.activeProfile?.accountDisplayName,
+                    deviceDisplayName: app.activeProfile?.deviceDisplayName,
                     pods: app.pods,
                     leaderPodId: app.leaderPodId,
                     showRecoveryNudge: app.shouldShowRecoveryNudge,

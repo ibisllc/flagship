@@ -103,6 +103,18 @@ public class QemuCommandLineTests
         Assert.DoesNotContain("-no-reboot", s);
     }
 
+    [Fact]
+    public void PrebuiltApplianceAttachesRawReadonlySeedNotIso()
+    {
+        var config = Config() with { ProvisioningMode = VMProvisioningMode.PrebuiltAppliance };
+        var s = Joined(QemuCommandLine.Build(config, Layout, Code, true, 4444, 0));
+        Assert.Contains(@"seed.img", s);
+        Assert.Contains("virtio-blk-pci,drive=flagship-seed", s);
+        Assert.Contains("readonly=on", s);
+        Assert.DoesNotContain("flagship-installer", s);
+        Assert.DoesNotContain("qemu-xhci", s);
+    }
+
     // ---- The debug-console hard guardrail ----
 
     [Fact]

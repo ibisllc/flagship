@@ -132,6 +132,24 @@ def args_prepare(
     return a
 
 
+def args_appliance_provision(
+    entry_path: str,
+    recipe_path: str,
+    base_path: str,
+    manifest_path: str,
+    disk_path: str,
+    seed_path: str,
+    arch: str,
+    disk_size: int,
+    qemu_img: str,
+) -> list[str]:
+    return [
+        entry_path, "appliance-provision", recipe_path, base_path, manifest_path,
+        disk_path, seed_path, "--arch", arch, "--disk-size", str(disk_size),
+        "--qemu-img", qemu_img,
+    ]
+
+
 def args_write(
     entry_path: str,
     recipe_path: str,

@@ -61,6 +61,21 @@ public enum UserData {
                                   wifiPassword: wifiPassword))
     }
 
+    public static func applianceBootstrap(recipeJSON: Data,
+                                          installerGitRef: String,
+                                          repoURL: String = defaultRepoURL,
+                                          encryptRoot: Bool = true,
+                                          bootHost: String = defaultBootHost) throws -> String {
+        try PreseedEngine.shared.buildApplianceBootstrap(
+            recipeJSON: recipeJSON,
+            burnOpts: burnOptions(installerGitRef: installerGitRef,
+                                  repoURL: repoURL,
+                                  encryptRoot: encryptRoot,
+                                  bootHost: bootHost,
+                                  wifiSSID: nil,
+                                  wifiPassword: nil))
+    }
+
     private static func burnOptions(installerGitRef: String,
                                     repoURL: String,
                                     encryptRoot: Bool,

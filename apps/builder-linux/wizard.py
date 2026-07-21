@@ -45,6 +45,7 @@ from cli_runner import (
     LogLine,
     Resolved,
     args_prepare,
+    args_appliance_provision,
     args_verify,
     args_write,
     locate,
@@ -52,7 +53,7 @@ from cli_runner import (
 )
 from pair_session import PairEvent, PairSession
 from vm import host_arch, recipe_info, resource_plan, ssh_launch
-from vm.config import VMConfig
+from vm.config import VMConfig, VMProvisioningMode
 from vm.host_resources import HostResources
 from vm.inventory import VMStoreError
 from vm.lifecycle import VMStateKind
@@ -743,7 +744,16 @@ class WizardModel:
         # (create_default sets toolchain_error), so the fallback never fires
         # in practice — it only keeps the type honest.
         guest_arch = self.vm.host_arch_tag or host_arch.ARCH_AMD64
-        config = VMConfig.plan(fields, raw, HostResources.current(), arch=guest_arch)
+        appliance_base = None
+        if self.state.mode == MODE_SIMPLE and os.environ.get("FLAGSHIP_VM_FORCE_ISO") != "1":
+            appliance_base = os.environ.get("FLAGSHIP_VM_APPLIANCE_BASE") or None
+        config = VMConfig.plan(
+            fields, raw, HostResources.current(), arch=guest_arch,
+            provisioning_mode=(
+                VMProvisioningMode.PREBUILT_APPLIANCE
+                if appliance_base else VMProvisioningMode.INSTALLER_ISO
+            ),
+        )
 
         # Own is_running across the whole download→remaster pipeline (mirrors
         # Wizard.cs RunHostHereAsync) so progress + Cancel work from the first
@@ -756,6 +766,46 @@ class WizardModel:
         self._cancel_download = cancel
         self._notify()
         try:
+            if appliance_base:
+                self.state.phase = "clone appliance"
+                self._notify()
+                try:
+                    self.vm.create_server(config)
+                except (VMStoreError, ValueError) as e:
+                    self._append_log("stderr", str(e))
+                    return
+                manifest = os.environ.get(
+                    "FLAGSHIP_VM_APPLIANCE_MANIFEST", appliance_base + ".json"
+                )
+                provisioned = [False]
+
+                def appliance_args(entry: str) -> list[str]:
+                    return args_appliance_provision(
+                        entry, str(recipe), appliance_base, manifest,
+                        self.vm.store.layout.disk_image_path(config.name),
+                        self.vm.appliance_seed_path(config.name), guest_arch,
+                        config.main_disk_size_bytes, self.vm.toolchain.img_binary,
+                    )
+
+                self._run_cli_core(appliance_args, on_success=lambda _out: provisioned.__setitem__(0, True))
+                if not provisioned[0]:
+                    self.vm.delete_server(config.name)
+                    return
+                try:
+                    os.unlink(recipe)
+                except OSError:
+                    pass
+                self.state.phase = "specialize"
+                self.vm.begin_install(config.name)
+                self.state.phase = "handoff"
+                for remaining in range(self._handoff_seconds, 0, -1):
+                    self.state.handoff_countdown = remaining
+                    self._notify()
+                    time.sleep(1)
+                self.state.handoff_countdown = None
+                self.reset_to_new_server()
+                return
+
             # Same Simple-mode base ISO fetch as the USB path (HOST arch — the
             # guest must match this machine); Advanced mode may bring its own
             # stock ISO.

@@ -10,6 +10,11 @@ enum AppMain {
     static func main() {
         let args = CommandLine.arguments
         #if canImport(Virtualization)
+        if let idx = args.firstIndex(of: "--vm-appliance-factory") {
+            MainActor.assumeIsolated {
+                VMFactory.run(Array(args[(idx + 1)...]))
+            }
+        }
         if let idx = args.firstIndex(of: "--vm-smoke") {
             MainActor.assumeIsolated {
                 VMSmoke.run(Array(args[(idx + 1)...]))

@@ -84,6 +84,11 @@
            #servers-list by views/home.js (the WhatsApp-style large
            collapsing title); the empty-state path renders its own card. -->
       <section id="view-home" class="hidden" data-tab="home">
+        <!-- The ACCOUNT's chosen name leads; the routing handle is only the
+             fallback while locked or before a name is set. Both are filled in
+             from the LOCALLY decrypted directory — never from the wire. -->
+        <p class="note" id="home-welcome">Welcome back.</p>
+        <p class="muted-sm hidden" id="home-this-device"></p>
         <div id="servers-list"></div>
 
         <h2 class="mt-5">Session</h2>

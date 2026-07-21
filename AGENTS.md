@@ -155,12 +155,118 @@ feature, but main advanced again afterward. This retail branch now carries a
 resolved merge from the then-current main: the Worker environment keeps both the
 retailer HMAC secret and arm64 ISO manifest, while in-memory storage keeps both
 retail serial/NFC stores and the new account-provisioning store. TypeScript, the
-repository test suite, and Android unit tests pass. The iOS simulator build still
-cannot resolve the shared `FlagshipCore`/`FlagshipAPI` modules; a missing direct
-`FlagshipAPI` target dependency was added as an unproven diagnostic fix. **Next:**
-isolate the shared-module Xcode failure, land any general fix on main, merge the
-new main tip again, then refresh marketplace, Chromebook/Android-OTG, Alpine, and
-the VM-appliance branch without disturbing its active worktree.
+repository test suite, and Android unit tests pass. The iOS simulator build
+"failure" was diagnosed as a build-invocation issue, NOT a code or
+package-wiring defect (pristine `main` reproduces it identically): `xcodebuild
+... -sdk iphonesimulator` forces one SDKROOT across the whole graph and starves
+the multiplatform FlagshipShared package of an iphonesimulator slice. Build with
+a `-destination` and NO `-sdk` (see the `apps/mobile/ios/App/project.yml` header
+and the RESOLVED entry below). The prior direct-`FlagshipAPI` target-dependency
+edit was an unproven diagnostic and is not required for the build to pass.
+**Next:** refresh marketplace, Chromebook/Android-OTG, Alpine, and the
+VM-appliance branch without disturbing its active worktree.
+
+**2026-07-21 (repo reconciliation + open-work rollup) — after parallel
+work-streams, `origin/main` is the single deployed truth; the merged handover
+branches (`feat/vm-prebuilt-appliance`, `feat/private-account-device-names`,
+`fix/leti-pairing-recovery`, `fix/openrouter-streaming`, `studio-release`,
+`handover`) and the stale local `main`/tmp worktrees were retired — all their
+code was already on `origin/main`. Feature branches kept as future-release gates:
+`feat/browser-extension`, `feat/retail`, `feat/marketplace`,
+`feat/chromebook-fit`, `alpine` (parked installer delta), `gym` (validation/test
+harness, being forward-rebased onto main). Open product work now in flight or
+queued:**
+
+- **Restricted-device profile/directory-key delivery (DoD blocker).** Server
+  stores + authorizes `accountDirectoryKeyGrant`s, but no client seals/unseals
+  `sealedKeyHex` — the `accountDirectory.test.ts` `"001122"` value is dummy, not a
+  round trip. Mirror the shipped `AcmeAccountKeyGrant` envelope (IRK-signed,
+  X25519 seal-to-device-pub; see `SecretSeal.swift` / `SwkDelivery.kt` /
+  `secretMailbox.ts`): seal only the permitted account-profile/directory key to
+  the recipient device pubkey, admin-sign + publish the grant, verify signature
+  before consumption, unseal + install under the correct local account membership.
+  TS/Swift/Kotlin parity + golden vectors in `test-vectors/`; negative tests for
+  wrong recipient, wrong account, tamper, replay, revoked device, missing scope.
+  Control plane must never see plaintext keys or names. **Fresh-start authorized:
+  ship a clean envelope with no live-data migration; wipe + reseed prod D1.**
+- **Native UI test coverage** — iOS + Android tests for account rename, device
+  rename, managed override, lock/unlock, managed-name removal (deleted with the
+  cutover, not yet replaced).
+- **Fixture cleanup** — classify + remove/convert any obsolete plaintext
+  display-name fixtures still in active tests.
+- **Retail iOS build** — RESOLVED: it was a build-invocation issue, not a code
+  or package-wiring defect (and not retail-specific — pristine `main` reproduces
+  it identically). `xcodebuild ... -sdk iphonesimulator` forces one SDKROOT
+  across the whole graph, which starves the multiplatform FlagshipShared package
+  of an iphonesimulator slice (the watchOS targets pin it to watchsimulator), so
+  the iOS targets can't resolve FlagshipCore/FlagshipAPI. Build with a
+  `-destination` and NO `-sdk` (as the gym's iOS adapter already does):
+  `xcodebuild -project apps/mobile/ios/App/FlagshipApp.xcodeproj -scheme
+  FlagshipApp -destination 'generic/platform=iOS Simulator'
+  CODE_SIGNING_ALLOWED=NO build`. See the header comment in
+  `apps/mobile/ios/App/project.yml` for the full explanation.
+- **VM appliance follow-through** — make appliance discovery/download native in
+  Studio (currently the checked-in fetch helper + `FLAGSHIP_VM_APPLIANCE_BASE`
+  opt-in); shrink the ~2.7 GiB base toward the leanest secure footprint; confirm
+  guest observability/logs and CLI parity. amd64 (Linux/KVM), Windows .NET/WPF +
+  WHPX, and Linux KVM builds are prepared for a Windows/Linux host — see the
+  handoff prompt in `docs/`.
+- **iOS TestFlight** — distribution-signed IPA at
+  `~/Desktop/flagship-builds/FlagshipApp-20260721.ipa`; upload uses the
+  app-specific password in Keychain / `FLAGSHIP_NOTARY_PASSWORD` (see
+  `scripts/release-studio.sh`). App-Store-signed, so not directly sideloadable —
+  on-device debugging needs a separate development-signed build.
+- **Orphaned boxes** — the prod wipe left six stale records (incl.
+  `leti.jolly-quince`); we are starting afresh, so these + their VM files are
+  being deleted/ignored rather than reburned.
+
+**2026-07-21 (prebuilt VM appliance release) — the measured d-i VM replacement
+is merged to `main`, the arm64 appliance is live, and a notarized Studio build
+is published.** Ezra2 repeated Ezra's VZ failure: registration never happened
+and the allowlisted stream remained at “Unpacking the Debian base system”
+through 38 minutes after disk writes stopped. The QEMU/HVF factory instead
+converted Debian's SHA-512-pinned official arm64 generic cloud image into an
+encrypted 8 GiB generalized base in 153–196 seconds; independent fresh-firmware
+boot smoke reaches the readiness marker in about five seconds. A later Mac/HVF
+rebuild stopped writing during the encrypted copy for 23 minutes, so Mac is
+explicitly not a release factory: reproducible artifacts must be manufactured
+and tested under Linux/KVM CI. Customer preparation (verify the full base
+SHA-256, make a 64 GiB thin overlay, write the fixed 8 MiB read-only seed) takes
+3.9–4.2 seconds and initially allocates ~193 KiB; the base allocates ~2.7 GiB.
+The 2.65 GiB compressed qcow2 is published in eleven independently SHA-256-
+pinned, resumable R2 parts, with a live distribution manifest and a checked-in
+Mac fetch/verify/expand helper. The manifest, every live part size, aggregate
+qcow2 hash, expanded raw hash, live DMG bytes, notarization staple, code
+signature, and production health were verified after deploy. The current
+Developer-ID Studio DMG is installed in `/Applications` and live at the Mac
+download route.
+
+Mac verifies arch/ref/size/SHA and APFS-clones (copy fallback); Linux/Windows use
+the same canonical Node verifier/seed generator and thin qcow2 overlays. The
+guest validates the seed, generates a fresh identity, verifies/registers the
+unchanged phone-signed recipe, replaces the public disposable factory LUKS key
+with the phone-sealed key, removes the factory key from disk + initramfs, and
+powers off for normal sealed boot. Factory success requires an explicit guest
+marker, populated removable EFI loader, and an independent boot smoke; logs
+publish only fixed stages/return codes plus one bounded allowlisted fatal line,
+never recipes, keys, package logs, or raw syslog. Decision: manufacture amd64 +
+arm64 Flagship derivatives in Linux/QEMU-KVM CI from official Debian Cloud
+`generic` inputs; do not put a third-party derivative in the trust chain. Cache
+once, clone/overlay per server; retain d-i for USB/bare metal and a VM fallback.
+The trusted hashes are pinned in the signed release source; the appliance is
+served resumably from controlled storage. `FLAGSHIP_VM_APPLIANCE_BASE` opts the
+current Studio into the prebuilt path; `FLAGSHIP_VM_FORCE_ISO=1` selects the
+baseline. Gates on this Mac: TypeScript build plus all local-listener/browser
+tests rerun with listener permission, Mac release build + 172 tests, Linux 286
+tests, and Android unit tests + APK. **Remaining (owner):** pair a fresh recipe
+and run the Mac prebuilt specialization through sealed reboot, phone unlock,
+entitlement/signalling, certificate, and live HTTPS while timing it against d-i;
+then make artifact discovery/download native in Studio rather than the current
+fetch-helper + environment opt-in. **Windows/Linux dev-machine TODO:** run/fix
+the full .NET/WPF suite, build/sign Windows, produce and publish the amd64
+appliance under Linux/KVM, and perform real WHPX + KVM specializations before
+publishing Windows/Linux desktop releases. The shared source path is ported,
+but those native builds and amd64 artifact are not yet released.
 
 **2026-07-21 (OpenRouter Vibe Code streaming) — OpenRouter BYOK sessions now
 reach the agent loop.** OpenRouter was accepted for stored AI keys and blocking
@@ -209,6 +315,81 @@ re-derives each box's public STK from the unlocked UMK after an app reinstall,
 then verifies the signed daemon certificate report, so a real live certificate
 no longer remains hidden as “No certificate yet.” **Remaining (owner):** rebuild
 the metal box from current `main` and validate TLS detail + one Vibe Code build.
+
+**2026-07-21 (private naming SHIPPED + post-review gap closure) — merged,
+deployed, and live in production.** `main` carries the cutover (merge
+`5a367d9d`); prod D1 was wiped (58 tables), migration **0083** applied and
+stamped, `.com` deployed, and `@openai-build` recreated through the new
+provisioner (server up, valid LE cert). The signed + notarized Flagship Studio
+build is published at `flagshipserver.com/download/mac` (live bytes
+sha-verified). An independent review then found four blocking gaps, all now
+closed:
+- **UMK reset orphaned the encrypted names.** Wipe-restart installs a new UMK,
+  and every profile ciphertext is sealed under UMK-derived keys — so the
+  rotation made them permanently undecryptable while they sat in the database,
+  leaving names opaque forever. Wipe-restart now purges account/self/managed
+  profiles and directory-key grants via a new `purgeForAccount` on each store
+  (both adapters), fail-soft and deploy-safe-degrading like the grant
+  revocation beside it.
+- **Home never showed the hierarchy.** All three clients led with the routing
+  handle, so the feature was invisible where it matters most. Home now reads
+  "Welcome back to &lt;account name&gt;" + "This device: &lt;device name&gt;" from the
+  LOCALLY decrypted directory, degrading to the handle when locked/offline.
+- **Demo status contradicted itself.** A running demo advertised a mid-install
+  phase (`status: up` + `phase: downloading`) because promotion to `ready`
+  never cleared it and the projection emitted it regardless — very visible on
+  an ADOPTED provider server that never replays later phases. Cleared at the
+  transition and suppressed whenever status is `up`.
+- **Migration 0083 was stamped 2025-07-21**, a year early (a hardcoded
+  timestamp). Corrected in prod to 2026-07-21.
+**Still open — handover list (nothing half-finished is uncommitted; every
+item below is NOT started or explicitly blocked):**
+1. **Restricted-device profile-key delivery is server-only — treat as
+   UNIMPLEMENTED.** Storage, route (`PUT /api/accounts/:id/devices/:did/
+   directory-key-grant`), and admin-root authorization all exist, but **no
+   client anywhere seals or unseals `sealedKeyHex`** (grep all three clients:
+   zero hits), and `accountDirectory.test.ts` uses dummy ciphertext `"001122"`
+   instead of a round trip. Needs: X25519 seal-to-recipient-device-pub, a
+   publish path for an administrator, and a consume path on the recipient,
+   across web/iOS/Android — a feature build, not a gap-close.
+2. **iOS TestFlight upload is BLOCKED on credentials.** A distribution-signed
+   IPA exists at `~/Desktop/flagship-builds/FlagshipApp-20260721.ipa` (18.9 MB,
+   `iOS Team Store Provisioning Profile: com.flagshipserver.app`). No ASC API
+   key in `~/.appstoreconnect/private_keys` and no `AC_PASSWORD` keychain item;
+   the `flagship-studio` notary profile is notarytool-private and `altool`
+   cannot read it. Needs an app-specific password or a **Team** ASC key (an
+   Individual key has no Issuer ID and will not work). NOTE: that IPA is
+   App-Store-signed, so it will NOT install directly on a device — a
+   development-signed build is needed for on-device testing.
+3. **Native rename/lock/account-name UI tests were deleted without equivalent
+   replacements.** Home-hierarchy coverage was added (iOS `welcomeLine` unit
+   tests, a web assertion test, Android test tags) but the rename/lock editors
+   themselves are uncovered on native.
+4. **Obsolete plaintext display fixtures remain in some active tests.**
+5. **Pre-existing boxes are orphaned by the wipe.** `leti.jolly-quince` and the
+   other five server records were destroyed; those machines still run but have
+   no `.com` account behind them and need reburning or re-registration.
+6. **iOS/Android changes are compiled but never exercised on hardware** — the
+   apps are not on TestFlight/Play, so push and Live Activities cannot be
+   received on a device.
+
+**Environment traps that cost real time — read before building:**
+- `/private/tmp/flagship-rush-main/node_modules` is a **symlink to the primary
+  worktree's**, so `@flagship/*` resolves to `/Users/harrywinner/flagship/
+  packages/*` — a DIFFERENT branch. Building or deploying there silently uses
+  another branch's sources; it made a clean merge look like 20+ type errors.
+  Build and deploy only from a worktree with its own real `node_modules`
+  (`/private/tmp/flagship-private-names` has one). That worktree also holds
+  another author's uncommitted `llm-providers` changes — do not clean it.
+- The `Flagship` scheme is a **SwiftPM library**; archiving it yields an EMPTY
+  archive. The real app target is `FlagshipApp` in
+  `apps/mobile/ios/App/FlagshipApp.xcodeproj`.
+- `apps/com`'s `npm run deploy` runs the predeploy gates then calls a bare
+  `wrangler`, which is not on PATH. Run `npm run deploy` for the gates, then
+  `npx wrangler deploy`. Re-run `npx tsc -b --force` first: the freshness gate
+  compares mtimes and a `git checkout` makes `src/` newer than `dist/`.
+- Disk space on this Mac is tight (~122 MiB free was observed during review;
+  Xcode failed with "No space left on device"). Clear caches before a release.
 
 **2026-07-21 (private-name audit continued) — the audit slice is complete
 and the whole TypeScript/native matrix is green; branch is still local and
@@ -268,7 +449,8 @@ recreate `@openai-build` with encrypted account name `OpenAI Build Week`. No
 merge, push, deployment, production mutation, or demo teardown has occurred.
 
 **2026-07-20 (later, resumable checkpoint) — private-name audit is partly
-complete; branch remains local and production untouched.** Work continues in
+complete; branch was local at the time of writing (SUPERSEDED — see the entry
+above: this work is now merged, deployed, and live).** Work continued in
 the isolated `/private/tmp/flagship-private-names` worktree on
 `feat/private-account-device-names`; the primary worktree and concurrent
 Codex/Claude changes remain untouched. Commits are kept as reviewable protocol,
@@ -295,7 +477,8 @@ Only after those gates: rebase/merge to current `main`, push, resolve exact
 production D1/provider targets, apply the clean schema/wipe, deploy `.com`
 (`.services` only if required), rebuild clients, and administratively tear down
 then recreate `@openai-build` with encrypted account name `OpenAI Build Week`.
-No merge, push, deployment, production mutation, or demo teardown has occurred.
+(Accurate when written; superseded — the merge, deploy, wipe, and demo
+recreation have all since happened. See the 2026-07-21 entry above.)
 
 **2026-07-20 (feature branch checkpoint) — private account/device naming and
 atomic demo provisioning are build-complete in the core path; rollout is NOT
@@ -332,7 +515,6 @@ the deployed `@openai-build` row in place: after local gates pass, resolve its
 exact D1/provider identifiers, tear it down through the administrative cleanup
 path, then recreate the same public username with encrypted account name
 `OpenAI Build Week`; no production data or server has been touched yet.
-
 **2026-07-20 (VM install rethink) — Ezra proved install-per-VM is the wrong
 default; cross-platform privacy-safe progress landed and clone-and-specialize is
 the locked replacement.** `ezra.jolly-quince` on VZ/Debian 13.6 reached

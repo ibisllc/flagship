@@ -69,6 +69,10 @@ import com.flagshipserver.app.viewmodels.LoadingState
 fun HomeScreen(
     state: LoadingState<ServerDetailResponse>,
     username: String,
+    /** Locally-decrypted account name; null while locked or not yet set. */
+    accountDisplayName: String? = null,
+    /** Locally-decrypted name THIS device chose for itself. */
+    deviceDisplayName: String? = null,
     pods: List<PodInfo>,
     leaderPodId: String?,
     onOpenPod: (PodInfo) -> Unit,
@@ -172,11 +176,27 @@ fun HomeScreen(
             style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Bold),
             modifier = Modifier.testTag("home-title"),
         )
+        // The ACCOUNT's chosen name leads — that is what the user named this
+        // cloud. The routing handle is only the fallback for a locked or
+        // not-yet-named account, whose name is ciphertext we may not read yet.
         Text(
-            text = if (username.isEmpty()) "Welcome back." else "Welcome back, $username.",
+            text = when {
+                !accountDisplayName.isNullOrEmpty() -> "Welcome back to $accountDisplayName."
+                username.isEmpty() -> "Welcome back."
+                else -> "Welcome back, $username."
+            },
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
+            modifier = Modifier.testTag("home-welcome"),
         )
+        if (!deviceDisplayName.isNullOrEmpty()) {
+            Text(
+                text = "This device: $deviceDisplayName",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 15.sp, lineHeight = 20.sp),
+                modifier = Modifier.testTag("home-this-device"),
+            )
+        }
 
         if (deviceCapability != null && !deviceCapability.isFullyScoped) {
             Spacer(Modifier.height(FS.space.s2))

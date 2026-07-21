@@ -335,7 +335,14 @@ public sealed class Wizard : INotifyPropertyChanged
             AppendLog(LogStream.Stderr, $"Cannot read the recipe: {e.Message}");
             return;
         }
-        var config = VMConfig.Plan(_parsedRecipe, rawRecipe, VM.HostResources.Current());
+        var applianceBase = Mode == BuilderMode.Simple
+            && Environment.GetEnvironmentVariable("FLAGSHIP_VM_FORCE_ISO") != "1"
+            ? Environment.GetEnvironmentVariable("FLAGSHIP_VM_APPLIANCE_BASE")
+            : null;
+        var config = VMConfig.Plan(
+            _parsedRecipe, rawRecipe, VM.HostResources.Current(),
+            provisioningMode: string.IsNullOrEmpty(applianceBase)
+                ? VMProvisioningMode.InstallerISO : VMProvisioningMode.PrebuiltAppliance);
 
         IsRunning = true;
         Phase = "download";
@@ -346,6 +353,48 @@ public sealed class Wizard : INotifyPropertyChanged
         FireBag();
         try
         {
+            if (!string.IsNullOrEmpty(applianceBase))
+            {
+                Phase = "clone appliance";
+                try { Vm.CreateServer(config); }
+                catch (VMStoreException e)
+                {
+                    AppendLog(LogStream.Stderr, e.Message);
+                    return;
+                }
+                var manifest = Environment.GetEnvironmentVariable("FLAGSHIP_VM_APPLIANCE_MANIFEST")
+                    ?? applianceBase + ".json";
+                var provisioned = false;
+                await RunCliCoreAsync(
+                    entry => CliArgs.ApplianceProvision(
+                        entry, _recipePath!, applianceBase, manifest,
+                        Vm.Store.Layout.DiskImagePath(config.Name),
+                        Vm.ApplianceSeedPath(config.Name), "amd64",
+                        config.MainDiskSizeBytes, Vm.Toolchain!.ImgBinary),
+                    onSuccess: _ => provisioned = true);
+                if (!provisioned)
+                {
+                    await Vm.DeleteServerAsync(config.Name);
+                    return;
+                }
+                try { File.Delete(_recipePath!); } catch { }
+                Phase = "specialize";
+                await Vm.BeginInstallAsync(config.Name);
+                Phase = "handoff";
+                for (var remaining = 5; remaining > 0; remaining--)
+                {
+                    HandoffCountdown = remaining;
+                    await Task.Delay(1000);
+                }
+                HandoffCountdown = null;
+                SelectedServerName = null;
+                Destination = null;
+                RecipePath = null;
+                Verified = null;
+                _parsedRecipe = null;
+                return;
+            }
+
             // Same Simple-mode base ISO fetch as the USB path; Advanced mode
             // may bring its own stock ISO.
             string baseIso;
@@ -583,6 +632,8 @@ public sealed class Wizard : INotifyPropertyChanged
     public string? PhaseLabel => Phase switch
     {
         "download" => "Downloading base image…",
+        "clone appliance" => "Cloning prebuilt server…",
+        "specialize" => "Securing this server…",
         "remaster" => "Building image…",
         "write" => "Writing to USB…",
         "handoff" => HandoffCountdown is int n
@@ -1058,6 +1109,14 @@ public static class CliArgs
         if (keepRecipe) a.Add("--keep-recipe");
         return a.ToArray();
     }
+
+    public static string[] ApplianceProvision(string entryPath, string recipePath,
+        string basePath, string manifestPath, string diskPath, string seedPath,
+        string arch, ulong diskSize, string qemuImg)
+        => new[] { entryPath, "appliance-provision", recipePath, basePath, manifestPath,
+            diskPath, seedPath, "--arch", arch, "--disk-size",
+            diskSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "--qemu-img", qemuImg };
 
     public static string[] Write(string entryPath, string recipePath, string isoPath, string? device, bool yes, bool keepRecipe)
     {

@@ -250,7 +250,7 @@ struct HostedServersSidebar: View {
         case .running, .awaitingPhoneUnlock:
             Button("Stop") { select(name); Task { await vmManager.powerOff(named: name) } }
         case .failed(let f) where f.phase == .install:
-            if FileManager.default.fileExists(atPath: vmManager.installerISOPath(for: name).path) {
+            if vmManager.provisioningMediaExists(for: server) {
                 Button("Retry install") { select(name); Task { await vmManager.beginInstall(named: name) } }
             }
         case .failed:
@@ -533,12 +533,11 @@ struct VMDetailView: View {
                 Button("Stop") { Task { await vmManager.powerOff(named: name) } }
                     .buttonStyle(.bordered)
             case .failed(let f) where f.phase == .install:
-                if FileManager.default.fileExists(
-                    atPath: vmManager.installerISOPath(for: name).path) {
+                if vmManager.provisioningMediaExists(for: server) {
                     Button("Retry install") { Task { await vmManager.beginInstall(named: name) } }
                         .buttonStyle(.borderedProminent)
                 } else {
-                    Text("Delete this server and pair again to rebuild the installer.")
+                    Text("Delete this server and pair again to rebuild its provisioning media.")
                         .font(FB.Font.caption())
                         .foregroundStyle(FB.Colors.textMuted)
                 }

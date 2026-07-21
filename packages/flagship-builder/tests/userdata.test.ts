@@ -1192,7 +1192,11 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // in the installed initrd); (2) the wired premount now writes a persistent
       // flagship-unlock.log to FLAGSHIP_BOOT. Prior: 2026-07-19 daemon
       // Restart=always + StartLimitIntervalSec=0.
-      "f865564c994e9048402033582b4e637c03d1f4102ec42308726ec50d8d2f0621",
+      // Re-pinned for the generalized appliance path: the exact same script can
+      // skip apt/clone/build only when the image's ref marker matches the signed
+      // recipe, and reuses the factory-built unseal helper; normal ISO/bare-metal
+      // execution remains the default branch.
+      "1d6191bb02813bdc15410e1320fa513e1f329c66ebf15244ceb6b7a96c4bb742",
     );
   });
 
@@ -1218,7 +1222,8 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Re-pinned 2026-07-20: initramfs hook stages virtio NIC drivers + the
       // wired premount persists flagship-unlock.log (see the wired pin above).
       // Prior: 2026-07-19 daemon Restart=always.
-      "c31cdd59a67a7dfe99fcffb04f7b59827fe937ab5b94378562c8bc773bc22ffc",
+      // Same appliance-only preinstalled helper reuse as the wired twin above.
+      "453cd9152ca83f7974287f4d012c8b956775ecae126a25a6d7464f909a3f4c63",
     );
   });
 

@@ -904,6 +904,7 @@ export async function renderHome() {
   const session = getSession();
   setSubtitle(session.username ? `signed in as ${session.username}` : "signed in");
   $("home-username").textContent = session.username || "(not set)";
+  void renderWelcomeHierarchy(session);
   $("home-irkpub").textContent = session.irk
     ? bytesToHex(session.irk.publicKey).slice(0, 16) + "…" + bytesToHex(session.irk.publicKey).slice(-4)
     : "—";
@@ -1373,4 +1374,32 @@ if (typeof document !== "undefined") {
   document.addEventListener("flagship:view-shown", (ev) => {
     if (ev.detail?.id !== "view-home") stopApprovalPoll();
   });
+}
+
+
+/** Fill "Welcome back to <account name>" + "This device: <device name>" from
+ *  the DECRYPTED directory. Best-effort and non-blocking: a locked or offline
+ *  account keeps the handle, because the names are ciphertext this browser may
+ *  not currently hold the key for. */
+async function renderWelcomeHierarchy(session) {
+  const welcome = $("home-welcome");
+  const deviceLine = $("home-this-device");
+  if (!welcome) return;
+  welcome.textContent = session?.username
+    ? `Welcome back, ${session.username}.`
+    : "Welcome back.";
+  if (deviceLine) deviceLine.classList.add("hidden");
+  try {
+    const directory = await fetchDecryptedDirectory();
+    const account = directory?.accountDisplayName;
+    if (account) welcome.textContent = `Welcome back to ${account}.`;
+    const self = (directory?.devices ?? []).find((d) => d.isCurrent);
+    const deviceName = self?.displayName;
+    if (deviceLine && deviceName) {
+      deviceLine.textContent = `This device: ${deviceName}`;
+      deviceLine.classList.remove("hidden");
+    }
+  } catch {
+    /* locked, offline, or not yet provisioned — the handle stands alone */
+  }
 }

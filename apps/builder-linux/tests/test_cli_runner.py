@@ -10,6 +10,7 @@ import pytest
 
 from cli_runner import (
     CLILocateError,
+    args_appliance_provision,
     args_prepare,
     args_user_data,
     args_verify,
@@ -26,6 +27,18 @@ from cli_runner import (
 def test_args_verify_minimal():
     a = args_verify("/cli.ts", "/r.json")
     assert a == ["/cli.ts", "verify", "/r.json"]
+
+
+def test_args_appliance_provision_carries_exact_overlay_inputs():
+    a = args_appliance_provision(
+        "/cli.js", "/recipe.json", "/base.raw", "/base.raw.json",
+        "/disk.qcow2", "/seed.img", "arm64", 64 * 1024**3, "/usr/bin/qemu-img",
+    )
+    assert a == [
+        "/cli.js", "appliance-provision", "/recipe.json", "/base.raw",
+        "/base.raw.json", "/disk.qcow2", "/seed.img", "--arch", "arm64",
+        "--disk-size", "68719476736", "--qemu-img", "/usr/bin/qemu-img",
+    ]
 
 
 def test_args_user_data_with_keep():

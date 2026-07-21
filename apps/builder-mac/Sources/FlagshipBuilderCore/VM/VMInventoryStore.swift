@@ -29,6 +29,7 @@ public struct VMRecord: Codable, Sendable, Equatable {
 ///     <root>/<name>/config.json     — VMRecord (spec + state)
 ///     <root>/<name>/disk.img        — the guest's main disk (sparse)
 ///     <root>/<name>/installer.iso   — the remastered installer (install phase only)
+///     <root>/<name>/seed.img        — recipe + canonical specialization script (appliance phase only)
 ///     <root>/<name>/efi-vars.bin    — EFI variable store (VZEFIVariableStore)
 ///     <root>/<name>/console.log     — serial output (debug-enabled VMs only)
 public struct VMBundleLayout: Sendable, Equatable {
@@ -58,6 +59,9 @@ public struct VMBundleLayout: Sendable, Equatable {
     }
     public func installerISOURL(_ name: String) -> URL {
         bundleDir(name).appendingPathComponent("installer.iso")
+    }
+    public func applianceSeedURL(_ name: String) -> URL {
+        bundleDir(name).appendingPathComponent("seed.img")
     }
     public func efiVariableStoreURL(_ name: String) -> URL {
         bundleDir(name).appendingPathComponent("efi-vars.bin")
@@ -146,7 +150,8 @@ public final class VMInventoryStore {
         let dir = layout.bundleDir(name)
         try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
         for url in [layout.configURL(name), layout.diskImageURL(name),
-                    layout.installerISOURL(name), layout.efiVariableStoreURL(name),
+                    layout.installerISOURL(name), layout.applianceSeedURL(name),
+                    layout.efiVariableStoreURL(name),
                     layout.consoleLogURL(name)] where fm.fileExists(atPath: url.path) {
             try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         }
