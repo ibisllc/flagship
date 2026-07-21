@@ -42,3 +42,14 @@ implementation (Codex use) · design · impact · idea quality.
 - OpenRouter key provided in-session (LLM/chat only, NOT OpenAI TTS). ROTATE after today.
 - Voiceover: OpenRouter for script; TTS via best reachable path, fallback macOS `say`.
 - Demo served via GYM (uses .gym-secrets.env: GYM_ADMIN_SECRET, GYM_HCLOUD_TOKEN, ...).
+
+## Progress log (append-only)
+- Site OPEN (SITE_PUBLIC=1) — flagshipserver.com serving real marketing pages.
+- All hand-off engineering merged to main; P4 retail-iOS "blocker" was a build-invocation bug (doc fix merged).
+- gym redeployed from main; gym D1 migrated to 0083 (approved cutover) + ledger stamped.
+- gym Fly tunnel hub (flagship-services-gym) had ZERO machines — DEPLOYED it (2 machines up, health 200). Root cause of boxes never serving.
+- Demo account `openai-build` (name "OpenAI Build Week") provisioned; box IP 167.233.218.51.
+- BUG FOUND: daemon hangs after "loaded entitlement bundle", never connects tunnel (deterministic across restarts). Delegated fix to worker w/ live SSH.
+- Video: script done (8 scenes, judges+public cuts); neural TTS voiceover (OpenAI gpt-4o-mini-tts, 142s); title/privacy/close cards; landing + webapp captures; 4 segments assembled; Ken Burns pipeline proven.
+- BLOCKED on daemon fix: vibecode-helloworld test, judges login, video Scenes 5 (live site) & 6 (vibecode).
+- Studio GUI capture (Scene 4) needs macOS accessibility grant or a Harry screen-record.
