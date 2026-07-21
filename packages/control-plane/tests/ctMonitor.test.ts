@@ -66,7 +66,7 @@ function pushToken(): PushTokenRecord {
     providerToken: "device-token-abc",
     pushX25519PubHex: "22".repeat(32),
     registrationSignatureHex: "33".repeat(64),
-    label: "Alice's iPhone",
+    deviceId: "a1".repeat(16),
     registeredAt: FIXED_NOW - 86_400_000,
     lastSeenAt: FIXED_NOW,
   };

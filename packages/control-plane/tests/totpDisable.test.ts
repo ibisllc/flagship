@@ -205,7 +205,7 @@ describe("TOTP disable", () => {
       providerToken: "p",
       pushX25519PubHex: "01".repeat(32),
       registrationSignatureHex: "00".repeat(64),
-      label: "iPhone",
+      deviceId: "0a".repeat(16),
       registeredAt: 1,
       lastSeenAt: 1,
     });
@@ -216,7 +216,7 @@ describe("TOTP disable", () => {
       providerToken: "p2",
       pushX25519PubHex: "02".repeat(32),
       registrationSignatureHex: "00".repeat(64),
-      label: "iPad",
+      deviceId: "0b".repeat(16),
       registeredAt: 1,
       lastSeenAt: 1,
     });
@@ -250,7 +250,7 @@ describe("TOTP disable", () => {
       providerToken: "p",
       pushX25519PubHex: "01".repeat(32),
       registrationSignatureHex: "00".repeat(64),
-      label: "iPhone",
+      deviceId: "0c".repeat(16),
       registeredAt: 1,
       lastSeenAt: 1,
     });

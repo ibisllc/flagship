@@ -48,7 +48,7 @@ function pushToken(username: string, tokenId: string): PushTokenRecord {
     providerToken: `provider-${tokenId}`,
     pushX25519PubHex: "ab".repeat(32),
     registrationSignatureHex: "cd".repeat(64),
-    label: "Test device",
+    deviceId: tokenId,
     registeredAt: 1,
     lastSeenAt: 1,
   };

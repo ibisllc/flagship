@@ -275,7 +275,7 @@ describe("v1.2 Plan B Phase 5 — real-push fan-out", () => {
         providerToken: `provider-${tokenId}`,
         pushX25519PubHex: "01".repeat(32),
         registrationSignatureHex: "00".repeat(64),
-        label: `Device ${tokenId}`,
+        deviceId: tokenId,
         registeredAt: 1,
         lastSeenAt: 1,
       });
