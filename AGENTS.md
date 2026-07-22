@@ -164,6 +164,12 @@ over action. The server response itself never signs out, revokes, or wipes the
 local identity; transport/server failures likewise preserve offline access.
 This requires the next TestFlight build before devices receive it.
 
+**2026-07-22 (Android clean-build CI) — a fresh checkout can build without a
+private Firebase file, and Android now has a native cloud gate.** The Google
+Services plugin applies only when `google-services.json` is present (push stays
+configured in signed/local builds); Ubuntu CI installs JDK 17 + Android 35, runs
+the debug JVM suite, and assembles the debug APK.
+
 **2026-07-22 (Windows Studio validation + native CI) — the Windows app now builds,
 tests, publishes, renders, and hosts the Debian installer under real QEMU/WHPX on
 Windows.** The drift-prone test-only CLI argument shim was replaced by the
