@@ -149,6 +149,18 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-21 (demo app deployment + native pairing) — demo users can now build
+apps from their sandboxed app-clone directory, and passwordless demo sessions
+pair and restore correctly across web, iOS, and Android.** The Docker guard
+allows only the final `docker build` context below the managed app-clones root;
+mounts, traversal, the Docker socket, and other host paths remain rejected. The
+native clients persist the paired token in their protected stores, restore the
+non-secret demo descriptor after relaunch, repair demo sessions without an
+owner passphrase, and clear the demo marker on sign-out. The production
+`openai-build` demo box was rebuilt on the fix and an actual `helloworld`
+container build/install/public-response check passed. Native code still needs
+the next TestFlight/Play build before testers receive it.
+
 **2026-07-21 (patent notice) — public site footers now carry a consistent
 “Patent Pending” notice, including standalone fallback and sign-in surfaces.**
 
