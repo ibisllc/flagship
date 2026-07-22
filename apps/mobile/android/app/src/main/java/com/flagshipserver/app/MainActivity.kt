@@ -142,6 +142,16 @@ class MainActivity : FragmentActivity() {
             }
         }
         val sessionStore = EncryptedSessionStore.create(applicationContext)
+        appState.onSignedOut = { sessionStore.setDemoSession(null) }
+        if (!appState.isPaired.value && !Keystore.hasUmkSeed()) {
+            sessionStore.demoSession()?.let { demo ->
+                com.flagshipserver.app.core.DemoFixtures.activate(
+                    appState,
+                    demo.username,
+                    demoServer = demo.server,
+                )
+            }
+        }
         val toasts = ToastCenter()
         // App-wide "active operations" registry feeding the global teal sliver.
         // Deploy ops are kept in sync from the pod list in AppRoot; build ops
@@ -517,14 +527,28 @@ private fun AppRoot(
     // retries on the next unlock. Removes the manual "Pair this device" step;
     // pairing-for-use is not sensitive, so it's admin-independent.
     val sessionStore = LocalSessionStore.current
+    val server = LocalFlagshipServerClient.current
     LaunchedEffect(isPaired, isUnlocked, pods) {
         if (!isPaired || !isUnlocked) return@LaunchedEffect
         val onlinePods = pods.filter {
             it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE && it.fqdn.isNotEmpty()
         }
         if (onlinePods.isEmpty()) return@LaunchedEffect
+        val username = app.currentUser.value ?: return@LaunchedEffect
+        val demoPods = onlinePods.filter { it.demoServer != null }
+        for (pod in demoPods) {
+            runCatching {
+                com.flagshipserver.app.core.DemoSessionPairer.ensurePaired(
+                    username = username,
+                    server = pod.demoServer!!,
+                    client = server,
+                    store = sessionStore,
+                )
+            }
+        }
+        val realPods = onlinePods.filter { it.demoServer == null }
         com.flagshipserver.app.viewmodels.PodAutoPairCoordinator(store = sessionStore)
-            .pairAll(onlinePods) { reason -> Keystore.deriveIRK(reason) }
+            .pairAll(realPods) { reason -> Keystore.deriveIRK(reason) }
     }
 
     // Edge-to-edge (targetSdk 35 forces it): pad the status bar + landscape

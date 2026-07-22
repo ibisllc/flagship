@@ -158,7 +158,7 @@ object DemoFixtures {
         } else {
             samplePods(username)
         }
-        appState.completeOnboarding(username = username, pods = pods)
+        appState.completeOnboarding(username = username, pods = pods, demoServer = demoServer)
         // Install AFTER completeOnboarding so the capability survives;
         // completeOnboarding intentionally does NOT touch this field.
         appState.setDeviceCapability(deviceCapability)

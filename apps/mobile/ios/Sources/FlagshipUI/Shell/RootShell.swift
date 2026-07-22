@@ -23,6 +23,7 @@ public struct RootShell: View {
     // store to self-provision a session token for every visible pod on unlock.
     @Environment(\.lockPowerClient) private var lockPower
     @Environment(\.sessionStore) private var sessionStore
+    @Environment(\.flagshipServerClient) private var server
 
     @State private var selected: RootDestination
     /// Slice B — the auto-pair batch coordinator (built lazily, once).
@@ -212,14 +213,28 @@ public struct RootShell: View {
     /// already-tokened pods and derives the IRK (one biometric) only when there's
     /// at least one unpaired pod. Safe to call repeatedly.
     private func runAutoPair() {
-        guard app.isUnlocked, app.isPaired, !(app.currentUser ?? "").isEmpty else { return }
+        guard app.isUnlocked, app.isPaired, let username = app.currentUser, !username.isEmpty else { return }
         let coord = autoPair ?? AutoPairCoordinator(
             client: lockPower,
             store: sessionStore
         )
         autoPair = coord
         let pods = app.pods
-        Task { await coord.pairVisiblePods(pods) }
+        Task {
+            // Demo profiles have no device-held owner IRK. Pair them through
+            // the Worker's demo-only signer; real profiles keep the normal
+            // biometric owner-signing path.
+            for pod in pods where pod.status == .online {
+                guard let demo = pod.demoServer else { continue }
+                _ = try? await DemoSessionPairer.ensurePaired(
+                    username: username,
+                    server: demo,
+                    client: server,
+                    store: sessionStore
+                )
+            }
+            await coord.pairVisiblePods(pods.filter { $0.demoServer == nil })
+        }
     }
 
     /// Route a freshly-arrived deep link. The friend-redeem invite is consumed

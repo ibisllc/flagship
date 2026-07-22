@@ -65,6 +65,7 @@ class AppState(
     profiles: List<Profile> = emptyList(),
     activeCloudName: String? = null,
 ) {
+    var onSignedOut: (() -> Unit)? = null
     private val _isPaired = MutableStateFlow(isPaired)
     val isPaired: StateFlow<Boolean> = _isPaired.asStateFlow()
 
@@ -333,7 +334,11 @@ class AppState(
         return _pods.value.any { it.status == PodInfo.Status.ONLINE }
     }
 
-    fun completeOnboarding(username: String, pods: List<PodInfo>) {
+    fun completeOnboarding(
+        username: String,
+        pods: List<PodInfo>,
+        demoServer: DemoServerBlock? = null,
+    ) {
         _currentUser.value = username
         _pods.value = pods
         _leaderPodId.value = pods.firstOrNull()?.podId
@@ -351,7 +356,7 @@ class AppState(
                 accountDisplayName = existing?.accountDisplayName,
                 deviceDisplayName = existing?.deviceDisplayName,
                 deviceCapability = _deviceCapability.value,
-                demoServer = null,
+                demoServer = demoServer,
                 createdAt = System.currentTimeMillis(),
             ),
         )
@@ -630,6 +635,7 @@ class AppState(
         // Welcome doesn't need the gate (passkey auth coming up); the
         // preference itself stays so a future re-pair re-arms.
         _isUnlocked.value = true
+        onSignedOut?.invoke()
     }
 }
 

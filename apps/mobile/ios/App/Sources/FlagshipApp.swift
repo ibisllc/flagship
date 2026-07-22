@@ -84,6 +84,9 @@ struct FlagshipApp: App {
         appState.onActiveProfileChanged = { cloudName in
             Keystore.setActiveProfile(cloudName)
         }
+        appState.onSignedOut = {
+            Task { await store.setDemoSession(nil) }
+        }
     }
 
     /// Smoke-test entry point: when launched with `-smoke-mode YES`
@@ -455,6 +458,21 @@ struct FlagshipApp: App {
                     appDelegate.push = push
                     appDelegate.pushRegistrar = registrar
                     pushRegistrar = registrar
+                }
+                .task {
+                    // Demo accounts intentionally have no wrapped UMK or
+                    // passphrase. Restore their public profile descriptor and
+                    // protected paired-session token directly instead of
+                    // sending a tester back through sign-in after every relaunch.
+                    guard !appState.isPaired,
+                          !Keystore.hasWrappedUMK,
+                          let demo = await sessionStore.demoSession
+                    else { return }
+                    DemoFixtures.activate(
+                        appState,
+                        username: demo.username,
+                        demoServer: demo.server
+                    )
                 }
                 .onOpenURL { url in
                     if let link = DeepLink.parse(url) { linker.enqueue(link) }

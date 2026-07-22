@@ -208,6 +208,10 @@ interface FlagshipServerClient {
      *  packages/control-plane/src/accountResolve.ts.
      *  See docs/login-and-account-redesign.md. */
     suspend fun resolveAccount(username: String): AccountResolution
+    /** Demo-only session mint. `.com` signs the narrow
+     *  `add-paired-session` order because demo profiles hold no local IRK. */
+    suspend fun pairDemoSession(username: String, token: String): DemoPairSessionResponse =
+        error("demo pairing unavailable")
 
     /** Phase 3b — vouched cross-device admit. The incoming device
      *  replays the admin's IRK-signed DeviceAdmit + its push-token
@@ -1077,6 +1081,12 @@ data class DemoServerBlock(
 
     enum class Lifecycle { None, Provisioning, Up }
 }
+
+@Serializable
+data class DemoPairSessionRequest(val token: String)
+
+@Serializable
+data class DemoPairSessionResponse(val ok: Boolean, val fqdn: String)
 
 /** v2 device-addressing — mirror of the Worker's `deviceCapability`
  *  block in `packages/control-plane/src/usersCheck.ts`. Embedded into
@@ -1999,6 +2009,16 @@ class MockFlagshipServerClient(
         )
     }
 
+    override suspend fun pairDemoSession(username: String, token: String): DemoPairSessionResponse {
+        tick()
+        require(Regex("^[0-9a-fA-F]{64}$").matches(token)) { "invalid paired-session token" }
+        val demo = demoServers[username.lowercase()] ?: throw HttpException(404, "demo user not found")
+        if (demo.lifecycle != DemoServerBlock.Lifecycle.Up) {
+            throw HttpException(409, "demo server is not ready")
+        }
+        return DemoPairSessionResponse(ok = true, fqdn = demo.fqdn)
+    }
+
     /** Phase 3b — last vouched-admit the Mock received, for test
      *  assertions (the admin's admit + the incoming device's register). */
     var lastDeviceAdmit: Pair<String, DeviceAdmitRequest>? = null
@@ -2547,6 +2567,16 @@ class LiveFlagshipServerClient(
         return transport.getJson(
             url = "$base/api/account/resolve/$encoded",
             responseSerializer = AccountResolution.serializer(),
+        )
+    }
+
+    override suspend fun pairDemoSession(username: String, token: String): DemoPairSessionResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.postJsonForResponse(
+            url = "$base/api/dev/sample-user/$encoded/pair",
+            body = DemoPairSessionRequest(token),
+            serializer = DemoPairSessionRequest.serializer(),
+            responseSerializer = DemoPairSessionResponse.serializer(),
         )
     }
 

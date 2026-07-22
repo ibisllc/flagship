@@ -14,6 +14,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
+
+@Serializable
+data class DemoSessionRecord(val username: String, val server: DemoServerBlock)
 
 /**
  * Holds the paired pod's base URL + the 32-byte hex session token used for the
@@ -51,6 +58,8 @@ interface SessionStoring {
      * it. Idempotent — a no-op once the pod has a token or there's no legacy one.
      */
     fun migrateSingleTokenToPod(anchorPodId: String)
+    fun demoSession(): DemoSessionRecord?
+    fun setDemoSession(session: DemoSessionRecord?)
 
     /**
      * Activate [podId]: point the single base-URL + token slots at it from the
@@ -91,6 +100,18 @@ class EncryptedSessionStore(private val prefs: SharedPreferences) : SessionStori
         _podBaseUrl.value = null
         _sessionToken.value = null
         prefs.edit().clear().apply()
+    }
+
+    override fun demoSession(): DemoSessionRecord? =
+        prefs.getString(KEY_DEMO_SESSION, null)?.let {
+            runCatching { Json.decodeFromString<DemoSessionRecord>(it) }.getOrNull()
+        }
+
+    override fun setDemoSession(session: DemoSessionRecord?) {
+        prefs.edit().apply {
+            if (session == null) remove(KEY_DEMO_SESSION)
+            else putString(KEY_DEMO_SESSION, Json.encodeToString(session))
+        }.apply()
     }
 
     // ---- Per-pod token store (Fix B) ----
@@ -143,6 +164,7 @@ class EncryptedSessionStore(private val prefs: SharedPreferences) : SessionStori
         private const val KEY_BASE_URL = "podBaseUrl"
         private const val KEY_TOKEN = "sessionToken"
         private const val KEY_POD_TOKENS = "podTokens"
+        private const val KEY_DEMO_SESSION = "demoSession.v1"
 
         fun create(context: Context): EncryptedSessionStore {
             val masterKey = MasterKey.Builder(context)
@@ -163,6 +185,7 @@ class InMemorySessionStore : SessionStoring {
     private val _podBaseUrl = MutableStateFlow<String?>(null)
     private val _sessionToken = MutableStateFlow<String?>(null)
     private val podTokens = mutableMapOf<String, String>()
+    private var savedDemoSession: DemoSessionRecord? = null
     override val podBaseUrl: StateFlow<String?> = _podBaseUrl.asStateFlow()
     override val sessionToken: StateFlow<String?> = _sessionToken.asStateFlow()
     override fun setPodBaseUrl(url: String?) { _podBaseUrl.value = url }
@@ -171,6 +194,7 @@ class InMemorySessionStore : SessionStoring {
         _podBaseUrl.value = null
         _sessionToken.value = null
         podTokens.clear()
+        savedDemoSession = null
     }
 
     override fun sessionToken(forPodId: String): String? =
@@ -191,4 +215,7 @@ class InMemorySessionStore : SessionStoring {
         if (legacy.isNullOrEmpty()) return
         podTokens[key] = legacy
     }
+
+    override fun demoSession(): DemoSessionRecord? = savedDemoSession
+    override fun setDemoSession(session: DemoSessionRecord?) { savedDemoSession = session }
 }

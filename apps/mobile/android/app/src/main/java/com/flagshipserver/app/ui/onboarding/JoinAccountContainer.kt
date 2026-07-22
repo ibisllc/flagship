@@ -50,6 +50,9 @@ import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.DemoFixtures
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.core.LocalSessionStore
+import com.flagshipserver.app.core.DemoSessionPairer
+import com.flagshipserver.app.api.DemoSessionRecord
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
@@ -76,6 +79,7 @@ fun JoinAccountContainer(
 ) {
     val app = LocalAppState.current
     val server = LocalFlagshipServerClient.current
+    val sessionStore = LocalSessionStore.current
     val scope = rememberCoroutineScope()
 
     var username by remember { mutableStateOf("") }
@@ -100,6 +104,24 @@ fun JoinAccountContainer(
                         // capability. Attach a fresh device + activate
                         // the sandbox with the server-supplied
                         // demoServer block. No passkey, no error.
+                        resolution.demoServer?.let { demo ->
+                            if (demo.lifecycle == com.flagshipserver.app.api.DemoServerBlock.Lifecycle.Up) {
+                                try {
+                                    DemoSessionPairer.ensurePaired(
+                                        username = resolution.username,
+                                        server = demo,
+                                        client = server,
+                                        store = sessionStore,
+                                    )
+                                } catch (_: Throwable) {
+                                    throw IllegalStateException(
+                                        "The demo server is online, but this device couldn't create a paired session. Try again.",
+                                    )
+                                }
+                            } else {
+                                sessionStore.setDemoSession(DemoSessionRecord(resolution.username, demo))
+                            }
+                        }
                         DemoFixtures.activate(
                             app,
                             resolution.username,

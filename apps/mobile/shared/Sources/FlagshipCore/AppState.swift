@@ -236,6 +236,9 @@ public final class AppState {
     /// `Flagship` SPM target. Left unset on watchOS (no keystore on the
     /// watch); the AppState mutations themselves are fully cross-platform.
     public var onActiveProfileChanged: ((String) -> Void)?
+    /// Platform shell hook for clearing persisted session-only state (notably
+    /// the passwordless demo marker) on an explicit sign-out.
+    public var onSignedOut: (() -> Void)?
 
     public init(
         isPaired: Bool = false,
@@ -344,7 +347,11 @@ public final class AppState {
         return pods.first(where: { $0.status == .online })
     }
 
-    public func completeOnboarding(username: String, pods: [PodInfo]) {
+    public func completeOnboarding(
+        username: String,
+        pods: [PodInfo],
+        demoServer: DemoServerBlock? = nil
+    ) {
         self.currentUser = username
         self.pods = pods
         // The genuine first anchor: the OLDEST pod (`pods.first` — `.com` returns
@@ -368,7 +375,7 @@ public final class AppState {
             accountDisplayName: existing?.accountDisplayName,
             deviceDisplayName: existing?.deviceDisplayName,
             deviceCapability: deviceCapability,
-            demoServer: nil,
+            demoServer: demoServer,
             createdAt: Date()
         ))
         self.activeProfileCloudName = username
@@ -665,6 +672,7 @@ public final class AppState {
         // about to authenticate via passkey anyway). Keep the user
         // preference for next launch; just unlock the runtime latch.
         self.isUnlocked = true
+        onSignedOut?()
     }
 
     /// B12 — call when the user successfully unlocks via biometric.

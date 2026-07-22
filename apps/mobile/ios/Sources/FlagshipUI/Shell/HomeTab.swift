@@ -721,6 +721,7 @@ struct ServerDetailContainer: View {
     @Environment(\.screensClient) private var client
     @Environment(\.secretMailboxClient) private var mailbox
     @Environment(\.lockPowerClient) private var lockPower
+    @Environment(\.flagshipServerClient) private var server
     @Environment(\.sessionStore) private var sessionStore
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
@@ -728,6 +729,7 @@ struct ServerDetailContainer: View {
     @State private var detailVm: HomeViewModel?
     @State private var metricsVm: ServerMetricsViewModel?
     @State private var pairVm: PodPairViewModel?
+    @State private var demoPairing = false
 
     private var pod: PodInfo? { app.pods.first(where: { $0.podId == podId }) }
 
@@ -740,6 +742,7 @@ struct ServerDetailContainer: View {
     }
 
     private var isPairing: Bool {
+        if demoPairing { return true }
         if case .signing = pairVm?.phase { return true }
         if case .posting = pairVm?.phase { return true }
         return false
@@ -908,6 +911,23 @@ struct ServerDetailContainer: View {
     private func pairThenReload(detailVm: HomeViewModel) async {
         guard let fqdn = pairFqdn else { return }
         guard !isPairing else { return }
+        if let demo = pod?.demoServer, let username = app.currentUser {
+            demoPairing = true
+            defer { demoPairing = false }
+            do {
+                try await DemoSessionPairer.ensurePaired(
+                    username: username,
+                    server: demo,
+                    client: server,
+                    store: sessionStore,
+                    replacingExistingToken: true
+                )
+                await detailVm.load()
+            } catch {
+                toasts.error("The demo server is online, but this device couldn't create a paired session. Try again.")
+            }
+            return
+        }
         let vm = PodPairViewModel(
             client: lockPower,
             store: sessionStore,

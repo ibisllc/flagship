@@ -1,5 +1,6 @@
 import SwiftUI
 import FlagshipAPI
+import FlagshipCore
 
 /// Username-first **Join** entry — the "I already have an account" flow.
 ///
@@ -16,9 +17,11 @@ import FlagshipAPI
 /// See docs/login-and-account-redesign.md.
 public struct JoinUsernameScreen: View {
     @Environment(\.flagshipServerClient) private var server
+    @Environment(\.sessionStore) private var sessionStore
     @Environment(\.colorScheme) private var scheme
     @State private var username: String = ""
     @State private var vm: LoginViewModel?
+    @State private var demoPairError: String?
 
     /// Demo branch — the typed name resolved to `kind:"demo"`. Carries
     /// the username + the optional server-supplied demoServer block.
@@ -64,6 +67,7 @@ public struct JoinUsernameScreen: View {
                         if case .resolved = vm.phase { vm.reset() }
                         if case .failed = vm.phase { vm.reset() }
                     }
+                    demoPairError = nil
                 }
 
                 if showUnknownState {
@@ -100,6 +104,25 @@ public struct JoinUsernameScreen: View {
         guard case .resolved(let outcome) = vm.phase else { return }
         switch outcome {
         case .demo(let u, let demoServer):
+            if let demoServer {
+                do {
+                    if demoServer.lifecycle == .up {
+                        try await DemoSessionPairer.ensurePaired(
+                            username: u,
+                            server: demoServer,
+                            client: server,
+                            store: sessionStore
+                        )
+                    } else {
+                        await sessionStore.setDemoSession(
+                            DemoSessionRecord(username: u, server: demoServer)
+                        )
+                    }
+                } catch {
+                    demoPairError = "The demo server is online, but this device couldn't create a paired session. Try again."
+                    return
+                }
+            }
             onDemo(u, demoServer)
         case .realAccount(let resolution):
             onRealAccount(resolution)
@@ -127,6 +150,7 @@ public struct JoinUsernameScreen: View {
     }
 
     private var helperText: String? {
+        if let demoPairError { return demoPairError }
         switch vm?.phase {
         case .resolving: return "Checking…"
         case .failed(let msg): return msg

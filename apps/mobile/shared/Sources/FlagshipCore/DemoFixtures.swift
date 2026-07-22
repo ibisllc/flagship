@@ -182,7 +182,8 @@ public enum DemoFixtures {
         if let block = demoServer {
             appState.completeOnboarding(
                 username: username,
-                pods: [samplePodFromDemoServer(block, username: username)]
+                pods: [samplePodFromDemoServer(block, username: username)],
+                demoServer: block
             )
         } else {
             appState.completeOnboarding(

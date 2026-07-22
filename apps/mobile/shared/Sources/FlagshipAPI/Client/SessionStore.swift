@@ -10,6 +10,7 @@ public actor SessionStore {
     private let defaults: UserDefaults
     private let podBaseKey = "flagship.podBaseUrl"
     private let sessionTokenKey = "flagship.sessionToken"
+    private let demoSessionKey = "flagship.demoSession.v1"
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -37,6 +38,22 @@ public actor SessionStore {
         defaults.removeObject(forKey: podBaseKey)
         defaults.removeObject(forKey: sessionTokenKey)
         defaults.removeObject(forKey: podTokensKey)
+        defaults.removeObject(forKey: demoSessionKey)
+    }
+
+    public var demoSession: DemoSessionRecord? {
+        guard let data = defaults.data(forKey: demoSessionKey) else { return nil }
+        return try? JSONDecoder().decode(DemoSessionRecord.self, from: data)
+    }
+
+    public func setDemoSession(_ session: DemoSessionRecord?) {
+        guard let session else {
+            defaults.removeObject(forKey: demoSessionKey)
+            return
+        }
+        if let data = try? JSONEncoder().encode(session) {
+            defaults.set(data, forKey: demoSessionKey)
+        }
     }
 
     // MARK: - Per-pod token store (Fix B)

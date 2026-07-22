@@ -1,5 +1,18 @@
 import Foundation
 
+/// The non-secret identity needed to restore a passwordless demo session after
+/// process death. The paired-session token remains in the platform's protected
+/// token store; this record only carries the public username + server block.
+public struct DemoSessionRecord: Codable, Equatable, Sendable {
+    public let username: String
+    public let server: DemoServerBlock
+
+    public init(username: String, server: DemoServerBlock) {
+        self.username = username
+        self.server = server
+    }
+}
+
 /// Actor-protocol that decouples LiveScreensClient from the concrete
 /// session-store implementation. Both SessionStore (UserDefaults) and
 /// KeychainSessionStore (Keychain) conform, so callers pick the right
@@ -29,6 +42,9 @@ public protocol SessionStoring: Actor {
     /// but `anchorPodId` has no per-pod token yet, attribute the legacy token to
     /// it. Idempotent — a no-op once the pod has a token or there's no legacy one.
     func migrateSingleTokenToPod(_ anchorPodId: String) async
+
+    var demoSession: DemoSessionRecord? { get }
+    func setDemoSession(_ session: DemoSessionRecord?) async
 }
 
 public extension SessionStoring {

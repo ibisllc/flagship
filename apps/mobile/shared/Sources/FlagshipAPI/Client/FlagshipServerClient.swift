@@ -54,6 +54,10 @@ public protocol FlagshipServerClient: Sendable {
     /// packages/control-plane/src/accountResolve.ts. See
     /// docs/login-and-account-redesign.md.
     func resolveAccount(username: String) async throws -> AccountResolution
+    /// Demo-only session mint. The username is the public demo capability;
+    /// `.com` owner-signs the narrow `add-paired-session` order on behalf of
+    /// the demo identity and forwards it to that demo user's box.
+    func pairDemoSession(username: String, token: String) async throws -> DemoPairSessionResponse
     func registerRecoveryEnvelope(_ req: RecoveryUploadRequest) async throws -> RecoveryEnvelopeResponse
     func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope
     /// Task #74 — the passphrase-gated wrapped-UMK fetch. POSTs
@@ -282,6 +286,12 @@ public protocol FlagshipServerClient: Sendable {
         username: String,
         body: AdminRootRotationRequest
     ) async throws -> AdminRootRotationResponse
+}
+
+public extension FlagshipServerClient {
+    func pairDemoSession(username: String, token: String) async throws -> DemoPairSessionResponse {
+        throw ScreensClientError.notImplemented("demo pairing")
+    }
 }
 
 public extension FlagshipServerClient {
@@ -1805,6 +1815,16 @@ public struct DemoServerBlock: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+public struct DemoPairSessionResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let fqdn: String
+
+    public init(ok: Bool, fqdn: String) {
+        self.ok = ok
+        self.fqdn = fqdn
+    }
+}
+
 /// Immutable account-scoped machine identity and its capability grant.
 public struct DeviceCapabilityBlock: Codable, Equatable, Sendable {
     public let deviceId: String
@@ -2390,6 +2410,21 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             demoServer: nil,
             graceModel: kind == .multi ? .twentyFourHourTotp : .threeDay
         )
+    }
+
+    public func pairDemoSession(username: String, token: String) async throws -> DemoPairSessionResponse {
+        try await tick()
+        let u = username.lowercased()
+        guard token.range(of: "^[0-9a-fA-F]{64}$", options: .regularExpression) != nil else {
+            throw ScreensClientError.http(status: 400, message: "invalid paired-session token")
+        }
+        guard let demo = demoServers[u] else {
+            throw ScreensClientError.http(status: 404, message: "demo user not found")
+        }
+        guard demo.lifecycle == .up else {
+            throw ScreensClientError.http(status: 409, message: "demo server is not ready")
+        }
+        return DemoPairSessionResponse(ok: true, fqdn: demo.fqdn)
     }
 
     public func registerRecoveryEnvelope(_ req: RecoveryUploadRequest) async throws -> RecoveryEnvelopeResponse {
@@ -3295,6 +3330,12 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(AccountResolution.self, from: data)
+    }
+
+    public func pairDemoSession(username: String, token: String) async throws -> DemoPairSessionResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        let body = try JSONEncoder().encode(["token": token])
+        return try await postJsonReturning("/api/dev/sample-user/\(encoded)/pair", body: body)
     }
 
     public func registerRecoveryEnvelope(_ req: RecoveryUploadRequest) async throws -> RecoveryEnvelopeResponse {
