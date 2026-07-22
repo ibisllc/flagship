@@ -111,13 +111,13 @@
                             <TextBlock Text="▣" FontSize="40" Foreground="{StaticResource FB.PrimaryDeep}" HorizontalAlignment="Center"/>
                             <TextBlock Text="Confirm the security code" FontFamily="{StaticResource FB.Font.Title}" FontSize="20" HorizontalAlignment="Center" Margin="0,12,0,0"/>
                             <TextBlock Text="Check that this code matches the Flagship app, then confirm on your phone." Style="{StaticResource RowHint}" TextWrapping="Wrap" TextAlignment="Center" Margin="16,8,16,16"/>
-                            <Border Background="{StaticResource FB.SurfaceElevated}" CornerRadius="10" Padding="24,14"><TextBlock Text="{Binding PairSas}" FontFamily="{StaticResource FB.Font.Mono}" FontSize="38" FontWeight="Bold"/></Border>
-                            <TextBlock Text="Waiting for you to confirm on your phone…" Style="{StaticResource Caption}" Margin="0,14,0,0"/>
+                            <Border Background="{StaticResource FB.SurfaceElevated}" CornerRadius="10" Padding="24,14" HorizontalAlignment="Center" MinWidth="230"><TextBlock Text="{Binding PairSas}" FontFamily="{StaticResource FB.Font.Mono}" FontSize="38" FontWeight="Bold" HorizontalAlignment="Center" TextAlignment="Center"/></Border>
+                            <TextBlock Text="Waiting for you to confirm on your phone…" Style="{StaticResource Caption}" Margin="0,14,0,0" HorizontalAlignment="Center" TextAlignment="Center"/>
                         </StackPanel>
                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="440" Visibility="{Binding ShowAwaitingAuthorization, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="▯" FontSize="42" Foreground="{StaticResource FB.PrimaryDeep}" HorizontalAlignment="Center"/>
                             <TextBlock Text="Awaiting authorization" FontFamily="{StaticResource FB.Font.Title}" FontSize="20" HorizontalAlignment="Center" Margin="0,12,0,0"/>
-                            <TextBlock Text="Finish authorizing this server in the Flagship app. This screen continues automatically when your phone sends the approved recipe." Style="{StaticResource RowHint}" TextWrapping="Wrap" TextAlignment="Center" Margin="16,8,16,12"/>
+                            <TextBlock Text="{Binding PairStatus}" Style="{StaticResource RowHint}" TextWrapping="Wrap" TextAlignment="Center" Margin="16,8,16,12"/>
                             <ProgressBar Width="180" Height="5" IsIndeterminate="True"/>
                             <Button Style="{StaticResource LinkButton}" Foreground="{StaticResource FB.Danger}" Content="Cancel pairing" HorizontalAlignment="Center" Margin="0,16,0,0" Click="CancelPairing_Click"/>
                         </StackPanel>
