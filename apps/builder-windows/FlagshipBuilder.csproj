@@ -38,7 +38,7 @@
     <Compile Include="src\IsoManifestClient.cs" />
     <Compile Include="src\IsoBaseCache.cs" />
     <Compile Include="src\PairSession.cs" />
-    <Compile Include="src\QrTerminalMatrix.cs" />
+    <Compile Include="src\NativePairingCrypto.cs" />
     <Compile Include="src\VM\HostResources.cs" />
     <Compile Include="src\VM\VMResourcePlan.cs" />
     <Compile Include="src\VM\ServerTier.cs" />
@@ -58,6 +58,11 @@
   <ItemGroup>
     <None Include="app.manifest" />
     <None Include="README.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NSec.Cryptography" Version="24.4.0" />
+    <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
 
 </Project>
