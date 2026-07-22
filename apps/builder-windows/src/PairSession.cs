@@ -90,34 +90,41 @@ public sealed class PairSession : IDisposable
 {
     private readonly bool _debug;
     private readonly CancellationTokenSource _cts = new();
+    private readonly NativePairingKeyPair _keys;
+    private readonly byte[] _codeBytes;
     private System.Net.WebSockets.ClientWebSocket? _socket;
 
     public event Action<PairEvent>? OnEvent;
     public event Action<LogLine>? OnLog;
     public string RecipeOutPath { get; }
+    public string HumanCode { get; }
+    public string HumanCodeDisplay => NativePairingCrypto.FormatHumanCode(HumanCode);
+    public string SessionId { get; }
+    public string QrPayload { get; }
 
     public PairSession(bool debug, string? outPath = null)
     {
         _debug = debug;
         RecipeOutPath = outPath ?? Path.Combine(Path.GetTempPath(), $"flagship-pair-{Guid.NewGuid():N}.json");
+        _keys = NativePairingCrypto.CreateKeyPair();
+        _codeBytes = NativePairingCrypto.NewCodeBytes();
+        HumanCode = NativePairingCrypto.HumanCode(_codeBytes);
+        SessionId = NativePairingCrypto.SessionId(_codeBytes);
+        QrPayload = NativePairingCrypto.QrPayload(HumanCode, _keys.PublicKey);
     }
 
     public async Task RunAsync()
     {
         if (_debug) throw new NotSupportedException("Native debug-consent pairing is not enabled.");
 
-        using var keys = NativePairingCrypto.CreateKeyPair();
-        var codeBytes = NativePairingCrypto.NewCodeBytes();
-        var humanCode = NativePairingCrypto.HumanCode(codeBytes);
-        var sessionId = NativePairingCrypto.SessionId(codeBytes);
-        var payload = NativePairingCrypto.QrPayload(humanCode, keys.PublicKey);
+
         var host = Environment.GetEnvironmentVariable("FLAGSHIP_CONTROL_HOST") ?? "flagshipserver.com";
         var scheme = Environment.GetEnvironmentVariable("FLAGSHIP_CONTROL_INSECURE") == "1" ? "ws" : "wss";
-        var uri = new Uri($"{scheme}://{host}/builder-pipe/{sessionId}?role=builder");
+        var uri = new Uri($"{scheme}://{host}/builder-pipe/{SessionId}?role=builder");
 
         OnEvent?.Invoke(new PairEvent
         {
-            Event = "ready", HumanCode = humanCode, Payload = payload, DebugRequested = false,
+            Event = "ready", HumanCode = HumanCode, Payload = QrPayload, DebugRequested = false,
         });
 
         byte[]? aeadKey = null;
@@ -152,7 +159,7 @@ public sealed class PairSession : IDisposable
                             await SendAsync(_socket, new
                             {
                                 kind = "builder-hello",
-                                builderPk = NativePairingCrypto.Base64UrlEncode(keys.PublicKey),
+                                builderPk = NativePairingCrypto.Base64UrlEncode(_keys.PublicKey),
                             }, _cts.Token);
                         }
                         break;
@@ -171,7 +178,7 @@ public sealed class PairSession : IDisposable
                         throw new InvalidOperationException($"Relay error: {reason}");
                     case "peer":
                         if (!root.TryGetProperty("frame", out var frame) || frame.ValueKind != JsonValueKind.Object) break;
-                        var completed = await HandlePeerFrameAsync(frame, keys, aeadKey, _socket, _cts.Token);
+                        var completed = await HandlePeerFrameAsync(frame, _keys, aeadKey, _socket, _cts.Token);
                         if (completed.NewKey != null)
                         {
                             if (aeadKey != null) CryptographicOperations.ZeroMemory(aeadKey);
@@ -199,7 +206,8 @@ public sealed class PairSession : IDisposable
         finally
         {
             if (aeadKey != null) CryptographicOperations.ZeroMemory(aeadKey);
-            CryptographicOperations.ZeroMemory(codeBytes);
+            CryptographicOperations.ZeroMemory(_codeBytes);
+            _keys.Dispose();
             if (_socket.State is System.Net.WebSockets.WebSocketState.Open or System.Net.WebSockets.WebSocketState.CloseReceived)
             {
                 try { await _socket.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None); }

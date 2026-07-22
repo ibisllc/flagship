@@ -155,6 +155,10 @@ public sealed class Wizard : INotifyPropertyChanged
 
         var session = new PairSession(debug: false);
         _pair = session;
+        // Match macOS: publish the locally generated QR before network work starts.
+        PairQr = session.QrPayload;
+        PairCode = session.HumanCodeDisplay;
+        PairStatus = "Waiting for your phone…";
         session.OnEvent += ev => OnUi(() => HandlePairEvent(ev));
         session.OnLog += line => OnUi(() => AppendLog(line.Stream, line.Text));
         _ = Task.Run(async () =>

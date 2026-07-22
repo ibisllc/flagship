@@ -49,4 +49,13 @@ public sealed class NativePairingCryptoTests
             NativePairingCrypto.Base64UrlEncode(nonce), key);
         Assert.Equal(plaintext, opened);
     }
-}
+
+    [Fact]
+    public void SessionPublishesQrBeforeNetworkStarts()
+    {
+        using var session = new PairSession(debug: false);
+        Assert.Matches("^[A-Z2-7]{4}-[A-Z2-7]{4}$", session.HumanCodeDisplay);
+        Assert.StartsWith("flagship://builder?c=", session.QrPayload);
+        Assert.Contains("&k=", session.QrPayload);
+        Assert.Equal(32, session.SessionId.Length);
+    }}
