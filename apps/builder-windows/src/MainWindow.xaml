@@ -27,7 +27,7 @@
         <local:InverseBoolConverter x:Key="InverseBool"/>
         <local:StateKindToBrushConverter x:Key="StateKindToBrush"/>
         <local:StateKindToGlyphConverter x:Key="StateKindToGlyph"/>
-        <local:QrTerminalToImageConverter x:Key="QrTerminalToImage"/>
+        <local:PairingPayloadToImageConverter x:Key="PairingPayloadToImage"/>
     </Window.Resources>
 
     <DockPanel>
@@ -95,7 +95,7 @@
                             <Border Background="White" BorderBrush="{StaticResource FB.Border}" BorderThickness="1" CornerRadius="10" Padding="16" MinWidth="210" MinHeight="210">
                                 <Grid>
                                     <ProgressBar Width="120" Height="4" IsIndeterminate="True" Visibility="{Binding PairQr, Converter={StaticResource NullToCollapsed}}"/>
-                                    <Image Source="{Binding PairQr, Converter={StaticResource QrTerminalToImage}}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" SnapsToDevicePixels="True"/>
+                                    <Image Source="{Binding PairQr, Converter={StaticResource PairingPayloadToImage}}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" SnapsToDevicePixels="True"/>
                                 </Grid>
                             </Border>
                             <TextBlock Text="Or enter this code" Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,12,0,2"/>

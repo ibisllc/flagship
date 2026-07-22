@@ -528,34 +528,21 @@ public static class DragHelper
 }
 
 // ---- Tiny converters used by MainWindow.xaml ----
-/// <summary>Turns the pairing engine's ANSI half-block QR into a crisp WPF bitmap.</summary>
-public sealed class QrTerminalToImageConverter : IValueConverter
+/// <summary>Renders the native pairing payload as a crisp QR bitmap.</summary>
+public sealed class PairingPayloadToImageConverter : IValueConverter
 {
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
-        if (value is not string terminal || string.IsNullOrWhiteSpace(terminal)) return null;
-        var modules = QrTerminalMatrix.Parse(terminal);
-        var height = modules.GetLength(0);
-        var width = modules.GetLength(1);
-        if (width == 0 || height == 0) return null;
-
-        const int scale = 6;
-        var pixels = new byte[width * scale * height * scale * 4];
-        var stride = width * scale * 4;
-        for (var y = 0; y < height * scale; y++)
-        for (var x = 0; x < width * scale; x++)
-        {
-            var black = modules[y / scale, x / scale];
-            var offset = y * stride + x * 4;
-            var shade = black ? (byte)0 : (byte)255;
-            pixels[offset] = shade;
-            pixels[offset + 1] = shade;
-            pixels[offset + 2] = shade;
-            pixels[offset + 3] = 255;
-        }
-
-        var bitmap = new WriteableBitmap(width * scale, height * scale, 96, 96, PixelFormats.Bgra32, null);
-        bitmap.WritePixels(new Int32Rect(0, 0, bitmap.PixelWidth, bitmap.PixelHeight), pixels, stride, 0);
+        if (value is not string payload || string.IsNullOrWhiteSpace(payload)) return null;
+        using var data = QRCoder.QRCodeGenerator.GenerateQrCode(
+            payload, QRCoder.QRCodeGenerator.ECCLevel.Q);
+        var png = new QRCoder.PngByteQRCode(data).GetGraphic(8);
+        using var stream = new MemoryStream(png, writable: false);
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.StreamSource = stream;
+        bitmap.EndInit();
         bitmap.Freeze();
         return bitmap;
     }
@@ -563,7 +550,6 @@ public sealed class QrTerminalToImageConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotImplementedException();
 }
-
 /// <summary>
 /// Bool → Visibility. Pass ConverterParameter="invert" to flip.
 /// </summary>
