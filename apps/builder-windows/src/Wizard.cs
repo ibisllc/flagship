@@ -160,7 +160,7 @@ public sealed class Wizard : INotifyPropertyChanged
         _ = Task.Run(async () =>
         {
             try { await session.RunAsync(); }
-            catch (Exception e) { OnUi(() => { AppendLog(LogStream.Stderr, $"pair failed: {e.Message}"); EndPairing("Pairing couldn't start — is Node installed?"); }); }
+            catch (Exception e) { OnUi(() => { AppendLog(LogStream.Stderr, $"pair failed: {e.Message}"); EndPairing("Pairing couldn't start — check your network connection."); }); }
         });
     }
 
