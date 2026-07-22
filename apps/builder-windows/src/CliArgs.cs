@@ -1,10 +1,9 @@
-// CliArgs lives in Wizard.cs alongside the WPF view-model; the test
-// project can't pull Wizard.cs in (WPF on non-Windows would fail).
-// Mirror the static arg-vector builders here so they stay in lock-step.
-// If you change CliArgs in Wizard.cs you MUST update this shim.
-
 namespace Flagship.Builder;
 
+/// <summary>
+/// Argument-vector builders for the Node CLI's subcommands.
+/// Pure, unit-testable. Mirror CLIArgs.swift / cli_runner.py.
+/// </summary>
 public static class CliArgs
 {
     public static string[] Verify(string entryPath, string recipePath)
@@ -26,6 +25,14 @@ public static class CliArgs
         return a.ToArray();
     }
 
+    public static string[] ApplianceProvision(string entryPath, string recipePath,
+        string basePath, string manifestPath, string diskPath, string seedPath,
+        string arch, ulong diskSize, string qemuImg)
+        => new[] { entryPath, "appliance-provision", recipePath, basePath, manifestPath,
+            diskPath, seedPath, "--arch", arch, "--disk-size",
+            diskSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "--qemu-img", qemuImg };
+
     public static string[] Write(string entryPath, string recipePath, string isoPath, string? device, bool yes, bool keepRecipe)
     {
         var a = new System.Collections.Generic.List<string>
@@ -40,6 +47,11 @@ public static class CliArgs
         return a.ToArray();
     }
 
+    /// <summary>
+    /// `pair --out &lt;recipe.json&gt; --emit-events [--debug]` — the phone-pairing
+    /// relay session (shared TS implementation), with machine-readable
+    /// milestones the WPF cover renders. Mirrors the CLI's `cmdPair`.
+    /// </summary>
     public static string[] Pair(string entryPath, string outPath, bool debug)
     {
         var a = new System.Collections.Generic.List<string>

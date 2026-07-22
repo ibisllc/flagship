@@ -221,9 +221,9 @@ public static class DiskEnumerator
             string media = idxMedia >= 0 && idxMedia < cells.Count ? cells[idxMedia] : "";
             // WMIC InterfaceType: "USB" / "IDE" / "SCSI"; MediaType:
             // "Removable Media" / "Fixed hard disk media".
-            var removable = media != null && media.IndexOf("Removable", StringComparison.OrdinalIgnoreCase) >= 0;
+            var removable = media.IndexOf("Removable", StringComparison.OrdinalIgnoreCase) >= 0;
             var isInternal = !removable && (
-                media != null && media.IndexOf("Fixed", StringComparison.OrdinalIgnoreCase) >= 0
+                media.IndexOf("Fixed", StringComparison.OrdinalIgnoreCase) >= 0
             );
             rows.Add(new RawDisk
             {

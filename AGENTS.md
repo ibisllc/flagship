@@ -149,6 +149,20 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-22 (Windows Studio validation + native CI) — the Windows app now builds,
+tests, publishes, renders, and hosts the Debian installer under real QEMU/WHPX on
+Windows.** The drift-prone test-only CLI argument shim was replaced by the
+production source, restoring the 227-test .NET suite; stock Windows PowerShell
+is now the documented build path, publishing reports a clear output-lock error,
+and a Windows CI gate covers tests + self-contained WPF publish. A live 13.6.0
+manifest download/SHA verification/remaster plus two WHPX installs proved UEFI,
+storage, the duration-gated clean installer stop, ISO detach, and disk boot. The
+guest reaches the Debian login prompt, but first-boot public registration and SSH
+remain absent even when the diagnostic bootstrap successfully installs a key;
+this is the existing shared Debian guest bootstrap/network seam, not a Windows
+host failure, and still needs Linux/filesystem forensics before Windows/Linux VM
+releases can claim end-to-end service readiness.
+
 **2026-07-22 (voi.ci route repair) — the production short-link host is bound
 to `flagship-com` through source-controlled Worker routes for both the apex and
 `www`.** The redirect handler had shipped without its cross-zone routes, so

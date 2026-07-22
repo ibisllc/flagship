@@ -30,6 +30,9 @@ function Invoke-Test {
 }
 
 function Invoke-Publish {
+    if (Get-Process -Name "FlagshipBuilder" -ErrorAction SilentlyContinue) {
+        throw "Close Flagship Studio before publishing; Windows is locking dist/FlagshipBuilder.exe."
+    }
     Write-Host "==> dotnet publish (Release, win-x64, self-contained)" -ForegroundColor Cyan
     & dotnet publish "$ScriptDir/FlagshipBuilder.csproj" `
         -c Release `
