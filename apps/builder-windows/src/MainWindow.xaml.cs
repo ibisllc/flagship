@@ -38,7 +38,11 @@ public partial class MainWindow : Window
         // intentionally do this after the constructor finishes so the
         // first frame paints with empty rows; the picker fills in as
         // WMIC returns.
-        Loaded += async (_, _) => await _wizard.RefreshDisksAsync();
+        Loaded += async (_, _) =>
+        {
+            await _wizard.RefreshDisksAsync();
+            _wizard.StartPairing();
+        };
         // Auto-scroll the log when new lines arrive.
         _wizard.LogLines.CollectionChanged += (_, _) =>
         {
@@ -67,7 +71,7 @@ public partial class MainWindow : Window
     private void MenuNewServer_Click(object sender, RoutedEventArgs e)
     {
         CloseConsole();
-        _wizard.ResetToNewServer();
+        _wizard.ReturnToPairingCover();
     }
 
     private void MenuExit_Click(object sender, RoutedEventArgs e) => Close();
@@ -86,6 +90,12 @@ public partial class MainWindow : Window
     private static void OpenUrl(string url)
         => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
 
+    private void EnterRecipeFileMode_Click(object sender, RoutedEventArgs e) => _wizard.EnterRecipeFileMode();
+    private void ReturnToPairing_Click(object sender, RoutedEventArgs e) => _wizard.ReturnToPairingCover();
+    private void PasteRecipe_Click(object sender, RoutedEventArgs e) { if (Clipboard.ContainsText()) _wizard.AcceptRecipeText(Clipboard.GetText()); }
+    private void SimpleMode_Click(object sender, RoutedEventArgs e) => _wizard.Mode = BuilderMode.Simple;
+    private void AdvancedMode_Click(object sender, RoutedEventArgs e) => _wizard.Mode = BuilderMode.Advanced;
+    private void WifiPassword_Changed(object sender, RoutedEventArgs e) { if (sender is PasswordBox box) _wizard.WifiPassword = box.Password; }
     // ---- Recipe row ----
 
     private void RecipeRow_DragEnter(object sender, DragEventArgs e) => HandleDragEnter(RecipeRow, e);
@@ -171,7 +181,7 @@ public partial class MainWindow : Window
         => _wizard.StartPairing();
 
     private void CancelPairing_Click(object sender, RoutedEventArgs e)
-        => _wizard.CancelPairing();
+        => _wizard.ReturnToPairingCover();
 
     // ---- Destination chooser + Host here ----
 
@@ -192,7 +202,7 @@ public partial class MainWindow : Window
     private void AddServer_Click(object sender, RoutedEventArgs e)
     {
         CloseConsole();
-        _wizard.ResetToNewServer();
+        _wizard.ReturnToPairingCover();
     }
 
     private void ServerList_SelectionChanged(object sender, SelectionChangedEventArgs e)

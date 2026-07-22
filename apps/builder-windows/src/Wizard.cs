@@ -34,6 +34,9 @@ public sealed class Wizard : INotifyPropertyChanged
     private string? _outIsoPath;
     private CliRunner? _currentRunner;
     private BuilderMode _mode = BuilderMode.Simple;
+    private bool _useSystemIso;
+    private string _wifiSsid = string.Empty;
+    private string _wifiPassword = string.Empty;
     private double? _progress;
     private string? _phase;
     private Recipe? _parsedRecipe;
@@ -75,6 +78,8 @@ public sealed class Wizard : INotifyPropertyChanged
     private string? _pairSas;
     private string? _pairStatus;
     private bool _pairDebug;
+    private PairingStage _pairingStage = PairingStage.Qr;
+    private bool _manualRecipeMode;
 
     /// <summary>True while the pairing relay session is live (cover is showing
     /// the QR + waiting for / talking to the phone).</summary>
@@ -119,6 +124,12 @@ public sealed class Wizard : INotifyPropertyChanged
     }
 
     public bool HasPairSas => !string.IsNullOrEmpty(_pairSas);
+    public PairingStage PairingStage { get => _pairingStage; private set { if (_pairingStage != value) { _pairingStage = value; FireBag(); } } }
+    public bool ManualRecipeMode { get => _manualRecipeMode; private set { if (_manualRecipeMode != value) { _manualRecipeMode = value; FireBag(); } } }
+    public bool ShowPairingQr => ShowPairingCover && PairingStage == PairingStage.Qr;
+    public bool ShowPairingConfirm => ShowPairingCover && PairingStage == PairingStage.Confirm;
+    public bool ShowAwaitingAuthorization => ShowPairingCover && PairingStage == PairingStage.AwaitingAuthorization;
+    public bool AdvancedAllowed => !ManualRecipeMode && Verified != null && Destination == ServerDestination.BurnToUSB;
 
     /// <summary>
     /// Start pairing: spawn `flagship-build pair --emit-events`, surface the QR /
@@ -138,9 +149,11 @@ public sealed class Wizard : INotifyPropertyChanged
         PairCode = null;
         PairSas = null;
         PairStatus = "Starting…";
+        PairingStage = PairingStage.Qr;
+        ManualRecipeMode = false;
         IsPairing = true;
 
-        var session = new PairSession(_pairDebug);
+        var session = new PairSession(debug: false);
         _pair = session;
         session.OnEvent += ev => OnUi(() => HandlePairEvent(ev));
         session.OnLog += line => OnUi(() => AppendLog(line.Stream, line.Text));
@@ -172,15 +185,18 @@ public sealed class Wizard : INotifyPropertyChanged
         switch (ev.Event)
         {
             case "ready":
+                PairingStage = PairingStage.Qr;
                 PairQr = ev.QrTerminal;
                 PairCode = ev.HumanCode;
                 PairStatus = "Scan the QR with the Flagship app, or type the code.";
                 break;
             case "phone-connected":
+                PairingStage = PairingStage.Confirm;
                 PairSas = ev.Sas;
                 PairStatus = "Phone connected — check the security code matches, then approve on your phone.";
                 break;
             case "paired":
+                PairingStage = PairingStage.AwaitingAuthorization;
                 PairStatus = "Paired — receiving your recipe…";
                 break;
             case "delivered":
@@ -254,7 +270,22 @@ public sealed class Wizard : INotifyPropertyChanged
     public bool ShowDestinationChooser
         => !ShowServerDetail && !IsPairing && Verified != null && _destination == null && !IsRunning && !IsFinished;
     public bool ShowHostHerePane => !ShowServerDetail && !IsPairing && _destination == ServerDestination.HostHere;
-    public bool ShowWizardPanes => !ShowServerDetail && !IsPairing && !ShowDestinationChooser && !ShowHostHerePane;
+    public bool ShowWizardPanes => !ShowServerDetail && !IsPairing && !ShowDestinationChooser && !ShowHostHerePane && (ManualRecipeMode || _destination == ServerDestination.BurnToUSB);
+    public void EnterRecipeFileMode()
+    {
+        if (IsPairing) CancelPairing();
+        ManualRecipeMode = true;
+        Mode = BuilderMode.Simple;
+        Destination = ServerDestination.BurnToUSB;
+        PairStatus = null;
+        FireBag();
+    }
+
+    public void ReturnToPairingCover()
+    {
+        ResetToNewServer();
+        StartPairing();
+    }
     /// <summary>The back-to-chooser link inside the USB pane.</summary>
     public bool ShowDestinationBackLink
         => ShowWizardPanes && Verified != null && _destination == ServerDestination.BurnToUSB && !IsRunning;
@@ -309,6 +340,8 @@ public sealed class Wizard : INotifyPropertyChanged
         _parsedRecipe = null;
         RecipeError = null;
         IsFinished = false;
+        ManualRecipeMode = false;
+        UseSystemIso = false;
         FireBag();
     }
 
@@ -542,6 +575,11 @@ public sealed class Wizard : INotifyPropertyChanged
     /// the SAME remaster+flash path Advanced uses. Advanced = remaster a stock
     /// user-supplied Debian/Ubuntu ISO via the Node CLI.
     /// </summary>
+    public bool UseSystemIso { get => _useSystemIso; set { if (_useSystemIso != value) { _useSystemIso = value; FireBag(); } } }
+    public string WifiSsid { get => _wifiSsid; set { if (_wifiSsid != value) { _wifiSsid = value; FireBag(); } } }
+    public string WifiPassword { get => _wifiPassword; set { if (_wifiPassword != value) { _wifiPassword = value; FireBag(); } } }
+    public bool IsSimpleMode => Mode == BuilderMode.Simple;
+    public bool IsAdvancedMode => Mode == BuilderMode.Advanced;
     public BuilderMode Mode
     {
         get => _mode;
@@ -590,7 +628,7 @@ public sealed class Wizard : INotifyPropertyChanged
 
     public bool CanBake =>
         HasRecipe
-        && (!Mode.RequiresUserISO() || HasIso)
+        && (!EffectiveRequiresUserIso || HasIso)
         && SelectedDisk != null && !IsRunning && !IsFinished;
 
     public bool ShowReadiness => !IsFinished && !IsRunning;
@@ -601,7 +639,7 @@ public sealed class Wizard : INotifyPropertyChanged
         {
             var missing = new System.Collections.Generic.List<string>();
             if (!HasRecipe) missing.Add("recipe");
-            if (Mode.RequiresUserISO() && !HasIso) missing.Add("ISO");
+            if (EffectiveRequiresUserIso && !HasIso) missing.Add("ISO");
             if (SelectedDisk == null) missing.Add("USB drive");
             if (missing.Count == 0)
             {
@@ -620,6 +658,8 @@ public sealed class Wizard : INotifyPropertyChanged
     /// <summary>The ISO row shows only in Advanced mode (Simple fetches the base
     /// from the server manifest, so it hides the user-ISO row).</summary>
     public bool ShowIsoRow => Mode.RequiresUserISO();
+    public bool IsoPickerEnabled => ShowIsoRow && !UseSystemIso;
+    private bool EffectiveRequiresUserIso => Mode.RequiresUserISO() && !UseSystemIso;
 
     // ---- progress ----
 
@@ -727,6 +767,13 @@ public sealed class Wizard : INotifyPropertyChanged
 
     // ---- mutation API (called from MainWindow) ----
 
+    public void AcceptRecipeText(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) { RecipeError = "Clipboard does not contain a recipe."; return; }
+        var path = Path.Combine(Path.GetTempPath(), $"flagship-recipe-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, json);
+        AcceptRecipeFile(path);
+    }
     public void AcceptRecipeFile(string path)
     {
         RecipeError = null;
@@ -836,7 +883,7 @@ public sealed class Wizard : INotifyPropertyChanged
     public async Task RunBakeAsync()
     {
         if (!CanBake) return;
-        if (Mode == BuilderMode.Simple)
+        if (Mode == BuilderMode.Simple || UseSystemIso)
         {
             await RunSimpleBakeAsync();
             return;
@@ -847,7 +894,7 @@ public sealed class Wizard : INotifyPropertyChanged
         DidRemasterForTest = true;
         Phase = "remaster";
         await RunCliAsync(
-            entry => CliArgs.Write(entry, recipe, iso, device: disk.DevicePath, yes: true, keepRecipe: false),
+            entry => CliArgs.Write(entry, recipe, iso, device: disk.DevicePath, yes: true, keepRecipe: false, WifiSsid, WifiPassword),
             onSuccess: _ => { IsFinished = true; });
         Phase = null;
     }
@@ -900,7 +947,7 @@ public sealed class Wizard : INotifyPropertyChanged
         FireBag();
         var recipe = _recipePath!;
         await RunCliCoreAsync(
-            entry => CliArgs.Write(entry, recipe, baseIso, device: disk.DevicePath, yes: true, keepRecipe: false),
+            entry => CliArgs.Write(entry, recipe, baseIso, device: disk.DevicePath, yes: true, keepRecipe: false, WifiSsid, WifiPassword),
             onSuccess: _ => { IsFinished = true; });
         FinishSimple();
     }
@@ -1058,7 +1105,8 @@ public sealed class Wizard : INotifyPropertyChanged
         nameof(DiskStatusGlyph), nameof(DiskStatusBrush), nameof(DiskIconBg),
         nameof(DiskRowTag),
         nameof(DoneServerDomain), nameof(DoneOutputPath),
-        nameof(Mode), nameof(Progress), nameof(Phase),
+        nameof(Mode), nameof(IsSimpleMode), nameof(IsAdvancedMode), nameof(UseSystemIso), nameof(IsoPickerEnabled), nameof(WifiSsid), nameof(WifiPassword),
+        nameof(Progress), nameof(Phase),
         nameof(BaseDownloadStarted), nameof(BaseDownloadUrl),
         nameof(ShowIsoRow),
         nameof(ShowProgress), nameof(ProgressIndeterminate), nameof(ProgressValue),
@@ -1070,6 +1118,8 @@ public sealed class Wizard : INotifyPropertyChanged
         nameof(ShowHostHerePane), nameof(ShowWizardPanes), nameof(ShowDestinationBackLink),
         nameof(IsPairing), nameof(ShowPairingCover), nameof(PairQr), nameof(PairCode),
         nameof(PairSas), nameof(PairStatus), nameof(PairDebug), nameof(HasPairSas),
+        nameof(PairingStage), nameof(ManualRecipeMode), nameof(ShowPairingQr),
+        nameof(ShowPairingConfirm), nameof(ShowAwaitingAuthorization), nameof(AdvancedAllowed),
         nameof(HasHostedServers), nameof(HostHereDisabledReason), nameof(HostHereEnabled),
         nameof(HostHereSpecSummary), nameof(HardwareBadgeLabel), nameof(HostedVmBadgeLabel),
     };

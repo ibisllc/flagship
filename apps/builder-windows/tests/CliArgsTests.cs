@@ -84,6 +84,22 @@ public class CliArgsTests
     }
 
     [Fact]
+    public void Write_WithWifi_AppendsExplicitFlags()
+    {
+        var argv = CliArgs.Write("cli.js", "recipe.json", "base.iso", null,
+            yes: true, keepRecipe: false, wifiSsid: " Studio WiFi ", wifiPassword: "secret pass");
+        Assert.Equal(new[] { "--wifi-ssid", "Studio WiFi", "--wifi-password", "secret pass" }, argv[^4..]);
+    }
+
+    [Fact]
+    public void Write_WithoutSsid_DoesNotLeakPassword()
+    {
+        var argv = CliArgs.Write("cli.js", "recipe.json", "base.iso", null,
+            yes: false, keepRecipe: false, wifiSsid: " ", wifiPassword: "secret");
+        Assert.DoesNotContain("--wifi-ssid", argv);
+        Assert.DoesNotContain("secret", argv);
+    }
+    [Fact]
     public void UserData_StandardForm()
     {
         var argv = CliArgs.UserData(@"C:\entry\cli.ts",
