@@ -16,6 +16,7 @@ import { formatDuration as formatAge, formatDays } from "../lib/dateFormat.js";
 import { toast } from "../lib/toast.js";
 import { releaseServerName } from "../lib/releaseServer.js";
 import { getActiveProfile } from "../lib/profiles.js";
+import { demoLifecycle } from "../lib/usersCheck.js";
 import {
   deviceCapabilityChipText,
   applyScopeGateToButton,
@@ -110,6 +111,33 @@ export async function fetchPodInventory(username) {
     /* offline / cors — fall back to bare cards, no pending */
   }
   return out;
+}
+
+/**
+ * Resolve the Home data source for the active account. Demo login does not
+ * create a paired-session id: its server capability is the `demoServer` block
+ * persisted on the profile by `activateDemoAccount`. Treat that block as one
+ * registered server so demo accounts reach the normal server-card renderer
+ * instead of falling into the unpaired empty state.
+ */
+export function homeServerSource(sessionId, profile, now = Date.now()) {
+  const block = profile?.demoServer;
+  const fqdn = typeof block?.fqdn === "string" ? block.fqdn.trim().toLowerCase() : "";
+  if (fqdn) {
+    const online = demoLifecycle(block) === "up";
+    return {
+      kind: "demo",
+      server: { serverId: fqdn, revoked: null },
+      fallbackPod: {
+        serverDomain: fqdn,
+        ...(online
+          ? { liveness: "live", lastReported: now }
+          : { registeredAt: now }),
+      },
+    };
+  }
+  if (sessionId) return { kind: "paired", sessionId };
+  return { kind: "empty" };
 }
 
 /**
@@ -933,10 +961,11 @@ export async function renderHome() {
   renderRecoveryBanner();
 
   const sid = recoveryStoreGet("sessionId");
+  const serverSource = homeServerSource(sid, getActiveProfile());
   const sessionStatusEl = $("session-status");
   const list = $("servers-list");
   list.innerHTML = "";
-  if (!sid) {
+  if (serverSource.kind === "empty") {
     sessionStatusEl.textContent = "Unpaired";
     sessionStatusEl.classList.remove("ok");
     // #36 — real empty state, not a "no paired session" stub. Phase 2:
@@ -949,10 +978,18 @@ export async function renderHome() {
     return;
   }
   try {
-    const r = await fetch(`/api/me/servers?sessionId=${encodeURIComponent(sid)}`);
-    if (!r.ok) throw new Error(`status ${r.status}`);
-    const body = await r.json();
-    sessionStatusEl.textContent = "Paired";
+    let body;
+    if (serverSource.kind === "demo") {
+      body = { servers: [serverSource.server] };
+      sessionStatusEl.textContent = "Demo";
+    } else {
+      const r = await fetch(
+        `/api/me/servers?sessionId=${encodeURIComponent(serverSource.sessionId)}`,
+      );
+      if (!r.ok) throw new Error(`status ${r.status}`);
+      body = await r.json();
+      sessionStatusEl.textContent = "Paired";
+    }
     sessionStatusEl.classList.add("ok");
     // #31 / #56 — ONE unauthenticated fan-out to /api/users/:u/pods on .com
     // returns BOTH the registered pods (liveness/cert enrichment) AND the
@@ -963,6 +1000,12 @@ export async function renderHome() {
     let { statusByDomain: podStatusByDomain, pending } = await fetchPodInventory(
       session.username,
     );
+    if (
+      serverSource.kind === "demo" &&
+      !podStatusByDomain.has(serverSource.server.serverId)
+    ) {
+      podStatusByDomain.set(serverSource.server.serverId, serverSource.fallbackPod);
+    }
     // Direct lead-read (Phase 6 follow-on): if any box is reachable, fetch
     // /api/leads directly for a fresher snapshot than the ~5-min relay.
     // Best-effort: any failure leaves podStatusByDomain untouched (fall back
