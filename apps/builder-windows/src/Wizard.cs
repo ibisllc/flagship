@@ -201,7 +201,11 @@ public sealed class Wizard : INotifyPropertyChanged
                 break;
             case "paired":
                 PairingStage = PairingStage.AwaitingAuthorization;
-                PairStatus = "Paired — receiving your recipe…";
+                PairStatus = "Paired. Waiting for your phone to send the approved recipe…";
+                break;
+            case "reconnecting":
+                PairingStage = PairingStage.AwaitingAuthorization;
+                PairStatus = "Your phone disconnected before sending the recipe. Reopen it to retry, or cancel pairing.";
                 break;
             case "delivered":
                 PairStatus = $"Recipe received for {ev.ServerDomain}.";

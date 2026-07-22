@@ -169,6 +169,7 @@ public sealed class PairSession : IDisposable
                             helloSent = false;
                             if (aeadKey != null) CryptographicOperations.ZeroMemory(aeadKey);
                             aeadKey = null;
+                            OnEvent?.Invoke(new PairEvent { Event = "reconnecting" });
                         }
                         break;
                     case "expired":
@@ -187,6 +188,9 @@ public sealed class PairSession : IDisposable
                         if (completed.Done)
                         {
                             recipeReceived = true;
+                            // SendAsync only queues the receipt locally. Keep the socket alive
+                            // briefly so the relay can forward it before we close the session.
+                            await Task.Delay(TimeSpan.FromSeconds(10), _cts.Token);
                             pingCts.Cancel();
                             try { await pingTask; } catch (OperationCanceledException) { }
                             return;
