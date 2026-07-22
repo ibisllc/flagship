@@ -204,6 +204,11 @@ export async function handleCreateDemoAccount(
     installerGitRef: blob.installerGitRef,
     demoUserIrkPrivHex: bytesToHex(irk.privateKey),
     ownerAidPubHex: bytesToHex(aid.publicKey),
+    // Admin-pinned demo account: the box must present an admin-root-signed
+    // RootEntitlement (the hub verifies pinned accounts against adminRootPub
+    // only) AND pin adminRootPub in its config so its own self-check accepts it.
+    adminRootPubHex: bytesToHex(admin.publicKey),
+    adminRootPrivHex: bytesToHex(admin.privateKey),
   });
   const providerName = `flagship-demo-${username}-${stableHex(username, idempotencyKey, "provider", 4)}`;
   try {

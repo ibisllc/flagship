@@ -69,6 +69,50 @@ describe("buildCloudConfigUserData", () => {
     expect(bootstrap).not.toContain("ownerAidPubHex");
   });
 
+  it("admin-pinned — pins adminRootPubHex into config.json AND ships the admin priv for minting", () => {
+    const adminPub = "ab".repeat(32);
+    const adminPriv = "12".repeat(32);
+    const yaml = buildCloudConfigUserData({
+      installBlobJson: "{}",
+      installerGitRef: "main",
+      demoUserIrkPrivHex: DEMO_IRK_PRIV,
+      adminRootPubHex: adminPub,
+      adminRootPrivHex: adminPriv,
+    });
+    const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
+    const bootstrap = Buffer.from(all[1]![1]!, "base64").toString("utf8");
+    // config.json carries adminRootPubHex so the box's local self-check accepts
+    // an admin-signed entitlement.
+    const m = bootstrap.match(/\{"serverId":[^\n]*"adminRootPubHex":"([0-9a-f]{64})"\}/);
+    expect(m).not.toBeNull();
+    expect(m![1]).toBe(adminPub);
+    // The admin priv is shipped to its own tmpfs file and the mint step prefers it.
+    expect(yaml).toContain("/run/flagship-demo-admin-root.hex");
+    expect(bootstrap).toContain("ADMIN_ROOT_PRIV_FILE=/run/flagship-demo-admin-root.hex");
+    expect(bootstrap).toContain("minting entitlement with the admin master root");
+  });
+
+  it("un-pinned — omits adminRootPubHex + the admin-root file (legacy IRK mint)", () => {
+    const yaml = buildCloudConfigUserData({
+      installBlobJson: "{}",
+      installerGitRef: "main",
+      demoUserIrkPrivHex: DEMO_IRK_PRIV,
+    });
+    expect(yaml).not.toContain("adminRootPubHex");
+    expect(yaml).not.toContain("/run/flagship-demo-admin-root.hex");
+  });
+
+  it("rejects adminRootPub without adminRootPriv (all-or-nothing)", () => {
+    expect(() =>
+      buildCloudConfigUserData({
+        installBlobJson: "{}",
+        installerGitRef: "main",
+        demoUserIrkPrivHex: DEMO_IRK_PRIV,
+        adminRootPubHex: "ab".repeat(32),
+      }),
+    ).toThrow(/adminRootPubHex and adminRootPrivHex must be provided together/);
+  });
+
   it("rejects an ownerAidPubHex that is not 32-byte hex", () => {
     expect(() =>
       buildCloudConfigUserData({

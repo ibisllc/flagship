@@ -51,6 +51,23 @@ export function buildCloudConfigUserData(args: {
    * config omits it and the box falls back to owner-IRK verification.
    */
   ownerAidPubHex?: string;
+  /**
+   * The account's ADMIN MASTER ROOT keypair (hex), when the demo account is
+   * admin-pinned (`.com` stores `adminRootPubHex`). Both halves are required
+   * TOGETHER and change how the box authorizes itself:
+   *   - the PUB is pinned into the box config (`adminRootPubHex`) so the daemon's
+   *     local self-check (`authorizeSensitiveOrder`) accepts an admin-signed
+   *     RootEntitlement, and
+   *   - the PRIV signs the minted RootEntitlement instead of the IRK, because the
+   *     tunnel hub verifies an admin-pinned account's RootEntitlement against the
+   *     admin root ONLY (no IRK fallback — `apps/web/src/tunnel/tunnelHub.ts`).
+   * WITHOUT this the box self-mints an IRK-signed entitlement that the hub
+   * rejects at HELLO (`rootEntitlement signature failed verification`) and never
+   * serves. Deterministic-from-KEK for demo (`deriveDemoAdminRoot`). OPTIONAL:
+   * absent ⇒ legacy IRK-signed path (correct only for un-pinned accounts).
+   */
+  adminRootPubHex?: string;
+  adminRootPrivHex?: string;
 }): string {
   const blobB64 = b64Utf8(args.installBlobJson);
   if (!/^[0-9a-f]{64}$/i.test(args.demoUserIrkPrivHex)) {
@@ -59,10 +76,25 @@ export function buildCloudConfigUserData(args: {
   if (args.ownerAidPubHex !== undefined && !/^[0-9a-f]{64}$/i.test(args.ownerAidPubHex)) {
     throw new Error("buildCloudConfigUserData: ownerAidPubHex must be 32-byte hex");
   }
+  // admin root pub+priv are all-or-nothing: pinning the pub without the priv
+  // (or vice-versa) would leave the box unable to satisfy both the local
+  // self-check AND the hub, i.e. the exact bug this arg fixes.
+  if ((args.adminRootPubHex === undefined) !== (args.adminRootPrivHex === undefined)) {
+    throw new Error("buildCloudConfigUserData: adminRootPubHex and adminRootPrivHex must be provided together");
+  }
+  if (args.adminRootPubHex !== undefined && !/^[0-9a-f]{64}$/i.test(args.adminRootPubHex)) {
+    throw new Error("buildCloudConfigUserData: adminRootPubHex must be 32-byte hex");
+  }
+  if (args.adminRootPrivHex !== undefined && !/^[0-9a-f]{64}$/i.test(args.adminRootPrivHex)) {
+    throw new Error("buildCloudConfigUserData: adminRootPrivHex must be 32-byte hex");
+  }
   // Pinned at TEMPLATE time (deterministic-from-KEK, like the git-ref) — it is
   // NOT in the install blob the bootstrap reads on the VPS.
   const ownerAidConfigField = args.ownerAidPubHex
     ? `,"ownerAidPubHex":"${args.ownerAidPubHex}"`
+    : "";
+  const adminRootConfigField = args.adminRootPubHex
+    ? `,"adminRootPubHex":"${args.adminRootPubHex}"`
     : "";
   // Validate git-ref shape inline (defense in depth — the operator
   // could only have set this via the Worker's wrangler.toml or
@@ -251,11 +283,24 @@ report_phase downloading
 #     (entitlement bundle not found) and never serves. The demo IRK priv
 #     was written by cloud-init write_files at /run/flagship-demo-irk.hex;
 #     we shred it right after.
+#     On an ADMIN-PINNED account the RootEntitlement MUST be signed by the admin
+#     master root, not the IRK — the hub verifies a pinned account's root order
+#     against adminRootPub only. When the admin priv was shipped we sign with it;
+#     otherwise (un-pinned account) we fall back to the IRK. Both files are
+#     shredded after minting.
 DEMO_IRK_PRIV_FILE=/run/flagship-demo-irk.hex
-if [ -s "$DEMO_IRK_PRIV_FILE" ]; then
-    DEMO_IRK_PRIV_HEX="$(tr -d '\\n' < "$DEMO_IRK_PRIV_FILE")"
+ADMIN_ROOT_PRIV_FILE=/run/flagship-demo-admin-root.hex
+MINT_PRIV_HEX=""
+if [ -s "$ADMIN_ROOT_PRIV_FILE" ]; then
+    MINT_PRIV_HEX="$(tr -d '\\n' < "$ADMIN_ROOT_PRIV_FILE")"
+    echo "[flagship-bootstrap] minting entitlement with the admin master root (pinned account)"
+elif [ -s "$DEMO_IRK_PRIV_FILE" ]; then
+    MINT_PRIV_HEX="$(tr -d '\\n' < "$DEMO_IRK_PRIV_FILE")"
+    echo "[flagship-bootstrap] minting entitlement with the owner IRK (un-pinned account)"
+fi
+if [ -n "$MINT_PRIV_HEX" ]; then
     npx tsx scripts/install-helper.ts mint-entitlements \\
-        --irk-priv "$DEMO_IRK_PRIV_HEX" \\
+        --irk-priv "$MINT_PRIV_HEX" \\
         --pod-pub "$SERVER_IDENTITY_PUB_HEX" \\
         --username "$USERNAME" \\
         --pod-canonical "$SERVER_DOMAIN" \\
@@ -263,9 +308,10 @@ if [ -s "$DEMO_IRK_PRIV_FILE" ]; then
         || echo "[flagship-bootstrap] WARNING: mint-entitlements failed; daemon will not serve"
     chmod 600 /var/flagship/entitlements.json 2>/dev/null || true
     shred -u "$DEMO_IRK_PRIV_FILE" 2>/dev/null || rm -f "$DEMO_IRK_PRIV_FILE"
-    echo "[flagship-bootstrap] entitlement bundle minted; demo IRK priv shredded"
+    shred -u "$ADMIN_ROOT_PRIV_FILE" 2>/dev/null || rm -f "$ADMIN_ROOT_PRIV_FILE"
+    echo "[flagship-bootstrap] entitlement bundle minted; signing privs shredded"
 else
-    echo "[flagship-bootstrap] WARNING: demo IRK priv missing at $DEMO_IRK_PRIV_FILE; cannot mint entitlements"
+    echo "[flagship-bootstrap] WARNING: no signing priv at $ADMIN_ROOT_PRIV_FILE or $DEMO_IRK_PRIV_FILE; cannot mint entitlements"
 fi
 
 # 7. Seal LUKS key for the phone (sealForRecipient — Ed25519→X25519
@@ -297,7 +343,7 @@ mkdir -p /etc/flagship
 # path (that's irkPublicKey). A malformed config fails closed (daemon falls back
 # to no-cfg), so this never blocks the cert/serving bring-up.
 cat > /etc/flagship/config.json <<CFGEOF
-{"serverId":"$SERVER_DOMAIN","userId":"$USERNAME","bakPublicKey":"$PHONE_DELEGATED_PUBKEY","irkPublicKey":"$USER_IRK_PUB"${ownerAidConfigField}}
+{"serverId":"$SERVER_DOMAIN","userId":"$USERNAME","bakPublicKey":"$PHONE_DELEGATED_PUBKEY","irkPublicKey":"$USER_IRK_PUB"${ownerAidConfigField}${adminRootConfigField}}
 CFGEOF
 chmod 600 /etc/flagship/config.json
 # Sealing key (SWK). The daemon constructs the ServicePlatform — i.e. the whole
@@ -462,6 +508,12 @@ echo "[flagship-bootstrap] done"
 `;
   const bootstrapB64 = b64Utf8(bootstrap);
   const irkPrivB64 = b64Utf8(args.demoUserIrkPrivHex + "\n");
+  // On an admin-pinned account, also ship the admin master root priv to a
+  // second tmpfs file the mint step prefers; it never persists to disk (0600,
+  // /run, shredded after minting).
+  const adminRootWriteFile = args.adminRootPrivHex
+    ? `\n  - path: /run/flagship-demo-admin-root.hex\n    permissions: '0600'\n    owner: root:root\n    encoding: b64\n    content: ${b64Utf8(args.adminRootPrivHex + "\n")}`
+    : "";
   // cloud-config YAML. We base64-encode each file so newlines + quotes
   // pass through unmolested. The demo IRK priv lands at
   // /run/flagship-demo-irk.hex (0600, tmpfs) so the bootstrap can mint
@@ -482,7 +534,7 @@ write_files:
     permissions: '0600'
     owner: root:root
     encoding: b64
-    content: ${irkPrivB64}
+    content: ${irkPrivB64}${adminRootWriteFile}
 runcmd:
   - [ /bin/bash, /usr/local/sbin/flagship-bootstrap.sh ]
 `;
