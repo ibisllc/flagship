@@ -9,7 +9,13 @@
 // Sensitive material (UMK seed, IRK private key) is held only in
 // `lib/state.js`'s closure — never on `window`, never logged.
 
-import { hasWrappedUmk } from "./keystore.js";
+import {
+  bootstrapNewIdentity,
+  hasWrappedUmk,
+  resetDevice,
+  setActiveKeystoreProfile,
+  unlockUmk,
+} from "./keystore.js";
 import { setSubtitle, show, $, registerView, setViewTab, isDebug, currentViewId } from "./lib/router.js";
 import { toast } from "./lib/toast.js";
 import { humanError } from "./lib/humanError.js";
@@ -56,7 +62,10 @@ import {
   downloadIcon,
 } from "./lib/icons.js";
 import { profileCard } from "./lib/uikit.js";
-import { getSession } from "./lib/state.js";
+import { getSession, unlockSession } from "./lib/state.js";
+import { dispatchInitialView } from "./lib/deepLink.js";
+import { resolveAccount, resumeDemoAccount } from "./lib/accountResolve.js";
+import { addProfile, getActiveProfile } from "./lib/profiles.js";
 import { initBootstrapView } from "./views/bootstrap.js";
 import { initUnlockView } from "./views/unlock.js";
 import { initPinViews } from "./views/pinLock.js";
@@ -110,6 +119,7 @@ import { joinLinkFromLocation } from "./lib/crossDevicePairing.js";
 import {
   migrateLegacy as migrateProfilesStore,
   cleanupLegacyKeys as cleanupProfilesLegacyKeys,
+  set as profileSet,
 } from "./lib/profilesStore.js";
 import {
   companionPayloadFromLocation,
@@ -720,6 +730,34 @@ async function boot() {
       show("view-home");
       await enterHome();
       return;
+    }
+  }
+
+  // Demo usernames are public, passwordless capabilities. Their local key is
+  // wrapped only to reuse the ordinary keystore shape, so a reload must never
+  // strand the tester on the real-account passphrase screen. This also repairs
+  // v19-and-earlier demo rows whose random wrap passphrase was discarded.
+  const demoProfile = getActiveProfile();
+  if (demoProfile?.demoServer) {
+    try {
+      const resumed = await resumeDemoAccount(demoProfile, {
+        unlockUmk,
+        unlockSession,
+        resolveAccount,
+        resetDevice,
+        bootstrapNewIdentity,
+        setActiveKeystoreProfile,
+        addProfile,
+        dispatchInitialView,
+        setUsername: (username) => profileSet("username", username),
+      });
+      if (resumed.resumed) {
+        if (resumed.repaired) toast("Demo session refreshed", "ok");
+        return;
+      }
+    } catch (e) {
+      console.error("demo resume failed", e);
+      toast("Couldn't reopen the demo session. Check your connection and reload.", "err");
     }
   }
 

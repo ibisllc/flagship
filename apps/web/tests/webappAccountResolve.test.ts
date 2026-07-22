@@ -261,8 +261,8 @@ describe("webapp activateDemoAccount — demo-as-recovery activation", () => {
     expect(deps.bootstrapNewIdentity).not.toHaveBeenCalled();
   });
 
-  it("generates a random local passphrase by default (not typed/shown)", async () => {
-    const { activateDemoAccount } = await loadLib();
+  it("uses a stable demo-only local wrap so reload never prompts for a passphrase", async () => {
+    const { activateDemoAccount, demoLocalPassphrase } = await loadLib();
     const seen: string[] = [];
     const deps = {
       bootstrapNewIdentity: vi.fn(async (p: string) => { seen.push(p); return new Uint8Array(32); }),
@@ -270,9 +270,56 @@ describe("webapp activateDemoAccount — demo-as-recovery activation", () => {
     };
     await activateDemoAccount(demoResolution("demo-c1"), deps as any);
     await activateDemoAccount(demoResolution("demo-c2"), deps as any);
-    // Hex, long, and distinct across activations (random).
-    expect(seen[0]).toMatch(/^[0-9a-f]+$/);
-    expect(seen[0]!.length).toBeGreaterThanOrEqual(32);
+    expect(seen[0]).toBe(demoLocalPassphrase("demo-c1"));
+    expect(seen[1]).toBe(demoLocalPassphrase("demo-c2"));
     expect(seen[0]).not.toBe(seen[1]);
+  });
+
+  it("resumes a demo directly under its stable local wrap", async () => {
+    const { resumeDemoAccount } = await loadLib();
+    const seed = new Uint8Array(32).fill(9);
+    const deps = {
+      unlockUmk: vi.fn(async () => seed),
+      unlockSession: vi.fn(),
+      dispatchInitialView: vi.fn(),
+      resolveAccount: vi.fn(),
+      resetDevice: vi.fn(),
+    };
+    const out = await resumeDemoAccount({
+      cloudName: "openai-build",
+      demoServer: { fqdn: "home.openai-build.flagship.services" },
+    }, deps as any);
+    expect(out).toEqual({ resumed: true, repaired: false });
+    expect(deps.unlockSession).toHaveBeenCalledWith(seed, "openai-build");
+    expect(deps.dispatchInitialView).toHaveBeenCalledTimes(1);
+    expect(deps.resolveAccount).not.toHaveBeenCalled();
+    expect(deps.resetDevice).not.toHaveBeenCalled();
+  });
+
+  it("repairs a legacy demo whose random local wrap was discarded", async () => {
+    const { resumeDemoAccount, demoLocalPassphrase } = await loadLib();
+    const seed = new Uint8Array(32).fill(5);
+    const deps = {
+      unlockUmk: vi.fn(async () => { throw new Error("bad passphrase"); }),
+      unlockSession: vi.fn(),
+      dispatchInitialView: vi.fn(),
+      resolveAccount: vi.fn(async () => demoResolution("openai-build")),
+      resetDevice: vi.fn(),
+      bootstrapNewIdentity: vi.fn(async () => seed),
+      setActiveKeystoreProfile: vi.fn(),
+      addProfile: vi.fn(),
+      setUsername: vi.fn(),
+    };
+    const out = await resumeDemoAccount({
+      cloudName: "openai-build",
+      demoServer: { fqdn: "home.openai-build.flagship.services" },
+    }, deps as any);
+    expect(out).toEqual({ resumed: true, repaired: true });
+    expect(deps.resetDevice).toHaveBeenCalledTimes(1);
+    expect(deps.bootstrapNewIdentity).toHaveBeenCalledWith(
+      demoLocalPassphrase("openai-build"),
+    );
+    expect(deps.unlockSession).toHaveBeenCalledWith(seed, "openai-build");
+    expect(deps.dispatchInitialView).toHaveBeenCalledTimes(1);
   });
 });

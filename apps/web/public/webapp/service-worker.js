@@ -42,7 +42,9 @@
 //       session id.
 //  v19: refresh Home + usersCheck so opening a demo server mints the browser's
 //       paired session instead of falling through to the unpaired detail error.
-const SHELL_VERSION = "v19";
+//  v20: demo profiles auto-unlock on reload and repair the old discarded local
+//       wrap passphrase instead of showing an impossible Unlock prompt.
+const SHELL_VERSION = "v20";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

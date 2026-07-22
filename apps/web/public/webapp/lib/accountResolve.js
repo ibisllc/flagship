@@ -134,18 +134,15 @@ export function classifyResolution(resolution) {
   return "recover";
 }
 
-/** Random URL-safe passphrase. A demo device's local wrap passphrase is
- *  never typed or shown — demo crypto is a no-op and the username is the
- *  capability — so we generate one purely to satisfy the keystore's
- *  local at-rest wrap. It stays in the closure of the activation call
- *  and is discarded; the seed is what `unlockSession` keeps.
+/** Stable local wrap passphrase for a demo profile. A demo username is already
+ *  the complete public capability, so this is deliberately NOT a secret; it
+ *  only lets the ordinary keystore format survive a reload without asking the
+ *  tester for a passphrase that was never shown to them.
+ *  @param {string} username
  *  @returns {string}
  */
-function randomLocalPassphrase() {
-  const bytes = (globalThis.crypto || crypto).getRandomValues(new Uint8Array(24));
-  let s = "";
-  for (const b of bytes) s += b.toString(16).padStart(2, "0");
-  return s;
+export function demoLocalPassphrase(username) {
+  return `flagship-demo-local-wrap-v1:${String(username).trim().toLowerCase()}`;
 }
 
 /** Activate a demo account as a freshly-attached device.
@@ -191,8 +188,8 @@ export async function activateDemoAccount(resolution, deps) {
   if (typeof deps.setActiveKeystoreProfile === "function") {
     deps.setActiveKeystoreProfile(username);
   }
-  const makePassphrase = deps.makePassphrase || randomLocalPassphrase;
-  const seed = await deps.bootstrapNewIdentity(makePassphrase());
+  const makePassphrase = deps.makePassphrase || demoLocalPassphrase;
+  const seed = await deps.bootstrapNewIdentity(makePassphrase(username));
 
   if (typeof deps.setUsername === "function") deps.setUsername(username);
 
@@ -215,4 +212,55 @@ export async function activateDemoAccount(resolution, deps) {
   }
 
   return { username, seed };
+}
+
+/** Resume a previously joined demo after a page reload.
+ *
+ * v19 and earlier wrapped demo keys under a random passphrase that was then
+ * discarded, so those profiles can never pass the generic Unlock screen. If
+ * the stable demo passphrase cannot open the row, re-resolve the public demo
+ * capability, delete ONLY that demo profile's unusable local key, and attach a
+ * fresh device using the reload-safe wrap. Real profiles never enter this path.
+ *
+ * @param {object|null|undefined} profile
+ * @param {object} deps
+ * @returns {Promise<{resumed: boolean, repaired?: boolean}>}
+ */
+export async function resumeDemoAccount(profile, deps) {
+  if (!profile?.demoServer || typeof profile.cloudName !== "string") {
+    return { resumed: false };
+  }
+  const username = profile.cloudName.trim().toLowerCase();
+  if (!username) return { resumed: false };
+  const passphrase = demoLocalPassphrase(username);
+
+  let seed = null;
+  try {
+    seed = await deps.unlockUmk(passphrase);
+  } catch {
+    // Expected once for profiles created by the old random-and-discard flow.
+  }
+  if (seed) {
+    await deps.unlockSession(seed, username);
+    if (typeof deps.dispatchInitialView === "function") {
+      await deps.dispatchInitialView();
+    }
+    return { resumed: true, repaired: false };
+  }
+
+  const resolution = await deps.resolveAccount(username);
+  if (classifyResolution(resolution) !== "demo") {
+    throw new Error("saved demo profile is no longer available");
+  }
+  await deps.resetDevice();
+  await activateDemoAccount(resolution, {
+    bootstrapNewIdentity: deps.bootstrapNewIdentity,
+    setActiveKeystoreProfile: deps.setActiveKeystoreProfile,
+    unlockSession: deps.unlockSession,
+    addProfile: deps.addProfile,
+    dispatchInitialView: deps.dispatchInitialView,
+    setUsername: deps.setUsername,
+    makePassphrase: () => passphrase,
+  });
+  return { resumed: true, repaired: true };
 }
