@@ -149,6 +149,12 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-22 (voi.ci route repair) — the production short-link host is bound
+to `flagship-com` through source-controlled Worker routes for both the apex and
+`www`.** The redirect handler had shipped without its cross-zone routes, so
+Cloudflare fell through to an unreachable origin and returned 522; keeping the
+routes in `wrangler.toml` prevents later deploys from reconciling them away.
+
 **2026-07-21 (demo app deployment + native pairing) — demo users can now build
 apps from their sandboxed app-clone directory, and passwordless demo sessions
 pair and restore correctly across web, iOS, and Android.** The Docker guard

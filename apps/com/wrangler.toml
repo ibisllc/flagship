@@ -28,6 +28,11 @@ routes = [
   { pattern = "flagshipserver.com/*",          zone_name = "flagshipserver.com" },
   { pattern = "www.flagshipserver.com/*",      zone_name = "flagshipserver.com" },
   { pattern = "web.flagshipserver.com/*",      zone_name = "flagshipserver.com" },
+  # voi.ci is a path redirector handled by this Worker. Keep both routes in
+  # source control so a later deploy cannot reconcile away a dashboard-only
+  # route and expose the zone's unreachable fallback origin (Cloudflare 522).
+  { pattern = "voi.ci/*",                      zone_name = "voi.ci" },
+  { pattern = "www.voi.ci/*",                  zone_name = "voi.ci" },
   # Dedicated origin for WebAuthn-PRF recovery (C3/B1 fix). Putting the
   # passkey behind its own sub-origin gives WebAuthn rpId =
   # "recovery.flagshipserver.com" — different from the apex — so any XSS
