@@ -149,6 +149,9 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-21 (patent notice) — public site footers now carry a consistent
+“Patent Pending” notice, including standalone fallback and sign-in surfaces.**
+
 **2026-07-21 (honest pre-release download surfaces) — the public site now
 leads app promotions with the live web app and presents iOS/Android as compact,
 gray coming-soon options.** The Studio chooser links only the published Mac DMG;

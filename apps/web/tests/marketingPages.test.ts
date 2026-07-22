@@ -105,6 +105,35 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(notFound.body).not.toContain("Get the mobile app");
   });
 
+  it("shows the patent-pending notice across public site footers", async () => {
+    const app = buildServer();
+    const paths = [
+      "/",
+      "/404.html",
+      "/abuse.html",
+      "/blog/",
+      "/coming-soon.html",
+      "/deck/",
+      "/docs/",
+      "/faq.html",
+      "/help.html",
+      "/login.html",
+      "/open-source.html",
+      "/privacy.html",
+      "/security.html",
+      "/security/disclosure.html",
+      "/security/report.html",
+      "/status/",
+      "/terms.html",
+    ];
+
+    for (const path of paths) {
+      const r = await app.inject({ method: "GET", url: path });
+      expect(r.statusCode, path).toBe(200);
+      expect(r.body, path).toContain("Patent Pending");
+    }
+  });
+
   it("the landing page no longer advertises /build/ or /pricing", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/" });
