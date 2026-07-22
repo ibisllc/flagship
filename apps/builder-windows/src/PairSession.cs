@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 
 namespace Flagship.Builder;
 
+public enum PairingStage { Qr, Confirm, AwaitingAuthorization }
+
 /// <summary>
 /// One phone-pairing milestone, parsed from a `FLAGSHIP_PAIR <json>` line the
 /// `flagship-build pair --emit-events` subprocess prints. Mirrors the shared

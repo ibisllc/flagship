@@ -164,6 +164,15 @@ over action. The server response itself never signs out, revokes, or wipes the
 local identity; transport/server failures likewise preserve offline access.
 This requires the next TestFlight build before devices receive it.
 
+**2026-07-22 (Windows Studio Mac-parity flow) — Windows now opens on a live
+phone-pairing cover and preserves the authorization boundary.** WPF has separate
+QR, SAS-confirm, and awaiting-authorization panes; manual recipe entry is the
+Simple-only escape hatch; the USB pane adds clipboard recipe input, an explicit
+Simple/Advanced selector, optional system ISO and Wi-Fi controls; and the empty
+hosted-server sidebar matches the centered Mac treatment. Wi-Fi is passed only
+when an SSID is present. Release build/publish and packaged startup pass; 229
+Windows tests pass.
+
 **2026-07-22 (web E2E onboarding compatibility) — the pod-sim flows follow the
 current random-handle onboarding and profile-scoped persistence model.** A shared
 helper drives the modal passphrase flow, creates a local-only test profile around

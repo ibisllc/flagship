@@ -68,7 +68,8 @@
                     VerticalAlignment="Center"
                     Style="{StaticResource LinkButton}"
                     Content="{Binding Mode, Converter={StaticResource ModeToggleLabel}}"
-                    Click="ModeToggle_Click"/>
+                    Click="ModeToggle_Click"
+                    Visibility="{Binding AdvancedAllowed, Converter={StaticResource BoolToVisibility}}"/>
         </Grid>
 
         <!-- Content: main area + hosted-servers sidebar -->
@@ -85,109 +86,45 @@
                           Margin="0">
                 <Grid>
 
-                    <!-- ===== Pane 0: phone-pairing cover (QR + code + SAS) ===== -->
-                    <StackPanel Margin="22,10,22,12"
-                                Visibility="{Binding ShowPairingCover,
-                                    Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock Text="Pair with your phone"
-                                   FontFamily="{StaticResource FB.Font.Title}"
-                                   FontSize="18"
-                                   Foreground="{StaticResource FB.Text}"/>
-                        <TextBlock Text="{Binding PairStatus}"
-                                   Style="{StaticResource RowHint}"
-                                   TextWrapping="Wrap"
-                                   Margin="0,2,0,10"/>
-
-                        <!-- The scannable QR, rendered from the CLI's unicode-block
-                             output in a monospace block. -->
-                        <Border Background="White"
-                                BorderBrush="{StaticResource FB.Border}"
-                                BorderThickness="1" CornerRadius="8"
-                                Padding="12" HorizontalAlignment="Left"
-                                Visibility="{Binding PairQr, Converter={StaticResource NotNullToVisible}}">
-                            <TextBlock Text="{Binding PairQr}"
-                                       FontFamily="Cascadia Mono, Consolas, Courier New"
-                                       FontSize="7"
-                                       Foreground="Black"
-                                       LineHeight="7"
-                                       LineStackingStrategy="BlockLineHeight"/>
-                        </Border>
-
-                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0"
-                                    Visibility="{Binding PairCode, Converter={StaticResource NotNullToVisible}}">
-                            <TextBlock Text="Code:" Style="{StaticResource Caption}"
-                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBlock Text="{Binding PairCode}"
-                                       FontFamily="{StaticResource FB.Font.Mono}"
-                                       FontSize="18"
-                                       Foreground="{StaticResource FB.PrimaryDeep}"/>
+                    <!-- ===== Phone pairing: separate QR, SAS, and authorization stages ===== -->
+                    <Grid Margin="22,10,22,12" Visibility="{Binding ShowPairingCover, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="470" Visibility="{Binding ShowPairingQr, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Pair your phone to begin" FontFamily="{StaticResource FB.Font.Title}" FontSize="20" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Open the Flagship app and scan this code — or type it in. You’ll confirm a security code, then build your server here." Style="{StaticResource RowHint}" TextWrapping="Wrap" TextAlignment="Center" Margin="18,8,18,16"/>
+                            <Border Background="White" BorderBrush="{StaticResource FB.Border}" BorderThickness="1" CornerRadius="10" Padding="16" MinWidth="210" MinHeight="210">
+                                <TextBlock Text="{Binding PairQr}" FontFamily="Cascadia Mono, Consolas" FontSize="7" Foreground="Black" LineHeight="7" LineStackingStrategy="BlockLineHeight" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="Or enter this code" Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,12,0,2"/>
+                            <TextBlock Text="{Binding PairCode}" FontFamily="{StaticResource FB.Font.Mono}" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding PairStatus}" Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                            <Button Style="{StaticResource LinkButton}" Content="I have a recipe" HorizontalAlignment="Center" Margin="0,18,0,0" Click="EnterRecipeFileMode_Click"/>
                         </StackPanel>
-
-                        <!-- SAS appears once the phone connects. -->
-                        <Border Background="{StaticResource FB.WarningFaded}"
-                                BorderBrush="{StaticResource FB.Warning}"
-                                BorderThickness="1" CornerRadius="8"
-                                Padding="12" Margin="0,12,0,0"
-                                HorizontalAlignment="Left"
-                                Visibility="{Binding HasPairSas, Converter={StaticResource BoolToVisibility}}">
-                            <StackPanel>
-                                <TextBlock Text="Security code — confirm it matches your phone"
-                                           Style="{StaticResource Caption}"/>
-                                <TextBlock Text="{Binding PairSas}"
-                                           FontFamily="{StaticResource FB.Font.Mono}"
-                                           FontSize="24"
-                                           Foreground="{StaticResource FB.Text}"/>
-                            </StackPanel>
-                        </Border>
-
-                        <Button Style="{StaticResource LinkButton}"
-                                HorizontalAlignment="Left"
-                                Margin="0,16,0,0"
-                                Foreground="{StaticResource FB.Danger}"
-                                Content="Cancel pairing"
-                                Click="CancelPairing_Click"/>
-                    </StackPanel>
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="440" Visibility="{Binding ShowPairingConfirm, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="▣" FontSize="40" Foreground="{StaticResource FB.PrimaryDeep}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Confirm the security code" FontFamily="{StaticResource FB.Font.Title}" FontSize="20" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                            <TextBlock Text="Check that this code matches the Flagship app, then confirm on your phone." Style="{StaticResource RowHint}" TextWrapping="Wrap" TextAlignment="Center" Margin="16,8,16,16"/>
+                            <Border Background="{StaticResource FB.SurfaceElevated}" CornerRadius="10" Padding="24,14"><TextBlock Text="{Binding PairSas}" FontFamily="{StaticResource FB.Font.Mono}" FontSize="38" FontWeight="Bold"/></Border>
+                            <TextBlock Text="Waiting for you to confirm on your phone…" Style="{StaticResource Caption}" Margin="0,14,0,0"/>
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="440" Visibility="{Binding ShowAwaitingAuthorization, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="▯" FontSize="42" Foreground="{StaticResource FB.PrimaryDeep}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Awaiting authorization" FontFamily="{StaticResource FB.Font.Title}" FontSize="20" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                            <TextBlock Text="Finish authorizing this server in the Flagship app. This screen continues automatically when your phone sends the approved recipe." Style="{StaticResource RowHint}" TextWrapping="Wrap" TextAlignment="Center" Margin="16,8,16,12"/>
+                            <ProgressBar Width="180" Height="5" IsIndeterminate="True"/>
+                            <Button Style="{StaticResource LinkButton}" Foreground="{StaticResource FB.Danger}" Content="Cancel pairing" HorizontalAlignment="Center" Margin="0,16,0,0" Click="CancelPairing_Click"/>
+                        </StackPanel>
+                    </Grid>
 
                     <!-- ===== Pane 1: the burn wizard (rows + bake) ===== -->
                     <StackPanel Margin="22,4,22,12"
                                 Visibility="{Binding ShowWizardPanes,
                                     Converter={StaticResource BoolToVisibility}}">
 
-                        <!-- Pair-with-phone entry (only before a recipe is loaded).
-                             The drop-a-recipe-file rows below remain as the manual
-                             fallback. -->
-                        <Border Background="{StaticResource FB.PrimaryFaded}"
-                                BorderBrush="{StaticResource FB.Primary}"
-                                BorderThickness="1" CornerRadius="10"
-                                Padding="14" Margin="0,4,0,10"
-                                Visibility="{Binding HasRecipe,
-                                    Converter={StaticResource BoolToVisibility},
-                                    ConverterParameter=invert}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="&#x1F4F1;" FontSize="20"
-                                           VerticalAlignment="Center" Margin="0,0,12,0"/>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="Pair with your phone" Style="{StaticResource RowTitle}"/>
-                                    <TextBlock Text="Scan a QR with the Flagship app to receive a recipe — no file needed."
-                                               Style="{StaticResource RowHint}" TextWrapping="Wrap"/>
-                                    <CheckBox Content="Advanced: request debug access"
-                                              IsChecked="{Binding PairDebug, Mode=TwoWay}"
-                                              Foreground="{StaticResource FB.TextMuted}"
-                                              FontSize="11.5" Margin="0,6,0,0"/>
-                                </StackPanel>
-                                <Button Grid.Column="2" Style="{StaticResource BakeButton}"
-                                        MinWidth="90" Height="34"
-                                        VerticalAlignment="Center"
-                                        Content="Pair"
-                                        Click="StartPairing_Click"/>
-                            </Grid>
-                        </Border>
-
+                        <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Content="‹ Pair a phone instead" Margin="0,0,0,8" Click="ReturnToPairing_Click" Visibility="{Binding ManualRecipeMode, Converter={StaticResource BoolToVisibility}}"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12" Visibility="{Binding AdvancedAllowed, Converter={StaticResource BoolToVisibility}}">
+                            <RadioButton Content="Simple" GroupName="BurnMode" Margin="8,0" IsChecked="{Binding IsSimpleMode}" Click="SimpleMode_Click"/>
+                            <RadioButton Content="Advanced" GroupName="BurnMode" Margin="8,0" IsChecked="{Binding IsAdvancedMode}" Click="AdvancedMode_Click"/>
+                        </StackPanel>
                         <!-- Back to the destination chooser (USB branch only). -->
                         <Button Style="{StaticResource LinkButton}"
                                 HorizontalAlignment="Left"
@@ -245,6 +182,8 @@
                             </Grid>
                         </Border>
 
+                        <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Content="Paste recipe from clipboard" Margin="4,-2,0,8" Click="PasteRecipe_Click" Visibility="{Binding ManualRecipeMode, Converter={StaticResource BoolToVisibility}}"/>
+
                         <!-- Row 2: ISO — Advanced mode only. -->
                         <Border x:Name="IsoRow"
                                 Style="{StaticResource DropRowBorder}"
@@ -255,6 +194,7 @@
                                 Drop="IsoRow_Drop"
                                 MouseLeftButtonUp="IsoRow_Click"
                                 Cursor="Hand"
+                                IsEnabled="{Binding IsoPickerEnabled}"
                                 Margin="0,4,0,8"
                                 Visibility="{Binding ShowIsoRow,
                                     Converter={StaticResource BoolToVisibility}}">
@@ -291,6 +231,8 @@
                                            Foreground="{Binding IsoStatusBrush}"/>
                             </Grid>
                         </Border>
+
+                        <CheckBox Content="Use system-provided ISO" IsChecked="{Binding UseSystemIso, Mode=TwoWay}" Margin="4,-2,0,10" FontSize="12" Visibility="{Binding ShowIsoRow, Converter={StaticResource BoolToVisibility}}"/>
 
                         <!-- Row 3: USB Drive -->
                         <Border x:Name="DiskRow"
@@ -346,6 +288,13 @@
                             </Grid>
                         </Border>
 
+                        <StackPanel Margin="4,8,4,0">
+                            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="160"/></Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding WifiSsid, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" ToolTip="Wi-Fi network name (optional)"/>
+                                <PasswordBox Grid.Column="1" PasswordChanged="WifiPassword_Changed" ToolTip="Wi-Fi password (optional)"/>
+                            </Grid>
+                            <TextBlock Text="Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                        </StackPanel>
                         <!-- Bake button -->
                         <StackPanel Margin="0,18,0,12" HorizontalAlignment="Center">
                             <Button x:Name="BakeButton"
@@ -842,14 +791,9 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <StackPanel Grid.Row="1"
-                                VerticalAlignment="Top" Margin="12,4,12,0"
-                                Visibility="{Binding HasHostedServers,
-                                    Converter={StaticResource BoolToVisibility},
-                                    ConverterParameter=invert}">
-                        <TextBlock Style="{StaticResource Caption}"
-                                   TextWrapping="Wrap"
-                                   Text="None yet. Verify a recipe and choose “Host on this PC”."/>
+                    <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="{Binding HasHostedServers, Converter={StaticResource BoolToVisibility}, ConverterParameter=invert}">
+                        <TextBlock Text="▥" FontSize="24" Foreground="{StaticResource FB.TextMuted}" HorizontalAlignment="Center"/>
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" Text="No servers hosted yet" HorizontalAlignment="Center"/>
                     </StackPanel>
                     <Border Grid.Row="2"
                             BorderThickness="0,1,0,0"
@@ -857,7 +801,7 @@
                         <Button Style="{StaticResource LinkButton}"
                                 HorizontalAlignment="Left"
                                 Margin="8,6,8,8"
-                                Content="＋ Add a server"
+                                Content="⊕  Pair a new server"
                                 Click="AddServer_Click"/>
                     </Border>
                 </Grid>

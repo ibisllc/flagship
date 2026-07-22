@@ -33,7 +33,7 @@ public static class CliArgs
             diskSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "--qemu-img", qemuImg };
 
-    public static string[] Write(string entryPath, string recipePath, string isoPath, string? device, bool yes, bool keepRecipe)
+    public static string[] Write(string entryPath, string recipePath, string isoPath, string? device, bool yes, bool keepRecipe, string? wifiSsid = null, string? wifiPassword = null)
     {
         var a = new System.Collections.Generic.List<string>
             { entryPath, "write", recipePath, isoPath };
@@ -44,6 +44,11 @@ public static class CliArgs
         }
         if (yes) a.Add("--yes");
         if (keepRecipe) a.Add("--keep-recipe");
+        if (!string.IsNullOrWhiteSpace(wifiSsid))
+        {
+            a.Add("--wifi-ssid"); a.Add(wifiSsid.Trim());
+            a.Add("--wifi-password"); a.Add(wifiPassword ?? string.Empty);
+        }
         return a.ToArray();
     }
 
