@@ -12,7 +12,7 @@
  * polluting D1.
  */
 
-import { test, expect } from "../fixtures/pod-sim.js";
+import { test, expect, bootstrapToHome } from "../fixtures/pod-sim.js";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
 
@@ -23,10 +23,7 @@ test("S8 — set up cloud recovery + assert webauthn_recovery_records POST", asy
 }) => {
   // Bootstrap.
   await page.goto("/");
-  await page.fill("#bootstrap-passphrase", PASSPHRASE);
-  await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-  await page.click("#bootstrap-go");
-  await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await bootstrapToHome(page, PASSPHRASE);
 
   // Pre-seed the username so the recovery setup doesn't prompt.
   await page.evaluate((u) => {

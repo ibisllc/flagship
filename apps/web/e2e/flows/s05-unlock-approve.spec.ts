@@ -21,7 +21,7 @@
  * the test self-contained.
  */
 
-import { test, expect, syncWebappPubkey } from "../fixtures/pod-sim.js";
+import { test, expect, bootstrapToHome, syncWebappPubkey } from "../fixtures/pod-sim.js";
 import { bytesToHex } from "../fixtures/identity.js";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
@@ -33,10 +33,7 @@ test("S5 — Approve a pending unlock request → webapp signs + posts a lease",
 }) => {
   // ── Setup: bootstrap + pair + seed pending request ────────────────
   await page.goto("/");
-  await page.fill("#bootstrap-passphrase", PASSPHRASE);
-  await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-  await page.click("#bootstrap-go");
-  await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await bootstrapToHome(page, PASSPHRASE);
   await syncWebappPubkey(page, podSim);
 
   await page.locator("#view-home .advanced-disclosure").evaluate((d) => { d.open = true; });

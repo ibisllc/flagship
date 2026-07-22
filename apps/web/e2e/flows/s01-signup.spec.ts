@@ -10,7 +10,7 @@
  * to fail / 404; we just assert the views are reachable.
  */
 
-import { test, expect } from "../fixtures/pod-sim.js";
+import { test, expect, bootstrapToHome } from "../fixtures/pod-sim.js";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
 
@@ -18,10 +18,7 @@ test("S1 — bootstrap → home → reload → unlock → home", async ({ page }
   // Bootstrap.
   await page.goto("/");
   await expect(page.locator("#view-bootstrap")).toBeVisible();
-  await page.fill("#bootstrap-passphrase", PASSPHRASE);
-  await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-  await page.click("#bootstrap-go");
-  await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await bootstrapToHome(page, PASSPHRASE);
 
   // Reload — wrapped UMK persists in IndexedDB → unlock prompt.
   await page.reload();
@@ -37,10 +34,7 @@ test("S1 — bootstrap → home → reload → unlock → home", async ({ page }
 test("S1 — wrong passphrase keeps the user on view-unlock with a toast", async ({ page }) => {
   // Set up state first.
   await page.goto("/");
-  await page.fill("#bootstrap-passphrase", PASSPHRASE);
-  await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-  await page.click("#bootstrap-go");
-  await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await bootstrapToHome(page, PASSPHRASE);
 
   // Reload + try with the wrong passphrase.
   await page.reload();

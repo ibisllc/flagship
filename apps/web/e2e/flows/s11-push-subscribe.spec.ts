@@ -8,7 +8,7 @@
  * test self-contained.
  */
 
-import { test, expect } from "../fixtures/pod-sim.js";
+import { test, expect, bootstrapToHome } from "../fixtures/pod-sim.js";
 
 // PushManager.subscribe requires a SW registration; project default
 // blocks SWs so other tests get clean page.route interception. S11
@@ -38,10 +38,7 @@ test("S11 — enable browser notifications + register webpush token", async ({
 
   // Bootstrap.
   await page.goto("/");
-  await page.fill("#bootstrap-passphrase", PASSPHRASE);
-  await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-  await page.click("#bootstrap-go");
-  await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await bootstrapToHome(page, PASSPHRASE);
 
   // Intercept .com endpoints. Pretend webpush is configured.
   let fetchedVapid = false;

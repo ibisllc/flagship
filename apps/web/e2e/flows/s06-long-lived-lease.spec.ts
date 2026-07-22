@@ -8,7 +8,7 @@
  * consume roundtrip is asserted live by smoke-lease-unlock.ts.
  */
 
-import { test, expect, syncWebappPubkey } from "../fixtures/pod-sim.js";
+import { test, expect, bootstrapToHome, syncWebappPubkey } from "../fixtures/pod-sim.js";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
 
@@ -19,10 +19,7 @@ test("S6 — enable long-lived auto-unlock + assert wire-side POST shape", async
 }) => {
   // Bootstrap + pair.
   await page.goto("/");
-  await page.fill("#bootstrap-passphrase", PASSPHRASE);
-  await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-  await page.click("#bootstrap-go");
-  await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await bootstrapToHome(page, PASSPHRASE);
   await syncWebappPubkey(page, podSim);
   await page.locator("#view-home .advanced-disclosure").evaluate((d) => { d.open = true; });
   await page.click("#open-pod-pair");
@@ -76,10 +73,7 @@ test("S7 — auto-renewer fires on home enter when a lease is close to expiry", 
 }) => {
   // Bootstrap + pair (renewer lives on home view).
   await page.goto("/");
-  await page.fill("#bootstrap-passphrase", PASSPHRASE);
-  await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-  await page.click("#bootstrap-go");
-  await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await bootstrapToHome(page, PASSPHRASE);
   await syncWebappPubkey(page, podSim);
   await page.locator("#view-home .advanced-disclosure").evaluate((d) => { d.open = true; });
   await page.click("#open-pod-pair");
