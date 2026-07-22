@@ -535,7 +535,7 @@ public sealed class PairingPayloadToImageConverter : IValueConverter
     {
         if (value is not string payload || string.IsNullOrWhiteSpace(payload)) return null;
         using var data = QRCoder.QRCodeGenerator.GenerateQrCode(
-            payload, QRCoder.QRCodeGenerator.ECCLevel.Q);
+            payload, QRCoder.QRCodeGenerator.ECCLevel.M);
         var png = new QRCoder.PngByteQRCode(data).GetGraphic(8);
         using var stream = new MemoryStream(png, writable: false);
         var bitmap = new BitmapImage();
