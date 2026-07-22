@@ -186,7 +186,7 @@ public sealed class Wizard : INotifyPropertyChanged
         {
             case "ready":
                 PairingStage = PairingStage.Qr;
-                PairQr = ev.QrTerminal;
+                PairQr = ev.Payload;
                 PairCode = ev.HumanCode;
                 PairStatus = "Scan the QR with the Flagship app, or type the code.";
                 break;
