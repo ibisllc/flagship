@@ -27,9 +27,6 @@
     <Compile Include="src\App.xaml.cs" />
     <Compile Include="src\MainWindow.xaml.cs" />
     <Compile Include="src\Wizard.cs" />
-    <Compile Include="src\CliArgs.cs" />
-    <Compile Include="src\CliRunner.cs" />
-    <Compile Include="src\CliLocator.cs" />
     <Compile Include="src\DiskEnumerator.cs" />
     <Compile Include="src\VerifyResult.cs" />
     <Compile Include="src\Recipe.cs" />
@@ -39,6 +36,10 @@
     <Compile Include="src\IsoBaseCache.cs" />
     <Compile Include="src\PairSession.cs" />
     <Compile Include="src\NativePairingCrypto.cs" />
+    <Compile Include="src\NativeIsoRemaster.cs" />
+    <Compile Include="src\NativePreseedEngine.cs" />
+    <Compile Include="src\NativeBuildPipeline.cs" />
+    <Compile Include="src\BuildLog.cs" />
     <Compile Include="src\VM\HostResources.cs" />
     <Compile Include="src\VM\VMResourcePlan.cs" />
     <Compile Include="src\VM\ServerTier.cs" />
@@ -58,9 +59,11 @@
   <ItemGroup>
     <None Include="app.manifest" />
     <None Include="README.md" />
+    <EmbeddedResource Include="..\..\packages\flagship-builder\engine\preseed-engine.js" LogicalName="Flagship.Builder.Resources.preseed-engine.js" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Jint" Version="4.4.2" />
     <PackageReference Include="NSec.Cryptography" Version="24.4.0" />
     <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>

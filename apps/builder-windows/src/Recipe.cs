@@ -295,7 +295,7 @@ public static class Hex
 ///   sha256), then runs the SAME remaster+flash path Advanced uses — the recipe
 ///   preseed is baked into the fetched base, then flashed. No user ISO.
 /// - Advanced: the user supplies their own stock Debian/Ubuntu ISO + a JSON
-///   recipe; the builder remasters that ISO in-place (via the Node CLI) then
+///   recipe; the builder remasters that ISO in-place (through the native installer pipeline) then
 ///   flashes.
 /// </summary>
 public enum BuilderMode { Simple, Advanced }

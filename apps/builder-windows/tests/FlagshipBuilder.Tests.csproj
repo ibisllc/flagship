@@ -28,8 +28,6 @@
          + pre-open guards run on any host. -->
     <Compile Include="..\src\DiskEnumerator.cs" />
     <Compile Include="..\src\VerifyResult.cs" />
-    <Compile Include="..\src\CliLocator.cs" />
-    <Compile Include="..\src\CliRunner.cs" />
     <Compile Include="..\src\Recipe.cs" />
     <Compile Include="..\src\Ed25519Verify.cs" />
     <Compile Include="..\src\DiskWrite.cs" />
@@ -38,7 +36,11 @@
     <Compile Include="..\src\IsoBaseCache.cs" />
     <!-- Phone-pairing subprocess glue: the pure event parser is WPF-free. -->
     <Compile Include="..\src\PairSession.cs" />
+    <Compile Include="..\src\BuildLog.cs" />
     <Compile Include="..\src\NativePairingCrypto.cs" />
+    <Compile Include="..\src\NativeIsoRemaster.cs" />
+    <Compile Include="..\src\NativePreseedEngine.cs" />
+    <Compile Include="..\src\NativeBuildPipeline.cs" />
     <!-- The pure VM core (mirrors apps/builder-mac FlagshipBuilderCore/VM) is
          WPF-free by design; pinned against the shared golden vectors. -->
     <Compile Include="..\src\VM\HostResources.cs" />
@@ -55,13 +57,8 @@
     <Compile Include="..\src\VM\QemuHost.cs" />
     <Compile Include="..\src\VM\SshLaunch.cs" />
     <Compile Include="..\src\VM\VMManager.cs" />
-    <!-- CliArgs lives in Wizard.cs alongside the view-model; we extract
-         it into a tiny shim for the test target to keep WPF out. -->
-    <Compile Include="..\src\CliArgs.cs" />
     <Compile Include="DiskEnumeratorTests.cs" />
     <Compile Include="VerifyResultTests.cs" />
-    <Compile Include="CliLocatorTests.cs" />
-    <Compile Include="CliArgsTests.cs" />
     <Compile Include="WizardStateMachineTests.cs" />
     <Compile Include="Ed25519VerifyTests.cs" />
     <Compile Include="RecipeTests.cs" />
@@ -80,16 +77,21 @@
     <Compile Include="VMManagerTests.cs" />
     <Compile Include="PairEventParserTests.cs" />
     <Compile Include="NativePairingCryptoTests.cs" />
+    <Compile Include="NativeIsoRemasterTests.cs" />
+    <Compile Include="NativePreseedEngineTests.cs" />
     <Compile Include="SshLaunchTests.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- The shared VM-core contract (apps/desktop-shared/golden) — the Mac
          suite must consume the SAME file so the two cores cannot drift. -->
+    <EmbeddedResource Include="..\..\..\packages\flagship-builder\engine\preseed-engine.js" LogicalName="Flagship.Builder.Resources.preseed-engine.js" />
+    <EmbeddedResource Include="..\..\..\packages\flagship-builder\engine\golden\preseed-vectors.json" LogicalName="Flagship.Builder.Tests.Resources.preseed-vectors.json" />
     <Content Include="..\..\desktop-shared\golden\vm-core-vectors.json" Link="Resources\vm-core-vectors.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Jint" Version="4.4.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
     <PackageReference Include="NSec.Cryptography" Version="24.4.0" />
     <PackageReference Include="xunit" Version="2.9.0" />
