@@ -11,6 +11,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Flagship.Builder.VM;
 using Microsoft.Win32;
 
@@ -38,10 +39,10 @@ public partial class MainWindow : Window
         // intentionally do this after the constructor finishes so the
         // first frame paints with empty rows; the picker fills in as
         // WMIC returns.
-        Loaded += async (_, _) =>
+        Loaded += (_, _) =>
         {
-            await _wizard.RefreshDisksAsync();
             _wizard.StartPairing();
+            _ = _wizard.RefreshDisksAsync();
         };
         // Auto-scroll the log when new lines arrive.
         _wizard.LogLines.CollectionChanged += (_, _) =>
@@ -92,7 +93,18 @@ public partial class MainWindow : Window
 
     private void EnterRecipeFileMode_Click(object sender, RoutedEventArgs e) => _wizard.EnterRecipeFileMode();
     private void ReturnToPairing_Click(object sender, RoutedEventArgs e) => _wizard.ReturnToPairingCover();
-    private void PasteRecipe_Click(object sender, RoutedEventArgs e) { if (Clipboard.ContainsText()) _wizard.AcceptRecipeText(Clipboard.GetText()); }
+    private void PasteRecipe_Click(object sender, RoutedEventArgs e)
+    {
+        if (Clipboard.ContainsText()) _wizard.AcceptRecipeText(Clipboard.GetText());
+        else _wizard.AcceptRecipeText(string.Empty);
+    }
+    private void BrowseRecipe_Click(object sender, RoutedEventArgs e) => BrowseForRecipe();
+    private void PairingHome_DragOver(object sender, DragEventArgs e) => HandleDragOver(e);
+    private void PairingHome_Drop(object sender, DragEventArgs e)
+    {
+        var path = ExtractDroppedFile(e);
+        if (path != null) _wizard.AcceptRecipeFile(path);
+    }
     private void SimpleMode_Click(object sender, RoutedEventArgs e) => _wizard.Mode = BuilderMode.Simple;
     private void AdvancedMode_Click(object sender, RoutedEventArgs e) => _wizard.Mode = BuilderMode.Advanced;
     private void WifiPassword_Changed(object sender, RoutedEventArgs e) { if (sender is PasswordBox box) _wizard.WifiPassword = box.Password; }
@@ -108,9 +120,10 @@ public partial class MainWindow : Window
         if (path != null) _wizard.AcceptRecipeFile(path);
     }
 
-    private void RecipeRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private void RecipeRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) => BrowseForRecipe();
+
+    private void BrowseForRecipe()
     {
-        // Filter for .json — same as the Mac picker.
         var dialog = new OpenFileDialog
         {
             Title = "Pick recipe (.json)",
@@ -118,11 +131,8 @@ public partial class MainWindow : Window
             CheckFileExists = true,
         };
         if (dialog.ShowDialog(this) == true)
-        {
             _wizard.AcceptRecipeFile(dialog.FileName);
-        }
     }
-
     // ---- ISO row ----
 
     private void IsoRow_DragEnter(object sender, DragEventArgs e) => HandleDragEnter(IsoRow, e);
@@ -518,6 +528,41 @@ public static class DragHelper
 }
 
 // ---- Tiny converters used by MainWindow.xaml ----
+/// <summary>Turns the pairing engine's ANSI half-block QR into a crisp WPF bitmap.</summary>
+public sealed class QrTerminalToImageConverter : IValueConverter
+{
+    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not string terminal || string.IsNullOrWhiteSpace(terminal)) return null;
+        var modules = QrTerminalMatrix.Parse(terminal);
+        var height = modules.GetLength(0);
+        var width = modules.GetLength(1);
+        if (width == 0 || height == 0) return null;
+
+        const int scale = 6;
+        var pixels = new byte[width * scale * height * scale * 4];
+        var stride = width * scale * 4;
+        for (var y = 0; y < height * scale; y++)
+        for (var x = 0; x < width * scale; x++)
+        {
+            var black = modules[y / scale, x / scale];
+            var offset = y * stride + x * 4;
+            var shade = black ? (byte)0 : (byte)255;
+            pixels[offset] = shade;
+            pixels[offset + 1] = shade;
+            pixels[offset + 2] = shade;
+            pixels[offset + 3] = 255;
+        }
+
+        var bitmap = new WriteableBitmap(width * scale, height * scale, 96, 96, PixelFormats.Bgra32, null);
+        bitmap.WritePixels(new Int32Rect(0, 0, bitmap.PixelWidth, bitmap.PixelHeight), pixels, stride, 0);
+        bitmap.Freeze();
+        return bitmap;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotImplementedException();
+}
 
 /// <summary>
 /// Bool → Visibility. Pass ConverterParameter="invert" to flip.

@@ -27,6 +27,7 @@
         <local:InverseBoolConverter x:Key="InverseBool"/>
         <local:StateKindToBrushConverter x:Key="StateKindToBrush"/>
         <local:StateKindToGlyphConverter x:Key="StateKindToGlyph"/>
+        <local:QrTerminalToImageConverter x:Key="QrTerminalToImage"/>
     </Window.Resources>
 
     <DockPanel>
@@ -88,16 +89,23 @@
 
                     <!-- ===== Phone pairing: separate QR, SAS, and authorization stages ===== -->
                     <Grid Margin="22,10,22,12" Visibility="{Binding ShowPairingCover, Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="470" Visibility="{Binding ShowPairingQr, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel x:Name="PairingHome" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="470" AllowDrop="True" DragOver="PairingHome_DragOver" Drop="PairingHome_Drop" Visibility="{Binding ShowPairingQr, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Pair your phone to begin" FontFamily="{StaticResource FB.Font.Title}" FontSize="20" HorizontalAlignment="Center"/>
                             <TextBlock Text="Open the Flagship app and scan this code — or type it in. You’ll confirm a security code, then build your server here." Style="{StaticResource RowHint}" TextWrapping="Wrap" TextAlignment="Center" Margin="18,8,18,16"/>
                             <Border Background="White" BorderBrush="{StaticResource FB.Border}" BorderThickness="1" CornerRadius="10" Padding="16" MinWidth="210" MinHeight="210">
-                                <TextBlock Text="{Binding PairQr}" FontFamily="Cascadia Mono, Consolas" FontSize="7" Foreground="Black" LineHeight="7" LineStackingStrategy="BlockLineHeight" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Grid>
+                                    <ProgressBar Width="120" Height="4" IsIndeterminate="True" Visibility="{Binding PairQr, Converter={StaticResource NullToCollapsed}}"/>
+                                    <Image Source="{Binding PairQr, Converter={StaticResource QrTerminalToImage}}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" SnapsToDevicePixels="True"/>
+                                </Grid>
                             </Border>
                             <TextBlock Text="Or enter this code" Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,12,0,2"/>
                             <TextBlock Text="{Binding PairCode}" FontFamily="{StaticResource FB.Font.Mono}" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                             <TextBlock Text="{Binding PairStatus}" Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,10,0,0"/>
-                            <Button Style="{StaticResource LinkButton}" Content="I have a recipe" HorizontalAlignment="Center" Margin="0,18,0,0" Click="EnterRecipeFileMode_Click"/>
+                            <TextBlock Text="Or drop a recipe anywhere here" Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,18,0,6"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Style="{StaticResource LinkButton}" Content="Browse recipe…" Margin="6,0" Click="BrowseRecipe_Click"/>
+                                <Button Style="{StaticResource LinkButton}" Content="Paste recipe" Margin="6,0" Click="PasteRecipe_Click"/>
+                            </StackPanel>
                         </StackPanel>
                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="440" Visibility="{Binding ShowPairingConfirm, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="▣" FontSize="40" Foreground="{StaticResource FB.PrimaryDeep}" HorizontalAlignment="Center"/>
