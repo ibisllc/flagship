@@ -4,25 +4,22 @@ import XCTest
 
 @MainActor
 final class PersistedSessionReconcilerTests: XCTestCase {
-    func test_missingAccount_wipesInsteadOfRestoring() async {
+    func test_missingAccount_restoresAndOnlyReportsMissing() async {
         let server = MockFlagshipServerClient()
         server.simulatedLatency = 0
         var restored: String?
-        var wiped = false
 
         let outcome = await PersistedSessionReconciler.reconcile(
             username: "jolly-quince",
             server: server,
-            restore: { restored = $0 },
-            wipe: { wiped = true }
+            restore: { restored = $0 }
         )
 
-        XCTAssertEqual(outcome, .removed)
-        XCTAssertNil(restored)
-        XCTAssertTrue(wiped)
+        XCTAssertEqual(outcome, .missing)
+        XCTAssertEqual(restored, "jolly-quince")
     }
 
-    func test_existingAccount_restoresWithoutWiping() async {
+    func test_existingAccount_restores() async {
         let server = MockFlagshipServerClient()
         server.simulatedLatency = 0
         server.demoServers["alice"] = DemoServerBlock(
@@ -31,18 +28,15 @@ final class PersistedSessionReconcilerTests: XCTestCase {
             ttlIdleMinutes: 30
         )
         var restored: String?
-        var wiped = false
 
         let outcome = await PersistedSessionReconciler.reconcile(
             username: "alice",
             server: server,
-            restore: { restored = $0 },
-            wipe: { wiped = true }
+            restore: { restored = $0 }
         )
 
         XCTAssertEqual(outcome, .restored)
         XCTAssertEqual(restored, "alice")
-        XCTAssertFalse(wiped)
     }
 
     func test_networkFailure_preservesOfflineAccess() async {
@@ -50,17 +44,14 @@ final class PersistedSessionReconcilerTests: XCTestCase {
         server.simulatedLatency = 0
         server.shouldFail = true
         var restored: String?
-        var wiped = false
 
         let outcome = await PersistedSessionReconciler.reconcile(
             username: "alice",
             server: server,
-            restore: { restored = $0 },
-            wipe: { wiped = true }
+            restore: { restored = $0 }
         )
 
         XCTAssertEqual(outcome, .restoredOffline)
         XCTAssertEqual(restored, "alice")
-        XCTAssertFalse(wiped)
     }
 }

@@ -16,7 +16,8 @@ struct FlagshipApp: App {
     @State private var dev = DeveloperSettings()
     @State private var privacy = PrivacySettings()
     @State private var pushRegistrar: PushRegistrar?
-    @State private var persistedIdentityCheckComplete = false
+    @State private var persistedIdentityRestoreStarted = false
+    @State private var orphanedPersistedUsername: String?
     private let mockClient = MockScreensClient()
     private let liveClient: any ScreensClient
     // The session store backing the live screens client. Owned here so
@@ -420,16 +421,28 @@ struct FlagshipApp: App {
                 .environment(\.serverTransferClient, activeServerTransfer)
                 .environment(\.serverMigrationClient, activeServerMigration)
                 .environment(\.pushRegistrar, pushRegistrar)
-                .overlay {
-                    if !persistedIdentityCheckComplete {
-                        ZStack {
-                            Color(uiColor: .systemBackground).ignoresSafeArea()
-                            ProgressView()
+                .alert(
+                    "Account no longer listed",
+                    isPresented: Binding(
+                        get: { orphanedPersistedUsername != nil && appState.isUnlocked },
+                        set: { presented in
+                            if !presented { orphanedPersistedUsername = nil }
                         }
-                        .accessibilityIdentifier("persisted-account-check")
+                    )
+                ) {
+                    Button("Keep on This iPhone", role: .cancel) {
+                        orphanedPersistedUsername = nil
                     }
+                    Button("Erase Local Keys and Data", role: .destructive) {
+                        // This is the only wipe in this flow: an explicit local
+                        // choice made after the phone has been unlocked.
+                        Keystore.wipe()
+                        appState.signOut()
+                        orphanedPersistedUsername = nil
+                    }
+                } message: {
+                    Text("Flagship.com no longer lists this account. Nothing on this iPhone has been deleted. You can keep using the local account, or erase its local keys and data to start over.")
                 }
-                .allowsHitTesting(persistedIdentityCheckComplete)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)
                     appDelegate.linker = linker
@@ -467,23 +480,33 @@ struct FlagshipApp: App {
 
     @MainActor
     private func restorePersistedIdentity() async {
-        guard !persistedIdentityCheckComplete else { return }
-        defer { persistedIdentityCheckComplete = true }
+        guard !persistedIdentityRestoreStarted else { return }
+        persistedIdentityRestoreStarted = true
+
+        // Arm the user's local lock preference before restoring. The directory
+        // lookup below never participates in deciding whether local access is
+        // allowed and cannot delay the Face ID screen.
+        appState.requireBiometricAtLaunch = privacy.requireBiometricAtLaunch
+        if privacy.requireBiometricAtLaunch && appState.isPaired {
+            appState.isUnlocked = false
+        }
 
         if !appState.isPaired {
             if !privacy.requirePassphraseAtLaunch,
                Keystore.hasWrappedUMK,
                Keystore.activeProfileId != Keystore.defaultProfileId {
                 let username = Keystore.activeProfileId
-                _ = await PersistedSessionReconciler.reconcile(
+                if privacy.requireBiometricAtLaunch {
+                    appState.isUnlocked = false
+                }
+                let outcome = await PersistedSessionReconciler.reconcile(
                     username: username,
                     server: liveServerClient,
-                    restore: { appState.restorePersistedSession(username: $0) },
-                    wipe: {
-                        Keystore.wipeAllProfiles()
-                        appState.signOut()
-                    }
+                    restore: { appState.restorePersistedSession(username: $0) }
                 )
+                if outcome == .missing {
+                    orphanedPersistedUsername = username
+                }
             } else if !Keystore.hasWrappedUMK,
                       let demo = await sessionStore.demoSession {
                 DemoFixtures.activate(
@@ -491,14 +514,10 @@ struct FlagshipApp: App {
                     username: demo.username,
                     demoServer: demo.server
                 )
+                if privacy.requireBiometricAtLaunch {
+                    appState.isUnlocked = false
+                }
             }
-        }
-
-        // Hydrate the launch lock only AFTER directory reconciliation. This
-        // prevents Face ID from authenticating an account `.com` says is gone.
-        appState.requireBiometricAtLaunch = privacy.requireBiometricAtLaunch
-        if privacy.requireBiometricAtLaunch && appState.isPaired {
-            appState.isUnlocked = false
         }
     }
 }
