@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { verifyPhoneOrder } from "@flagship/protocol";
 import { InMemoryDemoUsersStorage, type DemoUserRecord } from "@flagship/storage";
-import { deriveDemoUserIrk } from "../src/demoIdentity.js";
+import { deriveDemoDelegatedKey } from "../src/demoIdentity.js";
 import { handlePairDemoUser } from "../src/demoUsers.js";
 import { hexToBytes } from "../src/hex.js";
 
@@ -64,12 +64,12 @@ describe("demo browser pairing", () => {
       token: TOKEN,
       issuedAt: 1234,
     });
-    const owner = deriveDemoUserIrk(KEK, USERNAME);
+    const delegated = deriveDemoDelegatedKey(KEK, USERNAME);
     expect(
       verifyPhoneOrder(
         envelope.request,
         hexToBytes(envelope.signature),
-        owner.publicKey,
+        delegated.publicKey,
       ),
     ).toBe(true);
     expect((await storage.get(USERNAME))?.lastActivityAt).toBe(1234);

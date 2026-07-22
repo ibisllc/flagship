@@ -4,7 +4,7 @@ import type {
   DemoUsersStorage,
 } from "@flagship/storage";
 import { signPhoneOrder, type PhoneOrder } from "@flagship/protocol";
-import { deriveDemoUserIrk } from "./demoIdentity.js";
+import { deriveDemoDelegatedKey } from "./demoIdentity.js";
 import { bytesToHex, HEX64 } from "./hex.js";
 import {
   conflict,
@@ -102,9 +102,11 @@ export async function handleListDemoUsers(
 
 /**
  * Mint one ordinary paired session on a live demo box. Demo usernames are a
- * public capability, but the deterministic owner IRK remains Worker-held; this
- * endpoint signs only the non-sensitive add-paired-session order and forwards
- * it directly to the demo box. Real-account rows can never enter this path.
+ * public capability, but the deterministic demo delegated key remains
+ * Worker-held; this endpoint signs only the non-sensitive add-paired-session
+ * order and forwards it directly to the demo box. The cloud-config pins that
+ * delegated public key as FLAGSHIP_PSK_PUB_HEX. Real-account rows can never
+ * enter this path.
  */
 export async function handlePairDemoUser(
   deps: DemoPairingDeps,
@@ -129,7 +131,7 @@ export async function handlePairDemoUser(
     issuedAt,
   };
   const signature = bytesToHex(
-    signPhoneOrder(request, deriveDemoUserIrk(deps.demoIrkKek, row.username)),
+    signPhoneOrder(request, deriveDemoDelegatedKey(deps.demoIrkKek, row.username)),
   );
   let upstream: { status: number };
   try {
