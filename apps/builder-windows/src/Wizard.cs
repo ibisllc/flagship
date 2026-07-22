@@ -12,7 +12,7 @@ using Flagship.Builder.VM;
 namespace Flagship.Builder;
 
 /// <summary>
-/// Wizard view-model — owns user selections, fires the CLI, exposes
+/// Wizard view-model — owns user selections, runs the native build pipeline, exposes
 /// observable state to MainWindow.xaml via INotifyPropertyChanged.
 ///
 /// 1:1 with apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift and
@@ -32,7 +32,7 @@ public sealed class Wizard : INotifyPropertyChanged
     private string? _recipeError;
     private VerifyResult? _verified;
     private string? _outIsoPath;
-    private CliRunner? _currentRunner;
+    private readonly NativeBuildPipeline _nativeBuild = new();
     private BuilderMode _mode = BuilderMode.Simple;
     private bool _useSystemIso;
     private string _wifiSsid = string.Empty;
@@ -47,7 +47,7 @@ public sealed class Wizard : INotifyPropertyChanged
 
     /// <summary>
     /// Test seam: set inside RunBakeAsync only on the Advanced branch that
-    /// actually runs the CLI remaster step. Lets model-level unit tests assert
+    /// actually runs the native remaster step. Lets model-level unit tests assert
     /// the flow chosen without stubbing the privileged write. Mirrors
     /// WizardModel.swift's didRemasterForTest.
     /// </summary>
@@ -351,7 +351,7 @@ public sealed class Wizard : INotifyPropertyChanged
 
     /// <summary>
     /// "Host here": the SAME recipe → the SAME remastered installer ISO
-    /// (via the Node CLI's prepare), but applied to a managed VM on this PC
+    /// (through the native installer pipeline), but applied to a managed VM on this PC
     /// instead of a USB stick. The guest boot chain (unattended install →
     /// LUKS → phone-home unlock → register) runs unmodified inside the VM;
     /// this app never holds a key. Mirrors WizardModel.runHostHere.
@@ -372,14 +372,9 @@ public sealed class Wizard : INotifyPropertyChanged
             AppendLog(LogStream.Stderr, $"Cannot read the recipe: {e.Message}");
             return;
         }
-        var applianceBase = Mode == BuilderMode.Simple
-            && Environment.GetEnvironmentVariable("FLAGSHIP_VM_FORCE_ISO") != "1"
-            ? Environment.GetEnvironmentVariable("FLAGSHIP_VM_APPLIANCE_BASE")
-            : null;
         var config = VMConfig.Plan(
             _parsedRecipe, rawRecipe, VM.HostResources.Current(),
-            provisioningMode: string.IsNullOrEmpty(applianceBase)
-                ? VMProvisioningMode.InstallerISO : VMProvisioningMode.PrebuiltAppliance);
+            provisioningMode: VMProvisioningMode.InstallerISO);
 
         IsRunning = true;
         Phase = "download";
@@ -390,48 +385,6 @@ public sealed class Wizard : INotifyPropertyChanged
         FireBag();
         try
         {
-            if (!string.IsNullOrEmpty(applianceBase))
-            {
-                Phase = "clone appliance";
-                try { Vm.CreateServer(config); }
-                catch (VMStoreException e)
-                {
-                    AppendLog(LogStream.Stderr, e.Message);
-                    return;
-                }
-                var manifest = Environment.GetEnvironmentVariable("FLAGSHIP_VM_APPLIANCE_MANIFEST")
-                    ?? applianceBase + ".json";
-                var provisioned = false;
-                await RunCliCoreAsync(
-                    entry => CliArgs.ApplianceProvision(
-                        entry, _recipePath!, applianceBase, manifest,
-                        Vm.Store.Layout.DiskImagePath(config.Name),
-                        Vm.ApplianceSeedPath(config.Name), "amd64",
-                        config.MainDiskSizeBytes, Vm.Toolchain!.ImgBinary),
-                    onSuccess: _ => provisioned = true);
-                if (!provisioned)
-                {
-                    await Vm.DeleteServerAsync(config.Name);
-                    return;
-                }
-                try { File.Delete(_recipePath!); } catch { }
-                Phase = "specialize";
-                await Vm.BeginInstallAsync(config.Name);
-                Phase = "handoff";
-                for (var remaining = 5; remaining > 0; remaining--)
-                {
-                    HandoffCountdown = remaining;
-                    await Task.Delay(1000);
-                }
-                HandoffCountdown = null;
-                SelectedServerName = null;
-                Destination = null;
-                RecipePath = null;
-                Verified = null;
-                _parsedRecipe = null;
-                return;
-            }
-
             // Same Simple-mode base ISO fetch as the USB path; Advanced mode
             // may bring its own stock ISO.
             string baseIso;
@@ -478,9 +431,8 @@ public sealed class Wizard : INotifyPropertyChanged
             var recipe = _recipePath!;
             var outIso = Vm.InstallerIsoPath(config.Name);
             var remastered = false;
-            await RunCliCoreAsync(
-                entry => CliArgs.Prepare(entry, recipe, baseIso, outIso, keepRecipe: true),
-                onSuccess: _ => remastered = true);
+            try { await _nativeBuild.PrepareAsync(recipe, baseIso, outIso, WifiSsid, WifiPassword, _cts.Token); remastered = true; }
+            catch (Exception e) { AppendLog(LogStream.Stderr, e.Message); }
             if (!remastered)
             {
                 await Vm.DeleteServerAsync(config.Name);
@@ -577,7 +529,7 @@ public sealed class Wizard : INotifyPropertyChanged
     /// <summary>
     /// Simple (default) = fetch the server-manifest Debian-netinst base, then run
     /// the SAME remaster+flash path Advanced uses. Advanced = remaster a stock
-    /// user-supplied Debian/Ubuntu ISO via the Node CLI.
+    /// user-supplied Debian/Ubuntu ISO through the native installer pipeline.
     /// </summary>
     public bool UseSystemIso { get => _useSystemIso; set { if (_useSystemIso != value) { _useSystemIso = value; FireBag(); } } }
     public string WifiSsid { get => _wifiSsid; set { if (_wifiSsid != value) { _wifiSsid = value; FireBag(); } } }
@@ -785,7 +737,7 @@ public sealed class Wizard : INotifyPropertyChanged
         _parsedRecipe = null;
         RecipePath = path;
         // Verify LOCALLY (parse + Ed25519) for immediate feedback before the
-        // CLI remaster runs. Mirrors WizardModel.runVerify().
+        // native remaster runs. Mirrors WizardModel.runVerify().
         _ = RunVerifyAsync();
     }
 
@@ -834,11 +786,11 @@ public sealed class Wizard : INotifyPropertyChanged
     public void Cancel()
     {
         _cts?.Cancel();
-        _currentRunner?.Cancel();
+
     }
 
     /// <summary>
-    /// Parse + verify the recipe locally (no CLI). Sets Verified (surfaced in
+    /// Parse + verify the recipe locally before generation. Sets Verified (surfaced in
     /// the recipe row) + caches the parsed Recipe.
     /// </summary>
     public async Task RunVerifyAsync()
@@ -895,12 +847,11 @@ public sealed class Wizard : INotifyPropertyChanged
         var recipe = _recipePath!;
         var iso = _isoPath!;
         var disk = SelectedDisk!;
-        DidRemasterForTest = true;
-        Phase = "remaster";
-        await RunCliAsync(
-            entry => CliArgs.Write(entry, recipe, iso, device: disk.DevicePath, yes: true, keepRecipe: false, WifiSsid, WifiPassword),
-            onSuccess: _ => { IsFinished = true; });
-        Phase = null;
+        DidRemasterForTest = true; Phase = "remaster"; IsRunning = true; _cts = new CancellationTokenSource();
+        try { await _nativeBuild.WriteAsync(recipe, iso, disk.DevicePath, WifiSsid, WifiPassword, SetProgress, _cts.Token); IsFinished = true; }
+        catch (OperationCanceledException) { AppendLog(LogStream.Stderr, "Cancelled."); }
+        catch (Exception e) { AppendLog(LogStream.Stderr, e.Message); }
+        finally { IsRunning = false; Phase = null; Progress = null; _cts.Dispose(); _cts = null; FireBag(); }
     }
 
     /// <summary>
@@ -944,15 +895,15 @@ public sealed class Wizard : INotifyPropertyChanged
             return;
         }
 
-        // 2. Remaster + flash via the SAME CLI path Advanced uses.
+        // 2. Remaster + flash via the same native pipeline Advanced uses.
         DidRemasterForTest = true;
         Phase = "remaster";
         Progress = null;
         FireBag();
         var recipe = _recipePath!;
-        await RunCliCoreAsync(
-            entry => CliArgs.Write(entry, recipe, baseIso, device: disk.DevicePath, yes: true, keepRecipe: false, WifiSsid, WifiPassword),
-            onSuccess: _ => { IsFinished = true; });
+        try { await _nativeBuild.WriteAsync(recipe, baseIso, disk.DevicePath, WifiSsid, WifiPassword, SetProgress, _cts.Token); IsFinished = true; }
+        catch (OperationCanceledException) { AppendLog(LogStream.Stderr, "Cancelled."); }
+        catch (Exception e) { AppendLog(LogStream.Stderr, e.Message); }
         FinishSimple();
     }
 
@@ -986,73 +937,11 @@ public sealed class Wizard : INotifyPropertyChanged
         var outIso = Path.Combine(dir, stem + ".flagship.iso");
         _outIsoPath = outIso;
         FireBag();
-        await RunCliAsync(
-            entry => CliArgs.Prepare(entry, recipe, iso, outIso, keepRecipe: true),
-            onSuccess: _ => { IsFinished = true; });
-    }
-
-    // ---- CLI ----
-
-    private async Task RunCliAsync(Func<string, string[]> argBuilder, Action<string> onSuccess)
-    {
-        if (IsRunning) return;
-        IsRunning = true;
-        FireBag();
-        await RunCliCoreAsync(argBuilder, onSuccess);
-        IsRunning = false;
-        FireBag();
-    }
-
-    /// <summary>
-    /// CLI body WITHOUT the IsRunning toggle/guard — for callers (Simple bake)
-    /// that already own the running state across a multi-phase pipeline.
-    /// </summary>
-    private async Task RunCliCoreAsync(Func<string, string[]> argBuilder, Action<string> onSuccess)
-    {
-        CliLocator.Resolved? resolved = null;
-        try { resolved = CliLocator.Locate(); }
-        catch (CliLocatorException e)
-        {
-            AppendLog(LogStream.Stderr, $"CLI locate failed: {e.Message}");
-            return;
-        }
-
-        var args = argBuilder(resolved.EntryPath);
-        AppendLog(LogStream.Stdout, $"+ node {string.Join(" ", args)}");
-
-        var runner = new CliRunner(resolved.NodePath, args);
-        _currentRunner = runner;
-        var stdoutBuf = new System.Text.StringBuilder();
-        try
-        {
-            await runner.RunAsync(line =>
-            {
-                // AppendLog marshals to the UI thread internally; we
-                // only buffer stdout in the worker thread for the
-                // success callback.
-                AppendLog(line.Stream, line.Text);
-                if (line.Stream == LogStream.Stdout)
-                {
-                    stdoutBuf.AppendLine(line.Text);
-                }
-            });
-        }
-        catch (Exception e)
-        {
-            AppendLog(LogStream.Stderr, $"spawn failed: {e.Message}");
-            _currentRunner = null;
-            return;
-        }
-        _currentRunner = null;
-        var code = runner.ExitCode;
-        if (code == 0)
-        {
-            onSuccess(stdoutBuf.ToString());
-        }
-        else
-        {
-            AppendLog(LogStream.Stderr, $"CLI exited {code}");
-        }
+        if (IsRunning) return; IsRunning = true; _cts = new CancellationTokenSource();
+        try { await _nativeBuild.PrepareAsync(recipe, iso, outIso, WifiSsid, WifiPassword, _cts.Token); IsFinished = true; }
+        catch (OperationCanceledException) { AppendLog(LogStream.Stderr, "Cancelled."); }
+        catch (Exception e) { AppendLog(LogStream.Stderr, e.Message); }
+        finally { IsRunning = false; _cts.Dispose(); _cts = null; FireBag(); }
     }
 
     private void AppendLog(LogStream stream, string text)

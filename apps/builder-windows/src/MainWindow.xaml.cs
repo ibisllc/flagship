@@ -22,7 +22,7 @@ namespace Flagship.Builder;
 /// Drive) stacked vertically, a big Bake button below, and a collapsed
 /// log drawer at the bottom. Mirrors apps/builder-mac's WizardView 1:1.
 ///
-/// The wizard model (state + CLI invocation) lives in Wizard.cs and is
+/// The wizard model (state + native pipeline orchestration) lives in Wizard.cs and is
 /// surfaced as DataContext; drag/drop + file picker glue stays here
 /// because WPF couples those to the visual tree.
 /// </summary>
