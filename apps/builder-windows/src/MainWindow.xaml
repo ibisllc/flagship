@@ -130,8 +130,8 @@
 
                         <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Content="‹ Pair a phone instead" Margin="0,0,0,8" Click="ReturnToPairing_Click" Visibility="{Binding ManualRecipeMode, Converter={StaticResource BoolToVisibility}}"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12" Visibility="{Binding AdvancedAllowed, Converter={StaticResource BoolToVisibility}}">
-                            <RadioButton Content="Simple" GroupName="BurnMode" Margin="8,0" IsChecked="{Binding IsSimpleMode}" Click="SimpleMode_Click"/>
-                            <RadioButton Content="Advanced" GroupName="BurnMode" Margin="8,0" IsChecked="{Binding IsAdvancedMode}" Click="AdvancedMode_Click"/>
+                            <RadioButton Content="Simple" GroupName="BurnMode" Margin="8,0" IsChecked="{Binding IsSimpleMode, Mode=OneWay}" Click="SimpleMode_Click"/>
+                            <RadioButton Content="Advanced" GroupName="BurnMode" Margin="8,0" IsChecked="{Binding IsAdvancedMode, Mode=OneWay}" Click="AdvancedMode_Click"/>
                         </StackPanel>
                         <!-- Back to the destination chooser (USB branch only). -->
                         <Button Style="{StaticResource LinkButton}"
