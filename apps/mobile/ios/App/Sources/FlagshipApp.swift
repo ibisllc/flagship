@@ -16,6 +16,7 @@ struct FlagshipApp: App {
     @State private var dev = DeveloperSettings()
     @State private var privacy = PrivacySettings()
     @State private var pushRegistrar: PushRegistrar?
+    @State private var persistedIdentityCheckComplete = false
     private let mockClient = MockScreensClient()
     private let liveClient: any ScreensClient
     // The session store backing the live screens client. Owned here so
@@ -419,31 +420,18 @@ struct FlagshipApp: App {
                 .environment(\.serverTransferClient, activeServerTransfer)
                 .environment(\.serverMigrationClient, activeServerMigration)
                 .environment(\.pushRegistrar, pushRegistrar)
+                .overlay {
+                    if !persistedIdentityCheckComplete {
+                        ZStack {
+                            Color(uiColor: .systemBackground).ignoresSafeArea()
+                            ProgressView()
+                        }
+                        .accessibilityIdentifier("persisted-account-check")
+                    }
+                }
+                .allowsHitTesting(persistedIdentityCheckComplete)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)
-                    // Restore a previously paired session: if the Keystore
-                    // still holds a wrapped UMK (a real account that
-                    // survives restarts) and we know which cloud was
-                    // active, land on the gated shell instead of forcing a
-                    // fresh sign-in every launch. Demo/mock sessions never
-                    // wrap a UMK, so they fall through to Welcome as before.
-                    // Skipped when the user opted into a full passphrase
-                    // sign-in on every open (Settings -> Privacy).
-                    if !appState.isPaired,
-                       !privacy.requirePassphraseAtLaunch,
-                       Keystore.hasWrappedUMK,
-                       Keystore.activeProfileId != Keystore.defaultProfileId {
-                        appState.restorePersistedSession(username: Keystore.activeProfileId)
-                    }
-                    // B12 — hydrate the AppState gate from persisted
-                    // user preference. Done in onAppear (not init) so
-                    // SmokeMode + session-restore run first and can leave
-                    // isPaired false (in which case requireBiometricAtLaunch
-                    // is moot — Welcome is unauthenticated anyway).
-                    appState.requireBiometricAtLaunch = privacy.requireBiometricAtLaunch
-                    if privacy.requireBiometricAtLaunch && appState.isPaired {
-                        appState.isUnlocked = false
-                    }
                     appDelegate.linker = linker
                     WatchBridge.shared.activate(client: activeClient)
                     // Wire the FlagshipCore security-alerts bridge → the
@@ -460,19 +448,7 @@ struct FlagshipApp: App {
                     pushRegistrar = registrar
                 }
                 .task {
-                    // Demo accounts intentionally have no wrapped UMK or
-                    // passphrase. Restore their public profile descriptor and
-                    // protected paired-session token directly instead of
-                    // sending a tester back through sign-in after every relaunch.
-                    guard !appState.isPaired,
-                          !Keystore.hasWrappedUMK,
-                          let demo = await sessionStore.demoSession
-                    else { return }
-                    DemoFixtures.activate(
-                        appState,
-                        username: demo.username,
-                        demoServer: demo.server
-                    )
+                    await restorePersistedIdentity()
                 }
                 .onOpenURL { url in
                     if let link = DeepLink.parse(url) { linker.enqueue(link) }
@@ -486,6 +462,43 @@ struct FlagshipApp: App {
                         linker.enqueue(link)
                     }
                 }
+        }
+    }
+
+    @MainActor
+    private func restorePersistedIdentity() async {
+        guard !persistedIdentityCheckComplete else { return }
+        defer { persistedIdentityCheckComplete = true }
+
+        if !appState.isPaired {
+            if !privacy.requirePassphraseAtLaunch,
+               Keystore.hasWrappedUMK,
+               Keystore.activeProfileId != Keystore.defaultProfileId {
+                let username = Keystore.activeProfileId
+                _ = await PersistedSessionReconciler.reconcile(
+                    username: username,
+                    server: liveServerClient,
+                    restore: { appState.restorePersistedSession(username: $0) },
+                    wipe: {
+                        Keystore.wipeAllProfiles()
+                        appState.signOut()
+                    }
+                )
+            } else if !Keystore.hasWrappedUMK,
+                      let demo = await sessionStore.demoSession {
+                DemoFixtures.activate(
+                    appState,
+                    username: demo.username,
+                    demoServer: demo.server
+                )
+            }
+        }
+
+        // Hydrate the launch lock only AFTER directory reconciliation. This
+        // prevents Face ID from authenticating an account `.com` says is gone.
+        appState.requireBiometricAtLaunch = privacy.requireBiometricAtLaunch
+        if privacy.requireBiometricAtLaunch && appState.isPaired {
+            appState.isUnlocked = false
         }
     }
 }

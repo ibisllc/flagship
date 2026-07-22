@@ -20,14 +20,15 @@ import FlagshipCore
 ///      `servers-self-delete` order via `ServersSelfDeleteOrder` — the two ride
 ///      as one atomic bundle (`.com` rejects a standalone servers order, §5).
 ///   4. POST the bundle to `/api/account/self-delete`.
-///   5. On 200 ONLY: wipe ALL local key material (`Keystore.wipeAllProfiles`)
-///      and drop to Welcome (the injected `onWiped` callback runs
-///      `AppState.signOut`). The username frees immediately.
+///   5. On 200, OR a 404 proving the account was already removed, wipe ALL
+///      local key material (`Keystore.wipeAllProfiles`) and drop to Welcome
+///      (the injected `onWiped` callback runs `AppState.signOut`).
 ///
-/// The local wipe is structurally unreachable before a 200 — every pre-POST
-/// failure returns from `.failed` without touching the keystore. `.com`
-/// independently re-enforces last-device, so a 403 "not the last device" is the
-/// authoritative backstop surfaced via the humanized-error path.
+/// The local wipe is structurally unreachable unless `.com` confirms the
+/// desired terminal state (200 deleted, 404 already absent). Authentication,
+/// policy, and network failures never touch the keystore. `.com` independently
+/// re-enforces last-device, so a 403 "not the last device" is the authoritative
+/// backstop surfaced via the humanized-error path.
 @Observable
 @MainActor
 public final class AccountDeletionViewModel {
@@ -52,7 +53,7 @@ public final class AccountDeletionViewModel {
     /// Keychain profile (the only copy of the identity dies with the account).
     private let wipe: @MainActor () -> Void
     /// Drop to Welcome after a successful wipe (the SettingsTab wires this to
-    /// `AppState.signOut`). Runs ONLY after a 200 + wipe.
+    /// `AppState.signOut`). Runs only after `.com` confirms deleted/already gone.
     private let onWiped: @MainActor () -> Void
 
     public init(
@@ -139,7 +140,7 @@ public final class AccountDeletionViewModel {
             }
             return
         } catch ScreensClientError.http(let status, _) where status == 404 {
-            phase = .failed("That account no longer exists.")
+            finishLocalRemoval()
             return
         } catch let error as ScreensClientError {
             phase = .failed(error.errorDescription ?? "That didn't work. Try again in a moment.")
@@ -149,9 +150,12 @@ public final class AccountDeletionViewModel {
             return
         }
 
-        // 200 only: the account row is hard-deleted on `.com` (the name is
-        // already free). Now — and ONLY now — erase the local key material and
-        // drop to Welcome.
+        // The account row is hard-deleted on `.com` (the name is already free).
+        // Erase the local identity and drop to Welcome.
+        finishLocalRemoval()
+    }
+
+    private func finishLocalRemoval() {
         phase = .wiping
         wipe()
         onWiped()

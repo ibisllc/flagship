@@ -117,18 +117,18 @@ final class AccountDeletionViewModelTests: XCTestCase {
         XCTAssertFalse(didWipe)
     }
 
-    func test_404_failsWithoutWiping() async throws {
+    func test_404_alreadyAbsent_completesLocalWipe() async throws {
         let server = MockFlagshipServerClient(); server.simulatedLatency = 0
         server.selfDeleteError = ScreensClientError.http(status: 404, message: "username not registered")
         let irk = Curve25519.Signing.PrivateKey()
-        var didWipe = false
-        let vm = makeVM(server: server, irk: irk, wiped: { didWipe = true }, onWiped: {})
+        var didWipe = false, didLeave = false
+        let vm = makeVM(server: server, irk: irk, wiped: { didWipe = true }, onWiped: { didLeave = true })
 
         await vm.run(alsoDeleteServerContent: false)
 
-        guard case .failed(let msg) = vm.phase else { return XCTFail("expected .failed, got \(vm.phase)") }
-        XCTAssertTrue(msg.lowercased().contains("no longer exists"), "got: \(msg)")
-        XCTAssertFalse(didWipe)
+        XCTAssertEqual(vm.phase, .completed)
+        XCTAssertTrue(didWipe, "404 proves the account is already gone; the orphaned Keychain identity must be removed")
+        XCTAssertTrue(didLeave)
     }
 
     func test_noActiveAccount_failsAndDoesNotPost() async throws {

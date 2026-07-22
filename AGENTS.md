@@ -149,6 +149,15 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-22 (iOS orphaned-account cleanup) — a Keychain-restored profile is
+now reconciled with `.com` before Face ID unlock, and an account-deletion 404
+completes the local wipe.** Keychain/iCloud Keychain survives app deletion, so
+the old launch path could resurrect a locally wrapped identity after its account
+row was gone and then trap every destructive action behind server/recovery
+checks. A confirmed `exists:false` now clears all Flagship Keychain profiles and
+returns to Welcome; transport/server failures preserve offline access and never
+wipe. This requires the next TestFlight build before devices receive it.
+
 **2026-07-22 (voi.ci route repair) — the production short-link host is bound
 to `flagship-com` through source-controlled Worker routes for both the apex and
 `www`.** The redirect handler had shipped without its cross-zone routes, so
