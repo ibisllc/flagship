@@ -119,6 +119,27 @@ describe("docker build hardening (attacker-authored Dockerfile is the least-cont
     expect(args.join(" ")).not.toContain("docker.sock");
   });
 
+  it("allows the sandboxed app-clone directory as the required build context", () => {
+    const context = "/var/flagship/data/app-clones/openai-build--helloworld";
+    const args = dockerBuildArgs("img:1", context, DEFAULT_DOCKER_BUILD_LIMITS);
+    expect(args.at(-1)).toBe(context);
+    expect(args).not.toContain("-v");
+    expect(args).not.toContain("--mount");
+  });
+
+  it("does not broaden the context exception to private state or traversal", () => {
+    expect(() => dockerBuildArgs(
+      "img:1",
+      "/var/flagship",
+      DEFAULT_DOCKER_BUILD_LIMITS,
+    )).toThrow(/references \/var\/flagship/);
+    expect(() => dockerBuildArgs(
+      "img:1",
+      "/var/flagship/data/app-clones/../../identity",
+      DEFAULT_DOCKER_BUILD_LIMITS,
+    )).toThrow(/references \/var\/flagship/);
+  });
+
   it("honors overridden limits (operator can point at a locked egress bridge)", () => {
     const args = dockerBuildArgs("img:2", "/c", {
       memory: "512m",

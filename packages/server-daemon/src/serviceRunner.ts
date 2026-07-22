@@ -44,9 +44,21 @@ export interface CommandRunner {
 // keeps it that way.)
 // ──────────────────────────────────────────────────────────────────────
 export function assertNoHostPathInDockerArgs(args: readonly string[]): void {
-  for (const a of args) {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
     const lower = a.toLowerCase();
     if (lower.includes("/var/flagship")) {
+      // `docker build` necessarily receives one host path: its FINAL build
+      // context. Vibe/build-mode workspaces live in this dedicated subtree;
+      // Docker exposes only that directory to the Dockerfile, not the parent
+      // Flagship state tree. Keep the exception exact so `-f`, mounts, the
+      // whole /var/flagship root, and `..` traversal remain blocked.
+      const isSandboxedBuildContext =
+        args[0] === "build" &&
+        i === args.length - 1 &&
+        lower.startsWith("/var/flagship/data/app-clones/") &&
+        !lower.split("/").includes("..");
+      if (isSandboxedBuildContext) continue;
       throw new Error(`refusing docker invocation: arg references /var/flagship (${a})`);
     }
     if (lower.includes("docker.sock")) {
@@ -302,7 +314,8 @@ export function dockerBuildArgs(
     contextDir,
   ];
   // Regression insurance: a build must NEVER bind-mount a host path or the
-  // docker socket (Part-3 guard). Throws loudly at the invocation site.
+  // docker socket. Its final, sandboxed app-clone build context is the sole
+  // host-path argument allowed. Throws loudly at the invocation site.
   assertNoHostPathInDockerArgs(args);
   return args;
 }
