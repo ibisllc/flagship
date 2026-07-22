@@ -593,6 +593,17 @@ PUBKEY
 chmod 600 /home/flagship/.ssh/authorized_keys
 chown -R flagship:flagship /home/flagship/.ssh
 systemctl enable ssh 2>/dev/null || systemctl enable sshd 2>/dev/null || true
+# \`systemctl enable\` can silently fail in the installer chroot (there is no
+# running systemd/D-Bus). Make debug access deterministic on the first real
+# boot, just like the production units below.
+mkdir -p /etc/systemd/system/multi-user.target.wants
+if [ -e /lib/systemd/system/ssh.service ]; then
+    ln -sf /lib/systemd/system/ssh.service /etc/systemd/system/multi-user.target.wants/ssh.service
+elif [ -e /usr/lib/systemd/system/ssh.service ]; then
+    ln -sf /usr/lib/systemd/system/ssh.service /etc/systemd/system/multi-user.target.wants/ssh.service
+elif [ -e /lib/systemd/system/sshd.service ]; then
+    ln -sf /lib/systemd/system/sshd.service /etc/systemd/system/multi-user.target.wants/sshd.service
+fi
 
 # Persist a couple of install facts for the manual provisioning over SSH.
 mkdir -p /var/flagship
@@ -841,11 +852,14 @@ Description=Flagship first-boot registration with .com
 After=network-online.target
 Wants=network-online.target
 ConditionPathExists=!/var/flagship/registered.flag
+StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/flagship
 ExecStart=/usr/local/sbin/flagship-first-boot-register.sh
+Restart=on-failure
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
@@ -869,17 +883,37 @@ cd /opt/flagship
 # so its registered.flag makes this unit skip (no double-emit). Best-effort.
 CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
 report_phase() {
-    curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
+    curl -fsS --connect-timeout 3 --max-time 8 -X POST -H 'content-type: application/json' \\
         --data '{"phase":"'"$1"'"}' \\
         "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
 }
+wait_for_registration_network() {
+    # network-online.target is only meaningful when the installed networking
+    # stack enables a wait-online implementation. Debian images vary, so guard
+    # the actual invariant here: a default route plus working DNS/TCP/TLS.
+    _deadline=$(( $(date +%s) + 120 ))
+    _attempt=0
+    while [ "$(date +%s)" -lt "$_deadline" ]; do
+        _attempt=$((_attempt + 1))
+        if ip route show default 2>/dev/null | grep -q . && \\
+           curl -sS -o /dev/null --connect-timeout 3 --max-time 8 "$CONTROL_PLANE_BASE/"; then
+            echo "[register] network ready (attempt $_attempt)"
+            return 0
+        fi
+        echo "[register] waiting for route/DNS/HTTPS (attempt $_attempt)"
+        sleep 5
+    done
+    echo "[register] network unavailable after 120s"
+    return 1
+}
+wait_for_registration_network
 report_phase registering
 npx tsx scripts/install-helper.ts sign-server-register \\
     --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \\
     --auth-code-blob /var/flagship/install-blob.json \\
     > /run/register-payload.json
 echo "[register] POST $REGISTRATION_URL"
-curl -fsS -X POST -H "content-type: application/json" \\
+curl -fsS --connect-timeout 5 --max-time 30 -X POST -H "content-type: application/json" \\
     --data @/run/register-payload.json \\
     "$REGISTRATION_URL"
 date > /var/flagship/registered.flag
