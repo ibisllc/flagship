@@ -38,6 +38,7 @@
     <Compile Include="..\src\IsoBaseCache.cs"/>
     <!-- Phone-pairing subprocess glue: the pure event parser is WPF-free. -->
     <Compile Include="..\src\PairSession.cs"/>
+    <Compile Include="..\src\QrTerminalMatrix.cs"/>
     <!-- The pure VM core (mirrors apps/builder-mac FlagshipBuilderCore/VM) is
          WPF-free by design; pinned against the shared golden vectors. -->
     <Compile Include="..\src\VM\HostResources.cs"/>
@@ -78,6 +79,7 @@
     <Compile Include="WhpxProbeTests.cs"/>
     <Compile Include="VMManagerTests.cs"/>
     <Compile Include="PairEventParserTests.cs"/>
+    <Compile Include="QrTerminalMatrixTests.cs"/>
     <Compile Include="SshLaunchTests.cs"/>
   </ItemGroup>
 
