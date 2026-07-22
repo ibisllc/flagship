@@ -97,7 +97,7 @@ and Linux (`iso_manifest_client.py` / `iso_base_cache.py`) siblings.
 
 ```pwsh
 # Build (Debug) + run tests in one shot:
-pwsh apps/builder-windows/make.ps1
+powershell.exe -ExecutionPolicy Bypass -NoProfile -File apps/builder-windows/make.ps1
 
 # Just build:
 dotnet build apps/builder-windows/FlagshipBuilder.csproj
@@ -126,7 +126,7 @@ dotnet run --project apps/builder-windows/FlagshipBuilder.csproj
 ## Publish (self-contained .exe)
 
 ```pwsh
-pwsh apps/builder-windows/make.ps1 publish
+powershell.exe -ExecutionPolicy Bypass -NoProfile -File apps/builder-windows/make.ps1 publish
 # → apps/builder-windows/dist/FlagshipBuilder.exe (single-file, ~70MB)
 ```
 
@@ -143,7 +143,7 @@ This produces a self-contained, ReadyToRun, single-file `.exe`. No
 3. Set the thumbprint env var:
    ```pwsh
    $env:FLAGSHIP_SIGN_CERT_THUMBPRINT = "ABCD1234..."
-   pwsh apps/builder-windows/make.ps1 sign
+   powershell.exe -ExecutionPolicy Bypass -NoProfile -File apps/builder-windows/make.ps1 sign
    ```
 
 The script signs with SHA-256 + RFC 3161 timestamp from DigiCert.

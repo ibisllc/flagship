@@ -27,6 +27,7 @@
     <Compile Include="src\App.xaml.cs" />
     <Compile Include="src\MainWindow.xaml.cs" />
     <Compile Include="src\Wizard.cs" />
+    <Compile Include="src\CliArgs.cs" />
     <Compile Include="src\CliRunner.cs" />
     <Compile Include="src\CliLocator.cs" />
     <Compile Include="src\DiskEnumerator.cs" />

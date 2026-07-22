@@ -1,0 +1,41 @@
+name: builder-windows (.NET tests + WPF publish)
+
+on:
+  pull_request:
+    paths:
+      - "apps/builder-windows/**"
+      - "apps/desktop-shared/golden/**"
+      - ".github/workflows/builder-windows.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/builder-windows/**"
+      - "apps/desktop-shared/golden/**"
+      - ".github/workflows/builder-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-publish:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Unit tests
+        run: dotnet test apps/builder-windows/tests/FlagshipBuilder.Tests.csproj --configuration Release
+
+      - name: Publish self-contained app
+        shell: powershell
+        run: apps/builder-windows/make.ps1 publish
+
+      - name: Verify packaged executable
+        shell: powershell
+        run: |
+          $exe = Get-Item apps/builder-windows/dist/FlagshipBuilder.exe
+          if ($exe.Length -lt 1MB) { throw "published executable is unexpectedly small" }

@@ -56,7 +56,7 @@
     <Compile Include="..\src\VM\VMManager.cs"/>
     <!-- CliArgs lives in Wizard.cs alongside the view-model; we extract
          it into a tiny shim for the test target to keep WPF out. -->
-    <Compile Include="CliArgsShim.cs"/>
+    <Compile Include="..\src\CliArgs.cs"/>
     <Compile Include="DiskEnumeratorTests.cs"/>
     <Compile Include="VerifyResultTests.cs"/>
     <Compile Include="CliLocatorTests.cs"/>
