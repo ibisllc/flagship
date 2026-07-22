@@ -203,10 +203,10 @@ describe("service-worker.js — install / activate / waiting-state safety", () =
     // Seed: pretend old caches from previous SW versions exist.
     await h.caches.open("flagship-webapp-shell-v15");
     await h.caches.open("flagship-webapp-shell-v16");
-    await fireEvent(h.self, "install", {}); // creates the current (-v17)
+    await fireEvent(h.self, "install", {}); // creates the current (-v18)
     await fireEvent(h.self, "activate", {});
     const remaining = await h.caches.keys();
-    expect(remaining).toContain("flagship-webapp-shell-v17");
+    expect(remaining).toContain("flagship-webapp-shell-v18");
     expect(remaining).not.toContain("flagship-webapp-shell-v15");
     expect(remaining).not.toContain("flagship-webapp-shell-v16");
   });

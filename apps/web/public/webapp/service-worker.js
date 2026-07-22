@@ -37,7 +37,10 @@
 //       enroll/disable (lib/totp.js), the boot-approval relay
 //       (lib/edToMont.js + lib/bootApproval.js + views/boot-approval.js),
 //       and device-capability chip/scope-gating (consumed in home.js).
-const SHELL_VERSION = "v17";
+//  v18: refresh views/home.js so passwordless demo sign-in materialises the
+//       server supplied by account resolution without requiring a paired
+//       session id.
+const SHELL_VERSION = "v18";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

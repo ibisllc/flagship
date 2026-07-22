@@ -368,7 +368,8 @@ describe("/webapp PWA static surface", () => {
     //     views/wizard.js.
     // v17 added the webapp ↔ mobile parity surfaces: live account audit
     //     log, IRK-signed TOTP, boot-approval relay, device-cap gating.
-    expect(r.body).toContain('SHELL_VERSION = "v17"');
+    // v18 refreshes Home so demo login renders its server without a paired id.
+    expect(r.body).toContain('SHELL_VERSION = "v18"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");
