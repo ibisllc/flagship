@@ -11,7 +11,7 @@
  * even if every existing behavioral spec passes.
  */
 
-import { test, expect } from "../fixtures/pod-sim.js";
+import { test, expect, bootstrapToHome } from "../fixtures/pod-sim.js";
 
 const PASSPHRASE = "correct-horse-battery-staple-shell-test";
 
@@ -159,7 +159,7 @@ test.describe("S15 — webapp brand DNA", () => {
     page,
   }) => {
     await page.goto("/");
-    const btn = page.locator("#bootstrap-go");
+    const btn = page.locator("#bootstrap-create");
     await expect(btn).toBeVisible();
     const styles = await btn.evaluate((el) => {
       const cs = getComputedStyle(el);
@@ -182,10 +182,7 @@ test.describe("S15 — webapp brand DNA", () => {
     podSim,
   }) => {
     await page.goto("/");
-    await page.fill("#bootstrap-passphrase", PASSPHRASE);
-    await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-    await page.click("#bootstrap-go");
-    await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+    await bootstrapToHome(page, PASSPHRASE);
 
     // Section h2 elements ("Identity", "Servers", "Session", etc.) all
     // resolve to the mono stack + uppercase per the new style.css.

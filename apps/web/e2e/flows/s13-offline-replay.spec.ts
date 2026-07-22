@@ -8,7 +8,7 @@
  * the REPLAY_PATH_PATTERNS (smoke for the queue's wiring).
  */
 
-import { test, expect, syncWebappPubkey } from "../fixtures/pod-sim.js";
+import { test, expect, bootstrapToHome, syncWebappPubkey } from "../fixtures/pod-sim.js";
 
 // S13 is the one suite that tests the service worker; the project
 // default blocks SWs (so page.route can intercept /api/* in other
@@ -24,10 +24,7 @@ test("S13 — orders/send queued while offline + SW carries the replay patterns"
 }) => {
   // Bootstrap + pair.
   await page.goto("/");
-  await page.fill("#bootstrap-passphrase", PASSPHRASE);
-  await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-  await page.click("#bootstrap-go");
-  await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await bootstrapToHome(page, PASSPHRASE);
   await syncWebappPubkey(page, podSim);
 
   await page.locator("#view-home .advanced-disclosure").evaluate((d) => { d.open = true; });

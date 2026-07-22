@@ -149,6 +149,12 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-22 (web E2E onboarding compatibility) — the pod-sim flows follow the
+current random-handle onboarding and profile-scoped persistence model.** A shared
+helper drives the modal passphrase flow, creates a local-only test profile around
+the minted seed, and replaces the retired bootstrap field selectors; the pairing
+assertion now follows the label-free v2 order and active-profile API. TypeScript
+and the signup/reload/pod-pair browser scenarios pass locally on Windows.
 **2026-07-22 (Android clean-build CI) â€” a fresh checkout can build without a
 private Firebase file, and Android now has a native cloud gate.** The Google
 Services plugin applies only when `google-services.json` is present (push stays

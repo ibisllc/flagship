@@ -3,7 +3,7 @@
  * to a freshly-minted test identity. Each test gets isolated state.
  */
 
-import { test as base, type Page } from "@playwright/test";
+import { test as base, expect, type Page } from "@playwright/test";
 import { newTestIdentity, type TestIdentity, bytesToHex } from "./identity.js";
 import { startPodSim, type PodSim } from "../pod-sim/server.js";
 
@@ -12,6 +12,50 @@ export interface E2EFixtures {
   podSim: PodSim;
 }
 
+/**
+ * Complete first-run identity creation without coupling flow tests to the
+ * account-claim wizard. The identity is persisted before username suggestion,
+ * so forcing that optional network step to fail lets us reload, unlock, and
+ * reach the authenticated shell deterministically.
+ */
+export async function bootstrapToHome(page: Page, passphrase: string): Promise<void> {
+  await page.route("**/api/username/suggest", async (route) => {
+    await route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
+  });
+  await page.click("#bootstrap-create");
+  await page.locator(".modal-input").fill(passphrase);
+  await page.click("[data-modal-ok]");
+  await page.locator(".modal-input").fill(passphrase);
+  await page.click("[data-modal-ok]");
+  await expect(page.locator("#toast")).toBeVisible({ timeout: 10_000 });
+  await page.unroute("**/api/username/suggest");
+
+  await page.reload();
+  await expect(page.locator("#view-unlock")).toBeVisible({ timeout: 10_000 });
+  await page.fill("#unlock-passphrase", passphrase);
+  await page.click("#unlock-go");
+  await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+
+  // Current persistence is profile-scoped. Create a local-only profile around
+  // the same unlocked seed so subsequent pair/settings writes have a valid
+  // namespace and later reloads can unlock the profile-specific wrapped key.
+  await page.evaluate(async (localPassphrase) => {
+    const state = (await import("/lib/state.js" as string)) as {
+      getSession(): { umk: Uint8Array | null };
+    };
+    const keystore = (await import("/keystore.js" as string)) as {
+      persistSeedForProfile(seed: Uint8Array, cloudName: string, passphrase: string): Promise<string>;
+    };
+    const profiles = (await import("/lib/profiles.js" as string)) as {
+      addProfile(profile: { cloudName: string; accountId: string; deviceId: string; createdAt: number }): unknown;
+    };
+    const seed = state.getSession().umk;
+    if (!seed) throw new Error("bootstrapToHome: unlocked seed missing");
+    const cloudName = "e2e-local";
+    await keystore.persistSeedForProfile(seed, cloudName, localPassphrase);
+    profiles.addProfile({ cloudName, accountId: "e2e-local", deviceId: "browser", createdAt: Date.now() });
+  }, passphrase);
+}
 /**
  * Read the webapp's freshly-derived IRK public key (the one created
  * from the in-browser bootstrap random UMK) and tell the pod-sim to

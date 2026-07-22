@@ -12,7 +12,7 @@
  * notification → assert it focuses an existing tab.
  */
 
-import { test, expect } from "../fixtures/pod-sim.js";
+import { test, expect, bootstrapToHome } from "../fixtures/pod-sim.js";
 
 // S12 needs the SW (it pings the SW with a simulate-push message).
 // Project default blocks SWs; re-enable for this scenario.
@@ -29,10 +29,7 @@ test("S12 — simulate-push event → Notification fires with personalised body"
 
   // Bootstrap so the SW is registered.
   await page.goto("/");
-  await page.fill("#bootstrap-passphrase", PASSPHRASE);
-  await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-  await page.click("#bootstrap-go");
-  await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await bootstrapToHome(page, PASSPHRASE);
 
   // Wait for the SW to be active.
   await page.evaluate(() => {

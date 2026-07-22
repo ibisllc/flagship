@@ -8,16 +8,13 @@
  * contexts); scope here is the export download fires correctly.
  */
 
-import { test, expect } from "../fixtures/pod-sim.js";
+import { test, expect, bootstrapToHome } from "../fixtures/pod-sim.js";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
 
 test("S10 — export wrapped UMK downloads a JSON file", async ({ page }) => {
   await page.goto("/");
-  await page.fill("#bootstrap-passphrase", PASSPHRASE);
-  await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-  await page.click("#bootstrap-go");
-  await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await bootstrapToHome(page, PASSPHRASE);
 
   await page.click("#open-recovery");
   await expect(page.locator("#view-recovery")).toBeVisible();

@@ -21,7 +21,7 @@
  * docs/e2e-test-plan.md.
  */
 
-import { test, expect } from "../fixtures/pod-sim.js";
+import { test, expect, bootstrapToHome } from "../fixtures/pod-sim.js";
 
 const PASSPHRASE = "compose-deliver-test-passphrase-1234";
 
@@ -39,10 +39,7 @@ test.describe("S16 — Compose draft (#24)", () => {
 
     await page.goto("/");
     await expect(page.locator("#view-bootstrap")).toBeVisible();
-    await page.fill("#bootstrap-passphrase", PASSPHRASE);
-    await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-    await page.click("#bootstrap-go");
-    await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+    await bootstrapToHome(page, PASSPHRASE);
 
     // Drive the view directly via its module entry hook. The hash
     // router only listens to button clicks (no popstate handler), so
