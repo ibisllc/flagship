@@ -103,6 +103,8 @@ describe("debug SSH key threading — a debug grant with a real key bakes the SS
     expect(b).toContain("Flagship DEBUG bootstrap");
     expect(b).toContain(KEY);
     expect(b).toContain("openssh-server");
+    expect(b).toContain("/etc/systemd/system/multi-user.target.wants/ssh.service");
+    expect(b).toContain("ln -sf /lib/systemd/system/ssh.service");
     expect(b).not.toContain("[flagship-bootstrap] starting"); // not the provisioning bootstrap
   });
 
@@ -217,10 +219,13 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     // root, or committing an update. Under on-failure systemd treats exit 0 as
     // success and leaves the box dead the instant it consumes its SWK — before
     // it ever serves HTTPS (the "still coming up" first-boot failure).
-    expect(b).toContain("Restart=always");
-    expect(b).not.toContain("Restart=on-failure");
-    expect(b).toContain("StartLimitIntervalSec=0");
-    expect(b).toContain("RestartSec=5");
+    const daemonStart = b.indexOf("flagship-daemon.service <<'UNIT'");
+    const daemonEnd = b.indexOf("\nUNIT", daemonStart);
+    const daemonUnit = b.slice(daemonStart, daemonEnd);
+    expect(daemonUnit).toContain("Restart=always");
+    expect(daemonUnit).not.toContain("Restart=on-failure");
+    expect(daemonUnit).toContain("StartLimitIntervalSec=0");
+    expect(daemonUnit).toContain("RestartSec=5");
     expect(b).toContain("WantedBy=multi-user.target");
     // The pre-fix bug used `npx … run start`; that must be gone.
     expect(b).not.toContain("npx npm run start");
@@ -246,6 +251,26 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     expect(b).not.toMatch(/systemctl start flagship-first-boot-register\.service/);
   });
 
+  it("waits for usable networking and retries transient first-boot registration failures", () => {
+    const b = bootstrap();
+    const unitStart = b.indexOf("flagship-first-boot-register.service <<UNIT");
+    const unitEnd = b.indexOf("\nUNIT", unitStart);
+    const unit = b.slice(unitStart, unitEnd);
+    expect(unit).toContain("Restart=on-failure");
+    expect(unit).toContain("RestartSec=10");
+    expect(unit).toContain("StartLimitIntervalSec=0");
+
+    const wrapperStart = b.indexOf("flagship-first-boot-register.sh <<'WRAPPER'");
+    const wrapperEnd = b.indexOf("\nWRAPPER", wrapperStart);
+    const wrapper = b.slice(wrapperStart, wrapperEnd);
+    expect(wrapper).toContain("wait_for_registration_network");
+    expect(wrapper).toContain("ip route show default");
+    expect(wrapper).toContain(
+      'curl -sS -o /dev/null --connect-timeout 3 --max-time 8 "$CONTROL_PLANE_BASE/"',
+    );
+    expect(wrapper).toContain("network unavailable after 120s");
+    expect(wrapper).toContain("curl -fsS --connect-timeout 5 --max-time 30 -X POST");
+  });
   it("enables the units DETERMINISTICALLY (chroot-proof manual .wants symlinks)", () => {
     // ROOT CAUSE of the live "installed but dead at the login prompt" box:
     // `systemctl enable` in the installer in-target chroot (no running
@@ -315,7 +340,7 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     // (the encrypted path emits it inline; registered.flag stops a double-emit).
     expect(b).toContain("AUTH_CODE_SERIAL=$AUTH_CODE_SERIAL");
     const wrapperStart = b.indexOf("flagship-first-boot-register.sh <<'WRAPPER'");
-    const wrapperEnd = b.indexOf("WRAPPER\n", wrapperStart);
+    const wrapperEnd = b.indexOf("\nWRAPPER", wrapperStart);
     const wrapper = b.slice(wrapperStart, wrapperEnd);
     expect(wrapper).toContain("report_phase registering");
     expect(wrapper).toContain("/api/order/$AUTH_CODE_SERIAL/status");
@@ -1196,7 +1221,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // skip apt/clone/build only when the image's ref marker matches the signed
       // recipe, and reuses the factory-built unseal helper; normal ISO/bare-metal
       // execution remains the default branch.
-      "1d6191bb02813bdc15410e1320fa513e1f329c66ebf15244ceb6b7a96c4bb742",
+      "67118d2e95a9683c5010fd6129f46998d602a806ecbf0c55ff896e56bb69cc58",
     );
   });
 
@@ -1223,7 +1248,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // wired premount persists flagship-unlock.log (see the wired pin above).
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
-      "453cd9152ca83f7974287f4d012c8b956775ecae126a25a6d7464f909a3f4c63",
+      "640f43918457a8e0275b7064730c27d216743d3d6aea05a49a7724616476d60d",
     );
   });
 

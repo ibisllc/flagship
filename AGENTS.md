@@ -149,6 +149,13 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-22 (Debian first-boot registration recovery) — VM registration now
+waits for usable networking and self-heals after transient boot races.** The
+first-boot unit has unlimited on-failure retries, the wrapper bounds route/DNS/
+TLS readiness and every curl, and diagnostic SSH is enabled with a deterministic
+chroot-proof systemd symlink. Canonical engine/native copies and vectors were
+regenerated; all 260 builder tests and the TypeScript build pass. A fresh live
+QEMU install remains the final proof of registration and SSH on the wire.
 **2026-07-22 (Windows Studio Mac-parity flow) — Windows now opens on a live
 phone-pairing cover and preserves the authorization boundary.** WPF has separate
 QR, SAS-confirm, and awaiting-authorization panes; manual recipe entry is the
