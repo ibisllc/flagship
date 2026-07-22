@@ -56,6 +56,12 @@
  */
 
 import { controlApex } from "./apex.js";
+import {
+  getSessionTokenForPod,
+  setPodBaseUrl,
+  setSessionToken,
+  setSessionTokenForPod,
+} from "./api.js";
 
 /** Canonical scope list — mirror of `DEVICE_SCOPES` in
  *  `packages/protocol/src/auth.ts`. Order MUST match the canonical
@@ -250,6 +256,49 @@ export async function connectDemoServer(username, opts = {}) {
     const text = await resp.text().catch(() => "");
     throw new Error(`connect failed: HTTP ${resp.status} ${text}`);
   }
+}
+
+/** Create (or reuse) this browser's paired session on a live demo server. */
+export async function ensureDemoServerPairing(username, block, opts = {}) {
+  const fqdn = typeof block?.fqdn === "string" ? block.fqdn.trim().toLowerCase() : "";
+  if (!fqdn) throw new Error("demo server address is missing");
+  const readToken = opts.getToken || getSessionTokenForPod;
+  const writeToken = opts.setToken || setSessionTokenForPod;
+  const writeLegacy = opts.setLegacy || ((server, token) => {
+    setPodBaseUrl(`https://${server}`);
+    setSessionToken(token);
+  });
+  const existing = readToken(fqdn);
+  if (existing) {
+    writeLegacy(fqdn, existing);
+    return { fqdn, token: existing, reused: true };
+  }
+
+  const toHex = opts.bytesToHex || ((bytes) =>
+    Array.from(bytes).map((x) => x.toString(16).padStart(2, "0")).join(""));
+  const random = opts.random || ((length) => {
+    const bytes = new Uint8Array(length);
+    (globalThis.crypto || crypto).getRandomValues(bytes);
+    return bytes;
+  });
+  const token = toHex(random(32));
+  const f = opts.fetch || fetch;
+  const baseUrl = opts.baseUrl || controlApex();
+  const response = await f(
+    `${baseUrl}/api/dev/sample-user/${encodeURIComponent(username)}/pair`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token }),
+    },
+  );
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`demo pairing failed (HTTP ${response.status})${detail ? `: ${detail}` : ""}`);
+  }
+  writeToken(fqdn, token);
+  writeLegacy(fqdn, token);
+  return { fqdn, token, reused: false };
 }
 
 /** POST `/api/dev/sample-user/{username}/cancel` (no auth, no body) —

@@ -177,6 +177,7 @@ import {
   handleCleanupDemoAccount,
   handleGetDemoUser,
   handleListDemoUsers,
+  handlePairDemoUser,
   handleGymProvision,
   handleMintDeviceGrant,
   handleRevokeDeviceGrant,
@@ -661,6 +662,7 @@ const ROUTE_RE = {
   // Idempotent demo creation, exact-ID cleanup, and admin status reads.
   DEMO_USER_CREATE: /^\/api\/dev\/sample-user\/create$/,
   DEMO_USER_CLEANUP: /^\/api\/dev\/sample-user\/cleanup$/,
+  DEMO_USER_PAIR: /^\/api\/dev\/sample-user\/([^/]+)\/pair$/,
   DEMO_USER_GET: /^\/api\/dev\/sample-user\/([^/]+)$/,
   DEMO_USER_LIST: /^\/api\/dev\/sample-user$/,
   // Phase 1 of the gym recipe→Hetzner pipeline. GYM-ONLY: provisions a box
@@ -3105,7 +3107,8 @@ export async function tryControlPlane(
 
   // ──────────────────────────────────────────────────────────────────
   // One admin-owned demo lifecycle: create-or-resume, status, and exact-ID
-  // cleanup. There are no public connect, wake, heartbeat, or snapshot routes.
+  // cleanup. Pairing is the sole public write: knowing a demo username is the
+  // capability, and the handler can sign only a non-sensitive paired session.
   if (path.startsWith("/api/dev/sample-user")) {
     const lazyHetzner = env.HCLOUD_TOKEN
       ? createHetznerClient(env.HCLOUD_TOKEN)
@@ -3144,6 +3147,23 @@ export async function tryControlPlane(
       ...(demoDns ? { dns: demoDns } : {}),
       apex: env.SERVICES_APEX ?? "flagship.services",
     };
+    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_PAIR))) {
+      if (!env.DEMO_IRK_KEK) {
+        return jsonResponse({ error: "demo pairing is not configured" }, 503);
+      }
+      return finishPlain(await handlePairDemoUser({
+        storage: storage.demoUsers,
+        demoIrkKek: hexDecode(env.DEMO_IRK_KEK),
+        postOrder: async (fqdn, envelope) => {
+          const response = await fetch(`https://${fqdn}/api/orders-from-user`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(envelope),
+          });
+          return { status: response.status };
+        },
+      }, decodeURIComponent(m[1]!), await readJson(request)));
+    }
     if (method === "POST" && ROUTE_RE.DEMO_USER_CREATE.test(path)) {
       {
         const _adminAuth = authorizeAdmin({

@@ -16,9 +16,12 @@ import {
   connectDemoServer,
   demoLifecycle,
   demoPodStatus,
+  ensureDemoServerPairing,
   pollUntilDemoServerUp,
   samplePodFromDemoServer,
 } from "../public/webapp/lib/usersCheck.js";
+
+const TOKEN_FOR_TEST = "7f".repeat(32);
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -124,6 +127,70 @@ describe("webapp usersCheck — Plan A demoServer parsing", () => {
     );
     await expect(connectDemoServer("demoalice", { fetch: fakeFetch as any }))
       .rejects.toThrow(/429/);
+  });
+
+  it("ensureDemoServerPairing creates and persists a browser session", async () => {
+    const fakeFetch = vi.fn().mockResolvedValue(jsonResponse(200, { ok: true }));
+    const setToken = vi.fn();
+    const setLegacy = vi.fn();
+    const token = "42".repeat(32);
+    const result = await ensureDemoServerPairing(
+      "openai-build",
+      { fqdn: "HOME.OPENAI-BUILD.FLAGSHIP.SERVICES" },
+      {
+        fetch: fakeFetch as any,
+        getToken: () => null,
+        setToken,
+        setLegacy,
+        random: () => new Uint8Array(32).fill(0x42),
+        baseUrl: "https://flagshipserver.com",
+      },
+    );
+
+    expect(result).toEqual({
+      fqdn: "home.openai-build.flagship.services",
+      token,
+      reused: false,
+    });
+    expect(fakeFetch).toHaveBeenCalledWith(
+      "https://flagshipserver.com/api/dev/sample-user/openai-build/pair",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ token }),
+      }),
+    );
+    expect(setToken).toHaveBeenCalledWith("home.openai-build.flagship.services", token);
+    expect(setLegacy).toHaveBeenCalledWith("home.openai-build.flagship.services", token);
+  });
+
+  it("ensureDemoServerPairing reuses an existing per-server session", async () => {
+    const fakeFetch = vi.fn();
+    const setLegacy = vi.fn();
+    const result = await ensureDemoServerPairing(
+      "openai-build",
+      { fqdn: "home.openai-build.flagship.services" },
+      {
+        fetch: fakeFetch as any,
+        getToken: () => TOKEN_FOR_TEST,
+        setLegacy,
+      },
+    );
+    expect(result.reused).toBe(true);
+    expect(setLegacy).toHaveBeenCalledWith("home.openai-build.flagship.services", TOKEN_FOR_TEST);
+    expect(fakeFetch).not.toHaveBeenCalled();
+  });
+
+  it("ensureDemoServerPairing explains upstream failures", async () => {
+    const fakeFetch = vi.fn().mockResolvedValue(new Response("box offline", { status: 502 }));
+    await expect(ensureDemoServerPairing(
+      "openai-build",
+      { fqdn: "home.openai-build.flagship.services" },
+      {
+        fetch: fakeFetch as any,
+        getToken: () => null,
+        random: () => new Uint8Array(32),
+      },
+    )).rejects.toThrow(/HTTP 502.*box offline/);
   });
 
   it("pollUntilDemoServerUp returns the up-block when status flips", async () => {

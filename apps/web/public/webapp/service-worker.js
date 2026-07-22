@@ -40,7 +40,9 @@
 //  v18: refresh views/home.js so passwordless demo sign-in materialises the
 //       server supplied by account resolution without requiring a paired
 //       session id.
-const SHELL_VERSION = "v18";
+//  v19: refresh Home + usersCheck so opening a demo server mints the browser's
+//       paired session instead of falling through to the unpaired detail error.
+const SHELL_VERSION = "v19";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

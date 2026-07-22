@@ -3,7 +3,16 @@ import type {
   DemoUserRecord,
   DemoUsersStorage,
 } from "@flagship/storage";
-import { notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
+import { signPhoneOrder, type PhoneOrder } from "@flagship/protocol";
+import { deriveDemoUserIrk } from "./demoIdentity.js";
+import { bytesToHex, HEX64 } from "./hex.js";
+import {
+  conflict,
+  malformed,
+  notFound,
+  ok,
+  type HandlerResponseWithHeaders,
+} from "./types.js";
 
 export const DEMO_PAIRED_SESSION_CAP = 3;
 
@@ -18,6 +27,20 @@ export interface DemoUsersDeps {
   hetzner: DemoProviderStatusClient;
   audit?: AuditEventStorage;
   now?: () => number;
+}
+
+export interface DemoPairingDeps {
+  storage: DemoUsersStorage;
+  demoIrkKek: Uint8Array;
+  postOrder: (
+    fqdn: string,
+    envelope: { request: PhoneOrder; signature: string },
+  ) => Promise<{ status: number }>;
+  now?: () => number;
+}
+
+export interface DemoPairingBody {
+  token?: unknown;
 }
 
 function nowMs(deps: DemoUsersDeps): number {
@@ -75,6 +98,56 @@ export async function handleListDemoUsers(
       createdAt: row.createdAt,
     })),
   });
+}
+
+/**
+ * Mint one ordinary paired session on a live demo box. Demo usernames are a
+ * public capability, but the deterministic owner IRK remains Worker-held; this
+ * endpoint signs only the non-sensitive add-paired-session order and forwards
+ * it directly to the demo box. Real-account rows can never enter this path.
+ */
+export async function handlePairDemoUser(
+  deps: DemoPairingDeps,
+  username: string,
+  body: DemoPairingBody | undefined,
+): Promise<HandlerResponseWithHeaders> {
+  const token = typeof body?.token === "string" ? body.token.toLowerCase() : "";
+  if (!HEX64.test(token)) {
+    return malformed("token must be 64-hex");
+  }
+  const row = await deps.storage.get(username.toLowerCase());
+  if (!row) return notFound("no such demo user");
+  if (row.state !== "ready" || !row.activeServerFqdn) {
+    return conflict("demo server is not ready");
+  }
+
+  const issuedAt = (deps.now ?? Date.now)();
+  const request: Extract<PhoneOrder, { type: "add-paired-session" }> = {
+    type: "add-paired-session",
+    serverId: row.activeServerFqdn,
+    token,
+    issuedAt,
+  };
+  const signature = bytesToHex(
+    signPhoneOrder(request, deriveDemoUserIrk(deps.demoIrkKek, row.username)),
+  );
+  let upstream: { status: number };
+  try {
+    upstream = await deps.postOrder(row.activeServerFqdn, { request, signature });
+  } catch {
+    return { status: 502, body: { error: "demo server pairing failed" } };
+  }
+  if (upstream.status < 200 || upstream.status >= 300) {
+    return {
+      status: 502,
+      body: { error: "demo server rejected the pairing request" },
+    };
+  }
+  await deps.storage.update(row.username, { lastActivityAt: issuedAt });
+  return {
+    ...ok({ ok: true, fqdn: row.activeServerFqdn }),
+    headers: { "cache-control": "private, no-store" },
+  };
 }
 
 export async function runDemoProvisioningPoller(

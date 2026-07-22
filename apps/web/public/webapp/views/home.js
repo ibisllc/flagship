@@ -16,7 +16,7 @@ import { formatDuration as formatAge, formatDays } from "../lib/dateFormat.js";
 import { toast } from "../lib/toast.js";
 import { releaseServerName } from "../lib/releaseServer.js";
 import { getActiveProfile } from "../lib/profiles.js";
-import { demoLifecycle } from "../lib/usersCheck.js";
+import { demoLifecycle, ensureDemoServerPairing } from "../lib/usersCheck.js";
 import {
   deviceCapabilityChipText,
   applyScopeGateToButton,
@@ -832,6 +832,18 @@ function wireHomeListControls(list) {
       if (ev.target.closest("button, a, input, label, select, textarea")) return;
       const fqdn = card.getAttribute("data-open-fqdn");
       if (!fqdn) return;
+      const profile = getActiveProfile();
+      if (profile?.demoServer?.fqdn?.toLowerCase() === fqdn.toLowerCase()) {
+        try {
+          await ensureDemoServerPairing(profile.cloudName, profile.demoServer);
+        } catch {
+          toast(
+            "The demo server is online, but this browser couldn't create a paired session. Tap the server to retry.",
+            "err",
+          );
+          return;
+        }
+      }
       const { enterServerDetail } = await import("./server-detail.js");
       await enterServerDetail(fqdn);
     });
