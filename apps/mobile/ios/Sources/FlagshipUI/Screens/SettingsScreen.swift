@@ -257,19 +257,17 @@ public struct SettingsScreen: View {
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
-        let profileName = accountDisplayName ?? "@\(username)"
-        let profileDetail = accountDisplayName == nil ? profileSubtitle : "@\(username) · \(profileSubtitle)"
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                // Account hero — teal monogram + username + account-type
-                // subtitle. Drills into Account security (the most relevant
-                // account-level destination).
-                FSProfileCard(
-                    name: profileName,
-                    subtitle: profileDetail,
-                    action: onOpenAccountSecurity
-                )
-                .padding(.top, FS.space.s2)
+                // A compact, non-interactive cloud identifier. Account
+                // Security remains available in the Account group below.
+                Text("@\(username)")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(c.text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .accessibilityIdentifier("settings-cloud-username")
+                    .padding(.top, FS.space.s2)
 
                 // Optional promo slot (empty unless flipped on).
                 if showPromo {
@@ -436,15 +434,6 @@ public struct SettingsScreen: View {
                 disconnectMessage = "Couldn't disconnect — check your connection and try again."
             }
             disconnectTarget = nil
-        }
-    }
-
-    /// Account-type one-liner under the username on the profile hero.
-    private var profileSubtitle: String {
-        switch accountType {
-        case "multi":  return "Multi-device + 2FA"
-        case "single": return "Single-device account"
-        default:       return "Tap to manage account security"
         }
     }
 
