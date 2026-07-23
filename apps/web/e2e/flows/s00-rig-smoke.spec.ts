@@ -53,11 +53,11 @@ test("pod-sim CORS preflight echoes the cross-origin request", async ({
   const r = await request.fetch(`${podSim.baseUrl}/api/orders-from-user`, {
     method: "OPTIONS",
     headers: {
-      origin: "https://web.flagshipserver.com",
+      origin: "https://webapp.flagshipserver.com",
       "access-control-request-method": "POST",
       "access-control-request-headers": "content-type",
     },
   });
   expect(r.status()).toBe(204);
-  expect(r.headers()["access-control-allow-origin"]).toBe("https://web.flagshipserver.com");
+  expect(r.headers()["access-control-allow-origin"]).toBe("https://webapp.flagshipserver.com");
 });

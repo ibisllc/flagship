@@ -34,7 +34,7 @@ npx playwright install chromium     # downloads the Chromium binary (~100 MB)
 
 ```sh
 # Run all flows against the live apex Worker + a per-test pod-sim:
-WEBAPP_BASE_URL=https://web.flagshipserver.com \
+WEBAPP_BASE_URL=https://webapp.flagshipserver.com \
 APEX_BASE_URL=https://flagshipserver.com \
   npm test
 

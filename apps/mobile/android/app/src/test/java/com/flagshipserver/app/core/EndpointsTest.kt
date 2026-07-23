@@ -21,7 +21,8 @@ class EndpointsTest {
         assertEquals("flagship.services", Endpoints.dataApex)
         assertEquals("https://boot.flagshipserver.com", Endpoints.bootBaseUrl)
         assertEquals("https://recovery.flagshipserver.com", Endpoints.recoveryBaseUrl)
-        assertEquals("https://web.flagshipserver.com/", Endpoints.webappOrigin)
+        assertEquals("https://webapp.flagshipserver.com/", Endpoints.webappOrigin)
+        assertEquals("remote.flagshipserver.com", Endpoints.remoteHost)
         assertEquals("https://flagshipserver.com/api/server/register", Endpoints.registrationUrl)
         assertEquals("home.harry.flagship.services", Endpoints.serverFqdn("home", "harry"))
         assertEquals("harry.flagship.services", Endpoints.userZoneHost("harry"))
@@ -39,7 +40,7 @@ class EndpointsTest {
         // Sub-origins ride the gym apex.
         assertEquals("https://boot.gym.flagshipserver.com", Endpoints.bootBaseUrl)
         assertEquals("https://recovery.gym.flagshipserver.com", Endpoints.recoveryBaseUrl)
-        assertEquals("https://web.gym.flagshipserver.com/", Endpoints.webappOrigin)
+        assertEquals("https://webapp.gym.flagshipserver.com/", Endpoints.webappOrigin)
         // NOT the prod apex ⇒ cert pinning is skipped for this build.
         assertFalse(Endpoints.isProdControlApex)
     }

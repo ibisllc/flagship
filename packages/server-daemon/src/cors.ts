@@ -3,13 +3,19 @@ import type { HttpRequest, HttpResponse } from "./runtime.js";
 /**
  * CORS for the daemon's OWN `/api/*` surface.
  *
- * The browser webapp lives on a DIFFERENT origin from the box: it is
- * served at `web.<control-apex>` (prod `web.flagshipserver.com`, the gym
- * `web.gym.flagshipserver.com`) and calls the box directly at the box's own
- * origin (`<server>.<user>.flagship.services`) for `/api/screens/*`,
+ * The browser webapp lives on a DIFFERENT origin from the box: it is served
+ * at `webapp.<control-apex>` (prod `webapp.flagshipserver.com`, the gym
+ * `webapp.gym.flagshipserver.com`) and calls the box directly at the box's
+ * own origin (`<server>.<user>.flagship.services`) for `/api/screens/*`,
  * `/api/journal`, `/api/front-page`, `/api/services`, `/api/power`, … Those
  * are cross-origin requests, so without `Access-Control-Allow-Origin` the
  * browser blocks the response.
+ *
+ * `remote.<control-apex>` is the SAME shell on its own origin (the
+ * phone-approved browser-remote session, split out of `web.` on 2026-07-23),
+ * and it talks to the box on the same paths — including the two unauthenticated
+ * `/api/companion/dock/*` endpoints that BEGIN the ceremony. It must be allowed
+ * here or the remote flow cannot start at all.
  *
  * The data/services apex (`flagship.services`) has no structural relationship
  * to the control apex (`flagshipserver.com` — a different registrable
@@ -26,6 +32,15 @@ import type { HttpRequest, HttpResponse } from "./runtime.js";
  * headers, never cookies.
  */
 const WEBAPP_ORIGINS: ReadonlySet<string> = new Set([
+  "https://webapp.flagshipserver.com",
+  "https://remote.flagshipserver.com",
+  "https://webapp.gym.flagshipserver.com",
+  "https://remote.gym.flagshipserver.com",
+  // Retired 2026-07-23. A box only picks up this file on a daemon update or
+  // reburn, so an already-installed box keeps answering the old origin until
+  // then — and a pre-release tester whose browser still has the `web.` shell
+  // cached would otherwise be CORS-blocked by their own box. Drop these two
+  // once the fleet has turned over.
   "https://web.flagshipserver.com",
   "https://web.gym.flagshipserver.com",
 ]);

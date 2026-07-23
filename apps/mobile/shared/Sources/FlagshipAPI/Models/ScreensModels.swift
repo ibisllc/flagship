@@ -446,7 +446,7 @@ public struct AppBackupStartResponse: Codable, Equatable, Sendable {
 
 // MARK: - P14 — companion-dock (read-only desktop browser companions)
 //
-// "Dock a browser" mints a 60-second pairing ticket on the pod; the
+// "Remote" mints a 60-second pairing ticket on the pod; the
 // owner's phone shows it as a QR. A desktop browser scans, hits
 // `POST /api/companion/redeem` against the pod, and is granted a
 // 4-hour read-only companion session. The phone owns mint + list +

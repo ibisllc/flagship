@@ -1,10 +1,10 @@
-// P14 — Settings → Dock a browser.
+// P14 — Settings → Remote.
 //
-// Phone-side companion-dock surface. The desktop starts the ceremony and
-// displays a QR; this keyholder phone scans/pastes it, biometric-gates the
-// approval, and grants a 4-hour keyless companion session. Active
-// companions are listed below; each row has a single-tap revoke with a
-// confirm dialog.
+// Phone-side browser-remote surface. The desktop starts the ceremony at
+// remote.<apex> and displays a QR; this keyholder phone scans/pastes it,
+// biometric-gates the approval, and grants a 4-hour keyless remote
+// session. Connected browsers are listed below; each row has a single-tap
+// disconnect with a confirm dialog.
 //
 // Mirrors FlagshipUI/Screens/CompanionDockScreen.swift + the canonical
 // webapp `views/companion-dock.js`.
@@ -45,6 +45,7 @@ import androidx.navigation.NavController
 import com.flagshipserver.app.api.CompanionSummary
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalAppState
+import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -90,12 +91,12 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
         FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
         Spacer(Modifier.height(FS.space.s3))
         Text(
-            "DOCK A BROWSER",
+            "REMOTE",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
         )
         Text(
-            "Pair a desktop browser for four hours of keyless access. Disconnect it anytime.",
+            "Let a desktop browser drive this cloud for four hours without a key. Disconnect it anytime.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )
@@ -141,7 +142,7 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                     Text("Approve this browser?", color = FS.colors.text, fontWeight = FontWeight.SemiBold)
                     Text(approval.serverDomain, color = FS.colors.textMuted, fontFamily = FontFamily.Monospace)
                     Text(
-                        "It will receive a keyless companion session for four hours. Protected actions still require approval from this phone.",
+                        "It will receive a keyless remote session for four hours. Protected actions still require approval from this phone.",
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 13.sp),
                     )
@@ -158,7 +159,7 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
         if (approvalComplete) {
             Spacer(Modifier.height(FS.space.s3))
             FSCard(padding = PaddingValues(FS.space.s4)) {
-                Text("Browser docked", color = FS.colors.text, fontWeight = FontWeight.SemiBold)
+                Text("Browser connected", color = FS.colors.text, fontWeight = FontWeight.SemiBold)
             }
         }
         approvalError?.let {
@@ -168,7 +169,7 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
 
         Spacer(Modifier.height(FS.space.s6))
         Text(
-            "ACTIVE BROWSERS",
+            "CONNECTED BROWSERS",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
         )
@@ -199,11 +200,11 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
     pendingRevoke?.let { c ->
         AlertDialog(
             onDismissRequest = { pendingRevoke = null },
-            title = { Text("Revoke this browser?") },
+            title = { Text("Disconnect this browser?") },
             text = {
                 Text(
-                    "Revoke session ${c.tokenPrefix}. The browser session will stop immediately. " +
-                        "You can pair it again any time with a fresh QR from the desktop dock page.",
+                    "Disconnect session ${c.tokenPrefix}. The browser session will stop immediately. " +
+                        "It can reconnect any time with a fresh QR from ${Endpoints.remoteHost}.",
                 )
             },
             confirmButton = {
@@ -211,9 +212,9 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                     val target = c.tokenPrefix
                     pendingRevoke = null
                     vm.revoke(target)
-                    toasts.success("Browser revoked.")
+                    toasts.success("Browser disconnected.")
                 }) {
-                    Text("Revoke", color = FS.colors.danger)
+                    Text("Disconnect", color = FS.colors.danger)
                 }
             },
             dismissButton = {
@@ -263,7 +264,7 @@ private fun CompanionRow(
                 }
             }
             FSGhostButton(
-                label = if (revoking) "Revoking…" else "Revoke",
+                label = if (revoking) "Disconnecting…" else "Disconnect",
                 onClick = onRevokeRequest,
                 enabled = !revoking,
             )
@@ -275,7 +276,7 @@ private fun CompanionRow(
 private fun EmptyCompanionsCard() {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Text(
-            "No browsers docked yet. Open the dock page on a computer to add one.",
+            "No browsers connected yet. Open ${Endpoints.remoteHost} on a computer to add one.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )

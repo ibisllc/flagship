@@ -49,7 +49,8 @@
 //  v23: keyless companion banner + honest disabled-state policy.
 //  v24: quieter cross-platform Settings, recovery, and account-backup copy.
 //  v25: direct recipe download replaces the retired homepage QR handoff.
-const SHELL_VERSION = "v25";
+//  v26: web. split into webapp. + remote.; docking renamed to "remote".
+const SHELL_VERSION = "v26";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -208,7 +209,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (event.request.method !== "GET") return;
-  // Same-origin gate: scope is "/" on web.flagshipserver.com, so any
+  // Same-origin gate: scope is "/" on webapp./remote.<apex>, so any
   // in-scope GET is a webapp asset. Cross-origin calls (the user's pod
   // at <server>.<user>.flagship.services for /api/screens/*) bypass
   // the SW entirely.

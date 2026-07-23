@@ -158,7 +158,7 @@ a pure-fixture run makes no network call.
   at the gym apex (the G2 seam: live-client base + `flagship.dev.useLiveClient`);
   the cert-pinning test build carries the `gym.` SPKI pin or disables pinning in
   debug (§12-G2). XCUITest class: `GymLiveTests`.
-- **webapp** — serve Playwright from the gym origin (`web.gym.flagshipserver.com`);
+- **webapp** — serve Playwright from the gym origin (`webapp.gym.flagshipserver.com`);
   the webapp derives its apex from `window.location.origin` (§12-G2).
 
 ## Layout

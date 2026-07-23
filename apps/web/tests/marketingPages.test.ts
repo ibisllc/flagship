@@ -97,7 +97,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     for (const path of ["/", "/qr/"]) {
       const r = await app.inject({ method: "GET", url: path });
       expect(r.statusCode).toBe(200);
-      expect(r.body).toContain('href="https://web.flagshipserver.com/"');
+      expect(r.body).toContain('href="https://webapp.flagshipserver.com/"');
       expect(r.body).toContain('target="_blank"');
       expect(r.body).toContain("iOS soon");
       expect(r.body).toContain("Android soon");
@@ -106,7 +106,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
 
     const notFound = await app.inject({ method: "GET", url: "/404.html" });
     expect(notFound.statusCode).toBe(200);
-    expect(notFound.body).toContain('href="https://web.flagshipserver.com/"');
+    expect(notFound.body).toContain('href="https://webapp.flagshipserver.com/"');
     expect(notFound.body).not.toContain("Get the mobile app");
   });
 

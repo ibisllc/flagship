@@ -102,7 +102,7 @@ public struct SettingsScreen: View {
     var onOpenProfiles: () -> Void = {}
     /// P9 — open the peer-backup management screen.
     var onOpenPeerBackup: () -> Void = {}
-    /// P14 — open the "Dock a browser" companion-pairing screen.
+    /// P14 — open the "Remote" browser-pairing screen.
     var onOpenCompanionDock: () -> Void = {}
     /// Web-experience gating — open "Open secured sessions" (browser QR-login
     /// sessions this phone has authorized).
@@ -713,7 +713,7 @@ public struct SettingsScreen: View {
 
     /// Docked-browser sessions — distinct from Trusted devices (which
     /// hold your account keys). These are temporary desktop companions
-    /// created via "Dock a browser". The section is HIDDEN unless at
+    /// created via "Remote". The section is HIDDEN unless at
     /// least one session is active, so a normal single-phone account
     /// never sees a second, duplicate-looking device list. When present,
     /// each row carries the Revoke action — the only place to end a
@@ -762,7 +762,7 @@ public struct SettingsScreen: View {
     /// area.
     private func deviceExtrasGroup(c: FSColors) -> some View {
         FSSettingsGroup("COMPANIONS", rows: [
-            FSSettingsRow(icon: "laptopcomputer", title: "Dock a browser", subtitle: "Read-only desktop companion (4h)", action: onOpenCompanionDock),
+            FSSettingsRow(icon: "laptopcomputer", title: "Remote", subtitle: "Read-only browser session (4h)", action: onOpenCompanionDock),
             FSSettingsRow(
                 icon: "tray.full",
                 title: "Companion requests",

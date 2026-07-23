@@ -51,7 +51,7 @@ For a graduated cutover instead of an all-at-once flip, use version upload +
 `wrangler versions deploy` to split traffic between two versions; `wrangler
 versions list` shows what's deployable.
 
-> Custom domains (`boot.flagshipserver.com`, `web.flagshipserver.com`) are
+> Custom domains (`boot.flagshipserver.com`, `webapp.flagshipserver.com`) are
 > attached to the Worker, not to a version — a rollback does not move them.
 
 ## `.services` (Fly app)

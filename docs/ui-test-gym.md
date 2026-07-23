@@ -430,7 +430,7 @@ the total gym is *Tier-1 breadth + a curated Tier-2 slice*.
     pointed at the demo username.
   - Android: launch with `useLiveClient = true` + a stored session token (the
     harness seeds the pref) → `liveScreens`/`liveBuild`.
-  - webapp: point `WEBAPP_BASE_URL`/`APEX_BASE_URL` at `web.flagshipserver.com`
+  - webapp: point `WEBAPP_BASE_URL`/`APEX_BASE_URL` at `webapp.flagshipserver.com`
     / `flagshipserver.com` (the config already supports this) and run against
     the live demo account instead of the pod-sim.
 - **What it validates:** the contract the mocks only approximate — the real
@@ -956,7 +956,7 @@ verified this survey):**
 | **KV** | *(none today — prod `.com` uses D1 + R2 + DO, no `kv_namespaces` binding)* | none required to match prod; add only if the test-env grows one |
 | **`[vars]`** | `SERVICES_BASE_URL`, `TUNNEL_HUB_URL`, base-ISO + `FLAGSHIP_ISO_MANIFEST`, passthrough IPs, zone id, `CA_ENDORSEMENT_ENFORCE`, … | test copies pointing at the test Fly app; the **new apex var set to the `gym.` apex** (default stays the prod literal everywhere else — §12-G1); **`CA_ENDORSEMENT_ENFORCE` left OFF in test** (or a test CA) so the chokepoint doesn't gate the test directory |
 | **Secrets / KEKs** | `FLAGSHIP_ADMIN_SECRET`, `HCLOUD_TOKEN`, `DEMO_IRK_KEK`, `SERVICES_HMAC_KEY`, `CLOUDFLARE_DNS_API_TOKEN`/broker, VAPID, APNS/FCM, `FLAGSHIP_CA_PRIV_HEX` | a SEPARATE set for the test Worker (`wrangler secret put` against the test Worker); a **test Hetzner project token** (see below); test-only VAPID/CA |
-| **Routes / custom domains** | zone routes `flagshipserver.com/*`, `www.`, `web.`; custom domains `recovery.`, `boot.` | the equivalents on **`gym.` subdomains of the SAME zone**: custom domain `gym.flagshipserver.com` for the test Worker, plus `web.gym.`, `recovery.gym.`, `boot.gym.` (wrangler self-provisions DNS+cert for custom domains, the boot. mechanism we already use) |
+| **Routes / custom domains** | zone routes `flagshipserver.com/*`, `www.`, `webapp.`, `remote.`; custom domains `recovery.`, `boot.` | the equivalents on **`gym.` subdomains of the SAME zone**: custom domain `gym.flagshipserver.com` for the test Worker, plus `webapp.gym.`, `recovery.gym.`, `boot.gym.` (wrangler self-provisions DNS+cert for custom domains, the boot. mechanism we already use) |
 | **`.services` data plane** | `fly.toml` (repo ROOT, not `apps/web/fly.toml`) — `app = "flagship-services"`, `primary_region = "iad"`, SNI passthrough :443 + tunnel hub :8443, `[env] FLAGSHIP_SURFACE = "services"`, `Dockerfile` builds it | a SECOND Fly app, e.g. `flagship-services-gym` (its own `fly.gym.toml` / `flyctl -a`), same Dockerfile/image, its own anycast IPs; its `[env]` sets the apex var to **`gym.flagship.services`** (§12-G1) |
 | **Worker→Fly wiring** | `SERVICES_BASE_URL = https://flagship-services.fly.dev:8443`, `TUNNEL_HUB_URL = wss://…:8443/tunnel`, `SERVICES_PASSTHROUGH_IPV4/6` | repoint all three at the test Fly app + its anycast IPs |
 | **DNS / zone** | `flagshipserver.com` (identity) + `flagship.services` (`CLOUDFLARE_SERVICES_ZONE_ID = 51f3…`); per-box `<server>.<user>.flagship.services` A/AAAA published by the Worker | **the SAME two zones** — the test env lives under the `gym.` label: identity at `gym.flagshipserver.com`, data at `gym.flagship.services`, per-box `<server>.<user>.gym.flagship.services` A/AAAA published by the test Worker into the existing services zone. No new zone (rev4). |
@@ -1497,7 +1497,7 @@ demo-fixture, no backend); the live slice is G6.
   -a`), same `Dockerfile`/image, its own anycast IPs; `[env]` sets the apex var
   to `gym.flagship.services`. Repoint the Worker→Fly wiring (`SERVICES_BASE_URL` /
   `TUNNEL_HUB_URL` / passthrough IPs) at it.
-- **DNS:** `gym.flagshipserver.com` (+ `web.gym.`, `recovery.gym.`, `boot.gym.`)
+- **DNS:** `gym.flagshipserver.com` (+ `webapp.gym.`, `recovery.gym.`, `boot.gym.`)
   custom domains (wrangler self-provisions DNS+cert); per-box
   `<server>.<user>.gym.flagship.services` A/AAAA published by the test Worker into
   the existing services zone.

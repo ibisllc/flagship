@@ -91,8 +91,15 @@ public enum Endpoints {
     /// The cloud-recovery sub-origin (`recovery.<apex>`).
     public static var recoveryBaseUrl: URL { subOrigin("recovery") }
 
-    /// The webapp host (`web.<apex>`) — the companion-dock receiver host.
-    public static var webappHost: String { "web.\(controlHost)" }
+    /// The owner webapp host (`webapp.<apex>`) — the companion-ticket
+    /// receiver host.
+    public static var webappHost: String { "webapp.\(controlHost)" }
+
+    /// The browser-remote host (`remote.<apex>`) — where a desktop starts
+    /// a phone-approved remote session. Split out of the old shared `web.`
+    /// origin on 2026-07-23 so a keyless remote session's browser storage
+    /// is isolated from the owner webapp's by the same-origin policy.
+    public static var remoteHost: String { "remote.\(controlHost)" }
 
     /// The server-register endpoint baked into a fresh InstallBlob.
     public static var registrationUrl: String {

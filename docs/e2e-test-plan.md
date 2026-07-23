@@ -54,7 +54,7 @@ Three running processes the test suite spins up:
    with `--local` D1 (an isolated SQLite file the test suite seeds and
    resets between scenarios).
 2. **A second host alias** so the same Worker also serves
-   `web.flagshipserver.com`. Use Playwright's `extraHTTPHeaders` +
+   `webapp.flagshipserver.com`. Use Playwright's `extraHTTPHeaders` +
    `routes` to mock the Host header, or run wrangler with multiple
    routes — wrangler dev supports `--local-protocol https` and
    per-host routes via the same project's `wrangler.toml`.
@@ -108,7 +108,7 @@ block. All scenarios start from a clean Playwright `BrowserContext`
 (fresh IndexedDB, fresh permissions) unless noted.
 
 ### S1 — First-run signup
-1. Open `https://web.flagshipserver.com/`.
+1. Open `https://webapp.flagshipserver.com/`.
 2. **Assert** view-bootstrap is visible.
 3. Fill passphrase (twice), click Generate.
 4. **Assert** view-home is visible, "signed in" subtitle present.

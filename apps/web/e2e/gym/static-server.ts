@@ -1,6 +1,6 @@
 /**
  * A tiny self-contained static file server that mirrors the PRODUCTION
- * host-rewrite (web.flagshipserver.com/X → ASSETS /webapp/X, falling through to
+ * host-rewrite (webapp.flagshipserver.com/X → ASSETS /webapp/X, falling through to
  * the sibling public assets like /fonts/ and /tokens.css), so the gym's webapp
  * smoke needs NO backend — no wrangler dev, no pod-sim, no Worker. That is all
  * a cold-launch → bootstrap-renders smoke requires (§12-G3 / §4 Tier-1).
@@ -8,7 +8,7 @@
  * (s00..s16).
  *
  * Resolution order for a request path /X (matching apps/com/src/route.ts's
- * web.flagshipserver.com rewrite):
+ * webapp.flagshipserver.com rewrite):
  *   1. apps/web/public/webapp/X   — the webapp tree at the origin root
  *   2. apps/web/public/X          — sibling public assets (fonts, tokens.css)
  *   3. apps/web/public/webapp/index.html — SPA fallback ONLY for extension-less

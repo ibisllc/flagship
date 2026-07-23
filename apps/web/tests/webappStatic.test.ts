@@ -4,7 +4,7 @@ import { buildServer } from "../src/server.js";
 describe("/webapp PWA static surface", () => {
   // The on-disk file tree still lives at apps/web/public/webapp/* —
   // only the user-visible paths change. In production the Cloudflare
-  // Worker rewrites web.flagshipserver.com/X → ASSETS /webapp/X (see
+  // Worker rewrites webapp.flagshipserver.com/X → ASSETS /webapp/X (see
   // apps/com/src/route.ts → serveWebapp), so the manifest and SW
   // declare scope/start_url/cache keys at root, not under /webapp/.
   // The Fastify dev/test harness still serves files at their disk
@@ -19,7 +19,7 @@ describe("/webapp PWA static surface", () => {
     expect(body.scope).toBe("/");
     expect(body.display).toBe("standalone");
     // Icons reference root-relative paths so they resolve against
-    // web.flagshipserver.com, not /webapp/.
+    // webapp.flagshipserver.com, not /webapp/.
     expect(body.icons[0].src).toBe("/icon.svg");
   });
 
@@ -371,7 +371,7 @@ describe("/webapp PWA static surface", () => {
     // v18 refreshes Home so demo login renders its server without a paired id.
     // v19 adds demo-only paired-session minting before server detail opens.
     // v25 adds direct recipe download on top of the quieter Settings + dock shell.
-    expect(r.body).toContain('SHELL_VERSION = "v25"');
+    expect(r.body).toContain('SHELL_VERSION = "v26"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

@@ -8,7 +8,7 @@ runbook covers the DNS + Cloudflare setup needed before deploying.
 
 Before Task #73 the recovery flow shared `rpId = "flagshipserver.com"`
 with every other page on the apex. A successful XSS anywhere on
-`flagshipserver.com` or `web.flagshipserver.com` could call
+`flagshipserver.com` or `webapp.flagshipserver.com` could call
 `navigator.credentials.get()` against that rpId and exfiltrate the
 wrapped UMK. The fix is to put the credential behind its own rpId —
 `recovery.flagshipserver.com` — which the browser's same-origin policy

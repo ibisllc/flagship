@@ -1,12 +1,12 @@
-// P14 — Companion-browser dock view.
+// P14 — browser-remote view.
 //
 // Router slot: section id `view-companion-dock`. Reached from
-// Settings → Dock a browser. Surfaces:
-//   1. A pointer to the browser-initiated `/dock` ceremony. The desktop owns
-//      the QR; the keyholder phone only scans and approves it.
-//   2. Active-companions list (tokenPrefix + label + expiresAt), with a
+// Settings → Remote. Surfaces:
+//   1. A pointer to the browser-initiated ceremony at remote.<apex>. The
+//      desktop owns the QR; the keyholder phone only scans and approves it.
+//   2. Active-remotes list (tokenPrefix + label + expiresAt), with a
 //      revoke button per row.
-//   3. Empty state ("no companion browsers docked").
+//   3. Empty state ("no browsers connected").
 //
 // BFF endpoints consumed:
 //   GET  /api/screens/companion/list         → { companions: [{...}] }
@@ -22,6 +22,7 @@ import {
   companionList,
   companionRevoke,
 } from "../lib/companionClient.js";
+import { remoteOrigin } from "../lib/apex.js";
 
 registerView("view-companion-dock");
 
@@ -52,9 +53,9 @@ export async function renderCompanionDock() {
       if (e.status === 503) {
         root.innerHTML = `
           <div class="card placeholder">
-            Companion dock isn't available on this server yet — the daemon
-            is running an older build (pre-P14). Update the daemon to
-            enable docking a browser as a remote-control surface.
+            Remote isn't available on this server yet — the daemon is
+            running an older build (pre-P14). Update the daemon to let a
+            browser drive this server.
           </div>
         `;
         return;
@@ -68,22 +69,22 @@ export async function renderCompanionDock() {
   const companions = body.companions ?? [];
   const startCard = `
     <div class="card">
-      <div class="weight-600">Dock a browser</div>
+      <div class="weight-600">Use a browser as a remote</div>
       <p class="note">
-        On the browser you want to use, open the dock page. It will show a
-        one-time QR for this phone to scan and approve with Face ID.
+        On the computer you want to use, open <code>${escapeHtml(new URL(remoteOrigin()).host)}</code>.
+        It will show a one-time QR for this phone to scan and approve with Face ID.
       </p>
-      <a class="btn full-width mt-2" href="/dock" target="_blank" rel="noopener">Open dock page</a>
+      <a class="btn full-width mt-2" href="${escapeHtml(remoteOrigin())}/" target="_blank" rel="noopener">Open the remote page</a>
     </div>
   `;
 
   const listCard = companions.length === 0
     ? `
-      <h3 class="mt-4">Active companions</h3>
-      <div class="card placeholder">no companion browsers docked</div>
+      <h3 class="mt-4">Connected browsers</h3>
+      <div class="card placeholder">no browsers connected</div>
     `
     : `
-      <h3 class="mt-4">Active companions</h3>
+      <h3 class="mt-4">Connected browsers</h3>
       ${companions.map((c) => `
         <div class="card">
           <div class="row row-top">
@@ -91,7 +92,7 @@ export async function renderCompanionDock() {
               <div class="weight-600">Session ${escapeHtml(c.tokenPrefix)}</div>
               <div class="value text-xs">${escapeHtml(c.tokenPrefix)}…</div>
               <div class="faint-sm">
-                docked ${escapeHtml(fmtDate(c.redeemedAt))}
+                connected ${escapeHtml(fmtDate(c.redeemedAt))}
                 · ${escapeHtml(timeLeft(c.expiresAt))}
               </div>
               ${c.userAgent ? `<div class="faint-sm">${escapeHtml(c.userAgent)}</div>` : ""}
@@ -112,15 +113,15 @@ async function runRevoke(prefix) {
   if (!prefix) return;
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
-    title: `Revoke companion ${prefix}…?`,
-    message: "The companion browser using this session will be signed out immediately.",
-    okLabel: "Revoke",
+    title: `Disconnect remote ${prefix}…?`,
+    message: "The browser using this session will be signed out immediately.",
+    okLabel: "Disconnect",
     danger: true,
   });
   if (!ok) return;
   try {
     await companionRevoke(prefix);
-    toast("Revoked");
+    toast("Disconnected");
     await renderCompanionDock();
   } catch (e) {
     toast(e.message ?? String(e), "err");

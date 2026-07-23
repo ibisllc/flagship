@@ -103,7 +103,7 @@ beforeEach(() => {
 describe("companionPayloadFromLocation", () => {
   it("parses a ?companion=<b64> URL", async () => {
     const { receiver } = await loadReceiverModule();
-    const url = new URL(`https://web.flagshipserver.com/?companion=${payloadB64(VALID_PAYLOAD)}`);
+    const url = new URL(`https://webapp.flagshipserver.com/?companion=${payloadB64(VALID_PAYLOAD)}`);
     const parsed = receiver.companionPayloadFromLocation({ search: url.search });
     expect(parsed).toEqual(VALID_PAYLOAD);
   });
@@ -162,7 +162,7 @@ describe("redeemCompanionAndPersist", () => {
     const result = await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
       historyReplaceState: () => {},
-      locationHref: "https://web.flagshipserver.com/?companion=abc",
+      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe(
@@ -196,7 +196,7 @@ describe("redeemCompanionAndPersist", () => {
     await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
       historyReplaceState: () => {},
-      locationHref: "https://web.flagshipserver.com/?companion=abc",
+      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
 
     // The new cloudName is the deterministic companion-<host>-<prefix>.
@@ -231,7 +231,7 @@ describe("redeemCompanionAndPersist", () => {
     await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
       historyReplaceState: (u: string) => replaced.push(u),
-      locationHref: "https://web.flagshipserver.com/some/page?companion=abc&foo=bar",
+      locationHref: "https://webapp.flagshipserver.com/some/page?companion=abc&foo=bar",
     });
     expect(replaced).toHaveLength(1);
     expect(replaced[0]).not.toContain("companion=");
@@ -245,7 +245,7 @@ describe("redeemCompanionAndPersist", () => {
     const result = await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
       historyReplaceState: () => {},
-      locationHref: "https://web.flagshipserver.com/?companion=abc",
+      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
     expect(result.error).toMatch(/ticket expired/);
     expect(result.status).toBe(410);
@@ -259,7 +259,7 @@ describe("redeemCompanionAndPersist", () => {
     const result = await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
       historyReplaceState: () => {},
-      locationHref: "https://web.flagshipserver.com/?companion=abc",
+      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
     expect(result.status).toBe(500);
     // No raw `HTTP <code>` or stack text reaches the user.
@@ -276,7 +276,7 @@ describe("redeemCompanionAndPersist", () => {
     const result = await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
       historyReplaceState: () => {},
-      locationHref: "https://web.flagshipserver.com/?companion=abc",
+      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
     expect(result.error).toMatch(/missing/);
     expect(profilesStore.getActiveCloudName()).toBeNull();
@@ -299,10 +299,10 @@ describe("companionGuard.requireOwnerProfile()", () => {
     await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
       historyReplaceState: () => {},
-      locationHref: "https://web.flagshipserver.com/?companion=abc",
+      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
     expect(guard.isCompanionProfile()).toBe(true);
-    expect(() => guard.requireOwnerProfile()).toThrow(/companion/i);
+    expect(() => guard.requireOwnerProfile()).toThrow(/remote browser/i);
     try {
       guard.requireOwnerProfile();
     } catch (e) {
@@ -331,7 +331,7 @@ describe("companionGuard.requireOwnerProfile()", () => {
     await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
       historyReplaceState: () => {},
-      locationHref: "https://web.flagshipserver.com/?companion=abc",
+      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
 
     // replaceDeviceCeremony — outside the v1 relayable set; throws.
@@ -344,7 +344,7 @@ describe("companionGuard.requireOwnerProfile()", () => {
         { username: "alice", umk: new Uint8Array(32) },
         { fetch: async () => new Response("", { status: 500 }) },
       ),
-    ).rejects.toThrow(/companion/i);
+    ).rejects.toThrow(/remote browser/i);
 
     // wipeRestartCeremony — also outside the v1 relayable set.
     const wipePath = resolve(
@@ -369,7 +369,7 @@ describe("companionGuard.requireOwnerProfile()", () => {
         );
         if (out && typeof out.then === "function") await out;
       } catch (e: unknown) {
-        if (/companion/i.test(String((e as Error)?.message ?? e))) { wipeSaw = true; break; }
+        if (/remote browser/i.test(String((e as Error)?.message ?? e))) { wipeSaw = true; break; }
       }
     }
     expect(wipeSaw).toBe(true);
@@ -390,7 +390,7 @@ describe("companionGuard.requireOwnerProfile()", () => {
     await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
       fetchImpl,
       historyReplaceState: () => {},
-      locationHref: "https://web.flagshipserver.com/?companion=abc",
+      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
     });
 
     // releaseServerName under a companion profile now forwards to the

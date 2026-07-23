@@ -9,7 +9,7 @@
  *   - Device-1 (owner via the gym __gymAdopt seam) pairs to the pod
  *     (IRK-signed add-paired-session → owner paired-session token), then MINTS a
  *     companion ticket (POST <pod>/api/screens/companion/mint-ticket) and builds
- *     the receiver URL `web.gym.flagshipserver.com/?companion=<base64url JSON>`.
+ *     the receiver URL `webapp.gym.flagshipserver.com/?companion=<base64url JSON>`.
  *   - Device-2 (a fresh context) bootstraps its OWN device key (proving it is a
  *     distinct device), then OPENS that companion URL. The webapp boot path
  *     (app.js) redeems the ticket against the pod (POST /api/companion/redeem,
@@ -33,7 +33,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
-const ORIGIN = process.env.GYM_LIVE_WEB_ORIGIN ?? "https://web.gym.flagshipserver.com";
+const ORIGIN = process.env.GYM_LIVE_WEB_ORIGIN ?? "https://webapp.gym.flagshipserver.com";
 const here = fileURLToPath(new URL(".", import.meta.url));
 const REPO = join(here, "..", "..", "..", "..");
 const BOX_DIR = join(REPO, "gym-results", "feature-screenshots");

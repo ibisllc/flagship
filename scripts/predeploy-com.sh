@@ -5,7 +5,7 @@
 # it drops every route attached to the Worker that isn't in `X` and
 # silently re-attaches only the ones passed. We've burned production on
 # this exact foot-gun (see the discovery note in apps/com/wrangler.toml,
-# 2026-05-10) — losing web.flagshipserver.com or the www host because a
+# 2026-05-10) — losing webapp.flagshipserver.com or the www host because a
 # one-off command line specified a narrower route set than what the
 # Worker was previously serving.
 #

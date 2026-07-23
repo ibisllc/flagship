@@ -252,14 +252,14 @@ fun SettingsScreen(nav: NavController) {
 
         Spacer(Modifier.height(FS.space.s4))
 
-        // 3 — COMPANIONS: read-only docked browsers + the requests they raise.
+        // 3 — REMOTE: read-only browser sessions + the requests they raise.
         FSSettingsGroup(
             header = "COMPANIONS",
             rows = listOf(
                 // P14 — companion-dock: mint a 60s pairing ticket → 4h read-only browser.
                 FSSettingsRowData(
                     icon = "🖥",
-                    title = "Dock a browser",
+                    title = "Remote",
                     subtitle = "Scan a one-time QR for a 4-hour read-only desktop view.",
                     onClick = { nav.navigate("companion-dock") },
                 ),
@@ -629,9 +629,9 @@ fun SettingsScreen(nav: NavController) {
 /** P14 Phase 2 — Companion-requests row subtitle, mirroring iOS's
  *  companionRequestsSubtitle. */
 private fun companionRequestsSubtitle(pending: Int): String = when {
-    pending == 0 -> "Approve writes from docked browsers."
-    pending == 1 -> "1 pending write from a docked browser."
-    else -> "$pending pending writes from docked browsers."
+    pending == 0 -> "Approve writes from remote browsers."
+    pending == 1 -> "1 pending write from a remote browser."
+    else -> "$pending pending writes from remote browsers."
 }
 
 /** One segment of the APPEARANCE control: a sun / moon / "AUTO" pill that

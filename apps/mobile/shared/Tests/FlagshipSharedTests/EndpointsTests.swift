@@ -19,7 +19,8 @@ final class EndpointsTests: XCTestCase {
         XCTAssertEqual(Endpoints.dataApex, "flagship.services")
         XCTAssertEqual(Endpoints.bootBaseUrl.absoluteString, "https://boot.flagshipserver.com")
         XCTAssertEqual(Endpoints.recoveryBaseUrl.absoluteString, "https://recovery.flagshipserver.com")
-        XCTAssertEqual(Endpoints.webappHost, "web.flagshipserver.com")
+        XCTAssertEqual(Endpoints.webappHost, "webapp.flagshipserver.com")
+        XCTAssertEqual(Endpoints.remoteHost, "remote.flagshipserver.com")
         XCTAssertEqual(Endpoints.registrationUrl, "https://flagshipserver.com/api/server/register")
         XCTAssertEqual(Endpoints.serverFqdn(server: "home", user: "harry"), "home.harry.flagship.services")
         XCTAssertEqual(Endpoints.userZoneHost("harry"), "harry.flagship.services")
@@ -36,7 +37,7 @@ final class EndpointsTests: XCTestCase {
         // Sub-origins ride the gym apex.
         XCTAssertEqual(Endpoints.bootBaseUrl.absoluteString, "https://boot.gym.flagshipserver.com")
         XCTAssertEqual(Endpoints.recoveryBaseUrl.absoluteString, "https://recovery.gym.flagshipserver.com")
-        XCTAssertEqual(Endpoints.webappHost, "web.gym.flagshipserver.com")
+        XCTAssertEqual(Endpoints.webappHost, "webapp.gym.flagshipserver.com")
         XCTAssertEqual(Endpoints.registrationUrl, "https://gym.flagshipserver.com/api/server/register")
     }
 
@@ -73,12 +74,12 @@ final class EndpointsTests: XCTestCase {
         Endpoints.setOverride(nil)
         XCTAssertEqual(PairingQr.joinHost, "flagshipserver.com")
         XCTAssertEqual(QrRelay.qrUrlHost, "flagshipserver.com")
-        XCTAssertEqual(CompanionTicketURL.webappHost, "web.flagshipserver.com")
+        XCTAssertEqual(CompanionTicketURL.webappHost, "webapp.flagshipserver.com")
 
         Endpoints.setOverride(controlHost: "gym.flagshipserver.com")
         XCTAssertEqual(PairingQr.joinHost, "gym.flagshipserver.com")
         XCTAssertEqual(QrRelay.qrUrlHost, "gym.flagshipserver.com")
-        XCTAssertEqual(CompanionTicketURL.webappHost, "web.gym.flagshipserver.com")
+        XCTAssertEqual(CompanionTicketURL.webappHost, "webapp.gym.flagshipserver.com")
     }
 
     func test_installBlob_registrationUrlDefault_isProd_unlessOverridden() {

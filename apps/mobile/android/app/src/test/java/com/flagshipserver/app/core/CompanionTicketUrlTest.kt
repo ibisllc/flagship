@@ -28,8 +28,30 @@ class CompanionTicketUrlTest {
         assertEquals(code, parsed.approvalSecret)
     }
 
+    /** The feature was renamed dock -> remote on 2026-07-23. The webapp now
+     *  emits `flagship://remote`; `flagship://dock` stays parseable so a
+     *  browser still serving the pre-rename shell keeps working. */
+    @Test fun remoteLinkParsesIdenticallyToTheLegacyDockLink() {
+        val request = "ab".repeat(16)
+        val code = "cd".repeat(32)
+        val query = "server=demo.alice.flagship.services&request=$request&code=$code"
+        val viaRemote = CompanionDockApprovalLink.parse("flagship://remote?$query")
+        val viaDock = CompanionDockApprovalLink.parse("flagship://dock?$query")
+        assertNotNull(viaRemote)
+        assertEquals(viaDock, viaRemote)
+    }
+
     @Test fun desktopDockLinkRejectsWrongShape() {
         assertEquals(null, CompanionDockApprovalLink.parse("flagship://dock?server=evil.example&request=x&code=y"))
+        // Only the two sanctioned labels — a third host is not a remote link.
+        val request = "ab".repeat(16)
+        val code = "cd".repeat(32)
+        assertEquals(
+            null,
+            CompanionDockApprovalLink.parse(
+                "flagship://companion?server=demo.alice.flagship.services&request=$request&code=$code",
+            ),
+        )
     }
 
     @Test fun urlHasCanonicalPrefix() {
@@ -39,7 +61,7 @@ class CompanionTicketUrlTest {
             podBaseUrl = "https://home.alice.flagship.services",
             username = "alice",
         )
-        assertTrue(url, url.startsWith("https://web.flagshipserver.com/?companion="))
+        assertTrue(url, url.startsWith("https://webapp.flagshipserver.com/?companion="))
     }
 
     @Test fun payloadIsBase64UrlNoPadding() {
@@ -49,7 +71,7 @@ class CompanionTicketUrlTest {
             podBaseUrl = "https://home.alice.flagship.services",
             username = "alice",
         )
-        val encoded = url.removePrefix("https://web.flagshipserver.com/?companion=")
+        val encoded = url.removePrefix("https://webapp.flagshipserver.com/?companion=")
         assertFalse("base64url has no padding", encoded.contains("="))
         assertFalse("base64url uses '-' not '+'", encoded.contains("+"))
         assertFalse("base64url uses '_' not '/'", encoded.contains("/"))
@@ -62,7 +84,7 @@ class CompanionTicketUrlTest {
         val username = "alice"
 
         val url = CompanionTicketUrl.build(ticketId, ticketSecret, podBaseUrl, username)
-        val encoded = url.removePrefix("https://web.flagshipserver.com/?companion=")
+        val encoded = url.removePrefix("https://webapp.flagshipserver.com/?companion=")
         val decoded = Base64URL.decode(encoded)
         assertNotNull(decoded)
         val jsonString = String(decoded!!, Charsets.UTF_8)
@@ -81,7 +103,7 @@ class CompanionTicketUrlTest {
             podBaseUrl = "U",
             username = "N",
         )
-        val encoded = url.removePrefix("https://web.flagshipserver.com/?companion=")
+        val encoded = url.removePrefix("https://webapp.flagshipserver.com/?companion=")
         val jsonString = String(Base64URL.decode(encoded)!!, Charsets.UTF_8)
         // Declaration order in CompanionTicketPayload + kotlinx-serialization's
         // preservation thereof + the daemon TS encoder + iOS Codable all keep
@@ -99,7 +121,7 @@ class CompanionTicketUrlTest {
             podBaseUrl = "",
             username = "",
         )
-        val encoded = url.removePrefix("https://web.flagshipserver.com/?companion=")
+        val encoded = url.removePrefix("https://webapp.flagshipserver.com/?companion=")
         val jsonString = String(Base64URL.decode(encoded)!!, Charsets.UTF_8)
         assertEquals(
             """{"ticketId":"","ticketSecret":"","podBaseUrl":"","username":""}""",
@@ -113,7 +135,7 @@ class CompanionTicketUrlTest {
         val podBaseUrl = "https://home.alice.flagship.services/"
         val username = "alice"
         val url = CompanionTicketUrl.build(ticketId, ticketSecret, podBaseUrl, username)
-        val encoded = url.removePrefix("https://web.flagshipserver.com/?companion=")
+        val encoded = url.removePrefix("https://webapp.flagshipserver.com/?companion=")
         val decoded = Base64URL.decode(encoded)
         assertNotNull(decoded)
         val parsed = Json.parseToJsonElement(String(decoded!!, Charsets.UTF_8)) as JsonObject

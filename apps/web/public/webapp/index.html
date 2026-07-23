@@ -25,11 +25,11 @@
 
     <main>
       <div id="companion-mode-banner" class="companion-mode-banner hidden" role="status">
-        <strong>Keyless companion</strong>
+        <strong>Keyless remote</strong>
         <span>Read access is active. Protected features marked unavailable need a phone protocol.</span>
       </div>
       <section id="view-dock-start" class="hidden">
-        <h2>Dock this browser</h2>
+        <h2>Use this browser as a remote</h2>
         <p class="note">
           This browser gets no account key. Your phone approves the connection
           and remains responsible for protected actions.
@@ -45,7 +45,7 @@
           <button id="dock-begin" class="full-width mt-2">Show pairing QR</button>
         </div>
         <div class="card hidden" id="dock-approval-step">
-          <p class="note">In the Flagship phone app, open Settings → Dock a browser and scan this code.</p>
+          <p class="note">In the Flagship phone app, open Settings → Remote and scan this code.</p>
           <div id="dock-qr" class="qr-box" style="background:#fff;padding:12px;border-radius:8px;display:flex;justify-content:center"></div>
           <p class="note mt-2">Or paste this link in the phone app:</p>
           <code id="dock-link" class="break-all faint-sm"></code>
@@ -253,7 +253,7 @@
           <div class="fs-group">
             <button class="fs-row" id="settings-tab-trusted-devices"><span class="fs-row-icon icon" data-row-icon="devices"></span><span class="fs-row-body"><span class="fs-row-title">Trusted devices</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-sessions"><span class="fs-row-icon icon" data-row-icon="sessions"></span><span class="fs-row-body"><span class="fs-row-title">Browser sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-companion-dock"><span class="fs-row-icon icon" data-row-icon="dock"></span><span class="fs-row-body"><span class="fs-row-title">Dock a browser</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-companion-dock"><span class="fs-row-icon icon" data-row-icon="dock"></span><span class="fs-row-body"><span class="fs-row-title">Remote</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-companion-requests"><span class="fs-row-icon icon" data-row-icon="requests"></span><span class="fs-row-body"><span class="fs-row-title">Companion requests</span></span><span id="companion-requests-badge" class="fs-row-badge hidden" aria-label="pending companion requests">0</span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>
         </div>
@@ -492,10 +492,10 @@
         </div>
       </section>
 
-      <!-- View: Companion-browser dock (P14) -->
+      <!-- View: browser remote (P14) -->
       <section id="view-companion-dock" class="hidden">
-        <p class="fs-detail-label">DOCK A BROWSER</p>
-        <p class="note">Pair a desktop browser for four hours of keyless access. Disconnect it anytime.</p>
+        <p class="fs-detail-label">REMOTE</p>
+        <p class="note">Let a desktop browser drive this cloud for four hours without a key. Disconnect it anytime.</p>
         <div id="companion-dock-content"></div>
         <div class="row-2">
           <button class="secondary" id="companion-dock-refresh">Refresh</button>
@@ -508,7 +508,7 @@
       <section id="view-companion-requests" class="hidden">
         <p class="fs-detail-label">COMPANION REQUESTS</p>
         <p class="note">
-          Review writes from docked browsers. Your phone signs approved
+          Review writes from remote browsers. Your phone signs approved
           requests; browsers never receive your account key.
         </p>
         <div id="companion-requests-content"></div>

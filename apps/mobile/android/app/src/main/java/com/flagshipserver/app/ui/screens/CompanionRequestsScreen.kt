@@ -1,6 +1,6 @@
 // P14 Phase 2 — Settings → Companion requests inbox.
 //
-// Lists pending unsigned write-requests that companions (docked browsers)
+// Lists pending unsigned write-requests that remote browsers
 // have forwarded to the owner. Approve IRK-signs + dispatches the
 // destination call (release-server / revoke-server); Deny just records
 // the outcome on the daemon. Approve uses the same 1.5s hold-to-confirm
@@ -106,7 +106,7 @@ fun CompanionRequestsScreen(nav: NavController) {
             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
         )
         Text(
-            "Review writes from docked browsers. Your phone signs approved requests; browsers never receive your account key.",
+            "Review writes from remote browsers. Your phone signs approved requests; browsers never receive your account key.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )
@@ -118,7 +118,7 @@ fun CompanionRequestsScreen(nav: NavController) {
                     FSCard {
                         Text("No pending requests", color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
                         Text(
-                            "Companions can forward writes here when you've docked a browser.",
+                            "A remote browser can forward writes here once you've connected one.",
                             color = FS.colors.textMuted,
                             style = TextStyle(fontSize = 12.sp),
                         )

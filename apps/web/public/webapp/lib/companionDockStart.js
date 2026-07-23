@@ -29,16 +29,22 @@ export async function resolveDockServers(username, deps = {}) {
   return { username: clean, servers };
 }
 
+/** Build the deep link the phone scans to approve this browser.
+ *
+ *  The host label is `remote` as of 2026-07-23 (the feature's name). Both
+ *  phone clients still parse `flagship://dock` too, so an app built before
+ *  the rename keeps working against a browser built after it. Nothing but
+ *  the label changed — the three query params are byte-identical. */
 export function buildDockApprovalUrl({ requestId, approvalSecret, podBaseUrl }) {
-  if (!/^[0-9a-f]{32}$/.test(requestId ?? "")) throw new Error("Invalid dock request id");
-  if (!/^[0-9a-f]{64}$/.test(approvalSecret ?? "")) throw new Error("Invalid dock approval secret");
+  if (!/^[0-9a-f]{32}$/.test(requestId ?? "")) throw new Error("Invalid remote request id");
+  if (!/^[0-9a-f]{64}$/.test(approvalSecret ?? "")) throw new Error("Invalid remote approval secret");
   const pod = new URL(podBaseUrl);
   const params = new URLSearchParams({
     server: pod.host,
     request: requestId,
     code: approvalSecret,
   });
-  return `flagship://dock?${params.toString()}`;
+  return `flagship://remote?${params.toString()}`;
 }
 
 export async function beginDockRequest(podBaseUrl, deps = {}) {
@@ -55,7 +61,7 @@ export async function beginDockRequest(podBaseUrl, deps = {}) {
     }),
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.error ?? "Couldn't start docking");
+  if (!response.ok) throw new Error(body?.error ?? "Couldn't start the remote session");
   return {
     ...body,
     pollSecret,
@@ -80,7 +86,7 @@ export async function pollDockRequest(request, deps = {}) {
   });
   const body = await response.json().catch(() => ({}));
   if (response.status === 202) return { status: "pending", ...body };
-  if (!response.ok) throw new Error(body?.error ?? "Docking failed");
+  if (!response.ok) throw new Error(body?.error ?? "The remote session failed");
   return body;
 }
 
@@ -94,7 +100,7 @@ export async function waitForDockApproval(request, deps = {}) {
     if (result.status === "approved") return result;
     await delay(intervalMs);
   }
-  throw new Error("This docking code expired. Start again.");
+  throw new Error("This remote code expired. Start again.");
 }
 
 export function activateDockedBrowser(result) {

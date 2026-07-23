@@ -39,7 +39,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
-const ORIGIN = process.env.GYM_LIVE_WEB_ORIGIN ?? "https://web.gym.flagshipserver.com";
+const ORIGIN = process.env.GYM_LIVE_WEB_ORIGIN ?? "https://webapp.gym.flagshipserver.com";
 const here = fileURLToPath(new URL(".", import.meta.url));
 const REPO = join(here, "..", "..", "..", "..");
 const BOX_DIR = join(REPO, "gym-results", "feature-screenshots");
@@ -61,7 +61,7 @@ const CONTROL = process.env.GYM_LIVE_CONTROL_APEX ?? "gym.flagshipserver.com";
 // proven in tools/live-e2e/device-add-relay-probe.ts). The FIX (the two-leg
 // choreography) lives in THIS worktree but can't be deployed by the agent. To
 // prove the fix end-to-end against the REAL backend + REAL box, we keep the
-// origin `web.gym.flagshipserver.com` (so the gym adopt seam installs, CORS
+// origin `webapp.gym.flagshipserver.com` (so the gym adopt seam installs, CORS
 // allows .com calls, and the apex resolves to gym) and ONLY swap pairingRelay.js
 // for the fixed file via Playwright route interception. Set
 // GYM_USE_DEPLOYED_RELAY=1 to instead test the deployed (broken) file as-is.
@@ -146,7 +146,7 @@ test("full device-add: a second device joins the SAME cloud, quarantined, after 
       grade: USE_DEPLOYED_RELAY ? "C" : "A",
       detail: USE_DEPLOYED_RELAY
         ? "GYM_USE_DEPLOYED_RELAY=1 — driving the DEPLOYED (broken) lib/pairingRelay.js as-is (expect bundle delivery to hang)"
-        : "lib/pairingRelay.js swapped for the FIXED two-leg version via route interception (origin unchanged = web.gym.flagshipserver.com; CORS/seam/apex all live)",
+        : "lib/pairingRelay.js swapped for the FIXED two-leg version via route interception (origin unchanged = webapp.gym.flagshipserver.com; CORS/seam/apex all live)",
     });
 
     // ── DEVICE 1 — the OWNER. Its own context (own storage). ──────────────────
@@ -250,7 +250,7 @@ test("full device-add: a second device joins the SAME cloud, quarantined, after 
     // device-2 OPENS the /join link (the QR scan). NOTE: the QR encodes
     // `<controlApex>/join?sid=&pk=` (a phone universal/deep link). In the gym
     // env neither `gym.flagshipserver.com/join` (control = marketing) nor
-    // `web.gym.flagshipserver.com/join` (also marketing) serves the WEBAPP — so
+    // `webapp.gym.flagshipserver.com/join` (also marketing) serves the WEBAPP — so
     // a webapp receiver can't be reached by navigating the literal /join URL
     // (recorded as a finding). The webapp boot path that WOULD handle it is
     // `joinLinkFromLocation()` → `enterJoin({sid,pk})`; we drive that exact code

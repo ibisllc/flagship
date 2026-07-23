@@ -1,7 +1,7 @@
 // Kotlin mirror of FlagshipAPI/Endpoints.swift + the webapp's lib/apex.js.
 //
 // The SINGLE source of truth for the backend apexes the app talks to: the
-// control plane (`flagshipserver.com` + its `boot.` / `web.` / `recovery.`
+// control plane (`flagshipserver.com` + its `boot.` / `webapp.` / `remote.` / `recovery.`
 // sub-origins) and the data plane (`flagship.services`). These used to be
 // hardcoded as a literal in ~8 client / screen sites; consolidating them
 // makes the gym test env (gym.flagshipserver.com / gym.flagship.services,
@@ -77,9 +77,17 @@ object Endpoints {
     val recoveryBaseUrl: String
         get() = subOrigin("recovery")
 
-    /** The webapp host origin (`https://web.<apex>/`) — companion receiver. */
+    /** The owner webapp origin (`https://webapp.<apex>/`) — companion-ticket
+     *  receiver. */
     val webappOrigin: String
-        get() = "$scheme://web.$controlHost/"
+        get() = "$scheme://webapp.$controlHost/"
+
+    /** The browser-remote host (`remote.<apex>`) — where a desktop starts a
+     *  phone-approved remote session. Split out of the old shared `web.`
+     *  origin on 2026-07-23 so a keyless remote session's browser storage is
+     *  isolated from the owner webapp's by the same-origin policy. */
+    val remoteHost: String
+        get() = "remote.$controlHost"
 
     /** The server-register endpoint baked into a fresh recipe / InstallBlob. */
     val registrationUrl: String

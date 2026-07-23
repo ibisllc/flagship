@@ -52,7 +52,7 @@ function makeEnv(overrides: Partial<RouteEnv> = {}): RouteEnv {
 describe("flagshipserver.com Worker — routing", () => {
   it("non-/api paths are served by the asset binding when the preview cookie is set", async () => {
     // /webapp/* used to fall through here too, but as of the
-    // web.flagshipserver.com migration it 308-redirects to the new
+    // webapp.flagshipserver.com migration it 308-redirects to the new
     // origin — see the dedicated `/me + /webapp redirects` describe.
     // Pre-launch the apex marketing surface is gated behind a
     // coming-soon page (see the "Pre-launch stealth gate" describe);
@@ -744,11 +744,11 @@ describe("/og — OG-poster generator (P3.6)", () => {
   });
 });
 
-describe("/me + /webapp redirects to web.flagshipserver.com", () => {
-  it("/me returns a 308 to https://web.flagshipserver.com/", async () => {
+describe("/me + /webapp redirects to webapp.flagshipserver.com", () => {
+  it("/me returns a 308 to https://webapp.flagshipserver.com/", async () => {
     const r = await route(new Request("https://flagshipserver.com/me"), makeEnv());
     expect(r.status).toBe(308);
-    expect(r.headers.get("location")).toBe("https://web.flagshipserver.com/");
+    expect(r.headers.get("location")).toBe("https://webapp.flagshipserver.com/");
   });
 
   it("/me/anything also redirects to the webapp origin root", async () => {
@@ -760,7 +760,7 @@ describe("/me + /webapp redirects to web.flagshipserver.com", () => {
     // /me/* always lands on the webapp root — sub-paths under /me/ aren't
     // mapped 1:1 because the legacy /me area was speced as a single
     // landing surface.
-    expect(r.headers.get("location")).toBe("https://web.flagshipserver.com/");
+    expect(r.headers.get("location")).toBe("https://webapp.flagshipserver.com/");
   });
 
   it("/webapp redirects to the new origin root", async () => {
@@ -769,7 +769,7 @@ describe("/me + /webapp redirects to web.flagshipserver.com", () => {
       makeEnv(),
     );
     expect(r.status).toBe(308);
-    expect(r.headers.get("location")).toBe("https://web.flagshipserver.com/");
+    expect(r.headers.get("location")).toBe("https://webapp.flagshipserver.com/");
   });
 
   it("/webapp/ (with trailing slash) also redirects to the new origin root", async () => {
@@ -778,7 +778,7 @@ describe("/me + /webapp redirects to web.flagshipserver.com", () => {
       makeEnv(),
     );
     expect(r.status).toBe(308);
-    expect(r.headers.get("location")).toBe("https://web.flagshipserver.com/");
+    expect(r.headers.get("location")).toBe("https://webapp.flagshipserver.com/");
   });
 
   it("/webapp/foo/bar?x=1 preserves path tail and query", async () => {
@@ -788,7 +788,7 @@ describe("/me + /webapp redirects to web.flagshipserver.com", () => {
     );
     expect(r.status).toBe(308);
     expect(r.headers.get("location")).toBe(
-      "https://web.flagshipserver.com/foo/bar?x=1",
+      "https://webapp.flagshipserver.com/foo/bar?x=1",
     );
   });
 
@@ -815,10 +815,10 @@ describe("/me + /webapp redirects to web.flagshipserver.com", () => {
   });
 });
 
-describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
+describe("webapp.flagshipserver.com — webapp origin (host rewrite)", () => {
   it("/ on web. host fetches ASSETS /webapp/ (binding serves index.html)", async () => {
     const r = await route(
-      new Request("https://web.flagshipserver.com/"),
+      new Request("https://webapp.flagshipserver.com/"),
       makeEnv(),
     );
     expect(r.status).toBe(200);
@@ -827,7 +827,7 @@ describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
 
   it("/manifest.json on web. host fetches ASSETS /webapp/manifest.json", async () => {
     const r = await route(
-      new Request("https://web.flagshipserver.com/manifest.json"),
+      new Request("https://webapp.flagshipserver.com/manifest.json"),
       makeEnv(),
     );
     expect(r.status).toBe(200);
@@ -836,7 +836,7 @@ describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
 
   it("/lib/api.js on web. host fetches ASSETS /webapp/lib/api.js (deep paths)", async () => {
     const r = await route(
-      new Request("https://web.flagshipserver.com/lib/api.js"),
+      new Request("https://webapp.flagshipserver.com/lib/api.js"),
       makeEnv(),
     );
     expect(r.status).toBe(200);
@@ -845,7 +845,7 @@ describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
 
   it("/views/home.js?v=2 preserves query when rewriting", async () => {
     const r = await route(
-      new Request("https://web.flagshipserver.com/views/home.js?v=2"),
+      new Request("https://webapp.flagshipserver.com/views/home.js?v=2"),
       makeEnv(),
     );
     expect(r.status).toBe(200);
@@ -860,7 +860,7 @@ describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
     // fallback (content-type text/html) and the dynamic import would fail —
     // breaking the pairing QR. It must resolve from root.
     const r = await route(
-      new Request("https://web.flagshipserver.com/qrEncoder.js"),
+      new Request("https://webapp.flagshipserver.com/qrEncoder.js"),
       makeEnv(),
     );
     expect(r.status).toBe(200);
@@ -869,10 +869,10 @@ describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
 
   it("/api/* on web. host is NOT proxied — it's rewritten under /webapp/ (not exposed here)", async () => {
     // The webapp talks to the user's pod for /api/screens/*, never to
-    // web.flagshipserver.com. Anything that lands on /api/* here is a
+    // webapp.flagshipserver.com. Anything that lands on /api/* here is a
     // bug; we deliberately do NOT proxy to .services.
     const r = await route(
-      new Request("https://web.flagshipserver.com/api/screens/server-detail"),
+      new Request("https://webapp.flagshipserver.com/api/screens/server-detail"),
       makeEnv(),
     );
     expect(r.status).toBe(200);
@@ -883,7 +883,7 @@ describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
 
   it("POST to web. host is rejected with 405 (writes go to the user's pod)", async () => {
     const r = await route(
-      new Request("https://web.flagshipserver.com/whatever", {
+      new Request("https://webapp.flagshipserver.com/whatever", {
         method: "POST",
         body: "{}",
         headers: { "content-type": "application/json" },
@@ -896,7 +896,7 @@ describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
 
   it("HEAD on web. host works (browsers preflight)", async () => {
     const r = await route(
-      new Request("https://web.flagshipserver.com/manifest.json", { method: "HEAD" }),
+      new Request("https://webapp.flagshipserver.com/manifest.json", { method: "HEAD" }),
       makeEnv(),
     );
     expect(r.status).toBe(200);
@@ -913,7 +913,7 @@ describe("webapp host — client-route SPA fallback (the /join pairing bug)", ()
 
   it("/join on web. host serves the webapp index.html (PWA boots → enterJoin)", async () => {
     const r = await route(
-      new Request("https://web.flagshipserver.com/join"),
+      new Request("https://webapp.flagshipserver.com/join"),
       makeEnv(),
     );
     expect(r.status).toBe(200);
@@ -922,7 +922,7 @@ describe("webapp host — client-route SPA fallback (the /join pairing bug)", ()
 
   it("/join?sid=x&pk=y on web. host serves the webapp index.html (query carried by browser)", async () => {
     const r = await route(
-      new Request("https://web.flagshipserver.com/join?sid=relay123&pk=abc"),
+      new Request("https://webapp.flagshipserver.com/join?sid=relay123&pk=abc"),
       makeEnv(),
     );
     expect(r.status).toBe(200);
@@ -933,31 +933,40 @@ describe("webapp host — client-route SPA fallback (the /join pairing bug)", ()
 
   it("a generic extensionless route (/home) also serves the webapp index.html", async () => {
     const r = await route(
-      new Request("https://web.flagshipserver.com/home"),
+      new Request("https://webapp.flagshipserver.com/home"),
       makeEnv(),
     );
     expect(r.status).toBe(200);
     expect(await r.text()).toBe("asset:/webapp/index.html");
   });
 
-  it("/dock serves the webapp shell for the desktop pairing ceremony", async () => {
+  it("/dock on the webapp host 308s to the remote origin (the flow moved hosts)", async () => {
     const r = await route(
-      new Request("https://web.flagshipserver.com/dock"),
+      new Request("https://webapp.flagshipserver.com/dock"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe("https://remote.flagshipserver.com/");
+  });
+
+  it("/ on the remote host serves the webapp shell (the remote ceremony)", async () => {
+    const r = await route(
+      new Request("https://remote.flagshipserver.com/"),
       makeEnv(),
     );
     expect(r.status).toBe(200);
-    expect(await r.text()).toBe("asset:/webapp/index.html");
+    expect(await r.text()).toBe("asset:/webapp/");
   });
 
   it("real asset files (with an extension) still rewrite to /webapp/<file>, NOT index.html", async () => {
     // Regression guard: the SPA fallback must not swallow actual files.
     const css = await route(
-      new Request("https://web.flagshipserver.com/style.css"),
+      new Request("https://webapp.flagshipserver.com/style.css"),
       makeEnv(),
     );
     expect(await css.text()).toBe("asset:/webapp/style.css");
     const js = await route(
-      new Request("https://web.flagshipserver.com/lib/api.js"),
+      new Request("https://webapp.flagshipserver.com/lib/api.js"),
       makeEnv(),
     );
     expect(await js.text()).toBe("asset:/webapp/lib/api.js");
@@ -965,17 +974,17 @@ describe("webapp host — client-route SPA fallback (the /join pairing bug)", ()
 
   it("/ on web. host still serves /webapp/ (binding serves index.html) — unchanged", async () => {
     const r = await route(
-      new Request("https://web.flagshipserver.com/"),
+      new Request("https://webapp.flagshipserver.com/"),
       makeEnv(),
     );
     expect(await r.text()).toBe("asset:/webapp/");
   });
 
   // Apex-aware: the gym webapp host is web.<CONTROL_APEX>.
-  it("/join on the GYM webapp host (web.gym.flagshipserver.com) serves the webapp index.html", async () => {
+  it("/join on the GYM webapp host (webapp.gym.flagshipserver.com) serves the webapp index.html", async () => {
     const env = makeEnv({ CONTROL_APEX: "gym.flagshipserver.com" });
     const r = await route(
-      new Request("https://web.gym.flagshipserver.com/join?sid=x&pk=y"),
+      new Request("https://webapp.gym.flagshipserver.com/join?sid=x&pk=y"),
       env,
     );
     expect(r.status).toBe(200);
@@ -985,7 +994,7 @@ describe("webapp host — client-route SPA fallback (the /join pairing bug)", ()
   it("a gym webapp asset file still rewrites to /webapp/<file>", async () => {
     const env = makeEnv({ CONTROL_APEX: "gym.flagshipserver.com" });
     const r = await route(
-      new Request("https://web.gym.flagshipserver.com/manifest.json"),
+      new Request("https://webapp.gym.flagshipserver.com/manifest.json"),
       env,
     );
     expect(await r.text()).toBe("asset:/webapp/manifest.json");
@@ -1032,6 +1041,86 @@ describe("webapp host — client-route SPA fallback (the /join pairing bug)", ()
   });
 });
 
+describe("webapp. / remote. split + the retired web. host", () => {
+  // 2026-07-23: the single `web.` origin became two — `webapp.` (the owner
+  // webapp) and `remote.` (the phone-approved browser-remote session). The
+  // labels don't collide, so `web.` can 308 forward indefinitely.
+
+  it("web. 308s to webapp., preserving path and query", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/join?sid=abc&pk=def"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe(
+      "https://webapp.flagshipserver.com/join?sid=abc&pk=def",
+    );
+  });
+
+  it("web. is never SERVED — even its root only redirects", async () => {
+    const r = await route(new Request("https://web.flagshipserver.com/"), makeEnv());
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe("https://webapp.flagshipserver.com/");
+    expect(await r.text()).toBe("");
+  });
+
+  it("remote. serves the same shell assets as webapp., from its own origin", async () => {
+    const asset = await route(
+      new Request("https://remote.flagshipserver.com/lib/apex.js"),
+      makeEnv(),
+    );
+    expect(asset.status).toBe(200);
+    expect(await asset.text()).toBe("asset:/webapp/lib/apex.js");
+  });
+
+  it("remote. gets the client-route SPA fallback too", async () => {
+    const r = await route(new Request("https://remote.flagshipserver.com/home"), makeEnv());
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/index.html");
+  });
+
+  it("remote. rejects writes with 405, same as webapp.", async () => {
+    const r = await route(
+      new Request("https://remote.flagshipserver.com/", { method: "POST" }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(405);
+  });
+
+  it("both new origins are CORS-allowed against apex /api/*", async () => {
+    for (const origin of [
+      "https://webapp.flagshipserver.com",
+      "https://remote.flagshipserver.com",
+    ]) {
+      const r = await route(
+        new Request("https://flagshipserver.com/api/health", {
+          method: "OPTIONS",
+          headers: { origin, "access-control-request-method": "POST" },
+        }),
+        makeEnv(),
+      );
+      expect(r.headers.get("access-control-allow-origin")).toBe(origin);
+    }
+  });
+
+  it("is apex-aware under a test env (gym serves webapp./remote. of its apex)", async () => {
+    const env = { ...makeEnv(), CONTROL_APEX: "gym.flagshipserver.com" };
+    const webapp = await route(
+      new Request("https://webapp.gym.flagshipserver.com/"),
+      env,
+    );
+    expect(await webapp.text()).toBe("asset:/webapp/");
+    const remote = await route(
+      new Request("https://remote.gym.flagshipserver.com/"),
+      env,
+    );
+    expect(await remote.text()).toBe("asset:/webapp/");
+    const legacy = await route(new Request("https://web.gym.flagshipserver.com/"), env);
+    expect(legacy.status).toBe(308);
+    expect(legacy.headers.get("location")).toBe("https://webapp.gym.flagshipserver.com/");
+  });
+});
+
 describe("/transfer — take-over universal-link browser fallback", () => {
   // On the CONTROL apex the app (when installed) intercepts /transfer?o=… as a
   // universal link / App-Link and never hits the Worker. When it's NOT installed
@@ -1046,7 +1135,7 @@ describe("/transfer — take-over universal-link browser fallback", () => {
     );
     expect(r.status).toBe(308);
     expect(r.headers.get("location")).toBe(
-      "https://web.flagshipserver.com/transfer?o=eyJhIjoxfQ",
+      "https://webapp.flagshipserver.com/transfer?o=eyJhIjoxfQ",
     );
   });
 
@@ -1057,7 +1146,7 @@ describe("/transfer — take-over universal-link browser fallback", () => {
     );
     expect(r.status).toBe(308);
     expect(r.headers.get("location")).toBe(
-      "https://web.flagshipserver.com/transfer?o=abc",
+      "https://webapp.flagshipserver.com/transfer?o=abc",
     );
   });
 
@@ -1070,7 +1159,7 @@ describe("/transfer — take-over universal-link browser fallback", () => {
     );
     expect(r.status).toBe(308);
     expect(r.headers.get("location")).toBe(
-      "https://web.flagshipserver.com/transfer?o=xyz",
+      "https://webapp.flagshipserver.com/transfer?o=xyz",
     );
   });
 
@@ -1086,7 +1175,7 @@ describe("/transfer — take-over universal-link browser fallback", () => {
     // The redirect target: an extensionless client route on the webapp host
     // hands back the webapp shell so dispatchInitialView() can read ?o=.
     const r = await route(
-      new Request("https://web.flagshipserver.com/transfer?o=xyz"),
+      new Request("https://webapp.flagshipserver.com/transfer?o=xyz"),
       makeEnv(),
     );
     expect(r.status).toBe(200);
@@ -1099,13 +1188,13 @@ describe("CORS — cross-origin webapp → apex /api/* calls", () => {
     const r = await route(
       new Request("https://flagshipserver.com/api/recovery", {
         method: "OPTIONS",
-        headers: { origin: "https://web.flagshipserver.com" },
+        headers: { origin: "https://webapp.flagshipserver.com" },
       }),
       makeEnv(),
     );
     expect(r.status).toBe(204);
     expect(r.headers.get("access-control-allow-origin")).toBe(
-      "https://web.flagshipserver.com",
+      "https://webapp.flagshipserver.com",
     );
     expect(r.headers.get("access-control-allow-methods")).toContain("POST");
     expect(r.headers.get("access-control-allow-methods")).toContain("DELETE");
@@ -1115,13 +1204,13 @@ describe("CORS — cross-origin webapp → apex /api/* calls", () => {
   it("attaches access-control-allow-origin to /api/* responses for allow-listed origin", async () => {
     const r = await route(
       new Request("https://flagshipserver.com/api/health", {
-        headers: { origin: "https://web.flagshipserver.com" },
+        headers: { origin: "https://webapp.flagshipserver.com" },
       }),
       makeEnv(),
     );
     expect(r.status).toBe(200);
     expect(r.headers.get("access-control-allow-origin")).toBe(
-      "https://web.flagshipserver.com",
+      "https://webapp.flagshipserver.com",
     );
     expect(r.headers.get("vary")).toMatch(/origin/i);
   });
@@ -1140,7 +1229,7 @@ describe("CORS — cross-origin webapp → apex /api/* calls", () => {
   it("does NOT touch non-/api responses (marketing site stays plain)", async () => {
     const r = await route(
       new Request("https://flagshipserver.com/", {
-        headers: { origin: "https://web.flagshipserver.com" },
+        headers: { origin: "https://webapp.flagshipserver.com" },
       }),
       makeEnv(),
     );
@@ -1813,7 +1902,7 @@ describe("Pre-launch stealth gate (/wip_ + /alpha + coming-soon)", () => {
   it("/me/* and /webapp/* 308-redirects still fire without the cookie", async () => {
     const me = await route(new Request("https://flagshipserver.com/me/profile"), makeEnv());
     expect(me.status).toBe(308);
-    expect(me.headers.get("location")).toMatch(/^https:\/\/web\.flagshipserver\.com/);
+    expect(me.headers.get("location")).toMatch(/^https:\/\/webapp\.flagshipserver\.com/);
     const webapp = await route(new Request("https://flagshipserver.com/webapp/foo"), makeEnv());
     expect(webapp.status).toBe(308);
   });
@@ -1921,9 +2010,9 @@ describe("Pre-launch stealth gate (/wip_ + /alpha + coming-soon)", () => {
     expect(await r.text()).toBe("asset:/coming-soon.html");
   });
 
-  it("the gate does not affect web.flagshipserver.com (webapp origin)", async () => {
+  it("the gate does not affect webapp.flagshipserver.com (webapp origin)", async () => {
     const r = await route(
-      new Request("https://web.flagshipserver.com/"),
+      new Request("https://webapp.flagshipserver.com/"),
       makeEnv(),
     );
     expect(await r.text()).toBe("asset:/webapp/");

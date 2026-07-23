@@ -90,6 +90,7 @@ import {
   initCompanionDockStartView,
   enterCompanionDockStart,
 } from "./views/companion-dock-start.js";
+import { isRemoteSurface } from "./lib/apex.js";
 import {
   initCompanionRequestsView,
   enterCompanionRequests,
@@ -585,7 +586,16 @@ async function boot() {
   wireActivityEntries();
   wireServicesTabEntries();
 
-  if (window.location.pathname === "/dock" || window.location.pathname === "/dock/") {
+  // On remote.<apex> the whole origin IS the remote surface, so every entry
+  // path lands on the "start a remote session" view — there is nothing else
+  // here to open. `/dock` stays recognised because the pre-release testers'
+  // bookmarks point at the old path; the Worker 308s webapp.'s `/dock` here,
+  // and this keeps that landing honest even on a cached shell.
+  if (
+    isRemoteSurface() ||
+    window.location.pathname === "/dock" ||
+    window.location.pathname === "/dock/"
+  ) {
     enterCompanionDockStart();
     return;
   }
@@ -714,15 +724,15 @@ async function boot() {
     return;
   }
 
-  // P14 — companion receiver flow. `?companion=<base64url JSON>` means
-  // a regular browser is being docked as a read-only companion. We
+  // P14 — remote receiver flow. `?companion=<base64url JSON>` means a
+  // regular browser is being connected as a read-only remote. We
   // redeem the ticket against the owner's pod, mint a new profile slot
   // flagged kind:"companion", and continue normal boot under that
   // profile. UMK seed + IRK private key are NOT present on this device
   // — that's the marker for "this profile can't sign".
   const companionPayload = companionPayloadFromLocation();
   if (companionPayload) {
-    setSubtitle("docking");
+    setSubtitle("connecting");
     const result = await redeemCompanionAndPersist(companionPayload);
     if (result.error) {
       toast(result.error, "err");
@@ -730,11 +740,11 @@ async function boot() {
       // (we only strip on success), but the user can still navigate
       // around the existing webapp if they had a prior profile.
     } else {
-      toast(`docked as companion (${result.label ?? "no label"})`);
-      // Companion sessions skip the unlock view entirely — there's no
-      // UMK to unwrap. Render the home tab so they land somewhere
+      toast(`connected as a remote (${result.label ?? "no label"})`);
+      // Remote sessions skip the unlock view entirely — there's no UMK
+      // to unwrap. Render the home tab so they land somewhere
       // meaningful.
-      setSubtitle("companion");
+      setSubtitle("remote");
       show("view-home");
       await enterHome();
       return;

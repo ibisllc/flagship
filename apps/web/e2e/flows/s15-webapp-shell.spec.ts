@@ -99,7 +99,7 @@ test.describe("S15 — webapp brand DNA", () => {
     const appleIcon = await page.locator('link[rel="apple-touch-icon"]').getAttribute("href");
     expect(appleIcon).toBeTruthy();
     // Webapp serves its own /icon.svg at the root (the host-rewrite on
-    // web.flagshipserver.com maps /icon.svg to apps/web/public/webapp/icon.svg).
+    // webapp.flagshipserver.com maps /icon.svg to apps/web/public/webapp/icon.svg).
     expect(appleIcon).toMatch(/icon\.svg$/);
   });
 

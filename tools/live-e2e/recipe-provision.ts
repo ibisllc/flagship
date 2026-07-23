@@ -442,7 +442,7 @@ async function main(): Promise<void> {
 
       // ── CORS — the box's own /api/* must answer the webapp origin ─────────
       log("[CORS — daemon /api/* honours the webapp origin]");
-      const webappOrigin = `https://web.${CONTROL}`; // web.gym.flagshipserver.com
+      const webappOrigin = `https://webapp.${CONTROL}`; // webapp.gym.flagshipserver.com
       const apiUrl = `https://${fqdn}/api/front-page`;
       await check("OPTIONS preflight from the webapp origin echoes ACAO + methods/headers", () => {
         const r = curlHeaders(apiUrl, [

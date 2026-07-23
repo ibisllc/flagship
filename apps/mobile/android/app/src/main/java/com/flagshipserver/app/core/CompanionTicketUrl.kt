@@ -1,7 +1,7 @@
 // P14 — pure helper that packs a freshly-minted companion-pairing ticket
 // into the canonical URL the desktop browser scans:
 //
-//   https://web.flagshipserver.com/?companion=<base64url(JSON {ticketId,
+//   https://webapp.flagshipserver.com/?companion=<base64url(JSON {ticketId,
 //   ticketSecret, podBaseUrl, username})>
 //
 // base64url is RFC 4648 §5 — no padding. The webapp boot-time handler
@@ -62,9 +62,15 @@ object CompanionDockApprovalLink {
     private val hex32 = Regex("^[0-9a-fA-F]{32}$")
     private val hex64 = Regex("^[0-9a-fA-F]{64}$")
 
+    /** Accepted deep-link hosts. `remote` is the current label (the feature
+     *  was renamed from "dock" on 2026-07-23); `dock` stays accepted so a
+     *  browser still serving the pre-rename webapp keeps working against a
+     *  freshly built app. The payload is identical either way. */
+    private val ACCEPTED_HOSTS = setOf("remote", "dock")
+
     fun parse(raw: String): CompanionDockApprovalPayload? {
         val uri = runCatching { java.net.URI(raw.trim()) }.getOrNull() ?: return null
-        if (uri.scheme != "flagship" || uri.host != "dock") return null
+        if (uri.scheme != "flagship" || uri.host !in ACCEPTED_HOSTS) return null
         val params = uri.rawQuery.orEmpty().split('&').mapNotNull { pair ->
             val index = pair.indexOf('=')
             if (index < 1) null else {

@@ -7,14 +7,14 @@ Personal-cloud ecosystem. The phone is the trust root; users run their own serve
 ## What's where
 
 ```
-apps/com/                  Cloudflare Worker — flagshipserver.com (identity + state) + web.flagshipserver.com (webapp host-rewrite)
+apps/com/                  Cloudflare Worker — flagshipserver.com (identity + state) + webapp./remote.flagshipserver.com (host-rewrite)
 apps/web/                  Fly app — flagship.services (stateless data plane) + the webapp static surface
 apps/web/public/           Static assets served by the Worker's [assets] binding
    studio/                 /studio — short desktop download + direct phone-pairing guide
    dev/create-server       /dev/create-server — phone simulator
    status/                 /status/ — live health dashboard
    security/               disclosure.html, report.html
-   webapp/                 PWA source (served at root on web.flagshipserver.com)
+   webapp/                 PWA source (served at root on webapp. AND remote.flagshipserver.com)
 apps/mobile/               iOS Swift + Android Kotlin clients — substantial code; not yet on TestFlight/Play
 
 packages/protocol/         Canonical-bytes + Ed25519 sign/verify for every signed message
@@ -44,6 +44,8 @@ fly.toml                   :443 raw-TCP (SNI passthrough) + :8443 TLS-term (API 
 ## Live URLs
 
 - `https://flagshipserver.com/` — landing
+- `https://webapp.flagshipserver.com/` — the owner webapp (PWA)
+- `https://remote.flagshipserver.com/` — browser remote (phone-approved, keyless)
 - `https://flagshipserver.com/studio` — download Studio + direct phone-pairing guide
 - `https://flagshipserver.com/dev/create-server` — phone simulator (mints build codes)
 - `https://flagshipserver.com/status/` — live health
@@ -147,6 +149,30 @@ harness can't do:
   ISO + a physical OTG drive (`apps/mobile/android/OTG-BUILDER-NOTES.md` §5).
 
 ### Recent work (condensed log, newest first)
+
+**2026-07-23 (webapp./remote. split + "Remote" rename) — the one shared `web.`
+origin became two hosts, one per concern, and the docking feature is now called
+Remote on every surface.** `webapp.flagshipserver.com` serves the owner webapp;
+`remote.flagshipserver.com` serves the phone-approved, keyless browser session
+— the same shell assets on a separate origin, so a remote session's storage is
+isolated from the owner app's by the same-origin policy rather than by
+convention. Both are wrangler custom domains (brand-new hostnames with no DNS
+record; a zone route would never fire). `web.` is retired to a permanent 308 →
+`webapp.` (path + query preserved) purely for the pre-release testers holding a
+bookmark or an installed PWA; `webapp./dock` 308s to `remote./`. The labels do
+not collide, so the redirect can sit there until it's deleted before launch.
+Renamed user-facing only: every "dock a browser" string on web/iOS/Android is
+now "Remote", and the approval deep link is `flagship://remote` — both phone
+parsers still accept `flagship://dock`, so an app built before the rename keeps
+working. The daemon HTTP contract (`/api/companion/dock/*`) is deliberately
+UNCHANGED so already-installed boxes keep working; the daemon's CORS allowlist
+gains the four new origins and keeps the two old ones until the fleet turns
+over. Recovery's postMessage parent is pinned to `webapp.` only — a keyless
+remote has no business touching a recovery credential. Web shell cache is v26.
+**Remaining (owner):** deploy `.com` (wrangler provisions both DNS records +
+edge certs on first deploy — verify each host resolves and serves before
+announcing); rebuild iOS/Android so devices get the rename; existing boxes pick
+up the daemon CORS entry on their next daemon update or reburn.
 
 **2026-07-23 (direct Studio onboarding) — the legacy homepage recipe QR and
 `/ready` landing are retired; `/studio` is the short download and pairing URL.**

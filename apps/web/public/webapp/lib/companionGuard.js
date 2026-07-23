@@ -1,23 +1,23 @@
-// P14 — Companion-profile write guard.
+// P14 — remote-session write guard.
 //
 // Signing helpers (releaseServer, revokeServer, replaceDeviceCeremony,
 // wipeRestartCeremony, installService, ...) call requireOwnerProfile()
 // BEFORE pulling the UMK from the session. If the active profile is a
 // companion (kind === "companion"), this throws a tagged Error the
-// router catches and surfaces as a toast — "Companion sessions can't
+// router catches and surfaces as a toast — "A remote browser can't
 // sign. Open your owner app to approve this change."
 //
-// Wave 9 will add the write-relay: a companion-initiated signed write
-// will queue on the pod and the owner approves it asynchronously.
-// Today the contract is simpler: companions are strictly read-only,
-// signing is gated, and the error message tells the user where to go.
+// Wave 9 will add the write-relay: a remote-initiated signed write will
+// queue on the pod and the owner approves it asynchronously. Today the
+// contract is simpler: remote sessions are strictly read-only, signing
+// is gated, and the error message tells the user where to go.
 
 import { get as profileGet } from "./profilesStore.js";
 
 export const COMPANION_WRITE_ERROR_CODE = "companion-write-not-allowed";
 
 export class CompanionWriteError extends Error {
-  constructor(message = "Companion sessions can't sign — open your owner app to approve this") {
+  constructor(message = "A remote browser can't sign — open your owner app to approve this") {
     super(message);
     this.name = "CompanionWriteError";
     this.code = COMPANION_WRITE_ERROR_CODE;
@@ -46,7 +46,7 @@ export function isCompanionProfile() {
  * their reads), but the seed needed to sign was never persisted in
  * this browser. Calling crypto.subtle.sign with a missing seed would
  * surface as a cryptic "umk required" — this guard surfaces the
- * actual reason ("you're docked, not signed in") at the right layer.
+ * actual reason ("you're a remote, not signed in") at the right layer.
  */
 export function requireOwnerProfile() {
   if (isCompanionProfile()) throw new CompanionWriteError();
@@ -75,7 +75,7 @@ const UNAVAILABLE_IDS = [
 ];
 
 /** Make the shared webapp shell honest about the currently unsupported
- * companion capabilities. Read surfaces remain identical to the owner webapp;
+ * remote-session capabilities. Read surfaces remain identical to the owner webapp;
  * server release/revoke are intentionally not disabled because they already
  * have a phone-approval relay. */
 export function applyCompanionUiRestrictions(doc = globalThis.document) {
@@ -87,7 +87,7 @@ export function applyCompanionUiRestrictions(doc = globalThis.document) {
     if (active) {
       el.setAttribute("data-companion-unavailable", "true");
       el.setAttribute("aria-disabled", "true");
-      el.setAttribute("title", "Unavailable in a keyless companion session");
+      el.setAttribute("title", "Unavailable in a keyless remote session");
       if ("disabled" in el) el.disabled = true;
     } else if (el.getAttribute("data-companion-unavailable") === "true") {
       el.removeAttribute("data-companion-unavailable");
