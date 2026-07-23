@@ -2,10 +2,9 @@
 <!--
   Flagship Studio app manifest.
 
-  Raw-disk write requires admin on Windows. We declare
-  `requireAdministrator` so the OS shows the UAC consent prompt on
-  launch instead of failing later with cryptic ACCESS_DENIED errors
-  from `\\.\PhysicalDrive*`. Same approach Rufus and balenaEtcher use.
+  The desktop shell runs as the signed-in user. Raw USB writes are the only
+  operation that needs elevation; users explicitly restart elevated from File
+  before burning instead of granting the pairing and VM UI broad privileges.
 -->
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
   <assemblyIdentity version="0.0.1.0" name="FlagshipBuilder"/>
@@ -13,8 +12,7 @@
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v2">
-        <!-- raw block-device IO requires admin -->
-        <requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
       </requestedPrivileges>
     </security>
   </trustInfo>

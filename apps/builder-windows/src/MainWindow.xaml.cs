@@ -78,6 +78,30 @@ public partial class MainWindow : Window
         _wizard.ReturnToPairingCover();
     }
 
+    private void MenuRestartElevated_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var executable = Environment.ProcessPath
+                ?? throw new InvalidOperationException("Could not locate the Flagship Studio executable.");
+            Process.Start(new ProcessStartInfo(executable)
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+                WorkingDirectory = AppContext.BaseDirectory,
+            });
+            Close();
+        }
+        catch (System.ComponentModel.Win32Exception error) when (error.NativeErrorCode == 1223)
+        {
+            // UAC was cancelled; leave this normal-permission window open.
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "Could not restart as administrator",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
     private void MenuExit_Click(object sender, RoutedEventArgs e) => Close();
 
     private void MenuDocumentation_Click(object sender, RoutedEventArgs e)

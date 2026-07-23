@@ -17,9 +17,8 @@ namespace Flagship.Builder;
 ///
 /// 1:1 with apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift and
 /// apps/builder-linux/wizard.py's WizardModel. The Windows version
-/// invokes the CLI's `write` subcommand directly (same as Linux), since
-/// the app launches with `requireAdministrator`; we already have raw
-/// disk privileges so there is no pkexec dance.
+/// runs its native pipeline directly. Normal launch is least-privileged; the user
+/// explicitly restarts as administrator before a raw USB write.
 /// </summary>
 public sealed class Wizard : INotifyPropertyChanged
 {

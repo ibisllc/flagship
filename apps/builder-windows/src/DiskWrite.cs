@@ -22,8 +22,8 @@ namespace Flagship.Builder;
 ///      sector size — same rule as the macOS writer), flush, then unlock +
 ///      close the held volume handles.
 ///
-/// The app ships a `requireAdministrator` manifest, so the CreateFile opens
-/// succeed without a second UAC prompt (same posture as Rufus / balenaEtcher).
+/// The user explicitly restarts the app as administrator before these CreateFile
+/// calls; normal pairing and VM management remain least-privileged.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public static class DiskWrite

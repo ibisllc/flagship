@@ -198,8 +198,10 @@ title bar, taskbar, and tray share the Flagship icon; the sidebar reaches the to
 the menu is transparent, and the main-pane-only log footer matches the sidebar
 footer and expands as a full-height overlay instead of reflowing the wizard.
 Windows and macOS status icons expose the same safe Start/Stop/Restart/Stop All
-controls (destructive deletion remains in the full app). The 222-test Windows
-suite and warning-free WPF build pass.
+controls (destructive deletion remains in the full app). A valid native ICO now
+survives WPF startup decoding; normal launch is least-privileged, with an explicit
+File → Restart as administrator action reserved for raw USB writes. The 222-test
+Windows suite, warning-free build, publish, and packaged-window smoke test pass.
 **2026-07-22 (Windows Studio Mac-parity flow) — Windows now opens on a live
 phone-pairing cover and preserves the authorization boundary.** WPF has separate
 QR, SAS-confirm, and awaiting-authorization panes; manual recipe entry is the

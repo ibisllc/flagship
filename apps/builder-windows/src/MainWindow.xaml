@@ -47,6 +47,7 @@
     <Menu Grid.Row="0" Background="Transparent" Padding="4,2">
         <MenuItem Header="_File">
             <MenuItem Header="New Server" Click="MenuNewServer_Click"/>
+            <MenuItem Header="Restart as administrator…" Click="MenuRestartElevated_Click"/>
             <Separator/>
             <MenuItem Header="Exit" Click="MenuExit_Click"/>
         </MenuItem>
