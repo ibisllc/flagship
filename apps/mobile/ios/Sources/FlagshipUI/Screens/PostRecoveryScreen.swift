@@ -56,9 +56,8 @@ public final class PostRecoveryViewModel {
             let resp = try await client.postRecoveryStatus()
             lastSnapshot = resp.report
             if let report = resp.report {
-                if let pending = report.state.lastSeen,
-                   pending.objectedAt == nil,
-                   report.state.lastSwapTo == nil {
+                if report.hasActiveReattach,
+                   let pending = report.state.lastSeen {
                     phase = .pendingSwap(pending)
                 } else if let r = report.lastReissue {
                     phase = .complete(r)
@@ -74,6 +73,17 @@ public final class PostRecoveryViewModel {
     }
 }
 
+public extension PostRecoverySnapshot {
+    /// True only while an unobjectioned recovery re-pair is waiting to be
+    /// applied. A prior completed swap must not hide a newer pending one.
+    var hasActiveReattach: Bool {
+        guard let pending = state.lastSeen, pending.objectedAt == nil else {
+            return false
+        }
+        return state.lastSwapTo?.lowercased() != pending.newIrkPub.lowercased()
+    }
+}
+
 public struct PostRecoveryScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: PostRecoveryViewModel
@@ -84,9 +94,6 @@ public struct PostRecoveryScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
-                Text("Recovery progress")
-                    .font(FS.font.h2())
-                    .foregroundColor(c.text)
                 Text("After a re-pair, your servers re-anchor every app's membership to your new identity. This screen shows what they've finished.")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)

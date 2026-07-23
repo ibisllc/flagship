@@ -658,9 +658,11 @@ struct ProvidersStub: View {
 
 struct RecoveryContainer: View {
     @Environment(\.flagshipServerClient) private var serverClient
+    @Environment(\.screensClient) private var screensClient
     @Environment(ToastCenter.self) private var toasts
     @Environment(AppState.self) private var app
     @State private var vm: RecoveryViewModel?
+    @State private var showReattachProgress = false
     var onShowPostRecoveryProgress: () -> Void = {}
 
     var body: some View {
@@ -689,6 +691,7 @@ struct RecoveryContainer: View {
                             toasts.success("UMK recovered.")
                         }
                     },
+                    showReattachProgress: showReattachProgress,
                     onShowReattachProgress: onShowPostRecoveryProgress
                 )
             } else { ProgressView() }
@@ -702,6 +705,17 @@ struct RecoveryContainer: View {
                     webAuthn: PlatformWebAuthnProvider(),
                     username: { [app] in app.currentUser }
                 )
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                do {
+                    let status = try await screensClient.postRecoveryStatus()
+                    showReattachProgress = status.report?.hasActiveReattach == true
+                } catch {
+                    showReattachProgress = false
+                }
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
             }
         }
     }

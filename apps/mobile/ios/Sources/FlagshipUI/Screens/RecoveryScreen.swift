@@ -13,6 +13,7 @@ public struct RecoveryScreen: View {
     var onRunSetup: (String) async -> Void = { _ in }
     /// Receives the recovery PASSPHRASE for the restore path.
     var onRunRecover: (String) async -> Void = { _ in }
+    var showReattachProgress: Bool = false
     var onShowReattachProgress: () -> Void = {}
 
     @State private var enrollPassphrase = ""
@@ -24,11 +25,13 @@ public struct RecoveryScreen: View {
         vm: RecoveryViewModel,
         onRunSetup: @escaping (String) async -> Void = { _ in },
         onRunRecover: @escaping (String) async -> Void = { _ in },
+        showReattachProgress: Bool = false,
         onShowReattachProgress: @escaping () -> Void = {}
     ) {
         self.vm = vm
         self.onRunSetup = onRunSetup
         self.onRunRecover = onRunRecover
+        self.showReattachProgress = showReattachProgress
         self.onShowReattachProgress = onShowReattachProgress
     }
 
@@ -36,9 +39,24 @@ public struct RecoveryScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
-                Text("Recover on a new device").font(FS.font.h2()).foregroundColor(c.text)
-                Text("Your account's master key lives only on this device. Set up recovery now so you can get back in fast and safely if you lose it. We keep a copy locked away in the cloud — unlockable only with your passkey (synced through iCloud) and a recovery passphrase you choose. We can't open it, and we can't reset your passphrase. With recovery, you install Flagship on a new device, sign in, enter your passphrase, and you're back in. Without it you can still get back in, but only the slow way: a single-device account can be claimed from a new device after a 3-day wait — and because that same path lets anyone who knows your username start a claim, you'll want recovery's instant, private route instead.")
-                    .font(FS.font.body()).foregroundColor(c.textMuted)
+                if showReattachProgress {
+                    Button(action: onShowReattachProgress) {
+                        FSCard {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Re-attach progress").foregroundColor(c.text)
+                                    Text("See per-app re-anchoring after recovery.")
+                                        .font(FS.font.bodySm())
+                                        .foregroundColor(c.textMuted)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("recovery-open-reattach-progress")
+                }
 
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
@@ -101,28 +119,12 @@ public struct RecoveryScreen: View {
                         Image(systemName: "info.circle.fill").foregroundColor(c.primary)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("How this works").font(FS.font.bodySm()).foregroundColor(c.text)
-                            Text("Your passkey turns your passphrase into a key that only you can produce. We use it to lock a copy of your account key and store that locked copy on our servers. We never see the key inside — only your passkey can unlock it.")
+                            Text("Recovery requires both your recovery passphrase and access to the iCloud Keychain that holds your Flagship passkey. Together they unlock the encrypted copy of your account key stored on our servers; we cannot read it or reset your passphrase.")
                                 .font(FS.font.caption())
                                 .foregroundColor(c.textMuted)
                         }
                     }
                 }
-
-                Button(action: onShowReattachProgress) {
-                    FSCard {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Re-attach progress").foregroundColor(c.text)
-                                Text("See per-app re-anchoring after a recovery.")
-                                    .font(FS.font.bodySm())
-                                    .foregroundColor(c.textMuted)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundColor(c.textMuted)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
             }
             .padding(FS.space.s6)
         }
