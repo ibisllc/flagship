@@ -456,6 +456,16 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // PWA) hit this; delete the host, its route, and this block once
   // they've moved.
   if (url.hostname === legacyWebappHost(env)) {
+    // `web./dock` was THE bookmark for the docking ceremony, so it gets a
+    // direct 308 to the remote origin rather than being bounced through
+    // `webapp./dock` and redirected a second time. One hop, and the tester
+    // lands on the host the flow actually lives on.
+    if (url.pathname === "/dock" || url.pathname === "/dock/") {
+      return new Response(null, {
+        status: 308,
+        headers: { location: `https://${remoteHost(env)}/${url.search}` },
+      });
+    }
     const target = `https://${webappHost(env)}${url.pathname}${url.search}`;
     return new Response(null, { status: 308, headers: { location: target } });
   }

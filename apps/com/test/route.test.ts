@@ -1057,6 +1057,17 @@ describe("webapp. / remote. split + the retired web. host", () => {
     );
   });
 
+  it("web./dock goes STRAIGHT to remote./ — one hop, not via webapp./dock", async () => {
+    for (const path of ["/dock", "/dock/"]) {
+      const r = await route(
+        new Request(`https://web.flagshipserver.com${path}`),
+        makeEnv(),
+      );
+      expect(r.status).toBe(308);
+      expect(r.headers.get("location")).toBe("https://remote.flagshipserver.com/");
+    }
+  });
+
   it("web. is never SERVED — even its root only redirects", async () => {
     const r = await route(new Request("https://web.flagshipserver.com/"), makeEnv());
     expect(r.status).toBe(308);
