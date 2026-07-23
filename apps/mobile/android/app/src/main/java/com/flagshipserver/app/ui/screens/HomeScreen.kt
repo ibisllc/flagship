@@ -176,27 +176,12 @@ fun HomeScreen(
             style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Bold),
             modifier = Modifier.testTag("home-title"),
         )
-        // The ACCOUNT's chosen name leads — that is what the user named this
-        // cloud. The routing handle is only the fallback for a locked or
-        // not-yet-named account, whose name is ciphertext we may not read yet.
         Text(
-            text = when {
-                !accountDisplayName.isNullOrEmpty() -> "Welcome back to $accountDisplayName."
-                username.isEmpty() -> "Welcome back."
-                else -> "Welcome back, $username."
-            },
+            text = homeIdentityLine(accountDisplayName, username, deviceDisplayName),
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
             modifier = Modifier.testTag("home-welcome"),
         )
-        if (!deviceDisplayName.isNullOrEmpty()) {
-            Text(
-                text = "This device: $deviceDisplayName",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 15.sp, lineHeight = 20.sp),
-                modifier = Modifier.testTag("home-this-device"),
-            )
-        }
 
         if (deviceCapability != null && !deviceCapability.isFullyScoped) {
             Spacer(Modifier.height(FS.space.s2))
@@ -308,10 +293,7 @@ private fun TopAnnouncement(
             FSAnnouncementCard(
                 icon = "🔑",
                 title = "Your account isn't backed up yet",
-                message = "If you lose this device, getting back in means a 3-day wait " +
-                    "— and that same path lets anyone who knows your username try to " +
-                    "claim your account. Set up recovery now (one minute) so you can " +
-                    "restore instantly and privately.",
+                message = "If you lose access to this device, you may lose access to your Flagship cloud",
                 ctaLabel = "Secure my account",
                 onCta = onSetUpRecovery,
                 onDismiss = onDismissRecoveryBackupBanner,
@@ -376,7 +358,7 @@ private fun EmptyServerCard(onAddServer: () -> Unit) {
                 style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
             )
             Text(
-                "You don't have any servers yet. Add your first server to start running your own services — or come back to it whenever you like.",
+                "You don't have any servers yet. Add your first server to start running your own services.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
             )
@@ -389,6 +371,11 @@ private fun EmptyServerCard(onAddServer: () -> Unit) {
             )
         }
     }
+}
+
+internal fun homeIdentityLine(accountDisplayName: String?, username: String, deviceDisplayName: String?): String {
+    val account = accountDisplayName?.takeIf { it.isNotEmpty() } ?: username
+    return deviceDisplayName?.takeIf { it.isNotEmpty() }?.let { "$account > $it" } ?: account
 }
 
 /// Leading-icon tint for a server row, mirroring iOS

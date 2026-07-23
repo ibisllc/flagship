@@ -126,7 +126,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Keep entries terse: what changed +
-> what remains, not test counts or commit hashes. Last updated **2026-07-21**.
+> what remains, not test counts or commit hashes. Last updated **2026-07-22**.
 
 ### Pending owner validation (the standing caveat — applies to nearly every entry below)
 
@@ -148,6 +148,11 @@ harness can't do:
   ISO + a physical OTG drive (`apps/mobile/android/OTG-BUILDER-NOTES.md` §5).
 
 ### Recent work (condensed log, newest first)
+
+**2026-07-22 (quieter Home front page) — web, iOS, and Android show the
+locally decrypted `account > device` identity breadcrumb, use a one-line account
+backup warning, and shorten the no-server invitation.** iOS also hides its build
+shortcut and server-list heading until the account has a server.
 
 **2026-07-22 (iOS orphaned-account cleanup) — a Keychain-restored profile is
 restored locally before `.com` is queried, and an account-deletion 404 completes

@@ -70,4 +70,10 @@ describe("home recovery-banner wiring", () => {
     expect(HOME_JS).toMatch(/renderRecoveryBanner\(\)/);
     expect(HOME_JS).toMatch(/getElementById\(["']servers-list["']\)/);
   });
+
+  it("uses the concise loss warning", () => {
+    expect(HOME_JS).toContain(
+      "If you lose access to this device, you may lose access to your Flagship cloud",
+    );
+  });
 });

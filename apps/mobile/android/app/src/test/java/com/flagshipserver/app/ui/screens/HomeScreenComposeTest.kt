@@ -31,6 +31,8 @@ class HomeScreenComposeTest {
                 HomeScreen(
                     state = LoadingState.Loading,
                     username = "harry",
+                    accountDisplayName = "Harry's cloud",
+                    deviceDisplayName = "Pixel",
                     pods = emptyList(),
                     leaderPodId = null,
                     onOpenPod = {},
@@ -41,7 +43,9 @@ class HomeScreenComposeTest {
             }
         }
         composeRule.onNodeWithText("Add your first server").assertIsDisplayed()
-        composeRule.onNodeWithText("Welcome back, harry.").assertIsDisplayed()
+        composeRule.onNodeWithText("Harry's cloud > Pixel").assertIsDisplayed()
+        composeRule.onNodeWithText("Build a service").assertDoesNotExist()
+        composeRule.onNodeWithText("YOUR SERVERS").assertDoesNotExist()
     }
 
     @Test fun loadedPods_rendersServerOverviewCard() {
@@ -65,6 +69,7 @@ class HomeScreenComposeTest {
                 HomeScreen(
                     state = LoadingState.Loaded(detail),
                     username = "harry",
+                    deviceDisplayName = "Pixel",
                     pods = listOf(pod),
                     leaderPodId = "pod-x",
                     onOpenPod = {},
@@ -77,7 +82,7 @@ class HomeScreenComposeTest {
         // The server renders as an FSListRow (name title + fqdn subtitle) and
         // the state-driven overview card repeats the fqdn — assert the
         // unambiguous greeting + that the fqdn appears at least once.
-        composeRule.onNodeWithText("Welcome back, harry.").assertIsDisplayed()
+        composeRule.onNodeWithText("harry > Pixel").assertIsDisplayed()
         composeRule.onAllNodesWithText("home.harry.flagship.services")
             .onFirst().assertIsDisplayed()
         // The status pill now renders in the row's stacked `below` slot (under

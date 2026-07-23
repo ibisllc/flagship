@@ -49,29 +49,29 @@ final class HomeWelcomeHierarchyTests: XCTestCase {
 
     func test_decryptedAccountName_leads() {
         XCTAssertEqual(
-            HomeScreen.welcomeLine(accountDisplayName: "Johnson Family", username: "jolly-quince"),
-            "Welcome back to Johnson Family."
+            HomeScreen.welcomeLine(accountDisplayName: "Johnson Family", username: "jolly-quince", deviceDisplayName: "Harry's iPhone"),
+            "Johnson Family > Harry's iPhone"
         )
     }
 
     func test_noAccountName_fallsBackToHandle() {
         XCTAssertEqual(
-            HomeScreen.welcomeLine(accountDisplayName: nil, username: "jolly-quince"),
-            "Welcome back, jolly-quince."
+            HomeScreen.welcomeLine(accountDisplayName: nil, username: "jolly-quince", deviceDisplayName: "Harry's iPhone"),
+            "jolly-quince > Harry's iPhone"
         )
     }
 
     func test_emptyAccountName_isTreatedAsAbsent() {
         XCTAssertEqual(
-            HomeScreen.welcomeLine(accountDisplayName: "", username: "jolly-quince"),
-            "Welcome back, jolly-quince."
+            HomeScreen.welcomeLine(accountDisplayName: "", username: "jolly-quince", deviceDisplayName: "Harry's iPhone"),
+            "jolly-quince > Harry's iPhone"
         )
     }
 
     func test_neitherAvailable_staysGeneric() {
         XCTAssertEqual(
             HomeScreen.welcomeLine(accountDisplayName: nil, username: ""),
-            "Welcome back."
+            ""
         )
     }
 }

@@ -44,7 +44,8 @@
 //       paired session instead of falling through to the unpaired detail error.
 //  v20: demo profiles auto-unlock on reload and repair the old discarded local
 //       wrap passphrase instead of showing an impossible Unlock prompt.
-const SHELL_VERSION = "v20";
+//  v21: refresh the quieter Home identity, recovery warning, and empty state.
+const SHELL_VERSION = "v21";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

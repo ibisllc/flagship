@@ -146,7 +146,9 @@ public struct HomeScreen: View {
                 // account-reset (danger) suppresses everything; otherwise the
                 // backup banner, then the recovery nudge.
                 topAnnouncement(c: c)
-                quickActions(c: c)
+                if !pods.isEmpty {
+                    quickActions(c: c)
+                }
                 serversSection(c: c)
                 switch state {
                 case .loaded(let d):
@@ -191,7 +193,7 @@ public struct HomeScreen: View {
             FSAnnouncementCard(
                 icon: "key.horizontal.fill",
                 title: "Your account isn't backed up yet",
-                message: "If you lose this device, getting back in means a 3-day wait — and that same path lets anyone who knows your username try to claim your account. Set up recovery now (one minute) so you can restore instantly and privately.",
+                message: "If you lose access to this device, you may lose access to your Flagship cloud",
                 ctaLabel: "Secure my account",
                 onCta: onSetUpRecovery,
                 onDismiss: onDismissRecoveryBackupBanner
@@ -238,22 +240,16 @@ public struct HomeScreen: View {
         }.count
     }
 
-    /// Greeting line under the native large title + the optional restricted-
-    /// device chip. The big "Home" lives in the navigation bar now (it
-    /// collapses on scroll, WhatsApp-style); this keeps the personal
-    /// "Welcome back, <user>." beat without a competing 34pt header.
-    /// "Welcome back to <account name>." when we can read it; otherwise the
-    /// handle, and a bare greeting when even that is missing. Pure + static so
-    /// the precedence is testable without building a view.
-    public static func welcomeLine(accountDisplayName: String?, username: String) -> String {
-        if let account = accountDisplayName, !account.isEmpty {
-            return "Welcome back to \(account)."
-        }
-        return username.isEmpty ? "Welcome back." : "Welcome back, \(username)."
+    /// Compact account > device identity breadcrumb. Both display names are
+    /// decrypted locally; the routing handle is the account fallback.
+    public static func welcomeLine(accountDisplayName: String?, username: String, deviceDisplayName: String? = nil) -> String {
+        let account = accountDisplayName.flatMap { $0.isEmpty ? nil : $0 } ?? username
+        guard let device = deviceDisplayName, !device.isEmpty else { return account }
+        return "\(account) > \(device)"
     }
 
     private var welcomeLine: String {
-        Self.welcomeLine(accountDisplayName: accountDisplayName, username: username)
+        Self.welcomeLine(accountDisplayName: accountDisplayName, username: username, deviceDisplayName: deviceDisplayName)
     }
 
     private func subheader(c: FSColors) -> some View {
@@ -265,12 +261,6 @@ public struct HomeScreen: View {
             Text(welcomeLine)
                 .font(.system(size: 17))
                 .foregroundColor(c.textMuted)
-            if let device = deviceDisplayName, !device.isEmpty {
-                Text("This device: \(device)")
-                    .font(.system(size: 15))
-                    .foregroundColor(c.textMuted)
-                    .accessibilityIdentifier("home-this-device")
-            }
             if let cap = deviceCapability, !cap.isFullyScoped {
                 deviceChip(cap, c: c)
             }
@@ -372,13 +362,6 @@ public struct HomeScreen: View {
 
     private func serversSection(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            HStack {
-                Text("YOUR SERVERS")
-                    .font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
-                Spacer()
-                Text("\(pods.count)")
-                    .font(.system(size: 12, weight: .semibold)).foregroundColor(c.textMuted)
-            }
             if pods.isEmpty {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
@@ -390,7 +373,7 @@ public struct HomeScreen: View {
                                 Text("Your account is ready")
                                     .font(.system(size: 17, weight: .semibold))
                                     .foregroundColor(c.text)
-                                Text("You don't have any servers yet. Add your first server to start running your own services — or come back to it whenever you like.")
+                                Text("You don't have any servers yet. Add your first server to start running your own services.")
                                     .font(FS.font.bodySm())
                                     .foregroundColor(c.textMuted)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -402,6 +385,13 @@ public struct HomeScreen: View {
                 }
                 .accessibilityIdentifier("home-empty-state")
             } else {
+                HStack {
+                    Text("YOUR SERVERS")
+                        .font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+                    Spacer()
+                    Text("\(pods.count)")
+                        .font(.system(size: 12, weight: .semibold)).foregroundColor(c.textMuted)
+                }
                 // Filter chips (All / Online / Pending / Offline) over the
                 // derived liveness — purely narrows what's rendered.
                 FSChipRow(

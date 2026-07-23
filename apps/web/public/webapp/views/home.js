@@ -491,7 +491,7 @@ function renderEmptyServersList(root, { reason, username } = {}) {
     ? "Your account is ready"
     : "Your first server is one tap away";
   const hint = accountOpen
-    ? `Signed in as ${username}. Your account has no servers yet — add your first one whenever you're ready. You can run zero, one, or many.`
+    ? "You don't have any servers yet. Add your first server to start running your own services."
     : reason === "unpaired"
       ? "Pair the webapp to your phone or pod first, or jump straight in and build a fresh server."
       : "Mint a recipe, write it to a USB drive with the Flagship builder, and boot a spare machine — you're a few taps from your own cloud.";
@@ -617,7 +617,7 @@ function renderRecoveryBanner() {
     icon: keyIcon,
     title: "Your account isn't backed up yet",
     message:
-      "If you lose this device, getting back in means a 3-day wait — and that same path lets anyone who knows your username try to claim your account. Set up recovery now (one minute) so you can restore instantly and privately from a fresh browser.",
+      "If you lose access to this device, you may lose access to your Flagship cloud",
     ctaLabel: "Secure my account",
     dismissible: true,
     tone: "teal",
@@ -1432,29 +1432,27 @@ if (typeof document !== "undefined") {
 }
 
 
-/** Fill "Welcome back to <account name>" + "This device: <device name>" from
- *  the DECRYPTED directory. Best-effort and non-blocking: a locked or offline
- *  account keeps the handle, because the names are ciphertext this browser may
- *  not currently hold the key for. */
+export function homeIdentityLine({ accountDisplayName, username, deviceDisplayName } = {}) {
+  const account = accountDisplayName || username || "";
+  return deviceDisplayName ? `${account} > ${deviceDisplayName}` : account;
+}
+
+/** Fill the compact account > device breadcrumb from the decrypted directory. */
 async function renderWelcomeHierarchy(session) {
   const welcome = $("home-welcome");
-  const deviceLine = $("home-this-device");
   if (!welcome) return;
-  welcome.textContent = session?.username
-    ? `Welcome back, ${session.username}.`
-    : "Welcome back.";
-  if (deviceLine) deviceLine.classList.add("hidden");
+  welcome.textContent = homeIdentityLine({ username: session?.username });
   try {
     const directory = await fetchDecryptedDirectory();
     const account = directory?.accountDisplayName;
-    if (account) welcome.textContent = `Welcome back to ${account}.`;
     const self = (directory?.devices ?? []).find((d) => d.isCurrent);
     const deviceName = self?.displayName;
-    if (deviceLine && deviceName) {
-      deviceLine.textContent = `This device: ${deviceName}`;
-      deviceLine.classList.remove("hidden");
-    }
+    welcome.textContent = homeIdentityLine({
+      accountDisplayName: account,
+      username: session?.username,
+      deviceDisplayName: deviceName,
+    });
   } catch {
-    /* locked, offline, or not yet provisioned — the handle stands alone */
+    /* locked, offline, or not yet provisioned — the username stands alone */
   }
 }

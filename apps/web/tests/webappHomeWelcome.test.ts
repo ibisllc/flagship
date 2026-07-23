@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { homeIdentityLine } from "../public/webapp/views/home.js";
 
 // The account's chosen name is ciphertext on the wire and decrypted locally,
 // so Home must lead with it when readable and degrade to the routing handle
@@ -11,19 +12,23 @@ describe("web Home — welcome hierarchy", () => {
     "utf8",
   );
 
-  it("prefers the decrypted account name over the handle", () => {
-    expect(src).toContain("Welcome back to ${account}.");
-    expect(src).toContain("Welcome back, ${session.username}.");
+  it("renders the account and device breadcrumb", () => {
+    expect(homeIdentityLine({
+      accountDisplayName: "Johnson Family",
+      username: "jolly-quince",
+      deviceDisplayName: "MacBook",
+    })).toBe("Johnson Family > MacBook");
   });
 
-  it("surfaces the current device's decrypted name", () => {
-    expect(src).toContain("This device: ${deviceName}");
+  it("falls back to the username when the account name is unavailable", () => {
+    expect(homeIdentityLine({ username: "jolly-quince", deviceDisplayName: "MacBook" }))
+      .toBe("jolly-quince > MacBook");
     expect(src).toContain("d.isCurrent");
   });
 
   it("reads names only from the locally decrypted directory", () => {
     expect(src).toContain("fetchDecryptedDirectory");
     // A failure to decrypt must not blank the greeting.
-    expect(src).toMatch(/catch\s*\{[\s\S]*?handle stands alone/);
+    expect(src).toMatch(/catch\s*\{[\s\S]*?username stands alone/);
   });
 });
