@@ -354,6 +354,20 @@ main {
    * is tab-bar height (64) + a 16px optical breathing room. */
   padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 }
+.companion-mode-banner {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  color: var(--ink-soft);
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: 10px 14px;
+  margin-bottom: var(--space-4);
+  font-size: 12px;
+}
+.companion-mode-banner strong { color: var(--accent); white-space: nowrap; }
+[data-companion-unavailable="true"] { opacity: 0.42; cursor: not-allowed; }
 @media (min-width: 769px) {
   main {
     /* On desktop the tab strip is at the top, not the bottom — the

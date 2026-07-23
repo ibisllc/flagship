@@ -51,3 +51,60 @@ export function isCompanionProfile() {
 export function requireOwnerProfile() {
   if (isCompanionProfile()) throw new CompanionWriteError();
 }
+
+const UNAVAILABLE_IDS = [
+  "settings-tab-account-security",
+  "settings-tab-providers",
+  "settings-tab-recovery",
+  "settings-tab-trusted-devices",
+  "settings-tab-reset",
+  "settings-tab-account-delete",
+  "settings-tab-create-server",
+  "settings-tab-companion-dock",
+  "settings-tab-companion-requests",
+  "services-list-open-vibe-code",
+  "trusted-devices-add",
+  "recovery-cloud-setup",
+  "recovery-cloud-remove",
+  "recovery-keyfile-export",
+  "add-provider-go",
+  "build-src-scratch",
+  "build-src-git",
+  "build-src-mcp",
+  "build-mcp-create",
+];
+
+/** Make the shared webapp shell honest about the currently unsupported
+ * companion capabilities. Read surfaces remain identical to the owner webapp;
+ * server release/revoke are intentionally not disabled because they already
+ * have a phone-approval relay. */
+export function applyCompanionUiRestrictions(doc = globalThis.document) {
+  const active = isCompanionProfile();
+  doc?.getElementById?.("companion-mode-banner")?.classList.toggle("hidden", !active);
+  for (const id of UNAVAILABLE_IDS) {
+    const el = doc?.getElementById?.(id);
+    if (!el) continue;
+    if (active) {
+      el.setAttribute("data-companion-unavailable", "true");
+      el.setAttribute("aria-disabled", "true");
+      el.setAttribute("title", "Unavailable in a keyless companion session");
+      if ("disabled" in el) el.disabled = true;
+    } else if (el.getAttribute("data-companion-unavailable") === "true") {
+      el.removeAttribute("data-companion-unavailable");
+      el.removeAttribute("aria-disabled");
+      el.removeAttribute("title");
+      if ("disabled" in el) el.disabled = false;
+    }
+  }
+}
+
+export function installCompanionUiRestrictions(doc = globalThis.document) {
+  applyCompanionUiRestrictions(doc);
+  doc?.addEventListener?.("flagship:view-shown", () => applyCompanionUiRestrictions(doc));
+  if (typeof MutationObserver === "function" && doc?.body) {
+    const observer = new MutationObserver(() => applyCompanionUiRestrictions(doc));
+    observer.observe(doc.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }
+  return () => {};
+}

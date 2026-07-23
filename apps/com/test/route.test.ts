@@ -940,6 +940,15 @@ describe("webapp host — client-route SPA fallback (the /join pairing bug)", ()
     expect(await r.text()).toBe("asset:/webapp/index.html");
   });
 
+  it("/dock serves the webapp shell for the desktop pairing ceremony", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/dock"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/index.html");
+  });
+
   it("real asset files (with an extension) still rewrite to /webapp/<file>, NOT index.html", async () => {
     // Regression guard: the SPA fallback must not swallow actual files.
     const css = await route(

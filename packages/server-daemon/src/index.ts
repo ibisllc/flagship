@@ -55,6 +55,7 @@ import {
 } from "./peerBackup/httpPeerLink.js";
 import { InMemoryAppInviteStore } from "./inviteHandler.js";
 import { InMemoryCompanionTicketStore } from "./companion/companionTicketStore.js";
+import { InMemoryCompanionDockRequestStore } from "./companion/companionDockRequestStore.js";
 import { InMemoryCompanionWriteRequestStore } from "./companion/companionWriteRequestStore.js";
 import { bootstrapBrowserBundle, type BrowserBundle } from "./browser/bootstrap.js";
 import { buildCloneApp } from "./cloneService.js";
@@ -672,8 +673,12 @@ async function main(): Promise<void> {
     });
 
   // BFF in-memory ledgers (collaborator invites + companion-dock).
-  const { appInviteStore, companionTicketStore, companionWriteRequestStore } =
-    wireBffStores();
+  const {
+    appInviteStore,
+    companionTicketStore,
+    companionDockRequestStore,
+    companionWriteRequestStore,
+  } = wireBffStores();
 
   // ---- Order serial (provisioning-status channel) ----
   // The InstallBlob's authCode.serial is the order id keying the
@@ -1166,6 +1171,7 @@ async function main(): Promise<void> {
       repairAccumulator,
       appInviteStore,
       companionTicketStore,
+      companionDockRequestStore,
       companionWriteRequestStore,
       pullStateStore,
       updateClient,
@@ -1573,6 +1579,7 @@ function wirePeerBackup(deps: {
 interface BffStores {
   appInviteStore: InMemoryAppInviteStore;
   companionTicketStore: InMemoryCompanionTicketStore;
+  companionDockRequestStore: InMemoryCompanionDockRequestStore;
   companionWriteRequestStore: InMemoryCompanionWriteRequestStore;
 }
 
@@ -1585,6 +1592,7 @@ function wireBffStores(): BffStores {
   return {
     appInviteStore: new InMemoryAppInviteStore(),
     companionTicketStore: new InMemoryCompanionTicketStore(),
+    companionDockRequestStore: new InMemoryCompanionDockRequestStore(),
     companionWriteRequestStore: new InMemoryCompanionWriteRequestStore(),
   };
 }
@@ -1950,6 +1958,7 @@ async function wireRuntimeSurfaces(deps: {
   repairAccumulator: RepairStatsAccumulator;
   appInviteStore: InMemoryAppInviteStore;
   companionTicketStore: InMemoryCompanionTicketStore;
+  companionDockRequestStore: InMemoryCompanionDockRequestStore;
   companionWriteRequestStore: InMemoryCompanionWriteRequestStore;
   pullStateStore: FileAppPullStateStore;
   updateClient: UpdateClient;
@@ -1973,6 +1982,7 @@ async function wireRuntimeSurfaces(deps: {
     repairAccumulator,
     appInviteStore,
     companionTicketStore,
+    companionDockRequestStore,
     companionWriteRequestStore,
     pullStateStore,
     updateClient,
@@ -2399,6 +2409,7 @@ async function wireRuntimeSurfaces(deps: {
     // guard returns 403 for companion-initiated mutations.
     companion: {
       ticketStore: companionTicketStore,
+      dockRequestStore: companionDockRequestStore,
       pairedSessions,
       serverFqdn: env.serverFqdn,
       username,
@@ -3459,6 +3470,11 @@ export type {
   CompanionTicketRow,
   CompanionTicketStore,
 } from "./companion/companionTicketStore.js";
+export { InMemoryCompanionDockRequestStore } from "./companion/companionDockRequestStore.js";
+export type {
+  CompanionDockRequestRow,
+  CompanionDockRequestStore,
+} from "./companion/companionDockRequestStore.js";
 export {
   COMPANION_WRITE_REQUEST_KINDS,
   InMemoryCompanionWriteRequestStore,

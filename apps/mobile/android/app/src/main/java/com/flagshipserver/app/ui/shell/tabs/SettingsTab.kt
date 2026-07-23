@@ -62,6 +62,10 @@ fun SettingsTab() {
                     URLEncoder.encode(link.pk, "UTF-8"),
             )
         }
+        if (link is DeepLink.CompanionDockApproval) {
+            deepLinker.consume()
+            nav.navigate("companion-dock?link=" + URLEncoder.encode(link.rawLink, "UTF-8"))
+        }
     }
     NavHost(navController = nav, startDestination = "settings-root") {
         composable("settings-root") { SettingsScreen(nav) }
@@ -142,7 +146,12 @@ fun SettingsTab() {
         // P9 — peer-backup management.
         composable("peer-backup") { PeerBackupScreen(nav) }
         // P14 — companion-dock (dock a browser).
-        composable("companion-dock") { CompanionDockScreen(nav) }
+        composable(
+            route = "companion-dock?link={link}",
+            arguments = listOf(navArgument("link") { type = NavType.StringType; defaultValue = "" }),
+        ) { entry ->
+            CompanionDockScreen(nav, initialLink = URLDecoder.decode(entry.arguments?.getString("link") ?: "", "UTF-8"))
+        }
         // P14 Phase 2 — companion-requests inbox.
         composable("companion-requests") { CompanionRequestsScreen(nav) }
     }

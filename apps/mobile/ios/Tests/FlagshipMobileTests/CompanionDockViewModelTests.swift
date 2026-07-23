@@ -3,10 +3,8 @@ import XCTest
 @testable import FlagshipUI
 
 /// P14 — CompanionDockViewModel state machine + the wire shape it renders.
-/// Mirrors the daemon's `/api/screens/companion/*` BFF contract:
-///   - `companionMintTicket` → 60s ticket the QR encodes.
-///   - `companionList` → active companions, honest-empty by default.
-///   - `companionRevoke` → kills the session by tokenPrefix.
+/// Mirrors the daemon's desktop-begin → phone-approve contract plus active
+/// companion listing and revocation.
 @MainActor
 final class CompanionDockViewModelTests: XCTestCase {
 
@@ -77,38 +75,52 @@ final class CompanionDockViewModelTests: XCTestCase {
         }
     }
 
-    // MARK: - mint()
+    // MARK: - desktop-initiated approval
 
-    func test_mint_recordsCall_andSurfacesTicket() async {
-        let client = makeClient()
-        let vm = CompanionDockViewModel(client: client)
-        await vm.mint()
-        XCTAssertEqual(client.companionMintCalls.count, 1)
-        XCTAssertNotNil(vm.mintedTicket)
-        XCTAssertNil(vm.mintError)
-        // 60s TTL — within a 5s slack so the test isn't flaky on slow CI.
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
-        let remaining = (vm.mintedTicket?.expiresAt ?? 0) - now
-        XCTAssertGreaterThan(remaining, 55_000)
-        XCTAssertLessThanOrEqual(remaining, 60_000)
+    private var approvalLink: String {
+        "flagship://dock?server=home.alice.flagship.services&request=\("ab".repeated(16))&code=\("cd".repeated(32))"
     }
 
-    func test_mint_failure_setsMintError_clearsTicket() async {
-        let client = makeClient()
-        client.shouldFail = true
-        let vm = CompanionDockViewModel(client: client)
-        await vm.mint()
-        XCTAssertNil(vm.mintedTicket)
-        XCTAssertNotNil(vm.mintError)
+    func test_stageApproval_rejectsUnrelatedLink() {
+        let vm = CompanionDockViewModel(client: makeClient(), authenticate: { _ in })
+        XCTAssertFalse(vm.stageApproval(link: "https://example.com/not-dock"))
+        XCTAssertNil(vm.stagedApproval)
+        XCTAssertNotNil(vm.approvalError)
     }
 
-    func test_dismissMintedTicket_clears() async {
+    func test_stageApproval_requiresSelectedServer() {
+        let vm = CompanionDockViewModel(
+            client: makeClient(),
+            expectedServerDomain: "other.alice.flagship.services",
+            authenticate: { _ in }
+        )
+        XCTAssertFalse(vm.stageApproval(link: approvalLink))
+        XCTAssertNil(vm.stagedApproval)
+        XCTAssertTrue(vm.approvalError?.contains("Switch to") == true)
+    }
+
+    func test_approve_faceGatesThenPostsAndRefreshes() async {
         let client = makeClient()
-        let vm = CompanionDockViewModel(client: client)
-        await vm.mint()
-        XCTAssertNotNil(vm.mintedTicket)
-        vm.dismissMintedTicket()
-        XCTAssertNil(vm.mintedTicket)
+        var biometricCount = 0
+        let vm = CompanionDockViewModel(client: client, authenticate: { _ in biometricCount += 1 })
+        XCTAssertTrue(vm.stageApproval(link: approvalLink))
+        await vm.approve()
+        XCTAssertEqual(biometricCount, 1)
+        XCTAssertEqual(client.companionApproveDockCalls.count, 1)
+        XCTAssertEqual(client.companionApproveDockCalls[0].requestId, "ab".repeated(16))
+        XCTAssertTrue(vm.approvalComplete)
+        XCTAssertNil(vm.stagedApproval)
+    }
+
+    func test_approve_biometricFailureNeverPosts() async {
+        struct Cancelled: Error {}
+        let client = makeClient()
+        let vm = CompanionDockViewModel(client: client, authenticate: { _ in throw Cancelled() })
+        XCTAssertTrue(vm.stageApproval(link: approvalLink))
+        await vm.approve()
+        XCTAssertTrue(client.companionApproveDockCalls.isEmpty)
+        XCTAssertFalse(vm.approvalComplete)
+        XCTAssertNotNil(vm.approvalError)
     }
 
     // MARK: - revoke()
@@ -183,4 +195,8 @@ final class CompanionDockViewModelTests: XCTestCase {
         let obj = try JSONSerialization.jsonObject(with: json) as? [String: Any]
         XCTAssertEqual(obj?["tokenPrefix"] as? String, "deadbe")
     }
+}
+
+private extension String {
+    func repeated(_ count: Int) -> String { String(repeating: self, count: count) }
 }

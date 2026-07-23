@@ -13,6 +13,8 @@ import com.flagshipserver.app.api.AppInviteRevokeRequest
 import com.flagshipserver.app.api.AppInviteRevokeResponse
 import com.flagshipserver.app.api.AppsListResponse
 import com.flagshipserver.app.api.CompanionListResponse
+import com.flagshipserver.app.api.CompanionDockApproveRequest
+import com.flagshipserver.app.api.CompanionDockApproveResponse
 import com.flagshipserver.app.api.CompanionMintTicketRequest
 import com.flagshipserver.app.api.CompanionMintTicketResponse
 import com.flagshipserver.app.api.CompanionPendingWritesResponse
@@ -114,6 +116,7 @@ private class StubScreensClient(
     override suspend fun appInviteAccess(serviceId: String): AppInviteAccessResponse = error("unused")
     override suspend fun appInviteRevoke(req: AppInviteRevokeRequest): AppInviteRevokeResponse = error("unused")
     override suspend fun companionMintTicket(req: CompanionMintTicketRequest): CompanionMintTicketResponse = error("unused")
+    override suspend fun companionApproveDock(req: CompanionDockApproveRequest): CompanionDockApproveResponse = error("unused")
     override suspend fun companionList(): CompanionListResponse = error("unused")
     override suspend fun companionRevoke(req: CompanionRevokeRequest): CompanionRevokeResponse = error("unused")
     override suspend fun companionPendingWrites(): CompanionPendingWritesResponse = error("unused")

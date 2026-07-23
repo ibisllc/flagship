@@ -370,8 +370,8 @@ describe("/webapp PWA static surface", () => {
     //     log, IRK-signed TOTP, boot-approval relay, device-cap gating.
     // v18 refreshes Home so demo login renders its server without a paired id.
     // v19 adds demo-only paired-session minting before server detail opens.
-    // v20 makes passwordless demo profiles reload-safe.
-    expect(r.body).toContain('SHELL_VERSION = "v20"');
+    // v23 includes the quieter Home plus dock and companion-mode policy.
+    expect(r.body).toContain('SHELL_VERSION = "v23"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

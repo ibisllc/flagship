@@ -45,7 +45,9 @@
 //  v20: demo profiles auto-unlock on reload and repair the old discarded local
 //       wrap passphrase instead of showing an impossible Unlock prompt.
 //  v21: refresh the quieter Home identity, recovery warning, and empty state.
-const SHELL_VERSION = "v21";
+//  v22: desktop-initiated /dock ceremony and browser-only polling secret.
+//  v23: keyless companion banner + honest disabled-state policy.
+const SHELL_VERSION = "v23";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -93,6 +95,9 @@ const OPTIONAL_SHELL = [
   "/lib/totp.js",
   "/lib/edToMont.js",
   "/lib/bootApproval.js",
+  "/lib/companionReceiver.js",
+  "/lib/companionGuard.js",
+  "/lib/companionDockStart.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
@@ -113,6 +118,7 @@ const OPTIONAL_SHELL = [
   "/views/browser-viewer.js",
   "/views/account-audit.js",
   "/views/boot-approval.js",
+  "/views/companion-dock-start.js",
 ];
 
 // Combined list kept for the existing webappStatic test, which scans

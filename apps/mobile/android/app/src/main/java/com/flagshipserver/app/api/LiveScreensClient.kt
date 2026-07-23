@@ -218,6 +218,11 @@ class LiveScreensClient(
         return request("/api/screens/companion/mint-ticket", CompanionMintTicketResponse.serializer(), "POST", body)
     }
 
+    override suspend fun companionApproveDock(req: CompanionDockApproveRequest): CompanionDockApproveResponse {
+        val body = json.encodeToString(CompanionDockApproveRequest.serializer(), req).toByteArray()
+        return request("/api/screens/companion/dock/approve", CompanionDockApproveResponse.serializer(), "POST", body)
+    }
+
     override suspend fun companionList(): CompanionListResponse =
         request("/api/screens/companion/list", CompanionListResponse.serializer())
 

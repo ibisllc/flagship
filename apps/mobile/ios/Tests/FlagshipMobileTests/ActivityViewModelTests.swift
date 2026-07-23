@@ -162,6 +162,9 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
     func companionMintTicket(_ req: CompanionMintTicketRequest) async throws -> CompanionMintTicketResponse {
         try await real.companionMintTicket(req)
     }
+    func companionApproveDock(_ req: CompanionDockApproveRequest) async throws -> CompanionDockApproveResponse {
+        try await real.companionApproveDock(req)
+    }
     func companionList() async throws -> CompanionListResponse {
         try await real.companionList()
     }

@@ -1,9 +1,8 @@
 // P14 — Settings → Dock a browser.
 //
-// Phone-side companion-dock surface. Mints a 60-second pairing ticket
-// (POST /api/screens/companion/mint-ticket) rendered as a QR; the
-// desktop browser scans the QR to redeem the ticket against the user's
-// pod and become a 4-hour read-only companion session. Active
+// Phone-side companion-dock surface. The desktop starts the ceremony and
+// displays a QR; this keyholder phone scans/pastes it, biometric-gates the
+// approval, and grants a 4-hour keyless companion session. Active
 // companions are listed below; each row has a single-tap revoke with a
 // confirm dialog.
 //
@@ -13,7 +12,6 @@
 package com.flagshipserver.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -43,14 +41,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.CompanionSummary
-import com.flagshipserver.app.core.CompanionTicketUrl
-import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalToastCenter
-import com.flagshipserver.app.core.QrImage
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
@@ -62,23 +57,26 @@ import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Locale
 
 @Composable
-fun CompanionDockScreen(nav: NavController) {
+fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
     val client = LocalScreensClient.current
     val app = LocalAppState.current
     val toasts = LocalToastCenter.current
-    val vm = remember { CompanionDockViewModel(client) }
+    val vm = remember(client, app.currentPod?.fqdn) {
+        CompanionDockViewModel(client, expectedServerDomain = app.currentPod?.fqdn)
+    }
     val state by vm.state.collectAsState()
-    val mintedTicket by vm.mintedTicket.collectAsState()
-    val mintError by vm.mintError.collectAsState()
+    val stagedApproval by vm.stagedApproval.collectAsState()
+    val approvalPending by vm.approvalPending.collectAsState()
+    val approvalError by vm.approvalError.collectAsState()
+    val approvalComplete by vm.approvalComplete.collectAsState()
     val revokePending by vm.revokePending.collectAsState()
-    val currentUser by app.currentUser.collectAsState()
-    val currentPodFqdn = app.currentPod?.fqdn
-
     var pendingRevoke by remember { mutableStateOf<CompanionSummary?>(null) }
+    var pastedLink by remember { mutableStateOf(initialLink) }
+    var scanning by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { vm.load() }
-    LaunchedEffect(mintError) {
-        mintError?.let { toasts.error(it) }
+    LaunchedEffect(Unit) {
+        vm.load()
+        if (initialLink.isNotBlank()) vm.stageApproval(initialLink)
     }
 
     val scroll = rememberScrollState()
@@ -97,7 +95,7 @@ fun CompanionDockScreen(nav: NavController) {
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            "Show the QR to a desktop browser to grant it read-only access to your cloud for 4 hours.",
+            "Open web.flagshipserver.com/dock on your computer, then approve its pairing code here.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )
@@ -107,11 +105,65 @@ fun CompanionDockScreen(nav: NavController) {
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 FSPrimaryButton(
-                    label = "Mint pairing QR",
-                    onClick = { vm.mint() },
+                    label = if (scanning) "Close scanner" else "Scan pairing QR",
+                    onClick = { scanning = !scanning },
+                    block = true,
+                )
+                if (scanning) {
+                    QRScanner(onScanned = { raw ->
+                        if (vm.stageApproval(raw)) {
+                            pastedLink = raw
+                            scanning = false
+                        }
+                    })
+                }
+                OutlinedTextField(
+                    value = pastedLink,
+                    onValueChange = { pastedLink = it },
+                    label = { Text("Paste pairing link") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 4,
+                )
+                FSGhostButton(
+                    label = "Use pasted link",
+                    onClick = { vm.stageApproval(pastedLink) },
+                    enabled = pastedLink.isNotBlank(),
                     block = true,
                 )
             }
+        }
+
+        stagedApproval?.let { approval ->
+            Spacer(Modifier.height(FS.space.s3))
+            FSCard(padding = PaddingValues(FS.space.s4)) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    Text("Approve this browser?", color = FS.colors.text, fontWeight = FontWeight.SemiBold)
+                    Text(approval.serverDomain, color = FS.colors.textMuted, fontFamily = FontFamily.Monospace)
+                    Text(
+                        "It will receive a keyless companion session for four hours. Protected actions still require approval from this phone.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp),
+                    )
+                    FSPrimaryButton(
+                        label = if (approvalPending) "Approving…" else "Approve with biometrics",
+                        onClick = { vm.approve() },
+                        enabled = !approvalPending,
+                        block = true,
+                    )
+                    FSGhostButton(label = "Cancel", onClick = { vm.clearApproval() }, block = true)
+                }
+            }
+        }
+        if (approvalComplete) {
+            Spacer(Modifier.height(FS.space.s3))
+            FSCard(padding = PaddingValues(FS.space.s4)) {
+                Text("Browser docked", color = FS.colors.text, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        approvalError?.let {
+            Spacer(Modifier.height(FS.space.s2))
+            Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
         }
 
         Spacer(Modifier.height(FS.space.s6))
@@ -144,28 +196,6 @@ fun CompanionDockScreen(nav: NavController) {
         Spacer(Modifier.height(FS.space.s12))
     }
 
-    val ticket = mintedTicket
-    if (ticket != null) {
-        val podBaseUrl = currentPodFqdn?.let { "https://$it" } ?: ""
-        val username = currentUser ?: ""
-        val payload = remember(ticket.ticketId, ticket.ticketSecret, podBaseUrl, username) {
-            CompanionTicketUrl.build(
-                ticketId = ticket.ticketId,
-                ticketSecret = ticket.ticketSecret,
-                podBaseUrl = podBaseUrl,
-                username = username,
-            )
-        }
-        TicketDialog(
-            payload = payload,
-            expiresAt = ticket.expiresAt,
-            onDismiss = {
-                vm.dismissTicket()
-                vm.load()
-            },
-        )
-    }
-
     pendingRevoke?.let { c ->
         AlertDialog(
             onDismissRequest = { pendingRevoke = null },
@@ -173,7 +203,7 @@ fun CompanionDockScreen(nav: NavController) {
             text = {
                 Text(
                     "Revoke session ${c.tokenPrefix}. The browser session will stop immediately. " +
-                        "You can pair it again any time by minting a new QR.",
+                        "You can pair it again any time with a fresh QR from the desktop dock page.",
                 )
             },
             confirmButton = {
@@ -190,58 +220,6 @@ fun CompanionDockScreen(nav: NavController) {
                 TextButton(onClick = { pendingRevoke = null }) { Text("Cancel") }
             },
         )
-    }
-}
-
-@Composable
-private fun TicketDialog(payload: String, expiresAt: Long, onDismiss: () -> Unit) {
-    val remaining by produceState(initialValue = msUntil(expiresAt), expiresAt) {
-        while (true) {
-            value = msUntil(expiresAt)
-            if (value <= 0L) break
-            delay(250)
-        }
-    }
-    LaunchedEffect(remaining) {
-        if (remaining <= 0L) onDismiss()
-    }
-    Dialog(onDismissRequest = onDismiss) {
-        FSCard(
-            modifier = Modifier.fillMaxWidth(),
-            padding = PaddingValues(FS.space.s5),
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(FS.space.s3),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    "Scan from a desktop browser",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-                )
-                Text(
-                    "Open web.flagshipserver.com on a laptop and scan this code, or paste the URL.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                )
-                Box(modifier = Modifier.padding(top = FS.space.s2, bottom = FS.space.s2)) {
-                    QrImage(payload = payload, size = 240.dp, contentDescription = "Pairing QR")
-                }
-                Text(
-                    "Expires in ${formatRemaining(remaining)}",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                )
-                Text(
-                    payload,
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                FSGhostButton(label = "Done", onClick = onDismiss, block = true)
-            }
-        }
     }
 }
 
@@ -297,7 +275,7 @@ private fun CompanionRow(
 private fun EmptyCompanionsCard() {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Text(
-            "No browsers docked yet. Mint a QR above to pair one.",
+            "No browsers docked yet. Open the dock page on a computer to add one.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )

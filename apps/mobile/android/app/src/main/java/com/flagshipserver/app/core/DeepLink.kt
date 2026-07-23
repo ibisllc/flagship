@@ -79,6 +79,10 @@ sealed interface DeepLink {
         val pageId: String,
     ) : DeepLink
 
+    /** Desktop-initiated companion dock approval. The QR contains only the
+     * phone approval capability; the browser keeps a separate polling secret. */
+    data class CompanionDockApproval(val rawLink: String) : DeepLink
+
     /** Transfer-a-box take-over (docs/device-admin-entitlements.md Slice C). The
      *  giver's box-detail page renders the IRK-signed transfer offer as a QR /
      *  universal link: `https://flagshipserver.com/transfer?o=<b64url>` (or the
@@ -166,6 +170,9 @@ sealed interface DeepLink {
                     val page = params["page"].orEmpty()
                     if (server.isEmpty() || ref.isEmpty() || page.isEmpty()) null
                     else AuthorizeKnock(serverId = server, svc = svc, serviceRef = ref, pageId = page)
+                }
+                "dock" -> {
+                    if (CompanionDockApprovalLink.parse(uri.toString()) != null) CompanionDockApproval(uri.toString()) else null
                 }
                 "vibecode" -> {
                     // Accept either path form `flagship://vibecode/<id>`

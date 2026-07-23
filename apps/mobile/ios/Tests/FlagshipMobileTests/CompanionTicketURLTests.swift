@@ -131,4 +131,20 @@ final class CompanionTicketURLTests: XCTestCase {
             "https://home.harry.flagship.services"
         )
     }
+
+    func test_dockApprovalLink_parsesPhoneCapability() {
+        let request = String(repeating: "ab", count: 16)
+        let code = String(repeating: "cd", count: 32)
+        let parsed = CompanionDockApprovalLink.parse(
+            "flagship://dock?server=home.alice.flagship.services&request=\(request)&code=\(code)"
+        )
+        XCTAssertEqual(parsed?.serverDomain, "home.alice.flagship.services")
+        XCTAssertEqual(parsed?.requestId, request)
+        XCTAssertEqual(parsed?.approvalSecret, code)
+    }
+
+    func test_dockApprovalLink_rejectsWrongHostAndWidths() {
+        XCTAssertNil(CompanionDockApprovalLink.parse("flagship://dock?server=evil.example&request=x&code=y"))
+        XCTAssertNil(CompanionDockApprovalLink.parse("https://web.flagshipserver.com/dock"))
+    }
 }

@@ -50,6 +50,39 @@ export function companionCloudName(podBaseUrl, tokenPrefix) {
   return `companion-${host}-${tokenPrefix}`;
 }
 
+export function persistCompanionSession({
+  companionSessionToken,
+  expiresAt,
+  podBaseUrl,
+  username,
+}) {
+  if (typeof companionSessionToken !== "string" || typeof expiresAt !== "number") {
+    return { error: "missing companionSessionToken/expiresAt in response" };
+  }
+  if (typeof podBaseUrl !== "string" || !podBaseUrl || typeof username !== "string" || !username) {
+    return { error: "missing companion server or username" };
+  }
+  const tokenPrefix = companionSessionToken.slice(0, 12);
+  const cloudName = companionCloudName(podBaseUrl, tokenPrefix);
+  ensureProfile(cloudName);
+  setActiveCloudName(cloudName);
+  profileSet("username", username);
+  profileSet("podBaseUrl", podBaseUrl);
+  profileSet("sessionToken", companionSessionToken);
+  profileSet("kind", "companion");
+  profileSet("companionExpiresAt", String(expiresAt));
+  setPodBaseUrl(podBaseUrl);
+  setSessionToken(companionSessionToken);
+  return {
+    cloudName,
+    sessionToken: companionSessionToken,
+    expiresAt,
+    podBaseUrl,
+    username,
+    kind: "companion",
+  };
+}
+
 /**
  * The shape of the dependency block the receiver flow needs. Tests
  * inject `fetchImpl`; production uses the global fetch.
@@ -114,31 +147,13 @@ export async function redeemCompanionAndPersist(payload, deps = defaultReceiverD
     podBaseUrl,
     username,
   } = body ?? {};
-  if (typeof companionSessionToken !== "string" || typeof expiresAt !== "number") {
-    return { error: "missing companionSessionToken/expiresAt in response" };
-  }
-
-  // Mint + activate the new companion profile slot. Same store as
-  // owner profiles (so the rest of the webapp resolves session token
-  // + podBaseUrl + username through normal channels), but flagged
-  // `kind: "companion"` so signing paths can refuse.
-  const tokenPrefix = companionSessionToken.slice(0, 12);
-  const cloudName = companionCloudName(podBaseUrl ?? payload.podBaseUrl, tokenPrefix);
-  ensureProfile(cloudName);
-  setActiveCloudName(cloudName);
-  profileSet("username", username ?? payload.username);
-  profileSet("podBaseUrl", podBaseUrl ?? payload.podBaseUrl);
-  profileSet("sessionToken", companionSessionToken);
-  // `kind` + `expiresAt` are companion-specific slot fields. The
-  // profilesStore SLOT_FIELDS table doesn't include them by default;
-  // the slot accepts arbitrary keys via profileSet (we mirror to
-  // localStorage only for the known legacy keys).
-  profileSet("kind", "companion");
-  profileSet("companionExpiresAt", String(expiresAt));
-  // Mirror the active legacy api.js keys so unmigrated callsites
-  // (which read getPodBaseUrl + getSessionToken) work right away.
-  setPodBaseUrl(podBaseUrl ?? payload.podBaseUrl);
-  setSessionToken(companionSessionToken);
+  const persisted = persistCompanionSession({
+    companionSessionToken,
+    expiresAt,
+    podBaseUrl: podBaseUrl ?? payload.podBaseUrl,
+    username: username ?? payload.username,
+  });
+  if (persisted.error) return persisted;
 
   // Strip the query string from the URL so a reload doesn't try to
   // re-redeem an already-consumed ticket (replay = 409).
@@ -150,12 +165,5 @@ export async function redeemCompanionAndPersist(payload, deps = defaultReceiverD
     /* ignore */
   }
 
-  return {
-    cloudName,
-    sessionToken: companionSessionToken,
-    expiresAt,
-    podBaseUrl: podBaseUrl ?? payload.podBaseUrl,
-    username: username ?? payload.username,
-    kind: "companion",
-  };
+  return persisted;
 }

@@ -279,6 +279,10 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         let body = try JSONEncoder().encode(req)
         return try await request("/api/screens/companion/mint-ticket", method: "POST", body: body)
     }
+    public func companionApproveDock(_ req: CompanionDockApproveRequest) async throws -> CompanionDockApproveResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/companion/dock/approve", method: "POST", body: body)
+    }
     public func companionList() async throws -> CompanionListResponse {
         try await request("/api/screens/companion/list")
     }

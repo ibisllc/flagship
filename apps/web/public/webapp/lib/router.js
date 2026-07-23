@@ -38,7 +38,7 @@ export function show(id) {
   // first-run wizard (#25). The wizard shell sets its own class.
   const noTabs = id === "view-bootstrap" || id === "view-unlock"
     || id === "view-pin-unlock" || id === "view-pin-set"
-    || id === "view-wizard";
+    || id === "view-wizard" || id === "view-dock-start";
   document.body.classList.toggle("no-tabs", noTabs);
   // Side-channel so views can lazy-refresh on activation without
   // wiring per-route callbacks into the shell.

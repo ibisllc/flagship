@@ -87,8 +87,11 @@ import {
 import type { AppInviteStore } from "../inviteHandler.js";
 import {
   denyCompanionWrite,
+  handleApproveCompanionDock,
+  handleBeginCompanionDock,
   handleListCompanions,
   handleMintTicket,
+  handlePollCompanionDock,
   handleRedeemTicket,
   handleRevokeCompanion,
   type CompanionBffDeps,
@@ -352,6 +355,21 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       return await handleRedeemTicket(deps.companion, req);
     }
 
+    if (
+      rawPath === "/api/companion/dock/begin" &&
+      req.method.toUpperCase() === "POST"
+    ) {
+      if (!deps.companion) return jerr(503, "companion dock not configured");
+      return await handleBeginCompanionDock(deps.companion, req);
+    }
+    if (
+      rawPath === "/api/companion/dock/poll" &&
+      req.method.toUpperCase() === "POST"
+    ) {
+      if (!deps.companion) return jerr(503, "companion dock not configured");
+      return await handlePollCompanionDock(deps.companion, req);
+    }
+
     // ---- P14 Phase 2 — companion-side write-relay endpoints ----
     //
     // These live OUTSIDE /api/screens/ (the companion's webapp/SDK
@@ -425,6 +443,10 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (path === "/api/screens/companion/mint-ticket" && method === "POST") {
       if (!deps.companion) return jerr(503, "companion dock not configured");
       return await handleMintTicket(deps.companion, req);
+    }
+    if (path === "/api/screens/companion/dock/approve" && method === "POST") {
+      if (!deps.companion) return jerr(503, "companion dock not configured");
+      return await handleApproveCompanionDock(deps.companion, req);
     }
     if (path === "/api/screens/companion/list" && method === "GET") {
       if (!deps.companion) return jerr(503, "companion dock not configured");
@@ -1509,6 +1531,7 @@ function isWriteScopedPath(path: string): boolean {
   // (the dispatcher above handles this before reaching here, but in
   // case the order ever changes).
   if (path === "/api/screens/companion/mint-ticket") return true;
+  if (path === "/api/screens/companion/dock/approve") return true;
   if (path === "/api/screens/companion/revoke") return true;
   // P14 Phase 2 — resolve-pending is owner-only by definition (a
   // companion approving its own queued write would defeat the whole

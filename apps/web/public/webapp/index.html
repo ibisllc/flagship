@@ -24,6 +24,37 @@
     </header>
 
     <main>
+      <div id="companion-mode-banner" class="companion-mode-banner hidden" role="status">
+        <strong>Keyless companion</strong>
+        <span>Read access is active. Protected features marked unavailable need a phone protocol.</span>
+      </div>
+      <section id="view-dock-start" class="hidden">
+        <h2>Dock this browser</h2>
+        <p class="note">
+          This browser gets no account key. Your phone approves the connection
+          and remains responsible for protected actions.
+        </p>
+        <div class="card" id="dock-identify-step">
+          <label for="dock-username">Cloud username</label>
+          <input id="dock-username" type="text" placeholder="@username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" />
+          <button id="dock-find" class="full-width mt-2">Find my server</button>
+        </div>
+        <div class="card hidden" id="dock-server-step">
+          <label for="dock-server">Server</label>
+          <select id="dock-server" class="full-width"></select>
+          <button id="dock-begin" class="full-width mt-2">Show pairing QR</button>
+        </div>
+        <div class="card hidden" id="dock-approval-step">
+          <p class="note">In the Flagship phone app, open Settings → Dock a browser and scan this code.</p>
+          <div id="dock-qr" class="qr-box" style="background:#fff;padding:12px;border-radius:8px;display:flex;justify-content:center"></div>
+          <p class="note mt-2">Or paste this link in the phone app:</p>
+          <code id="dock-link" class="break-all faint-sm"></code>
+          <button id="dock-copy" class="secondary full-width mt-2">Copy pairing link</button>
+        </div>
+        <p id="dock-status" class="note" role="status" aria-live="polite"></p>
+        <button id="dock-restart" class="secondary full-width hidden">Start again</button>
+      </section>
+
       <!-- View 1: First run — passphrase to wrap a fresh UMK -->
       <section id="view-bootstrap" class="hidden">
         <h2>Get started</h2>

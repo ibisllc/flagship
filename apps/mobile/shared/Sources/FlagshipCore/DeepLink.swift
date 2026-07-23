@@ -36,6 +36,11 @@ public enum DeepLink: Equatable, Sendable {
     /// (also the `flagship://join?…` custom-scheme form).
     case joinAccount(sid: String, pk: String)
 
+    /// Desktop-initiated companion docking approval. The QR contains the
+    /// daemon request id + phone-only approval capability, never the browser's
+    /// polling secret or eventual session token.
+    case companionDockApproval(link: String)
+
     /// #92 — friend redeem of a service-access capability invite
     /// (docs/service-access-gating.md). Carries the BOX host the `/invite`
     /// link was served from + the 32-byte capability secret (64-hex). The
@@ -211,6 +216,11 @@ public enum DeepLink: Equatable, Sendable {
             if let sid = params["sid"], !sid.isEmpty,
                let pk = params["pk"], !pk.isEmpty {
                 return .joinAccount(sid: sid, pk: pk)
+            }
+            return nil
+        case "dock":
+            if CompanionDockApprovalLink.parse(url.absoluteString) != nil {
+                return .companionDockApproval(link: url.absoluteString)
             }
             return nil
         case "transfer":

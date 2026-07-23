@@ -30,6 +30,7 @@ import {
 } from "./lib/aiChatAlerts.js";
 import { getPodBaseUrl } from "./lib/api.js";
 import { installComFetchGuard } from "./lib/comFetch.js";
+import { applyCompanionUiRestrictions, installCompanionUiRestrictions } from "./lib/companionGuard.js";
 import { liveSync } from "./lib/liveSync.js";
 import { autoPairFromSnapshot } from "./lib/autoPair.js";
 import { refreshServerTrust, serverTrust } from "./lib/serverTrust.js";
@@ -86,6 +87,10 @@ import { initSecuredSessionsView, enterSecuredSessions } from "./views/secured-s
 import { initAccessAuthorizeView, enterAccessAuthorize } from "./views/access-authorize.js";
 import { initPeerBackupView, enterPeerBackup } from "./views/peer-backup.js";
 import { initCompanionDockView, enterCompanionDock } from "./views/companion-dock.js";
+import {
+  initCompanionDockStartView,
+  enterCompanionDockStart,
+} from "./views/companion-dock-start.js";
 import {
   initCompanionRequestsView,
   enterCompanionRequests,
@@ -494,6 +499,7 @@ async function boot() {
   // .com call short-circuits — no matter which lib makes it. (No verdict yet ⇒
   // trusted, so this never bricks a normal boot.) The blessing probe is exempt.
   try { installComFetchGuard(); } catch { /* best-effort */ }
+  try { installCompanionUiRestrictions(); } catch { /* best-effort */ }
   // P12 — auto-migrate legacy single-profile localStorage into the new
   // per-profile namespace. Idempotent; gated by `flagship.profiles.migrated.v2`.
   try { migrateProfilesStore(); } catch { /* swallow — best-effort */ }
@@ -527,6 +533,13 @@ async function boot() {
   initAccessAuthorizeView();
   initPeerBackupView();
   initCompanionDockView();
+  initCompanionDockStartView({
+    onComplete: async () => {
+      setSubtitle("companion");
+      applyCompanionUiRestrictions();
+      await enterHome();
+    },
+  });
   initCompanionRequestsView();
   initTrustedDevicesView();
   initAccountSecurityView();
@@ -581,6 +594,11 @@ async function boot() {
   wireSettingsTabEntries();
   wireActivityEntries();
   wireServicesTabEntries();
+
+  if (window.location.pathname === "/dock" || window.location.pathname === "/dock/") {
+    enterCompanionDockStart();
+    return;
+  }
 
   // Shared lock predicate for the top slivers — true once the app is past the
   // pre-paired / locked surfaces, so neither the teal ops bar nor the red trust

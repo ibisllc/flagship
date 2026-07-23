@@ -32,6 +32,10 @@ import type {
 } from "../companion/companionTicketStore.js";
 import { sha256HexOfHex } from "../companion/companionTicketStore.js";
 import type { CompanionWriteRequestStore } from "../companion/companionWriteRequestStore.js";
+import type {
+  CompanionDockRequestRow,
+  CompanionDockRequestStore,
+} from "../companion/companionDockRequestStore.js";
 
 const J = { "content-type": "application/json" } as const;
 
@@ -43,6 +47,8 @@ const DEFAULT_COMPANION_TTL_MS = 4 * 60 * 60_000;
 export interface CompanionBffDeps {
   /** Required. The ticket ledger. */
   ticketStore: CompanionTicketStore;
+  /** Desktop-initiated docking requests. Optional during rolling upgrades. */
+  dockRequestStore?: CompanionDockRequestStore;
   /**
    * Required. The paired-session store the companion-session token
    * lands in. The same store the owner uses for normal sessions —
@@ -106,6 +112,142 @@ export interface CompanionListResponse {
 
 export interface RevokeCompanionRequest {
   tokenPrefix: string;
+}
+
+export interface BeginCompanionDockRequest {
+  pollSecret: string;
+  userAgent?: string;
+}
+
+export interface ApproveCompanionDockRequest {
+  requestId: string;
+  approvalSecret: string;
+}
+
+export interface PollCompanionDockRequest {
+  requestId: string;
+  pollSecret: string;
+}
+
+/**
+ * POST /api/companion/dock/begin — public desktop entry.
+ *
+ * The browser supplies a polling secret that never appears in the QR. The
+ * daemon returns a separate approval secret for the phone to scan. Possessing
+ * the QR therefore cannot retrieve the eventual companion bearer token.
+ */
+export async function handleBeginCompanionDock(
+  deps: CompanionBffDeps,
+  req: HttpRequest,
+): Promise<HttpResponse> {
+  if (!deps.dockRequestStore) return jerr(503, "companion dock requests not configured");
+  const body = parseJson(req.body) as BeginCompanionDockRequest | null;
+  if (!body || !isSecretHex(body.pollSecret)) {
+    return jerr(400, "pollSecret must be 64 hex characters");
+  }
+  const now = deps.now ?? (() => Date.now());
+  const rand = deps.randomBytes ?? ((n: number) => new Uint8Array(randomBytes(n)));
+  const issuedAt = now();
+  const expiresAt = issuedAt + (deps.ticketTtlMs ?? DEFAULT_TICKET_TTL_MS);
+  const requestId = bytesToHex(rand(16));
+  const approvalSecret = bytesToHex(rand(32));
+  const claimedAgent = typeof body.userAgent === "string" ? body.userAgent : undefined;
+  const headerAgent = req.headers["user-agent"] ?? req.headers["User-Agent"];
+  const userAgent = (claimedAgent || headerAgent || "").slice(0, 256) || undefined;
+  const row: CompanionDockRequestRow = {
+    requestId,
+    pollSecretHash: sha256HexOfHex(body.pollSecret),
+    approvalSecretHash: sha256HexOfHex(approvalSecret),
+    issuedAt,
+    expiresAt,
+    status: "pending",
+  };
+  if (userAgent) row.userAgent = userAgent;
+  await deps.dockRequestStore.insert(row);
+  return jok({
+    requestId,
+    approvalSecret,
+    expiresAt,
+    podBaseUrl: `https://${deps.serverFqdn}`,
+    username: deps.username,
+  });
+}
+
+/** Owner-session gated; the native client adds its local biometric gate. */
+export async function handleApproveCompanionDock(
+  deps: CompanionBffDeps,
+  req: HttpRequest,
+): Promise<HttpResponse> {
+  if (!deps.dockRequestStore) return jerr(503, "companion dock requests not configured");
+  const body = parseJson(req.body) as ApproveCompanionDockRequest | null;
+  if (!body || !isRequestId(body.requestId) || !isSecretHex(body.approvalSecret)) {
+    return jerr(400, "valid requestId and approvalSecret required");
+  }
+  const now = deps.now ?? (() => Date.now());
+  const rand = deps.randomBytes ?? ((n: number) => new Uint8Array(randomBytes(n)));
+  const approvedAt = now();
+  const companionSessionToken = bytesToHex(rand(32));
+  const companionExpiresAt = approvedAt + (deps.companionTtlMs ?? DEFAULT_COMPANION_TTL_MS);
+  const result = await deps.dockRequestStore.approveAtomically({
+    requestId: body.requestId,
+    approvalSecretHashMatch: sha256HexOfHex(body.approvalSecret),
+    approvedAt,
+    companionSessionToken,
+    companionExpiresAt,
+  });
+  if (!result.ok) {
+    if (result.reason === "not-found" || result.reason === "wrong-secret") {
+      return jerr(401, "invalid dock request");
+    }
+    if (result.reason === "already-approved") return jerr(409, "dock request already approved");
+    return jerr(410, "dock request expired");
+  }
+  await deps.pairedSessions.addCompanion({
+    token: companionSessionToken,
+    addedAt: approvedAt,
+    expiresAt: companionExpiresAt,
+    userAgent: result.row.userAgent,
+  });
+  return jok({ ok: true, expiresAt: companionExpiresAt });
+}
+
+/** Public, but the browser-only polling secret is required. */
+export async function handlePollCompanionDock(
+  deps: CompanionBffDeps,
+  req: HttpRequest,
+): Promise<HttpResponse> {
+  if (!deps.dockRequestStore) return jerr(503, "companion dock requests not configured");
+  const body = parseJson(req.body) as PollCompanionDockRequest | null;
+  if (!body || !isRequestId(body.requestId) || !isSecretHex(body.pollSecret)) {
+    return jerr(400, "valid requestId and pollSecret required");
+  }
+  const now = deps.now ?? (() => Date.now());
+  const result = await deps.dockRequestStore.poll({
+    requestId: body.requestId,
+    pollSecretHashMatch: sha256HexOfHex(body.pollSecret),
+    nowMs: now(),
+  });
+  if (!result.ok) {
+    if (result.reason === "expired") return jerr(410, "dock request expired");
+    return jerr(401, "invalid dock request");
+  }
+  if (result.row.status === "pending") {
+    return {
+      status: 202,
+      headers: J,
+      body: JSON.stringify({ status: "pending", expiresAt: result.row.expiresAt }),
+    };
+  }
+  if (!result.row.companionSessionToken || !result.row.companionExpiresAt) {
+    return jerr(500, "approved dock request is incomplete");
+  }
+  return jok({
+    status: "approved",
+    companionSessionToken: result.row.companionSessionToken,
+    expiresAt: result.row.companionExpiresAt,
+    podBaseUrl: `https://${deps.serverFqdn}`,
+    username: deps.username,
+  });
 }
 
 /**
@@ -320,6 +462,14 @@ function bytesToHex(b: Uint8Array): string {
   let s = "";
   for (const x of b) s += x.toString(16).padStart(2, "0");
   return s;
+}
+
+function isSecretHex(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+function isRequestId(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{32}$/.test(value);
 }
 
 // Re-export so tests + the BFF wiring can reach the helper without

@@ -93,6 +93,7 @@ interface ScreensClient {
 
     // P14 — companion-dock (60s pairing ticket → 4h read-only browser).
     suspend fun companionMintTicket(req: CompanionMintTicketRequest): CompanionMintTicketResponse
+    suspend fun companionApproveDock(req: CompanionDockApproveRequest): CompanionDockApproveResponse
     suspend fun companionList(): CompanionListResponse
     suspend fun companionRevoke(req: CompanionRevokeRequest): CompanionRevokeResponse
 

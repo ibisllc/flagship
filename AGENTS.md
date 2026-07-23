@@ -154,6 +154,16 @@ locally decrypted `account > device` identity breadcrumb, use a one-line account
 backup warning, and shorten the no-server invitation.** iOS also hides its build
 shortcut and server-list heading until the account has a server.
 
+**2026-07-22 (phone-approved companion dock) — browser docking is now desktop-initiated,
+keyless, and phone-approved.** `/dock` resolves the user's server, creates a
+one-minute request, and shows a QR whose phone approval secret is distinct from
+the browser-only polling secret. iOS and Android scan or paste the link, require
+biometrics, and approve only against the currently selected server; the browser
+then receives a four-hour companion session and enters the shared webapp shell.
+The old phone-minted QR UI is removed. Unsupported companion mutations are
+visibly unavailable while the existing server release/revoke relay remains
+usable. Physical phone/browser validation remains pending.
+
 **2026-07-22 (iOS orphaned-account cleanup) — a Keychain-restored profile is
 restored locally before `.com` is queried, and an account-deletion 404 completes
 the local wipe only inside the explicit deletion ceremony.** Keychain/iCloud

@@ -45,6 +45,11 @@ final class DeepLinkTests: XCTestCase {
         XCTAssertEqual(DeepLink.parse(url), .createServer)
     }
 
+    func test_companionDockApproval_routesToSettings() {
+        let link = "flagship://dock?server=home.alice.flagship.services&request=\(String(repeating: "ab", count: 16))&code=\(String(repeating: "cd", count: 32))"
+        XCTAssertEqual(DeepLink.parse(URL(string: link)!), .companionDockApproval(link: link))
+    }
+
     func test_unknownHost_returnsNil() {
         let url = URL(string: "flagship://nothing-like-this")!
         XCTAssertNil(DeepLink.parse(url))

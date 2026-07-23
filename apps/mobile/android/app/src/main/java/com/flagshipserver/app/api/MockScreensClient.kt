@@ -535,6 +535,8 @@ class MockScreensClient(
      *  wire shape (label round-tripped, no other fields snuck in). */
     val companionMintCalls: MutableList<CompanionMintTicketRequest> = mutableListOf()
 
+    val companionApproveCalls: MutableList<CompanionDockApproveRequest> = mutableListOf()
+
     /** Records each `companionRevoke` call's tokenPrefix. */
     val companionRevokeCalls: MutableList<String> = mutableListOf()
 
@@ -550,6 +552,12 @@ class MockScreensClient(
             ticketSecret = secret,
             expiresAt = now() + 60_000L,
         )
+    }
+
+    override suspend fun companionApproveDock(req: CompanionDockApproveRequest): CompanionDockApproveResponse {
+        tick()
+        companionApproveCalls.add(req)
+        return CompanionDockApproveResponse(ok = true, expiresAt = now() + 4 * 60 * 60 * 1_000L)
     }
 
     override suspend fun companionList(): CompanionListResponse {

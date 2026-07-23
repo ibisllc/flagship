@@ -60,6 +60,11 @@ public struct SettingsTab: View {
                 path.append(.joinAccount(joinUrl: joinUrl))
             }
             _ = linker.consume()
+        case .companionDockApproval(let link):
+            if path.last != .companionDockApproval(link: link) {
+                path.append(.companionDockApproval(link: link))
+            }
+            _ = linker.consume()
         default:
             break
         }
@@ -444,9 +449,12 @@ public struct SettingsTab: View {
             PeerBackupScreen(vm: PeerBackupViewModel(client: client))
         case .companionDock:
             CompanionDockScreen(
-                vm: CompanionDockViewModel(client: client),
-                podBaseUrl: app.currentPod.map { CompanionTicketURL.podBaseUrl(forFqdn: $0.fqdn) },
-                username: app.currentUser ?? ""
+                vm: CompanionDockViewModel(client: client, expectedServerDomain: app.currentPod?.fqdn)
+            )
+        case .companionDockApproval(let link):
+            CompanionDockScreen(
+                vm: CompanionDockViewModel(client: client, expectedServerDomain: app.currentPod?.fqdn),
+                initialApprovalLink: link
             )
         case .companionRequests:
             CompanionRequestsContainer(

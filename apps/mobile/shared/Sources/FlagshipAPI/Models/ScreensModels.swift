@@ -467,6 +467,26 @@ public struct CompanionMintTicketResponse: Codable, Equatable, Sendable {
     }
 }
 
+public struct CompanionDockApproveRequest: Codable, Equatable, Sendable {
+    public let requestId: String
+    public let approvalSecret: String
+
+    public init(requestId: String, approvalSecret: String) {
+        self.requestId = requestId
+        self.approvalSecret = approvalSecret
+    }
+}
+
+public struct CompanionDockApproveResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let expiresAt: Int64
+
+    public init(ok: Bool, expiresAt: Int64) {
+        self.ok = ok
+        self.expiresAt = expiresAt
+    }
+}
+
 public struct CompanionSummary: Codable, Equatable, Sendable, Identifiable {
     public let tokenPrefix: String
     public let redeemedAt: Int64

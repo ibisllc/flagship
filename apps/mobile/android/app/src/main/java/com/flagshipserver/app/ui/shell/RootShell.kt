@@ -90,6 +90,7 @@ fun RootShell(
             // Web-experience gating — authorize a browser's QR-login. Routes
             // to the Apps tab, whose NavHost pushes the authorize screen.
             is com.flagshipserver.app.core.DeepLink.AuthorizeKnock -> RootDestination.APPS
+            is com.flagshipserver.app.core.DeepLink.CompanionDockApproval -> RootDestination.SETTINGS
         }
         // The tab's NavHost picks the link up via its own LaunchedEffect
         // on LocalDeepLinker.pending. We leave the queue populated so

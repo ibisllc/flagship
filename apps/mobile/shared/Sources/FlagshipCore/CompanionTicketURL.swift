@@ -103,3 +103,35 @@ public enum CompanionTicketURL {
         return env
     }
 }
+
+public enum CompanionDockApprovalLink {
+    public struct Payload: Equatable, Sendable {
+        public let serverDomain: String
+        public let requestId: String
+        public let approvalSecret: String
+
+        public init(serverDomain: String, requestId: String, approvalSecret: String) {
+            self.serverDomain = serverDomain
+            self.requestId = requestId
+            self.approvalSecret = approvalSecret
+        }
+    }
+
+    public static func parse(_ raw: String) -> Payload? {
+        guard let url = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)),
+              url.scheme == "flagship", url.host == "dock",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return nil }
+        let params = (components.queryItems ?? []).reduce(into: [String: String]()) { out, item in
+            if let value = item.value { out[item.name] = value }
+        }
+        guard let server = params["server"]?.lowercased(),
+              server.hasSuffix(".\(Endpoints.dataApex)"),
+              let requestId = params["request"]?.lowercased(),
+              requestId.range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil,
+              let secret = params["code"]?.lowercased(),
+              secret.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil
+        else { return nil }
+        return Payload(serverDomain: server, requestId: requestId, approvalSecret: secret)
+    }
+}

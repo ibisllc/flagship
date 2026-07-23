@@ -2,34 +2,33 @@ import SwiftUI
 import FlagshipAPI
 import FlagshipCore
 
-/// P14 — "Dock a browser". Settings entry that mints a 60-second pairing
-/// ticket and renders it as a QR a desktop browser scans to become a
-/// 4-hour read-only companion of the user's account. The phone owns
-/// mint + list + revoke; the browser owns the redeem leg.
+/// Phone side of the desktop-initiated docking ceremony.
 public struct CompanionDockScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: CompanionDockViewModel
-    let podBaseUrl: String?
-    let username: String
+    let initialApprovalLink: String?
 
     @State private var pendingRevoke: CompanionSummary?
     @State private var nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+    @State private var pastedLink = ""
+    @State private var showScanner = false
+    @State private var scanError: String?
 
-    public init(vm: CompanionDockViewModel, podBaseUrl: String?, username: String) {
+    public init(vm: CompanionDockViewModel, initialApprovalLink: String? = nil) {
         self.vm = vm
-        self.podBaseUrl = podBaseUrl
-        self.username = username
+        self.initialApprovalLink = initialApprovalLink
     }
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                Text("Pair a desktop browser for four hours of read-only access. Disconnect it anytime.")
+                Text("Open web.flagshipserver.com/dock on your computer, then approve its pairing code here.")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
-                mintCard(c: c)
+                pairingCard(c: c)
+                approvalCard(c: c)
                 activeList(c: c)
                 Spacer().frame(height: FS.space.s12)
             }
@@ -42,6 +41,10 @@ public struct CompanionDockScreen: View {
         .refreshable { await vm.load() }
         .task {
             if case .idle = vm.state { await vm.load() }
+            if let initialApprovalLink {
+                pastedLink = initialApprovalLink
+                _ = vm.stageApproval(link: initialApprovalLink)
+            }
         }
         .task {
             while !Task.isCancelled {
@@ -49,20 +52,17 @@ public struct CompanionDockScreen: View {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
         }
-        .sheet(
-            isPresented: Binding(
-                get: { vm.mintedTicket != nil },
-                set: { if !$0 { vm.dismissMintedTicket() } }
+        .sheet(isPresented: $showScanner) {
+            CompanionDockScannerSheet(
+                onScan: { raw in
+                    pastedLink = raw
+                    if vm.stageApproval(link: raw) {
+                        showScanner = false
+                    }
+                },
+                onError: { scanError = $0 },
+                onPasteInstead: { showScanner = false }
             )
-        ) {
-            if let ticket = vm.mintedTicket {
-                CompanionTicketSheet(
-                    ticket: ticket,
-                    podBaseUrl: podBaseUrl ?? "",
-                    username: username,
-                    onClose: { vm.dismissMintedTicket() }
-                )
-            }
         }
         .confirmationDialog(
             pendingRevoke.map { "Disconnect \(displayLabel(for: $0))?" } ?? "Disconnect companion?",
@@ -85,27 +85,72 @@ public struct CompanionDockScreen: View {
         }
     }
 
-    private func mintCard(c: FSColors) -> some View {
+    private func pairingCard(c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text("Mint a pairing QR")
+                Text("Pair a browser")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(c.text)
-                if let mintError = vm.mintError {
-                    Text(mintError)
+                FSPrimaryButton("Scan pairing QR", block: true) {
+                    scanError = nil
+                    showScanner = true
+                }
+                .accessibilityIdentifier("companion-dock-scan")
+                TextField("Paste pairing link", text: $pastedLink, axis: .vertical)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .lineLimit(2...4)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("companion-dock-link")
+                FSSecondaryButton("Use pasted link", block: true) {
+                    _ = vm.stageApproval(link: pastedLink)
+                }
+                .disabled(pastedLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if let scanError {
+                    Text(scanError)
                         .font(FS.font.caption())
                         .foregroundColor(c.danger)
                 }
-                FSPrimaryButton("Mint pairing QR", block: true) {
-                    Task {
-                        await vm.mint()
-                    }
-                }
-                .accessibilityIdentifier("companion-dock-mint")
-                Text("The QR expires in 60 seconds. After scanning, the browser stays a companion for 4 hours.")
-                    .font(FS.font.caption())
-                    .foregroundColor(c.textMuted)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func approvalCard(c: FSColors) -> some View {
+        if let approval = vm.stagedApproval {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    Text("Approve this browser?")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(c.text)
+                    Text(approval.serverDomain)
+                        .font(FS.font.mono())
+                        .foregroundColor(c.textMuted)
+                        .textSelection(.enabled)
+                    Text("It will receive a keyless companion session for four hours. Protected actions still require approval from this phone.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    FSPrimaryButton(vm.approvalPending ? "Approving…" : "Approve with Face ID", enabled: !vm.approvalPending, block: true) {
+                        Task { await vm.approve() }
+                    }
+                    .accessibilityIdentifier("companion-dock-approve")
+                    FSGhostButton("Cancel", block: true) { vm.clearApproval() }
+                }
+            }
+        }
+        if vm.approvalComplete {
+            FSCard {
+                HStack(spacing: FS.space.s2) {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(c.success)
+                    Text("Browser docked").font(FS.font.bodySm()).foregroundColor(c.text)
+                }
+            }
+        }
+        if let error = vm.approvalError {
+            Text(error)
+                .font(FS.font.caption())
+                .foregroundColor(c.danger)
+                .accessibilityIdentifier("companion-dock-approval-error")
         }
     }
 
@@ -135,7 +180,7 @@ public struct CompanionDockScreen: View {
                             Image(systemName: "laptopcomputer").foregroundColor(c.textMuted)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("No browsers docked").font(FS.font.bodySm()).foregroundColor(c.text)
-                                Text("Mint a pairing QR to add one.")
+                                Text("Open the dock page on a computer to add one.")
                                     .font(FS.font.caption())
                                     .foregroundColor(c.textMuted)
                             }
@@ -213,81 +258,34 @@ public struct CompanionDockScreen: View {
     }
 }
 
-/// Sheet body shown when a fresh ticket has been minted. Renders the QR
-/// + a manual link fallback + a 60-second countdown.
-struct CompanionTicketSheet: View {
-    @Environment(\.colorScheme) private var scheme
-    let ticket: CompanionMintTicketResponse
-    let podBaseUrl: String
-    let username: String
-    let onClose: () -> Void
-
-    @State private var nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+private struct CompanionDockScannerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let onScan: (String) -> Void
+    let onError: (String) -> Void
+    let onPasteInstead: () -> Void
 
     var body: some View {
-        let c = FSColors.scheme(scheme)
-        VStack(alignment: .leading, spacing: FS.space.s4) {
-            HStack {
-                Image(systemName: "qrcode")
-                    .imageScale(.large)
-                    .foregroundColor(c.primary)
-                Text("Scan to dock")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(c.text)
-                Spacer()
-                Button(action: onClose) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(c.textMuted)
-                        .imageScale(.large)
+        NavigationStack {
+            VStack(spacing: FS.space.s4) {
+                QRScannerView(
+                    onScan: onScan,
+                    onError: onError,
+                    validate: { CompanionDockApprovalLink.parse($0) != nil }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                Button("Paste link instead") {
+                    onPasteInstead()
+                    dismiss()
                 }
-                .accessibilityIdentifier("companion-ticket-close")
             }
-            Text("Open a desktop browser and scan this QR. After it scans, the browser becomes a read-only companion for 4 hours.")
-                .font(FS.font.bodySm())
-                .foregroundColor(c.textMuted)
-            if let urlString = qrUrl {
-                VStack(spacing: FS.space.s3) {
-                    PairingQRView(text: urlString, size: 240)
-                        .accessibilityIdentifier("companion-ticket-qr")
-                    Text(countdownLabel)
-                        .font(FS.font.caption())
-                        .foregroundColor(remainingMs <= 10_000 ? c.danger : c.textMuted)
-                        .accessibilityIdentifier("companion-ticket-countdown")
+            .padding(FS.space.s4)
+            .navigationTitle("Scan pairing QR")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
                 }
-                .frame(maxWidth: .infinity)
-            } else {
-                Text("Couldn't build the pairing URL. Make sure you're signed in to a pod.")
-                    .font(FS.font.bodySm())
-                    .foregroundColor(c.danger)
-            }
-            FSPrimaryButton("Done", block: true, action: onClose)
-        }
-        .padding(FS.space.s6)
-        .background(c.bg)
-        .presentationDetents([.medium, .large])
-        .task {
-            while !Task.isCancelled {
-                nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-                try? await Task.sleep(nanoseconds: 500_000_000)
             }
         }
-    }
-
-    private var qrUrl: String? {
-        guard !podBaseUrl.isEmpty else { return nil }
-        return CompanionTicketURL.build(
-            ticketId: ticket.ticketId,
-            ticketSecret: ticket.ticketSecret,
-            podBaseUrl: podBaseUrl,
-            username: username
-        )
-    }
-
-    private var remainingMs: Int64 { max(0, ticket.expiresAt - nowMs) }
-
-    private var countdownLabel: String {
-        let secs = remainingMs / 1000
-        if remainingMs <= 0 { return "Expired — mint a new one" }
-        return "Expires in \(secs)s"
     }
 }

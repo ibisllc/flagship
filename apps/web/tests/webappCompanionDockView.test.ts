@@ -39,15 +39,13 @@ describe("companion-dock view — static surface", () => {
     expect(body).toContain("export async function renderCompanionDock");
   });
 
-  it("hits the companion BFF endpoints", async () => {
+  it("uses the desktop-initiated ceremony and retains list/revoke", async () => {
     const body = await fetchAsset("/webapp/views/companion-dock.js");
-    // The mint button calls companionMintTicket; the list reads companionList;
-    // the row revoke calls companionRevoke. All three are imported by name.
-    expect(body).toContain("companionMintTicket");
     expect(body).toContain("companionList");
     expect(body).toContain("companionRevoke");
-    // And the QR-builder helper from companionClient.js.
-    expect(body).toContain("buildCompanionReceiverUrl");
+    expect(body).toContain('href="/dock"');
+    expect(body).not.toContain("companionMintTicket");
+    expect(body).not.toContain("buildCompanionReceiverUrl");
   });
 
   it("reads every documented field on CompanionListResponse rows", async () => {
@@ -70,9 +68,9 @@ describe("companion-dock view — static surface", () => {
     expect(body).toMatch(/no companion browsers docked/);
   });
 
-  it("vendors qrEncoder via the absolute import path", async () => {
+  it("does not render a phone-generated QR", async () => {
     const body = await fetchAsset("/webapp/views/companion-dock.js");
-    expect(body).toContain('import("/qrEncoder.js")');
+    expect(body).not.toContain('import("/qrEncoder.js")');
   });
 });
 
@@ -165,6 +163,13 @@ describe("companionGuard.js — read surface", () => {
     expect(body).toContain("export function requireOwnerProfile");
     expect(body).toContain("export class CompanionWriteError");
     expect(body).toContain('"companion-write-not-allowed"');
+  });
+
+  it("marks unsupported companion capabilities unavailable", async () => {
+    const body = await fetchAsset("/webapp/lib/companionGuard.js");
+    expect(body).toContain("installCompanionUiRestrictions");
+    expect(body).toContain("data-companion-unavailable");
+    expect(body).toContain("services-list-open-vibe-code");
   });
 
   it("signing helpers import the guard", async () => {

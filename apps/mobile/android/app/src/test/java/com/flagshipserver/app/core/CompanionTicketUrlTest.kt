@@ -16,6 +16,22 @@ import org.junit.Test
 
 class CompanionTicketUrlTest {
 
+    @Test fun desktopDockLinkParses() {
+        val request = "ab".repeat(16)
+        val code = "cd".repeat(32)
+        val parsed = CompanionDockApprovalLink.parse(
+            "flagship://dock?server=demo.alice.flagship.services&request=$request&code=$code",
+        )
+        assertNotNull(parsed)
+        assertEquals("demo.alice.flagship.services", parsed!!.serverDomain)
+        assertEquals(request, parsed.requestId)
+        assertEquals(code, parsed.approvalSecret)
+    }
+
+    @Test fun desktopDockLinkRejectsWrongShape() {
+        assertEquals(null, CompanionDockApprovalLink.parse("flagship://dock?server=evil.example&request=x&code=y"))
+    }
+
     @Test fun urlHasCanonicalPrefix() {
         val url = CompanionTicketUrl.build(
             ticketId = "tk-1",
