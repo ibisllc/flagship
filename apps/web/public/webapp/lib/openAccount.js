@@ -94,7 +94,7 @@ export async function claimUsername(username, irkPub, sign, deps = {}) {
   // served from web.<apex>, whose origin only serves GET/HEAD static assets — a
   // relative POST 405s there (and never reaches the control plane). Mirrors the
   // username CHECK (state.js) + the sibling calls in create-server.js. Surfaced
-  // by the live web e2e (the claim was hitting web.gym.flagshipserver.com → 405).
+  // by the live web e2e (the claim was hitting webapp.gym.flagshipserver.com → 405).
   const resp = await f(`${controlApex()}/api/username/claim`, {
     method: "POST",
     headers: { "content-type": "application/json" },

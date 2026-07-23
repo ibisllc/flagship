@@ -132,7 +132,7 @@ npx wrangler secret put WEBPUSH_CONTACT              --config wrangler.gym.toml
 # 1g. Build the control-plane dist FIRST (the Worker bundles the BUILT
 #     @flagship/control-plane dist/ — a deploy without a rebuild ships stale
 #     handler logic, per CLAUDE.md), then deploy the gym Worker. Custom domains
-#     in wrangler.gym.toml self-provision DNS + edge cert for gym./web.gym./
+#     in wrangler.gym.toml self-provision DNS + edge cert for gym./webapp.gym./
 #     recovery.gym./boot.gym.flagshipserver.com.
 cd /Users/harrywinner/flagship && npx tsc -b
 cd apps/com && npx wrangler deploy --config wrangler.gym.toml
@@ -189,7 +189,7 @@ The gym reuses the SAME two zones under the `gym.` label — **no new zone**.
 | Record | Type | Target | Who creates it |
 |---|---|---|---|
 | `gym.flagshipserver.com` | (custom domain) | flagship-com-gym Worker | **wrangler auto** (custom domain in `wrangler.gym.toml`) |
-| `web.gym.flagshipserver.com` | (custom domain) | flagship-com-gym Worker | **wrangler auto** |
+| `webapp.gym.flagshipserver.com` | (custom domain) | flagship-com-gym Worker | **wrangler auto** |
 | `recovery.gym.flagshipserver.com` | (custom domain) | flagship-com-gym Worker | **wrangler auto** |
 | `boot.gym.flagshipserver.com` | (custom domain) | flagship-com-gym Worker | **wrangler auto** |
 | `gym.flagship.services` | A / AAAA | the gym Fly anycast IPs (step 2d) | **operator** (one manual proxied/grey A+AAAA in the `flagship.services` zone) |
@@ -301,7 +301,7 @@ npm run gym:total
   `flagship.dev.useLiveClient`). The cert-pinning test build either carries the
   `gym.` LE chain's SPKI pin or disables pinning in the debug/test build (§12-G2).
 - **webapp** runs live by serving from / pointing Playwright at the gym origin
-  (`https://web.gym.flagshipserver.com`) instead of the static server — the
+  (`https://webapp.gym.flagshipserver.com`) instead of the static server — the
   webapp derives its apex from `window.location.origin` (§12-G2), so it talks to
   `gym.flagship.services` automatically.
 - The **demo-only destructive guardrail** (§7-G) still applies: the live slice's

@@ -68,7 +68,7 @@ function buildSandbox(opts: {
   const fetchLog: string[] = [];
 
   const self: any = {
-    location: { origin: "https://web.flagshipserver.com" },
+    location: { origin: "https://webapp.flagshipserver.com" },
     addEventListener: (type: string, cb: Function) => {
       if (!listeners.has(type)) listeners.set(type, []);
       listeners.get(type)!.push(cb);
@@ -206,7 +206,7 @@ describe("service-worker.js — install / activate / waiting-state safety", () =
     await fireEvent(h.self, "install", {}); // creates the current (-v20)
     await fireEvent(h.self, "activate", {});
     const remaining = await h.caches.keys();
-    expect(remaining).toContain("flagship-webapp-shell-v25");
+    expect(remaining).toContain("flagship-webapp-shell-v26");
     expect(remaining).not.toContain("flagship-webapp-shell-v15");
     expect(remaining).not.toContain("flagship-webapp-shell-v16");
   });

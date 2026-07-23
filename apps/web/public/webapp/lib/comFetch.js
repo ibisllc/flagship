@@ -68,7 +68,7 @@ export async function comFetch(pathOrUrl, init = {}) {
 /** Does this URL point at the .com control server (the gated host)? The
  *  data plane (`*.flagship.services` pods) is NOT gated here — pods carry the
  *  RELAY blessing, gated separately on the box; and `recovery.` /
- *  `web.flagshipserver.com` sub-origins are gated only when they are the
+ *  `webapp.flagshipserver.com` sub-origins are gated only when they are the
  *  control apex. We gate exactly `flagshipserver.com` (the identity + state
  *  control server). */
 function isComHost(url) {

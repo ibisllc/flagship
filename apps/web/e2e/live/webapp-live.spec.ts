@@ -1,6 +1,6 @@
 /**
  * LIVE webapp e2e — the FRONTEND-against-a-REAL-SERVER slice. Drives the actual
- * deployed gym webapp (web.gym.flagshipserver.com) against the actual gym
+ * deployed gym webapp (webapp.gym.flagshipserver.com) against the actual gym
  * backend (gym.flagshipserver.com / gym.flagship.services). Unlike the mocked
  * gym Tier-1 (every /api/* stubbed), here the app's real network paths execute:
  * the bootstrap mints a device identity client-side, then the first-run wizard's
@@ -13,7 +13,7 @@
 import { test, expect } from "@playwright/test";
 
 const PASSPHRASE = "correct-horse-battery-staple-live";
-const ORIGIN = process.env.GYM_LIVE_WEB_ORIGIN ?? "https://web.gym.flagshipserver.com";
+const ORIGIN = process.env.GYM_LIVE_WEB_ORIGIN ?? "https://webapp.gym.flagshipserver.com";
 
 test.describe("webapp LIVE (real gym backend)", () => {
   // The webapp host sits behind the pre-launch coming-soon gate (route.ts) —

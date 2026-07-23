@@ -127,7 +127,7 @@ export const test = base.extend<E2EFixtures>({
         async (route, request) => {
           const headers = {
             ...request.headers(),
-            "x-flagship-effective-host": "web.flagshipserver.com",
+            "x-flagship-effective-host": "webapp.flagshipserver.com",
           };
           await route.continue({ headers });
         },

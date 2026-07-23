@@ -43,7 +43,7 @@ export async function companionRevoke(tokenPrefix) {
 
 /**
  * Build the receiver-URL the QR code encodes. The receiver browser
- * loads `https://web.flagshipserver.com/?companion=<base64url-JSON>`
+ * loads `https://webapp.flagshipserver.com/?companion=<base64url-JSON>`
  * and the boot path in app.js redeems the ticket. Encoding the proof
  * in the URL query is correct here — the only target ever to consume
  * it is the receiver browser the QR is being shown to, and the user

@@ -14,7 +14,7 @@ import { defineConfig, devices } from "@playwright/test";
  *     http://localhost:8787 / wrangler dev). Set to
  *     https://flagshipserver.com to run against live.
  *   - The webapp is reachable at WEBAPP_BASE_URL (default the
- *     localhost wrangler dev URL above; live = https://web.flagshipserver.com).
+ *     localhost wrangler dev URL above; live = https://webapp.flagshipserver.com).
  */
 
 const webappBase = process.env.WEBAPP_BASE_URL ?? "http://localhost:8787";
@@ -56,7 +56,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         // Two cross-network gotchas the rig has to defuse:
-        //  1. The webapp loads from https://web.flagshipserver.com (PUBLIC,
+        //  1. The webapp loads from https://webapp.flagshipserver.com (PUBLIC,
         //     SECURE). It then tries to fetch https://127.0.0.1:NN/api/...
         //     (PRIVATE). Chrome's Private Network Access blocks this unless
         //     the target server replies to the preflight with

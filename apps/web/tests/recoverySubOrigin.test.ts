@@ -39,11 +39,11 @@ describe("recovery sub-origin static surface", () => {
     expect(r.body).not.toContain('const RP_ID = "flagshipserver.com"');
   });
 
-  it("/recovery/recovery.js postMessages only to https://web.flagshipserver.com", async () => {
+  it("/recovery/recovery.js postMessages only to https://webapp.flagshipserver.com", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/recovery/recovery.js" });
     expect(r.statusCode).toBe(200);
-    expect(r.body).toContain('PARENT_ORIGIN = "https://web.flagshipserver.com"');
+    expect(r.body).toContain('PARENT_ORIGIN = "https://webapp.flagshipserver.com"');
     // origin check on inbound messages
     expect(r.body).toContain("ev.origin !== PARENT_ORIGIN");
   });

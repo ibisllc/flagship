@@ -19,7 +19,7 @@ function buildSandbox() {
   const listeners = new Map<string, Function[]>();
   const shown: Array<{ title: string; opts: Record<string, unknown> }> = [];
   const self: any = {
-    location: { origin: "https://web.flagshipserver.com" },
+    location: { origin: "https://webapp.flagshipserver.com" },
     addEventListener: (type: string, cb: Function) => {
       const arr = listeners.get(type) ?? [];
       arr.push(cb);

@@ -128,7 +128,7 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
     https: { key: DEV_KEY, cert: DEV_CERT },
   });
 
-  // CORS — the webapp on web.flagshipserver.com calls cross-origin
+  // CORS — the webapp on webapp.flagshipserver.com calls cross-origin
   // AND across the public-→-private-network boundary, so we also
   // satisfy Chrome's Private Network Access preflight (RFC draft
   // implemented as Access-Control-{Request,Allow}-Private-Network).

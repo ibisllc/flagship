@@ -49,7 +49,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
-const ORIGIN = process.env.GYM_LIVE_WEB_ORIGIN ?? "https://web.gym.flagshipserver.com";
+const ORIGIN = process.env.GYM_LIVE_WEB_ORIGIN ?? "https://webapp.gym.flagshipserver.com";
 const here = fileURLToPath(new URL(".", import.meta.url));
 const REPO = join(here, "..", "..", "..", "..");
 const BOX_DIR = join(REPO, "gym-results", "feature-screenshots");
@@ -395,7 +395,7 @@ test("lost device → recover account + regain the same cloud (keyfile recovery)
     // iOS/Android run. Two-phase so this is honest about a real bug AND proves
     // the fix against the live backend (we must NOT deploy):
     //   (A) call the DEPLOYED runKeyfileImportTakeover (the buggy code still on
-    //       web.gym) → records the live failure (old==new IRK → handler 400),
+    //       webapp.gym) → records the live failure (old==new IRK → handler 400),
     //       confirming the bug exists against the real .com.
     //   (B) drive the FIXED, ROTATING envelope shape (old = registered key, new
     //       = a fresh rotated device key, signed by the new key — exactly what

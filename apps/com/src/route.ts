@@ -2,19 +2,24 @@
  * Pure routing logic for the flagshipserver.com Cloudflare Worker.
  *
  * Responsibilities:
- *   1. Host-aware: serves the apex (flagshipserver.com / www.) and the
- *      webapp origin (web.flagshipserver.com).
+ *   1. Host-aware: serves the apex (flagshipserver.com / www.), the
+ *      webapp origin (webapp.flagshipserver.com), and the browser-remote
+ *      origin (remote.flagshipserver.com).
  *   2. .com control-plane routes (username, auth-code, build-tickets,
  *      server registration, CA pubkey-cert) — served by Worker + D1.
  *   3. /build/iso/:filename — streams from R2.
  *   4. /api/_status/probe — Worker-resident probe of .services.
  *   5. /api/build/iso-info — base-ISO metadata.
  *   6. Anything else under /api/* not handled above — proxied to .services.
- *   7. On the apex: /webapp/* and /me/* 308-redirect to web.flagshipserver.com.
- *   8. On web.flagshipserver.com: /X is rewritten to ASSETS /webapp/X so
+ *   7. On the apex: /webapp/* and /me/* 308-redirect to webapp.flagshipserver.com.
+ *   8. On webapp.flagshipserver.com: /X is rewritten to ASSETS /webapp/X so
  *      the on-disk webapp source serves at the new origin's root. Files
  *      stay under apps/web/public/webapp/ — no churn.
- *   9. Anything else — static assets.
+ *   9. On remote.flagshipserver.com: the same shell assets, served from a
+ *      separate origin so a keyless remote session is storage-isolated
+ *      from the owner webapp.
+ *  10. web.flagshipserver.com (retired) — 308 to webapp.
+ *  11. Anything else — static assets.
  */
 
 import { tryControlPlane, tryBootHost } from "./controlPlaneRoutes.js";
@@ -35,8 +40,36 @@ import {
   type RateLimitBinding,
 } from "./rateLimit.js";
 
-const WEBAPP_HOST = "web.flagshipserver.com";
+const WEBAPP_HOST = "webapp.flagshipserver.com";
 const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
+
+/**
+ * remote.flagshipserver.com — the browser-remote surface.
+ *
+ * "Remote" is the desktop-initiated, phone-approved companion session:
+ * the browser asks a server to let it in, the phone approves, and the
+ * browser then drives that server read-mostly for a bounded window. It
+ * serves the SAME shell assets as the webapp host, but from its OWN
+ * origin, so a remote session's storage (its keyless companion profile
+ * + session token) can never be read by — or leak into — the owner
+ * webapp's origin. Root (`/`) on this host enters the remote flow; the
+ * shell then stays here for the life of the session.
+ */
+const REMOTE_HOST = "remote.flagshipserver.com";
+const REMOTE_ORIGIN = `https://${REMOTE_HOST}`;
+
+/**
+ * Retired origin, kept alive only as a permanent redirect.
+ *
+ * `web.` was a single origin doing two jobs (the owner webapp AND the
+ * companion/remote receiver). It split into `webapp.` + `remote.` on
+ * 2026-07-23. There is no collision between the old and new labels, so
+ * `web.` can 308 to `webapp.` indefinitely without shadowing either new
+ * host. This exists purely so the handful of pre-release testers with a
+ * `web.` bookmark or an installed PWA land somewhere useful; it is
+ * expected to be deleted before public launch.
+ */
+const LEGACY_WEBAPP_HOST = "web.flagshipserver.com";
 
 /** Assets that live at the SITE root (apps/web/public/<file>) and are shared
  *  with the marketing landing page, yet are imported by the webapp via an
@@ -46,13 +79,23 @@ const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
  *  webapp-imported assets belong here. */
 const WEBAPP_SHARED_ROOT_ASSETS: ReadonlySet<string> = new Set(["/qrEncoder.js"]);
 
-/** The webapp host for THIS env: `web.flagshipserver.com` in prod, or
- *  `web.<CONTROL_APEX>` under a test env (the gym serves the webapp at
- *  web.gym.flagshipserver.com). Prod-preserving — equals WEBAPP_HOST when
+/** The webapp host for THIS env: `webapp.flagshipserver.com` in prod, or
+ *  `webapp.<CONTROL_APEX>` under a test env (the gym serves the webapp at
+ *  webapp.gym.flagshipserver.com). Prod-preserving — equals WEBAPP_HOST when
  *  CONTROL_APEX is unset. apex.js retargets the app's backend off the served
  *  origin, so recognising + serving this host is all the gym webapp needs. */
 function webappHost(env: RouteEnv): string {
-  return env.CONTROL_APEX ? `web.${env.CONTROL_APEX}` : WEBAPP_HOST;
+  return env.CONTROL_APEX ? `webapp.${env.CONTROL_APEX}` : WEBAPP_HOST;
+}
+
+/** The remote host for THIS env — same env-awareness as `webappHost`. */
+function remoteHost(env: RouteEnv): string {
+  return env.CONTROL_APEX ? `remote.${env.CONTROL_APEX}` : REMOTE_HOST;
+}
+
+/** The retired `web.` host for THIS env. Only ever redirected, never served. */
+function legacyWebappHost(env: RouteEnv): string {
+  return env.CONTROL_APEX ? `web.${env.CONTROL_APEX}` : LEGACY_WEBAPP_HOST;
 }
 
 /**
@@ -82,7 +125,7 @@ const VOICI_WWW_HOST = "www.voi.ci";
  * which is a different origin from both the marketing apex and the
  * webapp. WebAuthn's same-origin policy enforces that a passkey created
  * here can only be exercised by a page served from this same origin —
- * so an XSS on flagshipserver.com or web.flagshipserver.com cannot
+ * so an XSS on flagshipserver.com or webapp.flagshipserver.com cannot
  * silently call `navigator.credentials.get()` and exfiltrate the UMK.
  *
  * Disk layout: apps/web/public/recovery/* serves at the root of this
@@ -136,7 +179,7 @@ const RECOVERY_CSP =
 
 /**
  * Origins allowed to call /api/* on the apex via cross-origin XHR.
- * The webapp lives on web.flagshipserver.com; the marketing/identity
+ * The webapp lives on webapp.flagshipserver.com; the marketing/identity
  * site on flagshipserver.com is same-origin (no preflight); local dev
  * runs against http://localhost.
  *
@@ -147,6 +190,7 @@ const RECOVERY_CSP =
  */
 const CORS_ALLOWED_ORIGINS = new Set<string>([
   WEBAPP_ORIGIN,
+  REMOTE_ORIGIN,
   RECOVERY_ORIGIN,
   "https://flagshipserver.com",
   "https://www.flagshipserver.com",
@@ -192,10 +236,10 @@ export interface RouteEnv {
   /** WebSocket URL daemons dial for the tunnel hub (discovery endpoint). */
   TUNNEL_HUB_URL?: string;
   /** Control-plane apex — a test env (gym) sets "gym.flagshipserver.com"; unset
-   *  in prod. The webapp host is `web.<CONTROL_APEX>`, so this makes the
+   *  in prod. The webapp host is `webapp.<CONTROL_APEX>`, so this makes the
    *  webapp-host routing apex-aware (without it the gym webapp host 307s to the
    *  prod webapp origin). apex.js already retargets the app's backend off the
-   *  served origin, so serving the webapp on web.gym.flagshipserver.com is all
+   *  served origin, so serving the webapp on webapp.gym.flagshipserver.com is all
    *  that's needed for the live web e2e. */
   CONTROL_APEX?: string;
   /** SNI passthrough anycast IPs (also used by serverRegister to publish DNS). */
@@ -368,6 +412,8 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
   if (override) {
     const lowered = override.split(":")[0]?.toLowerCase() ?? "";
     if (lowered === webappHost(env) ||
+        lowered === remoteHost(env) ||
+        lowered === legacyWebappHost(env) ||
         lowered === RECOVERY_HOST ||
         lowered === BOOT_HOST ||
         lowered === "www.flagshipserver.com" ||
@@ -390,7 +436,7 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
   }
 
   // ---- CORS preflight ----
-  // Cross-origin POSTs from the webapp (on web.flagshipserver.com) to
+  // Cross-origin POSTs from the webapp (on webapp.flagshipserver.com) to
   // /api/* on the apex trigger a preflight. Answer it directly so the
   // actual request can proceed.
   if (request.method === "OPTIONS" && url.pathname.startsWith("/api/")) {
@@ -403,15 +449,42 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
 
 /** Internal — the actual routing logic. `route` wraps this with CORS. */
 async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Response> {
-  // ---- web.flagshipserver.com ----
-  // Webapp lives at this dedicated origin. Files on disk are under
-  // apps/web/public/webapp/, but on this host we serve them at root —
-  // so /X is rewritten to ASSETS /webapp/X. Everything on this host is
-  // either a webapp asset or the SPA fallback; the apex's /api/* and
-  // /og + control-plane routes are NOT exposed here. The webapp itself
-  // talks to the user's pod for /api/screens/* and to the apex for
-  // anything .com-resident — never to web. directly.
+  // ---- web.flagshipserver.com (RETIRED) ----
+  // Permanent redirect to `webapp.`, path + query preserved. Placed
+  // FIRST so nothing else on this host can ever be served again. Only
+  // the pre-release testers who bookmarked `web.` (or installed its
+  // PWA) hit this; delete the host, its route, and this block once
+  // they've moved.
+  if (url.hostname === legacyWebappHost(env)) {
+    const target = `https://${webappHost(env)}${url.pathname}${url.search}`;
+    return new Response(null, { status: 308, headers: { location: target } });
+  }
+
+  // ---- webapp.flagshipserver.com ----
+  // The owner webapp lives at this dedicated origin. Files on disk are
+  // under apps/web/public/webapp/, but on this host we serve them at
+  // root — so /X is rewritten to ASSETS /webapp/X. Everything on this
+  // host is either a webapp asset or the SPA fallback; the apex's
+  // /api/* and /og + control-plane routes are NOT exposed here. The
+  // webapp itself talks to the user's pod for /api/screens/* and to the
+  // apex for anything .com-resident — never to webapp. directly.
   if (url.hostname === webappHost(env)) {
+    // `/dock` was the remote flow's path back when one origin did both
+    // jobs. It now lives at the root of its own host.
+    if (url.pathname === "/dock" || url.pathname === "/dock/") {
+      return new Response(null, {
+        status: 308,
+        headers: { location: `https://${remoteHost(env)}/${url.search}` },
+      });
+    }
+    return serveWebapp(request, url, env);
+  }
+
+  // ---- remote.flagshipserver.com ----
+  // The browser-remote surface. Same shell assets, separate origin (see
+  // REMOTE_HOST). The shell reads its own hostname to decide that `/`
+  // means "start a remote session" rather than "open my account".
+  if (url.hostname === remoteHost(env)) {
     return serveWebapp(request, url, env);
   }
 
@@ -543,7 +616,7 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
 
   // Legacy `/webapp/*` paths on the apex 308-redirect to the new origin.
   // Path tail and query string are preserved so deep links survive the
-  // move (`/webapp/foo?x=1` → `https://web.flagshipserver.com/foo?x=1`).
+  // move (`/webapp/foo?x=1` → `https://webapp.flagshipserver.com/foo?x=1`).
   // PWA installs made on the apex are now broken — that's accepted,
   // since the migration ran before any meaningful install base existed.
   if (url.pathname === "/webapp" || url.pathname.startsWith("/webapp/")) {
@@ -564,7 +637,7 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // `dispatchInitialView()` reads `?o=` (lib/deepLink.js → serverTransfer.js) and
   // opens the claim view. Placed with the other webapp redirects — BEFORE the
   // coming-soon gate — so the fallback works for a real acquirer with no preview
-  // cookie. The webapp is on a different associated domain (web.flagshipserver.com
+  // cookie. The webapp is on a different associated domain (webapp.flagshipserver.com
   // is not in the app's applinks), so the redirect target won't re-trigger a
   // universal-link bounce.
   if (url.pathname === "/transfer" || url.pathname === "/transfer/") {
@@ -1189,14 +1262,17 @@ function originHeader(request: Request): string | null {
  * so this CORS layer is defense-in-depth, not the primary auth gate.
  */
 /** Is this Origin allowed to make cross-origin /api/* calls? The static prod set
- *  plus, under a test env, the env-derived webapp origin (web.<CONTROL_APEX>) —
- *  the gym webapp at web.gym.flagshipserver.com calls gym.flagshipserver.com
+ *  plus, under a test env, the env-derived webapp origin (webapp.<CONTROL_APEX>) —
+ *  the gym webapp at webapp.gym.flagshipserver.com calls gym.flagshipserver.com
  *  cross-origin and the static set can't know it. Prod-preserving: CONTROL_APEX
  *  unset ⇒ only the static set. Surfaced by the live web e2e (CORS-blocked
  *  username check / claim). */
 function isCorsAllowed(origin: string, env: RouteEnv): boolean {
   if (CORS_ALLOWED_ORIGINS.has(origin)) return true;
-  return !!env.CONTROL_APEX && origin === `https://web.${env.CONTROL_APEX}`;
+  if (!env.CONTROL_APEX) return false;
+  return (
+    origin === `https://${webappHost(env)}` || origin === `https://${remoteHost(env)}`
+  );
 }
 
 function applyCors(request: Request, url: URL, res: Response, env: RouteEnv): Response {
@@ -1266,7 +1342,7 @@ function isWebappClientRoute(pathname: string): boolean {
 }
 
 /**
- * Serve a request to web.flagshipserver.com by rewriting `/X` to
+ * Serve a request to webapp.flagshipserver.com by rewriting `/X` to
  * `/webapp/X` and handing off to the assets binding. The on-disk file
  * tree is unchanged (apps/web/public/webapp/...); the user-visible
  * origin sees those files at root paths so the manifest's start_url
@@ -1280,8 +1356,8 @@ function isWebappClientRoute(pathname: string): boolean {
  * (anything with an extension) keep the literal `/webapp<path>` rewrite.
  *
  * Apex-aware: this fires for whatever `webappHost(env)` is —
- * `web.flagshipserver.com` in prod, `web.<CONTROL_APEX>` (e.g.
- * web.gym.flagshipserver.com) in a test env. The CONTROL apex
+ * `webapp.flagshipserver.com` in prod, `webapp.<CONTROL_APEX>` (e.g.
+ * webapp.gym.flagshipserver.com) in a test env. The CONTROL apex
  * (flagshipserver.com / gym.flagshipserver.com) never reaches here:
  * there `/join` is the native universal link and falls through to the
  * marketing asset fallback, unchanged.
@@ -1598,6 +1674,9 @@ export const _internal = {
   STRIP_RES_HEADERS,
   WEBAPP_HOST,
   WEBAPP_ORIGIN,
+  REMOTE_HOST,
+  REMOTE_ORIGIN,
+  LEGACY_WEBAPP_HOST,
   RECOVERY_HOST,
   RECOVERY_ORIGIN,
   RECOVERY_CSP,

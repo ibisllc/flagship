@@ -1,7 +1,7 @@
 import Foundation
 import FlagshipAPI
 
-/// P14 — builds the `https://web.flagshipserver.com/?companion=...` URL
+/// P14 — builds the `https://webapp.flagshipserver.com/?companion=...` URL
 /// the phone QR encodes. The desktop browser scans the QR, the webapp's
 /// boot-time handler decodes the `companion` query param into the
 /// 4-tuple `{ ticketId, ticketSecret, podBaseUrl, username }` and POSTs
@@ -14,7 +14,7 @@ public enum CompanionTicketURL {
     /// Static landing host the webapp lives at. The browser hits this
     /// URL first; the in-page JS parses the `companion` query param and
     /// redirects + redeems against the user's pod. Via `Endpoints`
-    /// (prod-default `web.flagshipserver.com` + test override).
+    /// (prod-default `webapp.flagshipserver.com` + test override).
     public static var webappHost: String { Endpoints.webappHost }
 
     public struct Envelope: Codable, Equatable, Sendable {
@@ -32,7 +32,7 @@ public enum CompanionTicketURL {
     }
 
     /// Encode the 4-tuple into the canonical
-    /// `https://web.flagshipserver.com/?companion=<b64url>` URL string.
+    /// `https://webapp.flagshipserver.com/?companion=<b64url>` URL string.
     /// Returns nil only if the JSON encode itself fails — every other
     /// path is total.
     public static func build(
@@ -117,9 +117,16 @@ public enum CompanionDockApprovalLink {
         }
     }
 
+    /// Accepted deep-link hosts. `remote` is the current label (the feature
+    /// was renamed from "dock" on 2026-07-23); `dock` stays accepted so a
+    /// browser still serving the pre-rename webapp keeps working against a
+    /// freshly built app. The payload is identical either way.
+    static let acceptedHosts: Set<String> = ["remote", "dock"]
+
     public static func parse(_ raw: String) -> Payload? {
         guard let url = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)),
-              url.scheme == "flagship", url.host == "dock",
+              url.scheme == "flagship",
+              let host = url.host, acceptedHosts.contains(host),
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         else { return nil }
         let params = (components.queryItems ?? []).reduce(into: [String: String]()) { out, item in

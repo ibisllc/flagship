@@ -52,15 +52,15 @@ describe("apex — prod default (no browser origin, no override)", () => {
     const a = await loadApex();
     expect(a.bootOrigin()).toBe("https://boot.flagshipserver.com");
     expect(a.recoveryOrigin()).toBe("https://recovery.flagshipserver.com");
-    expect(a.webappOrigin()).toBe("https://web.flagshipserver.com");
+    expect(a.webappOrigin()).toBe("https://webapp.flagshipserver.com");
   });
 });
 
 describe("apex — origin-driven retarget (served from a flagship host)", () => {
   afterEach(() => setLocation(null));
 
-  it("served from web.flagshipserver.com ⇒ adopts the prod apex (prod behaviour)", async () => {
-    setLocation("https://web.flagshipserver.com");
+  it("served from webapp.flagshipserver.com ⇒ adopts the prod apex (prod behaviour)", async () => {
+    setLocation("https://webapp.flagshipserver.com");
     const a = await loadApex();
     expect(a.controlApex()).toBe("https://flagshipserver.com");
     expect(a.controlHost()).toBe("flagshipserver.com");
@@ -87,8 +87,8 @@ describe("apex — origin-driven retarget (served from a flagship host)", () => 
     expect(a.recoveryOrigin()).toBe("https://recovery.gym.flagshipserver.com");
   });
 
-  it("served from web.gym.flagshipserver.com ⇒ strips web., keeps gym", async () => {
-    setLocation("https://web.gym.flagshipserver.com");
+  it("served from webapp.gym.flagshipserver.com ⇒ strips web., keeps gym", async () => {
+    setLocation("https://webapp.gym.flagshipserver.com");
     const a = await loadApex();
     expect(a.controlApex()).toBe("https://gym.flagshipserver.com");
     expect(a.dataApex()).toBe("gym.flagship.services");
@@ -113,7 +113,7 @@ describe("apex — explicit override seam (gym harness / non-browser callers)", 
   afterEach(() => setLocation(null));
 
   it("setApexOverride forces both apexes, ignoring the origin", async () => {
-    setLocation("https://web.flagshipserver.com"); // would otherwise be prod
+    setLocation("https://webapp.flagshipserver.com"); // would otherwise be prod
     const a = await loadApex();
     a.setApexOverride({
       control: "https://gym.flagshipserver.com",

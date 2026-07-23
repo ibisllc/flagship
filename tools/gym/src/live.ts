@@ -25,7 +25,7 @@
  *     `flagship.dev.useLiveClient` toggle, pointed at the gym apex. The XCUITest
  *     class is GymLiveTests (built only when the env is reachable).
  *   - webapp (documented, not the default slice here): serve Playwright from the
- *     gym origin (web.gym.flagshipserver.com); the webapp derives its apex from
+ *     gym origin (webapp.gym.flagshipserver.com); the webapp derives its apex from
  *     window.location.origin (§12-G2) and talks to gym.flagship.services.
  *
  * DEMO-ONLY guardrail (§7-G): the create/install/approve run against the gym

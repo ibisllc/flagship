@@ -6,12 +6,12 @@ import { join } from "node:path";
  * LIVE web e2e config — drives the REAL deployed gym webapp against the REAL gym
  * backend (the opposite of playwright.gym.config.ts, which serves a local static
  * tree with every /api/* stubbed). No webServer: the baseURL is the live host
- * (`web.gym.flagshipserver.com`), and the webapp derives its backend apex from
+ * (`webapp.gym.flagshipserver.com`), and the webapp derives its backend apex from
  * window.location.origin (lib/apex.js), so loading that host auto-points the app
  * at gym.flagshipserver.com + gym.flagship.services. Override with
  * GYM_LIVE_WEB_ORIGIN.
  */
-const origin = process.env.GYM_LIVE_WEB_ORIGIN ?? "https://web.gym.flagshipserver.com";
+const origin = process.env.GYM_LIVE_WEB_ORIGIN ?? "https://webapp.gym.flagshipserver.com";
 const here = fileURLToPath(new URL(".", import.meta.url));
 const outputDir = process.env.GYM_PW_OUTPUT ?? join(here, ".live-out");
 const jsonReport = process.env.GYM_PW_JSON ?? join(outputDir, "report.json");

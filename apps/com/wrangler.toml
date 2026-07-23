@@ -27,6 +27,10 @@ workers_dev = true
 routes = [
   { pattern = "flagshipserver.com/*",          zone_name = "flagshipserver.com" },
   { pattern = "www.flagshipserver.com/*",      zone_name = "flagshipserver.com" },
+  # RETIRED — kept only so the pre-release testers who bookmarked `web.`
+  # (or installed its PWA) get a 308 to `webapp.`. `web.` is an explicit
+  # proxied CNAME → flagshipserver.com, so a zone route works for it.
+  # Delete this route and its DNS record once they've moved.
   { pattern = "web.flagshipserver.com/*",      zone_name = "flagshipserver.com" },
   # voi.ci is a path redirector handled by this Worker. Keep both routes in
   # source control so a later deploy cannot reconcile away a dashboard-only
@@ -68,10 +72,23 @@ routes = [
   # itself, so the hostname resolves to flagship-com with no manual DNS step.
   # (Cut over 2026-06-11 — detached from flagship-boot first.)
   { pattern = "boot.flagshipserver.com",       custom_domain = true },
+  # webapp. + remote. — the 2026-07-23 split of the old `web.` origin into
+  # one host per concern: `webapp.` is the owner webapp, `remote.` is the
+  # phone-approved browser-remote session. Separate origins mean a remote
+  # session's storage is isolated from the owner app's by the same-origin
+  # policy, not by convention.
+  #
+  # CUSTOM DOMAINS (not zone routes), for the same reason as recovery. and
+  # boot. above: these are brand-new hostnames with NO DNS record, and the
+  # zone has no wildcard — a Worker Route only fires for a host that already
+  # resolves into Cloudflare. A custom domain makes wrangler provision the
+  # proxied record + edge cert itself, so there is no manual DNS step.
+  { pattern = "webapp.flagshipserver.com",     custom_domain = true },
+  { pattern = "remote.flagshipserver.com",     custom_domain = true },
 ]
 
 # Static assets — marketing pages, the webapp source under /webapp/
-# (served at root on web.flagshipserver.com via Worker rewrite),
+# (served at root on webapp. AND remote.flagshipserver.com via Worker rewrite),
 # /deck/, /security pages, /.well-known/security.txt. Wrangler uploads
 # everything in this directory to Cloudflare's static edge.
 [assets]
@@ -79,9 +96,10 @@ directory = "../web/public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 # Worker runs first for every request so it can: (1) host-rewrite
-# web.flagshipserver.com/X → asset /webapp/X before the assets edge
-# applies its SPA fallback at the wrong root; (2) 308-redirect apex
-# /webapp/* to web.; (3) handle /api/* and /build/iso/* directly. The
+# webapp./remote.flagshipserver.com/X → asset /webapp/X before the assets
+# edge applies its SPA fallback at the wrong root; (2) 308-redirect apex
+# /webapp/* to webapp., and the retired web. host to webapp. too;
+# (3) handle /api/* and /build/iso/* directly. The
 # Worker calls ASSETS.fetch as the default fallback for anything it
 # doesn't intercept, so static-file behavior is unchanged for the
 # marketing site — only one extra Worker invocation per request.

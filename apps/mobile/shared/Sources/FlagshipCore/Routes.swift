@@ -141,7 +141,7 @@ public enum SettingsRoute: Hashable, Sendable {
     /// P9 — peer-backup management. Participation toggle + peer lists
     /// (backing you up / you back up) + shard health + repair status.
     case peerBackup
-    /// P14 — "Dock a browser" companion-pairing surface. Mints a
+    /// P14 — "Remote" browser-pairing surface. Mints a
     /// 60-second pairing QR a desktop browser scans to become a 4-hour
     /// read-only companion of the user's account; lists + revokes
     /// active companions.

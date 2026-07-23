@@ -4,8 +4,8 @@
 // hardcoded literal (there used to be ~37 scattered copies).
 //
 // Why a function, not a baked constant: the webapp is served from the SAME
-// host it talks to (prod: web.flagshipserver.com → flagshipserver.com; the
-// gym test env: web.gym.flagshipserver.com → gym.flagshipserver.com), so the
+// host it talks to (prod: webapp.flagshipserver.com → flagshipserver.com; the
+// gym test env: webapp.gym.flagshipserver.com → gym.flagshipserver.com), so the
 // control apex is DERIVED from `window.location.origin` — serving the webapp
 // from `gym.flagshipserver.com` auto-retargets the whole app at the gym
 // backend with no rebuild (docs/ui-test-gym.md §12-G2). When there is no
@@ -24,8 +24,14 @@ const PROD_DATA_APEX = "flagship.services";
 // The label we treat as "the control apex" — `flagshipserver.com` in prod,
 // `gym.flagshipserver.com` under the gym test env. We recognise a served
 // origin as a flagship control surface when its host IS this apex or a
-// known sub-origin of it (`web.`, `boot.`, `recovery.`).
-const KNOWN_SUBORIGIN_PREFIXES = ["web.", "boot.", "recovery."];
+// known sub-origin of it (`webapp.`, `remote.`, `boot.`, `recovery.`).
+//
+// `web.` stays in the list purely so the retired origin still resolves an
+// apex if a stale service worker serves the shell from cache before the
+// 308 to `webapp.` takes effect. It matches only the exact `web.` label —
+// `webapp.flagshipserver.com` does NOT start with `web.` — so the old and
+// new prefixes cannot shadow each other.
+const KNOWN_SUBORIGIN_PREFIXES = ["webapp.", "remote.", "boot.", "recovery.", "web."];
 
 let override = null; // { control, data } | null
 
@@ -51,7 +57,7 @@ function browserOrigin() {
 }
 
 /** Strip a known sub-origin prefix off a host, yielding the bare control apex
- *  host (web.gym.flagshipserver.com → gym.flagshipserver.com). */
+ *  host (webapp.gym.flagshipserver.com → gym.flagshipserver.com). */
 function apexHostFrom(host) {
   for (const p of KNOWN_SUBORIGIN_PREFIXES) {
     if (host.startsWith(p)) return host.slice(p.length);
@@ -122,9 +128,28 @@ export function recoveryOrigin() {
   return subOrigin("recovery");
 }
 
-/** The webapp host origin (web.<apex>) — the companion-dock receiver host. */
+/** The webapp host origin (webapp.<apex>) — the owner webapp. */
 export function webappOrigin() {
-  return subOrigin("web");
+  return subOrigin("webapp");
+}
+
+/** The browser-remote origin (remote.<apex>) — where a desktop starts a
+ *  phone-approved remote session, and where that session then lives. */
+export function remoteOrigin() {
+  return subOrigin("remote");
+}
+
+/** True when the shell is being served from the remote origin, i.e. this
+ *  tab is the browser-remote surface rather than the owner webapp. Used by
+ *  the boot path to decide what `/` means. Default-false off-browser so the
+ *  unit-test env and any unknown host get the ordinary webapp behaviour. */
+export function isRemoteSurface() {
+  try {
+    const host = globalThis.location?.hostname;
+    return typeof host === "string" && host.startsWith("remote.");
+  } catch {
+    return false;
+  }
 }
 
 /** The data-plane apex suffix (no leading dot): `flagship.services` in prod,

@@ -29,7 +29,7 @@ afterEach(() => {
 
 /** Stub window.location.search/href + a recording history.replaceState. */
 function stubWindow(search: string) {
-  const href = `https://web.flagshipserver.com/${search}`;
+  const href = `https://webapp.flagshipserver.com/${search}`;
   const replaced: string[] = [];
   (globalThis as { window?: unknown }).window = {
     location: { search, href },

@@ -18,7 +18,7 @@ import { getSession } from "./state.js";
 import { sensitiveSigner } from "./adminRoot.js";
 import { controlApex } from "./apex.js";
 
-// Webapp lives on web.flagshipserver.com; .com endpoints live on the
+// Webapp lives on webapp.flagshipserver.com; .com endpoints live on the
 // apex. Same Worker handles both via host-based routing.
 const APEX = controlApex();
 

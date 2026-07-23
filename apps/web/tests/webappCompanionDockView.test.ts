@@ -43,7 +43,9 @@ describe("companion-dock view — static surface", () => {
     const body = await fetchAsset("/webapp/views/companion-dock.js");
     expect(body).toContain("companionList");
     expect(body).toContain("companionRevoke");
-    expect(body).toContain('href="/dock"');
+    // The ceremony moved to its own origin, so the link is absolute and
+    // derived from the apex rather than a same-origin `/dock` path.
+    expect(body).toContain("remoteOrigin()");
     expect(body).not.toContain("companionMintTicket");
     expect(body).not.toContain("buildCompanionReceiverUrl");
   });
@@ -63,9 +65,9 @@ describe("companion-dock view — static surface", () => {
     }
   });
 
-  it("speaks the empty state ('no companion browsers docked')", async () => {
+  it("speaks the empty state ('no browsers connected')", async () => {
     const body = await fetchAsset("/webapp/views/companion-dock.js");
-    expect(body).toMatch(/no companion browsers docked/);
+    expect(body).toMatch(/no browsers connected/);
   });
 
   it("does not render a phone-generated QR", async () => {
@@ -95,7 +97,7 @@ describe("companionClient.js — endpoint shapes", () => {
       podBaseUrl: "https://home.alice.flagship.services",
       username: "alice",
     });
-    expect(url).toMatch(/^https:\/\/web\.flagshipserver\.com\/\?companion=/);
+    expect(url).toMatch(/^https:\/\/webapp\.flagshipserver\.com\/\?companion=/);
     const b64 = new URL(url).searchParams.get("companion")!;
     const parsed = mod.parseCompanionPayload(b64);
     expect(parsed).toEqual({
@@ -124,10 +126,13 @@ describe("companionClient.js — endpoint shapes", () => {
 });
 
 describe("index.html — companion-dock surface", () => {
-  it("includes the Dock a browser settings entry", async () => {
+  it("includes the Remote settings entry", async () => {
     const html = await fetchAsset("/webapp/");
     expect(html).toContain('id="settings-tab-companion-dock"');
-    expect(html).toContain("Dock a browser");
+    expect(html).toContain(">Remote<");
+    // The feature was renamed on 2026-07-23 — the old label must not survive
+    // anywhere on the shell's settings surface.
+    expect(html).not.toContain("Dock a browser");
   });
 
   it("includes the view-companion-dock section + content container", async () => {
@@ -151,7 +156,7 @@ describe("app.js — companion-dock wiring", () => {
     expect(body).toContain('"view-companion-dock": "settings"');
   });
 
-  it("wires the Settings → Dock a browser button", async () => {
+  it("wires the Settings → Remote button", async () => {
     const body = await fetchAsset("/webapp/app.js");
     expect(body).toContain('"settings-tab-companion-dock"');
   });

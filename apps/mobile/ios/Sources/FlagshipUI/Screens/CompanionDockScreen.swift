@@ -2,7 +2,7 @@ import SwiftUI
 import FlagshipAPI
 import FlagshipCore
 
-/// Phone side of the desktop-initiated docking ceremony.
+/// Phone side of the desktop-initiated remote ceremony.
 public struct CompanionDockScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: CompanionDockViewModel
@@ -23,7 +23,7 @@ public struct CompanionDockScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                Text("Open web.flagshipserver.com/dock on your computer, then approve its pairing code here.")
+                Text("Open \(Endpoints.remoteHost) on your computer, then approve its pairing code here.")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -36,7 +36,7 @@ public struct CompanionDockScreen: View {
             .padding(.top, FS.space.s4)
         }
         .background(c.bg.ignoresSafeArea())
-        .navigationTitle("Dock a browser")
+        .navigationTitle("Remote")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await vm.load() }
         .task {
@@ -65,7 +65,7 @@ public struct CompanionDockScreen: View {
             )
         }
         .confirmationDialog(
-            pendingRevoke.map { "Disconnect \(displayLabel(for: $0))?" } ?? "Disconnect companion?",
+            pendingRevoke.map { "Disconnect \(displayLabel(for: $0))?" } ?? "Disconnect this browser?",
             isPresented: Binding(
                 get: { pendingRevoke != nil },
                 set: { if !$0 { pendingRevoke = nil } }
@@ -81,14 +81,14 @@ public struct CompanionDockScreen: View {
             }
             Button("Cancel", role: .cancel) { pendingRevoke = nil }
         } message: { _ in
-            Text("The browser session will end immediately. It can be re-paired any time with a fresh QR.")
+            Text("The browser session will end immediately. It can reconnect any time with a fresh QR.")
         }
     }
 
     private func pairingCard(c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text("Pair a browser")
+                Text("Connect a browser")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(c.text)
                 FSPrimaryButton("Scan pairing QR", block: true) {
@@ -127,7 +127,7 @@ public struct CompanionDockScreen: View {
                         .font(FS.font.mono())
                         .foregroundColor(c.textMuted)
                         .textSelection(.enabled)
-                    Text("It will receive a keyless companion session for four hours. Protected actions still require approval from this phone.")
+                    Text("It will receive a keyless remote session for four hours. Protected actions still require approval from this phone.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                     FSPrimaryButton(vm.approvalPending ? "Approving…" : "Approve with Face ID", enabled: !vm.approvalPending, block: true) {
@@ -142,7 +142,7 @@ public struct CompanionDockScreen: View {
             FSCard {
                 HStack(spacing: FS.space.s2) {
                     Image(systemName: "checkmark.circle.fill").foregroundColor(c.success)
-                    Text("Browser docked").font(FS.font.bodySm()).foregroundColor(c.text)
+                    Text("Browser connected").font(FS.font.bodySm()).foregroundColor(c.text)
                 }
             }
         }
@@ -157,7 +157,7 @@ public struct CompanionDockScreen: View {
     @ViewBuilder
     private func activeList(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("ACTIVE COMPANIONS")
+            Text("CONNECTED BROWSERS")
                 .font(.system(size: 12, weight: .semibold))
                 .tracking(1)
                 .foregroundColor(c.textMuted)
@@ -169,7 +169,7 @@ public struct CompanionDockScreen: View {
             case .failed(let msg):
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
-                        Text("Couldn't load companions").foregroundColor(c.danger)
+                        Text("Couldn't load connected browsers").foregroundColor(c.danger)
                         Text(msg).font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
                 }
@@ -179,8 +179,8 @@ public struct CompanionDockScreen: View {
                         HStack(alignment: .top, spacing: FS.space.s2) {
                             Image(systemName: "laptopcomputer").foregroundColor(c.textMuted)
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("No browsers docked").font(FS.font.bodySm()).foregroundColor(c.text)
-                                Text("Open the dock page on a computer to add one.")
+                                Text("No browsers connected").font(FS.font.bodySm()).foregroundColor(c.text)
+                                Text("Open \(Endpoints.remoteHost) on a computer to add one.")
                                     .font(FS.font.caption())
                                     .foregroundColor(c.textMuted)
                             }

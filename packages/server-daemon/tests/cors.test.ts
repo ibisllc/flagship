@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { corsPreflight, withCors, isWebappOrigin } from "../src/cors.js";
 import type { HttpRequest, HttpResponse } from "../src/runtime.js";
 
-const PROD = "https://web.flagshipserver.com";
-const GYM = "https://web.gym.flagshipserver.com";
+const PROD = "https://webapp.flagshipserver.com";
+const GYM = "https://webapp.gym.flagshipserver.com";
+const REMOTE = "https://remote.flagshipserver.com";
+const REMOTE_GYM = "https://remote.gym.flagshipserver.com";
+const LEGACY = "https://web.flagshipserver.com";
 const EVIL = "https://evil.example";
 
 function req(over: Partial<HttpRequest> = {}): HttpRequest {
@@ -27,14 +30,28 @@ describe("isWebappOrigin", () => {
     expect(isWebappOrigin(PROD)).toBe(true);
     expect(isWebappOrigin(GYM)).toBe(true);
     expect(isWebappOrigin(EVIL)).toBe(false);
-    expect(isWebappOrigin("http://web.flagshipserver.com")).toBe(false); // scheme matters
+    expect(isWebappOrigin("http://webapp.flagshipserver.com")).toBe(false); // scheme matters
     expect(isWebappOrigin("https://flagshipserver.com")).toBe(false); // apex, not webapp
+  });
+
+  it("allows the remote origins — without them the remote ceremony can't start", () => {
+    // /api/companion/dock/begin is called cross-origin from remote.<apex>
+    // BEFORE any session exists; a missing ACAO blocks the whole flow.
+    expect(isWebappOrigin(REMOTE)).toBe(true);
+    expect(isWebappOrigin(REMOTE_GYM)).toBe(true);
+  });
+
+  it("still allows the retired web. origin until the fleet turns over", () => {
+    expect(isWebappOrigin(LEGACY)).toBe(true);
+    // …but it is NOT a wildcard: a longer label sharing the prefix is refused.
+    expect(isWebappOrigin("https://web.evil.flagshipserver.com")).toBe(false);
+    expect(isWebappOrigin("https://webapp.evil.com")).toBe(false);
   });
 });
 
 describe("corsPreflight", () => {
   it("answers OPTIONS /api/* from an allowed origin with 204 + the full header set", () => {
-    for (const origin of [PROD, GYM]) {
+    for (const origin of [PROD, GYM, REMOTE, REMOTE_GYM]) {
       const r = corsPreflight(req({ method: "OPTIONS", headers: { origin } }));
       expect(r).not.toBeNull();
       expect(r!.status).toBe(204);
@@ -68,7 +85,7 @@ describe("corsPreflight", () => {
 
 describe("withCors", () => {
   it("echoes the specific allowed origin + Vary + the CORS header set onto an /api/* response", () => {
-    for (const origin of [PROD, GYM]) {
+    for (const origin of [PROD, GYM, REMOTE, REMOTE_GYM]) {
       const r = withCors(req({ headers: { origin } }), okBody);
       expect(r.headers!["access-control-allow-origin"]).toBe(origin);
       expect(r.headers!["vary"]).toBe("origin");

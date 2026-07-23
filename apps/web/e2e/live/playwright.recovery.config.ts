@@ -4,12 +4,12 @@ import { join } from "node:path";
 
 /**
  * LIVE account-recovery config — drives the REAL deployed gym webapp
- * (`web.gym.flagshipserver.com`) against a REAL gym box, with TWO browser
+ * (`webapp.gym.flagshipserver.com`) against a REAL gym box, with TWO browser
  * contexts (= the lost device + the fresh recovering device). Scoped to the
  * single recovery spec so it doesn't also pick up the pairing / feature-sweep
  * specs in this dir.
  */
-const origin = process.env.GYM_LIVE_WEB_ORIGIN ?? "https://web.gym.flagshipserver.com";
+const origin = process.env.GYM_LIVE_WEB_ORIGIN ?? "https://webapp.gym.flagshipserver.com";
 const here = fileURLToPath(new URL(".", import.meta.url));
 const outputDir = process.env.GYM_PW_OUTPUT ?? join(here, ".recovery-out");
 

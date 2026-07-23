@@ -33,19 +33,21 @@ workers_dev = true
 # + edge cert (the boot./recovery. mechanism we already use), so the hostnames
 # resolve to flagship-com-gym with no manual DNS step / no dns:write token.
 #   - gym.flagshipserver.com — the test control plane apex.
-#   - web.gym.flagshipserver.com — the test webapp host (Worker host-rewrite).
+#   - webapp.gym.flagshipserver.com — the test webapp host (Worker host-rewrite).
+#   - remote.gym.flagshipserver.com — the test browser-remote host.
 #   - recovery.gym. / boot.gym. — the test sub-origins (mirror prod's recovery./boot.).
 # These are namespaced under `gym.` so they never shadow a prod record.
 routes = [
   { pattern = "gym.flagshipserver.com",          custom_domain = true },
-  { pattern = "web.gym.flagshipserver.com",       custom_domain = true },
+  { pattern = "webapp.gym.flagshipserver.com",    custom_domain = true },
+  { pattern = "remote.gym.flagshipserver.com",    custom_domain = true },
   { pattern = "recovery.gym.flagshipserver.com",  custom_domain = true },
   { pattern = "boot.gym.flagshipserver.com",      custom_domain = true },
 ]
 
 # Static assets — identical to prod (the same ../web/public tree, same SPA
 # fallback + run-worker-first host-rewrite). The test webapp served from
-# web.gym.flagshipserver.com derives its apex from window.location.origin
+# webapp.gym.flagshipserver.com derives its apex from window.location.origin
 # (§12-G2) so it "just works" against the gym apex with no per-build edit.
 [assets]
 directory = "../web/public"

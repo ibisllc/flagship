@@ -1,7 +1,7 @@
 import XCTest
 @testable import FlagshipCore
 
-/// P14 — verifies the exact `https://web.flagshipserver.com/?companion=...`
+/// P14 — verifies the exact `https://webapp.flagshipserver.com/?companion=...`
 /// shape the QR encodes + that the base64url-no-padding payload round-
 /// trips back to the original envelope. The webapp + Android decoders
 /// MUST be byte-compatible with this encoder.
@@ -15,7 +15,7 @@ final class CompanionTicketURLTests: XCTestCase {
             username: "harry"
         )
         XCTAssertNotNil(url)
-        XCTAssertTrue(url!.hasPrefix("https://web.flagshipserver.com/?companion="))
+        XCTAssertTrue(url!.hasPrefix("https://webapp.flagshipserver.com/?companion="))
     }
 
     func test_build_payloadIsBase64URLNoPadding() {
@@ -74,9 +74,9 @@ final class CompanionTicketURLTests: XCTestCase {
     }
 
     func test_parse_rejectsGarbage() {
-        XCTAssertNil(CompanionTicketURL.parse("https://web.flagshipserver.com/"))
-        XCTAssertNil(CompanionTicketURL.parse("https://web.flagshipserver.com/?companion="))
-        XCTAssertNil(CompanionTicketURL.parse("https://web.flagshipserver.com/?companion=not-base64!"))
+        XCTAssertNil(CompanionTicketURL.parse("https://webapp.flagshipserver.com/"))
+        XCTAssertNil(CompanionTicketURL.parse("https://webapp.flagshipserver.com/?companion="))
+        XCTAssertNil(CompanionTicketURL.parse("https://webapp.flagshipserver.com/?companion=not-base64!"))
         XCTAssertNil(CompanionTicketURL.parse("not a url at all"))
     }
 
@@ -143,8 +143,27 @@ final class CompanionTicketURLTests: XCTestCase {
         XCTAssertEqual(parsed?.approvalSecret, code)
     }
 
+    /// The feature was renamed dock → remote on 2026-07-23. The webapp now
+    /// emits `flagship://remote`; `flagship://dock` stays parseable so a
+    /// browser still serving the pre-rename shell keeps working.
+    func test_remoteApprovalLink_parsesTheRenamedHostIdentically() {
+        let request = String(repeating: "ab", count: 16)
+        let code = String(repeating: "cd", count: 32)
+        let query = "server=home.alice.flagship.services&request=\(request)&code=\(code)"
+        let viaRemote = CompanionDockApprovalLink.parse("flagship://remote?\(query)")
+        let viaDock = CompanionDockApprovalLink.parse("flagship://dock?\(query)")
+        XCTAssertNotNil(viaRemote)
+        XCTAssertEqual(viaRemote, viaDock)
+    }
+
     func test_dockApprovalLink_rejectsWrongHostAndWidths() {
         XCTAssertNil(CompanionDockApprovalLink.parse("flagship://dock?server=evil.example&request=x&code=y"))
-        XCTAssertNil(CompanionDockApprovalLink.parse("https://web.flagshipserver.com/dock"))
+        XCTAssertNil(CompanionDockApprovalLink.parse("https://webapp.flagshipserver.com/dock"))
+        // Only the two sanctioned labels — a third host is not a remote link.
+        let request = String(repeating: "ab", count: 16)
+        let code = String(repeating: "cd", count: 32)
+        XCTAssertNil(CompanionDockApprovalLink.parse(
+            "flagship://companion?server=home.alice.flagship.services&request=\(request)&code=\(code)"
+        ))
     }
 }

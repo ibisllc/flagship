@@ -26,7 +26,7 @@ export function initCompanionDockStartView({ onComplete } = {}) {
 }
 
 export function enterCompanionDockStart() {
-  setSubtitle("dock a browser");
+  setSubtitle("remote");
   show("view-dock-start");
   resetDockStart();
 }
@@ -74,7 +74,7 @@ async function beginSelectedDock() {
     if (myRun !== runNumber) return;
     const persisted = activateDockedBrowser(approved);
     if (persisted.error) throw new Error(persisted.error);
-    setMessage("Approved. Opening your companion…");
+    setMessage("Approved. Opening your remote…");
     history.replaceState({}, "", "/");
     await onDocked?.(persisted);
   } catch (error) {

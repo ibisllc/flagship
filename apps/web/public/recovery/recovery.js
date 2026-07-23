@@ -4,7 +4,7 @@
 // passkey created/used here is scoped to rpId =
 // "recovery.flagshipserver.com" via the browser's WebAuthn same-origin
 // enforcement — so an XSS on flagshipserver.com or
-// web.flagshipserver.com cannot silently exercise it. This is the C3/B1
+// webapp.flagshipserver.com cannot silently exercise it. This is the C3/B1
 // audit fix.
 //
 // We never see the user's IRK private key here. The webapp (parent)
@@ -78,11 +78,16 @@ const ARGON2_SALT_TAG = "flagship.recovery.argon2.v1";
 const FETCH_TOKEN_INFO = new TextEncoder().encode("flagship.recovery.fetch.v1");
 const PRF_SALT_INFO = new TextEncoder().encode("flagship.recovery.salt.v1");
 
-// The webapp (web.flagshipserver.com) is the only postMessage peer we
-// trust. Browsers enforce this via `event.origin`; we also re-pin every
-// outbound postMessage's targetOrigin so a compromised/redirected
+// The owner webapp (webapp.flagshipserver.com) is the only postMessage
+// peer we trust. Browsers enforce this via `event.origin`; we also re-pin
+// every outbound postMessage's targetOrigin so a compromised/redirected
 // parent can't widen the audience.
-const PARENT_ORIGIN = "https://web.flagshipserver.com";
+//
+// Deliberately NOT widened to remote.flagshipserver.com: a remote session
+// is keyless by construction and has no business enrolling or unwrapping
+// a recovery credential (the whole recovery surface is disabled there —
+// see companionGuard's UNAVAILABLE_IDS). One origin in, one origin out.
+const PARENT_ORIGIN = "https://webapp.flagshipserver.com";
 
 const state = {
   mode: null, // "enroll" | "recover" | null

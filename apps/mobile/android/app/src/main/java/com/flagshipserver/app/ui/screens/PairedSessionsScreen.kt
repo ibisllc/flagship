@@ -1,5 +1,5 @@
 // Browser-sessions list — Settings → Browser sessions. Lists every
-// docked-browser session on the leader pod; tap to revoke.
+// remote-browser session on the leader pod; tap to revoke.
 
 package com.flagshipserver.app.ui.screens
 
@@ -48,7 +48,7 @@ fun PairedSessionsScreen(nav: NavController) {
     val sessions = remember { mutableStateListOf<PairedSessionSummary>() }
     var error by remember { mutableStateOf<String?>(null) }
     var loaded by remember { mutableStateOf(false) }
-    // Revoking a browser session is destructive (the docked computer loses
+    // Revoking a browser session is destructive (the remote computer loses
     // access), so it gates behind a grey Cancel / red Revoke confirm dialog
     // like every other destructive action (spec S3).
     var revokeTarget by remember { mutableStateOf<PairedSessionSummary?>(null) }
@@ -98,7 +98,7 @@ fun PairedSessionsScreen(nav: NavController) {
                         style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
                     )
                     Text(
-                        "Dock a browser to manage this account from a computer.",
+                        "Connect a remote browser to manage this account from a computer.",
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 12.sp, lineHeight = 18.sp),
                     )
