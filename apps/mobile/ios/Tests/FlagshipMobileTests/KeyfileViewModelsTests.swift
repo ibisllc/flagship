@@ -36,21 +36,18 @@ final class KeyfileViewModelsTests: XCTestCase {
 
     // MARK: - Export
 
-    func test_export_gateRequiresStrongPassphraseAndAllAcks() {
+    func test_export_gateRequiresMinimumPassphraseAndControlAcknowledgment() {
         let vm = KeyfileExportViewModel(username: "harry", readUMK: { _ in SymmetricKey(size: .bits256) })
         XCTAssertFalse(vm.canCreate)
         vm.passphrase = "weak"
         vm.confirmPassphrase = "weak"
         XCTAssertFalse(vm.canCreate, "weak passphrase blocks")
-        vm.passphrase = "Str0ng-Passphrase!"
-        vm.confirmPassphrase = "Str0ng-Passphrase!"
+        vm.passphrase = "twelveletters"
+        vm.confirmPassphrase = "twelveletters"
         XCTAssertTrue(vm.passphraseStrong)
         XCTAssertTrue(vm.passphrasesMatch)
-        XCTAssertFalse(vm.canCreate, "acks still unchecked")
+        XCTAssertFalse(vm.canCreate, "acknowledgment still unchecked")
         vm.ackControl = true
-        vm.ackOffline = true
-        XCTAssertFalse(vm.canCreate, "needs all three acks")
-        vm.ackNoRecovery = true
         XCTAssertTrue(vm.canCreate)
     }
 
@@ -58,7 +55,7 @@ final class KeyfileViewModelsTests: XCTestCase {
         let vm = KeyfileExportViewModel(username: "harry", readUMK: { _ in SymmetricKey(size: .bits256) })
         vm.passphrase = "Str0ng-Passphrase!"
         vm.confirmPassphrase = "Different-One99!"
-        vm.ackControl = true; vm.ackOffline = true; vm.ackNoRecovery = true
+        vm.ackControl = true
         XCTAssertFalse(vm.passphrasesMatch)
         XCTAssertFalse(vm.canCreate)
     }
@@ -68,7 +65,7 @@ final class KeyfileViewModelsTests: XCTestCase {
         let vm = KeyfileExportViewModel(username: "harry", accountId: "acct-9", readUMK: { _ in umk })
         vm.passphrase = "Str0ng-Passphrase!"
         vm.confirmPassphrase = "Str0ng-Passphrase!"
-        vm.ackControl = true; vm.ackOffline = true; vm.ackNoRecovery = true
+        vm.ackControl = true
 
         await vm.createBackup()
 
@@ -89,10 +86,9 @@ final class KeyfileViewModelsTests: XCTestCase {
 
     func test_export_strengthRule() {
         XCTAssertFalse(KeyfileExportViewModel.isStrong("short"))
-        XCTAssertFalse(KeyfileExportViewModel.isStrong("alllowercaseonly"))   // 1 class
-        XCTAssertFalse(KeyfileExportViewModel.isStrong("Two-Classes"))         // < 12 -> false anyway
-        XCTAssertTrue(KeyfileExportViewModel.isStrong("Str0ng-Passphrase!"))   // 4 classes, 18 chars
-        XCTAssertTrue(KeyfileExportViewModel.isStrong("MyLongPass99"))         // upper+lower+digit, 12 chars
+        XCTAssertFalse(KeyfileExportViewModel.isStrong("elevenchars"))
+        XCTAssertTrue(KeyfileExportViewModel.isStrong("twelveletters"))
+        XCTAssertTrue(KeyfileExportViewModel.isStrong("aaaaaaaaaaaa"))
     }
 
     // MARK: - Import

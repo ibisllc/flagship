@@ -9,7 +9,7 @@ import FlagshipCore
 /// passphrase-encrypted `.flagshipkey` file, byte-compatible with
 /// `packages/protocol/src/keyfile.ts`.
 ///
-/// The view holds the three required acknowledgments + the passphrase;
+/// The view holds the required control acknowledgment + the passphrase;
 /// this VM only validates strength and runs the wrap. The produced file
 /// text is handed back so the host can present a share sheet — we never
 /// write it anywhere on our own.
@@ -28,11 +28,8 @@ public final class KeyfileExportViewModel {
     public var passphrase: String = ""
     public var confirmPassphrase: String = ""
 
-    /// The three required acknowledgments. All must be true before the
-    /// "Create backup file" button enables.
+    /// Required before the "Create backup file" button enables.
     public var ackControl: Bool = false
-    public var ackOffline: Bool = false
-    public var ackNoRecovery: Bool = false
 
     public let username: String
     public let accountId: String?
@@ -53,14 +50,12 @@ public final class KeyfileExportViewModel {
         self.readUMK = readUMK
     }
 
-    /// All three acknowledgments checked.
+    /// The user acknowledged that the file + passphrase control the account.
     public var acknowledged: Bool {
-        ackControl && ackOffline && ackNoRecovery
+        ackControl
     }
 
-    /// Enough-strength passphrase: at least 12 chars and not trivially
-    /// uniform. The keyfile floor is 8; we ask for more in the UI since
-    /// this file is the keys to the whole account.
+    /// The backup UI requires at least 12 characters.
     public var passphraseStrong: Bool {
         Self.isStrong(passphrase)
     }
@@ -70,23 +65,15 @@ public final class KeyfileExportViewModel {
     }
 
     /// The "Create backup file" CTA is enabled only when everything
-    /// lines up: strong passphrase, confirmation matches, all three
-    /// acknowledgments checked.
+    /// lines up: minimum-length passphrase, confirmation matches, and the
+    /// acknowledgment is checked.
     public var canCreate: Bool {
         passphraseStrong && passphrasesMatch && acknowledged
     }
 
-    /// A simple, defensible strength rule. Surfaces enforce; this is a
-    /// floor, not a meter. >= 12 chars, and at least 3 of 4 character
-    /// classes (lower / upper / digit / symbol).
+    /// A simple minimum-length rule shared by the UI and action layer.
     static func isStrong(_ s: String) -> Bool {
-        guard s.count >= 12 else { return false }
-        let lower = s.contains { $0.isLowercase }
-        let upper = s.contains { $0.isUppercase }
-        let digit = s.contains { $0.isNumber }
-        let symbol = s.contains { !$0.isLetter && !$0.isNumber && !$0.isWhitespace }
-        let classes = [lower, upper, digit, symbol].filter { $0 }.count
-        return classes >= 3
+        s.count >= 12
     }
 
     /// Suggested filename for the share sheet: `<username>.flagshipkey`.

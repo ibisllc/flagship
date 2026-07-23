@@ -5,9 +5,9 @@ import FlagshipCore
 /// "Back up your account key" — exports the UMK into a passphrase-
 /// encrypted `.flagshipkey` file. Reached from Settings → Recovery.
 ///
-/// Copy is approved + verbatim. The "Create backup file" CTA enables
-/// only when a strong passphrase is set + confirmed AND all three
-/// acknowledgments are checked. On success the file is offered via the
+/// The "Create backup file" CTA enables only when a 12+-character
+/// passphrase is set + confirmed and the control acknowledgment is checked.
+/// On success the file is offered via the
 /// share sheet as `<username>.flagshipkey`; we never write it ourselves.
 public struct KeyfileExportScreen: View {
     @Environment(\.colorScheme) private var scheme
@@ -24,12 +24,6 @@ public struct KeyfileExportScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
-                Text("Back up your account key")
-                    .font(FS.font.h2()).foregroundColor(c.text)
-
-                Text("This saves your whole Flagship identity into one encrypted file. It's how you recover if you lose all your devices, and how you add this account to another device.")
-                    .font(FS.font.body()).foregroundColor(c.textMuted)
-
                 dangerCard(c: c)
                 passphraseCard(c: c)
                 acknowledgmentCard(c: c)
@@ -98,26 +92,19 @@ public struct KeyfileExportScreen: View {
     private func passphraseCard(c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text("Set a passphrase to encrypt the file. You'll need the file and this passphrase to restore your account. We can't reset it.")
-                    .font(FS.font.bodySm())
-                    .foregroundColor(c.textMuted)
                 FSField(
                     value: $vm.passphrase,
                     label: "Passphrase",
-                    placeholder: "A long, memorable passphrase",
-                    helper: vm.passphrase.isEmpty || vm.passphraseStrong
-                        ? "Use at least 12 characters with a mix of cases, numbers, or symbols."
-                        : nil,
+                    helper: "12 characters minimum",
                     error: vm.passphrase.isEmpty || vm.passphraseStrong
                         ? nil
-                        : "Too weak — use 12+ characters mixing cases, numbers, or symbols.",
+                        : "12 characters minimum",
                     secure: true
                 )
                 .accessibilityIdentifier("keyfile-export-passphrase")
                 FSField(
                     value: $vm.confirmPassphrase,
-                    label: "Confirm passphrase",
-                    placeholder: "Re-enter your passphrase",
+                    label: "Confirm Passphrase",
                     error: vm.confirmPassphrase.isEmpty || vm.passphrasesMatch
                         ? nil
                         : "Passphrases don't match.",
@@ -135,18 +122,6 @@ public struct KeyfileExportScreen: View {
                     isOn: $vm.ackControl,
                     text: "I understand anyone with this file and passphrase controls my entire account.",
                     id: "keyfile-export-ack-control",
-                    c: c
-                )
-                checkbox(
-                    isOn: $vm.ackOffline,
-                    text: "I'll keep it offline and out of any cloud, shared folder, email, or chat.",
-                    id: "keyfile-export-ack-offline",
-                    c: c
-                )
-                checkbox(
-                    isOn: $vm.ackNoRecovery,
-                    text: "I understand no one can recover it for me — losing it can mean losing the account forever.",
-                    id: "keyfile-export-ack-norecovery",
                     c: c
                 )
             }
