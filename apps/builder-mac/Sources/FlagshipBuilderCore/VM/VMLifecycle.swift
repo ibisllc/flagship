@@ -54,6 +54,26 @@ public enum VMState: Codable, Sendable, Equatable {
             }
         }
     }
+
+    public var canPowerOn: Bool {
+        switch self {
+        case .installed, .stopped:
+            return true
+        case .failed(let failure):
+            return failure.phase == .run
+        default:
+            return false
+        }
+    }
+
+    public var canPowerOff: Bool {
+        switch self {
+        case .awaitingPhoneUnlock, .running:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 public enum VMEvent: Sendable, Equatable {

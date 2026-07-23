@@ -202,6 +202,9 @@ controls (destructive deletion remains in the full app). A valid native ICO now
 survives WPF startup decoding; normal launch is least-privileged, with an explicit
 File → Restart as administrator action reserved for raw USB writes. The 222-test
 Windows suite, warning-free build, publish, and packaged-window smoke test pass.
+The macOS status menu also recovers runtime-failed guests and rechecks a completed
+stop before restarting; its packaged app and 173-test suite pass.
+
 **2026-07-22 (Windows Studio Mac-parity flow) — Windows now opens on a live
 phone-pairing cover and preserves the authorization boundary.** WPF has separate
 QR, SAS-confirm, and awaiting-authorization panes; manual recipe entry is the

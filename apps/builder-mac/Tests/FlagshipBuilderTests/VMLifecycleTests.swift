@@ -114,6 +114,19 @@ final class VMLifecycleTests: XCTestCase {
         XCTAssertEqual(effects, [.startVirtualMachine])
     }
 
+    func testPowerControlsMatchLifecycleTransitions() {
+        XCTAssertTrue(VMState.installed.canPowerOn)
+        XCTAssertTrue(VMState.stopped.canPowerOn)
+        XCTAssertTrue(VMState.failed(VMFailure(phase: .run, reason: "x")).canPowerOn)
+        XCTAssertFalse(VMState.failed(VMFailure(phase: .install, reason: "x")).canPowerOn)
+        XCTAssertFalse(VMState.running.canPowerOn)
+
+        XCTAssertTrue(VMState.running.canPowerOff)
+        XCTAssertTrue(VMState.awaitingPhoneUnlock.canPowerOff)
+        XCTAssertFalse(VMState.stopped.canPowerOff)
+        XCTAssertFalse(VMState.installing.canPowerOff)
+    }
+
     // MARK: - Invalid transitions are loud, not swallowed
 
     func testInvalidTransitionsThrow() {

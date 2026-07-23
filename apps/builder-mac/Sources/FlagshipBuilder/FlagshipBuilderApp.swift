@@ -103,12 +103,7 @@ private struct MenuBarContent: View {
     @ObservedObject var vmManager: VMManager
 
     private var runningServers: [VMManager.HostedServer] {
-        vmManager.servers.filter {
-            switch $0.record.state {
-            case .running, .awaitingPhoneUnlock: return true
-            default: return false
-            }
-        }
+        vmManager.servers.filter { $0.record.state.canPowerOff }
     }
 
     var body: some View {
@@ -140,22 +135,23 @@ private struct MenuBarContent: View {
 
     @ViewBuilder
     private func serverActions(_ server: VMManager.HostedServer) -> some View {
-        switch server.record.state {
-        case .installed, .stopped:
+        if server.record.state.canPowerOn {
             Button("Start") {
                 Task { await vmManager.powerOn(named: server.id) }
             }
-        case .running, .awaitingPhoneUnlock:
+        } else if server.record.state.canPowerOff {
             Button("Stop") {
                 Task { await vmManager.powerOff(named: server.id) }
             }
             Button("Restart") {
                 Task {
                     await vmManager.powerOff(named: server.id)
-                    await vmManager.powerOn(named: server.id)
+                    if vmManager.server(named: server.id)?.record.state.canPowerOn == true {
+                        await vmManager.powerOn(named: server.id)
+                    }
                 }
             }
-        default:
+        } else {
             Text(server.record.state.label)
         }
     }
