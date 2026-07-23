@@ -126,7 +126,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Keep entries terse: what changed +
-> what remains, not test counts or commit hashes. Last updated **2026-07-22**.
+> what remains, not test counts or commit hashes. Last updated **2026-07-23**.
 
 ### Pending owner validation (the standing caveat — applies to nearly every entry below)
 
@@ -148,6 +148,13 @@ harness can't do:
   ISO + a physical OTG drive (`apps/mobile/android/OTG-BUILDER-NOTES.md` §5).
 
 ### Recent work (condensed log, newest first)
+
+**2026-07-23 (desktop-download parity) — every active public Flagship Studio
+promotion shows both macOS and Windows; platform detection changes emphasis but
+never hides the other download.** The homepage now promotes both desktop builds
+in its opening and closing calls to action. `/ready/` remains compatibility for
+the homepage's browser-mediated QR recipe handoff and old `/build/` arrivals;
+direct phone↔Studio pairing is the newer primary ceremony.
 
 **2026-07-22 (today's integration + Settings parity) — the companion dock,
 Windows-native builder work, and dev→prod dataspace/promotion flow are on main,

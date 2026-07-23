@@ -85,6 +85,11 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).toContain("iOS soon");
     expect(r.body).toContain("Android soon");
     expect(r.body).toContain('aria-disabled="true"');
+    expect(r.body).toContain('data-studio-platform="mac"');
+    expect(r.body).toContain('href="/download/mac"');
+    expect(r.body).toContain('data-studio-platform="windows"');
+    expect(r.body).toContain('href="/download/windows"');
+    expect(r.body).toContain("userAgentData?.platform");
   });
 
   it("every app-promotion fallback points to the live web app without dead native links", async () => {
@@ -103,6 +108,16 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(notFound.statusCode).toBe(200);
     expect(notFound.body).toContain('href="https://web.flagshipserver.com/"');
     expect(notFound.body).not.toContain("Get the mobile app");
+  });
+
+  it("never promotes one available desktop build without the other", async () => {
+    const app = buildServer();
+    for (const path of ["/", "/ready/", "/ready/ready.js"]) {
+      const r = await app.inject({ method: "GET", url: path });
+      expect(r.statusCode, path).toBe(200);
+      expect(r.body, path).toContain("/download/mac");
+      expect(r.body, path).toContain("/download/windows");
+    }
   });
 
   it("shows the patent-pending notice across public site footers", async () => {

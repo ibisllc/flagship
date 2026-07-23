@@ -244,9 +244,9 @@ export interface R2ObjectLike {
 const PROXY_PREFIX = "/api/";
 
 // Flagship Studio installer targets, keyed by the OS slug used in
-// /download/<os>. The /ready/ page links to /download/<os> (on-brand, so the
-// storage URL never shows in the UI); we 302 to wherever the binary actually
-// lives (GitHub Releases asset, R2 object, …) — swappable here without
+// /download/<os>. Public download surfaces link to /download/<os> (on-brand,
+// so the storage URL never shows in the UI); we 302 to wherever the binary
+// actually lives (GitHub Releases asset, R2 object, …) — swappable here without
 // touching the page. Empty → the /docs#burn explainer ("get the Builder",
 // i.e. coming soon). Set each once that platform's build is published.
 const INSTALLER_DOWNLOADS: Record<string, string> = {

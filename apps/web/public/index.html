@@ -554,6 +554,35 @@
     }
 
     .hero-ctas { display: flex; flex-wrap: wrap; gap: 10px; }
+    .studio-promo {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 7px;
+      margin-top: 12px;
+      font-family: var(--type-mono);
+      font-size: 10px;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+    .studio-promo--center { justify-content: center; }
+    .studio-promo__label { color: var(--muted); margin-right: 2px; }
+    .studio-download {
+      min-height: 30px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 10px;
+      border: 1px solid var(--rule-strong);
+      border-radius: 4px;
+      color: var(--ink);
+      background: color-mix(in srgb, var(--canvas-2) 74%, transparent);
+    }
+    .studio-download:hover,
+    .studio-download.is-preferred {
+      border-color: var(--teal);
+      color: var(--teal-bright);
+      background: var(--teal-soft);
+    }
     .hero-hint {
       margin: 18px 0 0;
       font-family: var(--type-mono);
@@ -1137,6 +1166,12 @@
             </span>
           </div>
 
+          <div class="studio-promo" data-studio-downloads aria-label="Download Flagship Studio">
+            <span class="studio-promo__label">Flagship Studio</span>
+            <a class="studio-download" data-studio-platform="mac" href="/download/mac">macOS</a>
+            <a class="studio-download" data-studio-platform="windows" href="/download/windows">Windows</a>
+          </div>
+
           <p class="hero-hint">
             <span class="arrow" aria-hidden="true">→</span>
             Already have the app?
@@ -1347,6 +1382,11 @@
             <span>Android soon</span>
           </span>
         </div>
+        <div class="studio-promo studio-promo--center" data-studio-downloads aria-label="Download Flagship Studio">
+          <span class="studio-promo__label">Flagship Studio</span>
+          <a class="studio-download" data-studio-platform="mac" href="/download/mac">macOS</a>
+          <a class="studio-download" data-studio-platform="windows" href="/download/windows">Windows</a>
+        </div>
       </div>
 
       <footer class="footer">
@@ -1419,6 +1459,19 @@
      carries across every page. The home toggle uses [data-theme-toggle]. -->
 <script src="/theme.js"></script>
 <script>
+  /* Keep both desktop downloads visible; platform detection changes emphasis
+     only. This avoids turning user-agent ambiguity into a missing option. */
+  (function () {
+    "use strict";
+    const platform = String(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "").toLowerCase();
+    const preferred = platform.includes("win") ? "windows" : platform.includes("mac") ? "mac" : "";
+    if (!preferred) return;
+    document.querySelectorAll(`[data-studio-platform="${preferred}"]`).forEach((link) => {
+      link.classList.add("is-preferred");
+      link.setAttribute("title", "Recommended for this device");
+    });
+  })();
+
   /* QR overlay controller — moves the live QR node between hero and
      overlay so the relay writes to a single source of truth.
      No mirroring. The canvas + digits elements physically reparent. */

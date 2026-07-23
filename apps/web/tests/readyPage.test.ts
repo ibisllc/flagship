@@ -57,6 +57,8 @@ describe("/ready/ — post-order recipe landing", () => {
     expect(r.body).toContain("/download/mac");
     expect(r.body).toContain("/download/windows");
     expect(r.body).toContain("Windows 10/11 · x64 · .exe");
+    expect(r.body).toContain("detectedDesktopOS");
+    expect(r.body).toContain("Download for");
     expect(r.body).not.toContain("/download/linux");
     expect(r.body).toContain("Windows");
     expect(r.body).toContain("Linux");

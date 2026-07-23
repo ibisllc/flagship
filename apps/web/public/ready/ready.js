@@ -35,6 +35,13 @@ function escapeHtml(s) {
   ));
 }
 
+function detectedDesktopOS() {
+  const platform = String(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "").toLowerCase();
+  if (platform.includes("win")) return "windows";
+  if (platform.includes("mac")) return "mac";
+  return null;
+}
+
 function banner(text, ok = true) {
   const b = $("statusBanner");
   const t = $("statusBannerText");
@@ -96,17 +103,21 @@ function renderInstaller() {
 
   const available = OS_ORDER.filter((os) => OS_INFO[os].href);
   const pending = OS_ORDER.filter((os) => !OS_INFO[os].href);
-  primary.innerHTML = available.map((os) => {
-    const info = OS_INFO[os];
-    return '<a class="dl-primary" href="' + info.href + '">Download for ' + escapeHtml(info.label) + '</a>';
-  }).join("");
-  others.innerHTML = pending.map((os) => {
+  const detected = detectedDesktopOS();
+  const preferred = detected && available.includes(detected) ? detected : available[0];
+  const otherAvailable = available.filter((os) => os !== preferred);
+  const info = OS_INFO[preferred];
+  primary.innerHTML = '<a class="dl-primary" href="' + info.href + '">Download for ' + escapeHtml(info.label) + '</a>';
+  others.innerHTML = otherAvailable.map((os) => {
+    const other = OS_INFO[os];
+    return '<a class="btn-link" href="' + other.href + '">Download for ' + escapeHtml(other.label) + '</a>';
+  }).concat(pending.map((os) => {
     const info = OS_INFO[os];
     return '<span class="dl-pending" aria-disabled="true">' + escapeHtml(info.label) + ' · ' + escapeHtml(info.note) + '</span>';
-  }).join("");
+  })).join("");
   const note = document.createElement("div");
   note.className = "dl-note";
-  note.textContent = "macOS and Windows are available now. Linux remains in pre-release development.";
+  note.textContent = info.note + ". macOS and Windows are both available now.";
   primary.appendChild(note);
 }
 
