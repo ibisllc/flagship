@@ -3,7 +3,7 @@ import CryptoKit
 import Flagship
 import FlagshipCore
 
-/// Settings → Recovery setup. Walks the user through registering a
+/// Settings → Cloud recovery. Walks the user through registering a
 /// passkey on flagshipserver.com + uploading a wrapped UMK envelope.
 public struct RecoveryScreen: View {
     @Environment(\.colorScheme) private var scheme
@@ -129,7 +129,7 @@ public struct RecoveryScreen: View {
             .padding(FS.space.s6)
         }
         .background(c.bg.ignoresSafeArea())
-        .navigationTitle("Recovery")
+        .navigationTitle("Cloud recovery")
         .navigationBarTitleDisplayMode(.inline)
     }
 

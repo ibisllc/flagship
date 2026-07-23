@@ -1,7 +1,7 @@
 import SwiftUI
 import FlagshipAPI
 
-/// Settings → Recovery → Re-attach progress.
+/// Settings → Cloud recovery → Re-attach progress.
 ///
 /// Surfaces the daemon's J.3 / J.4 state machine to the user after a
 /// successful re-pair. The view polls `/api/screens/post-recovery/status`

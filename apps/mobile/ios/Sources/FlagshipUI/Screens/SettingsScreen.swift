@@ -464,7 +464,7 @@ public struct SettingsScreen: View {
                 action: onOpenAccountSecurity
             ),
             FSSettingsRow(icon: "sparkles", title: "AI keys", subtitle: "Bring-your-own keys for building apps", action: onOpenAiKeys),
-            FSSettingsRow(icon: "key.horizontal.fill", title: "Recovery", subtitle: "Recover on a new device", action: onOpenRecovery),
+            FSSettingsRow(icon: "key.horizontal.fill", title: "Cloud recovery", subtitle: "Recover on a new device", action: onOpenRecovery),
             FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: "Back up account key", subtitle: "Save an encrypted key file", action: onOpenKeyfileBackup),
             FSSettingsRow(icon: "person.2.circle.fill", title: "Profiles", subtitle: "Switch between your clouds", action: onOpenProfiles),
         ])

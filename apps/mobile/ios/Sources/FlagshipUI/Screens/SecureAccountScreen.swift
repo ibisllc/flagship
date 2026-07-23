@@ -110,7 +110,7 @@ public struct SecureAccountScreen: View {
             if recoveryVm == nil {
                 // Platform-backed provider on device; the simulator path
                 // falls back to a stable HKDF derivation. Same wiring as
-                // Settings → Recovery (RecoveryContainer).
+                // Settings → Cloud recovery (RecoveryContainer).
                 recoveryVm = RecoveryViewModel(
                     client: server,
                     webAuthn: PlatformWebAuthnProvider(),

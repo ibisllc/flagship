@@ -7,7 +7,7 @@ public struct ActivityFeed: Sendable {
     public let pairedSessions: [PairedSessionSummary]
     /// Non-nil when the daemon reports a J.3/J.4 reissuance snapshot
     /// (post-recovery walk). Surfaces as a card on Activity that
-    /// links into the Settings → Recovery → Re-attach progress
+    /// links into the Settings → Cloud recovery → Re-attach progress
     /// screen. Mirrors webapp activity.js fan-out.
     public let postRecovery: PostRecoverySnapshot?
     /// Account-level audit events from flagshipserver.com — device

@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 import FlagshipCore
 
 /// "Back up your account key" — exports the UMK into a passphrase-
-/// encrypted `.flagshipkey` file. Reached from Settings → Recovery.
+/// encrypted `.flagshipkey` file. Reached from Settings → Back up account key.
 ///
 /// The "Create backup file" CTA enables only when a 12+-character
 /// passphrase is set + confirmed and the control acknowledgment is checked.
