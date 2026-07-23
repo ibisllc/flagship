@@ -169,8 +169,11 @@ UNCHANGED so already-installed boxes keep working; the daemon's CORS allowlist
 gains the four new origins and keeps the two old ones until the fleet turns
 over. Recovery's postMessage parent is pinned to `webapp.` only — a keyless
 remote has no business touching a recovery credential. Web shell cache is v26.
-`web./dock` gets its own direct 308 to `remote./` rather than double-hopping
-through `webapp./dock` — it was the bookmark people actually held.
+`web./dock` gets its own direct 308 to `remote./` — it was the bookmark people
+actually held. `webapp./dock` has NO redirect and must not gain one: that host
+is new, nothing ever linked to it, and the shell enters the remote flow on
+HOSTNAME only (never on a `/dock` path) so the ceremony can't run on the owner
+origin and defeat the storage isolation the split exists for.
 **DEPLOYED + live-verified 2026-07-23.** `.com` Worker deployed (version
 `cb1c93ed`); wrangler provisioned both custom domains. Verified on the wire:
 `webapp.` and `remote.` both serve the shell with valid edge certs, `remote./`
@@ -182,7 +185,11 @@ postMessage parent, and shell cache is v26. `.services` Fly also deployed;
 restart drops the hub for ~20s and every box's TLS goes with it until the daemon
 re-dials the tunnel — it self-heals, but don't mistake it for a regression.
 **Remaining (owner):** rebuild iOS/Android so devices get the rename; existing
-boxes pick up the daemon CORS entry on their next daemon update or reburn.
+boxes pick up the daemon CORS entry on their next daemon update or reburn —
+until then a browser on `webapp.`/`remote.` is CORS-blocked by an old box (it
+answers 200 but omits the ACAO header, so the browser discards the response).
+Verified on `home.openai-build`: `web.` is allowed, the two new origins are not.
+Native phone clients send no Origin and are entirely unaffected.
 
 **2026-07-23 (direct Studio onboarding) — the legacy homepage recipe QR and
 `/ready` landing are retired; `/studio` is the short download and pairing URL.**

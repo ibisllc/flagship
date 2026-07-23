@@ -478,15 +478,13 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // /api/* and /og + control-plane routes are NOT exposed here. The
   // webapp itself talks to the user's pod for /api/screens/* and to the
   // apex for anything .com-resident — never to webapp. directly.
+  // No `/dock` special-case here: this host is brand new, so no bookmark
+  // or link ever pointed at `webapp./dock`. The one URL people actually
+  // held is `web./dock`, and that gets its own direct 308 above. Typing
+  // `webapp./dock` just boots the ordinary webapp — which is the point:
+  // the remote ceremony must not be reachable on the owner origin, or the
+  // storage isolation the split exists for is gone.
   if (url.hostname === webappHost(env)) {
-    // `/dock` was the remote flow's path back when one origin did both
-    // jobs. It now lives at the root of its own host.
-    if (url.pathname === "/dock" || url.pathname === "/dock/") {
-      return new Response(null, {
-        status: 308,
-        headers: { location: `https://${remoteHost(env)}/${url.search}` },
-      });
-    }
     return serveWebapp(request, url, env);
   }
 

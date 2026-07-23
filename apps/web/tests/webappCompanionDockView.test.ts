@@ -160,6 +160,22 @@ describe("app.js — companion-dock wiring", () => {
     const body = await fetchAsset("/webapp/app.js");
     expect(body).toContain('"settings-tab-companion-dock"');
   });
+
+  it("enters the remote flow on HOST, never on a /dock path", async () => {
+    // The security property of the webapp./remote. split: a remote session's
+    // storage must live on remote.<apex>. If the shell entered the ceremony
+    // because of a PATH, then webapp./dock would run it on the owner origin
+    // and the isolation would be gone. Host is the only trigger.
+    const body = await fetchAsset("/webapp/app.js");
+    expect(body).toContain("isRemoteSurface()");
+    expect(body).not.toMatch(/pathname === ["']\/dock\/?["']/);
+  });
+
+  it("isRemoteSurface keys off the remote. hostname", async () => {
+    const body = await fetchAsset("/webapp/lib/apex.js");
+    expect(body).toContain("export function isRemoteSurface");
+    expect(body).toContain('startsWith("remote.")');
+  });
 });
 
 describe("companionGuard.js — read surface", () => {

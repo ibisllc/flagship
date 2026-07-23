@@ -588,14 +588,14 @@ async function boot() {
 
   // On remote.<apex> the whole origin IS the remote surface, so every entry
   // path lands on the "start a remote session" view — there is nothing else
-  // here to open. `/dock` stays recognised because the pre-release testers'
-  // bookmarks point at the old path; the Worker 308s webapp.'s `/dock` here,
-  // and this keeps that landing honest even on a cached shell.
-  if (
-    isRemoteSurface() ||
-    window.location.pathname === "/dock" ||
-    window.location.pathname === "/dock/"
-  ) {
+  // here to open.
+  //
+  // The HOST is the only trigger; a `/dock` path is deliberately NOT one.
+  // Keying off the path would let the ceremony run on the owner webapp's
+  // origin, which is exactly the storage isolation the webapp./remote. split
+  // exists to enforce. The old `web./dock` bookmark is handled where it
+  // belongs — a 308 in the Worker, before any shell loads.
+  if (isRemoteSurface()) {
     enterCompanionDockStart();
     return;
   }

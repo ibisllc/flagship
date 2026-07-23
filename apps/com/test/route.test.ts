@@ -940,13 +940,17 @@ describe("webapp host — client-route SPA fallback (the /join pairing bug)", ()
     expect(await r.text()).toBe("asset:/webapp/index.html");
   });
 
-  it("/dock on the webapp host 308s to the remote origin (the flow moved hosts)", async () => {
+  it("webapp./dock is NOT the remote flow — it boots the ordinary webapp", async () => {
+    // `webapp.` is a brand-new host: nothing ever linked to /dock on it, so
+    // there is no redirect to honour. What matters is the negative — the
+    // remote ceremony must not be reachable on the OWNER origin, or the
+    // storage isolation the host split exists for is defeated.
     const r = await route(
       new Request("https://webapp.flagshipserver.com/dock"),
       makeEnv(),
     );
-    expect(r.status).toBe(308);
-    expect(r.headers.get("location")).toBe("https://remote.flagshipserver.com/");
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/index.html");
   });
 
   it("/ on the remote host serves the webapp shell (the remote ceremony)", async () => {
