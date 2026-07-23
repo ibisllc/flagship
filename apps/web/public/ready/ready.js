@@ -13,7 +13,7 @@ const RECIPE_HANDOFF_KEY = "flagship:qr:recipe";
 // swappable (see INSTALLER_DOWNLOADS in apps/com/src/route.ts).
 const OS_INFO = {
   mac: { label: "macOS", note: "Apple Silicon & Intel · .dmg", href: "/download/mac" },
-  windows: { label: "Windows", note: "Coming soon", href: null },
+  windows: { label: "Windows", note: "Windows 10/11 · x64 · .exe", href: "/download/windows" },
   linux: { label: "Linux", note: "Coming soon", href: null },
 };
 const OS_ORDER = ["mac", "windows", "linux"];
@@ -94,17 +94,20 @@ function renderInstaller() {
   const others = $("installerOthers");
   if (!primary || !others) return;
 
-  const mac = OS_INFO.mac;
-  primary.innerHTML =
-    `<a class="dl-primary" href="${mac.href}">Download for ${escapeHtml(mac.label)}</a>` +
-    OS_ORDER.filter((os) => os !== "mac").map((os) =>
-      `<span class="dl-pending" aria-disabled="true" title="${escapeHtml(OS_INFO[os].note)}">${escapeHtml(OS_INFO[os].label)} · ${escapeHtml(OS_INFO[os].note)}</span>`
-    ).join("");
+  const available = OS_ORDER.filter((os) => OS_INFO[os].href);
+  const pending = OS_ORDER.filter((os) => !OS_INFO[os].href);
+  primary.innerHTML = available.map((os) => {
+    const info = OS_INFO[os];
+    return '<a class="dl-primary" href="' + info.href + '">Download for ' + escapeHtml(info.label) + '</a>';
+  }).join("");
+  others.innerHTML = pending.map((os) => {
+    const info = OS_INFO[os];
+    return '<span class="dl-pending" aria-disabled="true">' + escapeHtml(info.label) + ' · ' + escapeHtml(info.note) + '</span>';
+  }).join("");
   const note = document.createElement("div");
   note.className = "dl-note";
-  note.textContent = mac.note;
+  note.textContent = "macOS and Windows are available now. Linux remains in pre-release development.";
   primary.appendChild(note);
-  others.textContent = "Mac is available now. Windows and Linux are still in pre-release development.";
 }
 
 function main() {

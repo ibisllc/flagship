@@ -251,7 +251,7 @@ const PROXY_PREFIX = "/api/";
 // i.e. coming soon). Set each once that platform's build is published.
 const INSTALLER_DOWNLOADS: Record<string, string> = {
   mac: "/downloads/FlagshipStudio.dmg",
-  windows: "",
+  windows: "https://github.com/ibisllc/flagship/releases/download/studio-windows-v0.0.1/FlagshipStudio-Windows.exe",
   linux: "",
 };
 

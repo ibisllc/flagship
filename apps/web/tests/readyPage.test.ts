@@ -55,7 +55,8 @@ describe("/ready/ — post-order recipe landing", () => {
     expect(r.body).toContain("navigator.clipboard");
     // Installer links go through the on-brand /download/<os> redirect.
     expect(r.body).toContain("/download/mac");
-    expect(r.body).not.toContain("/download/windows");
+    expect(r.body).toContain("/download/windows");
+    expect(r.body).toContain("Windows 10/11 · x64 · .exe");
     expect(r.body).not.toContain("/download/linux");
     expect(r.body).toContain("Windows");
     expect(r.body).toContain("Linux");

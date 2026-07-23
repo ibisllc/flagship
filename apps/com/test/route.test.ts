@@ -1939,10 +1939,9 @@ describe("Pre-launch stealth gate (/wip_ + /alpha + coming-soon)", () => {
 });
 
 describe("/download/<os> — on-brand installer redirect", () => {
-  it("302s macOS to the notarized DMG, and unset platforms to the /docs#burn explainer", async () => {
-    // macOS is wired to the staged DMG; the rest have no target yet → the
-    // coming-soon explainer, never a dead 404. (The /ready/ page links to
-    // /download/<os> so the storage path never shows in the UI.)
+  it("302s published installers to their artifacts and unset platforms to the explainer", async () => {
+    // Published platforms point at their real artifacts; Linux keeps the
+    // coming-soon explainer. The page only exposes stable on-brand routes.
     const mac = await route(
       new Request("https://flagshipserver.com/download/mac"),
       makeEnv(),
@@ -1950,14 +1949,21 @@ describe("/download/<os> — on-brand installer redirect", () => {
     expect(mac.status).toBe(302);
     expect(mac.headers.get("location")).toBe("/downloads/FlagshipStudio.dmg");
 
-    for (const os of ["windows", "linux"]) {
-      const r = await route(
-        new Request(`https://flagshipserver.com/download/${os}`),
-        makeEnv(),
-      );
-      expect(r.status).toBe(302);
-      expect(r.headers.get("location")).toBe("/docs#burn");
-    }
+    const windows = await route(
+      new Request("https://flagshipserver.com/download/windows"),
+      makeEnv(),
+    );
+    expect(windows.status).toBe(302);
+    expect(windows.headers.get("location")).toBe(
+      "https://github.com/ibisllc/flagship/releases/download/studio-windows-v0.0.1/FlagshipStudio-Windows.exe",
+    );
+
+    const linux = await route(
+      new Request("https://flagshipserver.com/download/linux"),
+      makeEnv(),
+    );
+    expect(linux.status).toBe(302);
+    expect(linux.headers.get("location")).toBe("/docs#burn");
   });
 
   it("works WITHOUT the preview cookie (download link survives the launch gate)", async () => {
