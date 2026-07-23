@@ -503,8 +503,8 @@ function renderEmptyServersList(root, { reason, username } = {}) {
       <p class="note empty-message">${escapeHtml(hint)}</p>
       <button class="primary full-width" id="empty-create-server">${escapeHtml(ctaLabel)}</button>
       ${accountOpen ? '<button class="linklike mt-2" id="empty-take-over">Someone handing you a box? Take over →</button>' : ""}
-      <a class="pill mt-2" href="https://flagshipserver.com/" target="_blank" rel="noopener">
-        Open flagshipserver.com →
+      <a class="pill mt-2" href="https://flagshipserver.com/studio" target="_blank" rel="noopener">
+        Get Flagship Studio →
       </a>
     </div>
   `;

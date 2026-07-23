@@ -4,15 +4,14 @@ import Flagship
 import FlagshipAPI
 import FlagshipCore
 
-/// Phone-side v2 create-server flow.
-///
-/// Phase layout: design → scan/paste → match → minting/delivering →
-/// delivered. The delivered card doubles as the placeholder detail
+/// Phone-side create-server flow. The live path moves from design to a delivery
+/// chooser; builder pairing keeps the reusable QR/code transport used by other
+/// pairing surfaces. Legacy relay phases remain for protocol compatibility.
+/// The delivered card doubles as the placeholder detail
 /// page for the pending pod — the user can tap it from the device
 /// list and see the same content (with a Cancel order button).
 public struct CreateServerStubScreen: View {
     @Environment(\.colorScheme) private var scheme
-    @Environment(DeveloperSettings.self) private var dev
     @Environment(\.flagshipServerClient) private var server
     @Bindable var vm: CreateServerViewModel
     /// Which sub-step of the design phase is showing. The long single-scroll
@@ -122,6 +121,7 @@ public struct CreateServerStubScreen: View {
             }
             .buttonStyle(.plain)
             .disabled(deliveryBusy)
+            .accessibilityIdentifier("cs-delivery-pair")
 
             Button { Task { await shareRecipe() } } label: {
                 deliveryCard(icon: "square.and.arrow.up", accent: c.text,
@@ -140,16 +140,6 @@ public struct CreateServerStubScreen: View {
             }
             .buttonStyle(.plain)
             .disabled(deliveryBusy)
-
-            // MOCK mode only: drive the whole create flow end-to-end with no
-            // desktop/builder via the legacy demo-QR relay path. Keeps the
-            // mock onboarding smoke test exercising a real mint+deliver.
-            if !dev.useLiveClient {
-                FSGhostButton("Use a demo QR (mock)", block: true) {
-                    Task { await vm.qrDetected(QrRelay.makeDemoQrUrl()) }
-                }
-                .accessibilityIdentifier("cs-demo-qr-button")
-            }
 
             if deliveryBusy { spinnerCard(c: c) }
         }
@@ -530,7 +520,7 @@ public struct CreateServerStubScreen: View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             phaseHeader(
                 "Scan the QR",
-                subtitle: "On your desktop, open flagshipserver.com. Aim the viewfinder at the QR on the homepage.",
+                subtitle: "Aim the viewfinder at a compatible Flagship pairing QR.",
                 c: c
             )
 
@@ -564,18 +554,6 @@ public struct CreateServerStubScreen: View {
             }
             .accessibilityIdentifier("cs-paste-toggle")
             .padding(.top, FS.space.s2)
-
-            // MOCK mode only: no desktop QR needed. Generate a valid demo QR
-            // locally and run the REAL flow against the mock relay/server, so
-            // the whole create-server UI is testable end-to-end without infra.
-            // (Replaces the old "skip — pretend it's running" shortcut, which
-            // faked an online server instead of exercising the real flow.)
-            if !dev.useLiveClient {
-                FSGhostButton("Use a demo QR (mock)", block: true) {
-                    Task { await vm.qrDetected(QrRelay.makeDemoQrUrl()) }
-                }
-                .accessibilityIdentifier("cs-demo-qr-button")
-            }
 
             FSGhostButton("Back", block: true) { vm.phase = .design }
         }
@@ -645,8 +623,8 @@ public struct CreateServerStubScreen: View {
     private func deliveredPage(serial: String, serverDomain: String, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             phaseHeader(
-                "Your boot disk is on the way",
-                subtitle: "The desktop browser should have started downloading your personalized ISO. Flash it, boot any commodity machine, and the new server will phone home and finish setup automatically.",
+                "Your recipe is ready",
+                subtitle: "Open the recipe in Flagship Studio, write the boot USB, and boot the target machine. The new server will phone home and finish setup automatically.",
                 c: c
             )
             FSCard {

@@ -1,23 +1,5 @@
-// Phone-side draft composer for a new server — v2 relay protocol.
-//
-// Replaces v1's POST-mint + sealed-box flow with the new client-derived
-// sid + X25519 ECDH + SAS protocol described in:
-//   memory/project_qr_relay_protocol_v2.md
-//
-// Two-step delivery:
-//   1. The user pastes (or scans) the QR URL shown on the homepage:
-//        https://flagshipserver.com/qr?s=<sid>&k=<browserPk-base64url>
-//      We parse out (sid, pk_b).
-//   2. The webapp signs the canonical InstallBlob with the device IRK,
-//      generates an ephemeral X25519 keypair, derives the shared secret
-//      and the 6-digit match code locally, and opens a WS as role=phone.
-//   3. We send {kind:"hello", phonePk} → relay forwards to the browser,
-//      which derives the same match code and displays it. The user
-//      glances between the two screens. **A 600 ms gate** delays the
-//      Confirm button so reflexive double-taps don't bypass the check.
-//   4. On Confirm, we AEAD-encrypt {blob, blobSignature} with kEnc and
-//      send {kind:"deliver", ciphertext, nonce}. On {kind:"delivered"}
-//      we mark the draft and tear down.
+// Client-side draft composer for a new server. The webapp signs the recipe
+// locally, downloads it, and the user opens that file in Flagship Studio.
 
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
@@ -35,7 +17,7 @@ import {
   saveDraft,
 } from "../lib/buildDraft.js";
 import { releaseServerName, serverDomainOf } from "../lib/releaseServer.js";
-import { controlApex, controlHost, serverFqdn } from "../lib/apex.js";
+import { controlApex, serverFqdn } from "../lib/apex.js";
 import { buildPairingOrder } from "../lib/bootApproval.js";
 import { markSwkDepositPending, clearSwkDeposit } from "../lib/swkDeposit.js";
 import { markPairingDepositPending, clearPairingDeposit } from "../lib/pairingDeposit.js";
@@ -66,10 +48,7 @@ const TAG_CLAIM = "flagship/claim-username/v1";
 const TAG_AUTH_CODE = "flagship/auth-code/v1";
 const TAG_RCK_REGISTER = "flagship/rck-register/v1";
 
-const CONFIRM_GATE_MS = 600;
-
 let activeDraftId = null;
-let activeRelay = null;
 let _refreshGen = 0;
 
 function genSerial() {
@@ -87,84 +66,6 @@ async function genEd25519() {
 
 function canonical(parts) {
   return new TextEncoder().encode(parts.join("|"));
-}
-
-// ── base64url helpers ────────────────────────────────────────────────
-function b64urlEncode(bytes) {
-  let s = "";
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-function b64urlDecode(b64u) {
-  const pad = "=".repeat((4 - (b64u.length % 4)) % 4);
-  const b64 = (b64u + pad).replace(/-/g, "+").replace(/_/g, "/");
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-// ── QR-URL parsing ───────────────────────────────────────────────────
-/**
- * Accept either the canonical URL form (https://flagshipserver.com/qr?s=…&k=…)
- * or the deep-link form (flagship://qr?s=…&k=…) or a raw query string
- * fragment ("s=…&k=…"). Returns { sid, pkB }.
- */
-function parseQrUrl(raw) {
-  const text = (raw || "").trim();
-  if (!text) throw new Error("paste the QR URL from the homepage");
-  let s, k;
-  try {
-    if (text.includes("?")) {
-      // URL or deep-link form
-      const u = new URL(text.startsWith("flagship://") ? text.replace("flagship://", "https://_/") : text);
-      s = u.searchParams.get("s");
-      k = u.searchParams.get("k");
-    } else if (text.includes("=")) {
-      const sp = new URLSearchParams(text);
-      s = sp.get("s");
-      k = sp.get("k");
-    }
-  } catch (_) {
-    throw new Error("could not parse the URL");
-  }
-  if (!s || !k) throw new Error("URL missing s= or k= parameter");
-  return { sid: s, pkB: k };
-}
-
-// ── Crypto: derive shared secret + match code + AEAD key ────────────
-async function deriveMaterial(phoneSk, browserPkB64u) {
-  const browserPkBytes = b64urlDecode(browserPkB64u);
-  if (browserPkBytes.length !== 32) throw new Error("browserPk must be 32 bytes");
-  const browserPk = await crypto.subtle.importKey(
-    "raw", browserPkBytes, { name: "X25519" }, false, []
-  );
-  const sharedBits = await crypto.subtle.deriveBits(
-    { name: "X25519", public: browserPk }, phoneSk, 256,
-  );
-  const base = await crypto.subtle.importKey(
-    "raw", sharedBits, "HKDF", false, ["deriveBits"]
-  );
-  async function expand(infoStr, bits) {
-    return new Uint8Array(await crypto.subtle.deriveBits(
-      {
-        name: "HKDF",
-        hash: "SHA-256",
-        salt: new TextEncoder().encode("flagship/qr/v1"),
-        info: new TextEncoder().encode(infoStr),
-      },
-      base,
-      bits,
-    ));
-  }
-  const kEncBytes = await expand("flagship/qr/enc/v1", 256);
-  const sasBytes  = await expand("flagship/qr/sas/v1", 32);
-  const u32 = (sasBytes[0] << 24 | sasBytes[1] << 16 | sasBytes[2] << 8 | sasBytes[3]) >>> 0;
-  const matchCode = (u32 % 1_000_000).toString().padStart(6, "0");
-  const kEnc = await crypto.subtle.importKey(
-    "raw", kEncBytes, "AES-GCM", false, ["encrypt"]
-  );
-  return { matchCode, kEnc };
 }
 
 // ── Drafts UI ───────────────────────────────────────────────────────
@@ -485,11 +386,7 @@ export function clampRecipeTtlMs(raw) {
  * The bundle the webapp already produces (`onWireBlob`) is identical
  * to that shape; we just splat the signature into `blobSignatureHex`.
  */
-function enableRecipeDownload(blobBundle) {
-  const btn = $("cs-download-recipe");
-  if (!btn) return;
-  btn.disabled = false;
-  btn.textContent = "Download recipe (.json)";
+function downloadRecipe(blobBundle) {
   const recipe = { ...blobBundle.blob, blobSignatureHex: blobBundle.blobSignature };
   // Secret-free pairing (offline/embed): carry the unsigned plaintext
   // `pairingOrder` sibling (the owner-IRK-signed `add-paired-session` order) into
@@ -506,20 +403,18 @@ function enableRecipeDownload(blobBundle) {
   // writes it to install-blob.json and the box-side gate can verify it. Absent
   // (the production default) ⇒ recipe is byte-identical + carries no grant.
   if (blobBundle.debugGrant) recipe.debugGrant = blobBundle.debugGrant;
-  btn.onclick = () => {
-    const json = JSON.stringify(recipe, null, 2);
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const stamp = new Date(recipe.authCode.expiresAt)
-      .toISOString()
-      .replace(/[:.]/g, "-")
-      .slice(0, 19);
-    a.download = `flagship-recipe-${recipe.serverDomain}-${stamp}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const json = JSON.stringify(recipe, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const stamp = new Date(recipe.authCode.expiresAt)
+    .toISOString()
+    .replace(/[:.]/g, "-")
+    .slice(0, 19);
+  a.download = `flagship-recipe-${recipe.serverDomain}-${stamp}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4_000);
 }
 
 async function handleSaveDraft() {
@@ -539,8 +434,7 @@ async function handleSaveDraft() {
   }
 }
 
-// ── The v2 deliver flow ──────────────────────────────────────────────
-async function handleDeliverNow() {
+async function handleRecipeDownload() {
   const session = getSession();
   if (!session.umk || !session.irk) {
     return toast("Unlock the webapp first", "err");
@@ -558,29 +452,26 @@ async function handleDeliverNow() {
   const alreadyOpened = !!session.username;
   const username = await ensureUsername();
 
-  let qrUrl;
-  try { qrUrl = parseQrUrl($("cs-relay-session").value); }
-  catch (e) { console.error(e); return toast(humanError(e), "err"); }
-
-  setStatus("active", "minting install blob…");
+  const btn = $("cs-download-recipe");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Creating recipe…";
+  }
+  setStatus("active", "creating signed recipe…");
   let blobBundle;
   try {
     blobBundle = await mintInstallBlobBundle(session, username, inputs, { skipClaim: alreadyOpened });
   } catch (e) {
     setStatus("error", String(e.message || e));
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Create and download recipe";
+    }
     return;
   }
 
-  // Enable the "Download recipe" button now that we have a freshly
-  // signed bundle. The Builder CLI accepts this exact JSON via
-  // `flagship-build verify <file>` / `flagship-build user-data <file>
-  // out.yaml` / `flagship-build prepare <file> <iso> out.iso`.
-  enableRecipeDownload(blobBundle);
-
-  setStatus("active", "connecting to relay…");
   try {
-    await deliverThroughRelay(qrUrl, blobBundle);
-    setStatus("done", "delivered. The browser is downloading the recipe — open it in the Flagship Studio.");
+    downloadRecipe(blobBundle);
     const saved = await saveDraft({
       id: activeDraftId,
       ...inputs,
@@ -590,8 +481,14 @@ async function handleDeliverNow() {
     });
     activeDraftId = saved.id;
     await refreshDrafts();
+    setStatus("done", "Recipe downloaded — open it in Flagship Studio.");
   } catch (e) {
     setStatus("error", String(e.message || e));
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Create and download recipe";
+    }
   }
 }
 
@@ -605,11 +502,8 @@ function setStatus(kind, text) {
   el.textContent = text;
 }
 
-// Exported so the GYM-ONLY `window.__gymCreate` seam (app.js, gym branch only)
-// can drive the EXACT same compose+sign path the real "Deliver to homepage"
-// button uses — the app is the author of the signed recipe. No behaviour change
-// for the normal flow; this is purely making the genuine composer reusable by
-// the live-e2e harness (faithful "create via the app").
+// Exported so the GYM-ONLY `window.__gymCreate` seam can drive the same
+// compose-and-sign path as the download action.
 export async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
   const { serverName, recipeTtlMs } = inputs;
   // §7a.1: only "approve" is carried on the wire; "auto" is the absent-field
@@ -828,106 +722,6 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   return bundle;
 }
 
-async function deliverThroughRelay({ sid, pkB }, blobBundle) {
-  // Generate our ephemeral X25519 keypair.
-  const kp = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
-  const phonePkRaw = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
-  const phonePkB64u = b64urlEncode(phonePkRaw);
-
-  // Derive shared material locally — match code is computed without
-  // server input. The server NEVER sees this value.
-  const { matchCode, kEnc } = await deriveMaterial(kp.privateKey, pkB);
-
-  // Open WS as phone. We always dial the apex — the webapp lives at
-  // web.flagshipserver.com but the relay is on flagshipserver.com.
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  const wsUrl = `${proto}://${controlHost()}/qr-pipe/${encodeURIComponent(sid)}?role=phone`;
-
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(wsUrl);
-    activeRelay = { ws, sid, abort: () => ws.close(1000, "user cancel") };
-    let confirmed = false;
-    let helloSent = false;
-
-    ws.addEventListener("open", () => {
-      ws.send(JSON.stringify({ kind: "hello", phonePk: phonePkB64u }));
-      helloSent = true;
-    });
-
-    ws.addEventListener("close", (e) => {
-      if (!confirmed) reject(new Error(`relay closed (${e.code} ${e.reason || ""})`));
-    });
-    ws.addEventListener("error", () => {
-      if (!confirmed) reject(new Error("relay socket error"));
-    });
-    ws.addEventListener("message", async (ev) => {
-      let m;
-      try { m = JSON.parse(ev.data); } catch { return; }
-      if (!m || typeof m.kind !== "string") return;
-
-      if (m.kind === "ack") {
-        // Show match code + arm the Confirm gate.
-        $("cs-match-code").textContent = `${matchCode.slice(0, 3)} ${matchCode.slice(3)}`;
-        setStatus("active", `compare the code on both screens, then confirm`);
-        try {
-          await waitForConfirm();
-        } catch (e) {
-          ws.close(1000, "cancelled");
-          return reject(e);
-        }
-        try {
-          // AEAD-encrypt the bundle.
-          const plain = new TextEncoder().encode(JSON.stringify(blobBundle));
-          const nonce = crypto.getRandomValues(new Uint8Array(12));
-          const ct = new Uint8Array(await crypto.subtle.encrypt(
-            { name: "AES-GCM", iv: nonce }, kEnc, plain,
-          ));
-          ws.send(JSON.stringify({
-            kind: "deliver",
-            ciphertext: b64urlEncode(ct),
-            nonce: b64urlEncode(nonce),
-          }));
-        } catch (e) {
-          reject(e);
-        }
-      } else if (m.kind === "delivered") {
-        confirmed = true;
-        try { ws.close(1000, "delivered"); } catch (_e) {}
-        resolve();
-      } else if (m.kind === "peer-missing") {
-        reject(new Error("the browser at the homepage isn't connected — reload it and retry"));
-      } else if (m.kind === "expired") {
-        reject(new Error("session expired — refresh the homepage and try again"));
-      } else if (m.kind === "error") {
-        reject(new Error(`relay: ${m.reason}`));
-      }
-    });
-  });
-}
-
-// Confirm gate — Tor-style 600 ms enforced pause so the user can read
-// the codes before tapping. Returns a promise that resolves on Confirm
-// or rejects on Cancel.
-function waitForConfirm() {
-  return new Promise((resolve, reject) => {
-    const btn = $("cs-deliver");
-    if (!btn) return reject(new Error("confirm button missing"));
-    btn.textContent = "Codes match — confirm";
-    btn.disabled = true;
-    setTimeout(() => { btn.disabled = false; }, CONFIRM_GATE_MS);
-    const onClick = () => { cleanup(); resolve(); };
-    const onBack = () => { cleanup(); reject(new Error("cancelled")); };
-    function cleanup() {
-      btn.removeEventListener("click", onClick);
-      $("create-server-back")?.removeEventListener("click", onBack);
-      btn.textContent = "Deliver to homepage";
-      btn.disabled = false;
-    }
-    btn.addEventListener("click", onClick, { once: true });
-    $("create-server-back")?.addEventListener("click", onBack, { once: true });
-  });
-}
-
 /** Live inline validation for the server-name field — mirrors the
  *  authoritative server-side rule (validateServerLabel). Shows the same
  *  message the throw in readInputs() would, so the user fixes it before
@@ -976,23 +770,16 @@ export function initCreateServerView() {
   $("cs-advanced")?.addEventListener("change", syncAdvancedVisibility);
   syncAdvancedVisibility();
   $("cs-save-draft")?.addEventListener("click", () => handleSaveDraft());
-  $("cs-deliver")?.addEventListener("click", () => handleDeliverNow().catch((e) => { console.error(e); toast(humanError(e), "err"); }));
-  $("cs-open-build")?.addEventListener("click", () => {
-    window.open("https://flagshipserver.com/", "_blank");
-  });
+  $("cs-download-recipe")?.addEventListener("click", () => handleRecipeDownload().catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   $("cs-new")?.addEventListener("click", () => {
     activeDraftId = null;
     $("cs-server-name").value = "";
     $("cs-backup-policy").value = "phone-only";
     $("cs-llm-pref").value = "";
-    $("cs-relay-session").value = "";
-    $("cs-match-code").textContent = "— — —";
     restoreDiskEncryption(null);
     setStatus("idle", "idle");
   });
   $("create-server-back")?.addEventListener("click", () => {
-    if (activeRelay) try { activeRelay.abort(); } catch (_e) {}
-    activeRelay = null;
     show("view-home");
   });
 }

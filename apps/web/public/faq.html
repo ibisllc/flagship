@@ -132,7 +132,7 @@
       <details class="q">
         <summary>How long does install take?</summary>
         <div class="answer">
-          <p>About ten minutes from inserting the USB stick to a real green padlock at <code>you.flagship.services</code>. Most of that is the kernel booting and Let's Encrypt issuing your cert. To make the stick you mint a recipe in the app, grab it from <a href="/ready/">/ready</a>, and hand it to the Flagship builder — it does the rest.</p>
+          <p>About ten minutes from inserting the USB stick to a real green padlock at <code>you.flagship.services</code>. Most of that is the kernel booting and Let's Encrypt issuing your cert. To make the stick, pair the app directly with <a href="/studio">Flagship Studio</a>; your phone sends the signed recipe and Studio does the rest.</p>
         </div>
       </details>
       <details class="q">
@@ -154,9 +154,9 @@
         </div>
       </details>
       <details class="q">
-        <summary>How does the QR scan work?</summary>
+        <summary>How does Studio pairing work?</summary>
         <div class="answer">
-          <p>Open the homepage on your computer. The page renders a one-time QR. Scan it from the mobile app — the app composes a recipe, signs it with your master identity key, and delivers it to your browser, where you land on <a href="/ready/">/ready</a> to copy or download it. Hand that recipe to the Flagship builder; it fetches the base OS for you and writes the boot USB. The QR and its session are single-use; if you reload, you get a new one.</p>
+          <p>Open <a href="/studio">Flagship Studio</a> on your computer. It shows a QR and a short code. In the mobile app, choose Add server → Pair with Studio, scan or enter the code, and compare the security code on both screens. Your phone signs the recipe and sends it directly to Studio; the pairing session is short-lived and single-use. The webapp offers a signed recipe download instead.</p>
         </div>
       </details>
       <details class="q">

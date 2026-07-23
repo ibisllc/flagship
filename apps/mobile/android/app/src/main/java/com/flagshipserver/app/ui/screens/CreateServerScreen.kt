@@ -1,17 +1,6 @@
-// Phone-side of the create-a-new-server flow.
-//
-// 1.  Design: user picks a name + description.
-// 2.  Scan/paste: user scans the QR shown on flagshipserver.com.
-//     We parse sid + browserPubKey; mint our own X25519 keypair;
-//     locally derive (kEnc, matchCode) via HKDF.
-// 3.  Mint the on-wire install-blob bundle: IRK-signed AuthCode +
-//     IRK-signed InstallBlob. Posts /api/auth-code/issue +
-//     /api/routing/register-rck + /api/username/claim to .com so the
-//     freshly-booted box can register itself once it phones home.
-// 4.  Confirm: show the matchCode so the user can compare against the
-//     browser screen, then on tap, AEAD-seal the bundle under kEnc and
-//     push through /qr-pipe.
-// 5.  Hand back to Home with a Pending pod row.
+// Phone-side create-server flow: design, mint a signed recipe, then pair with
+// Studio or share/copy/burn the recipe. The relay protocol remains reusable
+// pairing machinery; the retired website-homepage QR is not an entry point.
 //
 // MIRRORS: apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift
 //          + CreateServerViewModel.swift
@@ -68,7 +57,6 @@ import com.flagshipserver.app.core.Base64URL
 import com.flagshipserver.app.core.BuilderPairController
 import com.flagshipserver.app.core.DebugAccess
 import com.flagshipserver.app.core.LiveBuilderPairClient
-import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.CreateServerDraftStore
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.InstallBlob as InstallBlobBytes
@@ -107,7 +95,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
 // Design → DeliveryChooser fans into the delivery methods: Pair (builder app),
-// Burn (on-device USB-OTG), or the website-QR relay (Scan→Match, the demo path).
+// Burn (on-device USB-OTG), Save, or Copy.
 // Save/Copy mint inline and route straight to onDelivered.
 private enum class Phase { Design, DeliveryChooser, Scan, Match, Pair, Burn }
 
@@ -127,10 +115,6 @@ fun CreateServerScreen(
     val mailbox = LocalSecretMailboxClient.current
     val sessionStore = LocalSessionStore.current
     val toasts = LocalToastCenter.current
-    val dev = LocalDeveloperSettings.current
-    // Mock mode (Developer toggle OFF) has no real builder — surface a demo
-    // affordance to reach the website-QR relay path. Absent dev ⇒ live (prod).
-    val useLive = dev?.useLiveClient?.collectAsState()?.value ?: true
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     // Draft-only metadata store (backup policy) — device-local, NOT signed
@@ -326,10 +310,9 @@ fun CreateServerScreen(
             )
             Phase.DeliveryChooser -> DeliveryChooserPhase(
                 busy = working,
-                showDemo = !useLive,
                 onPair = {
-                    // The builder pairing is a LIVE relay session always (mock
-                    // mode has no real builder — it uses the demo QR below).
+                    // Builder pairing is a live relay session because Studio is
+                    // the peer that receives and stages the signed recipe.
                     val controller = BuilderPairController(
                         client = LiveBuilderPairClient(),
                         scope = scope,
@@ -398,10 +381,6 @@ fun CreateServerScreen(
                             working = false
                         }
                     }
-                },
-                onDemo = {
-                    error = null
-                    phase = Phase.Scan
                 },
                 error = error,
                 onCancel = onCancel,
@@ -914,16 +893,14 @@ private fun MatchPhase(
 
 // Delivery-method chooser shown after the design step. Mirrors iOS
 // CreateServerStubScreen.deliveryChooserPage: pair-with-builder / save-share /
-// copy / burn-on-device, plus a mock-only demo affordance.
+// copy / burn-on-device.
 @Composable
 private fun DeliveryChooserPhase(
     busy: Boolean,
-    showDemo: Boolean,
     onPair: () -> Unit,
     onShare: () -> Unit,
     onCopy: () -> Unit,
     onBurn: () -> Unit,
-    onDemo: () -> Unit,
     error: String?,
     onCancel: () -> Unit,
 ) {
@@ -964,17 +941,6 @@ private fun DeliveryChooserPhase(
         testTag = "cs-delivery-burn",
         onClick = onBurn,
     )
-    if (showDemo) {
-        Spacer(Modifier.height(FS.space.s3))
-        // MOCK mode only: reach the website-QR relay path (Scan→Match) so the
-        // create flow stays exercisable without a real builder/desktop.
-        FSGhostButton(
-            label = "Use a demo QR (mock)",
-            onClick = onDemo,
-            block = true,
-            modifier = Modifier.testTag("cs-demo-qr-button"),
-        )
-    }
     if (busy) {
         Spacer(Modifier.height(FS.space.s4))
         Text("Working…", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))

@@ -13,13 +13,11 @@ describe("/build/ is retired (recipe + Builder replaced the ISO flow)", () => {
     expect(r.body).not.toContain('src="/build/build.js"');
   });
 
-  it("forwards a pending recipe / the ?via=qr hand-off to /ready/", async () => {
+  it("forwards every legacy arrival to the canonical Studio page", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/build/" });
-    // The client-side stub redirects to /ready/ when a recipe is pending or
-    // the old QR hand-off query is present.
-    expect(r.body).toContain("/ready/");
-    expect(r.body).toContain("flagship:qr:recipe");
+    expect(r.body).toContain("/studio");
+    expect(r.body).not.toContain("flagship:qr:recipe");
   });
 
   it("build.js is gone (the ISO personalizer is no longer served)", async () => {

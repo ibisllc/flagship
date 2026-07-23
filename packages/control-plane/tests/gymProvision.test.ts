@@ -11,7 +11,7 @@
  *   that the box ends up owned by the app's IRK (the shipped IRK priv == the
  *   blob's authCode.userPubKey).
  *
- * The test composes the SAME shape the real app composes (cs-deliver): mint +
+ * The test composes the SAME shape the real app composes: mint +
  * self-sign an AuthCode under the app's device IRK, sign the InstallBlob, and
  * serialize the InstallBlobJsonShort. There is no demo-IRK / KEK here — the
  * recipe's owner is whatever IRK the app holds.
@@ -88,7 +88,7 @@ function makeHetzner(): FakeHetzner {
   };
 }
 
-/** Compose the app-signed recipe exactly like the real cs-deliver flow. */
+/** Compose the app-signed recipe exactly like the real recipe-download flow. */
 function composeRecipe(opts: { issuedAt?: number; expiresAt?: number } = {}): {
   blob: InstallBlob;
   blobJson: unknown;

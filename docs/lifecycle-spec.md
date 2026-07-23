@@ -64,7 +64,7 @@ iCloud-Keychain / Google Block Store-wrapped UMK + biometrics.
 
 #### `[Landing]` — `https://flagshipserver.com/`
 - **Hero**: "Your services. Your hardware. Your keys."
-- Buttons: `Download Flagship` (→ `[Download]`), `Build a server` (→ `[Build]`),
+- Buttons: `Download Flagship` (→ `[Download]`), `Get Studio` (→ `[Studio]`),
   `How it works` (anchor scroll), `Status` (→ `/status/`).
 - Below the fold: trust model, BUSL note + Change Date, abuse contact.
 - No account walled — pages are public.
@@ -78,13 +78,11 @@ iCloud-Keychain / Google Block Store-wrapped UMK + biometrics.
   key wrapped by WebAuthn).
 - CTA: `Already installed → Pair your existing phone`.
 
-#### `[Build]` — `https://flagshipserver.com/build/`
-- Single text field: `Paste your build code`.
-- On submit: sends `POST /api/build/check` with the code → renders an
-  ISO download stream.
-- Build code is the auth-code-blob the phone minted (§3). Single-use,
-  serial validated against D1 store, expires 24h.
-- Below: "What is a build code?" link → `/help/build-code`.
+#### `[Studio]` — `https://flagshipserver.com/studio`
+- Always offers both macOS and Windows downloads; platform detection only
+  highlights the likely choice.
+- Explains the phone-to-Studio QR/short-code pairing and USB-write flow.
+- `/build` and `/ready` permanently redirect here.
 
 #### `[Status]` — `https://flagshipserver.com/status/`
 - Live health for the public planes (Worker `/api/health`, Fly
@@ -92,7 +90,7 @@ iCloud-Keychain / Google Block Store-wrapped UMK + biometrics.
 - Public — no auth.
 
 ### Backend (already built)
-- Worker routes: `/`, `/download`, `/build/`, `/build/check`,
+- Worker routes: `/`, `/download`, `/studio`,
   `/status/`, `/api/health`, `/api/services/endpoints`.
 - D1: `auth_codes(serial PK, body, used_at)`.
 - R2: ISO base + per-build personalized trailer streamed via the
@@ -195,13 +193,14 @@ iCloud-Keychain / Google Block Store-wrapped UMK + biometrics.
   ```
 - IRK signs the canonical bytes.
 - Phone bundles `AuthCode + signature + registrationUrl + installerGitRef +
-  phoneDelegatedPubKey` into a JSON blob → renders both as **QR** and
-  **20-character build code** (Base32).
+  phoneDelegatedPubKey` into a signed recipe and delivers it to Studio through
+  the reusable QR/short-code pairing protocol.
 - For Path A, the phone POSTs the bundled blob to a per-order
   endpoint that the box's first-boot apkovl polls (`GET /api/box/order/<orderId>/blob`)
   — the box already has a per-order pre-installed key burnt at
   assembly time, gating the lookup.
-- For Path B, the user types the build code into `https://flagshipserver.com/build/`.
+- For Path B, the user pairs the phone directly with Studio or opens a recipe
+  file downloaded by the webapp.
 
 ### Path B: Build your own (BYOH)
 
@@ -210,18 +209,15 @@ User has a NUC / mini-PC / SBC at home and wants to install Flagship.
 #### `[Build with my hardware]` (phone)
 - Form: `Server name` (default "home"), `Disk size class`, optional
   `Peer-backup share ratio` slider.
-- `Generate build code` → mints the same AuthCode/blob, displays the
-  build code + a "Copy" button.
+- `Continue` → mints the same signed recipe and opens the delivery chooser.
 
-#### `[Build]` (browser, on user's laptop)
-- User opens `https://flagshipserver.com/build/`, pastes build code.
-- Worker validates serial (must be unused, signed by registered user,
-  not expired), then streams a personalized ISO:
-  - Base ISO (Alpine + apkovl with bootstrap) cached in R2.
-  - Personalizer appends the trailer (§4) at the end, after ISO9660 EOF.
-- Browser downloads `flagship-<server>-<user>.iso`.
-- **Print-and-flash** instructions on-screen: "Flash to a USB ≥ 4GB
-  with balenaEtcher / Rufus / `dd`. Then plug into your box."
+#### `[Studio]` (user's Mac or Windows computer)
+- Studio shows a QR and short code; the phone confirms a SAS and sends the
+  authorized recipe through the pairing relay.
+- Studio downloads and verifies the current base image, prepares it with the
+  recipe, and writes the selected USB drive.
+- The webapp fallback downloads the same recipe for Studio's **I have a
+  recipe** path.
 
 ### Backend
 - Already built: `iso-personalizer`, `installer-apkovl`, `bootkey-builder`.

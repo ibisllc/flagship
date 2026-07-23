@@ -684,7 +684,7 @@ struct WizardView: View {
             HStack(alignment: .center, spacing: FB.Spacing.s2) {
                 // Copy-paste path (preferred on the same machine — nothing
                 // is written to disk except a 0600 temp the CLI reads). The
-                // website's /ready/ page offers a "Copy recipe" button.
+                // webapp offers a "Download recipe" action.
                 Button {
                     let s = NSPasteboard.general.string(forType: .string) ?? ""
                     model.acceptRecipeText(s)

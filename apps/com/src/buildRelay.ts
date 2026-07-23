@@ -422,8 +422,8 @@ export class BuildRelaySession implements DurableObject {
   }
 
   private detachBrowser(): void {
-    // If the phone is mid-handshake and the browser drops, surface that
-    // so the phone can show a helpful "open the homepage again" prompt.
+    // If the phone is mid-handshake and its peer drops, surface that so the
+    // phone can offer a useful "reopen the pairing page" prompt.
     const phone = this.getPhoneSocket();
     if (phone && !this.session.consumed) {
       this.send(phone, { kind: "peer-missing" });

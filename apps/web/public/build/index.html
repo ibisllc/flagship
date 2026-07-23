@@ -16,17 +16,9 @@
     </style>
     <link rel="stylesheet" href="/theme-ui.css">
   <script src="/theme.js"></script>
+    <meta http-equiv="refresh" content="0; url=/studio">
     <script>
-      // The /build/ personalize-and-write-ISO flow is retired. The Flagship
-      // Builder now builds the boot USB from a recipe; it fetches the base OS
-      // itself. Forward anyone who arrived mid-flow (a pending recipe, or the old
-      // ?via=qr hand-off) to /ready/; send everyone else to the homepage.
-      (function () {
-        var hasRecipe = false;
-        try { hasRecipe = !!sessionStorage.getItem("flagship:qr:recipe"); } catch (e) {}
-        var viaQr = location.search.indexOf("via=qr") !== -1;
-        location.replace(hasRecipe || viaQr ? "/ready/" : "/");
-      })();
+      location.replace("/studio");
     </script>
   </head>
   <body>
@@ -43,8 +35,8 @@
     <main class="wrap">
       <h1>This page has moved</h1>
       <p>
-        Building a Flagship server now happens in the <strong>Flagship Studio</strong> desktop app, from a recipe your phone signs. The Builder fetches the base OS for you and writes the boot USB — you don't pick or download an image. Start at the
-        <a href="/">homepage</a>, or read <a href="/docs#burn">how it works</a>.
+        Building a Flagship server now happens in <strong>Flagship Studio</strong>.
+        <a href="/studio">Download Studio and see the pairing steps</a>.
       </p>
     </main>
   </body>

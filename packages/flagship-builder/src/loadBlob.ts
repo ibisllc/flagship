@@ -113,7 +113,7 @@ export async function loadBlobFromFile(path: string): Promise<LoadedBlob> {
 
 /**
  * Load from stdin (copy-paste flow: `pbpaste | flagship-build verify -`).
- * The website's /ready/ page offers a "Copy recipe" button; this is the CLI
+ * The webapp offers a recipe download; this is the CLI
  * counterpart to the Mac app's "Paste certificate".
  */
 export async function loadBlobFromStdin(): Promise<LoadedBlob> {

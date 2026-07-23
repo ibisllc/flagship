@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Download Flagship Studio for macOS or Windows and pair it with the Flagship app.">
+  <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#14120D" media="(prefers-color-scheme: dark)">
+  <title>Get Flagship Studio</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.svg">
+  <link rel="stylesheet" href="/site.css">
+  <link rel="stylesheet" href="/theme-ui.css">
+  <style>
+    .wrap { max-width: 720px; margin: var(--space-12) auto; padding: 0 var(--gutter) var(--space-12); }
+    .lede { max-width: 58ch; }
+    .mobile-note {
+      display: none;
+      margin: var(--space-5) 0;
+      padding: var(--space-4);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--canvas-tinted);
+      color: var(--ink-muted);
+    }
+    body[data-mobile="true"] .mobile-note { display: block; }
+    .downloads { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin: var(--space-6) 0; }
+    .download {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      padding: var(--space-5);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      color: var(--ink);
+      text-decoration: none;
+      box-shadow: var(--shadow-flat);
+    }
+    .download:hover, .download.is-preferred { border-color: var(--accent); }
+    .download.is-preferred { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+    .download strong { font-size: 17px; }
+    .download span { color: var(--ink-muted); font-size: var(--body-sm-size); }
+    .download .recommended { display: none; color: var(--accent); font-family: var(--font-mono); font-size: 11px; }
+    .download.is-preferred .recommended { display: block; }
+    .steps { counter-reset: studio-step; margin: var(--space-7) 0; padding: 0; list-style: none; }
+    .steps li {
+      counter-increment: studio-step;
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: var(--space-3);
+      padding: var(--space-4) 0;
+      border-top: 1px solid var(--border-soft);
+    }
+    .steps li::before {
+      content: counter(studio-step);
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      padding-top: 2px;
+    }
+    .steps strong { display: block; margin-bottom: var(--space-1); }
+    .steps p { margin: 0; color: var(--ink-muted); font-size: var(--body-sm-size); }
+    .footnote { color: var(--ink-muted); font-size: var(--body-sm-size); }
+    @media (max-width: 580px) { .downloads { grid-template-columns: 1fr; } }
+  </style>
+  <script src="/theme.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Flagship home">
+      <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>
+      <span class="name">Flagship</span>
+    </a>
+    <nav><a href="/docs/">docs</a><a href="/status/">status</a></nav>
+    <button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
+  </header>
+
+  <main class="wrap">
+    <p class="eyebrow">Flagship Studio</p>
+    <h1>Build your server from your computer.</h1>
+    <p class="lede">Studio pairs with the Flagship app, receives the server recipe your phone authorized, and writes the boot USB.</p>
+
+    <p class="mobile-note">Open <strong>flagshipserver.com/studio</strong> on the Mac or Windows computer you will use to create the server.</p>
+
+    <div class="downloads" aria-label="Download Flagship Studio">
+      <a class="download" data-platform="mac" href="/download/mac">
+        <span class="recommended">Recommended for this computer</span>
+        <strong>Download for macOS</strong>
+        <span>Apple Silicon and Intel · DMG</span>
+      </a>
+      <a class="download" data-platform="windows" href="/download/windows">
+        <span class="recommended">Recommended for this computer</span>
+        <strong>Download for Windows</strong>
+        <span>Windows 10 and 11 · EXE</span>
+      </a>
+    </div>
+
+    <ol class="steps">
+      <li><div><strong>Install and open Studio.</strong><p>Studio shows a QR code and a short pairing code.</p></div></li>
+      <li><div><strong>Pair from your phone.</strong><p>In Flagship, choose Add server → Pair with Studio, then scan the QR or enter the short code.</p></div></li>
+      <li><div><strong>Write and boot the USB.</strong><p>Choose the target drive in Studio. Your phone approves the recipe; Studio handles the operating-system image and USB.</p></div></li>
+    </ol>
+
+    <p class="footnote">Already downloaded a recipe from the webapp? Open or paste it in Studio. Linux support is coming later.</p>
+  </main>
+
+  <footer class="colophon"><span>© 2026 Flagship · Patent Pending</span><span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span></footer>
+  <script>
+    (function () {
+      "use strict";
+      const source = String(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "").toLowerCase();
+      const mobile = /android|iphone|ipad|ipod/.test(source) || /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+      document.body.dataset.mobile = mobile ? "true" : "false";
+      const preferred = source.includes("win") ? "windows" : source.includes("mac") ? "mac" : "";
+      if (preferred) document.querySelector(`[data-platform="${preferred}"]`)?.classList.add("is-preferred");
+    })();
+  </script>
+  <script src="/motion.js" defer></script>
+</body>
+</html>

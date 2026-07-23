@@ -57,7 +57,7 @@ the cloud-init builder. Box ends up owned by the app's IRK + serves a real LE ce
 
 ### Phase 2 — webapp gym-mode "provision on gym cloud" (gym branch)
 In `views/create-server.js`, when running on the gym apex, after composing the recipe
-(the real `cs-deliver` compose: mint+record AuthCode, sign InstallBlob), POST it to
+(the real download compose: mint+record AuthCode, sign InstallBlob), POST it to
 `/api/gym/provision` with the in-memory IRK priv instead of (only) the QR relay.
 Gym-branch only (never main). The real app thus drives the real provision.
 

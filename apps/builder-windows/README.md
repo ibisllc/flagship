@@ -17,7 +17,7 @@ The optional prebuilt-appliance shortcut is not used on Windows. Host Here follo
 
 ## User flows
 
-- Pair with phone: the homepage shows a scannable QR and SAS confirmation. Recipe paste, browse, and drag-and-drop remain available as recovery paths.
+- Pair with phone: Studio shows a scannable QR and SAS confirmation. Recipe paste, browse, and drag-and-drop remain available as recovery paths.
 - Simple USB: downloads and SHA-256 verifies the manifest-selected Debian base ISO, then remasters and writes it natively.
 - Advanced USB: remasters a user-supplied stock Debian or Ubuntu ISO.
 - Save installer: writes a personalized `.flagship.iso` without touching a disk.

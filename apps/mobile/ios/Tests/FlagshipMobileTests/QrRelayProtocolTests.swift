@@ -101,7 +101,7 @@ final class QrRelayProtocolTests: XCTestCase {
         let payload = Data("flagship/install-blob/v1|…".utf8)
         let sealed = try QrRelay.seal(payload: payload, with: key)
 
-        // Reverse the seal exactly the way heroQr.js does it.
+        // Reverse the seal exactly the way the browser pairing relay does it.
         let nonceBytes = Base64URL.decode(sealed.nonceBase64Url)!
         let ct = Base64URL.decode(sealed.ciphertextBase64Url)!
         let box = try AES.GCM.SealedBox(combined: nonceBytes + ct)

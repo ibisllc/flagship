@@ -1,7 +1,7 @@
 // Phase 3b — relay transport adapters for cross-device pairing.
 //
-// These wrap the QrRelay v2 WebSocket protocol (apps/web/public/heroQr.js
-// + views/create-server.js + apps/com/src/buildRelay.ts) into the
+// These wrap the QrRelay v2 WebSocket protocol (apps/com/src/buildRelay.ts)
+// into the
 // `relay` contract that lib/crossDevicePairing.js drives. The pure
 // orchestration + vouch crypto live there; this module is the live-
 // transport seam (NOT unit-gated — it needs a real WebSocket + the relay
@@ -57,7 +57,7 @@ function wsProto() {
   return (typeof location !== "undefined" && location.protocol === "https:") ? "wss" : "ws";
 }
 
-/* ── base64url + HKDF helpers (mirror create-server.js / heroQr.js) ── */
+/* ── base64url + HKDF helpers shared with the native pairing clients ── */
 function b64urlEncode(bytes) {
   let s = "";
   for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);

@@ -13,7 +13,7 @@
 // drive the [MockDevicePairingRelay] seam. The live wiring lands once
 // the relay server's phone↔phone roles are finalized (the existing
 // frame protocol already carries peer-hello / peer-deliver — see
-// apps/web/public/heroQr.js).
+// apps/web/public/webapp/lib/pairingRelay.js).
 
 package com.flagshipserver.app.core
 

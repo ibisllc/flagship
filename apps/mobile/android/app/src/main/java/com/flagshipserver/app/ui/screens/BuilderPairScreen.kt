@@ -236,7 +236,7 @@ private fun WhereToGetBuilder() {
             )
             Spacer(Modifier.height(FS.space.s1))
             Text(
-                "The Flagship Studio is a small desktop app that writes your server to a USB stick. Get it at flagshipserver.com, open it, and it'll show the code to scan here.",
+                "The Flagship Studio is a small desktop app that writes your server to a USB stick. On your computer, go to flagshipserver.com/studio, install it, and open it to see the code to scan here.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
             )

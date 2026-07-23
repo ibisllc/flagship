@@ -309,6 +309,6 @@ internal fun RiskWarning(text: String) {
 }
 
 /** 6-digit SAS rendered with a space after the third digit. Mirrors
- *  QrRelay.formatMatchCode + heroQr.js. */
+ *  QrRelay.formatMatchCode + webapp/lib/pairingRelay.js. */
 internal fun formatSas(code: String): String =
     if (code.length == 6) "${code.substring(0, 3)} ${code.substring(3)}" else code

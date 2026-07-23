@@ -4,11 +4,11 @@
 
 ## What it is
 
-A user signs up on `flagshipserver.com`, claims a username, and gets a Flagship server by:
+A user signs up, claims a username, and gets a Flagship server by:
 
-1. Tapping *"Create a new server"* in the phone app → phone mints a 12-character build code.
-2. Pasting the code at `flagshipserver.com/build/` → the browser downloads a personalized installer ISO.
-3. Flashing the ISO to a USB stick and booting any commodity hardware (old laptop, NUC, Raspberry Pi, …).
+1. Installing Flagship Studio from `flagshipserver.com/studio` on a Mac or Windows computer.
+2. Tapping *"Create a new server"* in the phone app and pairing with the QR or short code shown by Studio.
+3. Letting Studio download the base image and write the authorized recipe to a USB stick, then booting commodity hardware (old laptop, NUC, …).
 4. The server boots Alpine, validates the trailer signature, fetches install scripts from this public repo at the trailer-pinned ref, partitions + LUKS-encrypts the disk, registers itself with `.services`, runs the Flagship daemon.
 5. The user's services are reachable at `<service>.<server>.<user>.flagship.services` over real Let's Encrypt HTTPS — TLS terminates on the user's hardware.
 
@@ -23,7 +23,7 @@ A more detailed walkthrough lives in `CLAUDE.md` at the repo root.
 
 ## End-to-end live
 
-As of 2026-05-05 the full chain is verified in production. Browse `https://flagshipserver.com/dev/create-server` to mint a build code in a "phone simulator" page; paste it at `https://flagshipserver.com/build/` to download a personalized ISO; or run the demo daemon from `packages/hello-daemon` to prove the chain end-to-end without flashing real hardware.
+The production path uses the phone-held account key to authorize a signed recipe and delivers it directly to Studio over a QR/code pairing session. The webapp can download the same recipe as a file for opening in Studio. The demo daemon in `packages/hello-daemon` exercises the service path without flashing real hardware.
 
 ## Workspace
 

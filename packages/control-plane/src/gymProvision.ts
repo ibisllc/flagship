@@ -272,7 +272,7 @@ export async function handleGymProvision(
 
   // 5. Record the AuthCode (mirror handleAuthCodeIssue's validations). The app
   //    may already have recorded it via /api/auth-code/issue — that is the
-  //    expected case (cs-deliver does), so an idempotent "already active" is
+  //    expected case (recipe creation does), so an idempotent "already active" is
   //    fine: proceed. Any other persist failure is a conflict.
   if (
     blob.authCode.expiresAt - blob.authCode.issuedAt > maxExpiryMs ||

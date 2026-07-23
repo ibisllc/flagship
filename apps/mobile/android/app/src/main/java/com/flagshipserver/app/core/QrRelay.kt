@@ -2,7 +2,7 @@
 //
 // X25519 ECDH + HKDF-SHA256 → AES-GCM AEAD key + 6-digit SAS match
 // code. Phone-side of the QR relay; the browser counterpart lives in
-// apps/web/public/heroQr.js.
+// apps/web/public/webapp/lib/pairingRelay.js.
 
 package com.flagshipserver.app.core
 
@@ -79,7 +79,7 @@ object QrRelay {
     }
 
     /// Render the 6-digit SAS code with a space after the third digit —
-    /// matches `formatMatchCode` in heroQr.js / create-server.js.
+    /// matches the browser pairing relay's display formatter.
     fun formatMatchCode(code: String): String {
         if (code.length != 6) return code
         return code.substring(0, 3) + " " + code.substring(3)
@@ -128,7 +128,7 @@ object QrRelay {
 }
 
 /// base64url (RFC 4648 §5) helpers — no padding. Mirrors the Swift
-/// Base64URL enum + heroQr.js b64urlEncode/decode. Uses java.util.Base64
+/// Base64URL helper shared with the browser pairing relay. Uses java.util.Base64
 /// (API 26+; ours is minSdk 28) so the helper is reachable from plain-
 /// JVM unit tests as well as Android.
 object Base64URL {

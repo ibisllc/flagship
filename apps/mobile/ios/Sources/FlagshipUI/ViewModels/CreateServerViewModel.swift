@@ -5,23 +5,11 @@ import Flagship
 import FlagshipAPI
 import FlagshipCore
 
-/// Orchestrates the v2 create-server flow.
+/// Orchestrates create-server recipe minting and delivery.
 ///
-/// User-facing sequence:
-///
-///   1. design       Name + description.
-///   2. scanQr       Camera viewfinder pointing at the QR shown on
-///                   flagshipserver.com. A small "Copy the QR link
-///                   instead?" link below swaps to pasteQr.
-///   3. pasteQr      Input box + Submit. Back button returns to scanQr.
-///   4. connecting   Opens the relay WS as role=phone, sends hello.
-///   5. matching     Shows the 6-digit SAS match code. 600ms gate
-///                   before the Confirm button is tappable.
-///   6. minting      Three IRK-signed POSTs to flagshipserver.com.
-///   7. delivering   AEAD-seal the InstallBlob, push through the relay.
-///   8. delivered    Boot-disk-download placeholder. From here on, the
-///                   pod sits in AppState with status=.pending until
-///                   the freshly-booted box phones home.
+/// The user-facing path is design → delivery chooser → builder pairing,
+/// file sharing, or copying. The relay phases below remain reusable protocol
+/// machinery rather than a homepage-specific onboarding path.
 ///
 /// Cancel collapses any open relay socket + resets to .design.
 @Observable

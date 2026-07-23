@@ -2,7 +2,7 @@
 // (kEnc, matchCode), AES-256-GCM seal of the install-blob bundle.
 //
 // MIRRORS:
-//   - apps/web/public/heroQr.js (browser side)
+//   - apps/web/public/webapp/lib/pairingRelay.js (browser side)
 //   - apps/web/public/webapp/views/create-server.js `deliverThroughRelay`
 //
 // All bytes are derived locally — the relay never sees plaintext.

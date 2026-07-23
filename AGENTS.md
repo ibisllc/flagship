@@ -10,7 +10,7 @@ Personal-cloud ecosystem. The phone is the trust root; users run their own serve
 apps/com/                  Cloudflare Worker — flagshipserver.com (identity + state) + web.flagshipserver.com (webapp host-rewrite)
 apps/web/                  Fly app — flagship.services (stateless data plane) + the webapp static surface
 apps/web/public/           Static assets served by the Worker's [assets] binding
-   ready/                  /ready/ — after an order: copy/download the recipe + get the builder (replaced the old /build/ paste-a-code page; /build/iso/ stays as the R2 ISO-stream backend)
+   studio/                 /studio — short desktop download + direct phone-pairing guide
    dev/create-server       /dev/create-server — phone simulator
    status/                 /status/ — live health dashboard
    security/               disclosure.html, report.html
@@ -44,7 +44,7 @@ fly.toml                   :443 raw-TCP (SNI passthrough) + :8443 TLS-term (API 
 ## Live URLs
 
 - `https://flagshipserver.com/` — landing
-- `https://flagshipserver.com/ready/` — after an order: copy/download the recipe + get the builder
+- `https://flagshipserver.com/studio` — download Studio + direct phone-pairing guide
 - `https://flagshipserver.com/dev/create-server` — phone simulator (mints build codes)
 - `https://flagshipserver.com/status/` — live health
 - `https://flagshipserver.com/api/health` — JSON health
@@ -68,10 +68,9 @@ cd apps/com && npx wrangler d1 execute flagship-state \
     --file=../../packages/storage/migrations/0003_install_events.sql --remote
 
 # Smoke a fresh build chain
-# 1. Open https://flagshipserver.com/dev/create-server in a browser
-# 2. Mint an order; collect the recipe from https://flagshipserver.com/ready/
-# 3. Run packages/hello-daemon with the printed creds
-# 4. curl https://<assigned-subdomain>/   (real green padlock)
+# 1. Create and download a signed recipe from the webapp (or pair a phone with Studio)
+# 2. Open the recipe in Flagship Studio and write the installer
+# 3. Boot the target, then curl https://<assigned-subdomain>/
 ```
 
 ## Conventions
@@ -149,12 +148,14 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
-**2026-07-23 (desktop-download parity) — every active public Flagship Studio
-promotion shows both macOS and Windows; platform detection changes emphasis but
-never hides the other download.** The homepage now promotes both desktop builds
-in its opening and closing calls to action. `/ready/` remains compatibility for
-the homepage's browser-mediated QR recipe handoff and old `/build/` arrivals;
-direct phone↔Studio pairing is the newer primary ceremony.
+**2026-07-23 (direct Studio onboarding) — the legacy homepage recipe QR and
+`/ready` landing are retired; `/studio` is the short download and pairing URL.**
+iOS and Android direct users to open `flagshipserver.com/studio` on their
+computer, then scan Studio's QR or enter its short code. The webapp downloads
+its locally signed recipe directly for opening in Studio. Old `/ready` and
+`/build` arrivals redirect to `/studio`; shared QR transport remains intact for
+Dock, add-device, join, recovery, and other pairing ceremonies. Both desktop
+downloads remain visible, with platform detection changing emphasis only.
 
 **2026-07-22 (today's integration + Settings parity) — the companion dock,
 Windows-native builder work, and dev→prod dataspace/promotion flow are on main,

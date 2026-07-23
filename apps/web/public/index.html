@@ -262,34 +262,6 @@
     :root[data-theme="dark"] .theme-icon-moon { display: none; }
     :root[data-theme="dark"] .theme-icon-sun  { display: block; }
 
-    .qr-btn {
-      display: none;
-      align-items: center;
-      gap: 8px;
-      height: 36px;
-      padding: 0 14px;
-      background: transparent;
-      color: var(--ink);
-      border: 1px solid var(--rule-strong);
-      border-radius: 4px;
-      font-family: var(--type-mono);
-      font-size: 11px;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      font-weight: 500;
-      cursor: pointer;
-      transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
-    }
-    .qr-btn:hover { border-color: var(--teal); color: var(--teal-bright); }
-    .qr-btn[data-visible="true"] { display: inline-flex; }
-    .qr-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
-    /* On mobile, the QR button collapses to icon-only so the row has
-       breathing room for both buttons. */
-    @media (max-width: 540px) {
-      .qr-btn { padding: 0 10px; gap: 0; }
-      .qr-btn span { display: none; }
-    }
-
     /* Hamburger menu button — mobile only. */
     .nav-menu-btn {
       display: none;
@@ -490,12 +462,8 @@
       pointer-events: none;
     }
     .hero-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1.5fr) minmax(200px, 240px);
-      gap: clamp(24px, 4vw, 56px);
-      align-items: center;
+      max-width: 900px;
     }
-    @media (max-width: 880px) { .hero-grid { grid-template-columns: 1fr; gap: 16px; } }
 
     .hero-meta {
       font-family: var(--type-mono);
@@ -566,7 +534,8 @@
       text-transform: uppercase;
     }
     .studio-promo--center { justify-content: center; }
-    .studio-promo__label { color: var(--muted); margin-right: 2px; }
+    .studio-promo__label { color: var(--muted); margin-right: 2px; border-bottom: none; }
+    .studio-promo__label:hover { color: var(--teal-bright); border-bottom: none; }
     .studio-download {
       min-height: 30px;
       display: inline-flex;
@@ -583,135 +552,6 @@
       color: var(--teal-bright);
       background: var(--teal-soft);
     }
-    .hero-hint {
-      margin: 18px 0 0;
-      font-family: var(--type-mono);
-      font-size: 11.5px;
-      letter-spacing: 0.04em;
-      color: var(--muted);
-    }
-    .hero-hint .arrow { color: var(--teal); display: inline-block; margin-right: 4px; }
-    .hero-hint a, .hero-hint button {
-      background: none;
-      border: none;
-      padding: 0;
-      color: var(--ink);
-      font: inherit;
-      cursor: pointer;
-      border-bottom: 1px solid var(--teal);
-    }
-    .hero-hint a:hover, .hero-hint button:hover {
-      color: var(--teal-bright);
-      border-bottom-color: var(--teal-bright);
-    }
-
-    /* Hero QR — bare. Just the QR canvas + match-code digits. */
-    .hero-qr {
-      width: 100%;
-      max-width: 240px;
-      justify-self: end;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    @media (max-width: 880px) { .hero-qr { display: none; } }
-    .qr-host {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .qr-host-actions {
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      gap: 8px;
-      min-height: 32px;
-    }
-    .qr-host-actions.has-title { justify-content: space-between; }
-    .qr-host-actions .qr-action-btn + .qr-action-btn { margin-left: 0; }
-    .qr-host-actions .qr-overlay-title {
-      font-family: var(--type-sans);
-      font-weight: 500;
-      font-size: 17px;
-      letter-spacing: -0.01em;
-      color: var(--ink);
-      margin: 0;
-    }
-    .qr-host-actions .qr-action-btn-group {
-      display: inline-flex;
-      gap: 8px;
-      align-items: center;
-      margin-left: auto;
-    }
-    .qr-action-btn {
-      width: 32px; height: 32px;
-      border-radius: 4px;
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--muted);
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-      font-family: var(--type-mono);
-      font-size: 18px;
-      line-height: 1;
-      transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
-    }
-    .qr-action-btn:hover { color: var(--teal-bright); }
-    .qr-action-btn svg { width: 14px; height: 14px; display: block; }
-    .qr-copy-btn.is-copied { color: var(--teal-bright); }
-    /* Inside the overlay, both buttons get a visible border so the
-       title + buttons row reads as a unified header strip. */
-    #qrOverlayHost .qr-action-btn { border-color: var(--rule-strong); }
-    #qrOverlayHost .qr-action-btn:hover { border-color: var(--teal); }
-    #qrOverlayHost .qr-copy-btn.is-copied { border-color: var(--teal); }
-    .qr-url-box {
-      width: 100%;
-      box-sizing: border-box;
-      display: none;
-      background: var(--canvas);
-      color: var(--ink);
-      border: 1px solid var(--rule-strong);
-      border-radius: 4px;
-      padding: 8px 10px;
-      font-family: var(--type-mono);
-      font-size: 11px;
-      line-height: 1.4;
-      resize: none;
-      word-break: break-all;
-    }
-    .qr-url-box.is-visible { display: block; }
-    .hero-qr-canvas {
-      width: 100%;
-      position: relative;
-      background: #FFFFFF;
-      border: 1px solid var(--rule);
-      border-radius: 4px;
-      aspect-ratio: 1;
-      overflow: hidden;
-      color: #0A0A09;
-    }
-    .hero-qr-canvas svg { width: 100%; height: 100%; display: block; }
-    .hero-qr-canvas .hero-qr-skeleton {
-      width: 100%; height: 100%;
-      background:
-        repeating-linear-gradient(0deg,  rgba(10,10,9,0.18) 0 6px, transparent 6px 12px),
-        repeating-linear-gradient(90deg, rgba(10,10,9,0.18) 0 6px, transparent 6px 12px),
-        #FFFFFF;
-    }
-    .hero-qr-digits {
-      font-family: var(--type-mono);
-      font-weight: 500;
-      font-size: 13px;
-      letter-spacing: 0.18em;
-      color: var(--teal-bright);
-      font-feature-settings: "tnum","zero";
-      text-align: center;
-    }
-    .hero-qr-digits.is-pending { color: var(--faint); letter-spacing: 0.28em; }
-
     @keyframes dotpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
 
     /* ── How-it-works bento ────────────────────────────────────── */
@@ -1001,64 +841,6 @@
     .actions { display: flex; flex-wrap: wrap; gap: 10px; }
     .actions.center { justify-content: center; }
 
-    /* ── QR overlay ────────────────────────────────────────────── */
-    .qr-overlay {
-      position: fixed;
-      inset: 0;
-      width: 100vw; height: 100dvh;
-      max-width: none; max-height: none;
-      margin: 0;
-      padding: 0;
-      border: none;
-      background: color-mix(in srgb, var(--canvas) 92%, transparent);
-      backdrop-filter: blur(12px) saturate(120%);
-      -webkit-backdrop-filter: blur(12px) saturate(120%);
-      color: var(--ink);
-      z-index: 100;
-      overflow: hidden;
-    }
-    .qr-overlay::backdrop { background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); }
-    .qr-overlay[hidden] { display: none; }
-    .qr-overlay-inner { position: absolute; inset: 0; display: grid; place-items: center; padding: var(--gutter); }
-    .qr-overlay-card {
-      width: min(380px, 100%);
-      display: grid;
-      gap: 16px;
-      padding: clamp(18px, 2.6vw, 28px);
-      background: var(--canvas-2);
-      border: 1px solid var(--rule-strong);
-      border-radius: 8px;
-      box-shadow: 0 30px 80px rgba(0,0,0,0.6);
-    }
-    .qr-overlay-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-    .qr-overlay-head:empty { display: none; }
-    .qr-overlay-head h2 {
-      font-family: var(--type-sans);
-      font-weight: 500;
-      font-size: 17px;
-      letter-spacing: -0.01em;
-      margin: 0;
-      color: var(--ink);
-    }
-    /* The close button uses .qr-action-btn for styling so it matches
-       the copy button in the overlay's action row. */
-    /* When the QR host is parented inside the overlay, scale the digits up.
-       The QR canvas itself uses `width:100%` + `aspect-ratio:1`, so it
-       naturally fills whichever slot it's currently in. */
-    #qrOverlayHost { display: flex; flex-direction: column; gap: 14px; }
-    #qrOverlayHost .hero-qr-digits {
-      font-size: 20px;
-      letter-spacing: 0.22em;
-    }
-    #qrOverlayHost .hero-qr-digits.is-pending { letter-spacing: 0.3em; }
-    .qr-overlay-label {
-      font-family: var(--type-mono);
-      font-size: 10.5px;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: var(--muted);
-      text-align: center;
-    }
   </style>
 </head>
 <body>
@@ -1091,18 +873,6 @@
         <svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
           <path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/>
         </svg>
-      </button>
-      <button type="button" id="navQrBtn" class="qr-btn" aria-controls="qrOverlay" aria-expanded="false">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
-          <rect x="1.5" y="1.5" width="5" height="5"/>
-          <rect x="9.5" y="1.5" width="5" height="5"/>
-          <rect x="1.5" y="9.5" width="5" height="5"/>
-          <rect x="3.5" y="3.5" width="1" height="1" fill="currentColor"/>
-          <rect x="11.5" y="3.5" width="1" height="1" fill="currentColor"/>
-          <rect x="3.5" y="11.5" width="1" height="1" fill="currentColor"/>
-          <path d="M9.5 9.5h2v2h-2zM12.5 9.5h2M9.5 12.5h2M12.5 12.5h2v2h-2z"/>
-        </svg>
-        <span>QR code</span>
       </button>
       <button type="button" id="navMenuBtn" class="nav-menu-btn" aria-controls="navMenu" aria-expanded="false" aria-label="Menu">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
@@ -1167,42 +937,12 @@
           </div>
 
           <div class="studio-promo" data-studio-downloads aria-label="Download Flagship Studio">
-            <span class="studio-promo__label">Flagship Studio</span>
+            <a class="studio-promo__label" href="/studio">Flagship Studio</a>
             <a class="studio-download" data-studio-platform="mac" href="/download/mac">macOS</a>
             <a class="studio-download" data-studio-platform="windows" href="/download/windows">Windows</a>
           </div>
 
-          <p class="hero-hint">
-            <span class="arrow" aria-hidden="true">→</span>
-            Already have the app?
-            <button type="button" id="heroHintQrBtn">Scan the QR code</button>
-            to deliver a server.
-          </p>
         </div>
-
-        <!-- Hero QR — IDs are JS hooks for /heroQr.js. The canvas + digits
-             nodes are moved into the overlay when it opens (no mirroring),
-             so the relay writes to a single source of truth. -->
-        <aside class="hero-qr" id="heroQr" data-state="loading" aria-label="Deliver a server from the Flagship app">
-          <div id="qrHost" class="qr-host">
-            <div class="qr-host-actions" id="heroQrActions">
-              <div class="qr-action-btn-group" id="heroQrActionsGroup">
-                <button type="button" class="qr-action-btn qr-copy-btn" id="heroQrCopyBtn" aria-label="Copy QR URL" title="Copy URL">
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true">
-                    <rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.4"/>
-                    <path d="M3 10.5V3.4a1.4 1.4 0 0 1 1.4-1.4H10.5"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <textarea class="qr-url-box" id="heroQrUrlBox" readonly aria-label="QR URL"></textarea>
-            <div class="hero-qr-canvas" id="heroQrCanvas" aria-hidden="true">
-              <div class="hero-qr-skeleton"></div>
-            </div>
-            <div class="hero-qr-digits is-pending" id="heroQrDigits" aria-live="polite">— — — — — —</div>
-          </div>
-        </aside>
-
       </div>
     </div>
   </section>
@@ -1383,7 +1123,7 @@
           </span>
         </div>
         <div class="studio-promo studio-promo--center" data-studio-downloads aria-label="Download Flagship Studio">
-          <span class="studio-promo__label">Flagship Studio</span>
+          <a class="studio-promo__label" href="/studio">Flagship Studio</a>
           <a class="studio-download" data-studio-platform="mac" href="/download/mac">macOS</a>
           <a class="studio-download" data-studio-platform="windows" href="/download/windows">Windows</a>
         </div>
@@ -1399,6 +1139,7 @@
             <h4>Product</h4>
             <ul>
               <li><a href="/docs#how-it-works">How it works</a></li>
+              <li><a href="/studio">Flagship Studio</a></li>
               <li><a href="https://web.flagshipserver.com/">Webapp</a></li>
             </ul>
           </div>
@@ -1434,27 +1175,6 @@
 
 </main>
 
-<!-- QR overlay — host slot is empty. When opened, we MOVE the hero's
-     qr-host children (#heroQrCanvas + #heroQrDigits) into #qrOverlayHost
-     so the relay always writes to the same DOM node. -->
-<dialog class="qr-overlay" id="qrOverlay" aria-labelledby="qrOverlayTitle">
-  <div class="qr-overlay-inner">
-    <div class="qr-overlay-card">
-      <div class="qr-overlay-head">
-        <h2 id="qrOverlayTitle" class="qr-overlay-title">Scan from app</h2>
-      </div>
-      <button type="button" class="qr-action-btn qr-overlay-close" id="qrOverlayClose" aria-label="Close" title="Close" hidden>
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
-          <path d="M4 4 L12 12 M12 4 L4 12"/>
-        </svg>
-      </button>
-      <div id="qrOverlayHost"></div>
-      <p class="qr-overlay-label">Match code · verify on both screens</p>
-    </div>
-  </div>
-</dialog>
-
-<script src="/heroQr.js" defer></script>
 <!-- Shared theme controller — toggles + persists "fs-theme" so the choice
      carries across every page. The home toggle uses [data-theme-toggle]. -->
 <script src="/theme.js"></script>
@@ -1470,97 +1190,6 @@
       link.classList.add("is-preferred");
       link.setAttribute("title", "Recommended for this device");
     });
-  })();
-
-  /* QR overlay controller — moves the live QR node between hero and
-     overlay so the relay writes to a single source of truth.
-     No mirroring. The canvas + digits elements physically reparent. */
-  (function () {
-    "use strict";
-    const navBtn       = document.getElementById("navQrBtn");
-    const hintBtn      = document.getElementById("heroHintQrBtn");
-    const overlay      = document.getElementById("qrOverlay");
-    const overlayClose = document.getElementById("qrOverlayClose");
-    const overlayCloseHome = overlayClose?.parentElement ?? null;
-    const overlayTitle = document.getElementById("qrOverlayTitle");
-    const overlayTitleHome = overlayTitle?.parentElement ?? null;
-    const homeHost     = document.getElementById("qrHost");
-    const overlayHost  = document.getElementById("qrOverlayHost");
-    const heroCard     = document.getElementById("heroQr");
-    if (!overlay || !homeHost || !overlayHost) return;
-
-    function moveTo(target) {
-      const source = target === overlayHost ? homeHost : overlayHost;
-      while (source.firstChild) target.appendChild(source.firstChild);
-    }
-    function actionsRow() {
-      // The action row lives inside qr-host, so it follows the move.
-      return document.getElementById("heroQrActions");
-    }
-    function actionsGroup() {
-      return document.getElementById("heroQrActionsGroup");
-    }
-    function dressOverlayChrome(inOverlay) {
-      const row = actionsRow();
-      const group = actionsGroup();
-      if (inOverlay) {
-        if (row && overlayTitle) row.insertBefore(overlayTitle, row.firstChild);
-        if (group && overlayClose) {
-          group.appendChild(overlayClose);
-          overlayClose.removeAttribute("hidden");
-        }
-        row?.classList.add("has-title");
-      } else {
-        if (overlayTitleHome && overlayTitle) overlayTitleHome.appendChild(overlayTitle);
-        if (overlayCloseHome && overlayClose) {
-          overlayCloseHome.appendChild(overlayClose);
-          overlayClose.setAttribute("hidden", "");
-        }
-        row?.classList.remove("has-title");
-      }
-    }
-
-    function open() {
-      moveTo(overlayHost);
-      dressOverlayChrome(true);
-      if (typeof overlay.showModal === "function") overlay.showModal();
-      else overlay.setAttribute("open", "");
-      navBtn?.setAttribute("aria-expanded", "true");
-    }
-    function close() {
-      dressOverlayChrome(false);
-      if (typeof overlay.close === "function") overlay.close();
-      else overlay.removeAttribute("open");
-      moveTo(homeHost);
-      navBtn?.setAttribute("aria-expanded", "false");
-    }
-    navBtn?.addEventListener("click", open);
-    hintBtn?.addEventListener("click", open);
-    overlayClose?.addEventListener("click", close);
-    overlay.addEventListener("click", (ev) => { if (ev.target === overlay) close(); });
-    // Native <dialog> closes via Escape and that fires the 'close' event
-    // but doesn't run our handler — listen and move the node back too.
-    overlay.addEventListener("close", () => {
-      dressOverlayChrome(false);
-      moveTo(homeHost);
-      navBtn?.setAttribute("aria-expanded", "false");
-    });
-
-    const MOBILE_MAX = 880;
-    function setVisible(v) { if (navBtn) navBtn.dataset.visible = v ? "true" : "false"; }
-    function applyVisibility() { if (window.innerWidth <= MOBILE_MAX) setVisible(true); }
-    applyVisibility();
-    window.addEventListener("resize", applyVisibility);
-
-    if (heroCard && "IntersectionObserver" in window) {
-      const io = new IntersectionObserver((entries) => {
-        for (const e of entries) {
-          if (window.innerWidth <= MOBILE_MAX) { setVisible(true); continue; }
-          setVisible(!e.isIntersecting);
-        }
-      }, { threshold: 0.1 });
-      io.observe(heroCard);
-    }
   })();
 
   /* FAQ accordion — only one open at a time. */

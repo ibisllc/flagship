@@ -1,7 +1,7 @@
 /**
  * Server-side ISO personalization (#12, the dumb-flash default path).
  *
- * The user's phone/QR flow produces a signed install recipe. `/ready/` POSTs
+ * The user's app produces a signed install recipe. The legacy personalizer POSTs
  * that recipe here; we stream a PRE-BUILT reproducible Alpine base ISO with the
  * recipe appended as a trailer (packages/iso-personalizer/streamPersonalize) —
  * no per-user heavy build. The builder is then a dumb flasher (ISO + USB), and

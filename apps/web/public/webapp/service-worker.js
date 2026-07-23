@@ -48,7 +48,8 @@
 //  v22: desktop-initiated /dock ceremony and browser-only polling secret.
 //  v23: keyless companion banner + honest disabled-state policy.
 //  v24: quieter cross-platform Settings, recovery, and account-backup copy.
-const SHELL_VERSION = "v24";
+//  v25: direct recipe download replaces the retired homepage QR handoff.
+const SHELL_VERSION = "v25";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

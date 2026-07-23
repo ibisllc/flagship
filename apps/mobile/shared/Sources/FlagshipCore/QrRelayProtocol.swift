@@ -2,8 +2,7 @@ import Foundation
 import CryptoKit
 import FlagshipAPI
 
-/// Phone-side QR relay protocol (v2). Mirrors
-/// apps/web/public/heroQr.js + apps/web/public/webapp/views/create-server.js.
+/// Native QR-relay cryptography shared by account/device pairing ceremonies.
 ///
 /// The browser-on-flagshipserver.com displays a QR encoding
 ///   https://flagshipserver.com/qr?s=<sid>&k=<pkB-base64url>
@@ -12,7 +11,7 @@ import FlagshipAPI
 /// X25519 keypair, computes the shared secret, derives both a 256-bit
 /// AEAD key and a 6-digit SAS match code locally, connects to the
 /// relay WS as role=phone, exchanges hello/ack, and on user-confirm
-/// AEAD-encrypts the canonical InstallBlob bundle and ships it.
+/// AEAD-encrypts the ceremony payload and ships it.
 ///
 /// SECURITY: the match code is NEVER on the wire — both peers compute
 /// it from the shared X25519 secret. A MitM that swapped pubkeys would
@@ -161,7 +160,7 @@ public enum QrRelay {
         let sealed = try AES.GCM.seal(payload, using: key, nonce: nonce)
         // SealedBox.combined is nonce || ciphertext || tag; we ship the
         // ciphertext+tag and the nonce separately, matching the wire
-        // format in create-server.js / heroQr.js.
+        // format used by the browser pairing relay.
         let ct = sealed.ciphertext + sealed.tag
         return (Base64URL.encode(ct), Base64URL.encode(nonceBytes))
     }
@@ -176,7 +175,7 @@ public enum QrRelay {
 }
 
 /// base64url (RFC 4648 §5) helpers — no padding. Mirrors the
-/// b64urlEncode/decode pair in heroQr.js.
+/// base64url encode/decode pair in the browser pairing relay.
 public enum Base64URL {
     public static func encode(_ data: Data) -> String {
         let b64 = data.base64EncodedString()

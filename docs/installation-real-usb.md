@@ -1,8 +1,7 @@
 # Installing Flagship on real hardware
 
-The cloud demo (`flagshipserver.com/build/` → debian-12 base image) is the
-fastest way to try Flagship without committing hardware. This document is the
-**real-USB** path — what you do when you want your own pod on metal you own.
+This is the **real-USB** path — what you do when you want your own pod on metal
+you own. Flagship Studio performs the image download and USB write.
 
 ## What you'll need
 
@@ -11,19 +10,16 @@ fastest way to try Flagship without committing hardware. This document is the
    - 32 GB disk minimum (128 GB+ for real use)
    - Boots from USB
 2. A USB drive. 8 GB or larger. **Will be erased.**
-3. A second computer to do the burning. Mac, Windows, or Linux.
+3. A Mac or Windows computer to do the burning.
 4. Your phone, paired with your Flagship account.
 
 ## Steps
 
-### 1. Download the stock Ubuntu Server ISO (once)
+### 1. Install Flagship Studio
 
-Go to https://releases.ubuntu.com/22.04.5/ on your builder computer and grab
-`ubuntu-22.04.5-live-server-amd64.iso` (~2 GB). Save it somewhere stable;
-you can reuse it for many Flagship installs.
-
-The Builder will refuse any ISO that doesn't match Canonical's published
-SHA-256 — this is the trust boundary for the operating-system layer.
+On the Mac or Windows computer that will write the USB, open
+`https://flagshipserver.com/studio`, download Studio, and launch it. Studio
+fetches and verifies the current base image automatically.
 
 ### 2. Mint a recipe on your phone
 
@@ -34,18 +30,16 @@ Open the Flagship app and tap "Create server." Walk through:
 2. One-line description
 3. Recipe TTL — how long this recipe stays valid. Default 6 hours,
    range 5 min – 24 hours. Pick based on when you expect to burn + boot.
-4. Tap "Continue" → scan the QR code shown on `flagshipserver.com` (or
-   paste the QR's URL into your phone browser if the camera path doesn't
-   work — same flow either way)
-5. The phone signs the recipe with your account-owner key and pushes it
-   through a one-shot relay to the desktop
+4. Choose **Pair with the builder app**, then scan Studio's QR or type its
+   short code
+5. Confirm the security code; the phone signs the recipe with your account
+   key and sends it through the one-shot pairing relay
 
-### 3. Download the recipe on the desktop
+### 3. Receive the recipe in Studio
 
-Once the phone signs and pushes, the webapp shows the green "delivered"
-state. Hit the **Download recipe (.json)** button right below the "Deliver
-to homepage" button. You'll get a file named
-`flagship-recipe-<server-domain>-<expiry>.json`.
+Studio stages the recipe after the pairing is approved. If you created the
+server in the webapp instead, download its `.json` recipe and use Studio's
+**I have a recipe** path to open or paste it.
 
 Treat this file like a single-use auth token — anyone with it can do ONE
 install at your `<server-domain>` until it expires. Keep it on the burning
@@ -53,31 +47,11 @@ machine, ideally in a directory only you can read.
 
 ### 4. Burn the USB
 
-#### Option A: Mac
+In Studio, select the target USB drive and start the write. Confirm the drive
+carefully: it will be erased. Studio downloads and verifies the base image,
+prepares it with the signed recipe, and performs the privileged raw write.
 
-Open the **Flagship Studio.app** in `apps/builder-mac/` (run `swift run`
-inside that directory if you don't have a release build yet). Drag in:
-
-1. The recipe `.json`
-2. The Ubuntu Server ISO
-3. Select your USB drive from the picker
-
-Click **Bake.** Enter your admin password when prompted. ~3 minutes later
-the drive is ready.
-
-#### Option B: Linux
-
-Open the **Flagship Studio** (GTK4 app at `apps/builder-linux/`). Same
-wizard as the Mac app:
-
-```sh
-cd apps/builder-linux
-python flagship-builder.py
-```
-
-The app asks for sudo via PolicyKit when it needs to do the raw write.
-
-#### Option C: CLI (any OS)
+#### Advanced: CLI
 
 ```sh
 cd packages/flagship-builder
@@ -86,7 +60,7 @@ node src/cli.ts verify ~/Downloads/flagship-recipe-*.json
 
 sudo node src/cli.ts write \
     ~/Downloads/flagship-recipe-*.json \
-    ~/Downloads/ubuntu-22.04.5-live-server-amd64.iso
+    ~/Downloads/flagship-base.iso
 # Picks a USB interactively. Refuses any drive that looks internal.
 ```
 
@@ -94,7 +68,7 @@ The Builder auto-shreds the recipe `.json` after a successful write (the
 phone-signed token is single-use; leaving it on disk extends the attack
 window). Pass `--keep-recipe` if you want to keep it.
 
-#### Option D: "Burn elsewhere"
+#### Advanced: "Burn elsewhere"
 
 If your builder machine isn't where you want to do the raw write — say,
 you mint on a laptop and burn on a desktop — use `prepare` to build a
@@ -104,7 +78,7 @@ Rufus, `dd`):
 ```sh
 node packages/flagship-builder/src/cli.ts prepare \
     ~/Downloads/flagship-recipe-*.json \
-    ~/Downloads/ubuntu-22.04.5-live-server-amd64.iso \
+    ~/Downloads/flagship-base.iso \
     ~/Downloads/flagship-ready.iso
 
 # Then on the target machine:
@@ -114,9 +88,8 @@ sudo dd if=~/Downloads/flagship-ready.iso of=/dev/diskN bs=4M status=progress
 ### 5. Boot the target machine from the USB
 
 Plug the USB into the target. Power on, hit your firmware's boot-menu key
-(F12 / F10 / Esc — varies by manufacturer), pick the USB. Ubuntu's
-subiquity installer takes over, reads the recipe from the CIDATA
-partition, runs unattended. About 5-15 minutes (mostly apt install).
+(F12 / F10 / Esc — varies by manufacturer), pick the USB. The installer
+reads the recipe and runs unattended. Allow roughly 5–15 minutes.
 
 The machine reboots into its newly-installed Debian/Ubuntu rootfs and the
 flagship-bootstrap systemd unit POSTs the registration to
@@ -131,10 +104,10 @@ state, the IP, the cert expiry.
 
 ## Troubleshooting
 
-**Builder refuses my ISO.**
-Check the SHA-256 — `shasum -a 256 ubuntu-22.04.5-live-server-amd64.iso`
-must match Canonical's published value. If you downloaded from a mirror
-it may have been re-released.
+**Studio cannot download the base image.**
+Check the computer's connection and retry. Studio verifies the image against
+the signed manifest before it writes anything. Advanced CLI users supplying
+their own image must provide the exact image and digest expected by the builder.
 
 **Builder refuses my recipe.**
 Recipes expire (your phone showed how long when you minted). If you've

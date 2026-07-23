@@ -206,7 +206,7 @@ describe("service-worker.js — install / activate / waiting-state safety", () =
     await fireEvent(h.self, "install", {}); // creates the current (-v20)
     await fireEvent(h.self, "activate", {});
     const remaining = await h.caches.keys();
-    expect(remaining).toContain("flagship-webapp-shell-v24");
+    expect(remaining).toContain("flagship-webapp-shell-v25");
     expect(remaining).not.toContain("flagship-webapp-shell-v15");
     expect(remaining).not.toContain("flagship-webapp-shell-v16");
   });

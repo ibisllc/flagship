@@ -2,8 +2,7 @@ import Foundation
 
 /// Phone-side peer of `wss://flagshipserver.com/qr-pipe/<sid>?role=phone`
 /// (relay-v2). Wraps a URLSessionWebSocketTask + the small JSON-line
-/// frame protocol shared with the browser counterpart in
-/// `apps/web/public/heroQr.js` + `webapp/views/create-server.js`.
+/// frame protocol shared with `webapp/lib/pairingRelay.js`.
 ///
 /// Frame protocol (subset the phone cares about):
 ///   ← from relay
@@ -41,8 +40,8 @@ public enum QrRelayError: Error, LocalizedError, Sendable {
         switch self {
         case .connectionFailed(let m): return "Couldn't reach the relay: \(m)"
         case .relayClosedBeforeAck:    return "The relay closed before the browser acknowledged."
-        case .peerMissing:             return "The browser at flagshipserver.com isn't connected — reload it and try again."
-        case .sessionExpired:          return "Session expired — refresh the homepage and try again."
+        case .peerMissing:             return "The other pairing device isn't connected — reopen its pairing page and try again."
+        case .sessionExpired:          return "Pairing session expired — start a new one and try again."
         case .relayError(let m):       return "Relay: \(m)"
         case .unexpectedFrame(let m):  return "Unexpected frame from relay: \(m)"
         case .notImplemented(let f):   return "Not implemented yet: \(f)"

@@ -1,21 +1,17 @@
 /**
- * #24 — Compose draft + Deliver flow (webapp peer device) — v2 protocol.
+ * Compose draft + download flow for a webapp-held identity.
  *
  * The full UI flow runs against a real browser (see the Playwright
  * spec at e2e/flows/s16-build-relay.spec.ts). This vitest file pins:
  *
  *   1. Static structure of the view's module surface — the IDs, the
- *      view registration, the deliver/save handlers — so a refactor
+ *      view registration, the download/save handlers — so a refactor
  *      can't accidentally drop them.
  *   2. The pure canonical-bytes helpers in lib/buildDraft.js still
  *      round-trip the InstallBlob format.
  *
- * v2 specifics:
- *   - The match code is derived from an ECDH shared secret inside the
- *     view itself (no helper export). Tested end-to-end by the e2e flow.
- *   - The view sends {kind:"hello"} then {kind:"deliver"} on /qr-pipe.
- *   - There is no "match-code mismatch" branch — the SAS comparison is
- *     a human visual check, not a programmatic equality assertion.
+ * The signed recipe is downloaded directly and opened in Flagship Studio;
+ * the homepage relay is intentionally not part of this server-build flow.
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
@@ -86,50 +82,26 @@ describe("create-server view — static structure (#24)", () => {
   it("provides the inputs the user fills in", () => {
     expect(VIEW_SRC).toMatch(/cs-server-name/);
     expect(VIEW_SRC).toMatch(/cs-backup-policy/);
-    expect(VIEW_SRC).toMatch(/cs-relay-session/);
   });
 
-  it("wires the two primary actions: Save Draft + Deliver Now", () => {
+  it("wires Save Draft and the direct recipe download", () => {
     expect(VIEW_SRC).toMatch(/cs-save-draft.*addEventListener/s);
-    expect(VIEW_SRC).toMatch(/cs-deliver.*addEventListener/s);
+    expect(VIEW_SRC).toMatch(/cs-download-recipe.*addEventListener/s);
+    expect(VIEW_SRC).toMatch(/downloadRecipe\(blobBundle\)/);
   });
 
-  it("renders the live match-code surface so users can compare across screens", () => {
-    expect(VIEW_SRC).toMatch(/cs-match-code/);
-  });
-
-  it("uses the v2 wire shape — /qr-pipe + hello/deliver, no /build-relay", () => {
-    expect(VIEW_SRC).toContain("/qr-pipe");
-    expect(VIEW_SRC).toContain("phonePk");
-    expect(VIEW_SRC).toContain("kind: \"deliver\"");
-    expect(VIEW_SRC).not.toContain("/build-relay/");
-    expect(VIEW_SRC).not.toContain("kind: \"blob\"");
-  });
-
-  it("derives the match code locally from the ECDH shared secret", () => {
-    expect(VIEW_SRC).toContain("X25519");
-    expect(VIEW_SRC).toContain("HKDF");
-    expect(VIEW_SRC).toContain("flagship/qr/sas/v1");
-  });
-
-  it("gates Confirm behind a deliberate-pause timer (Tor-style 600ms)", () => {
-    expect(VIEW_SRC).toContain("CONFIRM_GATE_MS");
-    expect(VIEW_SRC).toContain("600");
-  });
-
-  it("dials the apex host via the single apex accessor (G2 — prod default unchanged)", () => {
-    // The relay host used to be the baked literal `flagshipserver.com`; it is
-    // now derived through lib/apex.js (origin-driven, prod-default) so a gym
-    // build retargets with one knob. The dial still lands on /qr-pipe as phone.
-    expect(VIEW_SRC).toMatch(/controlHost\(\)\}\/qr-pipe/);
-    expect(VIEW_SRC).toContain('from "../lib/apex.js"');
+  it("does not retain the retired homepage recipe relay", () => {
+    expect(VIEW_SRC).not.toContain("cs-relay-session");
+    expect(VIEW_SRC).not.toContain("/qr-pipe");
+    expect(VIEW_SRC).not.toContain("Deliver to homepage");
+    expect(INDEX_HTML).not.toContain("cs-match-code");
   });
 
   it("index.html has the view-create-server slot with every wired input", () => {
     expect(INDEX_HTML).toMatch(/<section id="view-create-server"/);
     expect(INDEX_HTML).toMatch(/id="cs-server-name"/);
-    expect(INDEX_HTML).toMatch(/id="cs-deliver"/);
-    expect(INDEX_HTML).toMatch(/id="cs-match-code"/);
+    expect(INDEX_HTML).toMatch(/id="cs-download-recipe"/);
+    expect(INDEX_HTML).toContain("flagshipserver.com/studio");
   });
 });
 

@@ -112,7 +112,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
 
   it("never promotes one available desktop build without the other", async () => {
     const app = buildServer();
-    for (const path of ["/", "/ready/", "/ready/ready.js"]) {
+    for (const path of ["/", "/studio/"]) {
       const r = await app.inject({ method: "GET", url: path });
       expect(r.statusCode, path).toBe(200);
       expect(r.body, path).toContain("/download/mac");

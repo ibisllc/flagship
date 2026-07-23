@@ -12,8 +12,8 @@
 // webapp can't hard-block capture), the explicit risk warning, and a
 // short single-use relay TTL.
 //
-// The relay choreography reuses the QrRelay v2 protocol
-// (apps/web/public/heroQr.js + views/create-server.js). The orchestration
+// The relay choreography reuses the QrRelay v2 protocol implemented by
+// lib/pairingRelay.js. The orchestration
 // + vouch crypto live in lib/crossDevicePairing.js (pure, injected) so
 // this view stays a thin DOM shell.
 

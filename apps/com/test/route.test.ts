@@ -124,7 +124,7 @@ describe("flagshipserver.com Worker — routing", () => {
     expect(realCss.headers.get("content-type")).toContain("text/css");
     // An SPA route (no file extension) still gets the HTML fallback.
     const spaRoute = await route(
-      new Request("https://flagshipserver.com/ready/"),
+      new Request("https://flagshipserver.com/not-a-file", { headers: cookie }),
       spaFallbackEnv,
     );
     expect(spaRoute.status).toBe(200);
@@ -1983,6 +1983,28 @@ describe("/download/<os> — on-brand installer redirect", () => {
     );
     expect(r.status).toBe(302);
     expect(r.headers.get("location")).toBe("/docs#burn");
+  });
+});
+
+describe("/studio — canonical desktop-builder page", () => {
+  it("serves the short no-slash URL directly, even without a preview cookie", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/studio"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/studio/index.html");
+  });
+
+  it("canonicalizes the trailing slash and retires /ready + /build", async () => {
+    for (const path of ["/studio/", "/ready", "/ready/", "/build", "/build/"]) {
+      const r = await route(
+        new Request(`https://flagshipserver.com${path}`),
+        makeEnv(),
+      );
+      expect(r.status, path).toBe(308);
+      expect(r.headers.get("location"), path).toBe("/studio");
+    }
   });
 });
 

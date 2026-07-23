@@ -2,8 +2,7 @@
 //
 // Phone-side peer of `wss://flagshipserver.com/qr-pipe/<sid>?role=phone`
 // (relay-v2). Wraps an OkHttp WebSocket + the small JSON-line frame
-// protocol shared with the browser counterpart in heroQr.js +
-// create-server.js.
+// protocol shared with the browser counterpart in pairingRelay.js.
 //
 // Frame protocol:
 //   ← from relay
@@ -43,8 +42,8 @@ interface QrRelayClient {
 sealed class QrRelayError(message: String) : RuntimeException(message) {
     data class ConnectionFailed(val why: String) : QrRelayError("Couldn't reach the relay: $why")
     object RelayClosedBeforeAck : QrRelayError("The relay closed before the browser acknowledged.")
-    object PeerMissing : QrRelayError("The browser at flagshipserver.com isn't connected — reload it and try again.")
-    object SessionExpired : QrRelayError("Session expired — refresh the homepage and try again.")
+    object PeerMissing : QrRelayError("The other pairing device isn't connected — reopen its pairing page and try again.")
+    object SessionExpired : QrRelayError("Pairing session expired — start a new one and try again.")
     data class RelayErr(val msg: String) : QrRelayError("Relay: $msg")
     data class UnexpectedFrame(val raw: String) : QrRelayError("Unexpected frame from relay: $raw")
     data class NotImplementedFeature(val feature: String) : QrRelayError("Not implemented yet: $feature")

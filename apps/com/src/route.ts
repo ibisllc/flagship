@@ -584,6 +584,24 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     return new Response(null, { status: 302, headers: { location: "/docs" } });
   }
 
+  // The homepage-mediated recipe relay and its /ready landing are retired.
+  // Keep old bookmarks useful while making the memorable no-slash URL the
+  // canonical place to install and pair Flagship Studio.
+  if (url.pathname === "/ready" || url.pathname === "/ready/" ||
+      url.pathname === "/build" || url.pathname === "/build/") {
+    return new Response(null, { status: 308, headers: { location: "/studio" } });
+  }
+  if (url.pathname === "/studio/") {
+    return new Response(null, { status: 308, headers: { location: "/studio" } });
+  }
+  if (url.pathname === "/studio") {
+    const studioUrl = new URL("/studio/index.html", url);
+    return env.ASSETS.fetch(new Request(studioUrl, {
+      method: request.method,
+      headers: request.headers,
+    }));
+  }
+
   // Pre-launch stealth gate: the public marketing surface is replaced by
   // a "coming soon" page so operational detail (build flow, dev tools,
   // status, docs, etc.) isn't exposed before the mobile apps ship.
@@ -654,7 +672,7 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   }
 
   // /download/<os> → the Flagship Studio installer for that OS. The
-  // /ready/ page links here so the storage URL never shows in the UI; we
+  // Public Studio surfaces link here so the storage URL never shows in the UI; we
   // 302 to wherever the binary lives. Placed BEFORE the coming-soon gate
   // so the download link works regardless of the preview cookie / launch
   // state. Unset or unknown OS → the /docs#burn "get the Builder"
@@ -1477,18 +1495,14 @@ const COMING_SOON_EXEMPT_PATHS = new Set<string>([
   "/apple-touch-icon.png",
   "/404.html",
   "/robots.txt",
-  // Load-bearing: the post-order recipe/ISO flow must work for a real
-  // user who has NO preview cookie, even while the marketing site is
-  // coming-soon. /ready/ (prefix below) + the shared assets it renders
-  // with are served through the gate. The download/personalize routes
-  // (/download/*, /api/*) are handled before the static fallback, so
-  // they're already ungated.
+  // Shared assets used by public utility pages remain available through the
+  // pre-launch gate. Download/API routes are handled before static fallback.
   "/site.css",
   "/theme-ui.css",
   "/theme.js",
   "/motion.js",
 ]);
-const COMING_SOON_EXEMPT_PREFIXES = ["/.well-known/", "/ready/", "/downloads/"];
+const COMING_SOON_EXEMPT_PREFIXES = ["/.well-known/", "/downloads/"];
 
 function hasPreviewCookie(request: Request): boolean {
   const header = request.headers.get("cookie");

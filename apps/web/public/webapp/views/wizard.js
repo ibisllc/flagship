@@ -358,9 +358,9 @@ async function renderStepBody(state, step) {
     case "create-server":
       return `
         <p class="note">Your account is open — this step is optional. Compose your first
-        server here (you can add more later). When you tap Continue, the webapp opens
-        <code>flagshipserver.com/build/</code> on this machine — scan the QR there from
-        this browser to deliver the disk image.</p>
+        server here (you can add more later). The webapp downloads a signed recipe;
+        open it in Flagship Studio to write the installer USB. Get Studio at
+        <code>flagshipserver.com/studio</code>.</p>
         <div class="btn-row-sm">
           <button id="wizard-go-create-server" class="pill primary">Add a server</button>
           <button id="wizard-skip-create-server" class="pill">Skip for now</button>
