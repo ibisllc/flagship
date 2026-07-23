@@ -1955,7 +1955,7 @@ describe("/download/<os> — on-brand installer redirect", () => {
     );
     expect(windows.status).toBe(302);
     expect(windows.headers.get("location")).toBe(
-      "https://github.com/ibisllc/flagship/releases/download/studio-windows-v0.0.1/FlagshipStudio-Windows.exe",
+      "https://github.com/ibisllc/flagship/releases/download/studio-windows-v0.0.1/FlagshipBuilder.exe",
     );
 
     const linux = await route(
