@@ -45,9 +45,14 @@ fun DeveloperScreen(nav: NavController) {
         FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
         Spacer(Modifier.height(FS.space.s3))
         Text(
-            "Developer",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            "DEVELOPER",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+        )
+        Text(
+            "Choose live or mock data and tune test behavior.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp),
         )
         Spacer(Modifier.height(FS.space.s4))
 

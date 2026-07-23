@@ -107,9 +107,14 @@ fun AccountSecurityScreen(nav: NavController) {
         verticalArrangement = Arrangement.spacedBy(FS.space.s4),
     ) {
         Text(
-            "Account security",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            "ACCOUNT SECURITY",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+        )
+        Text(
+            "Manage recovery protection and account-level security.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp),
         )
 
         FSCard(padding = PaddingValues(FS.space.s4)) {

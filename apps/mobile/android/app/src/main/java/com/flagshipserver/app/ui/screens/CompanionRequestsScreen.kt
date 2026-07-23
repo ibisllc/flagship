@@ -101,12 +101,12 @@ fun CompanionRequestsScreen(nav: NavController) {
         FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
         Spacer(Modifier.height(FS.space.s3))
         Text(
-            "Companion requests",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            "COMPANION REQUESTS",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
         )
         Text(
-            "A docked browser forwarded these write actions for you to approve. Your phone signs and sends each one — the browser never holds your account key.",
+            "Review writes from docked browsers. Your phone signs approved requests; browsers never receive your account key.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )

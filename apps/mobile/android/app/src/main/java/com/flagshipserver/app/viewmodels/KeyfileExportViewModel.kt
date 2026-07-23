@@ -3,7 +3,7 @@
 // compatible with packages/protocol/src/keyfile.ts. Mirror of the iOS
 // KeyfileExportViewModel.
 //
-// The view holds the three required acknowledgments + the passphrase;
+// The view holds the required acknowledgment + the passphrase;
 // this VM only validates strength and runs the wrap. The produced file
 // text is handed back so the host can save it via the Storage Access
 // Framework / a share intent — we never write it anywhere on our own.
@@ -45,22 +45,13 @@ class KeyfileExportViewModel(
     val confirmPassphrase: StateFlow<String> = _confirm.asStateFlow()
     fun setConfirmPassphrase(v: String) { _confirm.value = v }
 
-    // The three required acknowledgments. All must be true before
-    // "Create backup file" enables.
+    // The control acknowledgment must be true before the backup enables.
     private val _ackControl = MutableStateFlow(false)
     val ackControl: StateFlow<Boolean> = _ackControl.asStateFlow()
     fun setAckControl(v: Boolean) { _ackControl.value = v }
 
-    private val _ackOffline = MutableStateFlow(false)
-    val ackOffline: StateFlow<Boolean> = _ackOffline.asStateFlow()
-    fun setAckOffline(v: Boolean) { _ackOffline.value = v }
-
-    private val _ackNoRecovery = MutableStateFlow(false)
-    val ackNoRecovery: StateFlow<Boolean> = _ackNoRecovery.asStateFlow()
-    fun setAckNoRecovery(v: Boolean) { _ackNoRecovery.value = v }
-
     val acknowledged: Boolean
-        get() = _ackControl.value && _ackOffline.value && _ackNoRecovery.value
+        get() = _ackControl.value
 
     val passphraseStrong: Boolean
         get() = isStrong(_passphrase.value)
@@ -69,7 +60,7 @@ class KeyfileExportViewModel(
         get() = _confirm.value.isNotEmpty() && _passphrase.value == _confirm.value
 
     /** The "Create backup file" CTA enables only when everything lines
-     *  up: strong passphrase, confirmation matches, all three acks. */
+     *  up: strong passphrase, confirmation matches, and acknowledgment. */
     val canCreate: Boolean
         get() = passphraseStrong && passphrasesMatch && acknowledged
 

@@ -149,6 +149,16 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-22 (today's integration + Settings parity) — the companion dock,
+Windows-native builder work, and dev→prod dataspace/promotion flow are on main,
+and the quieter Settings hierarchy now matches across iOS, Android, and web.**
+Settings starts with a plain `@username`; recovery is named Cloud recovery;
+account backup uses one acknowledgment and minimal passphrase copy; recovery
+progress appears only while re-attachment is active; and companion, security,
+profile, developer, and recovery subpages use compact introductions. The web
+shell cache is v24. Native changes still require the next TestFlight/Play build,
+and the dock still needs physical phone/browser validation.
+
 **2026-07-22 (quieter Home front page) — web, iOS, and Android show the
 locally decrypted `account > device` identity breadcrumb, use a one-line account
 backup warning, and shorten the no-server invitation.** iOS also hides its build

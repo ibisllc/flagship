@@ -155,8 +155,6 @@ class KeyfileImportFlowTest {
         exportVm.setPassphrase("StrongPass123!")
         exportVm.setConfirmPassphrase("StrongPass123!")
         exportVm.setAckControl(true)
-        exportVm.setAckOffline(true)
-        exportVm.setAckNoRecovery(true)
         assertTrue(exportVm.canCreate)
         exportVm.createBackup()
         val ready = exportVm.phase.first()

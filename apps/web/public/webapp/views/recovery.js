@@ -31,6 +31,7 @@ import {
 } from "../lib/keyfileBackup.js";
 import { escapeHtml } from "../lib/util.js";
 import { get as profileGet } from "../lib/profilesStore.js";
+import { screensFetch } from "../lib/api.js";
 
 registerView("view-recovery");
 
@@ -148,6 +149,20 @@ async function refreshCloudStatus() {
   removeBtn.style.display = exists ? "" : "none";
 }
 
+async function refreshReattachVisibility() {
+  const card = $("recovery-reattach-card");
+  if (!card) return;
+  card.classList.add("hidden");
+  try {
+    const snapshot = (await screensFetch("/api/screens/post-recovery/status")).report;
+    const pending = snapshot?.state?.lastSeen;
+    const active = Boolean(pending && pending.objectedAt == null && snapshot.state.lastSwapTo == null);
+    card.classList.toggle("hidden", !active);
+  } catch {
+    card.classList.add("hidden");
+  }
+}
+
 async function runSetupCloud() {
   const btn = $("recovery-cloud-setup");
   if (btn) {
@@ -198,9 +213,9 @@ async function runRemoveCloud() {
 
 /* ---------- `.flagshipkey` backup (primary path) ---------- */
 
-// Build the export ceremony overlay: the heavy warning, a strong passphrase
-// (entered twice), and the 3 required acknowledgments. The "Create backup
-// file" button stays disabled until all three boxes are ticked and the
+// Build the export ceremony overlay: the warning, a strong passphrase
+// (entered twice), and the required acknowledgment. The "Create backup
+// file" button stays disabled until the box is ticked and the
 // passphrases match + pass the strength gate. Returns { passphrase } on
 // confirm or null on cancel.
 function openExportCeremony() {
@@ -223,12 +238,11 @@ function openExportCeremony() {
       .join("");
     overlay.innerHTML = `
       <div class="modal-card" role="document">
-        <h3 class="modal-title">${escapeHtml(KEYFILE_COPY.exportTitle)}</h3>
-        <p class="modal-message">${escapeHtml(KEYFILE_COPY.intro)}</p>
+        <p class="fs-detail-label">ACCOUNT BACKUP</p>
         <p class="modal-message err-text"><strong>${escapeHtml(KEYFILE_COPY.danger)}</strong></p>
-        <p class="modal-message">${escapeHtml(KEYFILE_COPY.passphrase)}</p>
         <input type="password" class="modal-input" data-pass1 placeholder="Passphrase" autocomplete="new-password" />
-        <input type="password" class="modal-input mt-2" data-pass2 placeholder="Confirm passphrase" autocomplete="new-password" />
+        <input type="password" class="modal-input mt-2" data-pass2 placeholder="Confirm Passphrase" autocomplete="new-password" />
+        <p class="faint-sm mt-2">${escapeHtml(KEYFILE_COPY.passphrase)}</p>
         <p class="modal-error err-text hidden" data-err></p>
         <div class="modal-acks mt-3">${ackHtml}</div>
         <div class="row-2 mt-3">
@@ -294,7 +308,7 @@ function openExportCeremony() {
 
 /**
  * Run the `.flagshipkey` export ceremony (heavy warning + strong
- * passphrase + the three acknowledgments) and download the file.
+ * passphrase + acknowledgment) and download the file.
  * Returns true when a backup file was actually written, false when the
  * user cancelled the ceremony or the export errored. Exported so the
  * first-run wizard's "Secure your account" step can reuse this exact
@@ -537,4 +551,5 @@ export function initRecoveryView() {
 export function enterRecovery() {
   show("view-recovery");
   void refreshCloudStatus();
+  void refreshReattachVisibility();
 }

@@ -53,14 +53,14 @@ fun ProfilesScreen(nav: NavController) {
         FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
         Spacer(Modifier.height(FS.space.s3))
         Text(
-            "Your clouds",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            "PROFILES",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
         )
         Text(
-            "One phone, multiple clouds. Each profile is a separate cloud (personal, family, work) with its own root key.",
+            "Switch the cloud this phone is using. Each profile has its own account key.",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            style = TextStyle(fontSize = 13.sp),
         )
         Spacer(Modifier.height(FS.space.s4))
 

@@ -90,12 +90,12 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
         FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
         Spacer(Modifier.height(FS.space.s3))
         Text(
-            "Dock a browser",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            "DOCK A BROWSER",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
         )
         Text(
-            "Open web.flagshipserver.com/dock on your computer, then approve its pairing code here.",
+            "Pair a desktop browser for four hours of keyless access. Disconnect it anytime.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )

@@ -62,7 +62,6 @@ import com.flagshipserver.app.ui.components.FSAnnouncementCard
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
-import com.flagshipserver.app.ui.components.FSProfileCard
 import com.flagshipserver.app.ui.components.FSSettingsGroup
 import com.flagshipserver.app.ui.components.FSSettingsRowData
 import com.flagshipserver.app.ui.theme.FS
@@ -140,18 +139,6 @@ fun SettingsScreen(nav: NavController) {
     }
     val sessionGated = signOutPolicy == SignOutPolicy.BLOCKED_NO_RECOVERY
 
-    // Account-type one-liner under the username on the profile hero, driven by
-    // the live account type (mirror of iOS SettingsScreen.profileSubtitle).
-    // Until the load resolves we fall back to the recovery-aware framing.
-    val profileSubtitle = when (accountType) {
-        "multi" -> "Multi-device + 2FA"
-        "single" -> "Single-device account"
-        else -> if (hasRecovery)
-            "Cloud recovery on · Tap to manage account security"
-        else
-            "Tap to manage account security"
-    }
-
     val scroll = rememberScrollState()
     Column(
         Modifier
@@ -168,13 +155,10 @@ fun SettingsScreen(nav: NavController) {
       ) {
         Spacer(Modifier.height(FS.space.s8))
 
-        // Account hero — teal monogram + username + account subtitle.
-        // Drills into Account security (the most relevant account-level
-        // destination), reusing the existing nav target.
-        FSProfileCard(
-            name = username,
-            subtitle = profileSubtitle,
-            onClick = { nav.navigate("account-security") },
+        Text(
+            "@${username.removePrefix("@")}",
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
             modifier = Modifier.testTag("settings-title"),
         )
 
@@ -224,8 +208,8 @@ fun SettingsScreen(nav: NavController) {
                 ),
                 FSSettingsRowData(
                     icon = "♻",
-                    title = "Recovery",
-                    subtitle = "Cloud recovery + offline recovery codes.",
+                    title = "Cloud recovery",
+                    subtitle = "Recover with your passphrase and cloud passkey.",
                     onClick = { nav.navigate("recovery") },
                 ),
                 FSSettingsRowData(

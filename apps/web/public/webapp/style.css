@@ -1725,6 +1725,21 @@ button[data-device-restricted] {
   transition: border-color var(--motion-state), background var(--motion-state);
 }
 .fs-profile-card:hover { border-color: var(--accent) !important; background: var(--canvas-2) !important; }
+.fs-settings-account-name {
+  margin: 4px 0 20px;
+  color: var(--text);
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 500;
+}
+.fs-detail-label {
+  margin: 4px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  letter-spacing: .08em;
+}
 .fs-profile-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .fs-profile-name {
   font-size: 21px;

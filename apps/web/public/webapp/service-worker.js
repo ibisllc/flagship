@@ -47,7 +47,8 @@
 //  v21: refresh the quieter Home identity, recovery warning, and empty state.
 //  v22: desktop-initiated /dock ceremony and browser-only polling secret.
 //  v23: keyless companion banner + honest disabled-state policy.
-const SHELL_VERSION = "v23";
+//  v24: quieter cross-platform Settings, recovery, and account-backup copy.
+const SHELL_VERSION = "v24";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

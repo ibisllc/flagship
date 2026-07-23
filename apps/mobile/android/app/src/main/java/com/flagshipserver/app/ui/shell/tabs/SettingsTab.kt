@@ -27,6 +27,7 @@ import com.flagshipserver.app.ui.screens.AiKeysManagerScreen
 import com.flagshipserver.app.ui.screens.DeveloperScreen
 import com.flagshipserver.app.ui.screens.PairedSessionsScreen
 import com.flagshipserver.app.ui.screens.PeerBackupScreen
+import com.flagshipserver.app.ui.screens.PostRecoveryScreen
 import com.flagshipserver.app.ui.screens.PrivacyScreen
 import com.flagshipserver.app.ui.screens.ProcessUrlScreen
 import com.flagshipserver.app.ui.screens.ProfilesScreen
@@ -110,6 +111,7 @@ fun SettingsTab() {
         composable("paired-sessions") { PairedSessionsScreen(nav) }
         composable("add-control-device") { AddControlDeviceScreen(nav) }
         composable("recovery") { RecoveryScreen(nav) }
+        composable("post-recovery") { PostRecoveryScreen(nav) }
         composable("keyfile-export") { KeyfileExportScreen(nav) }
         composable("developer") { DeveloperScreen(nav) }
         composable("providers") { ProvidersScreen(nav) }

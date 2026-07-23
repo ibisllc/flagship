@@ -62,7 +62,6 @@ import {
   alertTriangleIcon,
   downloadIcon,
 } from "./lib/icons.js";
-import { profileCard } from "./lib/uikit.js";
 import { getSession, unlockSession } from "./lib/state.js";
 import { dispatchInitialView } from "./lib/deepLink.js";
 import { resolveAccount, resumeDemoAccount } from "./lib/accountResolve.js";
@@ -218,23 +217,14 @@ const SETTINGS_ROW_ICONS = {
   chevron: chevronRightIcon,
 };
 
-/** Populate the Settings profile hero + stamp the row icon squares. */
+/** Populate the Settings account name + stamp the row icon squares. */
 function decorateSettingsTab() {
-  // Profile hero — teal monogram + username + account status. Tapping it
-  // opens AI providers (the primary account surface), matching the iOS
-  // profile card's drill-down into account.
   const hero = $("settings-profile-hero");
   if (hero) {
     let username = "";
     try { username = getSession().username || ""; } catch { /* locked */ }
-    hero.innerHTML = profileCard({
-      name: username,
-      subtitle: username ? "Your Flagship account" : "Signed in",
-    });
-    hero.querySelector("[data-profile-card]")?.addEventListener("click", async () => {
-      show("view-settings");
-      await renderProviders();
-    });
+    hero.className = "fs-settings-account-name";
+    hero.textContent = username ? `@${username.replace(/^@/, "")}` : "";
   }
   // Stamp the row icon squares + chevrons once.
   for (const span of document.querySelectorAll("#view-settings-tab [data-row-icon]")) {

@@ -61,12 +61,17 @@ fun PostRecoveryScreen(nav: NavController) {
         FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
         Spacer(Modifier.height(FS.space.s3))
         Text(
-            "Post-recovery",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            "RE-ATTACH PROGRESS",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+        )
+        Text(
+            "Track how each app is re-anchored to your recovered account key.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp),
         )
 
-        Spacer(Modifier.height(FS.space.s6))
+        Spacer(Modifier.height(FS.space.s4))
 
         if (error != null) {
             ErrorCard(message = error!!)

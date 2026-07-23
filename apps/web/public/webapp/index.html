@@ -242,7 +242,7 @@
           <div class="fs-group">
             <button class="fs-row" id="settings-tab-account-security"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Account security</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-providers"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI keys</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Cloud recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-backup-key"><span class="fs-row-icon icon" data-row-icon="backupkey"></span><span class="fs-row-body"><span class="fs-row-title">Back up account key</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-profiles"><span class="fs-row-icon icon" data-row-icon="profiles"></span><span class="fs-row-body"><span class="fs-row-title">Profiles</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>
@@ -494,7 +494,8 @@
 
       <!-- View: Companion-browser dock (P14) -->
       <section id="view-companion-dock" class="hidden">
-        <h2>Dock a browser</h2>
+        <p class="fs-detail-label">DOCK A BROWSER</p>
+        <p class="note">Pair a desktop browser for four hours of keyless access. Disconnect it anytime.</p>
         <div id="companion-dock-content"></div>
         <div class="row-2">
           <button class="secondary" id="companion-dock-refresh">Refresh</button>
@@ -505,11 +506,10 @@
       <!-- View: Companion requests (P14 Phase 2) — owner-side approval
            queue for write-requests forwarded by docked companions. -->
       <section id="view-companion-requests" class="hidden">
-        <h2>Companion requests</h2>
+        <p class="fs-detail-label">COMPANION REQUESTS</p>
         <p class="note">
-          Docked companion browsers can't sign on your behalf. When one
-          tries to release or revoke a server, the request lands here so
-          you can approve or deny it.
+          Review writes from docked browsers. Your phone signs approved
+          requests; browsers never receive your account key.
         </p>
         <div id="companion-requests-content"></div>
         <div class="row-2">
@@ -520,7 +520,8 @@
 
       <!-- View: Profiles (P12) — multi-profile switching (parity w/ iOS + Android) -->
       <section id="view-profiles" class="hidden">
-        <h2>Your clouds</h2>
+        <p class="fs-detail-label">PROFILES</p>
+        <p class="note">Switch the cloud this browser is using. Each profile has its own account key.</p>
         <div id="profiles-content"></div>
         <div class="row-2">
           <button class="secondary" id="profiles-refresh">Refresh</button>
@@ -927,7 +928,7 @@
       </section>
 
       <section id="view-post-recovery" class="hidden">
-        <h2>Reattach progress</h2>
+        <p class="fs-detail-label">RE-ATTACH PROGRESS</p>
         <div class="card warning">
           <p class="note">
             After a recovery rebinds your identity, the daemon walks every installed service and rewrites membership rows from the OLD IRK to the NEW one. The OLD pubkey is then wiped from service data; a 7-day encrypted journal lets you undo the rewrite if needed.
@@ -947,8 +948,8 @@
            the webapp surface mirrors the badge + lets users print
            recovery codes from a larger screen. -->
       <section id="view-account-security" class="hidden">
-        <h2>Account security</h2>
-        <p class="note">Single-device vs multi-device + 2FA.</p>
+        <p class="fs-detail-label">ACCOUNT SECURITY</p>
+        <p class="note">Manage recovery protection and account-level security.</p>
         <div id="account-security-content"></div>
         <button class="secondary full-width mt-2" id="account-security-back">← Back</button>
       </section>
@@ -985,10 +986,15 @@
       </section>
 
       <section id="view-recovery" class="hidden">
-        <h2>Recovery</h2>
+        <p class="fs-detail-label">CLOUD RECOVERY</p>
+        <div class="card hidden" id="recovery-reattach-card">
+          <p><strong>Re-attach progress</strong></p>
+          <p class="note">See per-app re-anchoring after recovery.</p>
+          <button class="secondary full-width mt-2" id="recovery-open-reattach">View progress</button>
+        </div>
         <div class="card">
           <p class="note">
-            <strong>Cloud recovery (passkey):</strong> wrap your master key with a passkey's PRF output and upload the ciphertext to flagshipserver.com. The unwrap key never leaves your browser; flagshipserver.com only ever sees opaque ciphertext.
+            Store an encrypted copy of your account key for a new browser.
           </p>
           <div class="row"><span class="label">Status</span><span class="pill" id="recovery-cloud-pill">checking…</span></div>
           <button id="recovery-cloud-setup" class="full-width mt-2">Set up cloud recovery</button>
@@ -1007,10 +1013,13 @@
 
         <!-- Export the whole UMK as a `.flagshipkey` file. -->
         <div class="card mt-2">
-          <h3>Back up your account key</h3>
-          <p class="note">This saves your whole Flagship identity into one encrypted file. It's how you recover if you lose all your devices, and how you add this account to another device.</p>
           <p class="note err-text"><strong>Anyone with both this file and its passphrase can take over your account and lock you out.</strong></p>
           <button id="recovery-keyfile-export" class="full-width mt-2">Back up account key</button>
+        </div>
+
+        <div class="card mt-2">
+          <p><strong>How this works</strong></p>
+          <p class="note">Recovery requires both your recovery passphrase and access to the passkey stored by your browser or password manager. Together they unlock the encrypted account key; Flagship cannot read it or reset your passphrase.</p>
         </div>
 
         <details class="card mt-2">
@@ -1022,12 +1031,6 @@
           <label class="mt-3">Import wrapped UMK</label>
           <input type="file" id="recovery-import-input" accept="application/json" />
         </details>
-        <div class="card mt-2">
-          <p class="note">
-            <strong>After recovery (J.4):</strong> if you've recently rebooted your identity, the daemon walks every installed service and rewrites memberships from the OLD IRK to the NEW one. Watch progress + see the 7-day undo window.
-          </p>
-          <button class="secondary full-width mt-2" id="recovery-open-reattach">Open reattach progress</button>
-        </div>
         <button class="secondary full-width mt-2" id="recovery-back">← Back</button>
       </section>
 

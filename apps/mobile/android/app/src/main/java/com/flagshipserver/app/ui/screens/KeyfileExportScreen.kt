@@ -74,8 +74,6 @@ fun KeyfileExportScreen(
     val passphrase by vm.passphrase.collectAsState()
     val confirm by vm.confirmPassphrase.collectAsState()
     val ackControl by vm.ackControl.collectAsState()
-    val ackOffline by vm.ackOffline.collectAsState()
-    val ackNoRecovery by vm.ackNoRecovery.collectAsState()
 
     // SAF "create document" — hands back a content:// uri we write the
     // keyfile text into. We never persist the file ourselves.
@@ -118,15 +116,9 @@ fun KeyfileExportScreen(
         FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
         Spacer(Modifier.height(FS.space.s3))
         Text(
-            "Back up your account key",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        Text(
-            "This saves your whole Flagship identity into one encrypted file. It's how you recover if you lose all your devices, and how you add this account to another device.",
+            "ACCOUNT BACKUP",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
         )
         Spacer(Modifier.height(FS.space.s4))
 
@@ -146,28 +138,20 @@ fun KeyfileExportScreen(
         // Passphrase.
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                Text(
-                    "Set a passphrase to encrypt the file. You'll need the file and this passphrase to restore your account. We can't reset it.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp),
-                )
                 FSField(
                     value = passphrase,
                     onValueChange = vm::setPassphrase,
                     label = "Passphrase",
-                    placeholder = "A long, memorable passphrase",
-                    helper = if (passphrase.isEmpty() || vm.passphraseStrong)
-                        "Use at least 12 characters with a mix of cases, numbers, or symbols." else null,
+                    helper = if (passphrase.isEmpty() || vm.passphraseStrong) "12 characters minimum" else null,
                     error = if (passphrase.isEmpty() || vm.passphraseStrong) null
-                    else "Too weak — use 12+ characters mixing cases, numbers, or symbols.",
+                    else "12 characters minimum",
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.semantics { contentDescription = "keyfile-export-passphrase" },
                 )
                 FSField(
                     value = confirm,
                     onValueChange = vm::setConfirmPassphrase,
-                    label = "Confirm passphrase",
-                    placeholder = "Re-enter your passphrase",
+                    label = "Confirm Passphrase",
                     error = if (confirm.isEmpty() || vm.passphrasesMatch) null else "Passphrases don't match.",
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.semantics { contentDescription = "keyfile-export-confirm" },
@@ -176,7 +160,7 @@ fun KeyfileExportScreen(
         }
         Spacer(Modifier.height(FS.space.s3))
 
-        // Acknowledgments — all three required.
+        // Acknowledgment.
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 AckCheckbox(
@@ -184,18 +168,6 @@ fun KeyfileExportScreen(
                     onToggle = { vm.setAckControl(!ackControl) },
                     text = "I understand anyone with this file and passphrase controls my entire account.",
                     cd = "keyfile-export-ack-control",
-                )
-                AckCheckbox(
-                    checked = ackOffline,
-                    onToggle = { vm.setAckOffline(!ackOffline) },
-                    text = "I'll keep it offline and out of any cloud, shared folder, email, or chat.",
-                    cd = "keyfile-export-ack-offline",
-                )
-                AckCheckbox(
-                    checked = ackNoRecovery,
-                    onToggle = { vm.setAckNoRecovery(!ackNoRecovery) },
-                    text = "I understand no one can recover it for me — losing it can mean losing the account forever.",
-                    cd = "keyfile-export-ack-norecovery",
                 )
             }
         }

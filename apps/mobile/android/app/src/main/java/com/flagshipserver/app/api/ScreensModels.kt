@@ -402,7 +402,12 @@ data class PostRecoverySnapshot(
     val currentIrkPubHex: String,
     val state: WatcherState,
     val lastReissue: ReissuanceReportPayload? = null,
-)
+) {
+    val hasActiveReattach: Boolean
+        get() = state.lastSeen?.objectedAt == null &&
+            state.lastSeen != null &&
+            state.lastSwapTo == null
+}
 
 @Serializable
 data class WatcherState(

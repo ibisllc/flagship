@@ -129,8 +129,8 @@ describe("Services view renders the hero + search + chips and keeps its flows", 
   });
 });
 
-describe("Settings tab — profile hero + grouped rounded sections", () => {
-  it("the markup carries a profile-hero slot + grouped fs-row sections", () => {
+describe("Settings tab — account name + grouped rounded sections", () => {
+  it("the markup carries an account-name slot + grouped fs-row sections", () => {
     expect(INDEX_HTML).toContain('id="settings-profile-hero"');
     expect(INDEX_HTML).toContain("fs-group");
     expect(INDEX_HTML).toContain("fs-row");
@@ -154,9 +154,11 @@ describe("Settings tab — profile hero + grouped rounded sections", () => {
       expect(INDEX_HTML).toContain(`id="${id}"`);
     }
   });
-  it("app.js populates the profile hero + stamps the row icons", () => {
+  it("app.js populates the account name + stamps the row icons", () => {
     expect(APP_JS).toContain("decorateSettingsTab");
-    expect(APP_JS).toContain("profileCard");
+    expect(APP_JS).toContain("fs-settings-account-name");
+    expect(APP_JS).toContain("hero.textContent");
+    expect(APP_JS).not.toContain("profileCard");
     expect(APP_JS).toContain("settings-profile-hero");
     expect(APP_JS).toContain("SETTINGS_ROW_ICONS");
   });

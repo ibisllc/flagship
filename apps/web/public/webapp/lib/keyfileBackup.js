@@ -7,8 +7,8 @@
 // the seed into the keystore + session so the account is fully restored.
 //
 // The crypto lives in lib/keyfile.js (byte-compatible with the protocol +
-// iOS). This module owns the UI ceremony (heavy warnings, the 3 required
-// acknowledgments, strong-passphrase enforcement) and the keystore/state
+// iOS). This module owns the UI ceremony (warning, acknowledgment,
+// strong-passphrase enforcement) and the keystore/state
 // wiring. The download + modal helpers are injectable so the flow is
 // unit-testable in a DOM-less environment.
 
@@ -22,16 +22,12 @@ import {
 /** Approved verbatim copy — keep in sync with the iOS strings. */
 export const KEYFILE_COPY = {
   exportTitle: "Back up your account key",
-  intro:
-    "This saves your whole Flagship identity into one encrypted file. It's how you recover if you lose all your devices, and how you add this account to another device.",
+  intro: "",
   danger:
     "Anyone with both this file and its passphrase can take over your account and lock you out.",
-  passphrase:
-    "Set a passphrase to encrypt the file. You'll need the file and this passphrase to restore your account. We can't reset it.",
+  passphrase: "12 characters minimum",
   acks: [
     "I understand anyone with this file and passphrase controls my entire account.",
-    "I'll keep it offline and out of any cloud, shared folder, email, or chat.",
-    "I understand no one can recover it for me — losing it can mean losing the account forever.",
   ],
   createButton: "Create backup file",
   afterSave: "Backup saved. Keep it somewhere safe and offline.",

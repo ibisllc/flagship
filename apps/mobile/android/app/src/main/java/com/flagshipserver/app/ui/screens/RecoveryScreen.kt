@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.keystore.BlockStoreUmkStore
@@ -55,16 +56,18 @@ import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class RecoveryMode { Choose, Setup, Restore, Codes }
+private enum class RecoveryMode { Choose, Setup, Restore }
 private enum class CloudStatus { Unknown, NotConfigured, Configured, Failed }
 
 @Composable
 fun RecoveryScreen(nav: NavController) {
     val app = LocalAppState.current
     val flagshipServer = LocalFlagshipServerClient.current
+    val screensClient = LocalScreensClient.current
     val toasts = LocalToastCenter.current
     val ctx = LocalContext.current
     val activity = ctx as? Activity
@@ -75,7 +78,7 @@ fun RecoveryScreen(nav: NavController) {
 
     var mode by remember { mutableStateOf(RecoveryMode.Choose) }
     var cloudStatus by remember { mutableStateOf(CloudStatus.Unknown) }
-    var codes by remember { mutableStateOf("") }
+    var showReattachProgress by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var passphrase by remember { mutableStateOf("") }
@@ -88,6 +91,14 @@ fun RecoveryScreen(nav: NavController) {
             CloudStatus.Failed
         }
     }
+    LaunchedEffect(screensClient) {
+        while (true) {
+            showReattachProgress = runCatching {
+                screensClient.postRecoveryStatus().report?.hasActiveReattach == true
+            }.getOrDefault(false)
+            delay(5_000)
+        }
+    }
 
     Column(
         Modifier
@@ -98,17 +109,28 @@ fun RecoveryScreen(nav: NavController) {
         FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
         Spacer(Modifier.height(FS.space.s3))
         Text(
-            "Recovery",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        Text(
-            "If you lose this phone, you can recover your account on a new device using one of these mechanisms.",
+            "CLOUD RECOVERY",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
         )
         Spacer(Modifier.height(FS.space.s4))
+
+        if (showReattachProgress) {
+            FSCard(padding = PaddingValues(FS.space.s4)) {
+                Text("Re-attach progress", color = FS.colors.text, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "See per-app re-anchoring after recovery.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp),
+                )
+                FSGhostButton(
+                    label = "View progress",
+                    onClick = { nav.navigate("post-recovery") },
+                    block = true,
+                )
+            }
+            Spacer(Modifier.height(FS.space.s3))
+        }
 
         if (error != null) {
             FSCard(padding = PaddingValues(FS.space.s3)) {
@@ -122,7 +144,6 @@ fun RecoveryScreen(nav: NavController) {
                 cloudStatus = cloudStatus,
                 onSetup = { mode = RecoveryMode.Setup },
                 onRestore = { mode = RecoveryMode.Restore },
-                onCodes = { mode = RecoveryMode.Codes },
             )
             RecoveryMode.Setup -> SetupCard(
                 working = working,
@@ -233,12 +254,10 @@ fun RecoveryScreen(nav: NavController) {
                     mode = RecoveryMode.Choose
                 },
             )
-            RecoveryMode.Codes -> CodesCard(
-                value = codes,
-                onValue = { codes = it },
-                onDone = { mode = RecoveryMode.Choose },
-            )
         }
+        Spacer(Modifier.height(FS.space.s3))
+        HowRecoveryWorksCard()
+        Spacer(Modifier.height(FS.space.s8))
     }
 }
 
@@ -247,11 +266,10 @@ private fun ChooseCard(
     cloudStatus: CloudStatus,
     onSetup: () -> Unit,
     onRestore: () -> Unit,
-    onCodes: () -> Unit,
 ) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text("Cloud recovery (passkey + Block Store)", color = FS.colors.text,
+            Text("Cloud recovery", color = FS.colors.text,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
             FSPill(
                 when (cloudStatus) {
@@ -263,25 +281,12 @@ private fun ChooseCard(
                 kind = if (cloudStatus == CloudStatus.Configured) FSPillKind.Online else FSPillKind.Idle,
             )
             Text(
-                "Wraps your master key with a passkey held by Google Password Manager. Backed up via Block Store so a new Android device picks it up automatically on first sign-in.",
+                "Store an encrypted copy of your account key for a new Android device.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp),
             )
             FSPrimaryButton(label = "Set up cloud recovery", onClick = onSetup, block = true)
             FSGhostButton(label = "Restore from cloud", onClick = onRestore, block = true)
-        }
-    }
-    Spacer(Modifier.height(FS.space.s3))
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text("Offline codes", color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-            Text(
-                "Generate ten BIP39 words you copy to paper / a password manager. Belt-and-suspenders alongside the passkey.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
-            FSGhostButton(label = "Generate codes", onClick = onCodes)
         }
     }
 }
@@ -301,20 +306,13 @@ private fun SetupCard(
         passphrase == passphraseConfirm
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text("Set up passkey recovery", color = FS.colors.text,
+            Text("Set up cloud recovery", color = FS.colors.text,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-            Text(
-                "Pick a recovery passphrase and write it down somewhere safe — " +
-                    "treat it like a password. If you ever lose this phone, you'll " +
-                    "need this passphrase together with your phone's passkey to get " +
-                    "back in. We can't reset it for you, so don't lose it.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            )
             FSField(
                 value = passphrase,
                 onValueChange = onPassphrase,
-                label = "Recovery passphrase (8+ characters)",
+                label = "Recovery passphrase",
+                helper = "8 characters minimum",
                 visualTransformation = PasswordVisualTransformation(),
             )
             FSField(
@@ -348,7 +346,7 @@ private fun RestoreCard(
             Text("Restore from cloud", color = FS.colors.text,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
             Text(
-                "Enter your recovery passphrase, then confirm the passkey prompt. We'll fetch the wrapped UMK from Block Store + unlock it. Re-pair your servers afterwards.",
+                "Enter your recovery passphrase, then confirm the passkey prompt.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp),
             )
@@ -370,21 +368,19 @@ private fun RestoreCard(
 }
 
 @Composable
-private fun CodesCard(value: String, onValue: (String) -> Unit, onDone: () -> Unit) {
+private fun HowRecoveryWorksCard() {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text(
-                "Your recovery words",
+                "How this works",
                 color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
             )
             Text(
-                "Write these down somewhere safe. Anyone with the words and your username can take over your account.",
+                "Recovery requires both your recovery passphrase and access to the Google account that holds your Flagship passkey. Together they unlock the encrypted copy of your account key; we cannot read it or reset your passphrase.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp),
             )
-            FSField(value = value, onValueChange = onValue, label = "")
-            FSGhostButton(label = "Done", onClick = onDone)
         }
     }
 }
