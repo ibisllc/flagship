@@ -38,7 +38,7 @@ struct FlagshipBuilderApp: App {
         .commands { BuilderCommands(model: model) }
 
         MenuBarExtra {
-            MenuBarContent()
+            MenuBarContent(vmManager: model.vmManager)
         } label: {
             MenuBarLabel()
         }
@@ -100,6 +100,16 @@ private struct MenuBarLabel: View {
 
 private struct MenuBarContent: View {
     @Environment(\.openWindow) private var openWindow
+    @ObservedObject var vmManager: VMManager
+
+    private var runningServers: [VMManager.HostedServer] {
+        vmManager.servers.filter {
+            switch $0.record.state {
+            case .running, .awaitingPhoneUnlock: return true
+            default: return false
+            }
+        }
+    }
 
     var body: some View {
         Button("Open Flagship Studio") {
@@ -107,6 +117,46 @@ private struct MenuBarContent: View {
             openWindow(id: "main")
         }
         Divider()
+        if vmManager.servers.isEmpty {
+            Text("No servers hosted yet")
+        } else {
+            ForEach(vmManager.servers) { server in
+                Menu(server.record.config.serverDomain) {
+                    serverActions(server)
+                }
+            }
+        }
+        Divider()
+        Button("Stop all running servers") {
+            let names = runningServers.map(\.id)
+            Task {
+                for name in names { await vmManager.powerOff(named: name) }
+            }
+        }
+        .disabled(runningServers.isEmpty)
+        Divider()
         Button("Quit Flagship Studio") { NSApp.terminate(nil) }
+    }
+
+    @ViewBuilder
+    private func serverActions(_ server: VMManager.HostedServer) -> some View {
+        switch server.record.state {
+        case .installed, .stopped:
+            Button("Start") {
+                Task { await vmManager.powerOn(named: server.id) }
+            }
+        case .running, .awaitingPhoneUnlock:
+            Button("Stop") {
+                Task { await vmManager.powerOff(named: server.id) }
+            }
+            Button("Restart") {
+                Task {
+                    await vmManager.powerOff(named: server.id)
+                    await vmManager.powerOn(named: server.id)
+                }
+            }
+        default:
+            Text(server.record.state.label)
+        }
     }
 }

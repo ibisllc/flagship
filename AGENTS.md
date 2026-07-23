@@ -192,6 +192,14 @@ chroot-proof systemd symlink. Canonical engine/native copies and vectors were
 regenerated; all 260 builder tests and the TypeScript build pass. A fresh live
 QEMU install remains the final proof of registration and SSH on the wire.
 
+**2026-07-23 (native desktop shell parity) — Windows now has a fixed-size,
+branded native shell and notification-area server controls.** The executable,
+title bar, taskbar, and tray share the Flagship icon; the sidebar reaches the top,
+the menu is transparent, and the main-pane-only log footer matches the sidebar
+footer and expands as a full-height overlay instead of reflowing the wizard.
+Windows and macOS status icons expose the same safe Start/Stop/Restart/Stop All
+controls (destructive deletion remains in the full app). The 222-test Windows
+suite and warning-free WPF build pass.
 **2026-07-22 (Windows Studio Mac-parity flow) — Windows now opens on a live
 phone-pairing cover and preserves the authorization boundary.** WPF has separate
 QR, SAS-confirm, and awaiting-authorization panes; manual recipe entry is the

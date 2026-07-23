@@ -6,9 +6,9 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         Title="Flagship Studio"
+        Icon="/assets/Flagship.ico"
         Width="940" Height="660"
-        MinWidth="860" MinHeight="580"
-        MaxWidth="1400"
+        ResizeMode="NoResize"
         Background="{StaticResource FB.Bg}"
         WindowStartupLocation="CenterScreen"
         FontFamily="{StaticResource FB.Font.Body}"
@@ -30,11 +30,21 @@
         <local:PairingPayloadToImageConverter x:Key="PairingPayloadToImage"/>
     </Window.Resources>
 
-    <DockPanel>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="320"/>
+        </Grid.ColumnDefinitions>
+        <Grid Grid.Column="0" Background="{StaticResource FB.Bg}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
     <!-- Native top menu — the counterpart of the macOS menu bar and the Linux
          hamburger. (Appearance/dark-mode is not here yet: this WPF app ships a
          single light palette; adding Auto/Light/Dark needs a dark resource set.) -->
-    <Menu DockPanel.Dock="Top" Background="{StaticResource FB.Surface}" Padding="4,2">
+    <Menu Grid.Row="0" Background="Transparent" Padding="4,2">
         <MenuItem Header="_File">
             <MenuItem Header="New Server" Click="MenuNewServer_Click"/>
             <Separator/>
@@ -47,15 +57,8 @@
             <MenuItem Header="About Flagship Studio" Click="MenuAbout_Click"/>
         </MenuItem>
     </Menu>
-    <Grid Margin="0">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>   <!-- header -->
-            <RowDefinition Height="*"/>      <!-- content -->
-            <RowDefinition Height="Auto"/>   <!-- log drawer -->
-        </Grid.RowDefinitions>
-
         <!-- Header -->
-        <Grid Grid.Row="0" Margin="22,18,22,8">
+        <Grid Grid.Row="1" Margin="22,18,22,8">
             <Button HorizontalAlignment="Left"
                     VerticalAlignment="Center"
                     Style="{StaticResource LinkButton}"
@@ -72,14 +75,7 @@
                     Click="ModeToggle_Click"
                     Visibility="{Binding AdvancedAllowed, Converter={StaticResource BoolToVisibility}}"/>
         </Grid>
-
-        <!-- Content: main area + hosted-servers sidebar -->
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="320"/>
-            </Grid.ColumnDefinitions>
-
+            <Grid Grid.Row="2">
             <!-- ============ MAIN AREA ============ -->
             <ScrollViewer Grid.Column="0"
                           VerticalScrollBarVisibility="Auto"
@@ -697,7 +693,102 @@
                     </StackPanel>
                 </Grid>
             </ScrollViewer>
-
+            </Grid>
+        <!-- Log drawer -->
+        <Border Grid.RowSpan="3" Panel.ZIndex="30"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{StaticResource FB.Border}"
+                Background="{StaticResource FB.Bg}">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="VerticalAlignment" Value="Bottom"/>
+                    <Setter Property="Height" Value="42"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ElementName=LogToggle, Path=IsChecked}" Value="True">
+                            <Setter Property="VerticalAlignment" Value="Stretch"/>
+                            <Setter Property="Height" Value="Auto"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="42"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0" Margin="22,0" VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ToggleButton Grid.Column="0"
+                                  x:Name="LogToggle"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  Cursor="Hand"
+                                  Padding="0">
+                        <ToggleButton.Template>
+                            <ControlTemplate TargetType="ToggleButton">
+                                <StackPanel Orientation="Horizontal" Background="Transparent">
+                                    <TextBlock x:Name="Arrow" Text="&#x25B7;"
+                                               Foreground="{StaticResource FB.TextMuted}"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,6,0"/>
+                                    <ContentPresenter VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="Arrow" Property="Text" Value="&#x25BD;"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </ToggleButton.Template>
+                        <TextBlock>
+                            <Run Text="Log"
+                                 Foreground="{DynamicResource FB.TextMuted}"
+                                 FontSize="11.5"/>
+                            <Run Text="{Binding LogCountLabel, Mode=OneWay}"
+                                 Foreground="{DynamicResource FB.TextMuted}"
+                                 FontFamily="{DynamicResource FB.Font.Mono}"
+                                 FontSize="11.5"/>
+                        </TextBlock>
+                    </ToggleButton>
+                    <Button Grid.Column="2"
+                            Style="{StaticResource LinkButton}"
+                            Content="Clear"
+                            Click="ClearLog_Click"
+                            Visibility="{Binding HasLogLines,
+                                Converter={StaticResource BoolToVisibility}}"/>
+                </Grid>
+                <Border Grid.Row="1" Margin="22,0,22,12"
+                        BorderThickness="1"
+                        BorderBrush="{StaticResource FB.Border}"
+                        CornerRadius="6"
+                        Background="{StaticResource FB.SurfaceElevated}"
+                        Visibility="{Binding ElementName=LogToggle,
+                                             Path=IsChecked,
+                                             Converter={StaticResource BoolToVisibility}}">
+                    <ScrollViewer x:Name="LogScroller"
+                                  VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding LogLines}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Text}"
+                                               FontFamily="{StaticResource FB.Font.Mono}"
+                                               FontSize="11.5"
+                                               Foreground="{Binding Stream,
+                                                   Converter={StaticResource StreamToBrush}}"
+                                               TextWrapping="Wrap"
+                                               Margin="10,1,10,1"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+        </Border>
+        </Grid>
             <!-- ============ SIDEBAR: servers hosted in this app ============ -->
             <Border Grid.Column="1"
                     BorderThickness="1,0,0,0"
@@ -812,98 +903,16 @@
                         <TextBlock Text="▥" FontSize="24" Foreground="{StaticResource FB.TextMuted}" HorizontalAlignment="Center"/>
                         <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" Text="No servers hosted yet" HorizontalAlignment="Center"/>
                     </StackPanel>
-                    <Border Grid.Row="2"
+                    <Border Grid.Row="2" Height="42"
                             BorderThickness="0,1,0,0"
                             BorderBrush="{StaticResource FB.Border}">
                         <Button Style="{StaticResource LinkButton}"
                                 HorizontalAlignment="Left"
-                                Margin="8,6,8,8"
+                                Margin="8,0" VerticalAlignment="Stretch"
                                 Content="⊕  Pair a new server"
                                 Click="AddServer_Click"/>
                     </Border>
                 </Grid>
             </Border>
-        </Grid>
-
-        <!-- Log drawer -->
-        <Border Grid.Row="2"
-                BorderThickness="0,1,0,0"
-                BorderBrush="{StaticResource FB.Border}"
-                Background="{StaticResource FB.Bg}">
-            <StackPanel>
-                <Grid Margin="22,8,22,4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <ToggleButton Grid.Column="0"
-                                  x:Name="LogToggle"
-                                  Background="Transparent"
-                                  BorderThickness="0"
-                                  Cursor="Hand"
-                                  Padding="0">
-                        <ToggleButton.Template>
-                            <ControlTemplate TargetType="ToggleButton">
-                                <StackPanel Orientation="Horizontal" Background="Transparent">
-                                    <TextBlock x:Name="Arrow" Text="&#x25B7;"
-                                               Foreground="{StaticResource FB.TextMuted}"
-                                               VerticalAlignment="Center"
-                                               Margin="0,0,6,0"/>
-                                    <ContentPresenter VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsChecked" Value="True">
-                                        <Setter TargetName="Arrow" Property="Text" Value="&#x25BD;"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </ToggleButton.Template>
-                        <TextBlock>
-                            <Run Text="Log"
-                                 Foreground="{DynamicResource FB.TextMuted}"
-                                 FontSize="11.5"/>
-                            <Run Text="{Binding LogCountLabel, Mode=OneWay}"
-                                 Foreground="{DynamicResource FB.TextMuted}"
-                                 FontFamily="{DynamicResource FB.Font.Mono}"
-                                 FontSize="11.5"/>
-                        </TextBlock>
-                    </ToggleButton>
-                    <Button Grid.Column="2"
-                            Style="{StaticResource LinkButton}"
-                            Content="Clear"
-                            Click="ClearLog_Click"
-                            Visibility="{Binding HasLogLines,
-                                Converter={StaticResource BoolToVisibility}}"/>
-                </Grid>
-                <Border Margin="22,0,22,12"
-                        BorderThickness="1"
-                        BorderBrush="{StaticResource FB.Border}"
-                        CornerRadius="6"
-                        Background="{StaticResource FB.SurfaceElevated}"
-                        Visibility="{Binding ElementName=LogToggle,
-                                             Path=IsChecked,
-                                             Converter={StaticResource BoolToVisibility}}">
-                    <ScrollViewer x:Name="LogScroller"
-                                  Height="180"
-                                  VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding LogLines}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Text}"
-                                               FontFamily="{StaticResource FB.Font.Mono}"
-                                               FontSize="11.5"
-                                               Foreground="{Binding Stream,
-                                                   Converter={StaticResource StreamToBrush}}"
-                                               TextWrapping="Wrap"
-                                               Margin="10,1,10,1"/>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </Border>
-            </StackPanel>
-        </Border>
     </Grid>
-    </DockPanel>
 </Window>

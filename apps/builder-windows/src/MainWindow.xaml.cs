@@ -29,12 +29,15 @@ namespace Flagship.Builder;
 public partial class MainWindow : Window
 {
     private readonly Wizard _wizard;
+    private readonly TrayIcon _trayIcon;
 
     public MainWindow()
     {
         _wizard = new Wizard();
         DataContext = _wizard;
         InitializeComponent();
+        _trayIcon = new TrayIcon(this, _wizard.Vm);
+        Closed += (_, _) => _trayIcon.Dispose();
         // Kick off the initial disk scan once the window is up. We
         // intentionally do this after the constructor finishes so the
         // first frame paints with empty rows; the picker fills in as

@@ -6,9 +6,13 @@
     <RootNamespace>Flagship.Builder</RootNamespace>
     <AssemblyName>FlagshipBuilder</AssemblyName>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>assets\Flagship.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- This remains a WPF app; the WinForms high-DPI analyzer does not apply to its manifest. -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
     <!-- DiskWrite.cs pins a managed buffer + offsets a byte* into WriteFile. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -26,6 +30,7 @@
     <Page Include="src\MainWindow.xaml" Generator="MSBuild:Compile" />
     <Compile Include="src\App.xaml.cs" />
     <Compile Include="src\MainWindow.xaml.cs" />
+    <Compile Include="src\TrayIcon.cs" />
     <Compile Include="src\Wizard.cs" />
     <Compile Include="src\DiskEnumerator.cs" />
     <Compile Include="src\VerifyResult.cs" />
@@ -58,8 +63,14 @@
 
   <ItemGroup>
     <None Include="app.manifest" />
+    <Resource Include="assets\Flagship.ico" />
     <None Include="README.md" />
     <EmbeddedResource Include="..\..\packages\flagship-builder\engine\preseed-engine.js" LogicalName="Flagship.Builder.Resources.preseed-engine.js" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
   </ItemGroup>
 
   <ItemGroup>
