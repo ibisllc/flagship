@@ -1430,18 +1430,23 @@ The `web.flagshipserver.com` compatibility layer is temporary and should be
 deleted outright: only the competition judges will use the UI, and they will be
 handed `webapp.` / `remote.` directly. Nothing else points at `web.`.
 
-**Do NOT delete it yet.** As of 2026-07-23 the fleet is exactly ONE box
-(`home.openai-build`, the demo/reviewer box — verified against prod D1: one
-`servers` row; `nimble-mango` and `noble-vole` are accounts with no box), and
-that box is still running a daemon whose CORS allowlist knows only `web.`.
-Verified on the live box: an `Origin: https://webapp.flagshipserver.com` request
-gets a 200 with NO `access-control-allow-origin`, so the BROWSER discards it.
-Deleting the redirect while that is true doesn't just drop a legacy URL — it
-leaves the judges with a webapp that signs in (that half is `.com`, already
-fixed) and then fails every read against their own server.
+**UNBLOCKED 2026-07-23** — the one box now speaks the new origins. The fleet is
+exactly ONE box (`home.openai-build`, the demo/reviewer box — verified against
+prod D1: one `servers` row; `nimble-mango` and `noble-vole` are accounts with no
+box). It was patched via Hetzner rescue (`POST /api/dev/rescue/153813669`, then
+mount `/dev/sda1` + edit + reboot). Verified live afterwards: preflight AND real
+GETs return `access-control-allow-origin` for `webapp.` and `remote.`,
+`evil.example` still gets none, cert valid, `.com` reports `liveness:"live"`.
 
-When the box is running a daemon built from `main` at or after 2026-07-23, do
-all of this in one pass:
+⚠️ That patch was applied **directly to the box's working tree**, so
+`/opt/flagship` now differs from its git HEAD (backup beside it:
+`cors.ts.bak-20260724-005404`). Consequence: the self-update path does
+`git checkout`, which can conflict on a dirty tree — reconcile (`git checkout --
+packages/server-daemon/src/cors.ts`) before the first real update, or let a
+reburn supersede it. The box runs `tsx src/index.ts`, so editing source IS the
+deploy — no build step was involved.
+
+The removal below is now safe to do whenever convenient:
 
 1. `apps/com/src/route.ts` — drop `LEGACY_WEBAPP_HOST`, `legacyWebappHost()`,
    the retired-host block in `routeImpl` (including the `web./dock` special
