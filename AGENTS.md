@@ -1424,6 +1424,44 @@ premount) + a no-LUKS escape hatch (phone-signed `InstallBlob.diskEncryption`, d
 on). Boot worker consolidated into `flagship-com` (`boot.flagshipserver.com` is a custom
 domain). Earliest phone-home beacons in the preseed.
 
+### TODO — delete the `web.` redirects (BLOCKED on the box speaking the new origins)
+
+The `web.flagshipserver.com` compatibility layer is temporary and should be
+deleted outright: only the competition judges will use the UI, and they will be
+handed `webapp.` / `remote.` directly. Nothing else points at `web.`.
+
+**Do NOT delete it yet.** As of 2026-07-23 the fleet is exactly ONE box
+(`home.openai-build`, the demo/reviewer box — verified against prod D1: one
+`servers` row; `nimble-mango` and `noble-vole` are accounts with no box), and
+that box is still running a daemon whose CORS allowlist knows only `web.`.
+Verified on the live box: an `Origin: https://webapp.flagshipserver.com` request
+gets a 200 with NO `access-control-allow-origin`, so the BROWSER discards it.
+Deleting the redirect while that is true doesn't just drop a legacy URL — it
+leaves the judges with a webapp that signs in (that half is `.com`, already
+fixed) and then fails every read against their own server.
+
+When the box is running a daemon built from `main` at or after 2026-07-23, do
+all of this in one pass:
+
+1. `apps/com/src/route.ts` — drop `LEGACY_WEBAPP_HOST`, `legacyWebappHost()`,
+   the retired-host block in `routeImpl` (including the `web./dock` special
+   case), and the two entries in the effective-host override list.
+2. `apps/com/wrangler.toml` — drop the `web.flagshipserver.com/*` route, then
+   delete the `web.` DNS record in Cloudflare (the route alone doesn't remove it).
+3. `packages/server-daemon/src/cors.ts` — drop the two `web.` origins from
+   `WEBAPP_ORIGINS` (that IS the fleet turnover the comment there refers to).
+4. `apps/web/public/webapp/lib/apex.js` — drop `"web."` from
+   `KNOWN_SUBORIGIN_PREFIXES` (it is only there for a stale cached shell).
+5. Tests pinning the above: `apps/com/test/route.test.ts` (the
+   "webapp. / remote. split + the retired web. host" describe) and
+   `packages/server-daemon/tests/cors.test.ts` (the legacy-origin case).
+
+Note there is NO in-place way for the harness to upgrade that box: SSH is
+refused by design (no authorized key in prod), and the dual-signed update path
+needs a phone-minted `UpdateOrder` plus a maintainer-endorsed target commit.
+The upgrade is owner-driven — either the phone update ceremony or a demo
+re-provision.
+
 ### GA close-out TODO (do NOT do in dev) — dev-mode disablements ("Bucket C")
 
 > Capabilities intentionally LEFT ENABLED for bring-up that MUST be disabled/removed
