@@ -25,12 +25,16 @@ public struct CompanionDockScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                header(c: c)
+                Text("Pair a desktop browser for four hours of read-only access. Disconnect it anytime.")
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
                 mintCard(c: c)
                 activeList(c: c)
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
+            .padding(.top, FS.space.s4)
         }
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Dock a browser")
@@ -79,18 +83,6 @@ public struct CompanionDockScreen: View {
         } message: { _ in
             Text("The browser session will end immediately. It can be re-paired any time with a fresh QR.")
         }
-    }
-
-    private func header(c: FSColors) -> some View {
-        VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text("Dock a browser")
-                .font(.system(size: 28, weight: .medium))
-                .foregroundColor(c.text)
-            Text("Show the QR below on your phone and scan it from a desktop browser. The browser becomes a read-only companion of this account for 4 hours.")
-                .font(FS.font.body())
-                .foregroundColor(c.textMuted)
-        }
-        .padding(.top, FS.space.s4)
     }
 
     private func mintCard(c: FSColors) -> some View {

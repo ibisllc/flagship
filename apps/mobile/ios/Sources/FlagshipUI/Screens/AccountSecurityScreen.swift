@@ -27,9 +27,10 @@ public struct AccountSecurityScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                Text("Account security")
-                    .font(.system(size: 28, weight: .medium))
-                    .foregroundColor(c.text)
+                Text("Manage recovery protection and account-level security.")
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, FS.space.s4)
 
                 badge(c: c)
@@ -49,6 +50,8 @@ public struct AccountSecurityScreen: View {
             .padding(.horizontal, FS.space.s6)
         }
         .background(c.bg.ignoresSafeArea())
+        .navigationTitle("Account security")
+        .navigationBarTitleDisplayMode(.inline)
         .task {
             if watchVM == nil { watchVM = viewModel.makeWatchDelegateViewModel() }
             if rotateVM == nil { rotateVM = viewModel.makeRotateAdminRootViewModel() }

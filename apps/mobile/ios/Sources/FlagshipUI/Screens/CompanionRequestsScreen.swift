@@ -21,11 +21,15 @@ public struct CompanionRequestsScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                header(c: c)
+                Text("Review writes sent by docked browsers. Your phone signs approved requests; browsers never receive your account key.")
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
                 content(c: c)
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
+            .padding(.top, FS.space.s4)
         }
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Companion requests")
@@ -44,18 +48,6 @@ public struct CompanionRequestsScreen: View {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
         }
-    }
-
-    private func header(c: FSColors) -> some View {
-        VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text("Pending writes from companions")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundColor(c.text)
-            Text("A docked browser forwarded these write actions for you to approve. Your phone signs and sends each one — the browser never holds your account key.")
-                .font(FS.font.body())
-                .foregroundColor(c.textMuted)
-        }
-        .padding(.top, FS.space.s4)
     }
 
     @ViewBuilder

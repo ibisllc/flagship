@@ -21,7 +21,7 @@ public struct AiKeysScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Spacer().frame(height: FS.space.s4)
-                    Text("Your AI keys power the build-from-scratch and adapt-a-repo flows. They stay on this device; your box calls the provider directly with them — flagshipserver.com never sees them.")
+                    Text("AI keys power app builds but stay on this phone. Your server calls the provider directly; Flagship never sees them.")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
 

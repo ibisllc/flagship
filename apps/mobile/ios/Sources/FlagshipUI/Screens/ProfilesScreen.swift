@@ -33,10 +33,10 @@ public struct ProfilesScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                Text("Your clouds").font(FS.font.h2()).foregroundColor(c.text)
-                Text("One phone, multiple clouds. Each profile is a separate cloud (personal, family, work) with its own root key.")
-                    .font(FS.font.body())
+                Text("Switch the cloud this phone is using. Each profile has its own account key.")
+                    .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if profiles.isEmpty {
                     FSCard(padding: FS.space.s6) {

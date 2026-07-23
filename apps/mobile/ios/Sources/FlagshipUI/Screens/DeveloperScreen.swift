@@ -23,9 +23,9 @@ public struct DeveloperScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
-                Text("Developer").font(FS.font.h2()).foregroundColor(c.text)
-                Text("Switches for testing against the live server vs. the mock fixtures. Don't change unless you know what you're doing.")
-                    .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                Text("Choose live or mock data and tune test behavior.")
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
 
                 FSCard {
                     Toggle(isOn: $dev.useLiveClient) {

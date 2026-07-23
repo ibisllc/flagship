@@ -779,8 +779,9 @@ struct AboutStub: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
-                Text("Flagship").font(FS.font.h2()).foregroundColor(c.text)
-                Text("Your stuff, on your hardware.").font(FS.font.body()).foregroundColor(c.textMuted)
+                Text("Your stuff, on your hardware.")
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
                         labeled("Version", "0.1.0 (dev)", c: c)
