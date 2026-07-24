@@ -1,0 +1,281 @@
+# "Update this server" — end-to-end rollout plan
+
+**Status:** PLAN ONLY. Nothing here is implemented. Written 2026-07-23 on
+`plan/update-server-feature` so it survives until we pick it up together.
+
+**Goal:** the "Update this server" button works seamlessly from all three
+clients (webapp, iOS, Android) — an owner taps it, the box pulls the endorsed
+target commit, rebuilds, restarts into it, and rolls back automatically if the
+new code fails its boot health gate. No SSH, no rescue, no manual box surgery.
+
+**One-line summary of the situation:** almost the entire feature is ALREADY
+BUILT and wired. It is blocked on exactly one thing — a maintainer *release
+authority* that can endorse a commit — and that was deliberately deferred at
+genesis (2026-05-19). This plan unblocks it the way the owner chose in
+conversation: **one root authority endorses releases too** (collapse), rather
+than standing up a separate release key right now.
+
+---
+
+## 0. What already exists (do NOT rebuild any of this)
+
+Verified in the tree on 2026-07-23:
+
+| Piece | Location | State |
+|---|---|---|
+| Box-side update consumer (fetch→gate→checkout→rebuild→exit0→health-gate→rollback) | `packages/server-daemon/src/updateConsumer.ts` + `updateHealthGate.ts` | built, wired in `index.ts` (~L2791) |
+| `.com` update lane (deposit + consume-once) | `POST/GET /api/server/:domain/update` — `secretMailbox.ts` L1300+, route `controlPlaneRoutes.ts` L530 | built |
+| 2-of-2 authorization gate (admin-root master gate) | `authorizeSensitiveOrder` (`adminAuthorityLocal.ts`), tag `flagship/server-update/v1` | built |
+| 2-of-2 authenticity gate (maintainer endorsement) | `selfUpdateReleaseGate.ts` → `releaseVerifier.ts` | built — **fails closed today** (see §1) |
+| `currentCommit` reported by the box | `screens/screensHttp.ts`, surfaced on all 3 clients | built |
+| **Webapp** Update UI (card + button + signer) | `views/server-detail.js` L284-334, `lib/serverUpdate.js` | **built** — signs the order with the owner's admin root / UMK |
+| iOS Update UI | `UpdateServerViewModel.swift`, `ServerUpdateFlow.swift` | built |
+| Android Update UI | `viewmodels/UpdateServerViewModel.kt`, `ui/screens/ServerDetailScreen.kt` | built |
+| Endorsement-minting CLI | `maintainers/packages/cli` → `endorsement`, `upsert-mandate` (YubiKey-signed) | built |
+| Spec | `docs/server-update-mechanism.md` | written |
+
+So this is NOT a feature build. It is a **trust-bootstrap + validation** task.
+
+---
+
+## 1. The single blocker
+
+The box's authenticity gate requires a **maintainer release endorsement** whose
+`commitHash` is the target commit, verified against a **release-track authority**
+that verifies FORWARD from the baked `MAINTAINER_PINNED_MANDATE_HASH`.
+
+Proven empirically (ran the real `@ibisllc/maintainers` verifier, 2026-07-23):
+
+```
+ca track    -> root: ANCHORED   authority: yes
+release trk -> root: null       rootError: pin-not-in-log   authority: no
+```
+
+Two facts make this a deliberate gap, not a bug:
+
+1. **One baked pin anchors exactly one track.** `verifyMandateChainFromPin`
+   matches a mandate by its exact canonical bytes; the baked pin equals the `ca`
+   origin mandate's `mandatePinHash` (confirmed: `5016749377de…801ae`). No
+   release mandate can share that hash.
+2. **The release track was deferred ON PURPOSE.** `docs/ca-operations.md` §370
+   (LOCKED SCOPE, owner, 2026-05-19): *"genesis signs the `ca` track ONLY …
+   `release` is deferred to its own later isolated genesis if a release-role ever
+   exists."* So there is no release mandate, no release key, and the daemon gate
+   fails closed on every update — by design, until now.
+
+Result today: tap Update → order authorizes → box fetches → gate returns
+`halted-unendorsed` → nothing is applied. Correct, safe, and useless.
+
+---
+
+## 2. The decision (owner, 2026-07-23): collapse to one authority
+
+We are NOT standing up a separate release key right now. The existing `ca`-track
+holder (key#1, `2137e739…71d7`, the YubiKey) will endorse releases too.
+
+**Why this is acceptable for where we are:**
+- There is exactly ONE holder key in existence anyway (`.maintainers/keys/`
+  holds only `hello@harrywinner.com` + its backup). A separate release *track*
+  today would point at the *same key* — separation on paper, zero real key
+  separation.
+- Code-push already requires TWO more independent factors beyond the
+  endorsement: (a) a commit that exists in the hardcoded GitHub remote, enforced
+  by the first-parent lineage walk (`verifyEndorsementChainAgainstGit`) — a
+  hostile mirror can't substitute commits; (b) an **admin-root-signed
+  `UpdateOrder` from the owner's phone/webapp behind biometrics**. The phone
+  factor is cryptographically independent of the YubiKey.
+- For a one-box, one-user, pre-release system this layering is enough.
+
+**The two conditions attached to the decision:**
+1. Make it an EXPLICIT, commented choice in code + correct the docs that
+   currently advertise three working tracks. No silent drift.
+2. Leave the door open: a future real `release` track must take precedence
+   automatically with no further code change.
+
+**What we are NOT doing (and why):**
+- NOT re-baking the pin to a release mandate — that would break the LIVE `ca`
+  track (`CA_ENDORSEMENT_ENFORCE=true` in prod).
+- NOT merging the tracks in the maintainers protocol itself — the protocol's
+  multi-track model stays intact; only Flagship's *daemon gate* chooses to accept
+  a ca-signed endorsement as a fallback.
+
+---
+
+## 3. Implementation phases
+
+### Phase 1 — Box gate: accept the `ca` chain as the release authority (fallback)
+
+The ONLY code change to the trust logic. One seam, in the daemon, commented as a
+deliberate pre-release posture.
+
+- **File:** `packages/server-daemon/src/releaseVerifier.ts`, `verifyStore()`.
+  Where it resolves the release chain to verify endorsements against
+  (`chainsByTrack.get("release")`), fall back to the `ca` chain:
+
+  ```ts
+  // PRE-RELEASE POSTURE (docs/update-server-rollout-plan.md §2): with no
+  // dedicated release track yet, the ca-track authority (the single YubiKey
+  // holder) also endorses releases. A real `release` track, once it exists,
+  // wins automatically — this fallback only fires when `release` is absent.
+  const releaseChain =
+    chainsByTrack.get("release") ?? chainsByTrack.get("ca");
+  ```
+
+  Apply the same `?? get("ca")` at every `chainsByTrack.get("release")` site
+  (there are a few — endorsement verification, takeover-alarm derivation). Audit
+  each: the takeover-alarm one may want to stay release-only; decide per-site,
+  document the choice inline.
+
+- **`ReleaseEndorsement` has no `track` field** (confirmed — it binds to a chain
+  purely via `signedBy`/signatures). So a ca-holder-signed endorsement verifies
+  cleanly against the ca chain with zero protocol change.
+
+- **Tests** (`packages/server-daemon/tests/releaseVerifier*.test.ts`):
+  - POSITIVE: a ca-holder-signed `ReleaseEndorsement` for commit X is accepted
+    when only the `ca` track exists; `currentRelease.commitHash === X`.
+  - NEGATIVE (must stay red): an endorsement signed by a NON-holder key is
+    rejected. A forged endorsement whose declared lineage doesn't match the git
+    walk is rejected. An endorsement for a commit not in the repo is rejected.
+  - PRECEDENCE: when BOTH a `release` chain and a `ca` chain exist, the
+    `release` chain is used (the fallback does not shadow a real track).
+  - Mutation-check each positive by breaking the fallback and confirming red.
+
+- **Correct the docs the change contradicts:**
+  - `.maintainers/README.md` — the "three tracks" table; note release rides `ca`
+    pre-release.
+  - `docs/ca-operations.md` §370 LOCKED SCOPE — add a dated superseding note:
+    the release role is now filled by the ca authority as a deliberate
+    pre-release collapse (this plan), not by app-store signing.
+  - `docs/server-update-mechanism.md` — reflect the fallback.
+
+### Phase 2 — The endorsement ceremony (one YubiKey signature, per release)
+
+Mint a `ReleaseEndorsement` for the target commit, on the `ca` track, with key#1.
+
+- **Tooling:** `maintainers` CLI `endorsement` verb (`--track ca`,
+  `--commit <sha>`, `--signing-key <yubikey source>`). It reads the ca mandates,
+  the holder key signs, emits a `ReleaseEndorsement` envelope.
+- **Where it lands:** committed under `.maintainers/endorsements/` (the verifier
+  reads `<rootDir>/endorsements/*.json`, filename-sorted). NOTE the endorsement
+  for commit X is typically committed AFTER X, so the box reads it from
+  freshly-FETCHED refs (`origin/main`, `FETCH_HEAD`) — which the consumer fetches
+  before consulting the gate. So: endorse HEAD, commit the endorsement on top,
+  push; the box fetches both.
+- **Lineage:** `previousCommitHash` / `intermediateCommits` must describe the
+  real first-parent path from the box's current commit to the target, or the
+  git-walk defense rejects it. The CLI computes/validates these; feed it the
+  box's reported `currentCommit` as the "from".
+- **Dry-run first** (`--dry-run`) — nothing is signed until the real tap.
+- **Write a thin wrapper script** `scripts/endorse-release.mjs` that: reads the
+  box's `currentCommit` (or takes `--from`), takes `--to <sha>` (default: current
+  `main` HEAD), runs the CLI dry-run, prints the envelope for review, then on
+  confirm does the real signed run and stages the commit. Owner runs it; the
+  YubiKey tap is theirs.
+
+### Phase 3 — Client verification (already built — exercise, don't build)
+
+All three UIs exist. This phase is *proving they work against a real endorsed
+update*, and fixing whatever surfaces.
+
+- **Webapp** (`lib/serverUpdate.js` + `server-detail.js`): confirm the OWNER
+  profile signs `flagship/server-update/v1` with the admin root and deposits to
+  `.com`. Confirm a COMPANION/remote session cannot (no seed → the sensitive
+  signer throws; it is not in `companionGuard` UNAVAILABLE_IDS, so ALSO add
+  `update-server-btn` there for an honest disabled state — small gap to close).
+- **iOS / Android:** rebuild is required regardless (they also carry the Remote
+  rename). Confirm `fromCommit` is read from the box's `currentCommit` (never
+  guessed), the biometric fires once, the order deposits.
+- **`fromCommit` freshness across all three:** the order's `fromCommit` MUST equal
+  the box's live HEAD or the consumer rejects (anti-skip). All clients already
+  source it from server-detail; verify no staleness window after the box updates.
+
+### Phase 4 — End-to-end validation on the live box
+
+The demo box (`home.openai-build`) is the test rig. It is currently on commit
+`~2026-07-21` with a DIRTY working tree (the CORS hand-patch — see §5).
+
+1. **Reconcile the dirty tree FIRST** (§5) or the `git checkout` step conflicts.
+2. Pick a small, safe target commit (e.g. current `main`), endorse it (Phase 2),
+   push endorsement.
+3. From the webapp, tap "Update this server". Watch:
+   - order deposits on `.com`;
+   - box consumes, fetches, gate passes (endorsed), checks out, rebuilds,
+     `exit(0)`, systemd restarts;
+   - boot health gate COMMITS the update on a healthy boot;
+   - `currentCommit` now reports the target.
+4. Repeat from iOS and Android once rebuilt.
+5. **Rollback drill:** endorse a commit known to fail the health gate (or inject
+   a failure) and confirm the box auto-rolls-back and reports the old commit —
+   proving a bad update can't brick the one box before the competition.
+
+---
+
+## 4. Definition of done
+
+- [ ] Box gate accepts a ca-holder-signed release endorsement; precedence + all
+      negative tests green; mutation-checked.
+- [ ] `scripts/endorse-release.mjs` exists; a dry-run produces a valid envelope.
+- [ ] `.maintainers/README.md`, `ca-operations.md` §370, `server-update-mechanism.md`
+      corrected to describe the collapse.
+- [ ] `update-server-btn` added to webapp companion UNAVAILABLE_IDS.
+- [ ] Live: webapp-initiated update moves `home.openai-build` to a new endorsed
+      commit and commits on healthy boot.
+- [ ] Live: iOS + Android initiate the same successfully (post app rebuild).
+- [ ] Live: rollback drill proves auto-recovery.
+- [ ] Full `npx vitest run` + `npx tsc -b` green; merge `plan/update-server-feature`.
+
+---
+
+## 5. Reconciliations / traps (read before starting)
+
+- **The demo box tree is DIRTY, and the consumer will NOT force past it.**
+  CONFIRMED: `updateConsumer.ts` L506 runs a plain `git checkout <target>` — no
+  `-f`, no `git reset --hard`, no stash. Plain checkout ABORTS if it would
+  overwrite a locally-modified file. The 2026-07-23 CORS fix was hand-applied to
+  `/opt/flagship/packages/server-daemon/src/cors.ts` (backup on-box:
+  `cors.ts.bak-20260724-005404`), so `cors.ts` is locally modified.
+  - Git only blocks the checkout when the local content *differs from the target*
+    AND *differs from HEAD*. `main` already carries these exact CORS origins
+    (`3320e859`), so a target on recent `main` may be byte-compatible enough that
+    checkout succeeds — but do NOT rely on byte-luck.
+  - **Deterministic fix (do this):** in the SAME rescue pass that bootstraps the
+    Phase-1 gate onto the box (§6 step 2), run `git -C /opt/flagship checkout --
+    packages/server-daemon/src/cors.ts` to discard the local edit, THEN
+    `git checkout <bootstrap-commit>` (which already contains the CORS origins).
+    After that the tree is clean and every future OTA update checks out cleanly.
+  - Alternative, considered and rejected: patching the consumer to `git reset
+    --hard` before checkout. That would let an update silently discard box-local
+    state — the opposite of what we want. Keep checkout non-destructive; clean the
+    tree out-of-band instead.
+- **`ca` mandate expires `2026-08-27` (~5 weeks).** Once releases ride the `ca`
+  authority, that expiry ALSO kills the ability to update boxes (expired mandate →
+  `currentAuthority` null → endorsements rejected). AGENTS.md already tracks
+  "re-mint the lease before 2026-08-31" — now that task gates updates too. Re-mint
+  is a `upsert-mandate` succession on the ca track (existing runbook).
+- **App-store-signing alternative is now bypassed.** §370 named "app-store
+  signing + reproducible-build CI" as the v1 update-integrity story. This plan
+  chooses the maintainer-endorsement path instead (it's what the daemon actually
+  enforces). Note the supersession so the two docs don't contradict.
+- **Webapp companion honesty gap:** `update-server-btn` is not in
+  `companionGuard`'s UNAVAILABLE_IDS. Functionally safe (a keyless session has no
+  seed to sign), but the button should visibly disable for companions. One-line
+  add.
+
+---
+
+## 6. Order of operations (the short version)
+
+1. Phase 1 code + tests on this branch → green → merge to `main`.
+2. Deploy nothing yet (box-side change ships to the box via the update itself —
+   chicken/egg: the FIRST update must be applied by a box already running the
+   fallback). **Resolve the bootstrap:** the box that will do the updating needs
+   the Phase-1 gate code. For `home.openai-build`, fold Phase 1 into the target
+   commit AND get it onto the box via one more rescue (or a reburn) — after that,
+   all future updates are seamless over-the-air. Document this one-time bootstrap
+   explicitly; it is the same chicken/egg every self-update system has.
+3. Phase 2 ceremony → endorse the target.
+4. Phase 3 rebuild clients.
+5. Phase 4 live validation + rollback drill.
+
+> The bootstrap in step 2 is the one unavoidable manual touch. After it, "Update
+> this server" is fully seamless from every client, forever.

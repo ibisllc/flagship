@@ -1424,6 +1424,32 @@ premount) + a no-LUKS escape hatch (phone-signed `InstallBlob.diskEncryption`, d
 on). Boot worker consolidated into `flagship-com` (`boot.flagshipserver.com` is a custom
 domain). Earliest phone-home beacons in the preseed.
 
+### TODO — ship "Update this server" end-to-end (PLAN WRITTEN, not started)
+
+The whole update feature is ALREADY BUILT (box consumer + `.com` lane + 2-of-2
+gate + webapp/iOS/Android UIs all exist and are wired). It is blocked on ONE
+thing: no maintainer authority can endorse a release, because the `release`
+track was deliberately deferred at genesis and one baked pin anchors only the
+`ca` track. Owner decision 2026-07-23: **collapse** — the existing `ca`-track
+YubiKey holder endorses releases too (defensible: one key exists anyway, and
+code-push still needs the hardcoded-repo lineage walk + an admin-root order from
+the phone/webapp behind biometrics).
+
+**Full phased plan lives in `docs/update-server-rollout-plan.md`** (on branch
+`plan/update-server-feature`). Shape: Phase 1 = one commented fallback in
+`releaseVerifier.ts` (`get("release") ?? get("ca")`) + positive/negative/
+precedence tests + doc corrections; Phase 2 = one YubiKey `endorsement --track
+ca` per release (wrapper script `scripts/endorse-release.mjs`); Phase 3 =
+exercise the already-built clients (+ one honesty gap: add `update-server-btn`
+to webapp companion UNAVAILABLE_IDS); Phase 4 = live validation on
+`home.openai-build` incl. a rollback drill. Two traps flagged in the plan:
+the demo box's tree is DIRTY (the CORS hand-patch) and the consumer's plain
+`git checkout` won't force past it — clean `cors.ts` in the same rescue pass
+that bootstraps the Phase-1 gate; and the `ca` mandate expires 2026-08-27, which
+now also gates updates (re-mint before then). The one unavoidable manual touch
+is bootstrapping the Phase-1 gate onto the box (chicken/egg — the first update
+needs a box already running the fallback); after that it's seamless OTA forever.
+
 ### TODO — delete the `web.` redirects (BLOCKED on the box speaking the new origins)
 
 The `web.flagshipserver.com` compatibility layer is temporary and should be
