@@ -489,6 +489,27 @@ export async function runUpdateConsumer(
     log(`[self-update] git fetch failed: ${(e as Error).message}; will retry next poll`);
     return { applied: false, reason: "apply-failed" };
   }
+  // Real boxes are cloned SHALLOW (`git clone --depth 50`, demoCloudConfig.ts),
+  // but the AUTHENTICITY gate's first-parent lineage walk needs the target's
+  // full ancestry — the FIRST endorsement is a genesis covering the entire
+  // history, and a shallow walk truncates at the graft boundary and would
+  // count-mismatch → reject. Deepen to full history before the gate. Only when
+  // actually shallow (`--unshallow` errors on a complete repo), and best-effort:
+  // if it fails the gate simply can't verify and rejects — never a bypass.
+  try {
+    const { stdout } = await opts.runner("git", [
+      "-C",
+      opts.repoPath,
+      "rev-parse",
+      "--is-shallow-repository",
+    ]);
+    if (stdout.trim() === "true") {
+      log("[self-update] deepening shallow clone for the endorsement lineage walk");
+      await opts.runner("git", ["-C", opts.repoPath, "fetch", "--unshallow"]);
+    }
+  } catch (e) {
+    log(`[self-update] shallow-deepen skipped (${(e as Error).message}); continuing`);
+  }
   try {
     opts.releaseGate.assertCommitEndorsed(order.targetCommit);
   } catch (e) {

@@ -299,6 +299,7 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
     expect(runner.calls).toEqual([
       ["git", "-C", "/opt/flagship", "rev-parse", "HEAD"],
       ["git", "-C", "/opt/flagship", "fetch"],
+      ["git", "-C", "/opt/flagship", "rev-parse", "--is-shallow-repository"],
       ["git", "-C", "/opt/flagship", "checkout", TARGET],
       ["npm", "ci", "--no-audit", "--no-fund"],
       ["npx", "tsc", "-b"],
@@ -310,6 +311,38 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
       bootAttempts: 0,
     });
     expect(exits.count).toBe(1);
+  });
+
+  // 7a-shallow. Real boxes are `git clone --depth 50`; the consumer must deepen
+  // to full history before the genesis endorsement's lineage walk, else the walk
+  // truncates at the graft boundary and the update is wrongly refused.
+  it("deepens a SHALLOW clone (git fetch --unshallow) before the endorsement gate", async () => {
+    const spy: RunnerSpy = { calls: [] };
+    const shallowRunner: UpdateCommandRunner = async (cmd, args) => {
+      spy.calls.push([cmd, ...args]);
+      if (cmd === "git" && args.includes("--is-shallow-repository")) {
+        return { stdout: "true\n" };
+      }
+      if (cmd === "git" && args.includes("rev-parse")) return { stdout: `${CURRENT}\n` };
+      return { stdout: "" };
+    };
+    const { opts } = baseOpts({ runner: shallowRunner });
+    const out = await runUpdateConsumer(opts);
+    expect(out).toEqual({ applied: true, previousCommit: CURRENT, targetCommit: TARGET });
+    // The unshallow ran, BEFORE the checkout.
+    const seq = spy.calls.map((c) => c.join(" "));
+    const unshallowIdx = seq.findIndex((c) => c.includes("fetch --unshallow"));
+    const checkoutIdx = seq.findIndex((c) => c.includes(`checkout ${TARGET}`));
+    expect(unshallowIdx).toBeGreaterThanOrEqual(0);
+    expect(checkoutIdx).toBeGreaterThan(unshallowIdx);
+  });
+
+  // 7a-complete. A COMPLETE clone is never unshallowed (`--unshallow` errors on
+  // a complete repo — issuing it would break every non-shallow box).
+  it("does NOT unshallow a complete clone", async () => {
+    const { opts, runner } = baseOpts(); // makeRunner returns CURRENT for rev-parse
+    await runUpdateConsumer(opts);
+    expect(calls(runner, "--unshallow")).toEqual([]);
   });
 
   // 7b. happy path — admin-root-signed with the root pinned.

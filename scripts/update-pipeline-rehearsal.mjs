@@ -163,11 +163,15 @@ async function main() {
   fs.writeFileSync(path.join(originDir, "VERSION"), "base\n");
   const c0 = commitAll(originDir, "c0 base + ca mandate");
 
-  // ---- the box is a clone at c0 ----------------------------------------
-  execFileSync("git", ["clone", "-q", originDir, boxDir]);
+  // ---- the box is a SHALLOW clone at c0 (exactly like a real demo box:
+  //      `git clone --depth 50`) so the rehearsal exercises the shallow-deepen
+  //      the consumer must do before the genesis-endorsement lineage walk.
+  execFileSync("git", ["clone", "-q", "--depth", "1", `file://${originDir}`, boxDir]);
   git(boxDir, ["config", "commit.gpgsign", "false"]);
   git(boxDir, ["config", "advice.detachedHead", "false"]);
   check("box starts at c0", git(boxDir, ["rev-parse", "HEAD"]).toLowerCase() === c0);
+  check("box clone is SHALLOW (like a real box)",
+    git(boxDir, ["rev-parse", "--is-shallow-repository"]) === "true");
 
   // A build runner: real git; npm/npx are controllable stubs (a file named
   // FAIL-BUILD in the checked-out tree makes the rebuild fail — used never here,
