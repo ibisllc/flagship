@@ -2790,6 +2790,25 @@ async function wireOwnerHandlers(deps: {
         repoPath,
         releaseGate: buildMaintainersReleaseGate({
           repoPath,
+          // BRING-UP/TEST SEAM ONLY (docs/update-server-rollout-plan.md §Phase 4):
+          // a dummy validation box can override the baked maintainer pin to a
+          // throwaway ca-track anchor so the whole update pipeline is exercisable
+          // in software without the owner's YubiKey. Absent on every real box ⇒
+          // the hardcoded MAINTAINER_PINNED_MANDATE_HASH stands. Setting it needs
+          // root on the box (root can already do anything), so it widens no attack
+          // surface — but it is logged LOUDLY so an override can never be silent.
+          ...(process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE
+            ? (() => {
+                console.warn(
+                  "[self-update] ⚠️  MAINTAINER PIN OVERRIDDEN via " +
+                    "FLAGSHIP_MAINTAINER_PIN_OVERRIDE — this box trusts a NON-production " +
+                    "release authority. This must NEVER be set on a real box.",
+                );
+                return {
+                  pinnedMandateHash: process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE,
+                };
+              })()
+            : {}),
           onLog: (m) => console.log(m),
         }),
         runner: realUpdateCommandRunner,
