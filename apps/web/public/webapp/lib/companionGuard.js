@@ -72,6 +72,10 @@ const UNAVAILABLE_IDS = [
   "build-src-git",
   "build-src-mcp",
   "build-mcp-create",
+  // "Update this server" signs an admin-root order — a keyless remote has no
+  // seed to sign with. It is functionally safe already (the signer throws), but
+  // disable it so the button is honestly unavailable rather than click-to-error.
+  "update-server-btn",
 ];
 
 /** Make the shared webapp shell honest about the currently unsupported

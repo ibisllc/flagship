@@ -316,6 +316,63 @@ describe("companionGuard.requireOwnerProfile()", () => {
     expect(() => guard.requireOwnerProfile()).not.toThrow();
   });
 
+  it("disables the 'Update this server' button for a companion (honest UI)", async () => {
+    const { receiver, guard } = await loadReceiverModule();
+    // Fake just enough DOM: the update button + the companion banner.
+    const btn: Record<string, unknown> & {
+      attrs: Record<string, string>;
+      setAttribute: (k: string, v: string) => void;
+      getAttribute: (k: string) => string | null;
+      removeAttribute: (k: string) => void;
+      classList: { toggle: () => void };
+    } = {
+      attrs: {},
+      setAttribute(k, v) {
+        this.attrs[k] = v;
+      },
+      getAttribute(k) {
+        return this.attrs[k] ?? null;
+      },
+      removeAttribute(k) {
+        delete this.attrs[k];
+      },
+      classList: { toggle: () => {} },
+    };
+    const inert = {
+      classList: { toggle: () => {} },
+      setAttribute() {},
+      getAttribute: () => null,
+      removeAttribute() {},
+    };
+    const doc = {
+      getElementById: (id: string) => (id === "update-server-btn" ? btn : inert),
+    };
+    // Owner (no companion profile): the button is untouched.
+    guard.applyCompanionUiRestrictions(doc);
+    expect(btn.attrs["data-companion-unavailable"]).toBeUndefined();
+
+    // Activate a companion session, then restrictions disable the button.
+    const fetchImpl = async () =>
+      new Response(
+        JSON.stringify({
+          companionSessionToken: "abc" + "0".repeat(61),
+          expiresAt: 1,
+          podBaseUrl: "https://home.alice.flagship.services",
+          username: "alice",
+        }),
+        { status: 200 },
+      );
+    await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
+      fetchImpl,
+      historyReplaceState: () => {},
+      locationHref: "https://webapp.flagshipserver.com/?companion=abc",
+    });
+    expect(guard.isCompanionProfile()).toBe(true);
+    guard.applyCompanionUiRestrictions(doc);
+    expect(btn.attrs["data-companion-unavailable"]).toBe("true");
+    expect(btn.attrs["aria-disabled"]).toBe("true");
+  });
+
   it("non-relayable signing helpers (replace / wipe) still REFUSE companion writes", async () => {
     const { receiver } = await loadReceiverModule();
     const fetchImpl = async () =>
