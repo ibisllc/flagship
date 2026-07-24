@@ -588,6 +588,10 @@ async function main(): Promise<void> {
   // budget is spent. A bad update can never brick a box. Code swap only —
   // /var/flagship keys/data are never touched.
   const selfUpdateRepoPath = process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship";
+  // The box's own running commit (its /opt/flagship HEAD). Shared between the
+  // public /api/leads advertisement and the authenticated screens BFF, and the
+  // applied-commit truth the self-update consumer enforces `fromCommit` against.
+  const currentCommitProvider = buildCurrentCommitProvider(selfUpdateRepoPath);
   const selfUpdateHealth: UpdateHealthSignal = buildUpdateHealthSignal();
   void runUpdateBootGate({
     pendingStore: filePendingVerifyStore(`${dataDir}/update-pending.json`),
@@ -1135,6 +1139,7 @@ async function main(): Promise<void> {
       buildLeadsHttpHandler({
         serverFqdn: env.serverFqdn!,
         snapshot: () => leadsSnapshotRef.current(),
+        commit: currentCommitProvider,
       }),
     );
     // Peer-backup shard transport (box↔box). Registered on the PUBLIC pipe —
@@ -2357,7 +2362,8 @@ async function wireRuntimeSurfaces(deps: {
     username,
     daemonVersion: process.env.FLAGSHIP_DAEMON_VERSION ?? "0.0.0",
     // The applied-commit truth the self-update consumer enforces
-    // `fromCommit` against — same checkout the consumer updates.
+    // `fromCommit` against — same checkout the consumer updates. (Its own
+    // cached provider; the /api/leads one lives in the outer scope.)
     currentCommit: buildCurrentCommitProvider(
       process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
     ),

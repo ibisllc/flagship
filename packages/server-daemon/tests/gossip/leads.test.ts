@@ -261,11 +261,24 @@ describe("GET /api/leads handler (response shape)", () => {
       leads: {
         blog: { leaderFqdn: "self.harry.flagship.services", leaderStkHex: "aa".repeat(32), live: true },
       },
+      commit: null, // no commit provider supplied
     });
 
     // Falls through (null) for other paths/methods.
     expect(await handler({ method: "POST", path: "/api/leads", headers: {}, body: Buffer.alloc(0) })).toBeNull();
     expect(await handler({ method: "GET", path: "/api/services", headers: {}, body: Buffer.alloc(0) })).toBeNull();
+  });
+
+  it("advertises the running commit when a provider is supplied", async () => {
+    const sha = "e1384d661203a925801bff3ea6d1d1aa575bde1e";
+    const handler = buildLeadsHttpHandler({
+      serverFqdn: "self.harry.flagship.services",
+      now: () => 1,
+      snapshot: () => ({ gossipActive: false, leads: {} }),
+      commit: () => sha,
+    });
+    const res = await handler({ method: "GET", path: "/api/leads", headers: {}, body: Buffer.alloc(0) });
+    expect((JSON.parse(res!.body as string) as { commit: string }).commit).toBe(sha);
   });
 
   it("serves the gossip-DISABLED shape unchanged (200, gossipActive:false, empty)", async () => {
@@ -280,6 +293,7 @@ describe("GET /api/leads handler (response shape)", () => {
       self: "self.harry.flagship.services",
       gossipActive: false,
       leads: {},
+      commit: null,
     });
   });
 });
