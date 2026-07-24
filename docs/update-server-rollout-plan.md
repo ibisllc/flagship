@@ -319,16 +319,38 @@ The demo box (`home.openai-build`) is the test rig. It is currently on commit
   git. Proven: good update commits on healthy boot; replay rejected; unendorsed
   refused; endorsed-but-unhealthy update auto-rolls-back. All assertions pass.
 
-**Remaining (needs infra + the owner):**
-- **Merge to `main`** (owner sign-off) — puts the pin-override seam + ca fallback
-  on trunk so a box can run the fallback.
-- **A box running the Phase-1 gate.** Either (a) a throwaway Hetzner box with
-  `FLAGSHIP_MAINTAINER_PIN_OVERRIDE` + a throwaway ca endorsement (software
-  authority, no YubiKey) to validate the real systemd/network/rebuild loop; or
-  (b) bootstrap Phase 1 onto `home.openai-build` via rescue (also clean the dirty
-  `cors.ts` in the same pass — §5) then do the real ceremony.
-- **The YubiKey ceremony** (owner) — `node scripts/endorse-release.mjs --to <sha>
-  --from <box currentCommit>` dry-run, then `--sign` with a tap.
-- **The admin order** (owner) — tap "Update this server" in the webapp/app
-  (biometric-signed admin-root order).
+**2026-07-24 (later) — LIVE end-to-end validation PASSED on a real Hetzner box.**
+Merged Phases 1–3 to `main` (`cebbbc16`), provisioned a throwaway demo box
+`home.update-drill.flagship.services`, and ran the FULLY-REAL-authority update:
+
+- **Demo-box authority gap found + closed.** A demo account's admin authority
+  (admin root + primary-device `admin` grant) is entirely KEK-derived and
+  Worker-held; demo pairing only hands a device a keyless session. So no
+  phone/webapp can order an update on a demo box (incl. `openai-build`). Added
+  `handleOrderDemoUpdate` → `POST /api/dev/sample-user/:u/order-update` (admin-
+  gated): the Worker re-derives the demo admin root and deposits a real
+  admin-signed `UpdateOrder`. Real USER accounts are unaffected (phone signs
+  directly). Dev tool — remove at GA with the other `/api/dev/*`.
+- **Shallow-clone bug found + fixed** (`cebbbc16`): real boxes are `git clone
+  --depth 50`; the genesis endorsement's first-parent walk needs full history.
+  The consumer now `git fetch --unshallow`es a shallow clone before the gate.
+  Would have blocked the first update on EVERY box; surfaced by the rehearsal.
+- **Verification vehicle** (`83a5c0bf`): the box now advertises its running
+  commit on public `/api/leads` — the unauthenticated proof signal.
+- **The run:** owner tapped the YubiKey (real ca endorsement of `83a5c0bf` via
+  the Phase-1 fallback); admin route deposited the demo-admin-signed order;
+  box consumed → unshallowed → gate passed → checked out → rebuilt → restarted
+  (a ~30s `root=000` blip) → boot-health COMMITTED. `/api/leads` flipped from
+  no `commit` field → `commit:83a5c0bf`, stable, cert valid. **Every layer of
+  the real 2-of-2 exercised on real infra.**
+
+**Remaining:**
+- **`openai-build` (reviewer box).** Messier than the throwaway: old unknown
+  HEAD, shallow, dirty tree (last session's `cors.ts` hand-patch), no SSH.
+  Decide in-place update (needs its HEAD read + the dirty `cors.ts` reconciled;
+  `main` now carries those CORS origins so a checkout MAY be byte-clean — §5)
+  vs a clean reprovision onto latest `main`.
+- **iOS/Android** initiate the update for REAL user accounts once rebuilt.
+- **Live rollback drill** on a real box (proven in the rehearsal; optional live).
+- **Tear down `update-drill`** (`sample-user cleanup update-drill`) when done.
 - **Re-mint the ca mandate before 2026-08-27** — it now also gates updates.
