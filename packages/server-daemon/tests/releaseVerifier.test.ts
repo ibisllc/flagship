@@ -243,6 +243,181 @@ describe("verifyMaintainersFolder (v2 verify-forward-from-pin)", () => {
   });
 });
 
+// ----- PRE-RELEASE POSTURE: ca-track fallback (rollout-plan §2) -----------
+
+/**
+ * Build a `.maintainers/` folder whose mandates live under an arbitrary track
+ * name (so we can create a `ca` track, or both `ca` and `release`, instead of
+ * the `release`-only helper above). Endorsements are signed by `signer`.
+ */
+function makeMultiTrackRepo(): {
+  rootDir: string;
+  cleanup: () => void;
+  ca: ReturnType<typeof kp>;
+  rel: ReturnType<typeof kp>;
+  stranger: ReturnType<typeof kp>;
+} {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "flagship-rv-multi-"));
+  fs.mkdirSync(path.join(tmp, ".maintainers", "keys"), { recursive: true });
+  return {
+    rootDir: tmp,
+    cleanup: () => fs.rmSync(tmp, { recursive: true, force: true }),
+    ca: kp(40),
+    rel: kp(60),
+    stranger: kp(80),
+  };
+}
+
+function mandateOnTrack(
+  track: string,
+  signer: ReturnType<typeof kp>,
+): Mandate {
+  const unsigned: Omit<Mandate, "signatures"> = {
+    kind: "Mandate",
+    version: 1,
+    mandateId: "22222222-2222-4222-8222-222222222222",
+    track,
+    holder: signer.pubKey,
+    issuedAt: ISO_GENESIS,
+    expiresAt: ISO_AFTER_EXPIRY,
+    successors: [signer.pubKey],
+    approvalRule: { kind: "threshold", threshold: 1 },
+    minSuccessors: 1,
+    maxDurationSeconds: 365 * DAY,
+    defaultDurationSeconds: 60 * DAY,
+    signedBy: signer.pubKey,
+  };
+  return signMandate(unsigned, [{ privKey: signer.privKey }]);
+}
+
+function writeMandateOnTrack(rootDir: string, m: Mandate): void {
+  const dir = path.join(rootDir, ".maintainers", "tracks", m.track, "mandates");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, `${m.issuedAt.replace(/[:.]/g, "")}-${m.track}.json`),
+    JSON.stringify(m),
+    "utf8",
+  );
+}
+
+function endorsedBy(
+  signer: ReturnType<typeof kp>,
+  commit: string,
+): ReleaseEndorsement {
+  const intermediates = [commit];
+  return signReleaseEndorsement(
+    {
+      kind: "ReleaseEndorsement",
+      version: 1,
+      releaseId: "44444444-4444-4444-8444-444444444444",
+      semverTag: "v9.9.9",
+      commitHash: commit,
+      previousReleaseId: null,
+      previousCommitHash: null,
+      intermediateCommits: intermediates,
+      intermediateMerkleRoot: intermediateMerkleRoot(intermediates),
+      endorsedNotes: null,
+      issuedAt: ISO_NEXT,
+      signedBy: signer.pubKey,
+    },
+    [{ privKey: signer.privKey }],
+  );
+}
+
+describe("release endorsement ca-track fallback (rollout-plan §2)", () => {
+  it("accepts a ca-holder-signed endorsement when only the ca track exists", () => {
+    const repo = makeMultiTrackRepo();
+    try {
+      const caGenesis = mandateOnTrack("ca", repo.ca);
+      writeMandateOnTrack(repo.rootDir, caGenesis);
+      const commit = "c".repeat(40);
+      writeEndorsement(repo.rootDir, endorsedBy(repo.ca, commit));
+
+      const status = verifyMaintainersFolder({
+        gitRepoPath: repo.rootDir,
+        now: new Date(ISO_NEXT),
+        pinnedMandateHash: mandatePinHash(caGenesis),
+      });
+      expect(status.validEndorsements).toHaveLength(1);
+      expect(status.currentRelease?.commitHash).toBe(commit);
+      expect(status.endorsementErrors).toHaveLength(0);
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  it("rejects an endorsement signed by a NON-holder key (fallback is not a bypass)", () => {
+    const repo = makeMultiTrackRepo();
+    try {
+      const caGenesis = mandateOnTrack("ca", repo.ca);
+      writeMandateOnTrack(repo.rootDir, caGenesis);
+      const commit = "d".repeat(40);
+      // Signed by a stranger key that holds no mandate on any track.
+      writeEndorsement(repo.rootDir, endorsedBy(repo.stranger, commit));
+
+      const status = verifyMaintainersFolder({
+        gitRepoPath: repo.rootDir,
+        now: new Date(ISO_NEXT),
+        pinnedMandateHash: mandatePinHash(caGenesis),
+      });
+      expect(status.validEndorsements).toHaveLength(0);
+      expect(status.currentRelease).toBe(null);
+      expect(status.endorsementErrors.length).toBeGreaterThan(0);
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  it("PRECEDENCE: a real release track wins — a ca-only endorsement is NOT accepted when release exists", () => {
+    const repo = makeMultiTrackRepo();
+    try {
+      // Both tracks exist; pin anchors the ca track. The release track has its
+      // own (different) holder. An endorsement signed by the CA holder must be
+      // rejected because the release chain — which wins — did not authorize it.
+      const caGenesis = mandateOnTrack("ca", repo.ca);
+      const relGenesis = mandateOnTrack("release", repo.rel);
+      writeMandateOnTrack(repo.rootDir, caGenesis);
+      writeMandateOnTrack(repo.rootDir, relGenesis);
+      const commit = "e".repeat(40);
+      writeEndorsement(repo.rootDir, endorsedBy(repo.ca, commit));
+
+      const status = verifyMaintainersFolder({
+        gitRepoPath: repo.rootDir,
+        now: new Date(ISO_NEXT),
+        // Pin the RELEASE genesis so the release track is the anchored, valid
+        // chain and therefore preferred by resolveReleaseChain.
+        pinnedMandateHash: mandatePinHash(relGenesis),
+      });
+      expect(status.validEndorsements).toHaveLength(0);
+      expect(status.currentRelease).toBe(null);
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  it("PRECEDENCE: a real release track wins — its OWN holder's endorsement is accepted even with a ca track present", () => {
+    const repo = makeMultiTrackRepo();
+    try {
+      const caGenesis = mandateOnTrack("ca", repo.ca);
+      const relGenesis = mandateOnTrack("release", repo.rel);
+      writeMandateOnTrack(repo.rootDir, caGenesis);
+      writeMandateOnTrack(repo.rootDir, relGenesis);
+      const commit = "f".repeat(40);
+      writeEndorsement(repo.rootDir, endorsedBy(repo.rel, commit));
+
+      const status = verifyMaintainersFolder({
+        gitRepoPath: repo.rootDir,
+        now: new Date(ISO_NEXT),
+        pinnedMandateHash: mandatePinHash(relGenesis),
+      });
+      expect(status.validEndorsements).toHaveLength(1);
+      expect(status.currentRelease?.commitHash).toBe(commit);
+    } finally {
+      repo.cleanup();
+    }
+  });
+});
+
 // ----- verifyEndorsementChainAgainstGit (unchanged by v2) ----------------
 
 function git(cwd: string, args: string[]): string {

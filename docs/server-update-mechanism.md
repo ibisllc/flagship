@@ -5,6 +5,15 @@
 > and/or its declared security posture — without a reburn, under a **2-of-2** signature
 > gate: **Flagship's current-mandate maintainer authority** (the code is blessed, not
 > malicious) **and** an **admin phone** (an admin authorized applying it to this box).
+>
+> **UPDATE 2026-07-24 — being SHIPPED (`docs/update-server-rollout-plan.md`).** The
+> mechanism below is built and wired end-to-end; it was blocked only on a maintainer
+> *release* authority that could endorse a commit (deferred at genesis). Owner decision:
+> the existing **`ca`-track holder endorses releases too** (pre-release collapse). The
+> daemon release gate (`releaseVerifier.ts` `resolveReleaseChain`) therefore prefers a
+> real `release` track when present and **falls back to the `ca` chain** otherwise. The
+> "authenticity" half below is unchanged in substance — the endorsing key is simply the
+> ca-track holder for now; a future dedicated release track wins automatically.
 
 ## Why this exists
 

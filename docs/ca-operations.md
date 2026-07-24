@@ -383,6 +383,23 @@ root of trust. Run it exactly; `--dry-run` first.**
 > three tracks", read **"the `ca` track"** / **"after the `ca`
 > track"**. One ORIGIN mandate, one `mandatePinHash`.
 >
+> **★ SUPERSEDING NOTE (2026-07-24, owner — `docs/update-server-rollout-plan.md`
+> §2):** the v1 "update integrity rides on app-store signing +
+> reproducible-build CI" clause above is superseded for the "Update this
+> server" feature. What the daemon actually enforces is a
+> maintainer-signed `ReleaseEndorsement`, so releases now ride the
+> maintainer-endorsement path — endorsed by the **existing `ca`-track
+> authority** as a deliberate pre-release collapse (one holder key exists;
+> a separate release track today would point at the same YubiKey). The
+> daemon gate (`releaseVerifier.ts` `resolveReleaseChain`) prefers a real
+> `release` track when present and falls back to `ca` otherwise, so a
+> future isolated release genesis wins automatically with no code change.
+> This does NOT re-bake the pin (the live `ca` track is untouched) and
+> does NOT merge the tracks in the protocol — only Flagship's daemon
+> chooses to accept a ca-signed endorsement. NOTE: once releases ride the
+> `ca` authority, the ca mandate's expiry (`2026-08-27`) also gates
+> updates — re-mint on the existing succession runbook before then.
+>
 > **★ LOCKED PARAMETERS (verified by a real `--dry-run` at pin
 > `393b7a7`, nothing signed):** two personas — primary **"Harry
 > Winner" / `hello@harrywinner.com` / role `maintainer`** (key#1,

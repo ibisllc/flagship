@@ -275,6 +275,24 @@ export function verifyEndorsementChainAgainstGit(
 
 // ---- internal -----------------------------------------------------------
 
+/**
+ * Resolve the chain that release endorsements are verified against.
+ *
+ * PRE-RELEASE POSTURE (docs/update-server-rollout-plan.md §2): prefer a real
+ * `release` track when present + valid; otherwise fall back to the `ca` track,
+ * which the single YubiKey holder also uses to endorse releases until a
+ * dedicated release role exists. Isolated here so the precedence rule lives in
+ * one place: a future `release` track needs no further code change to win, and
+ * the fallback can never shadow a genuine release authority.
+ */
+function resolveReleaseChain(
+  chainsByTrack: Map<TrackName, VerifiedChain>,
+): VerifiedChain | undefined {
+  const release = chainsByTrack.get("release");
+  if (release && release.validMandates.length > 0) return release;
+  return chainsByTrack.get("ca");
+}
+
 function verifyStore(
   store: MaintainersStoreSnapshot,
   now: Date,
@@ -317,15 +335,27 @@ function verifyStore(
     });
   }
 
+  // PRE-RELEASE POSTURE (docs/update-server-rollout-plan.md §2): the maintainers
+  // protocol models a dedicated `release` track, but at Flagship's genesis only
+  // the `ca` track was signed (ca-operations.md §370) and exactly one holder key
+  // exists. Rather than stand up a separate release key that would point at the
+  // SAME YubiKey, the ca-track authority endorses releases too. A real `release`
+  // track, once it ever exists, WINS automatically (it is preferred here) — this
+  // fallback fires only when `release` is absent or carries no valid chain, so it
+  // can never shadow a genuine release authority. `ReleaseEndorsement` has no
+  // `track` field, so a ca-holder-signed endorsement verifies cleanly against the
+  // ca chain with zero protocol change.
+  const releaseChain = resolveReleaseChain(chainsByTrack);
+
   let validEndorsements: ReleaseEndorsement[] = [];
   let endorsementErrors: ReleaseStatus["endorsementErrors"] = [];
   if (store.endorsements.length > 0) {
-    const releaseChain = chainsByTrack.get("release");
     if (!releaseChain || releaseChain.validMandates.length === 0) {
       endorsementErrors = store.endorsements.map((e) => ({
         releaseId: e.releaseId,
         reason: "no-release-track-authority",
-        detail: "endorsements present but no verifiable release-track v2 chain",
+        detail:
+          "endorsements present but no verifiable release-track (or ca-track fallback) v2 chain",
       }));
     } else {
       const result: VerifiedEndorsements = verifyChainOfEndorsements(
@@ -346,6 +376,12 @@ function verifyStore(
       ? validEndorsements[validEndorsements.length - 1] ?? null
       : null;
 
+  // Deliberately release-track ONLY (no ca fallback): the takeover alarm is a
+  // non-load-bearing UI signal specific to a successor seizing the release role.
+  // The ca track surfaces its own trust-change signalling elsewhere (the CA
+  // endorsement/maintainer-blessing path); conflating a ca-holder succession into
+  // a "release takeover" banner would be misleading. When no release track exists
+  // (the pre-release collapse), there is simply no release-takeover to report.
   const pendingTakeoverAlarm = deriveTakeoverAlarm(
     chainsByTrack.get("release"),
     store,
