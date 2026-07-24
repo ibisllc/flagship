@@ -1,7 +1,13 @@
 # "Update this server" — end-to-end rollout plan
 
-**Status:** PLAN ONLY. Nothing here is implemented. Written 2026-07-23 on
-`plan/update-server-feature` so it survives until we pick it up together.
+**Status (updated 2026-07-24):** Phases 1–3 are BUILT, tested, and committed on
+`plan/update-server-feature` (pushed). The whole tree is green (`npx tsc -b` +
+`npx vitest run` = 570 files / 7332 tests). Phase 4 (live validation) has its
+SOLO portion done — a faithful real-git rehearsal of the entire box pipeline
+passes — and now needs the infra/human steps (a box running the Phase-1 gate,
+plus the owner's YubiKey for the real ceremony). See "Progress log" at the end.
+
+Written 2026-07-23; being executed 2026-07-24.
 
 **Goal:** the "Update this server" button works seamlessly from all three
 clients (webapp, iOS, Android) — an owner taps it, the box pulls the endorsed
@@ -212,17 +218,25 @@ The demo box (`home.openai-build`) is the test rig. It is currently on commit
 
 ## 4. Definition of done
 
-- [ ] Box gate accepts a ca-holder-signed release endorsement; precedence + all
-      negative tests green; mutation-checked.
-- [ ] `scripts/endorse-release.mjs` exists; a dry-run produces a valid envelope.
-- [ ] `.maintainers/README.md`, `ca-operations.md` §370, `server-update-mechanism.md`
+- [x] Box gate accepts a ca-holder-signed release endorsement; precedence + all
+      negative tests green; mutation-checked. (`releaseVerifier.ts`
+      `resolveReleaseChain` + 4 new tests; mutation-checked 2026-07-24.)
+- [x] `scripts/endorse-release.mjs` exists; a dry-run produces a valid envelope.
+      (Dry-run + a full software-signed rehearsal both verified.)
+- [x] `.maintainers/README.md`, `ca-operations.md` §370, `server-update-mechanism.md`
       corrected to describe the collapse.
-- [ ] `update-server-btn` added to webapp companion UNAVAILABLE_IDS.
-- [ ] Live: webapp-initiated update moves `home.openai-build` to a new endorsed
-      commit and commits on healthy boot.
+- [x] `update-server-btn` added to webapp companion UNAVAILABLE_IDS (+ test).
+- [x] Full `npx vitest run` + `npx tsc -b` green. (570 files / 7332 tests.)
+- [x] Faithful local rehearsal of the whole pipeline passes
+      (`scripts/update-pipeline-rehearsal.mjs`): real git fetch→gate→checkout→
+      rebuild→commit, replay + unendorsed refusals, and a real auto-rollback.
+- [ ] Merge `plan/update-server-feature` to `main` (owner sign-off — it puts the
+      pin-override seam + ca fallback on trunk).
+- [ ] Live: webapp-initiated update moves a box to a new endorsed commit and
+      commits on healthy boot (dummy box with the pin override, and/or the real
+      `home.openai-build` after the YubiKey ceremony).
 - [ ] Live: iOS + Android initiate the same successfully (post app rebuild).
-- [ ] Live: rollback drill proves auto-recovery.
-- [ ] Full `npx vitest run` + `npx tsc -b` green; merge `plan/update-server-feature`.
+- [ ] Live: rollback drill proves auto-recovery on a real box.
 
 ---
 
@@ -279,3 +293,42 @@ The demo box (`home.openai-build`) is the test rig. It is currently on commit
 
 > The bootstrap in step 2 is the one unavoidable manual touch. After it, "Update
 > this server" is fully seamless from every client, forever.
+
+---
+
+## Progress log
+
+**2026-07-24 — Phases 1–3 shipped on the branch; Phase 4 solo portion done.**
+
+- **Phase 1** (`e1384d66`): `releaseVerifier.ts` `resolveReleaseChain` prefers a
+  real `release` track and falls back to `ca`. Takeover-alarm stays release-only
+  (documented). 4 new tests (accept ca-signed; reject non-holder; precedence both
+  ways) + mutation-checked. Docs corrected.
+- **Phase 2** (`5970e61e`): `scripts/endorse-release.mjs` — dry-run preview +
+  `--sign`. Computes the endorsement's lineage the way the box re-walks it
+  (genesis ⇒ full first-parent history; else the delta). Added
+  `FLAGSHIP_MAINTAINER_PIN_OVERRIDE`, a loudly-logged bring-up seam so a dummy
+  box can use a throwaway ca authority. Rehearsed: a scratch ca track signs a
+  genesis endorsement for HEAD and both halves of the box gate (crypto + git
+  walk) return PASS.
+- **Phase 3** (`099950ad`): `update-server-btn` added to the webapp companion
+  `UNAVAILABLE_IDS` (+ test). Confirmed all three clients source `fromCommit`
+  from the box-reported `currentCommit`.
+- **Phase 4 (solo)** (`5910fbf3`): `scripts/update-pipeline-rehearsal.mjs` drives
+  the REAL consumer + boot gate + release gate + 2-of-2 auth against REAL local
+  git. Proven: good update commits on healthy boot; replay rejected; unendorsed
+  refused; endorsed-but-unhealthy update auto-rolls-back. All assertions pass.
+
+**Remaining (needs infra + the owner):**
+- **Merge to `main`** (owner sign-off) — puts the pin-override seam + ca fallback
+  on trunk so a box can run the fallback.
+- **A box running the Phase-1 gate.** Either (a) a throwaway Hetzner box with
+  `FLAGSHIP_MAINTAINER_PIN_OVERRIDE` + a throwaway ca endorsement (software
+  authority, no YubiKey) to validate the real systemd/network/rebuild loop; or
+  (b) bootstrap Phase 1 onto `home.openai-build` via rescue (also clean the dirty
+  `cors.ts` in the same pass — §5) then do the real ceremony.
+- **The YubiKey ceremony** (owner) — `node scripts/endorse-release.mjs --to <sha>
+  --from <box currentCommit>` dry-run, then `--sign` with a tap.
+- **The admin order** (owner) — tap "Update this server" in the webapp/app
+  (biometric-signed admin-root order).
+- **Re-mint the ca mandate before 2026-08-27** — it now also gates updates.
