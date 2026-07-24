@@ -2,9 +2,16 @@ import type {
   AuditEventStorage,
   DemoUserRecord,
   DemoUsersStorage,
+  SecretMailboxStorage,
+  ServerStorage,
 } from "@flagship/storage";
-import { signPhoneOrder, type PhoneOrder } from "@flagship/protocol";
-import { deriveDemoDelegatedKey } from "./demoIdentity.js";
+import {
+  signPhoneOrder,
+  signUpdateOrder,
+  type PhoneOrder,
+  type UpdateOrder,
+} from "@flagship/protocol";
+import { deriveDemoAdminRoot, deriveDemoDelegatedKey } from "./demoIdentity.js";
 import { bytesToHex, HEX64 } from "./hex.js";
 import {
   conflict,
@@ -148,6 +155,111 @@ export async function handlePairDemoUser(
   await deps.storage.update(row.username, { lastActivityAt: issuedAt });
   return {
     ...ok({ ok: true, fqdn: row.activeServerFqdn }),
+    headers: { "cache-control": "private, no-store" },
+  };
+}
+
+export interface DemoUpdateDeps {
+  storage: DemoUsersStorage;
+  servers: ServerStorage;
+  secretMailbox: SecretMailboxStorage;
+  demoIrkKek: Uint8Array;
+  now?: () => number;
+  ttlMs?: number;
+}
+
+export interface DemoUpdateBody {
+  targetCommit?: unknown;
+  fromCommit?: unknown;
+}
+
+/** 14 days — matches the update-deposit lane's TTL. */
+const DEMO_UPDATE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const SHA_RE = /^[0-9a-f]{7,64}$/;
+
+function randomHex(bytes: number): string {
+  const b = new Uint8Array(bytes);
+  crypto.getRandomValues(b);
+  return bytesToHex(b);
+}
+
+/**
+ * Admin-driven "Update this server" order for a DEMO box.
+ *
+ * A demo account's admin authority (admin master root + the primary-device
+ * `admin` grant) is entirely KEK-derived and Worker-held — demo pairing only
+ * ever hands a device a keyless SESSION, never admin authority. So no phone or
+ * webapp can sign an `UpdateOrder` for a demo box (the box pins the demo admin
+ * root and the update consumer rejects a bare owner-IRK order). This handler is
+ * the sanctioned admin path: with the KEK it re-derives the demo account's admin
+ * root, signs the order, and deposits the PUBLIC carrier on the box's update
+ * lane exactly as `handlePostUpdateDeposit` would — the box then re-verifies the
+ * admin signature under its pinned root AND confirms the target commit is
+ * maintainer-endorsed (the ReleaseGate) before applying. Admin-gated at the
+ * route; it is a dev/demo tool (remove with the other `/api/dev/*` routes at GA).
+ *
+ * Real USER accounts are unaffected: their phone holds the admin root and signs
+ * the order directly — this handler is only for the Worker-custodied demo boxes.
+ */
+export async function handleOrderDemoUpdate(
+  deps: DemoUpdateDeps,
+  username: string,
+  body: DemoUpdateBody | undefined,
+): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? Date.now)();
+  const uname = username.toLowerCase();
+  const row = await deps.storage.get(uname);
+  if (!row) return notFound("no such demo user");
+  if (row.state !== "ready" || !row.activeServerId) {
+    return conflict("demo server is not ready");
+  }
+
+  const targetCommit =
+    typeof body?.targetCommit === "string" ? body.targetCommit.trim().toLowerCase() : "";
+  const fromCommit =
+    typeof body?.fromCommit === "string" ? body.fromCommit.trim().toLowerCase() : "";
+  if (!SHA_RE.test(targetCommit)) return malformed("targetCommit must be a git sha (7-64 hex)");
+  if (!SHA_RE.test(fromCommit)) return malformed("fromCommit must be a git sha (7-64 hex)");
+  if (targetCommit === fromCommit) return malformed("targetCommit equals fromCommit (no-op)");
+
+  const serverDomain = demoServerFqdn(uname);
+  const reg = await deps.servers.get(serverDomain);
+  if (!reg) return conflict("demo server is not registered");
+  if (reg.revokedAt) return conflict("demo server is revoked");
+
+  const admin = deriveDemoAdminRoot(deps.demoIrkKek, uname);
+  const order: UpdateOrder = {
+    serverDomain,
+    targetCommit,
+    fromCommit,
+    nonce: randomHex(16),
+    issuedAt: now,
+  };
+  const signature = bytesToHex(signUpdateOrder(order, admin));
+  const carrierHex = bytesToHex(
+    new TextEncoder().encode(JSON.stringify({ order, signature })),
+  );
+  const expiresAt = now + (deps.ttlMs ?? DEMO_UPDATE_TTL_MS);
+
+  const put = await deps.secretMailbox.putUpdateDeposit({
+    serverDomain,
+    username: reg.username,
+    requestNonceHex: randomHex(32),
+    stkPubHex: reg.identityPubKeyHex.toLowerCase(),
+    sealedHex: carrierHex,
+    issuedAt: now,
+    expiresAt,
+  });
+  if (!put.ok) return conflict(put.reason);
+
+  return {
+    ...ok({
+      ok: true,
+      serverDomain,
+      order,
+      signerAdminRootPubHex: bytesToHex(admin.publicKey),
+      expiresAt,
+    }),
     headers: { "cache-control": "private, no-store" },
   };
 }

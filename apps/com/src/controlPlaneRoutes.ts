@@ -177,6 +177,7 @@ import {
   handleCleanupDemoAccount,
   handleGetDemoUser,
   handleListDemoUsers,
+  handleOrderDemoUpdate,
   handlePairDemoUser,
   handleGymProvision,
   handleMintDeviceGrant,
@@ -663,6 +664,7 @@ const ROUTE_RE = {
   DEMO_USER_CREATE: /^\/api\/dev\/sample-user\/create$/,
   DEMO_USER_CLEANUP: /^\/api\/dev\/sample-user\/cleanup$/,
   DEMO_USER_PAIR: /^\/api\/dev\/sample-user\/([^/]+)\/pair$/,
+  DEMO_USER_ORDER_UPDATE: /^\/api\/dev\/sample-user\/([^/]+)\/order-update$/,
   DEMO_USER_GET: /^\/api\/dev\/sample-user\/([^/]+)$/,
   DEMO_USER_LIST: /^\/api\/dev\/sample-user$/,
   // Phase 1 of the gym recipe→Hetzner pipeline. GYM-ONLY: provisions a box
@@ -3162,6 +3164,24 @@ export async function tryControlPlane(
           });
           return { status: response.status };
         },
+      }, decodeURIComponent(m[1]!), await readJson(request)));
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_ORDER_UPDATE))) {
+      {
+        const _adminAuth = authorizeAdmin({
+          expected: env.FLAGSHIP_ADMIN_SECRET,
+          provided: request.headers.get("x-admin-secret"),
+        });
+        if (_adminAuth) return finishPlain(_adminAuth);
+      }
+      if (!env.DEMO_IRK_KEK) {
+        return jsonResponse({ error: "demo update is not configured" }, 503);
+      }
+      return finishPlain(await handleOrderDemoUpdate({
+        storage: storage.demoUsers,
+        servers: storage.servers,
+        secretMailbox: storage.secretMailbox,
+        demoIrkKek: hexDecode(env.DEMO_IRK_KEK),
       }, decodeURIComponent(m[1]!), await readJson(request)));
     }
     if (method === "POST" && ROUTE_RE.DEMO_USER_CREATE.test(path)) {
