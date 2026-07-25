@@ -52,7 +52,7 @@ public struct CreateServerStubScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                Spacer().frame(height: FS.space.s8)
+                Spacer().frame(height: FS.space.s4)
                 switch vm.phase {
                 case .design:                designPage(c: c)
                 case .deliveryChooser:       deliveryChooserPage(c: c)
@@ -80,6 +80,8 @@ public struct CreateServerStubScreen: View {
             .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
+        .navigationTitle(navTitle)
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $pairVM) { presentedVM in
             NavigationStack {
                 BuilderPairScreen(
@@ -107,12 +109,29 @@ public struct CreateServerStubScreen: View {
         }
     }
 
+    /// The small inline nav-bar title for the current page — replaces the old
+    /// big in-body headers (steps 1–3 + the delivery chooser lost their bulky
+    /// title + subtitle; the title now lives in the nav bar like every other
+    /// page in the app).
+    private var navTitle: String {
+        switch vm.phase {
+        case .design:          return designStepHeader(designStep)
+        case .deliveryChooser: return "Get it to a builder"
+        case .scanQr:          return "Scan the QR"
+        case .pasteQr:         return "Paste the QR link"
+        case .connecting:      return "Connecting"
+        case .matching:        return "Confirm match code"
+        case .minting:         return "Almost there"
+        case .delivering:      return "Delivering"
+        case .delivered:       return "Your recipe is ready"
+        case .failed:          return "Something went wrong"
+        }
+    }
+
     // MARK: - Delivery chooser
 
     private func deliveryChooserPage(c: FSColors) -> some View {
-        VStack(alignment: .leading, spacing: FS.space.s4) {
-            phaseHeader("Get it to a builder", subtitle: "Your recipe is ready. Pick how to send it to the Flagship builder that writes your USB stick.", c: c)
-
+        VStack(alignment: .leading, spacing: FS.space.s3) {
             Button { startPair() } label: {
                 deliveryCard(icon: "qrcode.viewfinder", accent: c.primary,
                              title: "Pair with the builder app",
@@ -146,15 +165,18 @@ public struct CreateServerStubScreen: View {
     }
 
     private func deliveryCard(icon: String, accent: Color, title: String, body: String, c: FSColors) -> some View {
-        FSCard(padding: FS.space.s6) {
-            VStack(alignment: .leading, spacing: FS.space.s3) {
+        FSCard(padding: FS.space.s4) {
+            HStack(alignment: .top, spacing: FS.space.s3) {
                 ZStack {
                     RoundedRectangle(cornerRadius: FS.radius.sm).fill(accent.opacity(0.12))
-                    Image(systemName: icon).foregroundColor(accent).font(.system(size: 22, weight: .semibold))
+                    Image(systemName: icon).foregroundColor(accent).font(.system(size: 16, weight: .semibold))
                 }
-                .frame(width: 44, height: 44)
-                Text(title).font(FS.font.h3()).foregroundColor(c.text)
-                Text(body).font(FS.font.body()).foregroundColor(c.textMuted)
+                .frame(width: 32, height: 32)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(FS.font.h4()).foregroundColor(c.text)
+                    Text(body).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                }
+                Spacer(minLength: 0)
             }
         }
     }
@@ -170,7 +192,7 @@ public struct CreateServerStubScreen: View {
         do {
             let minted = try await vm.mintRecipeJSON()
             let dir = URL(fileURLWithPath: NSTemporaryDirectory())
-            let url = dir.appendingPathComponent("\(SlugUtil.slugify(vm.name)).flagship-recipe.json")
+            let url = dir.appendingPathComponent("\(ServerLabel.normalized(vm.name)).flagship-recipe.json")
             try minted.json.data(using: .utf8)?.write(to: url, options: [.atomic])
             shareURL = url
             showShare = true
@@ -198,9 +220,7 @@ public struct CreateServerStubScreen: View {
     // MARK: - Phase 1: Design
 
     private func designPage(c: FSColors) -> some View {
-        let (title, subtitle) = designStepHeader(designStep)
         return VStack(alignment: .leading, spacing: FS.space.s4) {
-            phaseHeader(title, subtitle: subtitle, c: c)
             Text("Step \(designStep + 1) of \(designStepCount)")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(c.textMuted)
@@ -209,12 +229,19 @@ public struct CreateServerStubScreen: View {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     switch designStep {
                     case 0:
-                        FSField(value: $vm.name, label: "Short name", placeholder: "Home, Office, Garage")
+                        FSField(value: $vm.name, label: "Subdomain", placeholder: "home", error: vm.nameError)
                             .accessibilityIdentifier("cs-name-field")
+                            .textInputAutocapitalization(.never)
+                        Text(vm.previewFqdn)
+                            .font(FS.font.mono())
+                            .foregroundColor(c.textMuted)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .accessibilityIdentifier("cs-fqdn-preview")
                         FSField(
                             value: $vm.description,
-                            label: "One-line description",
-                            placeholder: "Failover for work · Music projects",
+                            label: "Short description (optional)",
+                            placeholder: "Alice's private home server",
                             helper: "Up to ~40 characters."
                         )
                         .accessibilityIdentifier("cs-description-field")
@@ -235,12 +262,12 @@ public struct CreateServerStubScreen: View {
         }
     }
 
-    /// Per-step title + subtitle for the design wizard.
-    private func designStepHeader(_ step: Int) -> (String, String) {
+    /// Per-step nav-bar title for the design wizard.
+    private func designStepHeader(_ step: Int) -> String {
         switch step {
-        case 0:  return ("Name your server", "A short name + one-line description. You'll see this everywhere the FQDN used to live.")
-        case 1:  return ("Boot unlock", "How this box comes back online after a reboot.")
-        default: return ("Backups", "How this server's data is protected.")
+        case 0:  return "Name your server"
+        case 1:  return "Boot unlock"
+        default: return "Backups"
         }
     }
 
@@ -300,9 +327,6 @@ public struct CreateServerStubScreen: View {
                 step: 0.5
             )
             .accessibilityIdentifier("cs-ttl-slider")
-            Text("After this window, the unused USB can't install — re-mint from this screen.")
-                .font(.caption)
-                .foregroundStyle(c.textMuted)
         }
     }
 
@@ -622,11 +646,9 @@ public struct CreateServerStubScreen: View {
 
     private func deliveredPage(serial: String, serverDomain: String, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            phaseHeader(
-                "Your recipe is ready",
-                subtitle: "Open the recipe in Flagship Studio, write the boot USB, and boot the target machine. The new server will phone home and finish setup automatically.",
-                c: c
-            )
+            Text("Open the recipe in Flagship Studio, write the boot USB, and boot the target machine. The new server will phone home and finish setup automatically.")
+                .font(FS.font.body())
+                .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     HStack(spacing: FS.space.s2) {

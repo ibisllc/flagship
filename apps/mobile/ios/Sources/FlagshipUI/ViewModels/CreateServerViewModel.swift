@@ -182,8 +182,25 @@ public final class CreateServerViewModel {
         self.backupPolicy = draftStore.backupPolicy()
     }
 
+    /// The subdomain must be a valid, non-reserved DNS label — what the user
+    /// types IS the subdomain (no slugify), so an invalid entry blocks Next
+    /// rather than being silently rewritten.
     public var canAdvanceFromDesign: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty
+        ServerLabel.isValid(name)
+    }
+
+    /// Inline validation message for the subdomain field — nil when the field
+    /// is empty (no error yet) or valid.
+    public var nameError: String? {
+        ServerLabel.errorMessage(name)
+    }
+
+    /// Live "this is the address it becomes" preview under the subdomain field,
+    /// so the user sees exactly what they're naming (empty ⇒ the placeholder).
+    public var previewFqdn: String {
+        let raw = name.trimmingCharacters(in: .whitespaces)
+        let label = raw.isEmpty ? "home" : ServerLabel.normalized(name)
+        return Endpoints.serverFqdn(server: label, user: username)
     }
 
     public var canSubmitPaste: Bool {
@@ -324,8 +341,10 @@ public final class CreateServerViewModel {
         // username claimed at open-account time. We just derive the IRK
         // (UMK is present) for the auth-code + RCK signatures below; we
         // do NOT re-generate the UMK and do NOT re-claim the username.
-        let serverNameSlug = SlugUtil.slugify(name)
-        let serverDomain = Endpoints.serverFqdn(server: serverNameSlug, user: username)
+        // The subdomain IS what the user typed (validated as a DNS label; no
+        // slugify). Normalize case only — domains are case-insensitive.
+        let serverName = ServerLabel.normalized(name)
+        let serverDomain = Endpoints.serverFqdn(server: serverName, user: username)
         // ONE biometric ceremony yields the IRK AND the new box's STK
         // pubkey. The STK pub is cached in the pin registry so later
         // (biometric-free) /pods refreshes can verify the box's STK-signed
@@ -359,7 +378,7 @@ public final class CreateServerViewModel {
         let authCode = AuthCode(
             serial: SerialGen.random(),
             username: username,
-            serverName: serverNameSlug,
+            serverName: serverName,
             serverDomain: serverDomain,
             delegatedPubKey: delegated.publicKey.rawRepresentation,
             userPubKey: irk.publicKey.rawRepresentation,
@@ -412,7 +431,7 @@ public final class CreateServerViewModel {
         let blob = InstallBlob(
             serverDomain: serverDomain,
             username: username,
-            serverName: serverNameSlug,
+            serverName: serverName,
             phoneDelegatedPubKey: delegated.publicKey.rawRepresentation,
             authCode: authCode,
             authCodeUserSignature: acSig,

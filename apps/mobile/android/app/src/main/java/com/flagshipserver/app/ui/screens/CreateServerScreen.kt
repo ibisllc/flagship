@@ -46,6 +46,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.api.AuthCodeIssueRequest
@@ -79,7 +81,7 @@ import com.flagshipserver.app.core.SerialGen
 import com.flagshipserver.app.core.ServerKeys
 import com.flagshipserver.app.core.ServerSettingsStore
 import com.flagshipserver.app.core.Endpoints
-import com.flagshipserver.app.core.SlugUtil
+import com.flagshipserver.app.core.ServerLabel
 import com.flagshipserver.app.core.WireAuthCode
 import com.flagshipserver.app.core.WireBlob
 import com.flagshipserver.app.keystore.Keystore
@@ -122,6 +124,11 @@ fun CreateServerScreen(
     val draftStore = remember { CreateServerDraftStore.from(context) }
 
     var phase by remember { mutableStateOf(Phase.Design) }
+    // Which sub-step of the design phase is showing — the long single form is
+    // split into one decision per page (0 identity, 1 boot unlock, 2 backups),
+    // matching the iOS wizard.
+    var designStep by remember { mutableStateOf(0) }
+    val designStepCount = 3
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var qrText by remember { mutableStateOf("") }
@@ -263,16 +270,31 @@ fun CreateServerScreen(
             .fillMaxWidth()
             .padding(horizontal = FS.space.s6),
       ) {
-        Spacer(Modifier.height(FS.space.s8))
+        Spacer(Modifier.height(FS.space.s6))
+        // Small per-page title (was one big 28sp "New server"). Matches the iOS
+        // move of the title into a compact header per step/page.
+        val pageTitle = when (phase) {
+            Phase.Design -> when (designStep) {
+                0 -> "Name your server"
+                1 -> "Boot unlock"
+                else -> "Backups"
+            }
+            Phase.DeliveryChooser -> "Get it to a builder"
+            Phase.Scan -> "Scan the QR"
+            Phase.Match -> "Confirm match code"
+            else -> "New server"
+        }
         Text(
-            "New server",
+            pageTitle,
             color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            style = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
         )
-        Spacer(Modifier.height(FS.space.s2))
+        Spacer(Modifier.height(FS.space.s4))
 
         when (phase) {
             Phase.Design -> DesignPhase(
+                step = designStep,
+                stepCount = designStepCount,
                 name = name,
                 onName = { name = it },
                 description = description,
@@ -301,8 +323,17 @@ fun CreateServerScreen(
                     draftStore.setBackupPolicy(it)
                 },
                 error = error,
+                onBack = { if (designStep > 0) designStep -= 1 },
+                onNext = {
+                    // Step 0 gates on a valid subdomain; later steps advance freely.
+                    if (designStep == 0 && !ServerLabel.isValid(name)) {
+                        error = ServerLabel.errorMessage(name) ?: "Enter a subdomain."
+                        return@DesignPhase
+                    }
+                    error = null
+                    designStep += 1
+                },
                 onContinue = {
-                    if (name.isBlank()) { error = "Name required."; return@DesignPhase }
                     error = null
                     phase = Phase.DeliveryChooser
                 },
@@ -506,6 +537,8 @@ internal const val MAX_RECIPE_TTL_MS: Long = 24L * 60L * 60_000L     // 24h
 
 @Composable
 private fun DesignPhase(
+    step: Int,
+    stepCount: Int,
     name: String,
     onName: (String) -> Unit,
     description: String,
@@ -526,62 +559,94 @@ private fun DesignPhase(
     backupPolicy: CreateServerDraftStore.BackupPolicy,
     onBackupPolicy: (CreateServerDraftStore.BackupPolicy) -> Unit,
     error: String?,
+    onBack: () -> Unit,
+    onNext: () -> Unit,
     onContinue: () -> Unit,
     onCancel: () -> Unit,
 ) {
     Text(
-        "Pick a short name (used as the subdomain) + a one-liner so the Home card reads well.",
+        "Step ${step + 1} of $stepCount",
         color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
     )
-    Spacer(Modifier.height(FS.space.s4))
+    Spacer(Modifier.height(FS.space.s3))
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column {
-            FSField(
-                value = name,
-                onValueChange = onName,
-                label = "Name",
-                modifier = Modifier.testTag("cs-name-field"),
-            )
-            Spacer(Modifier.height(FS.space.s2))
-            FSField(value = description, onValueChange = onDescription, label = "Description")
-            Spacer(Modifier.height(FS.space.s2))
-            Text(
-                "Subdomain preview: ${SlugUtil.slugify(name).ifEmpty { "name" }}.$username.${Endpoints.dataApex}",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 12.sp),
-            )
-            Spacer(Modifier.height(FS.space.s4))
-            RecipeTtlPicker(recipeTtlMs = recipeTtlMs, onRecipeTtlMs = onRecipeTtlMs)
-            Spacer(Modifier.height(FS.space.s4))
-            BootUnlockPicker(mode = bootUnlockMode, onMode = onBootUnlockMode)
-            Spacer(Modifier.height(FS.space.s4))
-            DiskEncryptionPicker(encryptDisk = encryptDisk, onEncryptDisk = onEncryptDisk)
-            Spacer(Modifier.height(FS.space.s4))
-            AdvancedModePicker(
-                advancedMode = advancedMode,
-                onAdvancedMode = onAdvancedMode,
-                embedSecrets = embedSecrets,
-                onEmbedSecrets = onEmbedSecrets,
-                debugFriendly = debugFriendly,
-                onDebugFriendly = onDebugFriendly,
-            )
-            Spacer(Modifier.height(FS.space.s4))
-            BackupPolicyPicker(policy = backupPolicy, onPolicy = onBackupPolicy)
-}
+            when (step) {
+                0 -> {
+                    // The subdomain IS what the user types (validated as a DNS
+                    // label; no slugify), so an invalid entry blocks Next.
+                    FSField(
+                        value = name,
+                        onValueChange = onName,
+                        label = "Subdomain",
+                        error = ServerLabel.errorMessage(name),
+                        modifier = Modifier.testTag("cs-name-field"),
+                    )
+                    Spacer(Modifier.height(FS.space.s2))
+                    // Live "this is the address it becomes" preview.
+                    val previewLabel = ServerLabel.normalized(name).ifEmpty { "home" }
+                    Text(
+                        "$previewLabel.$username.${Endpoints.dataApex}",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(FS.space.s3))
+                    FSField(
+                        value = description,
+                        onValueChange = onDescription,
+                        label = "Short description (optional)",
+                    )
+                    Spacer(Modifier.height(FS.space.s4))
+                    RecipeTtlPicker(recipeTtlMs = recipeTtlMs, onRecipeTtlMs = onRecipeTtlMs)
+                }
+                1 -> {
+                    BootUnlockPicker(mode = bootUnlockMode, onMode = onBootUnlockMode)
+                    Spacer(Modifier.height(FS.space.s4))
+                    DiskEncryptionPicker(encryptDisk = encryptDisk, onEncryptDisk = onEncryptDisk)
+                    Spacer(Modifier.height(FS.space.s4))
+                    AdvancedModePicker(
+                        advancedMode = advancedMode,
+                        onAdvancedMode = onAdvancedMode,
+                        embedSecrets = embedSecrets,
+                        onEmbedSecrets = onEmbedSecrets,
+                        debugFriendly = debugFriendly,
+                        onDebugFriendly = onDebugFriendly,
+                    )
+                }
+                else -> {
+                    BackupPolicyPicker(policy = backupPolicy, onPolicy = onBackupPolicy)
+                }
+            }
+        }
     }
     if (error != null) {
         Spacer(Modifier.height(FS.space.s2))
         Text(error, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
     }
     Spacer(Modifier.height(FS.space.s4))
-    FSPrimaryButton(
-        label = "Continue",
-        onClick = onContinue,
-        block = true,
-        modifier = Modifier.testTag("cs-continue-button"),
-    )
-    FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+    if (step < stepCount - 1) {
+        FSPrimaryButton(
+            label = "Next",
+            onClick = onNext,
+            block = true,
+            modifier = Modifier.testTag("cs-next-button"),
+        )
+    } else {
+        FSPrimaryButton(
+            label = "Continue",
+            onClick = onContinue,
+            block = true,
+            modifier = Modifier.testTag("cs-continue-button"),
+        )
+    }
+    if (step > 0) {
+        FSGhostButton(label = "Back", onClick = onBack, block = true)
+    } else {
+        FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+    }
 }
 
 @Composable
@@ -904,12 +969,6 @@ private fun DeliveryChooserPhase(
     error: String?,
     onCancel: () -> Unit,
 ) {
-    Text(
-        "Your recipe is ready. Pick how to get it to the Flagship builder that writes your USB stick.",
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-    )
-    Spacer(Modifier.height(FS.space.s4))
     DeliveryCard(
         title = "Pair with the builder app",
         body = "Scan the builder's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the builder is open in front of you.",
@@ -980,7 +1039,7 @@ private fun DeliveryCard(
 // res/xml/file_paths.xml). Mirrors InviteIssueScreen.shareViaSystemSheet.
 private fun shareRecipeFile(ctx: Context, serverName: String, json: String) {
     val dir = File(ctx.cacheDir, "recipes").apply { mkdirs() }
-    val slug = SlugUtil.slugify(serverName).ifEmpty { "server" }
+    val slug = ServerLabel.normalized(serverName).ifEmpty { "server" }
     val file = File(dir, "$slug.flagship-recipe.json")
     file.writeText(json)
     val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
@@ -1110,7 +1169,9 @@ internal suspend fun mintRecipeBundle(
     pairingDepositStore: PendingPairingDepositStore? = null,
     sessionStore: com.flagshipserver.app.api.SessionStoring? = null,
 ): MintedBundle {
-    val slug = SlugUtil.slugify(serverName)
+    // The subdomain IS what the user typed (validated as a DNS label in the
+    // design step; no slugify). Normalize case only.
+    val slug = ServerLabel.normalized(serverName)
     val serverDomain = Endpoints.serverFqdn(server = slug, user = username)
     val serial = SerialGen.random()
     val now = System.currentTimeMillis()

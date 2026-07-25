@@ -37,6 +37,10 @@ const SERVER_NAME_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 const RESERVED_SERVER_LABELS = new Set([
   "www", "api", "admin", "flagship", "flagshipserver", "services",
   "ns1", "ns2", "mail", "tunnel", "control", "status",
+  // Gossip fan-out reserved names — kept in sync with the authoritative
+  // control-plane list (packages/control-plane/src/labels.ts). These were
+  // missing here, so a box could shadow broadcast--<user> routing.
+  "broadcast", "servers", "all",
 ]);
 /** True iff `name` is a syntactically valid, non-reserved server name. */
 function isValidServerName(name) {

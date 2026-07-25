@@ -50,7 +50,7 @@
 //  v24: quieter cross-platform Settings, recovery, and account-backup copy.
 //  v25: direct recipe download replaces the retired homepage QR handoff.
 //  v26: web. split into webapp. + remote.; docking renamed to "remote".
-const SHELL_VERSION = "v26";
+const SHELL_VERSION = "v27";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
