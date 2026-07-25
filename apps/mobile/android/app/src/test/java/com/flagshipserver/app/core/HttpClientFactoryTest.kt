@@ -1,19 +1,24 @@
-// Pin the cert-pinning policy: flagshipserver.com gets STATIC SPKI pins;
-// box hostnames are intentionally NOT statically pinned (their LE certs
-// rotate every ~60d) — they get DYNAMIC whole-cert pins instead, via the
-// STK-signed daemon-status fingerprint (CertPinRegistry), enforced on both
-// seams: the hostname verifier (every TLS handshake, WebSockets included)
-// and the network interceptor (per request on pooled connections).
+// Pin the cert-pinning POLICY (owner decision 2026-07-25):
+//  - The control apex (flagshipserver.com) is NOT statically cert-pinned. It
+//    is fronted by a third-party edge (Cloudflare) that rotates certs and even
+//    swaps CAs, so a static SPKI pin is fragile and once hard-failed every
+//    request. Standard system CA trust applies — like any normal app. The only
+//    thing the system pins is the maintainer authority from our own ceremonies
+//    (MAINTAINER_PINNED_MANDATE_HASH → MaintainersTrust), which is transport-
+//    independent.
+//  - Box hostnames (<server>.<user>.flagship.services) are NOT statically
+//    pinned either, but DO get DYNAMIC whole-cert pins via the STK-signed
+//    daemon-status fingerprint (CertPinRegistry) — enforced on both seams: the
+//    hostname verifier (every TLS handshake, WebSockets included) and the
+//    network interceptor (per request on pooled connections).
 //
-// CertificatePinner.findMatchingPins(hostname) returns the (possibly
-// empty) list of pins configured for that hostname. We use that to
-// answer "is this hostname pinned?" without needing real certificates.
+// CertificatePinner.findMatchingPins(hostname) returns the (possibly empty)
+// list of STATIC pins configured for that hostname — we use it to assert that
+// nothing is statically pinned anymore.
 
 package com.flagshipserver.app.core
 
 import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -21,75 +26,44 @@ class HttpClientFactoryTest {
 
     @After fun reset() = Endpoints.setOverride(null) // never leak a gym override
 
-    @Test fun flagshipserverComHasExactlyTwoPins() {
-        // Two pins: the Cloudflare ECC CA-3 intermediate + the RSA
-        // CA-2 fallback. Keeping the assertion on the count guards
-        // against an accidental drop during a future rotation.
+    @Test fun controlApexIsNotStaticallyPinned() {
+        // The whole point of the 2026-07-25 change: flagshipserver.com uses
+        // standard system CA validation, NOT a static SPKI pin (which broke on
+        // the Cloudflare→Google-Trust-Services edge-cert migration).
         val client = HttpClientFactory.build()
-        val pins = client.certificatePinner.findMatchingPins("flagshipserver.com")
-        assertEquals(2, pins.size)
-        // Both pins serialize back to the sha256/<base64> form used in
-        // the source code's CertificatePinner.Builder.add(...) calls.
-        assertTrue(pins.all { it.toString().startsWith("sha256/") })
+        assertTrue(client.certificatePinner.findMatchingPins("flagshipserver.com").isEmpty())
+        assertTrue(client.certificatePinner.findMatchingPins("www.flagshipserver.com").isEmpty())
+    }
+
+    @Test fun boxHostnamesAreNotStaticallyPinned() {
+        // Box hostnames must stay out of any STATIC pinner: their LE certs
+        // rotate every ~60 days, so a static pin would break the box on
+        // renewal. They are pinned DYNAMICALLY via CertPinRegistry, which
+        // re-pins from each fresh STK-signed daemon-status report.
+        val client = HttpClientFactory.build()
+        assertTrue(client.certificatePinner.findMatchingPins("home.harry.flagship.services").isEmpty())
+        assertTrue(client.certificatePinner.findMatchingPins("office.alice.flagship.services").isEmpty())
+        // .services apex itself is also not pinned (it's the Fly app, not a pod).
+        assertTrue(client.certificatePinner.findMatchingPins("flagship.services").isEmpty())
     }
 
     @Test fun boxCertPinSeamsAreBothWired() {
-        // A′ phase 4 — the dynamic box pin must ride BOTH seams: the
-        // hostname verifier is the only one OkHttp runs for WebSocket
-        // upgrades; the interceptor is the only one that re-checks a
-        // pooled connection after a pin lands.
+        // A′ phase 4 — the dynamic box pin must ride BOTH seams: the hostname
+        // verifier is the only one OkHttp runs for WebSocket upgrades; the
+        // interceptor is the only one that re-checks a pooled connection after
+        // a pin lands. (This layer is KEPT — it pins the box's OWN, phone-
+        // verified, self-healing cert, not a third-party edge cert.)
         val client = HttpClientFactory.build()
         assertTrue(client.hostnameVerifier is CertPinHostnameVerifier)
         assertTrue(client.networkInterceptors.any { it is CertPinInterceptor })
     }
 
-    @Test fun perUserPodHostnamesAreNotStaticallyPinned() {
-        // Box hostnames must stay out of the STATIC pinner: their LE
-        // certs rotate every ~60 days, so the static pin would break the
-        // box on renewal. They are pinned DYNAMICALLY via CertPinRegistry,
-        // which re-pins from each fresh STK-signed daemon-status report.
-        val client = HttpClientFactory.build()
-        assertTrue(client.certificatePinner.findMatchingPins("home.harry.flagship.services").isEmpty())
-        assertTrue(client.certificatePinner.findMatchingPins("office.alice.flagship.services").isEmpty())
-        // .services apex itself is also not pinned (it's the Fly app,
-        // not the user's pod).
-        assertTrue(client.certificatePinner.findMatchingPins("flagship.services").isEmpty())
-    }
-
-    @Test fun wwwSubdomainOfFlagshipserverIsNotPinned() {
-        // Pinning is keyed by exact hostname; www isn't apex. If we
-        // ever want to add it, this test will need an explicit pin.
-        val client = HttpClientFactory.build()
-        assertTrue(client.certificatePinner.findMatchingPins("www.flagshipserver.com").isEmpty())
-    }
-
     @Test fun timeoutsAreReasonable() {
-        // Smoke-check the connection envelope so a future refactor
-        // can't silently bump connectTimeout to 5 minutes.
+        // Smoke-check the connection envelope so a future refactor can't
+        // silently bump connectTimeout to 5 minutes.
         val client = HttpClientFactory.build()
         assertTrue("connect timeout should be ≤30s", client.connectTimeoutMillis <= 30_000)
         assertTrue("read timeout should be ≤120s",  client.readTimeoutMillis    <= 120_000)
         assertTrue("write timeout should be ≤120s", client.writeTimeoutMillis   <= 120_000)
-    }
-
-    @Test fun pinnerIsNotTheNoOpDefault() {
-        // CertificatePinner.DEFAULT pins nothing; we explicitly build a
-        // configured one. Assert we didn't accidentally ship the
-        // default during a refactor.
-        val client = HttpClientFactory.build()
-        assertNotEquals(okhttp3.CertificatePinner.DEFAULT, client.certificatePinner)
-    }
-
-    @Test fun gymApexSkipsTheProdSpkiPins() {
-        // G2 — a gym test build points Endpoints at a non-prod apex served
-        // behind a different LE chain; the prod Cloudflare-intermediate pins
-        // would HARD-FAIL TLS there, so the pinner must NOT pin the gym apex.
-        // (Box hostnames still get dynamic pins via the registry — unaffected.)
-        Endpoints.setOverride(controlHost = "gym.flagshipserver.com")
-        val client = HttpClientFactory.build()
-        assertTrue(client.certificatePinner.findMatchingPins("gym.flagshipserver.com").isEmpty())
-        // And the prod apex isn't pinned either while overridden (it's not the
-        // configured host) — no stray prod pin leaks into a gym build.
-        assertTrue(client.certificatePinner.findMatchingPins("flagshipserver.com").isEmpty())
     }
 }
