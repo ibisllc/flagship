@@ -240,7 +240,7 @@ public struct ServerDetailScreen: View {
                         Text("This server isn't paired with this device yet")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundColor(c.text)
-                        Text("Pair it to manage this server here. Your phone will ask for Face ID once to approve.")
+                        Text("Pair it to manage this server here. Your phone will ask you to unlock once to approve.")
                             .font(FS.font.bodySm())
                             .foregroundColor(c.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -652,8 +652,8 @@ struct BootUnlockApprovalCard: View {
     }
     private var bodyCopy: String {
         isEntitlement
-            ? "Authorize this box to serve your account so it can come online. Your phone will ask for Face ID once to approve."
-            : "If you just powered it on, release its disk key to bring it online. Your phone will ask for Face ID once to approve."
+            ? "Authorize this box to serve your account so it can come online. Your phone will ask you to unlock once to approve."
+            : "If you just powered it on, release its disk key to bring it online. Your phone will ask you to unlock once to approve."
     }
     private var ctaLabel: String { isEntitlement ? "Authorize" : "Approve unlock" }
     private var approvedCopy: String {

@@ -352,9 +352,9 @@ private fun BootUnlockApprovalCard(
     val headline = if (isEntitlement) "Your box is waiting for authorization to serve"
                    else "Your box is waiting for your approval to unlock"
     val bodyCopy = if (isEntitlement)
-        "Authorize this box to serve your account so it can come online. Your phone will ask for your fingerprint once to approve."
+        "Authorize this box to serve your account so it can come online. Your phone will ask you to unlock once to approve."
     else
-        "If you just powered it on, release its disk key to bring it online. Your phone will ask for your fingerprint once to approve."
+        "If you just powered it on, release its disk key to bring it online. Your phone will ask you to unlock once to approve."
     val ctaLabel = if (isEntitlement) "Authorize" else "Approve unlock"
     val approvedCopy = if (isEntitlement) "Authorized — your box should come online shortly."
                        else "Unlock approved — your box should come online shortly."

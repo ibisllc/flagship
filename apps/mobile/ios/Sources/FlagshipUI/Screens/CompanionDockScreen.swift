@@ -130,7 +130,7 @@ public struct CompanionDockScreen: View {
                     Text("It will receive a keyless remote session for four hours. Protected actions still require approval from this phone.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
-                    FSPrimaryButton(vm.approvalPending ? "Approving…" : "Approve with Face ID", enabled: !vm.approvalPending, block: true) {
+                    FSPrimaryButton(vm.approvalPending ? "Approving…" : "Approve", enabled: !vm.approvalPending, block: true) {
                         Task { await vm.approve() }
                     }
                     .accessibilityIdentifier("companion-dock-approve")

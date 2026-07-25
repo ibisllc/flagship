@@ -160,7 +160,7 @@ struct AccountDeletionScreen: View {
             value: $typed,
             label: "Type your username to confirm",
             placeholder: username,
-            helper: "Then confirm with Face ID."
+            helper: "Then confirm with your device unlock."
         )
         .accessibilityIdentifier("account-delete-confirm-field")
     }

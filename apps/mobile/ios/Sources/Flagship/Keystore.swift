@@ -1367,10 +1367,17 @@ fileprivate struct WrappingKeypair {
         if lookupStatus == errSecSuccess, let key = existing {
             secKey = key as! SecKey
         } else {
+            // `.userPresence` accepts ANY device unlock — Face ID / Touch ID OR
+            // the device passcode — so a phone with a passcode but no enrolled
+            // biometric can still authorize. (Trade vs the old
+            // `.biometryCurrentSet`: that invalidated the key when biometrics
+            // changed; `.userPresence` does not, but adds the passcode path —
+            // the accepted A trade-off, and it matches Android's
+            // BIOMETRIC_STRONG|DEVICE_CREDENTIAL.)
             let access = SecAccessControlCreateWithFlags(
                 kCFAllocatorDefault,
                 kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-                [.privateKeyUsage, .biometryCurrentSet],
+                [.privateKeyUsage, .userPresence],
                 nil
             )!
             let attrs: [String: Any] = [

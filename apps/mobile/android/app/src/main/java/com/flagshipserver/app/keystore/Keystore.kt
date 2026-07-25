@@ -2,6 +2,7 @@ package com.flagshipserver.app.keystore
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import androidx.security.crypto.EncryptedSharedPreferences
@@ -156,7 +157,7 @@ object Keystore {
      *  the cached seeds. Stub left over from the scaffolding step. */
     fun generateUMK(useStrongBox: Boolean = true): SecretKey {
         val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
-        val spec = KeyGenParameterSpec.Builder(
+        val builder = KeyGenParameterSpec.Builder(
             UMK_ALIAS,
             KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
         )
@@ -165,8 +166,18 @@ object Keystore {
             .setKeySize(256)
             .setUserAuthenticationRequired(true)
             .setIsStrongBoxBacked(useStrongBox)
-            .build()
-        gen.init(spec)
+        // Accept a strong biometric OR the device credential (PIN / pattern /
+        // password) to unlock the key — device-agnostic, and usable on phones
+        // with a screen lock but no enrolled biometric. `setUserAuthentication-
+        // Parameters` is API 30+; on 28/29 the key keeps the legacy
+        // biometric-gated behavior (setUserAuthenticationRequired above).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            builder.setUserAuthenticationParameters(
+                0, // auth required for every use (no time window)
+                KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL,
+            )
+        }
+        gen.init(builder.build())
         return gen.generateKey()
     }
 

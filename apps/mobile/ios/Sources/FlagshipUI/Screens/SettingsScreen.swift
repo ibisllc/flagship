@@ -819,9 +819,9 @@ public struct SettingsScreen: View {
         let gated = signOutPolicy == .blockedNoRecovery
         return VStack(spacing: FS.space.s3) {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Locks Flagship behind Face ID. Nothing is interrupted.")
+                Text("Locks Flagship behind your device unlock. Nothing is interrupted.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
-                FSGhostButton("Lock with Face ID", block: true, large: true, action: onLock)
+                FSGhostButton("Lock the app", block: true, large: true, action: onLock)
                     .accessibilityIdentifier("settings-lock-btn")
             }
             VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -895,7 +895,7 @@ public struct SettingsScreen: View {
                     appearanceOption(.auto, systemImage: nil, text: "AUTO", c: c)
                 }
                 FSSettingsGroup(rows: [
-                    FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "Face ID lock, app-level gating", action: onOpenPrivacy),
+                    FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "App lock, app-level gating", action: onOpenPrivacy),
                     FSSettingsRow(icon: "info.circle.fill", title: "About Flagship", subtitle: "Version, license, source", action: onOpenAbout),
                 ])
             }

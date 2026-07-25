@@ -1,5 +1,6 @@
 package com.flagshipserver.app.keystore
 
+import androidx.biometric.BiometricManager.Authenticators
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -33,10 +34,19 @@ object BiometricGate {
                     }
                 }
             )
+            // Accept ANY strong device unlock — fingerprint / face / iris OR the
+            // device PIN / pattern / password (DEVICE_CREDENTIAL). This is
+            // device-agnostic (no modality preference) and lets a phone with a
+            // screen lock but no enrolled biometric still authenticate. When
+            // DEVICE_CREDENTIAL is allowed the system supplies its own cancel
+            // affordance, so a negative button must NOT be set (the two are
+            // mutually exclusive).
             val info = BiometricPrompt.PromptInfo.Builder()
                 .setTitle(title)
                 .setSubtitle(subtitle)
-                .setNegativeButtonText("Cancel")
+                .setAllowedAuthenticators(
+                    Authenticators.BIOMETRIC_STRONG or Authenticators.DEVICE_CREDENTIAL
+                )
                 .build()
             prompt.authenticate(info)
         }

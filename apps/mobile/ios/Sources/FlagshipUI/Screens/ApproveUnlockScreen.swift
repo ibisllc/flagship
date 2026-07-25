@@ -47,7 +47,7 @@ public struct ApproveUnlockScreen: View {
                 Spacer()
 
                 VStack(spacing: FS.space.s3) {
-                    FSPrimaryButton("Approve with Face ID", block: true, large: true, action: onApprove)
+                    FSPrimaryButton("Approve", block: true, large: true, action: onApprove)
                     FSDangerButton("Not me. Block.", block: true, large: true, action: onBlock)
                 }
             }

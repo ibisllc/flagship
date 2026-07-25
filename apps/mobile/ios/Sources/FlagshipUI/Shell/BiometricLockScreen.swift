@@ -40,7 +40,7 @@ struct BiometricLockScreen: View {
                 Text("Flagship is locked")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(c.text)
-                Text("Unlock with Face ID to continue.")
+                Text("Unlock to continue.")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
                 Spacer()
@@ -52,7 +52,7 @@ struct BiometricLockScreen: View {
                         .padding(.horizontal, FS.space.s6)
                 }
                 FSPrimaryButton(
-                    status == .authenticating ? "Authenticating…" : "Unlock with Face ID",
+                    status == .authenticating ? "Authenticating…" : "Unlock",
                     enabled: status != .authenticating,
                     block: true,
                     large: true,
@@ -124,7 +124,7 @@ struct BiometricLockScreen: View {
             app.markUnlocked()
             status = .idle
         } catch BiometricGate.GateError.notAvailable {
-            status = .failed("Face ID isn't set up on this device. Disable the lock from Settings on another paired device, or sign out and start fresh.")
+            status = .failed("No device screen lock is set up. Set one, disable the lock from Settings on another paired device, or sign out and start fresh.")
         } catch BiometricGate.GateError.userCancelled {
             status = .failed("Cancelled. Tap above to try again.")
         } catch {

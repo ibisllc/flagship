@@ -586,18 +586,18 @@ struct PrivacyScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                Text("Lock with Face ID")
+                Text("Lock the app")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(c.text)
                 Toggle(isOn: Binding(
                     get: { privacy.requireBiometricAtLaunch },
                     set: { newValue in toggle(to: newValue) },
                 )) {
-                    Text("Require Face ID when the app opens")
+                    Text("Require unlock when the app opens")
                         .foregroundColor(c.text)
                 }
                 .tint(c.primary)
-                Text("On by default. Flagship asks for Face ID each time the app launches or returns from the background, so you stay signed in without re-entering your passphrase. Turn it off to open straight in. Either way your services keep running and your pods stay reachable — this only controls who can see and tap.")
+                Text("On by default. Flagship asks you to unlock each time the app launches or returns from the background, so you stay signed in without re-entering your passphrase. Turn it off to open straight in. Either way your services keep running and your pods stay reachable — this only controls who can see and tap.")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
                 if let msg = pendingError {
@@ -618,7 +618,7 @@ struct PrivacyScreen: View {
                 }
                 .tint(c.primary)
                 .accessibilityIdentifier("privacy-require-passphrase-toggle")
-                Text("Off by default. When on, Flagship doesn't keep you signed in — each launch needs a full sign-in with your account passphrase, not just Face ID. The strongest option, and the slowest.")
+                Text("Off by default. When on, Flagship doesn't keep you signed in — each launch needs a full sign-in with your account passphrase, not just a quick unlock. The strongest option, and the slowest.")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
 
@@ -638,7 +638,7 @@ struct PrivacyScreen: View {
             // the preference + sync to AppState.
             Task {
                 do {
-                    try await BiometricGate().evaluate(reason: "Enable Face ID lock")
+                    try await BiometricGate().evaluate(reason: "Enable app lock")
                     privacy.requireBiometricAtLaunch = true
                     app.requireBiometricAtLaunch = true
                     // Already past auth → stay unlocked this session.

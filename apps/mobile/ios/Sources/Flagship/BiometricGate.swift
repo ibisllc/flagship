@@ -20,12 +20,15 @@ public struct BiometricGate {
         if GymSeams.bypassBiometricGates { return }
         let context = LAContext()
         var error: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+        // `.deviceOwnerAuthentication` = biometrics OR the device passcode, so a
+        // device with a passcode but no enrolled biometric still passes the gate
+        // (parity with Android's BIOMETRIC_STRONG|DEVICE_CREDENTIAL).
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
             throw GateError.notAvailable
         }
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             context.evaluatePolicy(
-                .deviceOwnerAuthenticationWithBiometrics,
+                .deviceOwnerAuthentication,
                 localizedReason: reason
             ) { success, evalError in
                 if success {

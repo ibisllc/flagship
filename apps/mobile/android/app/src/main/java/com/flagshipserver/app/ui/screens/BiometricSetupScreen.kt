@@ -48,12 +48,12 @@ fun BiometricSetupScreen(username: String, onContinue: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(FS.space.s6),
     ) {
         Text(
-            text = "Lock it to your fingerprint.",
+            text = "Lock it to your device.",
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            text = "Your master key lives in this phone's secure hardware. Approving a server unlock or installing a service will use Face Unlock or your fingerprint.",
+            text = "Your master key lives in this phone's secure hardware. Approving a server unlock or installing a service will use your phone's biometrics or screen lock.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
         )

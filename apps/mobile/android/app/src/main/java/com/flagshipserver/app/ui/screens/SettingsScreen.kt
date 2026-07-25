@@ -343,7 +343,7 @@ fun SettingsScreen(nav: NavController) {
                 FSSettingsRowData(
                     icon = "🔒",
                     title = "Privacy",
-                    subtitle = "Face unlock at launch, app-level gating.",
+                    subtitle = "Require unlock at launch, app-level gating.",
                     onClick = { nav.navigate("privacy") },
                 ),
                 // About — Android has no separate About screen, so the version /

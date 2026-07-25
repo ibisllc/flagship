@@ -361,7 +361,7 @@ public struct CreateServerStubScreen: View {
             bootUnlockOption(
                 mode: .approve,
                 title: "Authorize each boot",
-                subtitle: "Most theft-resistant. The box asks your phone (Face ID) on every reboot. Best for critical servers on stable infrastructure.",
+                subtitle: "Most theft-resistant. The box asks your phone to unlock on every reboot. Best for critical servers on stable infrastructure.",
                 c: c
             )
         }

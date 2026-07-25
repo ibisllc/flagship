@@ -72,7 +72,7 @@ export async function renderCompanionDock() {
       <div class="weight-600">Use a browser as a remote</div>
       <p class="note">
         On the computer you want to use, open <code>${escapeHtml(new URL(remoteOrigin()).host)}</code>.
-        It will show a one-time QR for this phone to scan and approve with Face ID.
+        It will show a one-time QR for this phone to scan and approve on your phone.
       </p>
       <a class="btn full-width mt-2" href="${escapeHtml(remoteOrigin())}/" target="_blank" rel="noopener">Open the remote page</a>
     </div>
