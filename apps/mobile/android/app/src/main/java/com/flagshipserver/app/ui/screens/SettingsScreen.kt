@@ -16,6 +16,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import com.flagshipserver.app.core.LocalPrivacySettings
 import com.flagshipserver.app.core.ThemeMode
+import com.flagshipserver.app.core.AppIconSwitcher
+import com.flagshipserver.app.core.AppIconVariant
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -134,6 +136,7 @@ fun SettingsScreen(nav: NavController) {
     // device") stay greyed-but-tappable until recovery is enrolled; a
     // tap-while-greyed surfaces this toast instead of the destructive path.
     val ctx = LocalContext.current
+    var iconVariant by remember { mutableStateOf(AppIconSwitcher.current(ctx)) }
     val showRecoveryRequiredToast = {
         Toast.makeText(ctx, "Set up account recovery to use this.", Toast.LENGTH_LONG).show()
     }
@@ -335,6 +338,23 @@ fun SettingsScreen(nav: NavController) {
             }
             ThemeSegment(Modifier.weight(1f), label = "AUTO", small = true, selected = themeMode == ThemeMode.AUTO) {
                 privacy?.setThemeMode(ThemeMode.AUTO)
+            }
+        }
+        Spacer(Modifier.height(FS.space.s3))
+        Text(
+            "App icon",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            ThemeSegment(Modifier.weight(1f), label = "Classic", small = true, selected = iconVariant == AppIconVariant.CLASSIC) {
+                AppIconSwitcher.set(ctx, AppIconVariant.CLASSIC)
+                iconVariant = AppIconVariant.CLASSIC
+            }
+            ThemeSegment(Modifier.weight(1f), label = "Legacy", small = true, selected = iconVariant == AppIconVariant.LEGACY) {
+                AppIconSwitcher.set(ctx, AppIconVariant.LEGACY)
+                iconVariant = AppIconVariant.LEGACY
             }
         }
         Spacer(Modifier.height(FS.space.s2))

@@ -151,6 +151,13 @@ targets:
         # Renders on Dynamic-Island + Lock-Screen via the widget extension.
         INFOPLIST_KEY_NSSupportsLiveActivities: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Alternate app icon "Legacy" (the original hexagon), switchable in
+        # Settings via UIApplication.setAlternateIconName. The classic teal +
+        # white circle stays the primary/default for brand consistency with
+        # Android. INCLUDE_ALL_APPICON_ASSETS bundles the alternate iconset and
+        # auto-generates the CFBundleIcons.CFBundleAlternateIcons metadata.
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIcon-Legacy
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ENABLE_PREVIEWS: YES
         SWIFT_VERSION: "5.0"

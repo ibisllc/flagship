@@ -27,10 +27,8 @@
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.Flagship">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+            <!-- LAUNCHER lives on the two activity-aliases below (icon switcher),
+                 not here, so exactly one branded icon appears in the drawer. -->
             <!-- Deep links from push notifications + cross-device
                  pairing (Phase 3b /join). autoVerify needs the
                  /.well-known/assetlinks.json on flagshipserver.com to
@@ -85,6 +83,38 @@
                 <data android:scheme="flagship" android:host="access" />
             </intent-filter>
         </activity>
+
+        <!-- App-icon switcher (Settings → App icon). Two launcher aliases, one
+             enabled at a time via PackageManager.setComponentEnabledSetting.
+             Classic (teal + white circle, brand-consistent with iOS) is the
+             default; Legacy (the original hexagon) is the opt-in alternate.
+             Both target MainActivity, which owns the deep-link intent-filters. -->
+        <activity-alias
+            android:name=".ClassicLauncher"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="true"
+            android:label="Flagship"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".LegacyLauncher"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:label="Flagship"
+            android:icon="@mipmap/ic_launcher_legacy"
+            android:roundIcon="@mipmap/ic_launcher_legacy_round">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <!-- FCM messaging service -->
         <service

@@ -3,4 +3,8 @@
     <color name="flagship_canvas">#0B0B10</color>
     <color name="flagship_ink">#F4F4F5</color>
     <color name="flagship_accent">#5EEAD4</color>
+    <!-- Classic app-icon teal (matches the iOS AppIcon + brand icon.svg). -->
+    <color name="flagship_classic_bg">#14B8A6</color>
+    <!-- White container behind the classic mark (adaptive-icon background). -->
+    <color name="flagship_icon_bg">#FFFFFF</color>
 </resources>

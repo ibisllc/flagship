@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import FlagshipAPI
 import FlagshipCore
 
@@ -23,6 +24,10 @@ public struct SettingsScreen: View {
     @Environment(PrivacySettings.self) private var privacy
     @State private var disconnectTarget: SettingsViewModel.DirectoryDevice?
     @State private var disconnectMessage: String?
+    /// Current alternate app-icon name — nil = the primary "classic" icon,
+    /// "AppIcon-Legacy" = the original hexagon. Read from UIApplication in
+    /// onAppear (App-icon segmented control).
+    @State private var alternateIconName: String?
     /// Browser-session revoke awaiting its confirm step. A revoke is
     /// destructive (the docked computer loses access), so it gates behind
     /// a grey Cancel / red Revoke dialog like every other destructive action.
@@ -894,12 +899,43 @@ public struct SettingsScreen: View {
                     appearanceOption(.dark, systemImage: "moon.fill", text: nil, c: c)
                     appearanceOption(.auto, systemImage: nil, text: "AUTO", c: c)
                 }
+                Text("APP ICON")
+                    .font(.system(size: 12, weight: .semibold)).tracking(1)
+                    .foregroundColor(c.textMuted)
+                HStack(spacing: FS.space.s2) {
+                    appIconOption(name: nil, label: "Classic", c: c)
+                    appIconOption(name: "AppIcon-Legacy", label: "Legacy", c: c)
+                }
                 FSSettingsGroup(rows: [
                     FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "App lock, app-level gating", action: onOpenPrivacy),
                     FSSettingsRow(icon: "info.circle.fill", title: "About Flagship", subtitle: "Version, license, source", action: onOpenAbout),
                 ])
             }
         }
+        .onAppear { alternateIconName = UIApplication.shared.alternateIconName }
+    }
+
+    /// One App-icon segment. `name` nil = the primary "classic" icon.
+    @ViewBuilder
+    private func appIconOption(name: String?, label: String, c: FSColors) -> some View {
+        let selected = alternateIconName == name
+        Button {
+            guard UIApplication.shared.alternateIconName != name else { return }
+            UIApplication.shared.setAlternateIconName(name) { error in
+                Task { @MainActor in
+                    alternateIconName = error == nil ? name : UIApplication.shared.alternateIconName
+                }
+            }
+        } label: {
+            Text(label).font(.system(size: 13, weight: .semibold))
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+                .foregroundColor(selected ? .white : c.text)
+                .background(selected ? c.primary : c.surfaceSunken)
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("appicon-\(label.lowercased())")
     }
 
     @ViewBuilder

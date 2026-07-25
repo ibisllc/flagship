@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- White rounded square with a circular hole punched out (evenOdd): the
+         teal adaptive background shows through the hole. Kept small + centred so
+         it floats with padding inside a launcher's circular mask. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M39,27 L69,27 Q81,27 81,39 L81,69 Q81,81 69,81 L39,81 Q27,81 27,69 L27,39 Q27,27 39,27 Z M34,54 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0 Z" />
+</vector>
