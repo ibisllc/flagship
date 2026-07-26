@@ -121,7 +121,7 @@ describe("create-server view — boot-unlock-mode chooser (§7a.1)", () => {
     // Authorize-each-boot
     expect(INDEX_HTML).toContain("🔐 Authorize each boot");
     expect(INDEX_HTML).toContain(
-      "Every restart waits for your Face ID / fingerprint. Nothing — not even flagshipserver.com — can start it without you. The cost: a power cut means it stays down until you approve.",
+      "Every restart waits for your approval on your phone. Nothing — not even flagshipserver.com — can start it without you. The cost: a power cut means it stays down until you approve.",
     );
   });
 
