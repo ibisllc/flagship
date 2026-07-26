@@ -2,9 +2,9 @@ package com.flagshipserver.app.keystore
 
 import androidx.biometric.BiometricManager.Authenticators
 import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.suspendCancellableCoroutine
-import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -15,7 +15,13 @@ class BiometricFailed(val code: Int, val errString: CharSequence) :
 object BiometricGate {
     suspend fun evaluate(activity: FragmentActivity, title: String, subtitle: String) {
         suspendCancellableCoroutine<Unit> { cont ->
-            val executor = Executors.newSingleThreadExecutor()
+            // BiometricPrompt's own docs mandate the main-thread executor — the
+            // callback drives Compose state (AppState.markUnlocked) and, with
+            // DEVICE_CREDENTIAL allowed, the PIN/pattern confirmation launches
+            // a full-screen system activity that stops the host Activity, so
+            // a background-thread callback risks landing after a lifecycle
+            // transition instead of cleanly resuming the coroutine in place.
+            val executor = ContextCompat.getMainExecutor(activity)
             val prompt = BiometricPrompt(
                 activity,
                 executor,

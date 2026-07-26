@@ -9,6 +9,9 @@
 package com.flagshipserver.app.ui.shell
 
 import android.app.Activity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,6 +69,13 @@ fun BiometricLockScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(FS.colors.bg)
+            // A full-screen lock cover must swallow every touch, not just
+            // paint over the shell behind it — Compose only routes taps to
+            // composables that actually declare pointer input, so without
+            // this a tap landing on empty space here (e.g. the Spacers)
+            // fell straight through to whatever was rendered underneath.
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
             .padding(horizontal = FS.space.s6)
             .testTag("biometric-lock-screen"),
         contentAlignment = Alignment.Center,
