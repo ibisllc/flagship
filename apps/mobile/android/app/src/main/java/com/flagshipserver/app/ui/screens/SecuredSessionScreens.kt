@@ -99,6 +99,8 @@ fun SecuredSessionsScreen(
                 )
             }
         }
+        Spacer(Modifier.height(FS.space.s3))
+        FSGhostButton(label = "Back", onClick = { nav.popBackStack() })
         Spacer(Modifier.height(FS.space.s12))
     }
 }
@@ -240,6 +242,8 @@ fun ProcessUrlScreen(nav: NavController) {
             },
             modifier = Modifier.testTag("process-url-submit"),
         )
+        Spacer(Modifier.height(FS.space.s3))
+        FSGhostButton(label = "Back", onClick = { nav.popBackStack() })
         Spacer(Modifier.height(FS.space.s12))
     }
 }

@@ -231,6 +231,8 @@ fun TrustedDevicesScreen(nav: NavController) {
         snackbarMsg?.let {
             Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
         }
+        Spacer(Modifier.height(FS.space.s2))
+        com.flagshipserver.app.ui.components.FSGhostButton(label = "Back", onClick = { nav.popBackStack() })
     }
 
     // Per-device actions: ModalBottomSheet is the Android idiom for

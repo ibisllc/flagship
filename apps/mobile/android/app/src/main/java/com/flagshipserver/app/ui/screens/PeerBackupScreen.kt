@@ -48,6 +48,7 @@ import com.flagshipserver.app.api.PeerBackupStats
 import com.flagshipserver.app.api.PeerBackupStatusResponse
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.theme.FS
@@ -57,7 +58,7 @@ import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Locale
 
 @Composable
-fun PeerBackupScreen(@Suppress("UNUSED_PARAMETER") nav: NavController) {
+fun PeerBackupScreen(nav: NavController) {
     val client = LocalScreensClient.current
     val vm = remember { PeerBackupViewModel(client) }
     val state by vm.state.collectAsState()
@@ -94,6 +95,8 @@ fun PeerBackupScreen(@Suppress("UNUSED_PARAMETER") nav: NavController) {
                 ServerCardSkeleton()
             }
         }
+        Spacer(Modifier.height(FS.space.s6))
+        FSGhostButton(label = "Back", onClick = { nav.popBackStack() })
         Spacer(Modifier.height(FS.space.s12))
     }
 }

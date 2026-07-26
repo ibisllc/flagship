@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -266,7 +268,7 @@ fun FSProfileCard(
  */
 @Composable
 fun FSAnnouncementCard(
-    icon: String,
+    icon: ImageVector,
     title: String,
     message: String,
     modifier: Modifier = Modifier,
@@ -293,7 +295,7 @@ fun FSAnnouncementCard(
                     .background(accent.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(icon, color = accent, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
+                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(title, color = FS.colors.text, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
@@ -330,7 +332,7 @@ fun FSAnnouncementCard(
 
 /** Descriptor for one [FSSettingsRow] inside an [FSSettingsGroup]. */
 data class FSSettingsRowData(
-    val icon: String,
+    val icon: ImageVector,
     val title: String,
     val iconTint: Color? = null,
     val subtitle: String? = null,
@@ -417,7 +419,7 @@ fun FSSettingsRow(data: FSSettingsRowData, modifier: Modifier = Modifier) {
                 .background(tint.copy(alpha = 0.14f)),
             contentAlignment = Alignment.Center,
         ) {
-            Text(data.icon, color = tint, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+            Icon(data.icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
         }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(data.title, color = FS.colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = TextStyle(fontSize = 16.sp))
@@ -454,7 +456,7 @@ fun FSSettingsRow(data: FSSettingsRowData, modifier: Modifier = Modifier) {
 
 /** Leading slot for an [FSListRow]: a tinted status icon, or a monogram. */
 sealed interface FSListLeading {
-    data class Icon(val symbol: String, val color: Color) : FSListLeading
+    data class Icon(val icon: ImageVector, val color: Color) : FSListLeading
     data class Monogram(val name: String) : FSListLeading
 }
 
@@ -498,7 +500,7 @@ fun FSListRow(
                     .background(leading.color.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(leading.symbol, color = leading.color, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
+                Icon(leading.icon, contentDescription = null, tint = leading.color, modifier = Modifier.size(22.dp))
             }
             is FSListLeading.Monogram -> FSMonogram(name = leading.name, size = 42.dp)
         }

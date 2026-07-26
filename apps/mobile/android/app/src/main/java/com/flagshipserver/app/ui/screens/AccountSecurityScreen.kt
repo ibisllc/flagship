@@ -61,6 +61,7 @@ import com.flagshipserver.app.keystore.PasskeyCeremonyAdapter
 import com.flagshipserver.app.keystore.PasskeyRecoveryManager
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
+import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.AccountSecurityPhase
@@ -190,6 +191,8 @@ fun AccountSecurityScreen(nav: NavController) {
         if (GymSeams.forceAdminRoot || Keystore.hasAdminRoot()) {
             AdminRootRotateCard(server = server, username = app.currentUser.value ?: "")
         }
+        Spacer(Modifier.height(FS.space.s2))
+        FSGhostButton(label = "Back", onClick = { nav.popBackStack() })
     }
 
     if (showEnableSheet) {

@@ -19,6 +19,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -278,7 +282,7 @@ private fun TopAnnouncement(
         accountWasReset -> {
             Spacer(Modifier.height(FS.space.s4))
             FSAnnouncementCard(
-                icon = "!",
+                icon = Icons.Outlined.ErrorOutline,
                 title = "This device was removed from your account",
                 message = "Another device on this account ran Disconnect, Replace, or " +
                     "Wipe. Sign in again with your recovery passkey to get back in.",
@@ -291,7 +295,7 @@ private fun TopAnnouncement(
         showRecoveryBackupBanner -> {
             Spacer(Modifier.height(FS.space.s4))
             FSAnnouncementCard(
-                icon = "🔑",
+                icon = Icons.Outlined.VpnKey,
                 title = "Your account isn't backed up yet",
                 message = "If you lose access to this device, you may lose access to your Flagship cloud",
                 ctaLabel = "Secure my account",
@@ -303,7 +307,7 @@ private fun TopAnnouncement(
         showRecoveryNudge -> {
             Spacer(Modifier.height(FS.space.s4))
             FSAnnouncementCard(
-                icon = "🔑",
+                icon = Icons.Outlined.VpnKey,
                 title = "Set up recovery",
                 message = "Right now, recovering this account without this phone takes a " +
                     "3-day wait that anyone who knows your username can start. Bank a " +
@@ -437,7 +441,7 @@ fun ServerRow(
 
     Box {
         FSListRow(
-            leading = FSListLeading.Icon("🖥", statusIconColor(liveness, pod.status)),
+            leading = FSListLeading.Icon(Icons.Outlined.Dns, statusIconColor(liveness, pod.status)),
             title = pod.name,
             subtitle = serverSubtitle(pod, liveness),
             modifier = Modifier.combinedClickable(

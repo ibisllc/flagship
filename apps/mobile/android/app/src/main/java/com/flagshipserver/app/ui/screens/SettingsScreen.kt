@@ -12,6 +12,25 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Autorenew
+import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Computer
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.ScreenShare
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import com.flagshipserver.app.core.LocalPrivacySettings
@@ -24,6 +43,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -169,7 +189,7 @@ fun SettingsScreen(nav: NavController) {
         if (showPromo) {
             Spacer(Modifier.height(FS.space.s4))
             FSAnnouncementCard(
-                icon = "✦",
+                icon = Icons.Outlined.AutoAwesome,
                 title = "Welcome to Flagship",
                 message = "Your stuff, on your hardware, with a real green padlock.",
                 onDismiss = { showPromo = false },
@@ -192,7 +212,7 @@ fun SettingsScreen(nav: NavController) {
                 // type (single vs multi-device + 2FA) rides the subtitle. The
                 // last branch is the load-pending fallback.
                 FSSettingsRowData(
-                    icon = "🛡",
+                    icon = Icons.Outlined.Shield,
                     title = "Account security",
                     subtitle = when (accountType) {
                         "multi" -> "Multi-device + 2FA — recovery needs a code."
@@ -203,26 +223,26 @@ fun SettingsScreen(nav: NavController) {
                     testTag = "settings-open-account-security",
                 ),
                 FSSettingsRowData(
-                    icon = "🔑",
+                    icon = Icons.Outlined.VpnKey,
                     title = "AI keys",
                     subtitle = "BYO LLM keys, saved on this device (Anthropic, OpenAI, Google…).",
                     onClick = { nav.navigate("ai-keys") },
                     testTag = "settings-ai-keys",
                 ),
                 FSSettingsRowData(
-                    icon = "♻",
+                    icon = Icons.Outlined.Autorenew,
                     title = "Cloud recovery",
                     subtitle = "Recover with your passphrase and cloud passkey.",
                     onClick = { nav.navigate("recovery") },
                 ),
                 FSSettingsRowData(
-                    icon = "💾",
+                    icon = Icons.Outlined.Save,
                     title = "Back up account key",
                     subtitle = "Save an encrypted key file to recover or move your account.",
                     onClick = { nav.navigate("keyfile-export") },
                 ),
                 FSSettingsRowData(
-                    icon = "☁",
+                    icon = Icons.Outlined.Cloud,
                     title = "Profiles",
                     subtitle = "Switch between your clouds.",
                     onClick = { nav.navigate("profiles") },
@@ -239,13 +259,13 @@ fun SettingsScreen(nav: NavController) {
             header = "DEVICES",
             rows = listOf(
                 FSSettingsRowData(
-                    icon = "📱",
+                    icon = Icons.Outlined.Devices,
                     title = "Trusted devices",
                     subtitle = "Phones and tablets that hold your account keys — add, replace, or remove.",
                     onClick = { nav.navigate("trusted-devices") },
                 ),
                 FSSettingsRowData(
-                    icon = "🖥",
+                    icon = Icons.Outlined.Computer,
                     title = "Browser sessions",
                     subtitle = "Per-server browser tabs paired with this account.",
                     onClick = { nav.navigate("paired-sessions") },
@@ -261,7 +281,7 @@ fun SettingsScreen(nav: NavController) {
             rows = listOf(
                 // P14 — companion-dock: mint a 60s pairing ticket → 4h read-only browser.
                 FSSettingsRowData(
-                    icon = "🖥",
+                    icon = Icons.Outlined.ScreenShare,
                     title = "Remote",
                     subtitle = "Scan a one-time QR for a 4-hour read-only desktop view.",
                     onClick = { nav.navigate("companion-dock") },
@@ -269,7 +289,7 @@ fun SettingsScreen(nav: NavController) {
                 // P14 Phase 2 — companion-requests inbox. Badge reflects
                 // the pending count fetched once when this screen appears.
                 FSSettingsRowData(
-                    icon = "📥",
+                    icon = Icons.Outlined.Inbox,
                     title = "Companion requests",
                     subtitle = companionRequestsSubtitle(companionPending),
                     badge = companionPending.takeIf { it > 0 },
@@ -286,14 +306,14 @@ fun SettingsScreen(nav: NavController) {
             header = "WEB ACCESS",
             rows = listOf(
                 FSSettingsRowData(
-                    icon = "🌐",
+                    icon = Icons.Outlined.Public,
                     title = "Open secured sessions",
                     subtitle = "Browser logins you authorized for restricted sites.",
                     onClick = { nav.navigate("secured-sessions") },
                     testTag = "settings-secured-sessions",
                 ),
                 FSSettingsRowData(
-                    icon = "🔗",
+                    icon = Icons.Outlined.Link,
                     title = "Process URL",
                     subtitle = "Paste a site's access link to authorize it from here.",
                     onClick = { nav.navigate("process-url") },
@@ -310,7 +330,7 @@ fun SettingsScreen(nav: NavController) {
             rows = listOf(
                 // P9 — peer-backup management.
                 FSSettingsRowData(
-                    icon = "🗄",
+                    icon = Icons.Outlined.Backup,
                     title = "Peer-backup",
                     subtitle = "Shard health across peers + repair status.",
                     onClick = { nav.navigate("peer-backup") },
@@ -330,10 +350,10 @@ fun SettingsScreen(nav: NavController) {
         )
         Spacer(Modifier.height(FS.space.s2))
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            ThemeSegment(Modifier.weight(1f), label = "☀️", selected = themeMode == ThemeMode.LIGHT) {
+            ThemeSegment(Modifier.weight(1f), icon = Icons.Outlined.LightMode, selected = themeMode == ThemeMode.LIGHT) {
                 privacy?.setThemeMode(ThemeMode.LIGHT)
             }
-            ThemeSegment(Modifier.weight(1f), label = "🌙", selected = themeMode == ThemeMode.DARK) {
+            ThemeSegment(Modifier.weight(1f), icon = Icons.Outlined.DarkMode, selected = themeMode == ThemeMode.DARK) {
                 privacy?.setThemeMode(ThemeMode.DARK)
             }
             ThemeSegment(Modifier.weight(1f), label = "AUTO", small = true, selected = themeMode == ThemeMode.AUTO) {
@@ -361,7 +381,7 @@ fun SettingsScreen(nav: NavController) {
         FSSettingsGroup(
             rows = listOf(
                 FSSettingsRowData(
-                    icon = "🔒",
+                    icon = Icons.Outlined.Lock,
                     title = "Privacy",
                     subtitle = "Require unlock at launch, app-level gating.",
                     onClick = { nav.navigate("privacy") },
@@ -371,7 +391,7 @@ fun SettingsScreen(nav: NavController) {
                 // 3-tap developer unlock). This row scrolls to nothing extra; it
                 // exists for group parity with iOS/web and taps the same unlock.
                 FSSettingsRowData(
-                    icon = "ℹ",
+                    icon = Icons.Outlined.Info,
                     title = "About Flagship",
                     subtitle = "Version, license, source.",
                     showsChevron = false,
@@ -416,7 +436,7 @@ fun SettingsScreen(nav: NavController) {
                 header = "DEVELOPER",
                 rows = listOf(
                     FSSettingsRowData(
-                        icon = "🛠",
+                        icon = Icons.Outlined.Build,
                         title = "Developer",
                         subtitle = "Toggle the live screens client + dev fixtures.",
                         onClick = { nav.navigate("developer") },
@@ -659,11 +679,13 @@ private fun companionRequestsSubtitle(pending: Int): String = when {
 @Composable
 private fun ThemeSegment(
     modifier: Modifier = Modifier,
-    label: String,
+    label: String? = null,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     small: Boolean = false,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val fg = if (selected) FS.colors.onAccent else FS.colors.text
     Box(
         modifier
             .height(46.dp)
@@ -672,14 +694,18 @@ private fun ThemeSegment(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            label,
-            color = if (selected) FS.colors.onAccent else FS.colors.text,
-            style = TextStyle(
-                fontSize = if (small) 11.sp else 18.sp,
-                fontWeight = if (small) FontWeight.Bold else FontWeight.Medium,
-                letterSpacing = if (small) 1.5.sp else 0.sp,
-            ),
-        )
+        if (icon != null) {
+            androidx.compose.material3.Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
+        } else if (label != null) {
+            Text(
+                label,
+                color = fg,
+                style = TextStyle(
+                    fontSize = if (small) 11.sp else 18.sp,
+                    fontWeight = if (small) FontWeight.Bold else FontWeight.Medium,
+                    letterSpacing = if (small) 1.5.sp else 0.sp,
+                ),
+            )
+        }
     }
 }

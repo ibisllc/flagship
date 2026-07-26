@@ -10,10 +10,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -236,7 +242,7 @@ private fun AppRow(app: AppSummary, me: String, onClick: () -> Unit) {
     val isShared = me.isNotEmpty() && app.creator.lowercase() != me
     FSListRow(
         leading = FSListLeading.Icon(
-            symbol = if (running) "▶" else "■",
+            icon = if (running) Icons.Outlined.PlayArrow else Icons.Outlined.Stop,
             color = if (running) FS.colors.success else FS.colors.textMuted,
         ),
         title = app.name,
@@ -267,7 +273,7 @@ private fun BuildAnotherAppRow(onClick: () -> Unit) {
             .padding(horizontal = FS.space.s4, vertical = FS.space.s3)
             .testTag("services-build-cta"),
     ) {
-        Text("✨", color = FS.colors.primary, style = TextStyle(fontSize = 15.sp))
+        Icon(Icons.Outlined.Add, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(16.dp))
         Text(
             text = "Build another service",
             color = FS.colors.primary,
