@@ -2,9 +2,10 @@
  * Pure routing logic for the flagshipserver.com Cloudflare Worker.
  *
  * Responsibilities:
- *   1. Host-aware: serves the apex (flagshipserver.com / www.), the
- *      webapp origin (webapp.flagshipserver.com), and the browser-remote
- *      origin (remote.flagshipserver.com).
+ *   1. Host-aware: serves the apex (flagshipserver.com), the webapp
+ *      origin (webapp.flagshipserver.com), and the browser-remote origin
+ *      (remote.flagshipserver.com). www.flagshipserver.com is never
+ *      served — it's a pure 308 redirect to the bare apex (see #10a).
  *   2. .com control-plane routes (username, auth-code, build-tickets,
  *      server registration, CA pubkey-cert) — served by Worker + D1.
  *   3. /build/iso/:filename — streams from R2.
@@ -19,6 +20,7 @@
  *      separate origin so a keyless remote session is storage-isolated
  *      from the owner webapp.
  *  10. web.flagshipserver.com (retired) — 308 to webapp.
+ *  10a. www.flagshipserver.com — 308 to the bare apex, path+query kept.
  *  11. Anything else — static assets.
  */
 
@@ -71,6 +73,21 @@ const REMOTE_ORIGIN = `https://${REMOTE_HOST}`;
  */
 const LEGACY_WEBAPP_HOST = "web.flagshipserver.com";
 
+/**
+ * `www.flagshipserver.com` is a redirect-only alias, never a served
+ * origin. The bare apex is canonical everywhere else in this codebase
+ * (CONTROL_APEX, every doc/share link, WebAuthn origins, canonical
+ * bytes), so www. exists purely to catch the "typed www out of habit"
+ * case and send it to the one real origin — the same
+ * one-canonical-origin discipline that motivated 308-retiring `web.`
+ * above rather than serving it in place. Piping www. straight into the
+ * same Worker instead (so it silently double-serves identical content)
+ * would mean every future absolute-URL / CSP / CORS / WebAuthn-rpId
+ * assumption in this file has to account for two live serving origins
+ * forever, for a host nobody is meant to actually use.
+ */
+const WWW_HOST = "www.flagshipserver.com";
+
 /** Assets that live at the SITE root (apps/web/public/<file>) and are shared
  *  with the marketing landing page, yet are imported by the webapp via an
  *  absolute path. On the webapp host these must be served from root (NOT
@@ -96,6 +113,21 @@ function remoteHost(env: RouteEnv): string {
 /** The retired `web.` host for THIS env. Only ever redirected, never served. */
 function legacyWebappHost(env: RouteEnv): string {
   return env.CONTROL_APEX ? `web.${env.CONTROL_APEX}` : LEGACY_WEBAPP_HOST;
+}
+
+/** The `www.` host for THIS env. Only ever redirected, never served — see
+ *  the routeImpl block below for why it's kept separate from the apex
+ *  rather than served in place. */
+function wwwHost(env: RouteEnv): string {
+  return env.CONTROL_APEX ? `www.${env.CONTROL_APEX}` : WWW_HOST;
+}
+
+/** The bare apex for THIS env: `flagshipserver.com` in prod, or
+ *  `CONTROL_APEX` itself under a test env (e.g. `gym.flagshipserver.com`) —
+ *  CONTROL_APEX already names a bare apex, not a `webapp./remote.`-style
+ *  subhost. www. redirects here. */
+function apexHost(env: RouteEnv): string {
+  return env.CONTROL_APEX ?? "flagshipserver.com";
 }
 
 /**
@@ -193,7 +225,9 @@ const CORS_ALLOWED_ORIGINS = new Set<string>([
   REMOTE_ORIGIN,
   RECOVERY_ORIGIN,
   "https://flagshipserver.com",
-  "https://www.flagshipserver.com",
+  // NOTE: no "https://www.flagshipserver.com" — www. is redirect-only
+  // (see WWW_HOST), so no page ever executes JS from that origin and
+  // no XHR can ever originate from it.
   "http://localhost:8787",
   "http://localhost:5173",
 ]);
@@ -414,10 +448,10 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
     if (lowered === webappHost(env) ||
         lowered === remoteHost(env) ||
         lowered === legacyWebappHost(env) ||
+        lowered === wwwHost(env) ||
         lowered === RECOVERY_HOST ||
         lowered === BOOT_HOST ||
-        lowered === "www.flagshipserver.com" ||
-        lowered === "flagshipserver.com") {
+        lowered === apexHost(env)) {
       url = new URL(
         `https://${lowered}${requestUrl.pathname}${requestUrl.search}${requestUrl.hash}`,
       );
@@ -449,6 +483,15 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
 
 /** Internal — the actual routing logic. `route` wraps this with CORS. */
 async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Response> {
+  // ---- www.flagshipserver.com ----
+  // Pure 308 to the bare apex, path + query preserved. Placed FIRST so
+  // nothing else on this host is ever served. See the WWW_HOST comment
+  // for why this is a redirect rather than a second serving origin.
+  if (url.hostname === wwwHost(env)) {
+    const target = `https://${apexHost(env)}${url.pathname}${url.search}`;
+    return new Response(null, { status: 308, headers: { location: target } });
+  }
+
   // ---- web.flagshipserver.com (RETIRED) ----
   // Permanent redirect to `webapp.`, path + query preserved. Placed
   // FIRST so nothing else on this host can ever be served again. Only

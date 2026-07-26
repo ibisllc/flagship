@@ -1136,6 +1136,45 @@ describe("webapp. / remote. split + the retired web. host", () => {
   });
 });
 
+describe("www.flagshipserver.com — redirect-only, never served", () => {
+  it("308s the root to the bare apex", async () => {
+    const r = await route(new Request("https://www.flagshipserver.com/"), makeEnv());
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe("https://flagshipserver.com/");
+    expect(await r.text()).toBe("");
+  });
+
+  it("308s a deep path + query, preserving both", async () => {
+    const r = await route(
+      new Request("https://www.flagshipserver.com/studio?ref=abc"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe("https://flagshipserver.com/studio?ref=abc");
+  });
+
+  it("is never CORS-allowed as an /api/* origin", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/health", {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://www.flagshipserver.com",
+          "access-control-request-method": "POST",
+        },
+      }),
+      makeEnv(),
+    );
+    expect(r.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("is apex-aware under a test env (gym's www. redirects to the gym apex)", async () => {
+    const env = { ...makeEnv(), CONTROL_APEX: "gym.flagshipserver.com" };
+    const r = await route(new Request("https://www.gym.flagshipserver.com/"), env);
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe("https://gym.flagshipserver.com/");
+  });
+});
+
 describe("/transfer — take-over universal-link browser fallback", () => {
   // On the CONTROL apex the app (when installed) intercepts /transfer?o=… as a
   // universal link / App-Link and never hits the Worker. When it's NOT installed

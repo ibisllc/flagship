@@ -3,9 +3,6 @@ main = "src/index.ts"
 compatibility_date = "2026-05-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Custom domains: Cloudflare auto-provisions DNS + cert and ALL traffic
-# (every path) hits this Worker. The www CNAME chains to the apex so the
-# www host shares the same Worker.
 workers_dev = true
 
 # Routes are wrangler-managed (declared in the `routes` array below).
@@ -26,7 +23,6 @@ workers_dev = true
 # Always pass the full set, or just trust the `routes` array here.
 routes = [
   { pattern = "flagshipserver.com/*",          zone_name = "flagshipserver.com" },
-  { pattern = "www.flagshipserver.com/*",      zone_name = "flagshipserver.com" },
   # RETIRED — kept only so the pre-release testers who bookmarked `web.`
   # (or installed its PWA) get a 308 to `webapp.`. `web.` is an explicit
   # proxied CNAME → flagshipserver.com, so a zone route works for it.
@@ -85,6 +81,22 @@ routes = [
   # proxied record + edge cert itself, so there is no manual DNS step.
   { pattern = "webapp.flagshipserver.com",     custom_domain = true },
   { pattern = "remote.flagshipserver.com",     custom_domain = true },
+  # www.flagshipserver.com — 2026-07-26 fix: this used to be a zone route
+  # (`www.flagshipserver.com/*`) on the theory that a leftover CNAME from
+  # the pre-Worker marketing site chained www. to the apex. That CNAME no
+  # longer exists (`www.` didn't resolve at all — a Worker Route only
+  # fires for a host that already resolves into Cloudflare, per the
+  # recovery./boot. notes above), so www. was a dead end: NXDOMAIN, not
+  # even a Cloudflare edge response. Re-provisioned the same way as
+  # recovery./boot./webapp./remote. — a custom domain lets wrangler create
+  # the proxied DNS record + edge cert itself, no manual DNS step. www. is
+  # deliberately redirect-only (see WWW_HOST in route.ts), not a second
+  # serving origin: the bare apex is canonical everywhere else in this
+  # codebase, and piping www. into the same Worker to double-serve
+  # identical content would mean every absolute-URL / CSP / CORS /
+  # WebAuthn-origin assumption here has to account for two live origins
+  # forever, for a host nobody is meant to actually use.
+  { pattern = "www.flagshipserver.com",        custom_domain = true },
 ]
 
 # Static assets — marketing pages, the webapp source under /webapp/
