@@ -159,6 +159,66 @@ class PendingServerReconcilerTest {
         assertNull(pod.pendingAuthCodeSerial)     // cleared on going online
     }
 
+    // A demo pod (Plan A, provisioned via /api/dev/sample-user/{u}/connect,
+    // never a phone-minted auth-code order) sitting PENDING must NOT be
+    // treated as a dead ghost just because the real directory has never
+    // heard of it — that directory can't ever hear of a demo box until its
+    // daemon self-registers. Without the demoServer exemption this pod
+    // vanishes on the very first reconcile and Home shows "Add your first
+    // server" forever, even while the real Hetzner box is still booting (or
+    // already up but not yet observed).
+    @Test fun demoPendingPod_survivesGhostDrop() = runTest {
+        val app = signedInApp()
+        app.addPod(
+            PodInfo(
+                podId = "demo-server-harry",
+                name = "Home",
+                fqdn = "home.harry.flagship.services",
+                status = PodInfo.Status.PENDING,
+                pendingAuthCodeSerial = null,
+                demoServer = com.flagshipserver.app.api.DemoServerBlock(
+                    fqdn = "home.harry.flagship.services",
+                    status = "provisioning",
+                ),
+            ),
+        )
+        val mailbox = MockSecretMailboxClient() // empty directory + no orders
+        PendingServerReconciler(app, mailbox).reconcile()
+
+        assertEquals(1, app.pods.value.size)
+        val pod = app.pods.value.single()
+        assertEquals(PodInfo.Status.PENDING, pod.status)
+        assertNotNull(pod.demoServer)
+    }
+
+    // Once the demo box actually registers for real, the normal upsert path
+    // (which runs BEFORE the ghost-drop loop) flips it out of PENDING in
+    // place — the demoServer exemption never has to fire for an online demo
+    // pod, and registration still wins the same way it does for a real box.
+    @Test fun demoPendingPod_flipsOnlineOnceRegistered() = runTest {
+        val app = signedInApp()
+        app.addPod(
+            PodInfo(
+                podId = "demo-server-harry",
+                name = "Home",
+                fqdn = "home.harry.flagship.services",
+                status = PodInfo.Status.PENDING,
+                pendingAuthCodeSerial = null,
+                demoServer = com.flagshipserver.app.api.DemoServerBlock(
+                    fqdn = "home.harry.flagship.services",
+                    status = "provisioning",
+                ),
+            ),
+        )
+        val mailbox = MockSecretMailboxClient().apply {
+            directory = listOf(registered("home.harry.flagship.services"))
+        }
+        PendingServerReconciler(app, mailbox).reconcile()
+
+        assertEquals(1, app.pods.value.size)
+        assertEquals(PodInfo.Status.ONLINE, app.pods.value.single().status)
+    }
+
     // A dead local pending pod (serial in neither array) is aged out.
     @Test fun deadPendingGhost_isDropped() = runTest {
         val app = signedInApp()

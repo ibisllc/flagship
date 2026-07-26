@@ -140,8 +140,21 @@ class PendingServerReconciler(
 
         // Drop ghosts: local pending pods whose box has since registered, OR
         // whose orderRef/fqdn is in NEITHER array (a dead order).
+        //
+        // A demo pod (Plan A, DemoFixtures.samplePodFromDemoServer) is NEVER
+        // backed by a phone-minted auth-code order — it's provisioned via
+        // `/api/dev/sample-user/{u}/connect`, a path this directory knows
+        // nothing about. Without this exemption, a demo pod sitting PENDING
+        // (lifecycle none/provisioning) reads as a dead ghost on the very
+        // next reconcile and gets deleted — permanently, since nothing
+        // re-adds it once removed — even while the real Hetzner box is still
+        // provisioning or already up. Its own connect/cancel flow
+        // (DemoConnectClient, DemoInstallProgressScreen) owns its lifecycle;
+        // once it registers for real, upsertRegisteredPod above already
+        // flips it out of PENDING before this loop runs.
         for (pod in app.pods.value) {
             if (pod.status != PodInfo.Status.PENDING) continue
+            if (pod.demoServer != null) continue
             val registered = liveFqdns.contains(pod.fqdn.lowercase())
             val serial = pod.pendingAuthCodeSerial
             val stillOutstanding = if (serial != null) {
