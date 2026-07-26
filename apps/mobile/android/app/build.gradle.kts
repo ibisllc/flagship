@@ -68,6 +68,16 @@ android {
         compose = true
     }
 
+    packaging {
+        resources {
+            // bcprov-jdk18on and jspecify (the latter pulled in transitively
+            // by the CameraX 1.5.3 bump) both carry an identical OSGi bundle
+            // manifest at this path; it's metadata, not code, so either copy
+            // is fine to keep.
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
+    }
+
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
@@ -138,10 +148,14 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     // Camera + QR
-    implementation("androidx.camera:camera-core:1.3.4")
-    implementation("androidx.camera:camera-camera2:1.3.4")
-    implementation("androidx.camera:camera-lifecycle:1.3.4")
-    implementation("androidx.camera:camera-view:1.3.4")
+    // 1.5.3 (was 1.3.4): camera-core's native libimage_processing_util_jni.so
+    // shipped 4 KB-page-aligned ELF segments through 1.3.x; fixed upstream in
+    // the 1.4 line. Play Console's pre-launch report flags any 4 KB-aligned
+    // native lib as unsupported on 16 KB-page-size Android 15+ devices.
+    implementation("androidx.camera:camera-core:1.5.3")
+    implementation("androidx.camera:camera-camera2:1.5.3")
+    implementation("androidx.camera:camera-lifecycle:1.5.3")
+    implementation("androidx.camera:camera-view:1.5.3")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     // Pure-JVM QR ENCODER for the cross-device pairing QR (Phase 3b).
     // mlkit only DECODES; zxing core has no Android deps so it runs in

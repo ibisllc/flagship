@@ -670,10 +670,24 @@ private fun FailedRow(message: String) {
     )
 }
 
+// The QR is displayed at a fixed 200.dp — well under this cap on every
+// density — so downsampling never visibly softens it, but it keeps memory
+// bounded if the server ever hands back a much larger PNG.
+private const val QR_MAX_DECODED_DIMENSION_PX = 800
+
 private fun decodeBase64Png(base64: String): android.graphics.Bitmap? {
     return try {
         val bytes = Base64.decode(base64, Base64.DEFAULT)
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sample = 1
+        while ((bounds.outWidth / (sample * 2)) >= QR_MAX_DECODED_DIMENSION_PX ||
+            (bounds.outHeight / (sample * 2)) >= QR_MAX_DECODED_DIMENSION_PX
+        ) {
+            sample *= 2
+        }
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
     } catch (_: Throwable) {
         null
     }

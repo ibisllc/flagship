@@ -2,8 +2,5 @@
 <resources>
     <style name="Theme.Flagship" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/flagship_canvas</item>
-        <item name="android:statusBarColor">@color/flagship_canvas</item>
-        <item name="android:navigationBarColor">@color/flagship_canvas</item>
-        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>
