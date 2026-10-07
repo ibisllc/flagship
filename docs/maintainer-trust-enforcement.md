@@ -206,8 +206,9 @@ flow yet**, so fail-closed-by-default would brick the fleet.
   it — OBSERVE-safe.
 - **Box daemon** verifies on every HELLO_ACK: fetch the maintainer chain
   (`GET /api/maintainer-blessing`), build a `CaTrustChain` at the BAKED pin,
-  run `shouldRelayThroughHub` (chain + TTL), verify `hubSig` over the box
-  nonce. It emits a structured `[relay-trust]` log line. Chain fetch errors
+  run `shouldRelayThroughHub` (chain + TTL), require `hubHost` to equal the
+  box's own services apex (`servicesApexOf(serverFqdn)`), verify `hubSig` over
+  the box nonce. It emits a structured `[relay-trust]` log line. Chain fetch errors
   yield NO verdict (never bricks on a blip).
 
 ### The enforce flag
@@ -223,9 +224,13 @@ flow yet**, so fail-closed-by-default would brick the fleet.
   LOCKDOWN — `resolveBackend` returns null so new streams are refused (the WS /
   control channel stays UP so a fresh blessing or owner exception can lift it)
   — and emits an SOS via the owner-notify hook (log-only by default; production
-  swaps in the `.com` push relay). A `verified === undefined` verdict (no
-  blessing presented / chain unreachable) NEVER locks down, under either flag.
-  A fresh valid blessing or a valid owner exception lifts lockdown.
+  swaps in the `.com` push relay). A hub that presents NO blessing is also a
+  failure under ENFORCE (`no-blessing`) — otherwise a rogue hub passes by
+  omitting it — and no owner exception can cover it (there is no hub key to
+  scope one to). An unreachable maintainer chain (`chain-fetch-error`) NEVER
+  locks down, under either flag. While locked down the box re-HELLOs every
+  60s, so a hub that was only mid-startup is re-checked in-session; a fresh
+  valid blessing or a valid owner exception lifts lockdown.
 
 ### Live-validation steps BEFORE flipping `FLAGSHIP_RELAY_TRUST_ENFORCE=true`
 
@@ -240,8 +245,8 @@ Do these against the live fleet, in order; do NOT flip until all pass:
 3. **Boxes are OBSERVING a PASS.** On real boxes (rebuilt daemon), confirm the
    journal shows `[relay-trust] verified=true reason=ok … mode=observe` on
    connect — across a daemon restart and a hub redeploy (re-blessed key). A
-   single `verified=false` or persistent `chain-fetch-error` in the fleet means
-   DO NOT flip.
+   single `verified=false`, `reason=no-blessing` after hub startup, or
+   persistent `chain-fetch-error` in the fleet means DO NOT flip.
 4. **Soak.** Let the fleet run in OBSERVE for at least one full blessing-refresh
    cycle (>26h) so a near-expiry refresh is exercised; watch for spurious
    `artifact-expired` from clock skew or a missed refresh.
@@ -255,7 +260,17 @@ Do these against the live fleet, in order; do NOT flip until all pass:
 6. **SOS transport.** Replace the log-only `sos` hook with the real STK-signed
    `flagship/push-relay/v1` fan-out (category trust-alert) and confirm the
    phone receives the SOS from a test lockdown.
-7. **Flip on ONE box first.** Set `FLAGSHIP_RELAY_TRUST_ENFORCE=true` on a
+7. **Dedicated hub credential.** The blessing issuer authenticates the hub
+   with the shared `SERVICES_CONTROL_SECRET`, which also guards the
+   custom-domain channel, so evicting a rogue hub means rotating a secret
+   several channels share. Before relying on eviction, give the issuer its own
+   credential or, better, an operator-approved registry of persistent hub
+   keys (the hub key is ephemeral-per-boot unless a volume is mounted).
+8. **Mid-session expiry.** A box verifies only on HELLO_ACK (and on the
+   lockdown re-check). A long-lived tunnel is not re-verified when its
+   blessing expires; add a periodic re-HELLO before relying on expiry as the
+   eviction clock.
+9. **Flip on ONE box first.** Set `FLAGSHIP_RELAY_TRUST_ENFORCE=true` on a
    single canary box, exercise a real failure + recovery, THEN roll to the
    fleet. Keep the flag flippable (no redeploy needed to revert).
 

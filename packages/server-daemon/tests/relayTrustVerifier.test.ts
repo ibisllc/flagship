@@ -19,7 +19,7 @@ import {
   type Mandate,
 } from "@ibisllc/maintainers";
 import { ed, signServiceBlessing, type Keypair } from "@flagship/protocol";
-import { RelayTrustVerifier } from "../src/relayTrustVerifier.js";
+import { RelayTrustVerifier, servicesApexOf } from "../src/relayTrustVerifier.js";
 
 const ISO_MANDATE_FROM = "2026-05-01T00:00:00.000Z";
 const ISO_MANDATE_TO = "2026-11-01T00:00:00.000Z";
@@ -124,6 +124,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
   it("verifies a good blessing + hubSig through the real chain", async () => {
     const v = new RelayTrustVerifier({
       comBaseUrl: "https://flagshipserver.com",
+      servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
       fetchImpl: chainMaterialFetch(),
       now: () => NOW,
@@ -134,10 +135,25 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
     expect(verdict).toEqual({ verified: true, reason: "ok", hubKeyPub: hubPubHex });
   });
 
+  it("fails closed when the box has no services apex", async () => {
+    const v = new RelayTrustVerifier({
+      comBaseUrl: "https://flagshipserver.com",
+      servicesApex: "",
+      pinnedMandateHash: PIN,
+      fetchImpl: chainMaterialFetch(),
+      now: () => NOW,
+      log: () => {},
+    });
+    const { nonce, sig } = nonceAndSig();
+    const verdict = await v.verify(mintBlessing(), sig, nonce);
+    expect(verdict.verified).toBe(false);
+    expect(verdict.reason).toBe("hubhost-mismatch");
+  });
+
   it("verifies a blessing naming the box's own services apex", async () => {
     const v = new RelayTrustVerifier({
       comBaseUrl: "https://flagshipserver.com",
-      serverFqdn: "home.alice.flagship.services",
+      servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
       fetchImpl: chainMaterialFetch(),
       now: () => NOW,
@@ -156,7 +172,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
   ])("verified=false (hubhost-mismatch) for a blessing naming %s", async (hubHost) => {
     const v = new RelayTrustVerifier({
       comBaseUrl: "https://flagshipserver.com",
-      serverFqdn: "home.alice.flagship.services",
+      servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
       fetchImpl: chainMaterialFetch(),
       now: () => NOW,
@@ -174,6 +190,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
   it("verified=false when the blessing chains but the hubSig is wrong (replay defense)", async () => {
     const v = new RelayTrustVerifier({
       comBaseUrl: "https://flagshipserver.com",
+      servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
       fetchImpl: chainMaterialFetch(),
       now: () => NOW,
@@ -191,6 +208,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
   it("verified=false (hubsig-missing) when no hubSig is presented", async () => {
     const v = new RelayTrustVerifier({
       comBaseUrl: "https://flagshipserver.com",
+      servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
       fetchImpl: chainMaterialFetch(),
       now: () => NOW,
@@ -205,6 +223,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
   it("verified=false when the blessing is signed by an unauthorized key", async () => {
     const v = new RelayTrustVerifier({
       comBaseUrl: "https://flagshipserver.com",
+      servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
       // endorse a DIFFERENT hot key than the one that signed the blessing
       fetchImpl: chainMaterialFetch(kp(0xee).pubKey),
@@ -220,6 +239,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
   it("verified=undefined (no verdict) on a chain-fetch error — never bricks", async () => {
     const v = new RelayTrustVerifier({
       comBaseUrl: "https://flagshipserver.com",
+      servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
       fetchImpl: (async () => {
         throw new Error("network down");
@@ -237,6 +257,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
     const fetchImpl = vi.fn();
     const v = new RelayTrustVerifier({
       comBaseUrl: "https://flagshipserver.com",
+      servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
       fetchImpl: fetchImpl as unknown as typeof fetch,
       now: () => NOW,
@@ -252,6 +273,7 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
     const fetchImpl = vi.fn(chainMaterialFetch());
     const v = new RelayTrustVerifier({
       comBaseUrl: "https://flagshipserver.com",
+      servicesApex: "flagship.services",
       pinnedMandateHash: PIN,
       fetchImpl: fetchImpl as unknown as typeof fetch,
       now: () => NOW,
@@ -262,4 +284,21 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
     await v.verify(mintBlessing(), sig, nonce);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
+});
+
+describe("servicesApexOf", () => {
+  it.each([
+    ["home.alice.flagship.services", "flagship.services"],
+    ["HOME.Alice.Flagship.Services", "flagship.services"],
+    ["home.u.gym.flagship.services", "gym.flagship.services"],
+  ])("%s → %s", (fqdn, apex) => {
+    expect(servicesApexOf(fqdn)).toBe(apex);
+  });
+
+  it.each(["alice.flagship.services", "flagship.services", "", "home..flagship.services", "home.alice.flagship.services."])(
+    "%j is not a box FQDN → \"\" (fail closed)",
+    (fqdn) => {
+      expect(servicesApexOf(fqdn)).toBe("");
+    },
+  );
 });

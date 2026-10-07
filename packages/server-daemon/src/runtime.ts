@@ -33,7 +33,7 @@ import {
   superviseTunnelClient,
   type SupervisedTunnelClient,
 } from "./tunnel/tunnelClient.js";
-import { RelayTrustVerifier } from "./relayTrustVerifier.js";
+import { RelayTrustVerifier, servicesApexOf } from "./relayTrustVerifier.js";
 import {
   RelayLockdownController,
   relayTrustEnforceFromEnv,
@@ -911,7 +911,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // supplied), mirroring the vibe-code W10 hook.
   const relayTrustVerifier = new RelayTrustVerifier({
     comBaseUrl: opts.controlPlaneBaseUrl,
-    serverFqdn: opts.serverFqdn,
+    servicesApex: servicesApexOf(opts.serverFqdn),
   });
   const relayLockdown = new RelayLockdownController({
     enforce: relayTrustEnforceFromEnv(),
@@ -925,6 +925,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       : {}),
     // Real STK-signed push-relay SOS when supplied; else the log-only default.
     ...(opts.onRelaySos ? { sos: opts.onRelaySos } : {}),
+    // The tunnel is created below; a re-HELLO's HELLO_ACK re-runs the check.
+    recheck: () => void tunnel.rehello().catch(() => {}),
   });
   const onHelloAckTrust = (e: {
     serviceBlessing: unknown;

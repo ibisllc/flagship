@@ -54,7 +54,7 @@ export interface RelayTrustVerdict {
    * `false` — a blessing/hubSig was present but verification FAILED.
    * `undefined` — no verdict was reachable (no blessing presented, or the
    *           chain couldn't be fetched). OBSERVE keeps relaying; ENFORCE
-   *           does NOT lock down on an undefined verdict (only on `false`).
+   *           locks down on `no-blessing` but not on `chain-fetch-error`.
    */
   verified: boolean | undefined;
   reason: RelayTrustVerdictReason;
@@ -71,11 +71,11 @@ export interface RelayTrustVerifierOptions {
   /** `.com` base URL, e.g. `https://flagshipserver.com`. */
   comBaseUrl: string;
   /**
-   * The box's own FQDN, e.g. `home.alice.flagship.services`. A blessing
-   * covers it only when its `hubHost` is that FQDN's services apex
-   * (`flagship.services`). Unset ⇒ unchecked.
+   * The services apex this box serves under (`flagship.services`; see
+   * `servicesApexOf`). A blessing covers the box only when its `hubHost` is
+   * exactly this. Empty ⇒ no blessing ever matches (fail closed).
    */
-  serverFqdn?: string;
+  servicesApex: string;
   /** Baked maintainer pin. Defaults to the protocol constant. */
   pinnedMandateHash?: string;
   /** How long to cache the fetched maintainer chain. Default 1h. */
@@ -97,12 +97,24 @@ function hexToBytes(h: string): Uint8Array {
 const DEFAULT_CHAIN_CACHE_MS = 60 * 60_000;
 
 /**
+ * The services apex of a box FQDN, which is always `<server>.<user>.<apex>`
+ * with an apex of at least two labels (`home.alice.flagship.services` →
+ * `flagship.services`). Any other shape yields "" so relay trust fails closed
+ * rather than guessing.
+ */
+export function servicesApexOf(serverFqdn: string): string {
+  const labels = serverFqdn.toLowerCase().split(".");
+  if (labels.length < 4 || labels.some((l) => l === "")) return "";
+  return labels.slice(2).join(".");
+}
+
+/**
  * Verifies hub relay blessings against the maintainer chain. Caches the
  * fetched chain briefly so a reconnect storm doesn't hammer `.com`.
  */
 export class RelayTrustVerifier {
   private readonly comBaseUrl: string;
-  private readonly servicesApex: string | undefined;
+  private readonly servicesApex: string;
   private readonly pinnedMandateHash: string;
   private readonly chainCacheMs: number;
   private readonly fetchImpl: typeof fetch;
@@ -112,10 +124,7 @@ export class RelayTrustVerifier {
 
   constructor(opts: RelayTrustVerifierOptions) {
     this.comBaseUrl = opts.comBaseUrl.replace(/\/$/, "");
-    this.servicesApex =
-      opts.serverFqdn === undefined
-        ? undefined
-        : opts.serverFqdn.toLowerCase().split(".").slice(2).join(".");
+    this.servicesApex = opts.servicesApex.toLowerCase();
     this.pinnedMandateHash = opts.pinnedMandateHash ?? MAINTAINER_PINNED_MANDATE_HASH;
     this.chainCacheMs = opts.chainCacheMs ?? DEFAULT_CHAIN_CACHE_MS;
     this.fetchImpl = opts.fetchImpl ?? fetch;
@@ -197,10 +206,9 @@ export class RelayTrustVerifier {
 
     // (c) the blessing must name the zone this box serves under.
     if (
-      this.servicesApex !== undefined &&
-      (this.servicesApex === "" ||
-        typeof blessing.hubHost !== "string" ||
-        blessing.hubHost.toLowerCase() !== this.servicesApex)
+      this.servicesApex === "" ||
+      typeof blessing.hubHost !== "string" ||
+      blessing.hubHost.toLowerCase() !== this.servicesApex
     ) {
       const v: RelayTrustVerdict = {
         verified: false,

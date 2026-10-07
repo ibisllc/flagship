@@ -158,9 +158,17 @@ bless it" was unenforceable. It now requires the existing
 `SERVICES_CONTROL_SECRET` as a bearer (unset ⇒ 503, mismatch ⇒ 401) and only
 blesses `hubHost == SERVICES_APEX` (else 403); the `.services` hub sends the
 secret and defaults its `hubHost` to its services apex. The box's
-`RelayTrustVerifier` also rejects a blessing whose `hubHost` isn't its own
-FQDN's apex (`hubhost-mismatch`). Impact was latent (relay trust is
-OBSERVE-only) but had to close before `FLAGSHIP_RELAY_TRUST_ENFORCE` flips.
+`RelayTrustVerifier` now requires the box's services apex and rejects a
+blessing naming any other host (`hubhost-mismatch`). After a second-opinion
+review, a hub presenting NO blessing is also a failure under ENFORCE (it was
+fail-open, so a rogue hub could pass by omitting it), and a locked-down box
+re-HELLOs every 60s so a hub that was merely mid-startup recovers in-session;
+OBSERVE behaviour is unchanged. Impact was latent (relay trust is OBSERVE-only)
+but had to close before `FLAGSHIP_RELAY_TRUST_ENFORCE` flips. Two further
+pre-flip items are recorded in `docs/maintainer-trust-enforcement.md`
+(live-validation steps 7–8): a dedicated hub credential or persistent hub-key
+registry instead of the shared secret, and re-verifying a long-lived tunnel
+when its blessing expires.
 **Remaining (owner):** both prod sides already hold `SERVICES_CONTROL_SECRET`,
 so no new secret is needed. Deploy `.services` (Fly) FIRST so the hub sends the
 header, then `.com`; the reverse order only costs blessings (a box with no

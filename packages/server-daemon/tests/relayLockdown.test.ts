@@ -3,8 +3,9 @@
  * (docs/maintainer-trust-enforcement.md, task #5).
  *
  * Deploy-safety contract: with enforce OFF (the default) it NEVER locks
- * down, regardless of verdict. With enforce ON it locks down + SOSes only
- * on a concrete verified=false with no covering owner TrustException.
+ * down, regardless of verdict. With enforce ON it locks down + SOSes on a
+ * concrete verified=false with no covering owner TrustException, or on a
+ * hub that presents no blessing at all.
  */
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -52,6 +53,15 @@ describe("RelayLockdownController — enforce OFF (default)", () => {
     expect(sos).not.toHaveBeenCalled();
   });
 
+  it("a missing blessing is a no-op under OBSERVE (no lockdown, verdict unchanged)", async () => {
+    const sos = vi.fn();
+    const c = new RelayLockdownController({ sos, log: () => {} });
+    await c.onVerdict(noVerdict);
+    expect(c.isRelayAllowed()).toBe(true);
+    expect(c.trustStatus().relayVerdict).toBe("unknown");
+    expect(sos).not.toHaveBeenCalled();
+  });
+
   it("default constructor (no opts) is OBSERVE", async () => {
     const c = new RelayLockdownController();
     await c.onVerdict(fail);
@@ -84,12 +94,79 @@ describe("RelayLockdownController — enforce ON", () => {
     });
   });
 
-  it("does NOT lock down on verified=undefined (no verdict)", async () => {
+  it("does NOT lock down when the maintainer chain is unreachable (.com blip)", async () => {
     const sos = vi.fn();
     const c = new RelayLockdownController({ enforce: true, sos, log: () => {} });
-    await c.onVerdict(noVerdict);
+    await c.onVerdict({ verified: undefined, reason: "chain-fetch-error", hubKeyPub: HUB_PUB });
     expect(c.isRelayAllowed()).toBe(true);
     expect(sos).not.toHaveBeenCalled();
+  });
+
+  it("locks down + SOSes when the hub presents NO blessing (omitting it is not a bypass)", async () => {
+    const sosEvents: RelaySosEvent[] = [];
+    const c = new RelayLockdownController({
+      enforce: true,
+      sos: (e) => sosEvents.push(e),
+      log: () => {},
+    });
+    await c.onVerdict(noVerdict);
+    expect(c.isRelayAllowed()).toBe(false);
+    expect(c.current().reason).toBe("no-blessing");
+    expect(c.trustStatus().relayVerdict).toBe("untrusted");
+    expect(sosEvents).toHaveLength(1);
+    expect(sosEvents[0]!.reason).toBe("no-blessing");
+  });
+
+  it("an owner exception cannot cover a missing blessing (no hub key to scope it to)", async () => {
+    const c = new RelayLockdownController({
+      enforce: true,
+      resolveTrustExceptions: async () => {
+        throw new Error("must not be consulted without a hub key");
+      },
+      log: () => {},
+    });
+    await c.onVerdict(noVerdict);
+    expect(c.isRelayAllowed()).toBe(false);
+  });
+
+  it("while locked down, re-checks every recheckMs until a good verdict lifts it", async () => {
+    const timers: Array<() => void> = [];
+    const setTimeoutImpl = ((fn: () => void) => {
+      timers.push(fn);
+      return { unref() {} };
+    }) as unknown as typeof setTimeout;
+    const recheck = vi.fn();
+    const c = new RelayLockdownController({
+      enforce: true,
+      recheck,
+      recheckMs: 60_000,
+      setTimeoutImpl,
+      log: () => {},
+    });
+    await c.onVerdict(noVerdict);
+    await c.onVerdict(noVerdict);
+    expect(timers).toHaveLength(1); // one pending recheck, not one per verdict
+    timers.shift()!();
+    expect(recheck).toHaveBeenCalledTimes(1);
+    expect(timers).toHaveLength(1); // still locked ⇒ re-armed
+    await c.onVerdict(ok);
+    expect(c.isRelayAllowed()).toBe(true);
+    timers.shift()!();
+    expect(recheck).toHaveBeenCalledTimes(1); // lifted ⇒ no further re-HELLO
+    expect(timers).toHaveLength(0);
+  });
+
+  it("never schedules a recheck when nothing is locked down", async () => {
+    const setTimeoutImpl = vi.fn() as unknown as typeof setTimeout;
+    const c = new RelayLockdownController({
+      enforce: true,
+      recheck: () => {},
+      setTimeoutImpl,
+      log: () => {},
+    });
+    await c.onVerdict(ok);
+    await c.onVerdict({ verified: undefined, reason: "chain-fetch-error" });
+    expect(setTimeoutImpl).not.toHaveBeenCalled();
   });
 
   it("does NOT re-SOS while already locked down", async () => {

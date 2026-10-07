@@ -17,9 +17,12 @@
  *     keeps the control/trust channel up so it can still receive a fresh
  *     blessing or an owner exception. It also emits an SOS to the owner.
  *
- * A verdict of `undefined` (no blessing presented / chain unreachable) is
- * NOT a failure — it never locks down, under either flag. Only a concrete
- * `verified === false` does.
+ * A verdict of `undefined` is NOT a failure under OBSERVE. Under ENFORCE a
+ * hub that presents NO blessing is one — otherwise a rogue hub would pass
+ * simply by omitting it — while an unreachable maintainer chain
+ * (`chain-fetch-error`) stays fail-open so a `.com` blip never bricks a box.
+ * While locked down the box re-HELLOs every `recheckMs`, so a hub that was
+ * merely mid-startup (no blessing fetched yet) is re-checked in-session.
  *
  * The cert-hash slug for a relay failure is `relayCertHash(hubKeyPub)`
  * (`@flagship/protocol`), matching the `TrustException.certHash` an owner
@@ -95,6 +98,15 @@ export interface RelayLockdownOptions {
    * locked-down box already appears offline.
    */
   sos?: (e: RelaySosEvent) => void;
+  /**
+   * Re-request the hub's trust attachment (the runtime wires the tunnel's
+   * re-HELLO, whose HELLO_ACK yields a fresh verdict). Called every
+   * `recheckMs` while locked down. Absent ⇒ recovery waits for a reconnect.
+   */
+  recheck?: () => void;
+  /** Default 60s. */
+  recheckMs?: number;
+  setTimeoutImpl?: typeof setTimeout;
   now?: () => number;
   log?: (line: string) => void;
 }
@@ -108,6 +120,10 @@ export class RelayLockdownController {
   private readonly enforce: boolean;
   private readonly resolveExceptions?: RelayLockdownOptions["resolveTrustExceptions"];
   private readonly sos: (e: RelaySosEvent) => void;
+  private readonly recheck: (() => void) | undefined;
+  private readonly recheckMs: number;
+  private readonly setTimeoutFn: typeof setTimeout;
+  private recheckPending = false;
   private readonly now: () => number;
   private readonly log: (line: string) => void;
   private state: RelayLockdownState = {
@@ -125,6 +141,9 @@ export class RelayLockdownController {
   constructor(opts: RelayLockdownOptions = {}) {
     this.enforce = opts.enforce ?? false;
     this.resolveExceptions = opts.resolveTrustExceptions;
+    this.recheck = opts.recheck;
+    this.recheckMs = opts.recheckMs ?? DEFAULT_RECHECK_MS;
+    this.setTimeoutFn = opts.setTimeoutImpl ?? setTimeout;
     this.now = opts.now ?? (() => Date.now());
     this.log = opts.log ?? ((l) => console.log(l));
     this.sos =
@@ -175,7 +194,8 @@ export class RelayLockdownController {
    *
    * - `verified === true`  → lift any prior lockdown (a fresh good blessing
    *   recovers the box without an owner exception).
-   * - `verified === undefined` → no-op (no verdict reachable).
+   * - `verified === undefined` → no-op (no verdict reachable), EXCEPT a
+   *   `no-blessing` under ENFORCE, which is handled as a failure.
    * - `verified === false` → under ENFORCE only, lock down + SOS UNLESS a
    *   valid owner TrustException covers this relay cert-hash. Under OBSERVE,
    *   log only.
@@ -192,7 +212,9 @@ export class RelayLockdownController {
       this.state = { lockedDown: false, certHash: null, reason: null, since: null };
       return this.current();
     }
-    if (verdict.verified === undefined) {
+    const missingUnderEnforce =
+      this.enforce && verdict.verified === undefined && verdict.reason === "no-blessing";
+    if (verdict.verified === undefined && !missingUnderEnforce) {
       // No verdict reachable (no blessing presented / chain unreachable). A
       // network blip must stay fail-open — it never locks down AND never flips
       // a prior verdict, so the last known trust snapshot is preserved.
@@ -253,7 +275,24 @@ export class RelayLockdownController {
         at: this.now(),
       });
     }
+    this.scheduleRecheck();
     return this.current();
+  }
+
+  private scheduleRecheck(): void {
+    if (!this.recheck || this.recheckPending) return;
+    this.recheckPending = true;
+    const t = this.setTimeoutFn(() => {
+      this.recheckPending = false;
+      if (!this.state.lockedDown) return;
+      try {
+        this.recheck?.();
+      } catch {
+        /* a failed re-HELLO is retried on the next tick */
+      }
+      this.scheduleRecheck();
+    }, this.recheckMs);
+    (t as { unref?: () => void }).unref?.();
   }
 
   /**
@@ -298,6 +337,8 @@ export class RelayLockdownController {
     this.state = { lockedDown: false, certHash: null, reason: null, since: null };
   }
 }
+
+const DEFAULT_RECHECK_MS = 60_000;
 
 /** Read the enforce flag from the environment (default OFF). */
 export function relayTrustEnforceFromEnv(
