@@ -162,17 +162,21 @@ secret and defaults its `hubHost` to its services apex. The box's
 blessing naming any other host (`hubhost-mismatch`). After a second-opinion
 review, a hub presenting NO blessing is also a failure under ENFORCE (it was
 fail-open, so a rogue hub could pass by omitting it), and a locked-down box
-re-HELLOs every 60s so a hub that was merely mid-startup recovers in-session;
-OBSERVE behaviour is unchanged. Impact was latent (relay trust is OBSERVE-only)
-but had to close before `FLAGSHIP_RELAY_TRUST_ENFORCE` flips. Two further
+re-HELLOs every 60s so a hub that was merely mid-startup recovers in-session.
+Entering lockdown now also closes already-open application streams (it used to
+refuse only new ones), and the re-check timer stops on daemon shutdown. OBSERVE
+behaviour is unchanged. Impact was latent (relay trust is OBSERVE-only)
+but had to close before `FLAGSHIP_RELAY_TRUST_ENFORCE` flips. Three further
 pre-flip items are recorded in `docs/maintainer-trust-enforcement.md`
-(live-validation steps 7–8): a dedicated hub credential or persistent hub-key
-registry instead of the shared secret, and re-verifying a long-lived tunnel
-when its blessing expires.
+(live-validation steps 7–9): a dedicated hub credential or persistent hub-key
+registry instead of the shared secret; persisting the hub's blessing so a hub
+restart during a `.com` outage doesn't lock down the fleet; and re-verifying a
+long-lived tunnel when its blessing expires.
 **Remaining (owner):** both prod sides already hold `SERVICES_CONTROL_SECRET`,
 so no new secret is needed. Deploy `.services` (Fly) FIRST so the hub sends the
-header, then `.com`; the reverse order only costs blessings (a box with no
-blessing gets an undefined verdict, which never locks down). The gym Fly app
+header, then `.com`; the reverse order only costs blessings (with enforcement
+OFF, as it is everywhere today, a box with no blessing just logs it — under
+ENFORCE the same gap would lock boxes down). The gym Fly app
 needs the secret too or its hub simply goes unblessed. Box-side check reaches
 boxes on their next daemon update/reburn.
 

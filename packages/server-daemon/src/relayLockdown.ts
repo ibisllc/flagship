@@ -23,6 +23,9 @@
  * (`chain-fetch-error`) stays fail-open so a `.com` blip never bricks a box.
  * While locked down the box re-HELLOs every `recheckMs`, so a hub that was
  * merely mid-startup (no blessing fetched yet) is re-checked in-session.
+ * Entering lockdown also fires `onLockdown`, which the runtime uses to cut
+ * application streams that were already open — refusing only NEW streams
+ * would leave existing ones flowing through the untrusted hub.
  *
  * The cert-hash slug for a relay failure is `relayCertHash(hubKeyPub)`
  * (`@flagship/protocol`), matching the `TrustException.certHash` an owner
@@ -107,6 +110,9 @@ export interface RelayLockdownOptions {
   /** Default 60s. */
   recheckMs?: number;
   setTimeoutImpl?: typeof setTimeout;
+  clearTimeoutImpl?: typeof clearTimeout;
+  /** Fired once on each transition INTO lockdown. Errors are swallowed. */
+  onLockdown?: () => void;
   now?: () => number;
   log?: (line: string) => void;
 }
@@ -123,7 +129,10 @@ export class RelayLockdownController {
   private readonly recheck: (() => void) | undefined;
   private readonly recheckMs: number;
   private readonly setTimeoutFn: typeof setTimeout;
-  private recheckPending = false;
+  private readonly clearTimeoutFn: typeof clearTimeout;
+  private readonly onLockdown: (() => void) | undefined;
+  private recheckTimer: ReturnType<typeof setTimeout> | null = null;
+  private stopped = false;
   private readonly now: () => number;
   private readonly log: (line: string) => void;
   private state: RelayLockdownState = {
@@ -144,6 +153,8 @@ export class RelayLockdownController {
     this.recheck = opts.recheck;
     this.recheckMs = opts.recheckMs ?? DEFAULT_RECHECK_MS;
     this.setTimeoutFn = opts.setTimeoutImpl ?? setTimeout;
+    this.clearTimeoutFn = opts.clearTimeoutImpl ?? clearTimeout;
+    this.onLockdown = opts.onLockdown;
     this.now = opts.now ?? (() => Date.now());
     this.log = opts.log ?? ((l) => console.log(l));
     this.sos =
@@ -267,6 +278,11 @@ export class RelayLockdownController {
         `[relay-trust] LOCKDOWN reason=${verdict.reason} certHash=${certHash.slice(0, 16)}… ` +
           "(relaying user traffic STOPPED; control channel kept up for recovery)",
       );
+      try {
+        this.onLockdown?.();
+      } catch {
+        /* cutting streams is best-effort; new streams are refused regardless */
+      }
       this.sos({
         certClass: "relay",
         certHash,
@@ -280,11 +296,10 @@ export class RelayLockdownController {
   }
 
   private scheduleRecheck(): void {
-    if (!this.recheck || this.recheckPending) return;
-    this.recheckPending = true;
+    if (!this.recheck || this.recheckTimer !== null || this.stopped) return;
     const t = this.setTimeoutFn(() => {
-      this.recheckPending = false;
-      if (!this.state.lockedDown) return;
+      this.recheckTimer = null;
+      if (!this.state.lockedDown || this.stopped) return;
       try {
         this.recheck?.();
       } catch {
@@ -293,6 +308,16 @@ export class RelayLockdownController {
       this.scheduleRecheck();
     }, this.recheckMs);
     (t as { unref?: () => void }).unref?.();
+    this.recheckTimer = t;
+  }
+
+  /** Cancel any pending re-check; called on daemon shutdown. Idempotent. */
+  stop(): void {
+    this.stopped = true;
+    if (this.recheckTimer !== null) {
+      this.clearTimeoutFn(this.recheckTimer);
+      this.recheckTimer = null;
+    }
   }
 
   /**

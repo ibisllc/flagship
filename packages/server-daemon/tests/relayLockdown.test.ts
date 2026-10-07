@@ -62,6 +62,14 @@ describe("RelayLockdownController — enforce OFF (default)", () => {
     expect(sos).not.toHaveBeenCalled();
   });
 
+  it("never cuts open streams under OBSERVE", async () => {
+    const onLockdown = vi.fn();
+    const c = new RelayLockdownController({ onLockdown, log: () => {} });
+    await c.onVerdict(fail);
+    await c.onVerdict(noVerdict);
+    expect(onLockdown).not.toHaveBeenCalled();
+  });
+
   it("default constructor (no opts) is OBSERVE", async () => {
     const c = new RelayLockdownController();
     await c.onVerdict(fail);
@@ -153,6 +161,53 @@ describe("RelayLockdownController — enforce ON", () => {
     expect(c.isRelayAllowed()).toBe(true);
     timers.shift()!();
     expect(recheck).toHaveBeenCalledTimes(1); // lifted ⇒ no further re-HELLO
+    expect(timers).toHaveLength(0);
+  });
+
+  it("fires onLockdown once on entering lockdown (to cut already-open streams)", async () => {
+    const onLockdown = vi.fn();
+    const c = new RelayLockdownController({ enforce: true, onLockdown, log: () => {} });
+    await c.onVerdict(fail);
+    await c.onVerdict(fail);
+    expect(onLockdown).toHaveBeenCalledTimes(1);
+    await c.onVerdict(ok);
+    await c.onVerdict(noVerdict);
+    expect(onLockdown).toHaveBeenCalledTimes(2);
+  });
+
+  it("a throwing onLockdown still leaves the box locked down", async () => {
+    const c = new RelayLockdownController({
+      enforce: true,
+      onLockdown: () => {
+        throw new Error("boom");
+      },
+      log: () => {},
+    });
+    await c.onVerdict(fail);
+    expect(c.isRelayAllowed()).toBe(false);
+  });
+
+  it("stop() cancels the pending recheck and prevents re-arming", async () => {
+    const timers: Array<() => void> = [];
+    const setTimeoutImpl = ((fn: () => void) => {
+      timers.push(fn);
+      return { unref() {} };
+    }) as unknown as typeof setTimeout;
+    const clearTimeoutImpl = vi.fn() as unknown as typeof clearTimeout;
+    const recheck = vi.fn();
+    const c = new RelayLockdownController({
+      enforce: true,
+      recheck,
+      setTimeoutImpl,
+      clearTimeoutImpl,
+      log: () => {},
+    });
+    await c.onVerdict(fail);
+    c.stop();
+    expect(clearTimeoutImpl).toHaveBeenCalledTimes(1);
+    timers.shift()!(); // a timer that already fired before the clear landed
+    expect(recheck).not.toHaveBeenCalled();
+    await c.onVerdict(fail);
     expect(timers).toHaveLength(0);
   });
 

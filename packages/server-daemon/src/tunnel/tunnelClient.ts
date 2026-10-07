@@ -165,6 +165,12 @@ export interface TunnelClient {
    * the next FRAME_DOMAIN_GRANTED broadcast.
    */
   requestTransfer(fqdn: string): void;
+  /**
+   * Close every open application stream (local socket + a CLOSE to the hub)
+   * while keeping the WS up. Relay-trust lockdown uses this so streams opened
+   * before the hub was found untrusted don't keep flowing. Returns the count.
+   */
+  closeStreams(): number;
   close(): Promise<void>;
 }
 
@@ -423,6 +429,16 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     requestTransfer: (fqdn: string) => {
       send(requestTransferFrame({ fqdn: fqdn.toLowerCase() }));
     },
+    closeStreams: () => {
+      const ids = [...streams.keys()];
+      for (const id of ids) {
+        const sock = streams.get(id);
+        streams.delete(id);
+        send(closeFrame(id, true));
+        sock?.destroy();
+      }
+      return ids.length;
+    },
     close: () =>
       new Promise<void>((resolve) => {
         // Mark close as expected so the supervisor's onClose hook (if
@@ -495,6 +511,8 @@ export interface SupervisedTunnelClient {
   rehello(): Promise<void>;
   /** Ask the live client (if any) to transfer ownership of an FQDN. */
   requestTransfer(fqdn: string): void;
+  /** Close the live client's application streams (if any); the WS stays up. */
+  closeStreams(): number;
   /** Stop supervising. Cancels any pending reconnect timer + closes the live WS. */
   close(): Promise<void>;
 }
@@ -694,6 +712,7 @@ export function superviseTunnelClient(
     requestTransfer: (fqdn: string) => {
       live?.requestTransfer(fqdn);
     },
+    closeStreams: () => live?.closeStreams() ?? 0,
     close: async () => {
       stopped = true;
       if (pendingTimer !== null) {

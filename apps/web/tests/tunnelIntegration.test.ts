@@ -175,6 +175,37 @@ describe("end-to-end tunnel: TCP → SNI router → WS hub → TunnelClient → 
     expect(received.includes(Buffer.from("hello-flagship", "utf8"))).toBe(true);
   });
 
+  it("closeStreams() cuts an open stream end to end while the tunnel stays up", async () => {
+    const hello = buildClientHello("photos.harry.flagship.services");
+    const client = netConnect(router.port, "127.0.0.1");
+    client.on("error", () => {});
+    const closed = new Promise<void>((resolve) => client.on("close", () => resolve()));
+    await new Promise<void>((resolve) => {
+      client.on("data", (chunk) => {
+        if (chunk.includes(Buffer.from("PING", "utf8"))) resolve();
+      });
+      client.write(Buffer.concat([Buffer.from(hello), Buffer.from("ping", "utf8")]));
+    });
+
+    expect(tunnel.closeStreams()).toBe(1);
+    await closed;
+    expect(tunnel.closeStreams()).toBe(0);
+
+    // The WS itself survived: a fresh stream still round-trips.
+    const again = await new Promise<Buffer>((resolve) => {
+      const c2 = netConnect(router.port, "127.0.0.1");
+      c2.on("error", () => {});
+      c2.on("data", (chunk) => {
+        if (chunk.includes(Buffer.from("AGAIN", "utf8"))) {
+          c2.end();
+          resolve(chunk);
+        }
+      });
+      c2.write(Buffer.concat([Buffer.from(hello), Buffer.from("again", "utf8")]));
+    });
+    expect(again.includes(Buffer.from("AGAIN", "utf8"))).toBe(true);
+  });
+
   it("rejects an SNI that has no registered tunnel", async () => {
     const hello = buildClientHello("unknown.flagship.services");
 

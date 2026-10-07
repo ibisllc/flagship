@@ -927,6 +927,10 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     ...(opts.onRelaySos ? { sos: opts.onRelaySos } : {}),
     // The tunnel is created below; a re-HELLO's HELLO_ACK re-runs the check.
     recheck: () => void tunnel.rehello().catch(() => {}),
+    onLockdown: () => {
+      const n = tunnel.closeStreams();
+      console.log(`[relay-trust] lockdown closed ${n} open stream(s)`);
+    },
   });
   const onHelloAckTrust = (e: {
     serviceBlessing: unknown;
@@ -1312,6 +1316,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     ready: () => Promise.resolve(),
     close: async () => {
       certRetryLoop?.stop();
+      relayLockdown.stop();
       if (renewalTimer) clearInterval(renewalTimer);
       aliasReconciler?.stop();
       await tunnel.close();

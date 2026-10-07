@@ -221,14 +221,18 @@ flow yet**, so fail-closed-by-default would brick the fleet.
   SOS. This is what deploying task #5 ships.
 - **ENFORCE (`true`):** on a concrete `verified === false` verdict with no
   covering owner `TrustException` for the relay cert-hash, the box enters
-  LOCKDOWN — `resolveBackend` returns null so new streams are refused (the WS /
-  control channel stays UP so a fresh blessing or owner exception can lift it)
+  LOCKDOWN — every already-open application stream is closed and
+  `resolveBackend` returns null so new streams are refused (the WS / control
+  channel stays UP so a fresh blessing or owner exception can lift it)
   — and emits an SOS via the owner-notify hook (log-only by default; production
   swaps in the `.com` push relay). A hub that presents NO blessing is also a
   failure under ENFORCE (`no-blessing`) — otherwise a rogue hub passes by
   omitting it — and no owner exception can cover it (there is no hub key to
   scope one to). An unreachable maintainer chain (`chain-fetch-error`) NEVER
-  locks down, under either flag. While locked down the box re-HELLOs every
+  locks down, under either flag. Note the limit of that: a `.com` outage is
+  fail-open only while the hub still holds a blessing. A hub that restarts
+  during the outage has none to present, so under ENFORCE every box it serves
+  locks down until `.com` returns and the hub re-fetches. While locked down the box re-HELLOs every
   60s, so a hub that was only mid-startup is re-checked in-session; a fresh
   valid blessing or a valid owner exception lifts lockdown.
 
@@ -266,11 +270,15 @@ Do these against the live fleet, in order; do NOT flip until all pass:
    several channels share. Before relying on eviction, give the issuer its own
    credential or, better, an operator-approved registry of persistent hub
    keys (the hub key is ephemeral-per-boot unless a volume is mounted).
-8. **Mid-session expiry.** A box verifies only on HELLO_ACK (and on the
+8. **Persist the hub's blessing.** Save the current blessing beside the hub
+   key (on the Fly volume) and reload it at boot, so a hub restart during a
+   `.com` outage doesn't lock down the fleet (see the ENFORCE note above).
+   Only effective when `FLAGSHIP_HUB_KEY_PATH` is on a mounted volume.
+9. **Mid-session expiry.** A box verifies only on HELLO_ACK (and on the
    lockdown re-check). A long-lived tunnel is not re-verified when its
    blessing expires; add a periodic re-HELLO before relying on expiry as the
    eviction clock.
-9. **Flip on ONE box first.** Set `FLAGSHIP_RELAY_TRUST_ENFORCE=true` on a
+10. **Flip on ONE box first.** Set `FLAGSHIP_RELAY_TRUST_ENFORCE=true` on a
    single canary box, exercise a real failure + recovery, THEN roll to the
    fleet. Keep the flag flippable (no redeploy needed to revert).
 
