@@ -162,9 +162,13 @@ edge-to-edge can no longer be opted out of and `MainActivity` already calls
 screens and the manifest declares none (no `screenOrientation`,
 `resizeableActivity`, `maxAspectRatio`, no `requestedOrientation` call);
 predictive back defaults on and nothing overrides the legacy `onBackPressed`. So
-the exposure was toolchain, not runtime. Reviewer build is `versionCode 7 /
-0.0.7`, signed with the upload cert, verified at `targetSdkVersion='36'` with
+the exposure was toolchain, not runtime. Reviewer build is `versionCode 8 /
+0.0.8`, signed with the upload cert, verified at `targetSdkVersion='36'` with
 the recovery credential gate intact through the newer R8. 1333 unit tests green.
+Note on version codes: 7 was consumed by the upload Play BLOCKED on targetSdk,
+and discarding that draft did NOT free it — any artifact that reaches the
+artifact library burns its integer permanently. `Release → App bundle explorer`
+lists every code ever uploaded; take one above the highest.
 **Remaining (owner):** upload the AAB to the internal-testing track — a release
 in review cannot be edited, you supersede it with a new release on the SAME
 track. One open question: the upload-cert fingerprint

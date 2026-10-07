@@ -30,8 +30,8 @@ android {
         applicationId = "com.flagshipserver.app"
         minSdk = 28
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.0.7"
+        versionCode = 8
+        versionName = "0.0.8"
         vectorDrawables { useSupportLibrary = true }
         // Keep APK lean (English only); reproducible-build prerequisite.
         resourceConfigurations += setOf("en")
