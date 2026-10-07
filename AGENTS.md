@@ -150,6 +150,30 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-10-07 (Android targets API 36) — Play refuses uploads below targetSdk 36,
+and meeting it moved the whole Android toolchain.** AGP 8.7.2 caps `compileSdk`
+at 35, and AGP 8.9.1 needs Gradle 8.11.1, so: `compileSdk`/`targetSdk` 35→36,
+AGP 8.7.2→8.9.1, Gradle 8.10.2→8.11.1, and CI's `sdkmanager` pin →
+`platforms;android-36` + `build-tools;36.0.0` (otherwise a clean checkout builds
+against an SDK it no longer targets). Android 16's three ENFORCED behaviour
+changes were checked BEFORE the bump and are all already no-ops here:
+edge-to-edge can no longer be opted out of and `MainActivity` already calls
+`enableEdgeToEdge()`; orientation/resizability locks are ignored on large
+screens and the manifest declares none (no `screenOrientation`,
+`resizeableActivity`, `maxAspectRatio`, no `requestedOrientation` call);
+predictive back defaults on and nothing overrides the legacy `onBackPressed`. So
+the exposure was toolchain, not runtime. Reviewer build is `versionCode 7 /
+0.0.7`, signed with the upload cert, verified at `targetSdkVersion='36'` with
+the recovery credential gate intact through the newer R8. 1333 unit tests green.
+**Remaining (owner):** upload the AAB to the internal-testing track — a release
+in review cannot be edited, you supersede it with a new release on the SAME
+track. One open question: the upload-cert fingerprint
+`3a833a30cf02bcf93d55331ae63d0c1ac1bb4ce1465f72d57925502a89ce3c6b` is NOT in
+`assetlinks.json`, which is correct for Play distribution (Google re-signs with
+the app-signing key — compare its SHA-256 in Play Console → Setup → App
+integrity against the five published fingerprints) but breaks
+`get_login_creds`, and therefore passkey recovery, for a SIDELOADED APK.
+
 **2026-10-07 (demo fleet trimmed to one; rate-limit binding found inert) — the
 fleet is now exactly one box, and a pre-existing enforcement gap surfaced while
 verifying the credential gate.** Demo state: `playstore-test-0725` (Play
