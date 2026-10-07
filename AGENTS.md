@@ -187,7 +187,15 @@ control), and pre-auth enrollment state is what the login decision tree reads
 to know whether to prompt for a code. With the gate in place, harvesting them
 no longer leads to an initiate. The one free trim left, if ever wanted: serve
 `totpEnrolled` as a boolean instead of the enrollment TIMESTAMP (costs the
-"generated on <date>" line in Settings on web + iOS). Every surface updated: webapp (recovery sub-origin forwards the
+"generated on <date>" line in Settings on web + iOS). Note for the next
+reviewer who raises enumeration: `GET /api/account/resolve/:u` is public too
+and returns MORE posture (kind, totpEnrolled, recovery present + gated),
+because the login tree branches on it pre-auth — posture is public by design;
+acting on it is what the gate stops. Proof TTL is 5 min (the house envelope
+freshness), and a replay inside it still hits the one-pending-row 409 unless
+the recoverer self-cancels first; binding the proof to the incoming newIrkPub
+is impossible (the client derives that key from the seed this very fetch hands
+it), so single-use-with-server-state is the only real upgrade left. Every surface updated: webapp (recovery sub-origin forwards the
 proof; takeover, keyfile-import and replace-device ceremonies carry a credential
 and sign the completion; shell cache **v29**), iOS, Android, and both mocks
 mirror the gate. **Remaining (owner):** `wrangler secret put

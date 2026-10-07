@@ -143,6 +143,25 @@ export async function handleUsernameLookup(
   // Defaults to `'single'` for pre-migration rows (matching the
   // column DEFAULT). The totp_secret_encrypted blob is NEVER echoed
   // here — only the enrolled-at timestamp, which is non-sensitive.
+  //
+  // This read is PUBLIC, and that has been raised as enumeration of an
+  // account's security posture. Removing the fields from here buys
+  // nothing: `GET /api/account/resolve/:u` is also public and returns
+  // the same facts and more (`kind`, `totpEnrolled`, whether a recovery
+  // credential exists and whether it is passphrase-gated), because the
+  // login decision tree has to branch on them BEFORE anyone can
+  // authenticate — that is the "login never 404s" design in
+  // docs/login-and-account-redesign.md. Posture is deliberately public;
+  // what must not be public is the ability to ACT on it, which is why
+  // `handleInitiateRePair` demands an enrolled credential rather than
+  // relying on any of this being secret.
+  //
+  // `irkPub` / `adminRootPub` are verification keys that clients and
+  // boxes pin and check signatures against; their secrecy was never a
+  // control. The one thing here with no public consumer is the precise
+  // enrollment TIMESTAMP (resolve already gives the boolean) — drop it
+  // to `totpEnrolled` if the metadata is ever judged worth the
+  // "generated on <date>" line it feeds in Settings on web + iOS.
   return ok({
     username: rec.username,
     irkPub: rec.irkPubHex,

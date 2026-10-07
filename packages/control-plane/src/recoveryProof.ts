@@ -47,12 +47,27 @@
  *     recovery (a new passphrase) invalidates every outstanding proof.
  *   - TTL-bounded at mint AND re-checked at verify, so a token minted
  *     with an absurd expiry by a future caller is still refused.
- *   - Residual: within its TTL a proof can be presented more than once,
- *     and anyone who can read it can initiate. Reading it requires
- *     breaking TLS to `.com` or owning the recovering client — at which
- *     point the attacker already has the recovered seed, which is
- *     strictly more powerful. A single-use proof needs server state;
- *     revisit if the TTL ever needs to be long.
+ *   - Residual: the token is bearer, not single-use. Reading one
+ *     requires breaking TLS to `.com` or owning the recovering client —
+ *     and a client that holds the proof also holds the recovered seed,
+ *     which is strictly more powerful. The exposure is also narrower
+ *     than "bearer" suggests: a successful initiate takes the
+ *     one-row-per-account lock (`pending_re_pairs.username` is the PK),
+ *     so a replay inside the TTL hits 409 "re-pair already pending".
+ *     The only replay that lands is the legitimate recoverer SELF-
+ *     CANCELLING inside the five-minute window and an attacker
+ *     re-initiating in what is left of it.
+ *
+ *     Reviewers ask why the proof is not bound to the incoming
+ *     `newIrkPub`, which would kill even that: the client cannot know
+ *     that key yet. It derives the new IRK from the UMK seed that THIS
+ *     fetch is what hands it, so at mint time the value does not exist.
+ *     Binding would need a second round trip, which an attacker holding
+ *     the first token could make themselves — circular. Making the
+ *     proof single-use is the real upgrade and it needs server state
+ *     (one row per issued proof); worth it only if the TTL ever has to
+ *     grow, since at five minutes the window is thinner than the one
+ *     the signed envelopes beside it already accept.
  *
  * The secret is `FLAGSHIP_RECOVERY_PROOF_SECRET` — a MAC key, not a
  * key-encrypting key (nothing here is encrypted, and no user data is
@@ -78,12 +93,17 @@ const PREFIX = "rp1";
 const TAG = "flagship/recovery-proof/v1";
 
 /**
- * How long a minted proof stays usable. The legitimate flow presents it
- * seconds after the gated fetch (unwrap → confirm → initiate), so this
- * is sized for a human reading the grace explainer in between, not for
- * resumability.
+ * How long a minted proof stays usable.
+ *
+ * The legitimate flow presents it SECONDS after the gated fetch —
+ * unwrap → install the recovered UMK → derive the rotated key →
+ * initiate, with no human step in between (every client confirms the
+ * takeover BEFORE the unwrap). Five minutes is therefore already
+ * generous, and it matches the freshness bound every signed envelope in
+ * this package uses (`DEFAULT_MAX_AGE`), so there is one window to
+ * reason about rather than two.
  */
-export const RECOVERY_PROOF_TTL_MS = 15 * 60_000;
+export const RECOVERY_PROOF_TTL_MS = 5 * 60_000;
 
 export interface RecoveryProofBinding {
   /** Account the proof authorizes recovery for (compared lowercased). */
