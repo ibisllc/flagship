@@ -9,7 +9,10 @@
  *       builds a `CaTrustChain` anchored at the BAKED pin,
  *   (b) calls `shouldRelayThroughHub` to verify the blessing chains to the
  *       baked pin + is unexpired, and
- *   (c) verifies `hubSig` over the box's nonce against the blessing's
+ *   (c) checks the blessing's `hubHost` is exactly the services apex the
+ *       box's own `<server>.<user>.<apex>` FQDN lives under — a blessing
+ *       for any other zone doesn't cover this box,
+ *   (d) verifies `hubSig` over the box's nonce against the blessing's
  *       `hubKeyPub` — proof the hub HOLDS the blessed key (defeats a MITM
  *       that merely replays an observed blessing).
  *
@@ -41,6 +44,7 @@ export type RelayTrustVerdictReason =
   | "no-blessing"
   | "hubsig-missing"
   | "hubsig-mismatch"
+  | "hubhost-mismatch"
   | "chain-fetch-error";
 
 export interface RelayTrustVerdict {
@@ -66,6 +70,12 @@ export interface MaintainerChainMaterial {
 export interface RelayTrustVerifierOptions {
   /** `.com` base URL, e.g. `https://flagshipserver.com`. */
   comBaseUrl: string;
+  /**
+   * The box's own FQDN, e.g. `home.alice.flagship.services`. A blessing
+   * covers it only when its `hubHost` is that FQDN's services apex
+   * (`flagship.services`). Unset ⇒ unchecked.
+   */
+  serverFqdn?: string;
   /** Baked maintainer pin. Defaults to the protocol constant. */
   pinnedMandateHash?: string;
   /** How long to cache the fetched maintainer chain. Default 1h. */
@@ -92,6 +102,7 @@ const DEFAULT_CHAIN_CACHE_MS = 60 * 60_000;
  */
 export class RelayTrustVerifier {
   private readonly comBaseUrl: string;
+  private readonly servicesApex: string | undefined;
   private readonly pinnedMandateHash: string;
   private readonly chainCacheMs: number;
   private readonly fetchImpl: typeof fetch;
@@ -101,6 +112,10 @@ export class RelayTrustVerifier {
 
   constructor(opts: RelayTrustVerifierOptions) {
     this.comBaseUrl = opts.comBaseUrl.replace(/\/$/, "");
+    this.servicesApex =
+      opts.serverFqdn === undefined
+        ? undefined
+        : opts.serverFqdn.toLowerCase().split(".").slice(2).join(".");
     this.pinnedMandateHash = opts.pinnedMandateHash ?? MAINTAINER_PINNED_MANDATE_HASH;
     this.chainCacheMs = opts.chainCacheMs ?? DEFAULT_CHAIN_CACHE_MS;
     this.fetchImpl = opts.fetchImpl ?? fetch;
@@ -180,7 +195,23 @@ export class RelayTrustVerifier {
       return v;
     }
 
-    // (c) proof-of-possession: hubSig over the box nonce under hubKeyPub.
+    // (c) the blessing must name the zone this box serves under.
+    if (
+      this.servicesApex !== undefined &&
+      (this.servicesApex === "" ||
+        typeof blessing.hubHost !== "string" ||
+        blessing.hubHost.toLowerCase() !== this.servicesApex)
+    ) {
+      const v: RelayTrustVerdict = {
+        verified: false,
+        reason: "hubhost-mismatch",
+        ...(hubKeyPub ? { hubKeyPub } : {}),
+      };
+      this.emit(v);
+      return v;
+    }
+
+    // (d) proof-of-possession: hubSig over the box nonce under hubKeyPub.
     if (!hubSigHex) {
       const v: RelayTrustVerdict = {
         verified: false,

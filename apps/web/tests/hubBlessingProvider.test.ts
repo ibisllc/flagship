@@ -69,6 +69,27 @@ describe("HubBlessingProvider", () => {
     expect(ed.verify(sig, nonce, kp.publicKey)).toBe(true);
   });
 
+  it("authenticates to .com with the shared secret when configured", async () => {
+    const kp = loadOrCreateHubKeypair();
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { hubKeyPub: string };
+      return new Response(JSON.stringify({ blessing: mintBlessing(body.hubKeyPub) }), {
+        status: 200,
+      });
+    });
+    const provider = new HubBlessingProvider({
+      keypair: kp,
+      hubHost: "flagship.services",
+      comBaseUrl: "https://flagshipserver.com",
+      sharedSecret: "s3cret",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      log: () => {},
+    });
+    await provider.refresh();
+    const headers = fetchImpl.mock.calls[0]![1]!.headers as Record<string, string>;
+    expect(headers.authorization).toBe("Bearer s3cret");
+  });
+
   it("keeps the prior blessing on a .com error (fail-open / OBSERVE-safe)", async () => {
     const kp = loadOrCreateHubKeypair();
     let call = 0;

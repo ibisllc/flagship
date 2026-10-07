@@ -471,17 +471,19 @@ export async function start(opts: {
   // ServiceBlessing daily so each HELLO_ACK can prove the relay holds a
   // blessed key. OBSERVE-safe: if the blessing isn't fetched yet (startup
   // race / `.com` down) the hub omits it and the box keeps relaying. Set
-  // FLAGSHIP_HUB_HOST to the served host (default flagship.services);
-  // FLAGSHIP_HUB_KEY_PATH persists the key to a Fly volume if mounted.
+  // FLAGSHIP_HUB_HOST to the served host (default: the services apex, which
+  // is what `.com` allows); FLAGSHIP_HUB_KEY_PATH persists the key to a Fly
+  // volume if mounted.
   let blessingProvider: HubBlessingProvider | undefined;
   if (surface === "services" || surface === "both") {
-    const hubHost = process.env.FLAGSHIP_HUB_HOST ?? "flagship.services";
+    const hubHost = process.env.FLAGSHIP_HUB_HOST ?? servicesApex;
     const keyPath = process.env.FLAGSHIP_HUB_KEY_PATH;
     const keypair = loadOrCreateHubKeypair(keyPath);
     blessingProvider = new HubBlessingProvider({
       keypair,
       hubHost,
       comBaseUrl,
+      ...(servicesControlSecret ? { sharedSecret: servicesControlSecret } : {}),
     });
     // Best-effort: don't block listen() on the first fetch.
     void blessingProvider.start();

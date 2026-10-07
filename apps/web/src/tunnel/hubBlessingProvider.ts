@@ -77,6 +77,8 @@ export interface HubBlessingProviderOptions {
   hubHost: string;
   /** `.com` base URL, e.g. `https://flagshipserver.com`. */
   comBaseUrl: string;
+  /** `SERVICES_CONTROL_SECRET` — `.com` blesses only a caller holding it. */
+  sharedSecret?: string;
   /** Refresh cadence. Default 12h (blessing TTL is ~26h, so this is slack). */
   refreshIntervalMs?: number;
   /** Test seam — replace global fetch. */
@@ -98,6 +100,7 @@ export class HubBlessingProvider {
   private readonly keypair: HubKeypair;
   private readonly hubHost: string;
   private readonly comBaseUrl: string;
+  private readonly sharedSecret: string | undefined;
   private readonly refreshIntervalMs: number;
   private readonly fetchImpl: typeof fetch;
   private readonly setIntervalFn: typeof setInterval;
@@ -110,6 +113,7 @@ export class HubBlessingProvider {
     this.keypair = opts.keypair;
     this.hubHost = opts.hubHost;
     this.comBaseUrl = opts.comBaseUrl.replace(/\/$/, "");
+    this.sharedSecret = opts.sharedSecret;
     this.refreshIntervalMs = opts.refreshIntervalMs ?? DEFAULT_REFRESH_MS;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.setIntervalFn = opts.setIntervalImpl ?? setInterval;
@@ -147,7 +151,10 @@ export class HubBlessingProvider {
         `${this.comBaseUrl}/api/services/hub-blessing`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            ...(this.sharedSecret ? { authorization: `Bearer ${this.sharedSecret}` } : {}),
+          },
           body: JSON.stringify({
             hubKeyPub: this.hubKeyPubHex(),
             hubHost: this.hubHost,

@@ -1208,11 +1208,22 @@ export async function tryControlPlane(
   }
   // The `.services` hub asks `.com` to bless its self-generated key. `.com`
   // signs a short-lived (~26h) ServiceBlessing with the live hot CA key; a
-  // box verifies it through the maintainer chain before relaying. An
-  // operator evicts a rogue Fly by ceasing to bless it (lapses within a
-  // day).
+  // box verifies it through the maintainer chain before relaying. Only the
+  // hub holding SERVICES_CONTROL_SECRET may ask, and only for the services
+  // apex — so an operator evicts a rogue Fly by rotating that secret (its
+  // blessing lapses within a day).
   if (method === "POST" && ROUTE_RE.HUB_BLESSING.test(path)) {
-    return finish(handleHubBlessing({ ca }, await readJson(request)));
+    return finish(
+      handleHubBlessing(
+        {
+          ca,
+          ...(env.SERVICES_CONTROL_SECRET ? { sharedSecret: env.SERVICES_CONTROL_SECRET } : {}),
+          allowedHubHosts: [env.SERVICES_APEX ?? "flagship.services"],
+        },
+        await readJson(request),
+        bearer(request.headers.get("authorization")),
+      ),
+    );
   }
   // Owner-signed, per-cert TrustException sync. `.com` is an untrusted
   // carrier: the envelope is device-key-signed + cert-hash-scoped, so it

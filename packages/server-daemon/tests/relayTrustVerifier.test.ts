@@ -87,11 +87,15 @@ const hubPriv = ed.utils.randomPrivateKey();
 const hubPub = ed.getPublicKey(hubPriv);
 const hubPubHex = Buffer.from(hubPub).toString("hex");
 
-function mintBlessing(issuedAt = NOW - 1000, ttlMs = 26 * 60 * 60_000) {
+function mintBlessing(
+  issuedAt = NOW - 1000,
+  ttlMs = 26 * 60 * 60_000,
+  hubHost = "flagship.services",
+) {
   return signServiceBlessing(
     {
       hubKeyPub: hubPubHex,
-      hubHost: "flagship.services",
+      hubHost,
       nonce: "n1",
       issuedAt,
       expiresAt: issuedAt + ttlMs,
@@ -128,6 +132,43 @@ describe("RelayTrustVerifier (OBSERVE)", () => {
     const { nonce, sig } = nonceAndSig();
     const verdict = await v.verify(mintBlessing(), sig, nonce);
     expect(verdict).toEqual({ verified: true, reason: "ok", hubKeyPub: hubPubHex });
+  });
+
+  it("verifies a blessing naming the box's own services apex", async () => {
+    const v = new RelayTrustVerifier({
+      comBaseUrl: "https://flagshipserver.com",
+      serverFqdn: "home.alice.flagship.services",
+      pinnedMandateHash: PIN,
+      fetchImpl: chainMaterialFetch(),
+      now: () => NOW,
+      log: () => {},
+    });
+    const { nonce, sig } = nonceAndSig();
+    const verdict = await v.verify(mintBlessing(), sig, nonce);
+    expect(verdict).toEqual({ verified: true, reason: "ok", hubKeyPub: hubPubHex });
+  });
+
+  it.each([
+    "probe-verify.invalid",
+    "services",
+    "alice.flagship.services",
+    "gym.flagship.services",
+  ])("verified=false (hubhost-mismatch) for a blessing naming %s", async (hubHost) => {
+    const v = new RelayTrustVerifier({
+      comBaseUrl: "https://flagshipserver.com",
+      serverFqdn: "home.alice.flagship.services",
+      pinnedMandateHash: PIN,
+      fetchImpl: chainMaterialFetch(),
+      now: () => NOW,
+      log: () => {},
+    });
+    const { nonce, sig } = nonceAndSig();
+    const verdict = await v.verify(mintBlessing(NOW - 1000, 26 * 60 * 60_000, hubHost), sig, nonce);
+    expect(verdict).toEqual({
+      verified: false,
+      reason: "hubhost-mismatch",
+      hubKeyPub: hubPubHex,
+    });
   });
 
   it("verified=false when the blessing chains but the hubSig is wrong (replay defense)", async () => {

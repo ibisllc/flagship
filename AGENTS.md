@@ -150,6 +150,24 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-10-06 (hub-blessing issuer authenticated) — closes an externally
+reported CA signing oracle; NOT deployed.** `POST /api/services/hub-blessing`
+had the hot CA key sign a `ServiceBlessing` for any caller's key and any
+`hubHost`, so a blessing proved nothing and "evict a rogue hub by ceasing to
+bless it" was unenforceable. It now requires the existing
+`SERVICES_CONTROL_SECRET` as a bearer (unset ⇒ 503, mismatch ⇒ 401) and only
+blesses `hubHost == SERVICES_APEX` (else 403); the `.services` hub sends the
+secret and defaults its `hubHost` to its services apex. The box's
+`RelayTrustVerifier` also rejects a blessing whose `hubHost` isn't its own
+FQDN's apex (`hubhost-mismatch`). Impact was latent (relay trust is
+OBSERVE-only) but had to close before `FLAGSHIP_RELAY_TRUST_ENFORCE` flips.
+**Remaining (owner):** both prod sides already hold `SERVICES_CONTROL_SECRET`,
+so no new secret is needed. Deploy `.services` (Fly) FIRST so the hub sends the
+header, then `.com`; the reverse order only costs blessings (a box with no
+blessing gets an undefined verdict, which never locks down). The gym Fly app
+needs the secret too or its hub simply goes unblessed. Box-side check reaches
+boxes on their next daemon update/reburn.
+
 **2026-10-06 (demo servers moved to UpCloud + leak findings) — DEPLOYED and
 live-verified; demos now provision on UpCloud.** `DEMO_CLOUD_PROVIDER`
 (`upcloud` in `wrangler.toml`; unset ⇒ `hetzner`) picks where NEW demo servers are created;

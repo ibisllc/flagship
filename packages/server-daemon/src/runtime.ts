@@ -911,6 +911,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // supplied), mirroring the vibe-code W10 hook.
   const relayTrustVerifier = new RelayTrustVerifier({
     comBaseUrl: opts.controlPlaneBaseUrl,
+    serverFqdn: opts.serverFqdn,
   });
   const relayLockdown = new RelayLockdownController({
     enforce: relayTrustEnforceFromEnv(),

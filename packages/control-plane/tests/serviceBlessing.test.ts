@@ -36,11 +36,15 @@ const ca = caFromHex("01".repeat(32));
 const caHex = hex(ca.publicKey);
 const hubKeyPub = "ab".repeat(32);
 
+const SECRET = "services-control-secret";
+const AUTH = { sharedSecret: SECRET, allowedHubHosts: ["flagship.services"] };
+
 describe("handleHubBlessing", () => {
   it("mints a ServiceBlessing that verifies through the chain (~26h TTL)", () => {
     const res = handleHubBlessing(
-      { ca: { keypair: ca, issuer: "flagship-ca-v1" }, now: () => NOW },
+      { ...AUTH, ca: { keypair: ca, issuer: "flagship-ca-v1" }, now: () => NOW },
       { hubKeyPub, hubHost: "flagship.services" },
+      SECRET,
     );
     expect(res.status).toBe(200);
     const blessing = (res.body as { blessing: ServiceBlessing }).blessing;
@@ -58,8 +62,9 @@ describe("handleHubBlessing", () => {
 
   it("honors a caller-supplied nonce", () => {
     const res = handleHubBlessing(
-      { ca: { keypair: ca, issuer: "x" }, now: () => NOW },
+      { ...AUTH, ca: { keypair: ca, issuer: "x" }, now: () => NOW },
       { hubKeyPub, hubHost: "flagship.services", nonce: "fixed-nonce" },
+      SECRET,
     );
     expect((res.body as { blessing: ServiceBlessing }).blessing.nonce).toBe(
       "fixed-nonce",
@@ -68,25 +73,70 @@ describe("handleHubBlessing", () => {
 
   it("rejects a non-hex hubKeyPub", () => {
     const res = handleHubBlessing(
-      { ca: { keypair: ca, issuer: "x" } },
+      { ...AUTH, ca: { keypair: ca, issuer: "x" } },
       { hubKeyPub: "nothex", hubHost: "flagship.services" },
+      SECRET,
     );
     expect(res.status).toBe(400);
   });
 
   it("rejects a hubHost containing the separator", () => {
     const res = handleHubBlessing(
-      { ca: { keypair: ca, issuer: "x" } },
+      { ...AUTH, ca: { keypair: ca, issuer: "x" } },
       { hubKeyPub, hubHost: "a|b" },
+      SECRET,
     );
     expect(res.status).toBe(400);
   });
 
   it("rejects a missing body", () => {
-    expect(handleHubBlessing({ ca: { keypair: ca, issuer: "x" } }, null).status).toBe(
+    expect(handleHubBlessing({ ...AUTH, ca: { keypair: ca, issuer: "x" } }, null, SECRET).status).toBe(
       400,
     );
   });
+
+  it("refuses to sign when the shared secret is unconfigured (fails closed)", () => {
+    const res = handleHubBlessing(
+      { ca: { keypair: ca, issuer: "x" }, allowedHubHosts: ["flagship.services"] },
+      { hubKeyPub, hubHost: "flagship.services" },
+      SECRET,
+    );
+    expect(res.status).toBe(503);
+    expect(res.body).not.toHaveProperty("blessing");
+  });
+
+  it.each([
+    ["no secret", null],
+    ["a wrong secret", "services-control-secreX"],
+    ["a prefix of the secret", "services-control"],
+  ])("refuses an anonymous caller presenting %s", (_label, presented) => {
+    const res = handleHubBlessing(
+      { ...AUTH, ca: { keypair: ca, issuer: "x" } },
+      { hubKeyPub, hubHost: "flagship.services" },
+      presented,
+    );
+    expect(res.status).toBe(401);
+    expect(res.body).not.toHaveProperty("blessing");
+  });
+
+  it("checks the secret before looking at the body", () => {
+    expect(handleHubBlessing({ ...AUTH, ca: { keypair: ca, issuer: "x" } }, null, null).status).toBe(
+      401,
+    );
+  });
+
+  it.each(["probe-verify.invalid", "services", "alice.flagship.services", "gym.flagship.services"])(
+    "refuses to bless hubHost %s outside the allowlist",
+    (hubHost) => {
+      const res = handleHubBlessing(
+        { ...AUTH, ca: { keypair: ca, issuer: "x" } },
+        { hubKeyPub, hubHost },
+        SECRET,
+      );
+      expect(res.status).toBe(403);
+      expect(res.body).not.toHaveProperty("blessing");
+    },
+  );
 });
 
 describe("trust-exception sync", () => {

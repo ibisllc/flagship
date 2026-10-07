@@ -78,10 +78,14 @@ mandate. Everything verifies forward from that pin.
 1. `.services` generates its **own** keypair (persisted on the Fly app).
 2. It asks `.com` to bless its pubkey; `.com` signs a short-lived
    `ServiceBlessing{ hubKeyPubkey, hubHost, nonce, issuedAt, expiresAt }` with
-   the live hot CA key. Re-requested ~daily. Operator evicts a rogue Fly by
-   telling `.com` to stop blessing → expires within a day.
+   the live hot CA key. Re-requested ~daily. The request must carry
+   `Authorization: Bearer <SERVICES_CONTROL_SECRET>` (unset ⇒ 503, mismatch ⇒
+   401) and `hubHost` must equal `.com`'s `SERVICES_APEX` (else 403) — without
+   that the endpoint is a signing oracle and eviction means nothing. Operator
+   evicts a rogue Fly by rotating `SERVICES_CONTROL_SECRET` → its blessing
+   expires within a day.
 3. The box's daemon verifies the blessing (`pin → chain → CA key authorized now
-   → blessing not expired`) **before** connecting to the tunnel, and the hub
+   → blessing not expired → hubHost is the box's own services apex`) **before** connecting to the tunnel, and the hub
    presents it (or the box challenges it) so the box knows the relay it's
    talking to holds a `.com`-blessed key. Fail → lockdown + relay-class SOS.
 

@@ -29,23 +29,25 @@ function stubDb(): D1Database {
     batch: async () => [],
   } as unknown as D1Database;
 }
-function env(): ControlPlaneEnv {
-  return { DB: stubDb() };
+function env(extra: Partial<ControlPlaneEnv> = {}): ControlPlaneEnv {
+  return { DB: stubDb(), SERVICES_CONTROL_SECRET: SECRET, ...extra };
 }
 const ORIGIN = "https://flagshipserver.com";
+const SECRET = "services-control-secret";
+
+function blessingRequest(body: unknown, authorization?: string): Request {
+  return new Request(`${ORIGIN}/api/services/hub-blessing`, {
+    method: "POST",
+    headers: authorization ? { authorization } : {},
+    body: JSON.stringify(body),
+  });
+}
 
 describe("POST /api/services/hub-blessing — dispatch", () => {
-  it("mints a ServiceBlessing signed by the env CA key", async () => {
-    const r = await tryControlPlane(
-      new Request(`${ORIGIN}/api/services/hub-blessing`, {
-        method: "POST",
-        body: JSON.stringify({
-          hubKeyPub: "ab".repeat(32),
-          hubHost: "flagship.services",
-        }),
-      }),
-      env(),
-    );
+  const hub = { hubKeyPub: "ab".repeat(32), hubHost: "flagship.services" };
+
+  it("mints a ServiceBlessing signed by the env CA key for the authenticated hub", async () => {
+    const r = await tryControlPlane(blessingRequest(hub, `Bearer ${SECRET}`), env());
     expect(r).not.toBeNull();
     expect(r!.status).toBe(200);
     const body = (await r!.json()) as { blessing: ServiceBlessing };
@@ -61,12 +63,50 @@ describe("POST /api/services/hub-blessing — dispatch", () => {
     ).toEqual({ ok: true });
   });
 
+  it("401 for an anonymous caller (the reported signing-oracle request)", async () => {
+    const r = await tryControlPlane(
+      blessingRequest({ hubKeyPub: "d7".repeat(32), hubHost: "probe-verify.invalid" }),
+      env(),
+    );
+    expect(r!.status).toBe(401);
+    expect(await r!.json()).not.toHaveProperty("blessing");
+  });
+
+  it("401 for a wrong bearer secret", async () => {
+    const r = await tryControlPlane(blessingRequest(hub, "Bearer nope"), env());
+    expect(r!.status).toBe(401);
+  });
+
+  it("503 when SERVICES_CONTROL_SECRET is unset (fails closed)", async () => {
+    const r = await tryControlPlane(
+      blessingRequest(hub, `Bearer ${SECRET}`),
+      env({ SERVICES_CONTROL_SECRET: undefined }),
+    );
+    expect(r!.status).toBe(503);
+  });
+
+  it("403 for a hubHost other than the services apex, even when authenticated", async () => {
+    const r = await tryControlPlane(
+      blessingRequest({ ...hub, hubHost: "probe-verify.invalid" }, `Bearer ${SECRET}`),
+      env(),
+    );
+    expect(r!.status).toBe(403);
+  });
+
+  it("allows the configured SERVICES_APEX (the gym env) and only that", async () => {
+    const gym = env({ SERVICES_APEX: "gym.flagship.services" });
+    const ok = await tryControlPlane(
+      blessingRequest({ ...hub, hubHost: "gym.flagship.services" }, `Bearer ${SECRET}`),
+      gym,
+    );
+    expect(ok!.status).toBe(200);
+    const prodHost = await tryControlPlane(blessingRequest(hub, `Bearer ${SECRET}`), gym);
+    expect(prodHost!.status).toBe(403);
+  });
+
   it("400 on a malformed body", async () => {
     const r = await tryControlPlane(
-      new Request(`${ORIGIN}/api/services/hub-blessing`, {
-        method: "POST",
-        body: JSON.stringify({ hubKeyPub: "nothex" }),
-      }),
+      blessingRequest({ hubKeyPub: "nothex" }, `Bearer ${SECRET}`),
       env(),
     );
     expect(r!.status).toBe(400);
