@@ -515,3 +515,22 @@ describe("rateLimit — wired into route()", () => {
     ]);
   });
 });
+
+describe("re-pair initiate budget", () => {
+  it("routes POST /api/users/:u/re-pair to its own endpoint, keyed by target", () => {
+    expect(endpointFor("POST", "/api/users/alice/re-pair")).toBe("re-pair-initiate");
+    expect(extractUsernameHash("/api/users/alice/re-pair")).toBe("alice");
+  });
+
+  it("does NOT limit /object or /complete — both are bounded by the pending row", () => {
+    expect(endpointFor("POST", "/api/users/alice/re-pair/object")).toBeNull();
+    expect(endpointFor("POST", "/api/users/alice/re-pair/complete")).toBeNull();
+  });
+
+  it("budgets the target account tighter than the source IP", () => {
+    const axes = LIMITS["re-pair-initiate"];
+    const perUser = axes.find((a) => a.axis === "usernameHash");
+    expect(perUser).toBeDefined();
+    expect(perUser!.limit).toBeLessThanOrEqual(3);
+  });
+});

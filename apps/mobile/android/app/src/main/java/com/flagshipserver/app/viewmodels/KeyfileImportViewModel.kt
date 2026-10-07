@@ -18,10 +18,12 @@ package com.flagshipserver.app.viewmodels
 
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.RePairCompleteRequest
 import com.flagshipserver.app.api.RePairInitiateRequest
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
+import com.flagshipserver.app.core.RePairCompleteClaim
 import com.flagshipserver.app.core.RePairInitiateClaim
 import com.flagshipserver.app.keystore.Keyfile
 import com.flagshipserver.app.keystore.Keystore
@@ -100,7 +102,7 @@ class KeyfileImportViewModel(
             val oldVersion = Keystore.currentIrkVersion()
             val newVersion = oldVersion + 1
             val newSign = Keystore.deriveIRK("Bring this device into your Flagship account", newVersion)
-            Keystore.deriveIRK("Confirm import", oldVersion)
+            val oldSign = Keystore.deriveIRK("Confirm import", oldVersion)
             val oldPubHex = pubHexForVersion(oldVersion)
             val newPubHex = pubHexForVersion(newVersion)
 
@@ -112,6 +114,13 @@ class KeyfileImportViewModel(
                 issuedAt = issuedAt,
             )
             val signature = HexUtil.encode(newSign.sign(canonical))
+            // The CREDENTIAL: a second signature over the SAME bytes by
+            // the OLD (currently registered) IRK. The key file gave us
+            // the seed, so we can derive that key and prove account
+            // ownership — which is what .com requires, since `signature`
+            // above is made by the key we're asking it to install and
+            // `oldIrkPub` is public.
+            val oldSignature = HexUtil.encode(oldSign.sign(canonical))
 
             val resp = server.initiateRePair(
                 username = username,
@@ -124,6 +133,7 @@ class KeyfileImportViewModel(
                     ),
                     signature = signature,
                     totpProof = null,
+                    oldIrkSignature = oldSignature,
                 ),
                 ifMatch = null,
             )
@@ -153,7 +163,30 @@ class KeyfileImportViewModel(
         val grace = _phase.value as? KeyfileImportPhase.Grace ?: return
         _phase.value = KeyfileImportPhase.Working
         try {
-            server.completeRePair(grace.username)
+            // Signed by the PENDING version — the key the swap installs.
+            // `.com` refuses an unsigned finalization.
+            val version = Keystore.pendingIrkRotationVersion() ?: Keystore.currentIrkVersion()
+            val newSign = Keystore.deriveIRK("Finish bringing this device in", version)
+            val newPubHex = pubHexForVersion(version)
+            val issuedAt = now()
+            val completeSig = newSign.sign(
+                RePairCompleteClaim.canonicalBytes(
+                    username = grace.username,
+                    newIrkPubHex = newPubHex,
+                    issuedAt = issuedAt,
+                ),
+            )
+            server.completeRePair(
+                grace.username,
+                RePairCompleteRequest(
+                    request = RePairCompleteRequest.Inner(
+                        username = grace.username,
+                        newIrkPub = newPubHex,
+                        issuedAt = issuedAt,
+                    ),
+                    signature = HexUtil.encode(completeSig),
+                ),
+            )
             Keystore.pendingIrkRotationVersion()?.let { pending ->
                 Keystore.setCurrentIrkVersion(pending)
                 Keystore.setPendingIrkRotationVersion(null)

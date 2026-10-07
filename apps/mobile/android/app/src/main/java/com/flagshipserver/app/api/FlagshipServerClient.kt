@@ -123,9 +123,14 @@ interface FlagshipServerClient {
         ifMatch: String?,
     ): RePairInitiateResponse
 
-    /** C7 — finalize a pending re-pair after the 24-hour grace.
-     *  Public read; 425 = grace not elapsed, 409 = objected, 200 = swap done. */
-    suspend fun completeRePair(username: String): RePairCompleteResponse
+    /** C7 — finalize a pending re-pair after the grace. Signed by the
+     *  NEW IRK (the key the pending row installs); 401 = unsigned or
+     *  wrong key, 425 = grace not elapsed, 409 = objected, 200 = swap
+     *  done. */
+    suspend fun completeRePair(
+        username: String,
+        body: RePairCompleteRequest,
+    ): RePairCompleteResponse
 
     /** M4 — read the pending re-pair row (GET /api/users/:u/re-pair).
      *  Powers the Trusted-devices "Replace pending" banner so a replace
@@ -510,6 +515,21 @@ data class RePairInitiateRequest(
      *  takeovers. Mirror of the Worker `body.totpProof` shape +
      *  RePairInitiate.totpProof on iOS. */
     val totpProof: TotpProof? = null,
+    /** `.com`'s short-lived attestation that the caller cleared the
+     *  cloud-recovery passphrase gate, handed back by the gated
+     *  wrapped-UMK fetch. The single-device credential. */
+    val recoveryProof: RecoveryProof? = null,
+    /** Hex Ed25519 signature over the SAME canonical bytes as
+     *  `signature`, by the account's CURRENTLY REGISTERED IRK.
+     *
+     *  Why any of these three are needed: `signature` is made by the
+     *  key we are asking `.com` to install, and `oldIrkPub` is public
+     *  (the username lookup serves it) — so neither proves the caller
+     *  owns the account. Recovery is credential-only, and `.com`
+     *  refuses an initiate that carries none of them. This one is the
+     *  strongest: holding the registered key IS account ownership, and
+     *  it is the key-file / already-signed-in-device route. */
+    val oldIrkSignature: String? = null,
 ) {
     @Serializable
     data class Inner(
@@ -526,6 +546,32 @@ data class RePairInitiateRequest(
     data class TotpProof(
         val code: String,
         val method: String,
+    )
+
+    /** The gated wrapped-UMK fetch's recovery-session token. Opaque. */
+    @Serializable
+    data class RecoveryProof(
+        val token: String,
+    )
+}
+
+/** Body for POST /api/users/:u/re-pair/complete — a `RePairComplete`
+ *  envelope signed by the NEW IRK (the key the pending row installs).
+ *  The endpoint used to be a bare public POST, so anyone could fire the
+ *  swap the moment a row ripened. The swap TARGET still comes from the
+ *  pending row, so this authorizes the scheduled rotation and can never
+ *  redirect it. Mirrors the TS `CompleteRePairBody` + iOS
+ *  `RePairCompleteRequest`. */
+@Serializable
+data class RePairCompleteRequest(
+    val request: Inner,
+    val signature: String,
+) {
+    @Serializable
+    data class Inner(
+        val username: String,
+        val newIrkPub: String,   // hex; must equal the pending row's
+        val issuedAt: Long,      // ms
     )
 }
 
@@ -1240,6 +1286,21 @@ data class GatedRecoveryEnvelope(
     val wrappedAdminRoot: String? = null,
     val prfSaltHash: String? = null,
     val updatedAt: Long? = null,
+    /** `.com`'s short-lived attestation that this fetch cleared the
+     *  passphrase gate. It is the credential a follow-on re-pair
+     *  initiate must present on a single-device account, whose request
+     *  is otherwise signed only by the key it asks to install, over a
+     *  publicly-readable `oldIrkPub`. Absent when the deployment has no
+     *  `FLAGSHIP_RECOVERY_PROOF_SECRET` (the initiate then fails closed
+     *  rather than proceeding unauthenticated). */
+    val recoveryProof: RecoveryProofToken? = null,
+)
+
+/** The gated fetch's recovery-session attestation. Opaque to clients. */
+@Serializable
+data class RecoveryProofToken(
+    val token: String,
+    val expiresAt: Long? = null,
 )
 
 /** POST /api/push/register canonical-bytes envelope. */
@@ -1515,6 +1576,10 @@ class MockFlagshipServerClient(
             HexUtil.decode(fetchTokenHex.lowercase()) ?: throw HttpException(400, "fetchToken must be hex"),
         )
         if (presented != storedHash) throw HttpException(403, "invalid fetch token")
+        // The gate was just cleared, so attest it — the Worker does the
+        // same, and the follow-on re-pair initiate requires it.
+        val proofToken = "rp1.mock.${username.lowercase()}.$storedHash"
+        gatedProofsMinted += username.lowercase()
         return GatedRecoveryEnvelope(
             username = username.lowercase(),
             credentialId = rec.credentialId,
@@ -1523,8 +1588,14 @@ class MockFlagshipServerClient(
             wrappedAdminRoot = rec.wrappedAdminRoot,
             prfSaltHash = rec.prfSaltHashHex,
             updatedAt = rec.updatedAt,
+            recoveryProof = RecoveryProofToken(token = proofToken),
         )
     }
+
+    /** Usernames the Mock has minted a recovery proof for. The re-pair
+     *  gate accepts a token only for one of these, mirroring that the
+     *  Worker's proof is MAC-bound to the account it was minted for. */
+    val gatedProofsMinted = mutableSetOf<String>()
 
     override suspend fun registerPushToken(req: PushTokenRegisterRequest): PushTokenRegisterResponse {
         tick()
@@ -1607,25 +1678,54 @@ class MockFlagshipServerClient(
     ): RePairInitiateResponse {
         tick()
         lastRePairInitiate = Triple(username, body, ifMatch)
-        // Mirror the Worker's proof gate (byte-matching error strings):
-        // multi ALWAYS requires a structurally-valid totpProof; #52 — a
-        // SINGLE account with a second factor enrolled (TOTP and/or
-        // unspent recovery codes) requires one too. Single with NEITHER
-        // stays grace-only.
+        // Mirror the Worker's credential gate (byte-matching error
+        // strings). Recovery is credential-only: the envelope's own
+        // signature is by the key being installed and `oldIrkPub` is
+        // public, so one of three proofs is required —
+        //   - `oldIrkSignature` (the account's registered key): always
+        //     acceptable, the key-file / signed-in-device route;
+        //   - `totpProof`: MANDATORY on multi, also accepted on single
+        //     when a code credential is enrolled;
+        //   - `recoveryProof`: single accounts with cloud recovery.
+        // Nothing presented and nothing enrolled ⇒ 409 no-credential.
         val u = username.lowercase()
         val isMulti = accountTypeByUser[u] == "multi"
-        val singleCredentialEnrolled = !isMulti &&
-            (totpEnrolledAtByUser[u] != null || !recoveryCodesByUser[u].isNullOrEmpty())
-        if (isMulti || singleCredentialEnrolled) {
-            val proof = body.totpProof
-            val structurallyValid = proof != null &&
-                proof.code.isNotEmpty() &&
-                (proof.method == "totp" || proof.method == "recovery")
-            if (!structurallyValid) {
-                throw HttpException(
+        val registeredKeyProven = !body.oldIrkSignature.isNullOrEmpty()
+        val codeEnrolled =
+            totpEnrolledAtByUser[u] != null || !recoveryCodesByUser[u].isNullOrEmpty()
+        // A recovery record WITH the passphrase gate is the single-device
+        // credential (a legacy ungated row can authorize nothing — the
+        // Worker refuses its fetch too). `cloudRecoveryByUser` is the
+        // older scripted flag; honour both.
+        val cloudEnrolled = !isMulti &&
+            ((cloudRecoveryByUser[u] ?: false) || recoveryByUsername[u]?.fetchTokenHashHex != null)
+        val proof = body.totpProof
+        // The Mock can't verify a code (it holds no secret), so a
+        // structurally-valid one counts — the real verification lives in
+        // the control-plane tests. What the Mock DOES mirror faithfully
+        // is the gate itself: something must be presented.
+        val codeOk = proof != null &&
+            proof.code.isNotEmpty() &&
+            (proof.method == "totp" || proof.method == "recovery")
+        val cloudOk = cloudEnrolled &&
+            !body.recoveryProof?.token.isNullOrEmpty() &&
+            (u in gatedProofsMinted || (cloudRecoveryByUser[u] ?: false))
+        if (!registeredKeyProven && !codeOk && !(!isMulti && cloudOk)) {
+            when {
+                isMulti -> throw HttpException(
+                    401, "totpProof required for multi-device recovery",
+                )
+                codeEnrolled -> throw HttpException(
                     401,
-                    if (isMulti) "totpProof required for multi-device recovery"
-                    else "totpProof required for single-device recovery (a second factor is enrolled)",
+                    "totpProof required for single-device recovery (a second factor is enrolled)",
+                )
+                cloudEnrolled -> throw HttpException(
+                    401,
+                    "recoveryProof required: complete the cloud-recovery passphrase step, then retry",
+                )
+                else -> throw HttpException(
+                    409,
+                    "this account has no recovery credential enrolled; recovery is credential-only",
                 )
             }
         }
@@ -1642,11 +1742,26 @@ class MockFlagshipServerClient(
         }
     }
 
-    override suspend fun completeRePair(username: String): RePairCompleteResponse {
+    /** Records the last finalization body so tests can assert the
+     *  envelope was signed (the Worker 401s an unsigned call). */
+    var lastRePairComplete: Pair<String, RePairCompleteRequest>? = null
+        private set
+
+    override suspend fun completeRePair(
+        username: String,
+        body: RePairCompleteRequest,
+    ): RePairCompleteResponse {
         tick()
+        lastRePairComplete = username to body
+        if (body.signature.isEmpty() || body.request.newIrkPub.isEmpty()) {
+            throw HttpException(
+                401,
+                "a RePairComplete envelope signed by the new IRK is required",
+            )
+        }
         return RePairCompleteResponse(
             ok = true,
-            newIrkPub = "00",
+            newIrkPub = body.request.newIrkPub,
             swappedAt = System.currentTimeMillis(),
         )
     }
@@ -2416,16 +2531,16 @@ class LiveFlagshipServerClient(
         )
     }
 
-    override suspend fun completeRePair(username: String): RePairCompleteResponse {
+    override suspend fun completeRePair(
+        username: String,
+        body: RePairCompleteRequest,
+    ): RePairCompleteResponse {
         val encoded = java.net.URLEncoder.encode(username, "UTF-8")
-        val resp = transport.execute(
-            method = "POST",
+        return transport.postJsonForResponse(
             url = "$base/api/users/$encoded/re-pair/complete",
-            accept = setOf(200),
-        )
-        return transport.json.decodeFromString(
-            RePairCompleteResponse.serializer(),
-            resp.body.decodeToString(),
+            body = body,
+            serializer = RePairCompleteRequest.serializer(),
+            responseSerializer = RePairCompleteResponse.serializer(),
         )
     }
 

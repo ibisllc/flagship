@@ -116,15 +116,17 @@ public final class KeyfileImportViewModel {
         }
     }
 
-    /// Finalize the takeover once its grace has elapsed. The complete
-    /// endpoint is a public, idempotent CAS-swap. 404 == already
+    /// Finalize the takeover once its grace has elapsed. Signed by the
+    /// rotated key the pending row installs (`.com` refuses an unsigned
+    /// finalization); otherwise an idempotent CAS-swap. 404 == already
     /// swapped (success); 425 == too early (stay in grace); 403/409 ==
     /// objected (cancelled).
     public func completeTakeover() async {
         guard case .completed(let username, let completesAt) = phase else { return }
         phase = .working
         do {
-            _ = try await server.completeRePair(username: username)
+            let body = try await signedCompleteBody(username: username)
+            _ = try await server.completeRePair(username: username, body: body)
             finalizeRotation()
             phase = .finalized(username: username)
         } catch ScreensClientError.http(let status, _) where status == 404 {
@@ -147,6 +149,27 @@ public final class KeyfileImportViewModel {
     /// landed server-side, promote it locally so subsequent signing (push,
     /// orders, …) uses the rotated device key — mirrors ReplaceDeviceViewModel
     /// + Android's finishTakeover. Best-effort: the swap already succeeded.
+    /// Build the `RePairComplete` envelope for the staged rotation. The
+    /// signing key is the PENDING version — the one the swap installs —
+    /// not the version this device is still signing everything else
+    /// with.
+    private func signedCompleteBody(username: String) async throws -> RePairCompleteRequest {
+        let version = Keystore.pendingIrkRotationVersion() ?? Keystore.currentIrkVersion()
+        let key = try await Keystore.deriveIRK(reason: "Finish bringing this device in", version: version)
+        let pubHex = HexUtil.encode(key.publicKey.rawRepresentation)
+        let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        let canonical = RePairComplete.canonicalBytes(
+            username: username,
+            newIrkPubHex: pubHex,
+            issuedAt: issuedAt
+        )
+        let signature = try key.signature(for: canonical)
+        return RePairCompleteRequest(
+            request: .init(username: username, newIrkPub: pubHex, issuedAt: issuedAt),
+            signature: HexUtil.encode(signature)
+        )
+    }
+
     private func finalizeRotation() {
         guard let pending = Keystore.pendingIrkRotationVersion() else { return }
         try? Keystore.setCurrentIrkVersion(pending)
@@ -175,6 +198,13 @@ public final class KeyfileImportViewModel {
         // The NEW (rotated) IRK signs — it proves possession of the
         // recovered+rotated key (the .com handler verifies against newIrkPub).
         let signature = try newKey.signature(for: canonical)
+        // …and the OLD (currently registered) IRK signs the SAME bytes.
+        // That second signature is the CREDENTIAL: the first one is made
+        // by the key we're asking .com to install and `oldIrkPub` is
+        // public, so neither proves account ownership. The key file gave
+        // us the seed, so we can derive the registered key and prove it
+        // outright — without this the initiate is refused.
+        let oldSignature = try oldKey.signature(for: canonical)
         let resp = try await server.initiateRePair(
             username: username,
             body: RePairInitiateRequest(
@@ -185,7 +215,8 @@ public final class KeyfileImportViewModel {
                     issuedAt: issuedAt
                 ),
                 signature: HexUtil.encode(signature),
-                totpProof: nil
+                totpProof: nil,
+                oldIrkSignature: HexUtil.encode(oldSignature)
             ),
             ifMatch: nil
         )

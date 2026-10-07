@@ -121,8 +121,15 @@ public final class ReplaceDeviceViewModel {
             issuedAt: issuedAt
         )
         let signature: Data
+        let oldSignature: Data
         do {
             signature = try newKey.signature(for: canonical)
+            // The CREDENTIAL. `signature` above is made by the key we're
+            // asking .com to install and `oldIrkPub` is public, so
+            // neither proves we own the account; a signature by the
+            // CURRENTLY REGISTERED key does, and this device holds it.
+            // Without it .com refuses the rotation.
+            oldSignature = try oldKey.signature(for: canonical)
         } catch {
             phase = .failed("Couldn't sign the rotation request: \(error.localizedDescription)")
             return
@@ -140,7 +147,8 @@ public final class ReplaceDeviceViewModel {
                         oldIrkPub: oldPubHex,
                         issuedAt: issuedAt
                     ),
-                    signature: HexUtil.encode(signature)
+                    signature: HexUtil.encode(signature),
+                    oldIrkSignature: HexUtil.encode(oldSignature)
                 ),
                 ifMatch: currentEtag
             )
@@ -175,7 +183,29 @@ public final class ReplaceDeviceViewModel {
         }
         phase = .completing
         do {
-            _ = try await server.completeRePair(username: user)
+            // Signed by the PENDING version — the key the swap installs,
+            // not the one this device is still signing with. `.com`
+            // refuses an unsigned finalization.
+            let newKey = try await Keystore.deriveIRK(
+                reason: "Finish replacing this device",
+                version: pending
+            )
+            let newPubHex = HexUtil.encode(newKey.publicKey.rawRepresentation)
+            let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+            let completeSig = try newKey.signature(
+                for: RePairComplete.canonicalBytes(
+                    username: user,
+                    newIrkPubHex: newPubHex,
+                    issuedAt: issuedAt
+                )
+            )
+            _ = try await server.completeRePair(
+                username: user,
+                body: RePairCompleteRequest(
+                    request: .init(username: user, newIrkPub: newPubHex, issuedAt: issuedAt),
+                    signature: HexUtil.encode(completeSig)
+                )
+            )
             try Keystore.setCurrentIrkVersion(pending)
             try Keystore.setPendingIrkRotationVersion(nil)
             // The IRK just rotated. Any watch-delegate key was attested by the

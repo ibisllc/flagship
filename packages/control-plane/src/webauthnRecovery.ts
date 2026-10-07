@@ -7,6 +7,7 @@ import type {
   WebauthnRecoveryStorage,
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
+import { mintRecoveryProof } from "./recoveryProof.js";
 import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
 /**
@@ -33,6 +34,20 @@ export interface WebauthnRecoveryDeps {
   webauthnRecovery: WebauthnRecoveryStorage;
   maxAgeMs?: number;
   now?: () => number;
+  /**
+   * `FLAGSHIP_RECOVERY_PROOF_SECRET` — the symmetric secret the gated
+   * fetch MACs its recovery-session proof with. When wired, a
+   * successful gated fetch returns `recoveryProof`, which
+   * `handleInitiateRePair` requires before it will schedule an IRK
+   * swap on a single-device account (see `recoveryProof.ts`).
+   *
+   * Absent ⇒ no proof is minted and the re-pair initiate it feeds
+   * refuses the recovery (fail CLOSED). The ciphertext release itself
+   * is unaffected: the passphrase gate above is what authorizes it,
+   * and a user restoring a device must not be blocked by a missing
+   * recovery-proof secret.
+   */
+  recoveryProofSecret?: string;
 }
 
 const DEFAULT_MAX_AGE = 5 * 60_000;
@@ -274,12 +289,34 @@ export async function handleFetchWrappedUmkWithToken(
   // (shouldn't happen for an enrolled account) simply omits the field, leaving
   // the client on its pre-Phase-B path.
   const userRec = await deps.usernames.get(username);
+  // The caller just proved possession of the recovery passphrase. Mint
+  // the short-lived proof of that fact so a follow-on re-pair initiate
+  // (which has no other way to tell an owner from a stranger — its own
+  // envelope is self-signed and `oldIrkPub` is public) can be gated on
+  // a real credential. Bound to this username + this record's token
+  // hash, so it is useless against another account and dies when the
+  // passphrase is rotated.
+  const recoveryProof = deps.recoveryProofSecret
+    ? await mintRecoveryProof(
+        { username, fetchTokenHashHex: rec.fetchTokenHashHex },
+        deps.recoveryProofSecret,
+        { now: now() },
+      )
+    : null;
   return {
     status: 200,
     body: {
       username: rec.username,
       credentialId: rec.credentialIdHex,
       wrappedUmk: rec.wrappedUmkB64,
+      ...(recoveryProof
+        ? {
+            recoveryProof: {
+              token: recoveryProof.token,
+              expiresAt: recoveryProof.expiresAt,
+            },
+          }
+        : {}),
       ...(userRec ? { registeredIrkPubHex: userRec.irkPubHex } : {}),
       // #28 — release the escrowed ACME account key alongside the UMK so a
       // recovering device can restore cert-minting authority. Ciphertext only;

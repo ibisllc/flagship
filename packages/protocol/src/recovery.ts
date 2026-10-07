@@ -14,6 +14,7 @@ import type { Bytes, Keypair } from "./types.js";
 
 const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
 const TAG_RE_PAIR_OBJECT = "flagship/re-pair-object/v1";
+const TAG_RE_PAIR_COMPLETE = "flagship/re-pair-complete/v1";
 const TAG_WIPE_RESTART = "flagship/wipe-restart/v1";
 const TAG_UPLOAD_RECOVERY_RECORD = "flagship/upload-recovery-record/v1";
 const TAG_MERGE_BACK = "flagship/merge-back/v1";
@@ -24,16 +25,23 @@ const TAG_INHERITANCE_DECLARATION = "flagship/inheritance-declaration/v1";
  * Recovery re-pair (J.3) — after the user has lost their old UMK
  * and generated a fresh one (so a NEW IRK), they POST this
  * envelope to claim ownership of their existing username + servers.
- * .com starts a 24h grace timer; the OLD IRK can sign a
- * `RePairObject` to cancel. After the grace expires with no
- * objection, .com swaps the username's IRK pubkey atomically.
+ * .com starts a grace timer; after it expires the holder of the NEW
+ * IRK signs a `RePairComplete` and .com swaps the username's IRK
+ * pubkey atomically.
  *
  * Signed by the NEW IRK (the one taking over).
+ *
+ * The signature alone is NOT authorization — it is self-asserted (the
+ * initiator signs with the key it is asking .com to install). `.com`
+ * additionally requires a RECOVERY CREDENTIAL proof beside this
+ * envelope: a TOTP / recovery code (`totpProof`, multi-device) or the
+ * recovery-session token minted by the passphrase-gated wrapped-UMK
+ * fetch (single-device). See `handleInitiateRePair`.
  */
 export interface RePairInitiate {
   username: string;
   newIrkPub: Bytes;
-  /** Old IRK pubkey, included so .com can show "is this old key really yours to retire?" copy on the objection prompt. */
+  /** Old IRK pubkey. `.com` requires it to equal the account's currently-registered IRK and CAS-swaps on it at completion, so a stale snapshot can never displace a newer key. It is PUBLIC (served by the username lookup) and therefore proves nothing on its own. */
   oldIrkPub: Bytes;
   issuedAt: number;
   /**
@@ -67,9 +75,13 @@ export interface RePairInitiate {
 }
 
 /**
- * Cancel a pending re-pair. Signed by the OLD IRK — the one being
- * displaced. If the old IRK is still in the user's possession, this
- * is the kill switch for an unauthorized takeover attempt.
+ * Cancel a pending re-pair. Signed by the NEW IRK — the recoverer's
+ * OWN key, so this is a SELF-cancel ("I started recovery on the wrong
+ * device"), NOT a veto the displaced owner can exercise. The old-IRK
+ * veto was removed deliberately (a device thief usually also holds the
+ * credential, so veto power was a net negative); the brake on an
+ * unauthorized takeover is the credential gate at initiate, not an
+ * objection window. See `handleObjectRePair`.
  */
 export interface RePairObject {
   username: string;
@@ -103,12 +115,52 @@ export function verifyRePairInitiate(r: RePairInitiate, sig: Bytes, newIrkPub: B
   }
 }
 
-export function signRePairObject(r: RePairObject, oldIrk: Keypair): Bytes {
-  return ed.sign(canonicalRePairObject(r), oldIrk.privateKey);
+export function signRePairObject(r: RePairObject, newIrk: Keypair): Bytes {
+  return ed.sign(canonicalRePairObject(r), newIrk.privateKey);
 }
-export function verifyRePairObject(r: RePairObject, sig: Bytes, oldIrkPub: Bytes): boolean {
+export function verifyRePairObject(r: RePairObject, sig: Bytes, newIrkPub: Bytes): boolean {
   try {
-    return ed.verify(sig, canonicalRePairObject(r), oldIrkPub);
+    return ed.verify(sig, canonicalRePairObject(r), newIrkPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Finalize a pending re-pair once its grace window has elapsed.
+ *
+ * Signed by the NEW IRK — the key the pending row will install — so
+ * `.com` installs a key only on the instruction of whoever holds it.
+ * The swap target is still read from the pending row, never from this
+ * envelope: a valid signature cannot redirect the swap, it only
+ * authorizes the one already scheduled.
+ *
+ * Field shape is IDENTICAL to `RePairObject` (username, newIrkPub,
+ * issuedAt) and both are signed by the same key — which is exactly why
+ * the tag differs. Without a distinct tag, a captured SELF-CANCEL
+ * signature would replay as a COMPLETION (and vice versa), turning the
+ * recoverer's own "stop" into "go". The tag is the verb.
+ */
+export interface RePairComplete {
+  username: string;
+  /** Pinned to the pending row's new IRK pubkey; a mismatch is rejected. */
+  newIrkPub: Bytes;
+  issuedAt: number;
+}
+
+function canonicalRePairComplete(r: RePairComplete): Bytes {
+  legacyFieldGuard("username", r.username);
+  return new TextEncoder().encode(
+    [TAG_RE_PAIR_COMPLETE, r.username, hex(r.newIrkPub), r.issuedAt].join("|"),
+  );
+}
+
+export function signRePairComplete(r: RePairComplete, newIrk: Keypair): Bytes {
+  return ed.sign(canonicalRePairComplete(r), newIrk.privateKey);
+}
+export function verifyRePairComplete(r: RePairComplete, sig: Bytes, newIrkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalRePairComplete(r), newIrkPub);
   } catch {
     return false;
   }

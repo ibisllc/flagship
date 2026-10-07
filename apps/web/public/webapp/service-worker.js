@@ -50,7 +50,10 @@
 //  v24: quieter cross-platform Settings, recovery, and account-backup copy.
 //  v25: direct recipe download replaces the retired homepage QR handoff.
 //  v26: web. split into webapp. + remote.; docking renamed to "remote".
-const SHELL_VERSION = "v28";
+//  v29: recovery re-pair is credential-gated — the takeover + replace-device
+//       ceremonies now carry a credential on initiate and SIGN the
+//       completion, so a stale shell would post bodies .com refuses.
+const SHELL_VERSION = "v29";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

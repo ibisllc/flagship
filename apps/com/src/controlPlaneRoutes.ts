@@ -399,6 +399,21 @@ export interface ControlPlaneEnv {
    */
   FLAGSHIP_TOTP_KEK?: string;
 
+  /**
+   * Secret the passphrase-gated wrapped-UMK fetch MACs its
+   * recovery-session proof with, and that `handleInitiateRePair`
+   * verifies it against (`control-plane/src/recoveryProof.ts`). It is
+   * what makes a single-device account's recovery credential-gated
+   * rather than open to anyone who knows the handle.
+   *
+   * Set it with `wrangler secret put FLAGSHIP_RECOVERY_PROOF_SECRET`.
+   * While it is UNSET, a single-device re-pair initiate returns 503
+   * instead of starting a grace clock: this dep fails CLOSED on
+   * purpose (degrading it is the vulnerability it closes), so recovery
+   * is unavailable rather than unauthenticated.
+   */
+  FLAGSHIP_RECOVERY_PROOF_SECRET?: string;
+
   /** Worker-only KEK for deterministic demo key custody. Demo accounts use
    * the standard encrypted profile and account-scoped device protocols. */
   DEMO_IRK_KEK?: string;
@@ -2054,6 +2069,13 @@ export async function tryControlPlane(
         {
           usernames: storage.usernames,
           webauthnRecovery: storage.webauthnRecovery,
+          // Mint the recovery-session proof alongside the ciphertext:
+          // this call is where the passphrase gate is actually passed,
+          // so it is the only honest place to attest it. The follow-on
+          // re-pair initiate requires that attestation.
+          ...(env.FLAGSHIP_RECOVERY_PROOF_SECRET
+            ? { recoveryProofSecret: env.FLAGSHIP_RECOVERY_PROOF_SECRET }
+            : {}),
         },
         decodeURIComponent(m[1]!),
         await readJson(request),
@@ -2488,10 +2510,17 @@ export async function tryControlPlane(
           // every trusted device.
           auditEvents: storage.auditEvents,
           ...(rePairFanout ? { pushFanout: rePairFanout } : {}),
-          // v1.2 Phase 3 — when the env var is wired, this turns on
-          // real TOTP verification + atomic recovery-code consumption
-          // for multi-device re-pair attempts. Absent ⇒ Phase 2
-          // structural-only check (deploy-safe degrade).
+          // The recovery-credential gate: the escrow row says whether
+          // the account HAS a cloud-recovery credential, and the secret
+          // verifies the proof that the caller passed its passphrase
+          // gate. Both fail CLOSED when absent — unlike the optional
+          // deps above, degrading these would reopen the takeover.
+          webauthnRecovery: storage.webauthnRecovery,
+          ...(env.FLAGSHIP_RECOVERY_PROOF_SECRET
+            ? { recoveryProofSecret: env.FLAGSHIP_RECOVERY_PROOF_SECRET }
+            : {}),
+          // Real TOTP verification + atomic recovery-code consumption
+          // for accounts with a code credential. Also fail-closed.
           ...(env.FLAGSHIP_TOTP_KEK ? { totpKekHex: env.FLAGSHIP_TOTP_KEK } : {}),
         },
         decodeURIComponent(m[1]!),

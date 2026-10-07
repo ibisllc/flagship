@@ -12,8 +12,10 @@ package com.flagshipserver.app.viewmodels
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.PendingRePairSnapshot
+import com.flagshipserver.app.api.RePairCompleteRequest
 import com.flagshipserver.app.api.RePairInitiateRequest
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.RePairCompleteClaim
 import com.flagshipserver.app.core.RePairInitiateClaim
 import com.flagshipserver.app.keystore.Keystore
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -111,6 +113,12 @@ class ReplaceDeviceViewModel(
             issuedAt = issuedAt,
         )
         val signature = newSign.sign(canonical)
+        // The CREDENTIAL. `signature` is made by the key we're asking
+        // .com to install, and `oldIrkPub` is public (the username
+        // lookup serves it) — so neither proves we own the account. A
+        // signature by the CURRENTLY REGISTERED key does, and this
+        // device holds it. Without it .com refuses the rotation.
+        val oldSignature = oldSign.sign(canonical)
 
         _phase.value = ReplaceDevicePhase.Posting
         try {
@@ -124,6 +132,7 @@ class ReplaceDeviceViewModel(
                         issuedAt = issuedAt,
                     ),
                     signature = HexUtil.encode(signature),
+                    oldIrkSignature = HexUtil.encode(oldSignature),
                 ),
                 ifMatch = currentEtag,
             )
@@ -153,7 +162,30 @@ class ReplaceDeviceViewModel(
         }
         _phase.value = ReplaceDevicePhase.Completing
         try {
-            server.completeRePair(user)
+            // Signed by the PENDING version — the key the swap installs,
+            // not the one this device still signs everything else with.
+            // `.com` refuses an unsigned finalization.
+            val newSign = Keystore.deriveIRK("Finish replacing this device", pending)
+            val newPubHex = pubHexForVersion(pending)
+            val issuedAt = System.currentTimeMillis()
+            val completeSig = newSign.sign(
+                RePairCompleteClaim.canonicalBytes(
+                    username = user,
+                    newIrkPubHex = newPubHex,
+                    issuedAt = issuedAt,
+                ),
+            )
+            server.completeRePair(
+                user,
+                RePairCompleteRequest(
+                    request = RePairCompleteRequest.Inner(
+                        username = user,
+                        newIrkPub = newPubHex,
+                        issuedAt = issuedAt,
+                    ),
+                    signature = HexUtil.encode(completeSig),
+                ),
+            )
             Keystore.setCurrentIrkVersion(pending)
             Keystore.setPendingIrkRotationVersion(null)
             // The IRK just rotated. Any watch-delegate key was attested by the

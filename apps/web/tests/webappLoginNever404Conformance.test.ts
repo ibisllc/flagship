@@ -356,6 +356,11 @@ describe("Phase 5 conformance — re-pair complete: every absent state is a tagg
     const { completeRePair } = await loadTakeover();
     const out = await completeRePair({
       username: "harry",
+      // The completion is signed by the rotated key (the server 401s
+      // an unsigned call); the mapping under test is the status → state
+      // one, so a stub signer is enough.
+      newIrkPubHex: "aa".repeat(32),
+      sign: () => new Uint8Array(64),
       fetch: vi.fn().mockResolvedValue(jsonResponse(status, body)) as any,
     });
     expect(out.outcome).toBe(expected);
@@ -364,7 +369,12 @@ describe("Phase 5 conformance — re-pair complete: every absent state is a tagg
   it("a genuine 500 still throws (transport fault, not an absent state)", async () => {
     const { completeRePair } = await loadTakeover();
     await expect(
-      completeRePair({ username: "harry", fetch: vi.fn().mockResolvedValue(jsonResponse(500, "boom")) as any }),
+      completeRePair({
+        username: "harry",
+        newIrkPubHex: "aa".repeat(32),
+        sign: () => new Uint8Array(64),
+        fetch: vi.fn().mockResolvedValue(jsonResponse(500, "boom")) as any,
+      }),
     ).rejects.toThrow(/re-pair complete failed \(500\)/);
   });
 });

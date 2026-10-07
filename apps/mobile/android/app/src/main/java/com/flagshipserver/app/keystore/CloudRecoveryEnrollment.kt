@@ -148,6 +148,11 @@ object CloudRecoveryEnrollment {
          *  the account never escrowed one. The caller re-establishes admin via
          *  Keystore.importAdminRoot. */
         val adminRootSeed: ByteArray? = null,
+        /** `.com`'s attestation that this restore cleared the passphrase
+         *  gate. The caller carries it into a follow-on re-pair, which
+         *  `.com` refuses without a credential. Null on a deployment
+         *  that mints none (the re-pair then fails closed). */
+        val recoveryProofToken: String? = null,
     )
 
     /**
@@ -215,7 +220,12 @@ object CloudRecoveryEnrollment {
                 null
             }
         }
-        return RestoreResult(umkSeed = umkSeed, acmeScalar = acmeScalar, adminRootSeed = adminRootSeed)
+        return RestoreResult(
+            umkSeed = umkSeed,
+            acmeScalar = acmeScalar,
+            adminRootSeed = adminRootSeed,
+            recoveryProofToken = fetched.recoveryProof?.token,
+        )
     }
 
     /**

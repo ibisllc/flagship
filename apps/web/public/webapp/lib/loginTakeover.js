@@ -59,6 +59,13 @@ import { generateDeviceId } from "./accountMetadata.js";
  *  packages/protocol/src/auth.ts TAG_RE_PAIR_INITIATE and the Worker. */
 export const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
 
+/** Canonical-bytes tag for the re-pair COMPLETE envelope. MUST match
+ *  packages/protocol/src/recovery.ts TAG_RE_PAIR_COMPLETE. Distinct
+ *  from the object/self-cancel tag on purpose: the two envelopes carry
+ *  identical fields and the same signer, so the tag is the only thing
+ *  separating "finish this recovery" from "abandon it". */
+export const TAG_RE_PAIR_COMPLETE = "flagship/re-pair-complete/v1";
+
 /** `|`-joined, UTF-8 — same as every signed message. */
 function canonical(parts) {
   return new TextEncoder().encode(parts.join("|"));
@@ -141,12 +148,23 @@ export async function collectRecoveryFactor(inlinePrompt) {
  *  totpRequired, quarantineMs }`). Throws on any non-2xx so the caller
  *  can surface it.
  *
+ *  `recoveryProof` likewise rides beside the envelope: it is `.com`'s
+ *  attestation that this caller cleared the cloud-recovery passphrase
+ *  gate, and it is what authorizes a SINGLE-device recovery (which has
+ *  no TOTP to present). Without a credential of one kind or the other
+ *  the Worker refuses — the signature below is self-asserted (we sign
+ *  with the key we are asking it to install) and `oldIrkPub` is public.
+ *
  *  @param {{
  *    username: string,
  *    newIrkPubHex: string,
  *    oldIrkPubHex: string,
  *    signHex: string,          hex Ed25519 sig by the NEW IRK
  *    totpProof?: {code: string, method: "totp"|"recovery"},
+ *    recoveryProof?: {token: string, expiresAt?: number} | string,
+ *    oldIrkSignatureHex?: string,   second sig over the SAME bytes by the
+ *                                   registered (old) IRK — the key-file /
+ *                                   seed-in-hand ownership proof
  *    issuedAt?: number,
  *    fetch?: typeof fetch,
  *    baseUrl?: string,
@@ -166,6 +184,10 @@ export async function initiateRePair(args) {
     },
     signature: args.signHex,
     ...(args.totpProof ? { totpProof: args.totpProof } : {}),
+    ...(args.recoveryProof ? { recoveryProof: args.recoveryProof } : {}),
+    ...(args.oldIrkSignatureHex
+      ? { oldIrkSignature: args.oldIrkSignatureHex }
+      : {}),
   };
   const resp = await f(
     `${baseUrl}/api/users/${encodeURIComponent(args.username)}/re-pair`,
@@ -273,6 +295,13 @@ export async function runTakeover(resolution, deps) {
   if (!(seed instanceof Uint8Array) || seed.length !== 32) {
     throw new Error("runTakeover: recovered seed is malformed");
   }
+  // The unwrap we just did IS the credential check, and `.com` attested
+  // to it with a short-lived proof. Collect it now (single-use) — the
+  // initiate below is refused without a credential, and on a
+  // single-device account this is the only one the user has.
+  const recoveryProof =
+    deps.recoveryProof ??
+    (typeof deps.takeRecoveryProof === "function" ? deps.takeRecoveryProof() : undefined);
 
   // 2 — persist + unlock under the resolved username. Point the keystore
   // at this profile FIRST so the recovered seed is wrapped under the new
@@ -290,12 +319,26 @@ export async function runTakeover(resolution, deps) {
   const oldIrkPubHex = toHex(oldIrk.publicKey);
   const newIrkPubHex = toHex(newIrk.publicKey);
   const issuedAt = now();
+  const message = canonical([
+    TAG_RE_PAIR_INITIATE,
+    username,
+    newIrkPubHex,
+    oldIrkPubHex,
+    issuedAt,
+  ]);
   // The NEW IRK signs (it proves it holds the recovered+rotated key).
-  const sig = await deps.signWithIrkVersioned(
-    seed,
-    TAKEOVER_IRK_VERSION,
-    canonical([TAG_RE_PAIR_INITIATE, username, newIrkPubHex, oldIrkPubHex, issuedAt]),
-  );
+  const sig = await deps.signWithIrkVersioned(seed, TAKEOVER_IRK_VERSION, message);
+  // …and the OLD (registered) IRK signs the same bytes when we can
+  // derive it from the recovered seed, which is the strongest
+  // credential `.com` accepts: it proves we hold the account's current
+  // key, not just the one we want installed. Sent alongside the cloud
+  // proof so recovery still works if one of the two is unavailable
+  // (e.g. the account's registered key was rotated away from v1, or the
+  // deployment has no recovery-proof secret).
+  const oldIrkSignatureHex =
+    typeof deps.signWithIrk === "function"
+      ? toHex(await deps.signWithIrk(seed, message))
+      : undefined;
 
   // 4 — INITIATE the re-pair (grace clock starts server-side). The
   // proof rides whenever the caller collected one — #52 made the
@@ -307,6 +350,8 @@ export async function runTakeover(resolution, deps) {
     oldIrkPubHex,
     signHex: toHex(sig),
     totpProof: deps.totpProof,
+    recoveryProof,
+    oldIrkSignatureHex,
     issuedAt,
     fetch: deps.fetch,
     baseUrl: deps.baseUrl,
@@ -330,6 +375,14 @@ export async function runTakeover(resolution, deps) {
     const methods = Array.isArray(err.body?.credentialRequired)
       ? err.body.credentialRequired
       : ["totp", "recovery-code"];
+    // Only prompt when a CODE is actually one of the accepted
+    // credentials. If the account's options are the cloud-recovery
+    // proof and/or its key file, asking for six digits would be asking
+    // for something that doesn't exist — the fix is to re-run the
+    // recovery unwrap, which is the caller's job.
+    if (!methods.includes("totp") && !methods.includes("recovery-code")) {
+      throw err;
+    }
     const proof = await deps.requestSecondFactor(methods);
     if (!proof) {
       const cancelled = new Error("runTakeover: second factor entry was cancelled");
@@ -587,10 +640,15 @@ export function formatRemaining(ms) {
 
 /** POST /api/users/:u/re-pair/complete to finalize the IRK swap.
  *
- *  The endpoint is a public read (idempotent, no signature gate); the
- *  webapp posts an empty JSON body. On a graceful-wipe cloud the caller
- *  MAY pass `refreshedGrants` (W6) — out of scope for the webapp's own
- *  takeover, but threaded through so a future caller can.
+ *  Signed by the NEW IRK — the key the pending row installs. `.com`
+ *  refuses an unsigned call: it used to be a bare public POST, so any
+ *  passer-by could fire the swap the moment a row ripened. The swap
+ *  TARGET still comes from the pending row, so a signature can only
+ *  authorize the rotation already scheduled, never redirect it.
+ *
+ *  On a graceful-wipe cloud the caller MAY also pass `refreshedGrants`
+ *  (W6) — out of scope for the webapp's own takeover, but threaded
+ *  through so a future caller can.
  *
  *  Returns a tagged outcome instead of throwing on the expected
  *  not-2xx branches so the UI renders a state, never a raw error:
@@ -604,9 +662,13 @@ export function formatRemaining(ms) {
  *
  *  @param {{
  *    username: string,
+ *    newIrkPubHex: string,
+ *    sign: (bytes: Uint8Array) => Promise<Uint8Array>|Uint8Array,
+ *    issuedAt?: number,
  *    refreshedGrants?: object[],
  *    fetch?: typeof fetch,
  *    baseUrl?: string,
+ *    bytesToHex?: (b: Uint8Array) => string,
  *  }} args
  *  @returns {Promise<{outcome: string, [k: string]: unknown}>}
  */
@@ -615,13 +677,28 @@ export async function completeRePair(args) {
   const baseUrl = args.baseUrl || APEX;
   const username = args?.username;
   if (!username) throw new Error("completeRePair: missing username");
+  const newIrkPubHex = args?.newIrkPubHex;
+  if (!newIrkPubHex || typeof args?.sign !== "function") {
+    // Fail here rather than POSTing a body the server will 401 — a
+    // caller that can't sign has no business finalizing a rotation.
+    throw new Error("completeRePair: newIrkPubHex + sign are required");
+  }
+  const toHex = args.bytesToHex || defaultBytesToHex;
+  const issuedAt = args.issuedAt ?? Date.now();
+  const sig = await args.sign(
+    canonical([TAG_RE_PAIR_COMPLETE, username, newIrkPubHex, issuedAt]),
+  );
   const hasGrants = Array.isArray(args.refreshedGrants) && args.refreshedGrants.length > 0;
   const resp = await f(
     `${baseUrl}/api/users/${encodeURIComponent(username)}/re-pair/complete`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(hasGrants ? { refreshedGrants: args.refreshedGrants } : {}),
+      body: JSON.stringify({
+        request: { username, newIrkPub: newIrkPubHex, issuedAt },
+        signature: toHex(sig),
+        ...(hasGrants ? { refreshedGrants: args.refreshedGrants } : {}),
+      }),
     },
   );
   if (resp.ok) {
@@ -681,10 +758,20 @@ export async function completeRePair(args) {
  *  finalizing so the host can show the right state.
  *
  *  @param {object} takeover           the runTakeover return ({username, rePair, …})
+ *  The completion is SIGNED by the rotated key, so this needs either an
+ *  explicit `sign` + `newIrkPubHex`, or the material to derive them:
+ *  `takeover.seed` plus the injected `signWithIrkVersioned` /
+ *  `deriveIrkVersioned` the takeover already used.
+ *
  *  @param {{
  *    finalizeV2Irk?: () => Promise<void>|void,
  *    openAccount?: () => Promise<void>|void,
  *    refreshedGrants?: object[],
+ *    sign?: (bytes: Uint8Array) => Promise<Uint8Array>|Uint8Array,
+ *    newIrkPubHex?: string,
+ *    signWithIrkVersioned?: (seed: Uint8Array, v: number, bytes: Uint8Array) => Promise<Uint8Array>,
+ *    deriveIrkVersioned?: (seed: Uint8Array, v: number) => Promise<{publicKey: Uint8Array}>,
+ *    bytesToHex?: (b: Uint8Array) => string,
  *    fetch?: typeof fetch,
  *    baseUrl?: string,
  *    now?: () => number,
@@ -705,11 +792,37 @@ export async function finishTakeover(takeover, deps = {}) {
       secondsRemaining: Math.ceil((completesAt - now()) / 1000),
     };
   }
+  const version = takeover?.newIrkVersion ?? TAKEOVER_IRK_VERSION;
+  const seed = takeover?.seed;
+  const toHex = deps.bytesToHex || defaultBytesToHex;
+  // Prefer what the caller handed us; otherwise re-derive from the seed
+  // the takeover is carrying (same key, same version it rotated to).
+  let newIrkPubHex = deps.newIrkPubHex ?? takeover?.newIrkPubHex;
+  if (!newIrkPubHex && seed instanceof Uint8Array && deps.deriveIrkVersioned) {
+    newIrkPubHex = toHex((await deps.deriveIrkVersioned(seed, version)).publicKey);
+  }
+  const sign =
+    deps.sign ??
+    (seed instanceof Uint8Array && deps.signWithIrkVersioned
+      ? (bytes) => deps.signWithIrkVersioned(seed, version, bytes)
+      : undefined);
+  if (!newIrkPubHex || !sign) {
+    // Surfaced as a state, not a throw: the countdown UI shows it and
+    // the user can re-run the ceremony from a device that holds the key.
+    return {
+      outcome: "needs-key",
+      message:
+        "This device can't finish the takeover — it no longer holds the recovered key. Start the recovery again.",
+    };
+  }
   const result = await completeRePair({
     username,
+    newIrkPubHex,
+    sign,
     refreshedGrants: deps.refreshedGrants,
     fetch: deps.fetch,
     baseUrl: deps.baseUrl,
+    bytesToHex: toHex,
   });
   if (result.outcome === "completed" || result.outcome === "already-completed") {
     if (typeof deps.finalizeV2Irk === "function") await deps.finalizeV2Irk();

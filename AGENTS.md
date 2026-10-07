@@ -127,7 +127,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Keep entries terse: what changed +
-> what remains, not test counts or commit hashes. Last updated **2026-07-23**.
+> what remains, not test counts or commit hashes. Last updated **2026-10-06**.
 
 ### Pending owner validation (the standing caveat — applies to nearly every entry below)
 
@@ -149,6 +149,55 @@ harness can't do:
   ISO + a physical OTG drive (`apps/mobile/android/OTG-BUILDER-NOTES.md` §5).
 
 ### Recent work (condensed log, newest first)
+
+**2026-10-06 (recovery re-pair is credential-gated) — closes an unauthenticated
+account-takeover primitive on `.com`; NOT deployed (needs a Worker secret set
+FIRST).** `handleInitiateRePair` schedules a swap of the account's registered
+IRK, and it demanded nothing a stranger couldn't supply: its envelope is signed
+by the **incoming** key (self-asserted), and the one input that looked secret —
+`oldIrkPub` — is served to anyone by `GET /api/username/:u`. So on any account
+with no TOTP (the default, and still the case with cloud recovery enrolled —
+only TOTP enrollment set the old `proofRequired`), an internet caller knowing
+just the handle could schedule a hostile root-key swap that completed after the
+3-day grace. There is **no owner veto**: `/re-pair/object` is signed by the NEW
+IRK (self-cancel for the recoverer; the old-IRK veto was removed deliberately),
+so the grace was a notification window, not a brake — the docs and push copy
+calling it one were wrong, and the alert ladder told the owner to "object", an
+action `.com` rejects. Now initiate requires one of three credentials:
+`oldIrkSignature` (a second signature over the same canonical bytes by the
+CURRENTLY REGISTERED IRK — the key-file / signed-in-device route, always
+available and the strongest), `totpProof` (mandatory on multi-device, unchanged),
+or `recoveryProof` (new: a short-lived username-bound HMAC the passphrase-gated
+wrapped-UMK fetch mints, `control-plane/src/recoveryProof.ts` — stateless, so no
+migration). No credential at all ⇒ 409 + an audited `re-pair-refused-no-credential`
+row; this now matches `docs/naming-recovery-and-name-change.md` §1.5-1.6 ("no
+no-credential takeover") and the admin-tier spec's row 35. Also closed: the
+no-KEK path accepted ANY code structurally (fail-OPEN on exactly the accounts
+that enrolled a second factor) — now 503; `/re-pair/complete` was a bare public
+POST, so any passer-by could fire a ripened swap — now a NEW-IRK-signed
+`flagship/re-pair-complete/v1` envelope (distinct tag from re-pair-object, which
+has identical fields and the same signer, so a captured self-cancel can't replay
+as a completion), authorized BEFORE any timing status is reported so it can't
+probe someone else's recovery; and `re-pair-initiate` gained a per-target-handle
+edge rate limit. DELIBERATELY NOT changed: the report also asked that
+`GET /api/username/:u` stop serving `irkPub` / `adminRootPub` /
+`totpEnrolledAt`. Those stay — the two pubkeys are the public trust anchors
+clients and boxes pin and verify signatures against (secrecy was never the
+control), and pre-auth enrollment state is what the login decision tree reads
+to know whether to prompt for a code. With the gate in place, harvesting them
+no longer leads to an initiate. The one free trim left, if ever wanted: serve
+`totpEnrolled` as a boolean instead of the enrollment TIMESTAMP (costs the
+"generated on <date>" line in Settings on web + iOS). Every surface updated: webapp (recovery sub-origin forwards the
+proof; takeover, keyfile-import and replace-device ceremonies carry a credential
+and sign the completion; shell cache **v29**), iOS, Android, and both mocks
+mirror the gate. **Remaining (owner):** `wrangler secret put
+FLAGSHIP_RECOVERY_PROOF_SECRET` **before** the `.com` deploy — until it is set,
+single-device recovery returns 503 (fail-closed is deliberate: degrading that dep
+is the vulnerability). Then rebuild iOS/Android. Noted, not fixed: iOS
+`startMultiDeviceTakeover` sends `oldIrkPub == newIrkPub`, which `.com` cannot
+accept (the oldIrkPub-matches-registered and newIrkPub-differs checks are
+mutually exclusive) — that multi-device takeover path is dead on the live server
+regardless of this change.
 
 **2026-07-23 (webapp./remote. split + "Remote" rename) — the one shared `web.`
 origin became two hosts, one per concern, and the docking feature is now called

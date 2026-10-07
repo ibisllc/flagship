@@ -33,6 +33,7 @@ import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.MockWebAuthnProvider
 import com.flagshipserver.app.keystore.Recovery
+import com.flagshipserver.app.keystore.RecoveryDerivation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -92,6 +93,33 @@ class LoginFlowTest {
         )
     }
 
+    /** The passphrase every gated-path test uses. */
+    private val gatedPassphrase = "correct horse battery"
+
+    /** Seed a MODERN (passphrase-gated) recovery record — the shape every
+     *  account enrolled since Task #74 has. The gate is what lets `.com`
+     *  attest that an unwrap was credentialed, which is what a follow-on
+     *  re-pair initiate must present: that request is otherwise signed
+     *  only by the key it asks to install, over a public `oldIrkPub`. */
+    private suspend fun seedGatedRecoveryEnvelope(server: MockFlagshipServerClient) {
+        val secrets = RecoveryDerivation.derivePassphraseSecrets(gatedPassphrase, "harry")
+        val prfSecret = webauthn.prfAssertWithSalt(credentialId, secrets.prfSalt)
+        val wrapped = Recovery.wrap(recoveredSeed, prfSecret)
+        server.registerRecoveryEnvelope(
+            RecoveryEnvelopeRequest(
+                request = RecoveryEnvelopeRequest.Inner(
+                    username = "harry",
+                    credentialId = credentialId,
+                    wrappedUmk = wrapped,
+                    issuedAt = 0L,
+                    fetchTokenHash = RecoveryDerivation.sha256Hex(secrets.fetchToken),
+                    prfSaltHash = RecoveryDerivation.sha256Hex(secrets.prfSalt),
+                ),
+                signature = "00",
+            ),
+        )
+    }
+
     /** Seed an envelope that ALSO escrows an ACME account key (#28),
      *  wrapped under the same Mock PRF secret. Returns the raw scalar so
      *  the caller can assert it's restored into the Keystore. */
@@ -127,13 +155,14 @@ class LoginFlowTest {
         totpEnrolled: Boolean = false,
         grace: String = if (kind == "multi") "24h-totp" else "3d",
         registeredIrkPubHex: String? = mismatchedRegisteredPub,
+        hasFetchGate: Boolean = false,
     ) = AccountResolution(
         username = username,
         exists = true,
         kind = kind,
         recovery = AccountResolution.RecoveryState(
             present = recoveryPresent,
-            hasFetchGate = false,
+            hasFetchGate = hasFetchGate,
             credentialId = if (recoveryPresent) credentialId else null,
         ),
         totpEnrolled = totpEnrolled,
@@ -304,11 +333,15 @@ class LoginFlowTest {
 
     @Test fun single_confirm_initiates_thenComplete_pairsAndLabelsAdmin() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
-        seedRecoveryEnvelope(server)
+        seedGatedRecoveryEnvelope(server)
         val app = AppState()
-        val m = vm(resolution("harry", "single", recoveryPresent = true), server, app)
+        val m = vm(
+            resolution("harry", "single", recoveryPresent = true, hasFetchGate = true),
+            server, app,
+        )
 
         m.begin()
+        m.submitPassphrase(gatedPassphrase)
         m.confirmTakeover()
 
         // Phase 4: confirm INITIATES + installs UMK + stages the rotation,
@@ -445,18 +478,19 @@ class LoginFlowTest {
      *  behind a grace window, carrying oldIrkPub = registeredIrkPubHex. */
     @Test fun single_recoveredKeyRotated_rePairsWithGrace() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
-        seedRecoveryEnvelope(server)
+        seedGatedRecoveryEnvelope(server)
         val app = AppState()
         val rotatedPub = "ab".repeat(32)
         val m = vm(
             resolution(
                 "harry", "single", recoveryPresent = true,
-                registeredIrkPubHex = rotatedPub,
+                registeredIrkPubHex = rotatedPub, hasFetchGate = true,
             ),
             server, app,
         )
 
         m.begin()
+        m.submitPassphrase(gatedPassphrase)
         m.confirmTakeover()
 
         assertTrue("Phase B re-pairs behind grace", m.phase.first() is LoginPhase.Grace)
@@ -542,19 +576,25 @@ class LoginFlowTest {
         assertEquals("recovery", body.totpProof?.method)
     }
 
-    /** #52 boundary — a single account with NOTHING enrolled keeps the
-     *  grace-only path (no second-factor detour). Pinned explicitly so
-     *  the gate stays opt-in-by-enrollment (no lockout regression). */
-    @Test fun single_noCredentialEnrolled_keepsGraceOnlyPath() = runTest {
+    /** A single account with no TOTP and no recovery codes takes NO
+     *  second-factor detour — its cloud-recovery passphrase is the
+     *  credential, and the proof of clearing that gate rides the
+     *  initiate. (It is not "grace-only": `.com` refuses an initiate
+     *  that carries no credential at all.) */
+    @Test fun single_cloudCredentialOnly_goesStraightToGraceWithProof() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
-        seedRecoveryEnvelope(server)
+        seedGatedRecoveryEnvelope(server)
         val app = AppState()
         val m = vm(
-            resolution("harry", "single", recoveryPresent = true, registeredIrkPubHex = "ab".repeat(32)),
+            resolution(
+                "harry", "single", recoveryPresent = true,
+                registeredIrkPubHex = "ab".repeat(32), hasFetchGate = true,
+            ),
             server, app,
         )
 
         m.begin()
+        m.submitPassphrase(gatedPassphrase)
         m.confirmTakeover()
 
         assertTrue("no enrollment ⇒ straight to grace", m.phase.first() is LoginPhase.Grace)

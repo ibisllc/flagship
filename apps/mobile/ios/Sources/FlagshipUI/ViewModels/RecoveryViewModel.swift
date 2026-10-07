@@ -35,6 +35,12 @@ public final class RecoveryViewModel {
     /// compares this against the IRK derived from the recovered UMK to decide
     /// instant-pair (key unchanged) vs re-pair-with-grace (key rotated).
     public private(set) var registeredIrkPubHex: String?
+    /// `.com`'s attestation that the gated fetch below cleared the
+    /// passphrase gate. The rotated-account re-pair carries it as its
+    /// credential — `.com` refuses to schedule an identity-key swap
+    /// without one (the initiate's own signature is made by the key
+    /// being installed, and `oldIrkPub` is public).
+    public private(set) var recoveryProofToken: String?
 
     private let client: any FlagshipServerClient
     private let webAuthn: WebAuthnProvider
@@ -203,6 +209,9 @@ public final class RecoveryViewModel {
             // Recovery Phase B — remember the registered IRK so the
             // post-recovery flow can detect a rotated key.
             registeredIrkPubHex = fetched.registeredIrkPubHex
+            // …and the proof that this unwrap was credentialed, for the
+            // re-pair that follows a rotated-key recovery.
+            recoveryProofToken = fetched.recoveryProof?.token
 
             // Anti-coercion: confirm the server returned the same prfSalt we
             // derived locally. A tampered `.com` feeding a different salt

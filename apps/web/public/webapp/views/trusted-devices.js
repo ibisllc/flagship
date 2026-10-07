@@ -346,7 +346,13 @@ async function finalizePendingReplace() {
   const phase = openPhaseToast("Finalize replace");
   try {
     phase.update("installing", "Installing new identity…");
-    const out = await completeReplaceDeviceCeremony({ username: session.username });
+    const out = await completeReplaceDeviceCeremony({
+      username: session.username,
+      // The finalization is signed by the key being installed — the
+      // next rotation slot after the one this device is signing with.
+      umk: session.umk,
+      newVersion: currentIrkVersion() + 1,
+    });
     // Bump the local IRK slot so subsequent signs use the rotated key.
     setCurrentIrkVersion(currentIrkVersion() + 1);
     await unlockSession(session.umk, session.username);
@@ -477,7 +483,11 @@ async function runReplaceDeviceSheet() {
     // webapp's local IRK version slot AND refresh the in-session IRK
     // so subsequent signing uses the rotated key.
     try {
-      await completeReplaceDeviceCeremony({ username: session.username });
+      await completeReplaceDeviceCeremony({
+        username: session.username,
+        umk: session.umk,
+        newVersion: result.newVersion,
+      });
       phase.update("installing", "Installing new identity…");
       setCurrentIrkVersion(result.newVersion);
       await unlockSession(session.umk, session.username);

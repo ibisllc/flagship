@@ -386,7 +386,13 @@ async function runKeyfileImport(file) {
       // skip the takeover (the bug this fix closes).
       throw new Error("account key wasn't available after restore");
     }
-    const { deriveIrkFromSeed, deriveIrkVersioned, signWithIrkVersioned, bytesToHex } = keystore;
+    const {
+      deriveIrkFromSeed,
+      deriveIrkVersioned,
+      signWithIrkVersioned,
+      signWithIrk,
+      bytesToHex,
+    } = keystore;
     const { runKeyfileImportTakeover, SecondFactorRequiredError } = await import(
       "../lib/keyfileImportTakeover.js"
     );
@@ -402,6 +408,10 @@ async function runKeyfileImport(file) {
         deriveIrkFromSeed,
         deriveIrkVersioned,
         signWithIrkVersioned,
+        // The v1 (registered-key) signer: the import's ownership proof
+        // to `.com`. Without it the initiate is refused — holding the
+        // seed is the credential, and this is how we show it.
+        signWithIrk,
         bytesToHex,
         addProfile: (profile) => addProfile(profile),
       });

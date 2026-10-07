@@ -103,9 +103,37 @@ export async function setupCloudRecovery(username) {
 }
 
 /**
+ * `.com`'s attestation that the last `recoverFromCloud` call cleared the
+ * recovery passphrase gate, parked here for the ceremony that follows.
+ *
+ * Why a module-level handoff instead of a return value: `recoverFromCloud`
+ * returns the raw seed to a dozen call sites, and only the takeover needs
+ * the proof. {@link takeRecoveryProof} is single-use — it clears on read,
+ * so a proof can't linger past the ceremony that asked for it. In memory
+ * only; never persisted (it is a bearer credential with a 15-minute life).
+ */
+let lastRecoveryProof = null;
+
+/**
+ * Consume the recovery proof from the most recent cloud unwrap. Returns
+ * `{ token, expiresAt }` or null; clears it either way.
+ *
+ * The re-pair initiate needs this: without it `.com` refuses to schedule
+ * an account-key rotation (recovery is credential-only, and nothing else
+ * in that request proves the caller owns the account).
+ */
+export function takeRecoveryProof() {
+  const p = lastRecoveryProof;
+  lastRecoveryProof = null;
+  return p;
+}
+
+/**
  * Recover the UMK seed from a previously-uploaded record. Returns the
  * 32-byte UMK seed; caller is responsible for re-wrapping it under a
  * passphrase (or storing as-is) per the local-storage flow.
+ *
+ * Also parks the recovery proof for {@link takeRecoveryProof}.
  */
 export async function recoverFromCloud(username) {
   if (!username) throw new Error("username required");
@@ -117,6 +145,10 @@ export async function recoverFromCloud(username) {
     throw new Error("recover: malformed UMK payload");
   }
   const seed = new Uint8Array(result.umk);
+  lastRecoveryProof =
+    result.recoveryProof && typeof result.recoveryProof.token === "string"
+      ? result.recoveryProof
+      : null;
 
   // Slice D (D-3 restore side): the sub-origin split `umk || adminRootSeed` back
   // out and returns the admin root as `adminRootSeed` when the escrow carried

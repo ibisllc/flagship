@@ -13,7 +13,7 @@ import { humanError } from "../lib/humanError.js";
 import { $, registerView } from "../lib/router.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
 import { inlineConfirm, inlinePrompt, inlineSuggestUsername } from "../lib/modal.js";
-import { recoverFromCloud } from "../lib/recovery.js";
+import { recoverFromCloud, takeRecoveryProof } from "../lib/recovery.js";
 import {
   activateDemoAccount,
   classifyResolution,
@@ -310,6 +310,14 @@ async function recoverRealAccount(resolution) {
       },
       takeoverDeps: {
         recoverFromCloud,
+        // `.com`'s attestation that the unwrap above cleared the
+        // recovery passphrase gate. The re-pair initiate is refused
+        // without a credential, and on a single-device account this is
+        // the one the user has.
+        takeRecoveryProof,
+        // The registered-key proof (we hold the recovered seed), sent
+        // alongside it — see runTakeover.
+        signWithIrk,
         // Multi-profile keying: point the keystore at the account being
         // taken over BEFORE the recovered seed is wrapped, so it lands
         // under that account's own record (never clobbers another profile).
