@@ -19,6 +19,7 @@ export interface DemoCloudEnv {
   UPCLOUD_PLAN?: string;
   UPCLOUD_TEMPLATE?: string;
   UPCLOUD_STORAGE_GB?: string;
+  UPCLOUD_SSH_PUBLIC_KEY?: string;
 }
 
 export interface DemoCreateSettings {
@@ -83,6 +84,7 @@ export function createDemoCreateSettings(env: DemoCloudEnv, fetchImpl?: FetchLik
         token: env.UPCLOUD_TOKEN!,
         template: env.UPCLOUD_TEMPLATE!,
         ...(storageGb ? { storageGb } : {}),
+        ...(env.UPCLOUD_SSH_PUBLIC_KEY ? { sshPublicKey: env.UPCLOUD_SSH_PUBLIC_KEY.trim() } : {}),
         ...(fetchImpl ? { fetch: fetchImpl } : {}),
       }),
       defaultRegion: env.UPCLOUD_ZONE || UPCLOUD_DEFAULT_ZONE,

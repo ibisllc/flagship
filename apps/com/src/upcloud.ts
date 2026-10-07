@@ -67,6 +67,8 @@ export interface UpCloudClientOptions {
   template?: string;
   /** Root disk size in GB; keep it within the plan's included quota. */
   storageGb?: number;
+  /** Debug-only SSH public key for the default login user; unset in normal operation. */
+  sshPublicKey?: string;
   fetch?: FetchLike;
   apiBase?: string;
   sleep?: (ms: number) => Promise<void>;
@@ -154,6 +156,9 @@ export function createUpCloudClient(opts: UpCloudClientOptions): UpCloudClient {
           metadata: "yes",
           user_data: args.userData,
           labels: { label: [{ key: DEMO_LABEL_KEY, value: args.username.toLowerCase() }] },
+          ...(opts.sshPublicKey
+            ? { login_user: { create_password: "no", ssh_keys: { ssh_key: [opts.sshPublicKey] } } }
+            : {}),
           storage_devices: {
             storage_device: [{
               action: "clone",

@@ -101,6 +101,17 @@ describe("UpCloud client", () => {
     expect(disk).toMatchObject({ storage: other, size: 30 });
   });
 
+  it("adds a debug SSH key only when one is configured", async () => {
+    const { fn, calls } = fakeFetch(() => ({ status: 202, body: serverBody("maintenance") }));
+    const args = { name: "n", location: "de-fra1", serverType: "P", userData: "x", username: "u" };
+    await createUpCloudClient({ token: "t", template: TEMPLATE, fetch: fn }).createServerWithUserData(args);
+    await createUpCloudClient({ token: "t", template: TEMPLATE, sshPublicKey: "ssh-ed25519 AAAA k", fetch: fn })
+      .createServerWithUserData(args);
+    const servers = calls.map((c) => (c.body as { server: Record<string, unknown> }).server);
+    expect(servers[0]).not.toHaveProperty("login_user");
+    expect(servers[1]!.login_user).toEqual({ create_password: "no", ssh_keys: { ssh_key: ["ssh-ed25519 AAAA k"] } });
+  });
+
   it("finds a demo server by its label and exact title", async () => {
     const { fn, calls } = fakeFetch((call) => call.url.includes("?label=")
       ? { status: 200, body: { servers: { server: [
