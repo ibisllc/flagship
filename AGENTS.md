@@ -200,19 +200,11 @@ treated as permanently down until its ticket returns, so the VMs behind the two
 cleared boxes were left alone — they now have NO D1 record pointing at them, so
 no future reconcile will surface them; find them in the console by the
 `flagship-demo` label alongside the three previously-identified orphans.
-**FINDING — `RATE_LIMITER` is not enforcing in production.** 8 sequential and 12
-parallel requests to `/api/recovery/by-username/:u` (budget 3/60s) all passed,
-and `/api/username/claim` likewise; `wrangler deploy --dry-run` DOES list
-`env.RATE_LIMITER (ratelimit)` and the hook sits correctly before dispatch, so
-this is the platform-side `unsafe.bindings` ratelimit, not the code. It predates
-today's work and silently voids every budget in `rateLimit.ts` — the
-username-claim and recovery-fetch brute-force caps included. The new
-`re-pair-initiate` entry is wired identically, so it starts enforcing the moment
-the binding does; meanwhile credential brute-force stays bounded by the
-in-Worker `peekVerifyAttempts` counter (5/15min per username, 429 + owner
-alert), which does not depend on the binding. Worth its own task: establish
-whether the account has the feature or whether namespace ids 1001/1002 need
-registering. **Also noted:** the `gym` branch's `apps/web/e2e/live/
+**One enforcement gap found while verifying the gate is tracked PRIVATELY, not
+here** — it is live with no fix shipped, and this repo is public, so the detail
+sits in agent memory (`ratelimit-binding-inert-prod`) alongside the reason it
+was also kept off the disclosure page. It goes in the hall of fame once it is
+closed. **Also noted:** the `gym` branch's `apps/web/e2e/live/
 account-recovery.spec.ts` POSTs a raw re-pair initiate signed only by the new
 IRK, which the gate now refuses — it holds the seed, so the fix is to add the
 `oldIrkSignature` proof the keyfile path uses. Do it when the branch is next
