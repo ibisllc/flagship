@@ -127,7 +127,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Keep entries terse: what changed +
-> what remains, not test counts or commit hashes. Last updated **2026-10-06**.
+> what remains, not test counts or commit hashes. Last updated **2026-10-07**.
 
 ### Pending owner validation (the standing caveat — applies to nearly every entry below)
 
@@ -149,6 +149,46 @@ harness can't do:
   ISO + a physical OTG drive (`apps/mobile/android/OTG-BUILDER-NOTES.md` §5).
 
 ### Recent work (condensed log, newest first)
+
+**2026-10-07 (demo fleet trimmed to one; rate-limit binding found inert) — the
+fleet is now exactly one box, and a pre-existing enforcement gap surfaced while
+verifying the credential gate.** Demo state: `playstore-test-0725` (Play
+reviewer, `state: ready`, UpCloud) is the ONLY demo, and the only `servers` row
+without a researcher behind it. Cleared the residue of two torn-down demos whose
+account rows were already gone — `openai-build` (12 rows across audit_events,
+usage_counters, install_policy_fanout, voici_links, servers, daemon_status,
+sealed_luks_keys) and `update-drill` (9 rows, same shape plus secret_mailbox).
+Both had kept half-answering: `GET /api/users/openai-build/pods` returned a live
+box after the account was gone, and the surviving `servers` rows kept the DNS
+reconciler treating their names as active. `update-drill` was certainly an
+artifact — 57 minutes of life in July, silent 75 days, unreachable, and
+`docs/update-server-rollout-plan.md` itself prescribed its teardown. **Decision
+worth recording: the other 32 accounts are NOT demos and are NOT deletable.** On
+an unannounced product the unfamiliar handles are researchers who signed up;
+"the operator doesn't recognise this name" is not evidence of junk, and an
+inventory sweep that treats it as such destroys real users. Only ever delete on
+positive evidence (a `demo_users` row, or an artifact the docs name). Hetzner is
+treated as permanently down until its ticket returns, so the VMs behind the two
+cleared boxes were left alone — they now have NO D1 record pointing at them, so
+no future reconcile will surface them; find them in the console by the
+`flagship-demo` label alongside the three previously-identified orphans.
+**FINDING — `RATE_LIMITER` is not enforcing in production.** 8 sequential and 12
+parallel requests to `/api/recovery/by-username/:u` (budget 3/60s) all passed,
+and `/api/username/claim` likewise; `wrangler deploy --dry-run` DOES list
+`env.RATE_LIMITER (ratelimit)` and the hook sits correctly before dispatch, so
+this is the platform-side `unsafe.bindings` ratelimit, not the code. It predates
+today's work and silently voids every budget in `rateLimit.ts` — the
+username-claim and recovery-fetch brute-force caps included. The new
+`re-pair-initiate` entry is wired identically, so it starts enforcing the moment
+the binding does; meanwhile credential brute-force stays bounded by the
+in-Worker `peekVerifyAttempts` counter (5/15min per username, 429 + owner
+alert), which does not depend on the binding. Worth its own task: establish
+whether the account has the feature or whether namespace ids 1001/1002 need
+registering. **Also noted:** the `gym` branch's `apps/web/e2e/live/
+account-recovery.spec.ts` POSTs a raw re-pair initiate signed only by the new
+IRK, which the gate now refuses — it holds the seed, so the fix is to add the
+`oldIrkSignature` proof the keyfile path uses. Do it when the branch is next
+rebased onto `main`.
 
 **2026-10-06 (hub-blessing issuer authenticated) — closes an externally
 reported CA signing oracle; NOT deployed.** `POST /api/services/hub-blessing`
@@ -210,9 +250,8 @@ its machines before a live gym run).
 by hand (153213447, 153638469, 153643080, 153813669, 155315594) — `.com` no
 longer tracks any of them.
 
-**2026-10-06 (recovery re-pair is credential-gated) — closes an unauthenticated
-account-takeover primitive on `.com`; NOT deployed (needs a Worker secret set
-FIRST).** `handleInitiateRePair` schedules a swap of the account's registered
+**2026-10-06 (recovery re-pair is credential-gated) — closed an unauthenticated
+account-takeover primitive on `.com`. DEPLOYED + live-verified 2026-10-07.** `handleInitiateRePair` schedules a swap of the account's registered
 IRK, and it demanded nothing a stranger couldn't supply: its envelope is signed
 by the **incoming** key (self-asserted), and the one input that looked secret —
 `oldIrkPub` — is served to anyone by `GET /api/username/:u`. So on any account
@@ -258,10 +297,15 @@ is impossible (the client derives that key from the seed this very fetch hands
 it), so single-use-with-server-state is the only real upgrade left. Every surface updated: webapp (recovery sub-origin forwards the
 proof; takeover, keyfile-import and replace-device ceremonies carry a credential
 and sign the completion; shell cache **v29**), iOS, Android, and both mocks
-mirror the gate. **Remaining (owner):** `wrangler secret put
-FLAGSHIP_RECOVERY_PROOF_SECRET` **before** the `.com` deploy — until it is set,
-single-device recovery returns 503 (fail-closed is deliberate: degrading that dep
-is the vulnerability). Then rebuild iOS/Android. Noted, not fixed: iOS
+mirror the gate. **DEPLOYED 2026-10-07** — Worker version `0425ed62`, from `origin/main` only
+(local `main` carried unpushed commits at the time; deploying it would have
+shipped code absent from the remote). `FLAGSHIP_RECOVERY_PROOF_SECRET` was set
+BEFORE the deploy, which is the required order: while it is unset a
+single-device re-pair returns 503, because degrading that dep IS the
+vulnerability it closes. Live-verified by replaying the report's own attack
+against prod: a correctly-signed initiate carrying no credential returns 409
+`no-credential` and leaves `pending: null`, so no grace clock starts.
+**Remaining (owner):** rebuild iOS (Android built 2026-10-07). Noted, not fixed: iOS
 `startMultiDeviceTakeover` sends `oldIrkPub == newIrkPub`, which `.com` cannot
 accept (the oldIrkPub-matches-registered and newIrkPub-differs checks are
 mutually exclusive) — that multi-device takeover path is dead on the live server
@@ -1552,44 +1596,45 @@ YubiKey holder endorses releases too (defensible: one key exists anyway, and
 code-push still needs the hardcoded-repo lineage walk + an admin-root order from
 the phone/webapp behind biometrics).
 
-**Full phased plan lives in `docs/update-server-rollout-plan.md`** (on branch
-`plan/update-server-feature`). Shape: Phase 1 = one commented fallback in
+**Full phased plan lives in `docs/update-server-rollout-plan.md`** — on `main`,
+which carries the CURRENT copy; the older one on branch
+`plan/update-server-feature` predates it, so read trunk. Shape: Phase 1 = one commented fallback in
 `releaseVerifier.ts` (`get("release") ?? get("ca")`) + positive/negative/
 precedence tests + doc corrections; Phase 2 = one YubiKey `endorsement --track
 ca` per release (wrapper script `scripts/endorse-release.mjs`); Phase 3 =
 exercise the already-built clients (+ one honesty gap: add `update-server-btn`
-to webapp companion UNAVAILABLE_IDS); Phase 4 = live validation on
-`home.openai-build` incl. a rollback drill. Two traps flagged in the plan:
-the demo box's tree is DIRTY (the CORS hand-patch) and the consumer's plain
-`git checkout` won't force past it — clean `cors.ts` in the same rescue pass
-that bootstraps the Phase-1 gate; and the `ca` mandate expires 2026-08-27, which
-now also gates updates (re-mint before then). The one unavoidable manual touch
+to webapp companion UNAVAILABLE_IDS); Phase 4 = live validation on the current
+fleet box incl. a rollback drill. **Both traps the plan flagged are now
+cleared** (2026-10-07): the dirty-working-tree trap died with
+`home.openai-build` — the box the plan targeted no longer exists, and its
+replacement `home.playstore-test-0725` runs unmodified source, so the
+consumer's plain `git checkout` has nothing to conflict with; and the lapsed
+`ca` mandate was re-minted 2026-10-06 (now expires 2027-04-04, so ~6 months of
+runway rather than an expiry to beat). Point Phase 4 at
+`home.playstore-test-0725` — but note it is the PLAY-REVIEWER demo, so either
+drill the update before handing the build over or stand up a throwaway box for
+it. The one unavoidable manual touch
 is bootstrapping the Phase-1 gate onto the box (chicken/egg — the first update
 needs a box already running the fallback); after that it's seamless OTA forever.
 
-### TODO — delete the `web.` redirects (BLOCKED on the box speaking the new origins)
+### TODO — delete the `web.` redirects (unblocked; safe whenever convenient)
 
 The `web.flagshipserver.com` compatibility layer is temporary and should be
 deleted outright: only the competition judges will use the UI, and they will be
 handed `webapp.` / `remote.` directly. Nothing else points at `web.`.
 
-**UNBLOCKED 2026-07-23** — the one box now speaks the new origins. The fleet is
-exactly ONE box (`home.openai-build`, the demo/reviewer box — verified against
-prod D1: one `servers` row; `nimble-mango` and `noble-vole` are accounts with no
-box). It was patched via Hetzner rescue (`POST /api/dev/rescue/153813669`, then
-mount `/dev/sda1` + edit + reboot). Verified live afterwards: preflight AND real
-GETs return `access-control-allow-origin` for `webapp.` and `remote.`,
-`evil.example` still gets none, cert valid, `.com` reports `liveness:"live"`.
+**Fully unblocked 2026-10-07.** The blocker was a single hand-patched box; it no
+longer exists. `home.openai-build` was torn down (its last D1 rows cleared
+2026-10-07), which also retires the old warning about its dirty `/opt/flagship`
+working tree and the `cors.ts.bak-20260724-005404` backup beside it — both are
+gone with the machine, and nothing needs reconciling before a self-update now.
+The current fleet is one box, `home.playstore-test-0725` (the Play-reviewer
+demo), provisioned from current source, so it ships the `webapp.`/`remote.`
+origins natively rather than by hand-patch. Verified live 2026-10-07: preflight
+returns `access-control-allow-origin` for `webapp.` and for `remote.`, and
+`evil.example` still gets none.
 
-⚠️ That patch was applied **directly to the box's working tree**, so
-`/opt/flagship` now differs from its git HEAD (backup beside it:
-`cors.ts.bak-20260724-005404`). Consequence: the self-update path does
-`git checkout`, which can conflict on a dirty tree — reconcile (`git checkout --
-packages/server-daemon/src/cors.ts`) before the first real update, or let a
-reburn supersede it. The box runs `tsx src/index.ts`, so editing source IS the
-deploy — no build step was involved.
-
-The removal below is now safe to do whenever convenient:
+The removal below is safe to do whenever convenient:
 
 1. `apps/com/src/route.ts` — drop `LEGACY_WEBAPP_HOST`, `legacyWebappHost()`,
    the retired-host block in `routeImpl` (including the `web./dock` special

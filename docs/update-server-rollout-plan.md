@@ -197,10 +197,15 @@ update*, and fixing whatever surfaces.
 
 ### Phase 4 — End-to-end validation on the live box
 
-The demo box (`home.openai-build`) is the test rig. It is currently on commit
-`~2026-07-21` with a DIRTY working tree (the CORS hand-patch — see §5).
+**Updated 2026-10-07: the rig this phase named no longer exists.**
+`home.openai-build` was torn down and its last D1 rows cleared, which also
+retires the dirty-tree trap — step 1 below no longer applies. The current fleet
+box is `home.playstore-test-0725`, provisioned from current source with a CLEAN
+tree, so the consumer's plain `git checkout` has nothing to conflict with. It is
+the Play-reviewer demo, though, so either drill the update before that build
+goes out or stand up a throwaway box for this phase.
 
-1. **Reconcile the dirty tree FIRST** (§5) or the `git checkout` step conflicts.
+1. ~~Reconcile the dirty tree FIRST~~ — not needed on a clean box (§5).
 2. Pick a small, safe target commit (e.g. current `main`), endorse it (Phase 2),
    push endorsement.
 3. From the webapp, tap "Update this server". Watch:
@@ -243,6 +248,11 @@ The demo box (`home.openai-build`) is the test rig. It is currently on commit
 ## 5. Reconciliations / traps (read before starting)
 
 - **The demo box tree is DIRTY, and the consumer will NOT force past it.**
+  **RESOLVED 2026-10-07 — the dirty box is gone**, taking the hand-patched
+  `cors.ts` and its `cors.ts.bak-20260724-005404` backup with it; the
+  replacement box runs unmodified source. Kept because the MECHANISM still
+  bites any box that is ever hand-patched: the checkout is deliberately
+  non-destructive, so one local edit stops an OTA update dead.
   CONFIRMED: `updateConsumer.ts` L506 runs a plain `git checkout <target>` — no
   `-f`, no `git reset --hard`, no stash. Plain checkout ABORTS if it would
   overwrite a locally-modified file. The 2026-07-23 CORS fix was hand-applied to
@@ -345,12 +355,18 @@ Merged Phases 1–3 to `main` (`cebbbc16`), provisioned a throwaway demo box
   the real 2-of-2 exercised on real infra.**
 
 **Remaining:**
-- **`openai-build` (reviewer box).** Messier than the throwaway: old unknown
-  HEAD, shallow, dirty tree (last session's `cors.ts` hand-patch), no SSH.
-  Decide in-place update (needs its HEAD read + the dirty `cors.ts` reconciled;
-  `main` now carries those CORS origins so a checkout MAY be byte-clean — §5)
-  vs a clean reprovision onto latest `main`.
+- ~~`openai-build` (reviewer box) — decide in-place update vs reprovision~~ —
+  **moot 2026-10-07.** That box was torn down, so none of its awkwardness (old
+  unknown HEAD, shallow clone, dirty tree, no SSH) applies to anything any more.
+  The reviewer box is now `home.playstore-test-0725`, provisioned from current
+  source with a clean tree — no reconciliation needed before an OTA update, but
+  it is serving an in-flight Play review, so prefer a throwaway for the drill.
 - **iOS/Android** initiate the update for REAL user accounts once rebuilt.
 - **Live rollback drill** on a real box (proven in the rehearsal; optional live).
-- **Tear down `update-drill`** (`sample-user cleanup update-drill`) when done.
-- **Re-mint the ca mandate before 2026-08-27** — it now also gates updates.
+- ~~Tear down `update-drill`~~ — **DONE 2026-10-07.** Its account row had
+  already gone; the 9 orphaned rows left behind (servers, daemon_status,
+  sealed_luks_keys, audit_events, usage_counters, install_policy_fanout,
+  secret_mailbox) were cleared, so no `servers` row without an account remains.
+- ~~Re-mint the ca mandate before 2026-08-27~~ — **DONE 2026-10-06.** The live
+  `/api/maintainer-blessing` now serves a `ca` mandate valid to 2027-04-04, so
+  there is ~6 months of runway rather than an expiry to beat.
