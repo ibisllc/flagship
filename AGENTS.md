@@ -150,9 +150,9 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
-**2026-10-06 (demo servers: UpCloud-ready + leak findings) — demo creation can
-now target UpCloud; nothing deployed or flipped.** `DEMO_CLOUD_PROVIDER`
-(`hetzner` default ⇒ prod unchanged) picks where NEW demo servers are created;
+**2026-10-06 (demo servers moved to UpCloud + leak findings) — DEPLOYED and
+live-verified; demos now provision on UpCloud.** `DEMO_CLOUD_PROVIDER`
+(`upcloud` in `wrangler.toml`; unset ⇒ `hetzner`) picks where NEW demo servers are created;
 existing servers route by id shape (numeric = Hetzner, UUID = UpCloud), so no
 migration. New `apps/com/src/upcloud.ts` + `demoCloud.ts`; config and the
 open items to verify on a real UpCloud account are in `docs/sample-users.md`
@@ -168,9 +168,17 @@ wipe dropped their rows (the wipe never touches Hetzner, and nothing sweeps
 (owner decision: demos are rare and stay on until cleaned up); its old docs
 (§11) are historical. The Android `DemoConnectClient` still calls the removed
 `/api/dev/sample-user/<u>/connect` — dead code, left unchanged.
-**Remaining (owner):** settle the Hetzner bill or `cleanup --force` its rows;
-set the UpCloud secret/vars, deploy `.com`, recreate the reviewer demo, and
-verify the §17.5 items on the first real UpCloud box.
+**Live state (2026-10-07):** the ONLY demo is `playstore-test-0725` (the Play
+reviewer login) on UpCloud `de-fra1` `STARTER-2xCPU-4GB` — Let's Encrypt cert +
+HTTPS 200 verified. `openai-build` and the old Hetzner `playstore-test-0725`
+were `cleanup --force`d. Trap that cost an hour: the UpCloud FREE TRIAL blocks
+outbound 8443 (the hub tunnel port), so a box silently hangs on
+`tunnel.ready()` — the account is now upgraded (§17.1). All the extra
+`hw-*` Fly apps were destroyed and `flagship-services-gym` is stopped (start
+its machines before a live gym run).
+**Remaining (owner):** once Hetzner unlocks, delete its five orphaned servers
+by hand (153213447, 153638469, 153643080, 153813669, 155315594) — `.com` no
+longer tracks any of them.
 
 **2026-10-06 (recovery re-pair is credential-gated) — closes an unauthenticated
 account-takeover primitive on `.com`; NOT deployed (needs a Worker secret set

@@ -1583,6 +1583,13 @@ decision — an operator removes a demo with `sample-user.mjs cleanup`.
 | `UPCLOUD_PLAN` | var | Plan name for new demos (required) |
 | `UPCLOUD_TEMPLATE` | var | Debian 12 public template UUID to clone (required) |
 | `UPCLOUD_STORAGE_GB` | var | Root disk size; default 20 — keep within the plan's included storage |
+| `UPCLOUD_SSH_PUBLIC_KEY` | secret | Debug only, normally UNSET. Installs one SSH key on newly created demo boxes. Delete the secret and the box's `authorized_keys` line when done. |
+
+**The UpCloud free trial blocks the tunnel.** Trial accounts firewall outbound
+traffic to ports 53/80/123/443/8080 only; the hub tunnel is on **8443**, so a
+trial-account box registers and loads its entitlement, then waits on
+`tunnel.ready()` forever with no heartbeat, cert, or error. The account must be
+upgraded to full access (one-time deposit) before demos can come online.
 
 Keep `HCLOUD_TOKEN` set while any Hetzner-created demo row remains, or its
 status/cleanup cannot reach the provider (use `--force`, below).
@@ -1620,16 +1627,16 @@ plus `orphanedServerId` for anything left behind to delete by hand. Cleanup
 now also removes the demo's `home.<user>` A/AAAA (+ wildcard) records when the
 Cloudflare token is configured.
 
-### 17.5 Verify on a real account before relying on it
+### 17.5 Verified live (2026-10-07)
 
-- UpCloud's Debian 12 template runs our `#cloud-config` from `user_data` via the
-  metadata service (the whole bootstrap depends on it).
-- The `user_data` size limit fits our cloud-config (it carries keys + the
-  install blob).
-- The exact plan name to use for `UPCLOUD_PLAN`, and that `UPCLOUD_STORAGE_GB`
-  fits within it.
-- The create request's explicit `networking` block (public + utility IPv4) and
-  the `storages=1&backups=delete` delete parameters behave as documented.
+`playstore-test-0725` was recreated on UpCloud and reached a Let's Encrypt
+certificate + HTTPS 200. Confirmed on the real account: the Debian 12 template
+(`01000000-0000-4000-8000-000020070100`) runs our `#cloud-config` from
+`user_data` via the metadata service; the cloud-config fits the `user_data`
+limit; `STARTER-2xCPU-4GB` with `UPCLOUD_STORAGE_GB = 30` creates; the
+public + utility `networking` block works; destroy (stop → `DELETE
+?storages=1&backups=delete`) succeeds. Provisioning to `ready` took ~10 min,
+plus ~1 min to the cert once the tunnel could connect.
 
 ---
 
