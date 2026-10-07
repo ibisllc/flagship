@@ -94,6 +94,29 @@
         commercial launch. We would rather tell you this before you spend
         your time than after.
       </p>
+      <p>What that means in practice, until the programme is funded:</p>
+      <ul>
+        <li><strong>We still triage and fix on the published SLA.</strong>
+          Funding has no bearing on how fast a report gets dealt with. Both
+          reports we have received so far were fixed and deployed the same
+          day.</li>
+        <li><strong>Every qualifying report is recorded as an outstanding
+          obligation</strong>, with the severity we assess it at, to be
+          settled against the bands above at commercial launch.</li>
+        <li><strong>We assess severity ourselves and will rate upwards.</strong>
+          If your own write-up is more conservative than the facts support —
+          as the first report we received was — we record the higher
+          severity, not the one you claimed.</li>
+        <li><strong>Credit is available immediately</strong>, in whatever form
+          you ask for, and is not contingent on anything. It is the one thing
+          we can give you now, so we would rather give it properly.</li>
+        <li><strong>No embargo once the fix has shipped.</strong> Write your
+          findings up publicly whenever you like. Ask us first if you want a
+          technical-accuracy review; we will not ask you to soften anything.</li>
+        <li><strong>If the delay causes you real hardship, tell us.</strong>
+          We would rather hear it than have you discover our funding position
+          afterwards and feel misled.</li>
+      </ul>
       <table class="payout-table">
         <thead>
           <tr><th>Severity</th><th>Examples</th><th>Range (USD)</th></tr>
@@ -182,38 +205,73 @@
 
       <h2>Hall of fame</h2>
       <p style="color: var(--ink-muted);">
-        Researchers who reported a vulnerability to us, with the commit that
+        Researchers who reported a vulnerability to us, with the commits that
         closed it. Credited in whatever form each reporter asks for — name,
         handle, or anonymous, with a link if they want one. Listed without
         attribution until they have told us their preference; we never
         publish a name we have not been given.
       </p>
-      <table class="payout-table">
-        <thead>
-          <tr><th>Reported</th><th>Issue</th><th>Severity</th><th>Fix</th><th>Credit</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>2026-10</td>
-            <td>Unauthenticated attacker schedules an identity-key swap on any
-              account without a second factor</td>
-            <td>Critical</td>
-            <td><a href="https://github.com/ibisllc/flagship/commit/7d49a444">7d49a444</a></td>
-            <td>Credit pending the reporter&rsquo;s preference</td>
-          </tr>
-          <tr>
-            <td>2026-10</td>
-            <td>Unauthenticated CA-signing oracle mints a relay-hub blessing
-              for any key or host</td>
-            <td>Critical</td>
-            <td><a href="https://github.com/ibisllc/flagship/commit/54889a4c">54889a4c</a>
-              <span style="color: var(--ink-muted);">(+ hardening
-              <a href="https://github.com/ibisllc/flagship/commit/484ef162">484ef162</a>,
-              <a href="https://github.com/ibisllc/flagship/commit/771db538">771db538</a>)</span></td>
-            <td>Credit pending the reporter&rsquo;s preference</td>
-          </tr>
-        </tbody>
-      </table>
+
+      <h3>Unauthenticated identity-key swap on an account with no second factor</h3>
+      <p style="color: var(--ink-muted);">
+        Critical &middot; reported and fixed October 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/7d49a444">7d49a444</a>
+        &middot; credit pending the reporter&rsquo;s preference
+      </p>
+      <p>
+        Account recovery schedules a replacement of the account&rsquo;s root
+        identity key. The endpoint that starts it verified the request against
+        the <em>incoming</em> key — a self-assertion — and its only other
+        input, the account&rsquo;s current identity key, is served to anyone by
+        the public username lookup. On an account with no second factor
+        enrolled, that left nothing a stranger could not supply: knowing a
+        public handle was enough to schedule a hostile key swap, which
+        completed once the grace window elapsed.
+      </p>
+      <p>
+        There was also no owner veto, contrary to what our own documentation
+        claimed. The objection endpoint is signed by the incoming key, so it
+        is the recoverer&rsquo;s own undo rather than something the displaced
+        owner can exercise. The grace window was a notification window, not a
+        brake.
+      </p>
+      <p>
+        Starting a recovery now requires an enrolled credential: a TOTP or
+        recovery code, the short-lived proof minted by the passphrase-gated
+        wrapped-key fetch, or a signature from the account&rsquo;s currently
+        registered key. An account with no credential cannot be recovered by
+        anyone, which is what our naming and recovery policy always said.
+        Finalising a recovery now requires a signature from the key being
+        installed, where it had been an unauthenticated POST. The same pass
+        closed a related fault we had not been told about: with its key
+        unavailable the server fell back to a structural check on TOTP codes,
+        so the second factor was a formality on exactly the accounts that had
+        enrolled one.
+      </p>
+
+      <h3>Unauthenticated CA-signing oracle mints a relay-hub blessing for any key or host</h3>
+      <p style="color: var(--ink-muted);">
+        Critical &middot; reported and fixed October 2026 &middot; fix
+        <a href="https://github.com/ibisllc/flagship/commit/54889a4c">54889a4c</a>,
+        hardening
+        <a href="https://github.com/ibisllc/flagship/commit/484ef162">484ef162</a>
+        and
+        <a href="https://github.com/ibisllc/flagship/commit/771db538">771db538</a>
+        &middot; credit pending the reporter&rsquo;s preference
+      </p>
+      <p>
+        The endpoint that issues relay-hub blessings did not authenticate its
+        caller, so anyone could obtain a validly signed blessing for a key and
+        host of their choosing — a signing oracle against the trust chain a
+        box uses to decide whether the hub in front of it is the real one.
+      </p>
+      <p>
+        The issuer is now authenticated and blessings are bound to the
+        expected apex. Two follow-ups harden the box side rather than the
+        hole itself: a box fails closed when the hub presents no blessing and
+        requires the expected apex, and trust lockdown now closes connections
+        that are already open instead of only refusing new ones.
+      </p>
     </main>
 
     <footer class="footer">
