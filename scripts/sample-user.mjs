@@ -11,7 +11,7 @@
  *
  * Subcommands:
  *   create <username> --account-name "<name>" [--idempotency-key <key>]
- *   cleanup <username> [--idempotency-key <key>]
+ *   cleanup <username> [--idempotency-key <key>] [--force]
  *   list
  *   status <username>
  *   help
@@ -78,6 +78,11 @@ export function parseArgs(argv) {
         throw new Error(`unexpected positional argument: ${tok}`);
       }
       const key = tok.slice(2);
+      if (key === "force") {
+        flags.force = true;
+        i += 1;
+        continue;
+      }
       const next = argv[i + 1];
       if (next === undefined || next.startsWith("--")) {
         throw new Error(`flag --${key} requires a value`);
@@ -230,6 +235,7 @@ export async function runCleanup(deps, username, flags = {}) {
     { method: "POST", body: JSON.stringify({
       username,
       idempotencyKey: flags.idempotencyKey ?? `sample-user-create:${username}`,
+      ...(flags.force ? { force: true } : {}),
     }) },
     env.adminSecret,
   );
@@ -248,8 +254,6 @@ export async function runCreate(deps, username, flags) {
   const { fetchFn, env, stderr, stdout, now } = deps;
   const accountName = flags.accountName;
   const idempotencyKey = flags.idempotencyKey ?? `sample-user-create:${username}`;
-  const region = flags.region ?? "fsn1";
-  const size = flags.size ?? "cpx11";
   stderr.write(`[create] starting at ${new Date(now()).toISOString()}\n`);
   stderr.write("[create] requesting atomic identity + provisioning…\n");
   const created = await adminFetch(
@@ -257,7 +261,13 @@ export async function runCreate(deps, username, flags) {
     adminUrl(env.baseUrl, "/api/dev/sample-user/create"),
     {
       method: "POST",
-      body: JSON.stringify({ username, accountName, idempotencyKey, region, size }),
+      // Region/size are sent only when given: the Worker owns the defaults
+      // for whichever cloud DEMO_CLOUD_PROVIDER selects.
+      body: JSON.stringify({
+        username, accountName, idempotencyKey,
+        ...(flags.region ? { region: flags.region } : {}),
+        ...(flags.size ? { size: flags.size } : {}),
+      }),
     },
     env.adminSecret,
   );
@@ -344,8 +354,8 @@ export const USAGE = [
   "sample-user — operator CLI for Flagship demo accounts",
   "",
   "USAGE:",
-  "  node scripts/sample-user.mjs create <username> --account-name \"<name>\" [--idempotency-key <key>] [--region fsn1] [--size cpx11]",
-  "  node scripts/sample-user.mjs cleanup <username> [--idempotency-key <key>]",
+  "  node scripts/sample-user.mjs create <username> --account-name \"<name>\" [--idempotency-key <key>] [--region <zone>] [--size <plan>]",
+  "  node scripts/sample-user.mjs cleanup <username> [--idempotency-key <key>] [--force]",
   "  node scripts/sample-user.mjs list",
   "  node scripts/sample-user.mjs status <username>",
   "",

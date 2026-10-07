@@ -1562,6 +1562,75 @@ Total Phase C diff: ~1500 LOC including tests.
 | `tools/vps-e2e/src/providers/hetzner.test.ts` | new fixtures |
 | `docs/runbooks/demo-users-bootstrap.md` | new (one-time setup: SSH key, secrets, Hetzner project) |
 
+## 17. UpCloud provider (2026-10)
+
+Demo servers can be created on UpCloud instead of Hetzner. The switch only
+changes where **new** demo servers are created; an existing server is always
+addressed by the provider that created it, inferred from its id (Hetzner ids
+are numeric, UpCloud ids are UUIDs — the demo row has no provider column).
+
+Code: `apps/com/src/upcloud.ts` (client), `apps/com/src/demoCloud.ts`
+(selection + routing). Demo servers stay on: there is no idle reaper, by owner
+decision — an operator removes a demo with `sample-user.mjs cleanup`.
+
+### 17.1 Configuration (Worker)
+
+| Name | Kind | Meaning |
+|---|---|---|
+| `DEMO_CLOUD_PROVIDER` | var | `hetzner` (default when unset) or `upcloud` |
+| `UPCLOUD_TOKEN` | secret | API token (`ucat_…`). Do not IP-restrict it — Workers egress from shared Cloudflare ranges. |
+| `UPCLOUD_ZONE` | var | Zone for new demos; default `de-fra1` |
+| `UPCLOUD_PLAN` | var | Plan name for new demos (required) |
+| `UPCLOUD_TEMPLATE` | var | Debian 12 public template UUID to clone (required) |
+| `UPCLOUD_STORAGE_GB` | var | Root disk size; default 20 — keep within the plan's included storage |
+
+Keep `HCLOUD_TOKEN` set while any Hetzner-created demo row remains, or its
+status/cleanup cannot reach the provider (use `--force`, below).
+
+### 17.2 Flip
+
+```sh
+cd apps/com
+printf '%s' "$UPCLOUD_TOKEN" | npx wrangler secret put UPCLOUD_TOKEN
+# [vars] in wrangler.toml: DEMO_CLOUD_PROVIDER = "upcloud",
+#   UPCLOUD_PLAN = "<plan>", UPCLOUD_TEMPLATE = "<uuid>" (UPCLOUD_ZONE optional)
+npx tsc -b && npm run deploy
+FLAGSHIP_ADMIN_SECRET=… node scripts/sample-user.mjs create <user> --account-name "<name>"
+```
+
+The CLI now sends `--region` / `--size` only when given, so the Worker's
+provider defaults (zone/plan above, or `fsn1`/`cpx11` on Hetzner) apply.
+
+### 17.3 Mapping
+
+`location` → `zone`, `serverType` → `plan`, image → cloned template; the
+create carries `metadata: "yes"` and the same `#cloud-config` user data as
+Hetzner, plus the `flagship-demo=<username>` label. Status `started` →
+`running` (what the poller promotes on), `stopped` → `off`, `maintenance` →
+`initializing`. Destroy = hard stop → wait for `stopped` → `DELETE
+/server/{uuid}?storages=1&backups=delete` (disk + backups go with it, so
+nothing keeps billing).
+
+### 17.4 Force cleanup
+
+`node scripts/sample-user.mjs cleanup <user> --force` (body `force: true`)
+finishes the teardown even when the provider or DNS call fails — e.g. a
+suspended provider account — and reports `providerDestroy` / `dnsCleanup`
+plus `orphanedServerId` for anything left behind to delete by hand. Cleanup
+now also removes the demo's `home.<user>` A/AAAA (+ wildcard) records when the
+Cloudflare token is configured.
+
+### 17.5 Verify on a real account before relying on it
+
+- UpCloud's Debian 12 template runs our `#cloud-config` from `user_data` via the
+  metadata service (the whole bootstrap depends on it).
+- The `user_data` size limit fits our cloud-config (it carries keys + the
+  install blob).
+- The exact plan name to use for `UPCLOUD_PLAN`, and that `UPCLOUD_STORAGE_GB`
+  fits within it.
+- The create request's explicit `networking` block (public + utility IPv4) and
+  the `storages=1&backups=delete` delete parameters behave as documented.
+
 ---
 
 End of spec.

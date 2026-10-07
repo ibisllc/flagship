@@ -351,6 +351,14 @@ CLOUDFLARE_SERVICES_ZONE_ID = "51f3bfe11a729db57effd70ed3cf9c77"
 # through 2026-11-05T19:31:05.140Z. Renew the LEASE again before then;
 # the mandate itself is good through 2027-04-04.
 CA_ENDORSEMENT_ENFORCE = "true"
+# Demo servers moved to UpCloud 2026-10-06 (Hetzner account suspended).
+# UPCLOUD_TOKEN is a Worker secret. Existing Hetzner-created demo rows
+# still route to Hetzner by server-ID shape. See docs/sample-users.md §17.
+DEMO_CLOUD_PROVIDER = "upcloud"
+UPCLOUD_ZONE = "de-fra1"
+UPCLOUD_PLAN = "STARTER-2xCPU-4GB"
+UPCLOUD_TEMPLATE = "01000000-0000-4000-8000-000020070100"
+UPCLOUD_STORAGE_GB = "30"
 # DnsBroker Worker (Task #13) — when set, the main Worker forwards ALL
 # DNS mutations to the broker. Production posture: drop
 # CLOUDFLARE_DNS_API_TOKEN from this Worker entirely and set this var

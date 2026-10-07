@@ -55,7 +55,7 @@ import {
   THROTTLE_WINDOW_RESET_MS,
   OFFER_TTL_MS,
 } from "@flagship/control-plane";
-import { createHetznerClient } from "./hetzner.js";
+import { createDemoServerRouter, hasAnyDemoCloudToken } from "./demoCloud.js";
 import { activeCaLeaseNotAfterMs } from "./caTrustChainLoader.js";
 import { notifyCaLeaseViaGithubIssue } from "./caLeaseGithubNotifier.js";
 
@@ -74,9 +74,11 @@ export interface ScheduledEnv {
   SERVICES_BASE_URL?: string;
   /** Shared bearer for the .com↔.services control channel (#87). */
   SERVICES_CONTROL_SECRET?: string;
-  /** Plan A — Hetzner API token (idle reaper + provisioning poller).
-   *  Unset ⇒ the demo cron branch no-ops. */
+  /** Plan A — Hetzner API token (demo provisioning poller). The demo cron
+   *  branch no-ops only when neither cloud token is set. */
   HCLOUD_TOKEN?: string;
+  /** UpCloud API token — polls demo servers whose id is an UpCloud UUID. */
+  UPCLOUD_TOKEN?: string;
   /** Direct Cloudflare credentials used for stale ACME TXT cleanup. */
   CLOUDFLARE_DNS_API_TOKEN?: string;
   CLOUDFLARE_SERVICES_ZONE_ID?: string;
@@ -481,9 +483,9 @@ async function runEvictionGcCron(env: ScheduledEnv, now: Date): Promise<void> {
 }
 
 /**
- * Plan A — demo-user cron pass. Idle reaper + provisioning poller.
- * No-ops when HCLOUD_TOKEN isn't configured (lets a deploy ship the
- * cron entry safely before the demo system is provisioned).
+ * Plan A — demo-user cron pass: the provisioning poller. There is no idle
+ * reaper by design — demo servers stay on until an operator cleans them up.
+ * No-ops when no cloud token is configured.
  *
  * See docs/sample-users.md §11.
  */
@@ -493,13 +495,12 @@ export async function runDemoCron(
 ): Promise<{
   promoted: number;
 } | null> {
-  if (!env.DB || !env.HCLOUD_TOKEN) return null;
+  if (!env.DB || !hasAnyDemoCloudToken(env)) return null;
   const storage = new D1Storage(env.DB);
-  const hetzner = createHetznerClient(env.HCLOUD_TOKEN);
   const deps = {
     storage: storage.demoUsers,
     usernames: storage.usernames,
-    hetzner,
+    hetzner: createDemoServerRouter(env),
     sshKeyId: 0, // unused by reaper / poller
     audit: storage.auditEvents,
     now: () => now.getTime(),

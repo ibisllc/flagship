@@ -133,3 +133,63 @@ describe("atomic demo account provisioning", () => {
     expect(await storage.usernames.get(body.username)).toBeUndefined();
   });
 });
+
+describe("demo cleanup --force", () => {
+  it("fails closed without force when the provider destroy fails", async () => {
+    const { storage, deps } = harness();
+    await handleCreateDemoAccount(deps, body);
+    const destroyServer = vi.fn(async () => { throw new Error("account suspended"); });
+    const res = await handleCleanupDemoAccount({
+      provisioning: storage.demoAccountProvisioning,
+      demos: storage.demoUsers,
+      destroyServer,
+    }, { username: body.username, idempotencyKey: body.idempotencyKey });
+    expect(res.status).toBe(502);
+    expect(await storage.demoUsers.get(body.username)).toBeDefined();
+  });
+
+  it("with force, still clears DNS and the demo row and reports the orphaned server", async () => {
+    const { storage, deps } = harness();
+    await handleCreateDemoAccount(deps, body);
+    const destroyServer = vi.fn(async () => { throw new Error("account suspended"); });
+    const cleanupDns = vi.fn(async () => undefined);
+    const res = await handleCleanupDemoAccount({
+      provisioning: storage.demoAccountProvisioning,
+      demos: storage.demoUsers,
+      destroyServer,
+      cleanupDns,
+    }, { username: body.username, idempotencyKey: body.idempotencyKey, force: true });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      deleted: true, providerDestroy: "failed", dnsCleanup: "ok", orphanedServerId: "server-1",
+    });
+    expect(cleanupDns).toHaveBeenCalledWith(body.username);
+    expect(await storage.demoUsers.get(body.username)).toBeUndefined();
+    expect(await storage.usernames.get(body.username)).toBeUndefined();
+  });
+
+  it("with force, a DNS failure is reported rather than blocking", async () => {
+    const { storage, deps } = harness();
+    await handleCreateDemoAccount(deps, body);
+    const res = await handleCleanupDemoAccount({
+      provisioning: storage.demoAccountProvisioning,
+      demos: storage.demoUsers,
+      destroyServer: async () => undefined,
+      cleanupDns: async () => { throw new Error("cf down"); },
+    }, { username: body.username, idempotencyKey: body.idempotencyKey, force: true });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ providerDestroy: "ok", dnsCleanup: "failed" });
+    expect(res.body).not.toHaveProperty("orphanedServerId");
+  });
+
+  it("only boolean true enables force", async () => {
+    const { storage, deps } = harness();
+    await handleCreateDemoAccount(deps, body);
+    const res = await handleCleanupDemoAccount({
+      provisioning: storage.demoAccountProvisioning,
+      demos: storage.demoUsers,
+      destroyServer: async () => { throw new Error("x"); },
+    }, { username: body.username, idempotencyKey: body.idempotencyKey, force: "true" });
+    expect(res.status).toBe(502);
+  });
+});

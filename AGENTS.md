@@ -150,6 +150,28 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-10-06 (demo servers: UpCloud-ready + leak findings) — demo creation can
+now target UpCloud; nothing deployed or flipped.** `DEMO_CLOUD_PROVIDER`
+(`hetzner` default ⇒ prod unchanged) picks where NEW demo servers are created;
+existing servers route by id shape (numeric = Hetzner, UUID = UpCloud), so no
+migration. New `apps/com/src/upcloud.ts` + `demoCloud.ts`; config and the
+open items to verify on a real UpCloud account are in `docs/sample-users.md`
+§17. Cleanup gains `--force` (finishes DNS + row teardown when the provider
+call fails, e.g. the suspended Hetzner account, reporting `orphanedServerId`)
+and now actually removes the demo's DNS records (the route never passed
+`cleanupDns`). The CLI stops sending `fsn1`/`cpx11` by default so the Worker's
+provider defaults apply. Context: the Hetzner account was suspended for an
+unpaid bill that included three ORPHANED demo servers — created by the
+pre-2026-07-20 random-suffix provisioner and orphaned when the 2026-07-21 prod
+wipe dropped their rows (the wipe never touches Hetzner, and nothing sweeps
+`flagship-demo`-labelled servers). The idle reaper is intentionally ABSENT
+(owner decision: demos are rare and stay on until cleaned up); its old docs
+(§11) are historical. The Android `DemoConnectClient` still calls the removed
+`/api/dev/sample-user/<u>/connect` — dead code, left unchanged.
+**Remaining (owner):** settle the Hetzner bill or `cleanup --force` its rows;
+set the UpCloud secret/vars, deploy `.com`, recreate the reviewer demo, and
+verify the §17.5 items on the first real UpCloud box.
+
 **2026-10-06 (recovery re-pair is credential-gated) — closes an unauthenticated
 account-takeover primitive on `.com`; NOT deployed (needs a Worker secret set
 FIRST).** `handleInitiateRePair` schedules a swap of the account's registered

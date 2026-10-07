@@ -31,6 +31,9 @@ export interface CreateDemoAccountBody {
 export interface CleanupDemoAccountBody {
   username?: unknown;
   idempotencyKey?: unknown;
+  /** Admin escape hatch: finish cleanup even when the provider or DNS call
+   *  fails (e.g. a suspended provider account), reporting what failed. */
+  force?: unknown;
 }
 
 export interface CleanupDemoAccountDeps {
@@ -250,21 +253,37 @@ export async function handleCleanupDemoAccount(
   const username = usernameResult.label;
   const row = await deps.demos.get(username);
   if (!row || row.idempotencyKey !== body.idempotencyKey) return conflict("demo cleanup target does not match");
+  const force = body.force === true;
   await deps.demos.update(username, { state: "cleanup-only" });
+  let providerDestroy: "ok" | "failed" | "none" = "none";
   if (row.activeServerId) {
     try {
       await deps.destroyServer(row.activeServerId);
+      providerDestroy = "ok";
     } catch {
-      return { status: 502, body: { error: "provider cleanup failed; retry with the same identifiers" } };
+      if (!force) {
+        return { status: 502, body: { error: "provider cleanup failed; retry with the same identifiers" } };
+      }
+      providerDestroy = "failed";
     }
   }
+  let dnsCleanup: "ok" | "failed" | "none" = deps.cleanupDns ? "ok" : "none";
   try {
     await deps.cleanupDns?.(username);
   } catch {
-    return { status: 502, body: { error: "DNS cleanup failed; retry with the same identifiers" } };
+    if (!force) {
+      return { status: 502, body: { error: "DNS cleanup failed; retry with the same identifiers" } };
+    }
+    dnsCleanup = "failed";
   }
   if (!(await deps.provisioning.cleanup(username, body.idempotencyKey))) {
     return conflict("demo cleanup target changed");
   }
-  return ok({ username, deleted: true });
+  return ok({
+    username,
+    deleted: true,
+    providerDestroy,
+    dnsCleanup,
+    ...(providerDestroy === "failed" ? { orphanedServerId: row.activeServerId } : {}),
+  });
 }

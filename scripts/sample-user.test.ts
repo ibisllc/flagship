@@ -41,8 +41,6 @@ describe("sample-user CLI", () => {
       username: "openai-build",
       accountName: "OpenAI Build Week",
       idempotencyKey: "sample-user-create:openai-build",
-      region: "fsn1",
-      size: "cpx11",
     });
     expect(poll).toHaveBeenCalledTimes(1);
   });
@@ -75,6 +73,38 @@ describe("sample-user CLI", () => {
     expect(JSON.parse(init.body)).toEqual({
       username: "openai-build",
       idempotencyKey: "sample-user-create:openai-build",
+    });
+  });
+
+  it("sends region/size only when given, so the Worker's provider defaults apply", async () => {
+    const fetchFn = vi.fn(async () => response(202, { state: "provisioning" }));
+    await runCreate({
+      fetchFn,
+      env: { baseUrl: "https://example.test", adminSecret: "secret" },
+      stderr: stream(),
+      stdout: stream(),
+      now: () => 1_900_000_000_000,
+      pollUntilReady: async () => ({ ready: true }),
+    }, "openai-build", { accountName: "OpenAI Build Week", region: "de-fra1", size: "PLAN-X" });
+    const init = fetchFn.mock.calls[0]?.[1] as { body: string };
+    expect(JSON.parse(init.body)).toMatchObject({ region: "de-fra1", size: "PLAN-X" });
+  });
+
+  it("cleanup --force forwards force:true", async () => {
+    expect(parseArgs(["cleanup", "openai-build", "--force"]))
+      .toMatchObject({ command: "cleanup", username: "openai-build", flags: { force: true } });
+    const fetchFn = vi.fn(async () => response(200, { deleted: true, providerDestroy: "failed" }));
+    expect(await runCleanup({
+      fetchFn,
+      env: { baseUrl: "https://example.test", adminSecret: "secret" },
+      stderr: stream(),
+      stdout: stream(),
+    }, "openai-build", { force: true })).toBe(0);
+    const init = fetchFn.mock.calls[0]?.[1] as { body: string };
+    expect(JSON.parse(init.body)).toEqual({
+      username: "openai-build",
+      idempotencyKey: "sample-user-create:openai-build",
+      force: true,
     });
   });
 });

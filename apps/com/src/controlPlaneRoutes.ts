@@ -213,6 +213,7 @@ import {
   caTrustChainPublicMaterial,
 } from "./caTrustChainLoader.js";
 import { createHetznerClient } from "./hetzner.js";
+import { createDemoCreateSettings, createDemoServerRouter, demoCreateMissingConfig } from "./demoCloud.js";
 
 export interface ControlPlaneEnv {
   DB?: D1Database;
@@ -371,6 +372,21 @@ export interface ControlPlaneEnv {
    * docs/sample-users.md §9.1.
    */
   HCLOUD_TOKEN?: string;
+
+  /** Where NEW demo servers are created: `hetzner` (default) | `upcloud`.
+   *  Existing servers route by id shape regardless. See
+   *  docs/sample-users.md "UpCloud provider". */
+  DEMO_CLOUD_PROVIDER?: string;
+  /** UpCloud API token (`ucat_…`), `wrangler secret put UPCLOUD_TOKEN`. */
+  UPCLOUD_TOKEN?: string;
+  /** UpCloud zone for new demos; default `de-fra1`. */
+  UPCLOUD_ZONE?: string;
+  /** UpCloud plan name for new demos (required when the provider is upcloud). */
+  UPCLOUD_PLAN?: string;
+  /** UpCloud Debian template UUID to clone (required when the provider is upcloud). */
+  UPCLOUD_TEMPLATE?: string;
+  /** Root disk size in GB for UpCloud demos; default 20. */
+  UPCLOUD_STORAGE_GB?: string;
 
   /**
    * Public-half SSH key Hetzner attaches to demo servers. Operator's
@@ -3141,19 +3157,7 @@ export async function tryControlPlane(
   // cleanup. Pairing is the sole public write: knowing a demo username is the
   // capability, and the handler can sign only a non-sensitive paired session.
   if (path.startsWith("/api/dev/sample-user")) {
-    const lazyHetzner = env.HCLOUD_TOKEN
-      ? createHetznerClient(env.HCLOUD_TOKEN)
-      : {
-          createServerFromSnapshot() {
-            throw new Error("HCLOUD_TOKEN is not configured on the Worker");
-          },
-          getServerStatus() {
-            throw new Error("HCLOUD_TOKEN is not configured on the Worker");
-          },
-          destroyServer() {
-            throw new Error("HCLOUD_TOKEN is not configured on the Worker");
-          },
-        };
+    const demoServers = createDemoServerRouter(env);
     const sshKeyIdRaw = env.DEMO_PUBLIC_SSH_KEY_ID;
     const sshKeyId = sshKeyIdRaw ? parseInt(sshKeyIdRaw, 10) : 0;
     // DNS cleanup on demo teardown: when the CF token is configured, hand
@@ -3172,7 +3176,7 @@ export async function tryControlPlane(
     const demoDeps = {
       storage: storage.demoUsers,
       usernames: storage.usernames,
-      hetzner: lazyHetzner,
+      hetzner: demoServers,
       sshKeyId,
       audit: storage.auditEvents,
       ...(demoDns ? { dns: demoDns } : {}),
@@ -3221,19 +3225,23 @@ export async function tryControlPlane(
         });
         if (_adminAuth) return finishPlain(_adminAuth);
       }
-      if (!env.DEMO_IRK_KEK || !env.HCLOUD_TOKEN) {
-        return jsonResponse({ error: "demo creation requires DEMO_IRK_KEK + HCLOUD_TOKEN" }, 503);
+      const missingDemoConfig = [env.DEMO_IRK_KEK ? null : "DEMO_IRK_KEK", demoCreateMissingConfig(env)]
+        .filter((v): v is string => !!v);
+      if (!env.DEMO_IRK_KEK || missingDemoConfig.length) {
+        return jsonResponse({ error: `demo creation requires ${missingDemoConfig.join(" + ")}` }, 503);
       }
+      const demoCloud = createDemoCreateSettings(env);
       return finishPlain(await handleCreateDemoAccount({
         provisioning: storage.demoAccountProvisioning,
         demos: storage.demoUsers,
         authCodes: storage.authCodes,
-        hetzner: createHetznerClient(env.HCLOUD_TOKEN),
+        hetzner: demoCloud.client,
         demoIrkKek: hexDecode(env.DEMO_IRK_KEK),
-        defaultRegion: "fsn1",
-        defaultSize: "cpx11",
-        fallbackServerTypes: ["cx23", "cpx21", "cpx22"] as const,
-        ...(sshKeyId ? { demoSshKeyId: sshKeyId } : {}),
+        defaultRegion: demoCloud.defaultRegion,
+        defaultSize: demoCloud.defaultSize,
+        ...(demoCloud.fallbackServerTypes ? { fallbackServerTypes: demoCloud.fallbackServerTypes } : {}),
+        ...(demoCloud.image ? { hetznerImage: demoCloud.image } : {}),
+        ...(sshKeyId && demoCloud.provider === "hetzner" ? { demoSshKeyId: sshKeyId } : {}),
         apex: env.SERVICES_APEX ?? "flagship.services",
         controlApex: env.CONTROL_APEX ?? "flagshipserver.com",
       }, await readJson(request)));
@@ -3246,12 +3254,19 @@ export async function tryControlPlane(
         });
         if (_adminAuth) return finishPlain(_adminAuth);
       }
-      if (!env.HCLOUD_TOKEN) return jsonResponse({ error: "HCLOUD_TOKEN is required for cleanup" }, 503);
-      const cleanupHetzner = createHetznerClient(env.HCLOUD_TOKEN);
+      const servicesApex = env.SERVICES_APEX ?? "flagship.services";
       return finishPlain(await handleCleanupDemoAccount({
         provisioning: storage.demoAccountProvisioning,
         demos: storage.demoUsers,
-        destroyServer: (serverId) => cleanupHetzner.destroyServer(serverId),
+        destroyServer: (serverId) => demoServers.destroyServer(serverId),
+        ...(demoDns ? {
+          cleanupDns: async (username: string) => {
+            const domain = `home.${username}.${servicesApex}`;
+            for (const name of [domain, `*.${domain}`]) {
+              for (const type of ["A", "AAAA"]) await demoDns.deleteByName(name, type);
+            }
+          },
+        } : {}),
       }, await readJson(request)));
     }
     if (method === "GET" && ROUTE_RE.DEMO_USER_LIST.test(path)) {
