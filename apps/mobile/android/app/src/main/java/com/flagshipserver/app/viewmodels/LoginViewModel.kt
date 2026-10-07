@@ -40,6 +40,7 @@ package com.flagshipserver.app.viewmodels
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.RePairCompleteRequest
 import com.flagshipserver.app.api.RePairInitiateRequest
 import com.flagshipserver.app.core.AcmeAccountKey
 import com.flagshipserver.app.core.AdminRootEscrow
@@ -47,6 +48,7 @@ import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.NetworkErrorHumanizer
+import com.flagshipserver.app.core.RePairCompleteClaim
 import com.flagshipserver.app.core.RePairInitiateClaim
 import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
 import com.flagshipserver.app.keystore.Keystore
@@ -153,6 +155,13 @@ class LoginViewModel(
      *  profile's Keystore slot. Null when the account never escrowed one. */
     private var recoveredAcmeScalar: ByteArray? = null
 
+    /** `.com`'s attestation that the gated restore cleared the recovery
+     *  passphrase gate. Carried into the Phase-B re-pair initiate as its
+     *  credential — the cloud refuses to schedule an identity-key swap
+     *  without one. Null for a legacy (ungated) record or a deployment
+     *  that mints no proof; the initiate then fails closed. */
+    private var recoveryProofToken: String? = null
+
     /** Slice D (D-3) — recovered admin master root seed (32 bytes), unwrapped
      *  from the envelope's escrowed `wrappedAdminRoot` if present. Held in
      *  memory until [confirmTakeover] imports it, re-establishing admin on the
@@ -215,6 +224,9 @@ class LoginViewModel(
             recoveredSeed = result.umkSeed
             recoveredAcmeScalar = result.acmeScalar
             recoveredAdminRootSeed = result.adminRootSeed
+            // The credential for the re-pair this may lead to: `.com`'s
+            // attestation that the unwrap above was passphrase-gated.
+            recoveryProofToken = result.recoveryProofToken
             _phase.value = if (isMulti) {
                 LoginPhase.AwaitingSecondFactor
             } else {
@@ -460,6 +472,12 @@ class LoginViewModel(
                     // `secondFactor` is set. Grace-only single accounts
                     // leave it null.
                     totpProof = secondFactor,
+                    // Single-device Phase B: the recovered key is NOT the
+                    // registered one (that's why we're re-pairing), so the
+                    // cloud-recovery proof is the credential we can show.
+                    recoveryProof = recoveryProofToken?.let {
+                        RePairInitiateRequest.RecoveryProof(it)
+                    },
                 ),
                 ifMatch = null,
             )
@@ -494,17 +512,38 @@ class LoginViewModel(
 
     /**
      * Phase 4 — finalize the takeover once its grace has elapsed. The
-     * re-pair COMPLETE endpoint is a public, idempotent CAS-swap with NO
-     * signature (we POST an empty body via [FlagshipServerClient.
-     * completeRePair]). On success we activate the staged IRK rotation
-     * locally (pending → current), open the account as the resolved user,
-     * leaving the device unnamed.
+     * COMPLETE call is signed by the key the pending row installs
+     * (`.com` refuses an unsigned finalization); past that it is an
+     * idempotent CAS-swap. On success we activate the staged IRK
+     * rotation locally (pending → current), open the account as the
+     * resolved user, leaving the device unnamed.
      */
     suspend fun completeTakeover() {
         if (_phase.value !is LoginPhase.Grace) return
         _phase.value = LoginPhase.TakingOver
         try {
-            server.completeRePair(username)
+            val version = Keystore.pendingIrkRotationVersion() ?: Keystore.currentIrkVersion()
+            val newSign = Keystore.deriveIRK("Finish restoring access", version)
+            val newPubHex = pubHexForVersion(version)
+            val issuedAt = System.currentTimeMillis()
+            val completeSig = newSign.sign(
+                RePairCompleteClaim.canonicalBytes(
+                    username = username,
+                    newIrkPubHex = newPubHex,
+                    issuedAt = issuedAt,
+                ),
+            )
+            server.completeRePair(
+                username,
+                RePairCompleteRequest(
+                    request = RePairCompleteRequest.Inner(
+                        username = username,
+                        newIrkPub = newPubHex,
+                        issuedAt = issuedAt,
+                    ),
+                    signature = HexUtil.encode(completeSig),
+                ),
+            )
             // Activate the staged rotation: the new IRK becomes current.
             Keystore.pendingIrkRotationVersion()?.let { pending ->
                 Keystore.setCurrentIrkVersion(pending)

@@ -145,8 +145,16 @@ export async function runKeyfileImportTakeover(args) {
     ? await args.signWithIrkVersioned(seed, newVersion, message)
     : await args.signWithIrk(seed, message);
 
-  // 3 — INITIATE. No totpProof: a keyfile decrypt is single-device proof,
-  //     exactly like mobile. A 401 means a second factor IS enrolled.
+  // 3 — INITIATE, carrying the registered-key credential: a SECOND
+  //     signature over the same canonical bytes by the OLD (currently
+  //     registered) IRK. The key file gave us the seed, so we can
+  //     derive that key and prove ownership with it — which is what
+  //     `.com` requires, since the primary signature above is made by
+  //     the key we're asking it to install and `oldIrkPub` is public.
+  //     A 401 means a second factor IS also enrolled.
+  const oldIrkSig = args.signWithIrk
+    ? await args.signWithIrk(seed, message)
+    : null;
   let rePair;
   try {
     rePair = await initiateRePair({
@@ -154,6 +162,7 @@ export async function runKeyfileImportTakeover(args) {
       newIrkPubHex,
       oldIrkPubHex,
       signHex: toHex(sig),
+      ...(oldIrkSig ? { oldIrkSignatureHex: toHex(oldIrkSig) } : {}),
       issuedAt,
       fetch: args.fetch,
       baseUrl: args.baseUrl,

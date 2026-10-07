@@ -238,15 +238,24 @@ function buildDefaultFirePush(
         const isUrgent = req.bit === ALERT_BIT_URGENT;
         const isInitial = req.bit === ALERT_BIT_T0;
         let body: string;
+        // Copy note: there is no owner-side VETO. `/re-pair/object` is
+        // signed by the NEW IRK (self-cancel for the recoverer), so
+        // telling the owner to "object" promises an action `.com`
+        // rejects. The owner's real remedy is to act from a device that
+        // is still signed in — rotating the identity there breaks the
+        // pending swap's CAS. Say that instead.
         if (isUrgent) {
-          body = "Your account is about to be taken over in 1 hour. Object now if this isn't you.";
+          body =
+            "This account will be taken over in 1 hour. If it wasn't you, secure it now from a device you still have.";
         } else if (isInitial) {
-          body = "A new device is trying to take over your account. Tap to review or object.";
+          body =
+            "A device used one of your recovery credentials to start taking over this account. Tap to review.";
         } else {
-          // Intermediate objection reminder. Deliberately grace-length-
-          // agnostic copy (no day count) — the rungs are now fractions
-          // of the grace window, not fixed days.
-          body = "Account recovery still pending. Tap to review or object before the window closes.";
+          // Intermediate reminder. Deliberately grace-length-agnostic
+          // copy (no day count) — the rungs are now fractions of the
+          // grace window, not fixed days.
+          body =
+            "Account recovery still pending. If it wasn't you, secure your account from a device you still have.";
         }
         await deps.pushFanout({
           username: req.username.toLowerCase(),
@@ -259,7 +268,7 @@ function buildDefaultFirePush(
             category: req.category,
             title: isUrgent
               ? "Account takeover in 1 hour"
-              : "Account recovery attempt",
+              : "Account recovery started",
             body,
             deepLink: `flagship://account/re-pair?u=${encodeURIComponent(
               req.username.toLowerCase(),

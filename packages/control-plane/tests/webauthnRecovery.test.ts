@@ -13,6 +13,7 @@ import {
   handleFetchWrappedUmkWithToken,
   handleUploadWebauthnRecovery,
 } from "../src/webauthnRecovery.js";
+import { verifyRecoveryProof } from "../src/recoveryProof.js";
 
 const USERNAME = "alice";
 
@@ -786,3 +787,83 @@ describe("webauthn recovery — upload accepts the new Argon2 hashes (Task #74)"
   });
 });
 
+
+describe("webauthn recovery — recovery-session proof minted by the gated fetch", () => {
+  const PROOF_SECRET = "worker-recovery-proof-secret";
+
+  async function gatedFetch(opts: { withSecret: boolean }) {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchToken = new Uint8Array(32);
+    crypto.getRandomValues(fetchToken);
+    const fetchTokenHashHex = await sha256Hex(fetchToken);
+    await upload({
+      storage,
+      irk,
+      wrappedUmk: new Uint8Array([1, 2, 3, 4]),
+      fetchTokenHashHex,
+      prfSaltHashHex: await sha256Hex(new Uint8Array([9])),
+    });
+    const res = await handleFetchWrappedUmkWithToken(
+      {
+        usernames: storage.usernames,
+        webauthnRecovery: storage.webauthnRecovery,
+        ...(opts.withSecret ? { recoveryProofSecret: PROOF_SECRET } : {}),
+      },
+      USERNAME,
+      { fetchToken: bytesToHex(fetchToken), issuedAt: Date.now() },
+    );
+    return { res, storage, fetchTokenHashHex };
+  }
+
+  it("returns a proof the re-pair initiate will accept", async () => {
+    const { res, fetchTokenHashHex } = await gatedFetch({ withSecret: true });
+    expect(res.status).toBe(200);
+    const proof = (res.body as { recoveryProof?: { token: string; expiresAt: number } })
+      .recoveryProof;
+    expect(proof?.token).toMatch(/^rp1\.\d+\.[0-9a-f]{64}$/);
+    const verdict = await verifyRecoveryProof(
+      proof!.token,
+      { username: USERNAME, fetchTokenHashHex },
+      PROOF_SECRET,
+    );
+    expect(verdict.ok).toBe(true);
+  });
+
+  it("still releases the ciphertext when no proof secret is configured", async () => {
+    // The passphrase gate is what authorizes the ciphertext release; a
+    // missing proof secret must not block someone restoring a device.
+    // (The follow-on re-pair is what refuses — fail-closed there.)
+    const { res } = await gatedFetch({ withSecret: false });
+    expect(res.status).toBe(200);
+    expect(res.body).not.toHaveProperty("recoveryProof");
+    expect((res.body as { wrappedUmk: string }).wrappedUmk).toBeTruthy();
+  });
+
+  it("mints NO proof on a wrong passphrase — the gate must be passed first", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchToken = new Uint8Array(32);
+    crypto.getRandomValues(fetchToken);
+    await upload({
+      storage,
+      irk,
+      wrappedUmk: new Uint8Array([1, 2, 3, 4]),
+      fetchTokenHashHex: await sha256Hex(fetchToken),
+      prfSaltHashHex: await sha256Hex(new Uint8Array([9])),
+    });
+    const wrong = new Uint8Array(32);
+    wrong.fill(0xff);
+    const res = await handleFetchWrappedUmkWithToken(
+      {
+        usernames: storage.usernames,
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: PROOF_SECRET,
+      },
+      USERNAME,
+      { fetchToken: bytesToHex(wrong), issuedAt: Date.now() },
+    );
+    expect(res.status).toBe(403);
+    expect(res.body).not.toHaveProperty("recoveryProof");
+  });
+});

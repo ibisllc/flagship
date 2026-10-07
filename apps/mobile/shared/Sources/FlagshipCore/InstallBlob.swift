@@ -272,6 +272,31 @@ public enum RePairInitiate {
     }
 }
 
+/// Re-pair COMPLETE envelope. Signed by the NEW IRK — the key the
+/// pending row installs — so `.com` finalizes a rotation only on the
+/// instruction of whoever holds it. Mirrors
+/// packages/protocol/src/recovery.ts `TAG_RE_PAIR_COMPLETE`.
+///
+/// Field shape is identical to the re-pair OBJECT (self-cancel)
+/// envelope and both are signed by the same key, so the TAG is the only
+/// thing separating "finish this recovery" from "abandon it". Never
+/// reuse one signature for the other.
+public enum RePairComplete {
+    public static let canonicalTag = "flagship/re-pair-complete/v1"
+    public static func canonicalBytes(
+        username: String,
+        newIrkPubHex: String,
+        issuedAt: Int64
+    ) -> Data {
+        Data([
+            canonicalTag,
+            username,
+            newIrkPubHex.lowercased(),
+            String(issuedAt),
+        ].joined(separator: "|").utf8)
+    }
+}
+
 /// V2 — Service URL-stem rename envelope. Signed by the user's current
 /// IRK. The internal `serviceId` is preserved across renames; only the
 /// user-visible `newDisplayLabel` changes. Mirrors

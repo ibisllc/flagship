@@ -450,13 +450,20 @@ export type AuditEventKind =
   | "recovery-code-consumed"
   | "quarantine-blocked-revoke"
   | "totp-failed-rate"
-  // #52 follow-up — single-device re-pair hardening. The first marks
+  // #52 follow-up — single-device re-pair hardening. The first marked
   // a grace-only recovery initiate on an account with NO enrolled
-  // second factor (allowed, but must stay visible in the feed); the
-  // second marks a stale pending re-pair swept because its completion
-  // window (RE_PAIR_COMPLETE_WINDOW_MS past completes_at) elapsed
-  // without a /complete.
+  // second factor. That initiate is now REFUSED outright (recovery is
+  // credential-only), so the kind is retained for historical rows and
+  // is no longer emitted; `re-pair-refused-no-credential` records the
+  // refusal instead. `re-pair-expired` marks a stale pending re-pair
+  // swept because its completion window (RE_PAIR_COMPLETE_WINDOW_MS
+  // past completes_at) elapsed without a /complete.
   | "re-pair-initiated-no-credential"
+  | "re-pair-refused-no-credential"
+  // Every accepted recovery initiate, with the credential it was
+  // authorized by (`recovery_method`). The owner's Activity feed is
+  // where a recovery they did not start becomes visible to them.
+  | "re-pair-initiated"
   | "re-pair-expired"
   // P13 — IRK-signed user-initiated server revocation
   // (POST /api/server-registry/revoke). Reason ∈ {lost, stolen,
@@ -494,7 +501,14 @@ export type AuditEventKind =
  * "Recovered via recovery code" / "Recovered without 2FA". Mirrors
  * the `RePairInitiate.totpProof.method` discriminator.
  */
-export type AuditRecoveryMethod = "totp" | "recovery-code" | "none";
+export type AuditRecoveryMethod =
+  | "totp"
+  | "recovery-code"
+  /** Cloud-recovery passphrase + passkey, proved via the gated wrapped-UMK fetch. */
+  | "recovery-credential"
+  /** A signature by the account's registered IRK (key-file / device-pair route). */
+  | "registered-key"
+  | "none";
 
 export interface AuditEventRecord {
   seq: number;

@@ -266,7 +266,8 @@ public final class RealAccountLoginViewModel {
         do {
             let resp = try await initiateRotatedRePair(
                 username: username,
-                oldIrkPubHex: recoveryVM.registeredIrkPubHex ?? recoveredIrkPubHex
+                oldIrkPubHex: recoveryVM.registeredIrkPubHex ?? recoveredIrkPubHex,
+                recoveryProofToken: recoveryVM.recoveryProofToken
             )
             phase = .completed(username: username, completesAt: resp.completesAt)
         } catch ScreensClientError.http(let status, _) where status == 401 {
@@ -328,7 +329,8 @@ public final class RealAccountLoginViewModel {
     private func initiateRotatedRePair(
         username: String,
         oldIrkPubHex: String,
-        proof: RePairInitiateRequest.TotpProof? = nil
+        proof: RePairInitiateRequest.TotpProof? = nil,
+        recoveryProofToken: String? = nil
     ) async throws -> RePairInitiateResponse {
         let newKey = try await Keystore.deriveIRK(reason: "Authorize takeover")
         let newPubHex = HexUtil.encode(newKey.publicKey.rawRepresentation)
@@ -350,7 +352,13 @@ public final class RealAccountLoginViewModel {
                     issuedAt: issuedAt
                 ),
                 signature: HexUtil.encode(signature),
-                totpProof: proof
+                totpProof: proof,
+                // The credential: `.com`'s attestation that the unwrap
+                // we just did cleared the recovery passphrase gate.
+                // Without it (or a code) the initiate is refused.
+                recoveryProof: recoveryProofToken.map {
+                    RePairInitiateRequest.RecoveryProof(token: $0)
+                }
             ),
             ifMatch: nil
         )
@@ -409,15 +417,34 @@ public final class RealAccountLoginViewModel {
     }
 
     /// Phase 4 — finalize the takeover once its grace has elapsed. The
-    /// re-pair COMPLETE endpoint is a public, idempotent CAS-swap with no
-    /// signature gate, so we POST an empty body via `completeRePair`. 404
-    /// == already swapped/swept (treat as success); 425 == too early
-    /// (stay in grace); 403/409 == objected (cancelled).
+    /// COMPLETE call is signed by the key the pending row installs
+    /// (`.com` refuses an unsigned finalization); past that it is an
+    /// idempotent CAS-swap. 404 == already swapped/swept (treat as
+    /// success); 425 == too early (stay in grace); 403/409 == objected
+    /// (cancelled).
     public func completeTakeover() async {
         guard case .completed(let username, let completesAt) = phase else { return }
         phase = .working
         do {
-            _ = try await server.completeRePair(username: username)
+            // The takeover installed THIS device's current IRK, so the
+            // live version is the one the pending row names.
+            let key = try await Keystore.deriveIRK(reason: "Finish restoring access")
+            let pubHex = HexUtil.encode(key.publicKey.rawRepresentation)
+            let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+            let completeSig = try key.signature(
+                for: RePairComplete.canonicalBytes(
+                    username: username,
+                    newIrkPubHex: pubHex,
+                    issuedAt: issuedAt
+                )
+            )
+            _ = try await server.completeRePair(
+                username: username,
+                body: RePairCompleteRequest(
+                    request: .init(username: username, newIrkPub: pubHex, issuedAt: issuedAt),
+                    signature: HexUtil.encode(completeSig)
+                )
+            )
             phase = .finalized(username: username)
         } catch ScreensClientError.http(let status, _) where status == 404 {
             phase = .finalized(username: username)

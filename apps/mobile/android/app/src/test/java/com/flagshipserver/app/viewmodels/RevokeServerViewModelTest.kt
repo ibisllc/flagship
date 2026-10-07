@@ -25,6 +25,7 @@ import com.flagshipserver.app.api.PushTokenRevokeRequest
 import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.api.PendingRePairSnapshot
 import com.flagshipserver.app.api.RckRegisterRequest
+import com.flagshipserver.app.api.RePairCompleteRequest
 import com.flagshipserver.app.api.RePairCompleteResponse
 import com.flagshipserver.app.api.RePairInitiateRequest
 import com.flagshipserver.app.api.RePairInitiateResponse
@@ -193,7 +194,7 @@ class RevokeServerViewModelTest {
         override suspend fun listAuditEvents(username: String, sinceSeq: Int, limit: Int): AuditEventListResponse = throw error
         override suspend fun hasCloudRecovery(username: String): Boolean = throw error
         override suspend fun initiateRePair(username: String, body: RePairInitiateRequest, ifMatch: String?): RePairInitiateResponse = throw error
-        override suspend fun completeRePair(username: String): RePairCompleteResponse = throw error
+        override suspend fun completeRePair(username: String, body: RePairCompleteRequest): RePairCompleteResponse = throw error
         override suspend fun fetchPendingRePair(username: String): PendingRePairSnapshot = throw error
         override suspend fun wipeRestart(username: String, body: WipeRestartRequest, ifMatch: String?): WipeRestartResponse = throw error
         override suspend fun renameApp(username: String, serviceId: String, body: AppRenameRequest): AppRenameResponse = throw error

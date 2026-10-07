@@ -343,9 +343,13 @@ CLOUDFLARE_SERVICES_ZONE_ID = "51f3bfe11a729db57effd70ed3cf9c77"
 # pubkey. Any other value = OBSERVE (logs verdict, signs anyway).
 # A LAPSED CaEndorsement under ENFORCE = a hard directory-attestation
 # outage by design. Renew before notAfter; to stand down, remove this
-# line and redeploy (instant, no state change). First armed
-# 2026-05-19 against pubkey 230ad9ed…1cd235cc, lease through
-# 2026-06-02T22:40:29.858Z.
+# line and redeploy (instant, no state change). First armed 2026-05-19
+# against pubkey 230ad9ed…1cd235cc. The ca-track MANDATE itself (not
+# just the lease) lapsed 2026-08-27 and went undetected ~6 weeks (no
+# renewal pager wired — see docs/ca-operations.md OPS-3); same-holder
+# mandate renewal + fresh lease both re-minted 2026-10-06, lease
+# through 2026-11-05T19:31:05.140Z. Renew the LEASE again before then;
+# the mandate itself is good through 2027-04-04.
 CA_ENDORSEMENT_ENFORCE = "true"
 # DnsBroker Worker (Task #13) — when set, the main Worker forwards ALL
 # DNS mutations to the broker. Production posture: drop

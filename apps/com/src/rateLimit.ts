@@ -53,6 +53,13 @@ export type RateLimitEndpoint =
   | "auth-code-issue"
   | "server-register"
   | "recovery-by-username"
+  // Recovery re-pair INITIATE — the account-key-rotation schedule.
+  // Keyed per-target-username (the path carries it) plus per-IP. The
+  // handler requires a recovery credential, so a flood can only ever
+  // be 401s; this keeps that flood off the escrow + audit stores and
+  // off the owner's push channel. The per-username budget is the
+  // tight one: a legitimate recovery initiates ONCE.
+  | "re-pair-initiate"
   | "qr-pipe-upgrade"
   | "device-grants-revoke"
   | "device-grants-mint"
@@ -165,6 +172,10 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "irk", limit: 5, windowSec: 3600 },
   ],
   "recovery-by-username": [
+    { axis: "ip", limit: 10, windowSec: 3600 },
+    { axis: "usernameHash", limit: 3, windowSec: 900 },
+  ],
+  "re-pair-initiate": [
     { axis: "ip", limit: 10, windowSec: 3600 },
     { axis: "usernameHash", limit: 3, windowSec: 900 },
   ],
@@ -377,6 +388,12 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && pathname === "/api/username/suggest") return "username-suggest";
   if (m === "POST" && pathname === "/api/auth-code/issue") return "auth-code-issue";
   if (m === "POST" && pathname === "/api/server/register") return "server-register";
+  // Recovery re-pair initiate. NOT /re-pair/object or /re-pair/complete:
+  // both are bounded by the single pending row they act on, and rate-
+  // limiting a finalization would strand a legitimate recovery.
+  if (m === "POST" && /^\/api\/users\/[^/]+\/re-pair$/.test(pathname)) {
+    return "re-pair-initiate";
+  }
   if (
     (m === "GET" || m === "DELETE") &&
     /^\/api\/recovery\/by-username\/[^/]+$/.test(pathname)
@@ -556,7 +573,10 @@ export function extractUsernameHash(pathname: string): string | undefined {
   const m =
     pathname.match(/^\/api\/recovery\/by-username\/([^/]+)$/) ??
     pathname.match(/^\/api\/recovery\/by-username\/([^/]+)\/fetch$/) ??
-    pathname.match(/^\/api\/account\/resolve\/([^/]+)$/);
+    pathname.match(/^\/api\/account\/resolve\/([^/]+)$/) ??
+    // Re-pair initiate is keyed by its TARGET account, so one handle
+    // can't be hammered from a rotating source address.
+    pathname.match(/^\/api\/users\/([^/]+)\/re-pair$/);
   return m ? decodeURIComponent(m[1]!) : undefined;
 }
 

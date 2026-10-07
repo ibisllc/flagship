@@ -313,7 +313,12 @@ describe("v1.2 Plan B Phase 5 — real-push fan-out", () => {
     expect(fires).toHaveLength(1);
     expect(new Set(fires[0]!.tokenIds)).toEqual(new Set(["devA", "devB"]));
     expect(fires[0]!.category).toBe("re-pair-initiated");
-    expect(fires[0]!.body).toMatch(/new device.*account/i);
+    // Copy note: NOT "object" — `/re-pair/object` is signed by the NEW
+    // IRK (self-cancel for the recoverer), so telling the owner to
+    // object promises an action `.com` rejects. The alert names the
+    // credential use and points at reviewing it.
+    expect(fires[0]!.body).toMatch(/recovery credentials.*taking over/i);
+    expect(fires[0]!.body).not.toMatch(/object/i);
     expect(fires[0]!.deepLink).toMatch(/^flagship:\/\/account\/re-pair\?u=alice/);
     // Bit was stamped after the successful fan-out.
     const after = await s.pendingRePairs.get(USERNAME);

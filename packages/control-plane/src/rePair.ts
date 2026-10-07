@@ -1,9 +1,11 @@
 import {
   verifyDeviceCapabilityGrant,
+  verifyRePairComplete,
   verifyRePairInitiate,
   verifyRePairObject,
   type DeviceCapabilityGrant,
   type DeviceScope,
+  type RePairComplete,
   type RePairInitiate,
   type RePairObject,
   DEVICE_SCOPES,
@@ -15,6 +17,7 @@ import type {
   PendingRePairStorage,
   PushTokenStorage,
   UsernameStorage,
+  WebauthnRecoveryStorage,
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
 import { hexToBytes } from "./hex.js";
@@ -29,24 +32,42 @@ import {
   type V12PushFanout,
 } from "./totp.js";
 import { ALERT_BIT_T0 } from "./rePairAlerts.js";
+import { verifyRecoveryProof } from "./recoveryProof.js";
 
 /**
  * Recovery re-pair endpoints (J.3).
  *
  * Three-step protocol:
- *   1. POST /api/users/:username/re-pair          (NEW IRK signed)
+ *   1. POST /api/users/:username/re-pair          (NEW IRK signed
+ *      + a RECOVERY CREDENTIAL proof — see below)
  *      Records a pending row with completes_at = now + grace.
- *   2. POST /api/users/:username/re-pair/object   (OLD IRK signed)
- *      Marks the row objected; no swap will happen.
+ *   2. POST /api/users/:username/re-pair/object   (NEW IRK signed)
+ *      SELF-cancel by the recoverer; marks the row objected.
  *   3. POST /api/users/:username/re-pair/complete (NEW IRK signed)
  *      Atomically swaps the username's IRK pubkey iff:
  *        - completes_at <= now < completes_at + RE_PAIR_COMPLETE_WINDOW_MS
  *        - objected_at IS NULL
  *
- * The 24h grace lets a user whose old device is still online cancel
- * an unauthorized takeover. Membership re-attach (J.4) is a daemon-
- * side concern and lives outside this handler — it walks installed
- * apps after a swap and emits per-app phone alerts for review.
+ * **What actually authorizes a takeover: the credential at step 1.**
+ * Not the grace window, and NOT an objection — step 2 is signed by the
+ * NEW IRK, so it is the recoverer's own undo, never a veto the
+ * displaced owner can exercise (that veto was removed deliberately: a
+ * device thief usually holds the credential too). Every signature in
+ * this protocol is made by the incoming key, and `oldIrkPub` is public
+ * (GET /api/username/:u serves it), so step 1 demands an enrolled
+ * credential — a TOTP / recovery code, or the recovery-session proof
+ * minted by the passphrase-gated wrapped-UMK fetch. An account with no
+ * credential cannot be recovered BY ANYONE, which is the stated product
+ * invariant (docs/naming-recovery-and-name-change.md §1.5-1.6) and the
+ * only thing standing between a public handle and a hostile key swap.
+ *
+ * The grace window is a NOTIFICATION window, not an authorization one:
+ * it gives the owner's other devices time to see the alert and act from
+ * a device that is still signed in. Do not re-describe it as a brake.
+ *
+ * Membership re-attach (J.4) is a daemon-side concern and lives outside
+ * this handler — it walks installed apps after a swap and emits per-app
+ * phone alerts for review.
  *
  * **Concurrency guarantees (SQL CAS at every mutation):**
  *
@@ -76,9 +97,10 @@ import { ALERT_BIT_T0 } from "./rePairAlerts.js";
 export const RE_PAIR_GRACE_MS = 24 * 60 * 60_000;
 
 /** Recovery Phase B — 3-day grace for single-device accounts. The earlier
- * 7-day window was wide enough to never miss an objection, but it also meant a
- * legitimately-recovering owner waited a week to take their account back. 3
- * days keeps a real objection window while making same-week recovery viable.
+ * 7-day window gave the owner's other devices plenty of time to notice, but it
+ * also meant a legitimately-recovering owner waited a week to take their
+ * account back. 3 days keeps a real notification window while making
+ * same-week recovery viable.
  * See docs/session-handoff-2026-06-02.md §4 + docs/v1.2-security-cascade.md
  * §"Re-pair J.3 grace extension". */
 export const RE_PAIR_SINGLE_GRACE_MS = 3 * 24 * 60 * 60_000;
@@ -192,6 +214,27 @@ export interface RePairDeps {
    * the rest of the cascade.
    */
   deviceCapabilityGrants?: DeviceCapabilityGrantStorage;
+  /**
+   * Cloud-recovery escrow store. REQUIRED in production: it is how
+   * `handleInitiateRePair` learns whether the account has a recovery
+   * credential at all, and what the presented `recoveryProof` must be
+   * bound to.
+   *
+   * Unlike the other optional deps in this interface, a missing value
+   * here does NOT degrade to the old behaviour — it FAILS CLOSED (503).
+   * The old behaviour was the vulnerability: an account with no TOTP
+   * got its IRK swap scheduled on nothing but a self-signed envelope
+   * plus the publicly-readable `oldIrkPub`.
+   */
+  webauthnRecovery?: WebauthnRecoveryStorage;
+  /**
+   * `FLAGSHIP_RECOVERY_PROOF_SECRET` — the secret the gated wrapped-UMK
+   * fetch MACs its recovery-session proof with (`recoveryProof.ts`).
+   * Same fail-closed rule as `webauthnRecovery`: without it, a
+   * single-device recovery cannot be authorized, so the initiate is
+   * refused rather than waved through.
+   */
+  recoveryProofSecret?: string;
 }
 
 const DEFAULT_MAX_AGE = 5 * 60_000;
@@ -236,6 +279,21 @@ export async function handleInitiateRePair(
      * J.3 path (the recovering device has no push_tokens row yet).
      */
     callerTokenId?: unknown;
+    /**
+     * The recovery-session token minted by the passphrase-gated
+     * wrapped-UMK fetch. `{ token }` as the fetch returns it, or a
+     * bare string. NOT in the canonical bytes (it is ephemeral and
+     * account-bound, exactly like `totpProof`).
+     */
+    recoveryProof?: unknown;
+    /**
+     * Hex Ed25519 signature over the SAME canonical RePairInitiate
+     * bytes, made by the account's CURRENTLY REGISTERED IRK. The
+     * key-file / device-pair credential: the caller holds the UMK
+     * seed, derives the registered key from it, and signs. Verified
+     * against `userRec.irkPubHex`.
+     */
+    oldIrkSignature?: unknown;
   };
   const r = b?.request ?? {};
   if (
@@ -319,6 +377,36 @@ export async function handleInitiateRePair(
     return malformed("newIrkPub equals current IRK");
   }
 
+  let newIrkPub: Uint8Array;
+  let oldIrkPub: Uint8Array;
+  let sig: Uint8Array;
+  try {
+    newIrkPub = hexToBytes(r.newIrkPub);
+    oldIrkPub = hexToBytes(r.oldIrkPub);
+    sig = hexToBytes(b.signature);
+  } catch {
+    return malformed("invalid hex");
+  }
+  const claim: RePairInitiate = {
+    username: r.username,
+    newIrkPub,
+    oldIrkPub,
+    issuedAt: r.issuedAt,
+  };
+  // The NEW IRK signs, proving the caller holds the key they are asking
+  // us to install — necessary, not sufficient (the credential gate
+  // below is what proves they may). `.com` verifies against the body's
+  // newIrkPub, not the stored old one. Neither `totpProof` nor
+  // `recoveryProof` is in the canonical bytes (see the RePairInitiate
+  // jsdoc) so their presence doesn't affect this check.
+  //
+  // Checked BEFORE the credential gate so a garbage request costs us no
+  // escrow reads and writes no audit row.
+  if (!verifyRePairInitiate(claim, sig, newIrkPub)) {
+    return forbidden("invalid signature");
+  }
+
+
   // v1.2 Phase 2 — account-type discriminator drives the grace +
   // TOTP-required flags. Absent / 'demo' falls through as 'single'
   // (the demo path lives in demo_users + never gets accountType
@@ -330,14 +418,33 @@ export async function handleInitiateRePair(
   const graceMs = isMultiDevice ? multiGraceMs : singleGraceMs;
   const totpRequired = isMultiDevice;
 
-  // #52 follow-up — a single-device account whose row carries an
-  // enrolled credential (a TOTP secret and/or unspent recovery codes)
-  // must ALSO prove it at initiate. Before this, single-device
-  // recovery started its grace on a bare signature from a brand-new
-  // self-signed IRK — no credential at all — so the grace window was
-  // the ONLY brake. Accounts with NEITHER enrolled keep the grace-only
-  // path (no lockout regression for pre-launch accounts), but that
-  // credential-less initiate is audit-logged so it stays visible.
+  // Recovery is CREDENTIAL-ONLY (docs/naming-recovery-and-name-change.md
+  // §1.6). Everything this handler has seen so far is public or
+  // self-asserted: `oldIrkPub` is served by GET /api/username/:u, and
+  // the envelope below is signed by the very key the caller is asking
+  // us to install. Neither says the caller owns the account.
+  //
+  // So the account's enrolled credential is the gate, and the account
+  // must have one:
+  //   - TOTP secret and/or unspent recovery codes → `totpProof`
+  //     (mandatory for multi-device; also accepted on single).
+  //   - cloud-recovery passphrase + passkey → `recoveryProof`, the
+  //     short-lived token the passphrase-gated wrapped-UMK fetch mints
+  //     (`recoveryProof.ts`). This is the single-device credential, and
+  //     the one every normal account actually has.
+  //   - the account's CURRENT key itself → `oldIrkSignature`, a second
+  //     signature over these same canonical bytes by the registered
+  //     IRK. That is the key-file / device-pair recovery route (the
+  //     user holds the UMK seed, so they can derive the registered key
+  //     and sign with it). Possession of the registered key IS account
+  //     ownership — it already authorizes every IRK-signed op — so it
+  //     is the strongest of the three, and it is the one credential an
+  //     attacker provably cannot hold.
+  //   - none of those → the recovery is REFUSED (409). There is nothing to
+  //     prove, and no veto downstream: `/re-pair/object` is self-cancel
+  //     only, so a grace-only initiate had no owner-side brake at all.
+  //     A name whose credentials are all lost stays reserved and
+  //     unusable by design — it does not become takeable.
   const hasTotpSecret = !!userRec.totpSecretEncrypted;
   // Mirrors totp.ts parseRecoveryCodesJson (which stays module-
   // internal): an unparsable / empty column means "nothing enrolled".
@@ -350,18 +457,122 @@ export async function handleInitiateRePair(
       hasRecoveryCodes = false;
     }
   }
-  const enrolledMethods: Array<"totp" | "recovery-code"> = [
+  // Fail CLOSED when the recovery-escrow dep or the proof secret is
+  // unwired: without them we cannot tell whether a cloud-recovery
+  // credential exists, let alone verify a proof of it. A TOTP-enrolled
+  // account is unaffected — its credential is readable from the
+  // username row, so it can still recover during such a deployment.
+  const canCheckRecoveryCredential = !!deps.webauthnRecovery && !!deps.recoveryProofSecret;
+  if (!canCheckRecoveryCredential && !hasTotpSecret && !hasRecoveryCodes) {
+    return {
+      status: 503,
+      body: {
+        error: "recovery credential verification is unavailable; cannot authorize a re-pair",
+        reason: "recovery-proof-unavailable",
+      },
+    };
+  }
+
+  const recoveryRec = deps.webauthnRecovery
+    ? await deps.webauthnRecovery.get(r.username)
+    : null;
+  // A record without `fetchTokenHashHex` pre-dates the passphrase gate
+  // (Task #74) and cannot authorize anything — the same refusal the
+  // gated fetch gives it ("re-enrol cloud recovery").
+  const recoveryCredentialHashHex =
+    canCheckRecoveryCredential && recoveryRec?.fetchTokenHashHex
+      ? recoveryRec.fetchTokenHashHex
+      : null;
+  // Multi-device recovery stays TOTP-gated: its 24h grace (vs 3 days)
+  // is priced on the stronger factor, so a recovery-credential proof
+  // must not be able to buy the shorter window.
+  const acceptRecoveryCredential = !isMultiDevice && !!recoveryCredentialHashHex;
+
+  // ── The registered-key credential, checked FIRST. ──
+  // A second signature over these same canonical bytes by the account's
+  // CURRENT key. Whoever holds the UMK seed can derive that key, which
+  // is how the key-file and device-pair recovery routes prove ownership
+  // — and why they keep working on an account with no cloud escrow and
+  // no TOTP. It is also the strongest of the credentials: possession of
+  // the registered IRK already authorizes every IRK-signed operation,
+  // so accepting it here grants nothing new.
+  let registeredKeyProven = false;
+  if (typeof b?.oldIrkSignature === "string" && b.oldIrkSignature.length > 0) {
+    let oldSig: Uint8Array;
+    try {
+      oldSig = hexToBytes(b.oldIrkSignature);
+    } catch {
+      return malformed("invalid hex");
+    }
+    // Verified against the STORED pub, not the body's copy of it (they
+    // were already compared above, but the stored row stays the source
+    // of truth so this can't drift into self-certification).
+    if (!verifyRePairInitiate(claim, oldSig, hexToBytes(userRec.irkPubHex))) {
+      return {
+        status: 401,
+        body: {
+          error: "oldIrkSignature does not verify under the account's registered IRK",
+          reason: "bad-registered-key-proof",
+          accountType,
+        },
+      };
+    }
+    registeredKeyProven = true;
+  }
+
+  const enrolledMethods: Array<
+    "totp" | "recovery-code" | "recovery-credential" | "registered-key"
+  > = [
     ...(hasTotpSecret ? (["totp"] as const) : []),
     ...(hasRecoveryCodes ? (["recovery-code"] as const) : []),
+    ...(acceptRecoveryCredential ? (["recovery-credential"] as const) : []),
   ];
-  const proofRequired = isMultiDevice || enrolledMethods.length > 0;
+
+  if (!registeredKeyProven && enrolledMethods.length === 0) {
+    // No credential ⇒ no recovery. Audited so a probe against an
+    // unprotected account is visible in the owner's Activity feed
+    // rather than silent.
+    if (deps.auditEvents) {
+      await recordAuditEvent(
+        { auditEvents: deps.auditEvents },
+        {
+          username: r.username.toLowerCase(),
+          eventKind: "re-pair-refused-no-credential",
+          detail: "Recovery attempt refused — no recovery credential is enrolled on this account",
+          devicePrefix: r.newIrkPub.slice(0, 8),
+          postedAt: now(),
+          accountTypeAtEvent: accountType,
+          recoveryMethod: "none",
+        },
+      );
+    }
+    return {
+      status: 409,
+      body: {
+        error:
+          "this account has no recovery credential enrolled; recovery is credential-only. Use a device that is still signed in, or import its key file.",
+        reason: "no-credential",
+        accountType,
+        // The route that is always available to whoever actually holds
+        // the account's key material.
+        credentialRequired: ["registered-key"],
+      },
+    };
+  }
+
+  // A proven registered key IS the authorization; nothing further to
+  // collect. Otherwise one of the enrolled credentials must be shown.
+  const proofRequired = !registeredKeyProven;
   // What the 401 advertises back to the client so it can prompt for
-  // the right thing. Multi always advertises both (the multi flow has
-  // historically accepted either); single advertises exactly what's
-  // enrolled.
-  const credentialRequired: Array<"totp" | "recovery-code"> = isMultiDevice
+  // the right thing. Multi always advertises both code methods (the
+  // multi flow has historically accepted either); single advertises
+  // exactly what's enrolled. `registered-key` is appended because it
+  // is always an option for a caller holding the account's key file.
+  const credentialRequired: Array<
+    "totp" | "recovery-code" | "recovery-credential" | "registered-key"
+  > = isMultiDevice
     ? ["totp", "recovery-code"]
-    : enrolledMethods;
+    : [...enrolledMethods, "registered-key" as const];
 
   // v1.2 — when a proof is required (multi-device, or single-device
   // with an enrolled credential), the body MUST carry a totpProof
@@ -379,30 +590,76 @@ export async function handleInitiateRePair(
   // `FLAGSHIP_TOTP_KEK` is set in production, the structural fallback
   // never fires.
   let totpProofConsumed = false;
-  if (proofRequired) {
+  let recoveryMethodUsed: "totp" | "recovery-code" | "recovery-credential" | "registered-key" =
+    registeredKeyProven ? "registered-key" : "totp";
+  if (registeredKeyProven) {
+    totpProofConsumed = true;
+  } else if (proofRequired) {
     const proof = b?.totpProof as { code?: unknown; method?: unknown } | undefined;
-    if (
-      !proof ||
-      typeof proof.code !== "string" ||
-      proof.code.length === 0 ||
-      (proof.method !== "totp" && proof.method !== "recovery")
-    ) {
-      // Same wire shape for both account types (the multi-device
+    const structuralCodeProof =
+      !!proof &&
+      typeof proof.code === "string" &&
+      proof.code.length > 0 &&
+      (proof.method === "totp" || proof.method === "recovery");
+    // The recovery-session token the gated wrapped-UMK fetch minted.
+    // Accepted as `{ token }` (what the fetch returns verbatim) or as a
+    // bare string, so a client can forward either shape.
+    const presented = (b as { recoveryProof?: unknown })?.recoveryProof;
+    const recoveryToken =
+      presented && typeof presented === "object"
+        ? (presented as { token?: unknown }).token
+        : presented;
+    const hasCodeMethod = hasTotpSecret || hasRecoveryCodes;
+
+    if (!(hasCodeMethod && structuralCodeProof) && !(acceptRecoveryCredential && typeof recoveryToken === "string")) {
+      // Same wire shape for every account type (the multi-device
       // clients already key their prompt-and-retry off this 401; the
       // "totpProof" substring + `credentialRequired` let single reuse
-      // that handling verbatim).
+      // that handling verbatim — a single account whose only credential
+      // is the cloud-recovery passphrase gets `["recovery-credential"]`
+      // and should re-run the gated fetch rather than prompt for a code).
       return {
         status: 401,
         body: {
           error: isMultiDevice
             ? "totpProof required for multi-device recovery"
-            : "totpProof required for single-device recovery (a second factor is enrolled)",
+            : hasCodeMethod
+              ? "totpProof required for single-device recovery (a second factor is enrolled)"
+              : "recoveryProof required: complete the cloud-recovery passphrase step, then retry",
           accountType,
           credentialRequired,
         },
       };
     }
-    if (deps.totpKekHex) {
+
+    if (!(hasCodeMethod && structuralCodeProof)) {
+      // ── Recovery-credential path (single-device). ──
+      // The binding comes from OUR stored row, never from the body, so
+      // the caller cannot choose what their token is checked against.
+      const verdict = await verifyRecoveryProof(
+        recoveryToken,
+        { username: r.username, fetchTokenHashHex: recoveryCredentialHashHex! },
+        deps.recoveryProofSecret!,
+        { now: now() },
+      );
+      if (!verdict.ok) {
+        return {
+          status: 401,
+          body: {
+            error: "invalid or expired recoveryProof",
+            reason: verdict.reason,
+            accountType,
+            credentialRequired,
+          },
+        };
+      }
+      totpProofConsumed = true;
+      recoveryMethodUsed = "recovery-credential";
+    } else if (deps.totpKekHex) {
+      // ── TOTP / recovery-code path. ──
+      // `structuralCodeProof` already established the shape; re-read
+      // the narrowed values for the verifier.
+      const code = proof!.code as string;
       // Real verification path (Phase 3).
       // Rate-limit the per-username verify counter so a brute-force
       // attempt against the TOTP code is bounded.
@@ -419,7 +676,7 @@ export async function handleInitiateRePair(
         };
       }
       const verdict = await validateTotpCode({
-        code: proof.code,
+        code,
         totpSecretEncrypted: userRec.totpSecretEncrypted,
         recoveryCodesHashesJson: userRec.recoveryCodesHashesJson,
         kekHex: deps.totpKekHex,
@@ -446,7 +703,7 @@ export async function handleInitiateRePair(
         const consume = await consumeRecoveryCode(
           { usernames: deps.usernames },
           r.username,
-          proof.code,
+          code,
         );
         if (!consume.consumed) {
           return {
@@ -474,38 +731,23 @@ export async function handleInitiateRePair(
         }
       }
       totpProofConsumed = true;
+      recoveryMethodUsed = verdict.method === "recovery" ? "recovery-code" : "totp";
     } else {
-      // Pre-Phase-3 fallback — structural-only validation, exactly
-      // as the Phase 2 handler did. Deployments without
-      // FLAGSHIP_TOTP_KEK set never reach the real-verify path; this
-      // keeps the existing tests + dev paths green.
-      totpProofConsumed = true;
+      // No KEK ⇒ the stored TOTP secret cannot be decrypted, so the
+      // presented code cannot be checked against anything. This used
+      // to fall back to a STRUCTURAL-ONLY check ("is it a non-empty
+      // string?"), which accepts any six characters — i.e. it turned
+      // the second factor into a formality on exactly the accounts
+      // that enrolled one. Fail closed instead; `FLAGSHIP_TOTP_KEK`
+      // is set in production, so this is a dev/mis-deploy path.
+      return {
+        status: 503,
+        body: {
+          error: "TOTP verification is unavailable; cannot authorize a re-pair",
+          reason: "totp-kek-unavailable",
+        },
+      };
     }
-  }
-
-  let newIrkPub: Uint8Array;
-  let oldIrkPub: Uint8Array;
-  let sig: Uint8Array;
-  try {
-    newIrkPub = hexToBytes(r.newIrkPub);
-    oldIrkPub = hexToBytes(r.oldIrkPub);
-    sig = hexToBytes(b.signature);
-  } catch {
-    return malformed("invalid hex");
-  }
-  const claim: RePairInitiate = {
-    username: r.username,
-    newIrkPub,
-    oldIrkPub,
-    issuedAt: r.issuedAt,
-  };
-  // The NEW IRK signs — that's the entity proving they hold the
-  // recovered private key. .com verifies against the body's
-  // newIrkPub (not the stored old one). totpProof is NOT in the
-  // canonical bytes (see RePairInitiate jsdoc) so its presence /
-  // absence doesn't affect signature verification.
-  if (!verifyRePairInitiate(claim, sig, newIrkPub)) {
-    return forbidden("invalid signature");
   }
 
   // Recovery-lock release: pending_re_pairs.username is the PK, so the
@@ -562,26 +804,33 @@ export async function handleInitiateRePair(
   });
   if (!insert.ok) return conflict(insert.reason);
 
-  // #52 follow-up — a single-device account with NO enrolled credential
-  // just started a grace-only recovery on a bare new-IRK signature.
-  // That's deliberately still allowed (no lockout regression for
-  // accounts that pre-date credential enrollment), but it must be
-  // VISIBLE: audit it so the Activity feed shows that this takeover
-  // had nothing but the grace window as its brake.
-  if (deps.auditEvents && !proofRequired) {
+  // The accepted initiate lands in the owner's Activity feed naming the
+  // credential that authorized it. A recovery the owner did not start
+  // is now impossible without one of their credentials — this is how
+  // they SEE which one was used.
+  if (deps.auditEvents) {
     await recordAuditEvent(
       { auditEvents: deps.auditEvents },
       {
         username: r.username.toLowerCase(),
-        eventKind: "re-pair-initiated-no-credential",
-        detail: "Recovery started with no second factor enrolled (grace window is the only brake)",
+        eventKind: "re-pair-initiated",
+        detail: `Recovery started, authorized by ${
+          recoveryMethodUsed === "recovery-credential"
+            ? "the cloud-recovery passphrase"
+            : recoveryMethodUsed === "recovery-code"
+              ? "a recovery code"
+              : recoveryMethodUsed === "registered-key"
+                ? "this account's current key"
+                : "a TOTP code"
+        }`,
         devicePrefix: r.newIrkPub.slice(0, 8),
         postedAt: now(),
         accountTypeAtEvent: accountType,
-        recoveryMethod: "none",
+        recoveryMethod: recoveryMethodUsed,
       },
     );
   }
+
 
   // v1.2 Phase 5 — fire the T+0 alert push immediately. If the
   // pushFanout dep isn't wired, the cron scheduler picks up rows
@@ -602,9 +851,9 @@ export async function handleInitiateRePair(
           })),
           payload: {
             category: "re-pair-initiated",
-            title: "Account recovery attempt",
+            title: "Account recovery started",
             body:
-              "A new device is trying to take over your account. Tap to review or object.",
+              "A device used one of your recovery credentials to start taking over this account. Tap to review.",
             deepLink: `flagship://account/re-pair?u=${encodeURIComponent(
               r.username.toLowerCase(),
             )}`,
@@ -639,6 +888,8 @@ export async function handleInitiateRePair(
       accountType,
       totpRequired,
       quarantineMs,
+      /** Which enrolled credential authorized this initiate. */
+      credentialUsed: recoveryMethodUsed,
     },
   };
 }
@@ -712,9 +963,14 @@ export async function handleObjectRePair(
 }
 
 /**
- * v2.1 (W6) — body shape for /api/users/:u/re-pair/complete. All
- * fields optional so legacy callers (curl with no body, or pre-W6
- * clients) still work.
+ * Body shape for /api/users/:u/re-pair/complete.
+ *
+ * `request` + `signature` are a `RePairComplete` envelope signed by the
+ * NEW IRK and are REQUIRED. The endpoint used to be a bare public POST
+ * ("idempotent, nothing to authorize"), which let any passer-by fire
+ * the swap the moment a pending row ripened. The swap target is still
+ * read from the pending row — a signature cannot redirect it — so this
+ * is strictly "only the key being installed may say go".
  *
  * `refreshedGrants` is only meaningful when the cloud's
  * `recovery_wipe_policy === 'graceful'`. Each entry is a fresh
@@ -728,6 +984,14 @@ export async function handleObjectRePair(
  * docs/v1.2-security-cascade.md §"Recovery wipe policy".
  */
 export interface CompleteRePairBody {
+  /** `RePairComplete` envelope fields; `newIrkPub` must equal the pending row's. */
+  request?: {
+    username?: unknown;
+    newIrkPub?: unknown;
+    issuedAt?: unknown;
+  };
+  /** Ed25519 signature over the canonical RePairComplete bytes, hex. */
+  signature?: unknown;
   refreshedGrants?: Array<{
     grantId: string;
     deviceId: string;
@@ -891,14 +1155,64 @@ export async function handleCompleteRePair(
   username: string,
   body?: CompleteRePairBody,
 ): Promise<HandlerResponse> {
-  // Public read — no signature gate. A successful complete is
-  // idempotent: if we've already swapped, the pending row is gone
-  // and we return 404; if we haven't, we check completion conditions
-  // and either swap or return why we can't.
+  // Signed by the NEW IRK — the key this call installs. Idempotent
+  // either way: if we've already swapped, the pending row is gone and
+  // we return 404; otherwise we check the completion conditions and
+  // either swap or say why we can't.
   const now = deps.now ?? (() => Date.now());
+  const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
   const quarantineMs = deps.quarantineMs ?? RE_PAIR_QUARANTINE_MS;
   const pending = await deps.pendingRePairs.get(username);
   if (!pending) return notFound("no pending re-pair");
+
+  // ── Authorize the finalization. ──
+  // The row names the key to install; this proves the caller holds it.
+  // Order matters: we authorize BEFORE reporting objected / too-early /
+  // expired, so an unauthenticated caller can't use the status codes to
+  // probe another account's recovery timeline.
+  const cb = body as CompleteRePairBody | undefined;
+  const cr = cb?.request;
+  if (
+    typeof cr?.username !== "string" ||
+    typeof cr?.newIrkPub !== "string" ||
+    typeof cr?.issuedAt !== "number" ||
+    typeof cb?.signature !== "string"
+  ) {
+    return {
+      status: 401,
+      body: {
+        error: "a RePairComplete envelope signed by the new IRK is required",
+        reason: "signature-required",
+      },
+    };
+  }
+  if (cr.username.toLowerCase() !== username.toLowerCase()) {
+    return forbidden("username / url mismatch");
+  }
+  if (Math.abs(now() - cr.issuedAt) > maxAgeMs) {
+    return forbidden("stale request");
+  }
+  if (cr.newIrkPub.toLowerCase() !== pending.newIrkPubHex.toLowerCase()) {
+    return forbidden("newIrkPub does not match the pending re-pair");
+  }
+  let completeNewIrkPub: Uint8Array;
+  let completeSig: Uint8Array;
+  try {
+    completeNewIrkPub = hexToBytes(cr.newIrkPub);
+    completeSig = hexToBytes(cb.signature);
+  } catch {
+    return malformed("invalid hex");
+  }
+  const completeClaim: RePairComplete = {
+    username: cr.username,
+    newIrkPub: completeNewIrkPub,
+    issuedAt: cr.issuedAt,
+  };
+  // Verified against the PENDING ROW's key (via the equality check
+  // above), never against a key the body chose on its own.
+  if (!verifyRePairComplete(completeClaim, completeSig, completeNewIrkPub)) {
+    return forbidden("invalid signature");
+  }
   if (pending.objectedAt) {
     return {
       status: 409,
@@ -966,8 +1280,8 @@ export async function handleCompleteRePair(
   let validatedPairs: Array<{ next: DeviceCapabilityGrantRecord; old: DeviceCapabilityGrantRecord }> = [];
   if (
     wipePolicy === "graceful" &&
-    body?.refreshedGrants &&
-    body.refreshedGrants.length > 0 &&
+    cb?.refreshedGrants &&
+    cb.refreshedGrants.length > 0 &&
     deps.deviceCapabilityGrants
   ) {
     let newIrkPubBytes: Uint8Array;
@@ -980,7 +1294,7 @@ export async function handleCompleteRePair(
       deps.deviceCapabilityGrants,
       username.toLowerCase(),
       newIrkPubBytes,
-      body.refreshedGrants,
+      cb.refreshedGrants,
     );
     if (!verdict.ok) {
       return { status: verdict.status, body: { error: verdict.error } };

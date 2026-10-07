@@ -28,9 +28,16 @@
 //     2. Re-derive Argon2id → fetchToken + prfSalt.
 //     3. POST /api/recovery/by-username/<u>/fetch with fetchToken. .com
 //        verifies SHA256(fetchToken) === stored hash; returns wrappedUmk +
-//        prfSaltHash on match.
+//        prfSaltHash + a short-lived recoveryProof on match.
 //     4. WebAuthn get() with PRF (input = prfSalt) → unwrap → UMK seed.
-//     5. postMessage the seed back to the parent.
+//     5. postMessage the seed + the recoveryProof back to the parent.
+//
+//   The recoveryProof is .com's attestation that THIS caller passed the
+//   passphrase gate. The parent needs it because a re-pair initiate (an
+//   account-key rotation) is otherwise authorized by nothing a stranger
+//   couldn't supply. The fetchToken itself stays on this origin — the
+//   proof is an opaque, username-bound, 15-minute bearer, which is
+//   strictly less sensitive than the seed we already hand over.
 //
 // Argon2id parameters (see derivePassphraseKey below). Tuned for ~1.5s
 // on a Pixel 6 in pure JS / Web Worker context. The recovery flow is
@@ -258,7 +265,8 @@ $("recover-go")?.addEventListener("click", async () => {
     setStatus("recover-status", "Asking flagshipserver.com for the wrapped key…", null);
     const fetched = await fetchWrappedUmk(username, fetchToken);
     if (!fetched) throw new Error("no cloud recovery for that username");
-    const { credentialIdHex, wrappedUmkB64, wrappedAdminRootB64, prfSaltHash } = fetched;
+    const { credentialIdHex, wrappedUmkB64, wrappedAdminRootB64, prfSaltHash, recoveryProof } =
+      fetched;
 
     // Defense-in-depth: verify the server returned the same prfSalt we
     // derived locally (otherwise a tampered .com could feed us a
@@ -289,6 +297,7 @@ $("recover-go")?.addEventListener("click", async () => {
       username,
       umk: Array.from(umk), // serialize for structured-clone safety
       ...(adminRootSeed ? { adminRootSeed: Array.from(adminRootSeed) } : {}),
+      ...(recoveryProof ? { recoveryProof } : {}),
     });
     setStatus("recover-status", "Done — return to the webapp to finish.", "ok");
   } catch (e) {
@@ -409,6 +418,13 @@ async function fetchWrappedUmk(username, fetchToken) {
   return {
     credentialIdHex: b.credentialId ?? credentialIdHex,
     wrappedUmkB64: b.wrappedUmk,
+    // Opaque attestation that the passphrase gate was just cleared.
+    // Absent on a deployment without FLAGSHIP_RECOVERY_PROOF_SECRET, in
+    // which case the follow-on re-pair fails closed (by design).
+    recoveryProof:
+      b.recoveryProof && typeof b.recoveryProof.token === "string"
+        ? b.recoveryProof
+        : null,
     // Slice D (D-3): the admin master root rides as a SEPARATE escrow blob
     // (`.com` releases it alongside the UMK on the gated fetch when present).
     wrappedAdminRootB64: typeof b.wrappedAdminRoot === "string" ? b.wrappedAdminRoot : null,

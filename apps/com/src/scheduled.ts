@@ -57,6 +57,7 @@ import {
 } from "@flagship/control-plane";
 import { createHetznerClient } from "./hetzner.js";
 import { activeCaLeaseNotAfterMs } from "./caTrustChainLoader.js";
+import { notifyCaLeaseViaGithubIssue } from "./caLeaseGithubNotifier.js";
 
 /** Scope of one row that the dump emits. */
 export type DumpRow =
@@ -97,6 +98,12 @@ export interface ScheduledEnv {
   WEBPUSH_VAPID_PRIVATE_KEY_PEM?: string;
   WEBPUSH_VAPID_PUBLIC_KEY_B64URL?: string;
   WEBPUSH_CONTACT?: string;
+  /** OPS-3 pager — fine-grained GitHub PAT (Issues: read+write) scoped to
+   *  GITHUB_ISSUES_REPO. Unset ⇒ the ca-lease check still runs (audit
+   *  event + console.error) but files no issue. */
+  GITHUB_ISSUES_TOKEN?: string;
+  /** "owner/name". Defaults to "ibisllc/flagship" when unset. */
+  GITHUB_ISSUES_REPO?: string;
 }
 
 /**
@@ -666,10 +673,18 @@ export async function runCaLeaseWarning(
 ): Promise<{ severity: string; alerted: boolean } | null> {
   if (!env.DB) return null;
   const storage = new D1Storage(env.DB);
+  const token = env.GITHUB_ISSUES_TOKEN;
+  const repo = env.GITHUB_ISSUES_REPO ?? "ibisllc/flagship";
   const result = await runCaLeaseWarningCheck({
     activeLeaseNotAfterMs: activeCaLeaseNotAfterMs,
     auditEvents: storage.auditEvents,
     now: () => now.getTime(),
+    ...(token
+      ? {
+          notifyOperator: (status, message) =>
+            notifyCaLeaseViaGithubIssue(status, message, { token, repo }),
+        }
+      : {}),
   });
   return { severity: result.status.severity, alerted: result.alerted };
 }

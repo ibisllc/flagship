@@ -49,6 +49,7 @@ import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.MockWebAuthnProvider
 import com.flagshipserver.app.keystore.Recovery
+import com.flagshipserver.app.keystore.RecoveryDerivation
 import com.flagshipserver.app.ui.screens.quarantineCopy
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -105,6 +106,35 @@ class LoginDecisionMatrixConformanceTest {
                     credentialId = credentialId,
                     wrappedUmk = wrapped,
                     issuedAt = 0L,
+                ),
+                signature = "00",
+            ),
+        )
+    }
+
+    /** The passphrase the gated-path branches use. */
+    private val gatedPassphrase = "correct horse battery"
+
+    /** Seed a MODERN (passphrase-gated) record. The gate is what lets
+     *  `.com` attest the unwrap was credentialed — the attestation a
+     *  re-pair initiate must carry, since that request is otherwise
+     *  signed only by the key it asks to install. */
+    private suspend fun seedGatedRecoveryEnvelope(
+        server: MockFlagshipServerClient,
+        username: String,
+    ) {
+        val secrets = RecoveryDerivation.derivePassphraseSecrets(gatedPassphrase, username)
+        val prfSecret = webauthn.prfAssertWithSalt(credentialId, secrets.prfSalt)
+        val wrapped = Recovery.wrap(recoveredSeed, prfSecret)
+        server.registerRecoveryEnvelope(
+            RecoveryEnvelopeRequest(
+                request = RecoveryEnvelopeRequest.Inner(
+                    username = username,
+                    credentialId = credentialId,
+                    wrappedUmk = wrapped,
+                    issuedAt = 0L,
+                    fetchTokenHash = RecoveryDerivation.sha256Hex(secrets.fetchToken),
+                    prfSaltHash = RecoveryDerivation.sha256Hex(secrets.prfSalt),
                 ),
                 signature = "00",
             ),
@@ -217,13 +247,13 @@ class LoginDecisionMatrixConformanceTest {
 
     @Test fun branch_single_takeoverReachesAdmin() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
-        seedRecoveryEnvelope(server)
+        seedGatedRecoveryEnvelope(server, "harry")
         val app = AppState()
         val r = AccountResolution(
             username = "harry",
             exists = true,
             kind = "single",
-            recovery = AccountResolution.RecoveryState(true, false, credentialId),
+            recovery = AccountResolution.RecoveryState(true, true, credentialId),
             totpEnrolled = false,
             graceModel = "3d",
             // A rotated (mismatched) registered IRK forces the Phase-B
@@ -233,13 +263,19 @@ class LoginDecisionMatrixConformanceTest {
         )
         val m = loginVm(r, server, app)
         m.begin()
+        assertEquals(LoginPhase.AwaitingPassphrase(single = true), m.phase.first())
+        m.submitPassphrase(gatedPassphrase)
         assertEquals(
             LoginPhase.TakeoverReady(AccountResolution.GraceModel.ThreeDay),
             m.phase.first(),
         )
         m.confirmTakeover()
-        assertTrue("single confirm initiates the 7d grace", m.phase.first() is LoginPhase.Grace)
+        assertTrue("single confirm initiates the 3d grace", m.phase.first() is LoginPhase.Grace)
         assertNull("single carries no second factor", server.lastRePairInitiate!!.second.totpProof)
+        assertNotNull(
+            "…but it MUST carry the cloud-recovery proof — recovery is credential-only",
+            server.lastRePairInitiate!!.second.recoveryProof,
+        )
         m.completeTakeover()
         assertEquals(LoginPhase.Opened, m.phase.first())
         assertNull(

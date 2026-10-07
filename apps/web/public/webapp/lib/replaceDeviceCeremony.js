@@ -44,6 +44,8 @@ import { controlApex } from "./apex.js";
 
 /** Canonical-bytes tag — MUST match @flagship/protocol TAG_RE_PAIR_INITIATE. */
 export const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
+/** MUST match packages/protocol/src/recovery.ts TAG_RE_PAIR_COMPLETE. */
+export const TAG_RE_PAIR_COMPLETE = "flagship/re-pair-complete/v1";
 
 const APEX = controlApex();
 
@@ -120,6 +122,14 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
   const sigBytes = new Uint8Array(
     await crypto.subtle.sign({ name: "Ed25519" }, newIrk.privateKey, canonical),
   );
+  // …and with the OLD (currently registered) IRK over the SAME bytes.
+  // That second signature is the credential `.com` requires: the first
+  // one is made by the key we're asking it to install, and `oldIrkPub`
+  // is public, so neither proves we own the account. This device holds
+  // the session UMK, so it can prove it outright.
+  const oldSigBytes = new Uint8Array(
+    await crypto.subtle.sign({ name: "Ed25519" }, oldIrk.privateKey, canonical),
+  );
 
   // 3 — POST initiate.
   const url = `${origin}/api/users/${encodeURIComponent(username)}/re-pair`;
@@ -128,6 +138,7 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
   const baseBody = {
     request: { username, newIrkPub: newIrkPubHex, oldIrkPub: oldIrkPubHex, issuedAt },
     signature: bytesToHex(sigBytes),
+    oldIrkSignature: bytesToHex(oldSigBytes),
   };
 
   async function post(body) {
@@ -218,17 +229,43 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
  * 200 body; throws (with `.code` "425" | "409" | "404") on the
  * documented non-2xx statuses.
  *
+ * Signed by the NEW (rotated) IRK — `.com` refuses an unsigned
+ * finalization, so this needs the session UMK and the version the
+ * ceremony rotated TO. The swap target still comes from the pending
+ * row; the signature only authorizes it.
+ *
  * @param {object} args
  * @param {string} args.username
+ * @param {Uint8Array} args.umk          session UMK seed (32 bytes)
+ * @param {number} args.newVersion       the rotation slot being installed
  * @param {object} [deps]
  * @param {typeof fetch} [deps.fetch]
  * @param {string} [deps.origin]
+ * @param {() => number} [deps.now]
  */
 export async function completeReplaceDeviceCeremony(args, deps = {}) {
-  const { username } = args;
+  const { username, umk, newVersion } = args;
   if (!username) throw makeError("username required", "400");
+  if (!(umk instanceof Uint8Array) || umk.length !== 32) {
+    throw makeError("umk must be a 32-byte Uint8Array", "400");
+  }
+  if (!Number.isInteger(newVersion) || newVersion < 1) {
+    throw makeError("newVersion required", "400");
+  }
   const f = deps.fetch || fetch;
   const origin = deps.origin || APEX;
+  const issuedAt = (deps.now || Date.now)();
+  const newIrk = await deriveIrkVersioned(umk, newVersion);
+  const newIrkPubHex = bytesToHex(newIrk.publicKey);
+  const completeSig = new Uint8Array(
+    await crypto.subtle.sign(
+      { name: "Ed25519" },
+      newIrk.privateKey,
+      new TextEncoder().encode(
+        [TAG_RE_PAIR_COMPLETE, username, newIrkPubHex, issuedAt].join("|"),
+      ),
+    ),
+  );
   let resp;
   try {
     resp = await f(
@@ -236,7 +273,10 @@ export async function completeReplaceDeviceCeremony(args, deps = {}) {
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          request: { username, newIrkPub: newIrkPubHex, issuedAt },
+          signature: bytesToHex(completeSig),
+        }),
       },
     );
   } catch (e) {

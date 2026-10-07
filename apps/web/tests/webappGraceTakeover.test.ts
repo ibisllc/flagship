@@ -124,33 +124,44 @@ describe("loginTakeover graceTimeline — grace window per graceModel", () => {
   });
 });
 
+/** The completion envelope is signed by the rotated key — `.com` 401s
+ *  an unsigned call. These cases exercise the status → outcome mapping,
+ *  so a fixed stub signer is enough. */
+function signer() {
+  return { newIrkPubHex: "bb".repeat(32), sign: () => new Uint8Array(64) };
+}
+
 describe("loginTakeover completeRePair — outcomes by status", () => {
-  it("200 → completed, POSTs an empty body to /re-pair/complete", async () => {
+  it("200 → completed, POSTs the signed envelope to /re-pair/complete", async () => {
     const { completeRePair } = await loadLib();
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(200, { ok: true, newIrkPub: "bb".repeat(32), swappedAt: 42, quarantineUntil: 99 }),
     );
-    const out = await completeRePair({ username: "harry", fetch: fetchMock as any });
+    const out = await completeRePair({ username: "harry", ...signer(), fetch: fetchMock as any });
     expect(out.outcome).toBe("completed");
     expect((out as any).body.newIrkPub).toBe("bb".repeat(32));
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("https://flagshipserver.com/api/users/harry/re-pair/complete");
     expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body)).toEqual({}); // no refreshedGrants
+    const body = JSON.parse(init.body);
+    expect(body.request.username).toBe("harry");
+    expect(body.request.newIrkPub).toBe("bb".repeat(32));
+    expect(body.signature).toBe("00".repeat(64));
+    expect(body).not.toHaveProperty("refreshedGrants");
   });
 
   it("threads refreshedGrants (W6) into the body when supplied", async () => {
     const { completeRePair } = await loadLib();
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { ok: true }));
     const grants = [{ grantId: "g1" }];
-    await completeRePair({ username: "harry", refreshedGrants: grants, fetch: fetchMock as any });
-    expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toEqual({ refreshedGrants: grants });
+    await completeRePair({ username: "harry", ...signer(), refreshedGrants: grants, fetch: fetchMock as any });
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body).refreshedGrants).toEqual(grants);
   });
 
   it("404 → already-completed (swapped earlier / swept)", async () => {
     const { completeRePair } = await loadLib();
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(404, { error: "no pending re-pair" }));
-    const out = await completeRePair({ username: "harry", fetch: fetchMock as any });
+    const out = await completeRePair({ username: "harry", ...signer(), fetch: fetchMock as any });
     expect(out).toEqual({ outcome: "already-completed" });
   });
 
@@ -159,7 +170,7 @@ describe("loginTakeover completeRePair — outcomes by status", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(409, { error: "re-pair was objected by the old IRK", objectedAt: 7 }),
     );
-    const out = await completeRePair({ username: "harry", fetch: fetchMock as any });
+    const out = await completeRePair({ username: "harry", ...signer(), fetch: fetchMock as any });
     expect(out.outcome).toBe("objected");
     expect((out as any).status).toBe(409);
     expect((out as any).message).toBe("re-pair was objected by the old IRK");
@@ -168,7 +179,7 @@ describe("loginTakeover completeRePair — outcomes by status", () => {
   it("403 → objected (forward-compat clean-surface)", async () => {
     const { completeRePair } = await loadLib();
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(403, { error: "forbidden" }));
-    const out = await completeRePair({ username: "harry", fetch: fetchMock as any });
+    const out = await completeRePair({ username: "harry", ...signer(), fetch: fetchMock as any });
     expect(out.outcome).toBe("objected");
     expect((out as any).status).toBe(403);
   });
@@ -178,14 +189,14 @@ describe("loginTakeover completeRePair — outcomes by status", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(425, { error: "grace window has not elapsed", completesAt: 5000, secondsRemaining: 12 }),
     );
-    const out = await completeRePair({ username: "harry", fetch: fetchMock as any });
+    const out = await completeRePair({ username: "harry", ...signer(), fetch: fetchMock as any });
     expect(out).toEqual({ outcome: "too-early", completesAt: 5000, secondsRemaining: 12 });
   });
 
   it("throws on a genuine server fault (500)", async () => {
     const { completeRePair } = await loadLib();
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(500, "boom"));
-    await expect(completeRePair({ username: "harry", fetch: fetchMock as any })).rejects.toThrow(
+    await expect(completeRePair({ username: "harry", ...signer(), fetch: fetchMock as any })).rejects.toThrow(
       /re-pair complete failed \(500\)/,
     );
   });
@@ -208,6 +219,7 @@ describe("loginTakeover finishTakeover — gate + finalize + open", () => {
     const openAccount = vi.fn();
     const out = await finishTakeover(takeoverObj(10_000), {
       fetch: fetchMock as any,
+      ...signer(),
       finalizeV2Irk,
       openAccount,
       now: () => 5_000,
@@ -226,6 +238,7 @@ describe("loginTakeover finishTakeover — gate + finalize + open", () => {
     const openAccount = vi.fn();
     const out = await finishTakeover(takeoverObj(1_000), {
       fetch: fetchMock as any,
+      ...signer(),
       finalizeV2Irk,
       openAccount,
       now: () => 1_000,
@@ -243,6 +256,7 @@ describe("loginTakeover finishTakeover — gate + finalize + open", () => {
     const openAccount = vi.fn();
     const out = await finishTakeover(takeoverObj(1_000), {
       fetch: fetchMock as any,
+      ...signer(),
       finalizeV2Irk,
       openAccount,
       now: () => 2_000,
@@ -259,6 +273,7 @@ describe("loginTakeover finishTakeover — gate + finalize + open", () => {
     const openAccount = vi.fn();
     const out = await finishTakeover(takeoverObj(1_000), {
       fetch: fetchMock as any,
+      ...signer(),
       finalizeV2Irk,
       openAccount,
       now: () => 2_000,
@@ -277,6 +292,7 @@ describe("loginTakeover finishTakeover — gate + finalize + open", () => {
     const openAccount = vi.fn();
     const out = await finishTakeover(takeoverObj(1_000), {
       fetch: fetchMock as any,
+      ...signer(),
       finalizeV2Irk,
       openAccount,
       now: () => 2_000, // local clock thinks ready; server disagrees

@@ -148,11 +148,15 @@ public protocol FlagshipServerClient: Sendable {
         ifMatch: String?
     ) async throws -> RePairInitiateResponse
 
-    /// B7 — finalize a pending re-pair. Public read (no signature gate);
-    /// the server checks completesAt + objectedAt before swapping the
-    /// stored IRK pubkey atomically. 425 = grace not elapsed; 409 =
-    /// objected; 200 = swap succeeded.
-    func completeRePair(username: String) async throws -> RePairCompleteResponse
+    /// B7 — finalize a pending re-pair. Signed by the NEW IRK (the key
+    /// the pending row installs); the server verifies that signature,
+    /// then checks completesAt + objectedAt before swapping the stored
+    /// IRK pubkey atomically. 401 = unsigned / wrong key; 425 = grace
+    /// not elapsed; 409 = objected; 200 = swap succeeded.
+    func completeRePair(
+        username: String,
+        body: RePairCompleteRequest
+    ) async throws -> RePairCompleteResponse
 
     /// M4 — read the pending re-pair row, if any. Public GET (no
     /// signature gate), maps to GET /api/users/:u/re-pair. Powers the
@@ -581,6 +585,17 @@ public struct RePairInitiateRequest: Encodable, Sendable {
         }
     }
 
+    /// `.com`'s attestation that the caller cleared the cloud-recovery
+    /// passphrase gate, handed back by the gated wrapped-UMK fetch.
+    /// This is the single-device credential: without one of these
+    /// three proofs the Worker refuses the initiate outright, because
+    /// `signature` below is made by the key we're asking it to install
+    /// and `oldIrkPub` is public (the username lookup serves it).
+    public struct RecoveryProof: Encodable, Equatable, Sendable {
+        public let token: String
+        public init(token: String) { self.token = token }
+    }
+
     public let request: Inner
     public let signature: String      // hex; Ed25519 over canonical-bytes by NEW IRK
     /// Present for multi-device takeovers AND (#52) for single-device
@@ -588,9 +603,49 @@ public struct RePairInitiateRequest: Encodable, Sendable {
     /// initiate that needs-but-omits it (401 + `credentialRequired`)
     /// and ignores it when nothing is enrolled.
     public let totpProof: TotpProof?
-    public init(request: Inner, signature: String, totpProof: TotpProof? = nil) {
+    /// The cloud-recovery credential (see `RecoveryProof`). Carried
+    /// beside the signed envelope, never inside it.
+    public let recoveryProof: RecoveryProof?
+    /// Hex Ed25519 signature over the SAME canonical bytes as
+    /// `signature`, by the account's CURRENTLY REGISTERED IRK. The
+    /// key-file / already-signed-in-device credential: whoever holds
+    /// the UMK seed can derive that key, and possession of it IS
+    /// account ownership. Strongest of the three, and the one a
+    /// stranger provably cannot produce.
+    public let oldIrkSignature: String?
+    public init(
+        request: Inner,
+        signature: String,
+        totpProof: TotpProof? = nil,
+        recoveryProof: RecoveryProof? = nil,
+        oldIrkSignature: String? = nil
+    ) {
         self.request = request; self.signature = signature
         self.totpProof = totpProof
+        self.recoveryProof = recoveryProof
+        self.oldIrkSignature = oldIrkSignature
+    }
+}
+
+/// Body for POST /api/users/:u/re-pair/complete — a `RePairComplete`
+/// envelope signed by the NEW IRK (the key the pending row installs).
+/// The endpoint used to be a bare public POST, so anyone could fire
+/// the swap the moment a row ripened. The swap TARGET still comes from
+/// the pending row, so this authorizes the scheduled rotation and can
+/// never redirect it.
+public struct RePairCompleteRequest: Encodable, Sendable {
+    public struct Inner: Encodable, Sendable {
+        public let username: String
+        public let newIrkPub: String   // hex; must equal the pending row's
+        public let issuedAt: Int64     // ms
+        public init(username: String, newIrkPub: String, issuedAt: Int64) {
+            self.username = username; self.newIrkPub = newIrkPub; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String       // hex; Ed25519 by the NEW IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
     }
 }
 
@@ -2168,6 +2223,14 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
     /// must re-pair with `oldIrkPub = registeredIrkPubHex` + the grace window.
     /// Absent on pre-Phase-B Workers.
     public let registeredIrkPubHex: String?
+    /// `.com`'s short-lived attestation that this fetch cleared the
+    /// passphrase gate. It is the credential a follow-on re-pair
+    /// initiate must present on a single-device account: that request
+    /// is otherwise signed only by the key it asks to install, over a
+    /// publicly-readable `oldIrkPub`. Absent when the deployment has no
+    /// `FLAGSHIP_RECOVERY_PROOF_SECRET` (in which case the initiate fails
+    /// closed rather than proceeding unauthenticated).
+    public let recoveryProof: RecoveryProofToken?
     public init(
         username: String,
         credentialId: String,
@@ -2176,7 +2239,8 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
         wrappedAdminRoot: String? = nil,
         prfSaltHash: String? = nil,
         updatedAt: Int64? = nil,
-        registeredIrkPubHex: String? = nil
+        registeredIrkPubHex: String? = nil,
+        recoveryProof: RecoveryProofToken? = nil
     ) {
         self.username = username
         self.credentialId = credentialId
@@ -2186,6 +2250,18 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
         self.prfSaltHash = prfSaltHash
         self.updatedAt = updatedAt
         self.registeredIrkPubHex = registeredIrkPubHex
+        self.recoveryProof = recoveryProof
+    }
+}
+
+/// The gated fetch's recovery-session attestation (see
+/// `RecoveryFetchResponse.recoveryProof`). Opaque to the client.
+public struct RecoveryProofToken: Codable, Equatable, Sendable {
+    public let token: String
+    public let expiresAt: Int64?
+    public init(token: String, expiresAt: Int64? = nil) {
+        self.token = token
+        self.expiresAt = expiresAt
     }
 }
 
@@ -2669,31 +2745,57 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     ) async throws -> RePairInitiateResponse {
         try await tick()
         lastRePairInitiate = (username, body, ifMatch)
-        // v1.2 — mirror the Worker's gate: a re-pair on a `multi`
-        // account is rejected (401) unless it carries a structurally-
-        // valid totpProof (non-empty code + an allowed method). #52 —
-        // a SINGLE-device account with an enrolled second factor
-        // (TOTP enrolled and/or unspent recovery codes) is gated the
-        // same way; single accounts with NEITHER stay grace-only.
-        // Lets the login state machine + its tests exercise the
-        // second-factor requirement against the Mock.
+        // Mirror the Worker's credential gate exactly (the Mock's whole
+        // job is wire fidelity). Recovery is credential-only: the
+        // envelope's own signature is made by the key being installed
+        // and `oldIrkPub` is public, so one of three proofs is
+        // required —
+        //   - a registered-key signature (`oldIrkSignature`): always
+        //     acceptable, since holding the account's current key IS
+        //     ownership (the key-file / signed-in-device route),
+        //   - a live code (`totpProof`): MANDATORY on multi-device,
+        //     also accepted on single when one is enrolled,
+        //   - the cloud-recovery proof (`recoveryProof`): single-device
+        //     accounts with a recovery credential.
+        // Nothing presented and nothing enrolled ⇒ 409 no-credential.
         let u = username.lowercased()
         let isMulti = accountTypeByUser[u] == "multi"
-        let singleCredentialEnrolled = !isMulti
-            && (totpEnrolledAtByUser[u] != nil || !(recoveryCodesByUser[u] ?? []).isEmpty)
-        if isMulti || singleCredentialEnrolled {
-            let proof = body.totpProof
-            let methodOk = proof?.method == "totp" || proof?.method == "recovery"
-            let codeOk = !(proof?.code.isEmpty ?? true)
-            guard let proof, methodOk, codeOk else {
+        let registeredKeyProven = !(body.oldIrkSignature?.isEmpty ?? true)
+        let codeEnrolled = totpEnrolledAtByUser[u] != nil
+            || !(recoveryCodesByUser[u] ?? []).isEmpty
+        let cloudEnrolled = !isMulti && (cloudRecoveryByUser[u] ?? false)
+        let proof = body.totpProof
+        // The Mock holds no TOTP secret, so a structurally-valid code
+        // counts — real verification is covered by the control-plane
+        // tests. What the Mock mirrors faithfully is the gate itself:
+        // SOMETHING must be presented.
+        let codeOk = proof != nil
+            && !(proof?.code.isEmpty ?? true)
+            && (proof?.method == "totp" || proof?.method == "recovery")
+        let cloudOk = cloudEnrolled && !(body.recoveryProof?.token.isEmpty ?? true)
+        if !registeredKeyProven && !codeOk && !(!isMulti && cloudOk) {
+            if isMulti {
                 throw ScreensClientError.http(
                     status: 401,
-                    message: isMulti
-                        ? "totpProof required for multi-device re-pair"
-                        : "totpProof required for single-device recovery (a second factor is enrolled)"
+                    message: "totpProof required for multi-device re-pair"
                 )
             }
-            _ = proof
+            if codeEnrolled {
+                throw ScreensClientError.http(
+                    status: 401,
+                    message: "totpProof required for single-device recovery (a second factor is enrolled)"
+                )
+            }
+            if cloudEnrolled {
+                throw ScreensClientError.http(
+                    status: 401,
+                    message: "recoveryProof required: complete the cloud-recovery passphrase step, then retry"
+                )
+            }
+            throw ScreensClientError.http(
+                status: 409,
+                message: "this account has no recovery credential enrolled; recovery is credential-only"
+            )
         }
         switch rePairBehavior {
         case .staleEtag(let etag):
@@ -2705,9 +2807,27 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         }
     }
 
-    public func completeRePair(username: String) async throws -> RePairCompleteResponse {
+    /// Records the last finalization body so tests can assert the
+    /// envelope was signed (the Worker 401s an unsigned call).
+    public var lastRePairComplete: (username: String, body: RePairCompleteRequest)?
+
+    public func completeRePair(
+        username: String,
+        body: RePairCompleteRequest
+    ) async throws -> RePairCompleteResponse {
         try await tick()
-        return RePairCompleteResponse(ok: true, newIrkPub: "00", swappedAt: Int64(Date().timeIntervalSince1970 * 1000))
+        lastRePairComplete = (username, body)
+        guard !body.signature.isEmpty, !body.request.newIrkPub.isEmpty else {
+            throw ScreensClientError.http(
+                status: 401,
+                message: "a RePairComplete envelope signed by the new IRK is required"
+            )
+        }
+        return RePairCompleteResponse(
+            ok: true,
+            newIrkPub: body.request.newIrkPub,
+            swappedAt: Int64(Date().timeIntervalSince1970 * 1000)
+        )
     }
 
     /// M4 — scripted pending re-pair snapshot per username. Tests set
@@ -3583,10 +3703,15 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return try JSONDecoder().decode(RePairInitiateResponse.self, from: data)
     }
 
-    public func completeRePair(username: String) async throws -> RePairCompleteResponse {
+    public func completeRePair(
+        username: String,
+        body: RePairCompleteRequest
+    ) async throws -> RePairCompleteResponse {
         let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/re-pair/complete"))
         req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(body)
         let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {

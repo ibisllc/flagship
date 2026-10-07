@@ -248,6 +248,29 @@ object RePairInitiateClaim {
     ).joinToString("|").toByteArray()
 }
 
+/** Re-pair COMPLETE envelope. Signed by the NEW IRK — the key the
+ *  pending row installs — so `.com` finalizes a rotation only on the
+ *  instruction of whoever holds it. Mirrors
+ *  packages/protocol/src/recovery.ts TAG_RE_PAIR_COMPLETE.
+ *
+ *  Identical field shape to the re-pair OBJECT (self-cancel) envelope,
+ *  signed by the same key, so the TAG is the only thing separating
+ *  "finish this recovery" from "abandon it". Never reuse one signature
+ *  as the other. */
+object RePairCompleteClaim {
+    const val CANONICAL_TAG = "flagship/re-pair-complete/v1"
+    fun canonicalBytes(
+        username: String,
+        newIrkPubHex: String,
+        issuedAt: Long,
+    ): ByteArray = listOf(
+        CANONICAL_TAG,
+        username,
+        newIrkPubHex.lowercase(),
+        issuedAt.toString(),
+    ).joinToString("|").toByteArray()
+}
+
 /** E4 — Wipe & restart envelope. Signed by the OLD IRK. Mirrors
  *  packages/protocol/src/auth.ts TAG_WIPE_RESTART. */
 object WipeRestartClaim {

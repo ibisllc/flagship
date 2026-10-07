@@ -41,17 +41,25 @@ import {
 // The ca-track ORIGIN mandate (the pin anchors exactly this file's
 // canonical bytes — see Gate B / docs/ca-operations.md).
 import caOriginMandate from "../../../.maintainers/tracks/ca/mandates/20260519T120808-706880c9.json";
+// Same-holder renewal (2026-10-06) after the ORIGIN mandate's
+// 2026-08-27 expiry lapsed ~6 weeks undetected (no renewal pager
+// exists yet — see docs/ca-operations.md "OPS-3"). Extends the forward
+// chain from the same pin; does not change MAINTAINER_PINNED_MANDATE_HASH.
+import caRenewal20261006 from "../../../.maintainers/tracks/ca/mandates/20261006T192041-9859b26b.json";
 // The committed CaEndorsement leases. Starts `[]`; the human ceremony
 // appends (see docs/ca-operations.md "CaEndorsement ceremony runbook").
 import caEndorsementsBundle from "../../../.maintainers/ca-endorsements/bundle.json";
 
 /**
  * The committed ca-track mandate log, oldest-first (canonical-log
- * order). Today this is the single ORIGIN mandate; successor mandates
- * (added by future ceremonies) extend this array — keep it
- * filename-sorted, exactly the daemon's `readStoreFromDisk` convention.
+ * order). The ORIGIN mandate plus every successor mandate added by a
+ * ceremony since — keep it filename-sorted, exactly the daemon's
+ * `readStoreFromDisk` convention.
  */
-const CA_TRACK_MANDATES: Mandate[] = [caOriginMandate as Mandate];
+const CA_TRACK_MANDATES: Mandate[] = [
+  caOriginMandate as Mandate,
+  caRenewal20261006 as Mandate,
+];
 
 const CA_ENDORSEMENTS: CaEndorsement[] = caEndorsementsBundle as CaEndorsement[];
 

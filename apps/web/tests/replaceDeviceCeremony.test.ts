@@ -285,7 +285,7 @@ describe("P10 — completeReplaceDeviceCeremony", () => {
       text: async () => "",
     }));
     const out = await completeReplaceDeviceCeremony(
-      { username: USERNAME },
+        { username: USERNAME, umk: FIXED_UMK, newVersion: 2 },
       { fetch: fakeFetch as any, origin: "https://flagshipserver.com" },
     );
     expect(out.ok).toBe(true);
@@ -302,7 +302,8 @@ describe("P10 — completeReplaceDeviceCeremony", () => {
       text: async () => "{}",
     }));
     await expect(
-      completeReplaceDeviceCeremony({ username: USERNAME }, { fetch: fakeFetch as any }),
+      completeReplaceDeviceCeremony(
+        { username: USERNAME, umk: FIXED_UMK, newVersion: 2 }, { fetch: fakeFetch as any }),
     ).rejects.toMatchObject({ code: "425" });
   });
 
@@ -314,7 +315,8 @@ describe("P10 — completeReplaceDeviceCeremony", () => {
       text: async () => "{}",
     }));
     await expect(
-      completeReplaceDeviceCeremony({ username: USERNAME }, { fetch: fakeFetch as any }),
+      completeReplaceDeviceCeremony(
+        { username: USERNAME, umk: FIXED_UMK, newVersion: 2 }, { fetch: fakeFetch as any }),
     ).rejects.toMatchObject({ code: "409" });
   });
 
@@ -326,7 +328,8 @@ describe("P10 — completeReplaceDeviceCeremony", () => {
       text: async () => "{}",
     }));
     await expect(
-      completeReplaceDeviceCeremony({ username: USERNAME }, { fetch: fakeFetch as any }),
+      completeReplaceDeviceCeremony(
+        { username: USERNAME, umk: FIXED_UMK, newVersion: 2 }, { fetch: fakeFetch as any }),
     ).rejects.toMatchObject({ code: "404" });
   });
 
@@ -340,7 +343,8 @@ describe("P10 — completeReplaceDeviceCeremony", () => {
       text: async () => "{}",
     }));
     await expect(
-      completeReplaceDeviceCeremony({ username: USERNAME }, { fetch: fakeFetch as any }),
+      completeReplaceDeviceCeremony(
+        { username: USERNAME, umk: FIXED_UMK, newVersion: 2 }, { fetch: fakeFetch as any }),
     ).rejects.toMatchObject({ code: "410" });
   });
 });

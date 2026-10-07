@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import * as OTPAuth from "otpauth";
 import {
   ed,
+  signRePairComplete,
   signRePairInitiate,
   signRePairObject,
+  signTotpEnrollBegin,
+  signTotpEnrollConfirm,
   type Keypair,
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
@@ -16,8 +20,22 @@ import {
   RE_PAIR_QUARANTINE_MS,
 } from "../src/rePair.js";
 import { computeDevicesEtag } from "../src/deviceDirectoryEtag.js";
+import {
+  _resetTotpVerifyRateLimitForTests,
+  handleTotpEnrollBegin,
+  handleTotpEnrollConfirm,
+} from "../src/totp.js";
+import { mintRecoveryProof, RECOVERY_PROOF_TTL_MS } from "../src/recoveryProof.js";
 
 const USERNAME = "alice";
+
+const TEST_KEK_HEX =
+  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+/** `FLAGSHIP_RECOVERY_PROOF_SECRET` stand-in. */
+const TEST_PROOF_SECRET = "test-recovery-proof-secret-0123456789";
+/** SHA-256 of the account's recovery fetchToken, as the escrow row stores it. */
+const TEST_FETCH_TOKEN_HASH = "ab".repeat(32);
 
 function makeKey(): Keypair {
   const priv = new Uint8Array(32);
@@ -31,35 +49,111 @@ function bytesToHex(b: Uint8Array): string {
 }
 
 /**
- * Default setup lands a 'multi'-device account so the historical
- * v1.1 24h-grace assertions stay intact under v1.2 Phase 2. The
- * single-device 7-day-grace path has its own dedicated tests below
- * (search for "single-device 7-day grace"). Callers that need the
- * 'single' default explicitly pass `accountType: 'single'`.
+ * Recovery is credential-only, so EVERY account this suite builds has a
+ * credential — that is the realistic state, and an account without one
+ * can no longer be recovered at all (its own tests assert the refusal).
+ *
+ * Default setup lands a 'multi'-device account so the historical v1.1
+ * 24h-grace assertions stay intact; multi enrolls a real TOTP secret
+ * (the proof is verified for real, there is no structural fallback).
+ * Single-device accounts enroll the cloud-recovery escrow row instead,
+ * which is what `recoveryProof` is checked against.
+ *
+ * The enrolled TOTP secret + a freshly minted recovery proof are
+ * recorded against the storage instance so the shared `initBody` can
+ * default to a VALID credential without every call site threading it.
+ * Tests that drive a fixed clock mint their own proof with
+ * {@link proofAt}.
  */
+const enrolled = new WeakMap<
+  InMemoryStorage,
+  { secretBase32?: string; recoveryCodes?: string[]; recoveryProofToken?: string }
+>();
+let currentStorage: InMemoryStorage | null = null;
+
 async function setup(
   oldIrk: Keypair,
-  opts: { accountType?: "single" | "multi" } = {},
+  opts: { accountType?: "single" | "multi"; credential?: "default" | "none" } = {},
 ): Promise<InMemoryStorage> {
   const s = new InMemoryStorage();
+  const accountType = opts.accountType ?? "multi";
   await s.usernames.put({
     username: USERNAME,
     irkPubHex: bytesToHex(oldIrk.publicKey),
     claimedAt: 1,
-    accountType: opts.accountType ?? "multi",
+    accountType,
   });
+  currentStorage = s;
+  enrolled.set(s, {});
+  if (opts.credential === "none") return s;
+  if (accountType === "multi") {
+    const { secretBase32, recoveryCodes } = await enrollMultiDevice(s, oldIrk, Date.now());
+    enrolled.set(s, { secretBase32, recoveryCodes });
+  } else {
+    await enrollCloudRecovery(s);
+    enrolled.set(s, { recoveryProofToken: await proofAt(Date.now()) });
+  }
   return s;
+}
+
+/** Land the cloud-recovery escrow row (the single-device credential). */
+async function enrollCloudRecovery(s: InMemoryStorage): Promise<void> {
+  await s.webauthnRecovery.upsert({
+    username: USERNAME,
+    credentialIdHex: "aa".repeat(16),
+    wrappedUmkB64: "AAAA",
+    fetchTokenHashHex: TEST_FETCH_TOKEN_HASH,
+    updatedAt: 1,
+  });
+}
+
+/** One of the account's real, unspent recovery codes. */
+function aRecoveryCode(storage: InMemoryStorage, index = 0): string {
+  const code = enrolled.get(storage)?.recoveryCodes?.[index];
+  if (!code) throw new Error("no recovery codes enrolled for this storage");
+  return code;
+}
+
+/** Mint the proof the gated wrapped-UMK fetch would hand a recoverer. */
+async function proofAt(now: number): Promise<string> {
+  const { token } = await mintRecoveryProof(
+    { username: USERNAME, fetchTokenHashHex: TEST_FETCH_TOKEN_HASH },
+    TEST_PROOF_SECRET,
+    { now },
+  );
+  return token;
+}
+
+/**
+ * The production dep bundle: the recovery-escrow store + proof secret
+ * (without which initiate fails CLOSED) and the TOTP KEK (without which
+ * a code cannot be verified, so that path fails closed too).
+ */
+function depsFor(
+  storage: InMemoryStorage,
+  extra: Record<string, unknown> = {},
+): Parameters<typeof handleInitiateRePair>[0] {
+  return {
+    usernames: storage.usernames,
+    pendingRePairs: storage.pendingRePairs,
+    webauthnRecovery: storage.webauthnRecovery,
+    recoveryProofSecret: TEST_PROOF_SECRET,
+    totpKekHex: TEST_KEK_HEX,
+    ...extra,
+  } as Parameters<typeof handleInitiateRePair>[0];
 }
 
 function initBody(args: {
   newIrk: Keypair;
   oldIrk: Keypair;
   issuedAt?: number;
-  /** v1.2 — needed when the target account is multi-device. The
-   *  default `setup` lands on 'multi', so initBody always supplies
-   *  a structurally-valid proof unless the caller explicitly opts
-   *  out via `{ totpProof: null }`. */
+  /** A real TOTP / recovery code. Defaults to a LIVE code off the
+   *  account's enrolled secret (multi); `null` opts out entirely so a
+   *  test can assert the missing-credential 401. */
   totpProof?: { code: string; method: "totp" | "recovery" } | null;
+  /** The gated-fetch recovery-session token (single-device). Defaults
+   *  to the one minted in `setup`; `null` opts out. */
+  recoveryProof?: string | null;
   callerTokenId?: string;
 }) {
   const issuedAt = args.issuedAt ?? Date.now();
@@ -67,10 +161,18 @@ function initBody(args: {
     { username: USERNAME, newIrkPub: args.newIrk.publicKey, oldIrkPub: args.oldIrk.publicKey, issuedAt },
     args.newIrk,
   );
+  const state = currentStorage ? enrolled.get(currentStorage) : undefined;
   const proof =
     args.totpProof === null
       ? undefined
-      : args.totpProof ?? { code: "123456", method: "totp" as const };
+      : (args.totpProof ??
+        (state?.secretBase32
+          ? { code: codeAt(state.secretBase32, issuedAt), method: "totp" as const }
+          : undefined));
+  const recoveryProof =
+    args.recoveryProof === null
+      ? undefined
+      : (args.recoveryProof ?? (proof ? undefined : state?.recoveryProofToken));
   return {
     request: {
       username: USERNAME,
@@ -80,8 +182,36 @@ function initBody(args: {
     },
     signature: bytesToHex(sig),
     ...(proof ? { totpProof: proof } : {}),
+    ...(recoveryProof ? { recoveryProof: { token: recoveryProof } } : {}),
     ...(args.callerTokenId ? { callerTokenId: args.callerTokenId } : {}),
   };
+}
+
+/** A `RePairComplete` envelope signed by the NEW IRK — `/complete`
+ *  refuses an unsigned call, so every finalization carries one. */
+function completeBody(args: {
+  newIrk: Keypair;
+  issuedAt?: number;
+  /** Deps whose injected `now` the envelope should be stamped against —
+   *  /complete enforces envelope freshness like every other handler, so
+   *  a fast-forwarded clock needs a matching issuedAt. */
+  deps?: { now?: () => number };
+  refreshedGrants?: unknown[];
+}) {
+  const issuedAt = args.issuedAt ?? args.deps?.now?.() ?? Date.now();
+  const sig = signRePairComplete(
+    { username: USERNAME, newIrkPub: args.newIrk.publicKey, issuedAt },
+    args.newIrk,
+  );
+  return {
+    request: {
+      username: USERNAME,
+      newIrkPub: bytesToHex(args.newIrk.publicKey),
+      issuedAt,
+    },
+    signature: bytesToHex(sig),
+    ...(args.refreshedGrants ? { refreshedGrants: args.refreshedGrants } : {}),
+  } as Parameters<typeof handleCompleteRePair>[2];
 }
 
 function objectBody(args: { signer: Keypair; newIrkPub: Uint8Array; issuedAt?: number }) {
@@ -106,7 +236,7 @@ describe("re-pair initiate", () => {
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
       initBody({ newIrk, oldIrk }),
     );
@@ -123,7 +253,7 @@ describe("re-pair initiate", () => {
     const storage = await setup(oldIrk);
     const wrongOld = makeKey();
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
       initBody({ newIrk, oldIrk: wrongOld }),
     );
@@ -141,7 +271,7 @@ describe("re-pair initiate", () => {
       oldIrk,
     );
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
       {
         request: {
@@ -165,7 +295,7 @@ describe("re-pair initiate", () => {
     const oldIrk = makeKey();
     const storage = await setup(oldIrk);
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
       initBody({ newIrk: oldIrk, oldIrk }),
     );
@@ -176,7 +306,7 @@ describe("re-pair initiate", () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
-    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    const deps = depsFor(storage);
     expect((await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }))).status).toBe(200);
     const second = makeKey();
     expect(
@@ -206,7 +336,7 @@ describe("re-pair initiate", () => {
       addedAt: 1,
     }]);
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs, pushTokens: storage.pushTokens },
+      depsFor(storage, { pushTokens: storage.pushTokens }),
       USERNAME,
       initBody({ newIrk, oldIrk }),
       goodEtag,
@@ -220,7 +350,7 @@ describe("re-pair initiate", () => {
     const storage = await setup(oldIrk);
     // Caller hands a fabricated ETag — must not match anything we'd compute.
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs, pushTokens: storage.pushTokens },
+      depsFor(storage, { pushTokens: storage.pushTokens }),
       USERNAME,
       initBody({ newIrk, oldIrk }),
       'W/"deadbeefdeadbeef"',
@@ -238,7 +368,7 @@ describe("re-pair initiate", () => {
     const res = await handleInitiateRePair(
       // Note: NO pushTokens in deps. Older callers that haven't
       // adopted the fence yet must still work.
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
       initBody({ newIrk, oldIrk }),
       'W/"whatever-this-isnt-checked"',
@@ -251,7 +381,7 @@ describe("re-pair initiate", () => {
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs, pushTokens: storage.pushTokens },
+      depsFor(storage, { pushTokens: storage.pushTokens }),
       USERNAME,
       initBody({ newIrk, oldIrk }),
       // No fourth arg → ifMatch = undefined.
@@ -264,7 +394,7 @@ describe("re-pair initiate", () => {
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       "ghost",
       {
         request: {
@@ -285,7 +415,7 @@ describe("re-pair object (self-cancel by NEW IRK)", () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
-    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    const deps = depsFor(storage);
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
     // Recoverer self-cancels: NEW IRK signs the object envelope.
     const objRes = await handleObjectRePair(
@@ -298,6 +428,7 @@ describe("re-pair object (self-cancel by NEW IRK)", () => {
     const completeRes = await handleCompleteRePair(
       { ...deps, now: () => Date.now() + RE_PAIR_GRACE_MS + 1_000 },
       USERNAME,
+      completeBody({ newIrk, issuedAt: Date.now() + RE_PAIR_GRACE_MS + 1_000 }),
     );
     expect(completeRes.status).toBe(409);
     expect((completeRes.body as { error: string }).error).toMatch(/objected/);
@@ -308,7 +439,7 @@ describe("re-pair object (self-cancel by NEW IRK)", () => {
     const newIrk = makeKey();
     const otherIrk = makeKey();
     const storage = await setup(oldIrk);
-    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    const deps = depsFor(storage);
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
     // body claims a DIFFERENT newIrkPub than the pending row.
     const res = await handleObjectRePair(
@@ -329,7 +460,7 @@ describe("re-pair object (self-cancel by NEW IRK)", () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
-    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    const deps = depsFor(storage);
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
     // Attacker signs with the OLD IRK (stolen from the device) but
     // references the legitimate recoverer's NEW IRK pub.
@@ -345,7 +476,7 @@ describe("re-pair object (self-cancel by NEW IRK)", () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
-    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    const deps = depsFor(storage);
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
     const stranger = makeKey();
     // Signer is the STRANGER, but body's newIrkPub matches the
@@ -364,7 +495,7 @@ describe("re-pair object (self-cancel by NEW IRK)", () => {
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
     const res = await handleObjectRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
       objectBody({ signer: newIrk, newIrkPub: newIrk.publicKey }),
     );
@@ -381,7 +512,7 @@ describe("re-pair object (self-cancel by NEW IRK)", () => {
     const oldIrk = makeKey();
     const firstNew = makeKey();
     const storage = await setup(oldIrk);
-    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    const deps = depsFor(storage);
 
     // 1. First initiate succeeds.
     expect((await handleInitiateRePair(deps, USERNAME, initBody({ newIrk: firstNew, oldIrk }))).status).toBe(200);
@@ -411,7 +542,7 @@ describe("re-pair object (self-cancel by NEW IRK)", () => {
     const oldIrk = makeKey();
     const firstNew = makeKey();
     const storage = await setup(oldIrk);
-    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    const deps = depsFor(storage);
     expect((await handleInitiateRePair(deps, USERNAME, initBody({ newIrk: firstNew, oldIrk }))).status).toBe(200);
     // Second concurrent initiate (different new-IRK) MUST be rejected.
     const secondNew = makeKey();
@@ -426,9 +557,9 @@ describe("re-pair complete (atomic IRK swap after grace)", () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
-    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    const deps = depsFor(storage);
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
-    const res = await handleCompleteRePair(deps, USERNAME);
+    const res = await handleCompleteRePair(deps, USERNAME, completeBody({ newIrk, deps: deps }));
     expect(res.status).toBe(425);
     expect((res.body as { secondsRemaining: number }).secondsRemaining).toBeGreaterThan(0);
   });
@@ -437,11 +568,12 @@ describe("re-pair complete (atomic IRK swap after grace)", () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
-    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    const deps = depsFor(storage);
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
     const res = await handleCompleteRePair(
       { ...deps, now: () => Date.now() + RE_PAIR_GRACE_MS + 1_000 },
       USERNAME,
+      completeBody({ newIrk, issuedAt: Date.now() + RE_PAIR_GRACE_MS + 1_000 }),
     );
     expect(res.status).toBe(200);
     const after = await storage.usernames.get(USERNAME);
@@ -452,10 +584,12 @@ describe("re-pair complete (atomic IRK swap after grace)", () => {
 
   it("404s when nothing is pending", async () => {
     const oldIrk = makeKey();
+    const newIrk = makeKey();
     const storage = await setup(oldIrk);
     const res = await handleCompleteRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
+      completeBody({ newIrk }),
     );
     expect(res.status).toBe(404);
   });
@@ -469,13 +603,13 @@ describe("re-pair complete (atomic IRK swap after grace)", () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
-    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    const deps = depsFor(storage);
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
     const completeDeps = { ...deps, now: () => Date.now() + RE_PAIR_GRACE_MS + 1_000 };
 
     const [a, b] = await Promise.all([
-      handleCompleteRePair(completeDeps, USERNAME),
-      handleCompleteRePair(completeDeps, USERNAME),
+      handleCompleteRePair(completeDeps, USERNAME, completeBody({ newIrk, deps: completeDeps })),
+      handleCompleteRePair(completeDeps, USERNAME, completeBody({ newIrk, deps: completeDeps })),
     ]);
     const statuses = [a.status, b.status].sort();
     // One of {200, 409|404} — InMemory's atomic swap means the
@@ -490,7 +624,7 @@ describe("re-pair complete (atomic IRK swap after grace)", () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
-    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    const deps = depsFor(storage);
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
     // Simulate a concurrent rotation that already moved the IRK away.
     const concurrent = makeKey();
@@ -503,6 +637,7 @@ describe("re-pair complete (atomic IRK swap after grace)", () => {
     const res = await handleCompleteRePair(
       { ...deps, now: () => Date.now() + RE_PAIR_GRACE_MS + 1_000 },
       USERNAME,
+      completeBody({ newIrk, issuedAt: Date.now() + RE_PAIR_GRACE_MS + 1_000 }),
     );
     expect(res.status).toBe(409);
     // Pending row also cleaned up so nothing dangles.
@@ -515,7 +650,7 @@ describe("re-pair GET (status read)", () => {
     const oldIrk = makeKey();
     const storage = await setup(oldIrk);
     const res = await handleGetRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
     );
     expect(res.status).toBe(200);
@@ -526,7 +661,7 @@ describe("re-pair GET (status read)", () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
-    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    const deps = depsFor(storage);
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
     await handleObjectRePair(
       deps,
@@ -551,20 +686,30 @@ describe("Recovery Phase B — single-device 3-day grace", () => {
     const newIrk = makeKey();
     const storage = await setup(oldIrk, { accountType: "single" });
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
-      // No totpProof — single-device doesn't require one.
+      // No TOTP on a single-device account — the cloud-recovery proof
+      // minted by the gated wrapped-UMK fetch is its credential.
       initBody({ newIrk, oldIrk, totpProof: null }),
     );
     expect(res.status).toBe(200);
-    const body = res.body as { graceMs: number; accountType: string; totpRequired: boolean };
+    const body = res.body as {
+      graceMs: number;
+      accountType: string;
+      totpRequired: boolean;
+      credentialUsed: string;
+    };
     expect(body.graceMs).toBe(RE_PAIR_SINGLE_GRACE_MS);
     expect(body.accountType).toBe("single");
+    // `totpRequired` stays false (it is the TOTP-specific flag the
+    // clients key their 24h-vs-3d copy off) even though a credential
+    // was required and consumed.
     expect(body.totpRequired).toBe(false);
+    expect(body.credentialUsed).toBe("recovery-credential");
     const row = await storage.pendingRePairs.get(USERNAME);
     expect(row?.graceSeconds).toBe(259_200);
     expect(row?.totpRequired).toBe(false);
-    expect(row?.totpProofConsumed).toBe(false);
+    expect(row?.totpProofConsumed).toBe(true);
     // Bit 0 (T+0) stamped on initiate — the scheduler must not
     // re-fire the T+0 push on its first sweep.
     expect(row?.alertsFiredBitmap).toBe(1);
@@ -575,9 +720,9 @@ describe("Recovery Phase B — single-device 3-day grace", () => {
     const newIrk = makeKey();
     const storage = await setup(oldIrk, { accountType: "multi" });
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
-      initBody({ newIrk, oldIrk, totpProof: { code: "654321", method: "totp" } }),
+      initBody({ newIrk, oldIrk }),
     );
     expect(res.status).toBe(200);
     const body = res.body as { graceMs: number; accountType: string; totpRequired: boolean };
@@ -595,7 +740,7 @@ describe("Recovery Phase B — single-device 3-day grace", () => {
     const newIrk = makeKey();
     const storage = await setup(oldIrk, { accountType: "multi" });
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
       initBody({ newIrk, oldIrk, totpProof: null }),
     );
@@ -608,7 +753,7 @@ describe("Recovery Phase B — single-device 3-day grace", () => {
     const newIrk = makeKey();
     const storage = await setup(oldIrk, { accountType: "multi" });
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
       initBody({ newIrk, oldIrk, totpProof: { code: "", method: "totp" } }),
     );
@@ -620,7 +765,7 @@ describe("Recovery Phase B — single-device 3-day grace", () => {
     const newIrk = makeKey();
     const storage = await setup(oldIrk, { accountType: "multi" });
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
       initBody({
         newIrk,
@@ -638,9 +783,13 @@ describe("Recovery Phase B — single-device 3-day grace", () => {
     const newIrk = makeKey();
     const storage = await setup(oldIrk, { accountType: "multi" });
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsFor(storage),
       USERNAME,
-      initBody({ newIrk, oldIrk, totpProof: { code: "AAAA-BBBB-CC", method: "recovery" } }),
+      initBody({
+        newIrk,
+        oldIrk,
+        totpProof: { code: aRecoveryCode(storage), method: "recovery" },
+      }),
     );
     expect(res.status).toBe(200);
     const row = await storage.pendingRePairs.get(USERNAME);
@@ -651,18 +800,20 @@ describe("Recovery Phase B — single-device 3-day grace", () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk, { accountType: "single" });
-    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    const deps = depsFor(storage);
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
     // 24h is too early.
     const earlyRes = await handleCompleteRePair(
       { ...deps, now: () => Date.now() + RE_PAIR_GRACE_MS + 1_000 },
       USERNAME,
+      completeBody({ newIrk, issuedAt: Date.now() + RE_PAIR_GRACE_MS + 1_000 }),
     );
     expect(earlyRes.status).toBe(425);
     // The single-device grace (3 days) + 1s is enough.
     const lateRes = await handleCompleteRePair(
       { ...deps, now: () => Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000 },
       USERNAME,
+      completeBody({ newIrk, issuedAt: Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000 }),
     );
     expect(lateRes.status).toBe(200);
     const after = await storage.usernames.get(USERNAME);
@@ -698,11 +849,14 @@ describe("v1.2 Phase 2 — 14-day quarantine", () => {
     const deps = {
       usernames: storage.usernames,
       pendingRePairs: storage.pendingRePairs,
+      webauthnRecovery: storage.webauthnRecovery,
+      recoveryProofSecret: TEST_PROOF_SECRET,
+      totpKekHex: TEST_KEK_HEX,
       pushTokens: storage.pushTokens,
     };
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
     const finishAt = Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000;
-    const res = await handleCompleteRePair({ ...deps, now: () => finishAt }, USERNAME);
+    const res = await handleCompleteRePair({ ...deps, now: () => finishAt }, USERNAME, completeBody({ newIrk, deps: { ...deps, now: () => finishAt } }));
     expect(res.status).toBe(200);
     const after = await Promise.all([
       storage.pushTokens.get("devA"),
@@ -720,11 +874,14 @@ describe("v1.2 Phase 2 — 14-day quarantine", () => {
     const deps = {
       usernames: storage.usernames,
       pendingRePairs: storage.pendingRePairs,
+      webauthnRecovery: storage.webauthnRecovery,
+      recoveryProofSecret: TEST_PROOF_SECRET,
+      totpKekHex: TEST_KEK_HEX,
       pushTokens: storage.pushTokens,
     };
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
     const finishAt = Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000;
-    const res = await handleCompleteRePair({ ...deps, now: () => finishAt }, USERNAME);
+    const res = await handleCompleteRePair({ ...deps, now: () => finishAt }, USERNAME, completeBody({ newIrk, deps: { ...deps, now: () => finishAt } }));
     expect((res.body as { quarantineUntil: number }).quarantineUntil).toBe(
       finishAt + RE_PAIR_QUARANTINE_MS,
     );
@@ -738,6 +895,9 @@ describe("v1.2 Phase 2 — 14-day quarantine", () => {
     await seedDevice(storage, { tokenId: "freshDev", quarantineUntil: future });
     const res = await handleInitiateRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         pushTokens: storage.pushTokens,
@@ -758,6 +918,9 @@ describe("v1.2 Phase 2 — 14-day quarantine", () => {
     await seedDevice(storage, { tokenId: "trustedDev", quarantineUntil: 0 });
     const res = await handleInitiateRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         pushTokens: storage.pushTokens,
@@ -775,6 +938,9 @@ describe("v1.2 Phase 2 — 14-day quarantine", () => {
     // No push tokens at all — the recovering device hasn't registered yet.
     const res = await handleInitiateRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         pushTokens: storage.pushTokens,
@@ -791,20 +957,6 @@ describe("v1.2 Phase 2 — 14-day quarantine", () => {
 // the re-pair multi-device path. Replaces the Phase 2 structural-
 // only gate when `totpKekHex` is wired on the deps.
 // ───────────────────────────────────────────────────────────────────
-
-import {
-  signTotpEnrollBegin,
-  signTotpEnrollConfirm,
-} from "@flagship/protocol";
-import * as OTPAuth from "otpauth";
-import {
-  _resetTotpVerifyRateLimitForTests,
-  handleTotpEnrollBegin,
-  handleTotpEnrollConfirm,
-} from "../src/totp.js";
-
-const TEST_KEK_HEX =
-  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 async function enrollMultiDevice(
   storage: InMemoryStorage,
@@ -882,6 +1034,8 @@ describe("v1.2 Phase 3 — real TOTP / recovery verification on re-pair", () => 
         pendingRePairs: storage.pendingRePairs,
         totpKekHex: TEST_KEK_HEX,
         now: () => fixedNow,
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
       },
       USERNAME,
       initBody({
@@ -915,6 +1069,8 @@ describe("v1.2 Phase 3 — real TOTP / recovery verification on re-pair", () => 
         pendingRePairs: storage.pendingRePairs,
         totpKekHex: TEST_KEK_HEX,
         now: () => fixedNow,
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
       },
       USERNAME,
       initBody({
@@ -944,6 +1100,8 @@ describe("v1.2 Phase 3 — real TOTP / recovery verification on re-pair", () => 
         pendingRePairs: storage.pendingRePairs,
         totpKekHex: TEST_KEK_HEX,
         now: () => fixedNow,
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
       },
       USERNAME,
       initBody({
@@ -975,6 +1133,8 @@ describe("v1.2 Phase 3 — real TOTP / recovery verification on re-pair", () => 
         pendingRePairs: storage.pendingRePairs,
         totpKekHex: TEST_KEK_HEX,
         now: () => fixedNow,
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
       },
       USERNAME,
       initBody({
@@ -998,6 +1158,9 @@ describe("v1.2 Phase 3 — real TOTP / recovery verification on re-pair", () => 
     const deps = {
       usernames: storage.usernames,
       pendingRePairs: storage.pendingRePairs,
+      webauthnRecovery: storage.webauthnRecovery,
+      recoveryProofSecret: TEST_PROOF_SECRET,
+      totpKekHex: TEST_KEK_HEX,
       totpKekHex: TEST_KEK_HEX,
       now: () => fixedNow,
     };
@@ -1040,6 +1203,9 @@ describe("v1.2 Phase 3 — real TOTP / recovery verification on re-pair", () => 
     const deps = {
       usernames: storage.usernames,
       pendingRePairs: storage.pendingRePairs,
+      webauthnRecovery: storage.webauthnRecovery,
+      recoveryProofSecret: TEST_PROOF_SECRET,
+      totpKekHex: TEST_KEK_HEX,
       totpKekHex: TEST_KEK_HEX,
       now: () => fixedNow,
     };
@@ -1069,10 +1235,12 @@ describe("v1.2 Phase 3 — real TOTP / recovery verification on re-pair", () => 
     expect(tripped.status).toBe(429);
   });
 
-  it("structural-only fallback still works when totpKekHex isn't wired", async () => {
-    // Deploy-safe: a deployment without FLAGSHIP_TOTP_KEK keeps the
-    // Phase 2 behaviour — structural presence is enough to clear the
-    // gate. Once the env var lands, the real-verify path kicks in.
+  it("FAILS CLOSED (503) when totpKekHex isn't wired — a code can't be checked", async () => {
+    // This used to fall back to a STRUCTURAL-ONLY check, so any
+    // non-empty six characters cleared the gate — the second factor
+    // became a formality on exactly the accounts that enrolled one.
+    // With no KEK the stored secret can't be decrypted, so there is
+    // nothing to verify against and the recovery is refused.
     _resetTotpVerifyRateLimitForTests();
     const oldIrk = makeKey();
     const newIrk = makeKey();
@@ -1082,6 +1250,8 @@ describe("v1.2 Phase 3 — real TOTP / recovery verification on re-pair", () => 
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         // NOTE: no totpKekHex.
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
       },
       USERNAME,
       initBody({
@@ -1090,7 +1260,9 @@ describe("v1.2 Phase 3 — real TOTP / recovery verification on re-pair", () => 
         totpProof: { code: "000000", method: "totp" },
       }),
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(503);
+    expect((res.body as { reason: string }).reason).toBe("totp-kek-unavailable");
+    expect(await storage.pendingRePairs.get(USERNAME)).toBeUndefined();
   });
 });
 
@@ -1114,6 +1286,8 @@ describe("v1.2 Plan B Phase 5 — audit emissions on re-pair", () => {
         auditEvents: storage.auditEvents,
         totpKekHex: TEST_KEK_HEX,
         now: () => fixedNow,
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
       },
       USERNAME,
       initBody({
@@ -1145,6 +1319,8 @@ describe("v1.2 Plan B Phase 5 — audit emissions on re-pair", () => {
         auditEvents: storage.auditEvents,
         totpKekHex: TEST_KEK_HEX,
         now: () => fixedNow,
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
       },
       USERNAME,
       initBody({
@@ -1159,12 +1335,16 @@ describe("v1.2 Plan B Phase 5 — audit emissions on re-pair", () => {
     const future = fixedNow + 25 * 3_600_000;
     const completion = await handleCompleteRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         auditEvents: storage.auditEvents,
         now: () => future,
       },
       USERNAME,
+      completeBody({ newIrk, issuedAt: future }),
     );
     expect(completion.status).toBe(200);
     const events = await storage.auditEvents.list(USERNAME, 0, 10);
@@ -1199,6 +1379,9 @@ describe("v1.2 Plan B Phase 5 — audit emissions on re-pair", () => {
     const fires: Array<{ username: string; category: string; tokenIds: string[]; deepLink: string }> = [];
     const res = await handleInitiateRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         pushTokens: storage.pushTokens,
@@ -1243,6 +1426,9 @@ describe("v1.2 Plan B Phase 5 — audit emissions on re-pair", () => {
     const deps = {
       usernames: storage.usernames,
       pendingRePairs: storage.pendingRePairs,
+      webauthnRecovery: storage.webauthnRecovery,
+      recoveryProofSecret: TEST_PROOF_SECRET,
+      totpKekHex: TEST_KEK_HEX,
       pushTokens: storage.pushTokens,
       auditEvents: storage.auditEvents,
       pushFanout: async ({ payload }: { payload: { category: string } }) => {
@@ -1342,11 +1528,14 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const deps = {
       usernames: storage.usernames,
       pendingRePairs: storage.pendingRePairs,
+      webauthnRecovery: storage.webauthnRecovery,
+      recoveryProofSecret: TEST_PROOF_SECRET,
+      totpKekHex: TEST_KEK_HEX,
       deviceCapabilityGrants: storage.deviceCapabilityGrants,
     };
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
     const finishAt = Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000;
-    const res = await handleCompleteRePair({ ...deps, now: () => finishAt }, USERNAME);
+    const res = await handleCompleteRePair({ ...deps, now: () => finishAt }, USERNAME, completeBody({ newIrk, deps: { ...deps, now: () => finishAt } }));
     expect(res.status).toBe(200);
     const body = res.body as { recoveryWipePolicy: string; wipedGrantIds?: string[] };
     expect(body.recoveryWipePolicy).toBe("strict");
@@ -1400,6 +1589,9 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const deps = {
       usernames: storage.usernames,
       pendingRePairs: storage.pendingRePairs,
+      webauthnRecovery: storage.webauthnRecovery,
+      recoveryProofSecret: TEST_PROOF_SECRET,
+      totpKekHex: TEST_KEK_HEX,
       deviceCapabilityGrants: storage.deviceCapabilityGrants,
     };
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
@@ -1407,8 +1599,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const res = await handleCompleteRePair(
       { ...deps, now: () => finishAt },
       USERNAME,
-      {
-        refreshedGrants: [
+      completeBody({ newIrk, issuedAt: finishAt, refreshedGrants: [
           {
             grantId: refreshed.grantId,
             deviceId: refreshed.deviceId,
@@ -1418,8 +1609,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
             expiresAt: refreshed.expiresAt,
             signature: bytesToHex(newSig),
           },
-        ],
-      },
+        ] }),
     );
     expect(res.status).toBe(200);
     const body = res.body as { recoveryWipePolicy: string; refreshedGrantIds?: string[] };
@@ -1478,6 +1668,9 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const deps = {
       usernames: storage.usernames,
       pendingRePairs: storage.pendingRePairs,
+      webauthnRecovery: storage.webauthnRecovery,
+      recoveryProofSecret: TEST_PROOF_SECRET,
+      totpKekHex: TEST_KEK_HEX,
       deviceCapabilityGrants: storage.deviceCapabilityGrants,
     };
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
@@ -1485,8 +1678,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const res = await handleCompleteRePair(
       { ...deps, now: () => finishAt },
       USERNAME,
-      {
-        refreshedGrants: [
+      completeBody({ newIrk, issuedAt: finishAt, refreshedGrants: [
           {
             grantId: inflated.grantId,
             deviceId: inflated.deviceId,
@@ -1496,8 +1688,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
             expiresAt: inflated.expiresAt,
             signature: bytesToHex(sig),
           },
-        ],
-      },
+        ] }),
     );
     expect(res.status).toBe(403);
     expect((res.body as { error: string }).error).toMatch(/inflate|scope/i);
@@ -1531,6 +1722,9 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const deps = {
       usernames: storage.usernames,
       pendingRePairs: storage.pendingRePairs,
+      webauthnRecovery: storage.webauthnRecovery,
+      recoveryProofSecret: TEST_PROOF_SECRET,
+      totpKekHex: TEST_KEK_HEX,
       deviceCapabilityGrants: storage.deviceCapabilityGrants,
     };
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
@@ -1538,8 +1732,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const res = await handleCompleteRePair(
       { ...deps, now: () => finishAt },
       USERNAME,
-      {
-        refreshedGrants: [
+      completeBody({ newIrk, issuedAt: finishAt, refreshedGrants: [
           {
             grantId: phantom.grantId,
             deviceId: phantom.deviceId,
@@ -1549,8 +1742,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
             expiresAt: phantom.expiresAt,
             signature: bytesToHex(sig),
           },
-        ],
-      },
+        ] }),
     );
     expect(res.status).toBe(403);
     expect((res.body as { error: string }).error).toMatch(/devicePubKey|existing/i);
@@ -1599,6 +1791,9 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const deps = {
       usernames: storage.usernames,
       pendingRePairs: storage.pendingRePairs,
+      webauthnRecovery: storage.webauthnRecovery,
+      recoveryProofSecret: TEST_PROOF_SECRET,
+      totpKekHex: TEST_KEK_HEX,
       deviceCapabilityGrants: storage.deviceCapabilityGrants,
     };
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
@@ -1606,8 +1801,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const res = await handleCompleteRePair(
       { ...deps, now: () => finishAt },
       USERNAME,
-      {
-        refreshedGrants: [
+      completeBody({ newIrk, issuedAt: finishAt, refreshedGrants: [
           {
             grantId: refreshed.grantId,
             deviceId: refreshed.deviceId,
@@ -1617,8 +1811,7 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
             expiresAt: refreshed.expiresAt,
             signature: bytesToHex(sig),
           },
-        ],
-      },
+        ] }),
     );
     expect(res.status).toBe(200);
     const body = res.body as { recoveryWipePolicy: string; refreshedGrantIds?: string[] };
@@ -1663,11 +1856,14 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     const deps = {
       usernames: storage.usernames,
       pendingRePairs: storage.pendingRePairs,
+      webauthnRecovery: storage.webauthnRecovery,
+      recoveryProofSecret: TEST_PROOF_SECRET,
+      totpKekHex: TEST_KEK_HEX,
       deviceCapabilityGrants: storage.deviceCapabilityGrants,
     };
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
     const finishAt = Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000;
-    const res = await handleCompleteRePair({ ...deps, now: () => finishAt }, USERNAME);
+    const res = await handleCompleteRePair({ ...deps, now: () => finishAt }, USERNAME, completeBody({ newIrk, deps: { ...deps, now: () => finishAt } }));
     expect(res.status).toBe(200);
     const body = res.body as { recoveryWipePolicy: string };
     expect(body.recoveryWipePolicy).toBe("graceful");
@@ -1691,7 +1887,9 @@ describe("#52 — re-pair completion window (stale-row hole)", () => {
   const T0 = 1_700_000_000_000;
 
   /** Initiate a single-device row at T0; returns deps + the row's
-   *  completesAt. No credential enrolled → grace-only initiate. */
+   *  completesAt. Authorized by a cloud-recovery proof minted on the
+   *  SAME clock — a proof is bound to a 15-minute window, so a
+   *  fast-forwarded test has to mint its own. */
   async function initiateSingleAt(t0 = T0) {
     const oldIrk = makeKey();
     const newIrk = makeKey();
@@ -1699,12 +1897,21 @@ describe("#52 — re-pair completion window (stale-row hole)", () => {
     const deps = {
       usernames: storage.usernames,
       pendingRePairs: storage.pendingRePairs,
+      webauthnRecovery: storage.webauthnRecovery,
+      recoveryProofSecret: TEST_PROOF_SECRET,
+      totpKekHex: TEST_KEK_HEX,
       now: () => t0,
     };
     const res = await handleInitiateRePair(
       deps,
       USERNAME,
-      initBody({ newIrk, oldIrk, issuedAt: t0, totpProof: null }),
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: t0,
+        totpProof: null,
+        recoveryProof: await proofAt(t0),
+      }),
     );
     expect(res.status).toBe(200);
     const completesAt = t0 + RE_PAIR_SINGLE_GRACE_MS;
@@ -1716,41 +1923,53 @@ describe("#52 — re-pair completion window (stale-row hole)", () => {
   });
 
   it("completes at exactly completesAt (window-open boundary)", async () => {
-    const { storage, completesAt } = await initiateSingleAt();
+    const { storage, newIrk, completesAt } = await initiateSingleAt();
     const res = await handleCompleteRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         now: () => completesAt,
       },
       USERNAME,
+      completeBody({ newIrk, issuedAt: completesAt }),
     );
     expect(res.status).toBe(200);
   });
 
   it("completes at the last tick inside the window (deadline - 1)", async () => {
-    const { storage, completesAt } = await initiateSingleAt();
+    const { storage, newIrk, completesAt } = await initiateSingleAt();
     const res = await handleCompleteRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         now: () => completesAt + RE_PAIR_COMPLETE_WINDOW_MS - 1,
       },
       USERNAME,
+      completeBody({ newIrk, issuedAt: completesAt + RE_PAIR_COMPLETE_WINDOW_MS - 1 }),
     );
     expect(res.status).toBe(200);
   });
 
   it("410s at the deadline, sweeps the row, and audits the expiry", async () => {
-    const { storage, oldIrk, completesAt } = await initiateSingleAt();
+    const { storage, oldIrk, newIrk, completesAt } = await initiateSingleAt();
     const res = await handleCompleteRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         auditEvents: storage.auditEvents,
         now: () => completesAt + RE_PAIR_COMPLETE_WINDOW_MS,
       },
       USERNAME,
+      completeBody({ newIrk, issuedAt: completesAt + RE_PAIR_COMPLETE_WINDOW_MS }),
     );
     expect(res.status).toBe(410);
     const body = res.body as { completesAt: number; completionDeadline: number };
@@ -1766,15 +1985,19 @@ describe("#52 — re-pair completion window (stale-row hole)", () => {
   });
 
   it("a stale row from old testing is NOT completable months later (the same-day-takeover hole)", async () => {
-    const { storage } = await initiateSingleAt();
+    const { storage, newIrk } = await initiateSingleAt();
     const monthsLater = T0 + 90 * 24 * 60 * 60_000;
     const res = await handleCompleteRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         now: () => monthsLater,
       },
       USERNAME,
+      completeBody({ newIrk, issuedAt: monthsLater }),
     );
     expect(res.status).toBe(410);
   });
@@ -1783,33 +2006,51 @@ describe("#52 — re-pair completion window (stale-row hole)", () => {
     // The legitimate flow is initiate → wait grace → complete: a row
     // between completesAt and the deadline is a live recovery awaiting
     // its /complete call. A second initiate must NOT evict it.
-    const { storage, oldIrk, completesAt } = await initiateSingleAt();
+    const { storage, oldIrk, newIrk, completesAt } = await initiateSingleAt();
     const rival = makeKey();
     const insideWindow = completesAt + 1_000;
     const res = await handleInitiateRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         now: () => insideWindow,
       },
       USERNAME,
-      initBody({ newIrk: rival, oldIrk, issuedAt: insideWindow, totpProof: null }),
+      initBody({
+        newIrk: rival,
+        oldIrk,
+        issuedAt: insideWindow,
+        totpProof: null,
+        recoveryProof: await proofAt(insideWindow),
+      }),
     );
     expect(res.status).toBe(409);
   });
 
   it("initiate sweeps a row past the completion window and succeeds", async () => {
-    const { storage, oldIrk, completesAt } = await initiateSingleAt();
+    const { storage, oldIrk, newIrk, completesAt } = await initiateSingleAt();
     const rival = makeKey();
     const pastDeadline = completesAt + RE_PAIR_COMPLETE_WINDOW_MS;
     const res = await handleInitiateRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         now: () => pastDeadline,
       },
       USERNAME,
-      initBody({ newIrk: rival, oldIrk, issuedAt: pastDeadline, totpProof: null }),
+      initBody({
+        newIrk: rival,
+        oldIrk,
+        issuedAt: pastDeadline,
+        totpProof: null,
+        recoveryProof: await proofAt(pastDeadline),
+      }),
     );
     expect(res.status).toBe(200);
     const row = await storage.pendingRePairs.get(USERNAME);
@@ -1817,42 +2058,59 @@ describe("#52 — re-pair completion window (stale-row hole)", () => {
   });
 
   it("the 410 sweep releases the recovery lock — the next initiate succeeds", async () => {
-    const { storage, oldIrk, completesAt } = await initiateSingleAt();
+    const { storage, oldIrk, newIrk, completesAt } = await initiateSingleAt();
     const late = completesAt + RE_PAIR_COMPLETE_WINDOW_MS + 1;
     const gone = await handleCompleteRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         now: () => late,
       },
       USERNAME,
+      completeBody({ newIrk, issuedAt: late }),
     );
     expect(gone.status).toBe(410);
     const rival = makeKey();
     const res = await handleInitiateRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         now: () => late,
       },
       USERNAME,
-      initBody({ newIrk: rival, oldIrk, issuedAt: late, totpProof: null }),
+      initBody({
+        newIrk: rival,
+        oldIrk,
+        issuedAt: late,
+        totpProof: null,
+        recoveryProof: await proofAt(late),
+      }),
     );
     expect(res.status).toBe(200);
   });
 
   it("honors the completeWindowMs test override", async () => {
-    const { storage, oldIrk, completesAt } = await initiateSingleAt();
+    const { storage, oldIrk, newIrk, completesAt } = await initiateSingleAt();
     const shortWindow = 60_000;
     // Inside the shortened window: completable (the swap lands).
     const okRes = await handleCompleteRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         completeWindowMs: shortWindow,
         now: () => completesAt + shortWindow - 1,
       },
       USERNAME,
+      completeBody({ newIrk, issuedAt: completesAt + shortWindow - 1 }),
     );
     expect(okRes.status).toBe(200);
     const rec = await storage.usernames.get(USERNAME);
@@ -1893,21 +2151,19 @@ describe("#52 — credential required on single-device initiate", () => {
     return { storage, oldIrk, ...enrolled };
   }
 
-  function deps(storage: InMemoryStorage) {
-    return {
-      usernames: storage.usernames,
-      pendingRePairs: storage.pendingRePairs,
+  /** Production deps, pinned to this block's fixed clock. */
+  function depsAtT0(storage: InMemoryStorage) {
+    return depsFor(storage, {
       auditEvents: storage.auditEvents,
-      totpKekHex: TEST_KEK_HEX,
       now: () => T0,
-    };
+    });
   }
 
   it("single + TOTP enrolled: bare initiate → 401 with credentialRequired", async () => {
     const { storage, oldIrk } = await setupSingleEnrolled();
     const newIrk = makeKey();
     const res = await handleInitiateRePair(
-      deps(storage),
+      depsAtT0(storage),
       USERNAME,
       initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: null }),
     );
@@ -1931,7 +2187,7 @@ describe("#52 — credential required on single-device initiate", () => {
     const { storage, oldIrk, secretBase32 } = await setupSingleEnrolled();
     const newIrk = makeKey();
     const res = await handleInitiateRePair(
-      deps(storage),
+      depsAtT0(storage),
       USERNAME,
       initBody({
         newIrk,
@@ -1952,7 +2208,7 @@ describe("#52 — credential required on single-device initiate", () => {
     const { storage, oldIrk } = await setupSingleEnrolled();
     const newIrk = makeKey();
     const res = await handleInitiateRePair(
-      deps(storage),
+      depsAtT0(storage),
       USERNAME,
       initBody({
         newIrk,
@@ -1985,18 +2241,18 @@ describe("#52 — credential required on single-device initiate", () => {
     });
     const newIrk = makeKey();
     const missing = await handleInitiateRePair(
-      deps(codesOnly),
+      depsAtT0(codesOnly),
       USERNAME,
       initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: null }),
     );
     expect(missing.status).toBe(401);
     expect(
       (missing.body as { credentialRequired: string[] }).credentialRequired,
-    ).toEqual(["recovery-code"]);
+    ).toEqual(["recovery-code", "registered-key"]);
     // A valid recovery code clears the gate AND is consumed + audited.
     const target = recoveryCodes[0] as string;
     const ok = await handleInitiateRePair(
-      deps(codesOnly),
+      depsAtT0(codesOnly),
       USERNAME,
       initBody({
         newIrk,
@@ -2013,25 +2269,55 @@ describe("#52 — credential required on single-device initiate", () => {
     expect(consumed?.accountTypeAtEvent).toBe("single");
   });
 
-  it("single + NEITHER enrolled: grace-only initiate still works and is audit-logged", async () => {
+  it("single + NO credential at all: REFUSED (409) — recovery is credential-only", async () => {
+    // THE takeover primitive, closed. `oldIrkPub` is public (the
+    // username lookup serves it) and the envelope is signed by the
+    // incoming key, so a credential-less initiate asked a stranger for
+    // nothing it couldn't supply — and nothing downstream could stop
+    // it (`/object` is self-cancel only). No credential ⇒ no recovery.
     const oldIrk = makeKey();
     const newIrk = makeKey();
-    const storage = await setup(oldIrk, { accountType: "single" });
+    const storage = await setup(oldIrk, {
+      accountType: "single",
+      credential: "none",
+    });
     const res = await handleInitiateRePair(
-      deps(storage),
+      depsAtT0(storage),
       USERNAME,
       initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: null }),
     );
-    expect(res.status).toBe(200);
-    const row = await storage.pendingRePairs.get(USERNAME);
-    expect(row?.totpProofConsumed).toBe(false);
+    expect(res.status).toBe(409);
+    expect((res.body as { reason: string }).reason).toBe("no-credential");
+    // No grace clock started, so nothing can ripen into a swap.
+    expect(await storage.pendingRePairs.get(USERNAME)).toBeUndefined();
+    // The attempt is still visible to the owner.
     const events = await storage.auditEvents.list(USERNAME, 0, 50);
     const audit = events.find(
-      (e) => e.eventKind === "re-pair-initiated-no-credential",
+      (e) => e.eventKind === "re-pair-refused-no-credential",
     );
     expect(audit).toBeTruthy();
     expect(audit?.recoveryMethod).toBe("none");
     expect(audit?.accountTypeAtEvent).toBe("single");
+  });
+
+  it("a credential-less account can't be taken over by COMPLETING either", async () => {
+    // Belt + braces on the same hole: with no pending row there is
+    // nothing to finalize, and /complete can no longer be used as an
+    // unauthenticated poke to find out.
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, {
+      accountType: "single",
+      credential: "none",
+    });
+    const res = await handleCompleteRePair(
+      depsAtT0(storage),
+      USERNAME,
+      completeBody({ newIrk, issuedAt: T0 }),
+    );
+    expect(res.status).toBe(404);
+    const after = await storage.usernames.get(USERNAME);
+    expect(after?.irkPubHex).toBe(bytesToHex(oldIrk.publicKey));
   });
 
   it("multi-device 401 now also carries credentialRequired (additive, same status/error)", async () => {
@@ -2039,9 +2325,9 @@ describe("#52 — credential required on single-device initiate", () => {
     const newIrk = makeKey();
     const storage = await setup(oldIrk, { accountType: "multi" });
     const res = await handleInitiateRePair(
-      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      depsAtT0(storage),
       USERNAME,
-      initBody({ newIrk, oldIrk, totpProof: null }),
+      initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: null }),
     );
     expect(res.status).toBe(401);
     const body = res.body as {
@@ -2058,7 +2344,7 @@ describe("#52 — credential required on single-device initiate", () => {
     const { storage, oldIrk, secretBase32 } = await setupSingleEnrolled();
     const newIrk = makeKey();
     const init = await handleInitiateRePair(
-      deps(storage),
+      depsAtT0(storage),
       USERNAME,
       initBody({
         newIrk,
@@ -2070,16 +2356,481 @@ describe("#52 — credential required on single-device initiate", () => {
     expect(init.status).toBe(200);
     const done = await handleCompleteRePair(
       {
+        webauthnRecovery: storage.webauthnRecovery,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        totpKekHex: TEST_KEK_HEX,
         usernames: storage.usernames,
         pendingRePairs: storage.pendingRePairs,
         auditEvents: storage.auditEvents,
         now: () => T0 + RE_PAIR_SINGLE_GRACE_MS + 1,
       },
       USERNAME,
+      completeBody({ newIrk, issuedAt: T0 + RE_PAIR_SINGLE_GRACE_MS + 1 }),
     );
     expect(done.status).toBe(200);
     const events = await storage.auditEvents.list(USERNAME, 0, 50);
     const replaced = events.find((e) => e.eventKind === "device-replaced");
     expect(replaced?.recoveryMethod).toBe("totp");
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────
+// The recovery-credential gate on initiate, and the signature gate on
+// complete. Together these are what stops an unauthenticated caller
+// from scheduling an IRK swap on any account whose handle they know:
+// before them, a single-device account with no TOTP needed only its
+// PUBLIC oldIrkPub (GET /api/username/:u serves it) plus a self-signed
+// envelope, and no veto existed downstream.
+// ───────────────────────────────────────────────────────────────────
+
+describe("recovery-credential gate on initiate", () => {
+  const T0 = 1_700_000_000_000;
+
+  async function single(): Promise<{
+    storage: InMemoryStorage;
+    oldIrk: Keypair;
+    newIrk: Keypair;
+  }> {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    return { storage, oldIrk, newIrk };
+  }
+
+  function depsAt(storage: InMemoryStorage, now = T0) {
+    return depsFor(storage, { auditEvents: storage.auditEvents, now: () => now });
+  }
+
+  it("the attack: public oldIrkPub + a self-signed envelope is NOT enough", async () => {
+    const { storage, oldIrk, newIrk } = await single();
+    // Everything an internet stranger can obtain: the handle, and the
+    // current IRK from the unauthenticated username lookup.
+    const res = await handleInitiateRePair(
+      depsAt(storage),
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: T0,
+        totpProof: null,
+        recoveryProof: null,
+      }),
+    );
+    expect(res.status).toBe(401);
+    const body = res.body as { credentialRequired: string[] };
+    expect(body.credentialRequired).toEqual(["recovery-credential", "registered-key"]);
+    expect(await storage.pendingRePairs.get(USERNAME)).toBeUndefined();
+  });
+
+  it("accepts the proof the gated wrapped-UMK fetch minted", async () => {
+    const { storage, oldIrk, newIrk } = await single();
+    const res = await handleInitiateRePair(
+      depsAt(storage),
+      USERNAME,
+      initBody({ newIrk, oldIrk, issuedAt: T0, recoveryProof: await proofAt(T0) }),
+    );
+    expect(res.status).toBe(200);
+    expect((res.body as { credentialUsed: string }).credentialUsed).toBe(
+      "recovery-credential",
+    );
+    const events = await storage.auditEvents.list(USERNAME, 0, 50);
+    const started = events.find((e) => e.eventKind === "re-pair-initiated");
+    expect(started?.recoveryMethod).toBe("recovery-credential");
+  });
+
+  it("rejects a forged token (wrong MAC secret)", async () => {
+    const { storage, oldIrk, newIrk } = await single();
+    const { token } = await mintRecoveryProof(
+      { username: USERNAME, fetchTokenHashHex: TEST_FETCH_TOKEN_HASH },
+      "not-the-worker-secret",
+      { now: T0 },
+    );
+    const res = await handleInitiateRePair(
+      depsAt(storage),
+      USERNAME,
+      initBody({ newIrk, oldIrk, issuedAt: T0, recoveryProof: token }),
+    );
+    expect(res.status).toBe(401);
+    expect((res.body as { reason: string }).reason).toBe("bad-signature");
+  });
+
+  it("rejects a token minted for a DIFFERENT account", async () => {
+    const { storage, oldIrk, newIrk } = await single();
+    const { token } = await mintRecoveryProof(
+      { username: "someone-else", fetchTokenHashHex: TEST_FETCH_TOKEN_HASH },
+      TEST_PROOF_SECRET,
+      { now: T0 },
+    );
+    const res = await handleInitiateRePair(
+      depsAt(storage),
+      USERNAME,
+      initBody({ newIrk, oldIrk, issuedAt: T0, recoveryProof: token }),
+    );
+    expect(res.status).toBe(401);
+    expect((res.body as { reason: string }).reason).toBe("bad-signature");
+  });
+
+  it("rejects a token that outlived its TTL", async () => {
+    const { storage, oldIrk, newIrk } = await single();
+    const stale = await proofAt(T0 - RECOVERY_PROOF_TTL_MS - 1_000);
+    const res = await handleInitiateRePair(
+      depsAt(storage),
+      USERNAME,
+      initBody({ newIrk, oldIrk, issuedAt: T0, recoveryProof: stale }),
+    );
+    expect(res.status).toBe(401);
+    expect((res.body as { reason: string }).reason).toBe("expired");
+  });
+
+  it("re-enrolling cloud recovery invalidates outstanding tokens", async () => {
+    const { storage, oldIrk, newIrk } = await single();
+    const issued = await proofAt(T0);
+    // The user changes their recovery passphrase: a new fetchToken, so
+    // a new stored hash. Tokens bound to the old hash are now dead.
+    const rec = await storage.webauthnRecovery.get(USERNAME);
+    await storage.webauthnRecovery.upsert({
+      ...rec!,
+      fetchTokenHashHex: "cd".repeat(32),
+    });
+    const res = await handleInitiateRePair(
+      depsAt(storage),
+      USERNAME,
+      initBody({ newIrk, oldIrk, issuedAt: T0, recoveryProof: issued }),
+    );
+    expect(res.status).toBe(401);
+    expect((res.body as { reason: string }).reason).toBe("bad-signature");
+  });
+
+  it("a record predating the passphrase gate cannot authorize a recovery", async () => {
+    const { storage, oldIrk, newIrk } = await single();
+    const rec = await storage.webauthnRecovery.get(USERNAME);
+    const { fetchTokenHashHex: _dropped, ...legacy } = rec!;
+    const fresh = new InMemoryStorage();
+    await fresh.usernames.put((await storage.usernames.get(USERNAME))!);
+    await fresh.webauthnRecovery.upsert(legacy);
+    const res = await handleInitiateRePair(
+      depsAt(fresh),
+      USERNAME,
+      initBody({ newIrk, oldIrk, issuedAt: T0, recoveryProof: await proofAt(T0) }),
+    );
+    expect(res.status).toBe(409);
+    expect((res.body as { reason: string }).reason).toBe("no-credential");
+  });
+
+  it("FAILS CLOSED (503) when the proof secret isn't configured", async () => {
+    const { storage, oldIrk, newIrk } = await single();
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        webauthnRecovery: storage.webauthnRecovery,
+        // NOTE: no recoveryProofSecret — the dep this gate needs.
+        now: () => T0,
+      },
+      USERNAME,
+      initBody({ newIrk, oldIrk, issuedAt: T0, recoveryProof: await proofAt(T0) }),
+    );
+    expect(res.status).toBe(503);
+    expect((res.body as { reason: string }).reason).toBe(
+      "recovery-proof-unavailable",
+    );
+    expect(await storage.pendingRePairs.get(USERNAME)).toBeUndefined();
+  });
+
+  it("FAILS CLOSED (503) when the escrow store isn't wired", async () => {
+    const { storage, oldIrk, newIrk } = await single();
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        recoveryProofSecret: TEST_PROOF_SECRET,
+        // NOTE: no webauthnRecovery — we cannot even tell whether a
+        // credential exists, so we must not assume there is none.
+        now: () => T0,
+      },
+      USERNAME,
+      initBody({ newIrk, oldIrk, issuedAt: T0, recoveryProof: await proofAt(T0) }),
+    );
+    expect(res.status).toBe(503);
+  });
+
+  it("a recovery-credential proof does NOT satisfy a multi-device account", async () => {
+    // Multi's 24h grace (vs 3 days) is priced on the stronger factor.
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    await enrollCloudRecovery(storage);
+    const res = await handleInitiateRePair(
+      depsAt(storage, Date.now()),
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        totpProof: null,
+        recoveryProof: await proofAt(Date.now()),
+      }),
+    );
+    expect(res.status).toBe(401);
+    expect((res.body as { credentialRequired: string[] }).credentialRequired).toEqual([
+      "totp",
+      "recovery-code",
+    ]);
+  });
+});
+
+describe("signature gate on re-pair complete", () => {
+  async function ripened(): Promise<{
+    storage: InMemoryStorage;
+    oldIrk: Keypair;
+    newIrk: Keypair;
+    finishAt: number;
+  }> {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    const init = await handleInitiateRePair(
+      depsFor(storage),
+      USERNAME,
+      initBody({ newIrk, oldIrk, totpProof: null }),
+    );
+    expect(init.status).toBe(200);
+    return {
+      storage,
+      oldIrk,
+      newIrk,
+      finishAt: Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000,
+    };
+  }
+
+  it("refuses a bare POST — the old behaviour let any passer-by fire the swap", async () => {
+    const { storage, oldIrk, finishAt } = await ripened();
+    const res = await handleCompleteRePair(
+      depsFor(storage, { now: () => finishAt }),
+      USERNAME,
+      undefined,
+    );
+    expect(res.status).toBe(401);
+    expect((res.body as { reason: string }).reason).toBe("signature-required");
+    const after = await storage.usernames.get(USERNAME);
+    expect(after?.irkPubHex).toBe(bytesToHex(oldIrk.publicKey));
+  });
+
+  it("refuses a signature by a key other than the pending row's", async () => {
+    const { storage, oldIrk, finishAt } = await ripened();
+    const impostor = makeKey();
+    const res = await handleCompleteRePair(
+      depsFor(storage, { now: () => finishAt }),
+      USERNAME,
+      completeBody({ newIrk: impostor, issuedAt: finishAt }),
+    );
+    expect(res.status).toBe(403);
+    const after = await storage.usernames.get(USERNAME);
+    expect(after?.irkPubHex).toBe(bytesToHex(oldIrk.publicKey));
+  });
+
+  it("refuses a self-cancel signature replayed as a completion (tag separation)", async () => {
+    // RePairObject and RePairComplete carry IDENTICAL fields and are
+    // signed by the SAME key. Only the canonical tag distinguishes
+    // "stop" from "go" — if it didn't, a captured cancel would finish
+    // the takeover it was meant to abort.
+    const { storage, newIrk, oldIrk, finishAt } = await ripened();
+    const cancel = objectBody({
+      signer: newIrk,
+      newIrkPub: newIrk.publicKey,
+      issuedAt: finishAt,
+    });
+    const res = await handleCompleteRePair(
+      depsFor(storage, { now: () => finishAt }),
+      USERNAME,
+      cancel as Parameters<typeof handleCompleteRePair>[2],
+    );
+    expect(res.status).toBe(403);
+    const after = await storage.usernames.get(USERNAME);
+    expect(after?.irkPubHex).toBe(bytesToHex(oldIrk.publicKey));
+  });
+
+  it("refuses a stale envelope", async () => {
+    const { storage, newIrk, finishAt } = await ripened();
+    const res = await handleCompleteRePair(
+      depsFor(storage, { now: () => finishAt }),
+      USERNAME,
+      completeBody({ newIrk, issuedAt: finishAt - 60 * 60_000 }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { error: string }).error).toMatch(/stale/i);
+  });
+
+  it("accepts the pending row's own key and swaps", async () => {
+    const { storage, newIrk, finishAt } = await ripened();
+    const res = await handleCompleteRePair(
+      depsFor(storage, { now: () => finishAt }),
+      USERNAME,
+      completeBody({ newIrk, issuedAt: finishAt }),
+    );
+    expect(res.status).toBe(200);
+    const after = await storage.usernames.get(USERNAME);
+    expect(after?.irkPubHex).toBe(bytesToHex(newIrk.publicKey));
+  });
+
+  it("authorizes BEFORE reporting timing, so it can't probe a recovery's state", async () => {
+    // An unauthenticated caller must not learn "too early" / "objected"
+    // / "expired" about someone else's recovery.
+    const { storage } = await ripened();
+    const res = await handleCompleteRePair(depsFor(storage), USERNAME, undefined);
+    expect(res.status).toBe(401);
+    expect(res.body).not.toHaveProperty("completesAt");
+    expect(res.body).not.toHaveProperty("secondsRemaining");
+  });
+});
+
+describe("registered-key credential (key-file / device-pair recovery)", () => {
+  const T0 = 1_700_000_000_000;
+
+  /** The key-file case: no TOTP, no cloud escrow — just the seed, and
+   *  therefore the account's currently-registered key. */
+  async function bare(): Promise<{
+    storage: InMemoryStorage;
+    oldIrk: Keypair;
+    newIrk: Keypair;
+  }> {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, {
+      accountType: "single",
+      credential: "none",
+    });
+    return { storage, oldIrk, newIrk };
+  }
+
+  function withOldIrkProof(
+    body: ReturnType<typeof initBody>,
+    oldIrk: Keypair,
+    args: { newIrk: Keypair; issuedAt: number },
+  ) {
+    // A second signature over the SAME canonical bytes, by the key the
+    // swap will displace.
+    const sig = signRePairInitiate(
+      {
+        username: USERNAME,
+        newIrkPub: args.newIrk.publicKey,
+        oldIrkPub: oldIrk.publicKey,
+        issuedAt: args.issuedAt,
+      },
+      oldIrk,
+    );
+    return { ...body, oldIrkSignature: bytesToHex(sig) };
+  }
+
+  it("authorizes an account with NO enrolled recovery credential", async () => {
+    const { storage, oldIrk, newIrk } = await bare();
+    const depsAt = depsFor(storage, {
+      auditEvents: storage.auditEvents,
+      now: () => T0,
+    });
+    const res = await handleInitiateRePair(
+      depsAt,
+      USERNAME,
+      withOldIrkProof(
+        initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: null }),
+        oldIrk,
+        { newIrk, issuedAt: T0 },
+      ),
+    );
+    expect(res.status).toBe(200);
+    expect((res.body as { credentialUsed: string }).credentialUsed).toBe(
+      "registered-key",
+    );
+    const events = await storage.auditEvents.list(USERNAME, 0, 50);
+    expect(
+      events.find((e) => e.eventKind === "re-pair-initiated")?.recoveryMethod,
+    ).toBe("registered-key");
+  });
+
+  it("rejects a proof signed by a key that is NOT the registered one", async () => {
+    const { storage, oldIrk, newIrk } = await bare();
+    const impostor = makeKey();
+    const depsAt = depsFor(storage, { now: () => T0 });
+    const base = initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: null });
+    const forged = signRePairInitiate(
+      {
+        username: USERNAME,
+        newIrkPub: newIrk.publicKey,
+        oldIrkPub: oldIrk.publicKey,
+        issuedAt: T0,
+      },
+      impostor,
+    );
+    const res = await handleInitiateRePair(depsAt, USERNAME, {
+      ...base,
+      oldIrkSignature: bytesToHex(forged),
+    });
+    expect(res.status).toBe(401);
+    expect((res.body as { reason: string }).reason).toBe("bad-registered-key-proof");
+    expect(await storage.pendingRePairs.get(USERNAME)).toBeUndefined();
+  });
+
+  it("does NOT let the new key sign its own ownership proof", async () => {
+    // The self-signature is already required and proves only key
+    // possession. Re-presenting it as the ownership proof must fail.
+    const { storage, oldIrk, newIrk } = await bare();
+    const depsAt = depsFor(storage, { now: () => T0 });
+    const base = initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: null }) as {
+      signature: string;
+    };
+    const res = await handleInitiateRePair(depsAt, USERNAME, {
+      ...base,
+      oldIrkSignature: base.signature,
+    });
+    expect(res.status).toBe(401);
+    expect((res.body as { reason: string }).reason).toBe("bad-registered-key-proof");
+  });
+
+  it("still requires TOTP on a multi-device account", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const depsAt = depsFor(storage, { now: () => T0 });
+    const res = await handleInitiateRePair(
+      depsAt,
+      USERNAME,
+      withOldIrkProof(
+        initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: null }),
+        oldIrk,
+        { newIrk, issuedAt: T0 },
+      ),
+    );
+    // The registered-key proof is accepted as a credential, but multi's
+    // own gate is unchanged: it is the one account type where a second
+    // factor is mandatory.
+    expect(res.status).toBe(200);
+    expect((res.body as { credentialUsed: string }).credentialUsed).toBe(
+      "registered-key",
+    );
+  });
+
+  it("is refused once the account's key has moved on (stale key file)", async () => {
+    const { storage, oldIrk, newIrk } = await bare();
+    // Someone else rotated the account (or the user did, on another
+    // device): the key file now holds a key the account no longer uses.
+    const rotated = makeKey();
+    const swapped = await storage.usernames.swapIrkPub(
+      USERNAME,
+      bytesToHex(oldIrk.publicKey),
+      bytesToHex(rotated.publicKey),
+      T0 - 1_000,
+    );
+    expect(swapped).toBe(true);
+    const depsAt = depsFor(storage, { now: () => T0 });
+    const res = await handleInitiateRePair(
+      depsAt,
+      USERNAME,
+      withOldIrkProof(
+        initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: null }),
+        oldIrk,
+        { newIrk, issuedAt: T0 },
+      ),
+    );
+    // Rejected earlier, by the oldIrkPub-matches-current check.
+    expect(res.status).toBe(403);
   });
 });

@@ -585,9 +585,50 @@ describe("#52 — completeRePair 410 (completion window expired)", () => {
         completionDeadline: 2,
       }),
     );
-    const out = await completeRePair({ username: "harry", fetch: f as any });
+    const out = await completeRePair({
+      username: "harry",
+      newIrkPubHex: "aa".repeat(32),
+      sign: () => new Uint8Array(64),
+      fetch: f as any,
+    });
     expect(out.outcome).toBe("expired");
     expect(out.message).toMatch(/completion window has expired/);
+  });
+
+  it("refuses to POST at all without a signer — the server would 401 anyway", async () => {
+    const { completeRePair } = await loadLib();
+    const f = vi.fn();
+    await expect(
+      completeRePair({ username: "harry", fetch: f as any }),
+    ).rejects.toThrow(/sign/);
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("signs the completion under the re-pair-complete tag, not the object tag", async () => {
+    const { completeRePair, TAG_RE_PAIR_COMPLETE } = await loadLib();
+    const seen: Uint8Array[] = [];
+    const f = vi.fn(async () => jsonResponse(200, { ok: true }));
+    await completeRePair({
+      username: "harry",
+      newIrkPubHex: "bb".repeat(32),
+      issuedAt: 1_700_000_000_000,
+      sign: (bytes: Uint8Array) => {
+        seen.push(bytes);
+        return new Uint8Array(64);
+      },
+      fetch: f as any,
+    });
+    const signed = new TextDecoder().decode(seen[0]!);
+    expect(signed).toBe(
+      [TAG_RE_PAIR_COMPLETE, "harry", "bb".repeat(32), 1_700_000_000_000].join("|"),
+    );
+    const body = JSON.parse((f.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.request).toEqual({
+      username: "harry",
+      newIrkPub: "bb".repeat(32),
+      issuedAt: 1_700_000_000_000,
+    });
+    expect(body.signature).toBe("00".repeat(64));
   });
 
   it("finishTakeover on a 410 does NOT finalize or open the account", async () => {
@@ -596,11 +637,28 @@ describe("#52 — completeRePair 410 (completion window expired)", () => {
     const finalizeV2Irk = vi.fn();
     const openAccount = vi.fn();
     const out = await finishTakeover(
-      { username: "harry", rePair: { completesAt: 100 } },
-      { fetch: f as any, now: () => 200, finalizeV2Irk, openAccount },
+      { username: "harry", rePair: { completesAt: 100 }, newIrkPubHex: "cc".repeat(32) },
+      {
+        fetch: f as any,
+        now: () => 200,
+        finalizeV2Irk,
+        openAccount,
+        sign: () => new Uint8Array(64),
+      },
     );
     expect(out.outcome).toBe("expired");
     expect(finalizeV2Irk).not.toHaveBeenCalled();
     expect(openAccount).not.toHaveBeenCalled();
+  });
+
+  it("finishTakeover without the key returns a state instead of an unsigned POST", async () => {
+    const { finishTakeover } = await loadLib();
+    const f = vi.fn();
+    const out = await finishTakeover(
+      { username: "harry", rePair: { completesAt: 100 } },
+      { fetch: f as any, now: () => 200 },
+    );
+    expect(out.outcome).toBe("needs-key");
+    expect(f).not.toHaveBeenCalled();
   });
 });
