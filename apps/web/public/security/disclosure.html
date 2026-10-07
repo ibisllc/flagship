@@ -83,6 +83,17 @@
       </div>
 
       <h2>Bounty payouts</h2>
+      <p style="color: var(--ink-muted);">
+        <strong>Status: pre-release, not yet fully funded.</strong> Flagship
+        has not launched commercially and the bounty programme is not funded
+        yet, so <strong>payouts are delayed until it is</strong>. The bands
+        below are what we expect to pay once funding is in place — they are
+        not a current offer. Until then we triage, fix, and credit reports
+        under this policy, and we record every qualifying report as an
+        outstanding obligation to be assessed against these bands at
+        commercial launch. We would rather tell you this before you spend
+        your time than after.
+      </p>
       <table class="payout-table">
         <thead>
           <tr><th>Severity</th><th>Examples</th><th>Range (USD)</th></tr>
@@ -171,9 +182,38 @@
 
       <h2>Hall of fame</h2>
       <p style="color: var(--ink-muted);">
-        No reports yet — be first. Once we accept a report, your name (or
-        handle) goes here with a link of your choice.
+        Researchers who reported a vulnerability to us, with the commit that
+        closed it. Credited in whatever form each reporter asks for — name,
+        handle, or anonymous, with a link if they want one. Listed without
+        attribution until they have told us their preference; we never
+        publish a name we have not been given.
       </p>
+      <table class="payout-table">
+        <thead>
+          <tr><th>Reported</th><th>Issue</th><th>Severity</th><th>Fix</th><th>Credit</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>2026-10</td>
+            <td>Unauthenticated attacker schedules an identity-key swap on any
+              account without a second factor</td>
+            <td>Critical</td>
+            <td><a href="https://github.com/ibisllc/flagship/commit/7d49a444">7d49a444</a></td>
+            <td>Credit pending the reporter&rsquo;s preference</td>
+          </tr>
+          <tr>
+            <td>2026-10</td>
+            <td>Unauthenticated CA-signing oracle mints a relay-hub blessing
+              for any key or host</td>
+            <td>Critical</td>
+            <td><a href="https://github.com/ibisllc/flagship/commit/54889a4c">54889a4c</a>
+              <span style="color: var(--ink-muted);">(+ hardening
+              <a href="https://github.com/ibisllc/flagship/commit/484ef162">484ef162</a>,
+              <a href="https://github.com/ibisllc/flagship/commit/771db538">771db538</a>)</span></td>
+            <td>Credit pending the reporter&rsquo;s preference</td>
+          </tr>
+        </tbody>
+      </table>
     </main>
 
     <footer class="footer">
