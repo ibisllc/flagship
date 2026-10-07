@@ -44,8 +44,8 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK 35
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android SDK 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Unit tests
         run: ./gradlew --no-daemon :app:testDebugUnitTest

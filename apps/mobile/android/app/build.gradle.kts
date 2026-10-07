@@ -24,12 +24,12 @@ val keystoreProps = Properties().apply {
 
 android {
     namespace = "com.flagshipserver.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.flagshipserver.app"
         minSdk = 28
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 7
         versionName = "0.0.7"
         vectorDrawables { useSupportLibrary = true }
