@@ -40,7 +40,7 @@ USB_BURN_ADVISORY = (
     "fails — ChromeOS manages the removable drive and caps raw writes from "
     "the container, so the burn stalls near 0%. Use Host on this PC to run "
     "the server as a local VM (recommended on a Chromebook), or run this "
-    "burner on a native Linux machine to write the stick."
+    "builder on a native Linux machine to write the stick."
 )
 
 
