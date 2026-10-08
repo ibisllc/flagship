@@ -103,7 +103,7 @@ sha256sum my-seed.iso
         The seed is generic, so it can't target any particular box. Your recipe — a
         Debian preseed carrying your phone's <strong>signed</strong> install blob — is written
         onto the appended partition. The installed system trusts your phone's signature and
-        nothing else; <code>flagshipserver.com</code> is never in that trust path. The burner
+        nothing else; <code>flagshipserver.com</code> is never in that trust path. The builder
         checks that the preseed it writes embeds <em>your</em> signature before it lays it down,
         so no server can substitute a different recipe.
       </p>
