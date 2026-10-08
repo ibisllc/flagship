@@ -1,169 +1,23 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#14120D" media="(prefers-color-scheme: dark)" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="stylesheet" href="/site.css" />
-    <title>Report a vulnerability · Flagship</title>
-    <style>
-      select {
-        width: 100%; box-sizing: border-box;
-        padding: 0.7rem 0.9rem;
-        border-radius: 10px;
-        border: 1px solid var(--line);
-        background: var(--bg-elev);
-        color: var(--fg);
-        font: inherit;
-      }
-      textarea { min-height: 14rem; resize: vertical; }
-      .out { margin-top: 1.5rem; padding: 1rem 1.1rem; border-radius: var(--radius); }
-      .out.ok { background: #4ad29515; border: 1px solid var(--accent); color: var(--accent); }
-      .out.err { background: #d34a4a15; border: 1px solid var(--err); color: var(--err); }
-      .req { color: var(--err); }
-      .hint { color: var(--fg-mute); font-weight: 400; font-size: 0.82rem; }
-    </style>
-    <link rel="stylesheet" href="/theme-ui.css">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Report a vulnerability · Flagship</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="canonical" href="https://flagshipserver.com/security#report">
+  <meta http-equiv="refresh" content="0; url=/security#report">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/components.css">
+  <link rel="stylesheet" href="/theme-ui.css">
   <script src="/theme.js"></script>
+  <script>location.replace("/security#report");</script>
 </head>
-  <body>
-    <header class="topbar">
-      <a href="/" class="brand" aria-label="Flagship — home">
-        <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>
-        <span class="name">Flagship</span>
-      </a>
-      <nav aria-label="Primary">
-        <a href="/">Home</a>
-        <a href="/security.html">Security model</a>
-        <a href="/security/disclosure.html">Disclosure</a>
-        <a href="/.well-known/security.txt">security.txt</a>
-      </nav>
-        <button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
-    </header>
-
-    <main>
-      <h1>Report a vulnerability</h1>
-      <p class="lede">
-        Thanks for taking the time. We aim to acknowledge within 48 hours.
-      </p>
-
-      <form id="form">
-        <label for="email">Your email <span class="hint">— so we can reply (optional but recommended)</span></label>
-        <input id="email" name="email" type="email" placeholder="you@example.com" />
-
-        <label for="severity">Severity (your guess)</label>
-        <select id="severity" name="severity">
-          <option value="critical">Critical — remote unauth, key compromise, data exfil</option>
-          <option value="high" selected>High — privilege escalation, account takeover</option>
-          <option value="medium">Medium — info disclosure, partial bypass</option>
-          <option value="low">Low — minor, requires unusual conditions</option>
-        </select>
-
-        <label for="component">Component</label>
-        <select id="component" name="component">
-          <option>Protocol / crypto</option>
-          <option>Server daemon</option>
-          <option>Data layer (Postgres / MinIO / Redis provisioning)</option>
-          <option>Boot image / image-builder</option>
-          <option>iOS app</option>
-          <option>Android app</option>
-          <option>Webapp</option>
-          <option>Deck (cast surface)</option>
-          <option>Control plane (flagshipserver.com)</option>
-          <option>Tunnel / public ingress</option>
-          <option>Other</option>
-        </select>
-
-        <label for="summary">Summary <span class="req">*</span></label>
-        <input id="summary" name="summary" required maxlength="200" placeholder="One-line description" />
-
-        <label for="details">Details, repro steps, impact <span class="req">*</span></label>
-        <textarea id="details" name="details" required maxlength="20000" placeholder="What did you do, what happened, why it matters."></textarea>
-
-        <button class="cta" type="submit" style="margin-top: 1.5rem;">Submit report</button>
-      </form>
-
-      <div id="out"></div>
-
-      <p style="margin-top: 2rem; color: var(--fg-mute);">
-        Prefer email? Send to
-        <a href="mailto:security@flagshipserver.com">security@flagshipserver.com</a>.
-        PGP encouraged.
-      </p>
-    </main>
-
-    <footer class="footer">
-  <div class="footer-inner">
-    <div class="footer-col">
-      <a href="/" class="wordmark"><span class="glyph" aria-hidden="true"></span><span>Flagship</span></a>
-      <p>A personal cloud that respects you, your hardware, and your mobile device.</p>
-    </div>
-    <div class="footer-col">
-      <h4>Product</h4>
-      <ul>
-        <li><a href="/docs#how-it-works">How it works</a></li>
-        <li><a href="https://webapp.flagshipserver.com/">Webapp</a></li>
-      </ul>
-    </div>
-    <div class="footer-col">
-      <h4>Trust</h4>
-      <ul>
-        <li><a href="/security.html">Architecture</a></li>
-        <li><a href="/security/disclosure.html">Disclosure</a></li>
-        <li><a href="/security/report.html">Report a vuln</a></li>
-        <li><a href="/abuse">Abuse</a></li>
-        <li><a href="/.well-known/security.txt">security.txt</a></li>
-      </ul>
-    </div>
-    <div class="footer-col">
-      <h4>Open</h4>
-      <ul>
-        <li><a href="/open-source.html">Open source</a></li>
-        <li><a href="/status/">Status</a></li>
-        <li><a href="/docs/">Docs</a></li>
-        <li><a href="/blog/">Blog</a></li>
-        <li><a href="/help">Help</a></li>
-      </ul>
-    </div>
-  </div>
-  <div class="footer-bottom">
-    <span>© 2026 Flagship · Patent Pending · BUSL-1.1 → Apache 2.0 on 2030-05-03</span>
-    <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="https://flagshipserver.com">flagshipserver.com</a></span>
-  </div>
-</footer>
-
-    <script type="module">
-      const form = document.getElementById("form");
-      const out = document.getElementById("out");
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        out.className = "out";
-        out.textContent = "Submitting…";
-        const data = Object.fromEntries(new FormData(form).entries());
-        try {
-          const r = await fetch("/api/security/report", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(data),
-          });
-          const body = await r.json();
-          if (r.ok) {
-            out.className = "out ok";
-            out.textContent = `Thank you. Reference: ${body.reportId}. We'll be in touch.`;
-            form.reset();
-          } else {
-            out.className = "out err";
-            out.textContent = body.error ?? `Submission failed (HTTP ${r.status}).`;
-          }
-        } catch (err) {
-          out.className = "out err";
-          out.textContent = "Network error. Please email security@flagshipserver.com directly.";
-        }
-      });
-    </script>
-  <script src="/motion.js" defer></script>
+<body>
+  <main class="container" style="padding: var(--space-16) var(--gutter);">
+    <p>The vulnerability report form now lives on the security page. Redirecting you to
+      <a href="/security#report">/security#report</a>…</p>
+  </main>
 </body>
 </html>

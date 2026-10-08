@@ -9,13 +9,35 @@
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="stylesheet" href="/site.css" />
     <title>Security · Flagship</title>
+    <meta name="description" content="Flagship's security model, coordinated disclosure and bounty policy, and vulnerability report form." />
     <style>
-      table { border-collapse: collapse; margin: 1rem 0; width: 100%; }
+      /* The topbar is sticky, so in-page jumps must land below it. */
+      html { scroll-padding-top: 84px; }
+      @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+      main > section + section { border-top: 1px solid var(--rule); margin-top: var(--space-16); }
+      main > section > h2:first-child { margin-top: var(--space-12); }
+      .topbar nav a[aria-current="location"] { color: var(--teal-bright); }
+      .table-wrap { overflow-x: auto; margin: 1rem 0; }
+      table { border-collapse: collapse; width: 100%; }
       th, td { padding: 0.6rem 0.9rem; border: 1px solid var(--line); text-align: left; vertical-align: top; }
       th { background: var(--bg-elev); font-weight: 500; font-size: 0.85rem; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.04em; }
       td ul { padding-left: 1rem; margin: 0; }
       td li { margin: 0.25rem 0; color: var(--fg); }
+      td.range { font-family: var(--font-mono); white-space: nowrap; }
+      code.fpr { white-space: nowrap; }
       code { background: var(--bg-elev); color: var(--fg); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.92em; }
+      .muted { color: var(--fg-mute); }
+      .fineprint { color: var(--fg-mute); font-size: 0.9rem; }
+      .hof-meta { color: var(--fg-mute); font-size: 0.9rem; }
+      #report-form label { margin-top: var(--space-6); margin-bottom: var(--space-2); }
+      #report-form label:first-child { margin-top: 0; }
+      #report-form textarea { min-height: 14rem; }
+      #report-form .req { color: var(--err); }
+      #report-form .hint { color: var(--fg-mute); text-transform: none; letter-spacing: 0; }
+      .out { margin-top: 1.5rem; padding: 1rem 1.1rem; border-radius: var(--radius); }
+      .out:empty { display: none; }
+      .out.ok { background: var(--ok-soft); border: 1px solid var(--accent); }
+      .out.err { background: var(--err-soft); border: 1px solid var(--err); color: var(--err); }
     </style>
     <link rel="stylesheet" href="/theme-ui.css">
   <script src="/theme.js"></script>
@@ -28,117 +50,332 @@
       </a>
       <nav aria-label="Primary">
         <a href="/">Home</a>
-        <a href="/security/disclosure.html">Disclosure</a>
-        <a href="/security/report.html">Report a vulnerability</a>
+        <a href="#model" data-section-link>Model</a>
+        <a href="#disclosure" data-section-link>Disclosure</a>
+        <a href="#report" data-section-link>Report</a>
         <a href="/.well-known/security.txt">security.txt</a>
       </nav>
         <button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
     </header>
 
     <main>
-      <h1>Security model</h1>
+      <h1>Security</h1>
       <p class="lede">
         Flagship is a personal-cloud product. Your phone is the trust root, you host your own data on hardware you own. We take that seriously.
       </p>
 
-      <h2>Threat model in one paragraph</h2>
-      <p>
-        Your phone holds your User Master Key (UMK) inside the Secure Enclave / StrongBox.
-        It never leaves the phone unwrapped. Derived keys do specific jobs:
-        <strong>BAK</strong> gates server boot, <strong>IRK</strong> signs account-level
-        operations like image-rebuild and revocation, and <strong>SWK</strong> is provisioned
-        to the server so backup runs autonomously without keeping your phone awake. Peer
-        hosts who store your backup shards only ever see opaque ciphertext. The
-        <code>flagshipserver.com</code> control plane is a delivery channel and matchmaker;
-        it never sees secrets in the clear.
-      </p>
+      <section id="model">
+        <h2>Security model</h2>
 
-      <div class="callout">
-        <strong>Three device families.</strong> The native iOS app and Android app use Secure
-        Enclave / StrongBox — strong key storage. The installable webapp uses software-only
-        IndexedDB-with-passphrase — weaker, suitable for testing or accessibility. We
-        deliberately don't share keys between families: a webapp identity and an iOS identity
-        are independent accounts, the way Apple Pay never crosses to Google Pay.
-      </div>
+        <h3>Threat model in one paragraph</h3>
+        <p>
+          Your phone holds your User Master Key (UMK) inside the Secure Enclave / StrongBox.
+          It never leaves the phone unwrapped. Derived keys do specific jobs:
+          <strong>BAK</strong> gates server boot, <strong>IRK</strong> signs account-level
+          operations like image-rebuild and revocation, and <strong>SWK</strong> is provisioned
+          to the server so backup runs autonomously without keeping your phone awake. Peer
+          hosts who store your backup shards only ever see opaque ciphertext. The
+          <code>flagshipserver.com</code> control plane is a delivery channel and matchmaker;
+          it never sees secrets in the clear.
+        </p>
 
-      <h2>What we promise</h2>
-      <ul class="bullets">
-        <li>All security-critical code (key derivation, signing, encryption, daemon, boot path, mobile clients) is open source under Apache 2.0.</li>
-        <li>The boot image is built reproducibly — you can verify the bytes match the source.</li>
-        <li>Standard primitives only: <code>Ed25519</code>, <code>AES-256-GCM</code>, <code>HKDF-SHA-256</code>. No homemade crypto.</li>
-        <li>Server boot requires a phone-signed approval over the network. A stolen server cannot self-unlock.</li>
-        <li>The auth domain (<code>flagshipserver.com</code>) is separate from the user-content domain (<code>*.flagship.services</code>) so user apps cannot reach session cookies via subdomain confusion.</li>
-        <li>flagshipserver.com is physically unable to read user-content TLS — bytes are routed by SNI and decrypted only on your own server.</li>
-        <li><strong>No KYC, ever.</strong> We do not collect, store, or expose any real-world identity attribute about any user — no legal name, no email, no phone, no government ID. <a href="https://github.com/ibisllc/flagship/blob/main/docs/policy/no-kyc.md">Read the full policy →</a></li>
-      </ul>
+        <div class="callout">
+          <strong>Three device families.</strong> The native iOS app and Android app use Secure
+          Enclave / StrongBox — strong key storage. The installable webapp uses software-only
+          IndexedDB-with-passphrase — weaker, suitable for testing or accessibility. We
+          deliberately don't share keys between families: a webapp identity and an iOS identity
+          are independent accounts, the way Apple Pay never crosses to Google Pay.
+        </div>
 
-      <h2>Scope</h2>
-      <table>
-        <thead><tr><th>In scope</th><th>Out of scope</th></tr></thead>
-        <tbody>
-          <tr>
-            <td>
-              <ul>
-                <li>Protocol package (key derivation, signing, encryption)</li>
-                <li>Server daemon (including data-layer provisioner + Forgejo admin)</li>
-                <li>Boot image and image-builder</li>
-                <li>iOS, Android, and webapp clients</li>
-                <li>Control-plane API on <code>flagshipserver.com</code></li>
-                <li>Tunnel transport from each Flagship server</li>
-                <li>Domain configuration / cookie scoping</li>
-              </ul>
-            </td>
-            <td>
-              <ul>
-                <li>User-deployed apps (their security is the user's responsibility)</li>
-                <li>Denial-of-service against our infrastructure</li>
-                <li>Automated scanner output without proof of impact</li>
-                <li>Issues in third-party dependencies — please report upstream and copy us</li>
-                <li>Social engineering of staff or users</li>
-              </ul>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+        <h3>What we promise</h3>
+        <ul class="bullets">
+          <li>All security-critical code (key derivation, signing, encryption, daemon, boot path, mobile clients) is open source under Apache 2.0.</li>
+          <li>The boot image is built reproducibly — you can verify the bytes match the source.</li>
+          <li>Standard primitives only: <code>Ed25519</code>, <code>X25519</code>, <code>AES-256-GCM</code>, <code>HKDF-SHA-256</code>. No homemade crypto.</li>
+          <li>Server boot requires a phone-signed approval over the network. A stolen server cannot self-unlock.</li>
+          <li>The auth domain (<code>flagshipserver.com</code>) is separate from the user-content domain (<code>*.flagship.services</code>) so user apps cannot reach session cookies via subdomain confusion.</li>
+          <li>flagshipserver.com is physically unable to read user-content TLS — bytes are routed by SNI and decrypted only on your own server.</li>
+          <li id="no-kyc"><strong>No KYC, ever.</strong> We do not collect, store, or expose any real-world identity attribute about any user — no legal name, no email, no phone, no government ID. <a href="https://github.com/ibisllc/flagship/blob/main/docs/policy/no-kyc.md">Read the full policy →</a></li>
+        </ul>
 
-      <h2>How to report a vulnerability</h2>
-      <p>Two channels:</p>
-      <ol class="bullets">
-        <li>
-          <strong>Email</strong>:
+        <h3>Source code</h3>
+        <p>
+          The protocol, daemon, image-builder, and mobile clients live at
+          <a href="https://github.com/ibisllc/flagship">github.com/ibisllc/flagship</a>
+          (link will be live when the repo is published). Audit it, build it, run it.
+        </p>
+      </section>
+
+      <section id="disclosure">
+        <h2>Coordinated disclosure &amp; bounty</h2>
+        <p>
+          We pay for serious vulnerabilities in a defined scope and respond to
+          reports under a published SLA. Coordinated disclosure is required —
+          exploit details stay private until a fix ships.
+        </p>
+
+        <h3>Scope</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>In scope</th><th>Out of scope</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>
+                  <ul>
+                    <li><code>flagshipserver.com</code> — the Cloudflare Worker, all <code>/api/*</code> routes, the static site, and domain configuration / cookie scoping.</li>
+                    <li><code>webapp.flagshipserver.com</code> — the webapp PWA: WebAuthn / IRK signing / lease deposit / recovery upload paths.</li>
+                    <li><code>remote.flagshipserver.com</code> — the browser-remote surface: the phone-approval ceremony and the keyless session it issues.</li>
+                    <li><code>*.flagship.services</code> — the SNI passthrough plane on Fly, the tunnel hub, and the tunnel transport from each Flagship server.</li>
+                    <li>The Flagship daemon as shipped by Flagship Studio on the Debian-based boot image. Includes ACME, the local TLS server, the data layer (Postgres / MinIO / Redis / Forgejo / Chromium under <code>/var/flagship/data/</code>).</li>
+                    <li>The boot image and Flagship Studio, the image-builder.</li>
+                    <li>The canonical-bytes layer in <code>@flagship/protocol</code> — sign/verify routines, key derivations, encryption.</li>
+                    <li>iOS and Android apps once shipped to TestFlight / Play Console.</li>
+                  </ul>
+                </td>
+                <td>
+                  <ul>
+                    <li>Vulnerabilities in apps installed by individual users (those are the app author's responsibility; report to them directly).</li>
+                    <li>Self-hosted forks of Flagship (only the canonical builds are in scope).</li>
+                    <li>Issues in third-party dependencies — please report upstream and copy us.</li>
+                    <li>Issues requiring physical access to a user's already-unlocked phone or laptop.</li>
+                    <li>Theoretical attacks against well-vetted primitives (Ed25519, X25519, AES-256-GCM, SHA-256, HKDF) without a working PoC.</li>
+                    <li>Rate-limiting, denial-of-service, or volumetric attacks against public endpoints. (We rely on Cloudflare's edge for these.)</li>
+                    <li>Missing security headers on static pages where there's no XSS sink.</li>
+                    <li>Reports auto-generated by scanners with no manual analysis.</li>
+                    <li>Social engineering of staff or users.</li>
+                  </ul>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Response targets</h3>
+        <ul class="bullets">
+          <li>Initial acknowledgement within <strong>2 business days</strong>.</li>
+          <li>Triage decision (in/out of scope, severity) within <strong>7 days</strong>.</li>
+          <li>Fix ship target by severity: critical within <strong>7 days</strong>; high within 30; medium within 90; low best-effort, usually rolled into the next release.</li>
+          <li>Public disclosure (reporter credit): coordinated with you, after the fix has shipped to all auto-update channels.</li>
+        </ul>
+
+        <h3>Bounty payouts</h3>
+        <p class="muted">
+          <strong>Status: pre-release, not yet fully funded.</strong> Flagship
+          has not launched commercially and the bounty programme is not funded
+          yet, so <strong>payouts are delayed until it is</strong>. The bands
+          below are what we expect to pay once funding is in place — they are
+          not a current offer. Until then we triage, fix, and credit reports
+          under this policy, and we record every qualifying report as an
+          outstanding obligation to be assessed against these bands at
+          commercial launch. We would rather tell you this before you spend
+          your time than after.
+        </p>
+        <p>What that means in practice, until the programme is funded:</p>
+        <ul class="bullets">
+          <li><strong>We still triage and fix on the published SLA.</strong>
+            Funding has no bearing on how fast a report gets dealt with. Both
+            reports we have received so far were fixed and deployed the same
+            day.</li>
+          <li><strong>Every qualifying report is recorded as an outstanding
+            obligation</strong>, with the severity we assess it at, to be
+            settled against the bands below at commercial launch.</li>
+          <li><strong>We assess severity ourselves and will rate upwards.</strong>
+            If your own write-up is more conservative than the facts support —
+            as the first report we received was — we record the higher
+            severity, not the one you claimed.</li>
+          <li><strong>Credit is available immediately</strong>, in whatever form
+            you ask for, and is not contingent on anything. It is the one thing
+            we can give you now, so we would rather give it properly.</li>
+          <li><strong>No embargo once the fix has shipped.</strong> Write your
+            findings up publicly whenever you like. Ask us first if you want a
+            technical-accuracy review; we will not ask you to soften anything.</li>
+          <li><strong>If the delay causes you real hardship, tell us.</strong>
+            We would rather hear it than have you discover our funding position
+            afterwards and feel misled.</li>
+        </ul>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Severity</th><th>Examples</th><th>Range (USD)</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Critical</td>
+                <td>Account takeover without phone access; arbitrary unlock-key extraction; remote code execution on the daemon; canonical-bytes signature bypass.</td>
+                <td class="range">$5,000 – $20,000</td>
+              </tr>
+              <tr>
+                <td>High</td>
+                <td>Cross-user data exposure; bypass of paired-session auth; unauthenticated read of <code>auto_unlock_leases</code> or <code>webauthn_recovery_records</code> contents (cleartext).</td>
+                <td class="range">$1,000 – $5,000</td>
+              </tr>
+              <tr>
+                <td>Medium</td>
+                <td>Stored or reflected XSS on <code>flagshipserver.com</code> or <code>webapp.flagshipserver.com</code>; CSRF on a state-changing endpoint not protected by signed canonical-bytes; significant trust-model violation that doesn't directly leak keys.</td>
+                <td class="range">$250 – $1,000</td>
+              </tr>
+              <tr>
+                <td>Low</td>
+                <td>Open redirect; subdomain takeover on a non-served subdomain; privacy leak (e.g. timing-side-channel revealing whether a username exists) without further impact.</td>
+                <td class="range">$50 – $250</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="fineprint">
+          Final amount depends on impact, exploitability, the quality of the
+          report, and whether you provided a working PoC. We reserve the right
+          to award above the listed range for exceptional reports. Payouts are
+          in USD via bank transfer or sent to a Bitcoin / Ethereum address you
+          provide.
+        </p>
+
+        <h3>Safe harbor</h3>
+        <p>
+          Good-faith research conducted under this policy will not be subject
+          to legal action by Flagship. You may probe production endpoints
+          provided you don't:
+        </p>
+        <ul class="bullets">
+          <li>Access, modify, or delete other users' data beyond the minimum
+            needed to demonstrate the issue. Use your own account.</li>
+          <li>Use the issue to extract more than test-account data.</li>
+          <li>Run automated scanners that generate sustained load.</li>
+          <li>Publish details before the fix has shipped, or before our
+            mutually agreed disclosure date (we aim for 90 days at most,
+            negotiable for critical issues).</li>
+        </ul>
+
+        <h3>Hall of fame</h3>
+        <p class="muted">
+          Researchers who reported a vulnerability to us, with the commits that
+          closed it. Credited in whatever form each reporter asks for — name,
+          handle, or anonymous, with a link if they want one. Listed without
+          attribution until they have told us their preference; we never
+          publish a name we have not been given.
+        </p>
+
+        <h4>Unauthenticated identity-key swap on an account with no second factor</h4>
+        <p class="hof-meta">
+          Critical &middot; reported and fixed October 2026 &middot; fix
+          <a href="https://github.com/ibisllc/flagship/commit/7d49a444">7d49a444</a>
+          &middot; credit pending the reporter&rsquo;s preference
+        </p>
+        <p>
+          Account recovery schedules a replacement of the account&rsquo;s root
+          identity key. The endpoint that starts it verified the request against
+          the <em>incoming</em> key — a self-assertion — and its only other
+          input, the account&rsquo;s current identity key, is served to anyone by
+          the public username lookup. On an account with no second factor
+          enrolled, that left nothing a stranger could not supply: knowing a
+          public handle was enough to schedule a hostile key swap, which
+          completed once the grace window elapsed.
+        </p>
+        <p>
+          There was also no owner veto, contrary to what our own documentation
+          claimed. The objection endpoint is signed by the incoming key, so it
+          is the recoverer&rsquo;s own undo rather than something the displaced
+          owner can exercise. The grace window was a notification window, not a
+          brake.
+        </p>
+        <p>
+          Starting a recovery now requires an enrolled credential: a TOTP or
+          recovery code, the short-lived proof minted by the passphrase-gated
+          wrapped-key fetch, or a signature from the account&rsquo;s currently
+          registered key. An account with no credential cannot be recovered by
+          anyone, which is what our naming and recovery policy always said.
+          Finalising a recovery now requires a signature from the key being
+          installed, where it had been an unauthenticated POST. The same pass
+          closed a related fault we had not been told about: with its key
+          unavailable the server fell back to a structural check on TOTP codes,
+          so the second factor was a formality on exactly the accounts that had
+          enrolled one.
+        </p>
+
+        <h4>Unauthenticated CA-signing oracle mints a relay-hub blessing for any key or host</h4>
+        <p class="hof-meta">
+          Critical &middot; reported and fixed October 2026 &middot; fix
+          <a href="https://github.com/ibisllc/flagship/commit/54889a4c">54889a4c</a>,
+          hardening
+          <a href="https://github.com/ibisllc/flagship/commit/484ef162">484ef162</a>
+          and
+          <a href="https://github.com/ibisllc/flagship/commit/771db538">771db538</a>
+          &middot; credit pending the reporter&rsquo;s preference
+        </p>
+        <p>
+          The endpoint that issues relay-hub blessings did not authenticate its
+          caller, so anyone could obtain a validly signed blessing for a key and
+          host of their choosing — a signing oracle against the trust chain a
+          box uses to decide whether the hub in front of it is the real one.
+        </p>
+        <p>
+          The issuer is now authenticated and blessings are bound to the
+          expected apex. Two follow-ups harden the box side rather than the
+          hole itself: a box fails closed when the hub presents no blessing and
+          requires the expected apex, and trust lockdown now closes connections
+          that are already open instead of only refusing new ones.
+        </p>
+      </section>
+
+      <section id="report">
+        <h2>Report a vulnerability</h2>
+        <p>
+          Use the form below (preferred — it asks for the right structured
+          fields), or email
           <a href="mailto:security@flagshipserver.com">security@flagshipserver.com</a>.
-          Encrypted reports are encouraged — PGP key fingerprint will be published here once minted.
-        </li>
-        <li>
-          <strong>Web form</strong>:
-          <a href="/security/report.html">/security/report.html</a>
-          for low-friction submissions.
-        </li>
-      </ol>
+          Encrypted reports are encouraged — use our PGP key:
+        </p>
+        <ul class="bullets">
+          <li><a href="/.well-known/pgp-key.txt">Download the public key</a>, or let your mail client find it for <code>security@flagshipserver.com</code> (published via Web Key Directory).</li>
+          <li>Fingerprint: <code class="fpr">D96D 675D B03E 3F3B BC88&nbsp; 7030 2308 936D 2154 96D0</code></li>
+        </ul>
+        <p>Please include:</p>
+        <ul class="bullets">
+          <li>A clear description of the issue.</li>
+          <li>The exact endpoint / file / commit hash affected.</li>
+          <li>A working PoC (script, curl invocation, or screenshots).</li>
+          <li>Your assessed impact and severity.</li>
+          <li>Whether you'd like to be credited publicly (and under what name).</li>
+        </ul>
 
-      <h3>Response targets</h3>
-      <ul class="bullets">
-        <li>Acknowledge receipt within <strong>48 hours</strong>.</li>
-        <li>Initial triage and severity assessment within <strong>5 business days</strong>.</li>
-        <li>Critical issues fixed within <strong>7 days</strong>; high within 30; medium within 90.</li>
-      </ul>
+        <form id="report-form">
+          <label for="email">Your email <span class="hint">— so we can reply (optional but recommended)</span></label>
+          <input id="email" name="email" type="email" placeholder="you@example.com" />
 
-      <h3>Disclosure policy</h3>
-      <ul class="bullets">
-        <li>Coordinated disclosure. Please give us a reasonable window (we aim for 90 days, negotiable for critical issues).</li>
-        <li>Don't exfiltrate user data or disrupt service while testing. Use your own account.</li>
-        <li>We don't currently operate a paid bug bounty. We will publicly credit reporters; as the project matures we'll revisit monetary rewards.</li>
-      </ul>
+          <label for="severity">Severity (your guess)</label>
+          <select id="severity" name="severity">
+            <option value="critical">Critical — remote unauth, key compromise, data exfil</option>
+            <option value="high" selected>High — privilege escalation, account takeover</option>
+            <option value="medium">Medium — info disclosure, partial bypass</option>
+            <option value="low">Low — minor, requires unusual conditions</option>
+          </select>
 
-      <h2>Hall of fame</h2>
-      <p>Researchers who have responsibly disclosed will be listed here. (Empty for now — we're new.)</p>
+          <label for="component">Component</label>
+          <select id="component" name="component">
+            <option>Protocol / crypto</option>
+            <option>Server daemon</option>
+            <option>Data layer (Postgres / MinIO / Redis provisioning)</option>
+            <option>Boot image / image-builder</option>
+            <option>iOS app</option>
+            <option>Android app</option>
+            <option>Webapp</option>
+            <option>Deck (cast surface)</option>
+            <option>Control plane (flagshipserver.com)</option>
+            <option>Tunnel / public ingress</option>
+            <option>Other</option>
+          </select>
 
-      <h2>Source code</h2>
-      <p>
-        The protocol, daemon, image-builder, and mobile clients live at
-        <a href="https://github.com/ibisllc/flagship">github.com/ibisllc/flagship</a>
-        (link will be live when the repo is published). Audit it, build it, run it.
-      </p>
+          <label for="summary">Summary <span class="req">*</span></label>
+          <input id="summary" name="summary" type="text" required maxlength="200" placeholder="One-line description" />
+
+          <label for="details">Details, repro steps, impact <span class="req">*</span></label>
+          <textarea id="details" name="details" required maxlength="20000" placeholder="What did you do, what happened, why it matters."></textarea>
+
+          <button class="cta" type="submit" style="margin-top: 1.5rem;">Submit report</button>
+        </form>
+
+        <div id="out" class="out" role="status" aria-live="polite"></div>
+      </section>
     </main>
 
     <footer class="footer">
@@ -157,9 +394,9 @@
     <div class="footer-col">
       <h4>Trust</h4>
       <ul>
-        <li><a href="/security.html">Architecture</a></li>
-        <li><a href="/security/disclosure.html">Disclosure</a></li>
-        <li><a href="/security/report.html">Report a vuln</a></li>
+        <li><a href="/security#model">Architecture</a></li>
+        <li><a href="/security#disclosure">Disclosure</a></li>
+        <li><a href="/security#report">Report a vuln</a></li>
         <li><a href="/abuse">Abuse</a></li>
         <li><a href="/.well-known/security.txt">security.txt</a></li>
       </ul>
@@ -180,6 +417,58 @@
     <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="https://flagshipserver.com">flagshipserver.com</a></span>
   </div>
 </footer>
+
+    <script type="module">
+      const form = document.getElementById("report-form");
+      const out = document.getElementById("out");
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        out.className = "out";
+        out.textContent = "Submitting…";
+        const data = Object.fromEntries(new FormData(form).entries());
+        try {
+          const r = await fetch("/api/security/report", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          const body = await r.json();
+          if (r.ok) {
+            out.className = "out ok";
+            out.textContent = `Thank you. Reference: ${body.reportId}. We'll be in touch.`;
+            form.reset();
+          } else {
+            out.className = "out err";
+            out.textContent = body.error ?? `Submission failed (HTTP ${r.status}).`;
+          }
+        } catch (err) {
+          out.className = "out err";
+          out.textContent = "Network error. Please email security@flagshipserver.com directly.";
+        }
+      });
+
+      // Mark the nav item for whichever section is in view.
+      const links = new Map(
+        [...document.querySelectorAll("[data-section-link]")].map((a) => [a.hash.slice(1), a]),
+      );
+      const sections = [...links.keys()].map((id) => document.getElementById(id));
+      const markCurrent = () => {
+        const line = 120;
+        let current = sections[0];
+        for (const s of sections) if (s.getBoundingClientRect().top <= line) current = s;
+        // At the very bottom the last section may be too short to reach the line.
+        if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
+          current = sections[sections.length - 1];
+        }
+        for (const [id, a] of links) {
+          if (id === current.id) a.setAttribute("aria-current", "location");
+          else a.removeAttribute("aria-current");
+        }
+      };
+      addEventListener("scroll", markCurrent, { passive: true });
+      addEventListener("resize", markCurrent);
+      markCurrent();
+    </script>
   <script src="/motion.js" defer></script>
 </body>
 </html>

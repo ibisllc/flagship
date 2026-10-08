@@ -108,7 +108,7 @@ public partial class MainWindow : Window
         => OpenUrl("https://flagshipserver.com/docs");
 
     private void MenuReportIssue_Click(object sender, RoutedEventArgs e)
-        => OpenUrl("https://flagshipserver.com/security/report.html");
+        => OpenUrl("https://flagshipserver.com/security#report");
 
     private void MenuAbout_Click(object sender, RoutedEventArgs e)
         => MessageBox.Show(this,

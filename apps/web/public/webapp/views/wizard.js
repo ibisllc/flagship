@@ -328,7 +328,7 @@ async function renderStepBody(state, step) {
         account. A server comes later (and you can run zero, one, or many). The handle
         is a routing label, not a profile — be as pseudonymous as you want; the server
         never stores any real-world identity attribute
-        (<a href="https://flagshipserver.com/security.html#no-kyc">why</a>).</p>
+        (<a href="https://flagshipserver.com/security#no-kyc">why</a>).</p>
         <label class="field-label" for="wizard-username-input">Username</label>
         <input id="wizard-username-input" type="text" inputmode="text" autocapitalize="none"
                autocomplete="username" spellcheck="false" placeholder="alice"

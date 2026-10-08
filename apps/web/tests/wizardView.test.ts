@@ -50,7 +50,7 @@ describe("first-run wizard (#25)", () => {
   });
 
   it("links to the no-KYC policy from the username step", () => {
-    expect(VIEW_JS).toMatch(/security\.html#no-kyc/);
+    expect(VIEW_JS).toMatch(/flagshipserver\.com\/security#no-kyc/);
   });
 
   it("index.html includes the view-wizard slot", () => {

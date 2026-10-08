@@ -136,8 +136,6 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
       "/open-source.html",
       "/privacy.html",
       "/security.html",
-      "/security/disclosure.html",
-      "/security/report.html",
       "/status/",
       "/terms.html",
     ];
@@ -209,10 +207,11 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).not.toMatch(/<h1[^>]*>\s*Pricing/);
   });
 
-  it("the report form continues to live at /security/report.html", async () => {
+  it("the report form lives in the #report section of /security", async () => {
     const app = buildServer();
-    const r = await app.inject({ method: "GET", url: "/security/report.html" });
+    const r = await app.inject({ method: "GET", url: "/security.html" });
     expect(r.statusCode).toBe(200);
+    expect(r.body).toMatch(/<section id="report">[\s\S]*<form id="report-form">/);
   });
 
   it("login page CTA continues to the deck (not the legacy /app.html path)", async () => {

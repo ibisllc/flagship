@@ -162,6 +162,23 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-10-07 (one-page /security + security@ PGP key) — the security model,
+disclosure/bounty policy, and report form are now one page with
+`#model` / `#disclosure` / `#report` sections; the old
+`/security/disclosure.html` and `/security/report.html` are redirect stubs to
+those anchors, and every site/webapp/Windows-Studio link points at them
+(webapp shell cache **v30**). Contradictions between the two old pages were
+resolved toward the disclosure policy (2-business-day ack, 7-day triage, the
+funded-later bounty bands, AES-256-GCM — the old "128" was wrong).
+security@flagshipserver.com now has a PGP key, fingerprint
+`D96D 675D B03E 3F3B BC88 7030 2308 936D 2154 96D0` (ed25519 + cv25519,
+expires 2028-10-07): published at `/.well-known/pgp-key.txt`, via Web Key
+Directory (direct method; `openpgpkey.` must stay unresolved), and in
+security.txt `Encryption:`. The private key exists ONLY on the owner's two
+YubiKeys (OpenPGP applet, touch on; separate from the CA's PIV slot 9c); no
+off-card backup was kept by design — losing both keys means minting and
+publishing a new one. Mail is read in Thunderbird over namecrane IMAP.
+
 **2026-10-07 (iOS App Store prep: parity audit + reviewer-path fixes) — iOS
 build `1.0 (3)` archived; screenshots captured; NOT uploaded.** A parity
 audit against Android found the reviewer demo login works on iOS end to end
