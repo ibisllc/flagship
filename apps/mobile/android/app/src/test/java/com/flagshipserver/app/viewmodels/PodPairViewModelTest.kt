@@ -157,7 +157,7 @@ class PodPairViewModelTest {
         assertEquals("cd".repeat(32), store.sessionToken(forPodId = PodInfo.podId(good)))
     }
 
-    // ── transports (mirror AddControlDeviceViewModelTest) ───────────────────
+    // ── transports ──────────────────────────────────────────────────────────
 
     class RecordingTransport(private val canned: String) : JsonHttpTransport {
         override val json: Json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }

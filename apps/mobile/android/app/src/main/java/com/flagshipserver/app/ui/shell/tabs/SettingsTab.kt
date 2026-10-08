@@ -15,7 +15,6 @@ import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.JoinLink
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.screens.AccountSecurityScreen
-import com.flagshipserver.app.ui.screens.AddControlDeviceScreen
 import com.flagshipserver.app.ui.screens.AddDeviceScreen
 import com.flagshipserver.app.ui.screens.CompanionDockScreen
 import com.flagshipserver.app.ui.screens.CompanionRequestsScreen
@@ -109,7 +108,6 @@ fun SettingsTab() {
         }
         composable("account-security") { AccountSecurityScreen(nav) }
         composable("paired-sessions") { PairedSessionsScreen(nav) }
-        composable("add-control-device") { AddControlDeviceScreen(nav) }
         composable("recovery") { RecoveryScreen(nav) }
         composable("post-recovery") { PostRecoveryScreen(nav) }
         composable("keyfile-export") { KeyfileExportScreen(nav) }

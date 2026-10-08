@@ -55,7 +55,6 @@ sealed interface SettingsRoute {
     data object Recovery : SettingsRoute
     data object PostRecoveryProgress : SettingsRoute
     data object About : SettingsRoute
-    data object AddControlDevice : SettingsRoute
     data object Developer : SettingsRoute
     /** P14 — Settings → Remote. Mints a 60-second pairing
      *  ticket as a QR; a desktop browser scans to become a 4-hour
