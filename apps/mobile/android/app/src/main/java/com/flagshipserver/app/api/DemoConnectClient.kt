@@ -1,5 +1,6 @@
 // Plan A — client for the `/api/dev/sample-user/{username}/connect`
-// endpoint pair. Kotlin mirror of iOS DemoConnectClient.swift.
+// endpoint. Kotlin mirror of iOS DemoConnectClient.swift. The old public
+// `/cancel` is gone: demo servers are operator-managed.
 //
 // When the typed username matches a `demo_users` row (i.e.
 // `/api/users/check` returns a `demoServer` block), tapping "Connect"
@@ -21,10 +22,10 @@ import java.net.URLEncoder
 interface DemoConnectClient {
     /** POST `/api/dev/sample-user/{username}/connect` with an empty
      *  body. 200 = the Worker observed (or already had) a
-     *  `provisioning` / `up` row; non-2xx throws [HttpException] so
-     *  the caller can show a precise error. The endpoint is rate-
-     *  limited on the Worker (10/min/IP, 30/min/u) — a 429 surfaces
-     *  as `HttpException(429, ...)`. */
+     *  `provisioning` / `up` row. Current Workers no longer expose the
+     *  route — the operator provisions every demo server up front — so a
+     *  404 returns normally and the caller just polls. Any other non-2xx
+     *  throws [HttpException] so the caller can show a precise error. */
     suspend fun connect(username: String)
 
     /** Poll `/api/users/check` every [pollIntervalMs] ms until the
@@ -37,13 +38,6 @@ interface DemoConnectClient {
         pollIntervalMs: Long = 3000L,
         timeoutMs: Long = 300_000L,
     ): DemoServerBlock
-
-    /** POST `/api/dev/sample-user/{username}/cancel` with an empty body.
-     *  "Cancel this device" — tears down the demo's VPS and resets it to
-     *  the empty state. Public (demo = capability-by-name) + edge
-     *  rate-limited; scoped to demo_users on the Worker. Non-2xx throws
-     *  [HttpException] so the caller can show a precise message. */
-    suspend fun cancel(username: String)
 }
 
 /** Errors specific to the demo-connect flow. Surfaced to the host so
@@ -74,13 +68,19 @@ class LiveDemoConnectClient(
         val encoded = URLEncoder.encode(username, "UTF-8")
         // The endpoint accepts an empty body. We send `{}` so the
         // Content-Type header always carries valid JSON.
-        transport.execute(
-            method = "POST",
-            url = "$base/api/dev/sample-user/$encoded/connect",
-            body = "{}".toByteArray(Charsets.UTF_8),
-            contentType = "application/json; charset=utf-8",
-            accept = setOf(200, 201),
-        )
+        try {
+            transport.execute(
+                method = "POST",
+                url = "$base/api/dev/sample-user/$encoded/connect",
+                body = "{}".toByteArray(Charsets.UTF_8),
+                contentType = "application/json; charset=utf-8",
+                accept = setOf(200, 201),
+            )
+        } catch (e: HttpException) {
+            // Retired route: the server is operator-provisioned, so there is
+            // nothing to trigger — just watch it come up.
+            if (e.status != 404) throw e
+        }
     }
 
     override suspend fun pollUntilUp(
@@ -101,17 +101,6 @@ class LiveDemoConnectClient(
         }
         throw DemoConnectException.TimedOut(lastStatus)
     }
-
-    override suspend fun cancel(username: String) {
-        val encoded = URLEncoder.encode(username, "UTF-8")
-        transport.execute(
-            method = "POST",
-            url = "$base/api/dev/sample-user/$encoded/cancel",
-            body = "{}".toByteArray(Charsets.UTF_8),
-            contentType = "application/json; charset=utf-8",
-            accept = setOf(200, 201),
-        )
-    }
 }
 
 // ── Mock ──────────────────────────────────────────────────────────
@@ -126,8 +115,6 @@ class MockDemoConnectClient(
     /** Tracks the usernames that received a `connect()` call so tests
      *  can assert wire round-trips happened. */
     val connectCalls: MutableList<String> = mutableListOf()
-    /** Tracks the usernames that received a `cancel()` call. */
-    val cancelCalls: MutableList<String> = mutableListOf()
 
     override suspend fun connect(username: String) {
         connectCalls += username
@@ -174,15 +161,6 @@ class MockDemoConnectClient(
             delay(pollIntervalMs)
         }
         throw DemoConnectException.TimedOut(lastStatus)
-    }
-
-    override suspend fun cancel(username: String) {
-        cancelCalls += username
-        val lower = username.lowercase()
-        val cur = server.demoServers[lower] ?: throw HttpException(404, "no such demo user")
-        // Mirror the Worker: reset to the empty state. Keep the FQDN so a
-        // later connect re-provisions under the same name.
-        server.demoServers[lower] = DemoServerBlock(fqdn = cur.fqdn, status = "none")
     }
 }
 

@@ -3,12 +3,11 @@
 // byte-for-byte. All three derive the SAME projection from the ONE
 // canonical phase ladder (ProvisionStatusPhase: booting…live + error) +
 // the ONE group table (LOCKED DESIGN §1.2/§1.3). Plus the device-metadata
-// wire decode + the cancel client round-trip.
+// wire decode.
 
 package com.flagshipserver.app.core
 
 import com.flagshipserver.app.api.DemoServerBlock
-import com.flagshipserver.app.api.MockDemoConnectClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.UsernameAvailabilityResponse
 import kotlinx.coroutines.test.runTest
@@ -222,18 +221,5 @@ class ProvisionProgressTest {
         assertEquals(PodInfo.Status.PENDING, pod.status)
         assertEquals("installing", pod.demoServer?.phase)
         assertEquals("1.2.3.4", pod.demoServer?.ip)
-    }
-
-    @Test fun cancel_mockRoundTrips_andResetsRowToNone() = runTest {
-        val mock = MockFlagshipServerClient()
-        mock.demoServers = mutableMapOf(
-            "demoalice" to DemoServerBlock(
-                fqdn = "home.demoalice.flagship.services", status = "provisioning", phase = "installing"
-            )
-        )
-        val demo = MockDemoConnectClient(mock)
-        demo.cancel("demoalice")
-        assertEquals(listOf("demoalice"), demo.cancelCalls)
-        assertEquals("none", mock.demoServers["demoalice"]?.status)
     }
 }

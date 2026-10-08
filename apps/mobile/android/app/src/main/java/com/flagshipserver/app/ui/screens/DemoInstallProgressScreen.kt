@@ -1,7 +1,8 @@
 // "Your server is being installed" detail screen for a demo server still
 // provisioning. Mirror of iOS DemoInstallProgressScreen.swift. Shows the
 // determinate progress bar, the four named steps with per-step state, the
-// device-identifying info block, and a "Cancel this device" action.
+// device-identifying info block. Demo servers are operator-provisioned and the
+// Worker exposes no public cancel, so there is nothing to offer here.
 
 package com.flagshipserver.app.ui.screens
 
@@ -25,10 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,13 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.api.DemoServerBlock
 import com.flagshipserver.app.core.LocalAppState
-import com.flagshipserver.app.core.LocalDemoConnectClient
-import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.ProvisionProgress
 import com.flagshipserver.app.ui.components.FSCard
-import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.theme.FS
-import kotlinx.coroutines.launch
 
 /** Thin determinate progress bar. `failed` renders in the danger colour;
  *  the detail page frames it as "retrying" because the daemon retries. */
@@ -72,15 +65,11 @@ fun DemoProgressBar(fraction: Double, failed: Boolean, modifier: Modifier = Modi
 @Composable
 fun DemoInstallProgressScreen(podId: String, onAfterCancel: () -> Unit) {
     val app = LocalAppState.current
-    val demo = LocalDemoConnectClient.current
-    val toasts = LocalToastCenter.current
-    val scope = rememberCoroutineScope()
-    var cancelling by remember { mutableStateOf(false) }
 
     val pods by app.pods.collectAsState()
     val pod = pods.firstOrNull { it.podId == podId }
     if (pod == null) {
-        // Pod gone (cancelled) — bounce.
+        // Pod gone — bounce.
         onAfterCancel()
         return
     }
@@ -118,30 +107,6 @@ fun DemoInstallProgressScreen(podId: String, onAfterCancel: () -> Unit) {
 
         DeviceInfo(block)
 
-        FSDangerButton(
-            label = if (cancelling) "Cancelling…" else "Cancel this device",
-            onClick = {
-                if (cancelling) return@FSDangerButton
-                cancelling = true
-                scope.launch {
-                    val user = app.currentUser.value
-                    if (user == null) {
-                        cancelling = false
-                        return@launch
-                    }
-                    try {
-                        demo.cancel(user)
-                        app.removePod(pod.podId)
-                        toasts.success("Device cancelled.")
-                        onAfterCancel()
-                    } catch (e: Exception) {
-                        toasts.warning("Couldn't cancel — try again in a moment.")
-                        cancelling = false
-                    }
-                }
-            },
-            modifier = Modifier.testTag("install-cancel-device-button"),
-        )
         Spacer(Modifier.height(FS.space.s8))
     }
 }
