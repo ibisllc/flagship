@@ -61,7 +61,7 @@ class TierStatusViewModelTest {
         assertEquals(1.2, s.value.dispatcherUsageGBmonth!!, 0.0001)
         assertEquals(50.0, s.value.dispatcherFreeQuotaGBmonth!!, 0.0001)
         assertTrue(s.value.customDomains.isEmpty())
-        assertEquals(listOf("harry"), s.value.reservedNames)
+        assertEquals(listOf("bright-maple"), s.value.reservedNames)
     }
 
     @Test fun load_pinnedFixture_byokTierWithCustomDomains() = runTest {

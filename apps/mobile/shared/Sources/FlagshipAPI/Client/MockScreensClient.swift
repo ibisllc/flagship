@@ -325,7 +325,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             dispatcherUsageGBmonth: 1.2,
             dispatcherFreeQuotaGBmonth: 50.0,
             customDomains: [],
-            reservedNames: ["harry"]
+            reservedNames: ["bright-maple"]
         )
     }
 
