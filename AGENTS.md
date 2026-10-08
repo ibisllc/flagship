@@ -162,6 +162,25 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-10-08 (all long-lived branches rebased onto `main` `199ecdbb` and
+force-pushed)** — `feat/marketplace`, `feat/retail`, `feat/browser-extension`,
+`feat/chromebook-fit`, `gym` and the parked `alpine`, each still `main` + exactly
+its own feature, lossless-checked, and verified (tsc + full vitest; Android unit
+tests + APK and the iOS app build where the branch has native code; Mac/Linux
+builder tests for `alpine`). Pre-rebase heads are kept as local
+`backup/<branch>-pre-rebase-2026-10-08` refs. Notable adaptations: chromebook-fit
+renamed burner→builder (its seed-baked "burner" strings deliberately kept — they
+pin the seed hash); marketplace's Settings row moved to a Material icon; gym's
+live recovery spec now carries `oldIrkSignature`; alpine's Quick mode returns as
+an opt-in third mode on all three desktops with its cache renamed so the Debian
+cache can't evict it. **Open, found by the alpine rebase (blocks any Alpine
+revival, not `main`):** `packages/iso-personalizer/src/trailer.ts` (and the three
+desktop serializers + the box parser) never carry `authCode.adminRootPubKey` or
+`diskEncryption`, so a current recipe that signs either fails verification on an
+Alpine box — a protocol change. **Open on chromebook-fit:** its pinned seed hash
+was built from Debian 13.5.0; rebuild + re-pin against 13.6.0 before setting
+`FLAGSHIP_ISO_SEED`. Windows changes on `alpine` are uncompiled (no .NET here).
+
 **2026-10-08 (iOS store-prep fixes ported to Android + web; recovery "veto" copy
 removed everywhere) — on `main`, NOT yet deployed/rebuilt.** Android closes the
 whole parity-debt list from the iOS audit (see Known bugs) and, per the owner's
@@ -333,8 +352,9 @@ was also kept off the disclosure page. It goes in the hall of fame once it is
 closed. **Also noted:** the `gym` branch's `apps/web/e2e/live/
 account-recovery.spec.ts` POSTs a raw re-pair initiate signed only by the new
 IRK, which the gate now refuses — it holds the seed, so the fix is to add the
-`oldIrkSignature` proof the keyfile path uses. Do it when the branch is next
-rebased onto `main`.
+`oldIrkSignature` proof the keyfile path uses. DONE 2026-10-08 on the `gym`
+rebase (the gym `.com`/webapp need a redeploy from that branch before phase A
+passes live).
 
 **2026-10-06 (hub-blessing issuer authenticated) — closes an externally
 reported CA signing oracle; NOT deployed.** `POST /api/services/hub-blessing`
@@ -1956,8 +1976,9 @@ re-provision.
 
 The cross-surface parity follow-up list is **empty** — all closed (add-server chooser,
 post-recovery keep/replace/wipe, multi-pod `PodSwitcher`, companion-requests poll,
-Android `AddControlDevice` order-send). Re-rebase `feat/marketplace` + `feat/retail`
-onto `main` when convenient (the gym + apex-threading are main-only refactors).
+Android `AddControlDevice` order-send). Every long-lived branch was rebased onto
+`main` `199ecdbb` on 2026-10-08 (see the Recent-work entry); rebase again whenever
+`main` gains shared-code changes.
 
 ### Static-asset content-hashing (site-ops, not started)
 
