@@ -23,6 +23,12 @@ public sealed record RecipeAuthCode
     public string UserPubKeyHex { get; init; } = "";
     public long IssuedAt { get; init; }
     public long ExpiresAt { get; init; }
+    /// <summary>
+    /// Signed by authCodeUserSignature (canonical <c>ar=</c>), so .com
+    /// registration rejects the authCode if a serializer drops it. Only the
+    /// Alpine trailer re-serializes from this model; null when absent.
+    /// </summary>
+    public string? AdminRootPubKeyHex { get; init; }
 }
 
 public sealed record Recipe
@@ -204,7 +210,11 @@ public static class RecipeLoader
                 UserPubKeyHex = ReqStr(ac, "userPubKey"),
                 IssuedAt = ReqLong(ac, "issuedAt"),
                 ExpiresAt = ReqLong(ac, "expiresAt"),
+                AdminRootPubKeyHex = OptStr(ac, "adminRootPubKey"),
             };
+            if (authCode.AdminRootPubKeyHex is { } ar &&
+                !System.Text.RegularExpressions.Regex.IsMatch(ar, "^[0-9a-fA-F]{64}$"))
+                throw new RecipeException("Not a valid recipe: authCode.adminRootPubKey is not 32-byte hex.");
 
             return new Recipe
             {
