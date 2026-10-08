@@ -48,6 +48,9 @@ class RecipeAuthCode:
     user_pub_key_hex: str
     issued_at: int
     expires_at: int
+    # Signed by authCodeUserSignature (canonical `ar=`): .com registration
+    # rejects the authCode if the box doesn't forward it.
+    admin_root_pub_key_hex: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,8 @@ class Recipe:
     blob_signature_hex: str
     # Phone-signed boot-unlock policy; None (absent) => treat as "auto".
     boot_unlock_mode: Optional[str] = None
+    # Phone-signed disk-encryption policy; None (absent) => "luks".
+    disk_encryption: Optional[str] = None
 
 
 class RecipeError(ValueError):
@@ -83,6 +88,23 @@ def _normalize_envelope(obj: dict) -> dict:
         flat["blobSignatureHex"] = sig
         return flat
     return obj
+
+
+def _opt_hex32(value, name: str) -> Optional[str]:
+    if value is None:
+        return None
+    v = str(value)
+    if len(v) != 64 or _decode_hex(v) is None:
+        raise RecipeError(f"{name} is not 32-byte hex")
+    return v
+
+
+def _opt_enum(value, name: str, allowed: tuple) -> Optional[str]:
+    if value is None:
+        return None
+    if value not in allowed:
+        raise RecipeError(f"unsupported {name}: {value!r}")
+    return str(value)
 
 
 def parse_recipe(data: Union[bytes, str, dict]) -> Recipe:
@@ -116,6 +138,7 @@ def parse_recipe(data: Union[bytes, str, dict]) -> Recipe:
             user_pub_key_hex=str(ac["userPubKey"]),
             issued_at=int(ac["issuedAt"]),
             expires_at=int(ac["expiresAt"]),
+            admin_root_pub_key_hex=_opt_hex32(ac.get("adminRootPubKey"), "authCode.adminRootPubKey"),
         )
         return Recipe(
             version=int(obj["version"]),
@@ -129,11 +152,8 @@ def parse_recipe(data: Union[bytes, str, dict]) -> Recipe:
             installer_git_ref=str(obj["installerGitRef"]),
             rck_pub_key_hex=str(obj["rckPubKey"]),
             blob_signature_hex=str(obj["blobSignatureHex"]),
-            boot_unlock_mode=(
-                str(obj["bootUnlockMode"])
-                if obj.get("bootUnlockMode") is not None
-                else None
-            ),
+            boot_unlock_mode=_opt_enum(obj.get("bootUnlockMode"), "bootUnlockMode", ("auto", "approve")),
+            disk_encryption=_opt_enum(obj.get("diskEncryption"), "diskEncryption", ("luks", "none")),
         )
     except KeyError as e:
         raise RecipeError(f"missing field {e}") from e
@@ -189,8 +209,11 @@ def _js_string(value: str) -> str:
 
 def install_blob_json(r: Recipe) -> bytes:
     """`JSON.stringify(installBlobToJson(blob))` — same field order + compact
-    (no spaces) so the bytes match trailer.ts. bootUnlockMode is deliberately
-    omitted (installBlobToJson doesn't emit it — server parity)."""
+    (no spaces) so the bytes match trailer.ts, including the optional signed
+    fields, each emitted only when present and exactly where trailer.ts puts
+    it. Dropping one fails the box's signature check (bootUnlockMode,
+    diskEncryption) or .com registration (authCode.adminRootPubKey). Pinned by
+    apps/desktop-shared/golden/alpine-trailer-vectors.json."""
     s = "{"
     s += '"version":%d,' % r.version
     s += '"serverDomain":%s,' % _js_string(r.server_domain)
@@ -208,10 +231,16 @@ def install_blob_json(r: Recipe) -> bytes:
     s += '"userPubKey":%s,' % _js_string(r.auth_code.user_pub_key_hex.lower())
     s += '"issuedAt":%d,' % r.auth_code.issued_at
     s += '"expiresAt":%d' % r.auth_code.expires_at
+    if r.auth_code.admin_root_pub_key_hex is not None:
+        s += ',"adminRootPubKey":%s' % _js_string(r.auth_code.admin_root_pub_key_hex.lower())
     s += "},"
     s += '"authCodeUserSignature":%s,' % _js_string(r.auth_code_user_signature_hex.lower())
     s += '"installerGitRef":%s,' % _js_string(r.installer_git_ref)
     s += '"rckPubKey":%s' % _js_string(r.rck_pub_key_hex.lower())
+    if r.boot_unlock_mode is not None:
+        s += ',"bootUnlockMode":%s' % _js_string(r.boot_unlock_mode)
+    if r.disk_encryption is not None:
+        s += ',"diskEncryption":%s' % _js_string(r.disk_encryption)
     s += "}"
     return s.encode("utf-8")
 

@@ -314,3 +314,42 @@ def test_pinned_sha_and_url_unchanged():
     assert base_iso_cache.URL == (
         "https://flagshipserver.com/build/iso/flagship-alpine-base.iso"
     )
+
+
+# ---- shared golden: apps/desktop-shared/golden/alpine-trailer-vectors.json ----
+# Generated from @flagship/iso-personalizer, so this pins the trailer to the
+# TypeScript bytes for every optional signed field (bootUnlockMode,
+# diskEncryption, authCode.adminRootPubKey) and for upper-case hex input.
+
+from pathlib import Path
+
+TRAILER_GOLDEN = json.loads(
+    (
+        Path(__file__).resolve().parents[3]
+        / "apps"
+        / "desktop-shared"
+        / "golden"
+        / "alpine-trailer-vectors.json"
+    ).read_text(encoding="utf-8")
+)["vectors"]
+
+
+@pytest.mark.parametrize("vec", TRAILER_GOLDEN, ids=[v["name"] for v in TRAILER_GOLDEN])
+def test_trailer_matches_shared_golden(vec):
+    recipe = ap.parse_recipe(vec["recipe"])
+    assert ap.install_blob_json(recipe).decode("utf-8") == vec["trailerJson"]
+    assert ap.build_trailer(recipe).hex() == vec["trailerHex"]
+
+
+def test_parse_recipe_rejects_malformed_signed_fields():
+    vec = next(v for v in TRAILER_GOLDEN if v["name"] == "every-signed-field")
+    for edit in (
+        lambda r: r.update(diskEncryption="plaintext"),
+        lambda r: r.update(bootUnlockMode="sometimes"),
+        lambda r: r["authCode"].update(adminRootPubKey="zz" * 32),
+        lambda r: r["authCode"].update(adminRootPubKey="ab" * 31),
+    ):
+        bad = json.loads(json.dumps(vec["recipe"]))
+        edit(bad)
+        with pytest.raises(ap.RecipeError):
+            ap.parse_recipe(bad)

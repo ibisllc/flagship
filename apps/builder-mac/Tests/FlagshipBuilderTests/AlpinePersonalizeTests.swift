@@ -91,4 +91,48 @@ final class AlpinePersonalizeTests: XCTestCase {
         XCTAssertEqual(out.count % 512, 0)
         XCTAssertGreaterThanOrEqual(out.count, fileSize + 16)
     }
+
+    // MARK: shared golden — apps/desktop-shared/golden/alpine-trailer-vectors.json
+
+    /// Generated from @flagship/iso-personalizer: every optional signed field
+    /// (bootUnlockMode, diskEncryption, authCode.adminRootPubKey) and upper-case
+    /// hex input must produce the TypeScript trailer byte-for-byte. Loading goes
+    /// through RecipeLoader, so each recipe's signature is verified too.
+    func testTrailerMatchesSharedGolden() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent() // FlagshipBuilderTests
+            .deletingLastPathComponent() // Tests
+            .deletingLastPathComponent() // builder-mac
+            .deletingLastPathComponent() // apps
+            .appendingPathComponent("desktop-shared/golden/alpine-trailer-vectors.json")
+        let root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let vectors = try XCTUnwrap(root["vectors"] as? [[String: Any]])
+        XCTAssertEqual(vectors.count, 5)
+        let beforeExpiry = Date(timeIntervalSince1970: 1_790_000_000.5)
+        for v in vectors {
+            let name = v["name"] as? String ?? "?"
+            let recipeData = try JSONSerialization.data(withJSONObject: try XCTUnwrap(v["recipe"]))
+            let recipe = try RecipeLoader.load(data: recipeData, now: beforeExpiry)
+            XCTAssertEqual(String(decoding: AlpinePersonalize.installBlobJSON(recipe), as: UTF8.self),
+                           v["trailerJson"] as? String, name)
+            let trailer = try AlpinePersonalize.buildTrailer(recipe)
+            XCTAssertEqual(trailer.map { String(format: "%02x", $0) }.joined(),
+                           v["trailerHex"] as? String, name)
+        }
+    }
+
+    func testRecipeRejectsMalformedAdminRoot() throws {
+        let json = """
+        {"version":2,"serverDomain":"home.x.flagship.services","username":"x","serverName":"home",
+         "phoneDelegatedPubKey":"\(String(repeating: "ab", count: 32))","registrationUrl":"https://flagship.services/api/server/register",
+         "authCode":{"version":1,"serial":"S","userPubKey":"\(String(repeating: "cd", count: 32))","issuedAt":1,"expiresAt":2,
+                     "adminRootPubKey":"\(String(repeating: "zz", count: 32))"},
+         "authCodeUserSignature":"\(String(repeating: "11", count: 64))","installerGitRef":"main",
+         "rckPubKey":"\(String(repeating: "ef", count: 32))","blobSignatureHex":"\(String(repeating: "22", count: 64))"}
+        """
+        XCTAssertThrowsError(try RecipeLoader.load(data: Data(json.utf8), now: Date(timeIntervalSince1970: 0))) {
+            XCTAssertEqual($0 as? RecipeError, .malformed("authCode.adminRootPubKey is not 32-byte hex"))
+        }
+    }
 }
