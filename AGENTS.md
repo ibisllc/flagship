@@ -1359,6 +1359,31 @@ both launch; the manifest fix is deployed. **Remaining:** validate QR-first-open
 and live receipt pairing and complete Host-on-this-Mac on the physical phone and
 computer.
 
+**2026-07-07 (Chromebook instance; `feat/chromebook-fit` only) — on-device
+(phone) USB burn built end to end on a reproducible ISO seed.** Closes the
+OTG-builder §5 seam (VerbatimInjector). Design: `docs/iso-seed-and-on-device-burn.md`;
+public verify page `/security/iso-seed.html`. The phone no longer remasters an
+ISO: it streams a pre-baked **seed** verbatim, then overwrites the seed's
+GPT-registered `FLAGSHIP` FAT16 partition with the per-recipe preseed.
+(a) `iso-seed/build-seed.sh` derives the seed from stock Debian netinst with
+xorriso only, byte-for-byte reproducible (`sha256=bc8ccfe8…` on the 13.5.0
+base), with the FLAGSHIP partition pre-declared via `xorriso -append_partition`
+so the builder does zero partition-table surgery; the baked stub preseed's
+early_command chain-loads the real one. (b) `flagship-builder`:
+`buildSeedStubPreseed()` + a `SEED_LOCALE`/`SEED_KEYMAP` drift guard (a test pins
+it to `iso-seed/preseed.cfg`). (c) `.com`: `/api/iso-manifest` serves the seed
+only to `platform=android` (`FLAGSHIP_ISO_SEED[_ARM64]`, unset ⇒ `download:null`);
+desktop stays on the stock base. (d) Android: `SeedInjector` + `GptReader`, plus
+a FLAG_DEBUGGABLE-gated `SeedSource.LocalFile` seam for adb-pushed seeds;
+preseed text comes only from the shared generator via Rhino. Validated end to
+end in QEMU/OVMF (burned stick → unattended install → installed disk boots to
+the Flagship login banner). Also: the Linux builder warns upfront that USB burns
+can't work inside Crostini (ChromeOS caps raw writes from the container at
+~488 KB), recommending Host on this PC. **Remaining:** confirm the OTG write
+transport on a real phone; **rebuild + re-pin the seed on the Debian 13.6.0 base**
+(main's stock base moved to 13.6.0, so the 13.5.0 `bc8ccfe8…` pin is stale);
+then set `FLAGSHIP_ISO_SEED` to the published release URL + sha.
+
 **2026-07-06 (evening, Chromebook instance) — Linux builder validated LIVE on
 ChromeOS; multi-arch Linux remainder DONE; Android/iOS large-screen polish.**
 On `feat/chromebook-fit` (branch off main; iOS half needs a Mac build before

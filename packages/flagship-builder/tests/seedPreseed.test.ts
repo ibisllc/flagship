@@ -1,7 +1,7 @@
 /**
  * Seed-ISO chain-load contract.
  *
- * The burner streams a generic seed ISO (iso-seed/) verbatim, then appends a FAT
+ * The builder streams a generic seed ISO (iso-seed/) verbatim, then appends a FAT
  * partition labeled FLAGSHIP whose /preseed.cfg is the full buildDebianPreseed
  * output. The seed's stub preseed (buildSeedStubPreseed / iso-seed/preseed.cfg)
  * sets the handful of settings d-i consumes BEFORE preseed/early_command, then

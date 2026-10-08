@@ -2,7 +2,7 @@
 
 The **seed** is a stock Debian netinst ISO with one published, reproducible
 change: it auto-configures the installer from a partition labeled `FLAGSHIP`
-that the burner (mobile app / desktop) appends after streaming the seed. This
+that the builder (mobile app / desktop) appends after streaming the seed. This
 lets a phone produce a working installer **without remastering an ISO
 on-device** — it only writes a small partition.
 

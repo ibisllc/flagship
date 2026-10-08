@@ -166,7 +166,7 @@ Three container quirks the app now handles:
   `sudo -n` elevation, remaster); only ChromeOS's device layer blocks the
   bytes. The app now shows an upfront advisory when a USB is selected on
   ChromeOS and recommends **Host on this PC** (which works great with KVM) —
-  or run this burner on a native Linux machine to write a stick. The empty
+  or run this builder on a native Linux machine to write a stick. The empty
   disk picker (before sharing) likewise explains the sharing step.
 - **Elevation**: the stock container has no pkexec (and no polkit agent to
   prompt), so the raw write elevates via non-interactive passwordless

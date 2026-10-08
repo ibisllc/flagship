@@ -7,7 +7,7 @@
 #      (BIOS + UEFI), with a short timeout so an unattended boot proceeds;
 #   2. a GENERIC preseed.cfg is added at /flagship/preseed.cfg — it carries NO
 #      per-recipe data; instead its early_command reads the recipe from a FAT
-#      partition labeled "FLAGSHIP" that the burner (phone/desktop) appends to
+#      partition labeled "FLAGSHIP" that the builder (phone/desktop) appends to
 #      the USB stick after streaming this seed verbatim;
 #   3. nothing else — the El Torito / isohybrid boot equipment is replayed
 #      byte-for-byte so the seed stays USB-bootable on BIOS and UEFI.
@@ -81,7 +81,7 @@ sed -i 's/^timeout .*/timeout 30/; s/^default .*/default flagship/' "$work/isoli
 # BOTH the GPT and the MBR by xorriso -append_partition. This is the fix for the
 # GPT-isohybrid problem: Linux ignores MBR-only entries on a GPT disk, so the
 # partition the installer must find has to live in the GPT. Declaring it here,
-# once, at build time means the burner does ZERO partition-table surgery — it
+# once, at build time means the builder does ZERO partition-table surgery — it
 # streams the seed verbatim (including this empty partition) and overwrites the
 # partition's CONTENTS with the per-recipe preseed FAT. 16 MiB leaves headroom
 # over the ~33 KB preseed. mformat is deterministic, so the seed stays
