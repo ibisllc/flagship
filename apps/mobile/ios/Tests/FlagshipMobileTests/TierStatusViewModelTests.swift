@@ -34,7 +34,7 @@ final class TierStatusViewModelTests: XCTestCase {
         XCTAssertEqual(r.dispatcherUsageGBmonth, 1.2)
         XCTAssertEqual(r.dispatcherFreeQuotaGBmonth, 50.0)
         XCTAssertEqual(r.customDomains, [])
-        XCTAssertEqual(r.reservedNames, ["harry"])
+        XCTAssertEqual(r.reservedNames, ["bright-maple"])
     }
 
     // MARK: - load()
@@ -47,7 +47,7 @@ final class TierStatusViewModelTests: XCTestCase {
             XCTFail("expected loaded, got \(vm.state)"); return
         }
         XCTAssertEqual(t.tier, "promo")
-        XCTAssertEqual(t.reservedNames, ["harry"])
+        XCTAssertEqual(t.reservedNames, ["bright-maple"])
     }
 
     func test_load_pinnedFixture_isReturnedVerbatim() async {
