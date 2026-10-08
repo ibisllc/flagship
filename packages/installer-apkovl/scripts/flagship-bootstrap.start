@@ -1,0 +1,315 @@
+#!/bin/sh
+# Flagship first-boot bootstrap.
+#
+# This file is the only Flagship-controlled script that ships in the
+# apkovl. It deliberately stays tiny: probe for the trailer, validate the
+# user signature on the InstallBlob, then `curl | sh` the actual installer
+# from the public Flagship GitHub repo at the git ref the trailer pins.
+#
+# The audit story:
+#   - The blob signature commits to the installerGitRef field, so a
+#     compromised .com or compromised network cannot swap the ref.
+#   - The fetched installer is at https://raw.githubusercontent.com/...
+#     pinned to that ref, so anyone can read what the install will do.
+#   - Idempotent: presence of /var/flagship/installed.flag short-circuits
+#     to boot-stage on subsequent boots.
+
+# DEBUG: write a "bootstrap-was-invoked" marker to /dev/sda at offset
+# 1 GiB as the VERY FIRST command, before any potentially-failing
+# step (set -eu, redirection, mkdir). The post-mortem rescue can read
+# this offset; if it shows "ALIVE @ <timestamp>", we know /etc/local.d/
+# at least invoked us. If it doesn't, Alpine's apkovl boot is dropping
+# the script on the floor before execution — different problem.
+{
+    echo "FLAGSHIP-BOOTSTRAP-ALIVE @ $(date)"
+    echo "PATH=$PATH"
+    echo "/dev/sda accessible: $([ -b /dev/sda ] && echo YES || echo NO)"
+    echo "----"
+} > /tmp/bootstrap-alive.txt 2>&1
+dd if=/tmp/bootstrap-alive.txt of=/dev/sda seek=1073741824 oflag=seek_bytes conv=notrunc,fsync bs=4K 2>/dev/null || true
+sync || true
+
+set -eu
+
+LOG=/var/log/flagship-bootstrap.log
+INSTALLED_FLAG=/var/flagship/installed.flag
+GITHUB_RAW="https://raw.githubusercontent.com/ibisllc/flagship"
+DEFAULT_REF="main"
+
+mkdir -p /var/flagship /var/log
+exec >>"$LOG" 2>&1
+set -x  # DEBUG: trace every command. Useful while the bootstrap is
+        # still being shaken out. Drop once Phase F goes green.
+date
+
+# DEBUG: copy the bootstrap log to /dev/sda at offset 1 GiB on every
+# exit (success or failure). The Alpine apkovl-mode root is tmpfs so
+# the log vanishes on reboot; persisting it to a known disk offset
+# lets a post-mortem rescue boot read the failure cause. The offset
+# is past the 240 MB ISO bytes + plenty of slack, and well before
+# the disk-end trailer copy (40 GB - ~1 KB).
+LOG_DEVICE_OFFSET=$((1 * 1024 * 1024 * 1024))   # 1 GiB
+LOG_MAX_BYTES=$((1 * 1024 * 1024))               # 1 MiB cap
+persist_log() {
+    sync || true
+    head -c "$LOG_MAX_BYTES" "$LOG" 2>/dev/null \
+        | dd of=/dev/sda seek="$LOG_DEVICE_OFFSET" oflag=seek_bytes conv=notrunc,fsync bs=4K 2>/dev/null || true
+    sync || true
+}
+trap persist_log EXIT
+trap persist_log ERR
+
+# DEBUG: also force network up + verify DNS BEFORE apk-add. Alpine's
+# default ordering puts `networking` in `boot` runlevel and `local`
+# (where this script runs) in `default`, but cx23 may race. Pin it.
+#
+# DHCP needs AF_PACKET (raw L2 sockets). Alpine 3.21 `linux-lts` ships
+# AF_PACKET as a kernel MODULE (`af_packet.ko`), not built-in, and
+# nothing autoloads it during the apkovl-mode boot path — so udhcpc
+# fails with `socket(AF_PACKET,2,8): Address family not supported by
+# protocol` before issuing any DHCP discover. Live-confirmed
+# 2026-05-21 by post-mortem of the bootstrap log persisted to disk
+# offset 1 GiB. modprobe + retry the DHCP.
+echo "[debug] modprobing af_packet (DHCP needs AF_PACKET raw sockets)"
+modprobe af_packet 2>&1 || echo "[debug] modprobe af_packet failed"
+echo "[debug] bringing eth0 up and waiting for DHCP"
+ifconfig eth0 up 2>&1 || true
+udhcpc -i eth0 -t 8 -n 2>&1 || true
+sleep 2
+echo "[debug] /etc/resolv.conf:"
+cat /etc/resolv.conf 2>&1 || true
+echo "[debug] ip a:"
+ip a 2>&1 | head -20 || ifconfig 2>&1 | head -20 || true
+echo "[debug] testing DNS:"
+nslookup dl-cdn.alpinelinux.org 2>&1 | head -5 || true
+echo "[debug] testing HTTPS to alpine cdn:"
+wget --spider --no-verbose --timeout=10 https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/APKINDEX.tar.gz 2>&1 | head -3 || true
+
+# Install the deps the rest of the bootstrap depends on. Vanilla Alpine
+# ships busybox + apk-tools + the kernel but no node / git / npm / curl /
+# jq, all of which this script needs (node for flagship-trailer-probe,
+# git/npm/node for the verify-endorsement.mjs verifier, curl/jq for the
+# CA cross-check + install.sh fetch). The bootstrap previously assumed
+# these were pre-installed, but the base ISO's apks/x86_64/ doesn't bundle
+# them — live-confirmed 2026-05-21 by mounting the dd'd disk from rescue
+# and listing the apk repo (101 packages, none of which are node/npm/git).
+#
+# Network is up by this point (Alpine's setup-interfaces / udhcpc fired
+# during the runlevel ascent before local.d scripts execute). apk uses
+# the mirror configured in /etc/apk/repositories — Alpine's default
+# during ISO boot is the in-ISO apks/ dir for the base layer, which we
+# extend to the public CDN here for the extra packages.
+if ! grep -q dl-cdn.alpinelinux.org /etc/apk/repositories 2>/dev/null; then
+    cat >> /etc/apk/repositories <<'REPOS'
+http://dl-cdn.alpinelinux.org/alpine/v3.21/main
+http://dl-cdn.alpinelinux.org/alpine/v3.21/community
+REPOS
+fi
+echo "flagship: apk-adding bootstrap deps (nodejs npm git curl jq)"
+if ! apk add --no-cache nodejs npm git curl jq; then
+    echo "flagship: apk add failed — network down or repos misconfigured"
+    exit 1
+fi
+
+# Validate that an installer ref string is safe to interpolate into the
+# GitHub raw URL. Rejects:
+#   - empty / "null"
+#   - "..", ".../...", "/..", "../" — defeats any attempt at directory
+#     traversal turning the GitHub raw URL into a different repo's tree
+#   - characters outside [A-Za-z0-9._/-] — branch + tag names, SHAs, and
+#     dotted release tags all live inside this charset; anything outside
+#     is either a URL-encoding attack or shell-metacharacter injection
+#
+# Caller convention: `validate_ref <ref> <label>` — label is printed in
+# the error message so the operator sees which source rejected.
+validate_ref() {
+    _ref="$1"
+    _label="${2:-ref}"
+    if [ -z "$_ref" ] || [ "$_ref" = "null" ]; then
+        echo "flagship: ${_label} is empty or null — refusing to install"
+        return 1
+    fi
+    # Reject any '..' substring outright. This catches "..", "../foo",
+    # "foo/..", and "foo/../bar" — busybox sh has no built-in regex,
+    # but `case` with a glob covers it.
+    case "$_ref" in
+        *..*)
+            echo "flagship: ${_label} contains '..' (\"$_ref\") — refusing to install"
+            return 1
+            ;;
+    esac
+    # Reject anything outside [A-Za-z0-9._/-]. POSIX globbing doesn't
+    # do negated character classes the way regex does, but `case` with
+    # explicit alternations is portable across busybox + dash + bash.
+    # We list every disallowed char individually; the alternation
+    # matches if ANY of them appears anywhere in the ref.
+    #
+    # Why not `tr -d` + length compare? Command substitution strips
+    # trailing newlines, so a ref like "main\n..." would silently look
+    # like an all-allowed string after tr. The case-glob path doesn't
+    # have that footgun.
+    case "$_ref" in
+        *[!A-Za-z0-9._/-]*)
+            echo "flagship: ${_label} contains disallowed characters (\"$_ref\") — refusing to install"
+            return 1
+            ;;
+    esac
+    return 0
+}
+
+if [ -f "$INSTALLED_FLAG" ]; then
+    echo "flagship: previously installed; pulling boot-stage and handing off"
+    REF="$(cat /boot/installer-ref 2>/dev/null || echo "$DEFAULT_REF")"
+    if ! validate_ref "$REF" "installer-ref"; then
+        exit 1
+    fi
+    curl -fsSL "$GITHUB_RAW/$REF/installer/boot-stage.sh" | sh
+    exit 0
+fi
+
+# Find the boot medium that carries our trailer.
+TRAILER_SRC=""
+for cand in /dev/sr0 /dev/sda /dev/nvme0n1 /dev/mmcblk0; do
+    [ -e "$cand" ] || continue
+    if /usr/local/bin/flagship-trailer-probe "$cand"; then
+        TRAILER_SRC="$cand"
+        break
+    fi
+done
+if [ -z "$TRAILER_SRC" ]; then
+    echo "flagship: no install trailer found — refusing to install"
+    exit 1
+fi
+echo "flagship: trailer found on $TRAILER_SRC"
+
+# Validate the trailer signature locally (security-critical: we won't
+# fetch anything from the network until we trust the blob).
+BLOB=/run/install-blob.json
+if ! /usr/local/bin/flagship-trailer-validate "$TRAILER_SRC" >"$BLOB"; then
+    echo "flagship: trailer signature invalid — refusing to install"
+    exit 1
+fi
+
+# H4 hardening (#14): cross-check the trailer's embedded IRK pubkey
+# against the Flagship CA's pubkey-cert binding for the same username.
+# parseTrailer alone is circular (signature verifies against the IRK
+# pubkey embedded in the same blob), so an evil-maid USB swap with
+# attacker-IRK-signed content would pass. Resolving the username's
+# CA-signed binding closes that path.
+TRAILER_USERNAME="$(jq -r .username "$BLOB")"
+TRAILER_IRK_PUB="$(jq -r .userPubKey "$BLOB")"
+if [ -z "$TRAILER_USERNAME" ] || [ "$TRAILER_USERNAME" = "null" ]; then
+    echo "flagship: trailer missing username field — refusing to install"
+    exit 1
+fi
+if [ -z "$TRAILER_IRK_PUB" ] || [ "$TRAILER_IRK_PUB" = "null" ]; then
+    echo "flagship: trailer missing userPubKey field — refusing to install"
+    exit 1
+fi
+case "$TRAILER_USERNAME" in
+    *[!A-Za-z0-9.-]*)
+        echo "flagship: trailer username has invalid shape — refusing to install"
+        exit 1
+        ;;
+esac
+echo "flagship: cross-checking IRK against CA pubkey-cert for $TRAILER_USERNAME"
+CA_CERT="$(curl --fail --silent --show-error --max-time 30 \
+    "https://flagshipserver.com/api/users/${TRAILER_USERNAME}/pubkey-cert" || echo "")"
+if [ -z "$CA_CERT" ]; then
+    echo "flagship: failed to fetch CA pubkey-cert for $TRAILER_USERNAME — refusing to install"
+    exit 1
+fi
+CA_IRK_PUB="$(echo "$CA_CERT" | jq -r .irkPub 2>/dev/null || echo "")"
+if [ -z "$CA_IRK_PUB" ] || [ "$CA_IRK_PUB" = "null" ]; then
+    echo "flagship: pubkey-cert response malformed — refusing to install"
+    exit 1
+fi
+if [ "$(echo "$TRAILER_IRK_PUB" | tr '[:upper:]' '[:lower:]')" \
+        != "$(echo "$CA_IRK_PUB" | tr '[:upper:]' '[:lower:]')" ]; then
+    echo "flagship: trailer IRK does NOT match CA-signed binding for $TRAILER_USERNAME"
+    echo "  trailer: $TRAILER_IRK_PUB"
+    echo "  CA:      $CA_IRK_PUB"
+    echo "  refusing to install — possible evil-maid USB swap"
+    exit 1
+fi
+echo "flagship: CA cross-check OK — trailer IRK matches binding for $TRAILER_USERNAME"
+
+REF="$(jq -r .installerGitRef "$BLOB")"
+if [ -z "$REF" ] || [ "$REF" = "null" ]; then
+    REF="$DEFAULT_REF"
+fi
+if ! validate_ref "$REF" "installerGitRef"; then
+    exit 1
+fi
+echo "flagship: installer pinned to git ref: $REF"
+
+# Maintainers-protocol endorsement gate.
+#
+# Before we curl-and-execute install.sh as root, we require that the
+# Flagship repo's HEAD-at-REF is endorsed by the current release-track
+# authority in the repo's own `.maintainers/` folder. This closes the
+# loop between "Harry's Yubikey signs a release manifest" and "the
+# first-boot installer refuses to apply a tampered tree."
+#
+# Strategy: shallow-clone the repo into /run/flagship-verify, resolve
+# HEAD to a commit hash, then shell out to scripts/verify-endorsement.mjs
+# (which uses @maintainers/protocol). If the gate passes, install.sh
+# runs normally; otherwise we exit non-zero and the box stays unprovisioned.
+#
+# A path-to-pure-shell exists (bundle a single statically-linked verify
+# binary into the apkovl so we don't need node here) — out of scope for
+# v1 alpha. Documented in scripts/verify-endorsement.mjs.
+VERIFY_DIR=/run/flagship-verify
+rm -rf "$VERIFY_DIR"
+echo "flagship: shallow-cloning $REPO_URL@$REF for endorsement verification"
+if ! git clone --depth 50 --no-tags --quiet --branch "$REF" "$REPO_URL" "$VERIFY_DIR" \
+        2>/dev/null; then
+    # The trailer's installerGitRef may be a commit SHA rather than a
+    # branch/tag; fall back to a full-fetch-then-checkout in that case.
+    if ! { git clone --depth 50 --no-tags --quiet "$REPO_URL" "$VERIFY_DIR" \
+            && git -C "$VERIFY_DIR" fetch --depth 50 --quiet origin "$REF" \
+            && git -C "$VERIFY_DIR" checkout --quiet "$REF"; }; then
+        echo "flagship: failed to clone $REPO_URL at ref $REF — refusing to install"
+        exit 1
+    fi
+fi
+HEAD_SHA="$(git -C "$VERIFY_DIR" rev-parse HEAD | tr -d '\n')"
+case "$HEAD_SHA" in
+    *[!0-9a-f]*|"") echo "flagship: bad HEAD sha (\"$HEAD_SHA\") — refusing to install"; exit 1;;
+esac
+echo "flagship: HEAD = $HEAD_SHA"
+
+# Install just enough deps for the verifier to import @maintainers/protocol.
+# `npm ci --omit=optional --no-audit --no-fund` is the lightest viable
+# install: it walks the workspace graph (so the @maintainers/protocol
+# symlink lands in node_modules/), but skips heavy optional deps.
+if ! (cd "$VERIFY_DIR" && npm ci --omit=optional --no-audit --no-fund --silent); then
+    echo "flagship: npm ci failed in verify clone — refusing to install"
+    exit 1
+fi
+# The verifier itself is .mjs but imports a .ts entry point in
+# @maintainers/protocol; we invoke via tsx (a devDep installed by the
+# previous step) so the helper can resolve the bare specifier.
+if ! (cd "$VERIFY_DIR" && \
+      node --import tsx scripts/verify-endorsement.mjs \
+        --git-repo-path "$VERIFY_DIR" \
+        --commit-hash "$HEAD_SHA"); then
+    echo "flagship: endorsement verification FAILED — refusing to install"
+    exit 1
+fi
+echo "flagship: endorsement OK — proceeding to install"
+
+# Fetch the install script from the public repo and run it. The script
+# is responsible for LUKS provisioning, fetching the daemon code, etc.
+INSTALLER_URL="$GITHUB_RAW/$REF/installer/install.sh"
+echo "flagship: fetching $INSTALLER_URL"
+INSTALLER=/run/flagship-install.sh
+if ! curl -fsSL "$INSTALLER_URL" -o "$INSTALLER"; then
+    echo "flagship: failed to fetch installer from $INSTALLER_URL"
+    exit 1
+fi
+chmod +x "$INSTALLER"
+
+# The installer takes (trailer-source, validated-blob, git-ref) so it
+# knows where to clone the rest of the daemon source from.
+exec "$INSTALLER" "$TRAILER_SRC" "$BLOB" "$REF"
