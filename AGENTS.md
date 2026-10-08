@@ -1713,7 +1713,9 @@ iPhone/iPad shots ran on the iOS 26.5 simulators; iPad captures come out as
 
 1. Verify the open → CLOSED fold returns to portrait (Device Hub posture
    buttons; the AX automation times out while Device Hub is in the background).
-2. **Owner:** open Organizer from Xcode 27.1, upload build 4, attach it to
+2. **Build 4 is UPLOADED** (2026-10-08, `xcodebuild -exportArchive` with
+   Xcode 27.1; Xcode now has the owner's Apple Account signed in, which an
+   upload requires). **Owner:** once processing finishes, attach `1.0 (4)` to
    version 1.0, upload the screenshots, fill the forms
    (`APP-STORE-CONNECT-FORMS.md` in the screenshots folder), answer export
    compliance + age rating, submit. Reviewer login: demo `playstore-test-0725`
