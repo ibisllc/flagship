@@ -1,6 +1,6 @@
 # ISO seed + on-device USB burn
 
-How a phone (or the desktop burner) turns a USB stick into a Flagship box
+How a phone (or the desktop builder) turns a USB stick into a Flagship box
 **without remastering an ISO on-device**, and how the base image is derived,
 delivered, and verified transparently.
 
@@ -11,7 +11,7 @@ Debian netinst ISO: editing `/boot/grub/grub.cfg` and the isolinux configs
 inside the ISO9660 filesystem to auto-preseed, injecting the preseed, and
 rebuilding the El Torito / isohybrid boot equipment. That is a full
 read-modify-write of an ~800 MB image via `xorriso` (a native C library). A
-phone can't cheaply do it, and it's the reason the desktop burner shells out to
+phone can't cheaply do it, and it's the reason the desktop builder shells out to
 the Node CLI's `remasterIso.ts`.
 
 ## The design: pre-baked seed + appended partition
@@ -42,8 +42,8 @@ We split the work so the phone never touches the ISO9660 structure:
 
 3. **The per-recipe payload** = one file, `preseed.cfg`, which is the full
    output of the shared `buildDebianPreseed` generator
-   (`packages/flagship-burner`) — it already carries the base64-encoded signed
-   InstallBlob and the first-boot bootstrap. The burner writes it to a small
+   (`packages/flagship-builder`) — it already carries the base64-encoded signed
+   InstallBlob and the first-boot bootstrap. The builder writes it to a small
    FAT16 volume labeled `FLAGSHIP` (`FatVolume.buildPreseedVolume` already
    produces exactly this).
 
@@ -59,9 +59,9 @@ We split the work so the phone never touches the ISO9660 structure:
 ## Trust model (unchanged)
 
 The **phone's signature on the InstallBlob is the entire trust root**, exactly
-as for the desktop burner. The seed is generic and carries no recipe, so a
+as for the desktop builder. The seed is generic and carries no recipe, so a
 malicious seed can't target a specific box. The per-recipe `preseed.cfg` embeds
-the phone-signed blob; the burner MUST verify the preseed it lays down embeds
+the phone-signed blob; the builder MUST verify the preseed it lays down embeds
 *that* signature before writing it (so a hostile preseed source can't swap in a
 different box's recipe). `.com` is never in the trust path — it only ships the
 generic seed bytes, which are sha-pinned and reproducible (below).
@@ -99,7 +99,7 @@ Debian point release re-pins both the stock and the seed together).
 
 ## Delivery
 
-`.com`'s `POST /api/iso-manifest` serves the seed to the burner, sha-pinned,
+`.com`'s `POST /api/iso-manifest` serves the seed to the builder, sha-pinned,
 exactly like the stock base — but from a **transparent public artifact** (a
 GitHub release) so anyone can fetch the same bytes the app fetches. The stock
 Debian base still comes from Debian/Google mirrors; only the *seed* (our
@@ -126,10 +126,10 @@ that added `FLAGSHIP` only to the MBR on-device was invisible to d-i's
 
 **Resolved (option 4):** the seed build pre-declares an **empty, GPT-registered
 `FLAGSHIP` FAT16 partition** (16 MiB) via `xorriso -append_partition`, which
-registers it in **both the GPT and the MBR**. So the burner does **zero
+registers it in **both the GPT and the MBR**. So the builder does **zero
 partition-table surgery**: it streams the seed verbatim (the empty partition
 comes along) and overwrites that partition's *contents* with the per-recipe
-preseed FAT. The burner finds the region by reading the GPT (the appended
+preseed FAT. The builder finds the region by reading the GPT (the appended
 partition is the highest-first-LBA entry). `mformat` is deterministic under a
 pinned `SOURCE_DATE_EPOCH`, so the seed stays byte-for-byte reproducible.
 

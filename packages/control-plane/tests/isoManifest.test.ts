@@ -152,7 +152,7 @@ describe("iso manifest handler", () => {
     it("no seed configured → { download: null } (even though stock is blessed)", () => {
       const r = handleIsoManifest(
         { blessedManifest: BLESSED, blessedManifestArm64: BLESSED },
-        { platform: "android", burnerVersion: "1.0.0", current: null },
+        { platform: "android", builderVersion: "1.0.0", current: null },
       );
       expect(r.status).toBe(200);
       expect(r.body).toEqual({ download: null });
@@ -161,7 +161,7 @@ describe("iso manifest handler", () => {
     it("seed configured + current=null → returns the SEED (not the stock base)", () => {
       const r = handleIsoManifest(
         { blessedManifest: BLESSED, seedManifest: SEED },
-        { platform: "android", burnerVersion: "1.0.0", current: null },
+        { platform: "android", builderVersion: "1.0.0", current: null },
       );
       expect(r.status).toBe(200);
       expect(r.body).toEqual({ download: SEED });
@@ -172,7 +172,7 @@ describe("iso manifest handler", () => {
         { blessedManifest: BLESSED, seedManifest: SEED },
         {
           platform: "android",
-          burnerVersion: "1.0.0",
+          builderVersion: "1.0.0",
           current: {
             version: "flagship-seed-debian-13.5.0",
             sha256: SEED.sha256.toUpperCase(),
@@ -188,7 +188,7 @@ describe("iso manifest handler", () => {
         { blessedManifest: BLESSED, seedManifest: SEED },
         {
           platform: "android",
-          burnerVersion: "1.0.0",
+          builderVersion: "1.0.0",
           current: { version: "flagship-seed-old", sha256: "f".repeat(64) },
         },
       );
@@ -203,7 +203,7 @@ describe("iso manifest handler", () => {
           seedManifest: SEED,
           seedManifestArm64: SEED_ARM64,
         },
-        { platform: "android", burnerVersion: "1.0.0", current: null, arch: "arm64" },
+        { platform: "android", builderVersion: "1.0.0", current: null, arch: "arm64" },
       );
       expect(r.body).toEqual({ download: SEED_ARM64 });
     });
@@ -211,7 +211,7 @@ describe("iso manifest handler", () => {
     it('android arch:"arm64" unconfigured → { download: null } (no amd64-seed fallback)', () => {
       const r = handleIsoManifest(
         { blessedManifest: BLESSED, blessedManifestArm64: BLESSED, seedManifest: SEED },
-        { platform: "android", burnerVersion: "1.0.0", current: null, arch: "arm64" },
+        { platform: "android", builderVersion: "1.0.0", current: null, arch: "arm64" },
       );
       expect(r.body).toEqual({ download: null });
     });
@@ -220,7 +220,7 @@ describe("iso manifest handler", () => {
       for (const platform of ["mac", "linux", "windows"] as const) {
         const r = handleIsoManifest(
           { blessedManifest: BLESSED, seedManifest: SEED },
-          { platform, burnerVersion: "1.0.0", current: null },
+          { platform, builderVersion: "1.0.0", current: null },
         );
         expect(r.body).toEqual({ download: BLESSED });
       }
@@ -229,7 +229,7 @@ describe("iso manifest handler", () => {
     it("seed and stock never cross: android never gets the stock base even when no seed is configured", () => {
       const r = handleIsoManifest(
         { blessedManifest: BLESSED, blessedManifestArm64: BLESSED },
-        { platform: "android", burnerVersion: "1.0.0", current: null },
+        { platform: "android", builderVersion: "1.0.0", current: null },
       );
       expect(r.body).toEqual({ download: null });
       expect(r.body).not.toEqual({ download: BLESSED });
