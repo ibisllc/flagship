@@ -344,12 +344,11 @@ async function renderStepBody(state, step) {
     case "passphrase":
     case "webauthn-recovery":
       return `
-        <p class="note">Set up recovery and you can get back into your account instantly
-        and privately from a fresh browser if you lose this device. Skip it and you can
-        still get back in, but only the slow way — a single-device account can be claimed
-        from a new browser after a 3-day wait, and because that same path lets anyone who
-        knows your username start a claim, recovery's the safer route. We recommend setting
-        it up now (one minute); if you skip, a banner reminds you on the home screen.</p>
+        <p class="note">Set up recovery and you can get back into your account from a
+        fresh browser if you lose this device. Skip it and getting back in needs your
+        backed-up account key file — without either, the account can't be recovered. We
+        recommend setting it up now (one minute); if you skip, a banner reminds you on the
+        home screen.</p>
         <div class="btn-row-sm">
           <button id="wizard-go-recovery" class="pill primary">Set up recovery</button>
           <button id="wizard-skip-recovery" class="pill">Skip for now</button>

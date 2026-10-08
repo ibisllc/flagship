@@ -230,7 +230,8 @@ export function isCredentialRequiredError(err) {
  *
  *  Steps (single == multi minus the second factor):
  *    1. Cloud-recovery unwrap → the original UMK seed (injected
- *       `recoverFromCloud`; stays the Mock/popup sub-origin flow).
+ *       `recoverFromCloud`; the real WebAuthn-PRF popup on the recovery
+ *       sub-origin).
  *    2. Persist the recovered seed under a fresh local wrap +
  *       unlock the session under the resolved username.
  *    3. Derive the OLD IRK (v1 == registered) and a fresh NEW device

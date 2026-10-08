@@ -54,7 +54,9 @@
 //       ceremonies now carry a credential on initiate and SIGN the
 //       completion, so a stale shell would post bodies .com refuses.
 //  v30: security links point at the one-page /security sections.
-const SHELL_VERSION = "v30";
+//  v31: demo accounts hide key-backed rows + remove-from-browser; every
+//       Worker audit kind is labelled; recovery copy matches the gate.
+const SHELL_VERSION = "v31";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

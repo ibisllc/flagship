@@ -18,7 +18,7 @@
 //
 // Grace countdown/completion/push/quarantine are Phase 4 (not here); the
 // flow only INITIATES the re-pair. Live PRF is out of scope —
-// recoverFromCloud is injected (the Mock/popup sub-origin flow as today).
+// recoverFromCloud is injected (the recovery sub-origin WebAuthn popup).
 
 import { describe, expect, it, vi } from "vitest";
 import { resolve } from "node:path";
