@@ -23,43 +23,40 @@ permissions:
 jobs:
   seed:
     runs-on: ubuntu-latest
-    container: debian:12
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # The original pin, built on a Debian 12 host. Reproducing it proves
-          # this environment matches the one that published it.
-          - debian: "13.5.0"
-            base_url: https://cdimage.debian.org/cdimage/archive/13.5.0/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso
-            base_sha256: 95838884f5ea6c82421dfe6baaa5a639dbbe6756c1e380f9fe7a7cb0c1949d2a
-            seed_sha256: bc8ccfe82b77ba2424c9baefff11e29d8190578639312dac8ca76223867802ec
-          # The current base (FLAGSHIP_ISO_MANIFEST).
-          - debian: "13.6.0"
-            base_url: https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso
-            base_sha256: 65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7
-            seed_sha256: ""
+        # Two xorriso generations must produce the same bytes (build-seed.sh
+        # neutralises the version stamp; the empty FAT is a committed image).
+        container: ["debian:12", "debian:13"]
+    container: ${{ matrix.container }}
+    env:
+      BASE_URL: https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso
+      BASE_SHA256: 65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7
+      SEED_SHA256: ad91527db2dec46025aaecf6900e69eaa676ecff645d481d3f81af76c7d764ac
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain
         run: |
           apt-get update -qq
-          apt-get install -y -qq --no-install-recommends xorriso mtools curl ca-certificates >/dev/null
-          xorriso -version | head -1
-          mformat --version | head -1
+          apt-get install -y -qq --no-install-recommends xorriso curl ca-certificates >/dev/null
+          dpkg-query -W -f='${Package} ${Version}\n' xorriso libisofs6 libisoburn1t64 libisoburn1 libburn4t64 libburn4 2>/dev/null || true
       - name: Fetch + verify the stock base
         run: |
-          curl -fsSL -o base.iso "${{ matrix.base_url }}"
-          echo "${{ matrix.base_sha256 }}  base.iso" | sha256sum -c -
+          curl -fsSL --retry 3 -o base.iso "$BASE_URL"
+          echo "$BASE_SHA256  base.iso" | sha256sum -c -
       - name: Build the seed
         run: bash iso-seed/build-seed.sh base.iso seed.iso
       - name: Check the pin
         run: |
           got="$(sha256sum seed.iso | cut -d' ' -f1)"
-          echo "Debian ${{ matrix.debian }} seed sha256: $got"
-          want="${{ matrix.seed_sha256 }}"
-          if [ -n "$want" ] && [ "$got" != "$want" ]; then
-            echo "::error::seed sha256 $got does not match the pin $want"
-            exit 1
-          fi
+          echo "seed sha256: $got"
+          [ "$got" = "$SEED_SHA256" ] && exit 0
+          echo "::error::seed sha256 $got does not match the pin $SEED_SHA256"
+          size=$(stat -c %s seed.iso); echo "size $size"
+          i=0; while [ $((i*1048576)) -lt "$size" ]; do
+            printf '%d %s\n' $i "$(dd if=seed.iso bs=1M skip=$i count=1 status=none | sha256sum | cut -c1-16)"
+            i=$((i+1))
+          done > chunks.txt
+          exit 1
