@@ -85,9 +85,11 @@ fi
 # `npx tsc -b`.
 # ──────────────────────────────────────────────────────────────────────
 
-# Packages whose dist/ the Worker bundles (apps/com/package.json deps).
-# boot-core ships the /api/boot/* router now mounted on flagship-com.
-BUNDLED_PKGS="control-plane storage protocol boot-core"
+# Packages whose dist/ the Worker bundles — one list, shared with
+# clean-build-com.sh. boot-core ships the /api/boot/* router mounted on
+# flagship-com.
+# shellcheck source=com-bundled-packages.sh
+. "$SCRIPT_DIR/com-bundled-packages.sh"
 
 # Echo the newest mtime (epoch seconds) of any regular file under $1,
 # or empty when the dir is absent / has no files. POSIX-portable: uses
@@ -124,6 +126,40 @@ if [ "${FLAGSHIP_SKIP_DIST_FRESHNESS:-0}" != "1" ]; then
       STALE="$STALE $pkg"
     fi
   done
+
+  # Orphaned output: a compiled dist/*.js whose src/*.ts no longer exists
+  # (deleted module, or left by checking out a feature branch). `tsc -b`
+  # never removes these; they stay one stray export away from the bundle.
+  ORPHANS=""
+  for pkg in $BUNDLED_PKGS; do
+    src_dir="$REPO_ROOT/packages/$pkg/src"
+    dist_dir="$REPO_ROOT/packages/$pkg/dist"
+    [ -d "$src_dir" ] && [ -d "$dist_dir" ] || continue
+    while IFS= read -r js; do
+      rel="${js#"$dist_dir"/}"
+      rel="${rel%.js}"
+      [ -e "$src_dir/$rel.ts" ] || ORPHANS="$ORPHANS $pkg/dist/$rel.js"
+    done < <(find "$dist_dir" -type f -name '*.js')
+  done
+
+  if [ -n "$ORPHANS" ]; then
+    echo "" >&2
+    echo "================================================================" >&2
+    echo "REFUSING TO DEPLOY: compiled output with no source" >&2
+    echo "================================================================" >&2
+    echo "" >&2
+    echo "Orphaned file(s):${ORPHANS}" >&2
+    echo "" >&2
+    echo "  \`tsc -b\` never deletes the output of a removed source file, so" >&2
+    echo "  deleted or feature-branch code is sitting next to the bundle." >&2
+    echo "" >&2
+    echo "What to do instead:" >&2
+    echo "    bash scripts/clean-build-com.sh" >&2
+    echo "  (\`npm run deploy\` in apps/com runs it for you.)" >&2
+    echo "" >&2
+    echo "================================================================" >&2
+    exit 1
+  fi
 
   if [ -n "$STALE" ]; then
     echo "" >&2

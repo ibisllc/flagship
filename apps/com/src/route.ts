@@ -321,6 +321,26 @@ export interface R2ObjectLike {
 
 const PROXY_PREFIX = "/api/";
 
+// Endpoints removed on purpose. They are answered at the edge, ahead of the
+// rate limiter, the D1 control plane, and the .services proxy, so their
+// absence never depends on the upstream also lacking them. The path is
+// normalized first (percent-escapes, case, duplicate and trailing slashes)
+// because an upstream router may be more forgiving than an exact match.
+// 2026-10-08: the legacy username rename let any account take an arbitrary
+// or reserved handle; paid name changes will be a new route.
+const RETIRED_API_PATHS = [/^\/api\/username\/rename$/, /^\/api\/username\/alias(\/.*)?$/];
+
+function isRetiredApiPath(pathname: string): boolean {
+  let p = pathname;
+  try {
+    p = decodeURIComponent(p);
+  } catch {
+    // Malformed escapes: match the raw path.
+  }
+  p = p.toLowerCase().replace(/\/{2,}/g, "/").replace(/\/+$/, "");
+  return RETIRED_API_PATHS.some((re) => re.test(p));
+}
+
 // Flagship Studio installer targets, keyed by the OS slug used in
 // /download/<os>. Public download surfaces link to /download/<os> (on-brand,
 // so the storage URL never shows in the UI); we 302 to wherever the binary
@@ -483,6 +503,10 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
 
 /** Internal — the actual routing logic. `route` wraps this with CORS. */
 async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Response> {
+  if (isRetiredApiPath(url.pathname)) {
+    return jsonResponse({ error: "not found" }, 404);
+  }
+
   // ---- www.flagshipserver.com ----
   // Pure 308 to the bare apex, path + query preserved. Placed FIRST so
   // nothing else on this host is ever served. See the WWW_HOST comment

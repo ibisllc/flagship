@@ -9,10 +9,14 @@
  * §5-6). Until that lands, nothing on `.com` may rename an account, so this
  * replays the exact reported request (a correctly-signed rename of a
  * registered account onto a reserved name) and requires that no handler
- * takes it and nothing is written.
+ * takes it and nothing is written. The edge must also answer it itself:
+ * an unhandled /api/ path is proxied to .services, so without the
+ * tombstone the 404 would only hold for as long as the upstream also lacked
+ * the route.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tryControlPlane, type ControlPlaneEnv } from "../src/controlPlaneRoutes.js";
+import { route, type RouteEnv } from "../src/route.js";
 import type { D1Database } from "@flagship/storage";
 import { deriveIRK, signUsernameRename } from "@flagship/protocol";
 
@@ -64,5 +68,61 @@ describe("username rename is not a .com route", () => {
       { DB: recordingDb([]) },
     );
     expect(r).toBeNull();
+  });
+});
+
+describe("the edge tombstones the retired routes instead of proxying them", () => {
+  const realFetch = globalThis.fetch;
+  let upstream: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    upstream = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    globalThis.fetch = upstream as unknown as typeof globalThis.fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  function env(db?: D1Database): RouteEnv {
+    return {
+      SERVICES_BASE_URL: "https://flagship.services",
+      ASSETS: { fetch: async () => new Response("asset", { status: 200 }) },
+      ...(db ? { DB: db } : {}),
+    };
+  }
+
+  const variants: Array<[string, string]> = [
+    ["POST", "/api/username/rename"],
+    ["POST", "/api/username/rename/"],
+    ["POST", "/api/username//rename"],
+    ["POST", "/api/username/RENAME"],
+    ["POST", "/api/username/%72ename"],
+    ["GET", "/api/username/alias/fresh-poppy"],
+    ["GET", "/api/username/alias"],
+    ["PUT", "/api/username/alias/x"],
+  ];
+
+  for (const withDb of [false, true]) {
+    for (const [method, path] of variants) {
+      it(`${method} ${path} → 404 without reaching .services or D1 (DB ${withDb ? "bound" : "unbound"})`, async () => {
+        const sql: string[] = [];
+        const r = await route(
+          new Request(`https://flagshipserver.com${path}`, {
+            method,
+            headers: { "content-type": "application/json" },
+            ...(method === "GET" ? {} : { body: "{}" }),
+          }),
+          env(withDb ? recordingDb(sql) : undefined),
+        );
+        expect(r.status).toBe(404);
+        expect(upstream).not.toHaveBeenCalled();
+        expect(sql).toEqual([]);
+      });
+    }
+  }
+
+  it("leaves the neighbouring username routes alone", async () => {
+    await route(new Request("https://flagshipserver.com/api/username/rapid-bison"), env());
+    expect(upstream).toHaveBeenCalledTimes(1);
   });
 });

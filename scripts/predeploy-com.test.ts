@@ -180,6 +180,38 @@ describe("predeploy-com.sh — build-freshness gate (dist vs src)", () => {
     expect(r.code).toBe(0);
   });
 
+  it("fails on compiled output whose source was deleted", () => {
+    const root = makeFixture([
+      { name: "control-plane", srcMtime: 1000, distMtime: 2000 },
+      { name: "storage", srcMtime: 1000, distMtime: 2000 },
+      { name: "protocol", srcMtime: 1000, distMtime: 2000 },
+    ]);
+    writeFileSync(join(root, "packages", "control-plane", "dist", "usernameHandover.js"), "");
+    const r = run(["deploy"], { FLAGSHIP_DIST_CHECK_ROOT: root });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("compiled output with no source");
+    expect(r.stderr).toContain("control-plane/dist/usernameHandover.js");
+    expect(r.stderr).toContain("clean-build-com.sh");
+  });
+
+  it("matches nested dist files to nested sources", () => {
+    const root = makeFixture([
+      { name: "control-plane", srcMtime: 1000, distMtime: 2000 },
+      { name: "storage", srcMtime: 1000, distMtime: 2000 },
+      { name: "protocol", srcMtime: 1000, distMtime: 2000 },
+    ]);
+    const src = join(root, "packages", "protocol", "src", "sub");
+    const dist = join(root, "packages", "protocol", "dist", "sub");
+    mkdirSync(src, { recursive: true });
+    mkdirSync(dist, { recursive: true });
+    writeFileSync(join(src, "x.ts"), "");
+    utimesSync(join(src, "x.ts"), 1000, 1000);
+    writeFileSync(join(dist, "x.js"), "");
+    utimesSync(join(dist, "x.js"), 2000, 2000);
+    const r = run(["deploy"], { FLAGSHIP_DIST_CHECK_ROOT: root });
+    expect(r.code).toBe(0);
+  });
+
   it("the route guard still fires even when dist is fresh", () => {
     const root = makeFixture([
       { name: "control-plane", srcMtime: 1000, distMtime: 2000 },
