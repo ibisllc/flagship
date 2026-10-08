@@ -177,7 +177,10 @@ Directory (direct method; `openpgpkey.` must stay unresolved), and in
 security.txt `Encryption:`. The private key exists ONLY on the owner's two
 YubiKeys (OpenPGP applet, touch on; separate from the CA's PIV slot 9c); no
 off-card backup was kept by design — losing both keys means minting and
-publishing a new one. Mail is read in Thunderbird over namecrane IMAP.
+publishing a new one. Mail is read in the namecrane SmarterMail webmail
+via Mailvelope on its GnuPG backend (Chrome native-messaging host
+`gpgmejson` → Homebrew `gpgme-json`); the key must be ownertrust-ultimate in
+the local keyring or Mailvelope reports its own signatures as invalid.
 
 **2026-10-07 (iOS App Store prep: parity audit + reviewer-path fixes) — iOS
 build `1.0 (3)` archived; screenshots captured; NOT uploaded.** A parity
