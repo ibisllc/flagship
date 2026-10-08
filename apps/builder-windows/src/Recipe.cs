@@ -294,22 +294,30 @@ public static class Hex
 ///   stock Debian-netinst base ISO per the SERVER manifest (cached, verified by
 ///   sha256), then runs the SAME remaster+flash path Advanced uses — the recipe
 ///   preseed is baked into the fetched base, then flashed. No user ISO.
+/// - Quick (Alpine, parked): the user supplies only a recipe. The builder
+///   downloads the stock Flagship Alpine base ISO ONCE (cached), appends the
+///   recipe trailer locally (AlpinePersonalize), and flashes — no remaster.
 /// - Advanced: the user supplies their own stock Debian/Ubuntu ISO + a JSON
 ///   recipe; the builder remasters that ISO in-place (through the native installer pipeline) then
 ///   flashes.
 /// </summary>
-public enum BuilderMode { Simple, Advanced }
+public enum BuilderMode { Simple, Quick, Advanced }
 
 public static class BuilderModeExtensions
 {
     public static bool RequiresRecipe(this BuilderMode m) => true;
 
-    /// <summary>Simple fetches the base from the server; only Advanced needs a user ISO.</summary>
+    /// <summary>Simple fetches the base from the server and Quick uses the cached
+    /// Alpine base; only Advanced needs a user ISO.</summary>
     public static bool RequiresUserISO(this BuilderMode m) => m == BuilderMode.Advanced;
 
     public static string BakeCtaLabel(this BuilderMode m) =>
-        m == BuilderMode.Simple ? "Flash to USB" : "Assemble and flash";
+        m == BuilderMode.Advanced ? "Assemble and flash" : "Flash to USB";
 
-    public static string MenuLabel(this BuilderMode m) =>
-        m == BuilderMode.Simple ? "Simple" : "Advanced";
+    public static string MenuLabel(this BuilderMode m) => m switch
+    {
+        BuilderMode.Simple => "Simple",
+        BuilderMode.Quick => "Quick",
+        _ => "Advanced",
+    };
 }
