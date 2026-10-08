@@ -84,6 +84,18 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 - Tests live next to packages: `packages/<pkg>/tests/`.
 - Canonical-bytes use `|` separator and `flagship/<purpose>/v1` tag prefix.
 - No comments unless the *why* is non-obvious; never explain *what*.
+- **Minimum OS = the oldest version that is still SAFE to use** (owner rule,
+  2026-10-07). "Safe" = the vendor still ships security fixes for that branch
+  AND every security feature the app relies on works there. Never raise the
+  floor for convenience; raise it when a branch stops getting security fixes
+  or a security-critical API needs it. Re-check on every toolchain update.
+  Current floors: **iOS/iPadOS 18.0** (iOS 17 stopped receiving fixes, every
+  iOS 17 iPhone can run 18, and passkey PRF — cloud recovery — is iOS 18+),
+  **watchOS 11.0** (the iOS 18 companion). Not yet reviewed against the rule:
+  the Mac Studio app (`macOS 14`) and Android (`minSdk 28`) — see the open
+  list. Platform versions in the `swift-tools-version:5.9` manifests use the
+  string form (`.iOS("18.0")`); `.v18` needs tools 6.0, which also flips on
+  Swift 6 strict concurrency.
 - **Unlaunched features live entirely on their own branch; `main` ships clean.**
   Every not-yet-launched feature — site literature, app code (iOS/Android/
   webapp), backend logic, AND tests — lives ONLY on its feature branch, so
@@ -183,8 +195,11 @@ reviewer path and a smoke-mode showcase (`-smoke-username`,
 narrower regular-width displays and the pairing capture guard no longer reads
 `UIScreen.main`; Duo itself is unverified (needs Xcode 27.1). Only the demo
 label + nudge copy were changed on Android (ships with the next Play build).
-Everything still open — Android parity debt, the pre-existing red tests, Duo —
-is tracked in **"Known bugs & debt — from the 2026-10-07 iOS parity audit"**
+Same day, per the new minimum-OS rule (Conventions), the iOS floor moved
+17.0 → 18.0 and watchOS 10.0 → 11.0, removing the iOS 17 branch where cloud
+recovery silently could not work (no passkey PRF); this lands in build 4, not
+the build-3 archive. Everything still open — Android parity debt, the
+pre-existing red tests, Duo, the Studio/Android floors — is tracked in **"Known bugs & debt — from the 2026-10-07 iOS parity audit"**
 below. **Remaining (owner):** upload the archive from Xcode
 Organizer, attach build 3 to the 1.0 version, upload the screenshots in
 `~/Desktop/flagship-builds/appstore-screenshots/`, and confirm the export
@@ -1706,6 +1721,25 @@ items here as they land.
     (`BuilderPairScreen.swift:165`) — the rest of the app uses SF Symbols.
 15. **Export compliance**: `ITSAppUsesNonExemptEncryption: NO` while the app
     does its own X25519/AES-GCM/Ed25519 sealing — confirm the claimed exemption.
+
+**Minimum-OS rule — products not yet reviewed (see Conventions):**
+16. **Mac Studio app floor is macOS 14** (`apps/builder-mac/Package.swift`,
+    `Info.plist` `LSMinimumSystemVersion`). Apple's current macOS patch window
+    is 27 / 26 / 15; check whether Sonoma still gets fixes before the next
+    Studio release, and raise to 15 if not. The mobile packages'
+    `.macOS(.v14)` is host-build only — keep it in step with Studio.
+17. **Android floor is `minSdk 28` (Android 9)**, long past Google's security
+    bulletin window. Raising it trades reach for safety and the Play build is in
+    review, so it's an owner decision for the next Android release: which
+    API level is the oldest still patched, and does any security feature
+    (credential manager / passkeys, StrongBox, device-credential biometrics)
+    need a higher one.
+
+**Tooling:** Xcode 27.1 (iPhone Duo simulator + iOS 27.1 SDK) needs macOS
+Tahoe 26.6+; this Mac is on 26.5.2. Path: install macOS Tahoe 26.7.1 (smallest
+update meeting the requirement — not the macOS 27 major upgrade), then
+`xcodes install 27.1` (the `xcodes` CLI is installed via Homebrew; it prompts
+for the Apple ID + 2FA). Keep Xcode 26.5 until 27.1 is verified.
 
 ### TODO — ship "Update this server" end-to-end (PLAN WRITTEN, not started)
 
