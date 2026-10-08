@@ -150,6 +150,47 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-10-07 (iOS App Store prep: parity audit + reviewer-path fixes) — iOS
+build `1.0 (3)` archived; screenshots captured; NOT uploaded.** A parity
+audit against Android found the reviewer demo login works on iOS end to end
+(resolve → `/api/dev/sample-user/<u>/pair` → Home online) but a demo account
+was treated as a real one everywhere else. Fixed on iOS: `AppState.isDemoAccount`
+(from the profile's `demoServer`, NOT the dev live/mock toggle) now drives the
+sign-out gate, hides the backup banner + recovery nudge + key-backed Settings
+rows, and turns Delete account into an explained remove-from-device; the
+Trusted-devices section no longer surfaces "No UMK is present yet." The
+Welcome + About 3-tap live/mock switches are `#if DEBUG` (a Release build has
+no hidden mode). Multi-device takeover was dead (`oldIrkPub == newIrkPub` plus
+an ungated `fetchRecoveryEnvelope` route that doesn't exist): it now runs the
+gated passphrase unwrap and a rotating re-pair (old = registered IRK, new = the
+recovered UMK's next version, `totpProof` + `recoveryProof`), and the
+completion signs with the staged version — mirrors Android. Also: Android's
+demo ghost-drop fix (b503a0f2) ported; the demo install screen tolerates the
+retired `/connect` (keeps polling) and drops its always-failing Cancel; Wipe &
+restart uses the real platform passkey instead of a mock PRF; audit rows (phone
++ Watch) are labelled for every Worker kind instead of showing raw
+`demo-vps-provisioned serverId=…`; "Live demo on Hetzner" → "Live demo server";
+the recovery-nudge copy no longer claims anyone-with-your-username can start a
+recovery (false since the re-pair credential gate). The iOS mock now mints a
+`recoveryProof` on the gated fetch like the Worker — two single-device recovery
+tests had been red on `main` since the gate landed. Three unrelated suites
+still fail on `main` too (OpenAccount idempotent-retry, Phase3bPairing admit,
+WipeRestart happy-path) — pre-existing, not investigated. Screenshot tooling:
+`AppStoreScreenshotTests` (opt-in via `TEST_RUNNER_SHOT_USER`) drives the live
+reviewer path and a smoke-mode showcase (`-smoke-username`,
+`-smoke-recovery-enrolled`); the Watch app takes Debug-only `-watch-showcase`
+/ `-watch-showcase-install`. iPhone Duo prep: sidebar width now adapts to
+narrower regular-width displays and the pairing capture guard no longer reads
+`UIScreen.main`; Duo itself is unverified (needs Xcode 27.1). Only the demo
+label + nudge copy were changed on Android (ships with the next Play build).
+Everything still open — Android parity debt, the pre-existing red tests, Duo —
+is tracked in **"Known bugs & debt — from the 2026-10-07 iOS parity audit"**
+below. **Remaining (owner):** upload the archive from Xcode
+Organizer, attach build 3 to the 1.0 version, upload the screenshots in
+`~/Desktop/flagship-builds/appstore-screenshots/`, and confirm the export
+compliance answer (`ITSAppUsesNonExemptEncryption: NO` while the app does its
+own X25519/AES-GCM sealing).
+
 **2026-10-07 (Android targets API 36) — Play refuses uploads below targetSdk 36,
 and meeting it moved the whole Android toolchain.** AGP 8.7.2 caps `compileSdk`
 at 35, and AGP 8.9.1 needs Gradle 8.11.1, so: `compileSdk`/`targetSdk` 35→36,
@@ -1604,6 +1645,67 @@ Wi-Fi-in-initramfs unlock (build-time driver/firmware staging + a bounded best-e
 premount) + a no-LUKS escape hatch (phone-signed `InstallBlob.diskEncryption`, default
 on). Boot worker consolidated into `flagship-com` (`boot.flagshipserver.com` is a custom
 domain). Earliest phone-home beacons in the preseed.
+
+### Known bugs & debt — from the 2026-10-07 iOS parity audit (OPEN)
+
+Found while preparing the iOS App Store submission. Everything fixed that day is
+in the matching Recent-work entry; this list is only what is still open. Strike
+items here as they land.
+
+**Android — same reviewer-visible bugs iOS had (fix before the next Play build):**
+1. **A demo account is treated as a real one.** It is detected from the dev
+   live/mock toggle, not the account (`ui/screens/SettingsScreen.kt:149`), so a
+   reviewer on a `demo_users` login can't sign out (greyed, "set up recovery"),
+   and Delete account fails for want of an IRK. Port iOS `AppState.isDemoAccount`
+   (profile/pod `demoServer`), hide key-backed rows + backup nudges for demos,
+   and make Delete account an explained remove-from-device.
+2. **`DemoConnectClient` calls retired Worker routes** (`api/DemoConnectClient.kt`,
+   `/api/dev/sample-user/<u>/connect` + `/cancel`), so the demo install screen
+   never advances and "Cancel this device" always fails. Treat a connect 404 as
+   "operator-provisioned, keep polling" and drop Cancel (as iOS now does).
+3. **Wipe & restart wraps the new UMK under a MOCK passkey**
+   (`viewmodels/WipeRestartViewModel.kt:38` defaults `MockWebAuthnProvider()`),
+   uploading a recovery envelope cloud recovery can never unwrap. Pass the
+   platform provider.
+4. **Raw audit kinds in Activity / audit log** (`viewmodels/ActivityViewModel.kt:68`,
+   `viewmodels/AuditLogViewModel.kt:42` fall back to the raw kind, e.g.
+   `demo-vps-provisioned` with `serverId=… fqdn=…` detail). Mirror iOS
+   `AuditLogViewModel.label/displayDetail`.
+5. **Android-only "Add a browser or tablet"** (`AddControlDeviceScreen`, reached
+   from `TrustedDevicesScreen.kt`) has no iOS route. Probably superseded by
+   Remote — decide: delete on Android, or port.
+
+**iOS — pre-existing unit-test failures (red on `main` before the audit, not investigated):**
+6. `OpenAccountViewModelTests.test_openAccount_isIdempotentOnRetry_noDoubleGenerateNoSecondClaim`
+   — "expected .opened on retry".
+7. `Phase3bPairingTests.test_admin_buildsAndSignsValidAdmit_forIncomingPubkey`
+   — `QrRelay.RelayError.badPublicKey`, and a `try!` at `Phase3bPairingTests.swift:311`
+   crashes the runner.
+8. `WipeRestartViewModelTests.test_happyPath_postsSignedEnvelope_andInstallsNewUMK`
+   — public-key mismatch at `:59`.
+
+**iOS — open, lower priority:**
+9. **iPhone Duo.** The shell is size-class driven (`RootShell.swift`: regular ⇒
+   sidebar), the sidebar now narrows on a smaller regular-width display, and the
+   pairing screen-capture guard checks every scene's screen instead of the
+   ambiguous `UIScreen.main`. NOT yet verified on the Duo: that needs Xcode
+   27.1 (Duo simulator + iOS 27.1 SDK), which isn't installed here. Build 3 is
+   on the iOS 26.5 SDK, so on the Duo's inner display it runs letterboxed
+   (black borders) rather than full-screen tablet layout — not a rejection risk,
+   but no tablet view until a 27.1-SDK build ships.
+10. **Install-docs link is dead-ended:** `https://flagshipserver.com/docs/install`
+    (`PendingServerScreen.swift:87`, `CreateServerStubScreen.swift:675`) serves the
+    generic landing page. Point it at a real install guide (e.g. `/help`).
+11. **TOTP QR decoded un-downsampled on every render**
+    (`AccountSecurityScreen.swift:539`, `UIImage(data:)` in the view body).
+    Android fixed the same in 81a22756; decode once, capped.
+12. **"Coming soon" row** after recovery (`PostRecoveryChoiceScreen.swift:109`),
+    plus unreachable `ProvidersStub` / `WipeComingSoonSheet` code to delete.
+13. **iPad Home: the "Build a service" card renders at half width.**
+14. **Emoji in copy**: "⚠️" (`BiometricLockScreen.swift:101`) and "✓"
+    (`BuilderPairScreen.swift:165`) — the rest of the app uses SF Symbols.
+15. **Export compliance**: `ITSAppUsesNonExemptEncryption: NO` while the app
+    does its own X25519/AES-GCM/Ed25519 sealing — confirm the claimed exemption.
 
 ### TODO — ship "Update this server" end-to-end (PLAN WRITTEN, not started)
 
