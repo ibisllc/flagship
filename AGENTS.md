@@ -178,10 +178,10 @@ replays a validly-signed rename onto `e2e` and requires no handler and no write.
 Paid name changes remain the planned `POST /api/account/name-change`
 (`docs/naming-recovery-and-name-change.md` §5-6), which never depended on this
 code. The `usernames_aliases` table and the protocol signing helpers stay.
-Listed in the /security Hall of fame. **Remaining (owner):** delete the two rows for each squat
-(`usernames_aliases` where `new_username IN ('e2e','abtest-vanity-hunt01')`, and
-the same two names in `usernames`); the original `rapid-bison`/`fresh-poppy`
-rows are untouched, so both accounts keep working.
+Listed in the /security Hall of fame. Both squats were reverted in prod the same
+day (the `e2e` and `abtest-vanity-hunt01` rows deleted from `usernames` and
+`usernames_aliases`); the original `rapid-bison`/`fresh-poppy` accounts are
+untouched. Still open: whether `rapid-bison` was the reporter or a third party.
 
 **2026-10-07 (one-page /security + security@ PGP key) — the security model,
 disclosure/bounty policy, and report form are now one page with
