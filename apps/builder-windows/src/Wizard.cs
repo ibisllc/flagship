@@ -383,6 +383,8 @@ public sealed class Wizard : INotifyPropertyChanged
     {
         get
         {
+            if (Mode == BuilderMode.Quick)
+                return "Quick (Alpine) builds USB installers only. Switch to Simple to host a server on this PC.";
             if (Vm.ToolchainError != null) return Vm.ToolchainError;
             if (_whpx is { IsAvailable: false } v) return v.Message;
             var cap = Vm.MaxVMCount;
@@ -696,6 +698,7 @@ public sealed class Wizard : INotifyPropertyChanged
     }
     public bool IsSimpleMode => Mode == BuilderMode.Simple;
     public bool IsAdvancedMode => Mode == BuilderMode.Advanced;
+    public bool IsQuickMode => Mode == BuilderMode.Quick;
     public BuilderMode Mode
     {
         get => _mode;
@@ -797,6 +800,7 @@ public sealed class Wizard : INotifyPropertyChanged
         "appliance" => "Downloading the server image…",
         "verify" => "Verifying the server image…",
         "clone appliance" => "Preparing the server's disk…",
+        "personalize" => "Personalizing…",
         "specialize" => "Securing this server…",
         "remaster" => "Building image…",
         "write" => "Writing to USB…",
@@ -820,7 +824,7 @@ public sealed class Wizard : INotifyPropertyChanged
     /// The download phase paints the warning (orange) tint to signal a one-time
     /// network fetch; the rest of the pipeline uses the accent (primary) color.
     /// </summary>
-    public Brush ProgressTint => Phase is "download" or "appliance"
+    public Brush ProgressTint => Phase is "download" or "appliance" or "personalize"
         ? FindBrush("FB.Warning")
         : FindBrush("FB.Primary");
 
@@ -1007,6 +1011,11 @@ public sealed class Wizard : INotifyPropertyChanged
     public async Task RunBakeAsync()
     {
         if (!CanBake) return;
+        if (Mode == BuilderMode.Quick)
+        {
+            await RunQuickBakeAsync();
+            return;
+        }
         if (Mode == BuilderMode.Simple || UseSystemIso)
         {
             await RunSimpleBakeAsync();
@@ -1085,6 +1094,109 @@ public sealed class Wizard : INotifyPropertyChanged
         _cts?.Dispose();
         _cts = null;
         FireBag();
+    }
+
+    /// <summary>
+    /// Quick (Alpine) pipeline: cache the Alpine base ISO ONCE → append the
+    /// recipe trailer locally (AlpinePersonalize) → raw-write. No remaster, no
+    /// user ISO. Mirrors WizardModel.runWrite()'s `.quick` branch.
+    /// </summary>
+    private async Task RunQuickBakeAsync()
+    {
+        if (IsRunning) return;
+        var disk = SelectedDisk!;
+        IsRunning = true;
+        Progress = null;
+        Phase = null;
+        BaseDownloadStarted = false;
+        _cts = new System.Threading.CancellationTokenSource();
+        FireBag();
+
+        Recipe parsed;
+        if (_parsedRecipe is Recipe cached)
+        {
+            parsed = cached;
+        }
+        else
+        {
+            try { parsed = await Task.Run(() => RecipeLoader.Load(_recipePath!)); }
+            catch (Exception e)
+            {
+                AppendLog(LogStream.Stderr, (e as RecipeException)?.Message ?? e.Message);
+                FinishSimple();
+                return;
+            }
+        }
+
+        string? prepared = null;
+        try
+        {
+            // 1. One-time Alpine base-ISO download (cached for every later server).
+            Phase = "download";
+            string baseIso;
+            try
+            {
+                baseIso = await BaseIsoCache.EnsureAsync(
+                    progress: p => SetProgress(p),
+                    onDownloadStart: () => OnUi(() =>
+                    {
+                        BaseDownloadStarted = true;
+                        AppendLog(LogStream.Stdout,
+                            "+ one-time download of the Alpine base image (~240 MB — cached, won't repeat)");
+                    }),
+                    notice: m => OnUi(() => AppendLog(LogStream.Stdout, "+ " + m)),
+                    cancellation: _cts.Token);
+            }
+            catch (Exception e)
+            {
+                AppendLog(LogStream.Stderr, (e as BaseIsoCache.CacheException)?.Message ?? e.Message);
+                return;
+            }
+
+            // 2. Personalize locally — append the recipe trailer to the base.
+            Phase = "personalize";
+            Progress = null;
+            FireBag();
+            prepared = Path.Combine(Path.GetTempPath(), $"flagship-prepared-{Guid.NewGuid():N}.iso");
+            try
+            {
+                AppendLog(LogStream.Stdout, $"+ personalize {parsed.ServerDomain}");
+                var basePath = baseIso;
+                var outPath = prepared;
+                await Task.Run(() => AlpinePersonalize.Personalize(basePath, parsed, outPath));
+            }
+            catch (Exception e)
+            {
+                AppendLog(LogStream.Stderr, (e as AlpinePersonalize.PersonalizeException)?.Message ?? e.Message);
+                return;
+            }
+
+            // 3. Raw-write the prepared image to the device (sector-aligned).
+            Phase = "write";
+            Progress = 0;
+            FireBag();
+            AppendLog(LogStream.Stdout, $"+ write-image → {disk.DevicePath}");
+            try
+            {
+                var imagePath = prepared;
+                var devicePath = disk.DevicePath;
+                await Task.Run(() => DiskWrite.Write(imagePath, devicePath, p => SetProgress(p)));
+            }
+            catch (Exception e)
+            {
+                AppendLog(LogStream.Stderr, (e as DiskWrite.DiskWriteException)?.Message ?? e.Message);
+                return;
+            }
+            IsFinished = true;
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(prepared))
+            {
+                try { if (File.Exists(prepared)) File.Delete(prepared); } catch { /* best effort */ }
+            }
+            FinishSimple();
+        }
     }
 
     private void SetProgress(double p) => OnUi(() => Progress = Math.Clamp(p, 0.0, 1.0));
@@ -1166,7 +1278,7 @@ public sealed class Wizard : INotifyPropertyChanged
         nameof(DiskStatusGlyph), nameof(DiskStatusBrush), nameof(DiskIconBg),
         nameof(DiskRowTag),
         nameof(DoneServerDomain), nameof(DoneOutputPath),
-        nameof(Mode), nameof(IsSimpleMode), nameof(IsAdvancedMode), nameof(UseSystemIso), nameof(IsoPickerEnabled), nameof(WifiSsid), nameof(WifiPassword),
+        nameof(Mode), nameof(IsSimpleMode), nameof(IsAdvancedMode), nameof(IsQuickMode), nameof(UseSystemIso), nameof(IsoPickerEnabled), nameof(WifiSsid), nameof(WifiPassword),
         nameof(Progress), nameof(Phase),
         nameof(BaseDownloadStarted), nameof(BaseDownloadUrl),
         nameof(ShowIsoRow),
