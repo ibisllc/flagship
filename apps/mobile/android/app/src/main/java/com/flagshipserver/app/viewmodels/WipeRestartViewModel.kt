@@ -10,7 +10,6 @@ import com.flagshipserver.app.api.WipeRestartRequest
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.WipeRestartClaim
 import com.flagshipserver.app.keystore.Keystore
-import com.flagshipserver.app.keystore.MockWebAuthnProvider
 import com.flagshipserver.app.keystore.Recovery
 import com.flagshipserver.app.keystore.WebAuthnProvider
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -35,7 +34,10 @@ sealed interface WipeRestartPhase {
 
 class WipeRestartViewModel(
     private val server: FlagshipServerClient,
-    private val webAuthn: WebAuthnProvider = MockWebAuthnProvider(),
+    // No default: the new UMK must be wrapped under a REAL platform passkey.
+    // A mock PRF uploads an envelope cloud recovery can never unwrap, so
+    // every caller has to choose the provider explicitly.
+    private val webAuthn: WebAuthnProvider,
     private val username: () -> String?,
     private val rng: SecureRandom = SecureRandom(),
 ) : ViewModel() {
