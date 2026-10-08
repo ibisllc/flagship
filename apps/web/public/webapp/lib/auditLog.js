@@ -25,33 +25,73 @@ export const AUDIT_MAX_LIMIT = 50;
 const COM_BASE = controlApex();
 
 /**
- * Human label for an audit event kind. Mirrors AuditLogViewModel.label
- * (iOS) + the inline Activity feed mapping. Covers the v1.1 device-
- * lifecycle kinds AND the v1.2 account-type / TOTP kinds the Worker
- * emits (account-type-changed-*, totp-enrolled, totp-disabled,
- * totp-failed-rate). Unknown kinds fall back to the raw string.
+ * Human label for every audit event kind the Worker writes (the
+ * `AuditEventKind` union in packages/storage/src/types.ts). Wording
+ * matches AuditLogViewModel.label (iOS); the kinds iOS has no case for
+ * (demo lifecycle, quarantine, deletion/reclaim) are labelled here
+ * rather than falling through. An unknown future kind is humanized
+ * (dashes → spaces, first letter capitalized), never shown raw.
  * @param {string} kind
  * @returns {string}
  */
 export function auditKindLabel(kind) {
-  return (
-    {
-      "device-disconnected": "Disconnected device",
-      "device-replaced": "Replaced device",
-      "device-added": "Added device",
-      "wipe-restart": "Wiped & restarted account",
-      "recovery-set-up": "Set up recovery",
-      "recovery-rotated": "Rotated recovery passkey",
-      "app-renamed": "Renamed app URL",
-      "account-type-changed-single-to-multi": "Enabled multi-device + 2FA",
-      "account-type-changed-multi-to-single": "Disabled multi-device + 2FA",
-      "totp-enrolled": "Enrolled 2FA (recovery codes issued)",
-      "totp-disabled": "Disabled 2FA",
-      "totp-failed-rate": "Too many failed 2FA codes",
-      "re-pair": "Re-paired a device",
-      "quarantine-blocked-revoke": "Blocked a quarantined device's action",
-    }[kind] ?? kind
-  );
+  const label = AUDIT_KIND_LABELS[kind];
+  if (label) return label;
+  const words = String(kind ?? "").replace(/-/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Account event";
+}
+
+export const AUDIT_KIND_LABELS = Object.freeze({
+  "device-disconnected": "Disconnected device",
+  "device-replaced": "Replaced device",
+  "device-added": "Added device",
+  "wipe-restart": "Wiped & restarted account",
+  "recovery-set-up": "Set up recovery",
+  "recovery-rotated": "Rotated recovery passkey",
+  "recovery-code-consumed": "Used a recovery code",
+  "app-renamed": "Renamed app URL",
+  "server-created": "Created server",
+  "server-online": "Server came online",
+  "server-revoked": "Removed server",
+  "server-transfer-offered": "Offered a server transfer",
+  "server-transfer-claimed": "Server transfer claimed",
+  "servers-self-delete-issued": "Requested server deletion",
+  "demo-vps-provisioned": "Demo server provisioned",
+  "demo-vps-destroyed": "Demo server removed",
+  "demo-vps-idle-reaped": "Demo server stopped after inactivity",
+  "demo-vps-stuck": "Demo server failed to start",
+  "demo-user-created": "Demo account created",
+  "demo-user-deleted": "Demo account deleted",
+  "demo-user-cancelled": "Demo setup cancelled",
+  "demo-connect-attempt-rate-limited": "Demo connection rate-limited",
+  "totp-enrolled": "Turned on authenticator codes",
+  "totp-disabled": "Turned off authenticator codes",
+  "totp-failed-rate": "Repeated authenticator code failures",
+  "re-pair": "Re-paired a device",
+  "re-pair-initiated": "Started device replacement",
+  "re-pair-expired": "Device replacement expired",
+  "re-pair-refused-no-credential": "Refused a device replacement",
+  "re-pair-initiated-no-credential": "Started device replacement without a credential",
+  "quarantine-blocked-revoke": "Blocked a quarantined device's action",
+  "account-type-changed-single-to-multi": "Switched to multi-device",
+  "account-type-changed-multi-to-single": "Switched to single-device",
+  "account-deleted": "Deleted account",
+  "username-reclaimed": "Username reclaimed",
+  "ct-unexpected-cert": "Unexpected certificate observed",
+});
+
+/**
+ * The detail line to show under an event, or null. Mirrors
+ * AuditLogViewModel.displayDetail (iOS): some kinds record machine-
+ * oriented `key=value` detail that means nothing to a person.
+ * @param {{ eventKind?: string, detail?: string }} event
+ * @returns {string|null}
+ */
+export function auditDisplayDetail(event) {
+  const detail = typeof event?.detail === "string" ? event.detail.trim() : "";
+  if (!detail) return null;
+  if (event.eventKind === "demo-vps-provisioned") return null;
+  return detail;
 }
 
 /**
@@ -69,14 +109,22 @@ export function auditKindIcon(kind) {
       "wipe-restart": "🗑️",
       "recovery-set-up": "🔐",
       "recovery-rotated": "🔁",
+      "recovery-code-consumed": "🔐",
       "app-renamed": "🔗",
+      "server-created": "🖥️",
+      "demo-vps-provisioned": "🖥️",
+      "server-online": "✅",
+      "server-revoked": "✖️",
       "account-type-changed-single-to-multi": "🛡️",
       "account-type-changed-multi-to-single": "🛡",
       "totp-enrolled": "🔑",
       "totp-disabled": "🔓",
       "totp-failed-rate": "⚠️",
       "re-pair": "🔗",
+      "re-pair-initiated": "🔄",
+      "re-pair-refused-no-credential": "⛔",
       "quarantine-blocked-revoke": "⛔",
+      "ct-unexpected-cert": "⚠️",
     }[kind] ?? "•"
   );
 }

@@ -12,6 +12,7 @@ import { get as profileGet } from "../lib/profilesStore.js";
 import {
   auditKindLabel as auditLabel,
   auditKindIcon as auditIcon,
+  auditDisplayDetail,
 } from "../lib/auditLog.js";
 import { enterAccountAudit } from "./account-audit.js";
 import { controlApex } from "../lib/apex.js";
@@ -178,7 +179,7 @@ export async function renderActivity() {
               </span>
               <span class="pill">${escapeHtml(fmtDate(e.postedAt))}</span>
             </div>
-            ${e.detail ? `<p class="note small">${escapeHtml(e.detail)}</p>` : ""}
+            ${auditDisplayDetail(e) ? `<p class="note small">${escapeHtml(auditDisplayDetail(e))}</p>` : ""}
           </div>`).join("")}
         <button class="secondary full-width mt-2" id="activity-see-all-audit">See all account history</button>
       `;

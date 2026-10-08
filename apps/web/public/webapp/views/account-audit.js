@@ -22,6 +22,7 @@ import {
   createAuditLogModel,
   auditKindLabel,
   auditKindIcon,
+  auditDisplayDetail,
 } from "../lib/auditLog.js";
 
 registerView("view-account-audit");
@@ -57,7 +58,7 @@ function eventRow(e) {
         </span>
         <span class="pill">${escapeHtml(fmtDate(e.postedAt))}</span>
       </div>
-      ${e.detail ? `<p class="note small">${escapeHtml(e.detail)}</p>` : ""}
+      ${auditDisplayDetail(e) ? `<p class="note small">${escapeHtml(auditDisplayDetail(e))}</p>` : ""}
       ${
         e.accountTypeAtEvent
           ? `<p class="faint-sm">account: ${escapeHtml(e.accountTypeAtEvent)}</p>`
