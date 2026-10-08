@@ -111,7 +111,7 @@ viewfinder** → scan the QR → take ownership.
 - The QR carries an **ephemeral transfer token** (giver-IRK-signed), not the
   acquirer's identity (unknown in advance). On scan, the acquirer presents their
   IRK; `.com` (brokering) binds ownership to it, one-time.
-- This reuses/extends `usernameHandover` / `serverRevocation` plumbing + the
+- This reuses/extends `serverRevocation` plumbing + the
   pairing-deposit pattern; it is NOT the same as adding a device to the *same*
   account.
 - Sequencing: ship the **deletion ceremony first** (warn "transfer first"), then
@@ -308,7 +308,10 @@ reached live.
 - `deviceDisconnect` — revoke an added device's grant (Tier-3).
 - `serverRevocation.handleServerReleaseName` — ordered name/routing/DNS/cert
   teardown (basis for both delete and transfer).
-- `usernameHandover` — name reassignment plumbing.
+- ~~`usernameHandover`~~ — REMOVED 2026-10-08: the legacy #93
+  `POST /api/username/rename` let any account take an arbitrary or reserved
+  handle with no roster/grammar/entitlement check. Name changes go through the
+  paid `POST /api/account/name-change` (naming-recovery-and-name-change.md §5).
 - `device_capability_grants` / `GET /api/users/:u/device-grants` — added-device
   roster + sibling/admin discovery.
 - Pairing-deposit / secret-mailbox pattern — for delivering the transfer token +

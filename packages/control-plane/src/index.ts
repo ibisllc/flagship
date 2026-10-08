@@ -46,7 +46,6 @@ export * from "./entitlementRevocations.js";
 export * from "./llmPromo.js";
 export * from "./userIdentity.js";
 export * from "./inheritance.js";
-export * from "./usernameHandover.js";
 export * from "./podInventory.js";
 export * from "./peerBackupMatch.js";
 export * from "./userStream.js";

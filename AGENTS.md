@@ -162,6 +162,26 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-10-08 (legacy username rename removed) — closes an externally reported
+bypass of the paid name change; NOT deployed.** The #93 `POST /api/username/rename`
+(+ its `GET /api/username/alias/:u` reader) let any account move to an arbitrary
+handle signed only by its own IRK: no suggestion roster, no
+`validateUserLabel` grammar/reserved-word check, no name-change entitlement, no
+rate limit, and every rename minted a permanent extra row. It was never called by
+any client and was functionally broken too (the new row dropped the admin root,
+AID and TOTP; servers stayed under the old name). Prod held two renames: the
+reporter's test handle and an earlier `rapid-bison` → reserved `e2e`.
+`authCode` re-validates usernames, so neither could get DNS or a cert. The route,
+handler and its test are deleted; `apps/com/test/usernameRenameRemoved.test.ts`
+replays a validly-signed rename onto `e2e` and requires no handler and no write.
+Paid name changes remain the planned `POST /api/account/name-change`
+(`docs/naming-recovery-and-name-change.md` §5-6), which never depended on this
+code. The `usernames_aliases` table and the protocol signing helpers stay.
+**Remaining (owner):** deploy `.com`, then delete the two rows for each squat
+(`usernames_aliases` where `new_username IN ('e2e','abtest-vanity-hunt01')`, and
+the same two names in `usernames`); the original `rapid-bison`/`fresh-poppy`
+rows are untouched, so both accounts keep working.
+
 **2026-10-07 (one-page /security + security@ PGP key) — the security model,
 disclosure/bounty policy, and report form are now one page with
 `#model` / `#disclosure` / `#report` sections; the old
