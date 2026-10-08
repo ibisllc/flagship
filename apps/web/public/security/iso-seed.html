@@ -71,12 +71,12 @@
         <thead><tr><th>Artifact</th><th>SHA-256</th></tr></thead>
         <tbody>
           <tr>
-            <td>Stock base — Debian 13.5.0 amd64 netinst<br><span class="hash" style="color:var(--fg-mute)">official Debian signed <code>SHA256SUMS</code></span></td>
+            <td>Stock base — Debian 13.6.0 amd64 netinst<br><span class="hash" style="color:var(--fg-mute)">official Debian signed <code>SHA256SUMS</code></span></td>
             <td class="hash"><code>see debian.org/…/SHA256SUMS</code></td>
           </tr>
           <tr>
             <td>Flagship seed (derived from the above)</td>
-            <td class="hash"><code>bc8ccfe82b77ba2424c9baefff11e29d8190578639312dac8ca76223867802ec</code></td>
+            <td class="hash"><code>54be17b43ddafa10e2112b2e5966835f12aaff39a50d21415f942e06a7ae7f19</code></td>
           </tr>
         </tbody>
       </table>
@@ -87,16 +87,18 @@
       <h2>Reproduce it yourself</h2>
       <p>The derivation is a single script — <a href="https://github.com/ibisllc/flagship/blob/main/iso-seed/build-seed.sh">iso-seed/build-seed.sh</a>
         — using only <code>xorriso</code>. Given the same stock base, it produces the exact
-        seed hash above on any machine:</p>
+        seed hash above with the <code>xorriso</code> shipped in Debian 12 or 13 (newer
+        releases lay the image out differently, so run it in a Debian container), and our
+        CI rebuilds it under both on every change:</p>
       <pre><code># 1. Download the exact stock base (url + sha are in the app's ISO manifest,
 #    and pinned to Debian's official signed SHA256SUMS).
 # 2. Re-derive the seed:
 git clone https://github.com/ibisllc/flagship
-flagship/iso-seed/build-seed.sh debian-13.5.0-amd64-netinst.iso my-seed.iso
+flagship/iso-seed/build-seed.sh debian-13.6.0-amd64-netinst.iso my-seed.iso
 
 # 3. Confirm it matches the published hash:
 sha256sum my-seed.iso
-# bc8ccfe82b77ba2424c9baefff11e29d8190578639312dac8ca76223867802ec</code></pre>
+# 54be17b43ddafa10e2112b2e5966835f12aaff39a50d21415f942e06a7ae7f19</code></pre>
 
       <h2>How your recipe is applied — and why it can't be swapped</h2>
       <p>
