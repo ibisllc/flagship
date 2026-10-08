@@ -2,8 +2,8 @@
 //
 // Bringing a device into an account via its backup file is a TAKEOVER, not a
 // silent local-identity swap: the cloud must learn the new device is taking
-// over so the account's OTHER devices are alerted and can object during the
-// grace window. This is the exact security flow mobile runs — the webapp used
+// over so the account's OTHER devices are alerted during the grace window
+// (an alert, not a veto: only the incoming key can cancel). This is the exact security flow mobile runs — the webapp used
 // to install a fresh local identity with NO server-side takeover and NO
 // grace/objection window, a security-model divergence.
 //

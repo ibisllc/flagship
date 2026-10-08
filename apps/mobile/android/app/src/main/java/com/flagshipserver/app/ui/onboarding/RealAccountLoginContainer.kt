@@ -336,7 +336,7 @@ private fun TakeoverExplainerView(
     val (graceLine, detail) = when (graceModel) {
         AccountResolution.GraceModel.TwentyFourHourTotp ->
             "This device takes over in 24 hours." to
-                "Your other devices are alerted now and can object during the grace window."
+                "Your other devices are alerted now."
         AccountResolution.GraceModel.ThreeDay ->
             "This device takes over in 3 days." to
                 "Your old device is alerted now. After the grace window this device becomes the admin."
@@ -417,7 +417,7 @@ private fun GraceCountdownView(
                 Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
                 Text(
                     if (elapsed) "The grace period has elapsed — you can take over now."
-                    else "This device takes over in ${formatRemaining(remaining)}. Your other devices are alerted and can object until then.",
+                    else "This device takes over in ${formatRemaining(remaining)}. Your other devices are alerted.",
                     color = FS.colors.text,
                     style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
                 )

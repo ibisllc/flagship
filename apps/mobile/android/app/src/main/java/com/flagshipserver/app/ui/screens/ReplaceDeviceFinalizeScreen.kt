@@ -160,8 +160,8 @@ private fun PendingBody(
                 modifier = Modifier.semantics { contentDescription = "replace-finalize-countdown" },
             )
             Text(
-                "During this window, another device on your account can object " +
-                    "and cancel the replacement.",
+                "Your other devices are notified during this window. Only this " +
+                    "device can cancel the replacement.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 12.sp),
             )

@@ -377,7 +377,7 @@ async function runKeyfileImport(file) {
 
     // H6 — bringing this device in via the backup file is a TAKEOVER, not a
     // silent local-identity swap. INITIATE the re-pair so the account's OTHER
-    // devices are alerted and can object during the grace window — exactly the
+    // devices are alerted during the grace window (no veto) — exactly the
     // security flow iOS/Android run. The seed is now in the unlocked session.
     const session = getSession();
     if (!(session.umk instanceof Uint8Array)) {
@@ -437,7 +437,7 @@ async function runKeyfileImport(file) {
  * H6 — the grace-period countdown after a keyfile-import takeover is initiated.
  * Mirrors iOS `KeyfileImportSheet.graceCountdownView`: a non-dismissible card
  * with a live "this device takes over in N — your other devices are being
- * alerted and can object until then" line + a "Finish now" button that arms
+ * alerted" line + a "Finish now" button that arms
  * once the grace has elapsed (then completes the re-pair + opens the account).
  *
  * Reuses loginTakeover.js's pure `graceTimeline` (label + ready flag) +

@@ -130,7 +130,7 @@ fun AccountSecurityScreen(nav: NavController) {
                 if (accountType == "multi")
                     "Recovery requires a 6-digit TOTP code (or a recovery code) plus a 24-hour grace window."
                 else
-                    "Recovery uses a 3-day waiting period during which your other devices can object.",
+                    "Recovery needs a recovery credential and then waits 3 days. Your other devices are alerted during the wait, but can't cancel it.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp),
             )

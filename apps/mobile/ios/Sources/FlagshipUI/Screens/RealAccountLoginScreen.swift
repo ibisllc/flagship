@@ -284,8 +284,8 @@ public struct RealAccountLoginScreen: View {
             Text("Welcome back")
                 .font(FS.font.h2()).foregroundColor(c.text)
             Text(multi
-                 ? "Enter your recovery passphrase, verify your passkey, and add your recovery code to restore access on this device. For your security it becomes active after a 24-hour hold, and your other devices are notified so they can stop it if it wasn't you."
-                 : "Sign in with your recovery passkey to restore access on this device. For your security, access becomes active after a 3-day hold — if another device is signed in, it's notified and can stop it if it wasn't you.")
+                 ? "Enter your recovery passphrase, verify your passkey, and add your recovery code to restore access on this device. For your security it becomes active after a 24-hour hold, and your other devices are notified."
+                 : "Sign in with your recovery passkey to restore access on this device. For your security, access becomes active after a 3-day hold, and any other signed-in device is notified.")
                 .font(FS.font.body())
                 .foregroundColor(c.textMuted)
 
@@ -342,8 +342,8 @@ public struct RealAccountLoginScreen: View {
                     Text(multi ? "24-hour security hold" : "3-day security hold")
                         .font(FS.font.bodySm()).foregroundColor(c.text)
                     Text(multi
-                         ? "Because your account has more than one device, restoring access here needs your recovery code as well as your passkey. After a 24-hour hold this device becomes the primary one; your other devices are notified and can stop it until then."
-                         : "This hold is the safety delay for a single-device account: after 3 days, this device has full access. It's what stops anyone else from quietly restoring your account — and if another device is ever signed in, it's alerted throughout and can stop the change.")
+                         ? "Because your account has more than one device, restoring access here needs your recovery code as well as your passkey. After a 24-hour hold this device becomes the primary one; your other devices are notified in the meantime."
+                         : "This hold is the safety delay for a single-device account: after 3 days, this device has full access. If another device is signed in, it's alerted throughout.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                 }
@@ -368,7 +368,7 @@ public struct RealAccountLoginScreen: View {
                             .foregroundColor(c.primary)
                         Text(elapsed
                              ? "The security hold is complete — you can finish restoring access now."
-                             : "Access becomes active in \(Self.formatRemaining(remaining)). Any other device on your account is notified and can stop it until then.")
+                             : "Access becomes active in \(Self.formatRemaining(remaining)). Any other device on your account has been notified.")
                             .font(FS.font.bodySm()).foregroundColor(c.text)
                     }
                 }

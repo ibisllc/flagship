@@ -95,7 +95,7 @@ function renderBadge() {
   const titleText = isMulti ? "Multi-device + 2FA" : "Single-device account";
   const explainer = isMulti
     ? "Recovery requires a 6-digit TOTP code (or a recovery code) plus a 24-hour grace window."
-    : "Recovery uses a 3-day waiting period during which your other devices can object.";
+    : "Recovery needs a recovery credential and then waits 3 days. Your other devices are alerted during the wait, but can't cancel it.";
   return `
     <div class="card" data-account-security-badge="${escapeHtml(state.accountType ?? "unknown")}">
       <div class="row">

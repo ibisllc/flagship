@@ -435,8 +435,8 @@ fun TrustedDevicesScreen(nav: NavController) {
                     "Rotates your account's identity key. Other devices on " +
                         "this account will need to re-pair the next time they " +
                         "open the app. Pods stay running, apps stay installed. " +
-                        "Takes effect after a 24-hour grace window during which " +
-                        "another device can object.",
+                        "Takes effect after a 24-hour grace window. Your other " +
+                        "devices are notified, and only this device can cancel it.",
                 )
             },
             confirmButton = {

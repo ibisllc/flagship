@@ -202,7 +202,7 @@ class ReplaceDeviceViewModel(
                     // UI doesn't keep showing a phantom pending
                     // state.
                     Keystore.setPendingIrkRotationVersion(null)
-                    "Another device objected to this rotation. Local state stays unchanged."
+                    "This replacement was cancelled. Local state stays unchanged."
                 }
                 else -> "Couldn't complete: $msg"
             }

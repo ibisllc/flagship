@@ -220,7 +220,7 @@ public final class ReplaceDeviceViewModel {
             // UI re-shows the timer.
             phase = .failed("The 24-hour grace hasn't ended yet. Try again later.")
         } catch ScreensClientError.http(let status, _) where status == 409 {
-            phase = .failed("Another device objected to this rotation. Local state stays unchanged.")
+            phase = .failed("This replacement was cancelled. Local state stays unchanged.")
             try? Keystore.setPendingIrkRotationVersion(nil)
         } catch {
             phase = .failed("Couldn't complete: \(error.localizedDescription)")

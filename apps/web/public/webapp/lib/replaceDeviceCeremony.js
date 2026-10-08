@@ -291,7 +291,7 @@ export async function completeReplaceDeviceCeremony(args, deps = {}) {
     throw makeError("The 24-hour grace hasn't ended yet. Try again later.", "425");
   }
   if (resp.status === 409) {
-    throw makeError("Another device objected, or the IRK has already rotated. Local state stays unchanged.", "409");
+    throw makeError("This replacement was cancelled, or the account key has already changed. Local state stays unchanged.", "409");
   }
   if (resp.status === 404) {
     throw makeError("No pending rotation found on the server.", "404");

@@ -530,8 +530,8 @@ export async function loginRealAccount(resolution, deps) {
   const confirmed = await deps.confirm({
     title: single ? "Take over this account" : "Take over this account (2FA)",
     message: single
-      ? "This becomes the admin device for the account after a 3-day grace period. Your other devices are alerted and can object during that window."
-      : "This becomes the admin device after a 24-hour grace period. You'll need a recovery code; your other devices are alerted and can object during that window.",
+      ? "This becomes the admin device for the account after a 3-day grace period. Your other devices are alerted during that window; only this device can cancel it."
+      : "This becomes the admin device after a 24-hour grace period. You'll need a recovery code. Your other devices are alerted during that window; only this device can cancel it.",
     okLabel: "Take over",
     cancelLabel: "Cancel",
   });

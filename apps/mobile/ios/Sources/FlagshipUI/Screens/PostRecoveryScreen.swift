@@ -133,7 +133,7 @@ public struct PostRecoveryScreen: View {
                 case .pendingSwap(let p):
                     HStack(spacing: FS.space.s2) {
                         Image(systemName: "clock.fill").foregroundColor(c.primary)
-                        Text("Grace window — your old phone has until \(timestamp(p.completesAt)) to object.")
+                        Text("Grace window — this takes effect at \(timestamp(p.completesAt)).")
                             .foregroundColor(c.text)
                     }
                 case .complete(let r):

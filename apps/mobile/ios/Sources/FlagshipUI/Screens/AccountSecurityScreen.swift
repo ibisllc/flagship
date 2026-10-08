@@ -112,7 +112,7 @@ public struct AccountSecurityScreen: View {
                         .accessibilityIdentifier("account-security-badge")
                     Text(viewModel.isMultiDevice
                          ? "Account recovery requires a 6-digit TOTP code (or a recovery code) plus a 24-hour grace window."
-                         : "Account recovery uses a 3-day waiting period during which your other devices can object.")
+                         : "Account recovery needs a recovery credential and then waits 3 days. Your other devices are alerted during the wait, but can't cancel it.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                 }

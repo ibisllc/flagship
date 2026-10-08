@@ -151,7 +151,7 @@ public struct KeyfileImportSheet: View {
                             .foregroundColor(c.primary)
                         Text(elapsed
                              ? "The grace period has elapsed — you can finish now."
-                             : "This device takes over in \(RealAccountLoginScreen.formatRemaining(remaining)). Your other devices are being alerted and can object until then.")
+                             : "This device takes over in \(RealAccountLoginScreen.formatRemaining(remaining)). Your other devices are being alerted.")
                             .font(FS.font.bodySm()).foregroundColor(c.text)
                     }
                 }

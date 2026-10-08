@@ -2,7 +2,7 @@
 //
 // Pins the testable core of lib/keyfileImportTakeover.js: a keyfile import is a
 // TAKEOVER, so it MUST initiate the re-pair (POST /api/users/:u/re-pair) so the
-// account's other devices are alerted + can object during the grace window —
+// account's other devices are alerted during the grace window (only the recovering device can cancel) —
 // mirroring iOS/Android `KeyfileImportViewModel`. The webapp used to install a
 // fresh local identity with NO server-side takeover at all.
 //

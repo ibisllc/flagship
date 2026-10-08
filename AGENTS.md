@@ -162,6 +162,25 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-10-08 (iOS store-prep fixes ported to Android + web; recovery "veto" copy
+removed everywhere) — on `main`, NOT yet deployed/rebuilt.** Android closes the
+whole parity-debt list from the iOS audit (see Known bugs) and, per the owner's
+orientation rule, locks phone-sized screens (smallest width < 600dp) to portrait
+via `OrientationPolicy` — tablets stay unlocked because Android 16 ignores locks
+there at targetSdk 36. The 3-tap developer unlock is debug-build only. The webapp
+gets the same demo-account treatment (detected from the profile's `demoServer`;
+delete / sign out / remove device become one explained remove-from-this-browser),
+labels for all 35 Worker audit kinds (a test reads the kind union so a new kind
+can't ship unlabelled), drops dead demo connect/cancel clients, and stops telling
+users anyone with their username can start a recovery; shell cache **v31**. All
+three clients also stopped promising that other devices "can object" to or "stop"
+a recovery or device replacement: every one of those flows is a `/re-pair`, whose
+only cancel is signed by the INCOMING key, so the copy now says other devices are
+alerted and only the device that started it can cancel; owner-facing recovery
+copy says recovery needs a credential (the control that actually protects them).
+**Remaining (owner):** webapp rides the next `.com` deploy; Android + iOS need
+rebuilds.
+
 **2026-10-08 (legacy username rename removed) — closes an externally reported
 bypass of the paid name change. DEPLOYED + live-verified 2026-10-08** (Worker
 `5394a541`: rename and alias now 404 in prod; claim unaffected). The #93 `POST /api/username/rename`
@@ -1758,28 +1777,10 @@ Found while preparing the iOS App Store submission. Everything fixed that day is
 in the matching Recent-work entry; this list is only what is still open. Strike
 items here as they land.
 
-**Android — same reviewer-visible bugs iOS had (fix before the next Play build):**
-1. **A demo account is treated as a real one.** It is detected from the dev
-   live/mock toggle, not the account (`ui/screens/SettingsScreen.kt:149`), so a
-   reviewer on a `demo_users` login can't sign out (greyed, "set up recovery"),
-   and Delete account fails for want of an IRK. Port iOS `AppState.isDemoAccount`
-   (profile/pod `demoServer`), hide key-backed rows + backup nudges for demos,
-   and make Delete account an explained remove-from-device.
-2. **`DemoConnectClient` calls retired Worker routes** (`api/DemoConnectClient.kt`,
-   `/api/dev/sample-user/<u>/connect` + `/cancel`), so the demo install screen
-   never advances and "Cancel this device" always fails. Treat a connect 404 as
-   "operator-provisioned, keep polling" and drop Cancel (as iOS now does).
-3. **Wipe & restart wraps the new UMK under a MOCK passkey**
-   (`viewmodels/WipeRestartViewModel.kt:38` defaults `MockWebAuthnProvider()`),
-   uploading a recovery envelope cloud recovery can never unwrap. Pass the
-   platform provider.
-4. **Raw audit kinds in Activity / audit log** (`viewmodels/ActivityViewModel.kt:68`,
-   `viewmodels/AuditLogViewModel.kt:42` fall back to the raw kind, e.g.
-   `demo-vps-provisioned` with `serverId=… fqdn=…` detail). Mirror iOS
-   `AuditLogViewModel.label/displayDetail`.
-5. **Android-only "Add a browser or tablet"** (`AddControlDeviceScreen`, reached
-   from `TrustedDevicesScreen.kt`) has no iOS route. Probably superseded by
-   Remote — decide: delete on Android, or port.
+**Android — same reviewer-visible bugs iOS had: ALL CLOSED 2026-10-08** (demo
+detection from the account, retired demo routes survived, Wipe & restart passkey
+made explicit, every audit kind labelled, "Add a browser or tablet" deleted per
+owner decision — Remote replaces it). Ships with the next Play build.
 
 **iOS — pre-existing unit-test failures (red on `main` before the audit, not investigated):**
 6. `OpenAccountViewModelTests.test_openAccount_isIdempotentOnRetry_noDoubleGenerateNoSecondClaim`

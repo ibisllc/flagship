@@ -408,7 +408,7 @@ public struct SettingsScreen: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Rotates your account's identity key. Other devices on this account will need to re-pair the next time they open the app — including this phone. Pods stay running, services stay installed. The change takes effect after a 24-hour grace window during which another device can object.")
+            Text("Rotates your account's identity key. Other devices on this account will need to re-pair the next time they open the app — including this phone. Pods stay running, services stay installed. The change takes effect after a 24-hour grace window; your other devices are notified, and only this phone can cancel it.")
         }
         .confirmationDialog(
             "Wipe and start over?",

@@ -257,7 +257,7 @@ private fun GraceView(completesAt: Long, onFinish: () -> Unit) {
                 Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
                 Text(
                     if (elapsed) "The grace period has elapsed — you can finish now."
-                    else "This device takes over in ${formatRemaining(remaining)}. Your other devices are being alerted and can object until then.",
+                    else "This device takes over in ${formatRemaining(remaining)}. Your other devices are being alerted.",
                     color = FS.colors.text,
                     style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
                 )

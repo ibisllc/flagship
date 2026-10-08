@@ -107,7 +107,7 @@ public struct ReplaceDeviceFinalizeScreen: View {
                         .foregroundColor(c.textMuted)
                 }
 
-                Text("During this window, another device on your account can object and cancel the replacement.")
+                Text("Your other devices are notified during this window. Only this device can cancel the replacement.")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
 
