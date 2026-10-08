@@ -181,6 +181,10 @@ public struct PendingServerReconciler {
         // is dropped too. Pods with a locally-stored serial match by hashed
         // ref; serial-less pods (surfaced from the directory) match by fqdn.
         for pod in app.pods where pod.status == .pending {
+            // A demo pod is provisioned by the operator, never by a phone-
+            // minted order, so the directory can't vouch for it until its box
+            // registers. Its lifecycle is owned by the demo flow, not here.
+            if pod.demoServer != nil { continue }
             let stillOutstanding: Bool
             if let serial = pod.pendingAuthCodeSerial, !serial.isEmpty {
                 stillOutstanding = outstandingRefs.contains(OrderRef.compute(serial: serial))

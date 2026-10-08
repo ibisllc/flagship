@@ -183,7 +183,16 @@ public enum WatchProtocol {
             case "recovery-set-up":     return "Set up recovery"
             case "recovery-rotated":    return "Rotated recovery passkey"
             case "app-renamed":         return "Renamed app URL"
-            default:                    return kind
+            case "server-created":      return "Created server"
+            case "server-online":       return "Server came online"
+            case "server-revoked":      return "Removed server"
+            case "demo-vps-provisioned": return "Demo server provisioned"
+            case "totp-enrolled":       return "Turned on authenticator codes"
+            case "totp-disabled":       return "Turned off authenticator codes"
+            case "re-pair-initiated":   return "Started device replacement"
+            default:
+                let words = kind.replacingOccurrences(of: "-", with: " ")
+                return words.prefix(1).uppercased() + words.dropFirst()
             }
         }
 
@@ -198,6 +207,8 @@ public enum WatchProtocol {
             case "recovery-set-up":     return "key.horizontal.fill"
             case "recovery-rotated":    return "arrow.triangle.2.circlepath"
             case "app-renamed":         return "link.circle"
+            case "server-created", "demo-vps-provisioned": return "server.rack"
+            case "server-online":       return "checkmark.seal.fill"
             default:                    return "shield.lefthalf.filled"
             }
         }

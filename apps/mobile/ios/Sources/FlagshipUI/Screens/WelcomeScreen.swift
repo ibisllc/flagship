@@ -26,7 +26,11 @@ public struct WelcomeScreen: View {
                 Spacer().frame(height: FS.space.s8)
                 BoxIllustration().frame(height: 220)
                     .contentShape(Rectangle())
-                    .onTapGesture { secretTap() }
+                    .onTapGesture {
+                        #if DEBUG
+                        secretTap()
+                        #endif
+                    }
                 Spacer()
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Text("Your stuff,\non your hardware.")
@@ -59,7 +63,8 @@ public struct WelcomeScreen: View {
 
     /// 3 taps on the box illustration toggles live↔mock and reveals the
     /// in-Settings developer menu. Reachable WITHOUT signing in, so a
-    /// stranded live build can fall back to the on-device mock.
+    /// stranded live build can fall back to the on-device mock. Debug
+    /// builds only: a shipped build has no hidden mode switch.
     private func secretTap() {
         tapCount += 1
         guard tapCount >= 3 else { return }

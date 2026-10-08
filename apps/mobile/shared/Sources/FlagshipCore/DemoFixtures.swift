@@ -140,7 +140,7 @@ public enum DemoFixtures {
         return PodInfo(
             podId: "demo-server-\(username)",
             name: label.capitalized,
-            description: "Live demo on Hetzner",
+            description: "Live demo server",
             fqdn: block.fqdn,
             status: mapStatus(block.lifecycle),
             demoServer: block

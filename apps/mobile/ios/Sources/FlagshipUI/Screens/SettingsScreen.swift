@@ -148,6 +148,9 @@ public struct SettingsScreen: View {
     /// not enrolled (no enrolment = removing this device permanently
     /// loses account access).
     var hasCloudRecovery: Bool = true
+    /// A passwordless demo session holds no account keys, so the key-backed
+    /// rows (recovery, key backup, trusted devices) are hidden for it.
+    var isDemoAccount: Bool = false
     /// #52 — the Tier-2 sign-out gate, computed by the container
     /// (SettingsTab) via SignOutPolicy.evaluate so the demo exemption
     /// lives in ONE place. `.blockedNoRecovery` greys out the gated
@@ -209,7 +212,8 @@ public struct SettingsScreen: View {
         hasCloudRecovery: Bool = true,
         signOutPolicy: SignOutPolicy = .allowed,
         onRecoveryRequired: @escaping () -> Void = {},
-        onDeleteAccount: @escaping () -> Void = {}
+        onDeleteAccount: @escaping () -> Void = {},
+        isDemoAccount: Bool = false
     ) {
         self.username = username
         self.accountDisplayName = accountDisplayName
@@ -253,6 +257,7 @@ public struct SettingsScreen: View {
         self.signOutPolicy = signOutPolicy
         self.onRecoveryRequired = onRecoveryRequired
         self.onDeleteAccount = onDeleteAccount
+        self.isDemoAccount = isDemoAccount
     }
 
     /// Optional promo announcement at the top of Settings. Wired but empty by
@@ -288,7 +293,9 @@ public struct SettingsScreen: View {
                 // Backup & peers · App · Danger zone · Developer (hidden). One
                 // tap to any row; account security leads the Account group.
                 accountGroup(c: c)
-                trustedDevicesSection(c: c)
+                if !isDemoAccount {
+                    trustedDevicesSection(c: c)
+                }
                 browserSessionsSection(c: c)
                 deviceExtrasGroup(c: c)
                 webAccessGroup(c: c)
@@ -469,8 +476,10 @@ public struct SettingsScreen: View {
                 action: onOpenAccountSecurity
             ),
             FSSettingsRow(icon: "sparkles", title: "AI keys", subtitle: "Bring-your-own keys for building apps", action: onOpenAiKeys),
+        ] + (isDemoAccount ? [] : [
             FSSettingsRow(icon: "key.horizontal.fill", title: "Cloud recovery", subtitle: "Recover on a new device", action: onOpenRecovery),
             FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: "Back up account key", subtitle: "Save an encrypted key file", action: onOpenKeyfileBackup),
+        ]) + [
             FSSettingsRow(icon: "person.2.circle.fill", title: "Profiles", subtitle: "Switch between your clouds", action: onOpenProfiles),
         ])
     }

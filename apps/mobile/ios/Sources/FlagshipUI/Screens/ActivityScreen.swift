@@ -74,7 +74,8 @@ public struct ActivityScreen: View {
                 case .failed(let msg):
                     ErrorCard(message: msg)
                 case .loaded(let feed):
-                    if let snap = feed.postRecovery {
+                    if let snap = feed.postRecovery,
+                       snap.lastReissue != nil || snap.state.lastSeen != nil {
                         section("POST-RECOVERY", c: c) {
                             postRecoveryCard(snap, c: c)
                         }
@@ -177,9 +178,7 @@ public struct ActivityScreen: View {
     }
 
     private func postRecoveryHeadline(_ snap: PostRecoverySnapshot) -> String {
-        if snap.lastReissue != nil { return "Re-attach finished." }
-        if snap.state.lastSeen != nil { return "Re-attach in progress." }
-        return "Snapshot ready."
+        snap.lastReissue != nil ? "Re-attach finished." : "Re-attach in progress."
     }
 
     /// P5 — entry into the dedicated full-page audit-log viewer. Mirrors
@@ -203,32 +202,17 @@ public struct ActivityScreen: View {
     /// audit section + Android's pending C11 mirror.
     private func auditRow(event: AuditEvent, c: FSColors) -> some View {
         HStack(alignment: .top) {
-            Image(systemName: auditIcon(for: event.eventKind))
+            Image(systemName: AuditLogViewModel.icon(for: event.eventKind))
                 .foregroundColor(auditColor(for: event.eventKind, c: c))
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
-                Text(auditLabel(for: event.eventKind)).foregroundColor(c.text)
-                if !event.detail.isEmpty {
-                    Text(event.detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                Text(AuditLogViewModel.label(for: event.eventKind)).foregroundColor(c.text)
+                if let detail = AuditLogViewModel.displayDetail(for: event) {
+                    Text(detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 }
             }
             Spacer()
             Text(relative(ms: event.postedAt)).font(FS.font.caption()).foregroundColor(c.textMuted)
-        }
-    }
-
-    private func auditIcon(for kind: String) -> String {
-        switch kind {
-        case "device-disconnected": return "lock.open.trianglebadge.exclamationmark"
-        case "device-replaced":     return "arrow.triangle.2.circlepath.circle"
-        case "device-added":        return "plus.circle"
-        case "wipe-restart":        return "trash.fill"
-        case "recovery-set-up":     return "key.horizontal.fill"
-        case "recovery-rotated":    return "arrow.triangle.2.circlepath"
-        case "app-renamed":         return "link.circle"
-        case "server-created":      return "server.rack"
-        case "server-online":       return "checkmark.seal.fill"
-        default:                    return "circle.fill"
         }
     }
 
@@ -241,21 +225,6 @@ public struct ActivityScreen: View {
         case "server-online":       return c.success
         case "server-created":      return c.primary
         default:                    return c.textMuted
-        }
-    }
-
-    private func auditLabel(for kind: String) -> String {
-        switch kind {
-        case "device-disconnected": return "Disconnected device"
-        case "device-replaced":     return "Replaced device"
-        case "device-added":        return "Added device"
-        case "wipe-restart":        return "Wiped & restarted account"
-        case "recovery-set-up":     return "Set up recovery"
-        case "recovery-rotated":    return "Rotated recovery passkey"
-        case "app-renamed":         return "Renamed app URL"
-        case "server-created":      return "Created server"
-        case "server-online":       return "Server came online"
-        default:                    return kind
         }
     }
 

@@ -97,7 +97,7 @@ public struct HomeTab: View {
                     pods: app.pods,
                     leaderPodId: app.leaderPodId,
                     showRecoveryNudge: app.shouldShowRecoveryNudge,
-                    showRecoveryBackupBanner: RecoveryBannerStore.shouldShow(
+                    showRecoveryBackupBanner: !app.isDemoAccount && RecoveryBannerStore.shouldShow(
                         hasCloudRecovery: app.hasCloudRecovery,
                         dismissed: recoveryBannerStore.dismissed
                     ),
@@ -656,8 +656,7 @@ func cancelPendingServer(
 
 /// Install-progress detail for a demo server. Reads the live pod from
 /// AppState (so it re-renders as the connect coordinator advances the
-/// `demoServer.phase` each poll), and wires "Cancel this device" → the
-/// public, demo-scoped cancel endpoint → return to the empty/list state.
+/// `demoServer.phase` each poll); bounces home if the pod disappears.
 struct DemoInstallProgressContainer: View {
     let podId: String
     let onAfterCancel: () -> Void
@@ -666,16 +665,15 @@ struct DemoInstallProgressContainer: View {
     @Environment(ToastCenter.self) private var toasts
     @State private var coordinator: DemoConnectCoordinator?
     @State private var started = false
-    @State private var cancelling = false
 
     private var pod: PodInfo? { app.pods.first(where: { $0.podId == podId }) }
 
     var body: some View {
         Group {
             if let pod {
-                DemoInstallProgressScreen(pod: pod) {
-                    Task { await runCancel() }
-                }
+                // Demo servers are operator-provisioned and the Worker no
+                // longer exposes a public cancel, so there is nothing to offer.
+                DemoInstallProgressScreen(pod: pod)
             } else {
                 // Pod vanished (cancelled) — bounce home.
                 Color.clear.onAppear { onAfterCancel() }
@@ -694,19 +692,6 @@ struct DemoInstallProgressContainer: View {
                 started = true
                 await c.connect(username: user, appState: app)
             }
-        }
-    }
-
-    private func runCancel() async {
-        guard !cancelling, let user = app.currentUser, let c = coordinator else { return }
-        cancelling = true
-        defer { cancelling = false }
-        let ok = await c.cancel(username: user, appState: app)
-        if ok {
-            toasts.success("Device cancelled.")
-            onAfterCancel()
-        } else {
-            toasts.warning("Couldn't cancel — try again in a moment.")
         }
     }
 }

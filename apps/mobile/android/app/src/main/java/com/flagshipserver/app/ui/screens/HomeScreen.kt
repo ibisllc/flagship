@@ -309,9 +309,9 @@ private fun TopAnnouncement(
             FSAnnouncementCard(
                 icon = Icons.Outlined.VpnKey,
                 title = "Set up recovery",
-                message = "Right now, recovering this account without this phone takes a " +
-                    "3-day wait that anyone who knows your username can start. Bank a " +
-                    "passkey so you can recover instantly and privately instead.",
+                message = "Right now, getting back into this account without this phone " +
+                    "needs your backed-up key file. Bank a passkey so you can recover " +
+                    "on a new device instead.",
                 ctaLabel = "Set it up",
                 onCta = onSetUpRecovery,
                 onDismiss = onDismissRecoveryNudge,

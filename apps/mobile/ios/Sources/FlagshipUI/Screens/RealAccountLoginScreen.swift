@@ -284,7 +284,7 @@ public struct RealAccountLoginScreen: View {
             Text("Welcome back")
                 .font(FS.font.h2()).foregroundColor(c.text)
             Text(multi
-                 ? "Sign in with your recovery passkey and your recovery code to restore access on this device. For your security it becomes active after a 24-hour hold, and your other devices are notified so they can stop it if it wasn't you."
+                 ? "Enter your recovery passphrase, verify your passkey, and add your recovery code to restore access on this device. For your security it becomes active after a 24-hour hold, and your other devices are notified so they can stop it if it wasn't you."
                  : "Sign in with your recovery passkey to restore access on this device. For your security, access becomes active after a 3-day hold — if another device is signed in, it's notified and can stop it if it wasn't you.")
                 .font(FS.font.body())
                 .foregroundColor(c.textMuted)
@@ -292,6 +292,14 @@ public struct RealAccountLoginScreen: View {
             graceCard(multi: multi, c: c)
 
             if multi {
+                SecureField("Recovery passphrase", text: $vm.passphraseInput)
+                    .textContentType(.password)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .padding(FS.space.s3)
+                    .background(c.surface)
+                    .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                    .accessibilityIdentifier("login-takeover-passphrase")
                 FSField(
                     value: $vm.secondFactorInput,
                     label: "Recovery code or authenticator code",

@@ -212,6 +212,10 @@ public final class SettingsViewModel {
             }
             trustedDevices = .loaded(presentations.sorted { $0.createdAt < $1.createdAt })
             cacheNames(decryptedAccountName ?? username, presentations.first(where: { $0.isCurrent })?.displayName)
+        } catch Keystore.KeystoreError.keyNotFound {
+            // A passwordless demo session holds no account keys, so there is
+            // no directory to read — that is the expected state, not a failure.
+            trustedDevices = .loaded([])
         } catch {
             trustedDevices = .failed(error.localizedDescription)
         }

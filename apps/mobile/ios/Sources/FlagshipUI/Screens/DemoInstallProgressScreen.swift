@@ -45,9 +45,10 @@ public struct DemoProgressBar: View {
 public struct DemoInstallProgressScreen: View {
     @Environment(\.colorScheme) private var scheme
     let pod: PodInfo
-    var onCancel: () -> Void
+    /// nil hides the cancel affordance (operator-managed demo servers).
+    var onCancel: (() -> Void)?
 
-    public init(pod: PodInfo, onCancel: @escaping () -> Void = {}) {
+    public init(pod: PodInfo, onCancel: (() -> Void)? = nil) {
         self.pod = pod
         self.onCancel = onCancel
     }
@@ -80,10 +81,12 @@ public struct DemoInstallProgressScreen: View {
 
                 deviceInfo(c)
 
-                FSDangerButton("Cancel this device", block: true, large: true) {
-                    confirming = true
+                if onCancel != nil {
+                    FSDangerButton("Cancel this device", block: true, large: true) {
+                        confirming = true
+                    }
+                    .accessibilityIdentifier("install-cancel-device-button")
                 }
-                .accessibilityIdentifier("install-cancel-device-button")
 
                 Spacer().frame(height: FS.space.s12)
             }
@@ -97,7 +100,7 @@ public struct DemoInstallProgressScreen: View {
             isPresented: $confirming,
             titleVisibility: .visible
         ) {
-            Button("Cancel this device", role: .destructive) { onCancel() }
+            Button("Cancel this device", role: .destructive) { onCancel?() }
             Button("Keep installing", role: .cancel) {}
         } message: {
             Text("This tears down the server and stops the install. You can start over from your account at any time.")

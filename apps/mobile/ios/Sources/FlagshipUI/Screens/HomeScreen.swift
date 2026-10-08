@@ -203,7 +203,7 @@ public struct HomeScreen: View {
             FSAnnouncementCard(
                 icon: "key.horizontal.fill",
                 title: "Set up recovery",
-                message: "Right now, recovering this account without this device takes a 3-day wait that anyone who knows your username can start. Bank a passkey with Apple so you can recover instantly and privately instead.",
+                message: "Right now, getting back into this account without this device needs your backed-up key file. Bank a passkey with Apple so you can recover on a new device instead.",
                 ctaLabel: "Set it up",
                 onCta: onSetUpRecovery,
                 onDismiss: onDismissRecoveryNudge

@@ -71,6 +71,24 @@ final class PendingServerReconcilerTests: XCTestCase {
         XCTAssertEqual(app.lastKnownOutstandingOrderRefs, [OrderRef.compute(serial: "HOME2SER")])
     }
 
+    // A demo pod (operator-provisioned, no phone-minted order) is never in
+    // the directory's pending array while its box comes up — it must not be
+    // ghost-dropped, or Home is left with no server (Android b503a0f2).
+    func test_pendingDemoPodIsNotGhostDropped() async {
+        let app = AppState()
+        let block = DemoServerBlock(fqdn: "home.demo.flagship.services", status: "provisioning")
+        app.completeOnboarding(
+            username: "demo",
+            pods: [DemoFixtures.samplePodFromDemoServer(block, username: "demo")],
+            demoServer: block
+        )
+        let r = PendingServerReconciler(app: app, store: freshStore(), fetchPods: fetcher(directory()))
+        await r.reconcile()
+
+        XCTAssertEqual(app.pods.count, 1)
+        XCTAssertEqual(app.pods.first?.status, .pending)
+    }
+
     // A directory-surfaced (serial-less) pod SURVIVES the next reconcile
     // while its order is still outstanding (matched by fqdn), and ages out
     // once the order disappears.

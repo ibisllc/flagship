@@ -280,6 +280,13 @@ public final class AppState {
         return profiles.first(where: { $0.cloudName == name })
     }
 
+    /// True for a passwordless demo account. Demo identities hold no account
+    /// keys, so key-backed flows (recovery, key backup, account deletion) do
+    /// not apply to them; the operator manages their lifecycle.
+    public var isDemoAccount: Bool {
+        activeProfile?.demoServer != nil || pods.contains(where: { $0.demoServer != nil })
+    }
+
     /// v2 device-addressing — true iff the current device is a
     /// restricted sub-identity (has a deviceCapability with a partial
     /// scope set). UI uses this to gate the chip + tooltips. A nil
@@ -308,6 +315,7 @@ public final class AppState {
     ///   - the user hasn't dismissed the nudge this session.
     /// The check is cheap and pure; UI calls it every render.
     public var shouldShowRecoveryNudge: Bool {
+        guard !isDemoAccount else { return false }
         guard !hasCloudRecovery else { return false }
         guard !recoveryNudgeDismissedThisSession else { return false }
         return pods.contains(where: { $0.status == .online })

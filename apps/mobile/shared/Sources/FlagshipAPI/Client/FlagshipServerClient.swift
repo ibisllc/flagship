@@ -2534,6 +2534,11 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             prfSaltHash: req.request.prfSaltHash?.lowercased() ?? existing?.prfSaltHash,
             updatedAt: Int64(Date().timeIntervalSince1970 * 1000)
         )
+        // A gated row is an enrolled cloud-recovery credential (what the
+        // Worker's re-pair gate reads as "recovery present").
+        if recoveryRowsByUser[u]?.fetchTokenHash != nil {
+            cloudRecoveryByUser[u] = true
+        }
         return RecoveryEnvelopeResponse(ok: true, updated: updated)
     }
 
@@ -2572,7 +2577,13 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             // registered IRK from the usernames table. The Mock's analog is
             // `claimedUsernames`; nil when the account wasn't claimed in this
             // test harness (the client then stays on the instant path).
-            registeredIrkPubHex: claimedUsernames[username.lowercased()]
+            registeredIrkPubHex: claimedUsernames[username.lowercased()],
+            // Like the Worker, a cleared passphrase gate mints the short-lived
+            // credential the re-pair initiate presents as `recoveryProof`.
+            recoveryProof: mintsRecoveryProofOnFetch ? RecoveryProofToken(
+                token: "mock-recovery-proof-\(username.lowercased())",
+                expiresAt: Int64(Date().timeIntervalSince1970 * 1000) + 5 * 60 * 1000
+            ) : nil
         )
     }
 
@@ -2715,6 +2726,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// hasn't enrolled yet" baseline. Set to `true` to suppress the
     /// nudge in tests that aren't exercising the B9 path.
     public var cloudRecoveryByUser: [String: Bool] = [:]
+    /// Whether the gated fetch mints a `recoveryProof` (current Workers do).
+    /// Tests turn it off to exercise the prompt-for-a-code fallback.
+    public var mintsRecoveryProofOnFetch = true
 
     public func hasCloudRecovery(username: String) async throws -> Bool {
         try await tick()

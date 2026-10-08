@@ -117,7 +117,7 @@ object DemoFixtures {
         return PodInfo(
             podId = "demo-server-$username",
             name = label.replaceFirstChar { it.uppercaseChar() },
-            description = "Live demo on Hetzner",
+            description = "Live demo server",
             fqdn = block.fqdn,
             status = mapStatus(block.lifecycle),
             demoServer = block,

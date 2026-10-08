@@ -21,6 +21,7 @@ public struct SettingsTab: View {
     @State private var replaceToast: String?
     @State private var wipeVm: WipeRestartViewModel?
     @State private var wipeToast: String?
+    @State private var showDemoDeleteNotice = false
     @State private var companionRequestsVm: CompanionRequestsViewModel?
     @State private var pendingCompanionCount: Int = 0
 
@@ -139,7 +140,7 @@ public struct SettingsTab: View {
                         // never wrap a real UMK).
                         guard SignOutPolicy.evaluate(
                             hasCloudRecovery: app.hasCloudRecovery,
-                            isDemoAccount: !dev.useLiveClient
+                            isDemoAccount: !dev.useLiveClient || app.isDemoAccount
                         ) == .allowed else { return }
                         Keystore.wipe()
                         app.signOut()
@@ -170,7 +171,7 @@ public struct SettingsTab: View {
                         // sessions are exempt.
                         guard SignOutPolicy.evaluate(
                             hasCloudRecovery: app.hasCloudRecovery,
-                            isDemoAccount: !dev.useLiveClient
+                            isDemoAccount: !dev.useLiveClient || app.isDemoAccount
                         ) == .allowed else { return }
                         // B6a — full self-revoke: drop push token on
                         // .com, wipe Keystore (UMK / IRK / wrapped
@@ -223,13 +224,14 @@ public struct SettingsTab: View {
                         path.append(.replaceDeviceFinalize(completesAt: completesAt))
                     },
                     onWipeRestart: {
-                        // E2/E3 — drive the wipe ceremony. Uses
-                        // MockWebAuthnProvider by default; a future
-                        // commit can swap in a live ASAuthorizationController
-                        // wrapper without touching the VM.
+                        // E2/E3 — drive the wipe ceremony. The new UMK is
+                        // wrapped under a REAL platform passkey: a mock PRF
+                        // would upload an envelope cloud recovery can never
+                        // unwrap. Mock mode keeps the mock.
                         if wipeVm == nil {
                             wipeVm = WipeRestartViewModel(
                                 server: server,
+                                webAuthn: dev.useLiveClient ? PlatformWebAuthnProvider() : MockWebAuthnProvider(),
                                 username: { [app] in app.currentUser }
                             )
                         }
@@ -250,13 +252,20 @@ public struct SettingsTab: View {
                     hasCloudRecovery: app.hasCloudRecovery,
                     signOutPolicy: SignOutPolicy.evaluate(
                         hasCloudRecovery: app.hasCloudRecovery,
-                        isDemoAccount: !dev.useLiveClient,
+                        isDemoAccount: !dev.useLiveClient || app.isDemoAccount,
                         isLastDevice: isLastDevice
                     ),
                     onRecoveryRequired: {
                         toasts.warning("Set up account recovery to use this.")
                     },
-                    onDeleteAccount: { path.append(.deleteAccount) }
+                    onDeleteAccount: {
+                        if app.isDemoAccount {
+                            showDemoDeleteNotice = true
+                        } else {
+                            path.append(.deleteAccount)
+                        }
+                    },
+                    isDemoAccount: app.isDemoAccount
                 )
                 .alert(
                     "Replace device",
@@ -268,6 +277,15 @@ public struct SettingsTab: View {
                     Button("OK") { replaceToast = nil }
                 } message: {
                     Text(replaceToast ?? "")
+                }
+                .alert("Demo account", isPresented: $showDemoDeleteNotice) {
+                    Button("Remove from this device", role: .destructive) {
+                        Keystore.wipe()
+                        app.signOut()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This demo account is managed by Flagship, so it can't be deleted from the app — you can remove it from this device instead. Accounts you create yourself are permanently deleted from here.")
                 }
                 .alert(
                     "Wipe & restart",
@@ -792,20 +810,22 @@ struct AboutStub: View {
                     .foregroundColor(c.textMuted)
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
-                        labeled("Version", "0.1.0 (dev)", c: c)
+                        labeled("Version", appVersion, c: c)
                             .contentShape(Rectangle())
                             .onTapGesture {
+                                #if DEBUG
                                 tapCount += 1
                                 if tapCount >= 3 && !dev.unlocked {
                                     dev.unlocked = true
                                     toasts.success("Developer menu unlocked.")
                                 }
+                                #endif
                             }
                         labeled("License", "BUSL-1.1 → Apache 2.0 (2030)", c: c)
                         labeled("Source", "github.com/ibisllc/flagship", c: c, mono: true)
                     }
                 }
-                if dev.unlocked {
+                if dev.unlocked && !dev.useLiveClient {
                     Text("Developer menu is in Settings.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
@@ -815,6 +835,13 @@ struct AboutStub: View {
         }
         .navigationTitle("About")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var appVersion: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "—"
+        guard let build = info?["CFBundleVersion"] as? String else { return short }
+        return "\(short) (\(build))"
     }
 
     private func labeled(_ label: String, _ value: String, c: FSColors, mono: Bool = false) -> some View {

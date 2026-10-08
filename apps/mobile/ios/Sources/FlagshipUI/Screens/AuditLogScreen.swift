@@ -82,8 +82,8 @@ public struct AuditLogScreen: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(AuditLogViewModel.label(for: e.eventKind))
                     .foregroundColor(c.text)
-                if !e.detail.isEmpty {
-                    Text(e.detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                if let detail = AuditLogViewModel.displayDetail(for: e) {
+                    Text(detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 }
             }
             Spacer()

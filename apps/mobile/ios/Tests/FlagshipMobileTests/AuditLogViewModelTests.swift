@@ -49,8 +49,23 @@ final class AuditLogViewModelTests: XCTestCase {
         XCTAssertEqual(AuditLogViewModel.label(for: "app-renamed"),         "Renamed app URL")
     }
 
-    func test_label_for_unknownKind_fallsBackToRawString() {
-        XCTAssertEqual(AuditLogViewModel.label(for: "future-event-kind"), "future-event-kind")
+    func test_label_for_unknownKind_isHumanized() {
+        XCTAssertEqual(AuditLogViewModel.label(for: "future-event-kind"), "Future event kind")
+    }
+
+    func test_label_coversServerWrittenKinds() {
+        XCTAssertEqual(AuditLogViewModel.label(for: "demo-vps-provisioned"), "Demo server provisioned")
+        XCTAssertEqual(AuditLogViewModel.label(for: "server-created"), "Created server")
+        XCTAssertEqual(AuditLogViewModel.label(for: "totp-enrolled"), "Turned on authenticator codes")
+    }
+
+    func test_displayDetail_dropsMachineDetailForDemoProvisioning() {
+        let demo = AuditEvent(seq: 1, eventKind: "demo-vps-provisioned", detail: "serverId=abc fqdn=home.x.flagship.services", devicePrefix: "", postedAt: 1)
+        XCTAssertNil(AuditLogViewModel.displayDetail(for: demo))
+        let created = AuditEvent(seq: 1, eventKind: "server-created", detail: "home", devicePrefix: "", postedAt: 1)
+        XCTAssertEqual(AuditLogViewModel.displayDetail(for: created), "home")
+        let blank = AuditEvent(seq: 1, eventKind: "server-created", detail: "  ", devicePrefix: "", postedAt: 1)
+        XCTAssertNil(AuditLogViewModel.displayDetail(for: blank))
     }
 
     func test_icon_for_knownKinds_matchesRevocationUiDocs() {

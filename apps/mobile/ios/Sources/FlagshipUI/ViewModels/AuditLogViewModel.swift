@@ -110,7 +110,7 @@ public final class AuditLogViewModel {
     // MARK: - Event kind → label / icon mapping (docs/revocation-ui.md)
 
     /// Human label for an event kind. Mirrors the inline Activity feed +
-    /// docs/revocation-ui.md. Unknown kinds fall back to the raw string.
+    /// docs/revocation-ui.md. Unknown kinds are humanized rather than shown raw.
     public static func label(for kind: String) -> String {
         switch kind {
         case "device-disconnected": return "Disconnected device"
@@ -119,9 +119,37 @@ public final class AuditLogViewModel {
         case "wipe-restart":        return "Wiped & restarted account"
         case "recovery-set-up":     return "Set up recovery"
         case "recovery-rotated":    return "Rotated recovery passkey"
+        case "recovery-code-consumed": return "Used a recovery code"
         case "app-renamed":         return "Renamed app URL"
-        default:                    return kind
+        case "server-created":      return "Created server"
+        case "server-online":       return "Server came online"
+        case "server-revoked":      return "Removed server"
+        case "server-transfer-offered": return "Offered a server transfer"
+        case "server-transfer-claimed": return "Server transfer claimed"
+        case "servers-self-delete-issued": return "Requested server deletion"
+        case "demo-vps-provisioned": return "Demo server provisioned"
+        case "totp-enrolled":       return "Turned on authenticator codes"
+        case "totp-disabled":       return "Turned off authenticator codes"
+        case "totp-failed-rate":    return "Repeated authenticator code failures"
+        case "re-pair-initiated":   return "Started device replacement"
+        case "re-pair-expired":     return "Device replacement expired"
+        case "re-pair-refused-no-credential": return "Refused a device replacement"
+        case "account-type-changed-single-to-multi": return "Switched to multi-device"
+        case "account-type-changed-multi-to-single": return "Switched to single-device"
+        case "ct-unexpected-cert":  return "Unexpected certificate observed"
+        default:
+            let words = kind.replacingOccurrences(of: "-", with: " ")
+            return words.prefix(1).uppercased() + words.dropFirst()
         }
+    }
+
+    /// The detail line to show under an event, or nil. Some kinds record
+    /// machine-oriented `key=value` detail that means nothing to a person.
+    public static func displayDetail(for event: AuditEvent) -> String? {
+        let detail = event.detail.trimmingCharacters(in: .whitespaces)
+        if detail.isEmpty { return nil }
+        if event.eventKind == "demo-vps-provisioned" { return nil }
+        return detail
     }
 
     /// SF Symbol for an event kind (per docs/revocation-ui.md).
@@ -134,6 +162,11 @@ public final class AuditLogViewModel {
         case "recovery-set-up":     return "key.horizontal.fill"
         case "recovery-rotated":    return "arrow.triangle.2.circlepath"
         case "app-renamed":         return "link.circle"
+        case "server-created", "demo-vps-provisioned": return "server.rack"
+        case "server-online":       return "checkmark.seal.fill"
+        case "server-revoked":      return "xmark.circle"
+        case "totp-enrolled", "totp-disabled", "totp-failed-rate": return "number.circle"
+        case "ct-unexpected-cert":  return "exclamationmark.shield"
         default:                    return "circle.fill"
         }
     }

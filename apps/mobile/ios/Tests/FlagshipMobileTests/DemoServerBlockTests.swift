@@ -259,4 +259,34 @@ final class DemoServerBlockTests: XCTestCase {
         XCTAssertEqual(app.pods.first?.status, .online,
                        "coordinator must flip the matching pod to .online")
     }
+    /// Current Workers retired `/connect` (demo servers are provisioned by
+    /// the operator), so a 404 there must not strand the progress screen —
+    /// the coordinator keeps polling until the server reports up.
+    func test_coordinator_connect404_stillPollsToUp() async {
+        let app = AppState()
+        let block = DemoServerBlock(fqdn: "home.demoalice.flagship.services", status: "up")
+        DemoFixtures.activate(app, username: "demoalice", demoServer: DemoServerBlock(
+            fqdn: block.fqdn, status: "provisioning"))
+        let mock = MockFlagshipServerClient()
+        mock.simulatedLatency = 0
+        mock.demoServers = ["demoalice": block]
+        let coord = DemoConnectCoordinator(server: mock, demoConnect: RetiredConnectRoute())
+
+        await coord.connect(username: "demoalice", appState: app, pollIntervalSeconds: 0.01, timeoutSeconds: 2.0)
+
+        guard case .up = coord.state else { return XCTFail("expected .up, got \(coord.state)") }
+        XCTAssertEqual(app.pods.first?.status, .online)
+    }
+}
+
+private struct RetiredConnectRoute: DemoConnectClient {
+    func connect(username: String) async throws {
+        throw ScreensClientError.http(status: 404, message: "not found")
+    }
+    func pollUntilUp(username: String, pollIntervalSeconds: Double, timeoutSeconds: Double) async throws -> DemoServerBlock {
+        throw ScreensClientError.http(status: 404, message: "not found")
+    }
+    func cancel(username: String) async throws {
+        throw ScreensClientError.http(status: 404, message: "not found")
+    }
 }

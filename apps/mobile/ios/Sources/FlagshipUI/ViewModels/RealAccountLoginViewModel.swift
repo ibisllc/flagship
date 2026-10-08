@@ -147,7 +147,8 @@ public final class RealAccountLoginViewModel {
     /// A 6-digit TOTP or a recovery code (we don't over-validate the
     /// shape here — the Worker is authoritative; we only block empty).
     public var canStartMultiTakeover: Bool {
-        !secondFactorInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        passphraseInput.count >= 8
+            && !secondFactorInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// Whether the typed second factor looks like a 6-digit TOTP (all
@@ -364,36 +365,33 @@ public final class RealAccountLoginViewModel {
         )
     }
 
-    /// Multi-device takeover (legacy path, pending the Phase-B rework). Still
-    /// runs the passkey-only unwrap + re-pair with a TOTP / recovery-code
-    /// second factor. Unchanged by Phase A, which scopes the gated-unwrap
-    /// rework to single-device accounts first.
+    /// Multi-device takeover. Same gated unwrap as the single-device path
+    /// (passphrase → Argon2id → gated fetch → live passkey PRF), then a
+    /// ROTATING re-pair: the displaced key is the account's registered IRK
+    /// and the incoming key is the recovered UMK's next IRK version, so the
+    /// two always differ as `.com` requires. Credentials ride beside the
+    /// envelope: the typed second factor (mandatory on multi-device) and the
+    /// recovery proof the gated fetch minted. Mirrors Android LoginViewModel.
     private func startMultiDeviceTakeover(ifMatch: String?) async {
         guard canStartMultiTakeover else {
-            phase = .failed("Enter your recovery code or the 6-digit code from your authenticator app.")
+            phase = .failed("Enter your recovery passphrase and your recovery or authenticator code.")
             return
         }
 
         phase = .working
         let username = resolution.username
 
-        // 1 — WebAuthn-PRF unwrap of the cloud-stored UMK (Mock).
-        let seed: SymmetricKey
-        do {
-            let prompt = try await webAuthn.assertAny()
-            let env = try await server.fetchRecoveryEnvelope(credentialId: prompt.credentialId)
-            let prfSecret = try await webAuthn.prfAssert(credentialId: prompt.credentialId)
-            seed = try Recovery.unwrap(
-                wrappedUmkBase64: env.wrappedUmk,
-                prfSecret: prfSecret
-            )
-        } catch {
+        let recoveryVM = RecoveryViewModel(client: server, webAuthn: webAuthn)
+        guard let seed = await recoveryVM.recover(username: username, passphrase: passphraseInput) else {
             if Task.isCancelled { return }
-            phase = .failed(humanizedRecoveryError(error))
+            if case .failed(let msg) = recoveryVM.phase {
+                phase = .failed(humanizedRecoveryMessage(msg))
+            } else {
+                phase = .failed("Recovery was cancelled.")
+            }
             return
         }
 
-        // 2 — Install the recovered UMK into this account's slot.
         Keystore.setActiveProfile(username)
         do {
             try await installUMK(seed, "Bring this device into your Flagship account")
@@ -402,10 +400,11 @@ public final class RealAccountLoginViewModel {
             return
         }
 
-        // 3 — Initiate the takeover re-pair with the typed second factor.
         do {
             let resp = try await initiateTakeoverRePair(
                 username: username,
+                registeredIrkPubHex: recoveryVM.registeredIrkPubHex,
+                recoveryProofToken: recoveryVM.recoveryProofToken,
                 ifMatch: ifMatch
             )
             phase = .completed(username: username, completesAt: resp.completesAt)
@@ -426,9 +425,11 @@ public final class RealAccountLoginViewModel {
         guard case .completed(let username, let completesAt) = phase else { return }
         phase = .working
         do {
-            // The takeover installed THIS device's current IRK, so the
-            // live version is the one the pending row names.
-            let key = try await Keystore.deriveIRK(reason: "Finish restoring access")
+            // The pending row names the key the initiate installed: the
+            // staged rotation version on a multi-device takeover, otherwise
+            // this device's current IRK.
+            let version = Keystore.pendingIrkRotationVersion() ?? Keystore.currentIrkVersion()
+            let key = try await Keystore.deriveIRK(reason: "Finish restoring access", version: version)
             let pubHex = HexUtil.encode(key.publicKey.rawRepresentation)
             let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
             let completeSig = try key.signature(
@@ -445,8 +446,10 @@ public final class RealAccountLoginViewModel {
                     signature: HexUtil.encode(completeSig)
                 )
             )
+            finalizeRotation()
             phase = .finalized(username: username)
         } catch ScreensClientError.http(let status, _) where status == 404 {
+            finalizeRotation()
             phase = .finalized(username: username)
         } catch ScreensClientError.http(let status, _) where status == 425 {
             phase = .completed(username: username, completesAt: completesAt)
@@ -462,22 +465,33 @@ public final class RealAccountLoginViewModel {
         }
     }
 
-    /// Build + POST the re-pair initiate. Multi attaches the typed
-    /// second factor as `totpProof`; single omits it. Signed by the
-    /// new IRK over the canonical bytes (totpProof stays OUT of the
-    /// signed envelope — codes are ephemeral).
+    private func finalizeRotation() {
+        guard let pending = Keystore.pendingIrkRotationVersion() else { return }
+        try? Keystore.setCurrentIrkVersion(pending)
+        try? Keystore.setPendingIrkRotationVersion(nil)
+    }
+
+    /// Build + POST the multi-device re-pair initiate. The incoming IRK
+    /// (next version of the recovered UMK) signs; `oldIrkPub` is the
+    /// registered key so the Worker keys the takeover on it. The typed
+    /// second factor and the recovery proof stay OUT of the signed envelope.
     private func initiateTakeoverRePair(
         username: String,
+        registeredIrkPubHex: String?,
+        recoveryProofToken: String?,
         ifMatch: String?
     ) async throws -> RePairInitiateResponse {
-        let newKey = try await Keystore.deriveIRK(reason: "Authorize takeover")
+        let oldVersion = Keystore.currentIrkVersion()
+        let newVersion = oldVersion + 1
+        let oldPubHex: String
+        if let registered = registeredIrkPubHex, !registered.isEmpty {
+            oldPubHex = registered
+        } else {
+            let oldKey = try await Keystore.deriveIRK(reason: "Authorize takeover", version: oldVersion)
+            oldPubHex = HexUtil.encode(oldKey.publicKey.rawRepresentation)
+        }
+        let newKey = try await Keystore.deriveIRK(reason: "Authorize takeover", version: newVersion)
         let newPubHex = HexUtil.encode(newKey.publicKey.rawRepresentation)
-        // On a fresh takeover device we don't hold the displaced key's
-        // private half; the old pubkey slot carries the new pubkey so
-        // the canonical bytes are well-formed. The Worker keys the
-        // takeover on the username row, not on a client-asserted old
-        // pubkey.
-        let oldPubHex = newPubHex
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         let canonical = RePairInitiate.canonicalBytes(
             username: username,
@@ -486,17 +500,9 @@ public final class RealAccountLoginViewModel {
             issuedAt: issuedAt
         )
         let signature = try newKey.signature(for: canonical)
+        let code = secondFactorInput.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        var proof: RePairInitiateRequest.TotpProof?
-        if branch == .multiTakeover {
-            let code = secondFactorInput.trimmingCharacters(in: .whitespacesAndNewlines)
-            proof = RePairInitiateRequest.TotpProof(
-                code: code,
-                method: Self.proofMethod(for: code)
-            )
-        }
-
-        return try await server.initiateRePair(
+        let resp = try await server.initiateRePair(
             username: username,
             body: RePairInitiateRequest(
                 request: .init(
@@ -506,10 +512,19 @@ public final class RealAccountLoginViewModel {
                     issuedAt: issuedAt
                 ),
                 signature: HexUtil.encode(signature),
-                totpProof: proof
+                totpProof: RePairInitiateRequest.TotpProof(
+                    code: code,
+                    method: Self.proofMethod(for: code)
+                ),
+                recoveryProof: recoveryProofToken.map {
+                    RePairInitiateRequest.RecoveryProof(token: $0)
+                }
             ),
             ifMatch: ifMatch
         )
+        // Persisted only once the initiate lands; completeTakeover commits it.
+        try? Keystore.setPendingIrkRotationVersion(newVersion)
+        return resp
     }
 
     /// Reset to the explainer so the user can retry after a failure.

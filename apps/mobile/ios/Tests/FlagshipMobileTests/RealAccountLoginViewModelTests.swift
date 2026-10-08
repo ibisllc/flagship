@@ -45,27 +45,6 @@ final class RealAccountLoginViewModelTests: XCTestCase {
         )
     }
 
-    /// Seed the Mock recovery store so the Mock-PRF unwrap round-trips:
-    /// `MockWebAuthnProvider.assertAny()` yields credentialId
-    /// "mock-cred-existing"; we wrap a random UMK under that cred's
-    /// stable PRF secret and register the envelope.
-    private func seedRecovery(_ server: MockFlagshipServerClient) async throws -> SymmetricKey {
-        let credentialId = "mock-cred-existing"
-        let umk = SymmetricKey(size: .bits256)
-        let prf = try await MockWebAuthnProvider().prfAssert(credentialId: credentialId)
-        let wrappedUmk = try Recovery.wrap(umkSeed: umk, prfSecret: prf)
-        _ = try await server.registerRecoveryEnvelope(.init(
-            request: .init(
-                username: "demo1234",
-                credentialId: credentialId,
-                wrappedUmk: wrappedUmk,
-                issuedAt: 1_700_000_000_000
-            ),
-            signature: "00"
-        ))
-        return umk
-    }
-
     /// A VM with an installUMK spy so we can assert the recovered seed
     /// is actually installed (without faking the Secure Enclave). The
     /// spy records AND performs the real install, because the VM's
@@ -279,8 +258,11 @@ final class RealAccountLoginViewModelTests: XCTestCase {
             signature: "s"
         ))
         // #52 — the single account has a second factor enrolled, so the
-        // Mock (mirroring the Worker) rejects a proof-less initiate.
+        // Mock (mirroring the Worker) rejects a proof-less initiate. The
+        // fetch mints no recovery proof here, so the code is the only
+        // credential and the VM must fall back to prompting for it.
         server.totpEnrolledAtByUser["harry"] = 1
+        server.mintsRecoveryProofOnFetch = false
         let enrol = RecoveryViewModel(
             client: server, webAuthn: MockWebAuthnProvider(), username: { "harry" }
         )
@@ -365,6 +347,24 @@ final class RealAccountLoginViewModelTests: XCTestCase {
             "no new initiate may fire on an empty submission")
     }
 
+    /// Current Workers accept the gated fetch's recovery proof as the
+    /// single-device credential even with a code enrolled, so the initiate
+    /// lands straight away without prompting for one.
+    func test_singleRecovery_codeEnrolled_recoveryProofSuffices() async throws {
+        defer { Keystore.wipe() }
+        let (vm, server, _) = try await makeRotatedEnrolledSingle()
+        server.mintsRecoveryProofOnFetch = true
+
+        await vm.startTakeover()
+
+        guard case .completed = vm.phase else {
+            return XCTFail("expected .completed via recoveryProof, got \(vm.phase)")
+        }
+        let last = try XCTUnwrap(server.lastRePairInitiate)
+        XCTAssertNotNil(last.body.recoveryProof)
+        XCTAssertNil(last.body.totpProof)
+    }
+
     /// An account with NO second factor enrolled keeps the grace-only
     /// path: the bare Phase-B initiate succeeds directly (.completed),
     /// never passing through `.needsSecondFactor`. (This is the
@@ -417,22 +417,107 @@ final class RealAccountLoginViewModelTests: XCTestCase {
         XCTAssertNil(server.lastRePairInitiate)
     }
 
-    // MARK: - Phase 4 — completeTakeover finalizes after grace (multi)
+    // MARK: - Multi-device takeover (gated unwrap + rotating re-pair)
 
-    /// The grace → complete path now lives on the MULTI branch (single-device
-    /// recovery pairs instantly with no grace). Initiate with a second factor,
-    /// land in grace, then finalize.
-    func test_grace_completeTakeover_finalizes_multi() async throws {
+    /// A multi-device account whose registered IRK is the recovered UMK's v1
+    /// IRK (the normal, unrotated case), with gated cloud recovery enrolled
+    /// and a second factor on file. The device is then wiped, so the VM runs
+    /// as on a fresh phone.
+    private func makeMultiTakeover() async throws -> (vm: RealAccountLoginViewModel, server: MockFlagshipServerClient, spy: InstallSpy, registeredPubHex: String) {
+        Keystore.wipe()
+        try await Keystore.generateUMK(reason: "test")
+        let umk = try await Keystore.currentUMK(reason: "test")
+        let registered = try await Keystore.deriveIRK(reason: "test", version: 1)
+        let registeredPubHex = HexUtil.encode(registered.publicKey.rawRepresentation)
+
         let server = makeServer()
         try await server.claimUsername(.init(
-            request: .init(username: "hilton", irkPub: "ab", issuedAt: 1), signature: "s"
+            request: .init(username: "hilton", irkPub: registeredPubHex, issuedAt: 1),
+            signature: "s"
         ))
         server.accountTypeByUser["hilton"] = "multi"
         server.totpEnrolledAtByUser["hilton"] = 1
-        _ = try await seedRecovery(server)
+        let enrol = RecoveryViewModel(
+            client: server, webAuthn: MockWebAuthnProvider(), username: { "hilton" }
+        )
+        await enrol.setup(umkSeed: umk, passphrase: "correct horse battery staple")
+        guard case .registered = enrol.phase else {
+            throw XCTSkip("enrol failed: \(enrol.phase)")
+        }
+
+        Keystore.wipe()
         let spy = InstallSpy()
         let r = resolution(username: "hilton", kind: .multi, recoveryPresent: true, totpEnrolled: true, grace: .twentyFourHourTotp)
         let vm = makeVM(resolution: r, server: server, installSpy: spy)
+        vm.passphraseInput = "correct horse battery staple"
+        return (vm, server, spy, registeredPubHex)
+    }
+
+    func test_multiTakeover_emptySecondFactor_failsBeforeRePair() async throws {
+        defer { Keystore.wipe() }
+        let (vm, server, spy, _) = try await makeMultiTakeover()
+
+        XCTAssertFalse(vm.canStartMultiTakeover)
+        await vm.startTakeover()
+
+        guard case .failed = vm.phase else {
+            return XCTFail("expected .failed for missing second factor, got \(vm.phase)")
+        }
+        XCTAssertNil(server.lastRePairInitiate, "must not initiate re-pair without a second factor")
+        XCTAssertEqual(spy.callCount, 0, "must not install a UMK before the second factor is entered")
+    }
+
+    func test_multiTakeover_requiresPassphrase() async throws {
+        defer { Keystore.wipe() }
+        let (vm, _, _, _) = try await makeMultiTakeover()
+        vm.secondFactorInput = "123456"
+        vm.passphraseInput = ""
+        XCTAssertFalse(vm.canStartMultiTakeover, "the gated unwrap needs the recovery passphrase")
+    }
+
+    /// The initiate displaces the REGISTERED key with a DIFFERENT incoming
+    /// key (`.com` rejects old == new), and carries both credentials: the
+    /// typed second factor and the recovery proof the gated fetch minted.
+    func test_multiTakeover_withTotp_rotatesAndCarriesCredentials() async throws {
+        defer { Keystore.wipe() }
+        let (vm, server, spy, registeredPubHex) = try await makeMultiTakeover()
+        vm.secondFactorInput = "123456"
+        XCTAssertTrue(vm.canStartMultiTakeover)
+
+        await vm.startTakeover()
+
+        guard case .completed(let user, _) = vm.phase else {
+            return XCTFail("expected .completed, got \(vm.phase)")
+        }
+        XCTAssertEqual(user, "hilton")
+        XCTAssertEqual(spy.callCount, 1)
+        let last = try XCTUnwrap(server.lastRePairInitiate)
+        XCTAssertEqual(last.body.request.oldIrkPub.lowercased(), registeredPubHex)
+        XCTAssertNotEqual(last.body.request.newIrkPub.lowercased(), registeredPubHex,
+                          "the incoming key must differ from the registered one")
+        let proof = try XCTUnwrap(last.body.totpProof, "multi re-pair MUST carry a totpProof")
+        XCTAssertEqual(proof.code, "123456")
+        XCTAssertEqual(proof.method, "totp")
+        XCTAssertNotNil(last.body.recoveryProof, "the gated fetch's recovery proof must ride along")
+        XCTAssertEqual(Keystore.pendingIrkRotationVersion(), 2)
+    }
+
+    func test_multiTakeover_withRecoveryCode_forwardsMethodRecovery() async throws {
+        defer { Keystore.wipe() }
+        let (vm, server, _, _) = try await makeMultiTakeover()
+        vm.secondFactorInput = "ABCD-EFGH-IJ"
+
+        await vm.startTakeover()
+
+        let last = try XCTUnwrap(server.lastRePairInitiate)
+        XCTAssertEqual(last.body.totpProof?.method, "recovery")
+    }
+
+    /// After grace, the completion is signed by the staged (rotated) key and
+    /// the local IRK lineage commits to it.
+    func test_grace_completeTakeover_finalizes_multi() async throws {
+        defer { Keystore.wipe() }
+        let (vm, _, _, _) = try await makeMultiTakeover()
         vm.secondFactorInput = "123456"
 
         await vm.startTakeover()
@@ -445,86 +530,8 @@ final class RealAccountLoginViewModelTests: XCTestCase {
             return XCTFail("expected .finalized, got \(vm.phase)")
         }
         XCTAssertEqual(user, "hilton")
-    }
-
-    // MARK: - Multi requires a second factor BEFORE re-pair
-
-    func test_multiTakeover_emptySecondFactor_failsBeforeRePair() async throws {
-        let server = makeServer()
-        try await server.claimUsername(.init(
-            request: .init(username: "hilton", irkPub: "ab", issuedAt: 1), signature: "s"
-        ))
-        server.accountTypeByUser["hilton"] = "multi"
-        server.totpEnrolledAtByUser["hilton"] = 1
-        _ = try await seedRecovery(server)
-        let spy = InstallSpy()
-        let r = resolution(username: "hilton", kind: .multi, recoveryPresent: true, totpEnrolled: true, grace: .twentyFourHourTotp)
-        let vm = makeVM(resolution: r, server: server, installSpy: spy)
-
-        // No second factor typed.
-        XCTAssertFalse(vm.canStartMultiTakeover)
-        await vm.startTakeover()
-
-        guard case .failed = vm.phase else {
-            return XCTFail("expected .failed for missing second factor, got \(vm.phase)")
-        }
-        XCTAssertNil(server.lastRePairInitiate, "must not initiate re-pair without a second factor")
-        XCTAssertEqual(spy.callCount, 0, "must not install a UMK before the second factor passes")
-    }
-
-    func test_multiTakeover_withTotp_forwardsTotpProofMethodTotp() async throws {
-        let server = makeServer()
-        try await server.claimUsername(.init(
-            request: .init(username: "hilton", irkPub: "ab", issuedAt: 1), signature: "s"
-        ))
-        server.accountTypeByUser["hilton"] = "multi"
-        server.totpEnrolledAtByUser["hilton"] = 1
-        let installedUmk = try await seedRecovery(server)
-        let spy = InstallSpy()
-        let r = resolution(username: "hilton", kind: .multi, recoveryPresent: true, totpEnrolled: true, grace: .twentyFourHourTotp)
-        let vm = makeVM(resolution: r, server: server, installSpy: spy)
-
-        vm.secondFactorInput = "123456"   // 6 digits → method "totp"
-        XCTAssertTrue(vm.canStartMultiTakeover)
-        await vm.startTakeover()
-
-        guard case .completed(let user, _) = vm.phase else {
-            return XCTFail("expected .completed, got \(vm.phase)")
-        }
-        XCTAssertEqual(user, "hilton")
-        XCTAssertEqual(spy.callCount, 1)
-        XCTAssertEqual(
-            spy.installed.first?.withUnsafeBytes { Data($0) },
-            installedUmk.withUnsafeBytes { Data($0) }
-        )
-        let last = try XCTUnwrap(server.lastRePairInitiate)
-        let proof = try XCTUnwrap(last.body.totpProof, "multi re-pair MUST carry a totpProof")
-        XCTAssertEqual(proof.code, "123456")
-        XCTAssertEqual(proof.method, "totp")
-    }
-
-    func test_multiTakeover_withRecoveryCode_forwardsTotpProofMethodRecovery() async throws {
-        let server = makeServer()
-        try await server.claimUsername(.init(
-            request: .init(username: "hilton", irkPub: "ab", issuedAt: 1), signature: "s"
-        ))
-        server.accountTypeByUser["hilton"] = "multi"
-        server.totpEnrolledAtByUser["hilton"] = 1
-        _ = try await seedRecovery(server)
-        let spy = InstallSpy()
-        let r = resolution(username: "hilton", kind: .multi, recoveryPresent: true, totpEnrolled: true, grace: .twentyFourHourTotp)
-        let vm = makeVM(resolution: r, server: server, installSpy: spy)
-
-        vm.secondFactorInput = "ABCD-EFGH-IJ"   // not 6 digits → method "recovery"
-        await vm.startTakeover()
-
-        guard case .completed = vm.phase else {
-            return XCTFail("expected .completed, got \(vm.phase)")
-        }
-        let last = try XCTUnwrap(server.lastRePairInitiate)
-        let proof = try XCTUnwrap(last.body.totpProof)
-        XCTAssertEqual(proof.code, "ABCD-EFGH-IJ")
-        XCTAssertEqual(proof.method, "recovery")
+        XCTAssertEqual(Keystore.currentIrkVersion(), 2)
+        XCTAssertNil(Keystore.pendingIrkRotationVersion())
     }
 
     // MARK: - The Mock enforces the Worker's multi gate (401)

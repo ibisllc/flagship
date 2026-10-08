@@ -93,8 +93,13 @@ final class WatchSecurityAlertsProjectionTests: XCTestCase {
         XCTAssertEqual(P.label(for: "recovery-set-up"), "Set up recovery")
     }
 
-    func test_label_unknownKind_fallsBackToRaw() {
-        XCTAssertEqual(P.label(for: "future-event-2027"), "future-event-2027")
+    func test_label_unknownKind_isHumanized() {
+        XCTAssertEqual(P.label(for: "future-event-2027"), "Future event 2027")
+    }
+
+    func test_label_serverKinds() {
+        XCTAssertEqual(P.label(for: "server-online"), "Server came online")
+        XCTAssertEqual(P.label(for: "server-created"), "Created server")
     }
 
     func test_icon_unknownKind_neutralShield() {

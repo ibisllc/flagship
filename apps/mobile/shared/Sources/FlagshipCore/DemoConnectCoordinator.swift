@@ -57,6 +57,10 @@ public final class DemoConnectCoordinator {
         state = .connecting
         do {
             try await demoConnect.connect(username: username)
+        } catch ScreensClientError.http(404, _) {
+            // Current Workers no longer expose /connect: the operator
+            // provisions every demo server up front, so there is nothing to
+            // trigger — just watch it come up.
         } catch let err as ScreensClientError {
             // Surface the HTTP status precisely so the view can
             // distinguish 409 ("not yet provisioned") from 429
