@@ -46,21 +46,21 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             : podContext
         let serviceCount = abs(podContext.hashValue) % 5 + 1   // 1–5 apps
         return ServerDetailResponse(
-            serverFqdn: "\(podName).harry.flagship.services",
-            username: "harry",
+            serverFqdn: "\(podName).bright-maple.flagship.services",
+            username: "bright-maple",
             daemonVersion: "0.18.4",
             currentCommit: "9f2c1ab3de4567890abcdef1234567890abcdef1",
             startedAt: now - Int64(abs(podContext.hashValue) % 30 + 1) * oneDay,
             uptimeMs: Int64(abs(podContext.hashValue) % 30 + 1) * oneDay,
             certNotAfter: now + 67 * oneDay,
             certNotBefore: now - 23 * oneDay,
-            certSans: ["\(podName).harry.flagship.services", "*.\(podName).harry.flagship.services"],
+            certSans: ["\(podName).bright-maple.flagship.services", "*.\(podName).bright-maple.flagship.services"],
             serviceCount: serviceCount,
             pairedSessionCount: 2,
             recentInstallEvents: [
-                RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", serviceId: "harry--plants", detail: "via vibe-code"),
-                RecentInstallEvent(at: now - 60_000 * 60 * 6, kind: "deploy", serviceId: "harry--wiki", detail: "v1.4.0"),
-                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", serviceId: "harry--wiki", detail: "via vibe-code"),
+                RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", serviceId: "bright-maple--plants", detail: "via vibe-code"),
+                RecentInstallEvent(at: now - 60_000 * 60 * 6, kind: "deploy", serviceId: "bright-maple--wiki", detail: "v1.4.0"),
+                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", serviceId: "bright-maple--wiki", detail: "via vibe-code"),
             ]
         )
     }
@@ -73,11 +73,11 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         // url mirrors the live daemon's tier-1 form
         // `https://<urlLabel>.<serverFqdn>` (screensHttp builds it off the
         // box's per-box wildcard name — cert model A′).
-        let fqdn = "\(podContext).harry.flagship.services"
+        let fqdn = "\(podContext).bright-maple.flagship.services"
         return AppsListResponse(apps: [
             AppSummary(
-                serviceId: "harry--plants",
-                creator: "harry",
+                serviceId: "bright-maple--plants",
+                creator: "bright-maple",
                 slug: "plants",
                 urlLabel: "plants",
                 summary: "Houseplant watering tracker",
@@ -87,8 +87,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 installedAt: now - 60_000 * 30
             ),
             AppSummary(
-                serviceId: "harry--wiki",
-                creator: "harry",
+                serviceId: "bright-maple--wiki",
+                creator: "bright-maple",
                 slug: "wiki",
                 urlLabel: "wiki",
                 summary: "Personal notes + recipes",
@@ -209,9 +209,9 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         return UrlControllerOwnedResponse(urls: [
-            .init(fqdn: "home.harry.flagship.services", kind: "canonical", claimedAt: now - 60_000 * 60 * 24 * 30),
-            .init(fqdn: "plants.harry.flagship.services", kind: "alias", claimedAt: now - 60_000 * 30),
-            .init(fqdn: "wiki.harry.flagship.services", kind: "alias", claimedAt: now - 60_000 * 60 * 26)
+            .init(fqdn: "home.bright-maple.flagship.services", kind: "canonical", claimedAt: now - 60_000 * 60 * 24 * 30),
+            .init(fqdn: "plants.bright-maple.flagship.services", kind: "alias", claimedAt: now - 60_000 * 30),
+            .init(fqdn: "wiki.bright-maple.flagship.services", kind: "alias", claimedAt: now - 60_000 * 60 * 26)
         ])
     }
 
@@ -338,7 +338,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                     (1.5,  .boot(at: ts())),
                     (4.0,  .tunnelOnline(at: ts())),
                     (9.5,  .certIssued(at: ts())),
-                    (11.0, .ready(serverFqdn: "newbox.harry.flagship.services", at: ts()))
+                    (11.0, .ready(serverFqdn: "newbox.bright-maple.flagship.services", at: ts()))
                 ]
                 var elapsed: TimeInterval = 0
                 for (delay, event) in timeline {
@@ -383,7 +383,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                         continuation.yield(.buildLog(line: log))
                         try? await Task.sleep(nanoseconds: 300_000_000)
                     }
-                    continuation.yield(.deploy(serviceId: "habits", url: "https://habits.\(podContext).harry.flagship.services/"))
+                    continuation.yield(.deploy(serviceId: "habits", url: "https://habits.\(podContext).bright-maple.flagship.services/"))
                     continuation.yield(.done)
                 }
                 continuation.finish()
@@ -419,8 +419,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// mock's in-memory map. Never echoed in any response (mirrors the
     /// daemon's "values never leave" invariant).
     private var mockEnvNames: [String: [String]] = [
-        "harry--plants": ["WEATHER_API_KEY"],
-        "harry--wiki": []
+        "bright-maple--plants": ["WEATHER_API_KEY"],
+        "bright-maple--wiki": []
     ]
 
     public func serviceEnvList(appId: String) async throws -> ServiceEnvListResponse {
@@ -447,7 +447,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         return VibeCodeSessionPublicState(
             id: sessionId,
-            appId: "harry--plants",
+            appId: "bright-maple--plants",
             status: "awaiting-tool-response",
             messages: [
                 VibeCodeSessionMessage(role: "user", text: "Build me a plants tracker", timestamp: now - 30_000),
@@ -471,8 +471,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         return BuildDeployResponse(
             ok: true,
-            serviceId: "harry-habits",
-            url: "https://habits.\(podContext).harry.flagship.services/"
+            serviceId: "bright-maple-habits",
+            url: "https://habits.\(podContext).bright-maple.flagship.services/"
         )
     }
 
@@ -781,7 +781,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     private func mockMcpConnection(buildId: String) -> BuildMcpConnection {
         if let f = buildMcpFixture { return f }
-        let url = "https://\(podContext).harry.flagship.services/mcp/build/\(buildId)"
+        let url = "https://\(podContext).bright-maple.flagship.services/mcp/build/\(buildId)"
         let key = "fbk_\(UUID().uuidString.prefix(16).lowercased())"
         let ideConfig: [String: AnyCodable] = [
             "mcpServers": AnyCodable([
@@ -868,8 +868,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         buildDeployCalls.append(buildId)
         return BuildDeployResponse(
             ok: true,
-            serviceId: "harry-imported-app",
-            url: "https://imported-app.\(podContext).harry.flagship.services/"
+            serviceId: "bright-maple-imported-app",
+            url: "https://imported-app.\(podContext).bright-maple.flagship.services/"
         )
     }
 
@@ -881,7 +881,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             BuildSummary(
                 buildId: "bld-plants01",
                 mode: "scratch",
-                serviceId: "harry--plants",
+                serviceId: "bright-maple--plants",
                 startedAt: now - 60_000 * 60,
                 lastAt: now - 60_000 * 58,
                 entryCount: 9,
@@ -917,7 +917,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             BuildJournalEntry(
                 seq: 3, ts: now - 60_000 * 58, buildId: buildId,
                 mode: "scratch", kind: "deployed", actor: "system",
-                summary: "deployed to home pod", serviceId: "harry--plants"
+                summary: "deployed to home pod", serviceId: "bright-maple--plants"
             ),
         ])
     }

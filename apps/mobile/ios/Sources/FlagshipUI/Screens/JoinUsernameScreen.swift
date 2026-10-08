@@ -51,7 +51,7 @@ public struct JoinUsernameScreen: View {
                 FSField(
                     value: $username,
                     label: "Username",
-                    placeholder: "harry",
+                    placeholder: "bright-maple",
                     helper: helperText,
                     error: errorText
                 )

@@ -84,7 +84,7 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
         if args.contains("-watch-showcase") {
             securityAlerts = .init(
                 pendingApprovals: [
-                    .init(requestId: "showcase", serverFqdn: "home.harry.flagship.services",
+                    .init(requestId: "showcase", serverFqdn: "home.bright-maple.flagship.services",
                           requestedAt: now - 40_000, ip: nil),
                 ],
                 recentEvents: [
@@ -97,7 +97,7 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
         if args.contains("-watch-showcase-install") {
             let phases = ["booting", "partitioning", "installing", "downloading", "registering"]
             provisionTimeline = .init(
-                serial: "showcase", podName: "Office", serverDomain: "office.harry.flagship.services",
+                serial: "showcase", podName: "Office", serverDomain: "office.bright-maple.flagship.services",
                 phase: "registering", detail: nil,
                 history: phases.enumerated().map { i, p in .init(phase: p, detail: nil, ts: now - Int64(5 - i) * 120_000) },
                 updatedAt: Date(), active: true

@@ -36,21 +36,21 @@ class MockScreensClient(
         val pod = podContext
         val serviceCount = (abs(pod.hashCode()) % 5) + 1
         return ServerDetailResponse(
-            serverFqdn = "$pod.harry.flagship.services",
-            username = "harry",
+            serverFqdn = "$pod.bright-maple.flagship.services",
+            username = "bright-maple",
             daemonVersion = "0.18.4",
             currentCommit = "9f2c1ab3de4567890abcdef1234567890abcdef1",
             startedAt = now() - 11L * day,
             uptimeMs = 11L * day,
             certNotAfter = now() + 67L * day,
             certNotBefore = now() - 23L * day,
-            certSans = listOf("$pod.harry.flagship.services", "*.$pod.harry.flagship.services"),
+            certSans = listOf("$pod.bright-maple.flagship.services", "*.$pod.bright-maple.flagship.services"),
             serviceCount = serviceCount,
             pairedSessionCount = 2,
             recentInstallEvents = listOf(
-                RecentInstallEvent(now() - 60_000L * 30, "installed", "harry--plants", "via vibe-code"),
-                RecentInstallEvent(now() - 60_000L * 60 * 6, "deploy", "harry--wiki", "v1.4.0"),
-                RecentInstallEvent(now() - 60_000L * 60 * 26, "installed", "harry--wiki", "via vibe-code"),
+                RecentInstallEvent(now() - 60_000L * 30, "installed", "bright-maple--plants", "via vibe-code"),
+                RecentInstallEvent(now() - 60_000L * 60 * 6, "deploy", "bright-maple--wiki", "v1.4.0"),
+                RecentInstallEvent(now() - 60_000L * 60 * 26, "installed", "bright-maple--wiki", "via vibe-code"),
             ),
         )
     }
@@ -60,12 +60,12 @@ class MockScreensClient(
         // url mirrors the live daemon's tier-1 form
         // `https://<urlLabel>.<serverFqdn>` (screensHttp builds it off the
         // box's per-box wildcard name — cert model A′).
-        val fqdn = "$podContext.harry.flagship.services"
+        val fqdn = "$podContext.bright-maple.flagship.services"
         return AppsListResponse(
             apps = listOf(
-                AppSummary("harry--plants", "harry", "plants", "plants",
+                AppSummary("bright-maple--plants", "bright-maple", "plants", "plants",
                     "Houseplant watering tracker", "https://plants.$fqdn/", "running", "0.0.3", now() - 60_000 * 30),
-                AppSummary("harry--wiki", "harry", "wiki", "wiki",
+                AppSummary("bright-maple--wiki", "bright-maple", "wiki", "wiki",
                     "Personal notes + recipes", "https://wiki.$fqdn/", "running", "1.4.0", now() - 60_000 * 60 * 26),
                 AppSummary("trent--scratchpad", "trent", "scratchpad", "scratchpad--trent",
                     "Markdown scratchpad", "https://scratchpad--trent.$fqdn/", "stopped", "0.7.1", now() - 60_000L * 60 * 24 * 12),
@@ -150,9 +150,9 @@ class MockScreensClient(
         tick()
         return UrlControllerOwnedResponse(
             urls = listOf(
-                OwnedUrl("home.harry.flagship.services", "canonical", now() - 60_000L * 60 * 24 * 30),
-                OwnedUrl("plants.harry.flagship.services", "alias", now() - 60_000L * 30),
-                OwnedUrl("wiki.harry.flagship.services", "alias", now() - 60_000L * 60 * 26),
+                OwnedUrl("home.bright-maple.flagship.services", "canonical", now() - 60_000L * 60 * 24 * 30),
+                OwnedUrl("plants.bright-maple.flagship.services", "alias", now() - 60_000L * 30),
+                OwnedUrl("wiki.bright-maple.flagship.services", "alias", now() - 60_000L * 60 * 26),
             )
         )
     }
@@ -246,8 +246,8 @@ class MockScreensClient(
     // invariant). The test surface exposes only the NAMES.
     private val mockEnvNames: MutableMap<String, MutableSet<String>> =
         mutableMapOf(
-            "harry--plants" to mutableSetOf("WEATHER_API_KEY"),
-            "harry--wiki" to mutableSetOf(),
+            "bright-maple--plants" to mutableSetOf("WEATHER_API_KEY"),
+            "bright-maple--wiki" to mutableSetOf(),
         )
 
     override suspend fun serviceEnvList(appId: String): ServiceEnvListResponse {
@@ -275,7 +275,7 @@ class MockScreensClient(
         val n = now()
         return VibeCodeSessionPublicState(
             id = sessionId,
-            appId = "harry--plants",
+            appId = "bright-maple--plants",
             status = "awaiting-tool-response",
             messages = listOf(
                 VibeCodeSessionMessage(role = "user", text = "Build me a plants tracker", timestamp = n - 30_000),
@@ -303,8 +303,8 @@ class MockScreensClient(
         tick()
         return BuildDeployResponse(
             ok = true,
-            serviceId = "harry-habits",
-            url = "https://habits.$podContext.harry.flagship.services/",
+            serviceId = "bright-maple-habits",
+            url = "https://habits.$podContext.bright-maple.flagship.services/",
         )
     }
 
@@ -329,12 +329,12 @@ class MockScreensClient(
                     newIrkPrefix = "feedbeef0123",
                     apps = listOf(
                         AppReissuanceSummary(
-                            serviceId = "harry--plants", slug = "plants",
+                            serviceId = "bright-maple--plants", slug = "plants",
                             rewrittenCount = 1, unchangedCount = 0,
                             error = null, completedAt = now() - 2 * day + 1_500,
                         ),
                         AppReissuanceSummary(
-                            serviceId = "harry--wiki", slug = "wiki",
+                            serviceId = "bright-maple--wiki", slug = "wiki",
                             rewrittenCount = 3, unchangedCount = 1,
                             error = null, completedAt = now() - 2 * day + 3_500,
                         ),
@@ -417,7 +417,7 @@ class MockScreensClient(
             1500L to InstallEvent.Boot(now()),
             4000L to InstallEvent.TunnelOnline(now()),
             9500L to InstallEvent.CertIssued(now()),
-            11000L to InstallEvent.Ready("newbox.harry.flagship.services", now()),
+            11000L to InstallEvent.Ready("newbox.bright-maple.flagship.services", now()),
         )
         var elapsed = 0L
         for ((at, event) in timeline) {
@@ -447,7 +447,7 @@ class MockScreensClient(
             emit(VibeCodeFrame.BuildLog(log))
             delay(300)
         }
-        emit(VibeCodeFrame.Deploy("habits", "https://habits.$podContext.harry.flagship.services/"))
+        emit(VibeCodeFrame.Deploy("habits", "https://habits.$podContext.bright-maple.flagship.services/"))
         emit(VibeCodeFrame.Done)
     }
 

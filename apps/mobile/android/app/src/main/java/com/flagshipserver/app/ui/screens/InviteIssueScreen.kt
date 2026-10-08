@@ -157,7 +157,7 @@ fun InviteIssueScreen(nav: NavController, serviceId: String) {
                     value = contextNote,
                     onValueChange = { vm.contextNote.value = it },
                     label = { Text("Context note (shown to invitee)") },
-                    placeholder = { Text("from harry's phone — work") },
+                    placeholder = { Text("from my phone — work") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.None,

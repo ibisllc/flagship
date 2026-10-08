@@ -1614,7 +1614,7 @@ class MockFlagshipServerClient(
 
     /** Scripted audit log per username — tests configure to drive
      *  Activity feed renders without hitting the Worker. The default
-     *  seed gives the demo username "harry" a handful of plausible
+     *  seed gives the demo username "bright-maple" a handful of plausible
      *  recent events so the P5 audit-log screen + the Activity feed
      *  both have something to render in dev/preview without any setup.
      *  Tests that need a clean state simply reassign the whole map. */
@@ -1622,7 +1622,7 @@ class MockFlagshipServerClient(
         val now = System.currentTimeMillis()
         val hour = 3_600_000L
         mapOf(
-            "harry" to listOf(
+            "bright-maple" to listOf(
                 AuditEvent(
                     seq = 4, eventKind = "device-added",
                     detail = "A device joined the account",

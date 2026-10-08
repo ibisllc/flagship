@@ -114,7 +114,7 @@ final class AppStoreScreenshotTests: XCTestCase {
         let env = ProcessInfo.processInfo.environment
         let app = XCUIApplication()
         app.launchArguments = ["-smoke-mode", "-smoke-tab", "home", "-smoke-recovery-enrolled",
-                               "-smoke-username", env["SHOT_HANDLE"] ?? "harry"]
+                               "-smoke-username", env["SHOT_HANDLE"] ?? "bright-maple"]
         app.launch()
 
         XCTAssertTrue(app.buttons["home-add-server"].waitForExistence(timeout: 20))

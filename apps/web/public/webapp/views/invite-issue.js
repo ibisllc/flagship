@@ -73,7 +73,7 @@ export async function renderInviteIssue(app) {
       <label>Sent to <span class="faint-sm">(memo)</span></label>
       <input id="ii-sentto" type="text" placeholder="+1 555 0142" autocomplete="off" />
       <label>Context note <span class="faint-sm">(shown to invitee)</span></label>
-      <input id="ii-context" type="text" placeholder="from harry's phone — work" autocomplete="off" maxlength="280" />
+      <input id="ii-context" type="text" placeholder="from my phone — work" autocomplete="off" maxlength="280" />
       <button id="ii-go" class="full-width mt-2">Issue invite</button>
       <div id="ii-status" class="mt-2 text-sm"></div>
       <div id="ii-result" class="mt-2 hidden">

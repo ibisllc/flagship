@@ -189,7 +189,7 @@ private fun UsernameEntryView(
             value = username,
             onValueChange = onUsernameChange,
             label = "Username",
-            placeholder = "harry",
+            placeholder = "bright-maple",
             helper = "Letters and digits only. No dots.",
             error = error,
         )

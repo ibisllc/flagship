@@ -30,10 +30,10 @@ private struct PodStatusEntry: TimelineEntry {
 private struct PodStatusProvider: TimelineProvider {
     func placeholder(in context: Context) -> PodStatusEntry {
         let demo = PodStatusSnapshot(
-            username: "harry",
+            username: "bright-maple",
             pods: [
-                .init(podId: "home", name: "Home", fqdn: "home.harry.flagship.services", statusRaw: "online", isLeader: true),
-                .init(podId: "office", name: "Office", fqdn: "office.harry.flagship.services", statusRaw: "online", isLeader: false),
+                .init(podId: "home", name: "Home", fqdn: "home.bright-maple.flagship.services", statusRaw: "online", isLeader: true),
+                .init(podId: "office", name: "Office", fqdn: "office.bright-maple.flagship.services", statusRaw: "online", isLeader: false),
             ]
         )
         return PodStatusEntry(date: .now, snapshot: demo)

@@ -24,15 +24,15 @@ class MockScreensClientTest {
         val home = c.serverDetail()
         c.podContext = "office"
         val office = c.serverDetail()
-        assertEquals("home.harry.flagship.services", home.serverFqdn)
-        assertEquals("office.harry.flagship.services", office.serverFqdn)
+        assertEquals("home.bright-maple.flagship.services", home.serverFqdn)
+        assertEquals("office.bright-maple.flagship.services", office.serverFqdn)
     }
 
     @Test fun appsList_returnsKnownApps() = runTest {
         val r = makeClient().appsList()
         // serviceId is the immutable composite `<creator>--<slug>`.
         assertEquals(
-            listOf("harry--plants", "harry--wiki", "trent--scratchpad").sorted(),
+            listOf("bright-maple--plants", "bright-maple--wiki", "trent--scratchpad").sorted(),
             r.apps.map { it.serviceId }.sorted(),
         )
     }
@@ -50,10 +50,10 @@ class MockScreensClientTest {
         // The Mock must return the SAME AppDetailResponse shape the live
         // daemon serves (screensHttp app-detail → BFF types.ts), so the
         // ServiceDetailViewModel renders identically against either client.
-        val r = makeClient().appDetail("harry--plants")
+        val r = makeClient().appDetail("bright-maple--plants")
         // app summary — the tier-1 url is the live `https://<urlLabel>.<fqdn>` form.
-        assertEquals("harry--plants", r.app.serviceId)
-        assertEquals("harry", r.app.creator)
+        assertEquals("bright-maple--plants", r.app.serviceId)
+        assertEquals("bright-maple", r.app.creator)
         assertEquals("plants", r.app.slug)
         assertTrue(r.app.url.startsWith("https://plants."))
         assertTrue(r.app.url.endsWith("/"))
@@ -112,7 +112,7 @@ class MockScreensClientTest {
 
         server.provisionStatuses["ORDER-1"] = ProvisionStatusRecord(
             serial = "ORDER-1",
-            serverDomain = "newbox.harry.flagship.services",
+            serverDomain = "newbox.bright-maple.flagship.services",
             phase = "live",
             updatedAt = 1_700_000_000_000L,
             history = listOf(
@@ -122,7 +122,7 @@ class MockScreensClientTest {
         )
         val rec = server.fetchProvisionStatus("ORDER-1")
         assertEquals("live", rec?.phase)
-        assertEquals("newbox.harry.flagship.services", rec?.serverDomain)
+        assertEquals("newbox.bright-maple.flagship.services", rec?.serverDomain)
         assertEquals(ProvisionStatusPhase.LIVE, ProvisionStatusPhase.fromWire(rec?.phase))
         assertTrue(ProvisionStatusPhase.fromWire(rec?.phase).isTerminal)
     }
@@ -138,39 +138,39 @@ class MockScreensClientTest {
 
     @Test fun serviceEnvList_returnsSortedNamesOnly() = runTest {
         val c = makeClient()
-        val r = c.serviceEnvList("harry--plants")
+        val r = c.serviceEnvList("bright-maple--plants")
         assertTrue(r.names.contains("WEATHER_API_KEY"))
     }
 
     @Test fun serviceEnvSet_thenList_includesNewName() = runTest {
         val c = makeClient()
         val envelope = ServiceEnvSetEnvelope(
-            serverId = "home.harry.flagship.services",
-            creator = "harry", slug = "plants",
+            serverId = "home.bright-maple.flagship.services",
+            creator = "bright-maple", slug = "plants",
             env = mapOf("FOO" to "bar-NEVER-LEAKED"),
             issuedAt = 1L,
         )
         c.serviceEnvSet(
-            "harry--plants",
+            "bright-maple--plants",
             ServiceEnvSetRequest(name = "FOO", value = "bar-NEVER-LEAKED", request = envelope, signature = "00"),
         )
-        val r = c.serviceEnvList("harry--plants")
+        val r = c.serviceEnvList("bright-maple--plants")
         assertTrue(r.names.contains("FOO"))
     }
 
     @Test fun serviceEnvUnset_dropsName() = runTest {
         val c = makeClient()
         val envelope = ServiceEnvSetEnvelope(
-            serverId = "home.harry.flagship.services",
-            creator = "harry", slug = "plants",
+            serverId = "home.bright-maple.flagship.services",
+            creator = "bright-maple", slug = "plants",
             env = emptyMap(),
             issuedAt = 1L,
         )
         c.serviceEnvUnset(
-            "harry--plants",
+            "bright-maple--plants",
             ServiceEnvUnsetRequest(name = "WEATHER_API_KEY", request = envelope, signature = "00"),
         )
-        val r = c.serviceEnvList("harry--plants")
+        val r = c.serviceEnvList("bright-maple--plants")
         assertTrue(!r.names.contains("WEATHER_API_KEY"))
     }
 

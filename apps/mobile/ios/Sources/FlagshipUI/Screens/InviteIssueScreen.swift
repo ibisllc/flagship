@@ -67,7 +67,7 @@ public struct InviteIssueScreen: View {
                         placeholder: "+1 555 0142")
                 FSField(value: $bvm.contextNote,
                         label: "Context note (shown to invitee)",
-                        placeholder: "from harry's phone — work")
+                        placeholder: "from my phone — work")
                 FSPrimaryButton(
                     issueButtonLabel,
                     block: true,

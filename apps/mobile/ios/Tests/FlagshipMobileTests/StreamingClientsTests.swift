@@ -17,7 +17,7 @@ final class StreamingClientsTests: XCTestCase {
         guard case .ready(let fqdn, _) = events.last else {
             XCTFail("last event should be .ready"); return
         }
-        XCTAssertEqual(fqdn, "newbox.harry.flagship.services")
+        XCTAssertEqual(fqdn, "newbox.bright-maple.flagship.services")
     }
 
     func test_installEvents_stopsOnTaskCancel() async throws {

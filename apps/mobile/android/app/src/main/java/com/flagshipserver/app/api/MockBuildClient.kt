@@ -78,7 +78,7 @@ class MockBuildClient(
     val mcpRotateCalls: MutableList<Pair<String, BuildMcpRequest>> = mutableListOf()
 
     private fun connectionFor(buildId: String): BuildMcpConnection {
-        val url = "https://home.harry.flagship.services/mcp/build/$buildId"
+        val url = "https://home.bright-maple.flagship.services/mcp/build/$buildId"
         val key = mintKey()
         return BuildMcpConnection(url = url, key = key, ideConfig = ideConfig(url, key))
     }
@@ -144,7 +144,7 @@ class MockBuildClient(
                 BuildSummary(
                     buildId = "bld-plants01",
                     mode = "scratch",
-                    serviceId = "harry--plants",
+                    serviceId = "bright-maple--plants",
                     startedAt = now() - 60_000L * 60 * 26,
                     lastAt = now() - 60_000L * 60 * 25,
                     entryCount = 7,
@@ -153,7 +153,7 @@ class MockBuildClient(
                 BuildSummary(
                     buildId = "bld-wiki0002",
                     mode = "git",
-                    serviceId = "harry--wiki",
+                    serviceId = "bright-maple--wiki",
                     startedAt = now() - 60_000L * 60 * 3,
                     lastAt = now() - 60_000L * 60 * 2,
                     entryCount = 4,
@@ -172,7 +172,7 @@ class MockBuildClient(
             entries = listOf(
                 BuildJournalEntry(seq = 1, ts = now() - 300_000, buildId = buildId, mode = "git", kind = "git-import", actor = "owner", summary = "Cloned repo"),
                 BuildJournalEntry(seq = 2, ts = now() - 240_000, buildId = buildId, mode = "git", kind = "fitness", actor = "box", summary = "Flagship-ready ✓"),
-                BuildJournalEntry(seq = 3, ts = now() - 60_000, buildId = buildId, mode = "git", kind = "deployed", actor = "box", summary = "Installed", serviceId = "harry--wiki"),
+                BuildJournalEntry(seq = 3, ts = now() - 60_000, buildId = buildId, mode = "git", kind = "deployed", actor = "box", summary = "Installed", serviceId = "bright-maple--wiki"),
             ),
         )
     }
@@ -184,8 +184,8 @@ class MockBuildClient(
         deployCalls.add(buildId)
         return BuildDeployResponse(
             ok = true,
-            serviceId = "harry-newapp",
-            url = "https://newapp.home.harry.flagship.services/",
+            serviceId = "bright-maple-newapp",
+            url = "https://newapp.home.bright-maple.flagship.services/",
         )
     }
 }

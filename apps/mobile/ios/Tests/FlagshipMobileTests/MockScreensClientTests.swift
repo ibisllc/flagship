@@ -12,8 +12,8 @@ final class MockScreensClientTests: XCTestCase {
     func test_serverDetail_returnsConsistentSnapshot() async throws {
         let c = makeClient()
         let d = try await c.serverDetail()
-        XCTAssertEqual(d.username, "harry")
-        XCTAssertEqual(d.serverFqdn, "home.harry.flagship.services")
+        XCTAssertEqual(d.username, "bright-maple")
+        XCTAssertEqual(d.serverFqdn, "home.bright-maple.flagship.services")
         XCTAssertGreaterThan(d.serviceCount, 0)
         XCTAssertFalse(d.recentInstallEvents.isEmpty)
     }
@@ -24,14 +24,14 @@ final class MockScreensClientTests: XCTestCase {
         // serviceId is the immutable composite `<creator>--<slug>`.
         XCTAssertEqual(
             r.apps.map(\.serviceId).sorted(),
-            ["harry--plants", "harry--wiki", "trent--scratchpad"]
+            ["bright-maple--plants", "bright-maple--wiki", "trent--scratchpad"]
         )
     }
 
     func test_appDetail_returnsRequestedApp() async throws {
         let c = makeClient()
-        let r = try await c.appDetail(serviceId: "harry--plants")
-        XCTAssertEqual(r.app.serviceId, "harry--plants")
+        let r = try await c.appDetail(serviceId: "bright-maple--plants")
+        XCTAssertEqual(r.app.serviceId, "bright-maple--plants")
         XCTAssertFalse(r.recentLogs.isEmpty)
     }
 
@@ -125,7 +125,7 @@ final class MockScreensClientTests: XCTestCase {
 
     func test_serviceEnvList_returnsSortedNamesOnly() async throws {
         let c = makeClient()
-        let r = try await c.serviceEnvList(appId: "harry--plants")
+        let r = try await c.serviceEnvList(appId: "bright-maple--plants")
         // The mock seeds WEATHER_API_KEY by default; the response shape
         // is name-only by construction (ServiceEnvListResponse has no
         // `values` field).
@@ -135,34 +135,34 @@ final class MockScreensClientTests: XCTestCase {
     func test_serviceEnvSet_then_list_includesNewName() async throws {
         let c = makeClient()
         let envelope = ServiceEnvSetEnvelope(
-            serverId: "home.harry.flagship.services",
-            creator: "harry", slug: "plants",
+            serverId: "home.bright-maple.flagship.services",
+            creator: "bright-maple", slug: "plants",
             env: ["FOO": "bar-NEVER-LEAKED"],
             issuedAt: 1
         )
         let _ = try await c.serviceEnvSet(
-            appId: "harry--plants",
+            appId: "bright-maple--plants",
             ServiceEnvSetRequest(
                 name: "FOO", value: "bar-NEVER-LEAKED",
                 request: envelope, signature: "00"
             )
         )
-        let r = try await c.serviceEnvList(appId: "harry--plants")
+        let r = try await c.serviceEnvList(appId: "bright-maple--plants")
         XCTAssertTrue(r.names.contains("FOO"))
     }
 
     func test_serviceEnvUnset_dropsName() async throws {
         let c = makeClient()
         let envelope = ServiceEnvSetEnvelope(
-            serverId: "home.harry.flagship.services",
-            creator: "harry", slug: "plants",
+            serverId: "home.bright-maple.flagship.services",
+            creator: "bright-maple", slug: "plants",
             env: [:], issuedAt: 1
         )
         let _ = try await c.serviceEnvUnset(
-            appId: "harry--plants",
+            appId: "bright-maple--plants",
             ServiceEnvUnsetRequest(name: "WEATHER_API_KEY", request: envelope, signature: "00")
         )
-        let r = try await c.serviceEnvList(appId: "harry--plants")
+        let r = try await c.serviceEnvList(appId: "bright-maple--plants")
         XCTAssertFalse(r.names.contains("WEATHER_API_KEY"))
     }
 

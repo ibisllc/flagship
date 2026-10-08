@@ -10,10 +10,10 @@ final class PodContextTests: XCTestCase {
         let home = try await c.serverDetail()
         c.podContext = "office"
         let office = try await c.serverDetail()
-        XCTAssertEqual(home.serverFqdn, "home.harry.flagship.services")
-        XCTAssertEqual(office.serverFqdn, "office.harry.flagship.services")
-        XCTAssertTrue(home.certSans?.contains("home.harry.flagship.services") ?? false)
-        XCTAssertTrue(office.certSans?.contains("office.harry.flagship.services") ?? false)
+        XCTAssertEqual(home.serverFqdn, "home.bright-maple.flagship.services")
+        XCTAssertEqual(office.serverFqdn, "office.bright-maple.flagship.services")
+        XCTAssertTrue(home.certSans?.contains("home.bright-maple.flagship.services") ?? false)
+        XCTAssertTrue(office.certSans?.contains("office.bright-maple.flagship.services") ?? false)
     }
 
     func test_mockServerMetrics_yieldsDistinctSeriesPerPod() async throws {
