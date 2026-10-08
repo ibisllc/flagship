@@ -25,12 +25,9 @@ final class PostRecoveryChoiceTests: XCTestCase {
     }
 
     func test_screen_defaultsToKeepBoth() {
-        let screen = PostRecoveryChoiceScreen()
-        // Selection is in @State; we read it via Mirror to keep
-        // the test surface narrow.
-        let mirror = Mirror(reflecting: screen)
-        let selectionState = mirror.descendant("_selection") as? State<RecoveryChoice>
-        XCTAssertEqual(selectionState?.wrappedValue, .keepBothDevices)
+        // Not read back out of @State via Mirror: SwiftUI's State layout
+        // is private and changed in the iOS 27 SDK.
+        XCTAssertEqual(PostRecoveryChoiceScreen.defaultSelection, .keepBothDevices)
     }
 
     func test_screen_passesWipeEnabledFlagThrough() {

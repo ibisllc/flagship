@@ -14,7 +14,8 @@ import FlagshipCore
 /// the wording is reviewable in one place.
 public struct PostRecoveryChoiceScreen: View {
     @Environment(\.colorScheme) private var scheme
-    @State private var selection: RecoveryChoice = .keepBothDevices
+    static let defaultSelection: RecoveryChoice = .keepBothDevices
+    @State private var selection: RecoveryChoice = Self.defaultSelection
 
     /// True only in v1.1, when the Wipe & restart code path is
     /// shipped. v1 renders the row dimmed with a "Coming soon"

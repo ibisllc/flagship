@@ -12,7 +12,7 @@ struct FlagshipApp: App {
     @State private var linker = DeepLinker()
     @State private var toasts = ToastCenter()
     @State private var operations = ActiveOperationsCenter()
-    @State private var trust = TrustCenter()
+    @State private var trust: TrustCenter
     @State private var dev = DeveloperSettings()
     @State private var privacy = PrivacySettings()
     @State private var pushRegistrar: PushRegistrar?
@@ -73,7 +73,11 @@ struct FlagshipApp: App {
         // hasn't overridden). `.unknown`/`.trusted` + any network-error
         // "no verdict" all let traffic through — we never brick on the absence
         // of a verdict, only on a valid blessing that fails verification.
-        let trustCenter = _trust.wrappedValue
+        // Seeded locally rather than read back through `_trust.wrappedValue`:
+        // Swift 6.3 treats that read as a use of `self` before every stored
+        // property is initialized.
+        let trustCenter = TrustCenter()
+        _trust = State(initialValue: trustCenter)
         self.liveServerClient = LiveFlagshipServerClient(
             trustGate: { @Sendable in await MainActor.run { trustCenter.isServerTrusted } }
         )

@@ -3215,7 +3215,14 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// (so tests can pin an exact wire shape). A serial that is neither
     /// here nor in `provisionStatusScripts` returns nil (the Worker's
     /// 404 → "no status").
-    public var provisionStatusFixtures: [String: ProvisionStatus] = [:]
+    public var provisionStatusFixtures: [String: ProvisionStatus] {
+        get { provisionStatusLock.withLock { _provisionStatusFixtures } }
+        set { provisionStatusLock.withLock { _provisionStatusFixtures = newValue } }
+    }
+    private var _provisionStatusFixtures: [String: ProvisionStatus] = [:]
+    // A view model polls `fetchProvisionStatus` off the main actor while a
+    // test seeds fixtures from it; unguarded, that races the dictionary.
+    private let provisionStatusLock = NSLock()
 
     /// Scripted phase PROGRESSION per serial. Each `fetchProvisionStatus`
     /// call advances one step along the script and returns a record whose
@@ -3235,7 +3242,11 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func fetchProvisionStatus(serial: String) async throws -> ProvisionStatus? {
         try await tick()
-        if let fixed = provisionStatusFixtures[serial] { return fixed }
+        return provisionStatusLock.withLock { nextProvisionStatus(serial: serial) }
+    }
+
+    private func nextProvisionStatus(serial: String) -> ProvisionStatus? {
+        if let fixed = _provisionStatusFixtures[serial] { return fixed }
         guard let script = provisionStatusScripts[serial], !script.isEmpty else {
             // No checkpoint yet — the Worker would 404; we map that to nil.
             return nil
