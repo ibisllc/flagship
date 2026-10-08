@@ -35,6 +35,9 @@
       "path": "./packages/iso-personalizer"
     },
     {
+      "path": "./packages/installer-apkovl"
+    },
+    {
       "path": "./packages/storage"
     },
     {

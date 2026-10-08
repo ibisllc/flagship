@@ -170,6 +170,37 @@ internal sealed class WizardStateView
 public class BuilderModeRules
 {
     [Fact]
+    public void QuickMode_DoesNotRequireUserIso()
+        => Assert.False(BuilderMode.Quick.RequiresUserISO());
+
+    [Fact]
+    public void QuickMode_Labels()
+    {
+        Assert.Equal("Flash to USB", BuilderMode.Quick.BakeCtaLabel());
+        Assert.Equal("Quick", BuilderMode.Quick.MenuLabel());
+    }
+
+    [Fact]
+    public void QuickMode_RecipePlusDisk_CanBake_NoIso()
+    {
+        var s = new WizardStateView
+        {
+            Mode = BuilderMode.Quick,
+            RecipePath = @"C:\tmp\recipe.json",
+            SelectedDevice = @"\\.\PhysicalDrive2",
+        };
+        Assert.True(s.CanBake);
+    }
+
+    [Fact]
+    public void QuickMode_RecipeOnly_NeedsDiskNotIso()
+    {
+        var s = new WizardStateView { Mode = BuilderMode.Quick, RecipePath = @"C:\tmp\recipe.json" };
+        Assert.False(s.CanBake);
+        Assert.Equal("Need: USB drive.", s.ReadinessSummary);
+    }
+
+    [Fact]
     public void SimpleMode_DoesNotRequireUserIso()
         => Assert.False(BuilderMode.Simple.RequiresUserISO());
 
