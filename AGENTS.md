@@ -173,13 +173,19 @@ renamed burner→builder (its seed-baked "burner" strings deliberately kept — 
 pin the seed hash); marketplace's Settings row moved to a Material icon; gym's
 live recovery spec now carries `oldIrkSignature`; alpine's Quick mode returns as
 an opt-in third mode on all three desktops with its cache renamed so the Debian
-cache can't evict it. **Open, found by the alpine rebase (blocks any Alpine
-revival, not `main`):** `packages/iso-personalizer/src/trailer.ts` (and the three
-desktop serializers + the box parser) never carry `authCode.adminRootPubKey` or
-`diskEncryption`, so a current recipe that signs either fails verification on an
-Alpine box — a protocol change. **Open on chromebook-fit:** its pinned seed hash
-was built from Debian 13.5.0; rebuild + re-pin against 13.6.0 before setting
-`FLAGSHIP_ISO_SEED`. Windows changes on `alpine` are uncompiled (no .NET here).
+cache can't evict it. **All four items it left open were closed the same day:**
+(1) the ISO trailer now carries every signed recipe field (`authCode.adminRootPubKey`,
+`diskEncryption`) on `main`, and `alpine`'s box verifier, bootstrap and three desktop
+serializers were fixed — an Alpine box could not install ANY current recipe (its
+validator rebuilt the obsolete v1 payload and the bootstrap read v2 fields from the
+wrong place), now covered by a cross-language golden vector; `main`'s netboot
+`parse-trailer.sh` is equally stale but dead (nothing ships the netboot path).
+(2) chromebook-fit's seed is re-pinned on 13.6.0 (`54be17b4…`) and is now
+reproducible across toolchains — xorriso and mtools had each stamped their version
+into the image — with an `iso-seed` CI job rebuilding it under debian:12 and 13.
+(3) the gym Worker + webapp were redeployed from the rebased `gym` branch (its
+hosts moved to `webapp.gym.` / `remote.gym.`). (4) `alpine`'s Windows code passes
+Windows CI (237 tests + publish) via the new on-demand `builder-windows` trigger.
 
 **2026-10-08 (iOS store-prep fixes ported to Android + web; recovery "veto" copy
 removed everywhere) — on `main`, NOT yet deployed/rebuilt.** Android closes the
