@@ -315,6 +315,35 @@
           requires the expected apex, and trust lockdown now closes connections
           that are already open instead of only refusing new ones.
         </p>
+
+        <h4>Free username rename bypassed the paid name change and the reserved-name list</h4>
+        <p class="hof-meta">
+          Medium &middot; reported and fixed October 2026 &middot; fix
+          <a href="https://github.com/ibisllc/flagship/commit/b3d6852b">b3d6852b</a>
+          &middot; credit pending the reporter&rsquo;s preference
+        </p>
+        <p>
+          New accounts can only take a handle the server suggested, and choosing
+          your own name is meant to be the paid name change — the fee is what
+          keeps desirable names from being squatted. An old rename endpoint
+          from early development was still live and enforced none of that. It
+          checked only the account&rsquo;s own signature, so any account holder
+          could move to a handle of their choosing, for free, as often as they
+          liked, including names we reserve for our own infrastructure. Because
+          names are never taken back, every such allocation would have been
+          permanent.
+        </p>
+        <p>
+          No other account&rsquo;s data or keys were exposed, and a squatted
+          reserved name could not be put to use: registering a server
+          re-validates the name, so none could obtain DNS records or a
+          certificate. No app ever called the endpoint, so we removed it rather
+          than patching it. The paid name change will be a separate, new
+          endpoint built with these checks from the start. Besides the
+          reporter&rsquo;s own test, we found one earlier rename in production,
+          onto a reserved test-environment name; that allocation is being
+          reverted.
+        </p>
       </section>
 
       <section id="report">

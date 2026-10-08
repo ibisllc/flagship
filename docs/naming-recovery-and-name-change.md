@@ -107,6 +107,36 @@ difference that makes a name change *cheap* vs transfer-a-box: **the IRK is
 unchanged, so the LUKS disk key stays sealed to the same key — NO disk re-seal**
 (transfer-a-box's hardest step is unnecessary here).
 
+> **⚠️ Read before building this endpoint — a free rename was already exploited
+> once.** The legacy #93 `POST /api/username/rename` checked only the account's
+> own IRK signature, so anyone could rename onto any handle for free, including
+> reserved infrastructure labels (one prod account took `e2e`). It was reported
+> externally and removed 2026-10-08 (`b3d6852b`; listed in the /security Hall of
+> fame). Because it costs money to change a name, this endpoint is where squatting
+> will be attempted, so treat each of these as a ship-blocker with its own
+> negative test:
+>
+> 1. **The entitlement is mandatory, single-use, and redeemed in the same
+>    transaction as the allocation.** Two concurrent requests with one
+>    entitlement must yield exactly one rename. A rename without a redeemed
+>    entitlement is refused before any write.
+> 2. **`validateUserLabel` runs on the new name** (grammar + the reserved list,
+>    which includes the test-environment apexes `gym`/`test`/`e2e`/`qa`/`ci`/
+>    `staging` and the gossip labels). Payment never buys a reserved name.
+> 3. **Refuse a name currently on the suggestion roster** (`UsernameOfferStorage`,
+>    unexpired) — otherwise a paid rename can snatch a handle another person was
+>    just offered mid-signup.
+> 4. **During the dibs window, a name with a matching `.com` domain needs the
+>    domain proof (§7)**, not just payment.
+> 5. **Per-account rate limit**, checked against prod rather than assumed.
+> 6. **Carry every account field to the new row** — admin root, AID, account
+>    type, TOTP enrollment, recovery wipe policy. The legacy handler copied only
+>    the IRK, silently downgrading the account.
+> 7. **Keep `apps/com/test/usernameRenameRemoved.test.ts` green.** The legacy
+>    route stays dead; the paid flow is a new route, never a revival of
+>    `usernameHandover.ts`. The feature branches still carry that file, so check
+>    it doesn't come back in a rebase.
+
 **Migration sequence (`POST /api/account/name-change`):**
 
 1. **Authorize:** IRK-signed `flagship/name-change/v1|aid|oldname|newname|issuedAt`

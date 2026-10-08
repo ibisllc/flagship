@@ -163,7 +163,8 @@ harness can't do:
 ### Recent work (condensed log, newest first)
 
 **2026-10-08 (legacy username rename removed) — closes an externally reported
-bypass of the paid name change; NOT deployed.** The #93 `POST /api/username/rename`
+bypass of the paid name change. DEPLOYED + live-verified 2026-10-08** (Worker
+`5394a541`: rename and alias now 404 in prod; claim unaffected). The #93 `POST /api/username/rename`
 (+ its `GET /api/username/alias/:u` reader) let any account move to an arbitrary
 handle signed only by its own IRK: no suggestion roster, no
 `validateUserLabel` grammar/reserved-word check, no name-change entitlement, no
@@ -177,7 +178,7 @@ replays a validly-signed rename onto `e2e` and requires no handler and no write.
 Paid name changes remain the planned `POST /api/account/name-change`
 (`docs/naming-recovery-and-name-change.md` §5-6), which never depended on this
 code. The `usernames_aliases` table and the protocol signing helpers stay.
-**Remaining (owner):** deploy `.com`, then delete the two rows for each squat
+Listed in the /security Hall of fame. **Remaining (owner):** delete the two rows for each squat
 (`usernames_aliases` where `new_username IN ('e2e','abtest-vanity-hunt01')`, and
 the same two names in `usernames`); the original `rapid-bison`/`fresh-poppy`
 rows are untouched, so both accounts keep working.
@@ -2009,6 +2010,13 @@ SPA HTML) for `.css`/`.js` (anticipated at `apps/com/src/route.ts:746-752`).
     third posture: run an OpenAI-compatible endpoint and flip the `LlmHarness`
     `baseUrlGuard` (`allowPrivate`/`allowHttp`/`hostAllowlist`). The adapter already
     exists. Spec: `docs/build-modes.md` "in-house inference server".
+13. **Paid name change (`POST /api/account/name-change`) — build it against the
+    ship-blocker checklist** at the top of the migration sequence in
+    `docs/naming-recovery-and-name-change.md` §5. A free rename route was already
+    exploited once (removed 2026-10-08): the entitlement must be single-use and
+    atomic, reserved and roster-offered names refused, every account field carried
+    over, and the legacy `usernameHandover.ts` must not return via a feature-branch
+    rebase.
 
 **NFC retail tier (post-v1; design in `docs/v1-operational-tasks.md § N`):** protocol +
 daemon state machine + cloud activation API are built & partly live; the read-only tap
