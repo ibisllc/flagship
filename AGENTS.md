@@ -1703,16 +1703,21 @@ Duo: closed ⇒ portrait tab shell; open/half ⇒ landscape sidebar, full-screen
 Demo/mock/placeholder strings no longer use the owner's name (`bright-maple`
 handle; neutral invite-note placeholder) on iOS, Android, and web.
 
+**Build 4 is archived** (`1.0 (4)`, iOS 27.1 SDK, Xcode 27A9275) as "FlagshipApp
+2026-10-08 build 4" in Organizer, and the screenshots are regenerated in
+`~/Desktop/flagship-builds/appstore-screenshots/` (iPhone 6.9" 1320×2868, iPad
+13" 2752×2064, Watch Ultra 422×514; build-3 shots moved to
+`appstore-screenshots-build3-old/`). The iOS 27.1 runtime is Duo-only, so the
+iPhone/iPad shots ran on the iOS 26.5 simulators; iPad captures come out as
+2064×2752 with a rotation flag and are re-rendered to true landscape pixels.
+
 1. Verify the open → CLOSED fold returns to portrait (Device Hub posture
    buttons; the AX automation times out while Device Hub is in the background).
-2. Recapture screenshots with `AppStoreScreenshotTests` (the default handle is
-   now `bright-maple`; the old set showed `harry`).
-3. Archive build 4 (iOS 18 floor, iOS 27.1 SDK).
-4. **Owner:** upload build 4 from Organizer, attach it to version 1.0, upload
-   screenshots, fill the forms
-   (`~/Desktop/flagship-builds/appstore-screenshots/APP-STORE-CONNECT-FORMS.md`),
-   answer export compliance + age rating, submit. Reviewer login: demo
-   `playstore-test-0725` (shared with the Play review — don't tear it down).
+2. **Owner:** open Organizer from Xcode 27.1, upload build 4, attach it to
+   version 1.0, upload the screenshots, fill the forms
+   (`APP-STORE-CONNECT-FORMS.md` in the screenshots folder), answer export
+   compliance + age rating, submit. Reviewer login: demo `playstore-test-0725`
+   (shared with the Play review — don't tear it down).
 
 ### Known bugs & debt — from the 2026-10-07 iOS parity audit (OPEN)
 
