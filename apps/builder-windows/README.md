@@ -25,6 +25,20 @@ The optional prebuilt-appliance shortcut is not used on Windows. Host Here follo
 
 Raw USB writes require elevation. `app.manifest` therefore requests administrator access and `DiskWrite` permanently rejects `PhysicalDrive0` and non-removable targets.
 
+## Alpine Quick mode (parked — `alpine` branch only)
+
+An opt-in third mode (`BuilderMode.Quick`) and the revival point for Alpine
+bare-metal; Simple stays the default. Quick caches the stock Flagship Alpine
+base ISO ONCE under `%LOCALAPPDATA%\flagship-builder\flagship-alpine-base-<version>.iso`
+(outside the Debian cache's `flagship-base-*` namespace), appends the
+phone-signed recipe as a trailer LOCALLY (`AlpinePersonalize.cs`, byte-identical
+to the server's `iso-personalizer/trailer.ts`), and raw-writes the result — no
+remaster, no user ISO, no Node. Bake runs **download** (first run only, sha256
+verified) → **personalize** (trailer appended; the ISO9660 PVD volume-size is
+patched so the box's `volumeSpaceSize × logicalBlockSize` find lands on it) →
+**write**. Covered by `tests/AlpinePersonalizeTests.cs` and
+`tests/BaseIsoCacheTests.cs`.
+
 ## xorriso
 
 ISO remastering requires the native xorriso executable. Resolution order is:
