@@ -140,6 +140,9 @@ interface InstallBlobJson {
     userPubKey: string;
     issuedAt: number;
     expiresAt: number;
+    /** Signed by `authCodeUserSignature` (canonical `ar=`), so `.com`
+     *  registration rejects the authCode if it is dropped. */
+    adminRootPubKey?: string;
   };
   authCodeUserSignature: string;
   installerGitRef: string;
@@ -147,6 +150,7 @@ interface InstallBlobJson {
   /** Optional signed fields — MUST be carried through the round-trip or the
    *  reconstructed blob's canonical bytes won't match the signature. */
   bootUnlockMode?: "auto" | "approve";
+  diskEncryption?: "luks" | "none";
 }
 
 function bytesToHex(b: Bytes): string {
@@ -179,17 +183,29 @@ export function installBlobToJson(b: InstallBlob): InstallBlobJson {
       userPubKey: bytesToHex(b.authCode.userPubKey),
       issuedAt: b.authCode.issuedAt,
       expiresAt: b.authCode.expiresAt,
+      ...(b.authCode.adminRootPubKey !== undefined
+        ? { adminRootPubKey: bytesToHex(b.authCode.adminRootPubKey) }
+        : {}),
     },
     authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
     ...(b.bootUnlockMode !== undefined ? { bootUnlockMode: b.bootUnlockMode } : {}),
+    ...(b.diskEncryption !== undefined ? { diskEncryption: b.diskEncryption } : {}),
   };
 }
 
 export function installBlobFromJson(j: InstallBlobJson): InstallBlob {
   if (j.version !== 2) throw new Error("unsupported InstallBlob version");
   if (j.authCode.version !== 1) throw new Error("unsupported AuthCode version");
+  const adminRootHex = j.authCode.adminRootPubKey;
+  if (adminRootHex !== undefined && !/^[0-9a-fA-F]{64}$/.test(adminRootHex)) {
+    throw new Error("authCode.adminRootPubKey must be 32-byte hex");
+  }
+  const adminRoot = adminRootHex === undefined ? undefined : hexToBytes(adminRootHex);
+  if (j.diskEncryption !== undefined && j.diskEncryption !== "luks" && j.diskEncryption !== "none") {
+    throw new Error("unsupported diskEncryption");
+  }
   return {
     version: 2,
     serverDomain: j.serverDomain,
@@ -207,10 +223,12 @@ export function installBlobFromJson(j: InstallBlobJson): InstallBlob {
       userPubKey: hexToBytes(j.authCode.userPubKey),
       issuedAt: j.authCode.issuedAt,
       expiresAt: j.authCode.expiresAt,
+      ...(adminRoot !== undefined ? { adminRootPubKey: adminRoot } : {}),
     },
     authCodeUserSignature: hexToBytes(j.authCodeUserSignature),
     installerGitRef: j.installerGitRef ?? "",
     rckPubKey: hexToBytes(j.rckPubKey),
     ...(j.bootUnlockMode !== undefined ? { bootUnlockMode: j.bootUnlockMode } : {}),
+    ...(j.diskEncryption !== undefined ? { diskEncryption: j.diskEncryption } : {}),
   };
 }
