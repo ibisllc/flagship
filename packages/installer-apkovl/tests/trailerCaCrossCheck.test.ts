@@ -26,7 +26,15 @@ describe("bootstrap H4 cross-check (#14)", () => {
 
   it("extracts username + IRK from the trailer JSON", () => {
     expect(BOOTSTRAP).toMatch(/jq -r \.username[^\n]+BLOB/);
-    expect(BOOTSTRAP).toMatch(/jq -r \.userPubKey[^\n]+BLOB/);
+    // InstallBlob v2 nests the signer key under authCode; a top-level read
+    // returns null and refuses every current recipe.
+    expect(BOOTSTRAP).toMatch(/jq -r '\.authCode\.userPubKey[^\n]+BLOB/);
+    expect(BOOTSTRAP).not.toMatch(/jq -r \.userPubKey/);
+  });
+
+  it("reads the key from the shape .com's pubkey-cert route actually returns", () => {
+    // GET /api/users/:u/pubkey-cert answers { binding: { pubKey, … }, signature }.
+    expect(BOOTSTRAP).toMatch(/CA_IRK_PUB=[^\n]*\.binding\.pubKey/);
   });
 
   it("compares trailer IRK to CA IRK (case-insensitive hex compare)", () => {

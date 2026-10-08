@@ -16,6 +16,10 @@ public struct RecipeAuthCode: Sendable, Equatable {
     public let userPubKeyHex: String
     public let issuedAt: Int64
     public let expiresAt: Int64
+    /// Signed by authCodeUserSignature (canonical `ar=`), so `.com`
+    /// registration rejects the authCode if a serializer drops it. Only the
+    /// Alpine trailer re-serializes from this model; nil when absent.
+    public var adminRootPubKeyHex: String? = nil
 }
 
 public struct Recipe: Sendable, Equatable {
@@ -145,6 +149,7 @@ public enum RecipeLoader {
             let userPubKey: String
             let issuedAt: Int64
             let expiresAt: Int64
+            let adminRootPubKey: String?
         }
         let version: Int
         let serverDomain: String
@@ -204,7 +209,12 @@ public enum RecipeLoader {
             delegatedPubKeyHex: dto.authCode.delegatedPubKey ?? dto.phoneDelegatedPubKey,
             userPubKeyHex: dto.authCode.userPubKey,
             issuedAt: dto.authCode.issuedAt,
-            expiresAt: dto.authCode.expiresAt)
+            expiresAt: dto.authCode.expiresAt,
+            adminRootPubKeyHex: dto.authCode.adminRootPubKey)
+        if let ar = ac.adminRootPubKeyHex,
+           ar.count != 64 || ar.contains(where: { !$0.isHexDigit }) {
+            throw RecipeError.malformed("authCode.adminRootPubKey is not 32-byte hex")
+        }
         return Recipe(
             version: dto.version,
             serverDomain: dto.serverDomain,

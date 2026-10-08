@@ -197,7 +197,7 @@ fi
 # attacker-IRK-signed content would pass. Resolving the username's
 # CA-signed binding closes that path.
 TRAILER_USERNAME="$(jq -r .username "$BLOB")"
-TRAILER_IRK_PUB="$(jq -r .userPubKey "$BLOB")"
+TRAILER_IRK_PUB="$(jq -r '.authCode.userPubKey // empty' "$BLOB")"
 if [ -z "$TRAILER_USERNAME" ] || [ "$TRAILER_USERNAME" = "null" ]; then
     echo "flagship: trailer missing username field — refusing to install"
     exit 1
@@ -219,7 +219,7 @@ if [ -z "$CA_CERT" ]; then
     echo "flagship: failed to fetch CA pubkey-cert for $TRAILER_USERNAME — refusing to install"
     exit 1
 fi
-CA_IRK_PUB="$(echo "$CA_CERT" | jq -r .irkPub 2>/dev/null || echo "")"
+CA_IRK_PUB="$(echo "$CA_CERT" | jq -r '.binding.pubKey // empty' 2>/dev/null || echo "")"
 if [ -z "$CA_IRK_PUB" ] || [ "$CA_IRK_PUB" = "null" ]; then
     echo "flagship: pubkey-cert response malformed — refusing to install"
     exit 1

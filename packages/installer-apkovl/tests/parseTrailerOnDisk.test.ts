@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   signAuthCode,
   signInstallBlob,
+  verifyAuthCode,
   type AuthCode,
   type InstallBlob,
 } from "@flagship/protocol";
@@ -58,6 +59,24 @@ describe("parseTrailerFromHandle", () => {
     expect(parsed).not.toBeNull();
     expect(parsed!.signatureValid).toBe(true);
     expect(parsed!.blob.serverDomain).toBe("home.harry.flagship.services");
+  });
+
+  it("keeps every optional signed field a current recipe carries", async () => {
+    const base = buildBlob();
+    const authCode: AuthCode = { ...base.authCode, adminRootPubKey: new Uint8Array(32).fill(0x42) };
+    const blob: InstallBlob = {
+      ...base,
+      authCode,
+      authCodeUserSignature: signAuthCode(authCode, harryIrk),
+      bootUnlockMode: "approve",
+      diskEncryption: "none",
+    };
+    const parsed = await parseTrailerFromHandle(bytesHandle(buildTrailer(blob, harryIrk).bytes));
+    expect(parsed!.signatureValid).toBe(true);
+    expect(parsed!.blob.diskEncryption).toBe("none");
+    expect(parsed!.blob.bootUnlockMode).toBe("approve");
+    expect(parsed!.blob.authCode.adminRootPubKey).toEqual(new Uint8Array(32).fill(0x42));
+    expect(verifyAuthCode(parsed!.blob.authCode, parsed!.blob.authCodeUserSignature, harryIrk.publicKey)).toBe(true);
   });
 
   it("returns null on an unpersonalized image (no magic at the end)", async () => {

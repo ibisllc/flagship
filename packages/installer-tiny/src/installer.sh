@@ -275,9 +275,20 @@ verify_recipe_signature() {
     # the signature itself (a tampered/empty field simply fails verification).
     [ "${#_upk}" = "64" ] || { rm -rf "$_vdir"; fail "authCode.userPubKey is not 32-byte hex"; }
 
-    # Reconstruct canonicalInstallBlob bytes — MUST byte-match auth.ts. No
-    # trailing newline (printf %s); parts joined by '|'.
+    # Optional signed fields. canonicalInstallBlob appends them only when
+    # present, so a recipe without them keeps its original bytes; dropping or
+    # flipping one breaks the signature (e.g. diskEncryption luks -> none).
+    _bum="$(jq -r '.bootUnlockMode // empty' "$BLOB_JSON")"
+    _de="$(jq -r '.diskEncryption // empty' "$BLOB_JSON")"
+    case "$_bum" in ""|auto|approve) ;; *) rm -rf "$_vdir"; fail "unsupported bootUnlockMode: $_bum" ;; esac
+    case "$_de" in ""|luks|none) ;; *) rm -rf "$_vdir"; fail "unsupported diskEncryption: $_de" ;; esac
+
+    # Reconstruct canonicalInstallBlob bytes — MUST byte-match
+    # packages/protocol/src/installBlob.ts. No trailing newline (printf %s);
+    # parts joined by '|'.
     _canon="flagship/install-blob/v1|2|$_sd|$_un|$_sn|$_pd|$_ru|$_ser|$_upk|$_acs|$_gr|$_rck"
+    if [ -n "$_bum" ]; then _canon="$_canon|$_bum"; fi
+    if [ -n "$_de" ]; then _canon="$_canon|de=$_de"; fi
     printf '%s' "$_canon" > "$_vdir/canonical.bin"
 
     # Signature bytes: prefer a raw 64-byte $BLOB_SIG file; else blobSignatureHex.

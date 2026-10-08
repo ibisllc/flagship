@@ -233,4 +233,48 @@ public class AlpinePersonalizeTests
     {
         try { if (File.Exists(p)) File.Delete(p); } catch { }
     }
+
+    // ---- shared golden: apps/desktop-shared/golden/alpine-trailer-vectors.json ----
+    // Generated from @flagship/iso-personalizer: every optional signed field
+    // (bootUnlockMode, diskEncryption, authCode.adminRootPubKey) and upper-case
+    // hex input must produce the TypeScript trailer byte-for-byte. Loading goes
+    // through RecipeLoader, so each recipe's signature is verified too.
+
+    private static JsonElement TrailerVectors()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Resources", "alpine-trailer-vectors.json");
+        return JsonDocument.Parse(File.ReadAllBytes(path)).RootElement.GetProperty("vectors");
+    }
+
+    private static readonly DateTimeOffset BeforeGoldenExpiry =
+        DateTimeOffset.FromUnixTimeMilliseconds(1_790_000_000_500);
+
+    [Fact]
+    public void TrailerMatchesSharedGolden()
+    {
+        var vectors = TrailerVectors();
+        Assert.Equal(5, vectors.GetArrayLength());
+        foreach (var v in vectors.EnumerateArray())
+        {
+            var recipe = RecipeLoader.Load(
+                Encoding.UTF8.GetBytes(v.GetProperty("recipe").GetRawText()), BeforeGoldenExpiry);
+            Assert.Equal(v.GetProperty("trailerJson").GetString(),
+                Encoding.UTF8.GetString(AlpinePersonalize.InstallBlobJson(recipe)));
+            Assert.Equal(v.GetProperty("trailerHex").GetString(),
+                Convert.ToHexString(AlpinePersonalize.BuildTrailer(recipe)).ToLowerInvariant());
+        }
+    }
+
+    [Fact]
+    public void RecipeRejectsMalformedAdminRoot()
+    {
+        JsonElement full = default;
+        foreach (var v in TrailerVectors().EnumerateArray())
+            if (v.GetProperty("name").GetString() == "every-signed-field") full = v.GetProperty("recipe");
+        var adminRoot = full.GetProperty("authCode").GetProperty("adminRootPubKey").GetString()!;
+        var bad = full.GetRawText().Replace(adminRoot, new string('z', 64));
+        var e = Assert.Throws<RecipeException>(
+            () => RecipeLoader.Load(Encoding.UTF8.GetBytes(bad), BeforeGoldenExpiry));
+        Assert.Contains("adminRootPubKey", e.Message);
+    }
 }

@@ -93,6 +93,7 @@
     <EmbeddedResource Include="..\..\..\packages\flagship-builder\engine\preseed-engine.js" LogicalName="Flagship.Builder.Resources.preseed-engine.js" />
     <EmbeddedResource Include="..\..\..\packages\flagship-builder\engine\golden\preseed-vectors.json" LogicalName="Flagship.Builder.Tests.Resources.preseed-vectors.json" />
     <Content Include="..\..\desktop-shared\golden\vm-core-vectors.json" Link="Resources\vm-core-vectors.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\desktop-shared\golden\alpine-trailer-vectors.json" Link="Resources\alpine-trailer-vectors.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
