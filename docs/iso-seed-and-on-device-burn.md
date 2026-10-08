@@ -78,21 +78,26 @@ generic seed bytes, which are sha-pinned and reproducible (below).
 - appends an empty `FLAGSHIP` FAT16 partition (`-append_partition`, GPT+MBR);
 - repacks with `-boot_image any replay` (boot equipment verbatim), keeping the
   **original Debian volume id** (d-i keys `/cdrom` detection on it);
-- pins every timestamp to a fixed epoch, the GPT disk GUID to a fixed value, and
-  `SOURCE_DATE_EPOCH` for `mformat`, so the output is **byte-for-byte
-  reproducible**.
+- pins every timestamp to a fixed epoch and the GPT disk GUID to a fixed value,
+  copies the stock base's Preparer Id (xorriso would stamp its own version), and
+  uses a committed, hash-checked empty FAT (`iso-seed/flagship-empty-fat16.img.gz`)
+  instead of running `mformat`, whose output differs between mtools releases —
+  so the output is **byte-for-byte reproducible**.
 
-Given the same stock base + this script + the same `xorriso`, the seed sha256 is
-identical on every machine. Anyone can re-derive it and compare against the
-published hash — that is the transparency guarantee.
+Given the same stock base + this script, the seed sha256 is identical under
+xorriso 1.5.4 (Debian 12) and 1.5.6 (Debian 13); the `iso-seed` CI job rebuilds
+it under both on every change and fails on any mismatch. xorriso 1.5.8 (current
+Homebrew) lays the image out differently and yields another sha, so verify in a
+Debian container. Anyone can re-derive it and compare against the published
+hash — that is the transparency guarantee.
 
 ### Pinned hashes
 
 | field | value |
 |---|---|
-| stock base | Debian 13.5.0 amd64 netinst (`FLAGSHIP_ISO_MANIFEST`, official signed sha) |
-| seed sha256 | `bc8ccfe82b77ba2424c9baefff11e29d8190578639312dac8ca76223867802ec` |
-| built by | `iso-seed/build-seed.sh` @ this commit, `xorriso` 1.x |
+| stock base | Debian 13.6.0 amd64 netinst (`FLAGSHIP_ISO_MANIFEST`, official signed sha) |
+| seed sha256 | `54be17b43ddafa10e2112b2e5966835f12aaff39a50d21415f942e06a7ae7f19` |
+| built by | `iso-seed/build-seed.sh` @ this commit, `xorriso` 1.5.4 / 1.5.6 (Debian 12 / 13) |
 
 Re-pin the seed sha whenever the stock base or `build-seed.sh` changes (a new
 Debian point release re-pins both the stock and the seed together).
@@ -111,7 +116,7 @@ above. See `docs/iso-manifest`* + the `platform: "android"` seed manifest.
 ```sh
 # 1. fetch the exact stock base .com pins (url+sha in the manifest)
 # 2. re-derive the seed
-iso-seed/build-seed.sh debian-13.5.0-amd64-netinst.iso my-seed.iso
+iso-seed/build-seed.sh debian-13.6.0-amd64-netinst.iso my-seed.iso
 # 3. compare against the published seed sha256
 sha256sum my-seed.iso   # must equal the pinned value above
 ```
@@ -136,7 +141,8 @@ pinned `SOURCE_DATE_EPOCH`, so the seed stays byte-for-byte reproducible.
 ## Validation status
 
 - **Reproducible seed build** — done + verified (byte-identical across runs;
-  `sha256=bc8ccfe8…` for the Debian 13.5.0 base).
+  `sha256=54be17b4…` for the Debian 13.6.0 base, identical under Debian 12
+  and 13 toolchains — the `iso-seed` CI job checks it).
 - **`FLAGSHIP` is GPT-registered** — verified by parsing the seed's GPT
   (`part3: name=Appended3`, the 16 MiB FLAGSHIP region past the ISO).
 - **Full install in QEMU (no hardware)** — verified end to end: a burned stick
