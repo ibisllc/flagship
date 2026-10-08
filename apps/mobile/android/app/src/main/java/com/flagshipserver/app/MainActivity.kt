@@ -106,10 +106,26 @@ class MainActivity : FragmentActivity() {
      *  ⇒ RootShell defaults to Home. */
     private var smokeInitialTab: com.flagshipserver.app.core.RootDestination? = null
 
+    /** Phone-sized screens portrait-only, tablet-sized left to the system.
+     *  Re-run on every configuration change so a foldable picks up the right
+     *  rule when it opens or closes, whether or not the activity is recreated. */
+    private fun applyOrientationPolicy(config: android.content.res.Configuration = resources.configuration) {
+        val wanted = com.flagshipserver.app.core.OrientationPolicy.requestedOrientation(
+            config.smallestScreenWidthDp,
+        )
+        if (requestedOrientation != wanted) requestedOrientation = wanted
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyOrientationPolicy(newConfig)
+    }
+
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        applyOrientationPolicy()
         // FIRST: apply a backend-apex override from the launch intent, BEFORE
         // the OkHttp client / clients are built below (the pinner + the live
         // clients read Endpoints at construction). The gym test build launches
