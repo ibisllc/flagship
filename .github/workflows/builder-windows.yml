@@ -12,6 +12,9 @@ on:
       - "apps/builder-windows/**"
       - "apps/desktop-shared/golden/**"
       - ".github/workflows/builder-windows.yml"
+  # Lets a branch that carries Windows code (e.g. the parked `alpine`) be
+  # checked on demand — feature branches get no push/PR run of their own.
+  workflow_dispatch:
 
 permissions:
   contents: read
