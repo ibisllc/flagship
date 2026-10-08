@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Computer
+import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.LightMode
@@ -221,7 +222,7 @@ fun SettingsScreen(nav: NavController) {
             rows = listOf(
                 // P7 — dedicated tier-status / subscription screen (marketplace).
                 FSSettingsRowData(
-                    icon = "💳",
+                    icon = Icons.Outlined.CreditCard,
                     title = "Plan / Subscription",
                     subtitle = "Tier, LLM credits, dispatcher usage, custom domains.",
                     onClick = { nav.navigate("tier-status") },
