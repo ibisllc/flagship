@@ -307,7 +307,7 @@ export interface ControlPlaneEnv {
    * remastering a stock ISO. `url` MUST point at the transparent public
    * artifact (the GitHub release asset) and `sha256` at the reproducible seed
    * hash pinned in docs/iso-seed-and-on-device-burn.md
-   * (367acd2f…8ec2168d for the Debian 13.5.0 amd64 base). Unset ⇒ android
+   * (54be17b4…f12aaff3 for the Debian 13.6.0 amd64 base). Unset ⇒ android
    * requests get `{ download: null }`. OWNER DEPLOY STEP: set this to the real
    * release url + pinned seed sha before deploy; leave it unset in dev.
    */

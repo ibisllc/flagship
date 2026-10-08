@@ -34,7 +34,9 @@ compare the output sha256 to verify the published seed.
 ## Re-pinning on a Debian point release
 
 1. Update the stock base pin (`FLAGSHIP_ISO_MANIFEST`).
-2. Re-run `build-seed.sh` against the new stock base.
+2. Re-run `build-seed.sh` against the new stock base in a Debian 12 or 13
+   container (or push and read the `iso-seed` CI job's output), and update the
+   pin in `.github/workflows/iso-seed.yml`.
 3. Update the seed sha256 in `docs/iso-seed-and-on-device-burn.md`, the
    `/security/iso-seed.html` page, and the `FLAGSHIP_ISO_SEED` env value, then
    publish the new seed as the GitHub release asset the manifest points at.
