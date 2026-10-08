@@ -423,6 +423,9 @@ struct FlagshipApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onGeometryChange(for: CGSize.self, of: { $0.size }) { _ in
+                    OrientationPolicy.reconcile()
+                }
                 .environment(appState)
                 .environment(linker)
                 .environment(toasts)
@@ -561,6 +564,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // PushBootstrap below — so we don't prompt on the cold-start
         // welcome screen.
         return true
+    }
+
+    func application(
+        _ application: UIApplication,
+        supportedInterfaceOrientationsFor window: UIWindow?
+    ) -> UIInterfaceOrientationMask {
+        OrientationPolicy.mask(for: window)
     }
 
     func application(

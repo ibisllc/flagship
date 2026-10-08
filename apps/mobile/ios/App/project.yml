@@ -124,14 +124,17 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: Flagship
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        # Fixed orientation per product decision: iPhone is portrait-only, iPad
-        # is landscape-only. Because neither device offers all four orientations
-        # we also declare UIRequiresFullScreen — this matches the intent (no
-        # Split View / Stage Manager multitasking) and silences Xcode's "all
-        # interface orientations must be supported unless the app requires full
-        # screen" warning for an iPad-capable target.
+        # Fixed orientation per product decision: phone-sized screens are
+        # portrait-only, tablet-sized screens (iPad, an open iPhone Duo) are
+        # landscape-only. A Duo is both depending on which display the app is
+        # on, so iPhone declares the superset here and AppDelegate narrows it
+        # per screen (OrientationPolicy). Because no screen offers all four
+        # orientations we also declare UIRequiresFullScreen — this matches the
+        # intent (no Split View / Stage Manager multitasking) and silences
+        # Xcode's "all interface orientations must be supported unless the app
+        # requires full screen" warning for an iPad-capable target.
         INFOPLIST_KEY_UIRequiresFullScreen: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_NSCameraUsageDescription: "Flagship uses the camera to scan a pairing QR shown by your server."
         # Biometric gate for sensitive actions (approve unlock, revoke
