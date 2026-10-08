@@ -1774,6 +1774,18 @@ items here as they land.
 15. **Export compliance**: `ITSAppUsesNonExemptEncryption: NO` while the app
     does its own X25519/AES-GCM/Ed25519 sealing — confirm the claimed exemption.
 
+**iOS — 1.1 enhancement (owner-approved 2026-10-08, not for 1.0):**
+18. **Hinge-aligned list-and-detail on the open / half-open iPhone Duo.** Today
+    the inner display shows the landscape sidebar shell, with the content
+    column running across the fold — awkward to read and tap when half open
+    (book posture). Split the screen at the hinge instead: left page =
+    navigation + the current list (servers, services), right page = the
+    selected item's detail. Do NOT just widen the sidebar to the left half — it
+    has four rows and would sit mostly empty. Prerequisite: confirm how iOS 27
+    reports hinge geometry to an app before designing around it. Half-open use
+    is mostly brief/hands-free and Flagship sessions are short, so this is
+    polish, not a launch blocker.
+
 **Minimum-OS rule — products not yet reviewed (see Conventions):**
 16. **Mac Studio app floor is macOS 14** (`apps/builder-mac/Package.swift`,
     `Info.plist` `LSMinimumSystemVersion`). Apple's current macOS patch window
