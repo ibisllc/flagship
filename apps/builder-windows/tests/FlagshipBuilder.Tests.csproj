@@ -116,6 +116,7 @@
     <EmbeddedResource Include="..\..\..\packages\flagship-builder\engine\golden\preseed-vectors.json" LogicalName="Flagship.Builder.Tests.Resources.preseed-vectors.json" />
     <Content Include="..\..\desktop-shared\golden\vm-core-vectors.json" Link="Resources\vm-core-vectors.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\..\packages\protocol\test-vectors\enrollment\vectors.json" Link="Resources\enrollment-vectors.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\desktop-shared\golden\alpine-trailer-vectors.json" Link="Resources\alpine-trailer-vectors.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -416,6 +416,73 @@ describe("recipe-signature verify (seam a — ARMED, fail-closed)", () => {
     // No signature at all (no .sig file, no blobSignatureHex) -> fail closed.
     expect(run(jsonPath, join(dir, "missing.sig")).status).not.toBe(0);
   });
+
+  it("verifies recipes carrying the optional signed fields, and catches their tampering", () => {
+    // canonicalInstallBlob appends `|bootUnlockMode` and `|de=<diskEncryption>`
+    // when present; the shell rebuild must do the same or every such recipe is
+    // refused (and a stripped/flipped value must still fail). Same live-tool
+    // requirements as the test above.
+    const have = (t: string) => spawnSync("sh", ["-c", `command -v ${t}`]).status === 0;
+    const opensslReal =
+      (spawnSync("openssl", ["version"], { encoding: "utf8" }).stdout || "").startsWith("OpenSSL");
+    if (!have("jq") || !have("xxd") || !opensslReal) {
+      return;
+    }
+    const irk = deriveIRK(generateUMK());
+    const now = Date.now();
+    const authCode = {
+      version: 1 as const,
+      serial: "TESTSERIAL0002",
+      username: "testuser",
+      serverName: "home",
+      serverDomain: "home.testuser.flagship.services",
+      delegatedPubKey: irk.publicKey,
+      userPubKey: irk.publicKey,
+      issuedAt: now,
+      expiresAt: now + 3_600_000,
+      adminRootPubKey: new Uint8Array(32).fill(0x42),
+    };
+    const base = {
+      version: 2 as const,
+      serverDomain: authCode.serverDomain,
+      username: authCode.username,
+      serverName: authCode.serverName,
+      phoneDelegatedPubKey: irk.publicKey,
+      registrationUrl: "https://flagshipserver.com",
+      authCode,
+      authCodeUserSignature: signAuthCode(authCode, irk),
+      installerGitRef: "main",
+      rckPubKey: irk.publicKey,
+    };
+    const dir = mkdtempSync(join(tmpdir(), "flagship-recipe-opt-"));
+    let i = 0;
+    const verify = (json: Record<string, unknown>, sig: Uint8Array) => {
+      const jp = join(dir, `r${i}.json`);
+      const sp = join(dir, `r${i++}.sig`);
+      writeFileSync(jp, JSON.stringify(json));
+      writeFileSync(sp, Buffer.from(sig));
+      return spawnSync("sh", [INSTALLER, "verify-recipe", jp, sp], { encoding: "utf8" }).status;
+    };
+
+    for (const extra of [
+      { bootUnlockMode: "approve" as const },
+      { diskEncryption: "none" as const },
+      { bootUnlockMode: "auto" as const, diskEncryption: "luks" as const },
+    ]) {
+      const blob = { ...base, ...extra };
+      const json = installBlobToJson(blob) as unknown as Record<string, unknown>;
+      const sig = signInstallBlob(blob, irk);
+      expect(verify(json, sig), JSON.stringify(extra)).toBe(0);
+    }
+
+    const blob = { ...base, diskEncryption: "luks" as const };
+    const json = installBlobToJson(blob) as unknown as Record<string, unknown>;
+    const sig = signInstallBlob(blob, irk);
+    expect(verify({ ...json, diskEncryption: "none" }, sig)).not.toBe(0);
+    const { diskEncryption: _stripped, ...withoutDe } = json;
+    expect(verify(withoutDe, sig)).not.toBe(0);
+    expect(verify({ ...json, diskEncryption: "plaintext" }, sig)).not.toBe(0);
+  });
 });
 
 describe("box-side recipe trailer-find (dumb-flash / personalize-stream)", () => {

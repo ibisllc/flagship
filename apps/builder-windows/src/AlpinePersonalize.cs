@@ -137,10 +137,11 @@ public static class AlpinePersonalize
 
     /// <summary>
     /// JSON.stringify(installBlobToJson(blob)) — same field order + compact
-    /// (no spaces) so the bytes match trailer.ts. The optional bootUnlockMode is
-    /// appended last, only when present, exactly as installBlobToJson does — the
-    /// embedded blob round-trips through the daemon → Worker re-verify, which
-    /// rebuilds the canonical bytes from these fields.
+    /// (no spaces) so the bytes match trailer.ts, including the optional signed
+    /// fields, each emitted only when present and where installBlobToJson puts
+    /// it. Dropping one fails the box's signature check (bootUnlockMode,
+    /// diskEncryption) or .com registration (authCode.adminRootPubKey). Pinned
+    /// by apps/desktop-shared/golden/alpine-trailer-vectors.json.
     /// </summary>
     public static byte[] InstallBlobJson(Recipe r)
     {
@@ -162,12 +163,16 @@ public static class AlpinePersonalize
         s.Append("\"userPubKey\":").Append(Js(r.AuthCode.UserPubKeyHex.ToLowerInvariant())).Append(',');
         s.Append("\"issuedAt\":").Append(r.AuthCode.IssuedAt).Append(',');
         s.Append("\"expiresAt\":").Append(r.AuthCode.ExpiresAt);
+        if (r.AuthCode.AdminRootPubKeyHex != null)
+            s.Append(",\"adminRootPubKey\":").Append(Js(r.AuthCode.AdminRootPubKeyHex.ToLowerInvariant()));
         s.Append("},");
         s.Append("\"authCodeUserSignature\":").Append(Js(r.AuthCodeUserSignatureHex.ToLowerInvariant())).Append(',');
         s.Append("\"installerGitRef\":").Append(Js(r.InstallerGitRef)).Append(',');
         s.Append("\"rckPubKey\":").Append(Js(r.RckPubKeyHex.ToLowerInvariant()));
         if (r.BootUnlockMode != null)
             s.Append(",\"bootUnlockMode\":").Append(Js(r.BootUnlockMode));
+        if (r.DiskEncryption != null)
+            s.Append(",\"diskEncryption\":").Append(Js(r.DiskEncryption));
         s.Append('}');
         return Encoding.UTF8.GetBytes(s.ToString());
     }

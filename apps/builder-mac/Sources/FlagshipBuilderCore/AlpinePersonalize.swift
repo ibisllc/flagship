@@ -128,10 +128,11 @@ public enum AlpinePersonalize {
     }
 
     /// `JSON.stringify(installBlobToJson(blob))` — same field order + compact
-    /// (no spaces) so the bytes match trailer.ts. The optional bootUnlockMode is
-    /// appended last, only when present, exactly as installBlobToJson does — the
-    /// embedded blob round-trips through the daemon → Worker, which rebuilds the
-    /// canonical bytes from these fields.
+    /// (no spaces) so the bytes match trailer.ts, including the optional signed
+    /// fields, each emitted only when present and where installBlobToJson puts
+    /// it. Dropping one fails the box's signature check (bootUnlockMode,
+    /// diskEncryption) or `.com` registration (authCode.adminRootPubKey).
+    /// Pinned by apps/desktop-shared/golden/alpine-trailer-vectors.json.
     static func installBlobJSON(_ r: Recipe) -> Data {
         var s = "{"
         s += "\"version\":\(r.version),"
@@ -150,11 +151,13 @@ public enum AlpinePersonalize {
         s += "\"userPubKey\":\(js(r.authCode.userPubKeyHex.lowercased())),"
         s += "\"issuedAt\":\(r.authCode.issuedAt),"
         s += "\"expiresAt\":\(r.authCode.expiresAt)"
+        if let ar = r.authCode.adminRootPubKeyHex { s += ",\"adminRootPubKey\":\(js(ar.lowercased()))" }
         s += "},"
         s += "\"authCodeUserSignature\":\(js(r.authCodeUserSignatureHex.lowercased())),"
         s += "\"installerGitRef\":\(js(r.installerGitRef)),"
         s += "\"rckPubKey\":\(js(r.rckPubKeyHex.lowercased()))"
         if let mode = r.bootUnlockMode { s += ",\"bootUnlockMode\":\(js(mode))" }
+        if let de = r.diskEncryption { s += ",\"diskEncryption\":\(js(de))" }
         s += "}"
         return Data(s.utf8)
     }
