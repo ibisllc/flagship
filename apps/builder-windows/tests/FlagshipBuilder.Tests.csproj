@@ -34,6 +34,9 @@
     <!-- Manifest client + manifest-driven base-ISO cache are WPF-free. -->
     <Compile Include="..\src\IsoManifestClient.cs" />
     <Compile Include="..\src\IsoBaseCache.cs" />
+    <!-- The parked Alpine Quick pipeline (personalize + its cache) is WPF-free. -->
+    <Compile Include="..\src\AlpinePersonalize.cs" />
+    <Compile Include="..\src\BaseIsoCache.cs" />
     <!-- Phone-pairing subprocess glue: the pure event parser is WPF-free. -->
     <Compile Include="..\src\PairSession.cs" />
     <Compile Include="..\src\BuildLog.cs" />
@@ -65,6 +68,8 @@
     <Compile Include="DiskWriteTests.cs" />
     <Compile Include="IsoManifestClientTests.cs" />
     <Compile Include="IsoBaseCacheTests.cs" />
+    <Compile Include="AlpinePersonalizeTests.cs" />
+    <Compile Include="BaseIsoCacheTests.cs" />
     <Compile Include="VMLifecycleTests.cs" />
     <Compile Include="VMResourcePlanTests.cs" />
     <Compile Include="VMConfigTests.cs" />

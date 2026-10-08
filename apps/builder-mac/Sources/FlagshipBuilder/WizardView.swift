@@ -597,12 +597,12 @@ struct WizardView: View {
         .opacity(model.isRunning ? 0.5 : 1)
     }
 
-    /// The remaster runs on the builder before the write; show it in the warning
-    /// (orange) tint so the bar visibly changes color when the write phase
-    /// starts filling in the normal accent.
+    /// The remaster (or the Alpine Quick personalize) runs on the builder before
+    /// the write; show it in the warning (orange) tint so the bar visibly changes
+    /// color when the write phase starts filling in the normal accent.
     private var progressTint: Color {
         switch model.phase {
-        case "remaster": return FB.Colors.warning
+        case "remaster", "personalize": return FB.Colors.warning
         default: return FB.Colors.primary
         }
     }

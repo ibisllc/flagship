@@ -134,6 +134,7 @@ public partial class MainWindow : Window
     }
     private void SimpleMode_Click(object sender, RoutedEventArgs e) => _wizard.Mode = BuilderMode.Simple;
     private void AdvancedMode_Click(object sender, RoutedEventArgs e) => _wizard.Mode = BuilderMode.Advanced;
+    private void QuickMode_Click(object sender, RoutedEventArgs e) => _wizard.Mode = BuilderMode.Quick;
     private void WifiPassword_Changed(object sender, RoutedEventArgs e) { if (sender is PasswordBox box) _wizard.WifiPassword = box.Password; }
     // ---- Recipe row ----
 

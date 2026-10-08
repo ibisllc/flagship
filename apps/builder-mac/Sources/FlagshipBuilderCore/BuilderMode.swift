@@ -10,8 +10,12 @@ import Foundation
 ///   the default.
 /// - `advanced`: the user supplies a stock Ubuntu/Debian ISO + a JSON recipe;
 ///   the builder remasters that ISO in-place (autoinstall / preseed) and flashes.
+/// - `quick` (Alpine, parked): the user supplies only a recipe. The builder
+///   downloads the stock Flagship Alpine base ISO ONCE (cached), appends the
+///   recipe trailer locally (AlpinePersonalize), and flashes — no remaster.
 public enum BuilderMode: String, Sendable, CaseIterable {
     case simple
+    case quick
     case advanced
 
     /// Both flows are recipe-driven: Simple bakes the recipe into the
@@ -19,15 +23,17 @@ public enum BuilderMode: String, Sendable, CaseIterable {
     public var requiresRecipe: Bool {
         switch self {
         case .simple: return true
+        case .quick: return true
         case .advanced: return true
         }
     }
 
-    /// Simple uses the server-manifest base ISO the builder caches; only Advanced
+    /// Simple and Quick use the server-manifest base ISO the builder caches; only Advanced
     /// needs the user to supply a stock ISO file.
     public var requiresUserISO: Bool {
         switch self {
         case .simple: return false
+        case .quick: return false
         case .advanced: return true
         }
     }
@@ -36,6 +42,7 @@ public enum BuilderMode: String, Sendable, CaseIterable {
     public var bakeCtaLabel: String {
         switch self {
         case .simple: return "Flash to USB"
+        case .quick: return "Flash to USB"
         case .advanced: return "Assemble and flash"
         }
     }
@@ -44,6 +51,7 @@ public enum BuilderMode: String, Sendable, CaseIterable {
     public var menuLabel: String {
         switch self {
         case .simple: return "Simple"
+        case .quick: return "Quick"
         case .advanced: return "Advanced"
         }
     }

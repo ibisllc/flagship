@@ -1,0 +1,50 @@
+#!/usr/bin/env node
+// Quick probe: does the file/device end with the FLAGSHIP magic footer?
+// Exits 0 if yes, 1 if no. Used by bootstrap to find the right device.
+
+import { open } from "node:fs/promises";
+
+const FOOTER_MAGIC = Buffer.concat([
+  Buffer.from([0, 0, 0]),
+  Buffer.from("FLAGSHIP-END", "utf8"),
+  Buffer.from([0]),
+]);
+const SIZE_FIELD = 4;
+
+async function main() {
+  const path = process.argv[2];
+  if (!path) {
+    console.error("usage: flagship-trailer-probe <device-or-file>");
+    process.exit(2);
+  }
+  let fh;
+  try {
+    fh = await open(path, "r");
+  } catch {
+    process.exit(1);
+  }
+  try {
+    const stat = await fh.stat();
+    const size = stat.size || (await deviceSize(path));
+    if (size < FOOTER_MAGIC.length + SIZE_FIELD + 100) process.exit(1);
+    const tailLen = FOOTER_MAGIC.length + SIZE_FIELD;
+    const buf = Buffer.alloc(tailLen);
+    await fh.read(buf, 0, tailLen, size - tailLen);
+    const sliceForMagic = buf.subarray(0, FOOTER_MAGIC.length);
+    if (Buffer.compare(sliceForMagic, FOOTER_MAGIC) === 0) process.exit(0);
+    process.exit(1);
+  } finally {
+    await fh.close();
+  }
+}
+
+async function deviceSize(path) {
+  try {
+    const { execFileSync } = await import("node:child_process");
+    return parseInt(execFileSync("blockdev", ["--getsize64", path]).toString().trim(), 10);
+  } catch {
+    return 0;
+  }
+}
+
+main().catch(() => process.exit(1));

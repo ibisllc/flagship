@@ -123,6 +123,43 @@ The pure layer is fully unit-tested; the following need a live Linux desktop:
 5. The TCG degrade path on a machine without KVM (warning shown, VM still
    boots, slowly).
 
+## Alpine Quick mode (parked — `alpine` branch only)
+
+A third, opt-in flow behind the header's **Alpine Quick** switch. It is the
+revival point for Alpine bare-metal and stays parked until the Alpine
+initramfs USB-enumeration blocker is solved; Simple remains the default.
+
+- **Quick** (recipe + USB only) — the builder owns the whole pipeline. It
+  downloads the stock Flagship Alpine base ISO **once** (cached under
+  `$XDG_CACHE_HOME/flagship-builder/flagship-alpine-base-<version>.iso`,
+  sha256-pinned — deliberately outside the Debian cache's `flagship-base-*`
+  namespace so its prune never evicts it), appends the signed recipe trailer
+  **locally** (`alpine_personalize.py`, byte-identical to the server's
+  `iso-personalizer/trailer.ts`), and raw-writes the result via
+  `pkexec python3 disk_write.py`. No remaster, no user ISO, no Node CLI.
+- Flash runs download → personalize → write. Quick builds USB installers only;
+  "Host on this PC" asks you to switch to Simple.
+
+### Quick-mode trailer (wire format)
+
+```
+MAGIC_HEADER("FLAGSHIP-BOOT\0\0\0", 16) || version(0x01, 1) ||
+u32le(jsonLen) || json || signature(64) ||
+MAGIC_FOOTER("\0\0\0FLAGSHIP-END\0", 16) || u32le(totalSize)
+```
+
+`json` is `JSON.stringify(installBlobToJson(blob))` in the exact field order
+(compact, lowercase hex; `bootUnlockMode` only when present); `signature` is the
+recipe's 64-byte `blobSignature` verbatim. `personalize()` patches the PVD
+volume-space-size (both-endian u32 at byte `32768 + 80`) to `fileSize / lbs` so
+the box's `volumeSpaceSize × lbs` find lands on the trailer, then zero-pads to
+the device sector (512) for an aligned raw write.
+
+Tests: `tests/test_alpine_personalize.py` (trailer structure + placement,
+recipe parsing, pinned cache filename/sha/URL) and `tests/test_quick_flow.py`
+(download → personalize → write phases via injected seams, the
+`PkexecFlasher` command vector).
+
 ## Requirements
 
 - **Python 3.10+**

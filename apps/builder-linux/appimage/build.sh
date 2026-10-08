@@ -62,6 +62,10 @@ install -Dm644 "${LINUX_DIR}/elevation.py"         "${APPDIR}/usr/share/flagship
 install -Dm644 "${LINUX_DIR}/pair_session.py"      "${APPDIR}/usr/share/flagship-builder/pair_session.py"
 mkdir -p "${APPDIR}/usr/share/flagship-builder/vm"
 install -m644 -t "${APPDIR}/usr/share/flagship-builder/vm" "${LINUX_DIR}"/vm/*.py
+# The Alpine Quick path: local recipe-trailer personalize + the cached
+# Alpine base ISO.
+install -Dm644 "${LINUX_DIR}/alpine_personalize.py" "${APPDIR}/usr/share/flagship-builder/alpine_personalize.py"
+install -Dm644 "${LINUX_DIR}/base_iso_cache.py"    "${APPDIR}/usr/share/flagship-builder/base_iso_cache.py"
 # disk_write.py is the script pkexec elevates for the raw write — install it
 # 0755 so the polkit-launched python3 can read+exec it.
 install -Dm755 "${LINUX_DIR}/disk_write.py"        "${APPDIR}/usr/share/flagship-builder/disk_write.py"
@@ -79,7 +83,7 @@ fi
 
 # ---- polkit policies (operator installs these separately on first run) ----
 # The Node-CLI write action + the local-flasher action
-# (pkexec python3 disk_write.py).
+# (pkexec python3 disk_write.py; also the Alpine Quick flash).
 install -Dm644 "${LINUX_DIR}/polkit/com.flagshipserver.builder.policy" \
   "${APPDIR}/usr/share/polkit-1/actions/com.flagshipserver.builder.policy"
 install -Dm644 "${LINUX_DIR}/polkit/com.flagshipserver.builder.write-image.policy" \

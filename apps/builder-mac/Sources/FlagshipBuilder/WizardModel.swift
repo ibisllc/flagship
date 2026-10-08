@@ -323,7 +323,8 @@ final class WizardModel: ObservableObject {
     }
     /// Simple = fetch a server-named Debian base ISO + remaster it with the
     /// recipe (default). Advanced = remaster a stock Ubuntu/Debian ISO the user
-    /// supplies. Both end in the same remaster+flash path.
+    /// supplies. Both end in the same remaster+flash path. Quick (Alpine, parked)
+    /// = cache the Alpine base once + append the recipe trailer, no remaster.
     @Published var mode: BuilderMode = .simple
 
     /// Advanced-mode only: use the server-named base ISO (fetched/cached) like
@@ -351,6 +352,7 @@ final class WizardModel: ObservableObject {
     var phaseLabel: String? {
         switch phase {
         case "download": return "Downloading base image…"
+        case "personalize": return "Personalizing…"
         case "verify": return "Verifying base image…"
         case "verify appliance": return "Verifying prebuilt server image…"
         case "clone appliance": return "Cloning prebuilt server…"
@@ -605,46 +607,52 @@ final class WizardModel: ObservableObject {
 
         guard let recipe = recipe else { return }
 
-        // The ISO to remaster: fetch the server-named Debian base when we own the
-        // ISO (Simple, or Advanced + "Use system-provided ISO"); otherwise use
-        // the stock ISO the user supplied.
-        let srcISO: URL
-        if fetchesBaseISO {
-            phase = "download"
+        if mode == .quick {
+            guard let prepared = await prepareAlpineQuickImage(recipe: recipe) else { return }
+            preparedToCleanup = prepared
+            imagePath = prepared.path
+        } else {
+            // The ISO to remaster: fetch the server-named Debian base when we own the
+            // ISO (Simple, or Advanced + "Use system-provided ISO"); otherwise use
+            // the stock ISO the user supplied.
+            let srcISO: URL
+            if fetchesBaseISO {
+                phase = "download"
+                do {
+                    srcISO = try await ensureBaseISO()
+                } catch {
+                    reportOperationFailure(error)
+                    return
+                }
+            } else {
+                guard let iso = iso else { return }
+                srcISO = iso
+            }
+
+            // Shared remaster+flash path for both modes.
+            phase = "remaster"
+            baseDownloadURL = nil
+            progress = nil
+            DockProgress.set(nil)
+            let preparedURL = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
             do {
-                srcISO = try await ensureBaseISO()
+                let cfgs = try installerConfigs(forRecipe: recipe)
+                appendLog(stream: .stdout, text: "+ remaster \(srcISO.lastPathComponent) → prepared image")
+                let used = try await Task.detached(priority: .userInitiated) { () -> String in
+                    try Remaster.remasterInstaller(srcISO: srcISO, outISO: preparedURL,
+                                                   userDataYAML: cfgs.yaml, preseedCfg: cfgs.preseed)
+                }.value
+                didRemasterForTest = true
+                appendLog(stream: .stdout, text: "+ installer family: \(used)")
             } catch {
                 reportOperationFailure(error)
+                try? FileManager.default.removeItem(at: preparedURL)
                 return
             }
-        } else {
-            guard let iso = iso else { return }
-            srcISO = iso
+            preparedToCleanup = preparedURL
+            imagePath = preparedURL.path
         }
-
-        // Shared remaster+flash path for both modes.
-        phase = "remaster"
-        baseDownloadURL = nil
-        progress = nil
-        DockProgress.set(nil)
-        let preparedURL = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
-        do {
-            let cfgs = try installerConfigs(forRecipe: recipe)
-            appendLog(stream: .stdout, text: "+ remaster \(srcISO.lastPathComponent) → prepared image")
-            let used = try await Task.detached(priority: .userInitiated) { () -> String in
-                try Remaster.remasterInstaller(srcISO: srcISO, outISO: preparedURL,
-                                               userDataYAML: cfgs.yaml, preseedCfg: cfgs.preseed)
-            }.value
-            didRemasterForTest = true
-            appendLog(stream: .stdout, text: "+ installer family: \(used)")
-        } catch {
-            reportOperationFailure(error)
-            try? FileManager.default.removeItem(at: preparedURL)
-            return
-        }
-        preparedToCleanup = preparedURL
-        imagePath = preparedURL.path
 
         // PRIVILEGED: the signed launchd helper does the raw write.
         do {
@@ -709,6 +717,51 @@ final class WizardModel: ObservableObject {
         }
     }
 
+    /// Quick (Alpine): download + cache the Alpine base ONCE, then append the
+    /// recipe trailer locally. Returns the prepared image, or nil after
+    /// reporting the failure.
+    private func prepareAlpineQuickImage(recipe: URL) async -> URL? {
+        let parsed: Recipe
+        do { parsed = try RecipeLoader.load(contentsOf: recipe) }
+        catch { reportOperationFailure(error); return nil }
+        phase = "download"
+        let baseURL: URL
+        do {
+            baseURL = try await BaseIsoCache.ensure(
+                progress: { [weak self] p in
+                    Task { @MainActor in self?.progress = p; DockProgress.set(p) }
+                },
+                onDownloadStart: { [weak self] in
+                    Task { @MainActor in
+                        self?.appendLog(stream: .stdout,
+                                        text: "+ one-time download of the Alpine base image (≈240 MB — cached, won't repeat)")
+                    }
+                },
+                notice: { [weak self] m in
+                    Task { @MainActor in self?.appendLog(stream: .stdout, text: "+ \(m)") }
+                })
+        } catch {
+            reportOperationFailure(error)
+            return nil
+        }
+        phase = "personalize"
+        progress = nil
+        DockProgress.set(nil)
+        let preparedURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
+        do {
+            appendLog(stream: .stdout, text: "+ personalize \(parsed.serverDomain)")
+            try await Task.detached(priority: .userInitiated) {
+                try AlpinePersonalize.personalize(baseISO: baseURL, recipe: parsed, outURL: preparedURL)
+            }.value
+        } catch {
+            reportOperationFailure(error)
+            try? FileManager.default.removeItem(at: preparedURL)
+            return nil
+        }
+        return preparedURL
+    }
+
     // MARK: - Host here (VM appliance)
 
     /// "Host here" prefers a verified generalized appliance when a local test
@@ -719,6 +772,10 @@ final class WizardModel: ObservableObject {
     /// installer remains the fallback and comparison baseline.
     func runHostHere() async {
         guard let recipe = recipe else { return }
+        if mode == .quick {
+            reportOperationFailure("Quick (Alpine) builds USB installers only. Switch to Simple to host a server on this Mac.")
+            return
+        }
         if effectiveRequiresUserISO && iso == nil { return }
         guard !isRunning else { return }
         isRunning = true

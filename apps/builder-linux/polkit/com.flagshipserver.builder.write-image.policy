@@ -7,7 +7,8 @@
 
   The raw write to the USB needs CAP_SYS_ADMIN (effectively root), so the GUI
   pkexec's the small, auditable `disk_write.py` flasher — NOT the whole GUI and
-  NOT Node.
+  NOT Node. The Alpine Quick mode uses the same flasher after it caches the base
+  Alpine ISO and appends the recipe trailer locally.
 
   When the user clicks "Flash to USB", pkexec invokes python3 as root after
   the user authenticates to the PolicyKit agent. The flasher takes exactly two

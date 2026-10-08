@@ -15,6 +15,8 @@ finish-args:
   - --socket=fallback-x11
   - --socket=wayland
   # The raw write won't work in-sandbox, but verify + prepare (save-an-ISO) do.
+  # The network is also used by Alpine Quick mode's one-time base-ISO download
+  # (cached under $XDG_CACHE_HOME/flagship-builder).
   - --share=network
   # Allow reading the user's Downloads folder for recipe + ISO drag-drop.
   - --filesystem=xdg-download:ro
@@ -43,6 +45,8 @@ modules:
       - install -Dm644 pair_session.py      ${FLATPAK_DEST}/share/flagship-builder/pair_session.py
       - mkdir -p ${FLATPAK_DEST}/share/flagship-builder/vm
       - install -m644 -t ${FLATPAK_DEST}/share/flagship-builder/vm vm/*.py
+      - install -Dm644 alpine_personalize.py ${FLATPAK_DEST}/share/flagship-builder/alpine_personalize.py
+      - install -Dm644 base_iso_cache.py    ${FLATPAK_DEST}/share/flagship-builder/base_iso_cache.py
       - install -Dm755 disk_write.py        ${FLATPAK_DEST}/share/flagship-builder/disk_write.py
       - install -Dm644 com.flagshipserver.Builder.desktop ${FLATPAK_DEST}/share/applications/com.flagshipserver.Builder.desktop
     sources:
