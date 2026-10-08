@@ -27,7 +27,7 @@ export const PRO_BANNER_DISMISS_KEY = "flagship.pro.banner.dismissed.v1";
 export const PRO_BANNER_ID = "home-pro-banner";
 
 // The /pro membership page is served from the .com identity origin, not the
-// webapp host (web.flagshipserver.com), so we link to the absolute URL — the
+// webapp host (webapp.flagshipserver.com), so we link to the absolute URL — the
 // same convention every other external webapp link uses.
 export const PRO_URL = "https://flagshipserver.com/pro";
 
