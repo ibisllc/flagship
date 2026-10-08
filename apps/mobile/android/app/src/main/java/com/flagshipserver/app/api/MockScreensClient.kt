@@ -684,7 +684,7 @@ class MockScreensClient(
             dispatcherUsageGBmonth = 1.2,
             dispatcherFreeQuotaGBmonth = 50.0,
             customDomains = emptyList(),
-            reservedNames = listOf("harry"),
+            reservedNames = listOf("bright-maple"),
         )
     }
 
