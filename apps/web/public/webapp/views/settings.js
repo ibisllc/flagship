@@ -26,7 +26,9 @@ import {
 } from "../lib/sessionTiers.js";
 import { resolveAccount } from "../lib/accountResolve.js";
 import { accountDeletePolicy } from "../lib/accountDeletion.js";
-import { enterAccountDelete } from "./account-delete.js";
+import { enterAccountDelete, removeDemoFromBrowser } from "./account-delete.js";
+import { getActiveProfile } from "../lib/profiles.js";
+import { isDemoProfile } from "../lib/demoAccount.js";
 
 registerView("view-settings");
 
@@ -62,15 +64,20 @@ let sessionRecoveryEnrolled = false;
  *  Best-effort + async; defaults to the safe (not-enrolled ⇒ greyed)
  *  framing on any failure. */
 async function refreshSessionGates() {
+  // A demo holds no account key, so there is nothing for recovery to
+  // protect: its session buttons just remove it from this browser.
+  const demo = isDemoProfile(getActiveProfile());
   let enrolled = false;
-  try {
-    enrolled = await hasCloudRecovery(getSession().username);
-  } catch {
-    enrolled = false;
+  if (!demo) {
+    try {
+      enrolled = await hasCloudRecovery(getSession().username);
+    } catch {
+      enrolled = false;
+    }
   }
   sessionRecoveryEnrolled = enrolled;
   for (const id of ["settings-signout", "settings-reset"]) {
-    $(id)?.classList.toggle("gated", !enrolled);
+    $(id)?.classList.toggle("gated", !enrolled && !demo);
   }
   // "Change PIN" only appears once a PIN is set (tier-1 PIN lock).
   let pinSet = false;
@@ -531,6 +538,13 @@ export function initSettingsView() {
   // recovery is enrolled, and a tap-while-greyed surfaces a toast instead
   // of running the key wipe.
   $("settings-signout")?.addEventListener("click", () => {
+    if (isDemoProfile(getActiveProfile())) {
+      removeDemoFromBrowser().catch((e) => {
+        console.error("demo removal failed", e);
+        toast(humanError(e), "err");
+      });
+      return;
+    }
     if (!sessionRecoveryEnrolled) {
       // No recovery: a last-device sign-out is account death → ceremony.
       handleNoRecoveryGatedTap().catch((e) => {
@@ -548,6 +562,13 @@ export function initSettingsView() {
   // this device wipes the only local copy of the key, so it stays greyed +
   // toasts until recovery is enrolled.
   $("settings-reset")?.addEventListener("click", () => {
+    if (isDemoProfile(getActiveProfile())) {
+      removeDemoFromBrowser().catch((e) => {
+        console.error("demo removal failed", e);
+        toast(humanError(e), "err");
+      });
+      return;
+    }
     if (!sessionRecoveryEnrolled) {
       // No recovery: removing the last device is account death → ceremony.
       handleNoRecoveryGatedTap().catch((e) => {

@@ -9,7 +9,9 @@ import { clearPin } from "../lib/pinLock.js";
 import { hasCloudRecovery } from "../lib/recovery.js";
 import { resolveAccount } from "../lib/accountResolve.js";
 import { accountDeletePolicy } from "../lib/accountDeletion.js";
-import { enterAccountDelete } from "./account-delete.js";
+import { enterAccountDelete, removeDemoFromBrowser } from "./account-delete.js";
+import { getActiveProfile } from "../lib/profiles.js";
+import { isDemoProfile } from "../lib/demoAccount.js";
 
 registerView("view-unlock");
 
@@ -34,6 +36,12 @@ async function handleUnlock() {
 }
 
 export async function handleReset() {
+  // A demo is operator-managed and this browser holds none of its keys:
+  // "remove this device" just forgets it here (no recovery to point at).
+  if (isDemoProfile(getActiveProfile())) {
+    await removeDemoFromBrowser();
+    return;
+  }
   // Fold the device-reset under the SignOutPolicy gate so it can't bypass the
   // deletion ceremony: with NO cloud recovery on the LAST device, a reset is
   // account DEATH and must run the full ceremony (typed-username + confirm),
@@ -66,7 +74,7 @@ export async function handleReset() {
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
     title: "Reset this device?",
-    message: "Removes this device's local key. You'll need your recovery passkey or the wrapped UMK export to come back. Continue?",
+    message: "Removes this device's local key. You'll need your cloud recovery passkey or your account key backup file to come back. Continue?",
     okLabel: "Reset",
     danger: true,
   });

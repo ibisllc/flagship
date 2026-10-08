@@ -31,6 +31,7 @@ import {
 import { getPodBaseUrl } from "./lib/api.js";
 import { installComFetchGuard } from "./lib/comFetch.js";
 import { applyCompanionUiRestrictions, installCompanionUiRestrictions } from "./lib/companionGuard.js";
+import { applyDemoSettingsRestrictions, isDemoProfile } from "./lib/demoAccount.js";
 import { liveSync } from "./lib/liveSync.js";
 import { autoPairFromSnapshot } from "./lib/autoPair.js";
 import { refreshServerTrust, serverTrust } from "./lib/serverTrust.js";
@@ -241,6 +242,7 @@ function decorateSettingsTab() {
 async function enterSettingsTab() {
   show("view-settings-tab");
   decorateSettingsTab();
+  applyDemoSettingsRestrictions(isDemoProfile(getActiveProfile()));
   // Reflect the debug toggle's current state every time the tab is opened.
   const toggle = $("settings-debug-toggle");
   const row = $("settings-developer-row");

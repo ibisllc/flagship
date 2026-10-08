@@ -17,11 +17,12 @@ import { getSession, lockSession } from "../lib/state.js";
 import { signWithIrk, resetDevice } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
 import { remove as profileRemove } from "../lib/profilesStore.js";
-import { removeProfile as forgetProfile } from "../lib/profiles.js";
 import { stopRenewals } from "./home.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { runDeletionCeremony } from "../lib/accountDeletion.js";
+import { removeProfile as forgetProfileRow, getActiveProfile } from "../lib/profiles.js";
+import { confirmAndRemoveDemo, isDemoProfile } from "../lib/demoAccount.js";
 
 registerView("view-account-delete");
 
@@ -59,7 +60,7 @@ async function runDelete() {
       resetDevice,
       lockSession,
       profileRemove,
-      forgetProfile,
+      forgetProfile: forgetProfileRow,
       stopRenewals,
       show,
       setSubtitle,
@@ -88,9 +89,36 @@ export function initAccountDeleteView() {
   });
 }
 
+/** A demo account is operator-managed and this browser holds none of its
+ *  keys, so "delete" / "sign out" / "remove device" all mean the same thing:
+ *  forget it here. Shared by every entry point that would otherwise try to
+ *  sign with a key the demo device doesn't have. */
+export async function removeDemoFromBrowser() {
+  const { inlineConfirm } = await import("../lib/modal.js");
+  return confirmAndRemoveDemo({
+    username: getSession().username || getActiveProfile()?.cloudName || "",
+    confirm: (copy) => inlineConfirm(copy),
+    resetDevice,
+    profileRemove,
+    forgetProfile: forgetProfileRow,
+    lockSession,
+    stopRenewals,
+    setSubtitle,
+    show,
+  });
+}
+
 /** Present the deletion ceremony for the active account. Resets the form to a
- *  safe, gated state every time so a previous typed handle can't carry over. */
+ *  safe, gated state every time so a previous typed handle can't carry over.
+ *  A demo account instead gets the explained remove-from-this-browser. */
 export function enterAccountDelete() {
+  if (isDemoProfile(getActiveProfile())) {
+    removeDemoFromBrowser().catch((e) => {
+      console.error("demo removal failed", e);
+      toast(humanError(e), "err");
+    });
+    return;
+  }
   ceremonyUsername = getSession().username || "";
   const nameEl = $("account-delete-username");
   if (nameEl) nameEl.textContent = ceremonyUsername;
