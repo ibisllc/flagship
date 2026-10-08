@@ -75,7 +75,8 @@ label flagship
 	append $CMDLINE vga=788 initrd=/install.amd/initrd.gz --- quiet
 EOF
 # prompt 0 + a short timeout so BIOS auto-boots the default without a keypress.
-sed -i 's/^timeout .*/timeout 30/; s/^default .*/default flagship/' "$work/isolinux.cfg"
+sed 's/^timeout .*/timeout 30/; s/^default .*/default flagship/' "$work/isolinux.cfg" > "$work/isolinux.cfg.new"
+mv "$work/isolinux.cfg.new" "$work/isolinux.cfg"
 
 # Pre-declare an EMPTY FLAGSHIP FAT16 partition (label FLAGSHIP), registered in
 # BOTH the GPT and the MBR by xorriso -append_partition. This is the fix for the
@@ -84,14 +85,24 @@ sed -i 's/^timeout .*/timeout 30/; s/^default .*/default flagship/' "$work/isoli
 # once, at build time means the builder does ZERO partition-table surgery — it
 # streams the seed verbatim (including this empty partition) and overwrites the
 # partition's CONTENTS with the per-recipe preseed FAT. 16 MiB leaves headroom
-# over the ~33 KB preseed. mformat is deterministic, so the seed stays
-# reproducible.
-FLAGSHIP_MB="${FLAGSHIP_MB:-16}"
+# over the ~33 KB preseed.
+#
+# The empty FAT is a committed image, not formatted here: mformat's boot sector
+# differs between mtools releases (version in the OEM name, and more), which
+# made every toolchain produce a different seed. gzip decompression is
+# byte-exact everywhere, and the hash check makes a swapped image fail loudly.
+EMPTY_FAT_GZ="$(dirname "$0")/flagship-empty-fat16.img.gz"
+EMPTY_FAT_SHA256="28614a99ff64bb58a5dadaf431a4be3d450b5d7dc8896454885ccbd99e85e480"
 empty_fat="$work/flagship-empty.fat"
-dd if=/dev/zero of="$empty_fat" bs=1M count="$FLAGSHIP_MB" status=none
-# mtools stamps the volume-label dir entry with the wall clock; pin it so the
-# empty FAT (and thus the seed) is reproducible. mtools honors SOURCE_DATE_EPOCH.
-SOURCE_DATE_EPOCH=1767225600 mformat -i "$empty_fat" -v FLAGSHIP -N 464c4147 ::
+gzip -dc "$EMPTY_FAT_GZ" > "$empty_fat"
+if [ "$(sha256sum "$empty_fat" | cut -d' ' -f1)" != "$EMPTY_FAT_SHA256" ]; then
+  echo "error: $EMPTY_FAT_GZ does not decompress to the pinned empty FAT" >&2
+  exit 1
+fi
+
+# xorriso stamps its own version into the volume's Preparer Id. Keep the stock
+# base's value instead, so the seed doesn't depend on which xorriso built it.
+PREPARER="$("$XORRISO" -indev "$SRC" -pvd_info 2>/dev/null | sed -n 's/^Preparer Id  : //p')"
 
 echo ">> repacking seed -> $OUT (boot equipment replayed verbatim)"
 rm -f "$OUT"
@@ -109,6 +120,7 @@ rm -f "$OUT"
   -map "$work/txt.cfg" /isolinux/txt.cfg \
   -map "$work/isolinux.cfg" /isolinux/isolinux.cfg \
   -append_partition 3 0x0e "$empty_fat" \
+  -preparer_id "$PREPARER" \
   -volume_date all_file_dates "=$EPOCH" \
   -volume_date "c" "$EPOCH" \
   -volume_date "m" "$EPOCH" \
