@@ -1,5 +1,5 @@
-// Webapp mirror of the protocol provision-progress model + the cancel
-// client + the device-metadata wire decode. Keeps the four surfaces
+// Webapp mirror of the protocol provision-progress model + the
+// device-metadata wire decode. Keeps the four surfaces
 // byte-aligned: the fraction, the four-group labels, and the per-step
 // states must match packages/protocol/src/provisionProgress.ts and the
 // iOS / Android renderers.
@@ -17,7 +17,7 @@ import {
   renderProgressDetail,
 } from "../public/webapp/lib/provisionProgress.js";
 
-import { checkUsername, cancelDemoServer } from "../public/webapp/lib/usersCheck.js";
+import { checkUsername } from "../public/webapp/lib/usersCheck.js";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -200,23 +200,3 @@ describe("webapp metadata wire decode", () => {
   });
 });
 
-describe("webapp cancelDemoServer", () => {
-  it("POSTs /cancel and returns the parsed body", async () => {
-    const fakeFetch = vi.fn().mockResolvedValue(
-      jsonResponse(200, { username: "demoalice", cancelled: true, state: "none" }),
-    );
-    const r = await cancelDemoServer("demoalice", { fetch: fakeFetch as any });
-    expect(r.cancelled).toBe(true);
-    expect(r.state).toBe("none");
-    const [url, init] = fakeFetch.mock.calls[0]!;
-    expect(String(url)).toContain("/api/dev/sample-user/demoalice/cancel");
-    expect(init.method).toBe("POST");
-  });
-
-  it("throws on a non-2xx", async () => {
-    const fakeFetch = vi.fn().mockResolvedValue(jsonResponse(502, { error: "x" }));
-    await expect(cancelDemoServer("demoalice", { fetch: fakeFetch as any })).rejects.toThrow(
-      /cancel failed/,
-    );
-  });
-});

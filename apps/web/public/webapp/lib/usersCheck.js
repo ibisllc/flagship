@@ -1,16 +1,17 @@
-// Webapp wrapper for `/api/users/check` + `/api/dev/sample-user/{u}/
-// connect` — the Plan A mobile-mirror surface.
+// Webapp wrapper for `/api/users/check` + `/api/dev/sample-user/{u}/pair`
+// — the Plan A mobile-mirror surface.
 //
 // Mirror of:
 //   - apps/mobile/ios/Sources/FlagshipAPI/Client/FlagshipServerClient.swift
-//     (usernameAvailable, DemoServerBlock, DemoConnectClient)
+//     (usernameAvailable, DemoServerBlock)
 //   - apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/
-//     FlagshipServerClient.kt (UsernameAvailabilityResponse, DemoConnectClient)
+//     FlagshipServerClient.kt (UsernameAvailabilityResponse)
 //
 // When `/api/users/check` returns a `demoServer` block, the webapp
-// can branch the same way iOS / Android branch — render ONE real
-// device and call /connect on tap. Absent ⇒ legacy testAccount-only
-// behaviour. See docs/sample-users.md §10.9.
+// branches the same way iOS / Android do and renders ONE real device.
+// Demo servers are operator-provisioned (scripts/sample-user.mjs), so
+// there is no client-side connect or cancel: the Worker retired
+// `/connect` and `/cancel`. See docs/sample-users.md §10.9.
 
 /** @typedef {Object} DemoServerBlock
  *  @property {string} fqdn
@@ -236,28 +237,6 @@ export async function checkUsername(username, opts = {}) {
   return resp.json();
 }
 
-/** POST `/api/dev/sample-user/{username}/connect` (no auth, no body).
- *  Tells the Worker to (re)provision the Hetzner VPS backing the
- *  demo. 200 = the Worker observed (or already had) a provisioning /
- *  up row; non-2xx throws so the caller can show a precise error.
- *  @param {string} username
- *  @param {{ fetch?: typeof fetch, baseUrl?: string }} [opts]
- */
-export async function connectDemoServer(username, opts = {}) {
-  const f = opts.fetch || fetch;
-  const baseUrl = opts.baseUrl || controlApex();
-  const url = `${baseUrl}/api/dev/sample-user/${encodeURIComponent(username)}/connect`;
-  const resp = await f(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: "{}",
-  });
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    throw new Error(`connect failed: HTTP ${resp.status} ${text}`);
-  }
-}
-
 /** Create (or reuse) this browser's paired session on a live demo server. */
 export async function ensureDemoServerPairing(username, block, opts = {}) {
   const fqdn = typeof block?.fqdn === "string" ? block.fqdn.trim().toLowerCase() : "";
@@ -299,32 +278,6 @@ export async function ensureDemoServerPairing(username, block, opts = {}) {
   writeToken(fqdn, token);
   writeLegacy(fqdn, token);
   return { fqdn, token, reused: false };
-}
-
-/** POST `/api/dev/sample-user/{username}/cancel` (no auth, no body) —
- *  "Cancel this device" from the install-progress detail page. Public
- *  (a demo account is a no-auth capability) + edge rate-limited; it
- *  ONLY touches demo_users rows. Tears down the active VPS and resets
- *  the demo to the empty state so the UI returns to the list. 200 =
- *  cancelled (or already torn down); non-2xx throws.
- *  @param {string} username
- *  @param {{ fetch?: typeof fetch, baseUrl?: string }} [opts]
- *  @returns {Promise<{ username: string, cancelled: boolean, state: string }>}
- */
-export async function cancelDemoServer(username, opts = {}) {
-  const f = opts.fetch || fetch;
-  const baseUrl = opts.baseUrl || controlApex();
-  const url = `${baseUrl}/api/dev/sample-user/${encodeURIComponent(username)}/cancel`;
-  const resp = await f(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: "{}",
-  });
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    throw new Error(`cancel failed: HTTP ${resp.status} ${text}`);
-  }
-  return resp.json();
 }
 
 /** Poll `/api/users/check` every [pollIntervalMs] ms until the

@@ -6,14 +6,13 @@
 //   - When the username carries ONLY a `testAccount` block (legacy),
 //     the `demoServer` field is null and the renderer falls back to
 //     the legacy path.
-//   - The connect-and-wait helpers POST `/connect`, then poll
-//     `/users/check` until the lifecycle flips to `up`.
+//   - The wait helper polls `/users/check` until the lifecycle
+//     flips to `up` (demos are operator-provisioned; no `/connect`).
 
 import { describe, expect, it, vi } from "vitest";
 
 import {
   checkUsername,
-  connectDemoServer,
   demoLifecycle,
   demoPodStatus,
   ensureDemoServerPairing,
@@ -110,23 +109,6 @@ describe("webapp usersCheck — Plan A demoServer parsing", () => {
       "demoalice",
     );
     expect(stillProvisioning.status).toBe("pending");
-  });
-
-  it("connectDemoServer POSTs to /api/dev/sample-user/{u}/connect", async () => {
-    const fakeFetch = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    await connectDemoServer("demoalice", { fetch: fakeFetch as any });
-    const [calledUrl, calledInit] = fakeFetch.mock.calls[0]!;
-    expect(calledUrl).toBe("https://flagshipserver.com/api/dev/sample-user/demoalice/connect");
-    expect(calledInit.method).toBe("POST");
-    expect(calledInit.body).toBe("{}");
-  });
-
-  it("connectDemoServer surfaces non-2xx as an error", async () => {
-    const fakeFetch = vi.fn().mockResolvedValue(
-      new Response("rate limited", { status: 429 }),
-    );
-    await expect(connectDemoServer("demoalice", { fetch: fakeFetch as any }))
-      .rejects.toThrow(/429/);
   });
 
   it("ensureDemoServerPairing creates and persists a browser session", async () => {
