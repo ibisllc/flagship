@@ -1,0 +1,65 @@
+name: iso-seed (reproducible build check)
+
+# Rebuilds the Flagship ISO seed from the pinned stock Debian base inside a
+# fixed Debian container and fails unless the output matches the published
+# sha256. This is the reference build: the seed is reproducible only for a
+# given xorriso + mtools, so the pin is whatever THIS environment produces,
+# and anyone can re-run it to check the seed .com serves.
+on:
+  push:
+    branches: [feat/chromebook-fit]
+    paths:
+      - "iso-seed/**"
+      - ".github/workflows/iso-seed.yml"
+  pull_request:
+    paths:
+      - "iso-seed/**"
+      - ".github/workflows/iso-seed.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    container: debian:12
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The original pin, built on a Debian 12 host. Reproducing it proves
+          # this environment matches the one that published it.
+          - debian: "13.5.0"
+            base_url: https://cdimage.debian.org/cdimage/archive/13.5.0/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso
+            base_sha256: 95838884f5ea6c82421dfe6baaa5a639dbbe6756c1e380f9fe7a7cb0c1949d2a
+            seed_sha256: bc8ccfe82b77ba2424c9baefff11e29d8190578639312dac8ca76223867802ec
+          # The current base (FLAGSHIP_ISO_MANIFEST).
+          - debian: "13.6.0"
+            base_url: https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso
+            base_sha256: 65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7
+            seed_sha256: ""
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends xorriso mtools curl ca-certificates >/dev/null
+          xorriso -version | head -1
+          mformat --version | head -1
+      - name: Fetch + verify the stock base
+        run: |
+          curl -fsSL -o base.iso "${{ matrix.base_url }}"
+          echo "${{ matrix.base_sha256 }}  base.iso" | sha256sum -c -
+      - name: Build the seed
+        run: bash iso-seed/build-seed.sh base.iso seed.iso
+      - name: Check the pin
+        run: |
+          got="$(sha256sum seed.iso | cut -d' ' -f1)"
+          echo "Debian ${{ matrix.debian }} seed sha256: $got"
+          want="${{ matrix.seed_sha256 }}"
+          if [ -n "$want" ] && [ "$got" != "$want" ]; then
+            echo "::error::seed sha256 $got does not match the pin $want"
+            exit 1
+          fi
