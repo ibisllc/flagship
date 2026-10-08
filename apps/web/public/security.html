@@ -319,7 +319,9 @@
         <h4>Free username rename bypassed the paid name change and the reserved-name list</h4>
         <p class="hof-meta">
           Medium &middot; reported and fixed October 2026 &middot; fix
-          <a href="https://github.com/ibisllc/flagship/commit/b3d6852b">b3d6852b</a>
+          <a href="https://github.com/ibisllc/flagship/commit/b3d6852b">b3d6852b</a>,
+          hardening
+          <a href="https://github.com/ibisllc/flagship/commit/c4132973">c4132973</a>
           &middot; credit pending the reporter&rsquo;s preference
         </p>
         <p>
@@ -343,6 +345,20 @@
           reporter&rsquo;s own test, we found one earlier rename in production,
           onto a reserved test-environment name; both allocations have been
           reverted.
+        </p>
+        <p>
+          A second review of the fix found two places where it relied on
+          something else being true, and both are now closed. Our edge server
+          forwards any API request it does not recognise to the backend, so the
+          removed endpoint answered &ldquo;not found&rdquo; only because the
+          backend lacked it too; the edge now refuses it directly, whatever its
+          spelling, and a test proves such a request never reaches the backend
+          or the database. And our compiler never deletes the output of a
+          removed source file, so the old handler&rsquo;s compiled code was
+          still sitting in the local build directory. It was never part of the
+          deployed service, since nothing loaded it, but every deploy now
+          rebuilds from an empty directory and refuses to ship compiled code
+          that has no source.
         </p>
       </section>
 

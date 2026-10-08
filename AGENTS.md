@@ -61,7 +61,7 @@ npx vitest run                                  # everything (~30s)
 npx tsc -b                                      # typecheck the whole tree
 
 # Deploy
-npx tsc -b && (cd apps/com && npm run deploy)   # Worker — tsc -b FIRST: it bundles the BUILT control-plane dist/, so a deploy without a rebuild silently ships stale handler logic. Use `npm run deploy` (NOT `wrangler deploy` directly): it runs the `predeploy` guard (scripts/predeploy-com.sh — route-safety + dist-freshness)
+npx tsc -b && (cd apps/com && npm run deploy)   # Worker — it bundles the BUILT dist/ of the packages in scripts/com-bundled-packages.sh. Use `npm run deploy` (NOT `wrangler deploy` directly): its `predeploy` rebuilds those packages from an empty dist/ (scripts/clean-build-com.sh — `tsc -b` alone never deletes a removed module's output) and then runs the guard (scripts/predeploy-com.sh — route-safety + dist-freshness + orphaned-output + migration drift)
 export PATH="$HOME/.fly/bin:$PATH"
 flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services
 
@@ -178,6 +178,16 @@ replays a validly-signed rename onto `e2e` and requires no handler and no write.
 Paid name changes remain the planned `POST /api/account/name-change`
 (`docs/naming-recovery-and-name-change.md` §5-6), which never depended on this
 code. The `usernames_aliases` table and the protocol signing helpers stay.
+Hardened the same day after a second review: the Worker now answers both retired
+paths itself with a 404 (`RETIRED_API_PATHS` in `apps/com/src/route.ts`,
+normalized for case, escapes and slashes) instead of proxying them to `.services`,
+where the 404 had only held because Fly also lacked the route; the test drives
+`route()` and proves neither `.services` nor D1 is touched. Separately, `tsc -b`
+had left 19 orphaned compiled files in local `dist/` — the deleted handler plus
+marketplace/retail modules from branch checkouts. `npm run deploy` now rebuilds
+the bundled packages from an empty `dist/` and predeploy refuses orphaned output;
+the gate also now covers `services-zone` and `iso-personalizer`, which the bundle
+reaches through control-plane but the freshness check had never watched.
 Listed in the /security Hall of fame. Both squats were reverted in prod the same
 day (the `e2e` and `abtest-vanity-hunt01` rows deleted from `usernames` and
 `usernames_aliases`); the original `rapid-bison`/`fresh-poppy` accounts are
