@@ -1678,6 +1678,39 @@ premount) + a no-LUKS escape hatch (phone-signed `InstallBlob.diskEncryption`, d
 on). Boot worker consolidated into `flagship-com` (`boot.flagshipserver.com` is a custom
 domain). Earliest phone-home beacons in the preseed.
 
+### RESUME HERE — iOS 1.0 App Store submission (paused 2026-10-07 for a macOS update)
+
+State: all fixes are on `main`. Build 3 (`1.0 (3)`, iOS 17 floor, iOS 26.5
+SDK) is archived in Xcode Organizer but NOT uploaded — upload from this
+session was blocked by the permission system, so the owner does it. Screenshots
++ paste-ready App Store Connect form text are in
+`~/Desktop/flagship-builds/appstore-screenshots/` (`APP-STORE-CONNECT-FORMS.md`).
+Reviewer login: demo `playstore-test-0725` (shared with the Play review — don't
+tear it down). 26 GB free after cache cleanup; `xcodes` CLI installed.
+
+1. **Owner:** update macOS 26.5.2 → **Tahoe 26.7.1** (NOT macOS 27):
+   `sudo softwareupdate -i "macOS Tahoe 26.7.1-25G241" -R`, or System Settings →
+   General → Software Update → "Other updates" / "More info…" under the macOS 27
+   banner. Xcode 27.1 needs Tahoe 26.6+.
+2. **Together:** `xcodes install 27.1` (Apple ID + 2FA prompt), then
+   `sudo xcode-select -s /Applications/Xcode-27.1.0.app` and install the iOS
+   27.1 simulator runtime (Xcode → Settings → Components). Keep Xcode 26.5
+   until 27.1 is verified.
+3. Rebuild on 27.1; fix any new SDK warnings/errors. Re-run the unit suite
+   (expect only the 3 pre-existing failures, items 6–8 below) and the gym iPad
+   tests.
+4. **iPhone Duo:** run on the Duo simulator in Device Hub — closed (outer,
+   compact ⇒ tab bar) and open (inner, regular ⇒ sidebar); check open/close
+   transitions, the narrowed sidebar, safe areas, and Split View. Fix what
+   breaks.
+5. Bump `CURRENT_PROJECT_VERSION` to 4; recapture screenshots with
+   `AppStoreScreenshotTests` (+ Duo shots if App Store Connect asks for them);
+   archive build 4 (iOS 18 floor, iOS 27.1 SDK).
+6. **Owner:** upload build 4 from Organizer, attach it to version 1.0, upload
+   screenshots, fill the forms, answer export compliance + age rating, submit.
+   (Build 3 can be submitted instead if timing beats the Duo work — the Duo
+   then runs it letterboxed.)
+
 ### Known bugs & debt — from the 2026-10-07 iOS parity audit (OPEN)
 
 Found while preparing the iOS App Store submission. Everything fixed that day is
