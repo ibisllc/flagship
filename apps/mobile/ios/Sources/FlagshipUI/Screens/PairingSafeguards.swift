@@ -36,12 +36,12 @@ public struct CaptureProtected: ViewModifier {
             }
             #if canImport(UIKit)
             .onAppear {
-                isCaptured = UIScreen.main.isCaptured
+                isCaptured = Self.anySceneScreenCaptured()
             }
             .onReceive(NotificationCenter.default.publisher(
                 for: UIScreen.capturedDidChangeNotification
             )) { _ in
-                isCaptured = UIScreen.main.isCaptured
+                isCaptured = Self.anySceneScreenCaptured()
             }
             .onReceive(NotificationCenter.default.publisher(
                 for: UIApplication.userDidTakeScreenshotNotification
@@ -50,6 +50,18 @@ public struct CaptureProtected: ViewModifier {
             }
             #endif
     }
+
+    #if canImport(UIKit)
+    /// `UIScreen.main` is ambiguous on a two-display device (iPhone Duo):
+    /// check every screen a scene of ours is on, so recording either display
+    /// hides the pairing secret.
+    @MainActor
+    private static func anySceneScreenCaptured() -> Bool {
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.screen }
+            .contains { $0.isCaptured }
+    }
+    #endif
 
     private var captureOverlay: some View {
         ZStack {

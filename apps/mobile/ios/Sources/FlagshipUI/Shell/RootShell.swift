@@ -327,25 +327,34 @@ private struct iPhoneShell: View {
 
 // MARK: - iPad (custom sidebar + content)
 
-private struct iPadShell: View {
+struct iPadShell: View {
     @Binding var selected: RootDestination
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
 
+    /// 280pt on an iPad; on narrower regular-width displays (the iPhone Duo's
+    /// inner screen) it shrinks with the window, down to 220pt, so the
+    /// content pane keeps a usable width.
+    static func sidebarWidth(for totalWidth: CGFloat) -> CGFloat {
+        min(280, max(220, totalWidth * 0.3))
+    }
+
     var body: some View {
         let c = FSColors.scheme(scheme)
-        HStack(spacing: 0) {
-            Sidebar(selected: $selected, app: app, c: c)
-                .frame(width: 280)
-                .background(c.sidebar)
-                // Addressable so the gym's iPad pass can assert the regular
-                // (iPad) shell renders the 280pt sidebar — and NOT the iPhone
-                // TabView — at the iPad destination (§7-C, D8). iPhone (compact)
-                // never builds this branch, so the id is iPad-only by construction.
-                .accessibilityIdentifier("ipad-sidebar")
-            Divider()
-            destinationContent(selected)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        GeometryReader { geo in
+            HStack(spacing: 0) {
+                Sidebar(selected: $selected, app: app, c: c)
+                    .frame(width: Self.sidebarWidth(for: geo.size.width))
+                    .background(c.sidebar)
+                    // Addressable so the gym's iPad pass can assert the regular
+                    // (iPad) shell renders the 280pt sidebar — and NOT the iPhone
+                    // TabView — at the iPad destination (§7-C, D8). iPhone (compact)
+                    // never builds this branch, so the id is iPad-only by construction.
+                    .accessibilityIdentifier("ipad-sidebar")
+                Divider()
+                destinationContent(selected)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .tint(c.primary)
     }
