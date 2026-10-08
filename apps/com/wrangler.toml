@@ -299,12 +299,12 @@ FLAGSHIP_NETBOOT_ISO_KEY = "flagship-netboot-trixie-amd64-v5.iso"
 #     installer media stays aligned with the live stable package mirror; move
 #     an older version to /cdimage/archive only when intentionally retaining it.
 #   - TOML literal string (single quotes): inner JSON double-quotes are kept verbatim.
-FLAGSHIP_ISO_MANIFEST = '{"version":"debian-13.6.0","url":"https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso","sha256":"65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7","sizeBytes":791674880,"attestation":"https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/SHA256SUMS"}'
+FLAGSHIP_ISO_MANIFEST = '{"version":"debian-13.6.0","url":"https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso","sha256":"65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7","sizeBytes":791674880,"attestation":"https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/SHA256SUMS"}'
 # The arm64 twin — served only to `arch:"arm64"` manifest requests (the desktop
 # apps' HOST-a-VM path on Apple-silicon Macs / arm64 Linux hosts, which boot
 # native-arch guests only). Burning stays amd64. Same re-pin rule on a Debian
 # point release: version/url/sha256 together, both arches at once.
-FLAGSHIP_ISO_MANIFEST_ARM64 = '{"version":"debian-13.6.0","url":"https://cdimage.debian.org/cdimage/release/13.6.0/arm64/iso-cd/debian-13.6.0-arm64-netinst.iso","sha256":"ffa590beb3ae9158c354e00ebc4bf45421f4720bb3a8ddf2db3cbfc0374cf480","sizeBytes":735358976,"attestation":"https://cdimage.debian.org/cdimage/release/13.6.0/arm64/iso-cd/SHA256SUMS"}'
+FLAGSHIP_ISO_MANIFEST_ARM64 = '{"version":"debian-13.6.0","url":"https://cdimage.debian.org/cdimage/archive/13.6.0/arm64/iso-cd/debian-13.6.0-arm64-netinst.iso","sha256":"ffa590beb3ae9158c354e00ebc4bf45421f4720bb3a8ddf2db3cbfc0374cf480","sizeBytes":735358976,"attestation":"https://cdimage.debian.org/cdimage/archive/13.6.0/arm64/iso-cd/SHA256SUMS"}'
 
 # W11 — `[varname]` block consumed by the admin-snapshot-now handler.
 # `FLAGSHIP_R2_TEMP_PUBLIC_BASE` is the public dev-url host for the

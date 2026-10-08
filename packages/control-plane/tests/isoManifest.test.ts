@@ -70,11 +70,11 @@ describe("iso manifest handler", () => {
   describe("arch selection", () => {
     const BLESSED_ARM64: IsoManifest = {
       version: "debian-13.6.0-arm64",
-      url: "https://cdimage.debian.org/cdimage/release/13.6.0/arm64/iso-cd/debian-13.6.0-arm64-netinst.iso",
+      url: "https://cdimage.debian.org/cdimage/archive/13.6.0/arm64/iso-cd/debian-13.6.0-arm64-netinst.iso",
       sha256: "d".repeat(64),
       sizeBytes: 735358976,
       attestation:
-        "https://cdimage.debian.org/cdimage/release/13.6.0/arm64/iso-cd/SHA256SUMS",
+        "https://cdimage.debian.org/cdimage/archive/13.6.0/arm64/iso-cd/SHA256SUMS",
     };
 
     it("absent arch → the amd64 manifest (back-compat with deployed builders)", () => {

@@ -73,10 +73,10 @@ secret — a plain `wrangler deploy` activates it. The currently-seeded value:
 ```json
 {
   "version": "debian-13.6.0",
-  "url": "https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso",
+  "url": "https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso",
   "sha256": "65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7",
   "sizeBytes": 791674880,
-  "attestation": "https://cdimage.debian.org/cdimage/release/13.6.0/amd64/iso-cd/SHA256SUMS"
+  "attestation": "https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/SHA256SUMS"
 }
 ```
 

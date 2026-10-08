@@ -2012,6 +2012,11 @@ SPA HTML) for `.css`/`.js` (anticipated at `apps/com/src/route.ts:746-752`).
    (Debian 13.5.0 netinst, version-pinned, official sha) and a real recipe's Simple-mode
    download worked end to end. Only maintenance remains: re-pin all three fields
    (version/url/sha) on a new Debian point release, then redeploy `.com`.
+   Debian moves the PREVIOUS release from `cdimage/release/` to `cdimage/archive/` the
+   day a point release ships, so a pin left on `release/` 404s Studio's Simple-mode
+   download (happened 2026-10-08: 13.7.0 shipped, 13.6.0 broke; fixed by pointing at
+   `archive/13.6.0`, same bytes + sha). `iso-manifest-urls.yml` checks every manifest
+   URL daily and fails loudly; when it does, move the pin to `archive/` (or re-pin).
 2. **Rebuild + re-sign the Mac builder** (it ships Simple-as-default + the manifest client
    + the JSC preseed engine).
 3. **Run the wipe** — `bash scripts/wipe-all-users.sh` (NOT the raw `--file` .sql: prod
