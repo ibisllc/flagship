@@ -139,7 +139,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Keep entries terse: what changed +
-> what remains, not test counts or commit hashes. Last updated **2026-10-07**.
+> what remains, not test counts or commit hashes. Last updated **2026-10-08**.
 
 ### Pending owner validation (the standing caveat — applies to nearly every entry below)
 
@@ -1681,38 +1681,38 @@ premount) + a no-LUKS escape hatch (phone-signed `InstallBlob.diskEncryption`, d
 on). Boot worker consolidated into `flagship-com` (`boot.flagshipserver.com` is a custom
 domain). Earliest phone-home beacons in the preseed.
 
-### RESUME HERE — iOS 1.0 App Store submission (paused 2026-10-07 for a macOS update)
+### RESUME HERE — iOS 1.0 App Store submission (resumed 2026-10-08)
 
-State: all fixes are on `main`. Build 3 (`1.0 (3)`, iOS 17 floor, iOS 26.5
-SDK) is archived in Xcode Organizer but NOT uploaded — upload from this
-session was blocked by the permission system, so the owner does it. Screenshots
-+ paste-ready App Store Connect form text are in
-`~/Desktop/flagship-builds/appstore-screenshots/` (`APP-STORE-CONNECT-FORMS.md`).
-Reviewer login: demo `playstore-test-0725` (shared with the Play review — don't
-tear it down). 26 GB free after cache cleanup; `xcodes` CLI installed.
+State: macOS is on Tahoe 26.7.1 and **Xcode 27.1 RC (27A9275)** is installed at
+`/Applications/Xcode-27.1.0-Release.Candidate.app` (no final 27.1 was published;
+App Store Connect accepts RC builds). `xcode-select` still points at Xcode 26.5,
+so build with `DEVELOPER_DIR=/Applications/Xcode-27.1.0-Release.Candidate.app/Contents/Developer`
+(or `sudo xcode-select -s` it). The iOS 27.1 simulator runtime is installed; the
+iPhone Duo device type needs 27.1 (27.0 refuses it). Disk is tight (~14 GB free).
+Build 3 (`1.0 (3)`) is archived but superseded — submit build 4.
 
-1. **Owner:** update macOS 26.5.2 → **Tahoe 26.7.1** (NOT macOS 27):
-   `sudo softwareupdate -i "macOS Tahoe 26.7.1-25G241" -R`, or System Settings →
-   General → Software Update → "Other updates" / "More info…" under the macOS 27
-   banner. Xcode 27.1 needs Tahoe 26.6+.
-2. **Together:** `xcodes install 27.1` (Apple ID + 2FA prompt), then
-   `sudo xcode-select -s /Applications/Xcode-27.1.0.app` and install the iOS
-   27.1 simulator runtime (Xcode → Settings → Components). Keep Xcode 26.5
-   until 27.1 is verified.
-3. Rebuild on 27.1; fix any new SDK warnings/errors. Re-run the unit suite
-   (expect only the 3 pre-existing failures, items 6–8 below) and the gym iPad
-   tests.
-4. **iPhone Duo:** run on the Duo simulator in Device Hub — closed (outer,
-   compact ⇒ tab bar) and open (inner, regular ⇒ sidebar); check open/close
-   transitions, the narrowed sidebar, safe areas, and Split View. Fix what
-   breaks.
-5. Bump `CURRENT_PROJECT_VERSION` to 4; recapture screenshots with
-   `AppStoreScreenshotTests` (+ Duo shots if App Store Connect asks for them);
-   archive build 4 (iOS 18 floor, iOS 27.1 SDK).
-6. **Owner:** upload build 4 from Organizer, attach it to version 1.0, upload
-   screenshots, fill the forms, answer export compliance + age rating, submit.
-   (Build 3 can be submitted instead if timing beats the Duo work — the Duo
-   then runs it letterboxed.)
+Done on 27.1: the app builds for device (one Swift 6.3 init-order fix in
+`FlagshipApp.swift`); the unit suite shows only the 3 pre-existing failures
+(items 6–8 below), after fixing a mock data race and a Mirror-into-`@State`
+test that the iOS 27 SDK broke; gym iPad tests 4/4. `CURRENT_PROJECT_VERSION`
+is 4. Orientation is now per SCREEN size (owner rule 2026-10-08): phone-sized
+screens portrait-only, tablet-sized (iPad, Duo open or half-open) landscape-only
+— `OrientationPolicy` + a reconcile on window-size change, because iOS keeps
+the old orientation when the scene moves between Duo displays. Verified on the
+Duo: closed ⇒ portrait tab shell; open/half ⇒ landscape sidebar, full-screen.
+Demo/mock/placeholder strings no longer use the owner's name (`bright-maple`
+handle; neutral invite-note placeholder) on iOS, Android, and web.
+
+1. Verify the open → CLOSED fold returns to portrait (Device Hub posture
+   buttons; the AX automation times out while Device Hub is in the background).
+2. Recapture screenshots with `AppStoreScreenshotTests` (the default handle is
+   now `bright-maple`; the old set showed `harry`).
+3. Archive build 4 (iOS 18 floor, iOS 27.1 SDK).
+4. **Owner:** upload build 4 from Organizer, attach it to version 1.0, upload
+   screenshots, fill the forms
+   (`~/Desktop/flagship-builds/appstore-screenshots/APP-STORE-CONNECT-FORMS.md`),
+   answer export compliance + age rating, submit. Reviewer login: demo
+   `playstore-test-0725` (shared with the Play review — don't tear it down).
 
 ### Known bugs & debt — from the 2026-10-07 iOS parity audit (OPEN)
 
@@ -1753,14 +1753,8 @@ items here as they land.
    — public-key mismatch at `:59`.
 
 **iOS — open, lower priority:**
-9. **iPhone Duo.** The shell is size-class driven (`RootShell.swift`: regular ⇒
-   sidebar), the sidebar now narrows on a smaller regular-width display, and the
-   pairing screen-capture guard checks every scene's screen instead of the
-   ambiguous `UIScreen.main`. NOT yet verified on the Duo: that needs Xcode
-   27.1 (Duo simulator + iOS 27.1 SDK), which isn't installed here. Build 3 is
-   on the iOS 26.5 SDK, so on the Duo's inner display it runs letterboxed
-   (black borders) rather than full-screen tablet layout — not a rejection risk,
-   but no tablet view until a 27.1-SDK build ships.
+9. ~~**iPhone Duo.**~~ Verified on the Xcode 27.1 Duo simulator 2026-10-08
+   (see RESUME HERE); only the fold-closed return to portrait is unconfirmed.
 10. **Install-docs link is dead-ended:** `https://flagshipserver.com/docs/install`
     (`PendingServerScreen.swift:87`, `CreateServerStubScreen.swift:675`) serves the
     generic landing page. Point it at a real install guide (e.g. `/help`).
