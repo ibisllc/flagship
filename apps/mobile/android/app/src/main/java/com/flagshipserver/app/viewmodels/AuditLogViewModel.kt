@@ -28,7 +28,9 @@ const val AUDIT_LOG_PAGE_SIZE = 20
 
 /** Human-readable label for each audit event kind. Pinned to
  *  docs/revocation-ui.md so the log reads consistently regardless of
- *  which subsystem authored the event. Mirrors the iOS + webapp maps. */
+ *  which subsystem authored the event, and covering every kind the Worker
+ *  writes. Unknown kinds are humanized rather than shown raw. Mirrors iOS
+ *  AuditLogViewModel.label(for:). */
 fun auditEventLabel(kind: String): String = when (kind) {
     "device-disconnected" -> "Disconnected device"
     "device-replaced"     -> "Replaced device"
@@ -36,10 +38,35 @@ fun auditEventLabel(kind: String): String = when (kind) {
     "wipe-restart"        -> "Wiped & restarted account"
     "recovery-set-up"     -> "Set up recovery"
     "recovery-rotated"    -> "Rotated recovery passkey"
+    "recovery-code-consumed" -> "Used a recovery code"
     "app-renamed"         -> "Renamed app URL"
     "server-created"      -> "Created server"
     "server-online"       -> "Server came online"
-    else                  -> kind
+    "server-revoked"      -> "Removed server"
+    "server-transfer-offered" -> "Offered a server transfer"
+    "server-transfer-claimed" -> "Server transfer claimed"
+    "servers-self-delete-issued" -> "Requested server deletion"
+    "demo-vps-provisioned" -> "Demo server provisioned"
+    "totp-enrolled"       -> "Turned on authenticator codes"
+    "totp-disabled"       -> "Turned off authenticator codes"
+    "totp-failed-rate"    -> "Repeated authenticator code failures"
+    "re-pair-initiated"   -> "Started device replacement"
+    "re-pair-expired"     -> "Device replacement expired"
+    "re-pair-refused-no-credential" -> "Refused a device replacement"
+    "account-type-changed-single-to-multi" -> "Switched to multi-device"
+    "account-type-changed-multi-to-single" -> "Switched to single-device"
+    "ct-unexpected-cert"  -> "Unexpected certificate observed"
+    else -> kind.replace('-', ' ').replaceFirstChar { it.uppercaseChar() }
+}
+
+/** The detail line to show under an event, or null. Some kinds record
+ *  machine-oriented `key=value` detail that means nothing to a person.
+ *  Mirrors iOS AuditLogViewModel.displayDetail(for:). */
+fun auditEventDisplayDetail(event: AuditEvent): String? {
+    val detail = event.detail.trim()
+    if (detail.isEmpty()) return null
+    if (event.eventKind == "demo-vps-provisioned") return null
+    return detail
 }
 
 data class AuditLogPage(

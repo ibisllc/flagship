@@ -49,6 +49,7 @@ import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.AuditLogPage
 import com.flagshipserver.app.viewmodels.AuditLogViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
+import com.flagshipserver.app.viewmodels.auditEventDisplayDetail
 import com.flagshipserver.app.viewmodels.auditEventLabel
 import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
@@ -173,9 +174,9 @@ private fun EventRow(e: AuditEvent) {
                 color = colorFor(e.eventKind),
                 style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
             )
-            if (e.detail.isNotEmpty()) {
+            auditEventDisplayDetail(e)?.let { detail ->
                 Text(
-                    e.detail,
+                    detail,
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 12.sp),
                 )

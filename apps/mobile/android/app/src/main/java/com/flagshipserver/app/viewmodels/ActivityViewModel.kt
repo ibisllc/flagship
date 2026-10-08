@@ -50,22 +50,9 @@ sealed interface ActivityItem {
     data class AuditEntry(
         val event: AuditEvent,
         override val at: Long = event.postedAt,
-        override val title: String = auditLabel(event.eventKind),
-        override val subtitle: String? = event.detail.takeIf { it.isNotBlank() },
+        override val title: String = auditEventLabel(event.eventKind),
+        override val subtitle: String? = auditEventDisplayDetail(event),
     ) : ActivityItem
-}
-
-private fun auditLabel(kind: String): String = when (kind) {
-    "device-disconnected" -> "Disconnected device"
-    "device-replaced"     -> "Replaced device"
-    "device-added"        -> "Added device"
-    "wipe-restart"        -> "Wiped & restarted account"
-    "recovery-set-up"     -> "Set up recovery"
-    "recovery-rotated"    -> "Rotated recovery passkey"
-    "app-renamed"         -> "Renamed app URL"
-    "server-created"      -> "Created server"
-    "server-online"       -> "Server came online"
-    else                  -> kind
 }
 
 data class ActivityFeed(

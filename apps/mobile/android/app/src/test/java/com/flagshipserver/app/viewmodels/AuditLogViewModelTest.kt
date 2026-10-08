@@ -22,6 +22,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -49,9 +50,23 @@ class AuditLogViewModelTest {
         assertEquals("Renamed app URL", auditEventLabel("app-renamed"))
         assertEquals("Created server", auditEventLabel("server-created"))
         assertEquals("Server came online", auditEventLabel("server-online"))
-        // Unknown kinds fall back to the raw string — never blank or
-        // localized away.
-        assertEquals("custom-future-kind", auditEventLabel("custom-future-kind"))
+        // Unknown kinds are humanized, never shown raw or blank.
+        assertEquals("Custom future kind", auditEventLabel("custom-future-kind"))
+    }
+
+    @Test fun label_coversServerWrittenKinds() {
+        assertEquals("Demo server provisioned", auditEventLabel("demo-vps-provisioned"))
+        assertEquals("Turned on authenticator codes", auditEventLabel("totp-enrolled"))
+        assertEquals("Refused a device replacement", auditEventLabel("re-pair-refused-no-credential"))
+    }
+
+    @Test fun displayDetail_dropsMachineDetailForDemoProvisioning() {
+        val demo = AuditEvent(seq = 1, eventKind = "demo-vps-provisioned", detail = "serverId=abc fqdn=home.x.flagship.services", devicePrefix = "", postedAt = 1)
+        assertNull(auditEventDisplayDetail(demo))
+        val created = AuditEvent(seq = 1, eventKind = "server-created", detail = "home", devicePrefix = "", postedAt = 1)
+        assertEquals("home", auditEventDisplayDetail(created))
+        val blank = AuditEvent(seq = 1, eventKind = "server-created", detail = "  ", devicePrefix = "", postedAt = 1)
+        assertNull(auditEventDisplayDetail(blank))
     }
 
     @Test fun load_emptyUsername_yieldsLoadedEmpty() = runTest {
