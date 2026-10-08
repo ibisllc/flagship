@@ -391,16 +391,14 @@ test("lost device → recover account + regain the same cloud (keyfile recovery)
 
     // ── THE TAKEOVER RE-PAIR (the security ceremony, against the LIVE gym .com).
     // The keyfile-import-takeover INITIATES a re-pair so the account's other
-    // devices are alerted + can object during the grace window — the exact flow
-    // iOS/Android run. Two-phase so this is honest about a real bug AND proves
-    // the fix against the live backend (we must NOT deploy):
-    //   (A) call the DEPLOYED runKeyfileImportTakeover (the buggy code still on
-    //       webapp.gym) → records the live failure (old==new IRK → handler 400),
-    //       confirming the bug exists against the real .com.
-    //   (B) drive the FIXED, ROTATING envelope shape (old = registered key, new
-    //       = a fresh rotated device key, signed by the new key — exactly what
-    //       the fixed lib emits) directly against the live .com → proves the fix
-    //       is ACCEPTED by the real re-pair handler.
+    // devices are alerted during the grace window — the exact flow iOS/Android
+    // run. Two phases against the LIVE gym .com (we must NOT deploy):
+    //   (A) call the DEPLOYED runKeyfileImportTakeover (whatever webapp.gym
+    //       serves) — accepted when that build is current;
+    //   (B) drive the rotating envelope directly (old = registered key, new =
+    //       a fresh rotated device key, signed by the new key, plus the
+    //       registered key's oldIrkSignature the credential gate requires) so
+    //       the exact status from the real re-pair handler is visible.
     // Completion ("Finish now") only arms after the single-device 3-day grace,
     // which is not wall-clock-able here — we record the grace state honestly.
     const deployedTakeover = await d2.evaluate(async (username) => {
@@ -434,14 +432,20 @@ test("lost device → recover account + regain the same cloud (keyfile recovery)
         return { ok: false, err: String((e && (e as any).message) || e) };
       }
     }, BOX.username);
-    const deployedBugConfirmed =
-      !deployedTakeover?.ok && /equals current IRK/i.test(String(deployedTakeover?.err ?? ""));
+    // The rotating, old-key-proven takeover is on main now, so a webapp.gym
+    // deployed from this branch should be accepted (or 409 if a prior run's
+    // initiate is still inside its grace). The old==new rejection only means
+    // webapp.gym is serving a stale build.
+    const deployedStale = /equals current IRK/i.test(String(deployedTakeover?.err ?? ""));
+    const deployedPending = /already pending/i.test(String(deployedTakeover?.err ?? ""));
     record({
-      step: "BUG (live): deployed keyfile-import re-pair is rejected by gym .com (old==new IRK)",
-      grade: deployedBugConfirmed ? "A" : (deployedTakeover?.ok ? "C" : "A"),
+      step: "deployed keyfile-import takeover is accepted by gym .com (rotating + old-key proof)",
+      grade: deployedTakeover?.ok || deployedPending ? "A" : "C",
       detail: deployedTakeover?.ok
-        ? `deployed code unexpectedly succeeded (it may already carry the fix): ${JSON.stringify(deployedTakeover.rePair)}`
-        : `deployed runKeyfileImportTakeover → ${deployedTakeover?.err} (the fix rotates old→new; see commit)`,
+        ? `deployed runKeyfileImportTakeover accepted: ${JSON.stringify(deployedTakeover.rePair)}`
+        : deployedStale
+          ? `webapp.gym is serving a STALE build (old==new IRK): ${deployedTakeover?.err} — redeploy the gym webapp`
+          : `deployed runKeyfileImportTakeover → ${deployedTakeover?.err}`,
     });
 
     // (B) the FIXED rotating envelope, exercised directly against the live .com.
@@ -459,7 +463,7 @@ test("lost device → recover account + regain the same cloud (keyfile recovery)
         const { controlApex } = await import("/lib/apex.js");
         const s = getSession();
         if (!(s.umk instanceof Uint8Array)) return { ok: false, err: "no umk after restore" };
-        const { deriveIrkFromSeed, deriveIrkVersioned, signWithIrkVersioned, bytesToHex } = keystore;
+        const { deriveIrkFromSeed, deriveIrkVersioned, signWithIrk, signWithIrkVersioned, bytesToHex } = keystore;
         const newVersion = TAKEOVER_IRK_VERSION;
         // old = the registered (v1) key; new = a fresh ROTATED device key. The
         // new key signs the re-pair-initiate canonical bytes — the exact shape
@@ -474,6 +478,11 @@ test("lost device → recover account + regain the same cloud (keyfile recovery)
           ["flagship/re-pair-initiate/v1", username, newIrkPubHex, oldIrkPubHex, issuedAt].join("|"),
         );
         const sig = await signWithIrkVersioned(s.umk, newVersion, message);
+        // .com refuses an initiate signed only by the incoming key (it is
+        // self-asserted and oldIrkPub is public). The key file holds the seed,
+        // so prove ownership the way lib/keyfileImportTakeover.js does: the
+        // REGISTERED (v1) key signs the same canonical bytes.
+        const oldIrkSig = await signWithIrk(s.umk, message);
         const resp = await fetch(
           `${controlApex()}/api/users/${encodeURIComponent(username)}/re-pair`,
           {
@@ -482,6 +491,7 @@ test("lost device → recover account + regain the same cloud (keyfile recovery)
             body: JSON.stringify({
               request: { username, newIrkPub: newIrkPubHex, oldIrkPub: oldIrkPubHex, issuedAt },
               signature: bytesToHex(sig),
+              oldIrkSignature: bytesToHex(oldIrkSig),
             }),
           },
         );
@@ -645,10 +655,12 @@ test("lost device → recover account + regain the same cloud (keyfile recovery)
             note: "deployed restoreFromBackupFile leaves no active cloud profile → the recovered cloud's per-profile podBaseUrl/sessionToken slots aren't writable, so pairing the recovered device to its box never persists (every /api/screens read finds an empty podBaseUrl). Fixed: restoreFromBackupFile now ensureProfile + setActiveCloudName for the recovered cloud.",
           },
           rePair: {
-            deployedCodeBug: {
-              confirmedLive: deployedBugConfirmed,
+            deployed: {
+              accepted: !!deployedTakeover?.ok,
+              alreadyPending409: deployedPending,
+              staleBuild: deployedStale,
               error: deployedTakeover?.err ?? null,
-              note: "deployed lib/keyfileImportTakeover.js sends old==new IRK → gym .com rejects with 400 'newIrkPub equals current IRK'. Keyfile recovery's re-pair was DEAD on the webapp + iOS (Android already rotated). Fixed in this worktree.",
+              note: "webapp.gym's lib/keyfileImportTakeover.js. A current build rotates old→new and carries the registered key's oldIrkSignature; 'newIrkPub equals current IRK' means the gym webapp needs a redeploy.",
             },
             fixed: {
               fixAccepted: !!takeover?.fixAccepted,
