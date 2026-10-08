@@ -72,7 +72,47 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
         }
     }
 
+    #if DEBUG
+    /// App Store screenshot seam: a simulator watch has no paired phone, so
+    /// `-watch-showcase` seeds a pending boot approval + recent events and
+    /// `-watch-showcase-install` an in-flight install ladder.
+    @discardableResult
+    private func seedShowcaseIfRequested() -> Bool {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-watch-showcase") || args.contains("-watch-showcase-install") else { return false }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        if args.contains("-watch-showcase") {
+            securityAlerts = .init(
+                pendingApprovals: [
+                    .init(requestId: "showcase", serverFqdn: "home.harry.flagship.services",
+                          requestedAt: now - 40_000, ip: nil),
+                ],
+                recentEvents: [
+                    .init(seq: 3, kind: "server-online", detail: "office", devicePrefix: "", postedAt: now - 3_600_000),
+                    .init(seq: 2, kind: "device-added", detail: "", devicePrefix: "", postedAt: now - 86_400_000),
+                    .init(seq: 1, kind: "recovery-set-up", detail: "", devicePrefix: "", postedAt: now - 2 * 86_400_000),
+                ]
+            )
+        }
+        if args.contains("-watch-showcase-install") {
+            let phases = ["booting", "partitioning", "installing", "downloading", "registering"]
+            provisionTimeline = .init(
+                serial: "showcase", podName: "Office", serverDomain: "office.harry.flagship.services",
+                phase: "registering", detail: nil,
+                history: phases.enumerated().map { i, p in .init(phase: p, detail: nil, ts: now - Int64(5 - i) * 120_000) },
+                updatedAt: Date(), active: true
+            )
+        }
+        return true
+    }
+    #endif
+
     func activate() {
+        #if DEBUG
+        // A showcase launch renders seeded data only; a live session would
+        // replace it with the (empty) paired-phone context.
+        if seedShowcaseIfRequested() { return }
+        #endif
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()

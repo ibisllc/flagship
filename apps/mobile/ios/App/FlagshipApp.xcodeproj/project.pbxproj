@@ -14,6 +14,7 @@
 		0B9051D212D7ABF830BFC8C6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4BCF8466537CDEBE460F85A8 /* Assets.xcassets */; };
 		1C9D09A9144DD8F14716442B /* FlagshipWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 320466AFB364B4CE4A1DB396 /* FlagshipWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		25FF22502B5437B43895A9CB /* ProvisionPhaseComplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FE2F4580A4DFDE33146944 /* ProvisionPhaseComplication.swift */; };
+		348FD2E20DDB83B215026A45 /* AppStoreScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0F97547E19F9E2FA08E4F04 /* AppStoreScreenshotTests.swift */; };
 		34D09AC29C29E289630C4402 /* WatchRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */; };
 		37CD93243A7D74054B520FA0 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5E2730A9F5FEA2A10B78AFB0 /* PrivacyInfo.xcprivacy */; };
 		3C9A765CFA2D09FA245A31E0 /* FlagshipCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9703502B31E53B7A7B02182E /* FlagshipCore */; };
@@ -155,6 +156,7 @@
 		94B12B136089A4BDE59177C0 /* GymTotalDetailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymTotalDetailTests.swift; sourceTree = "<group>"; };
 		95FE2F4580A4DFDE33146944 /* ProvisionPhaseComplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisionPhaseComplication.swift; sourceTree = "<group>"; };
 		AC644708931B6CC8A4F4273F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		B0F97547E19F9E2FA08E4F04 /* AppStoreScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotTests.swift; sourceTree = "<group>"; };
 		C026689338C66E2541C8B3EF /* FlagshipApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FlagshipApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CA43A33A5EACE6A2A88A7032 /* ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ios; path = ..; sourceTree = SOURCE_ROOT; };
 		CF58F7F531BA9B5914B63CA1 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -165,10 +167,10 @@
 		EA35BF39206378728D34AE65 /* WatchBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchBridge.swift; sourceTree = "<group>"; };
 		EB03394B07AE3AC9DDF17FDF /* FlagshipWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWatchWidgets.entitlements; sourceTree = "<group>"; };
 		F770CD2952CF826FD5D49B33 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_2FF6D992-5B15-4DE9-873F-6B527FF8B38D" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_40125134-91EA-474A-883B-FF03C23B220D" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
-		"TEMP_7ED81A29-7519-4364-A182-25CEB28FA24A" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
-		"TEMP_CEF34A7D-9F2B-4632-BC17-7EE6A93AD28B" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_3AAE4E51-0AA0-4331-8798-26DFAD20FB82" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
+		"TEMP_6C8CD9DF-510D-4DC7-8A55-1B2A7BBE41B6" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_8CCCF8EE-3A6E-43EE-823B-B0D8FB265376" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_F83582D0-335C-49C3-81F3-FFCA10C1A499" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -319,6 +321,7 @@
 		F51043E76B25BB084043EA15 /* UITests */ = {
 			isa = PBXGroup;
 			children = (
+				B0F97547E19F9E2FA08E4F04 /* AppStoreScreenshotTests.swift */,
 				9320B5267D47AFDE76FD5D46 /* GymEveryMergeTests.swift */,
 				1CCAE03802624702DE798B52 /* GymFeatureMirrorTests.swift */,
 				2D3499CD4ED81FE13DF74CC7 /* GymIPadTests.swift */,
@@ -331,13 +334,13 @@
 			path = UITests;
 			sourceTree = "<group>";
 		};
-		"TEMP_5CD32C1D-C8E9-4523-BA5A-2659E0B081F8" /* . */ = {
+		"TEMP_6A2DC36C-5AE6-409F-92D3-DA2F9D4A2C2C" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_CEF34A7D-9F2B-4632-BC17-7EE6A93AD28B" /* project.yml */,
-				"TEMP_7ED81A29-7519-4364-A182-25CEB28FA24A" /* FlagshipApp.xcodeproj */,
-				"TEMP_40125134-91EA-474A-883B-FF03C23B220D" /* FlagshipApp.entitlements */,
-				"TEMP_2FF6D992-5B15-4DE9-873F-6B527FF8B38D" /* Info.plist */,
+				"TEMP_F83582D0-335C-49C3-81F3-FFCA10C1A499" /* project.yml */,
+				"TEMP_3AAE4E51-0AA0-4331-8798-26DFAD20FB82" /* FlagshipApp.xcodeproj */,
+				"TEMP_6C8CD9DF-510D-4DC7-8A55-1B2A7BBE41B6" /* FlagshipApp.entitlements */,
+				"TEMP_8CCCF8EE-3A6E-43EE-823B-B0D8FB265376" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				5B69A221CA30982662250465 /* WidgetExtension */,
 				564C6947F31B33F80500C451 /* WatchWidgets */,
@@ -565,6 +568,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				348FD2E20DDB83B215026A45 /* AppStoreScreenshotTests.swift in Sources */,
 				8CDC40B8810F689102B838D2 /* GymEveryMergeTests.swift in Sources */,
 				BD9630458EA132BCD16ADCA4 /* GymFeatureMirrorTests.swift in Sources */,
 				044DDAEFDED42ACC06772BE5 /* GymIPadTests.swift in Sources */,
@@ -761,7 +765,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -818,7 +822,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;

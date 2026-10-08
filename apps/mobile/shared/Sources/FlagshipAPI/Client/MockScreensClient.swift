@@ -40,7 +40,10 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let oneDay: Int64 = 24 * 3600 * 1000
         // Vary fixture per current pod so the switcher visibly
         // changes what the screens render.
-        let podName = podContext
+        // DemoFixtures pod ids are `demo-<label>-<suffix>`; render the label.
+        let podName = podContext.hasPrefix("demo-")
+            ? String(podContext.split(separator: "-").dropFirst().first ?? Substring(podContext))
+            : podContext
         let serviceCount = abs(podContext.hashValue) % 5 + 1   // 1–5 apps
         return ServerDetailResponse(
             serverFqdn: "\(podName).harry.flagship.services",

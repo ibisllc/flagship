@@ -129,6 +129,17 @@ struct FlagshipApp: App {
             // Default the override off so a same-process re-evaluation can't leak
             // a prior launch's block into a non-flagged run.
             SignOutPolicy.gymForceBlockNoRecovery = false
+            // `-smoke-recovery-enrolled` seeds an account that already has cloud
+            // recovery (no setup nudge) — the App Store showcase capture.
+            if args.contains("-smoke-recovery-enrolled") {
+                app.hasCloudRecovery = true
+            }
+        }
+        // `-smoke-username <name>` overrides the seeded handle (App Store
+        // screenshot captures); gym runs keep the default.
+        var user = "smoketest"
+        if let i = args.firstIndex(of: "-smoke-username"), i + 1 < args.count, !args[i + 1].hasPrefix("-") {
+            user = args[i + 1]
         }
         if !app.isPaired {
             // The total-gym D5 seed variants pick a different fixture pod set so
@@ -138,17 +149,17 @@ struct FlagshipApp: App {
             if args.contains("-smoke-awaiting-unlock") {
                 DemoFixtures.activate(
                     app,
-                    username: "smoketest",
-                    pods: DemoFixtures.samplePodsWithAwaitingUnlock(username: "smoketest")
+                    username: user,
+                    pods: DemoFixtures.samplePodsWithAwaitingUnlock(username: user)
                 )
             } else if args.contains("-smoke-dead") {
                 DemoFixtures.activate(
                     app,
-                    username: "smoketest",
-                    pods: DemoFixtures.samplePodsWithDeadServer(username: "smoketest")
+                    username: user,
+                    pods: DemoFixtures.samplePodsWithDeadServer(username: user)
                 )
             } else {
-                DemoFixtures.activate(app, username: "smoketest")
+                DemoFixtures.activate(app, username: user)
             }
         }
         // `-smoke-ops` seeds ONE in-flight build so the global operations
@@ -309,6 +320,14 @@ struct FlagshipApp: App {
                 ttlIdleMinutes: 30
             )
         ]
+        // `-smoke-recovery-enrolled` (screenshot captures): the mock must
+        // report recovery too, or Home's recovery-status poll unsets it.
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-smoke-recovery-enrolled") {
+            let i = args.firstIndex(of: "-smoke-username")
+            let user = i.flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil } ?? "smoketest"
+            m.cloudRecoveryByUser[user.lowercased()] = true
+        }
         return m
     }()
     private let liveServerClient: any FlagshipServerClient
