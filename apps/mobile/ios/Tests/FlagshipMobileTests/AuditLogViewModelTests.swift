@@ -59,6 +59,30 @@ final class AuditLogViewModelTests: XCTestCase {
         XCTAssertEqual(AuditLogViewModel.label(for: "totp-enrolled"), "Turned on authenticator codes")
     }
 
+    /// Every kind the Worker can write needs an explicit label (web and Android
+    /// carry the same guard), so a new server-side kind can't ship showing a
+    /// humanized slug on iOS only.
+    func test_label_hasExplicitCaseForEveryWorkerAuditKind() throws {
+        let repo = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let types = try String(contentsOf: repo.appendingPathComponent("packages/storage/src/types.ts"), encoding: .utf8)
+        let source = try String(contentsOf: repo.appendingPathComponent(
+            "apps/mobile/ios/Sources/FlagshipUI/ViewModels/AuditLogViewModel.swift"), encoding: .utf8)
+        let union = try XCTUnwrap(types.range(of: "export type AuditEventKind =")).upperBound
+        let end = try XCTUnwrap(types.range(of: "\";", range: union..<types.endIndex)).upperBound
+        let body = types[union..<end].split(separator: "\n")
+            .map { $0.components(separatedBy: "//")[0] }.joined(separator: "\n")
+        let kinds = try NSRegularExpression(pattern: "\"([a-z0-9-]+)\"")
+            .matches(in: body, range: NSRange(body.startIndex..., in: body))
+            .compactMap { Range($0.range(at: 1), in: body).map { String(body[$0]) } }
+        XCTAssertGreaterThan(kinds.count, 30)
+        for kind in kinds {
+            XCTAssertTrue(source.contains("case \"\(kind)\""), "no explicit label for \(kind)")
+        }
+    }
+
     func test_displayDetail_dropsMachineDetailForDemoProvisioning() {
         let demo = AuditEvent(seq: 1, eventKind: "demo-vps-provisioned", detail: "serverId=abc fqdn=home.x.flagship.services", devicePrefix: "", postedAt: 1)
         XCTAssertNil(AuditLogViewModel.displayDetail(for: demo))
