@@ -34,7 +34,7 @@ jobs:
     env:
       BASE_URL: https://cdimage.debian.org/cdimage/archive/13.6.0/amd64/iso-cd/debian-13.6.0-amd64-netinst.iso
       BASE_SHA256: 65273beed27b2df543b68b65630ba525cfbad8df2b12035732b2dff87d6664e7
-      SEED_SHA256: ad91527db2dec46025aaecf6900e69eaa676ecff645d481d3f81af76c7d764ac
+      SEED_SHA256: 54be17b43ddafa10e2112b2e5966835f12aaff39a50d21415f942e06a7ae7f19
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain
