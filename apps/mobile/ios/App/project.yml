@@ -32,7 +32,7 @@ name: FlagshipApp
 options:
   bundleIdPrefix: com.flagshipserver
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "18.0"
   developmentLanguage: en
   createIntermediateGroups: true
   generateEmptyDirectories: true
@@ -94,7 +94,7 @@ targets:
   FlagshipApp:
     type: application
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     sources:
       - path: Sources
       - path: Resources
@@ -214,7 +214,7 @@ targets:
   FlagshipWidgets:
     type: app-extension
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     sources:
       - path: WidgetExtension
         excludes:
@@ -240,7 +240,7 @@ targets:
   FlagshipWatchApp:
     type: application
     platform: watchOS
-    deploymentTarget: "10.0"
+    deploymentTarget: "11.0"
     sources:
       - path: WatchApp
         excludes:
@@ -278,7 +278,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGNING_ALLOWED: YES
         CODE_SIGNING_REQUIRED: YES
-        WATCHOS_DEPLOYMENT_TARGET: "10.0"
+        WATCHOS_DEPLOYMENT_TARGET: "11.0"
         SDKROOT: watchos
         SUPPORTED_PLATFORMS: "watchsimulator watchos"
 
@@ -288,7 +288,7 @@ targets:
   FlagshipWatchWidgets:
     type: app-extension
     platform: watchOS
-    deploymentTarget: "10.0"
+    deploymentTarget: "11.0"
     sources:
       - path: WatchWidgets
         excludes:
@@ -315,7 +315,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGNING_ALLOWED: YES
         CODE_SIGNING_REQUIRED: YES
-        WATCHOS_DEPLOYMENT_TARGET: "10.0"
+        WATCHOS_DEPLOYMENT_TARGET: "11.0"
         SDKROOT: watchos
         SUPPORTED_PLATFORMS: "watchsimulator watchos"
         SKIP_INSTALL: YES
@@ -323,7 +323,7 @@ targets:
   FlagshipAppUITests:
     type: bundle.ui-testing
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     sources:
       - path: UITests
     dependencies:

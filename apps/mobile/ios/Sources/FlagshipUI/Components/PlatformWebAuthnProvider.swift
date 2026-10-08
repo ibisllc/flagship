@@ -200,9 +200,7 @@ extension PlatformWebAuthnProvider {
             name: credentialName,
             userID: userID
         )
-        if #available(iOS 18.0, *) {
-            request.prf = .inputValues(.init(saltInput1: prfSalt))
-        }
+        request.prf = .inputValues(.init(saltInput1: prfSalt))
 
         let authorization = try await perform(request)
         guard
@@ -212,13 +210,9 @@ extension PlatformWebAuthnProvider {
             throw WebAuthnError.unexpectedCredential
         }
 
-        if #available(iOS 18.0, *) {
-            // `output.first` is a CryptoKit.SymmetricKey? — presence here is
-            // a support signal only; the secret is read in `prfAssert`.
-            prfAvailable = credential.prf?.first != nil
-        } else {
-            prfAvailable = false
-        }
+        // `output.first` is a CryptoKit.SymmetricKey? — presence here is
+        // a support signal only; the secret is read in `prfAssert`.
+        prfAvailable = credential.prf?.first != nil
 
         let credentialIdHex = Self.hex(credential.credentialID)
         return WebAuthnRegistration(credentialId: credentialIdHex)
@@ -266,11 +260,7 @@ extension PlatformWebAuthnProvider {
         request.allowedCredentials = [
             ASAuthorizationPlatformPublicKeyCredentialDescriptor(credentialID: credentialIDBytes)
         ]
-        if #available(iOS 18.0, *) {
-            request.prf = .inputValues(.init(saltInput1: prfSalt))
-        } else {
-            throw WebAuthnError.prfUnsupported
-        }
+        request.prf = .inputValues(.init(saltInput1: prfSalt))
 
         // Use the passkey already on this device. Recovery runs ON the target
         // device, so the cross-device QR ("sign in with a nearby device") is
@@ -287,10 +277,8 @@ extension PlatformWebAuthnProvider {
             throw WebAuthnError.unexpectedCredential
         }
         // `credential.prf` is optional; its `.first` is a non-optional
-        // CryptoKit.SymmetricKey when PRF is present. Both the `.prf`
-        // property and the type are iOS 18+, so read them inside an
-        // availability block.
-        if #available(iOS 18.0, *), let output = credential.prf {
+        // CryptoKit.SymmetricKey when PRF is present.
+        if let output = credential.prf {
             prfAvailable = true
             // Serialize the 32-byte PRF SymmetricKey to Data.
             return output.first.withUnsafeBytes { Data($0) }

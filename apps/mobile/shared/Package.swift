@@ -20,8 +20,8 @@ import PackageDescription
 let package = Package(
     name: "FlagshipShared",
     platforms: [
-        .iOS(.v17),
-        .watchOS(.v10),
+        .iOS("18.0"),
+        .watchOS("11.0"),
         .macOS(.v14)
     ],
     products: [

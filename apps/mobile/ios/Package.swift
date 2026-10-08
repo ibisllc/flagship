@@ -20,7 +20,7 @@ import PackageDescription
 let package = Package(
     name: "FlagshipMobile",
     platforms: [
-        .iOS(.v17),
+        .iOS("18.0"),
         .macOS(.v14)
     ],
     products: [
