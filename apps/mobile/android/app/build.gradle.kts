@@ -66,6 +66,8 @@ android {
 
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG gates the hidden developer unlock out of release builds.
+        buildConfig = true
     }
 
     packaging {

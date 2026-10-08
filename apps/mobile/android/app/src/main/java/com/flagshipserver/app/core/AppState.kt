@@ -231,6 +231,13 @@ class AppState(
         return _profiles.value.firstOrNull { it.cloudName == name }
     }
 
+    /** True for a passwordless demo account. Demo identities hold no account
+     *  keys, so key-backed flows (recovery, key backup, account deletion) do
+     *  not apply to them; the operator manages their lifecycle. Read off the
+     *  ACCOUNT, never the developer live/mock toggle. Mirror of iOS
+     *  AppState.isDemoAccount. */
+    fun isDemoAccountNow(): Boolean = isDemoAccount(activeProfile, _pods.value)
+
     /**
      * The Box Request Inbox (docs/box-request-inbox.md): ONE typed object, keyed
      * by lowercased fqdn → the list of approvals that box is currently asking its
@@ -329,6 +336,7 @@ class AppState(
      * underlying StateFlows.
      */
     fun shouldShowRecoveryNudgeNow(): Boolean {
+        if (isDemoAccountNow()) return false
         if (_hasCloudRecovery.value) return false
         if (_recoveryNudgeDismissedThisSession.value) return false
         return _pods.value.any { it.status == PodInfo.Status.ONLINE }
@@ -636,6 +644,13 @@ class AppState(
         // preference itself stays so a future re-pair re-arms.
         _isUnlocked.value = true
         onSignedOut?.invoke()
+    }
+
+    companion object {
+        /** Pure core of [isDemoAccountNow], for Compose callers that already
+         *  collect the profile + pods flows (and for tests). */
+        fun isDemoAccount(activeProfile: Profile?, pods: List<PodInfo>): Boolean =
+            activeProfile?.demoServer != null || pods.any { it.demoServer != null }
     }
 }
 

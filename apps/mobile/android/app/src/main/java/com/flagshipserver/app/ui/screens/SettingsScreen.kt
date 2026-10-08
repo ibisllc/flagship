@@ -71,6 +71,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavController
+import com.flagshipserver.app.BuildConfig
+import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.api.PushTokenRevokeRequest
 import com.flagshipserver.app.core.HexUtil
@@ -143,10 +145,19 @@ fun SettingsScreen(nav: NavController) {
     )
     val accountType by accountSecurity.accountType.collectAsState()
     LaunchedEffect(username) { accountSecurity.load() }
-    // #52 — the Tier-2 sign-out gate. Demo/mock sessions (the mock screens
-    // client, i.e. !useLiveClient) are exempt: they never wrap a real UMK.
-    // Absent DeveloperSettings ⇒ NOT demo (fail-closed: the gate applies).
-    val isDemoAccount = dev?.useLiveClient?.collectAsState()?.value?.let { !it } ?: false
+    // #52 — the Tier-2 sign-out gate. Demo/mock sessions are exempt: they
+    // never wrap a real UMK. A passwordless demo ACCOUNT (its profile or pods
+    // carry a demoServer block) counts as demo too — it holds no account keys,
+    // so the key-backed rows are hidden and Delete account becomes a
+    // remove-from-device. Absent DeveloperSettings ⇒ the mock half is false
+    // (fail-closed: the gate applies).
+    val pods by app.pods.collectAsState()
+    val profiles by app.profiles.collectAsState()
+    val activeCloud by app.activeCloudName.collectAsState()
+    val isDemoAccountSession = AppState.isDemoAccount(profiles.firstOrNull { it.cloudName == activeCloud }, pods)
+    val isMockSession = dev?.useLiveClient?.collectAsState()?.value?.let { !it } ?: false
+    val isDemoAccount = isMockSession || isDemoAccountSession
+    var showDemoDeleteNotice by remember { mutableStateOf(false) }
     val signOutPolicy = SignOutPolicy.evaluate(
         hasCloudRecovery = hasRecovery,
         isDemoAccount = isDemoAccount,
@@ -229,6 +240,7 @@ fun SettingsScreen(nav: NavController) {
                     onClick = { nav.navigate("ai-keys") },
                     testTag = "settings-ai-keys",
                 ),
+            ) + (if (isDemoAccountSession) emptyList() else listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Autorenew,
                     title = "Cloud recovery",
@@ -241,6 +253,7 @@ fun SettingsScreen(nav: NavController) {
                     subtitle = "Save an encrypted key file to recover or move your account.",
                     onClick = { nav.navigate("keyfile-export") },
                 ),
+            )) + listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Cloud,
                     title = "Profiles",
@@ -257,13 +270,14 @@ fun SettingsScreen(nav: NavController) {
         //     device" row merged in there), plus the browser sessions list.
         FSSettingsGroup(
             header = "DEVICES",
-            rows = listOf(
+            rows = (if (isDemoAccountSession) emptyList() else listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Devices,
                     title = "Trusted devices",
                     subtitle = "Phones and tablets that hold your account keys — add, replace, or remove.",
                     onClick = { nav.navigate("trusted-devices") },
                 ),
+            )) + listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Computer,
                     title = "Browser sessions",
@@ -396,8 +410,12 @@ fun SettingsScreen(nav: NavController) {
                     subtitle = "Version, license, source.",
                     showsChevron = false,
                     onClick = {
-                        versionTaps += 1
-                        if (versionTaps >= 3) dev?.setUnlocked(true)
+                        // Debug builds only: a shipped build has no hidden
+                        // mode that swaps in fake data.
+                        if (BuildConfig.DEBUG) {
+                            versionTaps += 1
+                            if (versionTaps >= 3) dev?.setUnlocked(true)
+                        }
                     },
                 ),
             ),
@@ -413,19 +431,21 @@ fun SettingsScreen(nav: NavController) {
                     style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
                 )
                 Text(
-                    "v0.0.1 · BUSL-1.1",
+                    "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · BUSL-1.1",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 12.sp),
                     modifier = Modifier
                         .padding(top = FS.space.s1),
                 )
-                FSGhostButton(
-                    label = if (devUnlocked) "Developer unlocked" else "Tap version to unlock developer",
-                    onClick = {
-                        versionTaps += 1
-                        if (versionTaps >= 3) dev?.setUnlocked(true)
-                    },
-                )
+                if (BuildConfig.DEBUG) {
+                    FSGhostButton(
+                        label = if (devUnlocked) "Developer unlocked" else "Tap version to unlock developer",
+                        onClick = {
+                            versionTaps += 1
+                            if (versionTaps >= 3) dev?.setUnlocked(true)
+                        },
+                    )
+                }
             }
         }
 
@@ -545,10 +565,41 @@ fun SettingsScreen(nav: NavController) {
         Spacer(Modifier.height(FS.space.s2))
         FSDangerButton(
             label = "Delete account",
-            onClick = { nav.navigate("delete-account") },
+            onClick = {
+                if (isDemoAccountSession) showDemoDeleteNotice = true else nav.navigate("delete-account")
+            },
             block = true,
             modifier = Modifier.testTag("settings-delete-account-btn"),
         )
+
+        if (showDemoDeleteNotice) {
+            AlertDialog(
+                onDismissRequest = { showDemoDeleteNotice = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showDemoDeleteNotice = false
+                        Keystore.wipe()
+                        app.signOut()
+                    }) {
+                        Text("Remove from this device", color = FS.colors.danger)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDemoDeleteNotice = false }) {
+                        Text("Cancel")
+                    }
+                },
+                title = { Text("Demo account") },
+                text = {
+                    Text(
+                        "This demo account is managed by Flagship, so it can't be deleted from the " +
+                            "app — you can remove it from this device instead. Accounts you create " +
+                            "yourself are permanently deleted from here.",
+                    )
+                },
+                modifier = Modifier.testTag("settings-demo-delete-notice"),
+            )
+        }
 
         if (showRemoveConfirm) {
             AlertDialog(

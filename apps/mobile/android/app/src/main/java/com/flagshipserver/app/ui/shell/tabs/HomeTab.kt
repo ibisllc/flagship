@@ -236,8 +236,16 @@ fun HomeTab() {
             val reset by app.accountWasReset.collectAsState()
             val capability by app.deviceCapability.collectAsState()
             val bannerDismissed by recoveryBannerStore.dismissed.collectAsState()
-            val showNudge = !hasRecovery && !dismissed && pods.any { it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE }
-            val showBackupBanner = RecoveryBannerStore.shouldShow(
+            val profiles by app.profiles.collectAsState()
+            val activeCloud by app.activeCloudName.collectAsState()
+            // A demo session holds no account keys: backup and recovery nudges
+            // are things it can never act on.
+            val isDemoAccount = com.flagshipserver.app.core.AppState.isDemoAccount(
+                profiles.firstOrNull { it.cloudName == activeCloud },
+                pods,
+            )
+            val showNudge = !isDemoAccount && !hasRecovery && !dismissed && pods.any { it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE }
+            val showBackupBanner = !isDemoAccount && RecoveryBannerStore.shouldShow(
                 hasCloudRecovery = hasRecovery,
                 dismissed = bannerDismissed,
             )
