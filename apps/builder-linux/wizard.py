@@ -33,6 +33,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
+import alpine_personalize
+import base_iso_cache
 import container_env
 import elevation
 import iso_base_cache
@@ -72,7 +74,12 @@ from vm.server_tier import ServerDestination, ServerTier
 #              the SERVER manifest (/api/iso-manifest) + cached, then handed to
 #              the SAME Node CLI remaster+write path Advanced uses. Default.
 #   advanced : recipe + a user-supplied stock Ubuntu/Debian ISO. Same CLI path.
+# Plus the parked Alpine flow (mirrors apps/builder-mac BuilderMode.quick):
+#   quick    : recipe + USB only. Cache the Alpine base ISO once, append the
+#              recipe trailer locally (alpine_personalize), raw-write. No user
+#              ISO, no remaster, no Node CLI.
 MODE_SIMPLE = "simple"
+MODE_QUICK = "quick"
 MODE_ADVANCED = "advanced"
 
 # Reported to /api/iso-manifest as `builderVersion`; stamped at release.
@@ -224,8 +231,10 @@ class WizardState:
     mode: str = MODE_SIMPLE
     # 0…1 during the byte-write / base download; None = indeterminate/idle.
     progress: Optional[float] = None
-    # Raw phase token: "download" | "remaster" | "write".
+    # Raw phase token: "download" | "personalize" | "remaster" | "write".
     phase: Optional[str] = None
+    # True once the Alpine Quick one-time base-ISO download begins this run.
+    base_download_started: bool = False
     handoff_countdown: Optional[int] = None
     # URL of the base ISO being fetched in Simple mode — shown under the bar.
     download_url: Optional[str] = None
@@ -287,6 +296,7 @@ class WizardState:
             "verify": "Verifying the server image…",
             "clone appliance": "Preparing the server's disk…",
             "specialize": "Starting the server…",
+            "personalize": "Personalizing…",
             "remaster": "Building image…",
             "write": "Writing to USB…",
             "handoff": (
@@ -379,6 +389,11 @@ class WizardModel:
         schedule: Callable[[float, Callable[[], None]], Callable[[], None]] = timer_schedule,
         wifi_store: Optional[WifiStore] = None,
         xorriso_missing_fn: Callable[[], bool] = lambda: xorriso_missing(),
+        # Alpine Quick seams (tests pass fakes; production uses the real Alpine
+        # base cache + local personalize + pkexec flasher).
+        ensure_alpine_base_fn: Optional[Callable[..., Path]] = None,
+        personalize_fn: Optional[Callable[..., int]] = None,
+        flasher_factory: Optional[Callable[[str, str], "PkexecFlasher"]] = None,
     ) -> None:
         self.state = WizardState(mode=mode)
         self.on_change = on_change or (lambda: None)
@@ -403,6 +418,11 @@ class WizardModel:
             stop=self._pause_pairing_offline,
             schedule=schedule,
         )
+        self._ensure_alpine_base = ensure_alpine_base_fn or base_iso_cache.ensure
+        self._personalize = personalize_fn or alpine_personalize.personalize
+        self._flasher_factory = flasher_factory or (
+            lambda image, device: PkexecFlasher(image_path=image, device_path=device)
+        )
         self._builder_version = builder_version
         self.vm = vm_manager if vm_manager is not None else VMManager.create_default()
         self.vm.on_change = self._notify
@@ -418,7 +438,7 @@ class WizardModel:
         self._cancel_download: Optional[threading.Event] = None
 
     def set_mode(self, mode: str) -> None:
-        if mode not in (MODE_SIMPLE, MODE_ADVANCED):
+        if mode not in (MODE_SIMPLE, MODE_QUICK, MODE_ADVANCED):
             return
         self.state.mode = mode
         self._notify()
@@ -522,10 +542,13 @@ class WizardModel:
         `write` subcommand (needs root → pkexec). Simple mode first ensures the
         server-manifest Debian base ISO is cached, then feeds it to the SAME
         CLI path Advanced uses with a user-supplied ISO."""
-        if not self._require_xorriso():
+        # Alpine Quick appends a trailer and raw-writes: no remaster, no xorriso.
+        if self.state.mode != MODE_QUICK and not self._require_xorriso():
             return
         if self.state.mode == MODE_SIMPLE:
             threading.Thread(target=self._run_simple_bake_sync, daemon=True).start()
+        elif self.state.mode == MODE_QUICK:
+            threading.Thread(target=self._run_quick_bake_sync, daemon=True).start()
         else:
             threading.Thread(target=self._run_bake_sync, daemon=True).start()
 
@@ -677,6 +700,120 @@ class WizardModel:
         self.state.progress = None
         self._notify()
 
+    # ---- Alpine Quick: cached Alpine base + local personalize + raw write ----
+
+    def _set_phase(self, phase: Optional[str], progress: Optional[float] = None) -> None:
+        self.state.phase = phase
+        self.state.progress = progress
+        self._notify()
+
+    def _handle_control_line(self, line: str) -> bool:
+        """Parse a machine-readable control line from the flasher. Returns True
+        if consumed (so it's not shown in the log). Mirrors
+        WizardModel.handleControlLine."""
+        if line.startswith("FLAGSHIP_PROGRESS:"):
+            try:
+                self.state.progress = float(line[len("FLAGSHIP_PROGRESS:"):])
+            except ValueError:
+                self.state.progress = None
+            self._notify()
+            return True
+        if line.startswith("FLAGSHIP_PHASE:"):
+            p = line[len("FLAGSHIP_PHASE:"):]
+            self.state.phase = p
+            if p == "write":
+                self.state.progress = 0.0
+            self._notify()
+            return True
+        return False
+
+    def _run_quick_bake_sync(self) -> None:
+        with self._lock:
+            if self.state.is_running:
+                return
+            self.state.is_running = True
+        self.state.progress = None
+        self.state.phase = None
+        self.state.base_download_started = False
+        self._notify()
+
+        prepared: Optional[Path] = None
+        try:
+            recipe_path = self.state.recipe_path
+            disk = self.state.selected_disk
+            if recipe_path is None or disk is None:
+                return
+
+            try:
+                recipe = alpine_personalize.parse_recipe(recipe_path.read_bytes())
+            except Exception as e:  # alpine_personalize.RecipeError + IO
+                self._append_log("stderr", f"recipe error: {e}")
+                return
+
+            # 1. One-time Alpine base-ISO download (cached for every later server).
+            self._set_phase("download", None)
+
+            def _on_progress(p: float) -> None:
+                self.state.progress = p
+                self._notify()
+
+            def _on_download_start() -> None:
+                self.state.base_download_started = True
+                self._append_log(
+                    "stdout",
+                    "+ one-time download of the Alpine base image (~240 MB — cached, won't repeat)",
+                )
+                self._notify()
+
+            try:
+                base = self._ensure_alpine_base(
+                    progress=_on_progress, on_download_start=_on_download_start
+                )
+            except base_iso_cache.CacheError as e:
+                self._append_log("stderr", str(e))
+                return
+
+            # 2. Personalize locally — append the recipe trailer to the base.
+            self._set_phase("personalize", None)
+            prepared = Path(tempfile.gettempdir()) / f"flagship-prepared-{uuid.uuid4()}.iso"
+            try:
+                self._append_log("stdout", f"+ personalize {recipe.server_domain}")
+                self._personalize(base, recipe, prepared)
+            except alpine_personalize.PersonalizeError as e:
+                self._append_log("stderr", str(e))
+                return
+
+            # 3. Raw write via the pkexec'd flasher.
+            self._set_phase("write", 0.0)
+            flasher = self._flasher_factory(str(prepared), disk.device_path)
+            self._current_runner = flasher
+            self._append_log("stdout", f"+ {flasher.command_string}")
+            try:
+                flasher.start(
+                    on_line=lambda ll: self._append_log(ll.stream, ll.text),
+                    on_control=self._handle_control_line,
+                )
+            except (FileNotFoundError, OSError) as e:
+                self._append_log("stderr", f"spawn failed: {e}")
+                return
+            code = flasher.wait()
+            if code == 0:
+                self.state.is_finished = True
+            else:
+                self._append_log("stderr", f"write failed (code {code})")
+        finally:
+            self._current_runner = None
+            if prepared is not None:
+                try:
+                    prepared.unlink()
+                except OSError:
+                    pass
+            self.state.phase = None
+            self.state.progress = None
+            with self._lock:
+                self.state.is_running = False
+            self._notify()
+
     def run_prepare(self) -> None:
         """Optional path: emit a flashable ISO without writing to the
         USB. Kept around because the Mac GUI exposes it; useful when
@@ -791,6 +928,11 @@ class WizardModel:
         """Why "Host on this PC" is unavailable — None means it's usable.
         Honest, actionable reasons only (toolchain / capacity). A missing KVM
         does NOT block: the VM degrades to TCG with accel_warning."""
+        if self.state.mode == MODE_QUICK:
+            return (
+                "Quick (Alpine) builds USB installers only. Switch to Simple "
+                "to host a server on this PC."
+            )
         if self.vm.toolchain_error is not None:
             return self.vm.toolchain_error
         cap = self.vm.max_vm_count
@@ -1360,12 +1502,34 @@ def build_window(application, model: Optional[WizardModel] = None):
     mode_switch.set_valign(Gtk.Align.CENTER)
 
     def _on_mode_toggle(sw, _pspec):
-        wizard_model.set_mode(MODE_ADVANCED if sw.get_active() else MODE_SIMPLE)
+        if sw.get_active():
+            wizard_model.set_mode(MODE_ADVANCED)
+        elif wizard_model.state.mode == MODE_ADVANCED:
+            wizard_model.set_mode(MODE_SIMPLE)
 
     mode_switch.connect("notify::active", _on_mode_toggle)
     mode_box.append(mode_label)
     mode_box.append(mode_switch)
     header.pack_end(mode_box)
+
+    # Parked Alpine Quick flow (cached Alpine base + recipe trailer). Opt-in;
+    # turning it off returns to Simple.
+    quick_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+    quick_switch = Gtk.Switch()
+    quick_switch.set_active(wizard_model.state.mode == MODE_QUICK)
+    quick_switch.set_valign(Gtk.Align.CENTER)
+    quick_switch.set_tooltip_text("Quick: flash the cached Alpine base with the recipe appended")
+
+    def _on_quick_toggle(sw, _pspec):
+        if sw.get_active():
+            wizard_model.set_mode(MODE_QUICK)
+        elif wizard_model.state.mode == MODE_QUICK:
+            wizard_model.set_mode(MODE_SIMPLE)
+
+    quick_switch.connect("notify::active", _on_quick_toggle)
+    quick_box.append(Gtk.Label(label="Alpine Quick", xalign=0.0))
+    quick_box.append(quick_switch)
+    header.pack_end(quick_box)
 
     # ---- primary menu (☰): appearance, New Server, help, about/quit ----
     # Native GNOME hamburger menu — the counterpart of the macOS menu bar and
@@ -2256,6 +2420,8 @@ def build_window(application, model: Optional[WizardModel] = None):
         # Reflect the toggle if state changed programmatically.
         if mode_switch.get_active() != (s.mode == MODE_ADVANCED):
             mode_switch.set_active(s.mode == MODE_ADVANCED)
+        if quick_switch.get_active() != (s.mode == MODE_QUICK):
+            quick_switch.set_active(s.mode == MODE_QUICK)
         if s.requires_user_iso and s.iso_path:
             iso_status.set_text(f"Loaded: {s.iso_path.name}")
         else:
@@ -2289,8 +2455,9 @@ def build_window(application, model: Optional[WizardModel] = None):
             log_spinner.start()
         else:
             log_spinner.stop()
-        # progress bar: accent-coloured during the base download + remaster + write.
-        if s.is_running and s.phase in ("download", "remaster", "write"):
+        # progress bar: accent-coloured during the base download + remaster (or
+        # the Alpine Quick personalize) + write.
+        if s.is_running and s.phase in ("download", "personalize", "remaster", "write"):
             progress_bar.set_visible(True)
             if s.progress is None:
                 progress_bar.pulse()

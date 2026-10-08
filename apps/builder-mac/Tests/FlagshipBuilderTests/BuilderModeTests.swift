@@ -10,12 +10,14 @@ import XCTest
 /// decide which inputs are needed.
 final class BuilderModeTests: XCTestCase {
 
-    /// Two modes: Simple (default) + Advanced. If we change this we have to
-    /// revisit the WizardModel `@Published var mode: BuilderMode = .simple`.
-    func testModesAreSimpleAndAdvanced() {
+    /// Three modes: Simple (default) + the parked Alpine Quick + Advanced. If we
+    /// change this we have to revisit the WizardModel
+    /// `@Published var mode: BuilderMode = .simple`.
+    func testModesAreSimpleQuickAndAdvanced() {
         XCTAssertEqual(BuilderMode.simple.rawValue, "simple")
+        XCTAssertEqual(BuilderMode.quick.rawValue, "quick")
         XCTAssertEqual(BuilderMode.advanced.rawValue, "advanced")
-        XCTAssertEqual(Set(BuilderMode.allCases), Set([.simple, .advanced]))
+        XCTAssertEqual(Set(BuilderMode.allCases), Set([.simple, .quick, .advanced]))
     }
 
     /// allCases is ordered Simple-first so the segmented picker leads with the
@@ -30,6 +32,13 @@ final class BuilderModeTests: XCTestCase {
         XCTAssertFalse(BuilderMode.simple.requiresUserISO)
     }
 
+    /// Quick bakes the recipe into the builder's cached Alpine base as a
+    /// trailer; it needs the recipe but NOT a user-supplied ISO.
+    func testQuickRequiresRecipeButNotUserISO() {
+        XCTAssertTrue(BuilderMode.quick.requiresRecipe)
+        XCTAssertFalse(BuilderMode.quick.requiresUserISO)
+    }
+
     /// Advanced = stock distro ISO + recipe → remaster. Both are mandatory.
     func testAdvancedRequiresRecipeAndUserISO() {
         XCTAssertTrue(BuilderMode.advanced.requiresRecipe)
@@ -38,11 +47,13 @@ final class BuilderModeTests: XCTestCase {
 
     func testBakeCtaLabel() {
         XCTAssertEqual(BuilderMode.simple.bakeCtaLabel, "Flash to USB")
+        XCTAssertEqual(BuilderMode.quick.bakeCtaLabel, "Flash to USB")
         XCTAssertEqual(BuilderMode.advanced.bakeCtaLabel, "Assemble and flash")
     }
 
     func testMenuLabel() {
         XCTAssertEqual(BuilderMode.simple.menuLabel, "Simple")
+        XCTAssertEqual(BuilderMode.quick.menuLabel, "Quick")
         XCTAssertEqual(BuilderMode.advanced.menuLabel, "Advanced")
     }
 }
