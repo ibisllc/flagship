@@ -126,6 +126,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
       "/",
       "/404.html",
       "/abuse.html",
+      "/dibs.html",
       "/blog/",
       "/coming-soon.html",
       "/deck/",
@@ -145,6 +146,17 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
       expect(r.statusCode, path).toBe(200);
       expect(r.body, path).toContain("Patent Pending");
     }
+  });
+
+  it("/dibs explains the .com-only claim, its price and both proof locations", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/dibs.html" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain(".com only");
+    expect(r.body).toContain("$20");
+    expect(r.body).toContain("_flagship-claim.acme.com");
+    expect(r.body).toContain("/.well-known/flagship-claim");
+    expect(r.body).toContain("/api/name-dibs/window");
   });
 
   it("the landing page no longer advertises /build/ or /pricing", async () => {

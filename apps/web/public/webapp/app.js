@@ -62,6 +62,7 @@ import {
   alertCircleIcon,
   alertTriangleIcon,
   downloadIcon,
+  flagIcon,
 } from "./lib/icons.js";
 import { getSession, unlockSession } from "./lib/state.js";
 import { dispatchInitialView } from "./lib/deepLink.js";
@@ -98,6 +99,8 @@ import {
   refreshBadgeOnce as refreshCompanionRequestsBadge,
 } from "./views/companion-requests.js";
 import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
+import { enterNameDibs } from "./views/name-dibs.js";
+import { fetchDibsWindow } from "./lib/nameDibs.js";
 import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
 import { initDeveloperView, enterDeveloper } from "./views/developer.js";
 import { initVibeCodeView, enterVibeCode } from "./views/vibe-code.js";
@@ -216,6 +219,7 @@ const SETTINGS_ROW_ICONS = {
   dock: monitorIcon,
   requests: usersIcon,
   profiles: userIcon,
+  dibs: flagIcon,
   appearance: monitorIcon,
   privacy: shieldIcon,
   about: alertCircleIcon,
@@ -248,6 +252,11 @@ async function enterSettingsTab() {
   show("view-settings-tab");
   decorateSettingsTab();
   applyDemoSettingsRestrictions(isDemoProfile(getActiveProfile()));
+  // The dibs row shows only while the window is open (and never for a demo,
+  // which can't change its operator-managed name).
+  fetchDibsWindow()
+    .then((w) => $("settings-tab-name-dibs")?.classList.toggle("hidden", !w.open || isDemoProfile(getActiveProfile())))
+    .catch(() => $("settings-tab-name-dibs")?.classList.add("hidden"));
   // Reflect the debug toggle's current state every time the tab is opened.
   const toggle = $("settings-debug-toggle");
   const row = $("settings-developer-row");
@@ -320,6 +329,7 @@ function wireSettingsTabEntries() {
   });
   // Tier & usage (marketplace) — dedicated subscription/tier-status screen.
   wire("settings-tab-tier", enterTierStatus);
+  wire("settings-tab-name-dibs", enterNameDibs);
   wire("settings-tab-recovery", enterRecovery);
   // "Back up account key" reuses the Recovery screen's `.flagshipkey`
   // export ceremony — jump there and focus the backup button.

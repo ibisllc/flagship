@@ -18,6 +18,8 @@ import { canonicalPushRevoke } from "../public/webapp/lib/push.js";
 import { canonicalRevokeBytes } from "../public/webapp/lib/revokeServer.js";
 import { canonicalRePairInitiateBytes } from "../public/webapp/lib/replaceDeviceCeremony.js";
 import { canonicalClaimBytes } from "../public/webapp/lib/serverTransfer.js";
+import { canonicalDibsInitiateBytes, canonicalDibsVerifyBytes } from "../public/webapp/lib/nameDibs.js";
+import { canonicalNameChangeBytes } from "../public/webapp/lib/nameChange.js";
 
 const PATH = resolve(__dirname, "..", "..", "..", "test-vectors", "canonical-bytes.json");
 
@@ -106,6 +108,27 @@ const WEBAPP_ENCODERS: Record<string, (i: Record<string, unknown>) => Uint8Array
       username: i.username as string,
       newIrkPubHex: i.newIrkPub as string,
       oldIrkPubHex: i.oldIrkPub as string,
+      issuedAt: i.issuedAt as number,
+    }),
+  "name-dibs-initiate": (i) =>
+    canonicalDibsInitiateBytes({
+      username: i.username as string,
+      name: i.name as string,
+      irkPubHex: i.irkPubHex as string,
+      issuedAt: i.issuedAt as number,
+    }),
+  "name-dibs-verify": (i) =>
+    canonicalDibsVerifyBytes({
+      username: i.username as string,
+      name: i.name as string,
+      nonce: i.nonce as string,
+      issuedAt: i.issuedAt as number,
+    }),
+  "name-change": (i) =>
+    canonicalNameChangeBytes({
+      aidPubHex: i.aidPubHex as string,
+      oldUsername: i.oldUsername as string,
+      newUsername: i.newUsername as string,
       issuedAt: i.issuedAt as number,
     }),
   "server-transfer-claim": (i) =>

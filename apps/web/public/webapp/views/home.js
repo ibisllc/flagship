@@ -16,6 +16,9 @@ import { formatDuration as formatAge, formatDays } from "../lib/dateFormat.js";
 import { toast } from "../lib/toast.js";
 import { releaseServerName } from "../lib/releaseServer.js";
 import { renderProBanner } from "../lib/proBanner.js";
+import { renderDibsBanner } from "../lib/nameDibs.js";
+import { enterNameDibs } from "./name-dibs.js";
+import { isDemoProfile } from "../lib/demoAccount.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { demoLifecycle, ensureDemoServerPairing } from "../lib/usersCheck.js";
 import {
@@ -1013,6 +1016,12 @@ export async function renderHome() {
   // who never hit the bandwidth cap but would happily back the project.
   // Fully dismissible; once dismissed on this device it never re-appears.
   renderProBanner();
+  // Name dibs — while the one-year window is open, tell .com holders they can
+  // claim the matching name. Dismissible; fetches the window itself. Not for a
+  // demo, whose operator-managed name can't change.
+  if (!isDemoProfile(getActiveProfile())) {
+    renderDibsBanner({ onClaim: () => enterNameDibs() }).catch(() => {});
+  }
 
   // #6 / #7 — bandwidth usage/allowance card + over-allowance upgrade alert.
   // Fire-and-forget; best-effort so a metering hiccup never blocks Home.

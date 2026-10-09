@@ -906,7 +906,8 @@ function buildVectors(): Vector[] {
       dibsChallengeInput,
       new Uint8Array(0),
       nameDibsChallengePreimage(dibsChallengeInput.name, dibsChallengeInput.irkPubHex, dibsChallengeInput.nonce),
-      ALL,
+      // Only `.com` computes the challenge; clients display what it returns.
+      ["ts"],
     ),
   );
   const nameChangeInput = {

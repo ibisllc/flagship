@@ -57,7 +57,8 @@
 //  v31: demo accounts hide key-backed rows + remove-from-browser; every
 //       Worker audit kind is labelled; recovery copy matches the gate.
 //  v32: apex.js drops the retired `web.` sub-origin prefix.
-const SHELL_VERSION = "v40";
+//  v42: feat/custom-names — name dibs: Home notice + Settings "Claim your .com name" flow.
+const SHELL_VERSION = "v42";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
