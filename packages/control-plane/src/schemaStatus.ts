@@ -63,6 +63,10 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0091",
   // Name dibs claims (feat/named-links; main skips 0088–0094 for the feature branches).
   "0092",
+  // Voucher kinds: name change + dibs claim (feat/custom-names).
+  "0093",
+  // Name-change history + rate limit (feat/custom-names).
+  "0094",
   // The capability table behind own-key AI model menus.
   "0095",
   // The owner's server order (who leads, who's next).

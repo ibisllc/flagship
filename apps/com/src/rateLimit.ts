@@ -761,6 +761,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && pathname === "/api/abuse/reports") return "abuse-report";
   if (m === "GET" && /^\/api\/users\/[^/]+\/abuse-notices$/.test(pathname)) return "abuse-notices";
   if (m === "POST" && /^\/api\/users\/[^/]+\/abuse-notices\/[0-9a-f]{32}\/done$/.test(pathname)) return "abuse-notice-done";
+  if (m === "POST" && (pathname === "/api/account/name-change" || pathname === "/api/account/name-change/quote")) return "name-dibs";
   if (m === "POST" && pathname === "/api/auth-code/issue") return "auth-code-issue";
   if (m === "POST" && pathname === "/api/server/register") return "server-register";
   // Recovery re-pair initiate. NOT /re-pair/object or /re-pair/complete:
