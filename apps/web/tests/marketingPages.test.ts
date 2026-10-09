@@ -148,6 +148,15 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     }
   });
 
+  it("/pro sells the $10 name-change and $20 dibs-claim vouchers", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/pro.html" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain('id="names"');
+    expect(r.body).toContain("$10, once");
+    expect(r.body).toContain("$20, once");
+  });
+
   it("/dibs explains the .com-only claim, its price and both proof locations", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/dibs.html" });
