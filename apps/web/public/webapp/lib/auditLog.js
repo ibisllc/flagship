@@ -77,6 +77,7 @@ export const AUDIT_KIND_LABELS = Object.freeze({
   "account-type-changed-multi-to-single": "Switched to single-device",
   "account-deleted": "Deleted account",
   "username-reclaimed": "Username reclaimed",
+  "account-renamed": "Changed account name",
   "ct-unexpected-cert": "Unexpected certificate observed",
 });
 

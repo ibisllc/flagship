@@ -7,6 +7,8 @@ import {
   handleIssueVoucher,
   mintVoucherCode,
   normalizeVoucherCode,
+  consumeNameVoucher,
+  releaseNameVoucher,
   type VoucherDeps,
 } from "../src/voucher.js";
 
@@ -31,6 +33,13 @@ function fakeVouchers(): VoucherStorage & { map: Map<string, VoucherRecord> } {
       if (!v || v.redeemedAt !== undefined) return false;
       v.redeemedAt = now;
       v.redeemedBy = username;
+      return true;
+    },
+    async release(h, username) {
+      const v = map.get(h);
+      if (!v || v.redeemedBy !== username) return false;
+      delete v.redeemedAt;
+      delete v.redeemedBy;
       return true;
     },
   };
@@ -139,5 +148,45 @@ describe("voucher HTTP handlers", () => {
     const res = await handleIssueVoucher(d, { tier: "hobby", durationDays: 90 });
     expect(res.status).toBe(200);
     expect((res.body as { code: string }).code).toMatch(/^FLAG-/);
+  });
+});
+
+describe("name entitlement vouchers", () => {
+  it("issues a name-change voucher with no tier", async () => {
+    const d = deps();
+    const v = await issueVoucher(d, { kind: "name-change" });
+    expect(v).toMatchObject({ kind: "name-change", tier: "free", durationDays: 0 });
+  });
+
+  it("the tier redeem path refuses a name voucher without burning it", async () => {
+    const d = deps();
+    const { code } = await issueVoucher(d, { kind: "name-change" });
+    await expect(redeemVoucher(d, { code, username: "alice" })).rejects.toThrow(/name change/);
+    expect((await consumeNameVoucher(d, { code, kind: "name-change", username: "alice" })).ok).toBe(true);
+  });
+
+  it("a name voucher only pays for its own kind, and only once", async () => {
+    const d = deps();
+    const { code } = await issueVoucher(d, { kind: "name-change" });
+    expect(await consumeNameVoucher(d, { code, kind: "dibs-claim", username: "alice" })).toMatchObject({ ok: false, reason: /dibs claim voucher/ });
+    const first = await consumeNameVoucher(d, { code, kind: "name-change", username: "alice" });
+    expect(first.ok).toBe(true);
+    expect(await consumeNameVoucher(d, { code, kind: "name-change", username: "bob" })).toMatchObject({ ok: false, reason: "voucher already redeemed" });
+  });
+
+  it("release puts the voucher back for the same account", async () => {
+    const d = deps();
+    const { code } = await issueVoucher(d, { kind: "dibs-claim" });
+    const r = await consumeNameVoucher(d, { code, kind: "dibs-claim", username: "Alice" });
+    if (!r.ok) throw new Error(r.reason);
+    await releaseNameVoucher(d, { codeHash: r.codeHash, username: "alice" });
+    expect((await consumeNameVoucher(d, { code, kind: "dibs-claim", username: "alice" })).ok).toBe(true);
+  });
+
+  it("the admin issue endpoint takes a kind without tier/duration", async () => {
+    const d = deps();
+    const r = await handleIssueVoucher(d, { kind: "dibs-claim" });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, kind: "dibs-claim" });
   });
 });

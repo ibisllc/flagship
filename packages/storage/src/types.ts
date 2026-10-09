@@ -481,6 +481,9 @@ export type AuditEventKind =
   | "account-deleted"
   | "servers-self-delete-issued"
   | "username-reclaimed"
+  // Paid name change / dibs claim (docs/naming-recovery-and-name-change.md §5):
+  // the account moved to a new name; detail names old → new.
+  | "account-renamed"
   // Transfer-a-box (docs/account-deletion-and-name-reclaim.md §4) — a
   // cross-account ownership handoff. `server-transfer-offered` logs the
   // giver depositing the one-time offer; `server-transfer-claimed` logs
@@ -1626,6 +1629,30 @@ export interface NameDibsClaimStorage {
   countStartsSince(username: string, since: number): Promise<number>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Paid name change (migration 0094). The rename moves every account row from
+// the old username to the new one in ONE transaction (see accountRename.ts for
+// which columns move) and appends to the AID-keyed history.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface NameChangeRecord {
+  aidPubHex: string;
+  oldUsername: string;
+  newUsername: string;
+  at: number;
+}
+
+export interface NameChangeStorage {
+  /** Atomically move the account `oldUsername` → `newUsername` and record it.
+   *  Fails (changing nothing) when the old account is gone or the new name was
+   *  taken in the meantime. */
+  renameAccount(rec: NameChangeRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /** Renames by this account since `since` (rate limiting). */
+  countSince(aidPubHex: string, since: number): Promise<number>;
+  /** This account's renames, oldest first. */
+  history(aidPubHex: string): Promise<NameChangeRecord[]>;
+}
+
 export interface Storage {
   usernames: UsernameStorage;
   schemaVersion: SchemaVersionStorage;
@@ -1633,6 +1660,7 @@ export interface Storage {
   suggestThrottle: SuggestThrottleStorage;
   usernameOffers: UsernameOfferStorage;
   nameDibsClaims: NameDibsClaimStorage;
+  nameChanges: NameChangeStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;
@@ -2265,8 +2293,14 @@ export interface UsageStorage {
 
 /** A bearer voucher: redeeming it grants `tier` for `durationDays`. We persist
  *  only the SHA-256 of the normalized code (`codeHash`). Single-use. */
+/** What a voucher buys: a Pro tier (the original kind), or a single-use name
+ *  change / dibs claim (migration 0093). */
+export type VoucherKind = "tier" | "name-change" | "dibs-claim";
+
 export interface VoucherRecord {
   codeHash: string;
+  /** Absent on rows written before 0093 ⇒ "tier". */
+  kind?: VoucherKind;
   tier: TierName;
   durationDays: number;
   createdAt: number;
@@ -2371,6 +2405,9 @@ export interface VoucherStorage {
   /** Atomically mark redeemed IFF not already redeemed. Returns true only when
    *  THIS call won the redemption (false ⇒ missing or already redeemed). */
   redeem(codeHash: string, username: string, now: number): Promise<boolean>;
+  /** Undo a redemption made by `username` (the allocation it paid for failed).
+   *  True only when that redemption existed and was reverted. */
+  release(codeHash: string, username: string): Promise<boolean>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

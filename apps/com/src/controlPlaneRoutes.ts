@@ -130,6 +130,8 @@ import {
   handleSetRoutingTarget,
   handleSuggestUsername,
   handleNameDibsWindow,
+  handleNameChange,
+  handleNameChangeQuote,
   handleNameDibsInitiate,
   handleNameDibsVerify,
   parseDibsWindow,
@@ -534,6 +536,8 @@ const ROUTE_RE = {
   NAME_DIBS_WINDOW: /^\/api\/name-dibs\/window$/,
   NAME_DIBS_INITIATE: /^\/api\/name-dibs\/initiate$/,
   NAME_DIBS_VERIFY: /^\/api\/name-dibs\/verify$/,
+  NAME_CHANGE_QUOTE: /^\/api\/account\/name-change\/quote$/,
+  NAME_CHANGE: /^\/api\/account\/name-change$/,
   USERS_CHECK: /^\/api\/users\/check$/,
   ACCOUNT_RESOLVE: /^\/api\/account\/resolve\/([^/]+)$/,
   USERNAME_LOOKUP: /^\/api\/username\/([^/]+)$/,
@@ -1010,6 +1014,27 @@ export async function tryControlPlane(
       ROUTE_RE.NAME_DIBS_INITIATE.test(path)
         ? await handleNameDibsInitiate(dibsDeps, body)
         : await handleNameDibsVerify(dibsDeps, body),
+    );
+  }
+  if (method === "POST" && (ROUTE_RE.NAME_CHANGE.test(path) || ROUTE_RE.NAME_CHANGE_QUOTE.test(path))) {
+    const nameChangeDeps = {
+      usernames: storage.usernames,
+      nameChanges: storage.nameChanges,
+      vouchers: new D1VoucherStorage(env.DB),
+      claims: storage.nameDibsClaims,
+      servers: storage.servers,
+      offers: storage.usernameOffers,
+      aliases: storage.usernameAliases,
+      grants: storage.deviceCapabilityGrants,
+      auditEvents: storage.auditEvents,
+      window: parseDibsWindow(env.DIBS_WINDOW_START, env.DIBS_WINDOW_END),
+      fetch: (url: string, init?: Parameters<DibsFetch>[1]) => fetch(url, init),
+    };
+    const body = await readJson(request);
+    return finish(
+      ROUTE_RE.NAME_CHANGE.test(path)
+        ? await handleNameChange(nameChangeDeps, body)
+        : await handleNameChangeQuote(nameChangeDeps, body),
     );
   }
   if (method === "POST" && ROUTE_RE.USERNAME_SUGGEST.test(path)) {

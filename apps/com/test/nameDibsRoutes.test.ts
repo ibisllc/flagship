@@ -41,4 +41,18 @@ describe("name dibs routes", () => {
       expect(((await r!.json()) as { error: string }).error).toMatch(/malformed dibs/);
     }
   });
+
+  it("POST name-change and its quote reach their handlers", async () => {
+    const change = await tryControlPlane(
+      new Request("https://flagshipserver.com/api/account/name-change", { method: "POST", body: "{}" }),
+      env(),
+    );
+    expect(change!.status).toBe(400);
+    expect(((await change!.json()) as { error: string }).error).toMatch(/malformed name change/);
+    const quote = await tryControlPlane(
+      new Request("https://flagshipserver.com/api/account/name-change/quote", { method: "POST", body: "{}" }),
+      env(),
+    );
+    expect(quote!.status).toBe(400);
+  });
 });

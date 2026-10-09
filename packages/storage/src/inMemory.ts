@@ -118,6 +118,10 @@ import type {
   NamespaceStorage,
   NameDibsClaimRecord,
   NameDibsClaimStorage,
+  VoucherRecord,
+  VoucherStorage,
+  NameChangeRecord,
+  NameChangeStorage,
 } from "./types.js";
 
 /**
@@ -2203,6 +2207,7 @@ export class InMemoryStorage implements Storage {
   suggestThrottle = new InMemorySuggestThrottleStorage();
   usernameOffers = new InMemoryUsernameOfferStorage();
   nameDibsClaims = new InMemoryNameDibsClaimStorage();
+  nameChanges = new InMemoryNameChangeStorage(this.usernames);
   usernameAliases = new InMemoryUsernameAliasStorage();
   daemonStatus = new InMemoryDaemonStatusStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -2486,6 +2491,60 @@ export class InMemoryUsernameOfferStorage implements UsernameOfferStorage {
       }
     }
     return removed;
+  }
+}
+
+/** In-memory name changes. Moves only the username record (the in-memory
+ *  stores are test fixtures; the D1 adapter moves every account table). */
+export class InMemoryNameChangeStorage implements NameChangeStorage {
+  private rows: NameChangeRecord[] = [];
+  constructor(private readonly usernames: UsernameStorage) {}
+  async renameAccount(rec: NameChangeRecord): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const oldName = rec.oldUsername.toLowerCase();
+    const newName = rec.newUsername.toLowerCase();
+    const prev = await this.usernames.get(oldName);
+    if (!prev) return { ok: false, reason: "account not found" };
+    if (await this.usernames.get(newName)) return { ok: false, reason: "name already taken" };
+    const put = await this.usernames.put({ ...prev, username: newName });
+    if (!put.ok) return { ok: false, reason: put.reason };
+    await this.usernames.delete(oldName);
+    this.rows.push({ ...rec, oldUsername: oldName, newUsername: newName });
+    return { ok: true };
+  }
+  async countSince(aidPubHex: string, since: number): Promise<number> {
+    return this.rows.filter((r) => r.aidPubHex === aidPubHex.toLowerCase() && r.at >= since).length;
+  }
+  async history(aidPubHex: string): Promise<NameChangeRecord[]> {
+    return this.rows.filter((r) => r.aidPubHex === aidPubHex.toLowerCase()).map((r) => ({ ...r }));
+  }
+}
+
+/** In-memory vouchers (standalone, like D1VoucherStorage). Single-use redeem +
+ *  release mirror the D1 adapter. */
+export class InMemoryVoucherStorage implements VoucherStorage {
+  private rows = new Map<string, VoucherRecord>();
+  async create(rec: VoucherRecord): Promise<{ ok: true } | { ok: false; reason: string }> {
+    if (this.rows.has(rec.codeHash)) return { ok: false, reason: "voucher code already exists" };
+    this.rows.set(rec.codeHash, { ...rec, kind: rec.kind ?? "tier" });
+    return { ok: true };
+  }
+  async get(codeHash: string): Promise<VoucherRecord | undefined> {
+    const r = this.rows.get(codeHash);
+    return r ? { ...r } : undefined;
+  }
+  async redeem(codeHash: string, username: string, now: number): Promise<boolean> {
+    const r = this.rows.get(codeHash);
+    if (!r || r.redeemedAt !== undefined) return false;
+    r.redeemedAt = now;
+    r.redeemedBy = username;
+    return true;
+  }
+  async release(codeHash: string, username: string): Promise<boolean> {
+    const r = this.rows.get(codeHash);
+    if (!r || r.redeemedBy !== username) return false;
+    delete r.redeemedAt;
+    delete r.redeemedBy;
+    return true;
   }
 }
 

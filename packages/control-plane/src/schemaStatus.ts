@@ -51,6 +51,10 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0091",
   // Name dibs claims (feat/custom-names).
   "0092",
+  // Voucher kinds: name change + dibs claim (feat/custom-names).
+  "0093",
+  // Name-change history + rate limit (feat/custom-names).
+  "0094",
 ];
 
 export interface SchemaStatusDeps {

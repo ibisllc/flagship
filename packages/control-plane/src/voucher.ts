@@ -10,7 +10,8 @@
 // itself. Codes are high-entropy (100 bits) so the redeem endpoint can't be
 // brute-forced.
 
-import type { TierName, VoucherStorage } from "@flagship/storage";
+import type { TierName, VoucherKind, VoucherStorage } from "@flagship/storage";
+export { DIBS_CLAIM_PRICE_USD } from "./nameDibs.js";
 import { grantTier, GRANTABLE_TIERS, MAX_GRANT_DAYS, type TierGrantDeps, type TierGrantResult } from "./tierGrant.js";
 
 const USERNAME_RE = /^[a-z0-9]{3,30}$/;
@@ -21,7 +22,7 @@ export interface VoucherDeps extends TierGrantDeps {
   vouchers: VoucherStorage;
 }
 
-function nowMs(deps: VoucherDeps): number {
+function nowMs(deps: { now?: () => number }): number {
   return deps.now ? deps.now() : Date.now();
 }
 
@@ -45,17 +46,34 @@ export function mintVoucherCode(): string {
   return "FLAG-" + groups.map((g) => g.join("")).join("-");
 }
 
+/** USD price of each single-use name entitlement (owner decision 2026-10-09). */
+export const NAME_CHANGE_PRICE_USD = 10;
+
 export interface IssueVoucherArgs {
-  tier: TierName;
-  durationDays: number;
+  /** Defaults to "tier". A "name-change" / "dibs-claim" voucher carries no tier. */
+  kind?: VoucherKind;
+  tier?: TierName;
+  durationDays?: number;
   /** Optional explicit code (e.g. a pre-printed card). Defaults to a mint. */
   code?: string;
 }
 
 /** Issue a voucher (admin). Returns the plaintext code ONCE — we only store its
  *  hash, so it can never be recovered after this call. */
-export async function issueVoucher(deps: VoucherDeps, args: IssueVoucherArgs): Promise<{ code: string; tier: TierName; durationDays: number }> {
-  if (args.tier === "free" || !GRANTABLE_TIERS.includes(args.tier)) {
+export async function issueVoucher(
+  deps: Pick<VoucherDeps, "vouchers" | "now">,
+  args: IssueVoucherArgs,
+): Promise<{ code: string; kind: VoucherKind; tier: TierName; durationDays: number }> {
+  const kind = args.kind ?? "tier";
+  if (kind === "name-change" || kind === "dibs-claim") {
+    const code = args.code && normalizeVoucherCode(args.code).length >= 12 ? args.code : mintVoucherCode();
+    const codeHash = await sha256Hex(normalizeVoucherCode(code));
+    const r = await deps.vouchers.create({ codeHash, kind, tier: "free", durationDays: 0, createdAt: nowMs(deps) });
+    if (!r.ok) throw new Error(r.reason);
+    return { code, kind, tier: "free", durationDays: 0 };
+  }
+  if (kind !== "tier") throw new Error("kind must be tier | name-change | dibs-claim");
+  if (args.tier === undefined || args.tier === "free" || !GRANTABLE_TIERS.includes(args.tier)) {
     throw new Error("voucher tier must be a paid tier (hobby | maker)");
   }
   const days = Math.floor(Number(args.durationDays));
@@ -64,9 +82,45 @@ export async function issueVoucher(deps: VoucherDeps, args: IssueVoucherArgs): P
   }
   const code = args.code && normalizeVoucherCode(args.code).length >= 12 ? args.code : mintVoucherCode();
   const codeHash = await sha256Hex(normalizeVoucherCode(code));
-  const r = await deps.vouchers.create({ codeHash, tier: args.tier, durationDays: days, createdAt: nowMs(deps) });
+  const r = await deps.vouchers.create({ codeHash, kind: "tier", tier: args.tier, durationDays: days, createdAt: nowMs(deps) });
   if (!r.ok) throw new Error(r.reason);
-  return { code, tier: args.tier, durationDays: days };
+  return { code, kind: "tier", tier: args.tier, durationDays: days };
+}
+
+export type NameVoucherKind = Extract<VoucherKind, "name-change" | "dibs-claim">;
+
+/**
+ * Consume a single-use name entitlement for `username`. Atomic: of two racing
+ * requests with one code, exactly one wins. Returns the code hash on success
+ * (the handle `releaseNameVoucher` needs if the rename it paid for fails), or
+ * the refusal.
+ */
+export async function consumeNameVoucher(
+  deps: Pick<VoucherDeps, "vouchers" | "now">,
+  args: { code: string; kind: NameVoucherKind; username: string },
+): Promise<{ ok: true; codeHash: string } | { ok: false; reason: string }> {
+  const codeHash = await sha256Hex(normalizeVoucherCode(args.code));
+  const v = await deps.vouchers.get(codeHash);
+  if (!v) return { ok: false, reason: "invalid voucher code" };
+  if ((v.kind ?? "tier") !== args.kind) {
+    return {
+      ok: false,
+      reason: args.kind === "dibs-claim"
+        ? "this name is held for its .com holder — it needs a dibs claim voucher"
+        : "this voucher isn't a name-change voucher",
+    };
+  }
+  if (v.redeemedAt !== undefined) return { ok: false, reason: "voucher already redeemed" };
+  const won = await deps.vouchers.redeem(codeHash, args.username.toLowerCase(), nowMs(deps));
+  return won ? { ok: true, codeHash } : { ok: false, reason: "voucher already redeemed" };
+}
+
+/** Put a consumed name entitlement back (the rename it paid for failed). */
+export async function releaseNameVoucher(
+  deps: Pick<VoucherDeps, "vouchers">,
+  args: { codeHash: string; username: string },
+): Promise<void> {
+  await deps.vouchers.release(args.codeHash, args.username.toLowerCase());
 }
 
 export interface RedeemVoucherArgs {
@@ -83,6 +137,9 @@ export async function redeemVoucher(deps: VoucherDeps, args: RedeemVoucherArgs):
   const codeHash = await sha256Hex(normalizeVoucherCode(args.code));
   const v = await deps.vouchers.get(codeHash);
   if (!v) throw new Error("invalid voucher code");
+  // A name entitlement is consumed by the name change, never as a tier — and
+  // checking BEFORE the redeem means trying it here doesn't burn it.
+  if ((v.kind ?? "tier") !== "tier") throw new Error("this voucher is for a name change — use it in Settings → Change your name");
   if (v.redeemedAt !== undefined) throw new Error("voucher already redeemed");
   // Atomic consume — only the winner of a race proceeds to grant.
   const won = await deps.vouchers.redeem(codeHash, username, nowMs(deps));
@@ -113,14 +170,16 @@ export async function handleRedeemVoucher(deps: VoucherDeps, body: unknown): Pro
 /** `POST /api/admin/voucher/issue` — ADMIN. Body `{ tier, durationDays, code? }`.
  *  Returns the plaintext code ONCE. */
 export async function handleIssueVoucher(deps: VoucherDeps, body: unknown): Promise<VoucherHttpResult> {
-  const b = (body ?? {}) as { tier?: unknown; durationDays?: unknown; code?: unknown };
-  if (typeof b.tier !== "string" || typeof b.durationDays !== "number") {
+  const b = (body ?? {}) as { kind?: unknown; tier?: unknown; durationDays?: unknown; code?: unknown };
+  const kind = typeof b.kind === "string" ? (b.kind as VoucherKind) : "tier";
+  if (kind === "tier" && (typeof b.tier !== "string" || typeof b.durationDays !== "number")) {
     return { status: 400, body: { error: "tier and durationDays are required" } };
   }
   try {
     const res = await issueVoucher(deps, {
-      tier: b.tier as TierName,
-      durationDays: b.durationDays,
+      kind,
+      ...(typeof b.tier === "string" ? { tier: b.tier as TierName } : {}),
+      ...(typeof b.durationDays === "number" ? { durationDays: b.durationDays } : {}),
       code: typeof b.code === "string" ? b.code : undefined,
     });
     return { status: 200, body: { ok: true, ...res } };

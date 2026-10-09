@@ -310,11 +310,18 @@ export function createSqliteD1(): SqliteD1 {
       return new SqliteD1Statement(raw, query);
     },
     async batch(stmts: D1PreparedStatement[]) {
-      // src/d1.ts never calls batch(), but satisfy the interface: run
-      // each sequentially (no cross-statement transaction needed for the
-      // adapter's current shape).
+      // D1 runs a batch as ONE transaction: any failure rolls every statement
+      // back. Mirror that so adapters relying on it (the account rename) are
+      // tested against the real all-or-nothing semantics.
       const out: D1Result[] = [];
-      for (const s of stmts) out.push(await s.run());
+      raw.exec("BEGIN");
+      try {
+        for (const s of stmts) out.push(await s.run());
+        raw.exec("COMMIT");
+      } catch (e) {
+        raw.exec("ROLLBACK");
+        throw e;
+      }
       return out;
     },
     async exec(query: string) {

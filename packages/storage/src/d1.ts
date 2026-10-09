@@ -1,3 +1,4 @@
+import { RENAMED_ACCOUNT_COLUMNS } from "./accountRename.js";
 import type {
   AccountType,
   AuditEventRecord,
@@ -126,6 +127,8 @@ import type {
   NameClaimKind,
   NameDibsClaimRecord,
   NameDibsClaimStorage,
+  NameChangeRecord,
+  NameChangeStorage,
 } from "./types.js";
 
 /**
@@ -3501,9 +3504,9 @@ export class D1VoucherStorage implements VoucherStorage {
     try {
       await this.db
         .prepare(
-          `INSERT INTO vouchers (code_hash, tier, duration_days, created_at) VALUES (?,?,?,?)`,
+          `INSERT INTO vouchers (code_hash, tier, duration_days, created_at, kind) VALUES (?,?,?,?,?)`,
         )
-        .bind(rec.codeHash, rec.tier, rec.durationDays, rec.createdAt)
+        .bind(rec.codeHash, rec.tier, rec.durationDays, rec.createdAt, rec.kind ?? "tier")
         .run();
       return { ok: true as const };
     } catch (e) {
@@ -3526,10 +3529,12 @@ export class D1VoucherStorage implements VoucherStorage {
         created_at: number;
         redeemed_at: number | null;
         redeemed_by: string | null;
+        kind: string | null;
       }>();
     return r
       ? {
           codeHash: r.code_hash,
+          kind: r.kind === "name-change" || r.kind === "dibs-claim" ? r.kind : "tier",
           tier: r.tier as VoucherRecord["tier"],
           durationDays: r.duration_days,
           createdAt: r.created_at,
@@ -3547,6 +3552,16 @@ export class D1VoucherStorage implements VoucherStorage {
         `UPDATE vouchers SET redeemed_at = ?, redeemed_by = ? WHERE code_hash = ? AND redeemed_at IS NULL`,
       )
       .bind(now, username, codeHash)
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
+
+  async release(codeHash: string, username: string): Promise<boolean> {
+    const r = await this.db
+      .prepare(
+        `UPDATE vouchers SET redeemed_at = NULL, redeemed_by = NULL WHERE code_hash = ? AND redeemed_by = ?`,
+      )
+      .bind(codeHash, username)
       .run();
     return (r.meta?.changes ?? 0) > 0;
   }
@@ -4689,6 +4704,7 @@ export class D1Storage implements Storage {
   suggestThrottle: SuggestThrottleStorage;
   usernameOffers: UsernameOfferStorage;
   nameDibsClaims: NameDibsClaimStorage;
+  nameChanges: NameChangeStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;
@@ -4743,6 +4759,7 @@ export class D1Storage implements Storage {
     this.suggestThrottle = new D1SuggestThrottleStorage(db);
     this.usernameOffers = new D1UsernameOfferStorage(db);
     this.nameDibsClaims = new D1NameDibsClaimStorage(db);
+    this.nameChanges = new D1NameChangeStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
     this.daemonStatus = new D1DaemonStatusStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
@@ -4932,6 +4949,93 @@ export class D1SuggestThrottleStorage implements SuggestThrottleStorage {
 }
 
 /** D1 recently-offered-handles roster (migration 0062) — the claim gate. */
+/**
+ * Paid name change (migration 0094). One D1 batch — D1 runs it as a single
+ * transaction — so a rename either moves every account row or none:
+ *   1. defer foreign-key checks to commit (device_identities and friends
+ *      reference usernames(username); the parent and children move together);
+ *   2. clear rows still keyed by the NEW name — leftovers of a deleted account
+ *      that once held it, which must not surface under this account;
+ *   3. copy the usernames row (every column, read from the live schema) under
+ *      the new name — a concurrent signup on the name makes this fail and
+ *      roll the whole batch back;
+ *   4. rewrite each RENAMED_ACCOUNT_COLUMNS column, old → new;
+ *   5. delete the old usernames row, and append to the history.
+ */
+export class D1NameChangeStorage implements NameChangeStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async renameAccount(rec: NameChangeRecord): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const oldName = rec.oldUsername.toLowerCase();
+    const newName = rec.newUsername.toLowerCase();
+    const prev = await this.db.prepare("SELECT 1 AS hit FROM usernames WHERE username = ?1").bind(oldName).first();
+    if (!prev) return { ok: false, reason: "account not found" };
+
+    const tables = new Set(
+      ((await this.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all<{ name: string }>()).results ?? [])
+        .map((r) => r.name),
+    );
+    const cols = ((await this.db.prepare("PRAGMA table_info(usernames)").all<{ name: string }>()).results ?? [])
+      .map((r) => r.name);
+    if (!cols.includes("username")) return { ok: false, reason: "usernames schema unreadable" };
+    const others = cols.filter((c) => c !== "username");
+    const present = RENAMED_ACCOUNT_COLUMNS.filter(([t]) => tables.has(t));
+
+    const stmts: D1PreparedStatement[] = [this.db.prepare("PRAGMA defer_foreign_keys = ON")];
+    for (const [t, c] of present) {
+      // A voucher redeemed by a previous holder of the name is payment history,
+      // never shown to anyone — leave it.
+      if (t === "vouchers") continue;
+      stmts.push(this.db.prepare(`DELETE FROM ${t} WHERE ${c} = ?1`).bind(newName));
+    }
+    stmts.push(
+      this.db
+        .prepare(
+          `INSERT INTO usernames (username, ${others.join(", ")}) SELECT ?1, ${others.join(", ")} FROM usernames WHERE username = ?2`,
+        )
+        .bind(newName, oldName),
+    );
+    for (const [t, c] of present) {
+      stmts.push(this.db.prepare(`UPDATE ${t} SET ${c} = ?1 WHERE ${c} = ?2`).bind(newName, oldName));
+    }
+    stmts.push(this.db.prepare("DELETE FROM usernames WHERE username = ?1").bind(oldName));
+    stmts.push(
+      this.db
+        .prepare("INSERT INTO name_changes (aid_pub_hex, old_username, new_username, changed_at) VALUES (?1, ?2, ?3, ?4)")
+        .bind(rec.aidPubHex.toLowerCase(), oldName, newName, rec.at),
+    );
+    try {
+      await this.db.batch(stmts);
+    } catch (e) {
+      const msg = String((e as Error)?.message ?? e);
+      if (/UNIQUE|PRIMARY KEY|constraint/i.test(msg)) return { ok: false, reason: "name already taken" };
+      throw e;
+    }
+    return { ok: true };
+  }
+
+  async countSince(aidPubHex: string, since: number): Promise<number> {
+    const r = await this.db
+      .prepare("SELECT COUNT(*) AS n FROM name_changes WHERE aid_pub_hex = ?1 AND changed_at >= ?2")
+      .bind(aidPubHex.toLowerCase(), since)
+      .first<{ n: number }>();
+    return r?.n ?? 0;
+  }
+
+  async history(aidPubHex: string): Promise<NameChangeRecord[]> {
+    const r = await this.db
+      .prepare("SELECT * FROM name_changes WHERE aid_pub_hex = ?1 ORDER BY changed_at ASC")
+      .bind(aidPubHex.toLowerCase())
+      .all<{ aid_pub_hex: string; old_username: string; new_username: string; changed_at: number }>();
+    return (r.results ?? []).map((x) => ({
+      aidPubHex: x.aid_pub_hex,
+      oldUsername: x.old_username,
+      newUsername: x.new_username,
+      at: x.changed_at,
+    }));
+  }
+}
+
 interface NameDibsClaimRow {
   name: string;
   username: string;
