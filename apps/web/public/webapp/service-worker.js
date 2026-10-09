@@ -214,7 +214,10 @@
 //  v96: a call flagshipserver.com rate-limits says who is limited and when
 //      to try again (lib/rateLimited.js, precached) instead of a generic
 //      error.
-const SHELL_VERSION = "v96";
+//  v97: feat/marketplace only: main's shell plus the branch's files
+//       (marketplace, tier status, allowance, install, developer views), so
+//       it runs a version above main's; bump it past main's on rebase.
+const SHELL_VERSION = "v97";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
