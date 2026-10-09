@@ -166,7 +166,10 @@
 //  v79: notifications that name an app screen (https://<apex>/app/<route>)
 //       open the matching webapp view; the old desktop-pairing view
 //       (views/pair.js, flagship://desktop QR) is gone.
-const SHELL_VERSION = "v79";
+//  v80: feat/marketplace only: main's v79 plus the branch's shell files
+//       (marketplace, tier status, allowance, install, developer views), so
+//       it runs the next version above main's; bump it past main's on rebase.
+const SHELL_VERSION = "v80";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
