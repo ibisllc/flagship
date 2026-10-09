@@ -180,6 +180,19 @@ public extension EnvironmentValues {
     }
 }
 
+/// Name-dibs client (`.com`): the public window plus the IRK-signed claim
+/// initiate/verify. Defaults to the inert Mock for previews/tests.
+private struct NameDibsClientKey: EnvironmentKey {
+    static let defaultValue: any NameDibsClient = MockNameDibsClient()
+}
+
+public extension EnvironmentValues {
+    var nameDibsClient: any NameDibsClient {
+        get { self[NameDibsClientKey.self] }
+        set { self[NameDibsClientKey.self] = newValue }
+    }
+}
+
 /// Server-migration lane client (`.com`): deposits the admin-signed initiate /
 /// confirm-ready / freeze / abort and polls the public phase state
 /// (docs/server-migration.md). Hits `.com` (the migration orchestration lane),

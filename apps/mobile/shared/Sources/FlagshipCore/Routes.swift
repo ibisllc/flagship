@@ -6,6 +6,8 @@ import FlagshipAPI
 /// type-safe deep-linking and zero stringly-typed navigation.
 public enum HomeRoute: Hashable, Sendable {
     case serverDetail(podId: String)
+    /// The Home "Own a .com?" notice → the name-dibs claim screen.
+    case nameDibs
     /// "Add a server" — provisions a new box. Goes straight into the CreateServer
     /// flow: there's no chooser. Pairing is automatic (every control device sees
     /// every server), and taking over a transferred box is a link/QR ingestion
@@ -108,6 +110,8 @@ public enum SettingsRoute: Hashable, Sendable {
     /// P7 — the dedicated tier-status / subscription screen, reached from
     /// the Settings "Subscription" nav row.
     case tierStatus
+    /// Settings → "Claim your .com name" (name dibs; only while the window is open).
+    case nameDibs
     case recovery
     /// Settings → Account security. TOTP enroll/disable, recovery codes, and
     /// the Watch delegate. Reached via the account-security row — previously

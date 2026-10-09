@@ -119,6 +119,7 @@ fun SettingsTab() {
         composable("profiles") { ProfilesScreen(nav) }
         // P7 — dedicated tier-status / subscription screen (marketplace).
         composable("tier-status") { TierStatusScreen(nav) }
+        composable("name-dibs") { com.flagshipserver.app.ui.screens.NameDibsScreen() }
         // Web-experience gating — the browser QR-logins this phone authorized.
         composable("secured-sessions") { SecuredSessionsScreen(nav) }
         // Web-experience gating — paste a flagship://access link / "Get link".

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Computer
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Devices
@@ -156,6 +157,12 @@ fun SettingsScreen(nav: NavController) {
     val profiles by app.profiles.collectAsState()
     val activeCloud by app.activeCloudName.collectAsState()
     val isDemoAccountSession = AppState.isDemoAccount(profiles.firstOrNull { it.cloudName == activeCloud }, pods)
+    // Name dibs — the "Claim your .com name" row shows only while the window is open.
+    val nameDibsClient = com.flagshipserver.app.core.LocalNameDibsClient.current
+    var dibsOpen by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(nameDibsClient) {
+        dibsOpen = runCatching { nameDibsClient.window().open }.getOrDefault(false)
+    }
     val isMockSession = dev?.useLiveClient?.collectAsState()?.value?.let { !it } ?: false
     val isDemoAccount = isMockSession || isDemoAccountSession
     var showDemoDeleteNotice by remember { mutableStateOf(false) }
@@ -248,7 +255,15 @@ fun SettingsScreen(nav: NavController) {
                     onClick = { nav.navigate("ai-keys") },
                     testTag = "settings-ai-keys",
                 ),
-            ) + (if (isDemoAccountSession) emptyList() else listOf(
+            ) + (if (dibsOpen && !isDemoAccountSession) listOf(
+                FSSettingsRowData(
+                    icon = Icons.Outlined.Flag,
+                    title = "Claim your .com name",
+                    subtitle = "Own the .com? The matching name is held for you.",
+                    onClick = { nav.navigate("name-dibs") },
+                    testTag = "settings-open-name-dibs",
+                ),
+            ) else emptyList()) + (if (isDemoAccountSession) emptyList() else listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Autorenew,
                     title = "Cloud recovery",

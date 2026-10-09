@@ -145,6 +145,7 @@ public final class AuditLogViewModel {
         case "quarantine-blocked-revoke": return "Blocked a quarantined device's action"
         case "account-deleted":     return "Deleted account"
         case "username-reclaimed":  return "Username reclaimed"
+        case "account-renamed":     return "Changed account name"
         case "account-type-changed-single-to-multi": return "Switched to multi-device"
         case "account-type-changed-multi-to-single": return "Switched to single-device"
         case "ct-unexpected-cert":  return "Unexpected certificate observed"

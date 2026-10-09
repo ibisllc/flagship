@@ -12,6 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -167,6 +169,15 @@ fun HomeTab() {
     // StateFlow is collected below so toggling `setDismissed(true)`
     // from "Not now" recomposes Home and the banner disappears.
     val recoveryBannerStore = remember { RecoveryBannerStore.fromContext(ctx) }
+    // Name dibs notice — shown while the window is open, until dismissed on
+    // this device (a UI preference, so plain SharedPreferences).
+    val nameDibsClient = com.flagshipserver.app.core.LocalNameDibsClient.current
+    var dibsWindow by remember { mutableStateOf<com.flagshipserver.app.api.DibsWindow?>(null) }
+    val dibsPrefs = remember { ctx.getSharedPreferences("flagship.ui", android.content.Context.MODE_PRIVATE) }
+    var dibsDismissed by remember {
+        mutableStateOf(dibsPrefs.getBoolean(com.flagshipserver.app.viewmodels.NameDibsViewModel.BANNER_DISMISS_KEY, false))
+    }
+    LaunchedEffect(nameDibsClient) { dibsWindow = runCatching { nameDibsClient.window() }.getOrNull() }
 
     LaunchedEffect(app.currentPodId.value) { vm.load() }
 
@@ -288,6 +299,14 @@ fun HomeTab() {
                 onDismissRecoveryNudge = { app.dismissRecoveryNudgeForSession() },
                 showRecoveryBackupBanner = showBackupBanner,
                 onDismissRecoveryBackupBanner = { recoveryBannerStore.setDismissed(true) },
+                dibsNoticeClosesAt = dibsWindow?.end?.takeIf {
+                    !isDemoAccount && com.flagshipserver.app.viewmodels.NameDibsViewModel.shouldShowBanner(dibsWindow, dibsDismissed)
+                },
+                onClaimDibs = { nav.navigate("name-dibs") },
+                onDismissDibs = {
+                    dibsPrefs.edit().putBoolean(com.flagshipserver.app.viewmodels.NameDibsViewModel.BANNER_DISMISS_KEY, true).apply()
+                    dibsDismissed = true
+                },
                 accountWasReset = reset,
                 onSignInAgain = { app.signOut() },
                 deviceCapability = capability,
@@ -295,6 +314,7 @@ fun HomeTab() {
                 awaitingEntitlement = awaitingEntitlement,
             )
         }
+        composable("name-dibs") { com.flagshipserver.app.ui.screens.NameDibsScreen() }
         composable("server-detail/{podId}") { entry ->
             val podId = entry.arguments?.getString("podId") ?: return@composable
             val pod = pods.firstOrNull { it.podId == podId }

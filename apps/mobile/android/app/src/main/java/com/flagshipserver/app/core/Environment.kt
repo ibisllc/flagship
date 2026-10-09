@@ -17,6 +17,8 @@ import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
 import com.flagshipserver.app.api.MockSecretMailboxClient
 import com.flagshipserver.app.api.MockServerTransferClient
+import com.flagshipserver.app.api.MockNameDibsClient
+import com.flagshipserver.app.api.NameDibsClient
 import com.flagshipserver.app.api.ServerTransferClient
 import com.flagshipserver.app.api.InMemorySessionStore
 import com.flagshipserver.app.api.ScreensClient
@@ -51,6 +53,9 @@ val LocalSecretMailboxClient = staticCompositionLocalOf<SecretMailboxClient> { M
  *  box-pinned pipe. Production MainActivity wires the live client; previews +
  *  tests get the in-memory Mock. */
 val LocalServerTransferClient = staticCompositionLocalOf<ServerTransferClient> { MockServerTransferClient() }
+
+/** Name-dibs client (`.com`): the public window + IRK-signed claim initiate/verify. */
+val LocalNameDibsClient = staticCompositionLocalOf<NameDibsClient> { MockNameDibsClient() }
 
 /** The pod session store backing the BFF (holds podBaseUrl + session token).
  *  Production MainActivity installs the EncryptedSessionStore; previews + tests

@@ -67,6 +67,10 @@ public struct HomeScreen: View {
     var onSetUpRecovery: () -> Void = {}
     var onDismissRecoveryNudge: () -> Void = {}
     var onDismissRecoveryBackupBanner: () -> Void = {}
+    /// Name dibs notice: the window's end (ms) while it should show, else nil.
+    var dibsNoticeClosesAt: Int64? = nil
+    var onClaimDibs: () -> Void = {}
+    var onDismissDibs: () -> Void = {}
     var onSignInAgain: () -> Void = {}
 
     /// Search text over the server list (name / description / fqdn). Bound to
@@ -101,6 +105,9 @@ public struct HomeScreen: View {
         onSetUpRecovery: @escaping () -> Void = {},
         onDismissRecoveryNudge: @escaping () -> Void = {},
         onDismissRecoveryBackupBanner: @escaping () -> Void = {},
+        dibsNoticeClosesAt: Int64? = nil,
+        onClaimDibs: @escaping () -> Void = {},
+        onDismissDibs: @escaping () -> Void = {},
         onSignInAgain: @escaping () -> Void = {}
     ) {
         self.state = state
@@ -126,6 +133,9 @@ public struct HomeScreen: View {
         self.onSetUpRecovery = onSetUpRecovery
         self.onDismissRecoveryNudge = onDismissRecoveryNudge
         self.onDismissRecoveryBackupBanner = onDismissRecoveryBackupBanner
+        self.dibsNoticeClosesAt = dibsNoticeClosesAt
+        self.onClaimDibs = onClaimDibs
+        self.onDismissDibs = onDismissDibs
         self.onSignInAgain = onSignInAgain
     }
 
@@ -212,6 +222,16 @@ public struct HomeScreen: View {
                 onDismiss: onDismissRecoveryNudge
             )
             .accessibilityIdentifier("recovery-nudge-card")
+        } else if let closesAt = dibsNoticeClosesAt {
+            FSAnnouncementCard(
+                icon: "flag.fill",
+                title: "Own a .com? Claim the matching name",
+                message: "Until \(NameDibsScreen.date(closesAt)), a name that matches a registered .com is held for whoever controls that domain.",
+                ctaLabel: "Claim your .com name",
+                onCta: onClaimDibs,
+                onDismiss: onDismissDibs
+            )
+            .accessibilityIdentifier("dibs-notice")
         }
     }
 
