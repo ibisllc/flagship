@@ -98,7 +98,7 @@ struct BiometricLockScreen: View {
         } message: {
             Text(app.hasCloudRecovery
                 ? "This erases this device's account key from the Keychain and returns you to the start. Sign back in with your recovery passkey to restore it — your account and servers stay put."
-                : "⚠️ You have NO cloud recovery enrolled. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.")
+                : "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.")
         }
         // Auto-prompt on first appearance — pattern most password-manager
         // apps follow — EXCEPT when the user reached this screen by tapping

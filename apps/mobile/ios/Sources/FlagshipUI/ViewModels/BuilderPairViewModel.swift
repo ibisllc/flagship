@@ -18,7 +18,7 @@ import FlagshipCore
 /// identical X25519/HKDF/SAS constants).
 ///
 /// ONE-SHOT: once the builder acknowledges the staged recipe, the phone has NO
-/// further role — it shows "Sent ✓" and the user may lock/leave. There is no
+/// further role — it shows "Sent" and the user may lock/leave. There is no
 /// post-delivery session/resume, countdown, or debug-consent round-trip (the
 /// debug grant, if any, is baked into the recipe at mint). A brief socket loss
 /// during pairing is retried in-place. The builder keeps the recipe.

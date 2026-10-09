@@ -9,7 +9,7 @@ import FlagshipCore
 /// live session.
 ///
 /// ONE-SHOT: delivery is a single deposit. Once the recipe is sent the screen
-/// shows "Sent ✓ — you can close this screen" and the phone has no further
+/// shows "Sent — you can close this screen" and the phone has no further
 /// role; the builder keeps the recipe and the laptop user disconnects on the
 /// builder side. The display is kept awake only while this screen is foreground
 /// (so the OS auto-lock doesn't suspend the app mid-deposit).
@@ -162,7 +162,7 @@ public struct BuilderPairScreen: View {
 
     private func deliveredPage(domain: String, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            header("Sent ✓ — you can close this screen", "Your computer's builder has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.", c: c)
+            header("Sent — you can close this screen", "Your computer's builder has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.", c: c)
             FSCard {
                 Label(domain, systemImage: "checkmark.seal.fill")
                     .font(FS.font.h4())
