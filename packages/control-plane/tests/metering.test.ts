@@ -153,7 +153,7 @@ describe("allowance view (#6/#7 dashboard + alert)", () => {
 
     const approaching = await (async () => {
       const d = deps();
-      await recordEgress(d, "alice", 40 * GB); // 80% of free 50 GB
+      await recordEgress(d, "alice", 0.8 * MONTHLY_EGRESS_QUOTA_BYTES.free);
       return allowanceViewFrom("alice", await quotaStatus(d, "alice"));
     })();
     expect(approaching.state).toBe("approaching");
@@ -161,7 +161,7 @@ describe("allowance view (#6/#7 dashboard + alert)", () => {
 
     const over = await (async () => {
       const d = deps();
-      await recordEgress(d, "alice", 60 * GB); // over free 50 GB
+      await recordEgress(d, "alice", 1.2 * MONTHLY_EGRESS_QUOTA_BYTES.free);
       return allowanceViewFrom("alice", await quotaStatus(d, "alice"));
     })();
     expect(over.state).toBe("over");
@@ -191,6 +191,6 @@ describe("allowance view (#6/#7 dashboard + alert)", () => {
   it("an unknown username reads as free / zero (no existence oracle)", async () => {
     const res = await handleUserAllowance(deps(), "nobody123");
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ tier: "free", usedBytes: 0, quotaBytes: 50 * GB, state: "ok" });
+    expect(res.body).toMatchObject({ tier: "free", usedBytes: 0, quotaBytes: 25 * GB, state: "ok" });
   });
 });
