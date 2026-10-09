@@ -1590,12 +1590,49 @@ export interface PeerBackupManifestStorage {
   delete(serverDomain: string): Promise<boolean>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Name dibs (docs/naming-recovery-and-name-change.md §7). One row per
+// (name, claimant). A claimant proves control of `<name>.com` by publishing a
+// challenge bound to their IRK + the row's nonce; the FIRST verified claim on a
+// name wins (at most one verified row per name — enforced by the store).
+// ──────────────────────────────────────────────────────────────────────
+
+export interface NameDibsClaimRecord {
+  name: string;
+  username: string;
+  irkPubHex: string;
+  nonce: string;
+  createdAt: number;
+  /** Starts recorded for this (name, claimant) — the per-row retry counter. */
+  attempts: number;
+  verifiedAt?: number;
+  method?: "dns" | "http";
+  /** Set once the verified claim was redeemed into an actual rename. */
+  consumedAt?: number;
+}
+
+export interface NameDibsClaimStorage {
+  /** Begin (or restart) a claim with a fresh nonce. A row that is already
+   *  verified is left untouched and returned as-is. */
+  start(rec: { name: string; username: string; irkPubHex: string; nonce: string; createdAt: number }): Promise<NameDibsClaimRecord>;
+  get(name: string, username: string): Promise<NameDibsClaimRecord | undefined>;
+  /** The verified claim on `name`, if any. */
+  winner(name: string): Promise<NameDibsClaimRecord | undefined>;
+  /** Mark (name, username) verified — fails with "taken" when another
+   *  claimant already verified the name, "missing" when there's no row. */
+  markVerified(name: string, username: string, method: "dns" | "http", at: number): Promise<{ ok: true } | { ok: false; reason: "taken" | "missing" }>;
+  markConsumed(name: string, username: string, at: number): Promise<boolean>;
+  /** Claim starts by `username` at or after `since` (rate limiting). */
+  countStartsSince(username: string, since: number): Promise<number>;
+}
+
 export interface Storage {
   usernames: UsernameStorage;
   schemaVersion: SchemaVersionStorage;
   suggestionQueue: SuggestionQueueStorage;
   suggestThrottle: SuggestThrottleStorage;
   usernameOffers: UsernameOfferStorage;
+  nameDibsClaims: NameDibsClaimStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;

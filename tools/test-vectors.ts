@@ -58,6 +58,11 @@ import {
   signRevokeDeviceCapabilityGrant,
   signServerRegister,
   signServerTransferClaim,
+  signNameDibsInitiate,
+  signNameDibsVerify,
+  signNameChange,
+  nameDibsChallengePreimage,
+  nameDibsChallenge,
   signSetRoutingTarget,
   signTunnelHello,
   signWatchDelegateKey,
@@ -851,6 +856,76 @@ function buildVectors(): Vector[] {
     ),
   );
 
+  // ---- Custom names (docs/naming-recovery-and-name-change.md §5–7). The
+  // dibs initiate/verify envelopes are IRK-signed by the CLAIMING account; the
+  // challenge (unsigned) binds name + claiming IRK + server nonce so a
+  // published record can't be replayed by another key; the name change is
+  // signed under the account's admin authority and bound to its stable AID. ----
+  const dibsInitiateInput = {
+    username: "harry",
+    name: "acme-tools",
+    irkPubHex: hex(irk.publicKey),
+    issuedAt: ISSUED_AT,
+  };
+  vectors.push(
+    makeVector(
+      "name-dibs-initiate",
+      "irk",
+      dibsInitiateInput,
+      signNameDibsInitiate(dibsInitiateInput, irk),
+      payloadByName("name-dibs-initiate", dibsInitiateInput),
+      ALL,
+    ),
+  );
+  const dibsVerifyInput = {
+    username: "harry",
+    name: "acme-tools",
+    nonce: hex(FIXED_NONCE),
+    issuedAt: ISSUED_AT,
+  };
+  vectors.push(
+    makeVector(
+      "name-dibs-verify",
+      "irk",
+      dibsVerifyInput,
+      signNameDibsVerify(dibsVerifyInput, irk),
+      payloadByName("name-dibs-verify", dibsVerifyInput),
+      ALL,
+    ),
+  );
+  const dibsChallengeInput = {
+    name: "acme-tools",
+    irkPubHex: hex(irk.publicKey),
+    nonce: hex(FIXED_NONCE),
+    expectedChallenge: nameDibsChallenge("acme-tools", hex(irk.publicKey), hex(FIXED_NONCE)),
+  };
+  vectors.push(
+    makeVector(
+      "name-dibs-challenge",
+      "none",
+      dibsChallengeInput,
+      new Uint8Array(0),
+      nameDibsChallengePreimage(dibsChallengeInput.name, dibsChallengeInput.irkPubHex, dibsChallengeInput.nonce),
+      ALL,
+    ),
+  );
+  const nameChangeInput = {
+    aidPubHex: hex(newAdminRoot.publicKey),
+    oldUsername: "harry",
+    newUsername: "acme-tools",
+    issuedAt: ISSUED_AT,
+  };
+  vectors.push(
+    makeVector(
+      "name-change",
+      "admin-root",
+      nameChangeInput,
+      signNameChange(nameChangeInput, adminRoot),
+      payloadByName("name-change", nameChangeInput),
+      ALL,
+    ),
+  );
+
   return vectors;
 }
 
@@ -1074,6 +1149,14 @@ function payloadByName(name: string, i: Record<string, unknown>): Uint8Array {
       return enc(["flagship/re-pair-initiate/v1", i.username, i.newIrkPub, i.oldIrkPub, i.issuedAt].join("|"));
     case "re-pair-object":
       return enc(["flagship/re-pair-object/v1", i.username, i.newIrkPub, i.issuedAt].join("|"));
+    case "name-dibs-initiate":
+      return enc(["flagship/name-dibs-initiate/v1", i.username, i.name, i.irkPubHex, i.issuedAt].join("|"));
+    case "name-dibs-verify":
+      return enc(["flagship/name-dibs-verify/v1", i.username, i.name, i.nonce, i.issuedAt].join("|"));
+    case "name-dibs-challenge":
+      return enc(["flagship/name-dibs/v1", i.name, i.irkPubHex, i.nonce].join("|"));
+    case "name-change":
+      return enc(["flagship/name-change/v1", i.aidPubHex, i.oldUsername, i.newUsername, i.issuedAt].join("|"));
     case "admin-root-rotation":
       return enc(
         [

@@ -50,6 +50,9 @@ export interface RateLimitEnv {
 export type RateLimitEndpoint =
   | "username-claim"
   | "username-suggest"
+  // Name dibs initiate + verify: each verify makes outbound DNS/HTTPS lookups,
+  // so a flood must not turn the Worker into a lookup amplifier.
+  | "name-dibs"
   | "auth-code-issue"
   | "server-register"
   | "recovery-by-username"
@@ -179,6 +182,9 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "username-suggest": [
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "ip", limit: 200, windowSec: 3600 },
+  ],
+  "name-dibs": [
+    { axis: "ip", limit: 30, windowSec: 900 },
   ],
   "auth-code-issue": [
     { axis: "ip", limit: 20, windowSec: 3600 },
@@ -417,6 +423,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && pathname === "/api/username/claim") return "username-claim";
   if (m === "POST" && pathname === "/api/accounts") return "username-claim";
   if (m === "POST" && pathname === "/api/username/suggest") return "username-suggest";
+  if (m === "POST" && (pathname === "/api/name-dibs/initiate" || pathname === "/api/name-dibs/verify")) return "name-dibs";
   if (m === "POST" && pathname === "/api/auth-code/issue") return "auth-code-issue";
   if (m === "POST" && pathname === "/api/server/register") return "server-register";
   // Recovery re-pair initiate. NOT /re-pair/object or /re-pair/complete:

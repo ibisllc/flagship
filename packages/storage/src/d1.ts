@@ -124,6 +124,8 @@ import type {
   NameClaimRecord,
   NamespaceStorage,
   NameClaimKind,
+  NameDibsClaimRecord,
+  NameDibsClaimStorage,
 } from "./types.js";
 
 /**
@@ -4686,6 +4688,7 @@ export class D1Storage implements Storage {
   suggestionQueue: SuggestionQueueStorage;
   suggestThrottle: SuggestThrottleStorage;
   usernameOffers: UsernameOfferStorage;
+  nameDibsClaims: NameDibsClaimStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;
@@ -4739,6 +4742,7 @@ export class D1Storage implements Storage {
     this.suggestionQueue = new D1SuggestionQueueStorage(db);
     this.suggestThrottle = new D1SuggestThrottleStorage(db);
     this.usernameOffers = new D1UsernameOfferStorage(db);
+    this.nameDibsClaims = new D1NameDibsClaimStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
     this.daemonStatus = new D1DaemonStatusStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
@@ -4928,6 +4932,114 @@ export class D1SuggestThrottleStorage implements SuggestThrottleStorage {
 }
 
 /** D1 recently-offered-handles roster (migration 0062) — the claim gate. */
+interface NameDibsClaimRow {
+  name: string;
+  username: string;
+  irk_pub_hex: string;
+  nonce: string;
+  created_at: number;
+  attempts: number;
+  verified_at: number | null;
+  method: string | null;
+  consumed_at: number | null;
+}
+
+function rowToNameDibsClaim(r: NameDibsClaimRow): NameDibsClaimRecord {
+  return {
+    name: r.name,
+    username: r.username,
+    irkPubHex: r.irk_pub_hex,
+    nonce: r.nonce,
+    createdAt: r.created_at,
+    attempts: r.attempts,
+    ...(r.verified_at !== null ? { verifiedAt: r.verified_at } : {}),
+    ...(r.method === "dns" || r.method === "http" ? { method: r.method } : {}),
+    ...(r.consumed_at !== null ? { consumedAt: r.consumed_at } : {}),
+  };
+}
+
+/** Name-dibs claims (migration 0092). "At most one verified claim per name" is
+ *  a partial UNIQUE index, so two racing verifications can't both win. */
+export class D1NameDibsClaimStorage implements NameDibsClaimStorage {
+  constructor(private readonly db: D1Database) {}
+  async start(rec: { name: string; username: string; irkPubHex: string; nonce: string; createdAt: number }): Promise<NameDibsClaimRecord> {
+    const name = rec.name.toLowerCase();
+    const username = rec.username.toLowerCase();
+    await this.db.batch([
+      this.db
+        .prepare(`INSERT INTO name_dibs_starts (username, started_at) VALUES (?1, ?2)`)
+        .bind(username, rec.createdAt),
+      this.db
+        .prepare(
+          `INSERT INTO name_dibs_claims (name, username, irk_pub_hex, nonce, created_at, attempts)
+           VALUES (?1, ?2, ?3, ?4, ?5, 1)
+           ON CONFLICT(name, username) DO UPDATE SET
+             irk_pub_hex = excluded.irk_pub_hex,
+             nonce = excluded.nonce,
+             created_at = excluded.created_at,
+             attempts = name_dibs_claims.attempts + 1
+           WHERE name_dibs_claims.verified_at IS NULL`,
+        )
+        .bind(name, username, rec.irkPubHex.toLowerCase(), rec.nonce.toLowerCase(), rec.createdAt),
+    ]);
+    const row = await this.get(name, username);
+    if (!row) throw new Error("name dibs claim vanished after start");
+    return row;
+  }
+  async get(name: string, username: string): Promise<NameDibsClaimRecord | undefined> {
+    const r = await this.db
+      .prepare(`SELECT * FROM name_dibs_claims WHERE name = ?1 AND username = ?2`)
+      .bind(name.toLowerCase(), username.toLowerCase())
+      .first<NameDibsClaimRow>();
+    return r ? rowToNameDibsClaim(r) : undefined;
+  }
+  async winner(name: string): Promise<NameDibsClaimRecord | undefined> {
+    const r = await this.db
+      .prepare(`SELECT * FROM name_dibs_claims WHERE name = ?1 AND verified_at IS NOT NULL LIMIT 1`)
+      .bind(name.toLowerCase())
+      .first<NameDibsClaimRow>();
+    return r ? rowToNameDibsClaim(r) : undefined;
+  }
+  async markVerified(name: string, username: string, method: "dns" | "http", at: number): Promise<{ ok: true } | { ok: false; reason: "taken" | "missing" }> {
+    const existing = await this.get(name, username);
+    if (!existing) return { ok: false, reason: "missing" };
+    if (existing.verifiedAt !== undefined) return { ok: true };
+    try {
+      await this.db
+        .prepare(
+          `UPDATE name_dibs_claims SET verified_at = ?3, method = ?4
+           WHERE name = ?1 AND username = ?2 AND verified_at IS NULL`,
+        )
+        .bind(name.toLowerCase(), username.toLowerCase(), at, method)
+        .run();
+    } catch (e) {
+      // The partial unique index refuses a second verified row for the name.
+      if (/UNIQUE/i.test(String((e as Error)?.message ?? e))) return { ok: false, reason: "taken" };
+      throw e;
+    }
+    const w = await this.winner(name);
+    return w && w.username === username.toLowerCase() ? { ok: true } : { ok: false, reason: "taken" };
+  }
+  async markConsumed(name: string, username: string, at: number): Promise<boolean> {
+    const r = await this.db
+      .prepare(
+        `UPDATE name_dibs_claims SET consumed_at = ?3
+         WHERE name = ?1 AND username = ?2 AND verified_at IS NOT NULL AND consumed_at IS NULL`,
+      )
+      .bind(name.toLowerCase(), username.toLowerCase(), at)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return (meta?.changes ?? 0) > 0;
+  }
+  async countStartsSince(username: string, since: number): Promise<number> {
+    const r = await this.db
+      .prepare(`SELECT COUNT(*) AS n FROM name_dibs_starts WHERE username = ?1 AND started_at >= ?2`)
+      .bind(username.toLowerCase(), since)
+      .first<{ n: number }>();
+    return r?.n ?? 0;
+  }
+}
+
 export class D1UsernameOfferStorage implements UsernameOfferStorage {
   constructor(private readonly db: D1Database) {}
   async record(name: string, deviceKey: string, at: number): Promise<void> {

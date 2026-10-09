@@ -33,3 +33,4 @@ export * from "./directoryKeyDelivery.js";
 export * from "./servicePromote.js";
 export { ed } from "./edSync.js";
 export { resolveMsgSigner, type MsgSigner } from "./canonicalBase.js";
+export * from "./nameDibs.js";

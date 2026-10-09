@@ -25,6 +25,11 @@ import {
   deriveSTK,
   verifyAccountRecovery,
   verifyAdminRootRotation,
+  verifyNameDibsInitiate,
+  verifyNameDibsVerify,
+  verifyNameChange,
+  nameDibsChallenge,
+  nameDibsChallengePreimage,
   verifyAdminRootTransfer,
   verifyAuthCode,
   verifyDaemonStatusReport,
@@ -462,6 +467,39 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
           sig,
           oldIrkPub,
         );
+      case "name-dibs-initiate":
+        return verifyNameDibsInitiate(
+          {
+            username: i.username as string,
+            name: i.name as string,
+            irkPubHex: i.irkPubHex as string,
+            issuedAt: i.issuedAt as number,
+          },
+          sig,
+          irkPub,
+        );
+      case "name-dibs-verify":
+        return verifyNameDibsVerify(
+          {
+            username: i.username as string,
+            name: i.name as string,
+            nonce: i.nonce as string,
+            issuedAt: i.issuedAt as number,
+          },
+          sig,
+          irkPub,
+        );
+      case "name-change":
+        return verifyNameChange(
+          {
+            aidPubHex: i.aidPubHex as string,
+            oldUsername: i.oldUsername as string,
+            newUsername: i.newUsername as string,
+            issuedAt: i.issuedAt as number,
+          },
+          sig,
+          adminRootPub,
+        );
       case "admin-root-rotation":
         return verifyAdminRootRotation(
           {
@@ -526,6 +564,14 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
       .map((v) => v.name);
     // If this fails, a new signed vector was added without a typed verifier here.
     expect(uncovered).toEqual([]);
+  });
+
+  it("name-dibs-challenge: production preimage + challenge match the fixture", () => {
+    const v = file.vectors.find((x) => x.name === "name-dibs-challenge")!;
+    const i = v.input as { name: string; irkPubHex: string; nonce: string; expectedChallenge: string };
+    const pre = nameDibsChallengePreimage(i.name, i.irkPubHex, i.nonce);
+    expect([...pre].map((b) => b.toString(16).padStart(2, "0")).join("")).toBe(v.canonicalHex);
+    expect(nameDibsChallenge(i.name, i.irkPubHex, i.nonce)).toBe(i.expectedChallenge);
   });
 
   for (const v of file.vectors) {

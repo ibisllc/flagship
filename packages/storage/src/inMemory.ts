@@ -116,6 +116,8 @@ import type {
   DeviceCapabilityGrantStorage,
   NameClaimRecord,
   NamespaceStorage,
+  NameDibsClaimRecord,
+  NameDibsClaimStorage,
 } from "./types.js";
 
 /**
@@ -2200,6 +2202,7 @@ export class InMemoryStorage implements Storage {
   suggestionQueue = new InMemorySuggestionQueueStorage();
   suggestThrottle = new InMemorySuggestThrottleStorage();
   usernameOffers = new InMemoryUsernameOfferStorage();
+  nameDibsClaims = new InMemoryNameDibsClaimStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
   daemonStatus = new InMemoryDaemonStatusStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -2483,6 +2486,62 @@ export class InMemoryUsernameOfferStorage implements UsernameOfferStorage {
       }
     }
     return removed;
+  }
+}
+
+/** In-memory name-dibs claims. Mirrors the D1 store's one-verified-per-name rule. */
+export class InMemoryNameDibsClaimStorage implements NameDibsClaimStorage {
+  private rows = new Map<string, NameDibsClaimRecord>();
+  private starts: Array<{ username: string; at: number }> = [];
+  private key(name: string, username: string): string {
+    return `${name.toLowerCase()}\u0000${username.toLowerCase()}`;
+  }
+  async start(rec: { name: string; username: string; irkPubHex: string; nonce: string; createdAt: number }): Promise<NameDibsClaimRecord> {
+    const k = this.key(rec.name, rec.username);
+    this.starts.push({ username: rec.username.toLowerCase(), at: rec.createdAt });
+    const prev = this.rows.get(k);
+    if (prev?.verifiedAt !== undefined) return { ...prev };
+    const row: NameDibsClaimRecord = {
+      name: rec.name.toLowerCase(),
+      username: rec.username.toLowerCase(),
+      irkPubHex: rec.irkPubHex.toLowerCase(),
+      nonce: rec.nonce.toLowerCase(),
+      createdAt: rec.createdAt,
+      attempts: (prev?.attempts ?? 0) + 1,
+    };
+    this.rows.set(k, row);
+    return { ...row };
+  }
+  async get(name: string, username: string): Promise<NameDibsClaimRecord | undefined> {
+    const r = this.rows.get(this.key(name, username));
+    return r ? { ...r } : undefined;
+  }
+  async winner(name: string): Promise<NameDibsClaimRecord | undefined> {
+    for (const r of this.rows.values()) {
+      if (r.name === name.toLowerCase() && r.verifiedAt !== undefined) return { ...r };
+    }
+    return undefined;
+  }
+  async markVerified(name: string, username: string, method: "dns" | "http", at: number): Promise<{ ok: true } | { ok: false; reason: "taken" | "missing" }> {
+    const r = this.rows.get(this.key(name, username));
+    if (!r) return { ok: false, reason: "missing" };
+    const w = await this.winner(name);
+    if (w && w.username !== r.username) return { ok: false, reason: "taken" };
+    if (r.verifiedAt === undefined) {
+      r.verifiedAt = at;
+      r.method = method;
+    }
+    return { ok: true };
+  }
+  async markConsumed(name: string, username: string, at: number): Promise<boolean> {
+    const r = this.rows.get(this.key(name, username));
+    if (!r || r.verifiedAt === undefined || r.consumedAt !== undefined) return false;
+    r.consumedAt = at;
+    return true;
+  }
+  async countStartsSince(username: string, since: number): Promise<number> {
+    const u = username.toLowerCase();
+    return this.starts.filter((x) => x.username === u && x.at >= since).length;
   }
 }
 

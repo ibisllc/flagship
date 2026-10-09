@@ -237,6 +237,11 @@ tag = "v3"
 renamed_classes = [{ from = "BurnerRelaySession", to = "BuilderRelaySession" }]
 
 [vars]
+# Name dibs window (docs/naming-recovery-and-name-change.md §7). One year from
+# a start date in October 2026 — OWNER: set both when announcing. Unset ⇒ dibs
+# is off and every free name is open to everyone.
+# DIBS_WINDOW_START = "2026-10-15"
+# DIBS_WINDOW_END = "2027-10-15"
 # Apex roots, as CONFIG (docs/ui-test-gym.md §6.5 / §12-G1). PROD VALUES =
 # today's literals, so this Worker is byte-identical to before. The `gym.`
 # test Worker (a separate wrangler config / --name) overrides these to

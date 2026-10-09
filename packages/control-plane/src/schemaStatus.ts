@@ -49,6 +49,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0090",
   // feat/marketplace — app_sales payout ledger (#15 developer payouts).
   "0091",
+  // Name dibs claims (feat/custom-names).
+  "0092",
 ];
 
 export interface SchemaStatusDeps {

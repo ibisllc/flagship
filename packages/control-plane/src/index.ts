@@ -5,6 +5,7 @@ export * from "./adminRootRotation.js";
 export * from "./labels.js";
 export * from "./usernameClaim.js";
 export * from "./randomUsername.js";
+export * from "./nameDibs.js";
 export * from "./usersCheck.js";
 export * from "./authCode.js";
 export * from "./serverRegister.js";

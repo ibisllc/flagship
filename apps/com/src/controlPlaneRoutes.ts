@@ -129,6 +129,11 @@ import {
   handleServerRevokeBySelf,
   handleSetRoutingTarget,
   handleSuggestUsername,
+  handleNameDibsWindow,
+  handleNameDibsInitiate,
+  handleNameDibsVerify,
+  parseDibsWindow,
+  type DibsFetch,
   handleUsernameClaim,
   handleAccountBootstrap,
   handleUsersCheck,
@@ -236,6 +241,14 @@ import { createHetznerClient } from "./hetzner.js";
 import { createDemoCreateSettings, createDemoServerRouter, demoCreateMissingConfig } from "./demoCloud.js";
 
 export interface ControlPlaneEnv {
+  /**
+   * The one-year name-dibs window (docs/naming-recovery-and-name-change.md §7),
+   * ISO dates or ms. Both unset (or unparseable) ⇒ dibs is off and every free
+   * name is open to everyone. During the window a name whose `<name>.com` is
+   * registered is reserved for that domain's holder.
+   */
+  DIBS_WINDOW_START?: string;
+  DIBS_WINDOW_END?: string;
   DB?: D1Database;
   FLAGSHIP_CA_PRIV_HEX?: string;
   FLAGSHIP_CA_ISSUER?: string;
@@ -518,6 +531,9 @@ const ROUTE_RE = {
   USERNAME_CLAIM: /^\/api\/username\/claim$/,
   ACCOUNT_BOOTSTRAP: /^\/api\/accounts$/,
   USERNAME_SUGGEST: /^\/api\/username\/suggest$/,
+  NAME_DIBS_WINDOW: /^\/api\/name-dibs\/window$/,
+  NAME_DIBS_INITIATE: /^\/api\/name-dibs\/initiate$/,
+  NAME_DIBS_VERIFY: /^\/api\/name-dibs\/verify$/,
   USERS_CHECK: /^\/api\/users\/check$/,
   ACCOUNT_RESOLVE: /^\/api\/account\/resolve\/([^/]+)$/,
   USERNAME_LOOKUP: /^\/api\/username\/([^/]+)$/,
@@ -979,6 +995,23 @@ export async function tryControlPlane(
   // MUST precede USERNAME_LOOKUP (`/api/username/:u`) — "suggest" would otherwise
   // be read as a username lookup. Hands ONE random handle for sign-up, popped from
   // the pre-validated queue + escalating per-device throttle.
+  if (method === "GET" && ROUTE_RE.NAME_DIBS_WINDOW.test(path)) {
+    return finish(handleNameDibsWindow({ window: parseDibsWindow(env.DIBS_WINDOW_START, env.DIBS_WINDOW_END) }));
+  }
+  if (method === "POST" && (ROUTE_RE.NAME_DIBS_INITIATE.test(path) || ROUTE_RE.NAME_DIBS_VERIFY.test(path))) {
+    const dibsDeps = {
+      usernames: storage.usernames,
+      claims: storage.nameDibsClaims,
+      window: parseDibsWindow(env.DIBS_WINDOW_START, env.DIBS_WINDOW_END),
+      fetch: (url: string, init?: Parameters<DibsFetch>[1]) => fetch(url, init),
+    };
+    const body = await readJson(request);
+    return finish(
+      ROUTE_RE.NAME_DIBS_INITIATE.test(path)
+        ? await handleNameDibsInitiate(dibsDeps, body)
+        : await handleNameDibsVerify(dibsDeps, body),
+    );
+  }
   if (method === "POST" && ROUTE_RE.USERNAME_SUGGEST.test(path)) {
     return finish(
       await handleSuggestUsername(
