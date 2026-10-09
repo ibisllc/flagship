@@ -263,7 +263,10 @@
 //       sends the admin root's approval of the AuthCode, the RCK and a
 //       restore order sign under the admin root, and `.com`'s refusal
 //       (code add-server-admin-only) reads as the apps' sentence.
-const SHELL_VERSION = "v116";
+//  v117: feat/marketplace only: main's shell plus the branch's files
+//       (marketplace, tier status, allowance, install, developer views), so
+//       it runs a version above main's; bump it past main's on rebase.
+const SHELL_VERSION = "v117";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
