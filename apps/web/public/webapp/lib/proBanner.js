@@ -1,7 +1,7 @@
 /**
  * Home "Become a Pro member" CTA banner.
  *
- * Flagship is free. Monetization is bandwidth-metered (Free 50 GB, Pro
+ * Flagship is free. Monetization is bandwidth-metered (Free 25 GB, Pro
  * 250 GB) plus a marketplace — but most users never hit the bandwidth cap,
  * so the cap-hit upgrade alert (a separate surface) never reaches the ~95%
  * who'd happily chip in to keep the project free + independent. This banner
