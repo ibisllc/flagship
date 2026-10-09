@@ -1818,29 +1818,19 @@ detection from the account, retired demo routes survived, Wipe & restart passkey
 made explicit, every audit kind labelled, "Add a browser or tablet" deleted per
 owner decision — Remote replaces it). Ships with the next Play build.
 
-**iOS — pre-existing unit-test failures (red on `main` before the audit, not investigated):**
-6. `OpenAccountViewModelTests.test_openAccount_isIdempotentOnRetry_noDoubleGenerateNoSecondClaim`
-   — "expected .opened on retry".
-7. `Phase3bPairingTests.test_admin_buildsAndSignsValidAdmit_forIncomingPubkey`
-   — `QrRelay.RelayError.badPublicKey`, and a `try!` at `Phase3bPairingTests.swift:311`
-   crashes the runner.
-8. `WipeRestartViewModelTests.test_happyPath_postsSignedEnvelope_andInstallsNewUMK`
-   — public-key mismatch at `:59`.
+**iOS — pre-existing unit-test failures: ALL FIXED 2026-10-09** (full suite 1,356 tests; the only failure left is `MaintainersConformanceTests` when the checkout has no `node_modules`, an environment requirement):
+6. ~~`OpenAccountViewModelTests` idempotent retry~~ — FIXED 2026-10-09: a real bug; a retried account creation now reuses the device identity instead of generating a second one.
+7. ~~`Phase3bPairingTests` admit~~ — FIXED 2026-10-09: the test was stale (pre-80-byte join payload); updated, and the crashing `try!` replaced so a failure can't kill the runner.
+8. ~~`WipeRestartViewModelTests` happy path~~ — FIXED 2026-10-09: a real bug; after a wipe & restart the app kept using the OLD account key (`Keystore.swift`).
 
 **iOS — open, lower priority:**
 9. ~~**iPhone Duo.**~~ Verified on the Xcode 27.1 Duo simulator 2026-10-08
    (see RESUME HERE); only the fold-closed return to portrait is unconfirmed.
-10. **Install-docs link is dead-ended:** `https://flagshipserver.com/docs/install`
-    (`PendingServerScreen.swift:87`, `CreateServerStubScreen.swift:675`) serves the
-    generic landing page. Point it at a real install guide (e.g. `/help`).
-11. **TOTP QR decoded un-downsampled on every render**
-    (`AccountSecurityScreen.swift:539`, `UIImage(data:)` in the view body).
-    Android fixed the same in 81a22756; decode once, capped.
-12. **"Coming soon" row** after recovery (`PostRecoveryChoiceScreen.swift:109`),
-    plus unreachable `ProvidersStub` / `WipeComingSoonSheet` code to delete.
-13. **iPad Home: the "Build a service" card renders at half width.**
-14. **Emoji in copy**: "⚠️" (`BiometricLockScreen.swift:101`) and "✓"
-    (`BuilderPairScreen.swift:165`) — the rest of the app uses SF Symbols.
+10. ~~**Install-docs link is dead-ended**~~ — FIXED 2026-10-09: points at the install guide that exists.
+11. ~~**TOTP QR decoded un-downsampled on every render**~~ — FIXED 2026-10-09: decoded once, size-capped (mirrors Android).
+12. ~~**"Coming soon" row + unreachable stubs**~~ — FIXED 2026-10-09: the three unreachable screens are removed.
+13. ~~**iPad Home: the "Build a service" card renders at half width.**~~ — FIXED 2026-10-09 (before/after verified on the iPad simulator).
+14. ~~**Emoji in copy**~~ — FIXED 2026-10-09: SF Symbols.
 15. **Export compliance**: `ITSAppUsesNonExemptEncryption: NO` while the app
     does its own X25519/AES-GCM/Ed25519 sealing — confirm the claimed exemption.
 
