@@ -7,7 +7,7 @@ name: iso-seed (reproducible build check)
 # and anyone can re-run it to check the seed .com serves.
 on:
   push:
-    branches: [feat/chromebook-fit]
+    branches: [feat/phone-usb-burn]
     paths:
       - "iso-seed/**"
       - ".github/workflows/iso-seed.yml"

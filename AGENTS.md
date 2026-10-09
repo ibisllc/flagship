@@ -1359,7 +1359,7 @@ both launch; the manifest fix is deployed. **Remaining:** validate QR-first-open
 and live receipt pairing and complete Host-on-this-Mac on the physical phone and
 computer.
 
-**2026-07-07 (Chromebook instance; `feat/chromebook-fit` only) — on-device
+**2026-07-07 (Chromebook instance; `feat/chromebook-fit` only — renamed `feat/phone-usb-burn` 2026-10-09) — on-device
 (phone) USB burn built end to end on a reproducible ISO seed.** Closes the
 OTG-builder §5 seam (VerbatimInjector). Design: `docs/iso-seed-and-on-device-burn.md`;
 public verify page `/security/iso-seed.html`. The phone no longer remasters an
