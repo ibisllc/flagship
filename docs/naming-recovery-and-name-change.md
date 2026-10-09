@@ -7,7 +7,7 @@ no-credential "grace takeover" recovery path and the 90-day GC reclaim.
 
 1. **Account creation assigns a RANDOM name** (`happy-turtle-4821`-style). Free,
    instant, unsquattable, leaks nothing about who you are.
-2. **You can change your name any time — it costs money** (~$5 floor), paid
+2. **You can change your name any time — it costs money** ($10 flat), paid
    through the **unlinkable entitlement rails** so payment never links to the
    name or identity.
 3. **A name change RE-HOMES all your boxes** (new FQDNs, certs, DNS,
@@ -214,10 +214,10 @@ does not hide that this is the same box.
 - **Product:** one-time, single-use, bound to the *name-change action* (not
   transferable to other entitlements). Redemption is **IRK-signed** so only the
   account holder consumes it.
-- **Pricing (decided): ONE flat price** (~$5), **no premium/short-name tiers** —
+- **Pricing (decided 2026-10-09): $10 flat**, **no premium/short-name tiers** —
   the genuinely premium names are all already held as `.com` domains and so are
   reachable only through dibs, not an open market, so there's nothing to tier.
-  **A dibs claim is priced a bit HIGHER** than a normal change (a "we kept the
+  **A dibs claim is $20** — a bit higher than a normal change (a "we kept the
   name warm for you" premium), not lower.
 - **Methods:** card via processor + a privacy method (Monero) for the
   no-link-at-all path (mirrors `pro.html`).
@@ -250,11 +250,10 @@ forever (never a taken one).
 **Conflicts** (`nike.com` vs `nike.de`, same label): **first verified claim wins,
 no human tiebreak** (per the no-adjudication decision).
 
-**Pricing of a dibs claim:** §16 decision — free (launch incentive) vs the
-standard name-change fee. Either way it triggers the same §5 migration if the
-claimant already has boxes (most launch dibs claimants are new → no boxes → it's
-just an initial claim of a non-random name; allow a **non-random initial claim
-via domain-proof** as a special free case).
+**Pricing of a dibs claim (decided 2026-10-09): $20 flat**, against $10 for an
+ordinary change — two price points in all. No free initial claim: a brand creates
+an account (random name), proves the `.com`, and pays $20 to switch to its name,
+which runs the same §5 migration if it already has boxes.
 
 **New:** `POST /api/name-dibs/initiate` (returns challenge) + `POST
 /api/name-dibs/verify` (checks the record, allocates) + the window config + the
@@ -393,6 +392,12 @@ below where they conflict:
   privilege; a `.com` holder who didn't claim in time has no special claim later.
 - **Window: one year, starting this month (October 2026)** — exact start date to
   be set as `DIBS_WINDOW` config at launch.
+- **Prices: a name change is $10 flat; a dibs claim is $20.** No other price
+  points (no free first claim, no per-name premium).
+- **Custom domains are a Pro feature** (`docs/monetization-free-tier-first.md`
+  §3): Pro $10/mo includes one, Pro Max $20/mo unlimited; proving ownership of the
+  domain is part of adding it.
+- Settled by the above: open items 3, 4, 5 and 8 below.
 
 DECIDED (2026-06-22): **require a backup at sign-up** · **one flat price, no
 premium tiers**, **dibs priced a bit higher** (kept-warm) · **no cutover —
@@ -403,12 +408,12 @@ Still open:
 1. **Username grammar:** confirm hyphens allowed + the `--` ban + audit no tier-2
    parser collides (mostly an engineering audit — I can do it).
 2. **Random format:** `adjective-noun-NNNN`? suffix length? wordlist source.
-3. **Dibs claim price:** the exact "kept-warm" premium over the base change fee.
-4. **Post-window free matching-name claim by a domain holder:** free or base fee?
-5. **Dibs scope:** `.com` only, or any domain whose eTLD+1 label matches?
+3. ~~**Dibs claim price**~~ — $20 (2026-10-09).
+4. ~~**Post-window matching-name claim by a domain holder**~~ — no special claim after the window (2026-10-09).
+5. ~~**Dibs scope**~~ — `.com` only (2026-10-09).
 6. **Profanity policy** source + appeal (none, by design?).
 7. **Payment methods** at launch (card + Monero?) and the no-refund copy.
-8. **Dibs window length:** 12 months assumed — confirm.
+8. ~~**Dibs window length**~~ — one year from October 2026 (2026-10-09).
 
 ## 17. Build checklist (everything to realize the vision)
 

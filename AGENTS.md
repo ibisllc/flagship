@@ -2054,7 +2054,8 @@ SPA HTML) for `.css`/`.js` (anticipated at `apps/com/src/route.ts:746-752`).
     third posture: run an OpenAI-compatible endpoint and flip the `LlmHarness`
     `baseUrlGuard` (`allowPrivate`/`allowHttp`/`hostAllowlist`). The adapter already
     exists. Spec: `docs/build-modes.md` "in-house inference server".
-13. **Paid name change (`POST /api/account/name-change`) — build it against the
+13. **Paid name change (`POST /api/account/name-change`; $10 flat, a dibs claim $20 —
+    owner 2026-10-09) — build it against the
     ship-blocker checklist** at the top of the migration sequence in
     `docs/naming-recovery-and-name-change.md` §5. A free rename route was already
     exploited once (removed 2026-10-08): the entitlement must be single-use and
@@ -2091,7 +2092,8 @@ SPA HTML) for `.css`/`.js` (anticipated at `apps/com/src/route.ts:746-752`).
 19. **Gym: run the live account-recovery spec** (`apps/web/e2e/live/
     account-recovery.spec.ts`, `gym` branch) against the redeployed gym to confirm
     phase A now passes with the `oldIrkSignature` proof.
-20. **Custom domains = Pro (owner decision 2026-10-09).** Pointing DNS at the
+20. **Custom domains = Pro (owner decision 2026-10-09): Pro $10/mo includes one, Pro
+    Max $20/mo unlimited, Free none; ownership proof is part of adding one.** Pointing DNS at the
     passthrough without our permission must never route — true today: the hub
     drops any SNI no box has claimed, and boxes may only claim inside their own
     `*.<user>.flagship.services` zone (verified live: a foreign SNI is dropped; port

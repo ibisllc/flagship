@@ -88,7 +88,8 @@ real control is bounding free egress (one viral free box at 1 TB/mo = ~$20).
 | Tier | Monthly public-egress quota | Our worst-case cost | Price |
 | --- | --- | --- | --- |
 | **Free** | **50 GB** (hard cap → relay stops admitting new public traffic) | ~$1/mo (avg free user ≈ cents) | $0 |
-| **Pro** (paid tier) | **250 GB** + overage | $5/mo at the included max | **$5/mo** or anonymous voucher |
+| **Pro** (paid tier) | **250 GB** + overage; **1 custom domain** | $5/mo at the included max | **$10/mo** or anonymous voucher |
+| **Pro Max** | **1 TB** + overage; **unlimited custom domains** | ~$20/mo at the included max | **$20/mo** or anonymous voucher |
 | Overage (paid only) | beyond the included quota | — | **$0.05/GB** (~2.5× our cost) |
 
 The free cap is the one dial that matters: max exposure per free user =
@@ -107,7 +108,11 @@ subdomain stays free forever; vanity domains are the upgrade.
   preference for personal-domain identity.
 - **Free-tier behavior:** the default subdomain is forever-free and
   never deprecated. A custom domain is purely additive.
-- **Included in Pro (owner decision 2026-10-09).** Using a custom domain
+- **Included in Pro (owner decision 2026-10-09):** Pro ($10/mo) includes one
+  custom domain, Pro Max ($20/mo) unlimited; Free has none. Proving you control
+  the domain is part of adding it — needed regardless of price, since two
+  accounts could otherwise announce the same domain and the hub couldn't choose.
+- **Enforcement.** Using a custom domain
   with Flagship's relay is a Pro feature, not a self-serve trick: pointing
   a domain's DNS at the passthrough without a grant MUST NOT route. Today
   that holds by construction — the hub routes only SNI a box has claimed,
