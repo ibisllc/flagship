@@ -51,7 +51,7 @@ DEV="${1:?usage: parse-trailer.sh <device>}"
 
 # blockdev --getsize64 works on block devices; stat -c %s works on
 # regular files. Try the former first.
-DISK_SIZE=$(blockdev --getsize64 "$DEV" 2>/dev/null || stat -c %s "$DEV")
+DISK_SIZE=$(blockdev --getsize64 "$DEV" 2>/dev/null || stat -c %s "$DEV" 2>/dev/null || wc -c < "$DEV" | tr -d ' ')
 if [[ -z "$DISK_SIZE" || "$DISK_SIZE" -le 0 ]]; then
     echo "error: could not determine size of $DEV" >&2
     exit 1
@@ -123,6 +123,11 @@ fi
 # Extract the fields we need + reconstruct canonical-bytes for Ed25519
 # verification. jq is in pkgsel/include so present on the installed
 # rootfs.
+BLOB_VERSION=$(jq -r .version "$JSON_FILE")
+if [[ "$BLOB_VERSION" != "2" ]]; then
+    echo "error: unsupported InstallBlob version (got $BLOB_VERSION, expected 2)" >&2
+    exit 1
+fi
 USERNAME=$(jq -r .username "$JSON_FILE")
 SERVER_DOMAIN=$(jq -r .serverDomain "$JSON_FILE")
 SERVER_NAME=$(jq -r .serverName "$JSON_FILE")
@@ -131,12 +136,24 @@ REG_URL=$(jq -r .registrationUrl "$JSON_FILE")
 SERIAL=$(jq -r .authCode.serial "$JSON_FILE")
 USER_PUBKEY=$(jq -r .authCode.userPubKey "$JSON_FILE")
 AUTHCODE_USER_SIG=$(jq -r .authCodeUserSignature "$JSON_FILE")
-ISSUED_AT=$(jq -r .issuedAt "$JSON_FILE")
-EXPIRES_AT=$(jq -r .expiresAt "$JSON_FILE")
 INSTALLER_REF=$(jq -r .installerGitRef "$JSON_FILE")
 RCK_PUBKEY=$(jq -r .rckPubKey "$JSON_FILE")
+# Optional signed fields: absent ⇒ not part of the canonical bytes at all.
+BOOT_UNLOCK_MODE=$(jq -r '.bootUnlockMode // empty' "$JSON_FILE")
+DISK_ENCRYPTION=$(jq -r '.diskEncryption // empty' "$JSON_FILE")
+case "$BOOT_UNLOCK_MODE" in ""|auto|approve) ;; *)
+    echo "error: invalid bootUnlockMode '$BOOT_UNLOCK_MODE'" >&2; exit 1 ;; esac
+case "$DISK_ENCRYPTION" in ""|luks|none) ;; *)
+    echo "error: invalid diskEncryption '$DISK_ENCRYPTION'" >&2; exit 1 ;; esac
+# The canonical bytes carry lowercase hex (protocol `hex()`); a serializer
+# that emitted uppercase must not make a valid blob fail.
+lower() { printf '%s' "$1" | tr 'A-F' 'a-f'; }
+PHONE_DELEGATED=$(lower "$PHONE_DELEGATED")
+USER_PUBKEY=$(lower "$USER_PUBKEY")
+AUTHCODE_USER_SIG=$(lower "$AUTHCODE_USER_SIG")
+RCK_PUBKEY=$(lower "$RCK_PUBKEY")
 
-for k in USERNAME SERVER_DOMAIN USER_PUBKEY PHONE_DELEGATED INSTALLER_REF; do
+for k in USERNAME SERVER_DOMAIN USER_PUBKEY PHONE_DELEGATED RCK_PUBKEY; do
     v="${!k}"
     if [[ -z "$v" || "$v" == "null" ]]; then
         echo "error: trailer missing field $k" >&2
@@ -144,10 +161,14 @@ for k in USERNAME SERVER_DOMAIN USER_PUBKEY PHONE_DELEGATED INSTALLER_REF; do
     fi
 done
 
-# Reconstruct the canonical-bytes the signature commits to. MUST match
-# packages/protocol/src/canonicalBytes.ts → canonicalInstallBlob exactly.
-# (Mirrors the apkovl-bootstrap's flagship-trailer-validate field order.)
-CANONICAL="flagship/install-blob/v1|1|${SERVER_DOMAIN}|${USERNAME}|${SERVER_NAME}|${PHONE_DELEGATED}|${REG_URL}|${SERIAL}|${USER_PUBKEY}|${AUTHCODE_USER_SIG}|${ISSUED_AT}|${EXPIRES_AT}"
+# Reconstruct the canonical bytes the signature commits to. MUST match
+# packages/protocol/src/installBlob.ts → canonicalInstallBlob exactly
+# (InstallBlob v2: no issuedAt/expiresAt; installerGitRef + rckPubKey; the
+# optional bootUnlockMode and `de=`-prefixed diskEncryption appended only
+# when present). An empty installerGitRef is a legitimate value ("main").
+CANONICAL="flagship/install-blob/v1|2|${SERVER_DOMAIN}|${USERNAME}|${SERVER_NAME}|${PHONE_DELEGATED}|${REG_URL}|${SERIAL}|${USER_PUBKEY}|${AUTHCODE_USER_SIG}|${INSTALLER_REF}|${RCK_PUBKEY}"
+if [[ -n "$BOOT_UNLOCK_MODE" ]]; then CANONICAL="${CANONICAL}|${BOOT_UNLOCK_MODE}"; fi
+if [[ -n "$DISK_ENCRYPTION" ]]; then CANONICAL="${CANONICAL}|de=${DISK_ENCRYPTION}"; fi
 MSG_FILE="$TMP_DIR/canonical.bin"
 printf '%s' "$CANONICAL" > "$MSG_FILE"
 
