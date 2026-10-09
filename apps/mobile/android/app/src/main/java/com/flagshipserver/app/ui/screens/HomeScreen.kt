@@ -27,6 +27,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -118,6 +120,10 @@ fun HomeScreen(
      *  account creation and stays hidden across launches once dismissed. */
     showRecoveryBackupBanner: Boolean = false,
     onDismissRecoveryBackupBanner: () -> Unit = {},
+    /** Name dibs notice: the window's end (ms) while it should show, else null. */
+    dibsNoticeClosesAt: Long? = null,
+    onClaimDibs: () -> Unit = {},
+    onDismissDibs: () -> Unit = {},
     /** E7 — renders the account-was-reset danger banner above
      *  everything else. Suppresses the recovery nudge while shown so
      *  the two banners don't stack. */
@@ -272,6 +278,9 @@ fun HomeScreen(
             onSetUpRecovery = onSetUpRecovery,
             onDismissRecoveryBackupBanner = onDismissRecoveryBackupBanner,
             onDismissRecoveryNudge = onDismissRecoveryNudge,
+            dibsNoticeClosesAt = dibsNoticeClosesAt,
+            onClaimDibs = onClaimDibs,
+            onDismissDibs = onDismissDibs,
         )
 
         Spacer(Modifier.height(FS.space.s8))
@@ -378,6 +387,9 @@ private fun TopAnnouncement(
     onSetUpRecovery: () -> Unit,
     onDismissRecoveryBackupBanner: () -> Unit,
     onDismissRecoveryNudge: () -> Unit,
+    dibsNoticeClosesAt: Long? = null,
+    onClaimDibs: () -> Unit = {},
+    onDismissDibs: () -> Unit = {},
 ) {
     when {
         accountWasReset -> {
@@ -415,6 +427,19 @@ private fun TopAnnouncement(
                 onCta = onSetUpRecovery,
                 onDismiss = onDismissRecoveryNudge,
                 modifier = Modifier.testTag("recovery-nudge-card"),
+            )
+        }
+        dibsNoticeClosesAt != null -> {
+            Spacer(Modifier.height(FS.space.s4))
+            FSAnnouncementCard(
+                icon = Icons.Outlined.Flag,
+                title = "Own a .com? Claim the matching name",
+                message = "Until ${formatDibsDate(dibsNoticeClosesAt)}, a name that matches a registered .com " +
+                    "is held for whoever controls that domain.",
+                ctaLabel = "Claim your .com name",
+                onCta = onClaimDibs,
+                onDismiss = onDismissDibs,
+                modifier = Modifier.testTag("dibs-notice"),
             )
         }
     }
