@@ -139,7 +139,7 @@
             <label for="c-tier">Plan</label>
             <select id="c-tier" name="tier">
               <option value="hobby">Pro — 250 GB / month</option>
-              <option value="maker">Pro Max — 1 TB / month</option>
+              <option value="maker">Pro Max — 500 GB / month</option>
             </select>
             <button type="submit" class="btn">Continue to card checkout</button>
             <p id="checkout-msg" class="voucher-msg" role="status" aria-live="polite"></p>
@@ -242,7 +242,7 @@
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
         if (res.ok && res.body && res.body.ok) {
-          var tier = res.body.tier === "maker" ? "Pro (1 TB)" : "Pro";
+          var tier = res.body.tier === "maker" ? "Pro Max (500 GB)" : "Pro";
           msg.className = "voucher-msg ok";
           msg.textContent = "Redeemed — " + tier + " is now active on “" + username + "”. Your higher allowance applies within a few minutes.";
           form.code.value = "";
