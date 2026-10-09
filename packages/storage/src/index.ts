@@ -9,3 +9,4 @@ export * from "./serverBootKeys.js";
 export * from "./pqTrust.js";
 export * from "./voici.js";
 export * from "./names.js";
+export * from "./accountRename.js";
