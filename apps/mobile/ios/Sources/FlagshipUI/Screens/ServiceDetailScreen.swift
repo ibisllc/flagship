@@ -517,7 +517,7 @@ public struct ServiceDetailScreen: View {
                             Task { await vm.submitCustomDomain(rootDomain: customDomainRoot) }
                         }
                     }
-                    Text("Prior to claiming a FQDN, you must set a CNAME record targeting \(customDomainRoot).")
+                    Text("Custom domains come with Pro (one) and Pro Max (unlimited). To add one, first point a CNAME record from it to \(customDomainRoot) — that proves you control it.")
                         .font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
             }

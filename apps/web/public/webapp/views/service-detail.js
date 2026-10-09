@@ -419,8 +419,9 @@ function renderCustomDomainsSection() {
         <button class="secondary" id="sd-cd-add" ${cooling ? "disabled" : ""}>Add</button>
       </div>
       <div class="muted-sm text-xs mt-2">
-        Prior to claiming a FQDN, you must set a CNAME record targeting
-        <span class="mono">${escapeHtml(customDomainRoot())}</span>.
+        Custom domains come with <a href="/pro">Pro</a> (one) and Pro Max (unlimited).
+        To add one, first point a CNAME record from it to
+        <span class="mono">${escapeHtml(customDomainRoot())}</span> — that proves you control it.
       </div>
     </div>
   `;

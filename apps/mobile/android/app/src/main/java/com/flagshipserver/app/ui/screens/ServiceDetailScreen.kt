@@ -697,7 +697,8 @@ private fun SetCustomDomainSection(
                 )
             }
             Text(
-                text = "Prior to claiming a FQDN, you must set a CNAME record targeting $rootDomain.",
+                text = "Custom domains come with Pro (one) and Pro Max (unlimited). To add one, first " +
+                    "point a CNAME record from it to $rootDomain — that proves you control it.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 11.sp),
             )
