@@ -23,7 +23,7 @@ const GB = 1024 * 1024 * 1024;
 export const MONTHLY_EGRESS_QUOTA_BYTES: Record<TierName, number> = {
   free: 50 * GB,
   hobby: 250 * GB,
-  maker: 1024 * GB,
+  maker: 500 * GB,
 };
 
 /** Overage rate above quota, USD per GB (PAID tiers only — free is hard-capped

@@ -51,10 +51,10 @@ describe("metering — quota model", () => {
     expect(periodFor(Date.UTC(2025, 11, 31, 23, 59))).toBe("2025-12");
   });
 
-  it("free = 50 GB, hobby = 250 GB, maker = 1 TB", () => {
+  it("free = 50 GB, hobby = 250 GB, maker = 500 GB", () => {
     expect(quotaBytesForTier("free")).toBe(50 * GB);
     expect(quotaBytesForTier("hobby")).toBe(250 * GB);
-    expect(quotaBytesForTier("maker")).toBe(1024 * GB);
+    expect(quotaBytesForTier("maker")).toBe(500 * GB);
     expect(MONTHLY_EGRESS_QUOTA_BYTES.free).toBe(50 * GB);
   });
 });

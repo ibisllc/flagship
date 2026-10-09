@@ -62,7 +62,7 @@ Definitions that MUST match the webapp + server (`packages/control-plane/src/met
 
 | concept | rule |
 |---|---|
-| tier label | `free`→"Free", `hobby`→"Pro" (250 GB), `maker`→"Pro Max" (1 TB) |
+| tier label | `free`→"Free", `hobby`→"Pro" (250 GB), `maker`→"Pro Max" (500 GB) |
 | `state` | `ok` < 80% · `approaching` ≥ 80% & ≤ 100% · `over` > 100% |
 | colour | ok → accent/teal · approaching → amber/warn · over → red/err |
 | bytes → display | GB with **one decimal**: `usedBytes / 1024³` → `"12.4 GB of 50 GB"` |
