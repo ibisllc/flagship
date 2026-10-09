@@ -8,7 +8,7 @@
 // is the single place a tier ever changes.
 //
 // "Pro" maps to the paid tiers in TierStorage ("hobby" = 250 GB; "maker" =
-// 1 TB). Granting Pro = grant tier "hobby" for N days.
+// 500 GB). Granting Pro = grant tier "hobby" for N days.
 
 import type { TierName, TierStorage, TierSubscriptionRecord } from "@flagship/storage";
 
