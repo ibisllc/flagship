@@ -1758,6 +1758,15 @@ premount) + a no-LUKS escape hatch (phone-signed `InstallBlob.diskEncryption`, d
 on). Boot worker consolidated into `flagship-com` (`boot.flagshipserver.com` is a custom
 domain). Earliest phone-home beacons in the preseed.
 
+### ⚠️ URGENT — renew the CA endorsement lease before 2026-11-05
+
+The production CA's ONLY live endorsement lease (`.maintainers/ca-endorsements/
+bundle.json`) expires **2026-11-05**. After that every CA-chain check fails closed
+(maintainer-trust verification on the apps, the relay blessing, the Alpine
+bootstrap's binding check). Renewal needs the owner's YubiKey: mint a fresh
+`CaEndorsement` with the maintainers CLI, commit it to the bundle, redeploy `.com`.
+Found 2026-10-09 while closing the Alpine CA-check TODO.
+
 ### RESUME HERE — iOS 1.0 App Store submission (resumed 2026-10-08)
 
 State: macOS is on Tahoe 26.7.1 and **Xcode 27.1 RC (27A9275)** is installed at
@@ -1866,7 +1875,7 @@ update meeting the requirement — not the macOS 27 major upgrade), then
 `xcodes install 27.1` (the `xcodes` CLI is installed via Homebrew; it prompts
 for the Apple ID + 2FA). Keep Xcode 26.5 until 27.1 is verified.
 
-### TODO — ship "Update this server" end-to-end (PLAN WRITTEN, not started)
+### TODO — ship "Update this server" end-to-end (Phase 1 DONE 2026-07-24 in `cebbbc16`; Phases 2–4 need the YubiKey + a live box)
 
 The whole update feature is ALREADY BUILT (box consumer + `.com` lane + 2-of-2
 gate + webapp/iOS/Android UIs all exist and are wired). It is blocked on ONE
@@ -1898,43 +1907,12 @@ it. The one unavoidable manual touch
 is bootstrapping the Phase-1 gate onto the box (chicken/egg — the first update
 needs a box already running the fallback); after that it's seamless OTA forever.
 
-### TODO — delete the `web.` redirects (unblocked; safe whenever convenient)
+### ✅ DONE 2026-10-09 — the `web.` redirects are deleted
 
-The `web.flagshipserver.com` compatibility layer is temporary and should be
-deleted outright: only the competition judges will use the UI, and they will be
-handed `webapp.` / `remote.` directly. Nothing else points at `web.`.
-
-**Fully unblocked 2026-10-07.** The blocker was a single hand-patched box; it no
-longer exists. `home.openai-build` was torn down (its last D1 rows cleared
-2026-10-07), which also retires the old warning about its dirty `/opt/flagship`
-working tree and the `cors.ts.bak-20260724-005404` backup beside it — both are
-gone with the machine, and nothing needs reconciling before a self-update now.
-The current fleet is one box, `home.playstore-test-0725` (the Play-reviewer
-demo), provisioned from current source, so it ships the `webapp.`/`remote.`
-origins natively rather than by hand-patch. Verified live 2026-10-07: preflight
-returns `access-control-allow-origin` for `webapp.` and for `remote.`, and
-`evil.example` still gets none.
-
-The removal below is safe to do whenever convenient:
-
-1. `apps/com/src/route.ts` — drop `LEGACY_WEBAPP_HOST`, `legacyWebappHost()`,
-   the retired-host block in `routeImpl` (including the `web./dock` special
-   case), and the two entries in the effective-host override list.
-2. `apps/com/wrangler.toml` — drop the `web.flagshipserver.com/*` route, then
-   delete the `web.` DNS record in Cloudflare (the route alone doesn't remove it).
-3. `packages/server-daemon/src/cors.ts` — drop the two `web.` origins from
-   `WEBAPP_ORIGINS` (that IS the fleet turnover the comment there refers to).
-4. `apps/web/public/webapp/lib/apex.js` — drop `"web."` from
-   `KNOWN_SUBORIGIN_PREFIXES` (it is only there for a stale cached shell).
-5. Tests pinning the above: `apps/com/test/route.test.ts` (the
-   "webapp. / remote. split + the retired web. host" describe) and
-   `packages/server-daemon/tests/cors.test.ts` (the legacy-origin case).
-
-Note there is NO in-place way for the harness to upgrade that box: SSH is
-refused by design (no authorized key in prod), and the dual-signed update path
-needs a phone-minted `UpdateOrder` plus a maintainer-endorsed target commit.
-The upgrade is owner-driven — either the phone update ceremony or a demo
-re-provision.
+`web.flagshipserver.com` is retired for good (route, host logic, daemon CORS
+origins, apex prefix, pinning tests; shell cache v32), deployed in Worker
+`a65d0796`. **Owner:** delete the `web.` DNS record in Cloudflare — until then the
+name resolves to the zone but no Worker route serves it (404).
 
 ### GA close-out TODO (do NOT do in dev) — dev-mode disablements ("Bucket C")
 
@@ -2076,37 +2054,27 @@ SPA HTML) for `.css`/`.js` (anticipated at `apps/com/src/route.ts:746-752`).
     `_ARM64` (both `wrangler.toml` and `wrangler.gym.toml`), `distros.ts`,
     `docs/iso-manifest.md`, the docs page, and the phone-usb-burn seed pin (re-derive
     it in the branch's `iso-seed` CI job).
-16. **Netboot trailer parser is dead and wrong.** `packages/installer-netboot/
-    parse-trailer.sh` (+ `early-scan.sh`) rebuilds the obsolete v1 InstallBlob
-    payload, so it could never verify a current recipe; nothing ships the netboot
-    path today. Delete the path, or bring it to v2 (with the optional
-    `bootUnlockMode` / `de=` appends) before anyone revives it.
-17. **The Debian path's embedded `install-blob.json` omits signed fields.**
-    `userdata.ts` `installBlobToJson` drops `bootUnlockMode` and `diskEncryption`.
-    Harmless today (no box re-verifies the blob; both are consumed when the preseed
-    is generated), but a future box-side check would fail on it — carry every signed
-    field, as the ISO trailer now does.
-18. **Alpine: the bootstrap's CA cross-check trusts TLS only** — it fetches the
-    binding but never verifies its signature (`alpine` branch,
-    `installer-apkovl/scripts/flagship-bootstrap.start`). Fix before reviving Alpine.
+16. ~~**Netboot trailer parser is dead and wrong.**~~ DONE 2026-10-09: `parse-trailer.sh` now verifies v2 InstallBlobs (incl. the optional appends), tested through the real script.
+17. ~~**The Debian path's embedded `install-blob.json` omits signed fields.**~~ DONE 2026-10-09: `installBlobToJson` carries `bootUnlockMode` + `diskEncryption`; engine, golden vectors and the Mac/Android copies regenerated (absent fields ⇒ byte-identical).
+18. ~~**Alpine: the bootstrap's CA cross-check trusts TLS only.**~~ DONE 2026-10-09 on `alpine`: `verify-ca-binding.mjs` checks the binding against the repo's pinned CA chain before `install.sh` is fetched.
 19. **Gym: run the live account-recovery spec** (`apps/web/e2e/live/
     account-recovery.spec.ts`, `gym` branch) against the redeployed gym to confirm
     phase A now passes with the `oldIrkSignature` proof.
 20. **Custom domains = Pro (owner decision 2026-10-09): Pro $10/mo includes one, Pro
-    Max $20/mo unlimited, Free none; ownership proof is part of adding one.** Pointing DNS at the
-    passthrough without our permission must never route — true today: the hub
-    drops any SNI no box has claimed, and boxes may only claim inside their own
-    `*.<user>.flagship.services` zone (verified live: a foreign SNI is dropped; port
-    80 only redirects to https). To build it: `.com` verifies the owner's CNAME
-    (the half-built `customDomain.ts` order flow) and, while the account is Pro,
-    issues a `.com`-signed, expiring CustomDomainGrant (`{username, domain,
-    expiresAt}` tied to the paid period); the box presents it at HELLO; the hub
-    verifies it and only then accepts that one external claim (extend
-    `buildClaimedCanonicals`), so a lapsed subscription stops routing on renewal.
-    The box's ACME (TLS-ALPN-01 via passthrough) works once the hub routes the
-    name. Also rewrite `pro.html` on `feat/marketplace`, which says Pro is "just
-    about bandwidth headroom".
-21. **Throttle instead of cut off at the Free cap.** Free is 25 GB/month (2026-10-09)
+    Max $20/mo unlimited, Free none; ownership proof is part of adding one.** Correction
+    to the first version of this item: custom domains are ALREADY live and FREE on
+    `main` — `.com`'s cron verifies the CNAME and tells the hub to route the domain
+    (a box still can't claim an outside domain by itself; that guard is pinned by
+    `tunnelHubPerBoxWildcard.test.ts`). The Pro gate is BUILT on `feat/custom-domains`
+    (off `feat/marketplace`): order gate (402 free/lapsed, 403 over the Pro limit),
+    verifier enforcement each cron (suspend on lapse, keep the oldest on downgrade,
+    restore on renewal), hub lookups skip unpaid accounts, client + `/pro` copy.
+    Remaining: owner decision whether to close new free orders on `main` before Pro
+    launches; live e2e (cert for a newly routed domain; a real lapse); Stripe price
+    ids for $10/$20.
+21. **Throttle instead of cut off at the Free cap — BUILT on `feat/free-tier-throttle`
+    (256 kbit/s per account, both directions; needs a `.services` Fly deploy once
+    merged).** Free is 25 GB/month (2026-10-09)
     and today going over is a hard stop: the relay refuses new connections until
     the month resets (`usageMeter.ts` `admits()`), so a Free user can lose access to
     their own box mid-month. Replace the stop with a speed limit (e.g. a per-account
