@@ -8,6 +8,7 @@ import {
 import type { RegisteredTunnel, TunnelRegistry } from "./registry.js";
 import { fanOutNudge } from "./gossipFanout.js";
 import { accountFromCanonical, type UsageMeter } from "./usageMeter.js";
+import { SourcePauser } from "./throttle.js";
 
 /**
  * How long the hub holds a parked client stream — after nudging the user's
@@ -71,7 +72,7 @@ export function startSniRouter(
   registry: TunnelRegistry,
   opts: SniRouterOptions,
   /** Optional public-egress meter. When present, the router counts bytes per
-   *  account and refuses NEW streams for over-quota free accounts. Absent ⇒
+   *  account and slows over-quota free accounts to their speed limit. Absent ⇒
    *  metering off (the default; nothing changes). */
   meter?: UsageMeter,
 ): Promise<RunningSniRouter> {
@@ -320,17 +321,24 @@ function pipeToTunnel(
   // Per-account metering: attribute this stream to the box's owner. Custom
   // domains resolve to a tunnel whose podCanonical carries the username too.
   const account = meter ? accountFromCanonical(tunnel.podCanonical) : null;
-  // Hard cap: an over-quota free account stops getting NEW public streams.
-  // (Existing in-flight streams are left alone — we never kill live traffic.)
-  if (meter && account && !meter.admits(account)) {
-    client.destroy(new Error("over quota"));
-    return;
-  }
+  // An over-quota free account is slowed, never refused (throttle.ts): each
+  // direction charges the account's shared bucket and, when it overdraws,
+  // pauses its own source — the visitor's socket for uploads, the box's tunnel
+  // for downloads — so nothing is buffered. A paused socket only notices the
+  // visitor hanging up when it resumes, so a throttled stream can outlive its
+  // visitor by the current hold (one chunk of debt, ~2 s at 256 kbit/s).
+  const visitorSide = new SourcePauser(
+    () => client.pause(),
+    () => {
+      if (!client.destroyed) client.resume();
+    },
+  );
   const streamId = tunnel.nextStreamId();
   let closed = false;
   const closeStream = () => {
     if (closed) return;
     closed = true;
+    visitorSide.dispose();
     tunnel.detachStream(streamId);
     try {
       tunnel.send(closeFrame(streamId, false));
@@ -344,9 +352,12 @@ function pipeToTunnel(
       // box → visitor (the dominant egress leg).
       meter?.add(account, data.byteLength);
       client.write(Buffer.from(data));
+      const wait = meter?.throttleDelayMs(account, data.byteLength) ?? 0;
+      if (wait > 0) tunnel.holdInbound?.(wait);
     },
     onRemoteClose() {
       closed = true;
+      visitorSide.dispose();
       tunnel.detachStream(streamId);
       client.end();
     },
@@ -356,11 +367,13 @@ function pipeToTunnel(
   tunnel.send(openFrame(streamId, sni));
   meter?.add(account, initialBytes.byteLength);
   tunnel.send(dataFrame(streamId, initialBytes));
+  visitorSide.hold(meter?.throttleDelayMs(account, initialBytes.byteLength) ?? 0);
 
   client.on("data", (chunk: Buffer) => {
     // visitor → box (request leg; small, but still relay egress).
     meter?.add(account, chunk.byteLength);
     tunnel.send(dataFrame(streamId, bufferToBytes(chunk)));
+    visitorSide.hold(meter?.throttleDelayMs(account, chunk.byteLength) ?? 0);
   });
   client.on("end", closeStream);
   client.on("close", closeStream);

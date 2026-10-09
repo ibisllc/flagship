@@ -39,6 +39,7 @@ import {
   type TunnelHelloV2,
 } from "@flagship/protocol";
 import type { RegisteredTunnel, StreamCallbacks, TunnelRegistry } from "./registry.js";
+import { SourcePauser } from "./throttle.js";
 
 const TUNNEL_PATH = "/tunnel";
 
@@ -238,6 +239,13 @@ function attachTunnel(
   const send = (frame: Frame) => {
     if (ws.readyState === ws.OPEN) ws.send(encodeFrame(frame), { binary: true });
   };
+  const inbound = new SourcePauser(
+    () => ws.pause(),
+    () => {
+      if (ws.readyState === ws.OPEN) ws.resume();
+    },
+    now,
+  );
 
   /**
    * Build the relay-trust attachment for an accepting HELLO_ACK: the
@@ -302,6 +310,7 @@ function attachTunnel(
 
   ws.on("close", () => {
     cancelIdleClose();
+    inbound.dispose();
     if (registered) {
       const result = registry.unregister(registered.podCanonical);
       // Re-broadcast snapshots to every set affected by the removal.
@@ -365,6 +374,7 @@ function attachTunnel(
         attachStream: (id, cb) => streams.set(id, cb),
         detachStream: (id) => streams.delete(id),
         nextStreamId: takeStreamId,
+        holdInbound: (ms) => inbound.hold(ms),
       };
       const reg = registry.register({ tunnel, canonicals });
       registered = tunnel;

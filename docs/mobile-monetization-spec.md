@@ -66,7 +66,7 @@ Definitions that MUST match the webapp + server (`packages/control-plane/src/met
 | `state` | `ok` < 80% · `approaching` ≥ 80% & ≤ 100% · `over` > 100% |
 | colour | ok → accent/teal · approaching → amber/warn · over → red/err |
 | bytes → display | GB with **one decimal**: `usedBytes / 1024³` → `"12.4 GB of 50 GB"` |
-| hard cap | `hardCapped` (free + over): "public traffic is paused until next month or until you upgrade" |
+| over quota | `hardCapped` (free + over): "public traffic is slowed until next month or until you upgrade" (the relay throttles to 256 kbit/s; it no longer stops) |
 | paid over | `over && !hardCapped`: "over your plan's bandwidth — overage applies" |
 | unknown user | endpoint returns free/zero defaults (no existence oracle) — render the card, no error |
 

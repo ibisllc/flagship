@@ -17,6 +17,11 @@ export interface RegisteredTunnel {
   attachStream(streamId: number, callbacks: StreamCallbacks): void;
   detachStream(streamId: number): void;
   nextStreamId(): number;
+  /** Stop reading frames from the box for `ms` (TCP backpressure on its
+   *  tunnel), so an over-quota account's downloads slow to its speed limit
+   *  without the relay buffering them. Every stream on one tunnel belongs to
+   *  the same account. Optional: test doubles may omit it. */
+  holdInbound?(ms: number): void;
 }
 
 /**
