@@ -100,8 +100,13 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   Every not-yet-launched feature — site literature, app code (iOS/Android/
   webapp), backend logic, AND tests — lives ONLY on its feature branch, so
   `main` "doesn't think of" it at all. Current branches: **`feat/marketplace`**
-  (the marketplace) and **`feat/retail`** (getting the app working with
-  retail / NFC boxes). **No marketplace/retail code may sit on `main` until
+  (the marketplace; also Pro payments + vouchers), **`feat/retail`** (getting the
+  app working with retail / NFC boxes), **`feat/browser-extension`**,
+  **`feat/phone-usb-burn`** (Android burns a USB stick on its own),
+  **`feat/custom-names`** (dibs + paid name change) and **`feat/custom-domains`**
+  (custom domains as a Pro feature) — the last two branch OFF `feat/marketplace`
+  (they need its payment rail), so rebase them onto it after it moves —
+  **`feat/lan-direct`** and **`feat/free-tier-throttle`** (both off `main`). **No marketplace/retail code may sit on `main` until
   that feature launches** — branching IS the gate, there is NO gating/flag code
   in `main`.
   - **`feat/transfer-a-box` was a *develop-then-MERGE* branch — DONE.** Merged to
@@ -161,6 +166,31 @@ harness can't do:
   ISO + a physical OTG drive (`apps/mobile/android/OTG-BUILDER-NOTES.md` §5).
 
 ### Recent work (condensed log, newest first)
+
+**2026-10-09 (pricing, dibs, custom domains, throttle, LAN direct; TODO sweep).**
+Owner decisions (recorded in `docs/naming-recovery-and-name-change.md` §16 and
+`docs/monetization-free-tier-first.md`): name change $10, dibs claim $20; Pro
+$10/mo (250 GB, 1 custom domain), Pro Max $20/mo (500 GB, unlimited domains),
+Free 25 GB, overage $0.05/GB; dibs `.com`-only, one year from October 2026, then
+open to all; custom domains Pro-only. **Live on `main` (deployed):** Free 25 GB +
+Pro Max 500 GB quotas (no account was over 25 GB); `web.` retired (Worker
+`a65d0796`); new custom-domain orders refused until Pro launches (Worker
+`f69744bf`; the table was empty). **On `main`, not deployed:** the iOS known-bug
+fixes (two were real product bugs — a retried account creation registered a
+second primary device, and Wipe & restart kept signing with the old key) and the
+same retry fix on Android; netboot verifies v2 recipes; the Debian recipe copy
+carries every signed field. **Built on feature branches (pushed, rebased on this
+`main`):** `feat/custom-names` — dibs complete on all platforms (window config,
+`.com`-registered reservation, DNS-TXT / `.well-known` proof bound to the IRK,
+first verified claim wins, `/dibs` page, in-app notice + claim flow) and the paid
+name change's server side ($10 / $20 vouchers on `/pro`, `POST /api/account/
+name-change` meeting the §5 checklist, refund on failure); `feat/custom-domains` —
+the Pro gate end to end; `feat/free-tier-throttle` — 256 kbit/s per over-quota
+account instead of a hard stop; `feat/lan-direct` — box listens on its LAN and
+serves an STK-signed `lan-hint`, Android + iOS connect directly with the same
+cert pin (all tests pass; never run on real hardware). Migrations 0092–0094
+(dibs claims, voucher kinds, name changes) live on `feat/custom-names`, like
+marketplace's 0090–0091, because the voucher table exists only there.
 
 **2026-10-08 (all long-lived branches rebased onto `main` `199ecdbb` and
 force-pushed)** — `feat/marketplace`, `feat/retail`, `feat/browser-extension`,
@@ -2022,7 +2052,12 @@ SPA HTML) for `.css`/`.js` (anticipated at `apps/com/src/route.ts:746-752`).
     third posture: run an OpenAI-compatible endpoint and flip the `LlmHarness`
     `baseUrlGuard` (`allowPrivate`/`allowHttp`/`hostAllowlist`). The adapter already
     exists. Spec: `docs/build-modes.md` "in-house inference server".
-13. **Paid name change (`POST /api/account/name-change`; $10 flat, a dibs claim $20 —
+13. **Paid name change — BUILT (server side) on `feat/custom-names`, with dibs. Remaining:
+    renaming an account that HAS servers (refused today; needs the transfer-a-box
+    re-home + reburn validation), the client "Change your name" flow on all three
+    apps (local-state + private-profile re-encryption), a live D1 run. Owner config:
+    `DIBS_WINDOW_START`/`END`, issue $10/$20 vouchers, exempt `/dibs` from the
+    coming-soon gate. Original spec:** (`POST /api/account/name-change`; $10 flat, a dibs claim $20 —
     owner 2026-10-09) — build it against the
     ship-blocker checklist** at the top of the migration sequence in
     `docs/naming-recovery-and-name-change.md` §5. A free rename route was already
@@ -2072,7 +2107,9 @@ SPA HTML) for `.css`/`.js` (anticipated at `apps/com/src/route.ts:746-752`).
     token bucket of a few hundred kbit/s once over quota) so the box stays reachable
     but bulk transfer is impractical; keep the metering as is. Same question for paid
     tiers if overage billing ever has a ceiling.
-22. **Direct-to-server paths (LAN, Wi-Fi, Bluetooth)** so a device near its box stops
+22. **Direct-to-server paths — LAN BUILT on `feat/lan-direct` (Android + iOS; needs a
+    real box + phone on one Wi-Fi, roaming, and a Studio VM fallback check before
+    merge; Bluetooth not started).** Direct-to-server paths (LAN, Wi-Fi, Bluetooth) so a device near its box stops
     using — and paying for — the relay. Today every request, even from the same Wi-Fi,
     goes phone → `.services` → box, and both directions count against the quota.
     Notes: the box's certificate already covers `<server>.<user>.flagship.services`,
