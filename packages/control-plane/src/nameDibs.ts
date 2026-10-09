@@ -276,12 +276,24 @@ export async function handleNameDibsInitiate(
     return conflict(`${name}.com isn't registered, so the name isn't reserved — buy it as an ordinary name change`);
   }
 
-  if ((await deps.claims.countStartsSince(username, now - 60 * 60_000)) >= DIBS_STARTS_PER_HOUR) {
-    return { status: 429, body: { error: "too many claim attempts — try again in an hour" } };
+  // A pending claim keeps its nonce: the user may already have published the
+  // record (DNS takes time), and reopening the flow — here or on another
+  // device — must not silently invalidate it. Only an expired claim, or one
+  // started under a since-rotated key, gets a fresh nonce.
+  const pending = await deps.claims.get(name, username);
+  let row = pending;
+  const reusable =
+    pending !== undefined &&
+    (pending.verifiedAt !== undefined ||
+      (now - pending.createdAt <= DIBS_NONCE_TTL_MS && equalHex(pending.irkPubHex, auth.irkPubHex)));
+  if (!reusable) {
+    if ((await deps.claims.countStartsSince(username, now - 60 * 60_000)) >= DIBS_STARTS_PER_HOUR) {
+      return { status: 429, body: { error: "too many claim attempts — try again in an hour" } };
+    }
+    const nonce = (deps.newNonce ?? defaultNonce)();
+    row = await deps.claims.start({ name, username, irkPubHex: auth.irkPubHex, nonce, createdAt: now });
   }
-
-  const nonce = (deps.newNonce ?? defaultNonce)();
-  const row = await deps.claims.start({ name, username, irkPubHex: auth.irkPubHex, nonce, createdAt: now });
+  if (!row) return { status: 500, body: { error: "claim not recorded" } };
   const challenge = nameDibsChallenge(name, auth.irkPubHex, row.nonce);
   return ok({
     name,
