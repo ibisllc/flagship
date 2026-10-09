@@ -84,7 +84,7 @@ public struct PendingServerScreen: View {
                     .accessibilityIdentifier("pending-server-domain")
                 }
 
-                Link(destination: URL(string: "https://flagshipserver.com/docs/install")!) {
+                Link(destination: URL(string: "https://flagshipserver.com/docs/#burn")!) {
                     HStack {
                         Image(systemName: "book.fill")
                         Text("How to flash + boot")
