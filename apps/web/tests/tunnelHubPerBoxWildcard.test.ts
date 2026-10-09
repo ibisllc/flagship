@@ -118,6 +118,24 @@ describe("buildClaimedCanonicals — A′ wildcard claim validation", () => {
     if (!r.ok) expect(r.reason).toMatch(/foreign-zone/);
   });
 
+  // Owner rule (2026-10-09): a custom domain is a Pro feature granted by .com,
+  // never something a box can claim for itself. Pointing someone's DNS at the
+  // passthrough only works if the hub routes that SNI, and it routes only
+  // claims inside the box's own `*.<user>.<apex>` zone — so an outside domain,
+  // or one that merely contains our apex, must be refused at HELLO.
+  for (const host of [
+    "example.com",
+    "shop.example.com",
+    "home.alice.flagship.services.evil.com",
+    "aliceflagship.services",
+    "flagship.services",
+  ]) {
+    it(`rejects a claim on a domain outside flagship.services (${host})`, () => {
+      const r = buildClaimedCanonicals(PC, entitlement([host]), [], "alice");
+      expect(r.ok).toBe(false);
+    });
+  }
+
   it("accepts both the hierarchical and the tier-2 canonical in the pod's own zone", () => {
     const r = buildClaimedCanonicals(
       PC,

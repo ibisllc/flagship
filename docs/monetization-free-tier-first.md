@@ -107,9 +107,15 @@ subdomain stays free forever; vanity domains are the upgrade.
   preference for personal-domain identity.
 - **Free-tier behavior:** the default subdomain is forever-free and
   never deprecated. A custom domain is purely additive.
-- **OSS escape hatch:** point a CNAME at the dispatcher manually and
-  run your own ACME flow. The custom-domain fee buys turnkey
-  provisioning + SAN management, not the right to use a domain.
+- **Included in Pro (owner decision 2026-10-09).** Using a custom domain
+  with Flagship's relay is a Pro feature, not a self-serve trick: pointing
+  a domain's DNS at the passthrough without a grant MUST NOT route. Today
+  that holds by construction — the hub routes only SNI a box has claimed,
+  and a box may claim only names inside its own `*.<user>.<apex>` zone
+  (`buildClaimedCanonicals`; pinned by `tunnelHubPerBoxWildcard.test.ts`).
+- **OSS escape hatch:** run your own dispatcher (the protocol is open, see
+  §2) — then any domain is yours to route. What Pro sells is a custom
+  domain on *our* relay.
 
 ### 4. Reserved / trademark account names
 

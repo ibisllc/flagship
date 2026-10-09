@@ -2091,6 +2091,19 @@ SPA HTML) for `.css`/`.js` (anticipated at `apps/com/src/route.ts:746-752`).
 19. **Gym: run the live account-recovery spec** (`apps/web/e2e/live/
     account-recovery.spec.ts`, `gym` branch) against the redeployed gym to confirm
     phase A now passes with the `oldIrkSignature` proof.
+20. **Custom domains = Pro (owner decision 2026-10-09).** Pointing DNS at the
+    passthrough without our permission must never route — true today: the hub
+    drops any SNI no box has claimed, and boxes may only claim inside their own
+    `*.<user>.flagship.services` zone (verified live: a foreign SNI is dropped; port
+    80 only redirects to https). To build it: `.com` verifies the owner's CNAME
+    (the half-built `customDomain.ts` order flow) and, while the account is Pro,
+    issues a `.com`-signed, expiring CustomDomainGrant (`{username, domain,
+    expiresAt}` tied to the paid period); the box presents it at HELLO; the hub
+    verifies it and only then accepts that one external claim (extend
+    `buildClaimedCanonicals`), so a lapsed subscription stops routing on renewal.
+    The box's ACME (TLS-ALPN-01 via passthrough) works once the hub routes the
+    name. Also rewrite `pro.html` on `feat/marketplace`, which says Pro is "just
+    about bandwidth headroom".
 
 **NFC retail tier (post-v1; design in `docs/v1-operational-tasks.md § N`):** protocol +
 daemon state machine + cloud activation API are built & partly live; the read-only tap
