@@ -379,6 +379,21 @@ path.
 
 ## 16. Open decisions
 
+DECIDED (2026-10-09, owner) — these supersede §7's window rule and items 3–5 + 8
+below where they conflict:
+- **Paid name change is open DURING the dibs window**, for any available name
+  EXCEPT one whose `<name>.com` is registered — that label stays reserved for the
+  `.com` holder to claim via dibs. (Registered = the `.com` has NS records / an
+  RDAP registration; checked at purchase time.)
+- **Dibs scope: `.com` only.** Other TLDs get no special claim. A dotted form
+  (`website.net.flagship.services`) is impossible: addresses parse as
+  `<server>.<user>.flagship.services`, so it would read as server `website` of
+  user `net`.
+- **After the window, everything is open to everyone** — no lasting domain-proof
+  privilege; a `.com` holder who didn't claim in time has no special claim later.
+- **Window: one year, starting this month (October 2026)** — exact start date to
+  be set as `DIBS_WINDOW` config at launch.
+
 DECIDED (2026-06-22): **require a backup at sign-up** · **one flat price, no
 premium tiers**, **dibs priced a bit higher** (kept-warm) · **no cutover —
 instant relinquish on finalize** · name-change is a **rebrand, not
