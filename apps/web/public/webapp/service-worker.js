@@ -177,7 +177,10 @@
 //       (never a second device); an app's page ends in "Remove app" (the signed
 //       uninstall to the server the page reads, the only copy included) and shows
 //       the box's "Recent logs" when it sends some.
-const SHELL_VERSION = "v83";
+//  v84: feat/marketplace only: main's v83 plus the branch's shell files
+//       (marketplace, tier status, allowance, install, developer views), so
+//       it runs the next version above main's; bump it past main's on rebase.
+const SHELL_VERSION = "v84";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
