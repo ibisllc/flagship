@@ -114,8 +114,14 @@ final class Phase3bPairingTests: XCTestCase {
 
         // Drive start() — it shows the QR + awaits the incoming pubkey.
         let startTask = Task { await vm.start() }
-        // Feed the admin the incoming device pubkey.
-        relay.provideRawIncomingPubkey(incomingDeviceKey.publicKey.rawRepresentation)
+        // Feed the admin the incoming device's pairing payload, in the wire
+        // order JoinAccountViewModel sends: X25519 handshake key (32) ‖
+        // Ed25519 signing key (32) ‖ device id (16).
+        let incomingHandshake = Curve25519.KeyAgreement.PrivateKey()
+        var payload = incomingHandshake.publicKey.rawRepresentation
+        payload.append(incomingDeviceKey.publicKey.rawRepresentation)
+        payload.append(try XCTUnwrap(HexUtil.decode(deviceId)))
+        relay.provideRawIncomingPubkey(payload)
         await startTask.value
 
         // We should now be at confirmMatch with a 6-digit SAS.
@@ -304,14 +310,19 @@ final class Phase3bPairingTests: XCTestCase {
         let incomingVm = JoinAccountViewModel(relay: relay, server: server)
         try incomingVm.confirmDeviceDisplayName("Reviewer iPhone")
         let task = Task {
-            await incomingVm.connect(joinUrl: joinUrl, provideRawPubkeyToRelay: { handshakePub in
-                // We now know the incoming handshake pubkey → derive the
-                // shared AEAD key from the admin's ephemeral key + it, and
-                // seal the FOREIGN-bound bundle, then deliver it.
-                let material = try! QrRelay.deriveMaterial(
+            await incomingVm.connect(joinUrl: joinUrl, provideRawPubkeyToRelay: { payload in
+                // The payload is handshake key (32) ‖ signing key (32) ‖ device
+                // id (16); the AEAD key comes from the handshake key alone.
+                // Derive it from the admin's ephemeral key, seal the
+                // FOREIGN-bound bundle, then deliver it. No `try!`: a failure
+                // here must fail this test, not crash the runner.
+                guard let material = try? QrRelay.deriveMaterial(
                     phonePrivateKey: adminEphemeral,
-                    browserPublicKey: handshakePub
-                )
+                    browserPublicKey: Data(payload.prefix(32))
+                ) else {
+                    XCTFail("could not derive the pairing material from the join payload")
+                    return
+                }
                 let bundle = PairingBundle(
                     umkSeedHex: HexUtil.encode(SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }),
                     admit: .init(
@@ -330,7 +341,11 @@ final class Phase3bPairingTests: XCTestCase {
                     ),
                     grantSignature: "00"
                 )
-                let sealed = try! QrRelay.seal(payload: try! bundle.encoded(), with: material.aeadKey)
+                guard let encoded = try? bundle.encoded(),
+                      let sealed = try? QrRelay.seal(payload: encoded, with: material.aeadKey) else {
+                    XCTFail("could not seal the forged bundle")
+                    return
+                }
                 Task { try? await relay.adminDeliverBundle(sid: "sid-x", ciphertextBase64Url: sealed.ciphertextBase64Url, nonceBase64Url: sealed.nonceBase64Url) }
             })
         }
