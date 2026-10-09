@@ -50,3 +50,4 @@ export * from "./serverBackup.js";
 export * from "./aiModels.js";
 export * from "./appListScope.js";
 export * from "./planAttestation.js";
+export * from "./nameDibs.js";
