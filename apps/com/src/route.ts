@@ -19,7 +19,6 @@
  *   9. On remote.flagshipserver.com: the same shell assets, served from a
  *      separate origin so a keyless remote session is storage-isolated
  *      from the owner webapp.
- *  10. web.flagshipserver.com (retired) — 308 to webapp.
  *  10a. www.flagshipserver.com — 308 to the bare apex, path+query kept.
  *  11. Anything else — static assets.
  */
@@ -61,26 +60,13 @@ const REMOTE_HOST = "remote.flagshipserver.com";
 const REMOTE_ORIGIN = `https://${REMOTE_HOST}`;
 
 /**
- * Retired origin, kept alive only as a permanent redirect.
- *
- * `web.` was a single origin doing two jobs (the owner webapp AND the
- * companion/remote receiver). It split into `webapp.` + `remote.` on
- * 2026-07-23. There is no collision between the old and new labels, so
- * `web.` can 308 to `webapp.` indefinitely without shadowing either new
- * host. This exists purely so the handful of pre-release testers with a
- * `web.` bookmark or an installed PWA land somewhere useful; it is
- * expected to be deleted before public launch.
- */
-const LEGACY_WEBAPP_HOST = "web.flagshipserver.com";
-
-/**
  * `www.flagshipserver.com` is a redirect-only alias, never a served
  * origin. The bare apex is canonical everywhere else in this codebase
  * (CONTROL_APEX, every doc/share link, WebAuthn origins, canonical
  * bytes), so www. exists purely to catch the "typed www out of habit"
  * case and send it to the one real origin — the same
- * one-canonical-origin discipline that motivated 308-retiring `web.`
- * above rather than serving it in place. Piping www. straight into the
+ * one-canonical-origin discipline the webapp./remote. split follows rather
+ * than serving one host in place of another. Piping www. straight into the
  * same Worker instead (so it silently double-serves identical content)
  * would mean every future absolute-URL / CSP / CORS / WebAuthn-rpId
  * assumption in this file has to account for two live serving origins
@@ -108,11 +94,6 @@ function webappHost(env: RouteEnv): string {
 /** The remote host for THIS env — same env-awareness as `webappHost`. */
 function remoteHost(env: RouteEnv): string {
   return env.CONTROL_APEX ? `remote.${env.CONTROL_APEX}` : REMOTE_HOST;
-}
-
-/** The retired `web.` host for THIS env. Only ever redirected, never served. */
-function legacyWebappHost(env: RouteEnv): string {
-  return env.CONTROL_APEX ? `web.${env.CONTROL_APEX}` : LEGACY_WEBAPP_HOST;
 }
 
 /** The `www.` host for THIS env. Only ever redirected, never served — see
@@ -161,7 +142,7 @@ const VOICI_WWW_HOST = "www.voi.ci";
  * silently call `navigator.credentials.get()` and exfiltrate the UMK.
  *
  * Disk layout: apps/web/public/recovery/* serves at the root of this
- * origin (same trick we use for `web.` and the /webapp tree). Only the
+ * origin (same trick we use for the /webapp tree). Only the
  * single-purpose recovery page lives here — no shared JS, no shared
  * fonts (except via 'self'), no analytics.
  */
@@ -467,7 +448,6 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
     const lowered = override.split(":")[0]?.toLowerCase() ?? "";
     if (lowered === webappHost(env) ||
         lowered === remoteHost(env) ||
-        lowered === legacyWebappHost(env) ||
         lowered === wwwHost(env) ||
         lowered === RECOVERY_HOST ||
         lowered === BOOT_HOST ||
@@ -513,27 +493,6 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // for why this is a redirect rather than a second serving origin.
   if (url.hostname === wwwHost(env)) {
     const target = `https://${apexHost(env)}${url.pathname}${url.search}`;
-    return new Response(null, { status: 308, headers: { location: target } });
-  }
-
-  // ---- web.flagshipserver.com (RETIRED) ----
-  // Permanent redirect to `webapp.`, path + query preserved. Placed
-  // FIRST so nothing else on this host can ever be served again. Only
-  // the pre-release testers who bookmarked `web.` (or installed its
-  // PWA) hit this; delete the host, its route, and this block once
-  // they've moved.
-  if (url.hostname === legacyWebappHost(env)) {
-    // `web./dock` was THE bookmark for the docking ceremony, so it gets a
-    // direct 308 to the remote origin rather than being bounced through
-    // `webapp./dock` and redirected a second time. One hop, and the tester
-    // lands on the host the flow actually lives on.
-    if (url.pathname === "/dock" || url.pathname === "/dock/") {
-      return new Response(null, {
-        status: 308,
-        headers: { location: `https://${remoteHost(env)}/${url.search}` },
-      });
-    }
-    const target = `https://${webappHost(env)}${url.pathname}${url.search}`;
     return new Response(null, { status: 308, headers: { location: target } });
   }
 
@@ -1751,7 +1710,6 @@ export const _internal = {
   WEBAPP_ORIGIN,
   REMOTE_HOST,
   REMOTE_ORIGIN,
-  LEGACY_WEBAPP_HOST,
   RECOVERY_HOST,
   RECOVERY_ORIGIN,
   RECOVERY_CSP,

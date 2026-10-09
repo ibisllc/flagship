@@ -41,9 +41,9 @@ describe("isWebappOrigin", () => {
     expect(isWebappOrigin(REMOTE_GYM)).toBe(true);
   });
 
-  it("still allows the retired web. origin until the fleet turns over", () => {
-    expect(isWebappOrigin(LEGACY)).toBe(true);
-    // …but it is NOT a wildcard: a longer label sharing the prefix is refused.
+  it("no longer allows the retired web. origin", () => {
+    expect(isWebappOrigin(LEGACY)).toBe(false);
+    expect(isWebappOrigin("https://web.gym.flagshipserver.com")).toBe(false);
     expect(isWebappOrigin("https://web.evil.flagshipserver.com")).toBe(false);
     expect(isWebappOrigin("https://webapp.evil.com")).toBe(false);
   });

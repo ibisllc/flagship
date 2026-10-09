@@ -15,19 +15,12 @@ workers_dev = true
 # on owning DNS for the host they attach to and refuse to attach to a
 # host with externally-managed DNS records; Worker Routes intercept
 # before origin lookup, so the legacy CNAME is simply never reached.
-# `web.flagshipserver.com` is a CNAME → flagshipserver.com, proxied
-# through Cloudflare; the universal SSL cert covers it.
 #
 # Discovered the hard way (2026-05-10): `wrangler deploy --routes X`
 # reconciles to ONLY `X`, dropping every previously-attached route.
 # Always pass the full set, or just trust the `routes` array here.
 routes = [
   { pattern = "flagshipserver.com/*",          zone_name = "flagshipserver.com" },
-  # RETIRED — kept only so the pre-release testers who bookmarked `web.`
-  # (or installed its PWA) get a 308 to `webapp.`. `web.` is an explicit
-  # proxied CNAME → flagshipserver.com, so a zone route works for it.
-  # Delete this route and its DNS record once they've moved.
-  { pattern = "web.flagshipserver.com/*",      zone_name = "flagshipserver.com" },
   # voi.ci is a path redirector handled by this Worker. Keep both routes in
   # source control so a later deploy cannot reconcile away a dashboard-only
   # route and expose the zone's unreachable fallback origin (Cloudflare 522).

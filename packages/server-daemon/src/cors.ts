@@ -36,13 +36,6 @@ const WEBAPP_ORIGINS: ReadonlySet<string> = new Set([
   "https://remote.flagshipserver.com",
   "https://webapp.gym.flagshipserver.com",
   "https://remote.gym.flagshipserver.com",
-  // Retired 2026-07-23. A box only picks up this file on a daemon update or
-  // reburn, so an already-installed box keeps answering the old origin until
-  // then — and a pre-release tester whose browser still has the `web.` shell
-  // cached would otherwise be CORS-blocked by their own box. Drop these two
-  // once the fleet has turned over.
-  "https://web.flagshipserver.com",
-  "https://web.gym.flagshipserver.com",
 ]);
 
 /** Every custom request header the webapp sends to the box, lower-cased. */

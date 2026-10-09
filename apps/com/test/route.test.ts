@@ -1045,38 +1045,16 @@ describe("webapp host — client-route SPA fallback (the /join pairing bug)", ()
   });
 });
 
-describe("webapp. / remote. split + the retired web. host", () => {
+describe("webapp. / remote. split", () => {
   // 2026-07-23: the single `web.` origin became two — `webapp.` (the owner
   // webapp) and `remote.` (the phone-approved browser-remote session). The
-  // labels don't collide, so `web.` can 308 forward indefinitely.
+  // temporary `web.` → `webapp.` redirect was removed 2026-10-09.
 
-  it("web. 308s to webapp., preserving path and query", async () => {
-    const r = await route(
-      new Request("https://web.flagshipserver.com/join?sid=abc&pk=def"),
-      makeEnv(),
-    );
-    expect(r.status).toBe(308);
-    expect(r.headers.get("location")).toBe(
-      "https://webapp.flagshipserver.com/join?sid=abc&pk=def",
-    );
-  });
-
-  it("web./dock goes STRAIGHT to remote./ — one hop, not via webapp./dock", async () => {
-    for (const path of ["/dock", "/dock/"]) {
-      const r = await route(
-        new Request(`https://web.flagshipserver.com${path}`),
-        makeEnv(),
-      );
-      expect(r.status).toBe(308);
-      expect(r.headers.get("location")).toBe("https://remote.flagshipserver.com/");
+  it("no longer redirects the retired web. host", async () => {
+    for (const host of ["web.flagshipserver.com", "web.gym.flagshipserver.com"]) {
+      const r = await route(new Request(`https://${host}/dock`), makeEnv());
+      expect(r.headers.get("location")).toBeNull();
     }
-  });
-
-  it("web. is never SERVED — even its root only redirects", async () => {
-    const r = await route(new Request("https://web.flagshipserver.com/"), makeEnv());
-    expect(r.status).toBe(308);
-    expect(r.headers.get("location")).toBe("https://webapp.flagshipserver.com/");
-    expect(await r.text()).toBe("");
   });
 
   it("remote. serves the same shell assets as webapp., from its own origin", async () => {
@@ -1130,9 +1108,6 @@ describe("webapp. / remote. split + the retired web. host", () => {
       env,
     );
     expect(await remote.text()).toBe("asset:/webapp/");
-    const legacy = await route(new Request("https://web.gym.flagshipserver.com/"), env);
-    expect(legacy.status).toBe(308);
-    expect(legacy.headers.get("location")).toBe("https://webapp.gym.flagshipserver.com/");
   });
 });
 

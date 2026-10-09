@@ -25,13 +25,7 @@ const PROD_DATA_APEX = "flagship.services";
 // `gym.flagshipserver.com` under the gym test env. We recognise a served
 // origin as a flagship control surface when its host IS this apex or a
 // known sub-origin of it (`webapp.`, `remote.`, `boot.`, `recovery.`).
-//
-// `web.` stays in the list purely so the retired origin still resolves an
-// apex if a stale service worker serves the shell from cache before the
-// 308 to `webapp.` takes effect. It matches only the exact `web.` label —
-// `webapp.flagshipserver.com` does NOT start with `web.` — so the old and
-// new prefixes cannot shadow each other.
-const KNOWN_SUBORIGIN_PREFIXES = ["webapp.", "remote.", "boot.", "recovery.", "web."];
+const KNOWN_SUBORIGIN_PREFIXES = ["webapp.", "remote.", "boot.", "recovery."];
 
 let override = null; // { control, data } | null
 
