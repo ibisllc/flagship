@@ -161,6 +161,12 @@ export interface ScreensHttpDeps {
    */
   certInfo?: (() => { notAfter?: number; notBefore?: number; sans?: string[] } | null) | null;
   /**
+   * LAN-direct (docs/lan-direct.md): the box's STK-signed local endpoints, or
+   * null when it has none to offer. Served only behind the paired-session gate
+   * so the home network's layout is visible to the owner's devices alone.
+   */
+  lanHint?: (() => { hint: import("@flagship/protocol").LanHint; signatureHex: string } | null) | null;
+  /**
    * The box's own code-checkout HEAD — the applied-commit truth the
    * self-update consumer enforces `fromCommit` against (production:
    * `buildCurrentCommitProvider` over FLAGSHIP_SELF_REPO). Unset/null
@@ -548,6 +554,11 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     }
 
     // ---- P1.1 GET /api/screens/server-detail
+    if (path === "/api/screens/lan-hint" && method === "GET") {
+      const signed = deps.lanHint?.() ?? null;
+      if (!signed) return { status: 204, headers: {}, body: "" };
+      return { status: 200, headers: { ...J, "cache-control": "no-store" }, body: JSON.stringify(signed) };
+    }
     if (path === "/api/screens/server-detail" && method === "GET") {
       return jok(serverDetail(deps, now));
     }

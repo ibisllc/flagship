@@ -177,6 +177,12 @@ export interface DaemonRuntimeOptions {
    */
   tunnelSupervisor?: import("./tunnel/tunnelClient.js").SupervisorOptions;
   /**
+   * LAN-direct (docs/lan-direct.md): also accept connections on the box's
+   * private LAN addresses at `port`, forwarded into the same loopback TLS
+   * server the tunnel feeds. Omit to leave the box relay-only.
+   */
+  lanDirect?: { port: number };
+  /**
    * Resolve the owner-signed relay TrustExceptions that may cover a failing
    * relay cert-hash, verified against the IRK-anchored device set (never a
    * `.com`-asserted roster). Built by the daemon entry from the box's config
@@ -388,6 +394,8 @@ export interface DaemonRuntime {
    * diagnostics + the lock/SOS UI. Under OBSERVE (default) it never locks.
    */
   relayLockdown: RelayLockdownController;
+  /** LAN-direct listener; null when `lanDirect` wasn't requested. */
+  lan: import("./lanDirect.js").LanListener | null;
   /**
    * In-pod live-siblings router. Receives FRAME_DOMAIN_GRANTED events
    * from the tunnel hub and inbound sibling-app-message frames from
@@ -866,6 +874,13 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const tlsAddr = tls.address();
   if (!tlsAddr || typeof tlsAddr === "string") throw new Error("could not bind TLS backend");
   const tlsPort = tlsAddr.port;
+  const lan = opts.lanDirect
+    ? await (await import("./lanDirect.js")).startLanListener({
+        port: opts.lanDirect.port,
+        backendPort: tlsPort,
+        zone: opts.serverFqdn,
+      })
+    : null;
 
   // The same Ed25519 keypair the daemon uses for its server-identity
   // (signing tunnel HELLO, etc.) doubles as the X-Flagship-Signature
@@ -1320,6 +1335,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       if (renewalTimer) clearInterval(renewalTimer);
       aliasReconciler?.stop();
       await tunnel.close();
+      await lan?.close();
       tls.close();
     },
     certManager,
@@ -1328,6 +1344,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     servicePlatform: servicePlatformRef.current,
     urlController,
     relayLockdown,
+    lan,
     siblingRouter,
     appBackup,
     envStore,

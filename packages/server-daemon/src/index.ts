@@ -15,6 +15,7 @@ import {
 } from "./alertInboxHttp.js";
 import { buildAdminProxyHandler } from "./adminProxy.js";
 import { startDaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
+import { buildSignedLanHint } from "./lanDirect.js";
 import { makeRelayTrustExceptionResolver } from "./relayTrustExceptions.js";
 import { sendRelayTrustAlert } from "./relaySos.js";
 import type { RelayLockdownController } from "./relayLockdown.js";
@@ -958,6 +959,9 @@ async function main(): Promise<void> {
   const liveCertInfoRef: {
     current: { notAfter?: number; notBefore?: number; sans?: string[] } | null;
   } = { current: null };
+  // The live leaf cert, for the signed LAN hint (it binds the hint to the
+  // fingerprint the phone pins). Same source as the status heartbeat.
+  const liveCertPemRef: { current: string | null } = { current: null };
 
   let runtime: DaemonRuntime;
   try {
@@ -972,6 +976,12 @@ async function main(): Promise<void> {
       wildcard: env.wildcard,
       dataDir,
       entitlements: () => entitlementBundle,
+      // LAN-direct (docs/lan-direct.md): on by default at :443 on the box's
+      // private LAN addresses only; FLAGSHIP_LAN_DIRECT=0 keeps the box
+      // relay-only.
+      ...(process.env.FLAGSHIP_LAN_DIRECT === "0"
+        ? {}
+        : { lanDirect: { port: Number(process.env.FLAGSHIP_LAN_PORT ?? 443) } }),
       // Owner-override resolution for relay-trust: reads the owner-signed
       // relay TrustExceptions from `.com` + verifies them against the box's
       // IRK-anchored roster (anchor = the provisioned owner IRK). ONE
@@ -1007,6 +1017,7 @@ async function main(): Promise<void> {
       // resolves (which happens BEFORE the first cert attempt).
       onCertIssued: (cert, notAfter, names) => {
         liveCertInfoRef.current = liveCertInfo(cert.certPem, notAfter, names);
+        liveCertPemRef.current = cert.certPem;
         void reportStatus("live");
         // Feed the signed daemon-status heartbeat with the freshly-issued
         // cert so /pods gets REAL fingerprint/validity/issuer + a fresh
@@ -1182,6 +1193,7 @@ async function main(): Promise<void> {
       updateClient,
       updateScheduler,
       liveCertInfoRef,
+      liveCertPemRef,
     });
   } catch (e) {
     const msg = (e as Error).message ?? String(e);
@@ -1971,6 +1983,7 @@ async function wireRuntimeSurfaces(deps: {
   liveCertInfoRef: {
     current: { notAfter?: number; notBefore?: number; sans?: string[] } | null;
   };
+  liveCertPemRef: { current: string | null };
 }): Promise<void> {
   const {
     runtime,
@@ -1993,6 +2006,7 @@ async function wireRuntimeSurfaces(deps: {
     updateClient,
     updateScheduler,
     liveCertInfoRef,
+    liveCertPemRef,
   } = deps;
 
   // Wire vibe-code (legacy /api/llm/sessions) + the BFF /api/screens/*
@@ -2371,6 +2385,13 @@ async function wireRuntimeSurfaces(deps: {
     servicePlatform: runtime.servicePlatform,
     pairedSessions,
     certInfo: () => liveCertInfoRef.current,
+    lanHint: () =>
+      buildSignedLanHint({
+        serverDomain: env.serverFqdn!,
+        certPem: liveCertPemRef.current,
+        endpoints: runtime.lan?.endpoints() ?? [],
+        sign: (msg) => custodian.signAsBox(msg),
+      }),
     tabRegistry: browserBundle?.tabRegistry ?? null,
     appBackup: runtime.appBackup,
     urlController: runtime.urlController,
