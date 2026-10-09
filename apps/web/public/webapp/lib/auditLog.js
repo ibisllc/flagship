@@ -89,6 +89,7 @@ export const AUDIT_KIND_LABELS = Object.freeze({
   "username-reclaimed": tr("Username reclaimed"),
   "ct-unexpected-cert": tr("Unexpected certificate observed"),
   "invite-created": tr("Someone was invited to an app"),
+  "account-renamed": tr("Changed account name"),
 });
 
 /**
