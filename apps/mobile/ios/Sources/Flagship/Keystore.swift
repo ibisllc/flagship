@@ -115,6 +115,15 @@ public struct Keystore {
         sessionUmkLock.lock(); defer { sessionUmkLock.unlock() }
         _sessionUmk[profile] = umk
     }
+    /// A key replacement must never leave the OLD key behind in the session
+    /// cache: every later derive would hand back the pre-replacement IRK, so the
+    /// app would keep signing with a key `.com` has just retired. Swap it in
+    /// place when the session already holds one; never ADD an entry here — the
+    /// lock/unlock lifecycle alone decides when a key may sit in memory.
+    private static func replaceCachedSessionUmk(_ umk: SymmetricKey, for profile: String) {
+        sessionUmkLock.lock(); defer { sessionUmkLock.unlock() }
+        if _sessionUmk[profile] != nil { _sessionUmk[profile] = umk }
+    }
 
     /// Normalize a caller-supplied profileId to the canonical slot key.
     /// nil / empty / whitespace-only → the default sentinel. Otherwise
@@ -213,6 +222,7 @@ public struct Keystore {
             // Reset the IRK version state — fresh UMK → fresh v1 IRK.
             try setCurrentIrkVersion(1)
             try setPendingIrkRotationVersion(nil)
+            replaceCachedSessionUmk(umkSeed, for: activeProfileId)
         } catch let e as KeystoreError {
             throw e
         } catch {
