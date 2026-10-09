@@ -267,7 +267,7 @@ describe("allowance view (#6/#7 dashboard + alert)", () => {
 
     const approaching = await (async () => {
       const d = deps();
-      await recordEgress(d, "alice", 20 * GB); // 80% of free 25 GB
+      await recordEgress(d, "alice", 0.8 * MONTHLY_EGRESS_QUOTA_BYTES.free);
       return allowanceViewFrom("alice", await quotaStatus(d, "alice"));
     })();
     expect(approaching.state).toBe("approaching");
@@ -275,7 +275,7 @@ describe("allowance view (#6/#7 dashboard + alert)", () => {
 
     const over = await (async () => {
       const d = deps();
-      await recordEgress(d, "alice", 30 * GB); // over free 25 GB
+      await recordEgress(d, "alice", 1.2 * MONTHLY_EGRESS_QUOTA_BYTES.free);
       return allowanceViewFrom("alice", await quotaStatus(d, "alice"));
     })();
     expect(over.state).toBe("over");
