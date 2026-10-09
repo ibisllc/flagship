@@ -2210,6 +2210,12 @@ export function installBlobToJson(
     authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
+    // Signed optional fields (canonicalInstallBlob appends them when present),
+    // so they belong in the box's copy of the recipe: a box that ever re-checks
+    // the blob signature needs them, exactly as the ISO trailer carries them.
+    // Absent ⇒ omitted, so a recipe without them serializes as before.
+    ...(b.bootUnlockMode !== undefined ? { bootUnlockMode: b.bootUnlockMode } : {}),
+    ...(b.diskEncryption !== undefined ? { diskEncryption: b.diskEncryption } : {}),
     blobSignatureHex,
     // OFFLINE secret-free pairing (advanced/embed): the owner-IRK-signed
     // `add-paired-session` order in PLAINTEXT (`{request, signature}` JSON),

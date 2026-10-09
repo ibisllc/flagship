@@ -16,6 +16,7 @@ import {
   signAuthCode,
   signInstallBlob,
   verifyAuthCode,
+  verifyInstallBlob,
   ed,
   type AuthCode,
   type InstallBlob,
@@ -29,6 +30,7 @@ import {
   DEFAULT_BOOT_HOST,
 } from "../src/userdata.js";
 import { buildDebianPreseed } from "../src/preseed.js";
+import { parseInstallBlob } from "../src/installBlobParse.js";
 
 function makeKeypair(seedByte: number) {
   const sk = new Uint8Array(32).fill(seedByte);
@@ -437,14 +439,31 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
     expect(b).not.toContain("flagship/consume-unlock-key/v1|");
   });
 
-  it("explicit auto === default, byte-for-byte (auto is the absent semantics)", () => {
+  it("explicit auto behaves exactly like the default (auto is the absent semantics)", () => {
     const { blob, blobSignatureHex } = signedBlob();
     const dflt = buildAutoinstallUserData({ blob, blobSignatureHex });
     const explicit = buildAutoinstallUserData({
       blob: { ...blob, bootUnlockMode: "auto" },
       blobSignatureHex,
     });
-    expect(explicit).toBe(dflt);
+    // An explicit "auto" is a different SIGNED blob (its canonical bytes end in
+    // `|auto`), so the box's install-blob.json must carry the field; everything
+    // else in the user-data is byte-identical.
+    expect(extractEmbeddedBlob(dflt).bootUnlockMode).toBeUndefined();
+    expect(extractEmbeddedBlob(explicit).bootUnlockMode).toBe("auto");
+    const BLOB = /echo "[A-Za-z0-9+/=]+" \| base64 -d > \/var\/flagship\/install-blob\.json/;
+    expect(explicit.replace(BLOB, "BLOB")).toBe(dflt.replace(BLOB, "BLOB"));
+  });
+
+  it("install-blob.json carries every signed field, so the box can re-verify the blob", () => {
+    const irk = makeKeypair(7);
+    const { blob } = signedBlob();
+    const full: InstallBlob = { ...blob, bootUnlockMode: "approve", diskEncryption: "none" };
+    const sig = signInstallBlob(full, irk);
+    const yaml = buildAutoinstallUserData({ blob: full, blobSignatureHex: hx(sig) });
+    const restored = parseInstallBlob(extractEmbeddedBlob(yaml));
+    expect(restored).not.toBeNull();
+    expect(verifyInstallBlob(restored!, sig, irk.publicKey)).toBe(true);
   });
 
   it("bootUnlockMode:\"approve\" bakes \"approve\" + relay-only + NO box-lease call + NO plaintext fallback", () => {
