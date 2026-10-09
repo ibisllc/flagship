@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14120D" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="Own the .com? Claim the matching Flagship name first — for one year, .com holders have dibs." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="stylesheet" href="/site.css" />
+    <title>Name dibs · Flagship</title>
+    <style>
+      code { background: var(--bg-elev); color: var(--fg); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.92em; }
+    </style>
+    <link rel="stylesheet" href="/theme-ui.css">
+  <script src="/theme.js"></script>
+</head>
+  <body>
+    <header class="topbar">
+      <a href="/" class="brand" aria-label="Flagship — home">
+        <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>
+        <span class="name">Flagship</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="/">Home</a>
+        <a href="/security">Security</a>
+        <a href="/pro">Pro</a>
+      </nav>
+        <button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
+    </header>
+
+    <main>
+      <h1>Own the .com? Claim your name first.</h1>
+      <p class="lede">
+        Every Flagship account gets a random name to start with, and anyone can switch to a name of their own.
+        For the first year, a name that matches a registered <code>.com</code> is held for whoever controls that domain.
+      </p>
+      <p id="dibs-status" class="lede" aria-live="polite">Checking whether the dibs window is open…</p>
+
+      <h2>How it works</h2>
+      <ul class="bullets">
+        <li><strong>.com only.</strong> If you control <code>acme.com</code>, you can claim the Flagship name <code>acme</code>. Other endings (.net, .org, country domains) get no special claim.</li>
+        <li><strong>Prove it, once.</strong> In the app, go to <em>Settings → Claim your .com name</em>. You'll get a short code to publish in one of two places:
+          <ul class="bullets">
+            <li>a DNS <code>TXT</code> record at <code>_flagship-claim.acme.com</code>, or</li>
+            <li>a text file at <code>https://acme.com/.well-known/flagship-claim</code>.</li>
+          </ul>
+          The code is tied to your account's key, so nobody else can reuse it.</li>
+        <li><strong>First proof wins.</strong> If two accounts prove the same domain, the first verified claim gets the name. There is no appeal process.</li>
+        <li><strong>$20, once.</strong> Claiming a held name costs $20 (an ordinary name change is $10). Your servers move to the new name with you.</li>
+      </ul>
+
+      <h2>Everyone else</h2>
+      <p>
+        You can buy any name that's free and isn't held for a <code>.com</code> holder, any time — including during the window.
+        When the year ends, held names open up to everyone, first come, first served.
+      </p>
+
+      <h2>Why</h2>
+      <p>
+        Names on Flagship are yours for good — we never take one back. Giving domain holders a head start means
+        nobody can grab a brand's name before the brand has heard of us, without us ever having to judge who deserves a name.
+      </p>
+    </main>
+    <script>
+      (function () {
+        var el = document.getElementById("dibs-status");
+        function fmt(ms) { return new Date(ms).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }); }
+        fetch("/api/name-dibs/window").then(function (r) { return r.json(); }).then(function (w) {
+          if (w.open) el.textContent = "The dibs window is open until " + fmt(w.end) + ".";
+          else if (w.configured && Date.now() < w.start) el.textContent = "The dibs window opens on " + fmt(w.start) + " and runs for a year.";
+          else if (w.configured) el.textContent = "The dibs window closed on " + fmt(w.end) + " — every free name is now open to everyone.";
+          else el.textContent = "The dibs window hasn't been announced yet.";
+        }).catch(function () { el.textContent = ""; });
+      })();
+    </script>
+
+    <footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-col">
+      <a href="/" class="wordmark"><span class="glyph" aria-hidden="true"></span><span>Flagship</span></a>
+      <p>A personal cloud that respects you, your hardware, and your mobile device.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Product</h4>
+      <ul>
+        <li><a href="/docs#how-it-works">How it works</a></li>
+        <li><a href="/marketplace/">Services</a></li>
+        <li><a href="https://webapp.flagshipserver.com/">Webapp</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Trust</h4>
+      <ul>
+        <li><a href="/security#model">Architecture</a></li>
+        <li><a href="/security#disclosure">Disclosure</a></li>
+        <li><a href="/security#report">Report a vuln</a></li>
+        <li><a href="/abuse">Abuse</a></li>
+        <li><a href="/.well-known/security.txt">security.txt</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Open</h4>
+      <ul>
+        <li><a href="/open-source.html">Open source</a></li>
+        <li><a href="/status/">Status</a></li>
+        <li><a href="/docs/">Docs</a></li>
+        <li><a href="/blog/">Blog</a></li>
+        <li><a href="/help">Help</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 Flagship · Patent Pending · BUSL-1.1 → Apache 2.0 on 2030-05-03</span>
+    <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="https://flagshipserver.com">flagshipserver.com</a></span>
+  </div>
+</footer>
+  <script src="/motion.js" defer></script>
+</body>
+</html>
