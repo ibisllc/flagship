@@ -16,6 +16,39 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         self.store = store
     }
 
+    /// LAN-direct (docs/lan-direct.md): use the box's local listener when a
+    /// probe has proven the box is on this network; otherwise, or if that
+    /// attempt fails before the request could reach the box, the relay.
+    private func sendPreferringLan(_ req: URLRequest, host: String?) async throws -> (Data, URLResponse) {
+        #if canImport(Network)
+        if let host, let lan = await LanDirectRegistry.shared.session(for: host) {
+            do {
+                return try await lan.data(for: req)
+            } catch where LanDirectRegistry.failedBeforeDelivery(error) {
+                LanDirectRegistry.shared.markFailed(host: host)
+                // A pin mismatch here means some other device holds that LAN
+                // address — not an interception of the relay path.
+                _ = CertPinMismatchSink.shared.consumeRecentMismatch(host: host)
+            }
+        }
+        #endif
+        return try await urlSession.data(for: req)
+    }
+
+    /// The box's STK-signed LAN hint, or nil (204: it has none to offer).
+    public func lanHint() async throws -> LanHint.Envelope? {
+        guard let base = await store.podBaseUrl else { throw ScreensClientError.notPaired }
+        guard let token = await store.sessionToken else { throw ScreensClientError.noSessionToken }
+        guard let url = URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/screens/lan-hint") else {
+            throw ScreensClientError.http(status: 0, message: "bad URL")
+        }
+        var req = URLRequest(url: url)
+        req.setValue(token, forHTTPHeaderField: "x-flagship-session")
+        let (data, resp) = try await urlSession.data(for: req)
+        guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return try JSONDecoder().decode(LanHint.Envelope.self, from: data)
+    }
+
     private func request<T: Decodable>(_ path: String, method: String = "GET", body: Data? = nil) async throws -> T {
         guard let base = await store.podBaseUrl else { throw ScreensClientError.notPaired }
         guard let token = await store.sessionToken else { throw ScreensClientError.noSessionToken }
@@ -34,7 +67,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         let data: Data
         let resp: URLResponse
         do {
-            (data, resp) = try await urlSession.data(for: req)
+            (data, resp) = try await sendPreferringLan(req, host: url.host)
         } catch {
             // UX-A — a hard-fail pin mismatch surfaces here as a generic
             // transport error (the delegate cancelled the auth challenge).
