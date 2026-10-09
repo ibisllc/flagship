@@ -264,6 +264,8 @@ class MainActivity : FragmentActivity() {
         val liveShares = com.flagshipserver.app.viewmodels.ServerShareRuntime.live(okHttp, appContext) { trustCenter.isServerTrusted }
         val mockTransfer = MockServerTransferClient()
         val liveTransfer = LiveServerTransferClient(OkHttpJsonTransport(okHttp))
+        val mockNameDibs = com.flagshipserver.app.api.MockNameDibsClient()
+        val liveNameDibs = com.flagshipserver.app.api.LiveNameDibsClient(OkHttpJsonTransport(okHttp))
         val mockMailbox = MockSecretMailboxClient()
         // A′ pinning — every live /pods fetch reconciles the cert-pin
         // registry under STKs derived from THIS device's UMK. Live-only by
@@ -344,6 +346,8 @@ class MainActivity : FragmentActivity() {
                 if (useLive) liveMailbox else mockMailbox
             val effectiveTransfer: ServerTransferClient =
                 if (useLive) liveTransfer else mockTransfer
+            val effectiveNameDibs: com.flagshipserver.app.api.NameDibsClient =
+                if (useLive) liveNameDibs else mockNameDibs
             // Identity calls are IRK-signed (not session-token gated), so this
             // pivots on the toggle alone — like relay/mailbox above.
             val effectiveFlagshipServer: FlagshipServerClient =
@@ -563,6 +567,7 @@ class MainActivity : FragmentActivity() {
                     LocalQrRelayClient provides effectiveRelay,
                     LocalSecretMailboxClient provides effectiveMailbox,
                     LocalServerTransferClient provides effectiveTransfer,
+                    com.flagshipserver.app.core.LocalNameDibsClient provides effectiveNameDibs,
                     LocalSessionStore provides sessionStore,
                     com.flagshipserver.app.core.LocalPodClients provides podClients,
                     com.flagshipserver.app.viewmodels.LocalServerShares provides (if (useLive) liveShares else null),
