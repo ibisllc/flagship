@@ -301,7 +301,9 @@ public struct HomeScreen: View {
         // nil capability (legacy single-IRK path) enables everything.
         let scopes = deviceCapability?.scopeSet
         let canVibeCode = scopes == nil || scopes!.contains(.vibeCode)
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
+        // A single action: a stack, not an adaptive grid — the grid split
+        // regular-width screens into 280pt columns and left this card in one.
+        return VStack(spacing: FS.space.s3) {
             actionRow(
                 title: "Build a service",
                 subtitle: "Describe it in plain English. Your server builds and runs it.",
