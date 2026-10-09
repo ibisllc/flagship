@@ -98,6 +98,19 @@ class LiveScreensClient(
         }
     }
 
+    /** The box's STK-signed LAN hint, or null (204: it has none to offer). */
+    suspend fun lanHint(): com.flagshipserver.app.core.LanHint.Envelope? {
+        val req = Request.Builder()
+            .url(base() + "/api/screens/lan-hint")
+            .header("x-flagship-session", token())
+            .get()
+            .build()
+        val body = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            client.newCall(req).execute().use { resp -> if (resp.code == 200) resp.body?.string() else null }
+        } ?: return null
+        return json.decodeFromString(com.flagshipserver.app.core.LanHint.Envelope.serializer(), body)
+    }
+
     override suspend fun serverDetail(): ServerDetailResponse =
         request("/api/screens/server-detail", ServerDetailResponse.serializer())
 

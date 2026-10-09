@@ -209,6 +209,15 @@ class MainActivity : FragmentActivity() {
         AiKeyStore.attach(applicationContext)
         com.flagshipserver.app.core.SecuredSessionStore.attach(applicationContext)
         val okHttp = buildOkHttp()
+        // LAN-direct probes are only valid for the network they ran on.
+        getSystemService(android.net.ConnectivityManager::class.java)?.registerDefaultNetworkCallback(
+            object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) =
+                    com.flagshipserver.app.core.LanDirectRegistry.shared.onNetworkChanged()
+                override fun onLost(network: android.net.Network) =
+                    com.flagshipserver.app.core.LanDirectRegistry.shared.onNetworkChanged()
+            },
+        )
 
         // Identity / security plane. Mock for emulator/dev; Live talks to the
         // real flagshipserver.com (identity claims, login/resolve, recovery,
@@ -252,10 +261,19 @@ class MainActivity : FragmentActivity() {
             OkHttpJsonTransport(okHttp),
             onPods = { response ->
                 if (Keystore.hasUmkSeed()) {
-                    com.flagshipserver.app.core.CertPinRegistry.shared.update(
-                        response.pods,
-                        Keystore.currentUmkSeed(),
-                    )
+                    val umkSeed = Keystore.currentUmkSeed()
+                    com.flagshipserver.app.core.CertPinRegistry.shared.update(response.pods, umkSeed)
+                    // LAN-direct: refresh the active box's signed LAN hint,
+                    // bound to the pin just verified (docs/lan-direct.md).
+                    val box = sessionStore.podBaseUrl.value
+                        ?.let { runCatching { java.net.URI(it).host }.getOrNull() }
+                    if (box != null) {
+                        com.flagshipserver.app.core.LanDirectRegistry.shared.refresh(
+                            box,
+                            com.flagshipserver.app.core.ServerKeys.deriveStkPub(umkSeed, box),
+                            com.flagshipserver.app.core.CertPinRegistry.shared.pinFor(box),
+                        ) { liveScreens.lanHint() }
+                    }
                 }
             },
         )
