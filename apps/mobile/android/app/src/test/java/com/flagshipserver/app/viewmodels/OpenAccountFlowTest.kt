@@ -19,6 +19,9 @@ package com.flagshipserver.app.viewmodels
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.flagshipserver.app.api.AccountBootstrapRequest
+import com.flagshipserver.app.api.AccountBootstrapResponse
+import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.UsernameClaimRequest
 import com.flagshipserver.app.core.AppState
@@ -59,7 +62,7 @@ class OpenAccountFlowTest {
         Keystore.wipe()
     }
 
-    private fun newVm(server: MockFlagshipServerClient, app: AppState, username: String) =
+    private fun newVm(server: FlagshipServerClient, app: AppState, username: String) =
         OpenAccountViewModel(
             server = server,
             app = app,
@@ -160,6 +163,35 @@ class OpenAccountFlowTest {
         assertEquals(OpenAccountPhase.Opened, vm.phase.first())
         assertEquals(1, server.claimedUsernames.size)
         assertTrue(app.pods.first().isEmpty())
+    }
+
+    @Test fun openAccount_retryAfterLostResponse_reusesTheDevice() = runTest {
+        // The bootstrap reaches .com but its response is lost (a transport
+        // blip), so the user retries. The Worker registers a FRESH device id as
+        // a second primary device, so the retry must present the same one.
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        var dropNextResponse = true
+        val flaky = object : FlagshipServerClient by server {
+            override suspend fun bootstrapAccount(req: AccountBootstrapRequest): AccountBootstrapResponse {
+                val res = server.bootstrapAccount(req)
+                if (dropNextResponse) {
+                    dropNextResponse = false
+                    throw java.io.IOException("connection reset")
+                }
+                return res
+            }
+        }
+        val app = AppState()
+        val vm = newVm(flaky, app, "harry")
+
+        vm.openAccount("Harry's Pixel")
+        assertTrue(vm.phase.first() is OpenAccountPhase.Failed)
+        vm.openAccount("Harry's Pixel")
+
+        assertEquals(OpenAccountPhase.Opened, vm.phase.first())
+        val devices = server.bootstrapDeviceIds["harry"].orEmpty()
+        assertEquals("both attempts reached the server", 2, devices.size)
+        assertEquals("a retry must not mint a second device", 1, devices.toSet().size)
     }
 
     @Test fun openAccount_serverFailure_surfacesFailedState_andDoesNotPair() = runTest {

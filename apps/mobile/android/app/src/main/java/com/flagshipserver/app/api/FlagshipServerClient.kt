@@ -1394,6 +1394,7 @@ class MockFlagshipServerClient(
 
     private val _claimedUsernames = mutableMapOf<String, String>()       // username → irkPub
     private val _bootstrappedAccounts = mutableMapOf<String, AccountBootstrapRequest>()
+    private val _bootstrapDeviceIds = mutableMapOf<String, MutableList<String>>()
     private val _issuedAuthCodes = mutableMapOf<String, AuthCodeWire>()  // serial → wire
     private val _revokedAuthCodes = mutableSetOf<String>()
     private val _releasedServerNames = mutableListOf<ReleaseServerNameRequest>()
@@ -1408,6 +1409,9 @@ class MockFlagshipServerClient(
     val watchDelegatesByUser = mutableMapOf<String, MutableList<WatchDelegateInfo>>()
 
     val claimedUsernames: Map<String, String> get() = _claimedUsernames
+    /** Every device id each username was bootstrapped with, in order — lets a
+     *  test see whether a retry re-used the device or minted a second one. */
+    val bootstrapDeviceIds: Map<String, List<String>> get() = _bootstrapDeviceIds
     val issuedAuthCodes: Map<String, AuthCodeWire> get() = _issuedAuthCodes
     val revokedAuthCodes: Set<String> get() = _revokedAuthCodes
     val releasedServerNames: List<ReleaseServerNameRequest> get() = _releasedServerNames
@@ -1431,11 +1435,21 @@ class MockFlagshipServerClient(
     override suspend fun bootstrapAccount(req: AccountBootstrapRequest): AccountBootstrapResponse {
         tick()
         val username = req.claim.request.username.lowercase()
+        // Mirrors the Worker (`D1AccountProvisioningStorage.initialize`): the
+        // same IRK + admin root is the proof of ownership, so a retried
+        // bootstrap is accepted as "already created"; anyone else gets 409.
         val prior = _bootstrappedAccounts[username]
-        if (prior != null && prior != req) throw HttpException(409, "username taken")
+        if (prior != null) {
+            if (!prior.claim.request.irkPub.equals(req.claim.request.irkPub, ignoreCase = true) ||
+                !prior.adminRootPub.equals(req.adminRootPub, ignoreCase = true)
+            ) throw HttpException(409, "username unavailable")
+            _bootstrapDeviceIds.getOrPut(username) { mutableListOf() } += req.device.deviceId
+            return AccountBootstrapResponse(true, username, username, req.device.deviceId, false)
+        }
         _bootstrappedAccounts[username] = req
+        _bootstrapDeviceIds[username] = mutableListOf(req.device.deviceId)
         _claimedUsernames[username] = req.claim.request.irkPub
-        return AccountBootstrapResponse(true, username, username, req.device.deviceId, prior == null)
+        return AccountBootstrapResponse(true, username, username, req.device.deviceId, true)
     }
 
     override suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest) {

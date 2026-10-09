@@ -65,6 +65,13 @@ class OpenAccountViewModel(
     },
 ) : ViewModel() {
 
+    /** The device id and grant id this sign-up presents, minted once and reused
+     *  on every retry. `.com` treats a bootstrap repeated under the same keys,
+     *  device and grant as "already created", but a FRESH device id makes it
+     *  register a second primary device for the account — one phone, two
+     *  device records — so a retry after a transport blip must not re-mint them. */
+    private var pendingIdentity: Pair<String, String>? = null
+
     private val _phase = MutableStateFlow<OpenAccountPhase>(OpenAccountPhase.Ready)
     val phase: StateFlow<OpenAccountPhase> = _phase.asStateFlow()
 
@@ -135,7 +142,10 @@ class OpenAccountViewModel(
             )
             val normalizedAccountName = AccountMetadata.validateDisplayName(accountName)
             val normalizedDeviceName = AccountMetadata.validateDisplayName(label)
-            val deviceId = AccountMetadata.generateDeviceId()
+            val identity = pendingIdentity
+                ?: (AccountMetadata.generateDeviceId() to java.util.UUID.randomUUID().toString().lowercase())
+            pendingIdentity = identity
+            val deviceId = identity.first
             val deviceKey = AccountMetadata.deriveAccountDeviceKey(umk, username, deviceId)
             val devicePubHex = HexUtil.encode(AccountMetadata.deriveAccountDevicePub(umk, username, deviceId))
             val adminRoot = Keystore.adminRootKey("Authorize your private account name")
@@ -159,7 +169,7 @@ class OpenAccountViewModel(
                 "browse", "install-service", "vibe-code", "add-device", "manage-services",
                 "revoke-others", "admin", "view-directory",
             )
-            val grantId = java.util.UUID.randomUUID().toString().lowercase()
+            val grantId = identity.second
             val expiresAt = issuedAt + 90L * 24 * 3_600_000
             val grantBytes = listOf(
                 "flagship/device-capability-grant/v2", grantId, username, deviceId, devicePubHex,
