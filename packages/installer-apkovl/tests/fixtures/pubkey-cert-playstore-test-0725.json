@@ -1,0 +1,11 @@
+{
+    "binding": {
+        "version": 1,
+        "username": "playstore-test-0725",
+        "pubKey": "83637a0668ad7a293022e739b00fa333d9d48adb724ea4765c4b9d2847f66d4c",
+        "issuedAt": 1791565436093,
+        "expiresAt": 1792170236093,
+        "issuer": "flagship-ca-v1"
+    },
+    "signature": "889153620ce23a94cb579f7a4da58f261cf6e1ce9a345f8a9454b3784f8aff985f1ceaade0ea33090e2d07625886e29c8c1b0647de723fc6d5e42679141f7b01"
+}
