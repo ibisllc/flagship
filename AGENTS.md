@@ -2069,8 +2069,9 @@ SPA HTML) for `.css`/`.js` (anticipated at `apps/com/src/route.ts:746-752`).
     (off `feat/marketplace`): order gate (402 free/lapsed, 403 over the Pro limit),
     verifier enforcement each cron (suspend on lapse, keep the oldest on downgrade,
     restore on renewal), hub lookups skip unpaid accounts, client + `/pro` copy.
-    Remaining: owner decision whether to close new free orders on `main` before Pro
-    launches; live e2e (cert for a newly routed domain; a real lapse); Stripe price
+    The gate itself is ALSO on `main` since 2026-10-09 (Worker `f69744bf`): with no
+    paid plan purchasable yet, new orders are refused ("Custom domains are part of
+    Pro") — the table was empty, so no one lost anything. Remaining: live e2e (cert for a newly routed domain; a real lapse); Stripe price
     ids for $10/$20.
 21. **Throttle instead of cut off at the Free cap — BUILT on `feat/free-tier-throttle`
     (256 kbit/s per account, both directions; needs a `.services` Fly deploy once
