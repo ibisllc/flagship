@@ -32,6 +32,9 @@ public struct HomeTab: View {
     /// store is observed so toggling `dismissed` from "Not now"
     /// re-renders Home and the banner disappears immediately.
     @State private var recoveryBannerStore = RecoveryBannerStore()
+    @Environment(\.nameDibsClient) private var nameDibs
+    @State private var dibsWindow: DibsWindow?
+    @State private var dibsDismissed = UserDefaults.standard.bool(forKey: NameDibsViewModel.bannerDismissKey)
     /// The registered pod awaiting a delete confirmation (set by the Home
     /// list's "Delete server" context action). Non-nil ⇒ the typed-name
     /// delete sheet is shown.
@@ -46,6 +49,7 @@ public struct HomeTab: View {
                     destination(for: route)
                 }
         }
+        .task { dibsWindow = try? await nameDibs.window() }
         .onChange(of: linker.pending) { _, link in consume(link) }
         .task(id: linker.pending) { consume(linker.pending) }
     }
@@ -211,6 +215,13 @@ public struct HomeTab: View {
                     onDismissRecoveryBackupBanner: {
                         recoveryBannerStore.dismissed = true
                     },
+                    dibsNoticeClosesAt: (!app.isDemoAccount && NameDibsViewModel.shouldShowBanner(window: dibsWindow, dismissed: dibsDismissed))
+                        ? dibsWindow?.end : nil,
+                    onClaimDibs: { path.append(.nameDibs) },
+                    onDismissDibs: {
+                        UserDefaults.standard.set(true, forKey: NameDibsViewModel.bannerDismissKey)
+                        dibsDismissed = true
+                    },
                     onSignInAgain: {
                         // E7 — drop everything and head back to Welcome.
                         // signOut() clears AppState; the recovery flow
@@ -316,6 +327,8 @@ public struct HomeTab: View {
     @ViewBuilder
     private func flowDestination(for route: HomeRoute) -> some View {
         switch route {
+        case .nameDibs:
+            NameDibsScreen(vm: NameDibsViewModel(client: nameDibs, username: app.currentUser ?? ""))
         case .serverDetail(let podId):
             // Pending pods get the placeholder detail page; online pods
             // get the full ServerDetail with monitoring + access. A demo

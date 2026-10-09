@@ -467,6 +467,9 @@ struct FlagshipApp: App {
     // split as the others.
     private let mockServerTransfer = MockServerTransferClient()
     private let liveServerTransfer: any ServerTransferClient = LiveServerTransferClient()
+    // Name-dibs client — hits `.com`; live/mock split as transfer.
+    private let mockNameDibs = MockNameDibsClient()
+    private let liveNameDibs: any NameDibsClient = LiveNameDibsClient()
     // Server-migration lane client — hits `.com` (the migration orchestration
     // lane), not a box-pinned pipe; live/mock split as transfer.
     private let mockServerMigration = MockServerMigrationClient()
@@ -537,6 +540,9 @@ struct FlagshipApp: App {
     private var activeServerTransfer: any ServerTransferClient {
         dev.useLiveClient ? liveServerTransfer : mockServerTransfer
     }
+    private var activeNameDibs: any NameDibsClient {
+        dev.useLiveClient ? liveNameDibs : mockNameDibs
+    }
     private var activeServerMigration: any ServerMigrationClient {
         dev.useLiveClient ? liveServerMigration : mockServerMigration
     }
@@ -568,6 +574,7 @@ struct FlagshipApp: App {
                 .environment(\.serviceAccessClient, activeServiceAccess)
                 .environment(\.serviceAccessKeys, accessFixtureKeys)
                 .environment(\.serverTransferClient, activeServerTransfer)
+                .environment(\.nameDibsClient, activeNameDibs)
                 .environment(\.serverMigrationClient, activeServerMigration)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .alert(
