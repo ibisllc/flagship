@@ -1,4 +1,5 @@
 import SwiftUI
+import ImageIO
 import FlagshipAPI
 import FlagshipCore
 
@@ -536,10 +537,7 @@ struct AccountSecurityEnableSheet: View {
     /// a decode failure; the caller falls back to rendering the
     /// otpauth URL as plain text so manual entry still works.
     private func pngImage(fromBase64 base64: String) -> Image? {
-        guard let data = Data(base64Encoded: base64), let ui = UIImage(data: data) else {
-            return nil
-        }
-        return Image(uiImage: ui)
+        QrPngDecoder.image(fromBase64: base64).map { Image(uiImage: $0) }
     }
 }
 
@@ -559,5 +557,34 @@ extension AccountSecurityViewModel {
     var canCloseEarly: Bool {
         if case .confirmed = phase { return false }
         return true
+    }
+}
+
+/// Decodes the Worker's TOTP QR PNG once per secret, downsampled. The view
+/// body runs on every state change, and a plain `UIImage(data:)` decoded the
+/// full PNG each time; a larger-than-expected image from the server could
+/// also blow up decode memory. Mirrors Android's bounded decode (81a22756).
+enum QrPngDecoder {
+    /// The QR is drawn at 200 pt — 600 px at 3x — so 800 px never softens it.
+    static let maxPixelSize = 800
+
+    private static let cache = NSCache<NSString, UIImage>()
+
+    static func image(fromBase64 base64: String) -> UIImage? {
+        let key = base64 as NSString
+        if let hit = cache.object(forKey: key) { return hit }
+        guard let data = Data(base64Encoded: base64),
+              let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        let image = UIImage(cgImage: cg)
+        cache.setObject(image, forKey: key)
+        return image
     }
 }
