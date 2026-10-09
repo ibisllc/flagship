@@ -232,7 +232,12 @@ if [ "$(echo "$TRAILER_IRK_PUB" | tr '[:upper:]' '[:lower:]')" \
     echo "  refusing to install — possible evil-maid USB swap"
     exit 1
 fi
-echo "flagship: CA cross-check OK — trailer IRK matches binding for $TRAILER_USERNAME"
+# The match above trusts whatever TLS delivered. The binding's CA signature is
+# verified after the endorsement gate below, once the cloned repo's pinned
+# maintainer chain can say which CA key is authorized.
+CA_CERT_FILE=/run/flagship-pubkey-cert.json
+printf '%s' "$CA_CERT" > "$CA_CERT_FILE"
+echo "flagship: trailer IRK matches the served binding for $TRAILER_USERNAME (signature checked after the endorsement gate)"
 
 REF="$(jq -r .installerGitRef "$BLOB")"
 if [ -z "$REF" ] || [ "$REF" = "null" ]; then
@@ -297,7 +302,22 @@ if ! (cd "$VERIFY_DIR" && \
     echo "flagship: endorsement verification FAILED — refusing to install"
     exit 1
 fi
-echo "flagship: endorsement OK — proceeding to install"
+echo "flagship: endorsement OK"
+
+# H4, second half: the binding must be signed by a CA key the PINNED
+# maintainer authority currently endorses (scripts/verify-ca-binding.mjs —
+# the same chokepoint the Worker runs), so a spoofed or MITM'd
+# flagshipserver.com cannot vouch for an attacker's IRK.
+if ! (cd "$VERIFY_DIR" && \
+      node --import tsx scripts/verify-ca-binding.mjs \
+        --repo "$VERIFY_DIR" \
+        --cert "$CA_CERT_FILE" \
+        --username "$TRAILER_USERNAME" \
+        --irk-pub "$TRAILER_IRK_PUB"); then
+    echo "flagship: CA binding signature did NOT verify — refusing to install"
+    exit 1
+fi
+echo "flagship: CA binding verified — proceeding to install"
 
 # Fetch the install script from the public repo and run it. The script
 # is responsible for LUKS provisioning, fetching the daemon code, etc.
