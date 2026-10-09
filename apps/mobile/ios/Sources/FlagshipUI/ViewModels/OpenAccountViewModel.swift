@@ -48,6 +48,13 @@ public final class OpenAccountViewModel {
     public var accountName: String
     public private(set) var createdDeviceId: String?
 
+    /// The device id and grant id this sign-up presents, minted once and reused
+    /// on every retry. `.com` treats a bootstrap repeated under the same keys,
+    /// device and grant as "already created", but a FRESH device id makes it
+    /// register a second primary device for the account — one phone, two
+    /// device records — so a retry after a transport blip must not re-mint them.
+    private var pendingIdentity: (deviceId: String, grantId: String)?
+
     private let username: String
     private let server: any FlagshipServerClient
 
@@ -175,7 +182,9 @@ public final class OpenAccountViewModel {
             let now = Int64(Date().timeIntervalSince1970 * 1000)
             let umkKey = try await Keystore.currentUMK(reason: "Create your private account directory")
             let umk = umkKey.withUnsafeBytes { Data($0) }
-            let deviceId = try AccountMetadata.generateDeviceId()
+            let identity = try pendingIdentity ?? (AccountMetadata.generateDeviceId(), UUID().uuidString.lowercased())
+            pendingIdentity = identity
+            let deviceId = identity.deviceId
             let deviceKey = try AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: username, deviceId: deviceId)
             let devicePubHex = HexUtil.encode(deviceKey.publicKey.rawRepresentation)
             guard let aidPub = ServiceInvite.deriveAccountIdPub(umkSeed: umk) else {
@@ -209,7 +218,7 @@ public final class OpenAccountViewModel {
                 "revoke-others", "admin", "view-directory",
             ]
             let grant = DeviceCapabilityGrantEnvelope(
-                grantId: UUID().uuidString.lowercased(), username: username, deviceId: deviceId,
+                grantId: identity.grantId, username: username, deviceId: deviceId,
                 devicePubKeyHex: devicePubHex, scopes: scopes, issuedAt: now,
                 expiresAt: now + 90 * 24 * 3_600_000
             )

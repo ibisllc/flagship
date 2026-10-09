@@ -91,6 +91,11 @@ final class OpenAccountViewModelTests: XCTestCase {
         guard case .opened = vm.phase else { return XCTFail("expected .opened on retry") }
         XCTAssertEqual(server.claimedUsernames.count, 1, "retry must not create a second account")
         XCTAssertEqual(server.claimedUsernames["harry"], firstClaimIrk, "IRK must be stable (UMK reused)")
+        // The Worker registers a FRESH device id as a second primary device,
+        // so the retry must present the same one.
+        let devices = server.bootstrapDeviceIds["harry"] ?? []
+        XCTAssertEqual(devices.count, 2, "both attempts reached the server")
+        XCTAssertEqual(Set(devices).count, 1, "a retry must not mint a second device")
     }
 
     func test_openAccount_transportFailure_surfacesFailedPhase() async throws {

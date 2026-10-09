@@ -2305,6 +2305,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// 409 on a second different-IRK claim (idempotent under same IRK).
     public private(set) var claimedUsernames: [String: String] = [:]   // username → irkPub
     public private(set) var bootstrappedAccounts: [String: AccountBootstrapRequest] = [:]
+    /// Every device id each username was bootstrapped with, in order — lets a
+    /// test see whether a retry re-used the device or minted a second one.
+    public private(set) var bootstrapDeviceIds: [String: [String]] = [:]
     public private(set) var issuedAuthCodes: [String: AuthCodeWire] = [:]   // serial → wire
     public private(set) var revokedAuthCodes: Set<String> = []        // serial set
     public private(set) var releasedServerNames: [ReleaseServerNameRequest] = [] // recorded releases
@@ -2341,10 +2344,19 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func bootstrapAccount(_ req: AccountBootstrapRequest) async throws -> AccountBootstrapResponse {
         try await tick()
         let username = req.claim.request.username.lowercased()
-        if let prior = bootstrappedAccounts[username], prior != req {
-            throw ScreensClientError.http(status: 409, message: "username taken")
+        // Mirrors the Worker (`D1AccountProvisioningStorage.initialize`): the
+        // same IRK + admin root is the proof of ownership, so a retried
+        // bootstrap is accepted as "already created"; anyone else gets 409.
+        if let prior = bootstrappedAccounts[username] {
+            guard prior.claim.request.irkPub.lowercased() == req.claim.request.irkPub.lowercased(),
+                  prior.adminRootPub.lowercased() == req.adminRootPub.lowercased() else {
+                throw ScreensClientError.http(status: 409, message: "username unavailable")
+            }
+            bootstrapDeviceIds[username, default: []].append(req.device.deviceId)
+            return .init(ok: true, username: username, accountId: username, deviceId: req.device.deviceId, created: false)
         }
         bootstrappedAccounts[username] = req
+        bootstrapDeviceIds[username] = [req.device.deviceId]
         claimedUsernames[username] = req.claim.request.irkPub
         return .init(ok: true, username: username, accountId: username, deviceId: req.device.deviceId, created: true)
     }
