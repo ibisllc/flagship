@@ -19,9 +19,9 @@ const GB = 1024 * 1024 * 1024;
 
 /** Monthly public-egress quota by tier, in bytes. Tune freely — the only hard
  *  constraint is that free-tier worst-case cost = quota × Fly egress
- *  (~$0.02/GB), so 50 GB ⇒ ~$1/mo max exposure per free account. */
+ *  (~$0.02/GB), so 25 GB ⇒ ~$0.50/mo max exposure per free account. */
 export const MONTHLY_EGRESS_QUOTA_BYTES: Record<TierName, number> = {
-  free: 50 * GB,
+  free: 25 * GB,
   hobby: 250 * GB,
   maker: 500 * GB,
 };

@@ -2106,6 +2106,22 @@ SPA HTML) for `.css`/`.js` (anticipated at `apps/com/src/route.ts:746-752`).
     The box's ACME (TLS-ALPN-01 via passthrough) works once the hub routes the
     name. Also rewrite `pro.html` on `feat/marketplace`, which says Pro is "just
     about bandwidth headroom".
+21. **Throttle instead of cut off at the Free cap.** Free is 25 GB/month (2026-10-09)
+    and today going over is a hard stop: the relay refuses new connections until
+    the month resets (`usageMeter.ts` `admits()`), so a Free user can lose access to
+    their own box mid-month. Replace the stop with a speed limit (e.g. a per-account
+    token bucket of a few hundred kbit/s once over quota) so the box stays reachable
+    but bulk transfer is impractical; keep the metering as is. Same question for paid
+    tiers if overage billing ever has a ceiling.
+22. **Direct-to-server paths (LAN, Wi-Fi, Bluetooth)** so a device near its box stops
+    using — and paying for — the relay. Today every request, even from the same Wi-Fi,
+    goes phone → `.services` → box, and both directions count against the quota.
+    Notes: the box's certificate already covers `<server>.<user>.flagship.services`,
+    so a client that learns the box's LAN address (mDNS / a signed local-address hint
+    in the box's status report) can connect directly with the same hostname as SNI
+    and the same certificate pin — no new trust root. Bluetooth fits the low-volume
+    ceremonies (pairing, unlock approval, recovery) rather than data. Relates to the
+    deferred "direct LAN/box-AP trust channel" (2026-06-17 maintainer-trust entry).
 
 **NFC retail tier (post-v1; design in `docs/v1-operational-tasks.md § N`):** protocol +
 daemon state machine + cloud activation API are built & partly live; the read-only tap

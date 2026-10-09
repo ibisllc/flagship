@@ -51,22 +51,23 @@ describe("metering — quota model", () => {
     expect(periodFor(Date.UTC(2025, 11, 31, 23, 59))).toBe("2025-12");
   });
 
-  it("free = 50 GB, hobby = 250 GB, maker = 500 GB", () => {
-    expect(quotaBytesForTier("free")).toBe(50 * GB);
+  it("free = 25 GB, hobby = 250 GB, maker = 500 GB", () => {
+    expect(quotaBytesForTier("free")).toBe(25 * GB);
     expect(quotaBytesForTier("hobby")).toBe(250 * GB);
     expect(quotaBytesForTier("maker")).toBe(500 * GB);
-    expect(MONTHLY_EGRESS_QUOTA_BYTES.free).toBe(50 * GB);
+    expect(MONTHLY_EGRESS_QUOTA_BYTES.free).toBe(25 * GB);
   });
 });
 
 describe("metering — recordEgress accumulates within the period", () => {
   it("adds deltas and tracks remaining", async () => {
     const d = deps(); // no tier record → free
+    const free = MONTHLY_EGRESS_QUOTA_BYTES.free;
     const a = await recordEgress(d, "alice", 10 * GB);
     expect(a.usedBytes).toBe(10 * GB);
-    expect(a.remainingBytes).toBe(40 * GB);
-    const b = await recordEgress(d, "alice", 15 * GB);
-    expect(b.usedBytes).toBe(25 * GB);
+    expect(a.remainingBytes).toBe(free - 10 * GB);
+    const b = await recordEgress(d, "alice", free - 11 * GB);
+    expect(b.usedBytes).toBe(free - 1 * GB);
     expect(b.overQuota).toBe(false);
     expect(b.admit).toBe(true);
   });

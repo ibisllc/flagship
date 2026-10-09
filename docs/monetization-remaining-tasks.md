@@ -220,7 +220,7 @@ harness launch is Pro-gated with a clean upsell and graceful non-Pro behaviour.
 **Goal.** One authoritative table every surface reads from, so copy never drifts.
 
 **Numbers to lock** (current values in `docs/monetization-free-tier-first.md`):
-free **50 GB/mo** hard cap; Pro (`hobby`) **250 GB**; Pro Max (`maker`) **500 GB**;
+free **25 GB/mo** hard cap; Pro (`hobby`) **250 GB**; Pro Max (`maker`) **500 GB**;
 overage **$0.05/GB** (paid only); Pro **price/mo** (confirm); app marketplace
 **cut %** (e.g. 10%); customization **token bundle** size + value ratio (#17);
 the `MAX_APP_PRICE_CENTS` cap (currently $1000).

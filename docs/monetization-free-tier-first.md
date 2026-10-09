@@ -87,7 +87,7 @@ real control is bounding free egress (one viral free box at 1 TB/mo = ~$20).
 
 | Tier | Monthly public-egress quota | Our worst-case cost | Price |
 | --- | --- | --- | --- |
-| **Free** | **50 GB** (hard cap → relay stops admitting new public traffic) | ~$1/mo (avg free user ≈ cents) | $0 |
+| **Free** | **25 GB** (hard cap → relay stops admitting new public traffic; a throttle instead is on the open-work list) | ~$0.50/mo (avg free user ≈ cents) | $0 |
 | **Pro** (paid tier) | **250 GB** + overage; **1 custom domain** | $5/mo at the included max | **$10/mo** or anonymous voucher |
 | **Pro Max** | **500 GB** + overage; **unlimited custom domains** | ~$10/mo at the included max | **$20/mo** or anonymous voucher |
 | Overage (paid only) | beyond the included quota | — | **$0.05/GB** (~2.5× our cost) |
