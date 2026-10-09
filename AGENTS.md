@@ -164,11 +164,12 @@ harness can't do:
 
 **2026-10-08 (all long-lived branches rebased onto `main` `199ecdbb` and
 force-pushed)** — `feat/marketplace`, `feat/retail`, `feat/browser-extension`,
-`feat/chromebook-fit`, `gym` and the parked `alpine`, each still `main` + exactly
+`feat/phone-usb-burn` (then named `feat/chromebook-fit`), `gym` and the parked
+`alpine`, each still `main` + exactly
 its own feature, lossless-checked, and verified (tsc + full vitest; Android unit
 tests + APK and the iOS app build where the branch has native code; Mac/Linux
 builder tests for `alpine`). Pre-rebase heads are kept as local
-`backup/<branch>-pre-rebase-2026-10-08` refs. Notable adaptations: chromebook-fit
+`backup/<branch>-pre-rebase-2026-10-08` refs. Notable adaptations: phone-usb-burn
 renamed burner→builder (its seed-baked "burner" strings deliberately kept — they
 pin the seed hash); marketplace's Settings row moved to a Material icon; gym's
 live recovery spec now carries `oldIrkSignature`; alpine's Quick mode returns as
@@ -180,7 +181,7 @@ serializers were fixed — an Alpine box could not install ANY current recipe (i
 validator rebuilt the obsolete v1 payload and the bootstrap read v2 fields from the
 wrong place), now covered by a cross-language golden vector; `main`'s netboot
 `parse-trailer.sh` is equally stale but dead (nothing ships the netboot path).
-(2) chromebook-fit's seed is re-pinned on 13.6.0 (`54be17b4…`) and is now
+(2) phone-usb-burn's seed is re-pinned on 13.6.0 (`54be17b4…`) and is now
 reproducible across toolchains — xorriso and mtools had each stamped their version
 into the image — with an `iso-seed` CI job rebuilding it under debian:12 and 13.
 (3) the gym Worker + webapp were redeployed from the rebased `gym` branch (its
@@ -2060,6 +2061,36 @@ SPA HTML) for `.css`/`.js` (anticipated at `apps/com/src/route.ts:746-752`).
     atomic, reserved and roster-offered names refused, every account field carried
     over, and the legacy `usernameHandover.ts` must not return via a feature-branch
     rebase.
+14. **Launch `feat/phone-usb-burn`** (renamed 2026-10-09 from `feat/chromebook-fit`;
+    the Chromebook work itself already merged — what remains is Android burning a
+    USB stick with no computer: stream the reproducible seed over OTG, then write
+    the recipe into its `FLAGSHIP` partition). Before merging: (a) validate the OTG
+    write on a real phone + stick (only QEMU-validated so far); (b) publish the seed
+    as a GitHub release asset and set `FLAGSHIP_ISO_SEED` in `wrangler.toml` to its
+    URL + `sizeBytes` + the pinned sha `54be17b4…` (until then Android gets
+    `download: null`). Design: `docs/iso-seed-and-on-device-burn.md` (on the branch).
+15. **Re-pin the Debian base to 13.7.0.** 13.6.0 still downloads, from
+    `cdimage/archive/`, so nothing is broken. A re-pin needs a fresh hosted-VM and USB
+    install validated end to end first, then updates `FLAGSHIP_ISO_MANIFEST` +
+    `_ARM64` (both `wrangler.toml` and `wrangler.gym.toml`), `distros.ts`,
+    `docs/iso-manifest.md`, the docs page, and the phone-usb-burn seed pin (re-derive
+    it in the branch's `iso-seed` CI job).
+16. **Netboot trailer parser is dead and wrong.** `packages/installer-netboot/
+    parse-trailer.sh` (+ `early-scan.sh`) rebuilds the obsolete v1 InstallBlob
+    payload, so it could never verify a current recipe; nothing ships the netboot
+    path today. Delete the path, or bring it to v2 (with the optional
+    `bootUnlockMode` / `de=` appends) before anyone revives it.
+17. **The Debian path's embedded `install-blob.json` omits signed fields.**
+    `userdata.ts` `installBlobToJson` drops `bootUnlockMode` and `diskEncryption`.
+    Harmless today (no box re-verifies the blob; both are consumed when the preseed
+    is generated), but a future box-side check would fail on it — carry every signed
+    field, as the ISO trailer now does.
+18. **Alpine: the bootstrap's CA cross-check trusts TLS only** — it fetches the
+    binding but never verifies its signature (`alpine` branch,
+    `installer-apkovl/scripts/flagship-bootstrap.start`). Fix before reviving Alpine.
+19. **Gym: run the live account-recovery spec** (`apps/web/e2e/live/
+    account-recovery.spec.ts`, `gym` branch) against the redeployed gym to confirm
+    phase A now passes with the `oldIrkSignature` proof.
 
 **NFC retail tier (post-v1; design in `docs/v1-operational-tasks.md § N`):** protocol +
 daemon state machine + cloud activation API are built & partly live; the read-only tap
