@@ -54,9 +54,9 @@ describe("webapp service-detail — SET CUSTOM DOMAIN (#80)", () => {
     expect(body).toContain("CUSTOM_DOMAIN_COOLDOWN_MS = 300_000");
     expect(body).toContain('"flagship.customDomain.lastChanged."');
     expect(body).toContain("startCooldownTicker");
-    expect(body).toContain(
-      "Prior to claiming a FQDN, you must set a CNAME record targeting",
-    );
+    expect(body).toContain("point a CNAME record from it to");
+    // Custom domains are a Pro feature (owner decision 2026-10-09).
+    expect(body).toContain('Custom domains come with <a href="/pro">Pro</a> (one) and Pro Max (unlimited).');
     // The CUSTOM DOMAIN group sits atop WEB DOMAINS once bound.
     expect(body).toContain('<div class="label-tiny">CUSTOM DOMAIN</div>');
   });
