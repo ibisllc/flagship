@@ -196,7 +196,10 @@
 //      address keeps its port when a screen reaches it by name.
 //  v89: An app's "Back up now" fetches the archive with the session and
 //      saves it (lib/appBackup.js) instead of a link the box refused.
-const SHELL_VERSION = "v89";
+//  v90: feat/marketplace only: main's v89 plus the branch's shell files
+//       (marketplace, tier status, allowance, install, developer views), so
+//       it runs the next version above main's; bump it past main's on rebase.
+const SHELL_VERSION = "v90";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
