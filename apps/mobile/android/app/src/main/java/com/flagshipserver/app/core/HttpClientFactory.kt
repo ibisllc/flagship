@@ -34,6 +34,9 @@ object HttpClientFactory {
             // re-checks per request on pooled connections.
             .hostnameVerifier(CertPinHostnameVerifier(CertPinRegistry.shared::pinFor))
             .addNetworkInterceptor(CertPinInterceptor(CertPinRegistry.shared::pinFor))
+            // LAN-direct: a box host resolves to its pin-verified LAN address
+            // first when the phone is next to it (docs/lan-direct.md).
+            .dns(LanDirectDns())
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
