@@ -145,7 +145,6 @@ public struct SettingsTab: View {
                         Keystore.wipe()
                         app.signOut()
                     },
-                    onOpenProviders: { path.append(.providers) },
                     onOpenAiKeys: { path.append(.aiKeys) },
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
@@ -361,8 +360,6 @@ public struct SettingsTab: View {
                 ),
                 username: app.currentUser ?? ""
             )
-        case .providers:
-            ProvidersStub()
         case .aiKeys:
             AiKeysScreen(vm: AiKeysViewModel())
         case .recovery:
@@ -670,15 +667,6 @@ struct PrivacyScreen: View {
             privacy.requireBiometricAtLaunch = false
             app.requireBiometricAtLaunch = false
         }
-    }
-}
-
-struct ProvidersStub: View {
-    var body: some View {
-        FSCard { Text("LLM provider configuration — coming soon.") }
-            .padding(FS.space.s6)
-            .navigationTitle("Providers")
-            .navigationBarTitleDisplayMode(.inline)
     }
 }
 

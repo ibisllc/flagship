@@ -95,7 +95,6 @@ public enum ActivityRoute: Hashable, Sendable {
 }
 
 public enum SettingsRoute: Hashable, Sendable {
-    case providers
     /// Settings → AI keys. View saved BYOK keys (masked slugs), add, delete.
     /// Device-local; never shows a full key.
     case aiKeys
@@ -198,7 +197,7 @@ public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Senda
 /// Onboarding sub-routes. Welcome is the root; the leaf flows are
 /// "create a new account" (Welcome → ChooseUsername → OpenAccount) and
 /// "I already have an account" (Welcome → Recovery via WebAuthn-PRF →
-/// PostRecoveryChoice). Both leave the user on the paired RootShell.
+/// the post-recovery choice). Both leave the user on the paired RootShell.
 /// Provisioning a server is no longer part of onboarding — it's the
 /// in-shell "Add a server" flow (HomeRoute.provisionServer).
 public enum OnboardingRoute: Hashable, Sendable {

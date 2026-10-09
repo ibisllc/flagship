@@ -32,11 +32,6 @@ public struct SettingsScreen: View {
     /// destructive (the docked computer loses access), so it gates behind
     /// a grey Cancel / red Revoke dialog like every other destructive action.
     @State private var revokeSessionTarget: PairedSessionSummary?
-    /// Drives the v1 "Wipe & restart — coming soon" info sheet. The
-    /// menu entry stays visible (rather than hidden) so users
-    /// understand the option exists and is being designed; tapping
-    /// it opens an explainer instead of running the ceremony.
-    @State private var showWipeComingSoon = false
     /// B6a — confirmation modal for "Remove this device from account."
     /// Two-stage UX: tap fires this state, sheet shows; sheet's primary
     /// button calls onRemoveFromAccount. Sheet copy adapts based on
@@ -93,7 +88,6 @@ public struct SettingsScreen: View {
     /// Keychain (snoop-hardening) WITHOUT revoking server-side. Only
     /// safe when cloud recovery is enrolled; the screen gates on that.
     var onSignOut: () -> Void = {}
-    var onOpenProviders: () -> Void = {}
     /// Open Settings → AI keys (device-local BYOK key manager).
     var onOpenAiKeys: () -> Void = {}
     var onOpenRecovery: () -> Void = {}
@@ -189,7 +183,6 @@ public struct SettingsScreen: View {
         onRemoveManagedDeviceName: @escaping (String) async -> Bool = { _ in false },
         onLock: @escaping () -> Void = {},
         onSignOut: @escaping () -> Void = {},
-        onOpenProviders: @escaping () -> Void = {},
         onOpenAiKeys: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
         onOpenKeyfileBackup: @escaping () -> Void = {},
@@ -233,7 +226,6 @@ public struct SettingsScreen: View {
         self.onRevokeDevice = onRevokeDevice
         self.onLock = onLock
         self.onSignOut = onSignOut
-        self.onOpenProviders = onOpenProviders
         self.onOpenAiKeys = onOpenAiKeys
         self.onOpenRecovery = onOpenRecovery
         self.onOpenKeyfileBackup = onOpenKeyfileBackup
@@ -378,9 +370,6 @@ public struct SettingsScreen: View {
                 set: { if !$0 { nameEditMessage = nil } }
             )
         ) { Button("OK") { nameEditMessage = nil } } message: { Text(nameEditMessage ?? "") }
-        .sheet(isPresented: $showWipeComingSoon) {
-            WipeComingSoonSheet { showWipeComingSoon = false }
-        }
         .confirmationDialog(
             revokeSessionTarget.map { "Revoke session \($0.tokenPrefix)?" } ?? "Revoke this session?",
             isPresented: Binding(
@@ -1080,41 +1069,6 @@ private struct DeviceNameEditor: View {
                 }
             }
         }
-        .presentationDetents([.medium])
-    }
-}
-
-/// "Coming soon" explainer for the v1 Wipe & restart entry. Visible
-/// (rather than hidden) so users can see the v1.1 option exists and
-/// is being designed. The actual ceremony lands as E2/E3 on iOS.
-struct WipeComingSoonSheet: View {
-    @Environment(\.colorScheme) private var scheme
-    let onClose: () -> Void
-
-    var body: some View {
-        let c = FSColors.scheme(scheme)
-        VStack(alignment: .leading, spacing: FS.space.s4) {
-            HStack {
-                Image(systemName: "trash.circle.fill")
-                    .imageScale(.large)
-                    .foregroundColor(c.danger)
-                Text("Wipe & restart")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(c.text)
-                Spacer()
-            }
-            Text("Coming in v1.1.")
-                .font(FS.font.bodySm())
-                .foregroundColor(c.textMuted)
-            Text("This rotates your account's identity and recovery passkey in one shot — every other device gets disconnected and you re-pair each one fresh. Pods stay running, services stay installed.")
-                .foregroundColor(c.text)
-            Text("For v1 you can still Disconnect a single device, and Replace device will land alongside the account-key rotation tools. The full Wipe ceremony needs more testing before we ship it.")
-                .font(FS.font.bodySm())
-                .foregroundColor(c.textMuted)
-            FSPrimaryButton("Got it", block: true, action: onClose)
-        }
-        .padding(FS.space.s6)
-        .background(c.bg)
         .presentationDetents([.medium])
     }
 }
