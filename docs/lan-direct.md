@@ -99,9 +99,21 @@ recovery confirmations — where it removes the network entirely, not bulk data.
 It needs its own transport binding (GATT + a Noise/XX-style handshake anchored
 in the same STK) and is not part of this branch.
 
-## Status
+## Status (2026-10-09, `feat/lan-direct`)
 
-- Protocol message + cross-language vector, daemon listener + signed hint
-  endpoint, Android and iOS clients: on `feat/lan-direct`.
-- Needs a real box and phone on one network to validate end to end (bind on a
-  real interface, iOS proxy path, roaming between networks).
+- **Protocol + daemon:** built and tested — the pinned vector, every rejection
+  path, the address filter, and the listener over live sockets (raw-TLS pipe,
+  in-zone CONNECT, out-of-zone refusal, connection cap). Full vitest green.
+- **Android:** built and tested — the same vector, the refusal cases, and the
+  routing decisions (probe-gated, LAN-first with relay fallback, per-network
+  cache, expiry, internet-DNS-down). Unit suite green, debug APK builds.
+- **iOS:** written; the `FlagshipAPI` module (hint, registry, prober, proxy
+  sessions, `LiveScreensClient` routing) typechecks clean for macOS and the iOS
+  simulator under Swift 5 and Swift 6 strict concurrency. NOT yet built as the
+  app target and its XCTests (`LanHintTests`, `LanDirectRegistryTests`) NOT yet
+  run — the build machine ran out of disk. Do both before merging.
+- **Needs real hardware:** a box binding a real LAN interface; a phone on the same
+  Wi-Fi taking the LAN path (Android DNS route, iOS CONNECT proxy); roaming to
+  another network and back; a Studio-hosted VM (its NAT address won't be
+  reachable from a phone — the probe should fail and fall back).
+- **Before merge:** this design doc belongs on `main` by repo convention.

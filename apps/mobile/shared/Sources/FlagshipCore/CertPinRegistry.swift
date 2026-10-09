@@ -75,6 +75,15 @@ public final class CertPinRegistry: @unchecked Sendable {
         persist(snapshot)
     }
 
+    /// The cached STK pubkey for a box, if this device has derived it — used
+    /// to verify the box's LAN hint without unlocking the UMK again.
+    public func stkPub(forDomain domain: String) -> Data? {
+        let key = Self.normalize(domain)
+        lock.lock()
+        defer { lock.unlock() }
+        return stkPubs[key]
+    }
+
     private func persist(_ snapshot: [String: Data]) {
         guard let defaults else { return }
         defaults.set(snapshot.mapValues { HexUtil.encode($0) }, forKey: Self.stkPubsDefaultsKey)

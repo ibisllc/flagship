@@ -51,9 +51,18 @@ struct FlagshipApp: App {
         let pinnedSession = BoxPinnedURLSession.make(
             pinFor: { CertPinRegistry.shared.pinFor(host: $0) }
         )
-        self.liveClient = LiveScreensClient(
+        let lanClient = LiveScreensClient(
             urlSession: pinnedSession,
             store: store
+        )
+        self.liveClient = lanClient
+        // LAN-direct (docs/lan-direct.md): verify the active box's signed LAN
+        // hint against its pin + cached STK and route to it when proven.
+        LanDirectRegistry.shared.configure(
+            pinFor: { CertPinRegistry.shared.pinFor(host: $0) },
+            stkPubFor: { CertPinRegistry.shared.stkPub(forDomain: $0) },
+            activeBox: { await store.podBaseUrl.flatMap { URL(string: $0)?.host } },
+            fetchHint: { try? await lanClient.lanHint() }
         )
         self.livePodClients = .live(urlSession: pinnedSession, store: store)
         // The lock/power-off + dead-man routes are signature-authed daemon
@@ -391,7 +400,10 @@ struct FlagshipApp: App {
     // fingerprint pin). Live-only by construction: the Mock never invokes
     // onPods, so demo/mock sessions can never install pins.
     private let liveMailbox: any SecretMailboxClient = LiveSecretMailboxClient(
-        onPods: { response in CertPinRegistry.shared.update(pods: response.pods) }
+        onPods: { response in
+            CertPinRegistry.shared.update(pods: response.pods)
+            LanDirectRegistry.shared.refreshActive()
+        }
     )
     private var activeClient: any ScreensClient {
         dev.useLiveClient ? liveClient : mockClient

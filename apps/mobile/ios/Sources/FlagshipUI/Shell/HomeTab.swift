@@ -900,6 +900,7 @@ struct ServerDetailContainer: View {
         } else {
             CertPinRegistry.shared.update(pods: directory.pods)
         }
+        LanDirectRegistry.shared.refreshActive()
 
         guard let fqdn = pod?.fqdn, !fqdn.isEmpty else { return }
         let store = PendingSwkDepositStore()
