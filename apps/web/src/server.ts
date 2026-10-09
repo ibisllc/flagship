@@ -69,6 +69,7 @@ import {
 } from "./routes/pushRelay.js";
 import { startSniRouter, type RunningSniRouter } from "./tunnel/sniRouter.js";
 import { UsageMeter } from "./tunnel/usageMeter.js";
+import { overQuotaBytesPerSec } from "./tunnel/throttle.js";
 import { startTunnelHub } from "./tunnel/tunnelHub.js";
 import {
   HubBlessingProvider,
@@ -504,7 +505,8 @@ export async function start(opts: {
   // Public-egress metering (feat/metering). OFF unless USAGE_REPORT_SECRET is
   // set — so deploying this code is a no-op until the secret is provisioned.
   // The meter counts bytes per account in the SNI splice and flushes deltas to
-  // .com; it also refuses NEW streams for over-quota free accounts.
+  // .com; an over-quota free account is slowed to FLAGSHIP_OVER_QUOTA_KBPS
+  // (kbit/s, default 256), never refused.
   let meter: UsageMeter | undefined;
   const usageSecret = process.env.USAGE_REPORT_SECRET;
   if (usageSecret) {
@@ -512,6 +514,7 @@ export async function start(opts: {
       reportUrl: `${comBaseUrl}/api/usage/report`,
       secret: usageSecret,
       flushIntervalMs: process.env.USAGE_FLUSH_MS ? Number(process.env.USAGE_FLUSH_MS) : undefined,
+      throttleBytesPerSec: overQuotaBytesPerSec(process.env.FLAGSHIP_OVER_QUOTA_KBPS),
     });
     meter.start();
     console.log(`usage metering ON → ${comBaseUrl}/api/usage/report`);

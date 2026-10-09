@@ -7,9 +7,10 @@
 // traffic right now?" — plus the user-facing usage status.
 //
 // Quota model (see docs/monetization-free-tier-first.md for the locked
-// pricing + cost basis): free is a HARD CAP (over quota ⇒ the relay stops
-// admitting new public traffic); paid tiers bill overage per GB and are never
-// throttled. Tier comes from the existing TierStorage; a lapsed paid sub
+// pricing + cost basis): free is capped (over quota ⇒ `admit:false`, and the
+// relay slows the account to a speed limit rather than refusing it, so an
+// owner can still reach their own box); paid tiers bill overage per GB and are
+// never throttled. Tier comes from the existing TierStorage; a lapsed paid sub
 // (currentPeriodEnd in the past) falls back to free.
 
 import type { TierName, TierStorage, UsageStorage } from "@flagship/storage";
@@ -51,7 +52,8 @@ export interface QuotaStatus {
   remainingBytes: number;
   overQuota: boolean;
   /** May the relay carry MORE public traffic for this account right now?
-   *  Free over-quota ⇒ false (hard cap). Paid ⇒ always true (bills overage). */
+   *  Free over-quota ⇒ false (the relay throttles it). Paid ⇒ always true
+   *  (bills overage). */
   admit: boolean;
   /** Overage owed this period (paid tiers only); 0 for free. */
   overageUsd: number;
@@ -98,7 +100,7 @@ function statusFrom(tier: TierName, period: string, usedBytes: number): QuotaSta
     quotaBytes,
     remainingBytes: Math.max(0, quotaBytes - usedBytes),
     overQuota,
-    // Free is a hard cap; paid is never throttled (it bills overage).
+    // Free over quota is throttled by the relay; paid is never (it bills overage).
     admit: isFree ? !overQuota : true,
     overageUsd: isFree ? 0 : (overBytes / GB) * OVERAGE_USD_PER_GB,
   };
