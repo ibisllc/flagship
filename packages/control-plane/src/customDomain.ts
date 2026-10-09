@@ -25,8 +25,16 @@ import { verifySetCustomDomain, type SetCustomDomain } from "@flagship/protocol"
 import type {
   CustomDomainOrderStorage,
   DeviceCapabilityGrantStorage,
+  TierStorage,
   UsernameStorage,
 } from "@flagship/storage";
+import {
+  TIER_REQUIRED_ERROR,
+  customDomainAllowance,
+  isOwnZone,
+  isSuspended,
+  overLimitError,
+} from "./customDomainEntitlement.js";
 import { hexToBytes } from "./hex.js";
 import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import {
@@ -40,6 +48,8 @@ import {
 export interface CustomDomainDeps {
   usernames: UsernameStorage;
   customDomainOrders: CustomDomainOrderStorage;
+  /** Paid-tier source: custom domains are Pro (1) / Pro Max (unlimited) only. */
+  tiers: TierStorage;
   /** Slice D — device-grant store for the master-admin authority gate (§2 row
    *  20). Optional: absent ⇒ only the bare admin root satisfies the open gate. */
   grants?: DeviceCapabilityGrantStorage;
@@ -80,6 +90,7 @@ function fqdnError(fqdn: string): string | null {
   if (f.length === 0 || f.length > 253) return "fqdn missing or too long";
   if (f.includes("/") || f.includes(":")) return "fqdn must be a bare hostname (no scheme or path)";
   if (!FQDN_RE.test(f)) return "fqdn is not a valid hostname";
+  if (isOwnZone(f)) return "that hostname belongs to Flagship and can't be a custom domain";
   if (f.split(".").length < 3) {
     return "apex domains are not supported — attach a subdomain like www.example.com and redirect the apex to it";
   }
@@ -148,6 +159,26 @@ export async function handleSetCustomDomain(
     return forbidden("invalid signature");
   }
 
+  // Pro gate (owner decision 2026-10-09): Free has no custom domains, Pro one,
+  // Pro Max unlimited. Replacing this service's own domain doesn't count
+  // against the limit; any other live (pending/active) order does.
+  const allowance = await customDomainAllowance(deps.tiers, u, now);
+  if (allowance.limit === 0) {
+    return { status: 402, body: { error: TIER_REQUIRED_ERROR, code: "tier-required", tier: allowance.tier } };
+  }
+  if (Number.isFinite(allowance.limit)) {
+    const live = [
+      ...(await deps.customDomainOrders.listByStatus("pending")),
+      ...(await deps.customDomainOrders.listByStatus("active")),
+    ].filter((o) => o.userId === u && o.serviceId !== r.serviceId);
+    if (live.length >= allowance.limit) {
+      return {
+        status: 403,
+        body: { error: overLimitError(allowance.limit), code: "domain-limit", tier: allowance.tier, limit: allowance.limit },
+      };
+    }
+  }
+
   // 300s rate limit off the prior row's last_changed (the server is
   // the backstop; the client mirrors a UX cooldown).
   const existing = await deps.customDomainOrders.get(u, r.serviceId);
@@ -209,7 +240,9 @@ export async function handleGetCustomDomain(
   if (!row) return ok({ fqdn: null });
   return ok({
     fqdn: row.fqdn,
-    status: row.status,
+    // A lapsed subscription parks the order (see isSuspended); say so rather
+    // than showing it as merely "pending" verification.
+    status: isSuspended(row) ? "suspended" : row.status,
     confirmed: row.status === "active",
   });
 }

@@ -15,7 +15,8 @@
 // are idempotent so replay is harmless — the bearer secret is the
 // right weight here.
 
-import type { CustomDomainOrderStorage } from "@flagship/storage";
+import type { CustomDomainOrderStorage, TierStorage } from "@flagship/storage";
+import { customDomainAllowance } from "./customDomainEntitlement.js";
 import { malformed, ok, type HandlerResponseWithHeaders } from "./types.js";
 
 /** Length-checked, then XOR-accumulated constant-time compare. The
@@ -36,6 +37,15 @@ export function bearer(authorization: string | null | undefined): string | null 
 
 export interface ActiveRedirectionsDeps {
   customDomainOrders: CustomDomainOrderStorage;
+  /** Paid-tier source. The verifier suspends a lapsed account's orders within
+   *  a cron tick; this keeps the hub from re-installing one in between. */
+  tiers: TierStorage;
+  now?: () => number;
+}
+
+async function paid(deps: ActiveRedirectionsDeps, userId: string): Promise<boolean> {
+  const now = (deps.now ?? (() => Date.now()))();
+  return (await customDomainAllowance(deps.tiers, userId, now)).limit > 0;
 }
 
 export interface RedirectionEntry {
@@ -61,9 +71,11 @@ export async function handleActiveRedirections(
     return { status: 401, body: { error: "unauthorized" } };
   }
   const active = await deps.customDomainOrders.listActive();
-  const redirections: RedirectionEntry[] = active
-    .filter((r): r is typeof r & { podCanonical: string } => !!r.podCanonical)
-    .map((r) => ({ fqdn: r.fqdn, podCanonical: r.podCanonical }));
+  const redirections: RedirectionEntry[] = [];
+  for (const r of active) {
+    if (!r.podCanonical || !(await paid(deps, r.userId))) continue;
+    redirections.push({ fqdn: r.fqdn, podCanonical: r.podCanonical });
+  }
   return ok({ redirections });
 }
 
@@ -95,7 +107,7 @@ export async function handleRedirectionLookup(
   }
   const active = await deps.customDomainOrders.listActive();
   const hit = active.find((r) => r.fqdn.toLowerCase() === f && !!r.podCanonical);
-  if (!hit || !hit.podCanonical) {
+  if (!hit || !hit.podCanonical || !(await paid(deps, hit.userId))) {
     return { status: 404, body: { found: false } };
   }
   return ok({ found: true, fqdn: hit.fqdn, podCanonical: hit.podCanonical });

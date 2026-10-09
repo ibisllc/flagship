@@ -613,6 +613,7 @@ export async function runCustomDomainVerify(
   await runCustomDomainVerificationPass({
     customDomainOrders: storage.customDomainOrders,
     servers: storage.servers,
+    tiers: storage.tiers,
     resolveCname: (fqdn) => resolveCnameChain(fqdn),
     pushRedirection: async (op, fqdn, podCanonical) => {
       await pushRedirection({ servicesBaseUrl, secret }, { op, fqdn, podCanonical });

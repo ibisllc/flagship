@@ -2677,6 +2677,7 @@ export async function tryControlPlane(
         {
           usernames: storage.usernames,
           customDomainOrders: storage.customDomainOrders,
+          tiers: storage.tiers,
           grants: storage.deviceCapabilityGrants,
           // Replace-time DELETE(old fqdn): only wired when the control
           // channel is configured (same gate as the verifier cron).
@@ -2707,7 +2708,7 @@ export async function tryControlPlane(
   if (method === "GET" && (m = path.match(ROUTE_RE.CUSTOM_DOMAIN))) {
     return finish(
       await handleGetCustomDomain(
-        { usernames: storage.usernames, customDomainOrders: storage.customDomainOrders },
+        { usernames: storage.usernames, customDomainOrders: storage.customDomainOrders, tiers: storage.tiers },
         decodeURIComponent(m[1]!),
         decodeURIComponent(m[2]!),
       ),
@@ -2716,7 +2717,7 @@ export async function tryControlPlane(
   if (method === "GET" && ROUTE_RE.INTERNAL_ACTIVE_REDIRECTIONS.test(path)) {
     return finish(
       await handleActiveRedirections(
-        { customDomainOrders: storage.customDomainOrders },
+        { customDomainOrders: storage.customDomainOrders, tiers: storage.tiers },
         bearer(request.headers.get("authorization")),
         env.SERVICES_CONTROL_SECRET,
       ),
@@ -2725,7 +2726,7 @@ export async function tryControlPlane(
   if (method === "GET" && ROUTE_RE.INTERNAL_REDIRECTION_LOOKUP.test(path)) {
     return finish(
       await handleRedirectionLookup(
-        { customDomainOrders: storage.customDomainOrders },
+        { customDomainOrders: storage.customDomainOrders, tiers: storage.tiers },
         bearer(request.headers.get("authorization")),
         env.SERVICES_CONTROL_SECRET,
         url.searchParams.get("fqdn"),

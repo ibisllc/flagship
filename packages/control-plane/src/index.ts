@@ -28,6 +28,7 @@ export * from "./webauthnRecovery.js";
 export * from "./voici.js";
 export * from "./serviceRename.js";
 export * from "./customDomain.js";
+export * from "./customDomainEntitlement.js";
 export * from "./customDomainRedirections.js";
 export * from "./customDomainVerifier.js";
 export * from "./admin.js";

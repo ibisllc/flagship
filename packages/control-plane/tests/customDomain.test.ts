@@ -7,6 +7,15 @@ import {
 } from "../src/customDomain.js";
 import { handleGetAppLinks } from "../src/serviceRename.js";
 
+/** Every account on Pro Max (unlimited custom domains), so these tests keep
+ *  exercising the order/verify mechanics; the tier rules are pinned in
+ *  customDomainTier.test.ts. */
+const UNLIMITED_TIERS = {
+  get: async (username: string) => ({ username, tier: "maker" as const, updatedAt: 0 }),
+  put: async () => {},
+};
+
+
 const USER = "alice";
 const APP = "alice-game1";
 
@@ -32,7 +41,7 @@ async function seed(s: InMemoryStorage, irk: Keypair) {
 }
 
 function deps(s: InMemoryStorage, now: () => number) {
-  return { usernames: s.usernames, customDomainOrders: s.customDomainOrders, now };
+  return { usernames: s.usernames, customDomainOrders: s.customDomainOrders, tiers: UNLIMITED_TIERS, now };
 }
 
 function signedBody(irk: Keypair, fqdn: string, issuedAt: number, over?: Partial<{ username: string; serviceId: string; fqdn: string }>) {
@@ -181,6 +190,7 @@ describe("handleSetCustomDomain — replace-time DELETE(old fqdn)", () => {
       deps: {
         usernames: s.usernames,
         customDomainOrders: s.customDomainOrders,
+        tiers: UNLIMITED_TIERS,
         now,
         pushRedirection: async (op: "add" | "delete", fqdn: string, pod?: string) => {
           calls.push({ op, fqdn, pod });

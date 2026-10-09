@@ -8,6 +8,15 @@ import {
   pushRedirection,
 } from "../src/customDomainRedirections.js";
 
+/** Every account on Pro Max (unlimited custom domains), so these tests keep
+ *  exercising the order/verify mechanics; the tier rules are pinned in
+ *  customDomainTier.test.ts. */
+const UNLIMITED_TIERS = {
+  get: async (username: string) => ({ username, tier: "maker" as const, updatedAt: 0 }),
+  put: async () => {},
+};
+
+
 describe("constantTimeEqual / bearer", () => {
   it("constantTimeEqual: true only on exact match", () => {
     expect(constantTimeEqual("abc", "abc")).toBe(true);
@@ -43,18 +52,18 @@ describe("handleActiveRedirections (#87)", () => {
 
   it("fails closed: 503 when no secret configured", async () => {
     const s = new InMemoryStorage();
-    const r = await handleActiveRedirections({ customDomainOrders: s.customDomainOrders }, "anything", undefined);
+    const r = await handleActiveRedirections({ customDomainOrders: s.customDomainOrders, tiers: UNLIMITED_TIERS }, "anything", undefined);
     expect(r.status).toBe(503);
   });
   it("401 on missing or wrong bearer", async () => {
     const s = new InMemoryStorage();
-    expect((await handleActiveRedirections({ customDomainOrders: s.customDomainOrders }, null, "S")).status).toBe(401);
-    expect((await handleActiveRedirections({ customDomainOrders: s.customDomainOrders }, "wrong", "S")).status).toBe(401);
+    expect((await handleActiveRedirections({ customDomainOrders: s.customDomainOrders, tiers: UNLIMITED_TIERS }, null, "S")).status).toBe(401);
+    expect((await handleActiveRedirections({ customDomainOrders: s.customDomainOrders, tiers: UNLIMITED_TIERS }, "wrong", "S")).status).toBe(401);
   });
   it("200 returns only active rows that have a podCanonical", async () => {
     const s = new InMemoryStorage();
     await withRows(s);
-    const r = await handleActiveRedirections({ customDomainOrders: s.customDomainOrders }, "S", "S");
+    const r = await handleActiveRedirections({ customDomainOrders: s.customDomainOrders, tiers: UNLIMITED_TIERS }, "S", "S");
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ redirections: [{ fqdn: "shop.example.com", podCanonical: "home.u.flagship.services" }] });
   });
@@ -76,7 +85,7 @@ describe("handleRedirectionLookup (#12 lazy point lookup)", () => {
       lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
     });
   }
-  const dep = (s: InMemoryStorage) => ({ customDomainOrders: s.customDomainOrders });
+  const dep = (s: InMemoryStorage) => ({ customDomainOrders: s.customDomainOrders, tiers: UNLIMITED_TIERS });
 
   it("fails closed: 503 no secret, 401 bad bearer", async () => {
     const s = new InMemoryStorage();

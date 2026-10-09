@@ -67,14 +67,23 @@ function nowMs(deps: MeteringDeps): number {
   return deps.now ? deps.now() : Date.now();
 }
 
-/** Effective tier for an account: a lapsed paid sub falls back to free. */
-async function effectiveTier(deps: MeteringDeps, username: string): Promise<TierName> {
-  const rec = await deps.tiers.get(username);
+/** Effective tier for an account: a lapsed paid sub falls back to free. The
+ *  one definition of "paid right now" — metering and custom domains share it. */
+export async function effectiveTierOf(
+  tiers: TierStorage,
+  username: string,
+  nowMsValue: number,
+): Promise<TierName> {
+  const rec = await tiers.get(username.toLowerCase());
   if (!rec || rec.tier === "free") return "free";
-  if (rec.currentPeriodEnd !== undefined && rec.currentPeriodEnd < nowMs(deps)) {
+  if (rec.currentPeriodEnd !== undefined && rec.currentPeriodEnd < nowMsValue) {
     return "free"; // subscription lapsed
   }
   return rec.tier;
+}
+
+async function effectiveTier(deps: MeteringDeps, username: string): Promise<TierName> {
+  return effectiveTierOf(deps.tiers, username, nowMs(deps));
 }
 
 function statusFrom(tier: TierName, period: string, usedBytes: number): QuotaStatus {

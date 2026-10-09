@@ -9,6 +9,15 @@ import {
   type VerifierDeps,
 } from "../src/customDomainVerifier.js";
 
+/** Every account on Pro Max (unlimited custom domains), so these tests keep
+ *  exercising the order/verify mechanics; the tier rules are pinned in
+ *  customDomainTier.test.ts. */
+const UNLIMITED_TIERS = {
+  get: async (username: string) => ({ username, tier: "maker" as const, updatedAt: 0 }),
+  put: async () => {},
+};
+
+
 const USER = "harry";
 const APP = "harry-game1";
 const FQDN = "shop.example.com";
@@ -23,6 +32,7 @@ function harness(opts: {
   const deps: VerifierDeps = {
     customDomainOrders: s.customDomainOrders,
     servers: s.servers,
+    tiers: UNLIMITED_TIERS,
     resolveCname: async () => opts.cname ?? [],
     pushRedirection: async (op, fqdn, podCanonical) => {
       pushed.push({ op, fqdn, pod: podCanonical });

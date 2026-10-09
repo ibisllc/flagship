@@ -24,6 +24,15 @@ import { InMemoryStorage } from "@flagship/storage";
 import { handleSetCustomDomain } from "../src/customDomain.js";
 import { handleServerReleaseName } from "../src/serverRevoke.js";
 
+/** Every account on Pro Max (unlimited custom domains), so these tests keep
+ *  exercising the order/verify mechanics; the tier rules are pinned in
+ *  customDomainTier.test.ts. */
+const UNLIMITED_TIERS = {
+  get: async (username: string) => ({ username, tier: "maker" as const, updatedAt: 0 }),
+  put: async () => {},
+};
+
+
 const USER = "alice";
 const APP = "alice-game1";
 
@@ -71,7 +80,7 @@ describe("Slice D gate — set-custom-domain (§2 row 20)", () => {
     const irk = makeKey();
     await seedAccount(s, irk); // no admin root
     const r = await handleSetCustomDomain(
-      { usernames: s.usernames, customDomainOrders: s.customDomainOrders, now: () => NOW },
+      { usernames: s.usernames, customDomainOrders: s.customDomainOrders, tiers: UNLIMITED_TIERS, now: () => NOW },
       USER,
       APP,
       customDomainBody(irk, "shop.example.com", NOW),
@@ -87,6 +96,7 @@ describe("Slice D gate — set-custom-domain (§2 row 20)", () => {
     const deps = {
       usernames: s.usernames,
       customDomainOrders: s.customDomainOrders,
+      tiers: UNLIMITED_TIERS,
       grants: s.deviceCapabilityGrants,
       now: () => NOW,
     };
@@ -139,6 +149,7 @@ describe("Slice D gate — set-custom-domain (§2 row 20)", () => {
       {
         usernames: s.usernames,
         customDomainOrders: s.customDomainOrders,
+        tiers: UNLIMITED_TIERS,
         grants: s.deviceCapabilityGrants,
         now: () => NOW,
       },
@@ -185,6 +196,7 @@ describe("Slice D gate — set-custom-domain (§2 row 20)", () => {
       {
         usernames: s.usernames,
         customDomainOrders: s.customDomainOrders,
+        tiers: UNLIMITED_TIERS,
         grants: s.deviceCapabilityGrants,
         now: () => NOW,
       },
