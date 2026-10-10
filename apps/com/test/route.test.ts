@@ -2058,8 +2058,8 @@ describe("Pre-launch stealth gate (/wip_ + /alpha + coming-soon)", () => {
 
 describe("/download/<os> — on-brand installer redirect", () => {
   it("302s published installers to their artifacts and unset platforms to the explainer", async () => {
-    // Published platforms point at their real artifacts; Linux keeps the
-    // coming-soon explainer. The page only exposes stable on-brand routes.
+    // Published platforms point at their real artifacts. The page only
+    // exposes stable on-brand routes.
     const mac = await route(
       new Request("https://flagshipserver.com/download/mac"),
       makeEnv(),
@@ -2073,7 +2073,7 @@ describe("/download/<os> — on-brand installer redirect", () => {
     );
     expect(windows.status).toBe(302);
     expect(windows.headers.get("location")).toBe(
-      "https://github.com/ibisllc/flagship/releases/download/studio-windows-v0.0.1/FlagshipBuilder.exe",
+      "https://github.com/ibisllc/flagship/releases/download/studio-v0.1.0/FlagshipStudio-Windows-x64-0.1.0.zip",
     );
 
     const linux = await route(
@@ -2081,7 +2081,16 @@ describe("/download/<os> — on-brand installer redirect", () => {
       makeEnv(),
     );
     expect(linux.status).toBe(302);
-    expect(linux.headers.get("location")).toBe("/docs#burn");
+    expect(linux.headers.get("location")).toBe(
+      "https://github.com/ibisllc/flagship/releases/download/studio-v0.1.0/FlagshipStudio-Linux-x86_64-0.1.0.AppImage",
+    );
+
+    const unknown = await route(
+      new Request("https://flagshipserver.com/download/beos"),
+      makeEnv(),
+    );
+    expect(unknown.status).toBe(302);
+    expect(unknown.headers.get("location")).toBe("/docs#burn");
   });
 
   it("works WITHOUT the preview cookie (download link survives the launch gate)", async () => {
