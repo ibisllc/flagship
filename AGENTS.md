@@ -175,7 +175,8 @@ the phone app") and the live custom-domain refusal ("part of Pro — upgrade"),
 which build 4 shows verbatim. Terms §3/§4 and Privacy §2.4 now state nothing is
 sold today, and the refusal says "Custom domains aren't available yet." When
 `feat/custom-domains` is rebased, keep its Pro wording for the launch.
-**Remaining (owner):** reply to App Review.
+Reply sent and build 4 resubmitted 2026-10-10; awaiting review (keep the
+`playstore-test-0725` demo up).
 
 **2026-10-09 (pricing, dibs, custom domains, throttle, LAN direct; TODO sweep).**
 Owner decisions (recorded in `docs/naming-recovery-and-name-change.md` §16 and
@@ -404,7 +405,7 @@ rebase (the gym `.com`/webapp need a redeploy from that branch before phase A
 passes live).
 
 **2026-10-06 (hub-blessing issuer authenticated) — closes an externally
-reported CA signing oracle; NOT deployed.** `POST /api/services/hub-blessing`
+reported CA signing oracle; DEPLOYED (Fly v34 2026-10-07, then `.com`).** `POST /api/services/hub-blessing`
 had the hot CA key sign a `ServiceBlessing` for any caller's key and any
 `hubHost`, so a blessing proved nothing and "evict a rogue hub by ceasing to
 bless it" was unenforceable. It now requires the existing
