@@ -155,9 +155,6 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   every CA-chain check fails closed after it (app trust checks, relay blessing,
   Alpine bootstrap). Needs the owner's YubiKey: mint a `CaEndorsement` with the
   maintainers CLI, commit it, redeploy `.com`.
-- **Delete the `web.flagshipserver.com` DNS record** (owner, Cloudflare
-  dashboard). The redirects behind it were removed 2026-10-09; see agent memory
-  for why it can't wait.
 
 ### In flight
 
@@ -173,10 +170,10 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   passkey recovery on a sideloaded APK.
 - **Throwaway demo `drill-1010`** (UpCloud) exists for update-server testing.
   Tear it down with `node scripts/sample-user.mjs cleanup drill-1010` when done.
-- **amd64 VM appliance:** `.github/workflows/vm-appliance.yml` builds it under
-  KVM from Debian cloud build `20261001-2618`. Remaining: upload the parts to R2
-  (`wrangler r2 object put flagship-iso/<prefix>.part-NN`), commit
-  `apps/web/public/downloads/FlagshipVMAppliance-amd64.json`, redeploy `.com`.
+- **amd64 VM appliance published** 2026-10-10: built by `vm-appliance.yml` under
+  KVM from Debian cloud build `20261001-2618` (boot smoke passed), ten parts in R2
+  `flagship-iso/flagship-vm-appliance-amd64-main-ba730ac5f960.qcow2.part-NN`,
+  manifest `apps/web/public/downloads/FlagshipVMAppliance-amd64.json`.
 
 ### Built, waiting on deploys or rebuilds
 
