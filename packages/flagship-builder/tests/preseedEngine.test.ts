@@ -214,6 +214,17 @@ describe("preseed engine bundle", () => {
     }
   });
 
+  it("the native builders ship byte-identical copies of the bundle and the golden vectors", () => {
+    const repo = join(here, "..", "..", "..");
+    const read = (rel: string) => readFileSync(join(repo, rel), "utf8");
+    const bundle = read("packages/flagship-builder/engine/preseed-engine.js");
+    expect(read("apps/builder-mac/Sources/FlagshipBuilderCore/Resources/preseed-engine.js")).toBe(bundle);
+    expect(read("apps/mobile/android/app/src/main/assets/preseed-engine.js")).toBe(bundle);
+    expect(read("apps/builder-mac/Tests/FlagshipBuilderTests/Resources/preseed-vectors.json")).toBe(
+      read("packages/flagship-builder/engine/golden/preseed-vectors.json"),
+    );
+  });
+
   it("the debug-access grant reaches install-blob.json (consent is load-bearing)", () => {
     const grant = JSON.stringify({ grant: { serverDomain: "home.harry.flagship.services", sshAuthorizedKey: "ssh-ed25519 AAAA", issuedAt: 1700000000000 }, signatureHex: "ab".repeat(64) });
     const preseed = engine.buildPreseed(buildSignedRecipe({ debugGrant: grant }), "{}");
