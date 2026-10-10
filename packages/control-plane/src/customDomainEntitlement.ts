@@ -47,7 +47,7 @@ export async function customDomainAllowance(
   return { tier, limit: CUSTOM_DOMAIN_LIMITS[tier] };
 }
 
-export const TIER_REQUIRED_ERROR = "Custom domains are part of Pro — upgrade to add one.";
+export const TIER_REQUIRED_ERROR = "Custom domains aren't available yet.";
 export function overLimitError(limit: number): string {
   return `Your plan includes ${limit} custom domain${limit === 1 ? "" : "s"} — remove one, or move to Pro Max for unlimited.`;
 }
