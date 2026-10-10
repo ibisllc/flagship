@@ -142,8 +142,8 @@ describe("runUpdateBootGate", () => {
     expect(out).toEqual({ action: "rolled-back", previousCommit: PREV, targetCommit: TARGET });
     expect(runner.calls).toEqual([
       ["git", "-C", "/opt/flagship", "checkout", PREV],
-      ["npm", "ci", "--no-audit", "--no-fund"],
-      ["npx", "tsc", "-b"],
+      ["npm", "ci", "--no-audit", "--no-fund", "--include-workspace-root", "--workspace=packages/server-daemon"],
+      ["npx", "tsc", "-b", "packages/server-daemon"],
     ]);
     expect(pending.current).toBeNull();
     expect(reports).toEqual([

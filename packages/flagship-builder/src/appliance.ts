@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { BURN_PASSPHRASE } from "./userdata.js";
+import { BOX_NPM_SCOPE, BOX_TSC_BUILD, BURN_PASSPHRASE } from "./userdata.js";
 
 export const APPLIANCE_SEED_MAGIC = "FLSHSD01";
 export const APPLIANCE_SEED_HEADER_BYTES = 80;
@@ -166,9 +166,9 @@ echo "[appliance-factory] cloning Flagship ref=${opts.gitRef}"
 timeout -k 10 300 git clone --depth 2 --branch '${opts.gitRef}' '${repo}' /opt/flagship || { timeout -k 10 300 git clone --depth 2 '${repo}' /opt/flagship; timeout -k 10 300 git -C /opt/flagship fetch --depth 2 origin '${opts.gitRef}'; git -C /opt/flagship checkout '${opts.gitRef}'; }
 cd /opt/flagship
 echo "[appliance-factory] installing pinned workspace dependencies"
-timeout -k 15 600 npm install --no-audit --no-fund --workspaces --include-workspace-root
+timeout -k 15 600 npm install --no-audit --no-fund ${BOX_NPM_SCOPE}
 echo "[appliance-factory] compiling workspace"
-timeout -k 15 300 npx tsc -b
+timeout -k 15 300 ${BOX_TSC_BUILD}
 [ -e /opt/flagship/node_modules/@flagship/protocol/package.json ] || { echo "[appliance-factory] workspace link missing"; exit 1; }
 printf '%s\\n' '${opts.gitRef}' > /opt/flagship/.flagship-appliance-ref
 echo "[appliance-factory] compiled workspace ready"

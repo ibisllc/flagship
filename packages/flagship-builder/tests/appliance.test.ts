@@ -52,7 +52,11 @@ describe("generalized VM appliance", () => {
     expect(script).toContain(".flagship-appliance-ref");
     expect(script).toContain("KEYFILE_PATTERN=/etc/flagship/appliance-build.key");
     expect(script).toContain("flagship-appliance-specialize.service");
-    expect(script).toContain("npx tsc -b\n");
+    expect(script).toContain(
+      "npm install --no-audit --no-fund --include-workspace-root --workspace=packages/server-daemon\n",
+    );
+    expect(script).toContain("timeout -k 15 300 npx tsc -b packages/server-daemon\n");
+    expect(script).not.toContain("--workspaces");
     expect(script).toContain("workspace link missing");
     expect(script).toContain("/usr/local/lib/flagship-appliance/flagship-unseal");
     expect(script).toContain("GOMODCACHE=/root/go/pkg/mod");

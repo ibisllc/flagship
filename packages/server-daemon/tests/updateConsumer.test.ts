@@ -28,6 +28,7 @@ import {
   buildCurrentCommitProvider,
   buildUpdateConsumerPoller,
   decodeUpdateOrderCarrier,
+  rebuildWorkspace,
   runUpdateConsumer,
   type PendingVerifyMarker,
   type PendingVerifyStore,
@@ -303,8 +304,8 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
       ["git", "-C", "/opt/flagship", "fetch"],
       ["git", "-C", "/opt/flagship", "rev-parse", "--is-shallow-repository"],
       ["git", "-C", "/opt/flagship", "checkout", TARGET],
-      ["npm", "ci", "--no-audit", "--no-fund"],
-      ["npx", "tsc", "-b"],
+      ["npm", "ci", "--no-audit", "--no-fund", "--include-workspace-root", "--workspace=packages/server-daemon"],
+      ["npx", "tsc", "-b", "packages/server-daemon"],
     ]);
     expect(nonces.marked).toEqual([NONCE]);
     expect(pending.current).toEqual({
@@ -400,6 +401,51 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
     ]);
     expect(pending.current).toBeNull();
     expect(exits.count).toBe(0);
+  });
+});
+
+describe("rebuildWorkspace — installs and compiles only the daemon's closure", () => {
+  const SCOPE = ["--include-workspace-root", "--workspace=packages/server-daemon"];
+
+  function cwdRunner(failOn?: string) {
+    const calls: { argv: string[]; cwd?: string }[] = [];
+    const runner: UpdateCommandRunner = async (cmd, args, opts) => {
+      const argv = [cmd, ...args];
+      calls.push({ argv, ...(opts?.cwd ? { cwd: opts.cwd } : {}) });
+      if (failOn && argv.join(" ").startsWith(failOn)) throw new Error("boom");
+      return { stdout: "" };
+    };
+    return { calls, runner };
+  }
+
+  it("runs a scoped npm ci then tsc -b of the daemon, in the repo", async () => {
+    const { calls, runner } = cwdRunner();
+    await rebuildWorkspace(runner, "/opt/flagship", () => {});
+    expect(calls).toEqual([
+      { argv: ["npm", "ci", "--no-audit", "--no-fund", ...SCOPE], cwd: "/opt/flagship" },
+      { argv: ["npx", "tsc", "-b", "packages/server-daemon"], cwd: "/opt/flagship" },
+    ]);
+  });
+
+  it("falls back to a scoped npm install when npm ci fails", async () => {
+    const { calls, runner } = cwdRunner("npm ci");
+    const logs: string[] = [];
+    await rebuildWorkspace(runner, "/opt/flagship", (m) => logs.push(m));
+    expect(calls.map((c) => c.argv)).toEqual([
+      ["npm", "ci", "--no-audit", "--no-fund", ...SCOPE],
+      ["npm", "install", "--no-audit", "--no-fund", ...SCOPE],
+      ["npx", "tsc", "-b", "packages/server-daemon"],
+    ]);
+    expect(logs.join("\n")).toContain("falling back to npm install");
+  });
+
+  it("never asks for the whole monorepo", async () => {
+    const { calls, runner } = cwdRunner("npm ci");
+    await rebuildWorkspace(runner, "/opt/flagship", () => {});
+    for (const { argv } of calls) {
+      expect(argv).not.toContain("--workspaces");
+      if (argv[0] === "npx") expect(argv).toEqual(["npx", "tsc", "-b", "packages/server-daemon"]);
+    }
   });
 });
 

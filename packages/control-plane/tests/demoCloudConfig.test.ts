@@ -160,8 +160,14 @@ describe("buildCloudConfigUserData", () => {
     expect(bootstrap.startsWith("#!/bin/bash\n")).toBe(true);
     expect(bootstrap).toContain("apt-get install -y");
     expect(bootstrap).toContain("git clone");
-    expect(bootstrap).toContain("npm install");
-    expect(bootstrap).toContain("npx tsc -b");
+    // Only the daemon's workspace closure is installed and compiled, never
+    // the whole monorepo.
+    expect(bootstrap).toContain(
+      "npm install --no-audit --no-fund --include-workspace-root --workspace=packages/server-daemon 2>&1",
+    );
+    expect(bootstrap).toContain("npx tsc -b packages/server-daemon 2>&1");
+    expect(bootstrap).not.toContain("--workspaces");
+    expect(bootstrap).not.toMatch(/npx tsc -b(?! packages\/server-daemon)/);
     expect(bootstrap).toContain("install-helper.ts gen-identity");
     // N12b — the box mints the IRK-signed entitlement bundle on-box
     // (after gen-identity) using the shipped demo IRK priv, writes it to

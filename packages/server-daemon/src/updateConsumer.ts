@@ -82,19 +82,30 @@ export const realUpdateCommandRunner: UpdateCommandRunner = async (cmd, args, op
   return { stdout };
 };
 
-/** `npm ci` (falling back to `npm install`) + `npx tsc -b` in the repo. */
+/**
+ * Install + compile only the daemon's workspace closure, as the install-time
+ * bootstrap does. The scope is derived by npm and tsc from whatever checkout is
+ * on disk (npm follows the daemon's `@flagship/*` links, `tsc -b` its project
+ * references), so the same command serves an update (old daemon, new checkout)
+ * and a rollback (new daemon, old checkout) for any commit that has
+ * packages/server-daemon.
+ */
+const BOX_WORKSPACE = "packages/server-daemon";
+const BOX_NPM_SCOPE = ["--include-workspace-root", `--workspace=${BOX_WORKSPACE}`];
+
+/** `npm ci` (falling back to `npm install`) + `npx tsc -b` of the daemon. */
 export async function rebuildWorkspace(
   runner: UpdateCommandRunner,
   repoPath: string,
   log: (m: string) => void,
 ): Promise<void> {
   try {
-    await runner("npm", ["ci", "--no-audit", "--no-fund"], { cwd: repoPath });
+    await runner("npm", ["ci", "--no-audit", "--no-fund", ...BOX_NPM_SCOPE], { cwd: repoPath });
   } catch (e) {
     log(`[self-update] npm ci failed (${(e as Error).message}); falling back to npm install`);
-    await runner("npm", ["install", "--no-audit", "--no-fund"], { cwd: repoPath });
+    await runner("npm", ["install", "--no-audit", "--no-fund", ...BOX_NPM_SCOPE], { cwd: repoPath });
   }
-  await runner("npx", ["tsc", "-b"], { cwd: repoPath });
+  await runner("npx", ["tsc", "-b", BOX_WORKSPACE], { cwd: repoPath });
 }
 
 /**

@@ -153,13 +153,13 @@ fi
 post_stage "git-clone-done"
 
 cd /opt/flagship
-echo "[flagship] npm ci"
-npm ci --omit=optional --no-audit --no-fund || {
+echo "[flagship] npm ci (daemon workspace closure)"
+npm ci --omit=optional --no-audit --no-fund --include-workspace-root --workspace=packages/server-daemon || {
     echo "[flagship] npm ci failed — daemon will not start until repaired" >&2
 }
 post_stage "npm-ci-done"
-echo "[flagship] tsc -b"
-npx tsc -b || echo "[flagship] tsc -b reported errors — daemon may still start" >&2
+echo "[flagship] tsc -b packages/server-daemon"
+npx tsc -b packages/server-daemon || echo "[flagship] tsc -b reported errors — daemon may still start" >&2
 post_stage "tsc-done"
 
 # ── 4. Generate server identity ─────────────────────────────────

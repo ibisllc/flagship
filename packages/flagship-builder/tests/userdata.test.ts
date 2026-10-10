@@ -207,6 +207,30 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     expect(b).toContain("entitlementRelay.ts");
   });
 
+  it("installs and compiles only the daemon's workspace closure, not the whole monorepo", () => {
+    for (const encryptRoot of [true, false]) {
+      const s = buildBootstrapScript({
+        ref: "main",
+        repoUrl: "https://github.com/ibisllc/flagship.git",
+        encryptRoot,
+        bootUnlockMode: "auto",
+        bootHost: DEFAULT_BOOT_HOST,
+      });
+      expect(s).toContain(
+        "npm install --no-audit --no-fund --include-workspace-root --workspace=packages/server-daemon \\\n",
+      );
+      expect(s).toContain("npx tsc -b packages/server-daemon 2>&1 | tee /var/log/flagship-tsc.log || true\n");
+      expect(s).not.toContain("--workspaces");
+      expect(s).not.toMatch(/npx tsc -b(?! packages\/server-daemon)/);
+      expect(s.indexOf("--workspace=packages/server-daemon")).toBeLessThan(
+        s.indexOf("npx tsc -b packages/server-daemon"),
+      );
+      expect(s.indexOf("npx tsc -b packages/server-daemon")).toBeLessThan(
+        s.indexOf("install-helper.ts gen-identity"),
+      );
+    }
+  });
+
   it("installs the flagship-daemon unit with the FIXED ExecStart (npm run, not npx)", () => {
     const b = bootstrap();
     expect(b).toContain("cat > /etc/systemd/system/flagship-daemon.service");
@@ -1231,6 +1255,8 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain("flagship-unlock.log");
     expect(s).toContain("net state before unlock:");
     expect(createHash("sha256").update(s).digest("hex")).toBe(
+      // Re-pinned 2026-10-10: the box installs and compiles only the daemon's
+      // workspace closure instead of the whole monorepo.
       // Re-pinned 2026-07-20: (1) initramfs hook stages virtio_net/virtio_pci/
       // virtio_mmio (VZ/KVM guests came up registered then silent — no NIC driver
       // in the installed initrd); (2) the wired premount now writes a persistent
@@ -1240,7 +1266,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // skip apt/clone/build only when the image's ref marker matches the signed
       // recipe, and reuses the factory-built unseal helper; normal ISO/bare-metal
       // execution remains the default branch.
-      "67118d2e95a9683c5010fd6129f46998d602a806ecbf0c55ff896e56bb69cc58",
+      "1f3fd73e55e5eb69c69961c9f60691662e73f186ede271b069261d8894cbb790",
     );
   });
 
@@ -1263,11 +1289,12 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
+      // Re-pinned 2026-10-10: daemon-only install scope (see the wired pin above).
       // Re-pinned 2026-07-20: initramfs hook stages virtio NIC drivers + the
       // wired premount persists flagship-unlock.log (see the wired pin above).
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
-      "640f43918457a8e0275b7064730c27d216743d3d6aea05a49a7724616476d60d",
+      "1dcd0346e5e3f7e3ee3cf9aac0f028068e077e39818347ee40760913bdbd607a",
     );
   });
 

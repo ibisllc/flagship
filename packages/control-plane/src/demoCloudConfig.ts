@@ -236,9 +236,11 @@ report_phase installing
 # combo handles our workspace-heavy package-lock unreliably with ci
 # (silently no-ops on workspaces). install is more forgiving and
 # resolves workspaces correctly. Tee output to a dedicated log so
-# the operator can post-mortem npm errors directly.
-echo "[flagship-bootstrap] npm install (with workspace resolution)"
-npm install --no-audit --no-fund --workspaces --include-workspace-root 2>&1 \\
+# the operator can post-mortem npm errors directly. Scoped to the
+# daemon's dependency closure (+ the root's typescript/tsx), the same
+# scope as the d-i bootstrap and the OTA rebuild.
+echo "[flagship-bootstrap] npm install (daemon workspace closure)"
+npm install --no-audit --no-fund --include-workspace-root --workspace=packages/server-daemon 2>&1 \\
     | tee /var/log/flagship-npm.log
 NPM_RC=\${PIPESTATUS[0]}
 echo "[flagship-bootstrap] npm install exit=$NPM_RC"
@@ -256,8 +258,8 @@ if [ ! -e /opt/flagship/node_modules/@flagship/protocol/package.json ]; then
         fi
     done
 fi
-echo "[flagship-bootstrap] tsc -b"
-npx tsc -b 2>&1 | tee /var/log/flagship-tsc.log || \\
+echo "[flagship-bootstrap] tsc -b packages/server-daemon"
+npx tsc -b packages/server-daemon 2>&1 | tee /var/log/flagship-tsc.log || \\
     echo "[flagship-bootstrap] warning: tsc -b reported errors"
 report_phase downloading
 

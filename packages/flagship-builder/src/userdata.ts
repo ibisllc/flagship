@@ -512,6 +512,19 @@ export function yamlEscape(s: string): string {
  */
 export const BURN_PASSPHRASE = "flagship-build-time-luks-rekey-me-immediately";
 
+/**
+ * A box installs and compiles only the daemon, never the whole monorepo. One
+ * `--workspace` is enough: npm installs the selected workspace's full
+ * dependency closure, including the `@flagship/*` workspaces it links to, so
+ * nothing here goes stale when the daemon gains a dependency. The root is
+ * included for typescript + tsx, which the box needs to compile and to run
+ * `scripts/install-helper.ts`. `tsc -b` follows the daemon's project
+ * references. The OTA rebuild (server-daemon updateConsumer.ts) and the cloud
+ * demo bootstrap (control-plane demoCloudConfig.ts) use the same scope.
+ */
+export const BOX_NPM_SCOPE = "--include-workspace-root --workspace=packages/server-daemon";
+export const BOX_TSC_BUILD = "npx tsc -b packages/server-daemon";
+
 export interface BootstrapTemplateArgs {
   ref: string;
   repoUrl: string;
@@ -762,7 +775,7 @@ git clone --depth 50 --branch "$GIT_REF" "$REPO_URL" /opt/flagship || \\
      git -C /opt/flagship fetch --depth 50 origin "$GIT_REF" && \\
      git -C /opt/flagship checkout "$GIT_REF")
 cd /opt/flagship
-npm install --no-audit --no-fund --workspaces --include-workspace-root \\
+npm install --no-audit --no-fund ${BOX_NPM_SCOPE} \\
     | tee /var/log/flagship-npm.log
 if [ ! -e /opt/flagship/node_modules/@flagship/protocol/package.json ]; then
     echo "[flagship-bootstrap] WARN: workspace not symlinked; manual linking"
@@ -772,7 +785,7 @@ if [ ! -e /opt/flagship/node_modules/@flagship/protocol/package.json ]; then
         [ -n "$name" ] && ln -sfn "$pkg" "/opt/flagship/node_modules/$name"
     done
 fi
-npx tsc -b 2>&1 | tee /var/log/flagship-tsc.log || true
+${BOX_TSC_BUILD} 2>&1 | tee /var/log/flagship-tsc.log || true
 fi
 
 # Generate server identity.
