@@ -171,6 +171,13 @@ describe("screens HTTP — P1.1 server-detail", () => {
       }),
       installEventLog,
       currentCommit: () => "9f2c1ab3de4567890abcdef1234567890abcdef1",
+      lastUpdate: () => ({
+        outcome: "rolled-back",
+        at: 4_500,
+        previousCommit: "9f2c1ab3de4567890abcdef1234567890abcdef1",
+        targetCommit: "1234567890abcdef1234567890abcdef12345678",
+        bootAttempts: 3,
+      }),
     });
     const r = await handle(req({
       path: "/api/screens/server-detail",
@@ -187,6 +194,7 @@ describe("screens HTTP — P1.1 server-detail", () => {
     expect(body.certSans).toEqual([SERVER_FQDN, `*.${SERVER_FQDN}`]);
     expect(body.recentInstallEvents).toHaveLength(1);
     expect(body.currentCommit).toBe("9f2c1ab3de4567890abcdef1234567890abcdef1");
+    expect(body.lastUpdate).toMatchObject({ outcome: "rolled-back", bootAttempts: 3 });
   });
 
   it("degrades cleanly when subsystems are null (no app-platform / no certs / no event log)", async () => {
@@ -206,6 +214,7 @@ describe("screens HTTP — P1.1 server-detail", () => {
     expect(body.certNotAfter).toBeUndefined();
     // No provider wired (not a git checkout) ⇒ honest null, never a guess.
     expect(body.currentCommit).toBeNull();
+    expect(body.lastUpdate).toBeNull();
   });
 });
 

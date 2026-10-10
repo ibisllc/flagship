@@ -2091,6 +2091,12 @@ describe("/download/<os> — on-brand installer redirect", () => {
     );
     expect(unknown.status).toBe(302);
     expect(unknown.headers.get("location")).toBe("/docs#burn");
+
+    const inherited = await route(
+      new Request("https://flagshipserver.com/download/constructor"),
+      makeEnv(),
+    );
+    expect(inherited.headers.get("location")).toBe("/docs#burn");
   });
 
   it("works WITHOUT the preview cookie (download link survives the launch gate)", async () => {

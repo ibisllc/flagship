@@ -213,6 +213,7 @@ import {
   runUpdateBootGate,
   type UpdateHealthSignal,
 } from "./updateHealthGate.js";
+import { fileUpdateOutcomeStore } from "./updateOutcome.js";
 import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 
@@ -604,6 +605,12 @@ async function main(): Promise<void> {
       console.log("[self-update] restarting (health gate)");
       process.exit(0);
     },
+    report: (event, info) =>
+      fileUpdateOutcomeStore(`${dataDir}/update-outcome.json`).write({
+        outcome: event === "update-applied" ? "applied" : "rolled-back",
+        at: Date.now(),
+        ...info,
+      }),
     onLog: (m) => console.log(m),
   }).catch(() => {});
 
@@ -2367,6 +2374,12 @@ async function wireRuntimeSurfaces(deps: {
     currentCommit: buildCurrentCommitProvider(
       process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
     ),
+    lastUpdate: (() => {
+      const store = fileUpdateOutcomeStore(
+        `${process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship"}/update-outcome.json`,
+      );
+      return () => store.readSync();
+    })(),
     startedAt: Date.now(),
     servicePlatform: runtime.servicePlatform,
     pairedSessions,
@@ -2820,6 +2833,7 @@ async function wireOwnerHandlers(deps: {
         runner: realUpdateCommandRunner,
         usedNonceStore: fileUsedNonceStore(`${dataDir}/update-used-nonces.json`),
         pendingStore: filePendingVerifyStore(`${dataDir}/update-pending.json`),
+        outcomeStore: fileUpdateOutcomeStore(`${dataDir}/update-outcome.json`),
         requestExit: () => {
           console.log("[self-update] restarting into the staged update");
           process.exit(0);

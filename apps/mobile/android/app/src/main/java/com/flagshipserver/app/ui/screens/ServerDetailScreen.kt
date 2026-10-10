@@ -56,6 +56,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.flagshipserver.app.api.LastUpdate
 import com.flagshipserver.app.api.ServerMetricsResponse
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -225,6 +226,7 @@ fun ServerDetailScreen(
             UpdateServerCard(
                 serverDomain = d.value.serverFqdn,
                 currentCommit = d.value.currentCommit,
+                lastUpdate = d.value.lastUpdate,
             )
             Spacer(Modifier.height(FS.space.s6))
             TransferCard(serverDomain = d.value.serverFqdn)
@@ -1280,7 +1282,7 @@ private fun shortCommit(sha: String?): String? =
 // order's `fromCommit` must be truth, never a guess. Mirror of iOS
 // UpdateServerCard.
 @Composable
-private fun UpdateServerCard(serverDomain: String, currentCommit: String?) {
+private fun UpdateServerCard(serverDomain: String, currentCommit: String?, lastUpdate: LastUpdate? = null) {
     val app = LocalAppState.current
     val mailbox = LocalSecretMailboxClient.current
     val toasts = LocalToastCenter.current
@@ -1307,6 +1309,14 @@ private fun UpdateServerCard(serverDomain: String, currentCommit: String?) {
                     "Running $short",
                     color = FS.colors.text,
                     style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
+                )
+            }
+            lastUpdate?.summary?.let { summary ->
+                Text(
+                    summary,
+                    color = if (lastUpdate.outcome == "applied") FS.colors.textMuted else FS.colors.danger,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    modifier = Modifier.semantics { contentDescription = "sd-update-last-outcome" },
                 )
             }
             FSDangerButton(

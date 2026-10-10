@@ -199,3 +199,30 @@ describe("signing gate — flagship/server-update/v1 routes to the admin root", 
     expect(await ks.verifyWithEd25519Pub(adminPub, authSig, authBytes)).toBe(false);
   });
 });
+
+describe("describeLastUpdate — the box's update verdict in the update card", () => {
+  const A = "a".repeat(40);
+  const B = "b".repeat(40);
+
+  it("names both commits for a rollback", async () => {
+    const { describeLastUpdate } = await loadServerUpdate();
+    expect(describeLastUpdate({ outcome: "rolled-back", at: 1, previousCommit: A, targetCommit: B })).toBe(
+      "The last update to bbbbbbbb didn't start cleanly, so the server went back to aaaaaaaa on its own.",
+    );
+  });
+
+  it("explains a refusal and stays quiet when there is nothing to say", async () => {
+    const { describeLastUpdate } = await loadServerUpdate();
+    expect(describeLastUpdate({ outcome: "refused", at: 1, reason: "unendorsed" })).toBe(
+      "The server refused the last update: Flagship's maintainers haven't endorsed that release.",
+    );
+    expect(describeLastUpdate({ outcome: "refused", at: 1, reason: "something-new" })).toBe(
+      "The server refused the last update.",
+    );
+    expect(describeLastUpdate({ outcome: "applied", at: 1, targetCommit: B })).toBe(
+      "Last update: bbbbbbbb installed and running.",
+    );
+    expect(describeLastUpdate(null)).toBeNull();
+    expect(describeLastUpdate(undefined)).toBeNull();
+  });
+});

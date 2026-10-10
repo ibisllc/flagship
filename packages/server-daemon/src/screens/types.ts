@@ -1,3 +1,4 @@
+import type { UpdateOutcomeRecord } from "../updateOutcome.js";
 /**
  * BFF (Backend-For-Frontend) types for `/api/screens/*`.
  *
@@ -61,6 +62,12 @@ export interface ServerDetailResponse {
    * seed `fromCommit` in an UpdateOrder from it instead of guessing.
    */
   currentCommit: string | null;
+  /**
+   * Verdict of the most recent update order: applied, rolled back after the
+   * new code failed its boot health gate, or refused (with the reason). Null
+   * when the box has never received one. Older daemons omit the field.
+   */
+  lastUpdate?: UpdateOutcomeRecord | null;
   /** Unix-ms; when this daemon process started. */
   startedAt: number;
   uptimeMs: number;

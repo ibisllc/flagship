@@ -38,7 +38,7 @@ import {
 import { signWithIrk, bytesToHex } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
 import { setPreferredServer, isPreferredServer } from "../lib/setLeader.js";
-import { depositUpdateOrder, COMMIT_SHA_RE } from "../lib/serverUpdate.js";
+import { depositUpdateOrder, describeLastUpdate, COMMIT_SHA_RE } from "../lib/serverUpdate.js";
 import {
   createTransferOffer,
   buildTransferLink,
@@ -294,6 +294,7 @@ export async function renderServerDetail() {
           <span class="label">Running</span>
           <span class="value" id="update-current-commit">${escapeHtml(shortCommit(body.currentCommit))}</span>
         </div>
+        ${describeLastUpdate(body.lastUpdate) ? `<p class="note small mt-2" id="update-last-outcome">${escapeHtml(describeLastUpdate(body.lastUpdate))}</p>` : ""}
         <button id="update-server-btn" class="danger full-width mt-2"${body.currentCommit ? "" : " disabled"}>Update this server</button>
         <p class="note small${body.currentCommit ? " hidden" : ""}" id="update-hint">
           Waiting for this server to report its current version — it can't be

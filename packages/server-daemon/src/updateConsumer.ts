@@ -8,6 +8,7 @@ import {
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import type { ReleaseGate } from "./updateClient.js";
+import { refusalRecord, type UpdateOutcomeStore } from "./updateOutcome.js";
 
 const execFileP = promisify(execFile);
 
@@ -584,13 +585,21 @@ export interface UpdateConsumerPoller {
  * timer is unref'd so it never keeps the process alive on its own.
  */
 export function buildUpdateConsumerPoller(
-  opts: RunUpdateConsumerOptions & { intervalMs?: number },
+  opts: RunUpdateConsumerOptions & {
+    intervalMs?: number;
+    /** Records refusals the owner should see (see updateOutcome.ts). */
+    outcomeStore?: UpdateOutcomeStore;
+  },
 ): UpdateConsumerPoller {
   const intervalMs = opts.intervalMs ?? 5 * 60_000;
   let timer: ReturnType<typeof setInterval> | null = null;
 
   async function pollOnce(): Promise<UpdateConsumeOutcome> {
     const out = await runUpdateConsumer(opts);
+    const refusal = refusalRecord(out, (opts.now ?? Date.now)());
+    if (refusal && opts.outcomeStore) {
+      await opts.outcomeStore.write(refusal).catch(() => {});
+    }
     if (out.applied || (!out.applied && out.reason === "pending-verify")) stop();
     return out;
   }

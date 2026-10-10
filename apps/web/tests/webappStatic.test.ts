@@ -371,8 +371,8 @@ describe("/webapp PWA static surface", () => {
     // v18 refreshes Home so demo login renders its server without a paired id.
     // v19 adds demo-only paired-session minting before server detail opens.
     // v25 adds direct recipe download on top of the quieter Settings + dock shell.
-    // v32 drops the retired web. prefix from apex.js.
-    expect(r.body).toContain('SHELL_VERSION = "v32"');
+    // v33 shows the box's last update verdict in the update card.
+    expect(r.body).toContain('SHELL_VERSION = "v33"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

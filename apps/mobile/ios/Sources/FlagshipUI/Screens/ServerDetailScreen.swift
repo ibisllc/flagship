@@ -209,7 +209,7 @@ public struct ServerDetailScreen: View {
                     }
                     MigrateServerCard(serverDomain: d.serverFqdn)
                     ReplaceServerCard(serverDomain: d.serverFqdn, onReplaced: onDeleted)
-                    UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit)
+                    UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate)
                     TransferCard(serverDomain: d.serverFqdn)
                     DangerZoneCard(serverDomain: d.serverFqdn)
                 }
@@ -1083,6 +1083,8 @@ struct UpdateServerCard: View {
     let serverDomain: String
     /// The box-reported running commit from server-detail, or nil.
     let currentCommit: String?
+    /// The box's verdict on the last update order, or nil.
+    var lastUpdate: LastUpdate? = nil
 
     @State private var showSheet = false
 
@@ -1106,6 +1108,12 @@ struct UpdateServerCard: View {
                             Spacer()
                             Text(short).font(FS.font.mono()).foregroundColor(c.text)
                         }
+                    }
+                    if let summary = lastUpdate?.summary {
+                        Text(summary)
+                            .font(FS.font.caption())
+                            .foregroundColor(lastUpdate?.outcome == "applied" ? c.textMuted : c.danger)
+                            .accessibilityIdentifier("sd-update-last-outcome")
                     }
                     FSDangerButton("Update this server", block: true) {
                         showSheet = true

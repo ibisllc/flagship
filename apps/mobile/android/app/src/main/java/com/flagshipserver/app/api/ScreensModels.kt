@@ -55,7 +55,52 @@ data class ServerDetailResponse(
     val serviceCount: Int,
     val pairedSessionCount: Int,
     val recentInstallEvents: List<RecentInstallEvent>,
+    /** Verdict of the most recent update order. Absent from older daemons. */
+    val lastUpdate: LastUpdate? = null,
 )
+
+/** The box's record of the last update order: applied, rolled back after the
+ *  new code failed its boot health gate, or refused with a reason. */
+@Serializable
+data class LastUpdate(
+    val outcome: String,
+    val at: Long,
+    val targetCommit: String? = null,
+    val previousCommit: String? = null,
+    val bootAttempts: Int? = null,
+    val reason: String? = null,
+) {
+    /** One sentence for the update card, or null for an outcome this build
+     *  doesn't know. Matches the webapp's describeLastUpdate. */
+    val summary: String?
+        get() {
+            fun short(sha: String?): String? =
+                sha?.takeIf { it.length == 40 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } }?.take(8)
+            return when (outcome) {
+                "applied" -> short(targetCommit)?.let { "Last update: $it installed and running." }
+                    ?: "Last update installed and running."
+                "rolled-back" -> {
+                    val to = short(targetCommit)?.let { " to $it" } ?: ""
+                    val back = short(previousCommit)?.let { " to $it" } ?: ""
+                    "The last update$to didn't start cleanly, so the server went back$back on its own."
+                }
+                "refused" -> REFUSAL_COPY[reason]?.let { "The server refused the last update: $it" }
+                    ?: "The server refused the last update."
+                else -> null
+            }
+        }
+
+    private companion object {
+        val REFUSAL_COPY = mapOf(
+            "unendorsed" to "Flagship's maintainers haven't endorsed that release.",
+            "from-commit-mismatch" to "the server was no longer on the version the update was made for. Send it again.",
+            "apply-failed" to "it couldn't download or build the new version. Nothing changed.",
+            "rejected" to "the request wasn't signed by this account's admin key.",
+            "stale" to "the request was too old. Send it again.",
+            "wrong-domain" to "the request was for a different server.",
+        )
+    }
+}
 
 // ---------- P1.2 apps-list ---------------------------------------------
 

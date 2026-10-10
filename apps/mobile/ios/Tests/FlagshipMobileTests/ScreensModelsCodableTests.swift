@@ -33,6 +33,22 @@ final class ScreensModelsCodableTests: XCTestCase {
         """
         let decoded = try JSONDecoder().decode(ServerDetailResponse.self, from: Data(json.utf8))
         XCTAssertNil(decoded.currentCommit)
+        XCTAssertNil(decoded.lastUpdate)
+    }
+
+    func test_serverDetailResponse_decodesLastUpdateVerdict() throws {
+        let a = String(repeating: "a", count: 40), b = String(repeating: "b", count: 40)
+        let json = """
+        {"serverFqdn":"home.harry.flagship.services","username":"harry","daemonVersion":"0.1.0","startedAt":1,"uptimeMs":2,"serviceCount":0,"pairedSessionCount":0,"recentInstallEvents":[],"lastUpdate":{"outcome":"rolled-back","at":5,"previousCommit":"\(a)","targetCommit":"\(b)","bootAttempts":3}}
+        """
+        let decoded = try JSONDecoder().decode(ServerDetailResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(decoded.lastUpdate?.summary,
+                       "The last update to bbbbbbbb didn't start cleanly, so the server went back to aaaaaaaa on its own.")
+        XCTAssertEqual(LastUpdate(outcome: "refused", at: 1, reason: "unendorsed").summary,
+                       "The server refused the last update: Flagship's maintainers haven't endorsed that release.")
+        XCTAssertEqual(LastUpdate(outcome: "refused", at: 1, reason: "new-reason").summary,
+                       "The server refused the last update.")
+        XCTAssertNil(LastUpdate(outcome: "exploded", at: 1).summary)
     }
 
     func test_vibeCodeFrame_roundTripsAllVariants() throws {

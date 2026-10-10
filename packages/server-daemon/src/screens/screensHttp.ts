@@ -110,6 +110,7 @@ import {
   toReleaseStatusResponse,
   type ReleaseStatusProvider,
 } from "../releaseStatusProvider.js";
+import type { UpdateOutcomeRecord } from "../updateOutcome.js";
 
 const J = { "content-type": "application/json" } as const;
 
@@ -169,6 +170,8 @@ export interface ScreensHttpDeps {
    * update action.
    */
   currentCommit?: (() => string | null) | null;
+  /** The last update order's verdict (updateOutcome.ts), or null. */
+  lastUpdate?: (() => UpdateOutcomeRecord | null) | null;
   /** Recent install/uninstall events for server-detail. */
   installEventLog?: InstallEventLog | null;
   /** Tab ownership for app-detail / browser-tabs. */
@@ -1346,6 +1349,7 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     username: deps.username,
     daemonVersion: deps.daemonVersion,
     currentCommit: deps.currentCommit?.() ?? null,
+    lastUpdate: deps.lastUpdate?.() ?? null,
     startedAt: deps.startedAt,
     uptimeMs: now() - deps.startedAt,
     certNotAfter: cert?.notAfter,

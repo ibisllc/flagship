@@ -26,6 +26,7 @@ import {
 } from "@flagship/protocol";
 import {
   buildCurrentCommitProvider,
+  buildUpdateConsumerPoller,
   decodeUpdateOrderCarrier,
   runUpdateConsumer,
   type PendingVerifyMarker,
@@ -35,6 +36,7 @@ import {
   type UsedNonceStore,
 } from "../src/updateConsumer.js";
 import type { ReleaseGate } from "../src/updateClient.js";
+import type { UpdateOutcomeRecord, UpdateOutcomeStore } from "../src/updateOutcome.js";
 
 const DOMAIN = "home.alice.flagship.services";
 const USERNAME = "alice";
@@ -430,5 +432,47 @@ describe("buildCurrentCommitProvider — the BFF's applied-commit truth", () => 
   it("returns null on a non-SHA read (never surfaces junk as a version)", () => {
     const provider = buildCurrentCommitProvider("/repo", () => "HEAD\n");
     expect(provider()).toBeNull();
+  });
+});
+
+describe("buildUpdateConsumerPoller — records refusals the owner should see", () => {
+  function memOutcomes(): UpdateOutcomeStore & { written: UpdateOutcomeRecord[] } {
+    const store = {
+      written: [] as UpdateOutcomeRecord[],
+      async write(r: UpdateOutcomeRecord) {
+        store.written.push(r);
+      },
+      readSync: () => store.written.at(-1) ?? null,
+    };
+    return store;
+  }
+
+  it("records an unendorsed refusal", async () => {
+    const outcomes = memOutcomes();
+    const { opts } = baseOpts({
+      adminRootPub: ADMIN_ROOT.publicKey,
+      releaseGate: failGate,
+      fetchImpl: fetchFor(carrierHex(makeOrder(), ADMIN_ROOT)),
+    });
+    const out = await buildUpdateConsumerPoller({ ...opts, outcomeStore: outcomes }).pollOnce();
+    expect(out).toEqual({ applied: false, reason: "unendorsed" });
+    expect(outcomes.written).toEqual([{ outcome: "refused", reason: "unendorsed", at: NOW }]);
+  });
+
+  it("records nothing when there is no order or the nonce was already used", async () => {
+    const outcomes = memOutcomes();
+    const noOrder = baseOpts({
+      fetchImpl: (async () => new Response("", { status: 404 })) as typeof fetch,
+    });
+    await buildUpdateConsumerPoller({ ...noOrder.opts, outcomeStore: outcomes }).pollOnce();
+    const order = makeOrder();
+    const replay = baseOpts({
+      adminRootPub: ADMIN_ROOT.publicKey,
+      fetchImpl: fetchFor(carrierHex(order, ADMIN_ROOT)),
+      usedNonceStore: inMemNonces([order.nonce]),
+    });
+    const out = await buildUpdateConsumerPoller({ ...replay.opts, outcomeStore: outcomes }).pollOnce();
+    expect(out).toEqual({ applied: false, reason: "replayed-nonce" });
+    expect(outcomes.written).toEqual([]);
   });
 });

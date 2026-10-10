@@ -196,3 +196,37 @@ export async function depositUpdateOrder(args, deps = {}) {
   if (!resp.ok) throw err((out && out.error) || `HTTP ${resp.status}`, resp.status);
   return { ok: true, order, expiresAt: out.expiresAt };
 }
+
+const REFUSAL_COPY = {
+  unendorsed: "Flagship's maintainers haven't endorsed that release.",
+  "from-commit-mismatch":
+    "the server was no longer on the version the update was made for. Send it again.",
+  "apply-failed": "it couldn't download or build the new version. Nothing changed.",
+  rejected: "the request wasn't signed by this account's admin key.",
+  stale: "the request was too old. Send it again.",
+  "wrong-domain": "the request was for a different server.",
+};
+
+/**
+ * One sentence for the box-reported `lastUpdate` verdict (server-detail), or
+ * null when there is nothing to say (no update yet, or an older daemon).
+ */
+export function describeLastUpdate(lastUpdate) {
+  if (!lastUpdate || typeof lastUpdate !== "object") return null;
+  const short = (sha) => (COMMIT_SHA_RE.test(String(sha)) ? String(sha).slice(0, 8) : null);
+  const target = short(lastUpdate.targetCommit);
+  const previous = short(lastUpdate.previousCommit);
+  if (lastUpdate.outcome === "applied") {
+    return target ? `Last update: ${target} installed and running.` : "Last update installed and running.";
+  }
+  if (lastUpdate.outcome === "rolled-back") {
+    const to = target ? ` to ${target}` : "";
+    const back = previous ? ` to ${previous}` : "";
+    return `The last update${to} didn't start cleanly, so the server went back${back} on its own.`;
+  }
+  if (lastUpdate.outcome === "refused") {
+    const why = REFUSAL_COPY[lastUpdate.reason];
+    return why ? `The server refused the last update: ${why}` : "The server refused the last update.";
+  }
+  return null;
+}

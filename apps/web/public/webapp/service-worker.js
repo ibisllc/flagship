@@ -57,7 +57,8 @@
 //  v31: demo accounts hide key-backed rows + remove-from-browser; every
 //       Worker audit kind is labelled; recovery copy matches the gate.
 //  v32: apex.js drops the retired `web.` sub-origin prefix.
-const SHELL_VERSION = "v32";
+//  v33: the update card shows the box's last update verdict.
+const SHELL_VERSION = "v33";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

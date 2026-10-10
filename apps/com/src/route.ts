@@ -786,7 +786,7 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // explainer (coming soon) rather than a dead 404.
   if (url.pathname === "/download" || url.pathname.startsWith("/download/")) {
     const os = url.pathname.slice("/download/".length).replace(/\/+$/, "");
-    const target = INSTALLER_DOWNLOADS[os] || "/docs#burn";
+    const target = (Object.hasOwn(INSTALLER_DOWNLOADS, os) && INSTALLER_DOWNLOADS[os]) || "/docs#burn";
     return new Response(null, { status: 302, headers: { location: target } });
   }
 

@@ -47,6 +47,59 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public let serviceCount: Int
     public let pairedSessionCount: Int
     public let recentInstallEvents: [RecentInstallEvent]
+    /// Verdict of the most recent update order. Absent from older daemons.
+    public var lastUpdate: LastUpdate? = nil
+}
+
+/// The box's record of the last update order: applied, rolled back after the
+/// new code failed its boot health gate, or refused with a reason.
+public struct LastUpdate: Codable, Equatable, Sendable {
+    public let outcome: String
+    public let at: Int64
+    public let targetCommit: String?
+    public let previousCommit: String?
+    public let bootAttempts: Int?
+    public let reason: String?
+
+    public init(outcome: String, at: Int64, targetCommit: String? = nil, previousCommit: String? = nil, bootAttempts: Int? = nil, reason: String? = nil) {
+        self.outcome = outcome
+        self.at = at
+        self.targetCommit = targetCommit
+        self.previousCommit = previousCommit
+        self.bootAttempts = bootAttempts
+        self.reason = reason
+    }
+
+    /// One sentence for the update card, or nil for an outcome this build
+    /// doesn't know. Matches the webapp's describeLastUpdate.
+    public var summary: String? {
+        func short(_ sha: String?) -> String? {
+            guard let sha, sha.count == 40, sha.allSatisfy({ $0.isHexDigit && !$0.isUppercase }) else { return nil }
+            return String(sha.prefix(8))
+        }
+        switch outcome {
+        case "applied":
+            return short(targetCommit).map { "Last update: \($0) installed and running." } ?? "Last update installed and running."
+        case "rolled-back":
+            let to = short(targetCommit).map { " to \($0)" } ?? ""
+            let back = short(previousCommit).map { " to \($0)" } ?? ""
+            return "The last update\(to) didn't start cleanly, so the server went back\(back) on its own."
+        case "refused":
+            guard let why = Self.refusalCopy[reason ?? ""] else { return "The server refused the last update." }
+            return "The server refused the last update: \(why)"
+        default:
+            return nil
+        }
+    }
+
+    private static let refusalCopy: [String: String] = [
+        "unendorsed": "Flagship's maintainers haven't endorsed that release.",
+        "from-commit-mismatch": "the server was no longer on the version the update was made for. Send it again.",
+        "apply-failed": "it couldn't download or build the new version. Nothing changed.",
+        "rejected": "the request wasn't signed by this account's admin key.",
+        "stale": "the request was too old. Send it again.",
+        "wrong-domain": "the request was for a different server.",
+    ]
 }
 
 // MARK: - P1.2 apps-list
