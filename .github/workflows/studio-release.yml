@@ -1,0 +1,166 @@
+name: studio-release (Windows + Linux Flagship Studio)
+
+# Builds the Windows and Linux desktop apps from one commit, smoke-tests the
+# packaged artifacts with nothing from the repo on the path, and publishes them
+# as one GitHub release. The Mac DMG is still cut on the release Mac
+# (scripts/release-studio.sh) because notarization needs its keychain.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, e.g. 0.1.0 (tag becomes studio-v<version>)"
+        required: true
+      publish:
+        description: "Create the GitHub release (otherwise build + upload artifacts only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Unit tests
+        run: dotnet test apps/builder-windows/tests/FlagshipBuilder.Tests.csproj --configuration Release
+
+      - name: Publish self-contained app
+        shell: powershell
+        run: apps/builder-windows/make.ps1 publish
+
+      # Studio remasters the Debian ISO with a native xorriso, resolved from
+      # tools\xorriso.exe beside the exe before PATH (README "xorriso"). Users
+      # don't have MSYS2, so the release must carry it and its runtime DLLs.
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MSYS
+          update: false
+          install: xorriso
+
+      - name: Bundle xorriso
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          tools=apps/builder-windows/dist/tools
+          mkdir -p "$tools"
+          cp /usr/bin/xorriso.exe "$tools/"
+          ldd /usr/bin/xorriso.exe | awk '$3 ~ "^/usr/bin/" {print $3}' | sort -u | while read -r dll; do
+            cp "$dll" "$tools/"
+          done
+          pacman -Qi xorriso | sed -n 's/^Version *: //p' > "$tools/XORRISO-VERSION.txt"
+          cat > "$tools/NOTICE.txt" <<'EOF'
+          xorriso (GNU xorriso / libisoburn) and the MSYS2 runtime DLLs in this
+          folder are distributed under the GNU GPL, version 3 or later. Source:
+          https://www.gnu.org/software/xorriso/ and https://github.com/msys2/MSYS2-packages
+          EOF
+          ls -la "$tools"
+
+      - name: Smoke-test the bundled xorriso without MSYS2 on PATH
+        shell: powershell
+        run: |
+          $env:PATH = "C:\Windows\System32;C:\Windows"
+          & apps/builder-windows/dist/tools/xorriso.exe -version
+          if ($LASTEXITCODE -ne 0) { throw "bundled xorriso does not run" }
+
+      - name: Package
+        shell: powershell
+        run: |
+          $v = "${{ inputs.version }}"
+          $stage = "FlagshipStudio-Windows-x64-$v"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item apps/builder-windows/dist/FlagshipBuilder.exe "$stage/Flagship Studio.exe"
+          Copy-Item -Recurse apps/builder-windows/dist/tools "$stage/tools"
+          Compress-Archive -Path "$stage/*" -DestinationPath "$stage.zip"
+          Get-Item "$stage.zip" | Format-List Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: FlagshipStudio-Windows-x64-${{ inputs.version }}.zip
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Install build + smoke dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            file python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 libadwaita-1-0 xvfb xauth
+
+      - name: Build AppImage
+        run: bash apps/builder-linux/appimage/build.sh
+
+      - name: Smoke-test the packaged AppImage outside the repo
+        run: |
+          set -euo pipefail
+          img="$PWD/apps/builder-linux/dist/FlagshipBuilder-x86_64.AppImage"
+          work=$(mktemp -d)
+          cd "$work"
+          "$img" --appimage-extract >/dev/null
+          root="$work/squashfs-root/usr/share/flagship-builder"
+          # The CLI must run with no node_modules anywhere above it.
+          node "$root/cli-dist/cli.mjs" --help | head -3
+          # Every module wizard.py imports at startup must be in the bundle.
+          PYTHONPATH="$root" xvfb-run -a python3 -c "import wizard, cli_runner, pair_session, vm.manager; print('python imports ok')"
+
+      - name: Rename
+        run: mv apps/builder-linux/dist/FlagshipBuilder-x86_64.AppImage "FlagshipStudio-Linux-x86_64-${{ inputs.version }}.AppImage"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: FlagshipStudio-Linux-x86_64-${{ inputs.version }}.AppImage
+          if-no-files-found: error
+
+  release:
+    if: ${{ inputs.publish }}
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          v="${{ inputs.version }}"
+          sha256sum FlagshipStudio-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          {
+            echo "Flagship Studio $v for Windows and Linux, built from ${GITHUB_SHA}."
+            echo
+            echo "- Windows: unzip and run \`Flagship Studio.exe\` (keep the \`tools\` folder beside it). Not code-signed yet, so SmartScreen will warn."
+            echo "- Linux: \`chmod +x\` the AppImage and run it. Needs Node.js 20+ and pkexec."
+            echo
+            echo '```'
+            cat SHA256SUMS.txt
+            echo '```'
+          } > notes.md
+          gh release create "studio-v$v" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Flagship Studio $v (Windows + Linux)" --notes-file notes.md \
+            FlagshipStudio-* SHA256SUMS.txt

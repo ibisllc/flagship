@@ -16,9 +16,9 @@
 # What we ship inside the AppImage:
 #   - flagship-builder.py + wizard.py + cli_runner.py + disk_enumerator.py
 #   - the polkit policy XML (operator installs this themselves on first run)
-#   - a copy of packages/flagship-builder/dist/cli.js (built with `tsc -b`)
+#   - packages/flagship-builder bundled by esbuild into one cli.mjs
 #   - a desktop file pointing to the AppImage entry
-#   - an icon
+#   - the Flagship icon
 #
 # The user must still have:
 #   - node (>=20) installed system-wide (`apt install nodejs` or via nvm)
@@ -66,16 +66,15 @@ install -m644 -t "${APPDIR}/usr/share/flagship-builder/vm" "${LINUX_DIR}"/vm/*.p
 # 0755 so the polkit-launched python3 can read+exec it.
 install -Dm755 "${LINUX_DIR}/disk_write.py"        "${APPDIR}/usr/share/flagship-builder/disk_write.py"
 
-# ---- node CLI (built dist, copied into the AppImage) ----
-CLI_SRC="${REPO_ROOT}/packages/flagship-builder/dist"
-if [ -d "${CLI_SRC}" ]; then
-  echo ">> bundling ${CLI_SRC}"
-  cp -r "${CLI_SRC}" "${APPDIR}/usr/share/flagship-builder/cli-dist"
-else
-  echo "!! ${CLI_SRC} does not exist — running tsc -b first"
-  ( cd "${REPO_ROOT}" && npx tsc -b packages/flagship-builder )
-  cp -r "${CLI_SRC}" "${APPDIR}/usr/share/flagship-builder/cli-dist"
-fi
+# ---- node CLI (one self-contained bundle) ----
+# dist/cli.js imports @flagship/protocol, qrcode and ws, none of which exist
+# outside the repo's node_modules, so copying dist/ alone fails at run time.
+( cd "${REPO_ROOT}" && npx tsc -b packages/flagship-builder )
+mkdir -p "${APPDIR}/usr/share/flagship-builder/cli-dist"
+"${REPO_ROOT}/node_modules/.bin/esbuild" "${REPO_ROOT}/packages/flagship-builder/dist/cli.js" \
+  --bundle --platform=node --target=node20 --format=esm --log-level=warning \
+  --banner:js="import{createRequire as __cr}from'module';const require=__cr(import.meta.url);" \
+  --outfile="${APPDIR}/usr/share/flagship-builder/cli-dist/cli.mjs"
 
 # ---- polkit policies (operator installs these separately on first run) ----
 # The Node-CLI write action + the local-flasher action
@@ -101,12 +100,8 @@ StartupWMClass=com.flagshipserver.Builder
 DESK
 cp "${APPDIR}/usr/share/applications/com.flagshipserver.Builder.desktop" "${APPDIR}/"
 
-# ---- icon (placeholder — replace with the real flagship icon later) ----
-if [ ! -f "${APPDIR}/com.flagshipserver.Builder.png" ]; then
-  # 1x1 transparent PNG as a placeholder so appimagetool doesn't refuse.
-  printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n\x2d\xb4\x00\x00\x00\x00IEND\xaeB`\x82' \
-    > "${APPDIR}/com.flagshipserver.Builder.png"
-fi
+# ---- icon ----
+install -m644 "${SCRIPT_DIR}/com.flagshipserver.Builder.png" "${APPDIR}/com.flagshipserver.Builder.png"
 cp "${APPDIR}/com.flagshipserver.Builder.png" \
   "${APPDIR}/usr/share/icons/hicolor/256x256/apps/com.flagshipserver.Builder.png"
 
@@ -115,7 +110,7 @@ cat > "${APPDIR}/AppRun" <<'RUN'
 #!/usr/bin/env bash
 HERE="$(dirname "$(readlink -f "${0}")")"
 export PATH="${HERE}/usr/bin:${PATH}"
-export FLAGSHIP_BURN_ENTRY="${FLAGSHIP_BURN_ENTRY:-${HERE}/usr/share/flagship-builder/cli-dist/cli.js}"
+export FLAGSHIP_BURN_ENTRY="${FLAGSHIP_BURN_ENTRY:-${HERE}/usr/share/flagship-builder/cli-dist/cli.mjs}"
 export PYTHONPATH="${HERE}/usr/share/flagship-builder:${PYTHONPATH:-}"
 exec python3 "${HERE}/usr/bin/flagship-builder" "$@"
 RUN
@@ -124,7 +119,7 @@ chmod +x "${APPDIR}/AppRun"
 # ---- fetch appimagetool (cached in dist/) ----
 APPIMAGETOOL="${DIST_DIR}/appimagetool-${ARCH}.AppImage"
 if [ ! -x "${APPIMAGETOOL}" ]; then
-  URL="https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${ARCH}.AppImage"
+  URL="https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${ARCH}.AppImage"
   echo ">> downloading ${URL}"
   if command -v wget >/dev/null 2>&1; then
     wget -O "${APPIMAGETOOL}" "${URL}"
@@ -136,5 +131,5 @@ fi
 
 # ---- build ----
 OUT="${DIST_DIR}/FlagshipBuilder-${ARCH}.AppImage"
-ARCH="${ARCH}" "${APPIMAGETOOL}" "${APPDIR}" "${OUT}"
+ARCH="${ARCH}" APPIMAGE_EXTRACT_AND_RUN=1 "${APPIMAGETOOL}" "${APPDIR}" "${OUT}"
 echo ">> built ${OUT}"
