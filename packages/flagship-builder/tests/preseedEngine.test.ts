@@ -122,6 +122,7 @@ function buildSignedRecipe(o: RecipeOpts = {}): string {
 function makeBareEngine(): {
   buildPreseed: (recipe: string, burn?: string) => string;
   buildUserData: (recipe: string, burn?: string) => string;
+  buildInstallBlobJson: (recipe: string) => string;
 } {
   const src = readFileSync(BUNDLE_PATH, "utf8");
   const sandbox: Record<string, unknown> = {};
@@ -133,6 +134,7 @@ function makeBareEngine(): {
   return {
     buildPreseed: (recipe, burn) => api.buildPreseedFromRecipe(recipe, burn),
     buildUserData: (recipe, burn) => api.buildUserDataFromRecipe(recipe, burn),
+    buildInstallBlobJson: (recipe) => api.buildInstallBlobJsonFromRecipe(recipe),
   };
 }
 
@@ -206,11 +208,27 @@ describe("preseed engine bundle", () => {
   it("reproduces every committed golden vector (the cross-engine contract)", () => {
     const fixture = JSON.parse(
       readFileSync(join(here, "..", "engine", "golden", "preseed-vectors.json"), "utf8"),
-    ) as { vectors: Array<{ name: string; recipeJson: string; burnOptsJson: string; expectedPreseed: string; expectedUserData: string }> };
+    ) as { vectors: Array<{ name: string; recipeJson: string; burnOptsJson: string; expectedPreseed: string; expectedUserData: string; expectedInstallBlobJson: string }> };
     expect(fixture.vectors.length).toBeGreaterThanOrEqual(6);
     for (const v of fixture.vectors) {
       expect(engine.buildPreseed(v.recipeJson, v.burnOptsJson), `preseed ${v.name}`).toBe(v.expectedPreseed);
       expect(engine.buildUserData(v.recipeJson, v.burnOptsJson), `user-data ${v.name}`).toBe(v.expectedUserData);
+      expect(engine.buildInstallBlobJson(v.recipeJson), `install-blob ${v.name}`).toBe(v.expectedInstallBlobJson);
+    }
+  });
+
+  it("an appliance seed carries the same install-blob.json the installer writes", () => {
+    // The guest bootstrap reads flattened fields (jq .serverDomain); seeding the
+    // raw recipe envelope once left them all null on a hosted Mac VM.
+    const fixture = JSON.parse(
+      readFileSync(join(here, "..", "engine", "golden", "preseed-vectors.json"), "utf8"),
+    ) as { vectors: Array<{ name: string; recipeJson: string; burnOptsJson: string; expectedPreseed: string }> };
+    for (const v of fixture.vectors) {
+      const embedded = /echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/var\/flagship\/install-blob\.json/
+        .exec(v.expectedPreseed)![1]!;
+      const seeded = engine.buildInstallBlobJson(v.recipeJson);
+      expect(seeded, v.name).toBe(Buffer.from(embedded, "base64").toString("utf8"));
+      expect(JSON.parse(seeded).serverDomain, v.name).toBe("home.harry.flagship.services");
     }
   });
 

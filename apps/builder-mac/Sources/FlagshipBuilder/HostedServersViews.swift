@@ -190,7 +190,7 @@ struct HostedServersSidebar: View {
                                     observation: VMInstallObservation?,
                                     now: Date) -> String {
         let runtime = elapsed(since: server.record.stateChangedAt ?? server.record.createdAt, now: now)
-        guard let observation else { return "Waiting for first guest checkpoint · \(runtime)" }
+        guard let observation else { return "\(server.record.config.firstBootSummary) · \(runtime)" }
         if observation.isStale(at: now) {
             return "No guest progress for \(observation.staleMinutes(at: now))m · \(observation.summary)"
         }
@@ -419,7 +419,7 @@ struct VMDetailView: View {
                 }
                 return "\(observation.summary). Last guest checkpoint \(relativeAge(observation.updatedAt, now: now)); \(elapsed) minute\(elapsed == 1 ? "" : "s") total."
             }
-            return "Waiting for the first guest checkpoint; \(elapsed) minute\(elapsed == 1 ? "" : "s") total."
+            return "\(server.record.config.firstBootSummary); \(elapsed) minute\(elapsed == 1 ? "" : "s") so far. Progress appears here once the server checks in."
         case .running:
             return "Serving at https://\(server.record.config.serverDomain)/"
         case .failed(let f):
@@ -690,5 +690,14 @@ private extension View {
                 RoundedRectangle(cornerRadius: FB.Radius.md)
                     .strokeBorder(FB.Colors.border, lineWidth: 1)
             )
+    }
+}
+
+extension VMConfig {
+    /// What a server is doing before its first progress report reaches Studio.
+    var firstBootSummary: String {
+        effectiveProvisioningMode == .prebuiltAppliance
+            ? "Starting the server from the prebuilt image"
+            : "Booting the Debian installer"
     }
 }

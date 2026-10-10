@@ -155,6 +155,13 @@ public final class PreseedEngine {
         try invoke("buildBootstrapFromRecipe", recipeJSON: recipeJSON, burnOptsJson: burnOpts.json())
     }
 
+    /// The `/var/flagship/install-blob.json` bytes for a recipe — what the
+    /// installer path writes, and what an appliance seed must carry (the guest
+    /// bootstrap reads its flattened fields).
+    public func buildInstallBlobJSON(recipeJSON: Data) throws -> Data {
+        Data(try invoke("buildInstallBlobJsonFromRecipe", recipeJSON: recipeJSON, burnOptsJson: "{}").utf8)
+    }
+
     /// Raw invocation with a pre-built `burnOpts` JSON string — the exact wire
     /// shape the canonical generator + Node golden vectors use. Used by the
     /// byte-identity test to isolate JSC fidelity from the BurnOptions struct.

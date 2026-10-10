@@ -34,6 +34,7 @@ import {
   detectIsoFamily,
   debugSshKeyFromGrant,
   buildBootstrapFromRecipe,
+  buildInstallBlobJsonFromRecipe,
   encodeApplianceSeed,
   buildDebianApplianceFactoryPreseed,
   buildDebianCloudApplianceFactoryUserData,
@@ -316,7 +317,8 @@ async function cmdApplianceProvision(rest: string[]): Promise<void> {
     installerGitRef: loaded.blob.installerGitRef,
     encryptRoot: loaded.blob.diskEncryption !== "none",
   }));
-  const seed = encodeApplianceSeed(recipe, bootstrap);
+  const seed = encodeApplianceSeed(
+    new TextEncoder().encode(buildInstallBlobJsonFromRecipe(recipe.toString("utf8"))), bootstrap);
   await writeFile(seedPath, seed, { mode: 0o600, flag: "wx" });
   try {
     await promisify(execFile)(qemuImg, [

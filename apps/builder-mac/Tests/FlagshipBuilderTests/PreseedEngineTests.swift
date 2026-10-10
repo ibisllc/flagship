@@ -16,6 +16,7 @@ final class PreseedEngineTests: XCTestCase {
         let burnOptsJson: String
         let expectedPreseed: String
         let expectedUserData: String
+        let expectedInstallBlobJson: String
     }
     private struct Golden: Decodable {
         let version: Int
@@ -47,6 +48,10 @@ final class PreseedEngineTests: XCTestCase {
             let userData = try engine.buildUserDataRaw(recipeJSON: recipe, burnOptsJson: v.burnOptsJson)
             XCTAssertEqual(userData, v.expectedUserData,
                            "user-data mismatch for vector '\(v.name)'")
+            // The appliance seed must carry the installer's install-blob.json.
+            let blob = try engine.buildInstallBlobJSON(recipeJSON: recipe)
+            XCTAssertEqual(String(data: blob, encoding: .utf8), v.expectedInstallBlobJson,
+                           "install-blob mismatch for vector '\(v.name)'")
         }
     }
 

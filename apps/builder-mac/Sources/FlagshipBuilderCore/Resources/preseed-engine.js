@@ -469,6 +469,10 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
       debugSshAuthorizedKey: opts.debugSshAuthorizedKey
     });
   }
+  function buildInstallBlobJsonFromRecipe(recipeJson) {
+    var opts = optionsFromRecipeJson(recipeJson);
+    return JSON.stringify(installBlobToJson(opts.blob, opts.blobSignatureHex, opts.pairingOrder, opts.swkHex, opts.debugGrant));
+  }
   function parseBurn(json) {
     if (!json) return {};
     var o = JSON.parse(json);
@@ -480,7 +484,8 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
       buildPreseedFromRecipe: buildPreseedFromRecipe,
       buildUserDataFromRecipe: buildUserDataFromRecipe,
       buildBootstrapFromRecipe: buildBootstrapFromRecipe,
-      version: 2
+      buildInstallBlobJsonFromRecipe: buildInstallBlobJsonFromRecipe,
+      version: 3
     };
   }
   installAsEngineGlobal();

@@ -8,7 +8,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { signInstallBlob, ed } from "@flagship/protocol";
-import { buildPreseedFromRecipe, buildUserDataFromRecipe } from "../dist/index.js";
+import { buildInstallBlobJsonFromRecipe, buildPreseedFromRecipe, buildUserDataFromRecipe } from "../dist/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const OUT = join(here, "..", "engine", "golden", "preseed-vectors.json");
@@ -74,6 +74,7 @@ const vectors = matrix.map((m) => {
     burnOptsJson,
     expectedPreseed: buildPreseedFromRecipe(recipeJson, burnOptsJson),
     expectedUserData: buildUserDataFromRecipe(recipeJson, burnOptsJson),
+    expectedInstallBlobJson: buildInstallBlobJsonFromRecipe(recipeJson),
   };
 });
 

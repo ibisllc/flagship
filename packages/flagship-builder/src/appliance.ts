@@ -43,7 +43,18 @@ export function buildApplianceSpecializerScript(): string {
   return `#!/bin/bash
 set -euo pipefail
 exec > >(tee -a /var/log/flagship-appliance-specialize.log /dev/console) 2>&1
-trap 'rc=$?; echo "[appliance] specialization failed line=$LINENO rc=$rc"; exit "$rc"' ERR
+# Progress goes to the owner's install timeline (the same public order-status
+# stream the installer path uses) once the recipe names it. Details are fixed
+# phrases or the bootstrap's one bounded FATAL line, never logs or secrets.
+STATUS_URL=""
+STEP="starting"
+report() {
+    [ -n "$STATUS_URL" ] || return 0
+    curl -fsS --connect-timeout 3 --max-time 8 -X POST -H 'content-type: application/json' \
+        --data "$(jq -cn --arg p "$1" --arg d "$2" '{phase:$p,detail:$d}')" "$STATUS_URL" >/dev/null 2>&1 || true
+}
+stage() { STEP="$1"; echo "[appliance] $1"; report installing "$1"; }
+trap 'rc=$?; echo "[appliance] specialization failed line=$LINENO rc=$rc"; report error "Setup stopped while $STEP (line $LINENO)"; exit "$rc"' ERR
 echo "[appliance] specialization start"
 [ -f /etc/flagship/appliance-ready ] || { echo "[appliance] generalized base readiness marker missing"; exit 1; }
 echo "[appliance] generalized base verified"
@@ -75,6 +86,13 @@ chmod 600 /var/flagship/install-blob.json
 chmod 700 /usr/local/sbin/flagship-bootstrap.sh
 RECIPE_SHA="$(sha256sum /var/flagship/install-blob.json | cut -d' ' -f1)"
 [ "$RECIPE_SHA" = "$(jq -r .recipeSha256 /run/flagship-appliance/seed.json)" ] || { echo "[appliance] recipe digest mismatch"; exit 1; }
+SERIAL="$(jq -r '.authCode.serial // empty' /var/flagship/install-blob.json)"
+REGISTRATION_URL="$(jq -r '.registrationUrl // empty' /var/flagship/install-blob.json)"
+if [[ "$SERIAL" =~ ^[A-Za-z0-9]{1,64}$ ]] && [[ "$REGISTRATION_URL" =~ ^https://[A-Za-z0-9.-]+/api/server/register$ ]]; then
+    STATUS_URL="\${REGISTRATION_URL%/api/server/register}/api/order/$SERIAL/status"
+fi
+stage "Checking the server recipe"
+[ "$(jq -r '.serverDomain // empty' /var/flagship/install-blob.json)" != "" ] || { echo "[appliance] recipe has no server domain"; exit 1; }
 
 ROOT_SOURCE="$(findmnt -n -o SOURCE /)"
 ROOT_MAPPER="$(basename "$ROOT_SOURCE")"
@@ -86,7 +104,7 @@ ROOT_PARTITION="$(cat "/sys/class/block/$(basename "$ROOT_LUKS_PART")/partition"
 DISK_BYTES="$(blockdev --getsize64 "/dev/$ROOT_PARENT")"
 PART_BYTES="$(blockdev --getsize64 "$ROOT_LUKS_PART")"
 if [ $((DISK_BYTES - PART_BYTES)) -gt 1073741824 ]; then
-    echo "[appliance] expanding cloned disk to $DISK_BYTES bytes"
+    stage "Expanding the disk to $((DISK_BYTES / 1000000000)) GB"
     growpart "/dev/$ROOT_PARENT" "$ROOT_PARTITION"
     udevadm settle
     cryptsetup resize "$ROOT_MAPPER"
@@ -94,6 +112,7 @@ if [ $((DISK_BYTES - PART_BYTES)) -gt 1073741824 ]; then
     echo "[appliance] cloned disk expansion complete"
 fi
 
+stage "Setting up this server's identity and disk key"
 set +e
 FLAGSHIP_APPLIANCE_PREINSTALLED=1 /usr/local/sbin/flagship-bootstrap.sh
 BOOTSTRAP_RC=$?
@@ -102,9 +121,12 @@ if [ "$BOOTSTRAP_RC" -ne 0 ]; then
     SAFE_BOOTSTRAP_ERROR="$(grep -E '^\\[flagship-bootstrap\\] (FATAL|ERROR|WARN(ING)?):' /var/log/flagship-bootstrap.log 2>/dev/null | tail -n1 | tr -cd '[:print:]' | cut -c1-240 || true)"
     echo "[appliance] canonical bootstrap failed rc=$BOOTSTRAP_RC"
     [ -z "$SAFE_BOOTSTRAP_ERROR" ] || echo "$SAFE_BOOTSTRAP_ERROR"
+    trap - ERR
+    report error "Setup failed: \${SAFE_BOOTSTRAP_ERROR:-bootstrap exited $BOOTSTRAP_RC}"
     exit "$BOOTSTRAP_RC"
 fi
 
+stage "Removing the factory disk key"
 ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device | head -n1)"
 [ -b "$ROOT_LUKS_PART" ] || { echo "[appliance] encrypted root disappeared after specialization"; exit 1; }
 cryptsetup luksRemoveKey "$ROOT_LUKS_PART" /etc/flagship/appliance-build.key
@@ -115,6 +137,7 @@ update-initramfs -u
 date > /var/flagship/appliance-specialized.flag
 sync
 echo "[appliance] specialization complete; powering off for sealed boot"
+report installed "Restarting into the sealed disk"
 systemctl poweroff
 `;
 }

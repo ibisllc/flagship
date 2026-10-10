@@ -108,3 +108,31 @@ describe("generalized VM appliance", () => {
     expect(script).not.toContain("rm -rf /usr/share/locale/*");
   });
 });
+
+describe("appliance specializer progress", () => {
+  const script = buildApplianceSpecializerScript();
+
+  it("reports each stage to the order-status stream the recipe names", () => {
+    expect(script).toContain('STATUS_URL="${REGISTRATION_URL%/api/server/register}/api/order/$SERIAL/status"');
+    for (const stage of [
+      "Checking the server recipe",
+      "Expanding the disk to",
+      "Setting up this server's identity and disk key",
+      "Removing the factory disk key",
+    ]) {
+      expect(script).toContain(`stage "${stage}`);
+    }
+    expect(script).toContain('report installed "Restarting into the sealed disk"');
+  });
+
+  it("reports a failure instead of leaving the owner waiting", () => {
+    expect(script).toMatch(/trap '.*report error "Setup stopped while \$STEP/);
+    expect(script).toContain('report error "Setup failed: ${SAFE_BOOTSTRAP_ERROR:-bootstrap exited $BOOTSTRAP_RC}"');
+    expect(script).toContain('[ "$(jq -r \'.serverDomain // empty\' /var/flagship/install-blob.json)" != "" ]');
+  });
+
+  it("only reports to a well-formed serial and registration URL", () => {
+    expect(script).toContain('[[ "$SERIAL" =~ ^[A-Za-z0-9]{1,64}$ ]]');
+    expect(script).toContain('[[ "$REGISTRATION_URL" =~ ^https://[A-Za-z0-9.-]+/api/server/register$ ]]');
+  });
+});

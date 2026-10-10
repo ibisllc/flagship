@@ -24,6 +24,7 @@ import { buildDebianPreseed } from "./preseed.js";
 import {
   buildAutoinstallUserData,
   buildBootstrapScript,
+  installBlobToJson,
   resolveBootstrapInputs,
   type UserDataOptions,
 } from "./userdata.js";
@@ -116,6 +117,18 @@ export function buildBootstrapFromRecipe(recipeJson: string, burnOptsJson?: stri
   });
 }
 
+/** The `/var/flagship/install-blob.json` bytes for a recipe: exactly what the
+ * USB/installer path writes (via resolveBootstrapInputs' blobB64), so an
+ * appliance seed hands the guest the same flattened blob the bootstrap reads
+ * with `jq .serverDomain` etc. Seeding the raw recipe envelope instead left
+ * every field null and the guest refused to re-key its disk. */
+export function buildInstallBlobJsonFromRecipe(recipeJson: string): string {
+  const opts = optionsFromRecipeJson(recipeJson);
+  return JSON.stringify(
+    installBlobToJson(opts.blob, opts.blobSignatureHex, opts.pairingOrder, opts.swkHex, opts.debugGrant),
+  );
+}
+
 function parseBurn(json?: string): EngineBurnOptions {
   if (!json) return {};
   const o = JSON.parse(json) as EngineBurnOptions;
@@ -133,7 +146,8 @@ export function installAsEngineGlobal(): void {
     buildPreseedFromRecipe,
     buildUserDataFromRecipe,
     buildBootstrapFromRecipe,
-    version: 2,
+    buildInstallBlobJsonFromRecipe,
+    version: 3,
   };
 }
 

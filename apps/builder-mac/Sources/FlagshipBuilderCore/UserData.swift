@@ -76,6 +76,11 @@ public enum UserData {
                                   wifiPassword: nil))
     }
 
+    /// The install-blob.json an appliance seed carries to the guest.
+    public static func applianceInstallBlob(recipeJSON: Data) throws -> Data {
+        try PreseedEngine.shared.buildInstallBlobJSON(recipeJSON: recipeJSON)
+    }
+
     private static func burnOptions(installerGitRef: String,
                                     repoURL: String,
                                     encryptRoot: Bool,

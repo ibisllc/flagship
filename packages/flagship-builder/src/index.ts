@@ -40,6 +40,7 @@ export {
 export {
   buildPreseedFromRecipe,
   buildBootstrapFromRecipe,
+  buildInstallBlobJsonFromRecipe,
   buildUserDataFromRecipe,
   optionsFromRecipeJson,
   installAsEngineGlobal,

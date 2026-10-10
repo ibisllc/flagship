@@ -271,6 +271,14 @@ final class WizardModel: ObservableObject {
         }
     }
 
+    /// After handing a recipe to a new hosted server, open that server's view
+    /// (its install progress is what the user is waiting on) and retire the
+    /// spent pairing session behind it, so New Server starts from a fresh QR.
+    func showHostedServer(_ name: String) {
+        selectedHostedServer = name
+        scheduleHomeReset(after: 1)
+    }
+
     /// Complete wipe of the in-progress burn + session, then return to the
     /// locked cover with a FRESH QR (so the old code is retired). Triggered by
     /// Start over, or by a session that ended BEFORE a
@@ -826,12 +834,13 @@ final class WizardModel: ObservableObject {
                     recipeJSON: recipeData,
                     installerGitRef: parsed.installerGitRef,
                     encryptRoot: parsed.encryptsDisk)
+                let installBlob = try UserData.applianceInstallBlob(recipeJSON: recipeData)
                 let layout = vmManager.store.layout
                 try await Task.detached(priority: .userInitiated) {
                     try provisioner.provision(
                         config: config,
                         layout: layout,
-                        recipe: recipeData,
+                        recipe: installBlob,
                         bootstrap: bootstrap)
                 }.value
                 appendLog(stream: .stdout,
@@ -845,7 +854,7 @@ final class WizardModel: ObservableObject {
             try? FileManager.default.removeItem(at: recipe)
             phase = "specialize"
             await vmManager.beginInstall(named: config.name)
-            scheduleHomeReset()
+            showHostedServer(config.name)
             return
         }
 
@@ -901,7 +910,7 @@ final class WizardModel: ObservableObject {
         // Shred the single-use recipe, exactly like a successful USB burn.
         try? FileManager.default.removeItem(at: recipe)
         await vmManager.beginInstall(named: config.name)
-        scheduleHomeReset()
+        showHostedServer(config.name)
     }
 
     private final class Box<T> {
