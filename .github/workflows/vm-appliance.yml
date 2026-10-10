@@ -1,4 +1,4 @@
-name: vm-appliance (amd64 generalized base under KVM)
+name: vm-appliance (generalized base, amd64 or arm64)
 
 # Manufactures the prebuilt VM appliance from Debian's official generic cloud
 # image with scripts/build-vm-appliance-cloud-qemu.sh (guest success marker +
@@ -10,6 +10,11 @@ name: vm-appliance (amd64 generalized base under KVM)
 on:
   workflow_dispatch:
     inputs:
+      arch:
+        description: "amd64 or arm64"
+        type: choice
+        options: [amd64, arm64]
+        default: amd64
       git_ref:
         description: "Flagship ref the appliance installs (must match recipes' installerGitRef)"
         default: "main"
@@ -17,31 +22,59 @@ on:
         description: "cloud.debian.org trixie build directory"
         default: "20261001-2618"
       debian_sha512:
-        description: "SHA-512 of debian-13-generic-amd64.qcow2 in that build"
-        default: "6f0f93335bdef4ccf523c4317cc663ea52ca23b862667785f3d6d186ab4674a937385ccff0c55996b4b2e4c19e440cdf211e2a75ffa2f6548037ab43950c841d"
+        description: "SHA-512 of debian-13-generic-<arch>-<build>.qcow2 (blank = the pinned value for 20261001-2618)"
+        default: ""
 
 permissions:
   contents: read
 
 jobs:
-  amd64:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+  build:
+    runs-on: ${{ inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    timeout-minutes: 180
+    env:
+      ARCH: ${{ inputs.arch }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Enable KVM
+      - name: Pick the pinned source hash
         run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-          ls -la /dev/kvm
+          sha="${{ inputs.debian_sha512 }}"
+          if [ -z "$sha" ]; then
+            case "$ARCH" in
+              amd64) sha=6f0f93335bdef4ccf523c4317cc663ea52ca23b862667785f3d6d186ab4674a937385ccff0c55996b4b2e4c19e440cdf211e2a75ffa2f6548037ab43950c841d ;;
+              arm64) sha=001e742c14a69f3f506c1663b271b4aeed7fa766f7471a13d49ee22d338b8a637b5206a75bf994435af7b26ce3794a255dcf22e312b0d4b8d7b7f96076fe925f ;;
+            esac
+          fi
+          echo "SOURCE_SHA512=$sha" >> "$GITHUB_ENV"
 
-      - name: Install QEMU + OVMF
+      - name: Install QEMU + firmware
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 qemu-utils ovmf xorriso
-          ls /usr/share/OVMF/
+          if [ "$ARCH" = arm64 ]; then
+            sudo apt-get install -y -qq --no-install-recommends qemu-system-arm qemu-utils qemu-efi-aarch64 xorriso
+            echo "FLAGSHIP_QEMU_CODE=/usr/share/AAVMF/AAVMF_CODE.fd" >> "$GITHUB_ENV"
+            echo "FLAGSHIP_QEMU_VARS=/usr/share/AAVMF/AAVMF_VARS.fd" >> "$GITHUB_ENV"
+          else
+            sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 qemu-utils ovmf xorriso
+            echo "FLAGSHIP_QEMU_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd" >> "$GITHUB_ENV"
+            echo "FLAGSHIP_QEMU_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd" >> "$GITHUB_ENV"
+          fi
+
+      # GitHub's x64 runners expose /dev/kvm; the arm64 ones may not, in which
+      # case the factory runs under software emulation (much slower, same bytes).
+      - name: Enable KVM when the runner has it
+        run: |
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+            echo "FLAGSHIP_QEMU_ACCEL=kvm" >> "$GITHUB_ENV"
+          else
+            echo "no /dev/kvm: using TCG"
+            echo "FLAGSHIP_QEMU_ACCEL=tcg" >> "$GITHUB_ENV"
+            echo "FLAGSHIP_SMOKE_SECONDS=1200" >> "$GITHUB_ENV"
+          fi
 
       - uses: actions/setup-node@v4
         with:
@@ -53,23 +86,20 @@ jobs:
 
       - name: Download the pinned Debian cloud image
         run: |
-          curl -fsSL -o "$RUNNER_TEMP/debian-13-generic-amd64.qcow2" \
-            "https://cloud.debian.org/images/cloud/trixie/${{ inputs.debian_build }}/debian-13-generic-amd64-${{ inputs.debian_build }}.qcow2"
+          curl -fsSL -o "$RUNNER_TEMP/debian-source.qcow2" \
+            "https://cloud.debian.org/images/cloud/trixie/${{ inputs.debian_build }}/debian-13-generic-$ARCH-${{ inputs.debian_build }}.qcow2"
 
       - name: Build the appliance (factory + boot smoke)
-        env:
-          FLAGSHIP_QEMU_CODE: /usr/share/OVMF/OVMF_CODE_4M.fd
-          FLAGSHIP_QEMU_VARS: /usr/share/OVMF/OVMF_VARS_4M.fd
         run: |
           bash scripts/build-vm-appliance-cloud-qemu.sh \
-            "$RUNNER_TEMP/debian-13-generic-amd64.qcow2" "${{ inputs.debian_sha512 }}" \
-            "$RUNNER_TEMP/base.raw" amd64 "${{ inputs.git_ref }}"
+            "$RUNNER_TEMP/debian-source.qcow2" "$SOURCE_SHA512" \
+            "$RUNNER_TEMP/base.raw" "$ARCH" "${{ inputs.git_ref }}"
           cat "$RUNNER_TEMP/base.raw.json"
 
       - name: Compress, split and write the distribution manifest
         env:
           GIT_REF: ${{ inputs.git_ref }}
-          SOURCE_SHA512: ${{ inputs.debian_sha512 }}
+          DEBIAN_BUILD: ${{ inputs.debian_build }}
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/out"
@@ -82,7 +112,7 @@ jobs:
           sha=$(sha256sum "$RUNNER_TEMP/appliance.qcow2" | awk '{print $1}')
           size=$(stat -c %s "$RUNNER_TEMP/appliance.qcow2")
           ref_slug=$(printf %s "$GIT_REF" | tr -c 'a-zA-Z0-9.-' '-')
-          prefix="flagship-vm-appliance-amd64-${ref_slug}-${sha:0:12}.qcow2"
+          prefix="flagship-vm-appliance-${ARCH}-${ref_slug}-${sha:0:12}.qcow2"
           split -b 268435456 -d -a 2 "$RUNNER_TEMP/appliance.qcow2" "$out/$prefix.part-"
           rm -f "$RUNNER_TEMP/appliance.qcow2"
           RAW_SHA=$raw_sha RAW_SIZE=$raw_size SHA=$sha SIZE=$size PREFIX=$prefix OUT=$out python3 - <<'EOF'
@@ -93,12 +123,12 @@ jobs:
               parts.append({"name": p.name[len(prefix) + 1:], "sizeBytes": p.stat().st_size,
                             "sha256": hashlib.sha256(p.read_bytes()).hexdigest()})
           manifest = {
-              "version": 1, "arch": "amd64", "installerGitRef": os.environ["GIT_REF"],
+              "version": 1, "arch": os.environ["ARCH"], "installerGitRef": os.environ["GIT_REF"],
               "format": "qcow2", "sha256": os.environ["SHA"], "sizeBytes": int(os.environ["SIZE"]),
               "parts": parts, "rawSha256": os.environ["RAW_SHA"], "rawSizeBytes": int(os.environ["RAW_SIZE"]),
-              "source": {"name": "debian-13-generic-amd64-${{ inputs.debian_build }}.qcow2", "sha512": os.environ["SOURCE_SHA512"]},
+              "source": {"name": f"debian-13-generic-{os.environ['ARCH']}-{os.environ['DEBIAN_BUILD']}.qcow2", "sha512": os.environ["SOURCE_SHA512"]},
           }
-          (out / "FlagshipVMAppliance-amd64.json").write_text(json.dumps(manifest, indent=2) + "\n")
+          (out / f"FlagshipVMAppliance-{os.environ['ARCH']}.json").write_text(json.dumps(manifest, indent=2) + "\n")
           (out / "R2-KEY-PREFIX.txt").write_text(prefix + "\n")
           print(json.dumps(manifest, indent=2))
           EOF
@@ -106,7 +136,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: vm-appliance-amd64
+          name: vm-appliance-${{ inputs.arch }}
           path: ${{ runner.temp }}/out/
           if-no-files-found: error
           compression-level: 0

@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [ "$#" -ne 5 ]; then
   echo "usage: scripts/build-vm-appliance-cloud-qemu.sh <debian.qcow2> <sha512> <base.raw> <arm64|amd64> <git-ref>" >&2
-  echo "requires FLAGSHIP_QEMU_CODE and FLAGSHIP_QEMU_VARS; optional FLAGSHIP_QEMU_SYSTEM/FLAGSHIP_QEMU_IMG/FLAGSHIP_QEMU_ACCEL" >&2
+  echo "requires FLAGSHIP_QEMU_CODE and FLAGSHIP_QEMU_VARS; optional FLAGSHIP_QEMU_SYSTEM/FLAGSHIP_QEMU_IMG/FLAGSHIP_QEMU_ACCEL/FLAGSHIP_QEMU_CPU/FLAGSHIP_SMOKE_SECONDS" >&2
   exit 2
 fi
 
@@ -16,6 +16,9 @@ GIT_REF="$5"
 : "${FLAGSHIP_QEMU_VARS:?set FLAGSHIP_QEMU_VARS to the UEFI vars template}"
 QEMU_IMG="${FLAGSHIP_QEMU_IMG:-qemu-img}"
 QEMU_ACCEL="${FLAGSHIP_QEMU_ACCEL:-kvm}"
+# "host" only exists under a hypervisor; software emulation needs "max".
+if [ "$QEMU_ACCEL" = tcg ]; then QEMU_CPU="${FLAGSHIP_QEMU_CPU:-max}"; else QEMU_CPU="${FLAGSHIP_QEMU_CPU:-host}"; fi
+SMOKE_SECONDS="${FLAGSHIP_SMOKE_SECONDS:-90}"
 if [ "$ARCH" = arm64 ]; then
   QEMU_SYSTEM="${FLAGSHIP_QEMU_SYSTEM:-qemu-system-aarch64}"
   MACHINE=virt
@@ -64,7 +67,7 @@ cp "$FLAGSHIP_QEMU_VARS" "$WORK_DIR/vars.fd"
 
 set +e
 "$QEMU_SYSTEM" \
-  -machine "$MACHINE",accel="$QEMU_ACCEL" -cpu host -smp 4 -m 6144M \
+  -machine "$MACHINE",accel="$QEMU_ACCEL" -cpu "$QEMU_CPU" -smp 4 -m 6144M \
   -drive "if=pflash,format=raw,readonly=on,file=$FLAGSHIP_QEMU_CODE" \
   -drive "if=pflash,format=raw,file=$WORK_DIR/vars.fd" \
   -drive "id=debian-source,if=none,format=qcow2,file=$WORK_DIR/debian-source.qcow2" \
@@ -92,7 +95,7 @@ fi
 "$QEMU_IMG" create -f qcow2 -F raw -b "$OUTPUT_RAW" "$WORK_DIR/smoke-disk.qcow2"
 cp "$FLAGSHIP_QEMU_VARS" "$WORK_DIR/smoke-vars.fd"
 "$QEMU_SYSTEM" \
-  -machine "$MACHINE",accel="$QEMU_ACCEL" -cpu host -smp 2 -m 2048M \
+  -machine "$MACHINE",accel="$QEMU_ACCEL" -cpu "$QEMU_CPU" -smp 2 -m 2048M \
   -drive "if=pflash,format=raw,readonly=on,file=$FLAGSHIP_QEMU_CODE" \
   -drive "if=pflash,format=raw,file=$WORK_DIR/smoke-vars.fd" \
   -drive "id=smoke-disk,if=none,format=qcow2,file=$WORK_DIR/smoke-disk.qcow2" \
@@ -101,7 +104,7 @@ cp "$FLAGSHIP_QEMU_VARS" "$WORK_DIR/smoke-vars.fd"
   -device virtio-rng-pci -display none -serial "file:$WORK_DIR/smoke.log" -no-reboot &
 SMOKE_PID=$!
 SMOKE_OK=0
-for _attempt in $(seq 1 90); do
+for _attempt in $(seq 1 "$SMOKE_SECONDS"); do
   if grep -Fq '[appliance] generalized base verified' "$WORK_DIR/smoke.log" 2>/dev/null; then
     SMOKE_OK=1
     break
