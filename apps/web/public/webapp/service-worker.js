@@ -58,7 +58,8 @@
 //       Worker audit kind is labelled; recovery copy matches the gate.
 //  v32: apex.js drops the retired `web.` sub-origin prefix.
 //  v33: the update card shows the box's last update verdict.
-const SHELL_VERSION = "v33";
+//  v34: "Install complete" without the USB-only instruction.
+const SHELL_VERSION = "v34";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
