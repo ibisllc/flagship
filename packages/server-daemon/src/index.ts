@@ -599,7 +599,12 @@ async function main(): Promise<void> {
     runner: realUpdateCommandRunner,
     // Generous window: first boot after an update does a full ACME + tunnel
     // bring-up; a transient network outage shouldn't burn a boot attempt.
-    awaitHealthy: () => selfUpdateHealth.whenHealthy(10 * 60_000),
+    // TEMPORARY rollback drill (2026-10-10): only the throwaway drill box
+    // reports this boot unhealthy, to exercise rollback live. Reverted next.
+    awaitHealthy: () =>
+      env.serverFqdn === "home.drill-1010.flagship.services"
+        ? Promise.resolve(false)
+        : selfUpdateHealth.whenHealthy(10 * 60_000),
     requestRestart: () => {
       console.log("[self-update] restarting (health gate)");
       process.exit(0);
