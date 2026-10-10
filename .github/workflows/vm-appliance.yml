@@ -54,7 +54,7 @@ jobs:
       - name: Download the pinned Debian cloud image
         run: |
           curl -fsSL -o "$RUNNER_TEMP/debian-13-generic-amd64.qcow2" \
-            "https://cloud.debian.org/images/cloud/trixie/${{ inputs.debian_build }}/debian-13-generic-amd64.qcow2"
+            "https://cloud.debian.org/images/cloud/trixie/${{ inputs.debian_build }}/debian-13-generic-amd64-${{ inputs.debian_build }}.qcow2"
 
       - name: Build the appliance (factory + boot smoke)
         env:
@@ -96,7 +96,7 @@ jobs:
               "version": 1, "arch": "amd64", "installerGitRef": os.environ["GIT_REF"],
               "format": "qcow2", "sha256": os.environ["SHA"], "sizeBytes": int(os.environ["SIZE"]),
               "parts": parts, "rawSha256": os.environ["RAW_SHA"], "rawSizeBytes": int(os.environ["RAW_SIZE"]),
-              "source": {"name": "debian-13-generic-amd64.qcow2", "sha512": os.environ["SOURCE_SHA512"]},
+              "source": {"name": "debian-13-generic-amd64-${{ inputs.debian_build }}.qcow2", "sha512": os.environ["SOURCE_SHA512"]},
           }
           (out / "FlagshipVMAppliance-amd64.json").write_text(json.dumps(manifest, indent=2) + "\n")
           (out / "R2-KEY-PREFIX.txt").write_text(prefix + "\n")
