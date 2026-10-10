@@ -165,7 +165,7 @@ describe("buildVibeCodeStartStreaming — attachments reach the ChatRequest", ()
       appEnvStore: new InMemoryAppEnvStore(),
       context: attCtx,
       existingAppsSnapshot: () => [],
-      defaultModel: "claude-haiku",
+      defaultModels: { fake: "claude-haiku" },
     });
     const session = registry.create({ username: "alice", serverFqdn: "home.alice.flagship.services" });
     await credentials.put(session.meta.sessionId, { provider: "fake", apiKey: "k" });
@@ -192,7 +192,7 @@ describe("buildVibeCodeStartStreaming — attachments reach the ChatRequest", ()
       appEnvStore: new InMemoryAppEnvStore(),
       context: attCtx,
       existingAppsSnapshot: () => [],
-      defaultModel: "m",
+      defaultModels: { fake: "m" },
     });
     const session = registry.create({ username: "alice", serverFqdn: "home.alice.flagship.services" });
     await credentials.put(session.meta.sessionId, { provider: "fake", apiKey: "k" });

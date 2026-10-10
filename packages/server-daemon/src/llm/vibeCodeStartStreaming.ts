@@ -86,7 +86,8 @@ export interface BuildVibeCodeStartStreamingArgs {
   /** Existing-apps snapshot at the moment startStreaming is called. */
   existingAppsSnapshot: () => ExistingAppSummary[];
   /** Default model when the caller didn't specify one. */
-  defaultModel: string;
+  /** Per-provider fallback models (defaultModelsFromEnv). */
+  defaultModels: Readonly<Record<string, string>>;
 }
 
 export interface StartStreamingArgs {
@@ -117,14 +118,47 @@ export interface StartStreamingArgs {
   visibility?: "just-me" | "link";
 }
 
+/**
+ * The model used when the owner didn't choose one, per provider. One global
+ * default used to apply to every provider, so an OpenAI key was asked for
+ * "claude-3-5-sonnet-latest". Each entry is a long-lived ID that takes tool
+ * calls over the API our adapter speaks (OpenAI: Chat Completions). Ollama
+ * has no default: whatever we guessed might not be pulled on the user's host.
+ * Override per provider with FLAGSHIP_LLM_DEFAULT_MODEL_<PROVIDER>.
+ */
+export const DEFAULT_MODEL_BY_PROVIDER: Readonly<Record<string, string>> = {
+  anthropic: "claude-sonnet-5-5",
+  openai: "gpt-5",
+  google: "gemini-3.5-flash",
+  openrouter: "openrouter/auto",
+};
+
+export function defaultModelsFromEnv(
+  env: Record<string, string | undefined>,
+): Readonly<Record<string, string>> {
+  const out: Record<string, string> = { ...DEFAULT_MODEL_BY_PROVIDER };
+  for (const [key, value] of Object.entries(env)) {
+    const m = /^FLAGSHIP_LLM_DEFAULT_MODEL_([A-Z0-9_]+)$/.exec(key);
+    if (m && value && value.trim()) out[m[1]!.toLowerCase()] = value.trim();
+  }
+  return out;
+}
+
+export class NoDefaultModelError extends Error {}
+
 export function modelForProvider(
   provider: string,
   requested: string | undefined,
-  fallback: string,
+  defaults: Readonly<Record<string, string>>,
 ): string {
   if (requested) return requested;
-  if (provider === "openrouter") return "openrouter/auto";
-  return fallback;
+  const model = defaults[provider];
+  if (!model) {
+    throw new NoDefaultModelError(
+      `Choose a model for ${provider}: there's no default for it.`,
+    );
+  }
+  return model;
 }
 
 /**
@@ -147,6 +181,13 @@ export function buildVibeCodeStartStreaming(
       session.fail("no AI credential set for this session", true);
       return;
     }
+    let model: string;
+    try {
+      model = modelForProvider(credential.provider, s.model, args.defaultModels);
+    } catch (e) {
+      session.fail((e as Error).message, true);
+      return;
+    }
 
     const serviceId = args.resolveAppId(s.sessionId);
     // CRITICAL: only .names(). `.get()` is never called on this path —
@@ -162,7 +203,7 @@ export function buildVibeCodeStartStreaming(
       "\n\n" +
       TOOL_USE_PROMPT_SUPPLEMENT;
     const request: ChatRequest = {
-      model: modelForProvider(credential.provider, s.model, args.defaultModel),
+      model,
       messages: [
         { role: "system", content: systemMessage },
         {
@@ -228,6 +269,13 @@ export function buildVibeCodeResumeStreaming(
       session.fail("no AI credential set for this session", true);
       return;
     }
+    let resolvedModel: string;
+    try {
+      resolvedModel = modelForProvider(credential.provider, model, args.defaultModels);
+    } catch (e) {
+      session.fail((e as Error).message, true);
+      return;
+    }
 
     // The prior turn marked the parser `done` (endAssistant → parser.end);
     // reset it so the resumed file output is actually parsed (otherwise the
@@ -261,7 +309,7 @@ export function buildVibeCodeResumeStreaming(
       })),
     ];
     const request: ChatRequest = {
-      model: modelForProvider(credential.provider, model, args.defaultModel),
+      model: resolvedModel,
       messages,
       tools: VIBE_CODE_TOOLS.map((t) => ({ ...t })),
     };

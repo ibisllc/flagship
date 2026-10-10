@@ -108,7 +108,12 @@ import { buildVibeCodeHttpHandlers } from "./llm/vibeCodeHttp.js";
 import { buildDeploySession } from "./llm/deploySession.js";
 import { LlmHarness } from "./llmHarness.js";
 import { FileBuildCredentialStore } from "./llm/buildCredentialStore.js";
-import { buildVibeCodeStartStreaming, buildVibeCodeResumeStreaming } from "./llm/vibeCodeStartStreaming.js";
+import {
+  buildVibeCodeStartStreaming,
+  buildVibeCodeResumeStreaming,
+  defaultModelsFromEnv,
+  modelForProvider,
+} from "./llm/vibeCodeStartStreaming.js";
 import { FileBuildJournal } from "./buildmodes/buildJournal.js";
 import { FileMcpKeyStore } from "./buildmodes/mcpKeyStore.js";
 import { GitImporter } from "./buildmodes/gitImport.js";
@@ -2072,8 +2077,7 @@ async function wireRuntimeSurfaces(deps: {
     custodian.asSwkOps(),
   );
   await llmCredentials.load();
-  const defaultLlmModel =
-    process.env.FLAGSHIP_LLM_DEFAULT_MODEL ?? "claude-3-5-sonnet-latest";
+  const defaultLlmModels = defaultModelsFromEnv(process.env);
 
   const deploySession = runtime.servicePlatform
     ? buildDeploySession({
@@ -2177,7 +2181,7 @@ async function wireRuntimeSurfaces(deps: {
           throw new Error("AI adapt not configured");
         }
         const resp = await llmHarness.chatWithCredential(credential, {
-          model: model ?? defaultLlmModel,
+          model: modelForProvider(credential.provider, model, defaultLlmModels),
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
@@ -2200,7 +2204,11 @@ async function wireRuntimeSurfaces(deps: {
         if (!credential) throw new Error("AI adapt not configured");
         return llmHarness.chatWithCredential(credential, {
           ...req,
-          model: req.model && req.model.length > 0 ? req.model : defaultLlmModel,
+          model: modelForProvider(
+            credential.provider,
+            req.model && req.model.length > 0 ? req.model : undefined,
+            defaultLlmModels,
+          ),
         });
       },
       // The genuine no-credential case: a build for which the owner
@@ -2345,7 +2353,7 @@ async function wireRuntimeSurfaces(deps: {
                 : undefined,
             stores: "",
           })),
-        defaultModel: defaultLlmModel,
+        defaultModels: defaultLlmModels,
       }
     : undefined;
   const vibeStartStreaming = vibeStreamArgs

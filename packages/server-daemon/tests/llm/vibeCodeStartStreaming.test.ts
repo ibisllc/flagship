@@ -34,6 +34,8 @@ import { InMemoryBuildCredentialStore } from "../../src/llm/buildCredentialStore
 import {
   buildVibeCodeStartStreaming,
   modelForProvider,
+  defaultModelsFromEnv,
+  DEFAULT_MODEL_BY_PROVIDER,
   ownerChoiceSupplement,
 } from "../../src/llm/vibeCodeStartStreaming.js";
 import {
@@ -122,16 +124,30 @@ describe("ownerChoiceSupplement — Describe-form name + visibility steer the pr
 });
 
 describe("modelForProvider", () => {
-  it("uses OpenRouter's agent-capable auto router when the phone did not choose a model", () => {
-    expect(modelForProvider("openrouter", undefined, "claude-3-5-sonnet-latest"))
-      .toBe("openrouter/auto");
+  const defaults = defaultModelsFromEnv({});
+
+  it("never hands one provider another provider's model", () => {
+    // An OpenAI key was once asked for "claude-3-5-sonnet-latest".
+    expect(modelForProvider("openai", undefined, defaults)).not.toMatch(/claude/);
+    expect(modelForProvider("anthropic", undefined, defaults)).toMatch(/^claude-/);
+    expect(modelForProvider("google", undefined, defaults)).toMatch(/^gemini-/);
+    expect(modelForProvider("openrouter", undefined, defaults)).toBe("openrouter/auto");
   });
 
-  it("preserves an explicit model and other providers' configured default", () => {
-    expect(modelForProvider("openrouter", "anthropic/claude-sonnet-4", "fallback"))
+  it("keeps an explicit model and asks for one when a provider has no default", () => {
+    expect(modelForProvider("openrouter", "anthropic/claude-sonnet-4", defaults))
       .toBe("anthropic/claude-sonnet-4");
-    expect(modelForProvider("anthropic", undefined, "claude-default"))
-      .toBe("claude-default");
+    expect(() => modelForProvider("ollama", undefined, defaults)).toThrow(/Choose a model for ollama/);
+    expect(modelForProvider("ollama", "llama3.3", defaults)).toBe("llama3.3");
+  });
+
+  it("takes per-provider overrides from the environment and ignores the old global one", () => {
+    const d = defaultModelsFromEnv({
+      FLAGSHIP_LLM_DEFAULT_MODEL_OPENAI: "gpt-4o-mini",
+      FLAGSHIP_LLM_DEFAULT_MODEL: "claude-3-5-sonnet-latest",
+    });
+    expect(d.openai).toBe("gpt-4o-mini");
+    expect(d.anthropic).toBe(DEFAULT_MODEL_BY_PROVIDER.anthropic);
   });
 });
 
@@ -151,7 +167,7 @@ describe("buildVibeCodeStartStreaming — live BYOK wiring", () => {
       appEnvStore: store,
       context: ctx,
       existingAppsSnapshot: () => [],
-      defaultModel: "claude-haiku",
+      defaultModels: { fake: "claude-haiku" },
     });
 
     const session = registry.create({ username: "alice", serverFqdn: "home.alice.flagship.services" });
@@ -185,7 +201,7 @@ describe("buildVibeCodeStartStreaming — live BYOK wiring", () => {
       appEnvStore: store,
       context: ctx,
       existingAppsSnapshot: () => [],
-      defaultModel: "claude-haiku",
+      defaultModels: { fake: "claude-haiku" },
     });
     const session = registry.create({ username: "alice", serverFqdn: "home.alice.flagship.services" });
     await credentials.put(session.meta.sessionId, { provider: "fake", apiKey: "k" });
@@ -213,7 +229,7 @@ describe("buildVibeCodeStartStreaming — live BYOK wiring", () => {
       appEnvStore: new InMemoryAppEnvStore(),
       context: ctx,
       existingAppsSnapshot: () => [],
-      defaultModel: "m",
+      defaultModels: { fake: "m" },
     });
     const session = registry.create({ username: "alice", serverFqdn: "home.alice.flagship.services" });
     await credentials.put(session.meta.sessionId, { provider: "fake", apiKey: "stored-key" });
@@ -238,7 +254,7 @@ describe("buildVibeCodeStartStreaming — live BYOK wiring", () => {
       appEnvStore: new InMemoryAppEnvStore(),
       context: ctx,
       existingAppsSnapshot: () => [],
-      defaultModel: "m",
+      defaultModels: { fake: "m" },
     });
     const session = registry.create({ username: "alice", serverFqdn: "home.alice.flagship.services" });
     await startStreaming({ sessionId: session.meta.sessionId, prompt: "hi" });
@@ -261,7 +277,7 @@ describe("buildVibeCodeStartStreaming — live BYOK wiring", () => {
       appEnvStore: store,
       context: ctx,
       existingAppsSnapshot: () => [],
-      defaultModel: "m",
+      defaultModels: { fake: "m" },
     });
     const session = registry.create({ username: "alice", serverFqdn: "home.alice.flagship.services" });
     await credentials.put(session.meta.sessionId, { provider: "fake", apiKey: "k" });
