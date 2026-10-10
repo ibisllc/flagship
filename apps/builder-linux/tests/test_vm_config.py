@@ -29,7 +29,7 @@ def test_plan_is_deterministic_and_sized_by_the_host():
     assert c.username == "harry"
     assert c.server_name == "home"
     assert c.cpu_count == 4
-    assert c.memory_bytes == 6 * resource_plan.GIB
+    assert c.memory_bytes == 4 * resource_plan.GIB  # 16 GiB host: the floor
     assert c.main_disk_size_bytes == resource_plan.DEFAULT_MAIN_DISK_SIZE_BYTES
     assert c.network_mode == VMNetworkMode.NAT
     assert plan(RECIPE) == c

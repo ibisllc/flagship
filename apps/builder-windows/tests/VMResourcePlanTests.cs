@@ -19,8 +19,10 @@ public class VMResourcePlanTests
     [Fact]
     public void ComfortableHostGetsTheDefaultVMMemory()
     {
-        // 16 GiB host: 12 GiB spare over the reserve → the 6 GiB default.
-        Assert.Equal(6 * GiB, VMResourcePlan.VmMemoryBytes(Host(8, 16)));
+        // Above 16 GiB the 6 GiB default; at 16 GiB or less the 4 GiB floor, so
+        // Windows doesn't swap.
+        Assert.Equal(6 * GiB, VMResourcePlan.VmMemoryBytes(Host(8, 32)));
+        Assert.Equal(4 * GiB, VMResourcePlan.VmMemoryBytes(Host(8, 16)));
     }
 
     [Fact]
@@ -28,8 +30,8 @@ public class VMResourcePlanTests
     {
         // 8 GiB host: 4 GiB spare → clamped between floor (4) and default (6).
         Assert.Equal(4 * GiB, VMResourcePlan.VmMemoryBytes(Host(4, 8)));
-        // 9 GiB host: 5 GiB spare → 5 GiB.
-        Assert.Equal(5 * GiB, VMResourcePlan.VmMemoryBytes(Host(4, 9)));
+        // 9 GiB host: a small host, so the floor.
+        Assert.Equal(4 * GiB, VMResourcePlan.VmMemoryBytes(Host(4, 9)));
     }
 
     [Fact]

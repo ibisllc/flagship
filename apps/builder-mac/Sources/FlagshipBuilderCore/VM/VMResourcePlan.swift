@@ -15,6 +15,9 @@ public enum VMResourcePlan {
     public static let minimumVMMemoryBytes: UInt64 = 4 * gib
     /// RAM always left to macOS + the user's own apps.
     public static let hostReserveBytes: UInt64 = 4 * gib
+    /// At or below this much host RAM a VM gets the floor, not the comfortable
+    /// default: 6 GiB on a 16 GiB Mac pushes macOS into swap.
+    public static let compactHostMemoryBytes: UInt64 = 16 * gib
     /// Sparse main-disk size (the guest LUKS/ext4 root grows into it).
     public static let defaultMainDiskSizeBytes: UInt64 = 64 * gib
     /// Hard ceiling regardless of host size — family hosting, not a datacenter.
@@ -24,7 +27,8 @@ public enum VMResourcePlan {
     /// to what the host can spare above the reserve, never below the floor.
     public static func vmMemoryBytes(host: HostResources) -> UInt64 {
         let spare = host.memoryBytes > hostReserveBytes ? host.memoryBytes - hostReserveBytes : 0
-        return max(minimumVMMemoryBytes, min(defaultVMMemoryBytes, spare))
+        let comfortable = host.memoryBytes <= compactHostMemoryBytes ? minimumVMMemoryBytes : defaultVMMemoryBytes
+        return max(minimumVMMemoryBytes, min(comfortable, spare))
     }
 
     /// vCPUs for one VM: 2–4, leaving two host cores free, never more than the

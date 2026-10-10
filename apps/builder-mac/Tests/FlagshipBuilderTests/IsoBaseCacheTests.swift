@@ -301,3 +301,28 @@ final class IsoBaseCacheTests: XCTestCase {
         XCTAssertNil(decoded.current)
     }
 }
+
+final class IsoBaseCachePruneTests: XCTestCase {
+    func testDeletesOnlyBasesUnusedForThirtyDays() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("iso-prune-\(UUID().uuidString)")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+        let stale = dir.appendingPathComponent("flagship-base-debian-13.6.0.iso")
+        let fresh = dir.appendingPathComponent("flagship-base-arm64-debian-13.6.0.iso")
+        let unrelated = dir.appendingPathComponent("notes.txt")
+        for url in [stale, fresh, unrelated] { try Data([1]).write(to: url) }
+        let old = Date().addingTimeInterval(-31 * 24 * 60 * 60)
+        try fm.setAttributes([.modificationDate: old], ofItemAtPath: stale.path)
+        try fm.setAttributes([.modificationDate: old], ofItemAtPath: unrelated.path)
+
+        IsoBaseCache.pruneUnused(in: dir, except: .arm64)
+        XCTAssertFalse(fm.fileExists(atPath: stale.path))
+        XCTAssertTrue(fm.fileExists(atPath: fresh.path))
+        XCTAssertTrue(fm.fileExists(atPath: unrelated.path), "only cached bases are pruned")
+
+        try fm.setAttributes([.modificationDate: old], ofItemAtPath: fresh.path)
+        IsoBaseCache.pruneUnused(in: dir, except: .arm64)
+        XCTAssertTrue(fm.fileExists(atPath: fresh.path), "the arch about to be used is kept")
+    }
+}

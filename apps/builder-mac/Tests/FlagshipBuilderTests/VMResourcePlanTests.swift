@@ -15,14 +15,16 @@ final class VMResourcePlanTests: XCTestCase {
 
     func testComfortableHostGetsTheDefaultVMMemory() {
         // 16 GiB host: 12 GiB spare over the reserve → the 6 GiB default.
-        XCTAssertEqual(VMResourcePlan.vmMemoryBytes(host: host(cpus: 8, ramGiB: 16)), 6 * gib)
+        // A 16 GiB host gets the floor so macOS doesn't swap; bigger hosts get the default.
+        XCTAssertEqual(VMResourcePlan.vmMemoryBytes(host: host(cpus: 8, ramGiB: 16)), 4 * gib)
+        XCTAssertEqual(VMResourcePlan.vmMemoryBytes(host: host(cpus: 8, ramGiB: 32)), 6 * gib)
     }
 
     func testModestHostClampsDownToWhatItCanSpare() {
         // 8 GiB host: 4 GiB spare → clamped between floor (4) and default (6).
         XCTAssertEqual(VMResourcePlan.vmMemoryBytes(host: host(cpus: 4, ramGiB: 8)), 4 * gib)
         // 9 GiB host: 5 GiB spare → 5 GiB.
-        XCTAssertEqual(VMResourcePlan.vmMemoryBytes(host: host(cpus: 4, ramGiB: 9)), 5 * gib)
+        XCTAssertEqual(VMResourcePlan.vmMemoryBytes(host: host(cpus: 4, ramGiB: 9)), 4 * gib)
     }
 
     func testTinyHostNeverGoesBelowTheViabilityFloor() {

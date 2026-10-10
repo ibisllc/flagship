@@ -22,6 +22,9 @@ public static class VMResourcePlan
     public const ulong MinimumVMMemoryBytes = 4 * GiB;
     /// <summary>RAM always left to Windows + the user's own apps.</summary>
     public const ulong HostReserveBytes = 4 * GiB;
+    /// <summary>At or below this much host RAM a VM gets the floor, not the
+    /// comfortable default: 6 GiB on a 16 GiB laptop pushes the host into swap.</summary>
+    public const ulong CompactHostMemoryBytes = 16 * GiB;
     /// <summary>Sparse main-disk size (the guest LUKS/ext4 root grows into it).</summary>
     public const ulong DefaultMainDiskSizeBytes = 64 * GiB;
     /// <summary>Hard ceiling regardless of host size — family hosting, not a datacenter.</summary>
@@ -34,7 +37,8 @@ public static class VMResourcePlan
     public static ulong VmMemoryBytes(HostResources host)
     {
         ulong spare = host.MemoryBytes > HostReserveBytes ? host.MemoryBytes - HostReserveBytes : 0;
-        return Math.Max(MinimumVMMemoryBytes, Math.Min(DefaultVMMemoryBytes, spare));
+        ulong comfortable = host.MemoryBytes <= CompactHostMemoryBytes ? MinimumVMMemoryBytes : DefaultVMMemoryBytes;
+        return Math.Max(MinimumVMMemoryBytes, Math.Min(comfortable, spare));
     }
 
     /// <summary>

@@ -59,7 +59,7 @@
     ]
   },
   "resourcePlan": {
-    "notes": "gib = 2^30. Constants: default 6 GiB, floor 4 GiB, host reserve 4 GiB, absolute max 8 VMs, default main disk 64 GiB.",
+    "notes": "gib = 2^30. Constants: default 6 GiB (4 GiB on hosts with at most 16 GiB RAM), floor 4 GiB, host reserve 4 GiB, absolute max 8 VMs, default main disk 64 GiB.",
     "cases": [
       { "hostCpus": 1, "hostRamGiB": 8, "vmCpus": 1, "vmMemGiB": 4, "maxVMs": 1 },
       { "hostCpus": 2, "hostRamGiB": 2, "vmCpus": 2, "vmMemGiB": 4, "maxVMs": 0 },
@@ -67,14 +67,14 @@
       { "hostCpus": 2, "hostRamGiB": 7, "vmCpus": 2, "vmMemGiB": 4, "maxVMs": 0 },
       { "hostCpus": 2, "hostRamGiB": 8, "vmCpus": 2, "vmMemGiB": 4, "maxVMs": 1 },
       { "hostCpus": 4, "hostRamGiB": 8, "vmCpus": 2, "vmMemGiB": 4, "maxVMs": 1 },
-      { "hostCpus": 4, "hostRamGiB": 9, "vmCpus": 2, "vmMemGiB": 5, "maxVMs": 1 },
-      { "hostCpus": 4, "hostRamGiB": 16, "vmCpus": 2, "vmMemGiB": 6, "maxVMs": 2 },
-      { "hostCpus": 5, "hostRamGiB": 16, "vmCpus": 3, "vmMemGiB": 6, "maxVMs": 2 },
-      { "hostCpus": 8, "hostRamGiB": 12, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 1 },
-      { "hostCpus": 8, "hostRamGiB": 16, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 2 },
+      { "hostCpus": 4, "hostRamGiB": 9, "vmCpus": 2, "vmMemGiB": 4, "maxVMs": 1 },
+      { "hostCpus": 4, "hostRamGiB": 16, "vmCpus": 2, "vmMemGiB": 4, "maxVMs": 2 },
+      { "hostCpus": 5, "hostRamGiB": 16, "vmCpus": 3, "vmMemGiB": 4, "maxVMs": 2 },
+      { "hostCpus": 8, "hostRamGiB": 12, "vmCpus": 4, "vmMemGiB": 4, "maxVMs": 1 },
+      { "hostCpus": 8, "hostRamGiB": 16, "vmCpus": 4, "vmMemGiB": 4, "maxVMs": 2 },
       { "hostCpus": 10, "hostRamGiB": 32, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 4 },
       { "hostCpus": 12, "hostRamGiB": 32, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 4 },
-      { "hostCpus": 16, "hostRamGiB": 16, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 2 },
+      { "hostCpus": 16, "hostRamGiB": 16, "vmCpus": 4, "vmMemGiB": 4, "maxVMs": 2 },
       { "hostCpus": 32, "hostRamGiB": 128, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 8 }
     ]
   },

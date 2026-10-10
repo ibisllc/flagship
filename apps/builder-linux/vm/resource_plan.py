@@ -20,6 +20,9 @@ DEFAULT_VM_MEMORY_BYTES = 6 * GIB
 MINIMUM_VM_MEMORY_BYTES = 4 * GIB
 # RAM always left to the host OS + the user's own apps.
 HOST_RESERVE_BYTES = 4 * GIB
+# At or below this much host RAM a VM gets the floor, not the comfortable
+# default: 6 GiB on a 16 GiB laptop pushes the host into swap.
+COMPACT_HOST_MEMORY_BYTES = 16 * GIB
 # Sparse main-disk size (the guest LUKS/ext4 root grows into it).
 DEFAULT_MAIN_DISK_SIZE_BYTES = 64 * GIB
 # Hard ceiling regardless of host size — family hosting, not a datacenter.
@@ -30,7 +33,8 @@ def vm_memory_bytes(host: HostResources) -> int:
     """Memory for ONE VM on this host: the comfortable default, clamped down to
     what the host can spare above the reserve, never below the floor."""
     spare = host.memory_bytes - HOST_RESERVE_BYTES if host.memory_bytes > HOST_RESERVE_BYTES else 0
-    return max(MINIMUM_VM_MEMORY_BYTES, min(DEFAULT_VM_MEMORY_BYTES, spare))
+    comfortable = MINIMUM_VM_MEMORY_BYTES if host.memory_bytes <= COMPACT_HOST_MEMORY_BYTES else DEFAULT_VM_MEMORY_BYTES
+    return max(MINIMUM_VM_MEMORY_BYTES, min(comfortable, spare))
 
 
 def vm_cpu_count(host: HostResources) -> int:

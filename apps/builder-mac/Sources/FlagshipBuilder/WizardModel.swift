@@ -517,6 +517,48 @@ final class WizardModel: ObservableObject {
     /// verify it if ordered (or reuse the cache), and return the local ISO. The
     /// download URL is surfaced under the progress bar via `baseDownloadURL`;
     /// the boot/after-download path+sha logging happens inside IsoBaseCache.
+    /// The published prebuilt server image for this Mac's architecture, or nil
+    /// when none fits (none published, or built for a different installer ref)
+    /// so hosting falls back to the Debian installer. Integrity, network and
+    /// disk-space failures are reported and stop the run.
+    private func ensurePublishedAppliance(installerGitRef: String) async -> String? {
+        let arch = HostArch.current()
+        do {
+            let cache = try ApplianceCache(arch: arch, log: { [weak self] line in
+                Task { @MainActor in self?.appendLog(stream: .stdout, text: "+ \(line)") }
+            })
+            let base = try await cache.ensure(installerGitRef: installerGitRef) { [weak self] phase in
+                Task { @MainActor in
+                    guard let self else { return }
+                    switch phase {
+                    case .downloading(let part, let total):
+                        self.phase = "download"
+                        self.progress = Double(part - 1) / Double(total)
+                        DockProgress.set(self.progress)
+                    case .verifying:
+                        self.phase = "verify"
+                        self.progress = nil
+                        DockProgress.set(nil)
+                    case .expanding(let fraction):
+                        self.phase = "verify"
+                        self.progress = fraction
+                        DockProgress.set(fraction)
+                    case .ready:
+                        self.progress = nil
+                        DockProgress.set(nil)
+                    }
+                }
+            }
+            return base.path
+        } catch let error as ApplianceCache.CacheError where error.fallsBackToInstaller {
+            appendLog(stream: .stdout, text: "+ \(error.localizedDescription) Using the Debian installer instead.")
+            return nil
+        } catch {
+            reportOperationFailure(error)
+            return nil
+        }
+    }
+
     private func ensureBaseISO(arch: IsoArch = .amd64) async throws -> URL {
         let cache = IsoBaseCache(arch: arch, log: { [weak self] line in
             Task { @MainActor in self?.appendLog(stream: .stdout, text: "+ \(line)") }
@@ -750,9 +792,13 @@ final class WizardModel: ObservableObject {
         }
 
         let environment = ProcessInfo.processInfo.environment
-        let appliancePath = environment["FLAGSHIP_VM_FORCE_ISO"] == "1"
+        var appliancePath = environment["FLAGSHIP_VM_FORCE_ISO"] == "1"
             ? nil
             : environment["FLAGSHIP_VM_APPLIANCE_BASE"]
+        if mode == .simple, environment["FLAGSHIP_VM_FORCE_ISO"] != "1", appliancePath?.isEmpty != false {
+            appliancePath = await ensurePublishedAppliance(installerGitRef: parsed.installerGitRef)
+            if appliancePath == nil, operationError != nil { return }
+        }
         let usesAppliance = mode == .simple && appliancePath?.isEmpty == false
         let config = VMConfig.plan(
             recipe: parsed, recipeJSON: recipeData, host: host,

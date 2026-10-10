@@ -5,6 +5,8 @@ temp XDG_CACHE_HOME so nothing touches the real cache.
 from __future__ import annotations
 
 import hashlib
+import os
+import time
 
 import pytest
 
@@ -248,3 +250,26 @@ def test_ensure_manifest_error_no_cache_raises():
 def test_ensure_null_download_no_cache_raises():
     with pytest.raises(ManifestFetchError):
         ensure("1.0.0", manifest_fn=lambda v, c, arch="amd64": ManifestResult(download=None))
+
+
+def test_prune_unused_drops_only_stale_bases_of_other_arches(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    d = iso_base_cache.cache_dir()
+    d.mkdir(parents=True)
+    stale = d / "flagship-base-debian-13.6.0.iso"
+    fresh = d / "flagship-base-arm64-debian-13.6.0.iso"
+    other = d / "notes.txt"
+    for p in (stale, fresh, other):
+        p.write_bytes(b"x")
+    old = time.time() - 31 * 24 * 60 * 60
+    for p in (stale, other):
+        os.utime(p, (old, old))
+
+    iso_base_cache.prune_unused(keep_arch="arm64")
+    assert not stale.exists()
+    assert fresh.exists()
+    assert other.exists()
+
+    os.utime(fresh, (old, old))
+    iso_base_cache.prune_unused(keep_arch="arm64")
+    assert fresh.exists(), "the arch about to be used is kept"

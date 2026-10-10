@@ -31,6 +31,7 @@ from __future__ import annotations
 import glob
 import hashlib
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
@@ -165,6 +166,38 @@ def _sha256_of(path: Path) -> str:
                 break
             hasher.update(block)
     return hasher.hexdigest()
+
+
+# How long a cached base ISO may sit unused before it is deleted.
+UNUSED_LIFETIME_SECONDS = 30 * 24 * 60 * 60
+
+
+def prune_unused(keep_arch: Optional[str] = None, now: Optional[float] = None) -> None:
+    """Delete cached base ISOs of any arch but `keep_arch` that haven't been
+    used within UNUSED_LIFETIME_SECONDS. A machine that only hosts servers
+    needs no burn ISO, and one used once for a burn shouldn't hold 800 MB
+    forever. The file is never modified after download, so its mtime doubles
+    as "last used" (see mark_used)."""
+    d = cache_dir()
+    if not d.exists():
+        return
+    now = time.time() if now is None else now
+    for candidate in d.glob(f"{_FILENAME_PREFIX}*{_FILENAME_SUFFIX}"):
+        arch = next((a for a in ("amd64", "arm64") if _version_from_filename(candidate, arch=a)), None)
+        if arch is None or arch == keep_arch:
+            continue
+        try:
+            if now - candidate.stat().st_mtime > UNUSED_LIFETIME_SECONDS:
+                candidate.unlink()
+        except OSError:
+            pass
+
+
+def mark_used(path: Path) -> None:
+    try:
+        os.utime(path, None)
+    except OSError:
+        pass
 
 
 def inspect_cache(log: Optional[LogCb] = None, arch: str = "amd64") -> Optional[CachedBase]:
@@ -308,7 +341,10 @@ def ensure(
     log = log or (lambda _m: None)
     fetch = manifest_fn or fetch_manifest
 
+    prune_unused(keep_arch=arch)
     cached = inspect_cache(log=log, arch=arch)
+    if cached is not None:
+        mark_used(cached.path)
     current = (
         CurrentBase(version=cached.version, sha256=cached.sha256)
         if cached is not None

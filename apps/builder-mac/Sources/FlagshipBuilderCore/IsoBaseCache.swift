@@ -156,7 +156,9 @@ public struct IsoBaseCache {
     /// Inspect the cache, ask the server, obey, return the local base-ISO URL.
     public func ensure(progress: @escaping @Sendable (Phase) -> Void = { _ in }) async throws -> URL {
         let dir = try resolvedCacheDir()
+        Self.pruneUnused(in: dir, except: arch)
         let existing = Self.existingCachedISO(in: dir, arch: arch)
+        if let existing { Self.markUsed(existing.url) }
 
         // (a) Inspect the cached ISO + compute its sha256, LOG path+sha.
         var current: IsoManifestCurrent? = nil
@@ -319,6 +321,32 @@ public struct IsoBaseCache {
                 try? fm.removeItem(at: url)
             }
         }
+    }
+
+    /// How long a cached base ISO may sit unused before it is deleted.
+    public static let unusedLifetime: TimeInterval = 30 * 24 * 60 * 60
+
+    /// Delete cached base ISOs (of any arch but `keep`) not used within
+    /// `unusedLifetime`. A Mac that only hosts servers needs no burn ISO, and
+    /// one used once for a burn shouldn't hold 800 MB forever.
+    public static func pruneUnused(in dir: URL, except keep: IsoArch? = nil, now: Date = Date()) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(atPath: dir.path) else { return }
+        for name in entries {
+            guard let arch = IsoArch.allCases.first(where: { version(ofCachedName: name, arch: $0) != nil }),
+                  arch != keep else { continue }
+            let url = dir.appendingPathComponent(name)
+            let used = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+            if let used, now.timeIntervalSince(used) > unusedLifetime {
+                try? fm.removeItem(at: url)
+            }
+        }
+    }
+
+    /// Record a use. The file isn't otherwise modified after download, so its
+    /// modification date doubles as "last used".
+    static func markUsed(_ url: URL) {
+        try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
     }
 
     private static func fileSize(_ url: URL) -> Int64 {

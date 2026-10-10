@@ -42,7 +42,10 @@ let package = Package(
             resources: [
                 // Shared cross-platform golden vectors (Node-produced). The
                 // engine test asserts JavaScriptCore reproduces these exactly.
-                .copy("Resources/preseed-vectors.json")
+                .copy("Resources/preseed-vectors.json"),
+                // qemu-img-written qcow2 images (compressed v3 split in two
+                // parts, plain v2 with 4 KiB clusters) for Qcow2ExpanderTests.
+                .copy("Resources/qcow2")
             ]
         )
     ]
