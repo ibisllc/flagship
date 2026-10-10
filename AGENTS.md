@@ -167,6 +167,15 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-10-10 (Windows + Linux Studio from CI; update drill).** New on-demand
+`studio-release.yml` builds, smoke-tests and publishes both desktop apps as one
+GitHub release (`studio-v<version>`). It fixed two packaging bugs real users
+would have hit: the Windows release lacked the xorriso it needs to remaster the
+ISO (now bundled from MSYS2 with its DLLs in `tools\`), and the AppImage shipped
+the CLI's compiled files without their dependencies (now one esbuild bundle).
+Windows is unsigned, as v0.0.1 was. Update-server Phases 2–4 are being drilled
+on the throwaway UpCloud demo `drill-1010`.
+
 **2026-10-10 (App Review business-model question) — DEPLOYED (Worker
 `7ec897b9`).** Apple paused iOS 1.0 (4) with a 2.1 "Information Needed"
 asking about paid content. Build 4 itself has no payment copy; the triggers
