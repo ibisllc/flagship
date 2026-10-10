@@ -3,25 +3,69 @@
   "arch": "arm64",
   "installerGitRef": "main",
   "format": "qcow2",
-  "sha256": "b2b48ea72f508f8e282e5f245dafc879656375a2a2842e04dc7f790102736426",
-  "sizeBytes": 2840441344,
+  "sha256": "e34faec6163b7030fa98905589324eff80dea29a2de74feeabf937a409b7c18d",
+  "sizeBytes": 2893918720,
   "parts": [
-    { "name": "part-00", "sizeBytes": 268435456, "sha256": "3ff886f5d1009f02d69cee17be29290b4dcb1afaf4cc164dec1c30ed2cd86a0c" },
-    { "name": "part-01", "sizeBytes": 268435456, "sha256": "fca5e381b357726e7140bdbfb38c766ad9f9c162e51bdf283b0aa3dec0fa30b7" },
-    { "name": "part-02", "sizeBytes": 268435456, "sha256": "c6b03acfaa76884aa389715a4961859afd9aa95ef777a14b57c16598b633f2fe" },
-    { "name": "part-03", "sizeBytes": 268435456, "sha256": "a84c8118ce9deecf460b52980294311be55ab8befbba83471375859c0f0fe631" },
-    { "name": "part-04", "sizeBytes": 268435456, "sha256": "86e6b693a5477bb6d21094f88053c7a9cd84b9e06161f20ce763f5ce7e3867b7" },
-    { "name": "part-05", "sizeBytes": 268435456, "sha256": "ca9bb479046b2cce8b83489fa6ed351960b57f9755b000d2976732efcbedefd3" },
-    { "name": "part-06", "sizeBytes": 268435456, "sha256": "f2363e2ca0152380a42a7a5ccce5d91d74b25a9141319233500d505c1ebb8924" },
-    { "name": "part-07", "sizeBytes": 268435456, "sha256": "0c2ea18c1867cc4bc6cd154a5c1ac15a83c746ab11aecb4c249935ca8e5eedfa" },
-    { "name": "part-08", "sizeBytes": 268435456, "sha256": "449b27d77839b2a91ef0b73c193fbe55345f19656410104502a303bf3ad8e56d" },
-    { "name": "part-09", "sizeBytes": 268435456, "sha256": "6841b6a4bb89259f5bd7474b95b0e800d0f968b416b1c4d1083ee4a01fc8f60f" },
-    { "name": "part-10", "sizeBytes": 156086784, "sha256": "3c4459bb6c76cc4634b38ecb47715ec1a9f4ecfc51166ef18eaad87553158d37" }
+    {
+      "name": "part-00",
+      "sizeBytes": 268435456,
+      "sha256": "a4459df3d3a4eecb1f7429d16fba579a2474342066bcb941698764e70c424eb8"
+    },
+    {
+      "name": "part-01",
+      "sizeBytes": 268435456,
+      "sha256": "1ed8af82faeeef659b245132fce64090595dcc2d08087c45bdaa5e2c96b409c1"
+    },
+    {
+      "name": "part-02",
+      "sizeBytes": 268435456,
+      "sha256": "1b70d3e9904b8b550b2f22ae875203be2b7287972729e4d5b653d023a4a0dfd1"
+    },
+    {
+      "name": "part-03",
+      "sizeBytes": 268435456,
+      "sha256": "90b09e8cb5dae4e4771eb1005f3f4218d63228233e32e210f4585af7d7f6fbfa"
+    },
+    {
+      "name": "part-04",
+      "sizeBytes": 268435456,
+      "sha256": "92946b31e5be855af8fb67ff8afea6a8ea684a9858a14db30d894f40ad48956a"
+    },
+    {
+      "name": "part-05",
+      "sizeBytes": 268435456,
+      "sha256": "d1516614e2bb462185b7372494bd5ce31189bc5f81f4b962acaf871d34bf27ef"
+    },
+    {
+      "name": "part-06",
+      "sizeBytes": 268435456,
+      "sha256": "8b7124b2128472d1606a8f578f14bbcbd2dc17eb9270a2ea1bd8b43925e4a57d"
+    },
+    {
+      "name": "part-07",
+      "sizeBytes": 268435456,
+      "sha256": "d6eb4baf661e9d350c6e9e9074b048716c67d0839babc665a88bc544d77e1f6b"
+    },
+    {
+      "name": "part-08",
+      "sizeBytes": 268435456,
+      "sha256": "5477ac37e9e47584cba870b4641cefbb6ff917864a605a4a8818141b9f136e70"
+    },
+    {
+      "name": "part-09",
+      "sizeBytes": 268435456,
+      "sha256": "76690552ba3c11295a34190cac1a9d58c45d03478964aa145dbb7b0eaef3c6fe"
+    },
+    {
+      "name": "part-10",
+      "sizeBytes": 209564160,
+      "sha256": "7cce63ecf310ccf817621c84ca5ea3bb64bb1fb6a3b7fd173c7b7f8ea366921f"
+    }
   ],
-  "rawSha256": "d8e3d1cc4a39799824f0f955f9d63e6005c4bc574011887bc4a8f9dd829272a1",
+  "rawSha256": "90bd748f2eebe434bc70ee7dd9f1ce49f70c013281779b267a5ecb5df6155704",
   "rawSizeBytes": 8589934592,
   "source": {
-    "name": "debian-13-generic-arm64.qcow2",
-    "sha512": "3be884e19878b307a5916eb59be17efb7f1a5ec8290f2253345640f0a8740082fd40cfb7a7940b56cca0a76289ecd448507011cfd1b17472c9998d90f44b5c2c"
+    "name": "debian-13-generic-arm64-20261001-2618.qcow2",
+    "sha512": "001e742c14a69f3f506c1663b271b4aeed7fa766f7471a13d49ee22d338b8a637b5206a75bf994435af7b26ce3794a255dcf22e312b0d4b8d7b7f96076fe925f"
   }
 }

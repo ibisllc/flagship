@@ -170,14 +170,11 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   passkey recovery on a sideloaded APK.
 - **Throwaway demo `drill-1010`** (UpCloud) exists for update-server testing.
   Tear it down with `node scripts/sample-user.mjs cleanup drill-1010` when done.
-- **VM appliance rebuilds (both arches)** are running in CI from `7ac1b50a`
-  (arm64 on `ubuntu-24.04-arm` under TCG, ~65 min). When they pass: upload the
-  parts to R2, commit both manifests, redeploy `.com`. The published arm64 one is
-  still the July hand build.
-- **amd64 VM appliance published** 2026-10-10: built by `vm-appliance.yml` under
-  KVM from Debian cloud build `20261001-2618` (boot smoke passed), ten parts in R2
-  `flagship-iso/flagship-vm-appliance-amd64-main-ba730ac5f960.qcow2.part-NN`,
-  manifest `apps/web/public/downloads/FlagshipVMAppliance-amd64.json`.
+- **VM appliances published 2026-10-10 (both arches)**, built by `vm-appliance.yml`
+  from `9873b83e` (amd64 under KVM, arm64 on `ubuntu-24.04-arm` under TCG) and
+  uploaded to R2 `flagship-iso/` with their manifests in
+  `apps/web/public/downloads/`. They include the one-approval restart fix and
+  per-provider AI model defaults. The July hand-built arm64 image is retired.
 
 ### Built, waiting on deploys or rebuilds
 
