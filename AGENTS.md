@@ -167,6 +167,16 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-10-10 (App Review business-model question) — DEPLOYED (Worker
+`7ec897b9`).** Apple paused iOS 1.0 (4) with a 2.1 "Information Needed"
+asking about paid content. Build 4 itself has no payment copy; the triggers
+were the Terms/Privacy (subscriptions, Stripe, hardware sales, "cancel from
+the phone app") and the live custom-domain refusal ("part of Pro — upgrade"),
+which build 4 shows verbatim. Terms §3/§4 and Privacy §2.4 now state nothing is
+sold today, and the refusal says "Custom domains aren't available yet." When
+`feat/custom-domains` is rebased, keep its Pro wording for the launch.
+**Remaining (owner):** reply to App Review.
+
 **2026-10-09 (pricing, dibs, custom domains, throttle, LAN direct; TODO sweep).**
 Owner decisions (recorded in `docs/naming-recovery-and-name-change.md` §16 and
 `docs/monetization-free-tier-first.md`): name change $10, dibs claim $20; Pro
