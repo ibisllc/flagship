@@ -170,6 +170,9 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   passkey recovery on a sideloaded APK.
 - **Throwaway demo `drill-1010`** (UpCloud) exists for update-server testing.
   Tear it down with `node scripts/sample-user.mjs cleanup drill-1010` when done.
+- **arm64 VM appliance rebuild** is running in CI (`vm-appliance.yml`,
+  `ubuntu-24.04-arm`, TCG). When it passes: upload the parts to R2, commit the
+  manifest, redeploy `.com`, then run the Mac hosted-server test with a phone.
 - **amd64 VM appliance published** 2026-10-10: built by `vm-appliance.yml` under
   KVM from Debian cloud build `20261001-2618` (boot smoke passed), ten parts in R2
   `flagship-iso/flagship-vm-appliance-amd64-main-ba730ac5f960.qcow2.part-NN`,
@@ -229,9 +232,18 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
    wrangler files (gym has no `_ARM64` yet), `distros.ts`, `docs/iso-manifest.md`,
    the docs page + its test, and the phone-usb-burn seed pin.
    `iso-manifest-urls.yml` fails loudly the day a pin moves to `archive/`.
-2. **Mac-hosted VM needs ~20 GB free on this Mac** (it had 6 GB on 2026-10-10).
-   The arm64 d-i path has also stalled on VZ before; the prebuilt appliance
-   (`FLAGSHIP_VM_APPLIANCE_BASE`) avoids that but is still env opt-in, not native.
+2. **Hosted-VM footprint (2026-10-10).** Mac Studio now hosts on the published
+   prebuilt appliance by default: it downloads, verifies and expands the qcow2
+   natively (`ApplianceCache` + `Qcow2Expander`, no qemu-img), APFS-clones it per
+   server, and falls back to the Debian installer only when no image fits.
+   Boxes install/build only the daemon (`--workspace=packages/server-daemon`,
+   `tsc -b packages/server-daemon`; box `node_modules` 182 → 113 MB). Hosts with
+   ≤16 GiB RAM give a VM 4 GiB, not 6 (all three cores + vectors). Unused cached
+   ISOs are pruned after 30 days (Mac + Linux). Still open: a live hosted-server
+   run on Mac from a fresh arm64 appliance (the published one is a July hand
+   build; `vm-appliance.yml -f arch=arm64` rebuilds it under TCG); appliances
+   bake the code of their build day, so rebuild them when `main` moves
+   meaningfully; Linux/Windows still host via the installer ISO by default.
 3. **Hetzner:** account suspended; five orphaned servers to delete by hand when
    it unlocks (153213447, 153638469, 153643080, 153813669, 155315594).
 4. **Minimum-OS review** (Conventions rule): Mac Studio is macOS 14, Android is
