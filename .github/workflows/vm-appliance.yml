@@ -40,7 +40,7 @@ jobs:
       - name: Install QEMU + OVMF
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 qemu-utils ovmf
+          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 qemu-utils ovmf xorriso
           ls /usr/share/OVMF/
 
       - uses: actions/setup-node@v4
