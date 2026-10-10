@@ -170,9 +170,10 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   passkey recovery on a sideloaded APK.
 - **Throwaway demo `drill-1010`** (UpCloud) exists for update-server testing.
   Tear it down with `node scripts/sample-user.mjs cleanup drill-1010` when done.
-- **arm64 VM appliance rebuild** is running in CI (`vm-appliance.yml`,
-  `ubuntu-24.04-arm`, TCG). When it passes: upload the parts to R2, commit the
-  manifest, redeploy `.com`, then run the Mac hosted-server test with a phone.
+- **VM appliance rebuilds (both arches)** are running in CI from `7ac1b50a`
+  (arm64 on `ubuntu-24.04-arm` under TCG, ~65 min). When they pass: upload the
+  parts to R2, commit both manifests, redeploy `.com`. The published arm64 one is
+  still the July hand build.
 - **amd64 VM appliance published** 2026-10-10: built by `vm-appliance.yml` under
   KVM from Debian cloud build `20261001-2618` (boot smoke passed), ten parts in R2
   `flagship-iso/flagship-vm-appliance-amd64-main-ba730ac5f960.qcow2.part-NN`,
@@ -239,11 +240,17 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
    Boxes install/build only the daemon (`--workspace=packages/server-daemon`,
    `tsc -b packages/server-daemon`; box `node_modules` 182 → 113 MB). Hosts with
    ≤16 GiB RAM give a VM 4 GiB, not 6 (all three cores + vectors). Unused cached
-   ISOs are pruned after 30 days (Mac + Linux). Still open: a live hosted-server
-   run on Mac from a fresh arm64 appliance (the published one is a July hand
-   build; `vm-appliance.yml -f arch=arm64` rebuilds it under TCG); appliances
-   bake the code of their build day, so rebuild them when `main` moves
-   meaningfully; Linux/Windows still host via the installer ISO by default.
+   ISOs are pruned after 30 days (Mac + Linux). **Validated live on this Mac
+   2026-10-10** (`home2.plucky-avocet`, iPhone dev build + signed Studio):
+   create → specialized and resealed in ~45 s → phone unlock → Let's Encrypt
+   cert + HTTPS 200 about 2.5 min after creation. The first attempt exposed that
+   both appliance seed builders (Swift + Node CLI) seeded the raw recipe instead
+   of install-blob.json, so the guest bootstrap read nulls and stopped silently;
+   fixed via the engine's `buildInstallBlobJsonFromRecipe`, and the specializer
+   now reports each stage and any failure to the install timeline. Remaining:
+   publish the CI rebuilds of both arches (they bake the code of their build
+   day, so rebuild when `main` moves meaningfully); Linux/Windows still host via
+   the installer ISO by default.
 3. **Hetzner:** account suspended; five orphaned servers to delete by hand when
    it unlocks (153213447, 153638469, 153643080, 153813669, 155315594).
 4. **Minimum-OS review** (Conventions rule): Mac Studio is macOS 14, Android is
