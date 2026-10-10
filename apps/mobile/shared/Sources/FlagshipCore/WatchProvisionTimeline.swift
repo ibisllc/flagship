@@ -101,14 +101,14 @@ public extension WatchProtocol {
             ("downloading",  "Downloading system"),
             ("registering",  "Registering with Flagship"),
             ("sealing",      "Sealing your disk"),
-            ("installed",    "Install complete — unplug the USB"),
+            ("installed",    "Install complete"),
             ("pairing",      "Pairing"),
             ("live",         "Server is live"),
         ]
 
         /// Mirrors `FlagshipCore.ProvisionTimelineLadder.installedUnplugDetail`.
         public static let installedUnplugDetail =
-            "Install complete — unplug the USB, then power the box back on."
+            "Install complete. If it ran from a USB stick, unplug it and power the box back on."
 
         public static func rows(for ctx: ProvisionTimelineContext?) -> [TimelineRow] {
             let ladder = phases
@@ -150,10 +150,11 @@ public extension WatchProtocol {
                 }
                 if i == curIdx {
                     let isLive = entry.phase == "live"
-                    // `installed`: the box is OFF (nothing spins), but it's still
-                    // the current action-needed rung carrying the unplug detail.
+                    // `installed`: nothing spins. A hosted VM says what it's doing
+                    // ("Restarting into the sealed disk"); a USB install reports
+                    // no detail, so it gets the unplug instruction.
                     let detail = entry.phase == "installed"
-                        ? installedUnplugDetail
+                        ? (detailFor(entry.phase, in: ctx) ?? installedUnplugDetail)
                         : detailFor(entry.phase, in: ctx)
                     return TimelineRow(
                         phase: entry.phase,

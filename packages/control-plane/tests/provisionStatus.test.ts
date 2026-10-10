@@ -269,7 +269,7 @@ describe("provision status channel", () => {
       payload: { title: string; body: string; meta?: Record<string, unknown> };
     };
     expect(arg.payload.title).toBe("Install complete");
-    expect(arg.payload.body).toBe("Unplug the USB stick, then power the box back on.");
+    expect(arg.payload.body).toBe("The install finished. If it ran from a USB stick, unplug it and power the box back on.");
     expect(arg.payload.meta).toMatchObject({ serial: SERIAL, phase: "installed" });
   });
 

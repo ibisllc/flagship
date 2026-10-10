@@ -68,7 +68,7 @@ public struct InstallProgressAttributes: ActivityAttributes {
             case .downloading:  return "Downloading"
             case .partitioning: return "Partitioning disk"
             case .installing:   return "Installing"
-            case .installed:    return "Install complete — unplug the USB"
+            case .installed:    return "Install complete"
             case .registering:  return "Registering with Flagship"
             case .sealing:      return "Sealing your disk key"
             case .pairing:      return "Pairing with your phone"

@@ -54,7 +54,7 @@ class ProvisionProgressTest {
     @Test fun stepGroups_canonicalProjection_installedIsOwnRungAfterSecuring_coverEveryPhaseOnce() {
         // `installed` is its own rung now, positioned after Securing.
         assertEquals(
-            listOf("Booting", "Installing", "Registering", "Securing", "Install complete — unplug the USB", "Ready"),
+            listOf("Booting", "Installing", "Registering", "Securing", "Install complete", "Ready"),
             ProvisionProgress.stepGroups.map { it.label },
         )
         val flat = ProvisionProgress.stepGroups.flatMap { it.phases }
@@ -111,7 +111,7 @@ class ProvisionProgressTest {
         val installed = v.first { it.key == ProvisionProgress.StepKey.INSTALLED }
         assertEquals(ProvisionProgress.StepState.ACTIVE, installed.state)
         assertEquals(
-            "Install complete — unplug the USB, then power the box back on.",
+            "Install complete. If it ran from a USB stick, unplug it and power the box back on.",
             installed.detail,
         )
         assertEquals(ProvisionProgress.INSTALLED_UNPLUG_DETAIL, installed.detail)

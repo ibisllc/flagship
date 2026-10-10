@@ -1092,7 +1092,7 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
         case .downloading:  return "Downloading"
         case .partitioning: return "Partitioning disk"
         case .installing:   return "Installing"
-        case .installed:    return "Install complete — unplug the USB"
+        case .installed:    return "Install complete"
         case .registering:  return "Registering with Flagship"
         case .sealing:      return "Sealing your disk key"
         case .pairing:      return "Pairing with your phone"
@@ -1112,7 +1112,7 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
         case .downloading:  return "Downloading the server software."
         case .partitioning: return "Preparing the disk."
         case .installing:   return "Installing the server software."
-        case .installed:    return "Unplug the USB stick, then power the box back on."
+        case .installed:    return "The install finished. If it ran from a USB stick, unplug it and power the box back on."
         case .registering:  return "Your server is checking in with Flagship."
         case .sealing:      return "Sealing your encrypted disk key."
         case .pairing:      return "Your server is pairing with your phone."
@@ -1142,7 +1142,7 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
             case .installing:   return "Installing"
             case .registering:  return "Registering"
             case .securing:     return "Securing"
-            case .installed:    return "Install complete — unplug the USB"
+            case .installed:    return "Install complete"
             case .ready:        return "Ready"
             }
         }

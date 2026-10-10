@@ -68,7 +68,7 @@ describe("webapp PROVISION_STEP_GROUPS", () => {
       "Installing",
       "Registering",
       "Securing (TLS certificate)",
-      "Install complete — unplug the USB",
+      "Install complete",
       "Ready",
     ]);
     // `installed` is now its own rendered rung, positioned after Securing.
@@ -110,7 +110,7 @@ describe("webapp provisionStepStates", () => {
     expect(installed.state).toBe("active");
     expect(installed.detail).toBe(INSTALLED_DONE_DETAIL);
     expect(installed.detail).toBe(
-      "Install complete — unplug the USB, then power the box back on.",
+      "Install complete. If it ran from a USB stick, unplug it and power the box back on.",
     );
     // `installed` IS a standalone rendered rung now.
     expect(v.some((s) => s.key === "installed")).toBe(true);

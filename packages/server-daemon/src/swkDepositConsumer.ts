@@ -218,13 +218,18 @@ export interface SwkDepositPoller {
  * with a deposit already waiting comes online without a poll-interval delay.
  */
 export function buildSwkDepositPoller(
-  opts: ClaimSwkDepositOptions & { intervalMs?: number },
+  opts: ClaimSwkDepositOptions & {
+    intervalMs?: number;
+    /** Wraps each claim (consume-once read + persist) so a concurrent
+     *  self-restart waits for it (restartCoordinator.ts). */
+    guard?: <T>(claim: () => Promise<T>) => Promise<T>;
+  },
 ): SwkDepositPoller {
   const intervalMs = opts.intervalMs ?? 5 * 60_000;
   let timer: ReturnType<typeof setInterval> | null = null;
 
   async function pollOnce(): Promise<SwkClaimOutcome> {
-    const out = await claimSwkDeposit(opts);
+    const out = await (opts.guard ?? ((claim) => claim()))(() => claimSwkDeposit(opts));
     if (out.claimed) stop();
     return out;
   }

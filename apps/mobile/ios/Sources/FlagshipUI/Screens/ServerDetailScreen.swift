@@ -218,7 +218,12 @@ public struct ServerDetailScreen: View {
             .padding(.horizontal, FS.space.s6)
             .padding(.top, FS.space.s4)
             .fsReadingColumn()
+            // Pin the content to the scroll view's width: one view that won't
+            // shrink otherwise widens the scrollable area and the whole page
+            // drifts sideways and bounces back.
+            .containerRelativeFrame(.horizontal)
         }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Server")
         .navigationBarTitleDisplayMode(.inline)

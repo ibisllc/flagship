@@ -196,7 +196,7 @@ const PHASE_TITLES: Record<ProvisionStatusPhase, string> = {
   installing: "Installing",
   // ACTION-NEEDED, not success: the push title is the short "Install complete";
   // the in-ladder step title spells out the action.
-  installed: "Install complete — unplug the USB",
+  installed: "Install complete",
   registering: "Registering with Flagship",
   sealing: "Sealing your disk key",
   pairing: "Pairing with your phone",
@@ -209,7 +209,7 @@ const PHASE_BODIES: Record<ProvisionStatusPhase, string> = {
   downloading: "Downloading the server software.",
   partitioning: "Preparing the disk.",
   installing: "Installing the server software.",
-  installed: "Unplug the USB stick, then power the box back on.",
+  installed: "The install finished. If it ran from a USB stick, unplug it and power the box back on.",
   registering: "Your server is checking in with Flagship.",
   sealing: "Sealing your encrypted disk key.",
   pairing: "Your server is pairing with your phone.",

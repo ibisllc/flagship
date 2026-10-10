@@ -43,7 +43,7 @@ final class ProvisionProgressTests: XCTestCase {
     func test_stepGroups_canonicalLabels_andCoverEveryPhaseExactlyOnce() {
         XCTAssertEqual(
             ProvisionProgress.stepGroups.map { $0.label },
-            ["Booting", "Installing", "Registering", "Securing", "Install complete — unplug the USB", "Ready"]
+            ["Booting", "Installing", "Registering", "Securing", "Install complete", "Ready"]
         )
         // Every non-terminal phase is covered exactly once (design §1.2
         // projection table). The grouped order is NOT the ladder order —
@@ -70,7 +70,7 @@ final class ProvisionProgressTests: XCTestCase {
         XCTAssertEqual(v.map { $0.state }, [.done, .done, .done, .done, .active, .pending])
         let installed = v.first { $0.key == .installed }!
         XCTAssertEqual(installed.state, .active)
-        XCTAssertEqual(installed.detail, "Install complete — unplug the USB, then power the box back on.")
+        XCTAssertEqual(installed.detail, "Install complete. If it ran from a USB stick, unplug it and power the box back on.")
         XCTAssertEqual(installed.detail, ProvisionProgress.installedUnplugDetail)
     }
 
@@ -130,7 +130,7 @@ final class ProvisionProgressTests: XCTestCase {
         XCTAssertEqual(ProvisionStatusPhase.downloading.title, "Downloading")
         XCTAssertEqual(ProvisionStatusPhase.partitioning.title, "Partitioning disk")
         XCTAssertEqual(ProvisionStatusPhase.installing.title, "Installing")
-        XCTAssertEqual(ProvisionStatusPhase.installed.title, "Install complete — unplug the USB")
+        XCTAssertEqual(ProvisionStatusPhase.installed.title, "Install complete")
         XCTAssertEqual(ProvisionStatusPhase.registering.title, "Registering with Flagship")
         XCTAssertEqual(ProvisionStatusPhase.sealing.title, "Sealing your disk key")
         XCTAssertEqual(ProvisionStatusPhase.pairing.title, "Pairing with your phone")

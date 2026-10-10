@@ -212,13 +212,18 @@ export interface CgkDepositPoller {
  * with a deposit already waiting enables gossip without a poll-interval delay.
  */
 export function buildCgkDepositPoller(
-  opts: ClaimCgkDepositOptions & { intervalMs?: number },
+  opts: ClaimCgkDepositOptions & {
+    intervalMs?: number;
+    /** Wraps each claim (consume-once read + persist) so a concurrent
+     *  self-restart waits for it (restartCoordinator.ts). */
+    guard?: <T>(claim: () => Promise<T>) => Promise<T>;
+  },
 ): CgkDepositPoller {
   const intervalMs = opts.intervalMs ?? 5 * 60_000;
   let timer: ReturnType<typeof setInterval> | null = null;
 
   async function pollOnce(): Promise<CgkClaimOutcome> {
-    const out = await claimCgkDeposit(opts);
+    const out = await (opts.guard ?? ((claim) => claim()))(() => claimCgkDeposit(opts));
     if (out.claimed || (!out.claimed && out.reason === "already-claimed")) stop();
     return out;
   }

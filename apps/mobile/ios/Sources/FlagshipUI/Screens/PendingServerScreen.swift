@@ -48,24 +48,27 @@ public struct PendingServerScreen: View {
                     }
                 }
 
-                FSCard {
-                    VStack(alignment: .leading, spacing: FS.space.s3) {
-                        FSPill(pillLabel, kind: pillKind)
-                        Text(headline)
-                            .font(FS.font.body())
-                            .foregroundColor(c.text)
-                        ProvisionTimelineView(status: timeline?.status)
-                            .padding(.top, FS.space.s1)
-                    }
-                }
-
                 // The box reaches the boot-unlock step DURING provisioning (an
                 // encrypted disk asks the owner to release its key over the boot
-                // relay). Surface the Approve card right on the checklist so the
-                // owner can approve without hunting through a buried danger zone;
-                // it renders nothing until a live request for this box exists.
+                // relay). The Approve card goes first; it renders nothing until a
+                // live request for this box exists.
                 if let domain = approvalDomain, !domain.isEmpty {
                     BootUnlockApprovalCard(serverDomain: domain, awaitingUnlock: awaitingUnlock)
+                }
+
+                // While the box waits for the owner, the install checklist is
+                // finished and only pushes the Approve card off the screen.
+                if !awaitingUnlock {
+                    FSCard {
+                        VStack(alignment: .leading, spacing: FS.space.s3) {
+                            FSPill(pillLabel, kind: pillKind)
+                            Text(headline)
+                                .font(FS.font.body())
+                                .foregroundColor(c.text)
+                            ProvisionTimelineView(status: timeline?.status)
+                                .padding(.top, FS.space.s1)
+                        }
+                    }
                 }
 
                 if let domain = timeline?.status?.serverDomain, !domain.isEmpty {

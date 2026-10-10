@@ -41,7 +41,7 @@ object ProvisionProgress {
         "downloading" to "Downloading",
         "partitioning" to "Partitioning disk",
         "installing" to "Installing",
-        "installed" to "Install complete — unplug the USB",
+        "installed" to "Install complete",
         "registering" to "Registering with Flagship",
         "sealing" to "Sealing your disk key",
         "pairing" to "Pairing with your phone",
@@ -65,7 +65,7 @@ object ProvisionProgress {
     /** Detail shown on the Installed row when the current phase is
      *  `installed` (action-needed: install finished, box powered off). */
     const val INSTALLED_UNPLUG_DETAIL =
-        "Install complete — unplug the USB, then power the box back on."
+        "Install complete. If it ran from a USB stick, unplug it and power the box back on."
 
     /** The user-facing groups, in order. `installed` is its own rung after
      *  Securing (see above). */
@@ -74,7 +74,7 @@ object ProvisionProgress {
         StepGroup(StepKey.INSTALLING, "Installing", listOf("installing", "downloading")),
         StepGroup(StepKey.REGISTERING, "Registering", listOf("registering", "pairing")),
         StepGroup(StepKey.SECURING, "Securing", listOf("sealing")),
-        StepGroup(StepKey.INSTALLED, "Install complete — unplug the USB", listOf("installed")),
+        StepGroup(StepKey.INSTALLED, "Install complete", listOf("installed")),
         StepGroup(StepKey.READY, "Ready", listOf("live")),
     )
 

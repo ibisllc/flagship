@@ -34,7 +34,7 @@ export const PROVISION_PHASE_TITLES = Object.freeze({
   downloading: "Downloading",
   partitioning: "Partitioning disk",
   installing: "Installing",
-  installed: "Install complete — unplug the USB",
+  installed: "Install complete",
   registering: "Registering with Flagship",
   sealing: "Sealing your disk key",
   pairing: "Pairing with your phone",
@@ -57,7 +57,7 @@ export const PROVISION_STEP_GROUPS = Object.freeze([
   { key: "installing", label: "Installing", phases: ["installing", "downloading"] },
   { key: "registering", label: "Registering", phases: ["registering", "pairing"] },
   { key: "securing", label: "Securing (TLS certificate)", phases: ["sealing"] },
-  { key: "installed", label: "Install complete — unplug the USB", phases: ["installed"] },
+  { key: "installed", label: "Install complete", phases: ["installed"] },
   { key: "ready", label: "Ready", phases: ["live"] },
 ]);
 
@@ -66,7 +66,7 @@ export const PROVISION_STEP_GROUPS = Object.freeze([
  *  awaiting the user. Longer than PROVISION_PHASE_TITLES.installed (the push
  *  banner's short form) because the in-ladder row spells out BOTH actions. */
 export const INSTALLED_DONE_DETAIL =
-  "Install complete — unplug the USB, then power the box back on.";
+  "Install complete. If it ran from a USB stick, unplug it and power the box back on.";
 
 /** @param {string} phase */
 function isLadderPhase(phase) {

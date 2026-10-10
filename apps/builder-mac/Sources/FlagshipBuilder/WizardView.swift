@@ -174,7 +174,14 @@ struct WizardView: View {
                 subtitle: "Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys.",
                 badge: ServerTier.hostedVM.badgeLabel,
                 disabledReason: hostHereDisabledReason
-            ) { model.destination = .hostHere }
+            ) {
+                // Choosing the destination IS the decision; the pane that
+                // follows shows progress, not a second "are you sure".
+                model.destination = .hostHere
+                if !(model.effectiveRequiresUserISO && model.iso == nil) {
+                    Task { await model.runHostHere() }
+                }
+            }
         }
     }
 
@@ -250,10 +257,13 @@ struct WizardView: View {
                     subtitle: "Will run as a managed VM on this Mac — \(VMResourcePlan.vmCPUCount(host: host)) vCPU, \(VMResourcePlan.vmMemoryBytes(host: host) / VMResourcePlan.gib) GiB RAM, \(VMResourcePlan.defaultMainDiskSizeBytes / VMResourcePlan.gib) GiB disk."
                 )
             }
-            Text("The VM installs unattended from the same image a USB burn uses, then boots encrypted and waits for your phone to unlock it. This app never sees the disk key.")
+            Text("The server starts from Flagship's prebuilt image, seals its disk to your phone, then waits for you to approve the unlock there. This app never sees the disk key.")
                 .font(FB.Font.caption())
                 .foregroundStyle(FB.Colors.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
+            if model.advancedAllowed && model.mode == .advanced && !model.isRunning {
+                isoRow
+            }
             if let error = model.operationError {
                 StatusCard(icon: "exclamationmark.triangle.fill",
                            tint: FB.Colors.warning,
@@ -287,11 +297,13 @@ struct WizardView: View {
                                 .frame(maxWidth: 300)
                         }
                     }
-                } else {
+                } else if model.operationError != nil || (model.effectiveRequiresUserISO && model.iso == nil) {
+                    // Only when there's something to do: retry after a failure,
+                    // or start once an Advanced ISO has been chosen.
                     Button {
                         Task { await model.runHostHere() }
                     } label: {
-                        Text("Create server on this Mac")
+                        Text(model.operationError != nil ? "Try again" : "Create server on this Mac")
                             .font(FB.Font.rowTitle())
                             .frame(minWidth: 200, minHeight: 28)
                     }

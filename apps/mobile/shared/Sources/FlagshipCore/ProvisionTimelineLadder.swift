@@ -32,7 +32,7 @@ public enum ProvisionTimelineLadder {
     /// off awaiting the user). The single source for this copy across the
     /// phone ladder, the watch ladder, Android, and the webapp.
     public static let installedUnplugDetail =
-        "Install complete — unplug the USB, then power the box back on."
+        "Install complete. If it ran from a USB stick, unplug it and power the box back on."
 
     public static func rows(for status: ProvisionStatus?) -> [Row] {
         // `installed` is now a REAL visible rung — the final pre-poweroff
@@ -72,8 +72,11 @@ public enum ProvisionTimelineLadder {
                 // `installed`: the box is powered off, so nothing spins — but it
                 // is still the CURRENT rung (action needed) carrying the unplug
                 // instruction. `live` is the terminal done state.
+                // A hosted VM reports what it's doing on this rung ("Restarting
+                // into the sealed disk"); a USB install reports nothing, so it
+                // gets the unplug instruction.
                 let detail = phase == .installed
-                    ? Self.installedUnplugDetail
+                    ? (detailFor(phase, in: status) ?? Self.installedUnplugDetail)
                     : detailFor(phase, in: status)
                 return Row(
                     phase: phase,

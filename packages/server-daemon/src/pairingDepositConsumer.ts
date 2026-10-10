@@ -191,13 +191,18 @@ export interface PairingDepositPoller {
  * a box with a deposit already waiting pairs without a poll-interval delay.
  */
 export function buildPairingDepositPoller(
-  opts: ClaimPairingDepositOptions & { intervalMs?: number },
+  opts: ClaimPairingDepositOptions & {
+    intervalMs?: number;
+    /** Wraps each claim (consume-once read + persist) so a concurrent
+     *  self-restart waits for it (restartCoordinator.ts). */
+    guard?: <T>(claim: () => Promise<T>) => Promise<T>;
+  },
 ): PairingDepositPoller {
   const intervalMs = opts.intervalMs ?? 5 * 60_000;
   let timer: ReturnType<typeof setInterval> | null = null;
 
   async function pollOnce(): Promise<PairingClaimOutcome> {
-    const out = await claimPairingDeposit(opts);
+    const out = await (opts.guard ?? ((claim) => claim()))(() => claimPairingDeposit(opts));
     if (out.claimed || (!out.claimed && out.reason === "already-claimed")) stop();
     return out;
   }

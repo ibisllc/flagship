@@ -790,8 +790,11 @@ struct ServerDetailContainer: View {
         .navigationBarTitleDisplayMode(.inline)
         // `.task` cancels the closure automatically on view removal —
         // which catches the case where `.onDisappear` doesn't fire
-        // reliably during navigation churn on iPad.
-        .task {
+        // reliably during navigation churn on iPad. Keyed on liveness: the
+        // load below gives up on a box that is still coming up, so when that
+        // box goes live while this page is open it must run again, or the page
+        // sits on "Connecting to your server…" until the user leaves and returns.
+        .task(id: pod.map { "\($0.status)|\(String(describing: app.liveness(for: $0)))" }) {
             // Point the box session at THIS pod so per-pod detail targets the
             // tapped pod — not the global leader/sessionPod. Without this,
             // opening pod B while pod A is the session anchor loads A's data.

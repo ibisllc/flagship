@@ -188,8 +188,27 @@ final class ProvisionTimelineLadderTests: XCTestCase {
         XCTAssertEqual(rows[6].detail, ProvisionTimelineLadder.installedUnplugDetail)
         XCTAssertEqual(
             ProvisionTimelineLadder.installedUnplugDetail,
-            "Install complete — unplug the USB, then power the box back on."
+            "Install complete. If it ran from a USB stick, unplug it and power the box back on."
         )
+    }
+
+    func test_installedPhase_showsTheHostedVMsOwnDetailInsteadOfUnplug() {
+        // A Mac-hosted server never had a USB stick; it reports what it's doing.
+        let status = ProvisionStatus(
+            serial: "A1",
+            serverDomain: nil,
+            phase: .installed,
+            detail: "Restarting into the sealed disk",
+            updatedAt: 1_700_000_006_000,
+            history: [
+                .init(phase: .installing, detail: "Checking the server recipe", ts: 1_700_000_003_000),
+                .init(phase: .registering, detail: nil, ts: 1_700_000_005_000),
+                .init(phase: .installed, detail: "Restarting into the sealed disk", ts: 1_700_000_006_000),
+            ]
+        )
+        let row = ProvisionTimelineLadder.rows(for: status).first { $0.phase == .installed }
+        XCTAssertEqual(row?.state, .current)
+        XCTAssertEqual(row?.detail, "Restarting into the sealed disk")
     }
 
     func test_error_atInstalled_failsTheInstalledRung() {

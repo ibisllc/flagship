@@ -214,6 +214,7 @@ import {
   type UpdateHealthSignal,
 } from "./updateHealthGate.js";
 import { fileUpdateOutcomeStore } from "./updateOutcome.js";
+import { daemonRestarts as restarts } from "./restartCoordinator.js";
 import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 
@@ -735,11 +736,9 @@ async function main(): Promise<void> {
       unsealToBox: (blob) => custodian.unsealToBox(blob),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       persistSwk: (hex) => persistSwkHex(swkHexFilePath, hex),
-      restart: () => {
-        console.log("[daemon] SWK provisioned via deposit — restarting to enable the service platform");
-        process.exit(0);
-      },
+      restart: () => restarts.request("SWK provisioned via deposit; restarting to enable the service platform"),
       markerStore: fileSwkMarkerStore(`${dataDir}/swk-claimed.json`),
+      guard: restarts.guard,
       onLog: (m) => console.log(m),
     });
     swkPoller.start();
@@ -768,11 +767,9 @@ async function main(): Promise<void> {
       unsealToBox: (blob) => custodian.unsealToBox(blob),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       persistCgk: (hex) => persistCgkHex(cgkHexFilePath, hex),
-      restart: () => {
-        console.log("[daemon] CGK provisioned via deposit — restarting to enable gossip");
-        process.exit(0);
-      },
+      restart: () => restarts.request("CGK provisioned via deposit; restarting to enable gossip"),
       markerStore: fileCgkMarkerStore(`${dataDir}/cgk-claimed.json`),
+      guard: restarts.guard,
       onLog: (m) => console.log(m),
     });
     cgkPoller.start();
@@ -793,10 +790,7 @@ async function main(): Promise<void> {
       seedAdminRootHex: bytesToHexLocal(cfg.adminRootPub),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       pinStore: fileAdminRootPinStore(adminRootPinPath),
-      restart: () => {
-        console.log("[daemon] admin root rotated — restarting to re-bind the authority anchor");
-        process.exit(0);
-      },
+      restart: () => restarts.request("admin root rotated; restarting to re-bind the authority anchor"),
       onLog: (m) => console.log(m),
     });
     adminRotationPoller.start();
@@ -1126,6 +1120,7 @@ async function main(): Promise<void> {
           unsealToBox: (blob) => custodian.unsealToBox(blob),
           pairedSessions,
           markerStore: pairingMarker,
+          guard: restarts.guard,
           onLog: (m) => console.log(m),
         });
         pairingPoller.start();
@@ -1869,7 +1864,7 @@ async function loadEntitlementsOrExit(deps: {
       // IRK-signed entitlement for this box's STK at the moment it approves the
       // first-boot unlock, so an encrypted box comes online with a SINGLE owner
       // approval. Only if there is no deposit do we issue a relay request.
-      const deposited = await claimEntitlementDeposit({
+      const deposited = await restarts.guard(() => claimEntitlementDeposit({
         serverDomain: env.serverFqdn,
         ownerIrkPub: cfg.irkPublicKey,
         ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
@@ -1878,7 +1873,7 @@ async function loadEntitlementsOrExit(deps: {
         controlPlaneBaseUrl: env.controlPlaneBaseUrl,
         entitlementBundlePath,
         onLog: (m) => console.log(m),
-      });
+      }));
       if (deposited) {
         loaded = deposited;
       } else {
@@ -1887,7 +1882,7 @@ async function loadEntitlementsOrExit(deps: {
         );
         // The awaiting-entitlement handoff is covered by the `pairing` status
         // report fired once the bundle loads below — no separate UI phase.
-        const relayed = await fetchEntitlementViaRelay({
+        const relayed = await restarts.guard(() => fetchEntitlementViaRelay({
           serverDomain: env.serverFqdn,
           signer: custodian,
           ownerIrkPub: cfg.irkPublicKey,
@@ -1896,7 +1891,7 @@ async function loadEntitlementsOrExit(deps: {
           controlPlaneBaseUrl: env.controlPlaneBaseUrl,
           entitlementBundlePath,
           onLog: (m) => console.log(m),
-        });
+        }));
         if (relayed) {
           loaded = relayed;
         } else {
