@@ -52,7 +52,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           if [ "$ARCH" = arm64 ]; then
-            sudo apt-get install -y -qq --no-install-recommends qemu-system-arm qemu-utils qemu-efi-aarch64 xorriso
+            sudo apt-get install -y -qq --no-install-recommends qemu-system-arm qemu-utils qemu-efi-aarch64 ipxe-qemu xorriso
             echo "FLAGSHIP_QEMU_CODE=/usr/share/AAVMF/AAVMF_CODE.fd" >> "$GITHUB_ENV"
             echo "FLAGSHIP_QEMU_VARS=/usr/share/AAVMF/AAVMF_VARS.fd" >> "$GITHUB_ENV"
           else
