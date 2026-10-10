@@ -713,6 +713,10 @@ struct ServerDetailContainer: View {
     @Environment(ToastCenter.self) private var toasts
     @State private var detailVm: HomeViewModel?
     @State private var metricsVm: ServerMetricsViewModel?
+    /// The directory still calls the box live (its heartbeat isn't stale yet)
+    /// but it hasn't answered for ~30 s, e.g. a hosted VM that was just stopped.
+    /// Shown as offline instead of an endless "Connecting…"; cleared on answer.
+    @State private var notAnswering = false
     @State private var pairVm: PodPairViewModel?
     @State private var demoPairing = false
 
@@ -766,7 +770,7 @@ struct ServerDetailContainer: View {
                     // server-authoritative unreachable (was live, now stale);
                     // `.comingOnline` for a non-pending box = `never` (awaiting
                     // first heartbeat). Pending pods are handled by their own route.
-                    offline: pod.map { app.liveness(for: $0) == .offline } ?? false,
+                    offline: notAnswering || (pod.map { app.liveness(for: $0) == .offline } ?? false),
                     lastSeen: pod?.humanizedLastSeen(),
                     comingUp: pod.map { app.liveness(for: $0) == .comingOnline && $0.status != .pending } ?? false,
                     pairing: isPairing,
@@ -829,11 +833,15 @@ struct ServerDetailContainer: View {
             let wontAnswer = livenessState == .offline
                 || (livenessState == .comingOnline && pod?.status != .pending)
             var delay: UInt64 = 2_000_000_000
+            var failures = 0
+            notAnswering = false
             while !Task.isCancelled {
                 await detailVm?.load()
-                if let d = detailVm?.detail, case .loaded = d { break }
+                if let d = detailVm?.detail, case .loaded = d { notAnswering = false; break }
                 if detailVm?.needsPairing == true { break }
                 if wontAnswer { break }
+                failures += 1
+                if failures >= 4 { notAnswering = true }
                 try? await Task.sleep(nanoseconds: delay)
                 delay = min(delay * 2, 15_000_000_000)
             }
