@@ -59,8 +59,23 @@ export function buildDebianApplianceFactoryPreseed(gitRef: string): string {
 /** The customer appliance remains LUKS-encrypted even though Debian's official
  * cloud image is not: the cloud disk is only a disposable build host, and this
  * script copies it into a separate encrypted target before generalization. */
-export function buildDebianCloudApplianceFactoryUserData(gitRef: string): string {
-  const prepareB64 = utf8ToBase64(buildAppliancePrepareScript({ gitRef }));
+/**
+ * Multiply every long `timeout` in a factory script. The limits are sized for a
+ * hypervisor; a factory running under software emulation (GitHub's arm64
+ * runners have no KVM) is 10-20x slower and would trip them. Short console
+ * writes (`timeout 2|4`) are left alone. A scale of 1 returns the script as is.
+ */
+export function scaleFactoryTimeouts(script: string, scale: number): string {
+  if (!Number.isInteger(scale) || scale < 1 || scale > 50) throw new Error("invalid factory timeout scale");
+  if (scale === 1) return script;
+  return script
+    .replace(/timeout -k (\d+) (\d+)/g, (_m, k: string, n: string) => `timeout -k ${k} ${Number(n) * scale}`)
+    .replace(/timeout (\d{2,})(?= )/g, (_m, n: string) => `timeout ${Number(n) * scale}`);
+}
+
+export function buildDebianCloudApplianceFactoryUserData(gitRef: string, timeoutScale = 1): string {
+  const prepareB64 = utf8ToBase64(
+    scaleFactoryTimeouts(buildAppliancePrepareScript({ gitRef }), timeoutScale));
   const migrate = `#!/bin/bash
 set -euo pipefail
 exec > >(tee -a /var/log/flagship-appliance-cloud-factory.log) 2>&1
@@ -227,7 +242,7 @@ sync
 echo "[appliance-factory] encrypted generalized target ready"
 systemctl poweroff
 `;
-  const migrateB64 = utf8ToBase64(migrate);
+  const migrateB64 = utf8ToBase64(scaleFactoryTimeouts(migrate, timeoutScale));
   return `#cloud-config
 write_files:
   - path: /usr/local/sbin/flagship-cloud-to-appliance.sh

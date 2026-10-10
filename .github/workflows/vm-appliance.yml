@@ -74,6 +74,7 @@ jobs:
             echo "no /dev/kvm: using TCG"
             echo "FLAGSHIP_QEMU_ACCEL=tcg" >> "$GITHUB_ENV"
             echo "FLAGSHIP_SMOKE_SECONDS=1200" >> "$GITHUB_ENV"
+            echo "FLAGSHIP_FACTORY_TIMEOUT_SCALE=20" >> "$GITHUB_ENV"
           fi
 
       - uses: actions/setup-node@v4

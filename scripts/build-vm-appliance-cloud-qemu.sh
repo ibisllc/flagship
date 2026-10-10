@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [ "$#" -ne 5 ]; then
   echo "usage: scripts/build-vm-appliance-cloud-qemu.sh <debian.qcow2> <sha512> <base.raw> <arm64|amd64> <git-ref>" >&2
-  echo "requires FLAGSHIP_QEMU_CODE and FLAGSHIP_QEMU_VARS; optional FLAGSHIP_QEMU_SYSTEM/FLAGSHIP_QEMU_IMG/FLAGSHIP_QEMU_ACCEL/FLAGSHIP_QEMU_CPU/FLAGSHIP_SMOKE_SECONDS" >&2
+  echo "requires FLAGSHIP_QEMU_CODE and FLAGSHIP_QEMU_VARS; optional FLAGSHIP_QEMU_SYSTEM/FLAGSHIP_QEMU_IMG/FLAGSHIP_QEMU_ACCEL/FLAGSHIP_QEMU_CPU/FLAGSHIP_SMOKE_SECONDS/FLAGSHIP_FACTORY_TIMEOUT_SCALE" >&2
   exit 2
 fi
 
@@ -62,7 +62,7 @@ echo "verified official Debian cloud image sha512=$ACTUAL_SHA512"
 "$QEMU_IMG" create -f raw "$OUTPUT_RAW" 8G
 "$QEMU_IMG" create -f qcow2 -F qcow2 -b "$SOURCE_QCOW2" "$WORK_DIR/debian-source.qcow2"
 node packages/flagship-builder/dist/cli.js appliance-cloud-factory-seed \
-  "$WORK_DIR/factory-seed.iso" --git-ref "$GIT_REF"
+  "$WORK_DIR/factory-seed.iso" --git-ref "$GIT_REF" --timeout-scale "${FLAGSHIP_FACTORY_TIMEOUT_SCALE:-1}"
 cp "$FLAGSHIP_QEMU_VARS" "$WORK_DIR/vars.fd"
 
 set +e

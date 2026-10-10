@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDebianApplianceFactoryPreseed,
   buildDebianCloudApplianceFactoryUserData,
+  scaleFactoryTimeouts,
 } from "../src/applianceFactory.js";
 
 describe("generalized appliance factory preseed", () => {
@@ -43,5 +44,25 @@ describe("generalized appliance factory preseed", () => {
     expect(script).toContain("removable EFI loader missing");
     expect(script).toContain("systemctl poweroff");
     expect(script).not.toContain("factory.invalid");
+  });
+});
+
+describe("scaleFactoryTimeouts", () => {
+  it("leaves scale 1 untouched and multiplies only the long limits", () => {
+    const script = "timeout -k 10 120 apt-get update\ntimeout 60 cryptsetup open\ntimeout 2 sh -c x\n";
+    expect(scaleFactoryTimeouts(script, 1)).toBe(script);
+    expect(scaleFactoryTimeouts(script, 20)).toBe(
+      "timeout -k 10 2400 apt-get update\ntimeout 1200 cryptsetup open\ntimeout 2 sh -c x\n");
+    expect(() => scaleFactoryTimeouts(script, 0)).toThrow();
+  });
+
+  it("is applied to both the cloud wrapper and the prepare script", () => {
+    const decode = (yaml: string) =>
+      Buffer.from(/content: (\S+)/.exec(yaml)![1]!, "base64").toString("utf8");
+    const plain = decode(buildDebianCloudApplianceFactoryUserData("main"));
+    const slow = decode(buildDebianCloudApplianceFactoryUserData("main", 20));
+    expect(plain).toContain("timeout -k 10 120 apt-get");
+    expect(slow).toContain("timeout -k 10 2400 apt-get");
+    expect(slow).not.toContain(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > "\$TARGET_ROOT/.exec(plain)![1]!);
   });
 });
