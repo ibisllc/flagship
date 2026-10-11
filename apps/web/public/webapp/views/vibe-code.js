@@ -23,7 +23,21 @@ import { screensFetch, ScreensError, getPodBaseUrl, getSessionToken } from "../l
 import { activeOperations } from "../lib/activeOperations.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { inlineAlert, inlineConfirm } from "../lib/modal.js";
+import {
+  CONFLICT_TITLE,
+  EXAMPLES,
+  INVITE_ONLY,
+  canBuild,
+  checkName,
+  conflictFromError,
+  conflictMessage,
+  nameWarning,
+  slugify,
+  visibilityExplanation,
+} from "../lib/vibeNames.js";
 import { enterBuildKey } from "./build-key.js";
+import { enterBuildJournal } from "./build-journal.js";
 
 registerView("view-vibe-code");
 
@@ -50,6 +64,14 @@ let pendingTalkToolId = null;
 // seeded from the first prompt so the sliver reads "building <subject> on
 // <server>" while the AI works. Refreshed if the build's name is learned.
 let buildSubject = null;
+// The box's latest answer for the name field, and the slug it answered for:
+// a check only counts while the field still holds that slug.
+let nameCheck = null;
+let checkedSlug = "";
+let nameCheckTimer = null;
+let starting = false;
+// Set when a deploy the owner asked to be invite only came back open.
+let leftOpen = false;
 
 function clearPoll() {
   if (pollTimer) {
@@ -196,59 +218,14 @@ function renderChips() {
 async function send() {
   const promptEl = $("vc-prompt");
   const text = promptEl.value.trim();
+  if (!activeSessionId) return startBuild(text);
   if (!text && staged.length === 0) return toast("Type a message first.", "err");
   const attachments = staged.slice();
   const sendBtn = $("vc-send");
   sendBtn.disabled = true;
   sendBtn.textContent = "Sending…";
   try {
-    if (!activeSessionId) {
-      // First turn — start the session, carrying the BYOK credential so the
-      // box can drive the build with the owner's chosen key. YOU decide the
-      // name (→ slug/web address) + who can see it; both ride the start.
-      const startBody = { prompt: text, attachments };
-      if (buildCredential) startBody.credential = buildCredential;
-      const nameEl = $("vc-name");
-      const slug = nameEl
-        ? nameEl.value.toLowerCase().replace(/[^a-z0-9-]/g, "")
-        : "";
-      if (slug) startBody.name = slug;
-      const visEl = $("vc-visibility");
-      if (visEl && (visEl.value === "just-me" || visEl.value === "link")) {
-        startBody.visibility = visEl.value;
-      }
-      const r = await screensFetch("/api/screens/vibe-code/start", {
-        method: "POST",
-        body: JSON.stringify(startBody),
-      });
-      activeSessionId = r.sessionId;
-      if (r.needsCredential) {
-        // No model can drive this yet — gently route into the AI-key step.
-        // Don't surface a sliver op for a build that hasn't actually started.
-        toast("Add an AI key to start.", "warn");
-        promptEl.value = text; // keep what they typed
-        promptEl.disabled = false;
-        enterBuildKey({
-          contextLabel: "Start from scratch with AI",
-          back: "view-vibe-code",
-          onChosen: (credential) => {
-            buildCredential = credential;
-            activeSessionId = null; // re-start cleanly with the key
-            show("view-vibe-code");
-            void send();
-          },
-        });
-        return;
-      }
-      // The build is really running now — surface it in the global operations
-      // sliver as "building <subject> on <server>" until it deploys or fails.
-      buildSubject = subjectFromPrompt(text);
-      registerBuildOp();
-      // Name + visibility are first-turn-only — fold them away now the session
-      // is running (they can't change mid-build).
-      const ft = $("vc-first-turn");
-      if (ft) ft.classList.add("hidden");
-    } else if (pendingTalkToolId) {
+    if (pendingTalkToolId) {
       // Follow-up turn answering the AI's talkToUser question.
       const replyBody = { text, attachments };
       if (buildCredential) replyBody.credential = buildCredential;
@@ -261,10 +238,7 @@ async function send() {
       toast("Wait for the AI to finish this turn.", "info");
       return;
     }
-    // Clear the composer + staged attachments.
-    promptEl.value = "";
-    staged = [];
-    renderChips();
+    clearComposer();
     schedulePoll();
     await poll();
   } catch (e) {
@@ -272,6 +246,210 @@ async function send() {
   } finally {
     sendBtn.disabled = false;
     sendBtn.textContent = "Send";
+  }
+}
+
+function clearComposer() {
+  $("vc-prompt").value = "";
+  staged = [];
+  renderChips();
+}
+
+// ---- describe form (first turn) ------------------------------------------
+
+function currentSlug() {
+  return slugify($("vc-name")?.value);
+}
+
+function currentCheck() {
+  return checkedSlug === currentSlug() ? nameCheck : null;
+}
+
+function serverFqdn() {
+  const base = getPodBaseUrl();
+  if (!base) return "";
+  try {
+    return new URL(base).hostname;
+  } catch {
+    return "";
+  }
+}
+
+function renderNameStatus() {
+  const slug = currentSlug();
+  const addr = $("vc-name-address");
+  if (addr) {
+    addr.innerHTML = `https://<strong class="vc-address-name">${escapeHtml(slug || "<name>")}</strong>.${escapeHtml(serverFqdn())}`;
+  }
+  const status = $("vc-name-status");
+  if (status) {
+    const check = currentCheck();
+    const warning = nameWarning(check, slug);
+    status.classList.remove("is-taken", "is-free");
+    if (warning) {
+      status.textContent = `⚠ ${warning}`;
+      status.classList.add("is-taken");
+      status.classList.remove("hidden");
+    } else if (check?.ok && check.name) {
+      status.textContent = "✓ Available";
+      status.classList.add("is-free");
+      status.classList.remove("hidden");
+    } else {
+      status.textContent = "";
+      status.classList.add("hidden");
+    }
+  }
+  updateBuildButton();
+}
+
+function updateBuildButton() {
+  if (activeSessionId) return;
+  const btn = $("vc-send");
+  if (!btn) return;
+  btn.textContent = starting ? "Starting…" : "Build it";
+  btn.disabled = !canBuild({
+    slug: currentSlug(),
+    prompt: $("vc-prompt")?.value,
+    check: currentCheck(),
+    starting,
+  });
+}
+
+async function runNameCheck(slug) {
+  const result = await checkName({ baseUrl: getPodBaseUrl(), token: getSessionToken(), name: slug });
+  if (slug === currentSlug()) {
+    nameCheck = result;
+    checkedSlug = slug;
+    renderNameStatus();
+  }
+  return result;
+}
+
+function onNameInput() {
+  if (nameCheckTimer) clearTimeout(nameCheckTimer);
+  renderNameStatus();
+  const slug = currentSlug();
+  if (!slug) return;
+  nameCheckTimer = setTimeout(() => void runNameCheck(slug), 350);
+}
+
+async function showConflict(check, name) {
+  if (check.kind === "session") {
+    const open = await inlineConfirm({
+      title: CONFLICT_TITLE,
+      message: conflictMessage(check, name),
+      okLabel: "Open build sessions",
+      cancelLabel: "Pick another name",
+    });
+    // The list's Back returns to the chooser, not this half-filled form.
+    if (open) void enterBuildJournal();
+  } else {
+    await inlineAlert({ title: CONFLICT_TITLE, message: conflictMessage(check, name), okLabel: "Pick another name" });
+  }
+}
+
+function renderExamples() {
+  const box = $("vc-examples");
+  if (!box) return;
+  box.innerHTML = EXAMPLES.map(
+    (ex, i) => `<button type="button" class="secondary vc-example" data-example="${i}">${escapeHtml(ex.label)}</button>`,
+  ).join("");
+  box.querySelectorAll("[data-example]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const ex = EXAMPLES[Number(btn.dataset.example)];
+      if (!ex) return;
+      $("vc-prompt").value = ex.text;
+      updateBuildButton();
+    });
+  });
+}
+
+function renderVisibilityNote() {
+  const note = $("vc-visibility-note");
+  if (note) note.textContent = visibilityExplanation($("vc-visibility")?.value);
+}
+
+function setFirstTurnVisible(visible) {
+  $("vc-first-turn")?.classList.toggle("hidden", !visible);
+  $("vc-first-turn-extras")?.classList.toggle("hidden", !visible);
+}
+
+async function startBuild(text) {
+  if (starting) return;
+  const promptEl = $("vc-prompt");
+  const slug = currentSlug();
+  if (!canBuild({ slug, prompt: text, check: currentCheck(), starting })) return;
+  const attachments = staged.slice();
+  starting = true;
+  updateBuildButton();
+  try {
+    const latest = currentCheck() ?? (await runNameCheck(slug));
+    if (!latest.ok) {
+      if (latest.kind !== "invalid") await showConflict(latest, slug);
+      return;
+    }
+    // First turn — start the session, carrying the BYOK credential so the
+    // box can drive the build with the owner's chosen key. YOU decide the
+    // name (→ slug/web address) + who can see it; both ride the start.
+    const startBody = { prompt: text, attachments, name: slug };
+    if (buildCredential) startBody.credential = buildCredential;
+    const visEl = $("vc-visibility");
+    if (visEl && (visEl.value === "just-me" || visEl.value === "link")) {
+      startBody.visibility = visEl.value;
+    }
+    let r;
+    try {
+      r = await screensFetch("/api/screens/vibe-code/start", {
+        method: "POST",
+        body: JSON.stringify(startBody),
+      });
+    } catch (e) {
+      const taken = conflictFromError(e);
+      if (!taken) throw e;
+      nameCheck = taken;
+      checkedSlug = slug;
+      renderNameStatus();
+      await showConflict(taken, slug);
+      return;
+    }
+    if (r.needsCredential) {
+      // No model can drive this yet — gently route into the AI-key step.
+      // Don't surface a sliver op for a build that hasn't actually started.
+      toast("Add an AI key to start.", "warn");
+      promptEl.value = text; // keep what they typed
+      promptEl.disabled = false;
+      enterBuildKey({
+        contextLabel: "Start from scratch with AI",
+        back: "view-vibe-code",
+        onChosen: (credential) => {
+          buildCredential = credential;
+          show("view-vibe-code");
+          void send();
+        },
+      });
+      return;
+    }
+    activeSessionId = r.sessionId;
+    // The build is really running now — surface it in the global operations
+    // sliver as "building <subject> on <server>" until it deploys or fails.
+    buildSubject = subjectFromPrompt(text);
+    registerBuildOp();
+    // Name + visibility are first-turn-only — fold them away now the session
+    // is running (they can't change mid-build).
+    setFirstTurnVisible(false);
+    clearComposer();
+    schedulePoll();
+    await poll();
+  } catch (e) {
+    toast(e instanceof ScreensError ? e.message : String(e), "err");
+  } finally {
+    starting = false;
+    const sendBtn = $("vc-send");
+    if (activeSessionId) {
+      sendBtn.textContent = "Send";
+    } else {
+      updateBuildButton();
+    }
   }
 }
 
@@ -314,6 +492,9 @@ async function poll() {
     removeBuildOp();
   }
 }
+
+export const LEFT_OPEN_WARNING =
+  "This server couldn't make it invite only, so anyone with the link can open it. You can restrict it from the service's Access settings.";
 
 function statusLabel(status) {
   switch (status) {
@@ -417,6 +598,7 @@ function render(state) {
         <div class="value text-sm mt-1">
           <a href="${escapeHtml(state.deployedUrl)}" target="_blank" rel="noopener">${escapeHtml(state.deployedUrl)}</a>
         </div>
+        ${leftOpen ? `<p class="note vc-left-open mt-1">${escapeHtml(LEFT_OPEN_WARNING)}</p>` : ""}
       </div>`;
     resultBox.classList.remove("hidden");
   } else if (state.errorReason) {
@@ -447,6 +629,8 @@ async function triggerDeploy() {
       const text = await r.text().catch(() => "");
       throw new Error(`deploy failed: ${r.status} ${text}`.trim());
     }
+    const body = await r.json().catch(() => null);
+    leftOpen = body?.inviteOnly === false;
     toast("Deployed");
     schedulePoll();
   } catch (e) {
@@ -466,17 +650,23 @@ function reset() {
   pendingTalkToolId = null;
   buildCredential = null;
   buildSubject = null;
+  leftOpen = false;
+  starting = false;
+  nameCheck = null;
+  checkedSlug = "";
+  if (nameCheckTimer) clearTimeout(nameCheckTimer);
+  nameCheckTimer = null;
   renderChips();
   const promptEl = $("vc-prompt");
   promptEl.disabled = false;
   promptEl.value = "";
   // Restore the first-turn name + visibility settings for a fresh build.
-  const ft = $("vc-first-turn");
-  if (ft) ft.classList.remove("hidden");
+  setFirstTurnVisible(true);
   const nameEl = $("vc-name");
   if (nameEl) nameEl.value = "";
   const visEl = $("vc-visibility");
-  if (visEl) visEl.value = "just-me";
+  if (visEl) visEl.value = INVITE_ONLY;
+  renderVisibilityNote();
   $("vc-status").textContent = "idle";
   $("vc-messages").innerHTML =
     '<div class="card placeholder">Say what you\'d like to build to get started.</div>';
@@ -484,9 +674,7 @@ function reset() {
   $("vc-files-count").textContent = "(none yet)";
   $("vc-deploy-box")?.classList.add("hidden");
   $("vc-result")?.classList.add("hidden");
-  const sendBtn = $("vc-send");
-  sendBtn.disabled = false;
-  sendBtn.textContent = "Send";
+  renderNameStatus();
   const deployBtn = $("vc-deploy-go");
   if (deployBtn) {
     deployBtn.disabled = false;
@@ -498,6 +686,10 @@ export function initVibeCodeView() {
   $("vc-send")?.addEventListener("click", send);
   $("vc-deploy-go")?.addEventListener("click", triggerDeploy);
   $("vc-reset")?.addEventListener("click", reset);
+  $("vc-name")?.addEventListener("input", onNameInput);
+  $("vc-prompt")?.addEventListener("input", updateBuildButton);
+  $("vc-visibility")?.addEventListener("change", renderVisibilityNote);
+  renderExamples();
   $("vc-attach-input")?.addEventListener("change", (e) => {
     void stageFiles(e.target.files);
     e.target.value = ""; // allow re-selecting the same file
@@ -542,6 +734,8 @@ export async function openVibeCodeSession(sessionId) {
   show("view-vibe-code");
   reset();
   activeSessionId = sessionId;
-  $("vc-first-turn")?.classList.add("hidden");
+  setFirstTurnVisible(false);
+  const sendBtn = $("vc-send");
+  if (sendBtn) sendBtn.textContent = "Send";
   await poll().catch(() => {});
 }

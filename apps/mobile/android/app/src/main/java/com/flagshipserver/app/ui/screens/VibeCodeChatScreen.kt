@@ -70,6 +70,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
     // relay), so this button IS how a chat-built service ships. Mirror of iOS.
     var deploying by remember { mutableStateOf(false) }
     var deployedUrl by remember { mutableStateOf<String?>(null) }
+    var leftOpen by remember { mutableStateOf(false) }
 
     val pods = appState.pods.collectAsState().value
     val leaderId = appState.leaderPodId.collectAsState().value
@@ -333,6 +334,14 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                             style = TextStyle(fontSize = 13.sp),
                             modifier = Modifier.semantics { testTag = "vibecode-deployed-url" },
                         )
+                        if (leftOpen) {
+                            Spacer(Modifier.height(FS.space.s2))
+                            Text(
+                                LEFT_OPEN_WARNING,
+                                color = FS.colors.warning,
+                                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                            )
+                        }
                     }
                 }
             }
@@ -363,6 +372,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                     val r = client.vibeCodeDeploy(sessionId)
                                     if (r.ok) {
                                         deployedUrl = r.url
+                                        leftOpen = r.inviteOnly == false
                                     } else {
                                         errorMessage = "Deploy was rejected by the box."
                                     }
@@ -386,6 +396,9 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
         Spacer(Modifier.height(FS.space.s10))
     }
 }
+
+internal const val LEFT_OPEN_WARNING =
+    "This server couldn't make it invite only, so anyone with the link can open it. You can restrict it from the service's Access settings."
 
 private fun statusLabel(status: String): String = when (status) {
     "streaming" -> "Generating…"

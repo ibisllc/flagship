@@ -374,7 +374,8 @@ describe("/webapp PWA static surface", () => {
     // v35 lists the box's releases in the update dialog ("Update to latest").
     // v37 drops the update sheet's second downgrade confirmation.
     // v38 resumes open build sessions; Back from a build goes to the chooser.
-    expect(r.body).toContain('SHELL_VERSION = "v38"');
+    // v39 checks build names, adds Invite only + Discard, splits the AI Key page.
+    expect(r.body).toContain('SHELL_VERSION = "v39"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

@@ -21,9 +21,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.rememberCoroutineScope
+import com.flagshipserver.app.keystore.BiometricAuthority
+import com.flagshipserver.app.viewmodels.SavedKeyRow
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,12 +69,24 @@ private const val REASSURANCE =
     "Your key stays on this device. Your box calls the provider directly — " +
         "flagshipserver.com never sees it."
 
+/** Copy for the build-flow key step. Mirror of iOS BuildKeyScreen. */
+object AiKeyStep {
+    const val TITLE = "AI Key"
+    const val SECURITY_NOTE = "The keys are stored safely in your mobile app and your own servers."
+    const val ADD_LABEL = "Add an API key"
+    const val DELETE_TITLE = "Delete this key?"
+
+    fun deleteMessage(label: String): String =
+        "$label will be removed from this phone. Builds that are already running keep working."
+}
+
 /**
  * Reusable AI-key step. Shown for any build path that uses the BOX's model
- * (scratch always; git only when a non-fit repo needs adapting). Lists saved
- * keys for one-tap recall, pre-selects the active key for a "Confirm" happy
- * path, and offers a "use a different key" form with a "Save on this device"
- * toggle. On confirm yields an in-memory credential to `onConfirm`.
+ * (scratch always; git only when a non-fit repo needs adapting). Adding and
+ * choosing are separate: "Add an API key" opens a form that saves the key to
+ * the device-local list, and each saved key has "Use this" (which hands its
+ * in-memory credential to `onConfirm` and moves the flow on) and a confirmed
+ * delete. Mirror of iOS BuildKeyScreen.
  */
 @Composable
 fun AiKeyStepScreen(
@@ -70,8 +96,11 @@ fun AiKeyStepScreen(
 ) {
     val keys by vm.keys.collectAsState()
     val activeId by vm.activeId.collectAsState()
-
     var showForm by remember { mutableStateOf(keys.isEmpty()) }
+    LaunchedEffect(keys.isEmpty()) { if (keys.isEmpty()) showForm = true }
+    var confirmDelete by remember { mutableStateOf<SavedKeyRow?>(null) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     val scroll = rememberScrollState()
     Column(
@@ -84,95 +113,141 @@ fun AiKeyStepScreen(
         FSGhostButton(label = "← Back", onClick = onBack)
         Spacer(Modifier.height(FS.space.s3))
         Text(
-            "Which AI builds it?",
+            AiKeyStep.TITLE,
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
-        Spacer(Modifier.height(FS.space.s2))
-        Text(
-            "This build runs on your box's model, so it needs an AI key. $REASSURANCE",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-        )
-        Spacer(Modifier.height(FS.space.s5))
+        Spacer(Modifier.height(FS.space.s4))
 
-        // Saved keys — one-tap recall. The active one is the confirm default.
+        if (showForm) {
+            AiKeyEntryForm(
+                confirmLabel = "Add key",
+                showSaveToggle = false,
+                onCancel = if (keys.isNotEmpty()) ({ showForm = false }) else null,
+                onSubmit = { provider, apiKey, label, baseUrl, _ ->
+                    if (vm.addAndSelect(provider, apiKey, label, baseUrl)) showForm = false
+                },
+                confirmTag = "build-key-add-save",
+            )
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(FS.radius.sm))
+                    .clickable { showForm = true }
+                    .padding(vertical = FS.space.s2)
+                    .testTag("build-key-add"),
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
+                Text(
+                    AiKeyStep.ADD_LABEL,
+                    color = FS.colors.primary,
+                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                )
+            }
+        }
+
         if (keys.isNotEmpty()) {
+            Spacer(Modifier.height(FS.space.s5))
             Text(
-                "Saved on this device",
+                "Saved keys",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
             )
             Spacer(Modifier.height(FS.space.s2))
-            keys.forEach { row ->
-                SavedKeyRecallRow(
-                    slug = row.maskedSlug,
-                    isActive = row.id == activeId,
-                    onClick = { vm.credentialFor(row.id)?.let(onConfirm) },
+            AiKeysViewModel.ordered(keys, activeId).forEach { row ->
+                SavedKeyStepRow(
+                    row = row,
+                    lastUsed = row.id == activeId,
+                    onUse = { vm.choose(row.id)?.let(onConfirm) },
+                    onDelete = { confirmDelete = row },
                 )
                 Spacer(Modifier.height(FS.space.s2))
             }
-
-            // "Confirm" — the happy path: hand the box the active key.
-            activeId?.let { id ->
-                Spacer(Modifier.height(FS.space.s2))
-                FSPrimaryButton(
-                    label = "Confirm and build",
-                    onClick = { vm.credentialFor(id)?.let(onConfirm) },
-                    block = true,
-                )
+            deleteError?.let {
+                Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp))
             }
-
-            Spacer(Modifier.height(FS.space.s3))
-            FSSecondaryButton(
-                label = if (showForm) "Hide" else "Use a different key",
-                onClick = { showForm = !showForm },
-                block = true,
-                modifier = Modifier.testTag("build-key-different"),
-            )
         }
 
-        if (showForm) {
-            Spacer(Modifier.height(FS.space.s4))
-            AiKeyEntryForm(
-                confirmLabel = "Use this key",
-                onSubmit = { provider, apiKey, label, baseUrl, save ->
-                    vm.useEnteredKey(provider, apiKey, label, baseUrl, save)?.let(onConfirm)
-                },
+        Spacer(Modifier.height(FS.space.s4))
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Icon(
+                Icons.Outlined.Lock,
+                contentDescription = null,
+                tint = FS.colors.primary,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                AiKeyStep.SECURITY_NOTE,
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
             )
         }
 
         Spacer(Modifier.height(FS.space.s12))
     }
+
+    confirmDelete?.let { row ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text(AiKeyStep.DELETE_TITLE) },
+            text = { Text(AiKeyStep.deleteMessage(row.label)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDelete = null
+                        deleteError = null
+                        scope.launch {
+                            // Session-scoped like every other biometric gate in
+                            // the app: an unlocked session that already
+                            // authenticated isn't prompted again.
+                            val ok = runCatching {
+                                BiometricAuthority.current()?.ensureFresh(
+                                    title = AiKeyStep.DELETE_TITLE,
+                                    subtitle = "Delete the AI key ${row.label}",
+                                )
+                            }.isSuccess
+                            if (ok) vm.delete(row.id) else deleteError = "The key wasn't deleted."
+                        }
+                    },
+                    modifier = Modifier.testTag("build-key-delete-confirm"),
+                ) { Text("Delete key", color = FS.colors.danger) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
+        )
+    }
 }
 
 @Composable
-private fun SavedKeyRecallRow(slug: String, isActive: Boolean, onClick: () -> Unit) {
-    FSCard(
-        modifier = Modifier.clickable(onClick = onClick),
-        padding = PaddingValues(FS.space.s4),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                slug,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                modifier = Modifier.weight(1f),
-            )
-            if (isActive) {
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(FS.radius.pill))
-                        .background(FS.colors.primary.copy(alpha = 0.12f))
-                        .padding(horizontal = 10.dp, vertical = 3.dp),
-                ) {
-                    Text(
-                        "Active",
-                        color = FS.colors.primary,
-                        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                    )
+private fun SavedKeyStepRow(row: SavedKeyRow, lastUsed: Boolean, onUse: () -> Unit, onDelete: () -> Unit) {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    row.label,
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                    maxLines = 1,
+                )
+                Text(
+                    row.maskedSlug,
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp),
+                    maxLines = 1,
+                )
+                if (lastUsed) {
+                    Text("Last used", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
                 }
             }
+            IconButton(onClick = onDelete, modifier = Modifier.testTag("build-key-delete")) {
+                Icon(Icons.Outlined.Delete, contentDescription = "Delete ${row.label}", tint = FS.colors.danger)
+            }
+            FSPrimaryButton(
+                label = "Use this",
+                onClick = onUse,
+                modifier = Modifier.testTag(if (lastUsed) "build-key-confirm-active" else "build-key-use-saved"),
+            )
         }
     }
 }
@@ -185,6 +260,9 @@ private fun SavedKeyRecallRow(slug: String, isActive: Boolean, onClick: () -> Un
 @Composable
 fun AiKeyEntryForm(
     confirmLabel: String,
+    showSaveToggle: Boolean = true,
+    onCancel: (() -> Unit)? = null,
+    confirmTag: String = "build-key-use",
     onSubmit: (provider: String, apiKey: String, label: String, baseUrl: String?, save: Boolean) -> Unit,
 ) {
     var provider by remember { mutableStateOf(AiKeyStore.SUPPORTED_PROVIDERS.first()) }
@@ -239,21 +317,23 @@ fun AiKeyEntryForm(
                 placeholder = "https://…",
             )
 
-            Spacer(Modifier.height(FS.space.s3))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "Save on this device",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                    )
-                    Text(
-                        "Recall it next time without re-typing. Stored encrypted on this device only.",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
-                    )
+            if (showSaveToggle) {
+                Spacer(Modifier.height(FS.space.s3))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "Save on this device",
+                            color = FS.colors.text,
+                            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                        )
+                        Text(
+                            "Recall it next time without re-typing. Stored encrypted on this device only.",
+                            color = FS.colors.textMuted,
+                            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+                        )
+                    }
+                    Switch(checked = save, onCheckedChange = { save = it })
                 }
-                Switch(checked = save, onCheckedChange = { save = it })
             }
 
             Spacer(Modifier.height(FS.space.s4))
@@ -262,8 +342,12 @@ fun AiKeyEntryForm(
                 onClick = { onSubmit(provider, apiKey, label, baseUrl, save) },
                 enabled = apiKey.isNotBlank(),
                 block = true,
-                modifier = Modifier.testTag("build-key-use"),
+                modifier = Modifier.testTag(confirmTag),
             )
+            if (onCancel != null) {
+                Spacer(Modifier.height(FS.space.s2))
+                FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+            }
         }
     }
 }

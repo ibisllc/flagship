@@ -617,13 +617,51 @@ data class VibeCodeSessionMeta(
     val status: String,
     val serviceId: String? = null,
     val url: String? = null,
+    /** The owner's chosen name, which the session holds until it is deployed
+     *  or discarded. Absent on sessions from before names were kept. */
+    val name: String? = null,
+    val visibility: String? = null,
 ) {
+    /** Discarding frees the name; a deployed session's name is its app's. */
+    val canDiscard: Boolean
+        get() = status != "deployed"
+
     /** Still working or waiting on the owner: worth resuming. */
     val isActive: Boolean
         get() = status in ACTIVE_STATUSES
 
     private companion object {
         val ACTIVE_STATUSES = setOf("streaming", "awaiting-tool-response", "ready-to-deploy", "deploying")
+    }
+}
+
+/**
+ * `GET /api/screens/vibe-code/name-check`, and the body of a 409 from
+ * `vibeCodeStart`. `kind` is "invalid", "app" (an installed service) or
+ * "session" (an open build session, stopped from the build-sessions list).
+ * Mirror of iOS VibeCodeNameCheck.
+ */
+@Serializable
+data class VibeCodeNameCheck(
+    val ok: Boolean,
+    val name: String? = null,
+    val kind: String? = null,
+    val serviceId: String? = null,
+    val sessionId: String? = null,
+    val message: String? = null,
+) {
+    companion object {
+        /** What a box too old to answer is taken to say: free. */
+        val Unknown = VibeCodeNameCheck(ok = true)
+
+        private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
+        /** A refused start, if [error] is the box's 409 for a taken name. */
+        fun conflict(error: Throwable): VibeCodeNameCheck? {
+            if (error !is ScreensError.Http || error.status != 409) return null
+            val check = runCatching { json.decodeFromString(serializer(), error.body) }.getOrNull()
+            return check?.takeIf { !it.ok }
+        }
     }
 }
 

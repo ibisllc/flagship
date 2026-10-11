@@ -160,6 +160,45 @@ export function inlineConfirm({
 }
 
 /**
+ * Inline alert: title/message and one button. Resolves when dismissed.
+ */
+export function inlineAlert({ title, message, okLabel = "OK" } = {}) {
+  return new Promise((resolve) => {
+    const host = ensureHost();
+    const overlay = buildOverlay();
+    overlay.innerHTML = `
+      <div class="modal-card" role="document">
+        ${title ? `<h3 class="modal-title">${escapeHtml(title)}</h3>` : ""}
+        ${message ? `<p class="modal-message">${escapeHtml(message)}</p>` : ""}
+        <div class="row-2 mt-3">
+          <button data-modal-ok>${escapeHtml(okLabel)}</button>
+        </div>
+      </div>
+    `;
+    host.appendChild(overlay);
+    document.body.classList.add("modal-open");
+
+    const okBtn = overlay.querySelector("[data-modal-ok]");
+    queueMicrotask(() => okBtn?.focus({ preventScroll: true }));
+
+    const close = () => {
+      overlay.remove();
+      document.body.classList.remove("modal-open");
+      document.removeEventListener("keydown", onKey);
+      resolve();
+    };
+    const onKey = (ev) => {
+      if (ev.key === "Escape" || ev.key === "Enter") { ev.preventDefault(); close(); }
+    };
+    okBtn.addEventListener("click", close);
+    overlay.addEventListener("click", (ev) => {
+      if (ev.target === overlay) close();
+    });
+    document.addEventListener("keydown", onKey);
+  });
+}
+
+/**
  * Username suggestion step — shows ONE suggested handle with a regenerate
  * button (rate-limited: disabled with a live "Try again in Ns" countdown for
  * `retryAfterMs` after each suggestion), a "you can change it later" note, and

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { buildServer } from "../src/server.js";
 
 async function asset(path: string): Promise<string> {
@@ -37,29 +39,42 @@ describe("webapp AI-key step", () => {
     expect(body).not.toMatch(/innerHTML[\s\S]{0,200}e\.apiKey/);
   });
 
-  it("offers a 'use a different key' form with a Save-on-device toggle", async () => {
+  it("adding a key saves it to the list and does not move the flow on", async () => {
     const view = await asset("/webapp/views/build-key.js");
-    expect(view).toContain("bk-save");
     expect(view).toContain("addProvider");
-    // Save is optional — not saving still hands the credential onward.
-    expect(view).toMatch(/Save on this device/i);
+    expect(view).toContain("setActive(session.umk, added.id)");
+    expect(view).not.toContain("bk-save");
+    expect(view).not.toMatch(/addFromForm[\s\S]{0,1200}onChosenCb\(/);
 
     const html = await asset("/webapp/index.html");
-    expect(html).toContain('id="view-build-key"');
-    expect(html).toContain('id="bk-provider"');
-    expect(html).toContain('id="bk-key"');
-    expect(html).toContain('id="bk-save"');
-    // The key input is masked while typing.
-    expect(html).toMatch(/id="bk-key"[^>]*type="password"/);
-    // Reassuring copy about where the key lives.
-    expect(html).toMatch(/flagshipserver\.com never sees/i);
+    const section = html.slice(html.indexOf('id="view-build-key"'), html.indexOf('id="view-build-git"'));
+    expect(section).toContain("<h2>AI Key</h2>");
+    expect(section).toContain("Add an API key");
+    expect(section).toContain('id="bk-add">Add key<');
+    expect(section).not.toContain("Provide an AI key");
+    expect(section).not.toContain('id="bk-save"');
+    expect(section).toContain('id="bk-provider"');
+    expect(section).toMatch(/id="bk-key"[^>]*type="password"/);
+    expect(section).toMatch(/flagshipserver\.com never sees/i);
+    // The security note sits below the saved list.
+    expect(section.indexOf('id="build-key-saved"')).toBeLessThan(
+      section.indexOf("The keys are stored safely in your mobile app and your own servers."),
+    );
   });
 
-  it("a pre-existing key gets a clear Confirm affordance", async () => {
+  it("each saved key has Use this and a confirmed delete, last-used first", async () => {
     const body = await asset("/webapp/views/build-key.js");
-    expect(body).toMatch(/Confirm this key/i);
-    expect(body).toContain("data-confirm-id");
-    expect(body).toMatch(/Use \$\{slugFor/);
+    expect(body).toContain("Saved keys");
+    expect(body).toContain("Last used");
+    expect(body).toContain(">Use this<");
+    expect(body).toContain('okLabel: "Delete key"');
+    const { orderedEntries, deleteMessage, DELETE_TITLE } = await import(
+      pathToFileURL(resolve(__dirname, "..", "public", "webapp", "views", "build-key.js")).href
+    );
+    expect(orderedEntries([{ id: "a" }, { id: "b" }], "b").map((e: { id: string }) => e.id)).toEqual(["b", "a"]);
+    expect(orderedEntries([{ id: "a" }, { id: "b" }], "gone").map((e: { id: string }) => e.id)).toEqual(["a", "b"]);
+    expect(DELETE_TITLE).toBe("Delete this key?");
+    expect(deleteMessage("Work")).toBe("Work will be removed from this phone. Builds that are already running keep working.");
   });
 
   it("vibe-code sends the credential on start and handles needsCredential", async () => {

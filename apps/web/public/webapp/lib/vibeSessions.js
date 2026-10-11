@@ -43,10 +43,51 @@ export function sortSessionsNewestFirst(sessions) {
   return (sessions || []).slice().sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
 }
 
+function serviceSlug(serviceId) {
+  if (typeof serviceId !== "string") return "";
+  const i = serviceId.lastIndexOf("--");
+  return i >= 0 ? serviceId.slice(i + 2) : serviceId;
+}
+
+/** A past build's title: its name, else its service's slug. */
+export function buildDisplayName(build) {
+  if (build?.name) return build.name;
+  return serviceSlug(build?.serviceId) || "Unnamed build";
+}
+
+/** How a build was made, for the pill beside its name. */
+export function buildMethodLabel(mode) {
+  switch (mode) {
+    case "git": return "From Git";
+    case "mcp": return "From your IDE";
+    default: return "AI chat";
+  }
+}
+
+export function pastBuildSubtitle(build, started) {
+  const n = build?.entryCount ?? 0;
+  return `Started ${started} · ${n} step${n === 1 ? "" : "s"}`;
+}
+
+/** A live session's title: its own name, else its journal build's, else its
+ *  service's slug. */
 export function sessionTitle(session, builds) {
-  if (session.serviceId) return session.serviceId;
+  if (session.name) return session.name;
   const build = (builds || []).find((b) => b.buildId === session.sessionId);
-  return build?.serviceId || "AI build";
+  if (build) return buildDisplayName(build);
+  return serviceSlug(session.serviceId) || "Unnamed build";
+}
+
+/** Discarding frees the name; a deployed session's name is its app's. */
+export function canDiscard(session) {
+  return session?.status !== "deployed";
+}
+
+export const DISCARD_TITLE = "Discard this build?";
+
+export function discardMessage(session) {
+  const freed = session?.name ? ` Its name, "${session.name}", becomes free again.` : "";
+  return `This stops the AI and deletes what it has written on your server.${freed}`;
 }
 
 /** Past builds the box no longer holds a session for. */
@@ -66,6 +107,8 @@ export function decodeSessions(body) {
       status: s.status,
       serviceId: typeof s.serviceId === "string" ? s.serviceId : null,
       url: typeof s.url === "string" ? s.url : null,
+      name: typeof s.name === "string" && s.name ? s.name : null,
+      visibility: typeof s.visibility === "string" ? s.visibility : null,
     }));
 }
 
@@ -83,5 +126,29 @@ export async function fetchVibeSessions({ baseUrl, token, fetchImpl = globalThis
     return decodeSessions(await r.json());
   } catch {
     return [];
+  }
+}
+
+/** Stop a session and delete it on the box, which frees its name. Throws on
+ *  failure so the list can say why. */
+export async function discardSession({ baseUrl, token, sessionId, fetchImpl = globalThis.fetch } = {}) {
+  if (!baseUrl || !token) throw new Error("Not paired to a server yet.");
+  const r = await fetchImpl(
+    `${String(baseUrl).replace(/\/+$/, "")}/api/llm/sessions/${encodeURIComponent(sessionId)}/discard`,
+    {
+      method: "POST",
+      headers: { "x-flagship-session": token, "content-type": "application/json" },
+      body: "{}",
+    },
+  );
+  if (!r.ok) {
+    let msg = `The build wasn't discarded (HTTP ${r.status}).`;
+    try {
+      const body = await r.json();
+      if (body?.error) msg = body.error;
+    } catch {
+      // keep the status message
+    }
+    throw new Error(msg);
   }
 }

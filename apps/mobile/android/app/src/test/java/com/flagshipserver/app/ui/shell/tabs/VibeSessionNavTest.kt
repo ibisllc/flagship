@@ -21,4 +21,11 @@ class VibeSessionNavTest {
             openVibeSessionStack(listOf("apps-list", "app-detail/a"), vibeSessionChatRoute("s3")),
         )
     }
+
+    @Test fun aTakenNameOpensTheSessionsListAboveTheChooser() {
+        assertEquals(
+            listOf("apps-list", "build/source", "build/journal"),
+            openVibeSessionStack(listOf("apps-list", "build/source", "vibe/key", "vibe/describe"), BUILD_SESSIONS_ROUTE),
+        )
+    }
 }

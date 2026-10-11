@@ -9,10 +9,18 @@ import { screensFetch, ScreensError, buildEntryError, getPodBaseUrl, getSessionT
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { formatDateTime } from "../lib/dateFormat.js";
+import { inlineConfirm } from "../lib/modal.js";
 import {
+  DISCARD_TITLE,
+  buildDisplayName,
+  buildMethodLabel,
+  canDiscard,
+  discardMessage,
+  discardSession,
   endedBuilds,
   fetchVibeSessions,
   isActiveSession,
+  pastBuildSubtitle,
   sessionPillClass,
   sessionStatusLabel,
   sessionTitle,
@@ -63,15 +71,21 @@ async function renderList() {
       .map((s) => {
         const active = isActiveSession(s);
         const pill = sessionPillClass(s.status);
+        const discard = canDiscard(s)
+          ? `<div class="build-session-discard"><button class="linklike" data-discard="${escapeHtml(s.sessionId)}">Discard…</button></div>`
+          : "";
         return `
         <button class="card full-width build-session-row${active ? " is-active" : ""}" data-session="${escapeHtml(s.sessionId)}">
           <span class="build-session-body">
             <strong>${escapeHtml(sessionTitle(s, builds))}</strong>
             <span class="note">Started ${escapeHtml(formatDateTime(s.startedAt))}</span>
-            <span class="pill${pill ? ` ${pill}` : ""}">${escapeHtml(sessionStatusLabel(s.status))}</span>
+            <span class="build-session-pills">
+              <span class="pill${pill ? ` ${pill}` : ""}">${escapeHtml(sessionStatusLabel(s.status))}</span>
+              <span class="pill">${escapeHtml(buildMethodLabel("scratch"))}</span>
+            </span>
           </span>
           <span class="build-session-action">${active ? "Resume" : "Open"}</span>
-        </button>`;
+        </button>${discard}`;
       })
       .join("");
   }
@@ -81,8 +95,9 @@ async function renderList() {
       .map(
         (b) => `
         <button class="card full-width build-tile" data-build="${escapeHtml(b.buildId)}">
-          <strong>${escapeHtml(b.serviceId || b.mode)} <span class="note">(${escapeHtml(b.mode)})</span></strong>
-          <span class="note">${b.entryCount} step(s) · last: ${escapeHtml(b.lastKind)}</span>
+          <strong>${escapeHtml(buildDisplayName(b))}</strong>
+          <span class="note">${escapeHtml(pastBuildSubtitle(b, formatDateTime(b.startedAt)))}</span>
+          <span class="pill">${escapeHtml(buildMethodLabel(b.mode))}</span>
         </button>`,
       )
       .join("");
@@ -91,9 +106,30 @@ async function renderList() {
   for (const el of list.querySelectorAll("[data-session]")) {
     el.addEventListener("click", () => openVibeCodeSession(el.getAttribute("data-session")));
   }
+  for (const el of list.querySelectorAll("[data-discard]")) {
+    const session = sessions.find((s) => s.sessionId === el.getAttribute("data-discard"));
+    if (session) el.addEventListener("click", () => void confirmDiscard(session));
+  }
   for (const el of list.querySelectorAll("[data-build]")) {
     el.addEventListener("click", () => renderDetail(el.getAttribute("data-build")));
   }
+}
+
+async function confirmDiscard(session) {
+  const ok = await inlineConfirm({
+    title: DISCARD_TITLE,
+    message: discardMessage(session),
+    okLabel: "Discard build",
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    await discardSession({ baseUrl: getPodBaseUrl(), token: getSessionToken(), sessionId: session.sessionId });
+  } catch (e) {
+    toast(e.message, "err");
+    return;
+  }
+  await renderList();
 }
 
 async function renderDetail(buildId) {

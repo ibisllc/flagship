@@ -1999,6 +1999,36 @@ button[data-device-restricted] {
 .vc-send { margin-left: auto; }
 .vc-caps-note { margin: 0; font-size: 11px; }
 
+/* Describe form (first turn) */
+.vc-name-status { margin: 4px 0 0; font-size: 14px; }
+.vc-name-status.is-taken { color: var(--err); }
+.vc-name-status.is-free { color: var(--ok); }
+.vc-prompt-label { display: block; margin-top: var(--space-3); }
+.vc-first-turn-extras { display: flex; flex-direction: column; gap: var(--space-2); }
+.vc-first-turn-extras .field { margin: 0; }
+.vc-examples { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.vc-example {
+  width: auto;
+  min-height: 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+.vc-left-open { color: var(--warn); }
+
+/* Build sessions list */
+.build-session-pills { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.build-session-discard { display: flex; justify-content: flex-end; margin-top: 4px; }
+.build-session-discard button { color: var(--err); }
+
+/* AI Key step */
+.build-key-add { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 16px; }
+.build-key-row { display: flex; align-items: center; gap: var(--space-3); }
+.build-key-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.build-key-row-body .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.build-key-delete { width: auto; min-height: 0; padding: 6px; background: none; border: none; color: var(--err); cursor: pointer; }
+.build-key-row .build-key-use { width: auto; }
+
 /* Staged attachment chips */
 .vc-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .vc-chip {
@@ -2034,3 +2064,5 @@ button[data-device-restricted] {
   cursor: pointer;
 }
 .bk-save-row input { width: auto; margin: 0; }
+.vc-address { color: var(--ink-muted); }
+.vc-address-name { color: var(--accent); font-weight: 600; }

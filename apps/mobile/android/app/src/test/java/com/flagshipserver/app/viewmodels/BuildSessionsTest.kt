@@ -60,11 +60,81 @@ class BuildSessionsTest {
         assertEquals(listOf("g1"), ended.map { it.buildId })
     }
 
-    @Test fun namesASessionFromItselfThenItsJournalThenAFallback() {
-        val builds = listOf(BuildSummary(buildId = "s2", mode = "scratch", serviceId = "alice--notes"))
-        assertEquals("alice--todo", BuildSessions.name(VibeCodeSessionMeta("s1", 0, "streaming", "alice--todo"), builds))
-        assertEquals("alice--notes", BuildSessions.name(VibeCodeSessionMeta("s2", 0, "streaming"), builds))
-        assertEquals("AI build", BuildSessions.name(VibeCodeSessionMeta("s3", 0, "streaming"), builds))
+    @Test fun namesASessionFromItselfThenItsJournalThenItsServiceThenAFallback() {
+        val builds = listOf(
+            BuildSummary(buildId = "s2", mode = "scratch", serviceId = "alice--notes"),
+            BuildSummary(buildId = "s5", mode = "scratch", name = "garden"),
+        )
+        assertEquals("todo", BuildSessions.name(VibeCodeSessionMeta("s1", 0, "streaming", name = "todo"), builds))
+        assertEquals("notes", BuildSessions.name(VibeCodeSessionMeta("s2", 0, "streaming"), builds))
+        assertEquals("garden", BuildSessions.name(VibeCodeSessionMeta("s5", 0, "streaming"), builds))
+        assertEquals("todo", BuildSessions.name(VibeCodeSessionMeta("s4", 0, "streaming", "alice--todo"), builds))
+        assertEquals("Unnamed build", BuildSessions.name(VibeCodeSessionMeta("s3", 0, "streaming"), builds))
+    }
+
+    @Test fun decodesTheNameAndVisibilityTheBoxNowKeeps() {
+        val r = json.decodeFromString(
+            VibeCodeSessionsResponse.serializer(),
+            """{"sessions":[{"sessionId":"a","startedAt":1,"status":"streaming","name":"garden","visibility":"just-me"}]}""",
+        )
+        assertEquals("garden", r.sessions[0].name)
+        assertEquals("just-me", r.sessions[0].visibility)
+    }
+
+    @Test fun onlyUndeployedSessionsOfferDiscard() {
+        assertTrue(VibeCodeSessionMeta("a", 0, "failed", name = "x").canDiscard)
+        assertTrue(VibeCodeSessionMeta("a", 0, "streaming").canDiscard)
+        assertFalse(VibeCodeSessionMeta("b", 0, "deployed").canDiscard)
+    }
+
+    @Test fun theDiscardWarningNamesTheNameItFrees() {
+        assertEquals(
+            "This stops the AI and deletes what it has written on your server. Its name, \"garden\", becomes free again.",
+            BuildSessions.discardMessage(VibeCodeSessionMeta("a", 0, "streaming", name = "garden")),
+        )
+        assertEquals(
+            "This stops the AI and deletes what it has written on your server.",
+            BuildSessions.discardMessage(VibeCodeSessionMeta("a", 0, "streaming")),
+        )
+    }
+
+    @Test fun pastBuildsShowTheirNameAndHowTheyWereMade() {
+        val named = BuildSummary(buildId = "a", mode = "scratch", serviceId = "alice--garden", name = "garden", entryCount = 3)
+        assertEquals("garden", named.displayName)
+        assertEquals("AI chat", named.methodLabel)
+        assertEquals("Started today · 3 steps", BuildSessions.pastBuildSubtitle(named, "today"))
+        val fromService = BuildSummary(buildId = "b", mode = "git", serviceId = "alice--notes", entryCount = 1)
+        assertEquals("notes", fromService.displayName)
+        assertEquals("From Git", fromService.methodLabel)
+        assertEquals("Started today · 1 step", BuildSessions.pastBuildSubtitle(fromService, "today"))
+        val bare = BuildSummary(buildId = "c", mode = "mcp")
+        assertEquals("Unnamed build", bare.displayName)
+        assertEquals("From your IDE", bare.methodLabel)
+    }
+
+    @Test fun discardRemovesTheSessionOrShowsWhyNot() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0)
+        val discarded = mutableListOf<String>()
+        val vm = BuildJournalViewModel(
+            client, scope = backgroundScope,
+            fetchLiveSessions = { listOf(VibeCodeSessionMeta("a", 2, "streaming"), VibeCodeSessionMeta("b", 1, "failed")) },
+            discardSession = { discarded += it },
+        )
+        vm.loadList().join()
+        vm.discard(vm.liveSessions.value.first()).join()
+        assertEquals(listOf("a"), discarded)
+        assertEquals(listOf("b"), vm.liveSessions.value.map { it.sessionId })
+        assertNull(vm.discardError.value)
+
+        val failing = BuildJournalViewModel(
+            client, scope = backgroundScope,
+            fetchLiveSessions = { listOf(VibeCodeSessionMeta("a", 2, "streaming")) },
+            discardSession = { throw com.flagshipserver.app.api.ScreensError.Http(500, "boom") },
+        )
+        failing.loadList().join()
+        failing.discard(failing.liveSessions.value.first()).join()
+        assertEquals(listOf("a"), failing.liveSessions.value.map { it.sessionId })
+        assertTrue(failing.discardError.value != null)
     }
 
     @Test fun listLoadsSessionsNewestFirst_andAFailingRegistryReadsAsNone() = runTest {

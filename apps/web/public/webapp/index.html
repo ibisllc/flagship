@@ -535,7 +535,7 @@
       <!-- View 13: Vibe-code chat (P2.5) — a multi-turn chat with attachments -->
       <section id="view-vibe-code" class="hidden">
         <div class="row-top">
-          <h2>Build from scratch</h2>
+          <h2>New Service</h2>
           <span class="value vc-chat-status" id="vc-status">idle</span>
         </div>
         <p class="note">
@@ -547,29 +547,35 @@
           <div class="card placeholder">Say what you'd like to build to get started.</div>
         </div>
 
-        <!-- First-turn settings: YOU name it + choose who can see it. (The AI
-             was chosen on the previous step — not asked again.) Hidden once the
-             session has started. -->
+        <!-- First-turn settings: name it first (its web address, checked with
+             the box as you type), then what it should do, then who can open
+             it. Hidden once the session has started. -->
         <div class="vc-first-turn" id="vc-first-turn">
           <label class="field">
             <span class="field-label">Name</span>
             <input id="vc-name" type="text" autocapitalize="none" autocorrect="off"
                    spellcheck="false" placeholder="plant-tracker">
-            <span class="note">Lowercase letters, digits, and dashes — this is its web address.</span>
+            <span class="note vc-address" id="vc-name-address">https://<strong class="vc-address-name">&lt;name&gt;</strong></span>
           </label>
-          <label class="field">
-            <span class="field-label">Visible to</span>
-            <select id="vc-visibility">
-              <option value="just-me">Just me</option>
-              <option value="link">Anyone with the link</option>
-            </select>
-          </label>
+          <p class="vc-name-status hidden" id="vc-name-status" aria-live="polite"></p>
+          <span class="field-label vc-prompt-label">What should it do?</span>
         </div>
 
         <!-- Composer: textarea + attach affordance + attachment chips -->
         <div class="vc-composer card mt-2">
           <div id="vc-attach-chips" class="vc-chips hidden" aria-label="Attached files"></div>
           <textarea id="vc-prompt" rows="3" placeholder="A simple habit tracker — checkboxes per day, last 30 days visible."></textarea>
+          <div class="vc-first-turn-extras" id="vc-first-turn-extras">
+            <div class="vc-examples" id="vc-examples"></div>
+            <label class="field">
+              <span class="field-label">Who can open it</span>
+              <select id="vc-visibility">
+                <option value="just-me">Invite only</option>
+                <option value="link">Anyone with the link</option>
+              </select>
+              <span class="note" id="vc-visibility-note">Only you and the people you invite on Flagship can open it.</span>
+            </label>
+          </div>
           <div class="vc-composer-actions">
             <label class="secondary btn-attach" for="vc-attach-input" title="Attach an image or text file">
               <span aria-hidden="true">＋</span> Attach
@@ -630,19 +636,11 @@
 
       <!-- Reusable AI-key step (shown before any build path that uses the box's model) -->
       <section id="view-build-key" class="hidden">
-        <h2>Provide an AI key</h2>
-        <p class="note" id="build-key-context">Your box needs an AI key to do this.</p>
-        <p class="note">
-          The key stays on this device. Your box calls the provider directly —
-          flagshipserver.com never sees it.
-        </p>
+        <h2>AI Key</h2>
 
-        <div id="build-key-saved" class="mt-2"></div>
-
-        <button id="build-key-different" class="secondary full-width mt-2">Use a different key</button>
+        <button id="build-key-add" class="linklike build-key-add mt-2"><span aria-hidden="true">＋</span> Add an API key</button>
 
         <div class="card hidden mt-2" id="build-key-form">
-          <h3>Use a different key</h3>
           <label for="bk-provider">Provider</label>
           <select id="bk-provider">
             <option value="anthropic">Anthropic</option>
@@ -656,12 +654,8 @@
           <input id="bk-key" type="password" placeholder="sk-…" autocomplete="off" />
           <label for="bk-label">Label <span class="faint-sm">(optional)</span></label>
           <input id="bk-label" type="text" placeholder="personal / work" autocomplete="off" />
-          <label class="bk-save-row mt-2">
-            <input id="bk-save" type="checkbox" />
-            <span>Save on this device</span>
-          </label>
           <div class="row-gap-3 mt-2">
-            <button id="bk-use">Use this key</button>
+            <button id="bk-add">Add key</button>
             <button class="secondary" id="bk-cancel">Cancel</button>
           </div>
           <p class="faint-sm mt-3">
@@ -669,6 +663,10 @@
             flagshipserver.com never sees them.
           </p>
         </div>
+
+        <div id="build-key-saved" class="mt-2"></div>
+
+        <p class="note mt-3">The keys are stored safely in your mobile app and your own servers.</p>
 
         <div class="row-2 mt-2"><button class="secondary" id="build-key-back">← Back</button></div>
       </section>

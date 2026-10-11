@@ -6,9 +6,12 @@
 // box's model (marketplace install, IDE/MCP — which uses the user's own
 // editor AI) skip this entirely.
 //
-// The credential the user picks is handed back IN MEMORY via onChosen; the
-// raw key never touches flagshipserver.com. Saved keys live only in this
-// device's IndexedDB (providers.js, AES-GCM wrapped under the UMK seed).
+// Adding and choosing are separate: "Add an API key" opens a form that saves
+// the key to this device's list (and makes it the last-used one); each saved
+// key has "Use this", which hands the credential back IN MEMORY via onChosen
+// and moves the flow on, and a confirmed delete. The raw key never touches
+// flagshipserver.com. Saved keys live only in this device's IndexedDB
+// (providers.js, AES-GCM wrapped under the UMK seed).
 //
 // Usage:
 //   enterBuildKey({
@@ -16,21 +19,22 @@
 //     onChosen: ({ provider, apiKey, baseUrl }) => { … },
 //   });
 //
-// Built as a standalone view so attaching it to a new path later is a single
-// enterBuildKey() call.
+// MIRRORS: iOS BuildKeyScreen, Android AiKeyStepScreen.
 
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
+import { inlineConfirm } from "../lib/modal.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
-import { loadProviders, addProvider, PROMO_ID } from "../providers.js";
+import { loadProviders, addProvider, removeProvider, setActive, PROMO_ID } from "../providers.js";
 
 registerView("view-build-key");
 
 // The caller's callback for the chosen credential + a back target.
 let onChosenCb = null;
 let backView = "view-build-source";
+let savedCount = 0;
 
 // Keys are ALWAYS masked in any slug/list — only the typed input ever holds
 // the plaintext.
@@ -45,12 +49,50 @@ function slugFor(e) {
   return `${escapeHtml(e.provider)} · “${escapeHtml(e.label)}” · ${escapeHtml(maskKey(e.apiKey))}`;
 }
 
-function chooseEntry(e) {
+/** The saved keys, the last-used one first. */
+export function orderedEntries(entries, activeId) {
+  const active = (entries || []).find((e) => e.id === activeId);
+  if (!active) return (entries || []).slice();
+  return [active, ...entries.filter((e) => e.id !== active.id)];
+}
+
+export const DELETE_TITLE = "Delete this key?";
+
+export function deleteMessage(label) {
+  return `${label} will be removed from this phone. Builds that are already running keep working.`;
+}
+
+async function chooseEntry(e) {
   if (typeof onChosenCb !== "function") return;
-  const cb = onChosenCb;
+  const session = getSession();
+  if (session.umk) {
+    try {
+      await setActive(session.umk, e.id);
+    } catch {
+      // the last-used marker is a convenience; the choice still stands
+    }
+  }
   const credential = { provider: e.provider, apiKey: e.apiKey };
   if (e.baseUrl) credential.baseUrl = e.baseUrl;
-  cb(credential);
+  onChosenCb(credential);
+}
+
+async function confirmDelete(e) {
+  const ok = await inlineConfirm({
+    title: DELETE_TITLE,
+    message: deleteMessage(e.label),
+    okLabel: "Delete key",
+    danger: true,
+  });
+  if (!ok) return;
+  const session = getSession();
+  if (!session.umk) return toast("Unlock first", "err");
+  try {
+    await removeProvider(session.umk, e.id);
+  } catch (err) {
+    toast(humanError(err), "err");
+  }
+  await renderSaved();
 }
 
 async function renderSaved() {
@@ -69,113 +111,104 @@ async function renderSaved() {
     stored = { entries: [], activeId: PROMO_ID };
   }
   const entries = stored.entries || [];
+  savedCount = entries.length;
+  $("bk-cancel")?.classList.toggle("hidden", savedCount === 0);
   if (entries.length === 0) {
-    box.innerHTML =
-      '<div class="card placeholder">No saved keys yet — add one below.</div>';
+    showForm(true);
     return;
   }
 
-  // Pre-select the active key with a clear Confirm affordance; the rest are
-  // one-tap recall rows.
-  const active = entries.find((e) => e.id === stored.activeId);
-  let html = "";
-  if (active) {
-    html += `
-      <div class="card is-active">
-        <div class="weight-600">Confirm this key</div>
-        <div class="value text-sm mt-1">${slugFor(active)}</div>
-        <button class="full-width mt-2" data-confirm-id="${escapeHtml(active.id)}">Use ${slugFor(active)}</button>
-      </div>`;
-  }
-  const others = entries.filter((e) => !active || e.id !== active.id);
-  if (others.length > 0) {
-    html += others
+  box.innerHTML =
+    `<p class="note build-section-caption">Saved keys</p>` +
+    orderedEntries(entries, stored.activeId)
       .map(
         (e) => `
-      <div class="card mt-2">
-        <div class="row row-top">
-          <div class="value text-sm">${slugFor(e)}</div>
-          <button class="secondary" data-confirm-id="${escapeHtml(e.id)}">Use</button>
+      <div class="card mt-2 build-key-row">
+        <div class="build-key-row-body">
+          <strong>${escapeHtml(e.label)}</strong>
+          <span class="value text-sm">${slugFor(e)}</span>
+          ${e.id === stored.activeId ? '<span class="note">Last used</span>' : ""}
         </div>
+        <button class="build-key-delete" data-delete-id="${escapeHtml(e.id)}" aria-label="Delete ${escapeHtml(e.label)}">🗑</button>
+        <button class="build-key-use" data-use-id="${escapeHtml(e.id)}">Use this</button>
       </div>`,
       )
       .join("");
-  }
-  box.innerHTML = html;
 
-  box.querySelectorAll("[data-confirm-id]").forEach((btn) => {
+  const byId = (id) => entries.find((e) => e.id === id);
+  box.querySelectorAll("[data-use-id]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-confirm-id");
-      const entry = entries.find((e) => e.id === id);
-      if (entry) chooseEntry(entry);
+      const entry = byId(btn.getAttribute("data-use-id"));
+      if (entry) void chooseEntry(entry);
+    });
+  });
+  box.querySelectorAll("[data-delete-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const entry = byId(btn.getAttribute("data-delete-id"));
+      if (entry) void confirmDelete(entry);
     });
   });
 }
 
 function showForm(visible) {
   $("build-key-form")?.classList.toggle("hidden", !visible);
+  $("build-key-add")?.classList.toggle("hidden", visible);
 }
 
-async function useDifferentKey() {
+// Save the form's key to the list and close the form. Choosing a key is a
+// separate step, so adding one never moves the flow on.
+async function addFromForm() {
   const session = getSession();
   if (!session.umk) return toast("Unlock first", "err");
   const provider = $("bk-provider").value;
-  const apiKey = $("bk-key").value;
+  const apiKey = $("bk-key").value.trim();
   const baseUrl = $("bk-base").value.trim();
   const label = $("bk-label").value.trim();
-  if (!apiKey) return toast("API key required", "err");
-
-  // Save on this device (optional) — uses providers.js so it shows up in
-  // Settings and at this step next time.
-  if ($("bk-save")?.checked) {
-    try {
-      await addProvider(session.umk, {
-        provider,
-        label: label || provider,
-        apiKey,
-        baseUrl: baseUrl || undefined,
-      });
-      toast("Key saved on this device", "ok");
-    } catch (e) {
-      return toast(e.message, "err");
-    }
+  if (!apiKey) return toast("Enter an API key.", "err");
+  try {
+    const added = await addProvider(session.umk, {
+      provider,
+      label: label || provider,
+      apiKey,
+      baseUrl: baseUrl || undefined,
+    });
+    await setActive(session.umk, added.id);
+  } catch (e) {
+    return toast(humanError(e), "err");
   }
-
-  const credential = { provider, apiKey };
-  if (baseUrl) credential.baseUrl = baseUrl;
-  if (typeof onChosenCb === "function") onChosenCb(credential);
+  clearForm();
+  showForm(false);
+  await renderSaved();
 }
 
 function clearForm() {
   $("bk-key").value = "";
   $("bk-base").value = "";
   $("bk-label").value = "";
-  if ($("bk-save")) $("bk-save").checked = false;
 }
 
 export function initBuildKeyView() {
-  $("build-key-different")?.addEventListener("click", () => showForm(true));
+  $("build-key-add")?.addEventListener("click", () => {
+    clearForm();
+    showForm(true);
+  });
   $("bk-cancel")?.addEventListener("click", () => {
     clearForm();
     showForm(false);
   });
-  $("bk-use")?.addEventListener("click", () => {
-    useDifferentKey().catch((e) => { console.error(e); toast(humanError(e), "err"); });
+  $("bk-add")?.addEventListener("click", () => {
+    addFromForm().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
   $("build-key-back")?.addEventListener("click", () => show(backView));
 }
 
 // Open the key step.
-//   contextLabel — a short line for why a key is needed ("Start from scratch…")
-//   onChosen     — called with the in-memory { provider, apiKey, baseUrl? }
-//   back         — view id for the back button (default: the chooser)
-export function enterBuildKey({ contextLabel, onChosen, back } = {}) {
+//   onChosen — called with the in-memory { provider, apiKey, baseUrl? }
+//   back     — view id for the back button (default: the chooser)
+// (contextLabel is still accepted from callers; the page no longer shows it.)
+export function enterBuildKey({ onChosen, back } = {}) {
   onChosenCb = onChosen ?? null;
   backView = back || "view-build-source";
-  const ctx = $("build-key-context");
-  if (ctx && contextLabel) {
-    ctx.textContent = `${contextLabel} uses your box's AI. Provide or confirm the AI key it should use.`;
-  }
   clearForm();
   showForm(false);
   show("view-build-key");

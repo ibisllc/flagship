@@ -86,6 +86,15 @@ interface ScreensClient {
      *  same paired-session auth as [vibeCodeDeploy]). */
     suspend fun vibeCodeSessions(): VibeCodeSessionsResponse = VibeCodeSessionsResponse()
 
+    /** Is this name free for a new service? Boxes too old to answer say yes;
+     *  they refuse a clash at deploy instead. */
+    suspend fun vibeCodeNameCheck(name: String): VibeCodeNameCheck = VibeCodeNameCheck.Unknown
+
+    /** Stop a build session and delete it, its files and its AI key, which
+     *  frees its name. */
+    suspend fun vibeCodeDiscard(sessionId: String): Unit =
+        throw ScreensError.NotImplemented("discard")
+
     // P9 — peer-backup management.
     suspend fun peerBackupStatus(): PeerBackupStatusResponse
     suspend fun peerBackupToggle(participate: Boolean): PeerBackupStatusResponse

@@ -93,9 +93,35 @@ class AiKeysViewModel : ViewModel() {
         return true
     }
 
+    /** Save a key from the AI Key step's form and make it the last-used one.
+     *  Choosing a key is a separate step, so adding never moves the build on. */
+    fun addAndSelect(provider: String, apiKey: String, label: String, baseUrl: String?): Boolean {
+        if (provider.isBlank() || apiKey.isBlank()) return false
+        val added = AiKeyStore.add(provider.trim(), apiKey.trim(), label, baseUrl?.trim()?.ifBlank { null })
+        AiKeyStore.setActive(added.id)
+        refresh()
+        return true
+    }
+
+    /** "Use this": the chosen key becomes the last-used one. */
+    fun choose(id: String): AiCredential? {
+        val cred = AiKeyStore.credentialFor(id) ?: return null
+        AiKeyStore.setActive(id)
+        refresh()
+        return cred
+    }
+
     fun delete(id: String) {
         AiKeyStore.delete(id)
         refresh()
+    }
+
+    companion object {
+        /** The saved keys, the last-used one first. */
+        fun ordered(rows: List<SavedKeyRow>, activeId: String?): List<SavedKeyRow> {
+            val active = rows.firstOrNull { it.id == activeId } ?: return rows
+            return listOf(active) + rows.filter { it.id != active.id }
+        }
     }
 
     private fun SavedAiKey.toRow() =

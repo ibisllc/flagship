@@ -114,11 +114,32 @@ data class BuildSummary(
     val buildId: String,
     val mode: String,                 // "scratch" | "git" | "mcp"
     val serviceId: String? = null,
+    /** The name it was given (owner, repo or IDE), else its service's slug. */
+    val name: String? = null,
     val startedAt: Long = 0,
     val lastAt: Long = 0,
     val entryCount: Int = 0,
     val lastKind: String = "",
-)
+) {
+    /** The list title: the build's name, or its service's slug. */
+    val displayName: String
+        get() {
+            if (!name.isNullOrEmpty()) return name
+            val slug = serviceId?.substringAfterLast("--")
+            return if (slug.isNullOrEmpty()) "Unnamed build" else slug
+        }
+
+    /** How it was made, for the pill beside the name. */
+    val methodLabel: String get() = methodLabel(mode)
+
+    companion object {
+        fun methodLabel(mode: String): String = when (mode) {
+            "git" -> "From Git"
+            "mcp" -> "From your IDE"
+            else -> "AI chat"
+        }
+    }
+}
 
 @Serializable
 data class BuildSessionsResponse(
@@ -151,6 +172,9 @@ data class BuildDeployResponse(
     val ok: Boolean = false,
     val serviceId: String = "",
     val url: String = "",
+    /** Set by a vibe-code deploy the owner asked to be invite only: whether
+     *  the box put it behind its gate (false: it couldn't, so it is open). */
+    val inviteOnly: Boolean? = null,
 )
 
 /**

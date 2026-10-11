@@ -15,6 +15,7 @@ import com.flagshipserver.app.api.BuildMcpRequest
 import com.flagshipserver.app.api.BuildSummary
 import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.api.VibeCodeSessionMeta
+import com.flagshipserver.app.api.userFacing
 import com.flagshipserver.app.core.NetworkErrorHumanizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -257,6 +258,7 @@ class BuildJournalViewModel(
     private val client: BuildClient,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val fetchLiveSessions: suspend () -> List<VibeCodeSessionMeta> = { emptyList() },
+    private val discardSession: suspend (String) -> Unit = { throw ScreensError.NotImplemented("discard") },
 ) {
     private val _list = MutableStateFlow<LoadingState<List<BuildSummary>>>(LoadingState.Idle)
     val list: StateFlow<LoadingState<List<BuildSummary>>> = _list.asStateFlow()
@@ -294,6 +296,20 @@ class BuildJournalViewModel(
     }
 
     fun clearDetail() { _detail.value = LoadingState.Idle }
+
+    private val _discardError = MutableStateFlow<String?>(null)
+    val discardError: StateFlow<String?> = _discardError.asStateFlow()
+
+    /** Stop a session and delete it on the box, which frees its name. */
+    fun discard(session: VibeCodeSessionMeta): Job = scope.launch {
+        _discardError.value = null
+        try {
+            discardSession(session.sessionId)
+            _liveSessions.value = _liveSessions.value.filterNot { it.sessionId == session.sessionId }
+        } catch (t: Throwable) {
+            _discardError.value = t.userFacing()
+        }
+    }
 }
 
 /** Pure parts of the build sessions screen. Mirror of iOS BuildJournalScreen /
@@ -305,9 +321,24 @@ object BuildSessions {
         return builds.filter { it.buildId !in live }
     }
 
-    /** The journal's service name for a live session, once it has one. */
+    /** A live session's title: its own name, else its journal build's, else
+     *  its service's slug. */
     fun name(session: VibeCodeSessionMeta, builds: List<BuildSummary>): String =
-        session.serviceId ?: builds.firstOrNull { it.buildId == session.sessionId }?.serviceId ?: "AI build"
+        session.name
+            ?: builds.firstOrNull { it.buildId == session.sessionId }?.displayName
+            ?: session.serviceId?.substringAfterLast("--")
+            ?: "Unnamed build"
+
+    /** "Started <time> · N step(s)" under a past build's name. */
+    fun pastBuildSubtitle(build: BuildSummary, started: String): String =
+        "Started $started · ${build.entryCount} step${if (build.entryCount == 1) "" else "s"}"
+
+    const val DISCARD_TITLE = "Discard this build?"
+
+    fun discardMessage(session: VibeCodeSessionMeta): String {
+        val freed = session.name?.let { " Its name, \"$it\", becomes free again." } ?: ""
+        return "This stops the AI and deletes what it has written on your server.$freed"
+    }
 
     fun label(status: String): String = when (status) {
         "streaming" -> "AI is working"

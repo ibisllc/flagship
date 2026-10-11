@@ -109,10 +109,13 @@ export async function postAdminRootRotation(args) {
 }
 
 export class ScreensError extends Error {
-  constructor(message, status) {
+  constructor(message, status, body = null) {
     super(message);
     this.name = "ScreensError";
     this.status = status;
+    // The parsed error body, for callers that read more than `error` (e.g.
+    // the name clash a vibe-code start refuses with).
+    this.body = body;
   }
 }
 
@@ -173,7 +176,7 @@ export async function screensFetchFrom(base, path, init = {}) {
   }
   if (!r.ok) {
     const msg = body && typeof body === "object" && "error" in body ? body.error : `HTTP ${r.status}`;
-    throw new ScreensError(msg, r.status);
+    throw new ScreensError(msg, r.status, body);
   }
   return body;
 }

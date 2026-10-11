@@ -645,10 +645,18 @@ private fun CodeBlock(text: String) {
 fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
     val client = LocalBuildClient.current
     val screens = LocalScreensClient.current
-    val vm = remember { BuildJournalViewModel(client, fetchLiveSessions = { screens.vibeCodeSessions().sessions }) }
+    val vm = remember {
+        BuildJournalViewModel(
+            client,
+            fetchLiveSessions = { screens.vibeCodeSessions().sessions },
+            discardSession = { screens.vibeCodeDiscard(it) },
+        )
+    }
     val list by vm.list.collectAsState()
     val detail by vm.detail.collectAsState()
     val liveSessions by vm.liveSessions.collectAsState()
+    val discardError by vm.discardError.collectAsState()
+    var confirmDiscard by remember { mutableStateOf<VibeCodeSessionMeta?>(null) }
 
     LaunchedEffect(buildId) {
         if (buildId != null) vm.loadDetail(buildId) else vm.loadList()
@@ -680,7 +688,18 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                                     SessionTile(session, BuildSessions.name(session, builds)) {
                                         nav.openVibeSession(vibeSessionChatRoute(session.sessionId))
                                     }
+                                    if (session.canDiscard) {
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                            TextButton(
+                                                onClick = { confirmDiscard = session },
+                                                modifier = Modifier.testTag("build-session-discard-${session.sessionId}"),
+                                            ) {
+                                                Text("Discard…", color = FS.colors.danger, style = TextStyle(fontSize = 14.sp))
+                                            }
+                                        }
+                                    }
                                 }
+                                discardError?.let { ErrorCardSimple(it) }
                             }
                             if (ended.isNotEmpty()) {
                                 if (liveSessions.isNotEmpty()) Spacer(Modifier.height(FS.space.s2))
@@ -694,6 +713,21 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                 else -> InfoCard("Loading…", "Fetching your builds.")
             }
         }
+    }
+
+    confirmDiscard?.let { session ->
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = null },
+            title = { Text(BuildSessions.DISCARD_TITLE) },
+            text = { Text(BuildSessions.discardMessage(session)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDiscard = null
+                    vm.discard(session)
+                }) { Text("Discard build", color = FS.colors.danger) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDiscard = null }) { Text("Cancel") } },
+        )
     }
 }
 
@@ -727,7 +761,10 @@ private fun SessionTile(session: VibeCodeSessionMeta, title: String, onClick: ()
                 style = TextStyle(fontSize = 13.sp),
             )
             Spacer(Modifier.height(FS.space.s2))
-            FSPill(BuildSessions.label(session.status), sessionPill(session.status))
+            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                FSPill(BuildSessions.label(session.status), sessionPill(session.status))
+                FSPill(BuildSummary.methodLabel("scratch"), FSPillKind.Idle)
+            }
         }
         Text(
             if (active) "Resume" else "Open",
@@ -752,16 +789,18 @@ private fun BuildTile(b: BuildSummary, onClick: () -> Unit) {
         padding = PaddingValues(FS.space.s5),
     ) {
         Text(
-            "${b.serviceId ?: b.mode}  (${b.mode})",
+            b.displayName,
             color = FS.colors.text,
             style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
         )
         Spacer(Modifier.height(FS.space.s1))
         Text(
-            "${b.entryCount} step(s) · last: ${b.lastKind}",
+            BuildSessions.pastBuildSubtitle(b, fmtTimestamp(b.startedAt)),
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )
+        Spacer(Modifier.height(FS.space.s2))
+        FSPill(b.methodLabel, FSPillKind.Idle)
     }
 }
 

@@ -203,6 +203,26 @@ class LiveScreensClient(
     override suspend fun vibeCodeSessions(): VibeCodeSessionsResponse =
         request("/api/llm/sessions", VibeCodeSessionsResponse.serializer())
 
+    override suspend fun vibeCodeNameCheck(name: String): VibeCodeNameCheck =
+        try {
+            request(
+                "/api/screens/vibe-code/name-check?name=${java.net.URLEncoder.encode(name, "UTF-8")}",
+                VibeCodeNameCheck.serializer(),
+            )
+        } catch (e: ScreensError.Http) {
+            if (e.status == 404) VibeCodeNameCheck.Unknown else throw e
+        }
+
+    override suspend fun vibeCodeDiscard(sessionId: String) {
+        request(
+            "/api/llm/sessions/${java.net.URLEncoder.encode(sessionId, "UTF-8")}/discard",
+            DiscardResponse.serializer(), "POST", "{}".toByteArray(),
+        )
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class DiscardResponse(val ok: Boolean = false)
+
     override suspend fun peerBackupStatus(): PeerBackupStatusResponse =
         request("/api/screens/peer-backup/status", PeerBackupStatusResponse.serializer())
 

@@ -327,6 +327,10 @@ class MockScreensClient(
         return VibeCodeReplyResponse(ok = true)
     }
 
+    override suspend fun vibeCodeDiscard(sessionId: String) {
+        tick()
+    }
+
     override suspend fun vibeCodeDeploy(sessionId: String): BuildDeployResponse {
         tick()
         return BuildDeployResponse(

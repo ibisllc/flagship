@@ -14,13 +14,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -36,13 +39,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.BuildCredential
+import com.flagshipserver.app.api.VibeCodeNameCheck
 import com.flagshipserver.app.api.VibeCodeStartRequest
 import com.flagshipserver.app.core.LocalActiveOperationsCenter
 import com.flagshipserver.app.core.LocalAppState
@@ -53,6 +60,7 @@ import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.ui.shell.tabs.openBuildSessions
 import com.flagshipserver.app.ui.shell.tabs.openVibeSession
 import com.flagshipserver.app.ui.shell.tabs.vibeSessionChatRoute
 import com.flagshipserver.app.ui.theme.FS
@@ -161,58 +169,160 @@ private fun PromoUsageBadge(used: Int, cap: Int) {
     }
 }
 
+/** Pure parts of the describe form. Mirror of iOS VibeCodeDescribeScreen. */
+object VibeCodeDescribe {
+    /** Who can reach the built service. Values are the wire contract carried
+     *  on [VibeCodeStartRequest.visibility]. */
+    const val INVITE_ONLY = "just-me"
+    const val ANYONE_WITH_LINK = "link"
+
+    val visibilities = listOf(INVITE_ONLY to "Invite only", ANYONE_WITH_LINK to "Anyone with the link")
+
+    fun explanation(visibility: String): String =
+        if (visibility == ANYONE_WITH_LINK) {
+            "Anyone with the address can open it. Where it needs to know who someone is, they sign in with Flagship."
+        } else {
+            "Only you and the people you invite on Flagship can open it."
+        }
+
+    val examples = listOf(
+        "Habit tracker" to "A habit tracker: I tick off my daily habits and see my streaks for the last month.",
+        "Family wishlist" to "A family wishlist: everyone keeps a list, and the others can quietly mark what they'll buy.",
+        "Recipe jar" to "A recipe jar: save recipes with a photo, ingredients and steps, and search them by ingredient.",
+        "Sleep journal" to "A sleep journal: log when I went to bed, when I woke up and how I slept, with a weekly chart.",
+    )
+
+    const val CONFLICT_TITLE = "That name is taken"
+
+    /** The address label the box will serve at. Lowercased; only the safe slug
+     *  characters survive (the daemon is the authority, this is the preview +
+     *  what we send). */
+    fun slug(name: String): String = name.lowercase().filter { it.isLetterOrDigit() || it == '-' }
+
+    fun conflictMessage(check: VibeCodeNameCheck, name: String): String {
+        val n = check.name ?: name
+        return when (check.kind) {
+            "session" -> "A build session already uses \"$n\". To use the name for a new build, open Build sessions and discard that one first."
+            "app" -> "You already have a service called \"$n\". Pick another name."
+            else -> check.message ?: "Pick another name."
+        }
+    }
+
+    /** The red line under the name field, or null when there's nothing wrong. */
+    fun warning(check: VibeCodeNameCheck?, name: String): String? = when {
+        check == null || check.ok -> null
+        check.kind == "invalid" -> check.message ?: "That can't be a web address."
+        else -> conflictMessage(check, name)
+    }
+
+    fun canBuild(slug: String, prompt: String, check: VibeCodeNameCheck?, starting: Boolean): Boolean =
+        slug.isNotEmpty() && prompt.isNotBlank() && check?.kind != "invalid" && !starting
+}
+
 /**
- * D.6.3 — VibeCodeDescribeView.
- *
- * Free-text textarea (the textarea IS the hero), a few example
- * chips, structured fields below (name, visibility, AI provider).
- * Permissions preview surfaces below the fold.
+ * D.6.3 — VibeCodeDescribeView. The "new service" form: name it first (its
+ * web address, checked with the box as you type, so a clash shows before any
+ * description is written), describe it, and choose who can open it. The AI
+ * was already chosen on the provider-pick step upstream.
  */
 @Composable
 fun VibeCodeDescribeScreen(nav: NavController) {
-    var prompt by remember {
-        mutableStateOf(
-            "A little site to track which of my houseplants I've watered, with a photo per plant. Send me a push when one's been thirsty 5+ days.",
-        )
-    }
-    // YOU decide the name + who can see it (no longer fixed). The AI was chosen
-    // on the previous step — not asked again here.
+    var prompt by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
-    var visibility by remember { mutableStateOf("just-me") }
-    // The web-address label: lowercased, only the safe slug characters survive.
-    val slug = name.lowercase().filter { it.isLetterOrDigit() || it == '-' }
+    var visibility by remember { mutableStateOf(VibeCodeDescribe.INVITE_ONLY) }
+    val slug = VibeCodeDescribe.slug(name)
+    // The latest answer from the box, and the slug it answered for: a check
+    // only counts while the field still holds that slug.
+    var check by remember { mutableStateOf<VibeCodeNameCheck?>(null) }
+    var checkedSlug by remember { mutableStateOf("") }
+    val currentCheck = check.takeIf { checkedSlug == slug }
+    var conflict by remember { mutableStateOf<VibeCodeNameCheck?>(null) }
 
     val screens = LocalScreensClient.current
     val toasts = LocalToastCenter.current
     val appState = LocalAppState.current
     val username = appState.currentUser.value ?: "you"
+    val server = (appState.sessionPod ?: appState.leaderPod)?.fqdn ?: "$username.flagship.services"
     val scope = rememberCoroutineScope()
-    // A credential picked at the AI-key step (BYOK path) — null for promo.
-    val credential = remember { PendingBuildCredential.peek() }
     var starting by remember { mutableStateOf(false) }
     val describeScroll = rememberScrollState()
 
+    suspend fun runCheck(s: String): VibeCodeNameCheck {
+        val result = runCatching { screens.vibeCodeNameCheck(s) }.getOrDefault(VibeCodeNameCheck.Unknown)
+        if (s == VibeCodeDescribe.slug(name)) {
+            check = result
+            checkedSlug = s
+        }
+        return result
+    }
+
+    LaunchedEffect(slug) {
+        if (slug.isEmpty()) return@LaunchedEffect
+        kotlinx.coroutines.delay(350)
+        runCheck(slug)
+    }
+
     Column(
-        // Scrollable: title + prompt (180dp) + examples + the two cards push the
-        // "Build it" button below the fold on shorter screens (and under the
-        // keyboard); a scroll keeps it reachable.
+        // Scrollable: the form pushes "Build it" below the fold on shorter
+        // screens (and under the keyboard); a scroll keeps it reachable.
         modifier = Modifier.fillMaxSize().verticalScroll(describeScroll).padding(horizontal = FS.space.s6),
     ) {
         Spacer(Modifier.height(FS.space.s12))
+        // No app bar on Android: the title sits where the other build screens
+        // put theirs (iOS shows it in the navigation bar).
         Text(
-            text = "New service",
+            text = "New Service",
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            text = "Describe what you want. Your Flagship will build it and run it at ${if (slug.isEmpty()) "<name>" else slug}.$username.flagship.services.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp),
-        )
         Spacer(Modifier.height(FS.space.s6))
 
-        // Textarea
+        FSField(
+            value = name,
+            onValueChange = { name = it },
+            label = "Name",
+            placeholder = "plant-tracker",
+            fieldTag = "vibe-describe-name",
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        Text(
+            text = buildAnnotatedString {
+                withStyle(SpanStyle(color = FS.colors.textMuted)) { append("https://") }
+                withStyle(SpanStyle(color = FS.colors.primary, fontWeight = FontWeight.SemiBold)) {
+                    append(slug.ifEmpty { "<name>" })
+                }
+                withStyle(SpanStyle(color = FS.colors.textMuted)) { append(".$server") }
+            },
+            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            maxLines = 2,
+            modifier = Modifier.testTag("vibe-describe-address"),
+        )
+        val warning = VibeCodeDescribe.warning(currentCheck, slug)
+        if (warning != null) {
+            Spacer(Modifier.height(FS.space.s2))
+            Text(
+                text = "⚠ $warning",
+                color = FS.colors.danger,
+                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                modifier = Modifier.testTag("vibe-describe-name-taken"),
+            )
+        } else if (currentCheck != null && currentCheck.ok && currentCheck.name != null) {
+            Spacer(Modifier.height(FS.space.s2))
+            Text(
+                text = "✓ Available",
+                color = FS.colors.success,
+                style = TextStyle(fontSize = 14.sp),
+            )
+        }
+
+        Spacer(Modifier.height(FS.space.s6))
+
+        Text(
+            text = "What should it do?",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+        )
+        Spacer(Modifier.height(FS.space.s2))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -240,39 +350,26 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                 )
             }
         }
-
-        Spacer(Modifier.height(FS.space.s6))
-
-        // Examples row
-        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            for (ex in listOf("Habit tracker", "Family wishlist", "Recipe jar", "Sleep journal")) {
-                ExampleChip(ex) { prompt = it }
+        Spacer(Modifier.height(FS.space.s2))
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+        ) {
+            for ((label, text) in VibeCodeDescribe.examples) {
+                ExampleChip(label) { prompt = text }
             }
         }
 
-        Spacer(Modifier.height(FS.space.s8))
-
-        // Owner-editable name (→ slug/address) + who can see it. (AI was chosen
-        // on the previous step — not asked again.)
-        FSField(
-            value = name,
-            onValueChange = { name = it },
-            label = "Name",
-            placeholder = "plant-tracker",
-            helper = "Lowercase letters, digits, and dashes — this is its web address.",
-            fieldTag = "vibe-describe-name",
-        )
-
-        Spacer(Modifier.height(FS.space.s4))
+        Spacer(Modifier.height(FS.space.s6))
 
         Text(
-            text = "Visible to",
+            text = "Who can open it",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
         )
         Spacer(Modifier.height(FS.space.s2))
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            for ((value, label) in listOf("just-me" to "Just me", "link" to "Anyone with the link")) {
+            for ((value, label) in VibeCodeDescribe.visibilities) {
                 val selected = visibility == value
                 Box(
                     contentAlignment = Alignment.Center,
@@ -293,22 +390,12 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                 }
             }
         }
-
-        Spacer(Modifier.height(FS.space.s4))
-
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Text(
-                text = "It'll ask for these:",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-            )
-            Spacer(Modifier.height(FS.space.s2))
-            Text(
-                text = "· Postgres (a 'plants' table)\n· Object store (photos)\n· Push notifications",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 14.sp, lineHeight = 22.sp),
-            )
-        }
+        Spacer(Modifier.height(FS.space.s2))
+        Text(
+            text = VibeCodeDescribe.explanation(visibility),
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+        )
 
         Spacer(Modifier.height(FS.space.s8))
 
@@ -318,6 +405,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
             onClick = {
                 if (starting) return@FSPrimaryButton
                 starting = true
+                val s = slug
                 // Launch on Main so the post-call nav.navigate runs on the main
                 // thread. The network I/O hops to IO inside the client; only the
                 // UI work needs Main. (rememberCoroutineScope is Main in prod,
@@ -326,36 +414,48 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                 // called on the main thread'. Pinning Main is correct + robust.)
                 scope.launch(kotlinx.coroutines.Dispatchers.Main) {
                     try {
+                        val latest = check.takeIf { checkedSlug == s } ?: runCheck(s)
+                        if (!latest.ok) {
+                            if (latest.kind != "invalid") conflict = latest
+                            return@launch
+                        }
                         val cred = PendingBuildCredential.peek()?.let {
                             BuildCredential(it.provider, it.apiKey, it.baseUrl)
                         }
                         val resp = screens.vibeCodeStart(
                             VibeCodeStartRequest(
                                 prompt = prompt, credential = cred,
-                                name = slug, visibility = visibility,
+                                name = s, visibility = visibility,
                             ),
                         )
                         if (resp.needsCredential) {
                             // Box wants a key — route into the AI-key step.
-                            starting = false
                             nav.navigate("vibe/key")
                         } else {
                             PendingBuildCredential.take()
                             nav.openVibeSession("vibe/generating/${resp.sessionId}")
                         }
                     } catch (t: Throwable) {
+                        val taken = VibeCodeNameCheck.conflict(t)
+                        if (taken != null) {
+                            check = taken
+                            checkedSlug = s
+                            conflict = taken
+                            return@launch
+                        }
                         // Don't swallow — a tap that does nothing with no
                         // feedback is a dead control. Surface the failure (e.g.
                         // the box paired session isn't ready) so the owner knows
                         // the build didn't start. Mirror of iOS's un-swallowed
                         // vibeCodeStart error. The owner can retry the tap.
-                        starting = false
                         android.util.Log.e("VibeCodeStart", "failed: ${t::class.java.name}: ${t.message}", t)
                         toasts.error("Couldn't start the build: ${NetworkErrorHumanizer.humanize(t)}")
+                    } finally {
+                        starting = false
                     }
                 }
             },
-            enabled = !starting && slug.isNotEmpty(),
+            enabled = VibeCodeDescribe.canBuild(slug, prompt, currentCheck, starting),
             block = true,
             large = true,
         )
@@ -366,16 +466,44 @@ fun VibeCodeDescribeScreen(nav: NavController) {
             style = TextStyle(fontSize = 13.sp),
             modifier = Modifier.fillMaxWidth().padding(top = FS.space.s1),
         )
+        Spacer(Modifier.height(FS.space.s8))
+    }
+
+    conflict?.let { c ->
+        AlertDialog(
+            onDismissRequest = { conflict = null },
+            title = { Text(VibeCodeDescribe.CONFLICT_TITLE) },
+            text = { Text(VibeCodeDescribe.conflictMessage(c, slug)) },
+            confirmButton = {
+                if (c.kind == "session") {
+                    TextButton(
+                        onClick = {
+                            conflict = null
+                            nav.openBuildSessions()
+                        },
+                        modifier = Modifier.testTag("vibe-describe-open-sessions"),
+                    ) { Text("Open build sessions") }
+                } else {
+                    TextButton(onClick = { conflict = null }) { Text("Pick another name") }
+                }
+            },
+            dismissButton = {
+                if (c.kind == "session") {
+                    TextButton(onClick = { conflict = null }) { Text("Pick another name") }
+                }
+            },
+        )
     }
 }
 
 @Composable
-private fun ExampleChip(text: String, onPick: (String) -> Unit) {
+private fun ExampleChip(text: String, onPick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(FS.radius.pill))
             .background(FS.colors.surfaceSunken)
             .border(1.dp, FS.colors.border, RoundedCornerShape(FS.radius.pill))
+            .clickable(onClick = onPick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
         Text(

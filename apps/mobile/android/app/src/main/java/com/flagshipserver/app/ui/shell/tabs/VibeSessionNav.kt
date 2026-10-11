@@ -26,3 +26,9 @@ fun NavController.openVibeSession(sessionRoute: String) {
     if (!hasChooser) navigate(BUILD_CHOOSER_ROUTE)
     navigate(sessionRoute) { popUpTo(BUILD_CHOOSER_ROUTE) }
 }
+
+const val BUILD_SESSIONS_ROUTE = "build/journal"
+
+/** The build-sessions list, one level above "Build a service", so Back from
+ *  it returns to the chooser rather than to a half-filled form. */
+fun NavController.openBuildSessions() = openVibeSession(BUILD_SESSIONS_ROUTE)

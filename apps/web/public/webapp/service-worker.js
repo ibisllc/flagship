@@ -63,7 +63,10 @@
 //  v36: the server page shows the box's health report.
 //  v37: the update sheet no longer asks again before going back.
 //  v38: open build sessions can be resumed; Back from a build goes to the chooser.
-const SHELL_VERSION = "v38";
+//  v39: unique build names checked as you type, "Invite only", Discard in Build
+//       sessions, named past builds, and the AI Key page split into add and
+//       choose; precaches lib/vibeSessions.js + lib/vibeNames.js.
+const SHELL_VERSION = "v39";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -114,6 +117,8 @@ const OPTIONAL_SHELL = [
   "/lib/companionReceiver.js",
   "/lib/companionGuard.js",
   "/lib/companionDockStart.js",
+  "/lib/vibeSessions.js",
+  "/lib/vibeNames.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
