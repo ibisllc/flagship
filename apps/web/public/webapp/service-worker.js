@@ -66,7 +66,9 @@
 //  v39: unique build names checked as you type, "Invite only", Discard in Build
 //       sessions, named past builds, and the AI Key page split into add and
 //       choose; precaches lib/vibeSessions.js + lib/vibeNames.js.
-const SHELL_VERSION = "v39";
+//  v40: "Edit this service" (AI chat or IDE); precaches views/edit-service.js
+//       + lib/editService.js.
+const SHELL_VERSION = "v40";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -119,6 +121,7 @@ const OPTIONAL_SHELL = [
   "/lib/companionDockStart.js",
   "/lib/vibeSessions.js",
   "/lib/vibeNames.js",
+  "/lib/editService.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
@@ -132,6 +135,7 @@ const OPTIONAL_SHELL = [
   "/views/paired-sessions.js",
   "/views/vibe-code.js",
   "/views/vibecode-chat.js",
+  "/views/edit-service.js",
   "/views/service-env.js",
   "/views/recovery.js",
   "/views/install-progress.js",

@@ -13,6 +13,9 @@
 package com.flagshipserver.app.api
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 interface ScreensClient {
     // P1.1 server-detail
@@ -154,4 +157,12 @@ sealed class ScreensError(message: String) : Throwable(message) {
 fun Throwable.userFacing(): String = when (this) {
     is ScreensError -> message ?: "Something went wrong. Try again."
     else -> "Couldn't reach the server. Check your connection and try again."
+}
+
+/** The box's own `{error}` wording from a refused call, if it sent one. */
+fun Throwable.boxError(): String? {
+    if (this !is ScreensError.Http) return null
+    val obj = runCatching { Json.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return null
+    val err = obj["error"] as? JsonPrimitive ?: return null
+    return err.content.takeIf { err.isString && it.isNotEmpty() }
 }

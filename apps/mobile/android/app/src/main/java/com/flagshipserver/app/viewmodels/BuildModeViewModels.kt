@@ -15,6 +15,7 @@ import com.flagshipserver.app.api.BuildMcpRequest
 import com.flagshipserver.app.api.BuildSummary
 import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.api.VibeCodeSessionMeta
+import com.flagshipserver.app.api.boxError
 import com.flagshipserver.app.api.userFacing
 import com.flagshipserver.app.core.NetworkErrorHumanizer
 import kotlinx.coroutines.CoroutineScope
@@ -171,7 +172,13 @@ class BuildGitViewModel(
 class BuildMcpViewModel(
     private val client: BuildClient,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    /** Set when the IDE changes an installed service rather than building a
+     *  new one: the build starts from its code and deploys over it. */
+    val editServiceId: String? = null,
 ) {
+    /** The slug of the service being edited, for the intro line. */
+    val editingName: String? get() = editServiceId?.substringAfter("--")
+
     sealed interface McpPhase {
         data object Idle : McpPhase
         data object Creating : McpPhase
@@ -197,14 +204,16 @@ class BuildMcpViewModel(
     fun create(label: String = "android"): Job = scope.launch {
         _phase.value = McpPhase.Creating
         try {
-            val r = client.mcpCreate(BuildMcpRequest(label = label))
+            val r = client.mcpCreate(BuildMcpRequest(label = label, editServiceId = editServiceId))
             buildId = r.buildId
             _connection.value = r.connection
             _phase.value = McpPhase.Ready
             refreshEnvRequests().join()
         } catch (t: Throwable) {
-            // A 404 on this entry call means the box has no build platform.
-            _phase.value = McpPhase.Failed(friendlyBuildEntry(t))
+            // A 404 on this entry call means the box has no build platform;
+            // an edit's refusals (service gone, not editable) carry their own words.
+            val boxSays = if (editServiceId != null) t.boxError() else null
+            _phase.value = McpPhase.Failed(boxSays ?: friendlyBuildEntry(t))
         }
     }
 

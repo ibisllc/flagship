@@ -29,3 +29,32 @@ class VibeSessionNavTest {
         )
     }
 }
+
+class OpenEditSessionNavTest {
+    @Test fun backFromAnEditLandsOnTheServicePage() {
+        assertEquals(
+            listOf("apps-list", "app-detail/alice--notes", "vibe-code-chat/s1"),
+            openEditSessionStack(
+                listOf("apps-list", "app-detail/alice--notes", "edit-service/alice--notes", "edit/describe/alice--notes"),
+                "s1",
+                "alice--notes",
+            ),
+        )
+    }
+
+    @Test fun anotherServicesPageIsNotTheOneKept() {
+        assertEquals(
+            listOf("apps-list", "app-detail/alice--notes", "vibe-code-chat/s2"),
+            openEditSessionStack(
+                listOf("apps-list", "app-detail/alice--notes", "edit-service/alice--notes", "app-detail/alice--wiki"),
+                "s2",
+                "alice--notes",
+            ),
+        )
+        // Not under its page at all: the session is just pushed.
+        assertEquals(
+            listOf("apps-list", "vibe-code-chat/s3"),
+            openEditSessionStack(listOf("apps-list"), "s3", "alice--notes"),
+        )
+    }
+}

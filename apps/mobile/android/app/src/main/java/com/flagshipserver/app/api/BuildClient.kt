@@ -67,6 +67,9 @@ data class BuildAdaptResponse(
 @Serializable
 data class BuildMcpRequest(
     val label: String? = null,
+    /** Start the IDE build from this installed service's code; deploying
+     *  replaces it in place. */
+    val editServiceId: String? = null,
 )
 
 /** The connection an external IDE pastes into its MCP settings. The key

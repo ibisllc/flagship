@@ -152,6 +152,9 @@ data class AppDetailResponse(
     val browserTabs: List<BrowserTabRef>,
     val lastBackup: BackupSummary? = null,
     val recentLogs: List<String>,
+    /** The owner can change its code from the phone (built on this box, with
+     *  its source there). Absent on older boxes. */
+    val editable: Boolean? = null,
 ) {
     @Serializable
     data class DataLayerInstance(val store: String, val instanceName: String)
@@ -200,6 +203,9 @@ data class VibeCodeStartRequest(
     val name: String? = null,
     /** Owner-chosen reach: "just-me" or "link". Applied at install. */
     val visibility: String? = null,
+    /** Change this installed service (`<creator>--<slug>`) instead of building
+     *  a new one. The box ignores [name] and [visibility] when it's set. */
+    val editServiceId: String? = null,
 )
 
 @Serializable

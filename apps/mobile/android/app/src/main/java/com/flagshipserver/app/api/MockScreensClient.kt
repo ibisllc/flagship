@@ -101,6 +101,9 @@ class MockScreensClient(
         )
     }
 
+    /** Services the box says can be edited from the phone (built there). */
+    var editableServiceIds: Set<String> = setOf("bright-maple--plants")
+
     override suspend fun appDetail(serviceId: String): AppDetailResponse {
         tick()
         val app = appsList().apps.firstOrNull { it.serviceId == serviceId }
@@ -125,12 +128,20 @@ class MockScreensClient(
                 bytes = 4_812_000,
             ),
             recentLogs = listOf("listening on :8080", "GET / → 200", "migration check ok"),
+            editable = serviceId in editableServiceIds,
         )
     }
 
 
+    val vibeCodeStartCalls: MutableList<VibeCodeStartRequest> = mutableListOf()
+
+    /** When set, start refuses with it (e.g. an edit's 409 or 413). */
+    var vibeCodeStartError: Throwable? = null
+
     override suspend fun vibeCodeStart(req: VibeCodeStartRequest): VibeCodeStartResponse {
         tick()
+        vibeCodeStartCalls.add(req)
+        vibeCodeStartError?.let { throw it }
         // Wire-match the live contract: no credential + no promo budget ⇒ the
         // box asks the client for a key. The mock has no promo budget, so a
         // credential-less start signals needsCredential.

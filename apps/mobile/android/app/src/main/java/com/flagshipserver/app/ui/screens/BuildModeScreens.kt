@@ -481,11 +481,11 @@ private fun JournalLink(nav: NavController, buildId: String?) {
 // ── mcp ─────────────────────────────────────────────────────────
 
 @Composable
-fun BuildMcpScreen(nav: NavController) {
+fun BuildMcpScreen(nav: NavController, editServiceId: String? = null) {
     val client = LocalBuildClient.current
     val toasts = LocalToastCenter.current
     val ctx = LocalContext.current
-    val vm = remember { BuildMcpViewModel(client) }
+    val vm = remember(editServiceId) { BuildMcpViewModel(client, editServiceId = editServiceId) }
     val phase by vm.phase.collectAsState()
     val connection by vm.connection.collectAsState()
     val envRequests by vm.envRequests.collectAsState()
@@ -493,7 +493,8 @@ fun BuildMcpScreen(nav: NavController) {
 
     ScreenScaffold(
         title = "Connect your IDE",
-        subtitle = "Build from Cursor or Cline using your own AI. The box runs an MCP server scoped to just this build — no model key on the box.",
+        subtitle = vm.editingName?.let { EditService.ideIntro(it) }
+            ?: "Build from Cursor or Cline using your own AI. The box runs an MCP server scoped to just this build — no model key on the box.",
         onBack = { nav.popBackStack() },
     ) {
         val creating = phase is BuildMcpViewModel.McpPhase.Creating

@@ -27,6 +27,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -167,6 +168,24 @@ class BuildModeViewModelsTest {
         // env-requests loaded value-free.
         assertTrue(vm.envRequests.value.isNotEmpty())
         assertEquals("WEATHER_API_KEY", vm.envRequests.value.first().name)
+    }
+
+    @Test fun mcp_edit_asksTheBoxToStartFromTheService() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0)
+        val vm = BuildMcpViewModel(client, scope = backgroundScope, editServiceId = "alice--notes")
+        assertEquals("notes", vm.editingName)
+        vm.create().join()
+        assertEquals("alice--notes", client.mcpCreateCalls.last().editServiceId)
+        // Regenerating the key keeps the same build; it doesn't restart the edit.
+        vm.rotate().join()
+        assertNull(client.mcpRotateCalls.last().second.editServiceId)
+        assertNull(BuildMcpViewModel(client, scope = backgroundScope).editingName)
+    }
+
+    @Test fun mcp_newBuild_sendsNoEditServiceId() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0)
+        BuildMcpViewModel(client, scope = backgroundScope).create().join()
+        assertNull(client.mcpCreateCalls.last().editServiceId)
     }
 
     @Test fun mcp_create404_showsPlatformAbsentMessage() = runTest {

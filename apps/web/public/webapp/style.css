@@ -1940,6 +1940,13 @@ button[data-device-restricted] {
 .build-resume-row.has-active, .build-session-row.is-active { border-color: var(--ok); }
 .build-resume-count { padding: 1px 8px; border-radius: var(--radius-pill); background: var(--ok); color: #fff; font-size: 13px; font-weight: 700; }
 .build-resume-chevron { color: var(--ink-muted); font-size: 1.2rem; }
+/* "Edit this service" row on service detail, and its chooser's options. */
+.edit-row { display: flex; align-items: center; gap: var(--space-3); text-align: left; cursor: pointer; }
+.edit-row-icon { flex: 0 0 auto; display: inline-flex; color: var(--accent); }
+.edit-row-icon svg { width: 22px; height: 22px; }
+.edit-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.edit-row-body strong { font-size: 1rem; }
+.edit-row-body .note { margin: 0; }
 .build-new-caption { margin-bottom: var(--space-2); }
 .build-section-caption { margin: var(--space-3) 0 var(--space-2); }
 .build-session-row { display: flex; align-items: center; gap: var(--space-3); text-align: left; cursor: pointer; }

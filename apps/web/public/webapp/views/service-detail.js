@@ -13,6 +13,8 @@ import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { controlApex, dataApex } from "../lib/apex.js";
+import { pencilIcon } from "../lib/icons.js";
+import { EDIT_ROW_CAPTION, EDIT_ROW_TITLE } from "../lib/editService.js";
 
 const COM_BASE = controlApex();
 
@@ -72,6 +74,7 @@ export async function renderServiceDetail(serviceId) {
           <span class="label">creator</span><span class="value">${escapeHtml(s.creator)}</span>
         </div>
       </div>
+      ${body.editable === true ? renderEditRow() : ""}
 
       ${renderWebDomainsSection(s, currentServiceLinks)}
       <div id="sd-custom-domains">${renderCustomDomainsSection()}</div>
@@ -157,6 +160,10 @@ export async function renderServiceDetail(serviceId) {
       </div>
     `;
 
+    $("sd-edit")?.addEventListener("click", async () => {
+      const { enterEditService } = await import("./edit-service.js");
+      enterEditService(s.serviceId);
+    });
     $("sd-backup-go")?.addEventListener("click", () => triggerBackup(s.serviceId));
     $("sd-open-browser")?.addEventListener("click", () => {
       enterBrowserViewer(s.serviceId).catch((e) => { console.error(e); toast(humanError(e), "err"); });
@@ -191,6 +198,19 @@ export async function renderServiceDetail(serviceId) {
       throw e;
     }
   }
+}
+
+/** Shown only when the box says the service can be edited here. */
+function renderEditRow() {
+  return `
+      <button class="card full-width edit-row" id="sd-edit">
+        <span class="edit-row-icon" aria-hidden="true">${pencilIcon}</span>
+        <span class="edit-row-body">
+          <strong>${escapeHtml(EDIT_ROW_TITLE)}</strong>
+          <span class="note">${escapeHtml(EDIT_ROW_CAPTION)}</span>
+        </span>
+        <span class="build-resume-chevron" aria-hidden="true">›</span>
+      </button>`;
 }
 
 async function triggerBackup(serviceId) {

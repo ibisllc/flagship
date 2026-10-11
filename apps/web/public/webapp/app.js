@@ -105,6 +105,7 @@ import { initBuildKeyView } from "./views/build-key.js";
 import { initBuildGitView } from "./views/build-git.js";
 import { initBuildMcpView } from "./views/build-mcp.js";
 import { initBuildJournalView } from "./views/build-journal.js";
+import { initEditServiceView } from "./views/edit-service.js";
 import { initRecoveryView, enterRecovery } from "./views/recovery.js";
 import { initPostRecoveryChoiceView } from "./views/post-recovery-choice.js";
 import { initAccountDeleteView, enterAccountDelete } from "./views/account-delete.js";
@@ -161,6 +162,8 @@ const SUB_VIEW_TABS = {
   "view-build-git": "apps",
   "view-build-mcp": "apps",
   "view-build-journal": "apps",
+  "view-edit-service": "apps",
+  "view-edit-describe": "apps",
   "view-service-env": "apps",
   "view-browser-viewer": "apps",
   "view-install-progress": "activity",
@@ -544,6 +547,7 @@ async function boot() {
   initBuildGitView();
   initBuildMcpView();
   initBuildJournalView();
+  initEditServiceView();
   initServiceEnvView();
   initVibeCodeChatView();
   initRecoveryView();

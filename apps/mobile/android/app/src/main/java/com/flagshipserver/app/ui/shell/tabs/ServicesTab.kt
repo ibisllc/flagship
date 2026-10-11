@@ -21,6 +21,9 @@ import com.flagshipserver.app.ui.screens.BuildGitScreen
 import com.flagshipserver.app.ui.screens.BuildJournalScreen
 import com.flagshipserver.app.ui.screens.BuildMcpScreen
 import com.flagshipserver.app.ui.screens.BuildSourceChooserScreen
+import com.flagshipserver.app.ui.screens.EditDescribeScreen
+import com.flagshipserver.app.ui.screens.EditService
+import com.flagshipserver.app.ui.screens.EditServiceScreen
 import com.flagshipserver.app.ui.screens.VibeCodeProviderPickScreen
 import com.flagshipserver.app.ui.screens.VibeCodeDescribeScreen
 import com.flagshipserver.app.ui.screens.VibeCodeGeneratingScreen
@@ -103,6 +106,32 @@ fun ServicesTab() {
             val creator = if (delimIdx > 0) id.substring(0, delimIdx) else ""
             val slug = if (delimIdx > 0) id.substring(delimIdx + 2) else id
             ServiceEnvScreen(nav, appId = id, creator = creator, slug = slug)
+        }
+        // "Edit this service": the chooser, then either the AI-key step and
+        // "What should change?" or the IDE screen building from its code.
+        composable("edit-service/{serviceId}") { entry ->
+            val id = entry.arguments?.getString("serviceId") ?: return@composable
+            EditServiceScreen(nav, serviceId = id)
+        }
+        composable("edit/key/{serviceId}") { entry ->
+            val id = entry.arguments?.getString("serviceId") ?: return@composable
+            AiKeyStepScreen(
+                onConfirm = { cred ->
+                    PendingBuildCredential.set(cred)
+                    nav.navigate(EditService.describeRoute(id)) {
+                        popUpTo(EditService.keyRoute(id)) { inclusive = true }
+                    }
+                },
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable("edit/describe/{serviceId}") { entry ->
+            val id = entry.arguments?.getString("serviceId") ?: return@composable
+            EditDescribeScreen(nav, serviceId = id)
+        }
+        composable("edit/mcp/{serviceId}") { entry ->
+            val id = entry.arguments?.getString("serviceId") ?: return@composable
+            BuildMcpScreen(nav, editServiceId = id)
         }
         composable(BUILD_CHOOSER_ROUTE) { BuildSourceChooserScreen(nav) }
         composable("build/git") { BuildGitScreen(nav) }

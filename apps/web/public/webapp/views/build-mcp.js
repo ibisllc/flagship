@@ -7,19 +7,33 @@ import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, buildEntryError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { ideEditIntro, serviceSlug } from "../lib/editService.js";
 import { enterBuildJournal } from "./build-journal.js";
 
 registerView("view-build-mcp");
 
 let buildId = null;
+// Set when the IDE changes an installed service rather than building a new
+// one: the build starts from its code and its deploy replaces it.
+let editServiceId = null;
+let backView = "view-build-source";
+let defaultIntro = null;
 
 export function initBuildMcpView() {
   $("build-mcp-create").addEventListener("click", createConnection);
-  $("build-mcp-back").addEventListener("click", () => show("view-build-source"));
+  $("build-mcp-back").addEventListener("click", () => show(backView));
 }
 
-export function enterBuildMcp() {
+/** Open the IDE screen; `editServiceId` makes it change that service. */
+export function enterBuildMcp({ editServiceId: editId = null, back = "view-build-source" } = {}) {
   buildId = null;
+  editServiceId = editId;
+  backView = back;
+  const intro = $("build-mcp-intro");
+  if (intro) {
+    defaultIntro ??= intro.textContent;
+    intro.textContent = editId ? ideEditIntro(serviceSlug(editId)) : defaultIntro;
+  }
   $("build-mcp-conn").classList.add("hidden");
   $("build-mcp-conn").innerHTML = "";
   show("view-build-mcp");
@@ -30,15 +44,19 @@ async function createConnection() {
   btn.disabled = true;
   btn.textContent = "creating…";
   try {
+    const body = { label: "webapp" };
+    if (editServiceId) body.editServiceId = editServiceId;
     const r = await screensFetch("/api/build/mcp", {
       method: "POST",
-      body: JSON.stringify({ label: "webapp" }),
+      body: JSON.stringify(body),
     });
     buildId = r.buildId;
     renderConnection(r.connection);
   } catch (e) {
-    // A 404 on this entry call means the box has no service/build platform.
-    toast(buildEntryError(e), "err");
+    // A 404 on this entry call means the box has no service/build platform;
+    // an edit's refusals (service gone, not editable) carry their own words.
+    const boxSays = editServiceId && typeof e?.body?.error === "string" ? e.body.error : null;
+    toast(boxSays ?? buildEntryError(e), "err");
   } finally {
     btn.disabled = false;
     btn.textContent = "Create a connection";

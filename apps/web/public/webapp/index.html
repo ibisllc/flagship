@@ -415,6 +415,26 @@
         </div>
       </section>
 
+      <!-- "Edit this service": change it with the AI chat or from an IDE -->
+      <section id="view-edit-service" class="hidden">
+        <h2 id="edit-service-title">Edit</h2>
+        <div id="edit-service-options" class="mt-2"></div>
+        <p class="note mt-3" id="edit-service-note"></p>
+        <div class="row-2 mt-2"><button class="secondary" id="edit-service-back">← Back</button></div>
+      </section>
+
+      <!-- Edit this service: what should change, for the AI chat -->
+      <section id="view-edit-describe" class="hidden">
+        <h2 id="edit-describe-title">Edit</h2>
+        <label class="field mt-2">
+          <span class="field-label">What should change?</span>
+          <textarea id="edit-describe-prompt" rows="7"></textarea>
+        </label>
+        <p class="note">For example: "Add a due date to each item and sort by it."</p>
+        <button id="edit-describe-start" class="full-width mt-2" disabled>Start</button>
+        <div class="row-2 mt-2"><button class="secondary" id="edit-describe-back">← Back</button></div>
+      </section>
+
       <!-- View 21: Invite issue (#82) -->
       <section id="view-invite-issue" class="hidden">
         <h2>Invite</h2>
@@ -688,7 +708,7 @@
       <section id="view-build-mcp" class="hidden">
         <h2>Connect your IDE</h2>
         <div class="card">
-          <p class="note">Build a service from Cursor or Cline using your own AI subscription. Your box runs a small MCP server, scoped to this one build, that exposes only safe build tools (write files, validate, request a secret value-free, deploy).</p>
+          <p class="note" id="build-mcp-intro">Build a service from Cursor or Cline using your own AI subscription. Your box runs a small MCP server, scoped to this one build, that exposes only safe build tools (write files, validate, request a secret value-free, deploy).</p>
           <button id="build-mcp-create" class="full-width mt-2">Create a connection</button>
         </div>
         <div id="build-mcp-conn" class="hidden mt-2"></div>

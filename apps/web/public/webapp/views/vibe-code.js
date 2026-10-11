@@ -72,6 +72,9 @@ let nameCheckTimer = null;
 let starting = false;
 // Set when a deploy the owner asked to be invite only came back open.
 let leftOpen = false;
+// Where Back goes instead of the chooser: an edit session returns to the
+// service it changes.
+let backTo = null;
 
 function clearPoll() {
   if (pollTimer) {
@@ -651,6 +654,7 @@ function reset() {
   buildCredential = null;
   buildSubject = null;
   leftOpen = false;
+  backTo = null;
   starting = false;
   nameCheck = null;
   checkedSlug = "";
@@ -696,7 +700,8 @@ export function initVibeCodeView() {
   });
   $("vibe-code-back")?.addEventListener("click", () => {
     clearPoll();
-    show("view-build-source");
+    if (backTo) void backTo();
+    else show("view-build-source");
   });
 }
 
@@ -728,11 +733,21 @@ export async function resumeVibeCode() {
   await poll().catch(() => {});
 }
 
-/** Reopen a session the box still holds (from the build sessions list). */
-export async function openVibeCodeSession(sessionId) {
-  if (activeSessionId === sessionId) return resumeVibeCode();
+/**
+ * Reopen a session the box still holds (from the build sessions list), or
+ * open one just started to change a service.
+ *   back       — called by Back instead of returning to the chooser
+ *   credential — the AI key follow-up replies carry
+ */
+export async function openVibeCodeSession(sessionId, { back = null, credential = null } = {}) {
+  if (activeSessionId === sessionId) {
+    backTo = back;
+    return resumeVibeCode();
+  }
   show("view-vibe-code");
   reset();
+  backTo = back;
+  if (credential) buildCredential = credential;
   activeSessionId = sessionId;
   setFirstTurnVisible(false);
   const sendBtn = $("vc-send");

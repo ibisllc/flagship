@@ -14,11 +14,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -184,6 +188,10 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
             is LoadingState.Loaded -> {
                 val resp = d.value
                 Header(app = resp.app)
+                if (resp.editable == true) {
+                    Spacer(Modifier.height(FS.space.s4))
+                    EditRow(onClick = { nav.navigate("edit-service/$serviceId") })
+                }
                 Spacer(Modifier.height(FS.space.s8))
 
                 // ── WHERE IT RUNS ──────────────────────────────────────
@@ -452,6 +460,32 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
 
 private fun LoadingState<AppDetailResponse>.loadedValue(): AppDetailResponse? =
     (this as? LoadingState.Loaded)?.value
+
+/** "Edit this service", shown when the box says it can be edited here. */
+@Composable
+private fun EditRow(onClick: () -> Unit) {
+    FSCard(
+        padding = PaddingValues(FS.space.s4),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { testTag = "service-detail-edit" }
+            .clickable(onClick = onClick),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.EditNote, contentDescription = null, tint = FS.colors.primary)
+            Spacer(Modifier.width(FS.space.s3))
+            Column(Modifier.weight(1f)) {
+                Text(EditService.ROW_TITLE, color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
+                Text(
+                    EditService.ROW_CAPTION,
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                )
+            }
+            Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
+        }
+    }
+}
 
 @Composable
 private fun Header(app: AppSummary) {

@@ -32,3 +32,24 @@ const val BUILD_SESSIONS_ROUTE = "build/journal"
 /** The build-sessions list, one level above "Build a service", so Back from
  *  it returns to the chooser rather than to a half-filled form. */
 fun NavController.openBuildSessions() = openVibeSession(BUILD_SESSIONS_ROUTE)
+
+fun appDetailRoute(serviceId: String) = "app-detail/$serviceId"
+
+/**
+ * The back stack after opening the AI-chat session changing [serviceId]: it
+ * sits directly above that service's page (the chooser, AI-key and describe
+ * steps are dropped), so Back from it returns there. Mirror of iOS
+ * `[AppsRoute].openEditSession`.
+ */
+fun openEditSessionStack(stack: List<String>, sessionId: String, serviceId: String): List<String> {
+    val i = stack.lastIndexOf(appDetailRoute(serviceId))
+    val base = if (i >= 0) stack.subList(0, i + 1) else stack
+    return base + vibeSessionChatRoute(sessionId)
+}
+
+/** Applies [openEditSessionStack] to the live back stack. */
+fun NavController.openEditSession(sessionId: String, serviceId: String) {
+    val detail = appDetailRoute(serviceId)
+    val hasDetail = runCatching { getBackStackEntry(detail) }.isSuccess
+    navigate(vibeSessionChatRoute(sessionId)) { if (hasDetail) popUpTo(detail) }
+}
