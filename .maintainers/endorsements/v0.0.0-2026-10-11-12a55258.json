@@ -1,0 +1,29 @@
+{
+  "kind": "ReleaseEndorsement",
+  "version": 1,
+  "releaseId": "ed2ef1d2-6e15-47c3-96b7-af00e7e68cdd",
+  "semverTag": "v0.0.0-2026-10-11-12a55258",
+  "commitHash": "12a55258dd3dd14924dbfb454587afe590cfa1e5",
+  "previousReleaseId": "4befd60a-2ea7-4585-b918-b3955fa7d153",
+  "previousCommitHash": "8fc727ffcc0b9a54e3549e6aca3efb9b7d6ba735",
+  "intermediateCommits": [
+    "7311f0d6071f0a2d5335cbe55f4c8a45249db610",
+    "61db381f7097002497dc0d802b2a50a5a14d39e8",
+    "907124aa6467efc68d4196b817184db6b15553e4",
+    "11e3411c8cbf3a5a20dacc8f24c3099d8b61662a",
+    "3fbfcc277d450357c8b7c3c4696e488aaa1d1ed5",
+    "41c144d104edf412cfa4ce2d66b78907945e0fc0",
+    "0385310195770fc2db5a1adaedb2267da766823a",
+    "12a55258dd3dd14924dbfb454587afe590cfa1e5"
+  ],
+  "intermediateMerkleRoot": "6add669f96aad7a9acdbff1c196dccf6441e272ac2ff03bb5f847b9bef7374b4",
+  "endorsedNotes": null,
+  "issuedAt": "2026-10-11T16:30:27.114Z",
+  "signedBy": "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+  "signatures": [
+    {
+      "pubkey": "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+      "sig": "bdf54d5195ab07de3619ad6b3ed5170e906af87f50d029e710fb1676d7de3a11981b06fa8a4c3b93de6f2d3cb93744babc9d7b882b5e3f95a962cd07068e580b"
+    }
+  ]
+}
