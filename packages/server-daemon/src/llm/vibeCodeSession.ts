@@ -248,6 +248,20 @@ export class VibeCodeStreamParser extends EventEmitter {
   snapshot(): Record<string, string> {
     return { ...this.files };
   }
+
+  /**
+   * The system prompt lets the model ask in text (`=== QUESTION === … === END
+   * ===`) instead of calling talkToUser. That block parses like a file named
+   * QUESTION, so take it out of the files and return its text; null when the
+   * turn asked nothing.
+   */
+  takeQuestion(): string | null {
+    const raw = this.files["QUESTION"];
+    if (raw === undefined) return null;
+    delete this.files["QUESTION"];
+    const text = raw.trim();
+    return text.length > 0 ? text : null;
+  }
 }
 
 /** A pending tool_use the orchestrator is waiting on the owner to resolve. */
@@ -489,6 +503,19 @@ export class VibeCodeSession extends EventEmitter {
 
   endAssistant(): void {
     this.parser.end();
+    // A text-form question is a question, not a finished app: route it through
+    // the same pending talkToUser slot the tool uses, so the owner gets a
+    // reply box (and a push) instead of a Deploy button for a "file" holding
+    // the question.
+    const question = this.parser.takeQuestion();
+    if (question !== null && !this.cancelled && this.meta.status === "streaming") {
+      this.receiveToolUse({
+        id: `question-${Date.now().toString(36)}`,
+        name: "talkToUser",
+        input: { message: question },
+      });
+      return;
+    }
     if (
       !this.cancelled &&
       (this.meta.status === "streaming" || this.meta.status === "awaiting-tool-response")

@@ -83,6 +83,36 @@ describe("VibeCodeSession", () => {
     expect(s.manifestJson()).toContain("{}");
   });
 
+  it("treats a text-form QUESTION block as a question, not a finished app", () => {
+    // GPT-5 asked in text instead of calling talkToUser; the parser read the
+    // block as a file named QUESTION and the session offered Deploy.
+    const s = new VibeCodeSession({ username: "alice", serverFqdn: "home.alice.flagship.services" });
+    const events: VibeCodeEvent[] = [];
+    s.on("event", (e: VibeCodeEvent) => events.push(e));
+    s.pushUserMessage("A picture site with uploads and comments");
+    s.feedAssistant(
+      "=== QUESTION ===\nShould uploads and comments be open to anonymous visitors?\n=== END ===\n",
+    );
+    s.endAssistant();
+    expect(s.meta.status).toBe("awaiting-tool-response");
+    expect(s.files()).toEqual({});
+    const pending = s.pendingToolUses();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.name).toBe("talkToUser");
+    expect(pending[0]!.input.message).toBe("Should uploads and comments be open to anonymous visitors?");
+    const talk = events.find((e) => e.kind === "talk-to-user");
+    expect(talk && talk.kind === "talk-to-user" ? talk.message : "").toMatch(/anonymous visitors\?$/);
+
+    // The owner's reply resumes the build like any talkToUser answer.
+    expect(s.pushUserReply({ toolUseId: pending[0]!.id, text: "Members only for uploads" }).ok).toBe(true);
+    expect(s.meta.status).toBe("streaming");
+    s.prepareForResume();
+    s.feedAssistant("=== flagship.app.json ===\n{}\n=== END ===\n");
+    s.endAssistant();
+    expect(s.meta.status).toBe("ready-to-deploy");
+    expect(Object.keys(s.files())).toEqual(["flagship.app.json"]);
+  });
+
   it("markDeployed flips status + emits event", () => {
     const s = new VibeCodeSession({ username: "alice", serverFqdn: "home.alice.flagship.services" });
     const events: VibeCodeEvent[] = [];
