@@ -70,8 +70,12 @@ public struct BuildAdaptResponse: Codable, Equatable, Sendable {
 /// `POST /api/build/mcp {label?}` / `POST /api/build/sessions/:id/mcp/rotate {label?}`
 public struct BuildMcpRequest: Codable, Equatable, Sendable {
     public let label: String?
-    public init(label: String? = nil) {
+    /// Start the IDE build from this installed service's code; deploying
+    /// replaces it in place.
+    public let editServiceId: String?
+    public init(label: String? = nil, editServiceId: String? = nil) {
         self.label = label
+        self.editServiceId = editServiceId
     }
 }
 

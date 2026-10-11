@@ -377,8 +377,14 @@ public struct BuildMcpScreen: View {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Spacer().frame(height: FS.space.s6)
                     Text("Connect your IDE").font(FS.font.h2())
-                    Text("Your editor's agent builds against your box using your OWN AI subscription. No model key is stored on the box.")
-                        .font(FS.font.body()).foregroundColor(c.textMuted)
+                    if let name = vm.editingName {
+                        Text("Your editor's agent changes \(name) on your server, starting from its current code, using your own AI subscription. Deploying from the IDE replaces the running version; its address and data stay the same.")
+                            .font(FS.font.body()).foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text("Your editor's agent builds against your box using your OWN AI subscription. No model key is stored on the box.")
+                            .font(FS.font.body()).foregroundColor(c.textMuted)
+                    }
 
                     if vm.connection == nil {
                         FSPrimaryButton(vm.isCreating ? "Creating…" : "Create a connection",

@@ -42,6 +42,12 @@ public enum AppsRoute: Hashable, Sendable {
     /// box-model paths (scratch, git-adapt) route through here; marketplace
     /// + MCP skip it.
     case buildKey(purpose: BuildKeyPurpose)
+    /// "Edit this service": change it with the AI chat or from an IDE.
+    case editService(serviceId: String)
+    /// Describe the change for the AI chat.
+    case editDescribe(serviceId: String)
+    /// Connect an IDE to a build that starts from the service's code.
+    case editMcp(serviceId: String)
     case vibeCodeProviderPick
     case vibeCodeDescribe
     case vibeCodeGenerating(sessionId: String)
@@ -76,6 +82,8 @@ public enum BuildKeyPurpose: Hashable, Sendable {
     /// Start-from-scratch: seed the vibe-code describe → start flow with the
     /// chosen credential.
     case scratch
+    /// Changing an installed service with the AI chat.
+    case edit(serviceId: String)
     /// Git non-fit "Build with AI": run the adapt pass on this build with the
     /// chosen credential (keeps the 503 → fall-back-to-scratch path).
     case gitAdapt(buildId: String)
@@ -256,6 +264,15 @@ public extension Array where Element == AppsRoute {
             removeSubrange((i + 1)...)
         } else {
             append(.buildSource)
+        }
+        append(.vibeCodeChat(sessionId: sessionId))
+    }
+
+    /// The AI-chat session changing a service, directly above that service's
+    /// page, so Back from it returns there.
+    mutating func openEditSession(_ sessionId: String, serviceId: String) {
+        if let i = lastIndex(of: .appDetail(serviceId: serviceId)) {
+            removeSubrange((i + 1)...)
         }
         append(.vibeCodeChat(sessionId: sessionId))
     }

@@ -152,6 +152,9 @@ public struct AppDetailResponse: Codable {
     public let browserTabs: [BrowserTabRef]
     public let lastBackup: BackupSummary?
     public let recentLogs: [String]
+    /// The owner can change its code from the phone (built on this box, with
+    /// its source there). Absent on older boxes.
+    public var editable: Bool? = nil
 
     public struct DataLayerInstance: Codable, Equatable {
         public let store: String
@@ -217,13 +220,17 @@ public struct VibeCodeStartRequest: Codable, Equatable, Sendable {
     /// Owner-chosen reach: "just-me" (gated to the owner) or "link" (anyone with
     /// the link). Optional for back-compat; the daemon applies it at install.
     public let visibility: String?
+    /// Change this installed service (`<creator>--<slug>`) instead of building
+    /// a new one. The box ignores `name` and `visibility` when it's set.
+    public let editServiceId: String?
     public init(prompt: String, model: String?, credential: LlmProviderCredential? = nil,
-                name: String? = nil, visibility: String? = nil) {
+                name: String? = nil, visibility: String? = nil, editServiceId: String? = nil) {
         self.prompt = prompt
         self.model = model
         self.credential = credential
         self.name = name
         self.visibility = visibility
+        self.editServiceId = editServiceId
     }
 }
 

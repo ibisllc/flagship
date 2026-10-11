@@ -144,6 +144,16 @@ public struct ServicesTab: View {
             BuildJournalContainer(buildId: buildId, onResume: { path.openVibeSession($0) })
         case .buildKey(let purpose):
             BuildKeyContainer(purpose: purpose, path: $path, holder: buildCred)
+        case .editService(let serviceId):
+            EditServiceScreen(
+                name: Self.slug(of: serviceId),
+                onAI: { path.append(.buildKey(purpose: .edit(serviceId: serviceId))) },
+                onIDE: { path.append(.editMcp(serviceId: serviceId)) }
+            )
+        case .editDescribe(let serviceId):
+            EditDescribeContainer(serviceId: serviceId, path: $path, holder: buildCred)
+        case .editMcp(let serviceId):
+            BuildMcpContainer(path: $path, editServiceId: serviceId)
         case .vibeCodeProviderPick:
             VibeCodeProviderPickScreen(
                 onPickPromo: { path.append(.vibeCodeDescribe) },
@@ -166,6 +176,11 @@ public struct ServicesTab: View {
         case .serviceAccess(let serviceId):
             ServiceAccessContainer(serviceId: serviceId)
         }
+    }
+
+    /// The slug half of a `<creator>--<slug>` service id.
+    static func slug(of serviceId: String) -> String {
+        serviceId.range(of: "--").map { String(serviceId[$0.upperBound...]) } ?? serviceId
     }
 
     private func searchBinding(vm: ServicesListViewModel) -> Binding<String> {
@@ -388,7 +403,8 @@ struct ServiceDetailContainer: View {
                     onRemove: { confirmRemove = true },
                     onOpenBrowserTabs: { path.append(.browserTabs(serviceId: serviceId)) },
                     onOpenCollaborators: { path.append(.inviteManage(serviceId: serviceId)) },
-                    onOpenAccess: { path.append(.serviceAccess(serviceId: serviceId)) }
+                    onOpenAccess: { path.append(.serviceAccess(serviceId: serviceId)) },
+                    onEdit: { path.append(.editService(serviceId: serviceId)) }
                 )
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -533,6 +549,38 @@ struct ServiceEnvContainer: View {
             slug: slug,
             client: client,
             signEnvelope: signer
+        )
+    }
+}
+
+/// Starts an AI-chat session that changes an installed service.
+struct EditDescribeContainer: View {
+    let serviceId: String
+    @Binding var path: [AppsRoute]
+    let holder: BuildCredentialHolder
+    @Environment(\.screensClient) private var client
+    var body: some View {
+        EditDescribeScreen(
+            name: ServicesTab.slug(of: serviceId),
+            onStart: { prompt in
+                do {
+                    let selection = VibeCodeCredentialSelection.compatible(with: holder.credential)
+                    let resp = try await client.vibeCodeStart(VibeCodeStartRequest(
+                        prompt: prompt, model: selection.model, credential: selection.credential,
+                        editServiceId: serviceId
+                    ))
+                    if resp.needsCredential == true {
+                        path.append(.buildKey(purpose: .edit(serviceId: serviceId)))
+                        return nil
+                    }
+                    path.openEditSession(resp.sessionId, serviceId: serviceId)
+                    return nil
+                } catch {
+                    return EditStartRefusal.from(error)
+                }
+            },
+            onOpenSessions: { path.openBuildSessions() },
+            onUseIDE: { path.append(.editMcp(serviceId: serviceId)) }
         )
     }
 }
@@ -690,6 +738,7 @@ struct BuildKeyContainer: View {
     private var contextLabel: String {
         switch purpose {
         case .scratch:  return "Start from scratch with AI"
+        case .edit:     return "Changing a service with AI"
         case .gitAdapt: return "Building this repo with AI"
         }
     }
@@ -700,6 +749,8 @@ struct BuildKeyContainer: View {
             switch purpose {
             case .scratch:
                 path.append(.vibeCodeDescribe)
+            case .edit(let serviceId):
+                path.append(.editDescribe(serviceId: serviceId))
             case .gitAdapt:
                 // Pop back to the git screen; its onAppear takes the
                 // credential off the holder + runs the adapt pass.
@@ -712,6 +763,7 @@ struct BuildKeyContainer: View {
 // mcp build mode container. Copy goes through UIPasteboard + a toast.
 struct BuildMcpContainer: View {
     @Binding var path: [AppsRoute]
+    var editServiceId: String? = nil
     @Environment(\.screensClient) private var client
     @Environment(ToastCenter.self) private var toasts
     @State private var vm: BuildMcpViewModel?
@@ -730,7 +782,7 @@ struct BuildMcpContainer: View {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task { if vm == nil { vm = BuildMcpViewModel(client: client) } }
+        .task { if vm == nil { vm = BuildMcpViewModel(client: client, editServiceId: editServiceId) } }
     }
 }
 

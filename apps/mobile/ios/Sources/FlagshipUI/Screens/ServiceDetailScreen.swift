@@ -34,6 +34,8 @@ public struct ServiceDetailScreen: View {
     /// #92 — push the per-service access-gating ("Who can open this")
     /// surface onto the nav stack.
     var onOpenAccess: () -> Void = {}
+    /// "Edit this service", shown when the box says it can be edited here.
+    var onEdit: () -> Void = {}
 
     public init(
         vm: ServiceDetailViewModel,
@@ -44,7 +46,8 @@ public struct ServiceDetailScreen: View {
         onRemove: @escaping () -> Void = {},
         onOpenBrowserTabs: @escaping () -> Void = {},
         onOpenCollaborators: @escaping () -> Void = {},
-        onOpenAccess: @escaping () -> Void = {}
+        onOpenAccess: @escaping () -> Void = {},
+        onEdit: @escaping () -> Void = {}
     ) {
         self.vm = vm
         self.username = username
@@ -55,6 +58,7 @@ public struct ServiceDetailScreen: View {
         self.onOpenBrowserTabs = onOpenBrowserTabs
         self.onOpenCollaborators = onOpenCollaborators
         self.onOpenAccess = onOpenAccess
+        self.onEdit = onEdit
     }
 
     public var body: some View {
@@ -68,6 +72,7 @@ public struct ServiceDetailScreen: View {
                     ErrorCard(message: msg)
                 case .loaded(let d):
                     header(d: d.app, c: c)
+                    if d.editable == true { editRow(c: c) }
                     whereItRuns(d: d, c: c)
                     webDomains(d: d, c: c)
                     browserTabsRow(d: d, c: c)
@@ -570,6 +575,26 @@ public struct ServiceDetailScreen: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("service-detail-open-collaborators")
         }
+    }
+
+    private func editRow(c: FSColors) -> some View {
+        Button(action: onEdit) {
+            FSCard {
+                HStack(spacing: FS.space.s3) {
+                    Image(systemName: "pencil.and.outline").foregroundColor(c.primary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Edit this service").foregroundColor(c.text)
+                        Text("Change it with AI, or in your own editor")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.textMuted)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("service-detail-edit")
     }
 
     private func accessRow(c: FSColors) -> some View {

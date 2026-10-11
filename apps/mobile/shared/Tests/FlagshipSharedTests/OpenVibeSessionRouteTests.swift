@@ -24,3 +24,12 @@ final class OpenVibeSessionRouteTests: XCTestCase {
         XCTAssertEqual(path, [.buildSource, .buildJournal(buildId: nil)])
     }
 }
+
+final class OpenEditSessionRouteTests: XCTestCase {
+    func testBackFromAnEditLandsOnTheServicePage() {
+        var path: [AppsRoute] = [.appDetail(serviceId: "alice--notes"), .editService(serviceId: "alice--notes"),
+                                 .buildKey(purpose: .edit(serviceId: "alice--notes")), .editDescribe(serviceId: "alice--notes")]
+        path.openEditSession("s1", serviceId: "alice--notes")
+        XCTAssertEqual(path, [.appDetail(serviceId: "alice--notes"), .vibeCodeChat(sessionId: "s1")])
+    }
+}

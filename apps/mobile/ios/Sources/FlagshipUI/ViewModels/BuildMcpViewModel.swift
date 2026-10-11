@@ -29,8 +29,18 @@ public final class BuildMcpViewModel {
     /// uses "ios".
     private let label = "ios"
 
-    public init(client: any ScreensClient) {
+    /// Set when the IDE changes an installed service rather than building a
+    /// new one: the build starts from its code and deploys over it.
+    public let editServiceId: String?
+
+    public init(client: any ScreensClient, editServiceId: String? = nil) {
         self.client = client
+        self.editServiceId = editServiceId
+    }
+
+    /// The slug of the service being edited, for the intro line.
+    public var editingName: String? {
+        editServiceId.flatMap { $0.components(separatedBy: "--").last }
     }
 
     /// Pretty-printed IDE config JSON, ready to paste / copy.
@@ -49,7 +59,7 @@ public final class BuildMcpViewModel {
         isCreating = true
         defer { isCreating = false }
         do {
-            let r = try await client.buildMcpCreate(BuildMcpRequest(label: label))
+            let r = try await client.buildMcpCreate(BuildMcpRequest(label: label, editServiceId: editServiceId))
             buildId = r.buildId
             connection = r.connection
             await refreshEnvRequests()
