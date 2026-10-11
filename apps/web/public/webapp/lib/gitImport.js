@@ -16,6 +16,9 @@ export const ADAPTER_FILE_NAME = "flagship.app.json";
 export const EXPORT_BUTTON = "Get flagship.app.json";
 export const EXPORT_PREPARING = "Preparing…";
 export const EXPORT_NOTE = "Is this your repo? Commit this file at its root and every Flagship server will run it this way.";
+export const SHARE_LABEL = "Share the adaptation";
+export const SHARE_NOTE =
+  "If the AI adapts this open-source repo, Flagship publishes the changes so others can install it without AI. Nothing about you or your server is included.";
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_LIMIT_MS = 45 * 60 * 1000;
@@ -38,13 +41,48 @@ export function blankNameHint(ref) {
   return `Leave it blank to name it after the repo${String(ref ?? "").trim() ? " and branch" : ""}.`;
 }
 
-export function gitRequestBody({ gitUrl, ref, name }) {
+/** `share` false: never share this repo's adaptation with the public store
+ *  (sent as `share: false`; omitted otherwise, which shares it). */
+export function gitRequestBody({ gitUrl, ref, name, share = true }) {
   const body = { gitUrl: String(gitUrl ?? "").trim() };
   const r = String(ref ?? "").trim();
   if (r) body.ref = r;
   const slug = slugify(name);
   if (slug) body.name = slug;
+  if (share === false) body.share = false;
   return body;
+}
+
+/** A failed Install: a shared adaptation that crashed here hands the repo to
+ *  the owner's AI (`{needsAdapt, reason}`); anything else is an error. */
+export function deployFailure(e) {
+  const reason = boxReason(e) ?? (e instanceof ScreensError ? e.message : String(e));
+  return e?.body && typeof e.body === "object" && e.body.needsAdapt === true
+    ? { needsAdapt: true, reason }
+    : { message: reason };
+}
+
+/** An adapt the box already started itself (409): follow it instead. */
+export function adaptAlreadyRunning(e) {
+  return e instanceof ScreensError && e.status === 409;
+}
+
+/**
+ * Start the AI adapt and follow it to its end. `start()` posts the adapt;
+ * `follow()` polls a background run (see `followAdapt`). An older box answers
+ * with the finished result; a 409 means the box already started the AI
+ * itself (a shared adaptation crashed and it had a key), so follow that run.
+ * Other failures (a 503 included) are thrown for the caller.
+ */
+export async function startAndFollowAdapt({ start, follow }) {
+  let r;
+  try {
+    r = await start();
+  } catch (e) {
+    if (adaptAlreadyRunning(e)) return follow();
+    throw e;
+  }
+  return r?.started === true ? follow() : adaptFinished(r || {});
 }
 
 /** Why "Check repo" was refused: a taken name, the box's own reason, or the

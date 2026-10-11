@@ -299,3 +299,89 @@ describe("git import screen", () => {
     expect(js).toContain("background: true");
   });
 });
+
+describe("share the adaptation, and a shared adaptation that crashes", () => {
+  it("shares unless switched off", async () => {
+    const { gitRequestBody } = await loadGit();
+    expect(gitRequestBody({ gitUrl: "https://github.com/me/random", ref: "", name: "" })).toEqual({
+      gitUrl: "https://github.com/me/random",
+    });
+    expect(gitRequestBody({ gitUrl: "https://github.com/me/random", share: true })).not.toHaveProperty("share");
+    expect(gitRequestBody({ gitUrl: "https://github.com/me/random", share: false })).toEqual({
+      gitUrl: "https://github.com/me/random",
+      share: false,
+    });
+  });
+
+  it("the switch is on by default and says what is published", async () => {
+    const { SHARE_LABEL, SHARE_NOTE } = await loadGit();
+    expect(SHARE_LABEL).toBe("Share the adaptation");
+    expect(SHARE_NOTE).toBe(
+      "If the AI adapts this open-source repo, Flagship publishes the changes so others can install it without AI. Nothing about you or your server is included.",
+    );
+    const html = await asset("/webapp/index.html");
+    const section = html.slice(html.indexOf('id="view-build-git"'), html.indexOf('id="view-build-mcp"'));
+    expect(section).toMatch(/<input type="checkbox" id="build-git-share"[^>]* checked \/> Share the adaptation/);
+    expect(section).toContain(SHARE_NOTE);
+    const js = await asset("/webapp/views/build-git.js");
+    expect(js).toContain('share: $("build-git-share").checked');
+    expect(js).toContain('$("build-git-share").checked = true;');
+  });
+
+  it("a failed Install that needs the AI shows the not-ready card with the box's reason", async () => {
+    const { deployFailure, notReadyText } = await loadGit();
+    const reason =
+      "docker build failed: exit 1. The shared adaptation of this repo didn't work on this server, so it has been reported. Use AI to prepare the repo for Flagship instead.";
+    const got = deployFailure(new ScreensError(reason, 502, { error: reason, needsAdapt: true }));
+    expect(got).toEqual({ needsAdapt: true, reason });
+    expect(notReadyText(got.reason)).toContain("didn't work on this server");
+    expect(deployFailure(new ScreensError("x", 502, { error: "docker build failed: exit 1" }))).toEqual({
+      message: "docker build failed: exit 1",
+    });
+    const js = await asset("/webapp/views/build-git.js");
+    const deploy = js.slice(js.indexOf("async function deploy()"));
+    expect(deploy).toContain("if (failure.needsAdapt) {");
+    expect(deploy).toContain("renderVerdict({ buildId, fit: false, reason: failure.reason");
+  });
+
+  it("an adapt the box already started (409) is followed to Adapted", async () => {
+    const { startAndFollowAdapt, followAdapt } = await loadGit();
+    const start = vi.fn(async () => {
+      throw new ScreensError("HTTP 409", 409, { error: "the AI is already adapting this repo" });
+    });
+    const out = await startAndFollowAdapt({
+      start,
+      follow: () =>
+        followAdapt({
+          ...instant,
+          fetchState: async () => ({ state: { adapt: { status: "done", fileCount: 16, deployed: false } } }),
+          fetchJournal: async () => ({ entries: [] }),
+        }),
+    });
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(out).toEqual({ phase: "adapted", fileCount: 16 });
+  });
+
+  it("a started adapt is followed, an older box's answer is used, other refusals are thrown", async () => {
+    const { startAndFollowAdapt } = await loadGit();
+    const follow = vi.fn(async () => ({ phase: "adapted", fileCount: 3 }));
+    expect(await startAndFollowAdapt({ start: async () => ({ ok: true, started: true }), follow })).toEqual({
+      phase: "adapted",
+      fileCount: 3,
+    });
+    expect(await startAndFollowAdapt({ start: async () => ({ ok: true, fileCount: 7 }), follow })).toEqual({
+      phase: "adapted",
+      fileCount: 7,
+    });
+    expect(follow).toHaveBeenCalledTimes(1);
+    await expect(
+      startAndFollowAdapt({
+        start: async () => {
+          throw new ScreensError("AI adapt not configured", 503, { error: "AI adapt not configured" });
+        },
+        follow,
+      }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(follow).toHaveBeenCalledTimes(1);
+  });
+});

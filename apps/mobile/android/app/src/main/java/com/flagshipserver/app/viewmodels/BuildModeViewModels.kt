@@ -30,6 +30,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 private fun friendly(t: Throwable): String = when (t) {
     is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
@@ -121,7 +124,9 @@ class BuildGitViewModel(
 
     fun dismissConflict() { _conflict.value = null }
 
-    fun checkRepo(gitUrl: String, ref: String, name: String = ""): Job = scope.launch {
+    /** [share] false: never share this repo's adaptation with the public
+     *  store (sent as `share: false`; omitted otherwise, which shares it). */
+    fun checkRepo(gitUrl: String, ref: String, name: String = "", share: Boolean = true): Job = scope.launch {
         val wanted = slug(name)
         _conflict.value = null
         _assignedName.value = null
@@ -135,6 +140,7 @@ class BuildGitViewModel(
                     gitUrl = gitUrl.trim(),
                     ref = ref.trim().ifEmpty { null },
                     name = wanted.ifEmpty { null },
+                    share = if (share) null else false,
                 ),
             )
             buildId = r.buildId
@@ -170,18 +176,31 @@ class BuildGitViewModel(
                 ),
             )
             if (r.started == true) {
-                if (withTimeoutOrNull(pollLimitMs) { followAdapt(id) } == null) {
-                    failAdapt("The AI is taking unusually long. Check Build sessions later to see how it went.")
-                }
+                followAdaptWithLimit(id)
             } else {
                 finishAdapt(r.fileCount ?: 0, r.deployedUrl.takeIf { r.deployed == true })
             }
         } catch (t: Throwable) {
             if (t is ScreensError.Http && t.status == 503) {
                 _phase.value = GitPhase.AdaptUnavailable
+            } else if (t is ScreensError.Http && t.status == 409) {
+                // The box started the AI itself (a shared adaptation crashed
+                // and it had a key): follow that run.
+                try {
+                    followAdaptWithLimit(id)
+                } catch (e: Throwable) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    failAdapt(friendly(e))
+                }
             } else {
                 failAdapt(t.boxError() ?: friendly(t))
             }
+        }
+    }
+
+    private suspend fun followAdaptWithLimit(id: String) {
+        if (withTimeoutOrNull(pollLimitMs) { followAdapt(id) } == null) {
+            failAdapt("The AI is taking unusually long. Check Build sessions later to see how it went.")
         }
     }
 
@@ -241,7 +260,15 @@ class BuildGitViewModel(
             val r = client.deploy(id)
             _phase.value = GitPhase.Deployed(url = r.url)
         } catch (t: Throwable) {
-            _phase.value = GitPhase.Failed(t.boxError() ?: friendly(t))
+            val reason = t.boxError() ?: friendly(t)
+            // A shared adaptation that crashed here: the repo needs the
+            // owner's AI now, so show the card that offers it.
+            _phase.value = if (needsAdapt(t)) {
+                GitPhase.Verdict(fit = false, reason = reason, fileCount = lastVerdict?.fileCount ?: 0)
+                    .also { lastVerdict = it }
+            } else {
+                GitPhase.Failed(reason)
+            }
         } finally {
             // Deployed, failed, or cancelled — drop the phantom op either way.
             operations?.removeBuild(id)
@@ -298,6 +325,13 @@ class BuildGitViewModel(
 
     companion object {
         const val ADAPTER_FILE_NAME = "flagship.app.json"
+
+        /** A deploy refusal that says the repo now needs the owner's AI. */
+        fun needsAdapt(t: Throwable): Boolean {
+            if (t !is ScreensError.Http) return false
+            val obj = runCatching { Json.parseToJsonElement(t.body) as? JsonObject }.getOrNull() ?: return false
+            return (obj["needsAdapt"] as? JsonPrimitive)?.let { !it.isString && it.content == "true" } == true
+        }
 
         /** The typed name as the address label it becomes. */
         fun slug(name: String): String = name.lowercase().filter { it.isLetterOrDigit() || it == '-' }

@@ -98,6 +98,11 @@ interface ScreensClient {
     suspend fun vibeCodeDiscard(sessionId: String): Unit =
         throw ScreensError.NotImplemented("discard")
 
+    /** `POST /api/screens/adapter-report/:serviceId {detail}`: tell the public
+     *  store the adaptation this service was built from has a problem. */
+    suspend fun adapterReport(serviceId: String, detail: String): Unit =
+        throw ScreensError.NotImplemented("report")
+
     // P9 — peer-backup management.
     suspend fun peerBackupStatus(): PeerBackupStatusResponse
     suspend fun peerBackupToggle(participate: Boolean): PeerBackupStatusResponse

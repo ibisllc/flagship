@@ -90,9 +90,13 @@ class MockBuildClient(
     /** Override what a polled background adapt reports. */
     var adaptStatusFixture: BuildAdaptStatus? = null
 
+    /** Thrown by `adaptStart` (after recording the call). */
+    var adaptStartError: Throwable? = null
+
     override suspend fun adaptStart(buildId: String, req: BuildAdaptRequest): BuildAdaptReply {
         tick()
         adaptStartCalls.add(buildId to req)
+        adaptStartError?.let { throw it }
         if (adaptNotConfigured) throw ScreensError.Http(503, """{"error":"AI adapt not configured"}""")
         return BuildAdaptReply(ok = true, started = true)
     }
@@ -228,9 +232,13 @@ class MockBuildClient(
 
     val deployCalls: MutableList<String> = mutableListOf()
 
+    /** Thrown by `deploy` instead of installing. */
+    var deployError: Throwable? = null
+
     override suspend fun deploy(buildId: String): BuildDeployResponse {
         tick()
         deployCalls.add(buildId)
+        deployError?.let { throw it }
         return BuildDeployResponse(
             ok = true,
             serviceId = "bright-maple-newapp",

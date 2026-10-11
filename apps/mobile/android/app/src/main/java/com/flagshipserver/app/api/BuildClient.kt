@@ -31,6 +31,9 @@ data class BuildGitRequest(
     val ref: String? = null,
     /** The service's name. Null: the box names it from the repo and branch. */
     val name: String? = null,
+    /** False: never share this repo's adaptation with the public store.
+     *  Null (omitted): the box shares it. */
+    val share: Boolean? = null,
 )
 
 /** POST /api/build/git response — the fitness verdict. `fit=true` ⇒
@@ -62,7 +65,9 @@ data class BuildAdaptRequest(
     val background: Boolean? = null,
 )
 
-/** POST /api/build/sessions/:id/adapt response. A 503 means "AI adapt not
+/** POST /api/build/sessions/:id/adapt response. A 409 means the box already
+ *  started the AI itself (a shared adaptation crashed): follow it via
+ *  [BuildClient.state]. A 503 means "AI adapt not
  *  configured" — the client falls back to from-scratch. */
 @Serializable
 data class BuildAdaptResponse(

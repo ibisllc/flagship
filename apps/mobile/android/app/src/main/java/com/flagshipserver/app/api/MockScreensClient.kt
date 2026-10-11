@@ -129,6 +129,7 @@ class MockScreensClient(
             ),
             recentLogs = listOf("listening on :8080", "GET / → 200", "migration check ok"),
             editable = serviceId in editableServiceIds,
+            adaptedFrom = adaptedFromFixture[serviceId]?.let { AppDetailResponse.AdaptedFrom(it) },
         )
     }
 
@@ -340,6 +341,18 @@ class MockScreensClient(
 
     override suspend fun vibeCodeDiscard(sessionId: String) {
         tick()
+    }
+
+    /** Services built from a shared adaptation, and the repo each adapts. */
+    var adaptedFromFixture: Map<String, String> = emptyMap()
+    val adapterReports: MutableList<Pair<String, String>> = mutableListOf()
+    /** Thrown by `adapterReport` instead of sending. */
+    var adapterReportError: Throwable? = null
+
+    override suspend fun adapterReport(serviceId: String, detail: String) {
+        tick()
+        adapterReportError?.let { throw it }
+        adapterReports.add(serviceId to detail)
     }
 
     override suspend fun vibeCodeDeploy(sessionId: String): BuildDeployResponse {

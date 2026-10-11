@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.Feedback
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -65,6 +66,8 @@ import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FSLayout
+import com.flagshipserver.app.viewmodels.AdapterReport
+import com.flagshipserver.app.viewmodels.AdapterReportViewModel
 import com.flagshipserver.app.viewmodels.CustomDomainCooldownStore
 import com.flagshipserver.app.viewmodels.CustomDomainPrompt
 import com.flagshipserver.app.viewmodels.LoadingState
@@ -141,6 +144,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
     var showReplaceDialog by remember { mutableStateOf(false) }
     var replaceDraft by remember { mutableStateOf("") }
     var showUninstallDialog by remember { mutableStateOf(false) }
+    var showAdapterReport by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var uninstalling by remember { mutableStateOf(false) }
 
@@ -191,6 +195,10 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                 if (resp.editable == true) {
                     Spacer(Modifier.height(FS.space.s4))
                     EditRow(onClick = { nav.navigate("edit-service/$serviceId") })
+                }
+                resp.adaptedFrom?.let { from ->
+                    Spacer(Modifier.height(FS.space.s4))
+                    AdapterReportRow(repo = from.repo, onClick = { showAdapterReport = true })
                 }
                 Spacer(Modifier.height(FS.space.s8))
 
@@ -419,6 +427,10 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
         )
     }
 
+    if (showAdapterReport) {
+        AdapterReportDialog(serviceId = serviceId, onDismiss = { showAdapterReport = false })
+    }
+
     if (showUninstallDialog) {
         AlertDialog(
             onDismissRequest = { if (!uninstalling) showUninstallDialog = false },
@@ -456,6 +468,96 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
             },
         )
     }
+}
+
+/** "Report a problem with this adaptation", for a service built from a
+ *  shared adaptation. */
+@Composable
+private fun AdapterReportRow(repo: String, onClick: () -> Unit) {
+    FSCard(
+        padding = PaddingValues(FS.space.s4),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { testTag = "service-detail-report-adapter" }
+            .clickable(onClick = onClick),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Feedback, contentDescription = null, tint = FS.colors.primary)
+            Spacer(Modifier.width(FS.space.s3))
+            Column(Modifier.weight(1f)) {
+                Text(AdapterReport.ROW_TITLE, color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
+                Text(
+                    AdapterReport.rowCaption(repo),
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    maxLines = 2,
+                )
+            }
+            Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
+        }
+    }
+}
+
+@Composable
+private fun AdapterReportDialog(serviceId: String, onDismiss: () -> Unit) {
+    val client = LocalScreensClient.current
+    val vm = remember(serviceId) { AdapterReportViewModel(serviceId, client) }
+    val sending by vm.sending.collectAsState()
+    val sent by vm.sent.collectAsState()
+    val error by vm.error.collectAsState()
+    var detail by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = { if (!sending) onDismiss() },
+        title = { Text(AdapterReport.TITLE) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                if (sent) {
+                    Text(
+                        AdapterReport.SENT,
+                        color = FS.colors.success,
+                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    Text(AdapterReport.SENT_NEXT, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+                } else {
+                    Text(AdapterReport.PROMPT, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+                    Text(
+                        "⚠ ${AdapterReport.WARNING}",
+                        color = FS.colors.warning,
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    )
+                    OutlinedTextField(
+                        value = detail,
+                        onValueChange = { detail = it },
+                        minLines = 5,
+                        maxLines = 8,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { testTag = "adapter-report-text" },
+                    )
+                    Text(
+                        AdapterReport.counter(detail),
+                        color = if (detail.length > AdapterReport.MAX_LENGTH) FS.colors.danger else FS.colors.textMuted,
+                        style = TextStyle(fontSize = 12.sp),
+                    )
+                    error?.let { Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp)) }
+                }
+            }
+        },
+        confirmButton = {
+            if (sent) {
+                TextButton(onClick = onDismiss) { Text("Done") }
+            } else {
+                TextButton(
+                    onClick = { vm.send(detail) },
+                    enabled = AdapterReport.canSend(detail, sending),
+                    modifier = Modifier.semantics { testTag = "adapter-report-send" },
+                ) { Text(if (sending) "Sending…" else "Send report") }
+            }
+        },
+        dismissButton = {
+            if (!sent) TextButton(onClick = { if (!sending) onDismiss() }) { Text("Cancel") }
+        },
+    )
 }
 
 private fun LoadingState<AppDetailResponse>.loadedValue(): AppDetailResponse? =

@@ -223,6 +223,17 @@ class LiveScreensClient(
     @kotlinx.serialization.Serializable
     private data class DiscardResponse(val ok: Boolean = false)
 
+    override suspend fun adapterReport(serviceId: String, detail: String) {
+        val body = json.encodeToString(AdapterReportRequest.serializer(), AdapterReportRequest(detail)).toByteArray()
+        request(
+            "/api/screens/adapter-report/${java.net.URLEncoder.encode(serviceId, "UTF-8")}",
+            DiscardResponse.serializer(), "POST", body,
+        )
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class AdapterReportRequest(val detail: String)
+
     override suspend fun peerBackupStatus(): PeerBackupStatusResponse =
         request("/api/screens/peer-backup/status", PeerBackupStatusResponse.serializer())
 

@@ -71,7 +71,10 @@
 //  v41: name a git import, follow the AI adapt in the background, Discard
 //       open git and IDE builds; precaches lib/gitImport.js.
 //  v42: "Get flagship.app.json" on an adapted or installed git import.
-const SHELL_VERSION = "v42";
+//  v43: "Share the adaptation" on a git import, a crashed shared adaptation
+//       hands over to the AI, "Report a problem with this adaptation";
+//       precaches lib/adapterReport.js.
+const SHELL_VERSION = "v43";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -126,6 +129,7 @@ const OPTIONAL_SHELL = [
   "/lib/vibeNames.js",
   "/lib/editService.js",
   "/lib/gitImport.js",
+  "/lib/adapterReport.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",

@@ -378,7 +378,8 @@ describe("/webapp PWA static surface", () => {
     // v40 adds "Edit this service" (AI chat or IDE).
     // v41 names a git import and follows the AI adapt in the background.
     // v42 offers "Get flagship.app.json" on an adapted or installed git import.
-    expect(r.body).toContain('SHELL_VERSION = "v42"');
+    // v43 shares adaptations by default and reports a broken one.
+    expect(r.body).toContain('SHELL_VERSION = "v43"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

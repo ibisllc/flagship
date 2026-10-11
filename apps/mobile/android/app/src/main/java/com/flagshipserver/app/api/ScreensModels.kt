@@ -155,7 +155,13 @@ data class AppDetailResponse(
     /** The owner can change its code from the phone (built on this box, with
      *  its source there). Absent on older boxes. */
     val editable: Boolean? = null,
+    /** Built from a shared repo adaptation: the repo it adapts, so the page
+     *  can offer to report a problem with it. */
+    val adaptedFrom: AdaptedFrom? = null,
 ) {
+    @Serializable
+    data class AdaptedFrom(val repo: String)
+
     @Serializable
     data class DataLayerInstance(val store: String, val instanceName: String)
 

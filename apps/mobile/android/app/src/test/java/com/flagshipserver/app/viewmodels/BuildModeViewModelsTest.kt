@@ -279,6 +279,59 @@ class BuildModeViewModelsTest {
         assertEquals(BuildGitViewModel.GitPhase.Adapted(fileCount = 12), vm.phase.value)
     }
 
+    @Test fun git_sharingIsOnUnlessSwitchedOff() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0)
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/random", "").join()
+        assertNull(client.gitImportCalls.last().share)
+        vm.checkRepo("https://github.com/me/random", "", share = false).join()
+        assertEquals(false, client.gitImportCalls.last().share)
+
+        // On the wire (LiveBuildClient's Json): omitted unless switched off.
+        val wire = kotlinx.serialization.json.Json { encodeDefaults = true; explicitNulls = false }
+        assertTrue("share" !in wire.encodeToString(BuildGitRequest.serializer(), BuildGitRequest(gitUrl = "u")))
+        assertTrue(
+            wire.encodeToString(BuildGitRequest.serializer(), BuildGitRequest(gitUrl = "u", share = false))
+                .contains("\"share\":false"),
+        )
+    }
+
+    @Test fun git_aSharedAdaptationThatCrashes_offersTheOwnersAI() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply {
+            deployError = ScreensError.Http(
+                502,
+                """{"error":"docker build failed: exit 1. The shared adaptation of this repo didn't work on this server, so it has been reported. Use AI to prepare the repo for Flagship instead.","needsAdapt":true}""",
+            )
+        }
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/flagship-ready", "").join()
+        vm.deploy().join()
+        val v = vm.phase.value
+        assertTrue("expected the not-ready card, got $v", v is BuildGitViewModel.GitPhase.Verdict)
+        v as BuildGitViewModel.GitPhase.Verdict
+        assertTrue(!v.fit)
+        assertTrue(BuildGitViewModel.notReadyText(v.reason).contains("didn't work on this server"))
+        assertEquals(14, v.fileCount)
+
+        // Without needsAdapt a failed install stays an error.
+        client.deployError = ScreensError.Http(502, """{"error":"docker build failed: exit 1"}""")
+        vm.deploy().join()
+        assertEquals(BuildGitViewModel.GitPhase.Failed("docker build failed: exit 1"), vm.phase.value)
+    }
+
+    @Test fun git_adaptTheBoxAlreadyStarted_isFollowed() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply {
+            gitFitFixture = false
+            adaptStartError = ScreensError.Http(409, """{"error":"the AI is already adapting this repo"}""")
+            adaptStatusFixture = BuildAdaptStatus(status = "done", fileCount = 16, deployed = false)
+        }
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/random", "").join()
+        vm.adapt().join()
+        assertEquals(BuildGitViewModel.GitPhase.Adapted(fileCount = 16), vm.phase.value)
+        assertNull(vm.adaptError.value)
+    }
+
     @Test fun git_notReadyCard_saysItPlainly() {
         assertEquals(
             "This repo has no flagship.app.json and is not yet adapted to run on Flagship.",

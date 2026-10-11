@@ -15,6 +15,7 @@ import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { controlApex, dataApex } from "../lib/apex.js";
 import { pencilIcon } from "../lib/icons.js";
 import { EDIT_ROW_CAPTION, EDIT_ROW_TITLE } from "../lib/editService.js";
+import { openAdapterReport, renderReportRow } from "../lib/adapterReport.js";
 
 const COM_BASE = controlApex();
 
@@ -75,6 +76,7 @@ export async function renderServiceDetail(serviceId) {
         </div>
       </div>
       ${body.editable === true ? renderEditRow() : ""}
+      ${typeof body.adaptedFrom?.repo === "string" ? renderReportRow(body.adaptedFrom.repo) : ""}
 
       ${renderWebDomainsSection(s, currentServiceLinks)}
       <div id="sd-custom-domains">${renderCustomDomainsSection()}</div>
@@ -163,6 +165,9 @@ export async function renderServiceDetail(serviceId) {
     $("sd-edit")?.addEventListener("click", async () => {
       const { enterEditService } = await import("./edit-service.js");
       enterEditService(s.serviceId);
+    });
+    $("sd-report-adapter")?.addEventListener("click", () => {
+      void openAdapterReport({ serviceId: s.serviceId, fetchJson: (path, init) => screensFetch(path, init) });
     });
     $("sd-backup-go")?.addEventListener("click", () => triggerBackup(s.serviceId));
     $("sd-open-browser")?.addEventListener("click", () => {

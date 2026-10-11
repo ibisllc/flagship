@@ -17,14 +17,15 @@ import {
   EXPORT_BUTTON,
   EXPORT_NOTE,
   EXPORT_PREPARING,
-  adaptFinished,
   addressLabel,
   blankNameHint,
   checkRepoFailure,
+  deployFailure,
   exportAdapter,
   followAdapt,
   gitRequestBody,
   notReadyText,
+  startAndFollowAdapt,
 } from "../lib/gitImport.js";
 import { enterVibeCode, showConflict } from "./vibe-code.js";
 import { enterBuildJournal } from "./build-journal.js";
@@ -64,6 +65,7 @@ export function enterBuildGit() {
   $("build-git-url").value = "";
   $("build-git-ref").value = "";
   $("build-git-name").value = "";
+  $("build-git-share").checked = true;
   $("build-git-verdict").classList.add("hidden");
   $("build-git-verdict").innerHTML = "";
   renderNameStatus();
@@ -145,6 +147,7 @@ async function checkRepo() {
     gitUrl: $("build-git-url").value,
     ref: $("build-git-ref").value,
     name: $("build-git-name").value,
+    share: $("build-git-share").checked,
   });
   if (!body.gitUrl) return toast("Paste a repo URL first", "err");
   buildId = null;
@@ -283,9 +286,22 @@ function failAdapt(message) {
   if (lastVerdict) renderVerdict(lastVerdict, message);
 }
 
+function showAdaptOutcome(outcome) {
+  if (outcome.phase === "installed") {
+    renderInstalled(outcome.url);
+    toast("Deployed", "ok");
+  } else if (outcome.phase === "adapted") {
+    renderAdapted(outcome.fileCount);
+    toast("Adapted — review and install", "ok");
+  } else {
+    failAdapt(outcome.reason);
+  }
+}
+
 // Start the AI adapt on a non-fit repo in the background and follow it. An
 // older box ignores `background` and answers with the finished result. If
-// the box has no model wired (503), fall back to the from-scratch flow.
+// the box has no model wired (503), fall back to the from-scratch flow; if
+// it already started the AI itself (409), follow that run.
 async function adapt() {
   if (!buildId) return;
   const id = buildId;
@@ -293,24 +309,16 @@ async function adapt() {
   renderAdapting(null);
   try {
     const body = adaptCredential ? { credential: adaptCredential, background: true } : { background: true };
-    const r = await screensFetch(`${path}/adapt`, { method: "POST", body: JSON.stringify(body) });
-    const outcome = r?.started === true
-      ? await followAdapt({
-          fetchState: () => screensFetch(path),
-          fetchJournal: () => screensFetch(`${path}/journal`),
-          onProgress: (p) => { if (buildId === id) renderAdapting(p); },
-        })
-      : adaptFinished(r || {});
+    const outcome = await startAndFollowAdapt({
+      start: () => screensFetch(`${path}/adapt`, { method: "POST", body: JSON.stringify(body) }),
+      follow: () => followAdapt({
+        fetchState: () => screensFetch(path),
+        fetchJournal: () => screensFetch(`${path}/journal`),
+        onProgress: (p) => { if (buildId === id) renderAdapting(p); },
+      }),
+    });
     if (buildId !== id) return;
-    if (outcome.phase === "installed") {
-      renderInstalled(outcome.url);
-      toast("Deployed", "ok");
-    } else if (outcome.phase === "adapted") {
-      renderAdapted(outcome.fileCount);
-      toast("Adapted — review and install", "ok");
-    } else {
-      failAdapt(outcome.reason);
-    }
+    showAdaptOutcome(outcome);
   } catch (e) {
     if (buildId !== id) return;
     if (e instanceof ScreensError && e.status === 503) {
@@ -342,7 +350,14 @@ async function deploy() {
     renderInstalled(r.url);
     toast("Deployed", "ok");
   } catch (e) {
-    toast(boxReason(e) ?? (e instanceof ScreensError ? e.message : String(e)), "err");
+    const failure = deployFailure(e);
+    if (failure.needsAdapt) {
+      // A shared adaptation that crashed here: the repo needs the owner's AI
+      // now, so show the card that offers it.
+      renderVerdict({ buildId, fit: false, reason: failure.reason, fileCount: lastVerdict?.fileCount ?? 0, name: assignedName });
+      return;
+    }
+    toast(failure.message, "err");
     btn.disabled = false;
     btn.textContent = "Install it";
   }

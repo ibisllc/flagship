@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -394,6 +395,9 @@ fun BuildGitScreen(nav: NavController) {
     }
 
     var name by remember { mutableStateOf("") }
+    // Share the adaptation with Flagship's public store, so others can
+    // install this repo without AI. On unless the owner says otherwise.
+    var share by remember { mutableStateOf(true) }
     val slug = BuildGitViewModel.slug(name)
     val conflict by vm.conflict.collectAsState()
     val assignedName by vm.assignedName.collectAsState()
@@ -471,10 +475,30 @@ fun BuildGitScreen(nav: NavController) {
         }
         Spacer(Modifier.height(FS.space.s4))
 
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Share the adaptation",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 15.sp),
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = share,
+                onCheckedChange = { share = it },
+                modifier = Modifier.testTag("build-git-share"),
+            )
+        }
+        Text(
+            SHARE_ADAPTATION_HINT,
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+        )
+        Spacer(Modifier.height(FS.space.s4))
+
         val checking = phase is BuildGitViewModel.GitPhase.Checking
         FSPrimaryButton(
             label = if (checking) "Cloning…" else "Check repo",
-            onClick = { if (url.isBlank()) toasts.error("Paste a repo URL first.") else vm.checkRepo(url, ref, name) },
+            onClick = { if (url.isBlank()) toasts.error("Paste a repo URL first.") else vm.checkRepo(url, ref, name, share) },
             enabled = !checking && !nameRefused,
             block = true,
             modifier = Modifier.testTag("build-git-check"),
@@ -518,6 +542,10 @@ fun BuildGitScreen(nav: NavController) {
         )
     }
 }
+
+internal const val SHARE_ADAPTATION_HINT =
+    "If the AI adapts this open-source repo, Flagship publishes the changes so others can install it without AI. " +
+        "Nothing about you or your server is included."
 
 @Composable
 private fun FieldLabel(text: String) {
