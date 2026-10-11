@@ -23,7 +23,24 @@ import type { BuildJournal, BuildJournalEntry, BuildJournalSummary, BuildMode } 
 import type { DeployResult } from "./deployArtifact.js";
 import { VibeCodeStreamParser } from "../llm/vibeCodeSession.js";
 import { SYSTEM_PROMPT_V1 } from "../llm/systemPrompt.js";
-import { checkServiceName, deriveServiceName, type ServiceNameCheck, type ServiceNameDeps } from "../llm/serviceName.js";
+import {
+  checkServiceName,
+  deriveServiceName,
+  repoNameFromUrl,
+  slugifyLabel,
+  type ServiceNameCheck,
+  type ServiceNameDeps,
+} from "../llm/serviceName.js";
+import {
+  applyRepoAdapter,
+  buildAdapterFile,
+  deriveRepoAdapter,
+  parseManifest,
+  repoAdapterProblems,
+  splitAdapterFile,
+  type AppManifest,
+} from "@flagship/protocol";
+import { indexableRepo, licensePathOf, type AdapterIndex } from "./adapterIndex.js";
 
 /**
  * The model call the AI "adapt" pass makes. Provider-agnostic by design:
@@ -67,6 +84,18 @@ export interface BuildState {
   name?: string;
   /** The AI adapt pass, when one was started in the background. */
   adapt?: AdaptStatus;
+}
+
+/** What a git build remembers to share its adapter once it deploys. */
+interface GitSource {
+  repo: string | null;
+  commit?: string;
+  ref?: string;
+  original: Record<string, string>;
+  /** Where the tree it builds came from. */
+  origin: "repo" | "index" | "ai" | "as-is";
+  /** The repo's own adapter, which no longer fits these files. */
+  staleAdapter?: string[];
 }
 
 export type AdaptStatus =
@@ -115,6 +144,11 @@ export interface BuildOrchestratorDeps {
    * deploy under their manifest's name, as before.
    */
   names?: () => ServiceNameDeps;
+  /**
+   * flagshipserver.com's anonymous index of repo adapters. Unset ⇒ imports
+   * never look one up and adapts are never shared.
+   */
+  adapterIndex?: AdapterIndex;
   /**
    * An installed service's current code, if it can be edited here (built on
    * this box, still installed). Unset ⇒ edits aren't offered.
@@ -189,6 +223,7 @@ export class BuildOrchestrator {
   private readonly mcpServers = new Map<string, McpBuildServer>();
   /** Value-free per-build env requests an authoring agent made. */
   private readonly envRequests = new Map<string, PendingEnvRequest[]>();
+  private readonly gitSources = new Map<string, GitSource>();
   private readonly now: () => number;
   private readonly rand: () => string;
 
@@ -284,9 +319,20 @@ export class BuildOrchestrator {
       summary: `import ${args.gitUrl}`,
       ...(given ? { name: given } : repoName ? { name: repoName } : {}),
     });
-    const fitness = await this.deps.gitImporter.inspect({ gitUrl: args.gitUrl, ref: args.ref, buildId });
+    let fitness = await this.deps.gitImporter.inspect({ gitUrl: args.gitUrl, ref: args.ref, buildId });
     if (!fitness.fit && fitness.unreadable) {
       return { error: fitness.reason, status: 422 };
+    }
+    const repo = indexableRepo(args.gitUrl);
+    let origin: GitSource["origin"] = fitness.fit ? (fitness.repoAdapter === "applied" ? "repo" : "as-is") : "ai";
+    if (!fitness.fit && repo && fitness.commit && fitness.original) {
+      const known = await this.fromIndex(repo, fitness.commit, fitness.original);
+      if (known) {
+        const reason = "Flagship-ready: Flagship knows how to run this repo — installing as-is, no AI needed";
+        await this.deps.journal.append(buildId, { mode: "git", kind: "fitness-check", actor: "system", summary: reason });
+        fitness = { ...fitness, ...known, fit: true, reason };
+        origin = "index";
+      }
     }
     let name: string | undefined;
     if (names) {
@@ -313,6 +359,14 @@ export class BuildOrchestrator {
       ...(name ? { name } : {}),
     });
     this.workspaces.set(buildId, new BuildWorkspace(fitness.files));
+    this.gitSources.set(buildId, {
+      repo,
+      ...(fitness.commit ? { commit: fitness.commit } : {}),
+      ...(args.ref ? { ref: args.ref } : {}),
+      original: fitness.original ?? fitness.files,
+      origin,
+      ...(!fitness.fit && typeof fitness.repoAdapter === "object" ? { staleAdapter: fitness.repoAdapter.failed } : {}),
+    });
     return {
       buildId,
       fit: fitness.fit,
@@ -348,6 +402,7 @@ export class BuildOrchestrator {
     this.workspaces.delete(buildId);
     this.mcpServers.delete(buildId);
     this.envRequests.delete(buildId);
+    this.gitSources.delete(buildId);
     if (st.mode === "mcp") await this.deps.mcpKeys.revoke(buildId);
     await this.deps.journal.append(buildId, {
       mode: st.mode,
@@ -414,9 +469,19 @@ export class BuildOrchestrator {
   ): Promise<AdaptResult> {
     const st = this.states.get(buildId);
     if (!st || st.mode !== "git") return { ok: false, reason: "not a git build" };
-    if (st.name) {
-      const named = `The app's name is "${st.name}": use exactly that as "name" in flagship.app.json.`;
-      opts = { ...opts, instructions: opts.instructions?.trim() ? `${opts.instructions.trim()}\n${named}` : named };
+    const notes: string[] = [];
+    const stale = this.gitSources.get(buildId)?.staleAdapter;
+    if (stale) {
+      notes.push(
+        `The repo's flagship.app.json carries an adapter (its "adapter" section) written for an older commit; ` +
+          `its edits no longer fit ${stale.join(", ")}. It shows how this repo was adapted before: redo the same ` +
+          `changes against the current files, and write flagship.app.json WITHOUT the "adapter" section.`,
+      );
+    }
+    if (st.name) notes.push(`The app's name is "${st.name}": use exactly that as "name" in flagship.app.json.`);
+    if (notes.length) {
+      const extra = notes.join("\n");
+      opts = { ...opts, instructions: opts.instructions?.trim() ? `${opts.instructions.trim()}\n${extra}` : extra };
     }
     const ws = this.workspaces.get(buildId);
     if (!ws) return { ok: false, reason: "no workspace for build" };
@@ -698,8 +763,70 @@ export class BuildOrchestrator {
     if (r.ok) {
       st.serviceId = r.serviceId;
       st.deployedUrl = r.url;
+      const src = this.gitSources.get(buildId);
+      if (src) {
+        this.gitSources.delete(buildId);
+        void this.shareAdapter(src, ws.snapshot());
+      }
     }
     return r;
+  }
+
+  /**
+   * An adapter someone shared for this repo that fits these files: the first
+   * that passes the same checks the index ran and applies cleanly.
+   */
+  private async fromIndex(
+    repo: string,
+    commit: string,
+    original: Record<string, string>,
+  ): Promise<{ files: Record<string, string>; manifestJson: string; manifest: AppManifest } | null> {
+    if (!this.deps.adapterIndex) return null;
+    for (const candidate of await this.deps.adapterIndex.lookup(repo, commit)) {
+      const split = splitAdapterFile(candidate.file);
+      if (!split.ok || !split.adapter || split.adapter.source.repo !== repo) continue;
+      if (repoAdapterProblems(split.adapter, split.manifestJson).length > 0) continue;
+      const parsed = parseManifest(JSON.parse(split.manifestJson));
+      if (!parsed.ok) continue;
+      const applied = applyRepoAdapter(original, split.adapter, split.manifestJson);
+      if (!applied.ok) continue;
+      return { files: applied.files, manifestJson: split.manifestJson, manifest: parsed.manifest };
+    }
+    return null;
+  }
+
+  /**
+   * Share what made this repo run, so the next person importing it needs no
+   * AI: only for public repos on the big hosts, only once it has deployed,
+   * never the repo's own adapter (that's the author's), with the owner's
+   * choices (the name) taken out and nothing that says who sent it.
+   */
+  private async shareAdapter(src: GitSource, built: Record<string, string>): Promise<void> {
+    if (!this.deps.adapterIndex || !src.repo || !src.commit || src.origin === "repo" || src.origin === "as-is") return;
+    const licensePath = licensePathOf(src.original);
+    const manifestText = built["flagship.app.json"];
+    if (!licensePath || !manifestText) return;
+    let manifest: Record<string, unknown>;
+    try {
+      manifest = JSON.parse(manifestText) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    delete manifest.adapter;
+    manifest.name = slugifyLabel(repoNameFromUrl(src.repo)) || "app";
+    const manifestJson = JSON.stringify(manifest);
+    const adapter = deriveRepoAdapter(src.original, built, {
+      repo: src.repo,
+      base: src.commit,
+      ...(src.ref ? { ref: src.ref } : {}),
+    });
+    if (repoAdapterProblems(adapter, manifestJson).length > 0) return;
+    await this.deps.adapterIndex.submit({
+      repo: src.repo,
+      base: src.commit,
+      licensePath,
+      file: buildAdapterFile(manifestJson, adapter),
+    });
   }
 
   // ----- internals -------------------------------------------------------

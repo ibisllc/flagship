@@ -119,6 +119,7 @@ import {
 import { FileBuildJournal } from "./buildmodes/buildJournal.js";
 import { FileMcpKeyStore } from "./buildmodes/mcpKeyStore.js";
 import { GitImporter } from "./buildmodes/gitImport.js";
+import { httpAdapterIndex } from "./buildmodes/adapterIndex.js";
 import { combineNameHolders, type NameHolders } from "./llm/serviceName.js";
 import { buildArtifactDeployer } from "./buildmodes/deployArtifact.js";
 import { BuildOrchestrator } from "./buildmodes/buildOrchestrator.js";
@@ -2225,6 +2226,11 @@ async function wireRuntimeSurfaces(deps: {
       editableService,
       deployArtifact: artifactDeployer,
       names: () => ({ registry: nameHolders, hostUsername: username, installed: runtime.servicePlatform ?? null }),
+      // Anonymous: see adapterIndex.ts. FLAGSHIP_ADAPTER_INDEX=off keeps
+      // every import and adapt on the box.
+      ...(process.env.FLAGSHIP_ADAPTER_INDEX === "off"
+        ? {}
+        : { adapterIndex: httpAdapterIndex(env.controlPlaneBaseUrl ?? "https://flagshipserver.com") }),
       serverFqdn: env.serverFqdn,
       mcpBaseUrl: `https://${env.serverFqdn}`,
       // AI "adapt" pass for non-fit git imports — LIVE. One non-streaming

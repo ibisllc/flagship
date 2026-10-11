@@ -26,7 +26,7 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import { parseManifest, type AppManifest } from "@flagship/protocol";
+import { applyRepoAdapter, parseManifest, splitAdapterFile, type AppManifest } from "@flagship/protocol";
 import {
   assertResolvedHostSafe,
   UnsafeBaseUrlError,
@@ -46,7 +46,7 @@ const TEXT_EXT = new Set([
   ".sql", ".md", ".txt", ".yml", ".yaml", ".toml", ".env", ".sh", ".py",
   ".go", ".rs", ".rb", ".java", ".kt", ".svelte", ".vue", ".xml", ".conf",
 ]);
-const NO_EXT_ALLOW = new Set(["Dockerfile", "Makefile", "Procfile", ".gitignore", ".dockerignore", "LICENSE"]);
+const NO_EXT_ALLOW = new Set(["Dockerfile", "Makefile", "Procfile", ".gitignore", ".dockerignore", "LICENSE", "LICENCE", "COPYING", "NOTICE"]);
 
 export interface GitInspectArgs {
   gitUrl: string;
@@ -56,8 +56,18 @@ export interface GitInspectArgs {
   buildId?: string;
 }
 
+/** What every read repo carries, fit or not. */
+interface ReadRepo {
+  /** The commit that was cloned, when it could be read. */
+  commit?: string;
+  /** The repo's own files, before any adapter was applied. */
+  original?: Record<string, string>;
+  /** The repo's flagship.app.json carried an adapter: whether it fit. */
+  repoAdapter?: "applied" | { failed: string[] };
+}
+
 export type GitFitness =
-  | {
+  | (ReadRepo & {
       fit: true;
       gitUrl: string;
       ref?: string;
@@ -65,8 +75,8 @@ export type GitFitness =
       manifestJson: string;
       files: Record<string, string>;
       reason: string;
-    }
-  | {
+    })
+  | (ReadRepo & {
       fit: false;
       gitUrl: string;
       ref?: string;
@@ -76,7 +86,7 @@ export type GitFitness =
       unreadable?: true;
       files: Record<string, string>;
       reason: string;
-    };
+    });
 
 export interface GitImportDeps {
   cmd: CommandRunner;
@@ -85,6 +95,8 @@ export interface GitImportDeps {
   journal?: BuildJournal | null;
   /** Override the clone step in tests; default = `git clone --depth 1`. */
   cloneInto?: (a: { gitUrl: string; ref?: string; dest: string }) => Promise<void>;
+  /** Override reading the cloned commit in tests; default = `git rev-parse HEAD`. */
+  commitOf?: (dir: string) => Promise<string | undefined>;
   maxFiles?: number;
   maxBytesPerFile?: number;
   now?: () => number;
@@ -210,35 +222,64 @@ export class GitImporter {
       return { fit: false, gitUrl, ref, files: {}, reason, unreadable: true };
     }
 
-    const files = await this.readTree(dest);
+    const commit = await this.headCommit(dest);
+    const original = await this.readTree(dest);
     await rm(dest, { recursive: true, force: true });
+    const read: ReadRepo = { ...(commit ? { commit } : {}), original };
 
-    const manifestJson = files[MANIFEST_FILE];
-    if (manifestJson == null) {
+    const rawManifest = original[MANIFEST_FILE];
+    if (rawManifest == null) {
       const reason = `no ${MANIFEST_FILE} — repo isn't a Flagship app yet; the AI can adapt it`;
       await this.note(buildId, "fitness-check", reason);
-      return { fit: false, gitUrl, ref, files, reason };
+      return { ...read, fit: false, gitUrl, ref, files: original, reason };
     }
 
-    let parsedJson: unknown;
-    try {
-      parsedJson = JSON.parse(manifestJson);
-    } catch (e) {
-      const reason = `${MANIFEST_FILE} is not valid JSON: ${(e as Error).message}`;
+    // A manifest may carry an adapter: the repo stays an ordinary repo and
+    // the adapter says how to make it run here.
+    const split = splitAdapterFile(rawManifest);
+    if (!split.ok) {
+      const reason = `${MANIFEST_FILE} is not valid: ${split.reason}`;
       await this.note(buildId, "fitness-check", reason);
-      return { fit: false, gitUrl, ref, manifestErrors: [reason], files, reason };
+      return { ...read, fit: false, gitUrl, ref, manifestErrors: [reason], files: original, reason };
+    }
+    let files = original;
+    let manifestJson = rawManifest;
+    if (split.adapter) {
+      const applied = applyRepoAdapter(original, split.adapter, split.manifestJson);
+      if (!applied.ok) {
+        const reason = `the repo's Flagship adapter no longer fits ${applied.failed.join(", ")}; the AI can update it`;
+        await this.note(buildId, "fitness-check", reason);
+        return { ...read, repoAdapter: { failed: applied.failed }, fit: false, gitUrl, ref, files: original, reason };
+      }
+      files = applied.files;
+      manifestJson = split.manifestJson;
+      read.repoAdapter = "applied";
     }
 
-    const result = parseManifest(parsedJson);
+    const result = parseManifest(JSON.parse(manifestJson));
     if (!result.ok) {
       const reason = `${MANIFEST_FILE} present but invalid: ${result.errors[0] ?? "schema error"}`;
       await this.note(buildId, "fitness-check", reason, result.errors.join("; "));
-      return { fit: false, gitUrl, ref, manifestErrors: result.errors, files, reason };
+      return { ...read, fit: false, gitUrl, ref, manifestErrors: result.errors, files: original, reason };
     }
 
-    const reason = `Flagship-ready: '${result.manifest.name}' — installing as-is`;
+    const reason = split.adapter
+      ? `Flagship-ready: the repo says how to run it here — installing as-is`
+      : `Flagship-ready: '${result.manifest.name}' — installing as-is`;
     await this.note(buildId, "fitness-check", reason);
-    return { fit: true, gitUrl, ref, manifest: result.manifest, manifestJson, files, reason };
+    return { ...read, fit: true, gitUrl, ref, manifest: result.manifest, manifestJson, files, reason };
+  }
+
+  private async headCommit(dir: string): Promise<string | undefined> {
+    if (this.deps.commitOf) return this.deps.commitOf(dir);
+    if (this.deps.cloneInto || !this.deps.cmd.capture) return undefined;
+    try {
+      const { stdout } = await this.deps.cmd.capture("git", ["-C", dir, "rev-parse", "HEAD"]);
+      const sha = stdout.trim();
+      return /^[0-9a-f]{40}$/.test(sha) ? sha : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   private async note(
