@@ -21,6 +21,7 @@ public struct ServiceDetailScreen: View {
     let globalLeaderPodId: String?
     /// V2 — drives the Replace App sheet.
     @State private var showReplaceSheet = false
+    @State private var showAdapterReport = false
     @State private var replaceDraft = ""
     var onSave: () -> Void = {}
     var onRemove: () -> Void = {}
@@ -73,6 +74,7 @@ public struct ServiceDetailScreen: View {
                 case .loaded(let d):
                     header(d: d.app, c: c)
                     if d.editable == true { editRow(c: c) }
+                    if let from = d.adaptedFrom { adapterReportRow(repo: from.repo, c: c) }
                     whereItRuns(d: d, c: c)
                     webDomains(d: d, c: c)
                     browserTabsRow(d: d, c: c)
@@ -577,6 +579,30 @@ public struct ServiceDetailScreen: View {
         }
     }
 
+    private func adapterReportRow(repo: String, c: FSColors) -> some View {
+        Button(action: { showAdapterReport = true }) {
+            FSCard {
+                HStack(spacing: FS.space.s3) {
+                    Image(systemName: "exclamationmark.bubble").foregroundColor(c.primary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Report a problem with this adaptation").foregroundColor(c.text)
+                        Text("It was set up from a shared adaptation of \(repo)")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.textMuted)
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("service-detail-report-adapter")
+        .sheet(isPresented: $showAdapterReport) {
+            AdapterReportSheet(serviceId: vm.serviceId)
+        }
+    }
+
     private func editRow(c: FSColors) -> some View {
         Button(action: onEdit) {
             FSCard {
@@ -675,5 +701,79 @@ public struct ServiceDetailScreen: View {
 
     private func relative(ms: Int64) -> String {
         Date.flagshipFormatted(epochMs: ms)
+    }
+}
+
+/// The owner's note about a shared adaptation that doesn't work. It goes to
+/// Flagship's public store with only the adaptation's id; three reports
+/// retire an adaptation so the next server's AI makes a better one.
+struct AdapterReportSheet: View {
+    let serviceId: String
+    @Environment(\.screensClient) private var client
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
+    @State private var detail = ""
+    @State private var sending = false
+    @State private var sent = false
+    @State private var error: String?
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        NavigationStack {
+            FSScreen {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: FS.space.s4) {
+                        if sent {
+                            Label("Sent. Thank you.", systemImage: "checkmark.circle.fill")
+                                .font(FS.font.h4()).foregroundColor(c.success)
+                            Text("To fix it on your server now, use Edit this service to change it with AI.")
+                                .font(FS.font.body()).foregroundColor(c.textMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            Text("What goes wrong? It helps fix the shared adaptation for everyone.")
+                                .font(FS.font.body()).foregroundColor(c.text)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Label("Please don't include anything that identifies you, your server or your data: no names, addresses, emails or passwords.",
+                                  systemImage: "exclamationmark.shield")
+                                .font(FS.font.bodySm()).foregroundColor(c.warning)
+                                .fixedSize(horizontal: false, vertical: true)
+                            TextEditor(text: $detail)
+                                .font(FS.font.body())
+                                .padding(10)
+                                .frame(height: 160)
+                                .background(c.surfaceSunken)
+                                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border, lineWidth: 1))
+                                .accessibilityIdentifier("adapter-report-text")
+                            Text("\(detail.count) / 2000").font(FS.font.caption()).foregroundColor(c.textMuted)
+                            if let error { ErrorCard(message: error) }
+                            FSPrimaryButton(sending ? "Sending…" : "Send report",
+                                            enabled: !sending && !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && detail.count <= 2000,
+                                            block: true) {
+                                Task { await send() }
+                            }
+                            .accessibilityIdentifier("adapter-report-send")
+                        }
+                    }
+                    .padding(FS.space.s6)
+                }
+            }
+            .navigationTitle("Report a problem")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(sent ? "Done" : "Cancel") { dismiss() } }
+            }
+        }
+    }
+
+    private func send() async {
+        sending = true
+        defer { sending = false }
+        error = nil
+        do {
+            try await client.adapterReport(serviceId: serviceId, detail: detail.trimmingCharacters(in: .whitespacesAndNewlines))
+            sent = true
+        } catch {
+            self.error = ScreensClientError.boxReason(error) ?? ScreensClientError.userFacing(error)
+        }
     }
 }

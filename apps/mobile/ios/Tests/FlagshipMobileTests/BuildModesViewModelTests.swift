@@ -171,6 +171,43 @@ final class BuildModesViewModelTests: XCTestCase {
         XCTAssertTrue(try String(contentsOf: url, encoding: .utf8).contains("\"adapter\""))
     }
 
+    func test_gitVM_sharingIsOnUnlessSwitchedOff() async {
+        let client = makeClient()
+        let vm = BuildGitViewModel(client: client)
+        vm.gitUrl = "https://github.com/me/random"
+        await vm.checkRepo()
+        XCTAssertNil(client.buildGitCalls.last?.share)
+        vm.share = false
+        await vm.checkRepo()
+        XCTAssertEqual(client.buildGitCalls.last?.share, false)
+    }
+
+    func test_gitVM_aSharedAdaptationThatCrashes_offersTheOwnersAI() async {
+        let client = makeClient()
+        client.buildDeployError = ScreensClientError.http(
+            status: 502, message: #"{"error":"docker build failed: exit 1. The shared adaptation of this repo didn't work on this server, so it has been reported. Use AI to prepare the repo for Flagship instead.","needsAdapt":true}"#)
+        let vm = BuildGitViewModel(client: client)
+        vm.gitUrl = "https://github.com/me/flagship-ready"
+        await vm.checkRepo()
+        await vm.deploy()
+        guard case .verdict(let v) = vm.phase else { return XCTFail("expected the not-ready card, got \(vm.phase)") }
+        XCTAssertFalse(v.fit)
+        XCTAssertTrue(BuildGitScreen.notReadyText(v).contains("didn't work on this server"))
+        XCTAssertNil(vm.errorMessage)
+    }
+
+    func test_gitVM_adaptTheBoxAlreadyStarted_isFollowed() async {
+        let client = makeClient()
+        let vm = BuildGitViewModel(client: client)
+        vm.pollInterval = .milliseconds(1)
+        vm.gitUrl = "https://github.com/me/random"
+        await vm.checkRepo()
+        client.buildAdaptStartError = ScreensClientError.http(status: 409, message: #"{"error":"the AI is already adapting this repo"}"#)
+        await vm.adapt()
+        guard case .adapted(let n) = vm.phase else { return XCTFail("expected adapted, got \(vm.phase)") }
+        XCTAssertEqual(n, 16)
+    }
+
     func test_notReadyCard_saysItPlainly() {
         let missing = BuildGitResponse(buildId: "b", fit: false, reason: "no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it", fileCount: 3)
         XCTAssertEqual(BuildGitScreen.notReadyText(missing), "This repo has no flagship.app.json and is not yet adapted to run on Flagship.")

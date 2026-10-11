@@ -272,6 +272,16 @@ public struct BuildGitScreen: View {
                         nameStatus(c: c)
                     }
 
+                    VStack(alignment: .leading, spacing: FS.space.s1) {
+                        Toggle("Share the adaptation", isOn: $vm.share)
+                            .font(FS.font.body())
+                            .tint(c.primary)
+                            .accessibilityIdentifier("build-git-share")
+                        Text("If the AI adapts this open-source repo, Flagship publishes the changes so others can install it without AI. Nothing about you or your server is included.")
+                            .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
                     FSPrimaryButton(checkLabel, enabled: vm.canCheck && !checking && !nameRefused, block: true) {
                         Task { await vm.checkRepo() }
                     }

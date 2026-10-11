@@ -30,6 +30,9 @@ public final class BuildGitViewModel {
     public var ref: String = ""
     /// Optional. Blank: the box names it from the repo and branch.
     public var name: String = ""
+    /// Share the adaptation with Flagship's public store, so others can
+    /// install this repo without AI. On unless the owner says otherwise.
+    public var share: Bool = true
     /// Set when "Check repo" was refused because the name is taken; the
     /// screen sends the owner to that build or asks for another name.
     public var conflict: VibeCodeNameCheck?
@@ -79,7 +82,7 @@ public final class BuildGitViewModel {
         do {
             let r = try await client.buildGit(
                 BuildGitRequest(gitUrl: url, ref: trimmedRef.isEmpty ? nil : trimmedRef,
-                                name: wanted.isEmpty ? nil : wanted)
+                                name: wanted.isEmpty ? nil : wanted, share: share ? nil : false)
             )
             buildId = r.buildId
             assignedName = r.name ?? (wanted.isEmpty ? nil : wanted)
@@ -123,6 +126,12 @@ public final class BuildGitViewModel {
             }
         } catch let ScreensClientError.http(status, _) where status == 503 {
             shouldFallBackToScratch = true
+        } catch let ScreensClientError.http(status, _) where status == 409 {
+            // The box started the AI itself (a shared adaptation crashed and
+            // it had a key): follow that run.
+            do { try await followAdapt(buildId: buildId) } catch {
+                failAdapt(ScreensClientError.userFacing(error))
+            }
         } catch {
             failAdapt(ScreensClientError.boxReason(error) ?? ScreensClientError.userFacing(error))
         }
@@ -185,6 +194,16 @@ public final class BuildGitViewModel {
             phase = .installed(url: r.url)
         } catch {
             errorMessage = ScreensClientError.boxReason(error) ?? ScreensClientError.userFacing(error)
+            // A shared adaptation that crashed here: the repo needs the
+            // owner's AI now, so show the card that offers it.
+            if Self.needsAdapt(error) {
+                let v = BuildGitResponse(buildId: buildId, fit: false, reason: errorMessage ?? "",
+                                         fileCount: lastVerdict?.fileCount ?? 0, name: assignedName)
+                lastVerdict = v
+                errorMessage = nil
+                phase = .verdict(v)
+                return
+            }
             // Keep the build alive so the user can retry Install.
             phase = .adapted(fileCount: 0)
         }
@@ -213,10 +232,17 @@ public final class BuildGitViewModel {
         }
     }
 
+    static func needsAdapt(_ error: Error) -> Bool {
+        guard case let ScreensClientError.http(_, message) = error,
+              let obj = try? JSONSerialization.jsonObject(with: Data(message.utf8)) as? [String: Any] else { return false }
+        return obj["needsAdapt"] as? Bool == true
+    }
+
     public func reset() {
         gitUrl = ""
         ref = ""
         name = ""
+        share = true
         conflict = nil
         assignedName = nil
         phase = .idle

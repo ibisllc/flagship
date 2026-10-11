@@ -857,10 +857,13 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// Override what a polled background adapt reports.
     public var buildAdaptStatusFixture: BuildAdaptStatus?
     public private(set) var buildDiscardCalls: [String] = []
+    /// Thrown by `buildAdaptStart` (after recording the call).
+    public var buildAdaptStartError: Error?
 
     public func buildAdaptStart(buildId: String, _ req: BuildAdaptRequest) async throws -> BuildAdaptReply {
         try await tick()
         buildAdaptStartCalls.append((buildId, req))
+        if let e = buildAdaptStartError { throw e }
         if buildAdaptUnavailable {
             throw ScreensClientError.http(status: 503, message: "AI adapt not configured")
         }
@@ -873,6 +876,12 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             ? (buildAdaptStatusFixture ?? BuildAdaptStatus(status: "done", fileCount: 16, deployed: false))
             : nil
         return BuildStateResponse(state: .init(buildId: buildId, mode: "git", adapt: adapt))
+    }
+
+    public private(set) var adapterReports: [(serviceId: String, detail: String)] = []
+    public func adapterReport(serviceId: String, detail: String) async throws {
+        try await tick()
+        adapterReports.append((serviceId, detail))
     }
 
     public func buildAdapterFile(buildId: String) async throws -> String {
@@ -921,9 +930,13 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         ])
     }
 
+    /// Thrown by `buildDeploy` instead of installing.
+    public var buildDeployError: Error?
+
     public func buildDeploy(buildId: String) async throws -> BuildDeployResponse {
         try await tick()
         buildDeployCalls.append(buildId)
+        if let e = buildDeployError { throw e }
         return BuildDeployResponse(
             ok: true,
             serviceId: "bright-maple-imported-app",

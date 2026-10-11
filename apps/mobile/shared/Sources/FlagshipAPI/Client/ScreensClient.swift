@@ -164,6 +164,9 @@ public protocol ScreensClient: Sendable {
     /// `GET …/adapter`: the flagship.app.json that makes a git import's repo
     /// run the way this build does, for the repo's author to commit.
     func buildAdapterFile(buildId: String) async throws -> String
+    /// `POST /api/screens/adapter-report/:serviceId {detail}`: tell the public
+    /// store the adaptation this service was built from has a problem.
+    func adapterReport(serviceId: String, detail: String) async throws
     /// The list of past builds across every mode (the journal index).
     /// `GET /api/build/sessions`
     func buildSessions() async throws -> BuildSessionsResponse
@@ -300,5 +303,8 @@ public extension ScreensClient {
     }
     func buildAdapterFile(buildId: String) async throws -> String {
         throw ScreensClientError.notImplemented("flagship.app.json")
+    }
+    func adapterReport(serviceId: String, detail: String) async throws {
+        throw ScreensClientError.notImplemented("report")
     }
 }

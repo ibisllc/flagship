@@ -21,10 +21,13 @@ public struct BuildGitRequest: Codable, Equatable, Sendable {
     public let ref: String?
     /// The service's name. Nil: the box names it from the repo and branch.
     public let name: String?
-    public init(gitUrl: String, ref: String? = nil, name: String? = nil) {
+    /// False: never share this repo's adaptation with the public store.
+    public let share: Bool?
+    public init(gitUrl: String, ref: String? = nil, name: String? = nil, share: Bool? = nil) {
         self.gitUrl = gitUrl
         self.ref = ref
         self.name = name
+        self.share = share
     }
 }
 

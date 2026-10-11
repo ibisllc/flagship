@@ -155,6 +155,14 @@ public struct AppDetailResponse: Codable {
     /// The owner can change its code from the phone (built on this box, with
     /// its source there). Absent on older boxes.
     public var editable: Bool? = nil
+    /// Built from a shared repo adaptation: the repo it adapts, so the page
+    /// can offer to report a problem with it.
+    public var adaptedFrom: AdaptedFrom? = nil
+
+    public struct AdaptedFrom: Codable, Equatable {
+        public let repo: String
+        public init(repo: String) { self.repo = repo }
+    }
 
     public struct DataLayerInstance: Codable, Equatable {
         public let store: String
