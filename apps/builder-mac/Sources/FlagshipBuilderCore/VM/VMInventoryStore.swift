@@ -22,6 +22,19 @@ public struct VMRecord: Codable, Sendable, Equatable {
         self.lastConnectedAt = lastConnectedAt
         self.tier = tier
     }
+
+    /// An auto-unlock server that has run before unlocks itself with the key
+    /// the phone left it at its first approval, so a restart needs nobody.
+    /// Only its first boot, or an approve-every-boot server, waits for the phone.
+    public var unlocksOnItsOwn: Bool {
+        config.bootUnlockMode != "approve" && lastConnectedAt != nil
+    }
+
+    /// `state.label`, except a sealed boot that needs no one reads as unlocking.
+    public var stateLabel: String {
+        if case .awaitingPhoneUnlock = state, unlocksOnItsOwn { return "Unlocking…" }
+        return state.label
+    }
 }
 
 /// The on-disk layout of one VM bundle under the inventory root:

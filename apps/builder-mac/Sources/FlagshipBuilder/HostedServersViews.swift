@@ -170,7 +170,7 @@ struct HostedServersSidebar: View {
                         .font(FB.Font.caption())
                         .foregroundStyle(FB.Colors.warning)
                 } else {
-                    Text(server.record.state.label)
+                    Text(server.record.stateLabel)
                         .font(FB.Font.caption())
                         .foregroundStyle(FB.Colors.textMuted)
                 }
@@ -178,13 +178,13 @@ struct HostedServersSidebar: View {
         } else if case .running = server.record.state, let health = vmManager.healthReports[server.id] {
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 let v = health.verdict(at: context.date)
-                Text(v.ok ? server.record.state.label : (v.lines.first ?? server.record.state.label))
+                Text(v.ok ? server.record.stateLabel : (v.lines.first ?? server.record.stateLabel))
                     .font(FB.Font.caption())
                     .foregroundStyle(v.ok ? FB.Colors.textMuted : FB.Colors.warning)
                     .lineLimit(2)
             }
         } else {
-            Text(server.record.state.label)
+            Text(server.record.stateLabel)
                 .font(FB.Font.caption())
                 .foregroundStyle(FB.Colors.textMuted)
         }
@@ -400,13 +400,13 @@ struct VMDetailView: View {
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 StatusCard(icon: statusIcon(state),
                            tint: statusTint(state),
-                           title: state.label,
+                           title: server.record.stateLabel,
                            subtitle: statusSubtitle(server, now: context.date))
             }
         } else {
             StatusCard(icon: statusIcon(state),
                        tint: statusTint(state),
-                       title: state.label,
+                       title: server.record.stateLabel,
                        subtitle: statusSubtitle(server, now: Date()))
         }
     }
@@ -451,9 +451,12 @@ struct VMDetailView: View {
             if VMLifecycle.comingUpIsStalled(state: server.record.state, elapsed: now.timeIntervalSince(since)) {
                 return "Taking longer than expected — the box may not have reached the network. Check that it's online, or power off and retry."
             }
+            if server.record.unlocksOnItsOwn {
+                return "Unlocking its disk with the key your phone left it. Nothing to approve."
+            }
             return server.record.config.bootUnlockMode == "approve"
                 ? "The disk is sealed — approve the unlock on your phone."
-                : "The disk is sealed — waiting for the phone-home unlock."
+                : "The disk is sealed — approve the first unlock on your phone. After that it unlocks on its own."
         case .installing:
             let start = server.record.stateChangedAt ?? server.record.createdAt
             let elapsed = max(0, Int(now.timeIntervalSince(start)) / 60)
@@ -527,7 +530,7 @@ struct VMDetailView: View {
             Label("Server details", systemImage: "clock.arrow.circlepath")
                 .font(FB.Font.rowTitle())
                 .foregroundStyle(FB.Colors.ink)
-            detailRow("State", server.record.state.label)
+            detailRow("State", server.record.stateLabel)
             detailRow("Created", server.record.createdAt.formatted(
                 date: .abbreviated, time: .shortened))
             detailRow("Last state change", (server.record.stateChangedAt ?? server.record.createdAt)

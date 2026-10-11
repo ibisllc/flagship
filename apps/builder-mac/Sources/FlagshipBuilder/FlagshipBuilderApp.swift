@@ -152,7 +152,7 @@ private struct MenuBarContent: View {
                 }
             }
         } else {
-            Text(server.record.state.label)
+            Text(server.record.stateLabel)
         }
     }
 }

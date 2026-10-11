@@ -36,6 +36,16 @@ final class VMInventoryStoreTests: XCTestCase {
 
     // MARK: - Layout
 
+    func testOnlyAFirstOrApproveBootWaitsForThePhone() {
+        var r = record(name: "home.harry.flagship.services")
+        r.state = .awaitingPhoneUnlock
+        XCTAssertEqual(r.stateLabel, "Waiting for you to unlock")
+        r.lastConnectedAt = Date()
+        XCTAssertEqual(r.stateLabel, "Unlocking…")
+        r.state = .running
+        XCTAssertEqual(r.stateLabel, "Running")
+    }
+
     func testBundleLayoutPaths() {
         let layout = VMBundleLayout(root: root)
         let dir = layout.bundleDir("home.harry.flagship.services")
