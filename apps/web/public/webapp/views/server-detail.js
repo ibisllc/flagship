@@ -83,6 +83,8 @@ import { humanError } from "../lib/humanError.js";
 import { inlineConfirm } from "../lib/modal.js";
 import { formatWhen } from "../lib/dateFormat.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+import { liveSync } from "../lib/liveSync.js";
+import { serverHealthVerdict, healthForServer, renderHealthCard } from "../lib/serverHealth.js";
 
 registerView("view-server-detail");
 
@@ -113,8 +115,10 @@ function shortCommit(sha) {
 export async function renderServerDetail() {
   const root = $("server-detail-content");
   root.innerHTML = skeletonCards(2);
+  startHealthWatch(detailFqdn);
   try {
     const body = await screensFetch("/api/screens/server-detail");
+    if (!detailFqdn && body?.serverFqdn) startHealthWatch(body.serverFqdn);
     root.innerHTML = `
       <div class="card">
         <div class="row"><span class="label">FQDN</span><span class="value">${escapeHtml(body.serverFqdn)}</span></div>
@@ -352,6 +356,40 @@ export async function renderServerDetail() {
       throw e;
     }
   }
+}
+
+// ---- Box health (the box's own report, relayed on /pods) ---------------
+
+let detailFqdn = "";
+let healthUnsub = null;
+let healthTimer = null;
+
+function stopHealthWatch() {
+  if (healthUnsub) { healthUnsub(); healthUnsub = null; }
+  if (healthTimer) { clearInterval(healthTimer); healthTimer = null; }
+}
+
+// Re-evaluated on every live-sync snapshot and every 30 s, so a report that
+// stops arriving turns into "No health report for N min" on screen.
+function startHealthWatch(fqdn) {
+  stopHealthWatch();
+  const el = $("server-health");
+  if (!el) return;
+  el.innerHTML = "";
+  if (!fqdn) return;
+  let pods = [];
+  const paint = () => {
+    if ($("view-server-detail")?.classList.contains("hidden")) {
+      stopHealthWatch();
+      return;
+    }
+    el.innerHTML = renderHealthCard(serverHealthVerdict(healthForServer(pods, fqdn), Date.now()));
+  };
+  healthUnsub = liveSync.subscribe((snap) => {
+    pods = snap?.pods ?? [];
+    paint();
+  });
+  healthTimer = setInterval(paint, 30_000);
 }
 
 function wirePreferredServer(body) {
@@ -1940,7 +1978,8 @@ export function initServerDetailView() {
   });
 }
 
-export async function enterServerDetail() {
+export async function enterServerDetail(fqdn) {
+  detailFqdn = typeof fqdn === "string" ? fqdn.toLowerCase() : "";
   show("view-server-detail");
   await renderServerDetail();
 }

@@ -51,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -80,6 +81,7 @@ import com.flagshipserver.app.core.JournalUnits
 import com.flagshipserver.app.core.PowerMode
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
+import com.flagshipserver.app.core.ServerHealthVerdict
 import com.flagshipserver.app.core.ServerSettingsStore
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
@@ -134,6 +136,7 @@ fun ServerDetailScreen(
     // The pod's FQDN, available even when the daemon BFF load fails — drives the
     // approval card. The loaded detail path prefers its own serverFqdn.
     serverFqdn: String? = null,
+    health: com.flagshipserver.app.api.BoxHealthWire? = null,
 ) {
     val client = LocalScreensClient.current
     val detailVm = remember(podId) { HomeViewModel(client) }
@@ -194,6 +197,8 @@ fun ServerDetailScreen(
             Spacer(Modifier.height(FS.space.s6))
         }
 
+        ServerHealthCard(health = health)
+
         when (val d = detail) {
             is LoadingState.Loaded -> ServerInfoCard(d.value)
             is LoadingState.Failed -> ErrorCard(d.message, onRetry = { detailVm.load() })
@@ -245,6 +250,48 @@ fun ServerDetailScreen(
         Spacer(Modifier.height(FS.space.s12))
       }
     }
+}
+
+// The box's own health report, relayed on /pods. Re-evaluated every 30 s so a
+// report that stops arriving turns into "No health report for N min" on screen.
+@Composable
+private fun ServerHealthCard(health: com.flagshipserver.app.api.BoxHealthWire?) {
+    if (health == null) return
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(30_000)
+            now = System.currentTimeMillis()
+        }
+    }
+    val verdict = ServerHealthVerdict.evaluate(health, now) ?: return
+    if (verdict.ok) {
+        Text(
+            verdict.lines.first(),
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            modifier = Modifier.testTag("server-health-ok"),
+        )
+    } else {
+        Text(
+            "Server health",
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("server-health-issues")) {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                verdict.lines.forEach { line ->
+                    Text(
+                        line,
+                        color = FS.colors.warning,
+                        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
+                    )
+                }
+            }
+        }
+    }
+    Spacer(Modifier.height(FS.space.s6))
 }
 
 // Boot-unlock status + kill switch for one server. Reads the per-server choice

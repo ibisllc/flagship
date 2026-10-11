@@ -461,6 +461,7 @@ class AppState(
         lastReported: Long? = null,
         identityPubKeyHex: String = "",
         leadsServices: List<String> = emptyList(),
+        health: com.flagshipserver.app.api.BoxHealthWire? = null,
     ): String {
         // HONEST LIVENESS (Fix A) — derive the pod's status from the
         // server-authoritative `liveness` field instead of trusting that a
@@ -487,7 +488,7 @@ class AppState(
             // came online, or is now waiting for an approval is re-flowed below.
             if (old.status == derivedStatus && old.cameOnline && !awaitingUnlock &&
                 old.liveness == liveness && old.lastSeenMsAgo == lastSeenMsAgo &&
-                old.leadsServices == leadsServices
+                old.leadsServices == leadsServices && old.health == health
             ) {
                 return old.podId
             }
@@ -507,6 +508,7 @@ class AppState(
                     // Keep a known STK; never downgrade to empty on a sparse update.
                     identityPubKeyHex = identityPubKeyHex.ifEmpty { old.identityPubKeyHex },
                     leadsServices = leadsServices,
+                    health = health,
                 )
             }
             return old.podId
@@ -527,6 +529,7 @@ class AppState(
                 lastReported = lastReported,
                 identityPubKeyHex = identityPubKeyHex,
                 leadsServices = leadsServices,
+                health = health,
             ),
         )
         return id
@@ -719,6 +722,9 @@ data class PodInfo(
      *  leads nothing. Surfaced as a small "lead" indicator on the server card.
      *  Mirror of iOS PodInfo.leadsServices. */
     val leadsServices: List<String> = emptyList(),
+    /** Latest box health report from `/pods` (`health`); null when the box
+     *  doesn't send one yet. Rendered by the detail page's health card. */
+    val health: com.flagshipserver.app.api.BoxHealthWire? = null,
 ) {
     enum class Status { ONLINE, OFFLINE, UNKNOWN, PENDING }
 

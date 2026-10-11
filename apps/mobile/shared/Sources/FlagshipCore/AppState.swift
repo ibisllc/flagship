@@ -136,6 +136,11 @@ public final class AppState {
     /// (the watcher keeps its legacy keep-waiting behaviour).
     public var lastKnownOutstandingOrderRefs: Set<String>?
 
+    /// Latest box health report per lowercased fqdn, from the `/pods`
+    /// directory. Kept beside `pods` rather than on `PodInfo` so a report
+    /// arriving every minute doesn't re-flow the whole pod list.
+    public var podHealth: [String: BoxHealth] = [:]
+
     /// The Box Request Inbox (docs/box-request-inbox.md): ONE typed object,
     /// keyed by lowercased fqdn → the list of approvals that box is currently
     /// asking its owner for. Mirrors the backend's `/pods` `pendingRequests`

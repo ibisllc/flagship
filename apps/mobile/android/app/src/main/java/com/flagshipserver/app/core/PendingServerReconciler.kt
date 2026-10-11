@@ -115,6 +115,7 @@ class PendingServerReconciler(
                 // Per-service leadership (Phase 6) — the services this box leads
                 // (additive; empty when absent).
                 leadsServices = entry.leadsServices,
+                health = entry.health,
             )
             // Secret-free recipe: a registered box now has a directory identity
             // to seal the SWK to. The handler no-ops unless a deposit is owed for

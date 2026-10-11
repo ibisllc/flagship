@@ -60,7 +60,8 @@
 //  v33: the update card shows the box's last update verdict.
 //  v34: "Install complete" without the USB-only instruction.
 //  v35: the update dialog lists the box's releases ("Update to latest").
-const SHELL_VERSION = "v35";
+//  v36: the server page shows the box's health report.
+const SHELL_VERSION = "v36";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

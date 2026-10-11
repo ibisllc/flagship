@@ -114,6 +114,9 @@ public struct PendingServerReconciler {
         // A registered fqdn matching a pending pod flips it in place (identity
         // unified on the fqdn); a new fqdn is added fresh.
         let registeredEntries = directory.pods.filter { $0.revokedAt == nil }
+        var health: [String: BoxHealth] = [:]
+        for entry in registeredEntries { if let h = entry.health { health[entry.serverDomain.lowercased()] = h } }
+        if app.podHealth != health { app.podHealth = health }
         for entry in registeredEntries where !entry.serverDomain.isEmpty {
             let fqdn = entry.serverDomain
             let pendingName = app.pods.first(where: {

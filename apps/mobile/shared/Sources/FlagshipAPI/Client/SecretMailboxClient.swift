@@ -495,6 +495,10 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// empty (a pre-field Worker, or the box leads nothing). Decoded LENIENTLY so
     /// a garbled value yields [] rather than failing the whole pods-list decode.
     public let leadsServices: [String]
+    /// The box's latest signed health report, as `.com` relays it (see
+    /// `BoxHealth`). nil on a box that hasn't updated to the reporter, and on
+    /// a garbled relay, so it never fails the pods-list decode.
+    public let health: BoxHealth?
     public init(
         serverDomain: String,
         identityPubKey: String,
@@ -507,7 +511,8 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         pendingRequests: [PendingRequestSummaryWire] = [],
         liveness: String? = nil,
         lastSeenMsAgo: Int64? = nil,
-        leadsServices: [String] = []
+        leadsServices: [String] = [],
+        health: BoxHealth? = nil
     ) {
         self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
         self.revokedAt = revokedAt; self.lastReported = lastReported
@@ -518,6 +523,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.liveness = liveness
         self.lastSeenMsAgo = lastSeenMsAgo
         self.leadsServices = leadsServices
+        self.health = health
     }
 
     public init(from decoder: Decoder) throws {
@@ -537,6 +543,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.hasCert = cert != nil
         self.signedStatus = (try? c.decodeIfPresent(SignedDaemonStatus.self, forKey: .signedStatus)) ?? nil
         self.trustStatus = (try? c.decodeIfPresent(SignedBoxTrustStatus.self, forKey: .trustStatus)) ?? nil
+        self.health = (try? c.decodeIfPresent(BoxHealth.self, forKey: .health)) ?? nil
     }
 
     /// Encode mirrors the wire shape (the presence flag round-trips through a
@@ -556,6 +563,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         try c.encodeIfPresent(lastSeenMsAgo, forKey: .lastSeenMsAgo)
         if !leadsServices.isEmpty { try c.encode(leadsServices, forKey: .leadsServices) }
         if !pendingRequests.isEmpty { try c.encode(pendingRequests, forKey: .pendingRequests) }
+        try c.encodeIfPresent(health, forKey: .health)
     }
 
     /// `cameOnline` derivation, shared by the reconciler. A box that has
@@ -564,7 +572,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices
+        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices, health
     }
 }
 

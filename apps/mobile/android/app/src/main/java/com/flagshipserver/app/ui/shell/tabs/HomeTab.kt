@@ -341,6 +341,7 @@ fun HomeTab() {
                     awaitingUnlock = pod.awaitingUnlock,
                     awaitingEntitlement = awaitingEnt,
                     serverFqdn = pod.fqdn,
+                    health = pod.health,
                     onBack = { nav.popBackStack() },
                 )
             }

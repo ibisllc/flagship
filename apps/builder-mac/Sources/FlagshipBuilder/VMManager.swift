@@ -16,6 +16,7 @@ final class VMManager: ObservableObject {
 
     @Published private(set) var servers: [HostedServer] = []
     @Published private(set) var installObservations: [String: VMInstallObservation] = [:]
+    @Published private(set) var healthReports: [String: VMServerHealth] = [:]
 
     let store: VMInventoryStore
     /// Log sink — the wizard routes this into its log pane.
@@ -27,6 +28,7 @@ final class VMManager: ObservableObject {
     private var attachISO: [String: Bool] = [:]
     private var unlockPolls: [String: Task<Void, Never>] = [:]
     private var installPolls: [String: Task<Void, Never>] = [:]
+    private var healthPolls: [String: Task<Void, Never>] = [:]
     private var installStallLogged: Set<String> = []
     /// Held while any server is up: a Mac that idles to sleep takes every
     /// hosted server off the internet (seen 2026-10-11: "Maintenance Sleep"
@@ -115,6 +117,9 @@ final class VMManager: ObservableObject {
         installPolls[name] = nil
         installObservations[name] = nil
         installStallLogged.remove(name)
+        healthPolls[name]?.cancel()
+        healthPolls[name] = nil
+        healthReports[name] = nil
         try? store.delete(name: name)
         servers.removeAll { $0.id == name }
         syncWakeHold()
@@ -157,6 +162,7 @@ final class VMManager: ObservableObject {
         await run(effects: effects, on: server.record.config)
         syncUnlockPoll(for: server.record.config)
         syncInstallPoll(for: server.record.config)
+        syncHealthPoll(for: server.record.config)
         syncWakeHold()
     }
 
@@ -331,6 +337,48 @@ final class VMManager: ObservableObject {
                     return
                 }
                 try? await Task.sleep(nanoseconds: 15_000_000_000)
+            }
+        }
+    }
+
+    // MARK: - Health reports
+
+    /// While a guest runs, read its signed health report from the public
+    /// directory once a minute. The report comes from a timer inside the
+    /// guest, so it explains a server that stopped answering.
+    private func syncHealthPoll(for config: VMConfig) {
+        let name = config.name
+        guard currentState(name) == .running else {
+            healthPolls[name]?.cancel()
+            healthPolls[name] = nil
+            healthReports[name] = nil
+            return
+        }
+        guard healthPolls[name] == nil,
+              let url = VMServerHealth.podsURL(username: config.username) else { return }
+        let domain = config.serverDomain
+        healthPolls[name] = Task { [weak self] in
+            let session = URLSession(configuration: {
+                let c = URLSessionConfiguration.ephemeral
+                c.timeoutIntervalForRequest = 15
+                return c
+            }())
+            var lastIssues: [String] = []
+            while !Task.isCancelled {
+                if let (data, response) = try? await session.data(from: url),
+                   (response as? HTTPURLResponse)?.statusCode == 200,
+                   let health = VMServerHealth.fromPods(data, serverDomain: domain) {
+                    self?.healthReports[name] = health
+                    let v = health.verdict(at: Date())
+                    let issues = v.ok ? [] : v.lines
+                    if issues != lastIssues {
+                        self?.log(issues.isEmpty
+                            ? "VM \(name): health back to normal"
+                            : "VM \(name): health — \(issues.joined(separator: " "))")
+                        lastIssues = issues
+                    }
+                }
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
             }
         }
     }

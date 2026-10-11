@@ -479,6 +479,39 @@ data class PendingRequestSummaryWire(
     val expiresAt: Long = 0,
 )
 
+/** `health` on a `/pods` pod: the box's latest signed health report as `.com`
+ *  relays it (control-plane serverHealth.ts), plus `receivedAt` on the server
+ *  clock. Every field is defaulted so a partial relay still decodes; the
+ *  verdict (core.ServerHealthVerdict) treats a missing `receivedAt` as no
+ *  report. Mirror of iOS. */
+@Serializable
+data class BoxHealthWire(
+    val v: Int? = null,
+    val domain: String? = null,
+    /** Box clock, ms. */
+    val at: Long? = null,
+    val uptimeS: Long? = null,
+    val memTotalMB: Long? = null,
+    val memAvailMB: Long? = null,
+    val swapUsedMB: Long? = null,
+    /** Kernel OOM kills since boot. */
+    val oomKills: Long? = null,
+    val daemon: BoxHealthDaemonWire? = null,
+    /** The daemon holds a connection to the relay. */
+    val tunnel: Boolean? = null,
+    val diskUsedPct: Int? = null,
+    /** Server clock, ms. */
+    val receivedAt: Long? = null,
+)
+
+@Serializable
+data class BoxHealthDaemonWire(
+    /** "active" | "activating" | "deactivating" | "inactive" | "failed" | "reloading". */
+    val state: String? = null,
+    val restarts: Long? = null,
+    val lastExit: Long? = null,
+)
+
 @Serializable
 data class PodDirectoryEntry(
     val serverDomain: String,
@@ -532,6 +565,8 @@ data class PodDirectoryEntry(
      *  garbled/absent value yields [] rather than failing the whole pods-list
      *  decode. Mirror of iOS PodDirectoryEntry.leadsServices. */
     val leadsServices: List<String> = emptyList(),
+    /** Latest box health report; null on a box that doesn't send one yet. */
+    val health: BoxHealthWire? = null,
 ) {
     /** A box that has reported daemon status OR holds a cert has come online
      *  at least once. Mirror of iOS PodDirectoryEntry.cameOnline. */

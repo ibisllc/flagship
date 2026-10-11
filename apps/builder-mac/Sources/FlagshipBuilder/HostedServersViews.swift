@@ -175,6 +175,14 @@ struct HostedServersSidebar: View {
                         .foregroundStyle(FB.Colors.textMuted)
                 }
             }
+        } else if case .running = server.record.state, let health = vmManager.healthReports[server.id] {
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                let v = health.verdict(at: context.date)
+                Text(v.ok ? server.record.state.label : (v.lines.first ?? server.record.state.label))
+                    .font(FB.Font.caption())
+                    .foregroundStyle(v.ok ? FB.Colors.textMuted : FB.Colors.warning)
+                    .lineLimit(2)
+            }
         } else {
             Text(server.record.state.label)
                 .font(FB.Font.caption())
@@ -338,6 +346,7 @@ struct VMDetailView: View {
                 VStack(alignment: .leading, spacing: FB.Spacing.s4) {
                     header(server)
                     statusCard(server)
+                    healthCard(server)
                     controls(server)
                     dashboard(server)
                     accessSection(server)
@@ -399,6 +408,20 @@ struct VMDetailView: View {
                        tint: statusTint(state),
                        title: state.label,
                        subtitle: statusSubtitle(server, now: Date()))
+        }
+    }
+
+    /// The guest's own signed health report, once it runs the reporter.
+    @ViewBuilder
+    private func healthCard(_ server: VMManager.HostedServer) -> some View {
+        if case .running = server.record.state, let health = vmManager.healthReports[server.id] {
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                let v = health.verdict(at: context.date)
+                StatusCard(icon: v.ok ? "heart.text.square" : "exclamationmark.triangle.fill",
+                           tint: v.ok ? FB.Colors.success : FB.Colors.warning,
+                           title: v.ok ? "Health" : "Server health",
+                           subtitle: v.lines.joined(separator: "\n"))
+            }
         }
     }
 

@@ -55,6 +55,9 @@ public struct ServerDetailScreen: View {
     /// their server-detail cert seam empty even while serving HTTPS; this is the
     /// authenticated fallback for expiry, issuer, and SANs.
     let verifiedCertStatus: DaemonStatusReport?
+    /// The box's latest signed health report from `/pods`, nil before the box
+    /// runs the reporter.
+    let health: BoxHealth?
     var onOpenSessions: () -> Void = {}
     var onOpenTier: () -> Void = {}
     var onRefresh: () async -> Void = {}
@@ -80,6 +83,7 @@ public struct ServerDetailScreen: View {
         comingUp: Bool = false,
         pairing: Bool = false,
         verifiedCertStatus: DaemonStatusReport? = nil,
+        health: BoxHealth? = nil,
         onOpenSessions: @escaping () -> Void = {},
         onOpenTier: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
@@ -99,6 +103,7 @@ public struct ServerDetailScreen: View {
         self.comingUp = comingUp
         self.pairing = pairing
         self.verifiedCertStatus = verifiedCertStatus
+        self.health = health
         self.onOpenSessions = onOpenSessions
         self.onOpenTier = onOpenTier
         self.onRefresh = onRefresh
@@ -147,6 +152,9 @@ public struct ServerDetailScreen: View {
                         awaitingUnlock: awaitingEntitlement,
                         purpose: .entitlement
                     )
+                }
+                if let health {
+                    ServerHealthCard(health: health)
                 }
                 switch state {
                 case .idle, .loading:
@@ -1516,6 +1524,51 @@ struct RevokeServerSheet: View {
             onFailed(msg)
         default:
             break
+        }
+    }
+}
+
+
+/// The box's own account of its health (`BoxHealth.verdict`), re-read every
+/// 30 s so a report that stops arriving turns into "No health report".
+struct ServerHealthCard: View {
+    @Environment(\.colorScheme) private var scheme
+    let health: BoxHealth
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let v = health.verdict(nowMs: Int64(context.date.timeIntervalSince1970 * 1000))
+            if v.ok {
+                HStack(spacing: FS.space.s2) {
+                    Image(systemName: "heart.text.square")
+                        .foregroundColor(c.textMuted)
+                    Text(v.lines.first ?? "")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityIdentifier("server-health-ok")
+            } else {
+                FSCard {
+                    VStack(alignment: .leading, spacing: FS.space.s2) {
+                        HStack(spacing: FS.space.s2) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text("Server health")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundColor(c.text)
+                        }
+                        ForEach(v.lines, id: \.self) { line in
+                            Text(line)
+                                .font(FS.font.bodySm())
+                                .foregroundColor(c.text)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .accessibilityIdentifier("server-health-issues")
+            }
         }
     }
 }

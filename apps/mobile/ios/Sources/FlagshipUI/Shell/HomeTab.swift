@@ -777,6 +777,7 @@ struct ServerDetailContainer: View {
                     verifiedCertStatus: pod.flatMap {
                         CertPinRegistry.shared.verifiedReport(for: $0.fqdn)
                     },
+                    health: pod.flatMap { app.podHealth[$0.fqdn.lowercased()] },
                     onRefresh: {
                         await refreshDirectoryAndRepairAppKey(allowAuthentication: true)
                         async let a: Void = detailVm.load()
