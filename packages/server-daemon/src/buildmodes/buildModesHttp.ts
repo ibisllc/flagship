@@ -61,7 +61,7 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
     // name check, so the phone can send the owner to that build.
     if (path === "/api/build/git" && req.method === "POST") {
       const body = parseJson(req.body) as
-        | { gitUrl?: string; ref?: string; name?: string; credential?: unknown }
+        | { gitUrl?: string; ref?: string; name?: string; share?: boolean; credential?: unknown }
         | null;
       if (!body || typeof body.gitUrl !== "string" || body.gitUrl.length === 0) {
         return jerr(400, "gitUrl required");
@@ -72,6 +72,7 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
         gitUrl: body.gitUrl.trim(),
         ...(typeof body.ref === "string" && body.ref.trim() ? { ref: body.ref.trim() } : {}),
         ...(typeof body.name === "string" && body.name.trim() ? { name: body.name } : {}),
+        ...(body.share === false ? { share: false } : {}),
       });
       if ("error" in r) {
         const c = r.check;

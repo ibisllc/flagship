@@ -153,6 +153,14 @@ export interface LineageResolverLike {
 
 export interface ScreensHttpDeps {
   gate: PairedSessionGate;
+  /**
+   * Services built from a published repo adapter, and a way to report one
+   * to flagshipserver.com (anonymously: the adapter, and the owner's note).
+   */
+  adapterReports?: {
+    originOf(serviceId: string): { repo: string } | null;
+    report(serviceId: string, detail: string): Promise<boolean>;
+  };
   serverFqdn: string;
   username: string;
   daemonVersion: string;
@@ -603,6 +611,20 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       const app = deps.servicePlatform.byServiceId(serviceId);
       if (!app) return jerr(404, "app not found");
       return jok(appDetail(app, deps));
+    }
+
+    // POST /api/screens/adapter-report/:serviceId {detail} — the owner says
+    // the published adapter this service came from has a problem. Only the
+    // adapter and their note leave the box; the page asks them to keep the
+    // note free of anything identifying.
+    if (path.startsWith("/api/screens/adapter-report/") && method === "POST") {
+      const serviceId = decodeURIComponent(path.slice("/api/screens/adapter-report/".length));
+      if (!deps.adapterReports?.originOf(serviceId)) return jerr(404, "this service wasn't built from a shared adaptation");
+      const detail = (parseJson(req.body) as { detail?: unknown } | null)?.detail;
+      if (typeof detail !== "string" || !detail.trim()) return jerr(400, "Describe the problem.");
+      if (detail.length > 2000) return jerr(400, "Keep it under 2,000 characters.");
+      if (!(await deps.adapterReports.report(serviceId, detail.trim()))) return jerr(502, "Couldn't send the report. Try again later.");
+      return jok({ ok: true });
     }
 
     // ---- P1.12 GET /api/screens/paired-sessions/list
@@ -1467,6 +1489,7 @@ function appDetail(app: InstalledService, deps: ScreensHttpDeps): AppDetailRespo
     browserTabs,
     recentLogs: [],
     editable: deps.vibeCode?.canEdit?.(app.serviceId) ?? false,
+    ...(deps.adapterReports?.originOf(app.serviceId) ? { adaptedFrom: deps.adapterReports.originOf(app.serviceId)! } : {}),
   };
 }
 

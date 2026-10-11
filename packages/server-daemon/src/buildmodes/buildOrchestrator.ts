@@ -41,7 +41,10 @@ import {
   splitAdapterFile,
   type AppManifest,
 } from "@flagship/protocol";
-import { indexableRepo, licensePathOf, type AdapterIndex } from "./adapterIndex.js";
+import { indexableRepo, licensePathOf, type AdapterIndex, type StoreReason } from "./adapterIndex.js";
+
+/** How many times the AI may fix an adaptation the store refused. */
+const MAX_FIX_ROUNDS = 2;
 
 /**
  * The model call the AI "adapt" pass makes. Provider-agnostic by design:
@@ -103,6 +106,13 @@ interface GitSource {
   shared?: boolean;
   /** The owner steered the AI in their own words, which may be personal. */
   steered?: boolean;
+  /** Share the adaptation once it deploys (the owner can switch it off). */
+  share: boolean;
+  /** The published adapter this build installs (origin "index"). */
+  indexFile?: string;
+  /** Fix rounds run after the store refused it, and one waiting to run. */
+  rounds: number;
+  pendingFix?: StoreReason[];
 }
 
 export type AdaptStatus =
@@ -156,6 +166,11 @@ export interface BuildOrchestratorDeps {
    * never look one up and adapts are never shared.
    */
   adapterIndex?: AdapterIndex;
+  /**
+   * Remember which published adapter an installed service came from, so its
+   * owner can report a problem with it later.
+   */
+  recordAdapterOrigin?: (serviceId: string, origin: { repo: string; file: string } | null) => Promise<void>;
   /**
    * An installed service's current code, if it can be edited here (built on
    * this box, still installed). Unset ⇒ edits aren't offered.
@@ -262,6 +277,10 @@ export class BuildOrchestrator {
   private readonly gitSources = new Map<string, GitSource>();
   /** A git build's non-text files, carried to the deploy unchanged. */
   private readonly binaries = new Map<string, Record<string, Buffer>>();
+  /** Published adapters that failed to install here; never offered again. */
+  private readonly failedHere = new Set<string>();
+  /** Builds whose AI is running; a fix round waits for it. */
+  private readonly agentBusy = new Set<string>();
   private readonly now: () => number;
   private readonly rand: () => string;
 
@@ -341,7 +360,7 @@ export class BuildOrchestrator {
    * deploy as-is; on NOT-FIT, the tree is loaded too (so the AI adapt
    * path can pick it up) and `gitFit:false` is returned.
    */
-  async createGit(args: { gitUrl: string; ref?: string; name?: string }): Promise<CreateGitResult> {
+  async createGit(args: { gitUrl: string; ref?: string; name?: string; share?: boolean }): Promise<CreateGitResult> {
     const names = this.deps.names?.();
     const given = args.name?.trim().toLowerCase();
     if (given && names) {
@@ -363,6 +382,7 @@ export class BuildOrchestrator {
     }
     const repo = indexableRepo(args.gitUrl);
     let origin: GitSource["origin"] = fitness.fit ? (fitness.repoAdapter === "applied" ? "repo" : "as-is") : "ai";
+    let indexFile: string | undefined;
     // A repo with its own flagship.app.json is its author's to describe:
     // never looked up in the index, never shared to it.
     const authored = fitness.original?.["flagship.app.json"] != null;
@@ -373,6 +393,7 @@ export class BuildOrchestrator {
         await this.deps.journal.append(buildId, { mode: "git", kind: "fitness-check", actor: "system", summary: reason });
         fitness = { ...fitness, ...known, fit: true, reason };
         origin = "index";
+        indexFile = known.sha;
       }
     }
     let name: string | undefined;
@@ -408,6 +429,9 @@ export class BuildOrchestrator {
       ...(args.ref ? { ref: args.ref } : {}),
       original: fitness.original ?? fitness.files,
       origin,
+      share: args.share !== false,
+      rounds: 0,
+      ...(indexFile ? { indexFile } : {}),
       ...(!fitness.fit && typeof fitness.repoAdapter === "object" ? { staleAdapter: fitness.repoAdapter.failed } : {}),
     });
     return {
@@ -509,7 +533,7 @@ export class BuildOrchestrator {
    */
   async adaptGit(
     buildId: string,
-    opts: { instructions?: string } = {},
+    opts: { instructions?: string; storeFeedback?: StoreReason[] } = {},
   ): Promise<AdaptResult> {
     const st = this.states.get(buildId);
     if (!st || st.mode !== "git") return { ok: false, reason: "not a git build" };
@@ -522,6 +546,14 @@ export class BuildOrchestrator {
         `The repo's flagship.app.json carries an adapter (its "adapter" section) written for an older commit; ` +
           `its edits no longer fit ${stale.join(", ")}. It shows how this repo was adapted before: redo the same ` +
           `changes against the current files, and write flagship.app.json WITHOUT the "adapter" section.`,
+      );
+    }
+    if (opts.storeFeedback?.length) {
+      notes.push(
+        `This app is already adapted, installed and running. Flagship's public store of adaptations, which ` +
+          `shares this adaptation with others, refused it for these reasons:\n` +
+          opts.storeFeedback.map((r) => `- ${r.message}`).join("\n") +
+          `\nFix only these, with the smallest change that keeps the app working, validate, and deploy again.`,
       );
     }
     if (st.name) notes.push(`The app's name is "${st.name}": use exactly that as "name" in flagship.app.json.`);
@@ -667,6 +699,7 @@ export class BuildOrchestrator {
 
     const agentRunner = this.deps.agentRunner!;
     let result: BuildAgentResult;
+    this.agentBusy.add(buildId);
     try {
       result = await runBuildAgent({
         buildId,
@@ -683,6 +716,11 @@ export class BuildOrchestrator {
       const reason = `agentic adapt failed: ${(e as Error).message}`;
       await this.deps.journal.append(buildId, { mode: "git", kind: "error", actor: "ai", summary: reason });
       return { ok: false, reason };
+    } finally {
+      this.agentBusy.delete(buildId);
+      // A refusal that arrived while the AI was working (its own deploy
+      // shared the adaptation) is fixed now that it's done.
+      this.runPendingFix(buildId);
     }
 
     const st = this.states.get(buildId);
@@ -808,16 +846,43 @@ export class BuildOrchestrator {
       ...(st.name ? { name: st.name } : {}),
       ...(this.binaries.has(buildId) ? { binaries: this.binaries.get(buildId)! } : {}),
     });
-    if (r.ok) {
-      st.serviceId = r.serviceId;
-      st.deployedUrl = r.url;
-      const src = this.gitSources.get(buildId);
-      if (src && !src.shared) {
+    const src = this.gitSources.get(buildId);
+    if (!r.ok) return src ? this.installFailed(buildId, st, src, r.reason) : r;
+    st.serviceId = r.serviceId;
+    st.deployedUrl = r.url;
+    // Deploying again (the owner, or a fix round) replaces it in place.
+    st.editsServiceId ??= r.serviceId;
+    if (src) {
+      // Built from a published adapter: that one. Otherwise sharing may name
+      // one below; until then the service has none.
+      const origin = src.origin === "index" && src.indexFile && src.repo ? { repo: src.repo, file: src.indexFile } : null;
+      void this.deps.recordAdapterOrigin?.(r.serviceId, origin).catch(() => {});
+      if (!src.shared) {
         src.shared = true;
-        void this.shareAdapter(src, ws.snapshot());
+        void this.shareAdapter(buildId, src, ws.snapshot(), r.serviceId).catch(() => {});
       }
     }
     return r;
+  }
+
+  /**
+   * A published adapter that fails to build or start here is reported (which
+   * one and at what stage, nothing else) and never offered on this box
+   * again; the build goes back to the repo's own files for the AI.
+   */
+  private installFailed(buildId: string, st: BuildState, src: GitSource, reason: string): DeployResult {
+    const stage = /^docker build failed/.test(reason) ? "build" : /^install rejected/.test(reason) ? "start" : null;
+    if (src.origin !== "index" || !src.indexFile || !src.repo || !stage) return { ok: false, reason };
+    void this.deps.adapterIndex?.complain({ repo: src.repo, file: src.indexFile, stage }).catch(() => {});
+    this.failedHere.add(src.indexFile);
+    this.workspaces.set(buildId, new BuildWorkspace(src.original));
+    st.gitFit = false;
+    src.origin = "ai";
+    delete src.indexFile;
+    return {
+      ok: false,
+      reason: `${reason}. The shared adaptation of this repo didn't work on this server, so it has been reported. Check the repo again to prepare it with AI instead.`,
+    };
   }
 
   /**
@@ -828,17 +893,18 @@ export class BuildOrchestrator {
     repo: string,
     commit: string,
     original: Record<string, string>,
-  ): Promise<{ files: Record<string, string>; manifestJson: string; manifest: AppManifest } | null> {
+  ): Promise<{ files: Record<string, string>; manifestJson: string; manifest: AppManifest; sha: string } | null> {
     if (!this.deps.adapterIndex) return null;
     for (const candidate of await this.deps.adapterIndex.lookup(repo, commit)) {
       const split = splitAdapterFile(candidate.file);
+      if (this.failedHere.has(candidate.sha)) continue;
       if (!split.ok || !split.adapter || split.adapter.source.repo !== repo) continue;
       if (repoAdapterProblems(split.adapter, split.manifestJson, { publicText: Object.values(original) }).length > 0) continue;
       const parsed = parseManifest(JSON.parse(split.manifestJson));
       if (!parsed.ok) continue;
       const applied = applyRepoAdapter(original, split.adapter, split.manifestJson);
       if (!applied.ok) continue;
-      return { files: applied.files, manifestJson: split.manifestJson, manifest: parsed.manifest };
+      return { files: applied.files, manifestJson: split.manifestJson, manifest: parsed.manifest, sha: candidate.sha };
     }
     return null;
   }
@@ -849,13 +915,49 @@ export class BuildOrchestrator {
    * never the repo's own adapter (that's the author's), with the owner's
    * choices (the name) taken out and nothing that says who sent it.
    */
-  private async shareAdapter(src: GitSource, built: Record<string, string>): Promise<void> {
-    if (!this.deps.adapterIndex || !src.repo || src.steered || src.origin === "repo" || src.origin === "as-is") return;
+  private async shareAdapter(buildId: string, src: GitSource, built: Record<string, string>, serviceId: string): Promise<void> {
+    const index = this.deps.adapterIndex;
+    if (!index || !src.repo || !src.share || src.steered || src.origin === "repo" || src.origin === "as-is") return;
     const licensePath = licensePathOf(src.original);
     const file = licensePath ? adapterFileFor(src, built) : null;
     if (!file || !src.commit || !licensePath) return;
-    await this.deps.adapterIndex.submit({ repo: src.repo, base: src.commit, licensePath, file });
+    const v = await index.submit({ repo: src.repo, base: src.commit, licensePath, file });
+    const note = (summary: string, detail?: string) =>
+      this.deps.journal.append(buildId, {
+        mode: "git",
+        kind: "adapt-step",
+        actor: "system",
+        summary,
+        ...(detail ? { detail } : {}),
+      });
+    if (!v) {
+      await note("couldn't reach Flagship's store of adaptations; not shared");
+      return;
+    }
+    if (v.status !== "refused") {
+      await note(v.status === "kept" ? "shared the adaptation with Flagship's public store" : "the public store already had this adaptation");
+      if (v.file) await this.deps.recordAdapterOrigin?.(serviceId, { repo: src.repo, file: v.file });
+      return;
+    }
+    const reasons = v.reasons ?? [];
+    await note("the public store refused the adaptation", reasons.map((r) => r.message).join("; "));
+    if (!reasons.length || reasons.some((r) => !r.fixable)) return;
+    if (src.rounds >= MAX_FIX_ROUNDS || !this.adaptConfigured(buildId)) return;
+    src.pendingFix = reasons;
+    this.runPendingFix(buildId);
   }
+
+  /** Let the AI fix what the store refused, once nothing else is running. */
+  private runPendingFix(buildId: string): void {
+    const src = this.gitSources.get(buildId);
+    if (!src?.pendingFix || this.agentBusy.has(buildId)) return;
+    const reasons = src.pendingFix;
+    delete src.pendingFix;
+    src.rounds++;
+    src.shared = false;
+    void this.adaptGit(buildId, { storeFeedback: reasons }).catch(() => {});
+  }
+
 
   /**
    * The flagship.app.json that makes this repo run the way this build does,

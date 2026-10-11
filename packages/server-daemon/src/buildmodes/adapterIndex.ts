@@ -16,11 +16,32 @@
 import { createHash } from "node:crypto";
 import { normalizeRepoUrl } from "@flagship/protocol";
 
+export interface StoreReason {
+  code: string;
+  message: string;
+  /** Whether changing the adaptation could get it kept. */
+  fixable: boolean;
+}
+
+/** flagshipserver.com's answer to a submission. */
+export interface SubmitVerdict {
+  status: "kept" | "known" | "refused";
+  /** The sha256 of the file, which names it in the store. */
+  file?: string;
+  reasons?: StoreReason[];
+}
+
 export interface AdapterIndex {
   /** Adapters for this repo, best first. Empty on any failure. */
-  lookup(repo: string, base: string): Promise<Array<{ base: string; file: string }>>;
-  /** Fire and forget: the index answers the same whether it kept it or not. */
-  submit(s: { repo: string; base: string; licensePath: string; file: string }): Promise<void>;
+  lookup(repo: string, base: string): Promise<Array<{ base: string; file: string; sha: string }>>;
+  /** Submit and wait for the checks. Null when there was no answer. */
+  submit(s: { repo: string; base: string; licensePath: string; file: string }): Promise<SubmitVerdict | null>;
+  /**
+   * Say a published adapter didn't work: it failed to build or start while
+   * installing, or the owner reports a problem in their own words. Nothing
+   * else is sent. Fire and forget.
+   */
+  complain(c: { repo: string; file: string; stage: "build" | "start" | "report"; detail?: string }): Promise<void>;
 }
 
 const INDEX_HOSTS = new Set(["github.com", "gitlab.com", "codeberg.org"]);
@@ -47,10 +68,10 @@ const CANDIDATES = 3;
 type FetchLike = (
   url: string,
   init: { method: string; headers?: Record<string, string>; body?: string; signal: AbortSignal },
-) => Promise<{ ok: boolean; text(): Promise<string> }>;
+) => Promise<{ ok: boolean; status?: number; text(): Promise<string> }>;
 
 interface StoreIndex {
-  adapters?: Array<{ base?: unknown; file?: unknown; added?: unknown; confirmations?: unknown }>;
+  adapters?: Array<{ base?: unknown; file?: unknown; added?: unknown; confirmations?: unknown; complaints?: unknown }>;
 }
 
 /**
@@ -63,6 +84,13 @@ export function httpAdapterIndex(
 ): AdapterIndex {
   const store = (opts.store ?? DEFAULT_ADAPTER_STORE).replace(/\/+$/, "");
   const submitTo = opts.submitTo.replace(/\/+$/, "");
+  const post = (path: string, body: unknown, ms: number) =>
+    fetchImpl(`${submitTo}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(ms),
+    });
   const get = async (url: string): Promise<string | null> => {
     const res = await fetchImpl(url, { method: "GET", signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS) });
     return res.ok ? res.text() : null;
@@ -79,13 +107,12 @@ export function httpAdapterIndex(
             typeof a.base === "string" && typeof a.file === "string" && /^[0-9a-f]{64}\.json$/.test(a.file),
         );
         const ordered = [...entries.filter((a) => a.base === commit), ...entries.filter((a) => a.base !== commit)];
-        const out: Array<{ base: string; file: string }> = [];
+        const out: Array<{ base: string; file: string; sha: string }> = [];
         for (const a of ordered.slice(0, CANDIDATES)) {
           const file = await get(`${dir}/${a.file}`);
+          const sha = a.file.slice(0, 64);
           // The name is the hash of the content: a file that doesn't match it isn't the one published.
-          if (file && createHash("sha256").update(file).digest("hex") === a.file.slice(0, 64)) {
-            out.push({ base: a.base, file });
-          }
+          if (file && createHash("sha256").update(file).digest("hex") === sha) out.push({ base: a.base, file, sha });
         }
         return out;
       } catch {
@@ -94,14 +121,31 @@ export function httpAdapterIndex(
     },
     async submit(s) {
       try {
-        await fetchImpl(`${submitTo}/api/adapters/submit`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(s),
-          signal: AbortSignal.timeout(SUBMIT_TIMEOUT_MS),
-        });
+        const res = await post("/api/adapters/submit", { ...s, wait: true }, SUBMIT_TIMEOUT_MS);
+        if (!res.ok) return null;
+        const v = JSON.parse(await res.text()) as Partial<SubmitVerdict>;
+        if (v.status !== "kept" && v.status !== "known" && v.status !== "refused") return null;
+        const reasons = Array.isArray(v.reasons)
+          ? v.reasons.filter(
+              (r): r is StoreReason =>
+                !!r && typeof r.code === "string" && typeof r.message === "string" && typeof r.fixable === "boolean",
+            )
+          : [];
+        return {
+          status: v.status,
+          ...(typeof v.file === "string" && /^[0-9a-f]{64}$/.test(v.file) ? { file: v.file } : {}),
+          ...(reasons.length ? { reasons } : {}),
+        };
       } catch {
         // Sharing is a courtesy to the next importer; a failure costs nothing here.
+        return null;
+      }
+    },
+    async complain(c) {
+      try {
+        await post("/api/adapters/complain", c, LOOKUP_TIMEOUT_MS);
+      } catch {
+        // Best effort, like sharing.
       }
     },
   };

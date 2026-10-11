@@ -109,6 +109,11 @@ export interface AppDetailResponse {
    * this box and its source is here. Absent on boxes from before editing.
    */
   editable?: boolean;
+  /**
+   * Built from a published repo adapter: the repo, so the page can offer
+   * "Report a problem with this adaptation". Absent otherwise.
+   */
+  adaptedFrom?: { repo: string };
 }
 
 // ---------- P1.5 — /api/screens/vibe-code/start ------------------------

@@ -248,7 +248,10 @@ describe("the adapter index", () => {
     };
     const idx = httpAdapterIndex({ store: "https://store.test/", submitTo: "https://flagshipserver.com/" }, fetcher);
     const found = await idx.lookup(REPO, COMMIT);
-    expect(found).toEqual([{ base: COMMIT, file: ADAPTER_FILE }, { base: "b".repeat(40), file: older }]);
+    expect(found).toEqual([
+      { base: COMMIT, file: ADAPTER_FILE, sha: sha(ADAPTER_FILE) },
+      { base: "b".repeat(40), file: older, sha: sha(older) },
+    ]);
     for (const c of calls) expect(c.headers).toBeUndefined();
 
     store["https://store.test/do-not-adapt.txt"] = `${REPO}\n`;
@@ -262,7 +265,7 @@ describe("the adapter index", () => {
         url: "https://flagshipserver.com/api/adapters/submit",
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: REPO, base: COMMIT, licensePath: "LICENSE", file: "{}" }),
+        body: JSON.stringify({ repo: REPO, base: COMMIT, licensePath: "LICENSE", file: "{}", wait: true }),
       },
     ]);
     const offline = httpAdapterIndex({ submitTo: "https://x" }, async () => {
@@ -379,5 +382,236 @@ describe("a repo's own flagship.app.json is its author's", () => {
     expect(applied.ok && applied.files["index.js"]).toBe(ADAPTED["index.js"]);
     const none = await handle({ method: "GET", path: "/api/build/sessions/nope/adapter", headers: {}, body: Buffer.alloc(0) });
     expect(none!.status).toBe(404);
+  });
+});
+
+describe("the store's answer, and fixing what it refused", () => {
+  function deployingTurns() {
+    return [
+      {
+        content: "",
+        model: "m",
+        toolUses: [
+          { id: "1", name: "write_file", input: { path: "index.js", content: ADAPTED["index.js"] } },
+          { id: "2", name: "write_file", input: { path: "Dockerfile", content: ADAPTED.Dockerfile } },
+          { id: "3", name: "write_file", input: { path: "flagship.app.json", content: MANIFEST } },
+          { id: "4", name: "deploy", input: {} },
+        ],
+      },
+    ] as ChatResponse[];
+  }
+
+  function scripted(verdicts: Array<import("../src/buildmodes/adapterIndex.js").SubmitVerdict>) {
+    const submitted: string[] = [];
+    const complaints: unknown[] = [];
+    const index: AdapterIndex = {
+      lookup: async () => [],
+      submit: async (s) => {
+        submitted.push(s.file);
+        return verdicts.shift() ?? { status: "kept", file: "f".repeat(64) };
+      },
+      complain: async (c) => {
+        complaints.push(c);
+      },
+    };
+    return { index, submitted, complaints };
+  }
+
+  async function adaptAndSettle(o: BuildOrchestrator, gitUrl = REPO) {
+    const r = await o.createGit({ gitUrl });
+    if ("error" in r) throw new Error(r.error);
+    await o.adaptGit(r.buildId);
+    for (let i = 0; i < 20; i++) await settle();
+    return r.buildId;
+  }
+
+  it("asks the AI to fix a fixable refusal, redeploys in place and sends it again", async () => {
+    const prompts: string[] = [];
+    let turns = deployingTurns();
+    const { index, submitted } = scripted([
+      { status: "refused", file: "a".repeat(64), reasons: [{ code: "adds-secret", message: "it adds what looks like a Stripe secret key", fixable: true }] },
+      { status: "kept", file: "b".repeat(64) },
+    ]);
+    const origins: Array<[string, unknown]> = [];
+    const journal = new InMemoryBuildJournal();
+    const deployed: Array<{ editsServiceId?: string }> = [];
+    const o: BuildOrchestrator = new BuildOrchestrator({
+      journal,
+      gitImporter: new GitImporter({
+        cmd: { run: async () => {} },
+        workingDir: mkdtempSync(join(tmpdir(), "fix-")),
+        cloneInto: fixtureClone(ORIGINAL),
+        commitOf: async () => COMMIT,
+      }),
+      mcpKeys: new InMemoryMcpKeyStore(),
+      serverFqdn: FQDN,
+      adapterIndex: index,
+      recordAdapterOrigin: async (id, origin) => {
+        origins.push([id, origin]);
+      },
+      deployArtifact: async (a): Promise<DeployResult> => {
+        deployed.push({ ...(a.editsServiceId ? { editsServiceId: a.editsServiceId } : {}) });
+        return { ok: true, serviceId: "harry--hello", url: `https://hello.${FQDN}`, image: "i" };
+      },
+      agentRunner: async (_id, req) => {
+        if (req.messages.length === 2) {
+          prompts.push(String(req.messages[1]!.content));
+          if (turns.length === 0) turns = deployingTurns();
+        }
+        return turns.shift() ?? { content: "done", model: "m" };
+      },
+    });
+    const id = await adaptAndSettle(o);
+    expect(submitted).toHaveLength(2);
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toMatch(/refused it for these reasons:\n- it adds what looks like a Stripe secret key/);
+    expect(prompts[1]).not.toMatch(/Extra instructions from the owner: .*Acme/);
+    expect(deployed).toEqual([{}, { editsServiceId: "harry--hello" }]);
+    expect(origins.at(-1)).toEqual(["harry--hello", { repo: REPO, file: "b".repeat(64) }]);
+    expect((await journal.read(id)).map((e) => e.summary)).toContain("shared the adaptation with Flagship's public store");
+  });
+
+  it("stops after two fix rounds, and never tries to fix what can't be fixed", async () => {
+    const refusal = { status: "refused" as const, reasons: [{ code: "review", message: "other concern", fixable: true }] };
+    let turns = deployingTurns();
+    const { index, submitted } = scripted([refusal, refusal, refusal, refusal]);
+    const { o } = setup({
+      index,
+      agent: (req) => {
+        if (req.messages.length === 2 && turns.length === 0) turns = deployingTurns();
+        return turns.shift() ?? { content: "done", model: "m" };
+      },
+    });
+    await adaptAndSettle(o);
+    expect(submitted).toHaveLength(3);
+
+    turns = deployingTurns();
+    const hard = scripted([{ status: "refused", reasons: [{ code: "no-license", message: "no license", fixable: false }] }]);
+    const { o: o2 } = setup({ index: hard.index, agent: () => turns.shift() ?? { content: "done", model: "m" } });
+    await adaptAndSettle(o2);
+    expect(hard.submitted).toHaveLength(1);
+  });
+
+  it("shares nothing when the owner switched sharing off", async () => {
+    const turns = deployingTurns();
+    const { index, submitted } = scripted([]);
+    const { o } = setup({ index, agent: () => turns.shift() ?? { content: "done", model: "m" } });
+    const r = await o.createGit({ gitUrl: REPO, share: false });
+    if ("error" in r) throw new Error(r.error);
+    await o.adaptGit(r.buildId);
+    await settle();
+    expect(submitted).toEqual([]);
+  });
+
+  it("reports a published adapter that fails to build here, and doesn't offer it again", async () => {
+    const { createHash } = await import("node:crypto");
+    const fileSha = createHash("sha256").update(ADAPTER_FILE).digest("hex");
+    const complaints: unknown[] = [];
+    const index: AdapterIndex = {
+      lookup: async () => [{ base: COMMIT, file: ADAPTER_FILE, sha: fileSha }],
+      submit: async () => null,
+      complain: async (c) => {
+        complaints.push(c);
+      },
+    };
+    const journal = new InMemoryBuildJournal();
+    const o = new BuildOrchestrator({
+      journal,
+      gitImporter: new GitImporter({
+        cmd: { run: async () => {} },
+        workingDir: mkdtempSync(join(tmpdir(), "crash-")),
+        cloneInto: fixtureClone(ORIGINAL),
+        commitOf: async () => COMMIT,
+      }),
+      mcpKeys: new InMemoryMcpKeyStore(),
+      serverFqdn: FQDN,
+      adapterIndex: index,
+      deployArtifact: async (): Promise<DeployResult> => ({ ok: false, reason: "docker build failed: exit 1" }),
+    });
+    const r = await o.createGit({ gitUrl: REPO });
+    if ("error" in r) throw new Error(r.error);
+    expect(r.fit).toBe(true);
+    const d = await o.deploy(r.buildId);
+    expect(d.ok).toBe(false);
+    expect(!d.ok && d.reason).toMatch(/didn't work on this server, so it has been reported/);
+    await settle();
+    expect(complaints).toEqual([{ repo: REPO, file: fileSha, stage: "build" }]);
+    expect(o.workspace(r.buildId)!.read("Dockerfile")).toBeNull();
+
+    const again = await o.createGit({ gitUrl: REPO });
+    if ("error" in again) throw new Error(again.error);
+    expect(again.fit).toBe(false);
+  });
+
+  it("doesn't blame the adapter for a failure that isn't its own", async () => {
+    const complaints: unknown[] = [];
+    const index: AdapterIndex = {
+      lookup: async () => [{ base: COMMIT, file: ADAPTER_FILE, sha: "e".repeat(64) }],
+      submit: async () => null,
+      complain: async (c) => {
+        complaints.push(c);
+      },
+    };
+    const o = new BuildOrchestrator({
+      journal: new InMemoryBuildJournal(),
+      gitImporter: new GitImporter({
+        cmd: { run: async () => {} },
+        workingDir: mkdtempSync(join(tmpdir(), "nocrash-")),
+        cloneInto: fixtureClone(ORIGINAL),
+        commitOf: async () => COMMIT,
+      }),
+      mcpKeys: new InMemoryMcpKeyStore(),
+      serverFqdn: FQDN,
+      adapterIndex: index,
+      deployArtifact: async (): Promise<DeployResult> => ({ ok: false, reason: 'You already have a service called "hello".' }),
+    });
+    const r = await o.createGit({ gitUrl: REPO });
+    if ("error" in r) throw new Error(r.error);
+    await o.deploy(r.buildId);
+    await settle();
+    expect(complaints).toEqual([]);
+  });
+});
+
+describe("reporting a problem from the service page", () => {
+  it("remembers which adapter a service came from, across restarts", async () => {
+    const { FileAdapterOrigins } = await import("../src/buildmodes/adapterOrigins.js");
+    const path = join(mkdtempSync(join(tmpdir(), "origins-")), "data", "adapter-origins.json");
+    const a = new FileAdapterOrigins(path);
+    await a.load();
+    await a.set("harry--hello", { repo: REPO, file: "c".repeat(64) });
+    const b = new FileAdapterOrigins(path);
+    await b.load();
+    expect(b.get("harry--hello")).toEqual({ repo: REPO, file: "c".repeat(64) });
+    await b.set("harry--hello", null);
+    const c = new FileAdapterOrigins(path);
+    await c.load();
+    expect(c.get("harry--hello")).toBeNull();
+  });
+
+  it("sends the owner's note for a service built from a shared adaptation, and nothing for others", async () => {
+    const { buildScreensHttp } = await import("../src/screens/screensHttp.js");
+    const reports: Array<[string, string]> = [];
+    const handle = buildScreensHttp({
+      gate: { check: () => null },
+      serverFqdn: FQDN,
+      username: "harry",
+      daemonVersion: "t",
+      startedAt: 0,
+      adapterReports: {
+        originOf: (id) => (id === "harry--hello" ? { repo: REPO } : null),
+        report: async (id, detail) => {
+          reports.push([id, detail]);
+          return true;
+        },
+      },
+    } as unknown as Parameters<typeof buildScreensHttp>[0]);
+    const post = (id: string, body: unknown) =>
+      handle({ method: "POST", path: `/api/screens/adapter-report/${id}`, headers: {}, body: Buffer.from(JSON.stringify(body)) });
+    expect((await post("harry--other", { detail: "x" }))!.status).toBe(404);
+    expect((await post("harry--hello", { detail: "  " }))!.status).toBe(400);
+    expect((await post("harry--hello", { detail: "x".repeat(2001) }))!.status).toBe(400);
+    expect((await post("harry--hello", { detail: " The upload page crashes. " }))!.status).toBe(200);
+    expect(reports).toEqual([["harry--hello", "The upload page crashes."]]);
   });
 });

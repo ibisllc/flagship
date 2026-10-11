@@ -120,6 +120,7 @@ import { FileBuildJournal } from "./buildmodes/buildJournal.js";
 import { FileMcpKeyStore } from "./buildmodes/mcpKeyStore.js";
 import { GitImporter } from "./buildmodes/gitImport.js";
 import { httpAdapterIndex } from "./buildmodes/adapterIndex.js";
+import { FileAdapterOrigins } from "./buildmodes/adapterOrigins.js";
 import { combineNameHolders, type NameHolders } from "./llm/serviceName.js";
 import { buildArtifactDeployer } from "./buildmodes/deployArtifact.js";
 import { BuildOrchestrator } from "./buildmodes/buildOrchestrator.js";
@@ -2199,6 +2200,17 @@ async function wireRuntimeSurfaces(deps: {
   // "your builds" list + the journal viewer span every mode. The deploy
   // path is the same artifact deployer (harness-only Forgejo push,
   // docker build, signed install) all modes funnel through.
+  // Anonymous, and read from the public store: see adapterIndex.ts.
+  // FLAGSHIP_ADAPTER_INDEX=off keeps every import and adapt on the box.
+  const adapterIndex =
+    process.env.FLAGSHIP_ADAPTER_INDEX === "off"
+      ? undefined
+      : httpAdapterIndex({
+          ...(process.env.FLAGSHIP_ADAPTER_STORE ? { store: process.env.FLAGSHIP_ADAPTER_STORE } : {}),
+          submitTo: env.controlPlaneBaseUrl ?? "https://flagshipserver.com",
+        });
+  const adapterOrigins = new FileAdapterOrigins(join(dataDir, "data", "adapter-origins.json"));
+  await adapterOrigins.load().catch((e) => console.warn(`[adapters] origins unreadable: ${(e as Error).message}`));
   if (runtime.servicePlatform) {
     const mcpSwk = swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32);
     const mcpKeys = new FileMcpKeyStore(join(dataDir, "mcp-keys"), mcpSwk);
@@ -2226,16 +2238,8 @@ async function wireRuntimeSurfaces(deps: {
       editableService,
       deployArtifact: artifactDeployer,
       names: () => ({ registry: nameHolders, hostUsername: username, installed: runtime.servicePlatform ?? null }),
-      // Anonymous, and read from the public store: see adapterIndex.ts.
-      // FLAGSHIP_ADAPTER_INDEX=off keeps every import and adapt on the box.
-      ...(process.env.FLAGSHIP_ADAPTER_INDEX === "off"
-        ? {}
-        : {
-            adapterIndex: httpAdapterIndex({
-              ...(process.env.FLAGSHIP_ADAPTER_STORE ? { store: process.env.FLAGSHIP_ADAPTER_STORE } : {}),
-              submitTo: env.controlPlaneBaseUrl ?? "https://flagshipserver.com",
-            }),
-          }),
+      ...(adapterIndex ? { adapterIndex } : {}),
+      recordAdapterOrigin: (serviceId, origin) => adapterOrigins.set(serviceId, origin),
       serverFqdn: env.serverFqdn,
       mcpBaseUrl: `https://${env.serverFqdn}`,
       // AI "adapt" pass for non-fit git imports — LIVE. One non-streaming
@@ -2475,6 +2479,22 @@ async function wireRuntimeSurfaces(deps: {
     startedAt: Date.now(),
     servicePlatform: runtime.servicePlatform,
     pairedSessions,
+    ...(adapterIndex
+      ? {
+          adapterReports: {
+            originOf: (serviceId: string) => {
+              const o = adapterOrigins.get(serviceId);
+              return o ? { repo: o.repo } : null;
+            },
+            report: async (serviceId: string, detail: string) => {
+              const o = adapterOrigins.get(serviceId);
+              if (!o) return false;
+              await adapterIndex.complain({ repo: o.repo, file: o.file, stage: "report", detail });
+              return true;
+            },
+          },
+        }
+      : {}),
     certInfo: () => liveCertInfoRef.current,
     tabRegistry: browserBundle?.tabRegistry ?? null,
     appBackup: runtime.appBackup,
