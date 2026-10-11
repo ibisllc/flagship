@@ -126,6 +126,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
       "/",
       "/404.html",
       "/abuse.html",
+      "/adapters.html",
       "/blog/",
       "/coming-soon.html",
       "/deck/",
@@ -238,6 +239,29 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     const groups = ["Setup", "Privacy", "Services", "money", "company"];
     const hits = groups.filter((g) => r.body.toLowerCase().includes(g.toLowerCase()));
     expect(hits.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("/adapters.html explains the public, anonymous index and how a repo owner opts out", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/adapters.html" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toMatch(/class="(nav|topbar)"/);
+    expect(r.body).toContain("mailto:legal@flagshipserver.com");
+    expect(r.body).toContain('id="opt-out"');
+    expect(r.body).toContain("Control how your repo runs on Flagship");
+    expect(r.body).toContain("https://github.com/ibisllc/flagship-adapters");
+    expect(r.body).toContain("do-not-adapt.txt");
+    const priv = await app.inject({ method: "GET", url: "/privacy.html" });
+    expect(priv.body).toContain('id="repo-adaptations"');
+    expect(priv.body).toContain('href="/adapters');
+  });
+
+  it("every footer with the Open column links the repo adapters page", async () => {
+    const app = buildServer();
+    for (const path of ["/", "/404.html", "/abuse.html", "/adapters.html", "/blog/", "/docs/", "/faq.html", "/help.html", "/open-source.html", "/privacy.html", "/security.html", "/status/", "/terms.html"]) {
+      const r = await app.inject({ method: "GET", url: path });
+      expect(r.body, path).toContain('<li><a href="/adapters.html">Repo adapters</a></li>');
+    }
   });
 
   it("privacy + terms include real contact addresses", async () => {

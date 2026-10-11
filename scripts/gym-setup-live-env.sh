@@ -115,8 +115,8 @@ if [ -n "$D1_ID" ] && grep -q 'REPLACE_WITH_flagship-state-gym_DATABASE_ID' "$WR
 fi
 log "applying migrations to $D1_NAME (idempotent)"
 wr d1 migrations apply "$D1_NAME" --config "$WRANGLER_CFG" --remote || warn "migrations apply reported an issue — review above"
-# R2: three buckets (ignore 'already exists'); enable temp dev-url; patch the base.
-for b in flagship-iso-gym flagship-iso-temp-gym flagship-backups-gym; do
+# R2: four buckets (ignore 'already exists'); enable temp dev-url; patch the base.
+for b in flagship-iso-gym flagship-iso-temp-gym flagship-backups-gym flagship-adapters-gym; do
   wr r2 bucket create "$b" >/dev/null 2>&1 && ok "created R2 $b" || ok "R2 $b exists"
 done
 DEVURL="$(wr r2 bucket dev-url enable flagship-iso-temp-gym 2>/dev/null | grep -oE 'https://pub-[0-9a-f]+\.r2\.dev' | head -1 || true)"

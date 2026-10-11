@@ -45,6 +45,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0083",
   // Box-signed health reports (memory, OOM kills, daemon restarts, tunnel).
   "0084",
+  // The anonymous repo adapter queue (published to a public repo) + do-not-adapt list.
+  "0085",
 ];
 
 export interface SchemaStatusDeps {

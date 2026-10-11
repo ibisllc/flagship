@@ -58,6 +58,8 @@ import {
 import { createDemoServerRouter, hasAnyDemoCloudToken } from "./demoCloud.js";
 import { activeCaLeaseNotAfterMs } from "./caTrustChainLoader.js";
 import { notifyCaLeaseViaGithubIssue } from "./caLeaseGithubNotifier.js";
+import { runAdapterPublish } from "./adapterPublish.js";
+import type { AdapterBucketLike } from "./adapterIndex.js";
 
 /** Scope of one row that the dump emits. */
 export type DumpRow =
@@ -106,6 +108,11 @@ export interface ScheduledEnv {
   GITHUB_ISSUES_TOKEN?: string;
   /** "owner/name". Defaults to "ibisllc/flagship" when unset. */
   GITHUB_ISSUES_REPO?: string;
+  /** Repo adapter queue (adapterIndex.ts) and its daily public publish
+   *  (adapterPublish.ts). Publish no-ops unless the token AND repo are set. */
+  ADAPTERS_BUCKET?: AdapterBucketLike;
+  ADAPTERS_GITHUB_TOKEN?: string;
+  ADAPTERS_REPO?: string;
 }
 
 /**
@@ -371,6 +378,15 @@ export async function scheduled(
         console.error("[ca-lease] cron pass failed", e);
       }),
     );
+    // Repo adapters: once a day (the 00:00 UTC run), publish the queue to the
+    // public index repo in one commit. A failure leaves the queue for tomorrow.
+    if (now.getUTCHours() === 0) {
+      ctx.waitUntil(
+        runAdapterPublish(env, now).catch((e) => {
+          console.error("[adapters] publish failed", (e as Error).message);
+        }),
+      );
+    }
     return;
   }
   if (controller.cron === "*/10 * * * *") {

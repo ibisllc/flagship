@@ -55,7 +55,7 @@ binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/*"]
 
-# --- R2: three test buckets (`-gym` suffix), mirroring prod's three -----------
+# --- R2: four test buckets (`-gym` suffix), mirroring prod's four ------------
 # Create once (see the runbook): wrangler r2 bucket create flagship-iso-gym, etc.
 [[r2_buckets]]
 binding = "ISO_BUCKET"
@@ -71,6 +71,12 @@ bucket_name = "flagship-iso-temp-gym"
 [[r2_buckets]]
 binding = "BACKUPS_BUCKET"
 bucket_name = "flagship-backups-gym"
+
+# Repo adapter queue. No ADAPTERS_REPO here on purpose: the gym must never
+# publish to the public index, so its queue only ever fills.
+[[r2_buckets]]
+binding = "ADAPTERS_BUCKET"
+bucket_name = "flagship-adapters-gym"
 
 # Cron triggers — same cadence/handlers as prod (D1→R2 backup + CT scan; the
 # demo-user reaper + provisioning poller). The reaper no-ops without HCLOUD_TOKEN,

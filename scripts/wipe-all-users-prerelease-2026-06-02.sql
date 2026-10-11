@@ -28,6 +28,10 @@
 -- refill via DoH), not user data. schema_version is PRESERVED (the migration
 -- ledger the predeploy drift gate reads). 0082 only adds columns to
 -- server_transfers (already listed).
+-- Re-audited 2026-10-11 through 0085: repo_adapters + adapter_blocklist (0085)
+-- are PRESERVED. The adapter queue is anonymous (no account, server or IP in
+-- it) and mirrors a public repo, so it is not user data; the blocklist records
+-- repo owners' opt-outs, and wiping it would republish their repos.
 --
 -- ⚠️ DO NOT run this file via `wrangler d1 execute --file`. Prod D1's schema
 -- DRIFTS from the repo (migrations are applied by hand; e.g. nfc_rendezvous/0040

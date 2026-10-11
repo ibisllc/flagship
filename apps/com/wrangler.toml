@@ -137,6 +137,15 @@ bucket_name = "flagship-iso-temp"
 binding = "BACKUPS_BUCKET"
 bucket_name = "flagship-backups"
 
+# Repo adapter queue (src/adapterIndex.ts): anonymous submitted
+# flagship.app.json files waiting for the daily publish to the public repo
+# ADAPTERS_REPO (src/adapterPublish.ts), keyed pending/<sha256>.json and deleted
+# once published. Private (no public dev-url). Provision once:
+#   npx wrangler r2 bucket create flagship-adapters
+[[r2_buckets]]
+binding = "ADAPTERS_BUCKET"
+bucket_name = "flagship-adapters"
+
 # Cron triggers.
 #  * `0 */6 * * *` — D1 → R2 backup (gzipped JSONL). First run of each
 #    calendar month (UTC) also writes a monthly snapshot kept forever.
@@ -251,6 +260,11 @@ CONTROL_APEX = "flagshipserver.com"
 # set to anything other than "1"/"true") to re-arm the pre-launch gate — see
 # the SITE_PUBLIC handling in route.ts. Non-secret, so it lives in [vars].
 SITE_PUBLIC = "1"
+# Public repo the daily cron publishes the repo adapter index to (boxes read it
+# from raw.githubusercontent.com). Needs the ADAPTERS_GITHUB_TOKEN secret, a
+# fine-grained PAT with contents:write on this repo only; unset ⇒ the queue
+# just waits. Optional ADAPTER_REVIEW_ANTHROPIC_KEY adds an AI review.
+ADAPTERS_REPO = "ibisllc/flagship-adapters"
 # Fly's TLS-term endpoint (port 8443). The flagship.services apex itself
 # runs SNI passthrough on :443, so https://flagship.services/api/* will
 # always 525. The Worker proxies any /api/* path it doesn't handle to

@@ -88,7 +88,7 @@
   <section class="page-hero">
     <h1>Privacy policy.</h1>
     <p class="lede">Flagship is built so we can't read your data. This page is the formal version of that promise — what we collect, what we don't, why, and how to ask for it back.</p>
-    <div class="meta">Last updated: 2026-10-10 · Effective: 2026-10-10</div>
+    <div class="meta">Last updated: 2026-10-11 · Effective: 2026-10-11</div>
   </section>
 
   <div class="summary-card">
@@ -103,6 +103,7 @@
           <li>A <span class="yes">sealed LUKS blob</span> (we can't open it)</li>
           <li><span class="yes">Push tokens</span>, if you opt into push</li>
           <li><span class="yes">Billing data</span>, if you pay us</li>
+          <li>Anonymous <span class="yes">repo adaptations</span> your server shares, which we publish</li>
         </ul>
       </div>
       <div>
@@ -173,7 +174,11 @@
         </tbody>
       </table>
 
-      <h3>2.6 What we explicitly don't collect</h3>
+      <h3 id="repo-adaptations">2.6 Repo adaptations (anonymous, public)</h3>
+      <p>When your Flagship server adapts a public open-source repo so it runs on Flagship, it shares the adaptation with us so the next person can install that repo without needing AI (<a href="/adapters">what a repo adapter is</a>). Adaptations are public: we publish them at <a href="https://github.com/ibisllc/flagship-adapters">github.com/ibisllc/flagship-adapters</a>, so anyone can see exactly what Flagship servers will apply. For each one we keep and publish the repo's address, the commit it was made against, the repo's license, the adaptation itself, the day it was published, and how many servers sent the identical file.</p>
+      <p>We never record who sent one: no account, server, IP address or user agent is attached or stored, and nothing in the operational logs in §2.5 is joined to it. Until it is published, an adaptation waits with us, with only the day it arrived; we publish in daily batches, dated to the day. We only keep adaptations of public repos under an open-source license, after checking them; when the optional automated review is on, the adaptation (never anything about you) is sent to Anthropic for that check. A repo owner can have their repo added to our public do-not-adapt list; see <a href="/adapters#opt-out">/adapters</a>.</p>
+
+      <h3>2.7 What we explicitly don't collect</h3>
       <ul>
         <li>The content of your TLS-encrypted traffic. <code>flagship.services</code> sees only encrypted bytes; the cert lives on your box.</li>
         <li>Files, photos, messages, or any application data stored on your Flagship server.</li>
@@ -189,13 +194,14 @@
       <table class="t">
         <thead><tr><th>Vendor</th><th>Used for</th><th>Region</th></tr></thead>
         <tbody>
-          <tr><td>Cloudflare</td><td>Worker, D1, R2 (sealed blobs + screenshots), DNS</td><td>Global edge</td></tr>
+          <tr><td>Cloudflare</td><td>Worker, D1, R2 (sealed blobs, screenshots, repo adaptations waiting to be published), DNS</td><td>Global edge</td></tr>
+          <tr><td>GitHub</td><td>The public repo of shared repo adaptations (no personal data)</td><td>US</td></tr>
           <tr><td>Fly.io</td><td>Stateless tunnel hub on <code>flagship.services</code></td><td>US/EU regions</td></tr>
           <tr><td>Stripe</td><td>Payments and subscriptions</td><td>US/EU</td></tr>
           <tr><td>Apple (APNs)</td><td>iOS push delivery</td><td>US</td></tr>
           <tr><td>Google (FCM)</td><td>Android push delivery</td><td>US</td></tr>
           <tr><td>Let's Encrypt (ISRG)</td><td>TLS certificate issuance</td><td>US</td></tr>
-          <tr><td>Anthropic, OpenAI, others</td><td>Only on the optional AI promo path; routed for one-shot key issuance, not proxied</td><td>US</td></tr>
+          <tr><td>Anthropic, OpenAI, others</td><td>Only on the optional AI promo path; routed for one-shot key issuance, not proxied. Anthropic also checks shared repo adaptations when that review is on (§2.6)</td><td>US</td></tr>
         </tbody>
       </table>
       <p>If you BYOK (bring your own key), prompts go directly from your daemon to the provider you chose. We are not a sub-processor in that flow.</p>
@@ -210,6 +216,7 @@
         <li><strong>Billing data</strong>: kept for 7 years for tax compliance after the last transaction.</li>
         <li><strong>Shipping addresses</strong>: kept until delivered, plus 90 days for return-window handling.</li>
         <li><strong>Logs</strong>: 30 days, then aggregated counters only.</li>
+        <li><strong>Repo adaptations</strong>: published, and kept public; our own copy of the file is deleted once it is published, usually within a day. Taken out of the index when the repo's owner asks; git history keeps earlier versions. They carry no personal data.</li>
       </ul>
     </section>
 
@@ -306,6 +313,7 @@
       <h4>Open</h4>
       <ul>
         <li><a href="/open-source.html">Open source</a></li>
+        <li><a href="/adapters.html">Repo adapters</a></li>
         <li><a href="/status/">Status</a></li>
         <li><a href="/docs/">Docs</a></li>
         <li><a href="/blog/">Blog</a></li>

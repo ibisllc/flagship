@@ -25,6 +25,12 @@
 
 import { tryControlPlane, tryBootHost } from "./controlPlaneRoutes.js";
 import {
+  handleAdapterIndex,
+  isAdapterIndexPath,
+  type AdapterBucketLike,
+  type WaitUntilLike,
+} from "./adapterIndex.js";
+import {
   recordRateLimited,
   recordUpgrade,
   readRecent as readRelayMetrics,
@@ -279,6 +285,12 @@ export interface RouteEnv {
    * wiring is in wrangler.toml.
    */
   BUILDER_RELAY?: BuildRelayNamespaceLike;
+  /** R2 bucket holding queued repo adapters until they are published (adapterIndex.ts). */
+  ADAPTERS_BUCKET?: AdapterBucketLike;
+  /** Optional Worker secret: enables the AI review of submitted adapters. */
+  ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
+  /** Shared secret gating /api/admin/* (see ControlPlaneEnv). */
+  FLAGSHIP_ADMIN_SECRET?: string;
 }
 
 export interface BuildRelayNamespaceLike {
@@ -423,7 +435,11 @@ function isWebappShellPath(pathname: string): boolean {
   return false;
 }
 
-export async function route(request: Request, env: RouteEnv): Promise<Response> {
+export async function route(
+  request: Request,
+  env: RouteEnv,
+  ctx?: WaitUntilLike,
+): Promise<Response> {
   const requestUrl = new URL(request.url);
 
   // Workerd (wrangler dev) replaces the Host header with the route's
@@ -477,12 +493,17 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
     return corsPreflight(request, env);
   }
 
-  const res = await routeImpl(request, env, url);
+  const res = await routeImpl(request, env, url, ctx);
   return applyCors(request, url, res, env);
 }
 
 /** Internal — the actual routing logic. `route` wraps this with CORS. */
-async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Response> {
+async function routeImpl(
+  request: Request,
+  env: RouteEnv,
+  url: URL,
+  ctx?: WaitUntilLike,
+): Promise<Response> {
   if (isRetiredApiPath(url.pathname)) {
     return jsonResponse({ error: "not found" }, 404);
   }
@@ -558,6 +579,13 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // not what the user's browser sees.
   if (url.pathname === STATUS_PROBE_PATH) {
     return statusProbe(env);
+  }
+
+  // The repo adapter index. Served before the rate limiter and the .services
+  // proxy: it takes no identity, and an unknown /api/adapters/* path must 404
+  // here rather than reach an upstream.
+  if (isAdapterIndexPath(url.pathname)) {
+    return handleAdapterIndex(request, env, ctx);
   }
 
   if (url.pathname === STATUS_RELAY_PATH) {

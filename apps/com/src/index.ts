@@ -17,8 +17,12 @@ export { BuilderRelaySession } from "./builderRelay.js";
  * hourly snapshots older than 30 days.
  */
 export default {
-  async fetch(request: Request, env: RouteEnv): Promise<Response> {
-    return route(request, env);
+  async fetch(
+    request: Request,
+    env: RouteEnv,
+    ctx: { waitUntil(p: Promise<unknown>): void },
+  ): Promise<Response> {
+    return route(request, env, ctx);
   },
   async scheduled(
     controller: { scheduledTime: number; cron: string },
