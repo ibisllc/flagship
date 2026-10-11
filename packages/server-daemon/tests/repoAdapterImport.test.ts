@@ -200,24 +200,55 @@ describe("the adapter index", () => {
     expect(r.fit).toBe(false);
   });
 
-  it("talks to flagshipserver.com with nothing but the content type", async () => {
-    const calls: Array<{ url: string; headers: Record<string, string>; body: string }> = [];
-    const idx = httpAdapterIndex("https://flagshipserver.com/", async (url, init) => {
-      calls.push({ url, headers: init.headers, body: init.body });
-      return { ok: true, json: async () => ({ adapters: [{ base: COMMIT, file: "{}" }, { junk: 1 }] }) };
-    });
-    expect(await idx.lookup(REPO, COMMIT)).toEqual([{ base: COMMIT, file: "{}" }]);
+  it("reads the public store directly, checks each file against its hash, and sends nothing identifying", async () => {
+    const { createHash } = await import("node:crypto");
+    const sha = (t: string) => createHash("sha256").update(t).digest("hex");
+    const older = buildAdapterFile(MANIFEST, deriveRepoAdapter(ORIGINAL, ADAPTED, { repo: REPO, base: "b".repeat(40) }));
+    const store: Record<string, string> = {
+      "https://store.test/adapters/github.com/me/hello/index.json": JSON.stringify({
+        repo: REPO,
+        adapters: [
+          { base: "b".repeat(40), file: `${sha(older)}.json` },
+          { base: COMMIT, file: `${sha(ADAPTER_FILE)}.json` },
+          { base: COMMIT, file: `${"0".repeat(64)}.json` },
+        ],
+      }),
+      [`https://store.test/adapters/github.com/me/hello/${sha(older)}.json`]: older,
+      [`https://store.test/adapters/github.com/me/hello/${sha(ADAPTER_FILE)}.json`]: ADAPTER_FILE,
+      [`https://store.test/adapters/github.com/me/hello/${"0".repeat(64)}.json`]: "tampered",
+      "https://store.test/do-not-adapt.txt": "https://github.com/someone/else\n",
+    };
+    const calls: Array<{ url: string; method: string; headers?: Record<string, string>; body?: string }> = [];
+    const fetcher = async (url: string, init: { method: string; headers?: Record<string, string>; body?: string }) => {
+      calls.push({ url, method: init.method, ...(init.headers ? { headers: init.headers } : {}), ...(init.body ? { body: init.body } : {}) });
+      const body = store[url];
+      return { ok: body != null || init.method === "POST", text: async () => body ?? "" };
+    };
+    const idx = httpAdapterIndex({ store: "https://store.test/", submitTo: "https://flagshipserver.com/" }, fetcher);
+    const found = await idx.lookup(REPO, COMMIT);
+    expect(found).toEqual([{ base: COMMIT, file: ADAPTER_FILE }, { base: "b".repeat(40), file: older }]);
+    for (const c of calls) expect(c.headers).toBeUndefined();
+
+    store["https://store.test/do-not-adapt.txt"] = `${REPO}\n`;
+    expect(await idx.lookup(REPO, COMMIT)).toEqual([]);
+    expect(await idx.lookup("https://github.com/me/unknown", COMMIT)).toEqual([]);
+
+    calls.length = 0;
     await idx.submit({ repo: REPO, base: COMMIT, licensePath: "LICENSE", file: "{}" });
-    expect(calls.map((c) => c.url)).toEqual([
-      "https://flagshipserver.com/api/adapters/lookup",
-      "https://flagshipserver.com/api/adapters/submit",
+    expect(calls).toEqual([
+      {
+        url: "https://flagshipserver.com/api/adapters/submit",
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ repo: REPO, base: COMMIT, licensePath: "LICENSE", file: "{}" }),
+      },
     ]);
-    for (const c of calls) expect(c.headers).toEqual({ "content-type": "application/json" });
-    const failing = httpAdapterIndex("https://x", async () => {
+    const offline = httpAdapterIndex({ submitTo: "https://x" }, async () => {
       throw new Error("offline");
     });
-    expect(await failing.lookup(REPO, COMMIT)).toEqual([]);
+    expect(await offline.lookup(REPO, COMMIT)).toEqual([]);
   });
+
 });
 
 describe("non-text files and symlinks", () => {

@@ -2226,11 +2226,16 @@ async function wireRuntimeSurfaces(deps: {
       editableService,
       deployArtifact: artifactDeployer,
       names: () => ({ registry: nameHolders, hostUsername: username, installed: runtime.servicePlatform ?? null }),
-      // Anonymous: see adapterIndex.ts. FLAGSHIP_ADAPTER_INDEX=off keeps
-      // every import and adapt on the box.
+      // Anonymous, and read from the public store: see adapterIndex.ts.
+      // FLAGSHIP_ADAPTER_INDEX=off keeps every import and adapt on the box.
       ...(process.env.FLAGSHIP_ADAPTER_INDEX === "off"
         ? {}
-        : { adapterIndex: httpAdapterIndex(env.controlPlaneBaseUrl ?? "https://flagshipserver.com") }),
+        : {
+            adapterIndex: httpAdapterIndex({
+              ...(process.env.FLAGSHIP_ADAPTER_STORE ? { store: process.env.FLAGSHIP_ADAPTER_STORE } : {}),
+              submitTo: env.controlPlaneBaseUrl ?? "https://flagshipserver.com",
+            }),
+          }),
       serverFqdn: env.serverFqdn,
       mcpBaseUrl: `https://${env.serverFqdn}`,
       // AI "adapt" pass for non-fit git imports — LIVE. One non-streaming
