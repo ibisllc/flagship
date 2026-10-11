@@ -14,7 +14,8 @@
  */
 
 import type { D1Database } from "@flagship/storage";
-import { utcDay, type AdapterBucketLike } from "./adapterIndex.js";
+import { splitAdapterFile } from "@flagship/protocol";
+import { aiReview, utcDay, type AdapterBucketLike } from "./adapterIndex.js";
 
 export interface AdapterPublishEnv {
   DB?: D1Database;
@@ -23,16 +24,24 @@ export interface AdapterPublishEnv {
   ADAPTERS_GITHUB_TOKEN?: string;
   /** "owner/name" of the public index repo. Unset ⇒ no publish. */
   ADAPTERS_REPO?: string;
+  /**
+   * Unset: adapters are published after the rule checks alone. Once set,
+   * each publish also reviews what went out without it, and withdraws what
+   * fails.
+   */
+  ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
 }
 
 export type PublishResult =
   | { published: false; reason: string }
-  | { published: true; commit: string; added: number; confirmed: number; removedRepos: number };
+  | { published: true; commit: string; added: number; confirmed: number; removedRepos: number; withdrawn: number };
 
 // One R2 read and one blob per new file, inside the subrequest budget the
 // scheduled invocation shares with the backup and the other 6-hourly tasks.
 // Anything past this waits for the next day's publish.
 export const MAX_NEW_PER_PUBLISH = 100;
+// AI reviews per publish, new and catch-up together, for the same budget.
+export const MAX_REVIEWS_PER_PUBLISH = 40;
 
 const GITHUB_API = "https://api.github.com";
 const AUTHOR_NAME = "Flagship adapters";
@@ -44,6 +53,7 @@ interface Row {
   base: string;
   license: string;
   r2_key: string | null;
+  review: string;
   confirmations: number;
   pending_confirmations: number;
   published_day: string | null;
@@ -79,7 +89,22 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
       .bind()
       .all<{ repo: string; state: string }>()
   ).results;
-  if (!fresh.length && !bumped.length && !listChanges.length) return { published: false, reason: "nothing to publish" };
+  const reviewKey = env.ADAPTER_REVIEW_ANTHROPIC_KEY;
+  // Published before there was a key to review them with: review them now.
+  const unreviewed = reviewKey
+    ? (
+        await db
+          .prepare(
+            `SELECT * FROM repo_adapters WHERE published_day IS NOT NULL AND review = 'rules'
+             ORDER BY published_day, file_sha256 LIMIT ${MAX_REVIEWS_PER_PUBLISH}`,
+          )
+          .bind()
+          .all<Row>()
+      ).results
+    : [];
+  if (!fresh.length && !bumped.length && !listChanges.length && !unreviewed.length) {
+    return { published: false, reason: "nothing to publish" };
+  }
 
   const blocked = new Set(
     (
@@ -110,12 +135,51 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
     if (obj) bodies.set(row.file_sha256, await obj.text());
     else dropped.push(row);
   }
-  const added = fresh.filter((r) => bodies.has(r.file_sha256));
+  // With a key, nothing goes out unreviewed, and what went out before the
+  // key existed is reviewed too; a failure is dropped or withdrawn.
+  let reviewBudget = MAX_REVIEWS_PER_PUBLISH;
+  const deferred = new Set<string>();
+  const reviewedNow: string[] = [];
+  const withdrawn: Row[] = [];
+  const passes = async (row: Row, body: string): Promise<boolean> => {
+    const split = splitAdapterFile(body);
+    if (!split.ok || !split.adapter) return false;
+    return aiReview(reviewKey!, row.repo, split.manifestJson, split.adapter);
+  };
+  if (reviewKey) {
+    for (const row of fresh) {
+      const body = bodies.get(row.file_sha256);
+      if (!body || row.review !== "rules") continue;
+      if (reviewBudget <= 0) {
+        deferred.add(row.file_sha256);
+        continue;
+      }
+      reviewBudget--;
+      if (await passes(row, body)) reviewedNow.push(row.file_sha256);
+      else {
+        bodies.delete(row.file_sha256);
+        dropped.push(row);
+      }
+    }
+    for (const row of unreviewed) {
+      if (reviewBudget <= 0 || isBlocked(row.repo)) break;
+      const res = await fetch(`https://raw.githubusercontent.com/${repoName}/main/${repoDir(row.repo)}/${row.file_sha256}.json`, {
+        redirect: "manual",
+      });
+      if (!res.ok) continue;
+      reviewBudget--;
+      if (await passes(row, await res.text())) reviewedNow.push(row.file_sha256);
+      else withdrawn.push(row);
+    }
+  }
+  const added = fresh.filter((r) => bodies.has(r.file_sha256) && !deferred.has(r.file_sha256));
   const confirmed = bumped.filter((r) => !isBlocked(r.repo));
+  const gone = new Set(withdrawn.map((r) => r.file_sha256));
 
   // Each touched repo's index.json, rendered from every published row plus
   // this batch, with the counts this commit makes true.
-  const touched = new Set([...added, ...confirmed].map((r) => r.repo));
+  const touched = new Set([...added, ...confirmed, ...withdrawn].map((r) => r.repo));
+  const emptied: string[] = [];
   const indexes = new Map<string, string>();
   for (const repo of touched) {
     const all = (
@@ -125,7 +189,9 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
         .all<Row>()
     ).results;
     const entries = [
-      ...all.map((r) => ({ row: r, added: r.published_day!, confirmations: r.confirmations + r.pending_confirmations })),
+      ...all
+        .filter((r) => !gone.has(r.file_sha256))
+        .map((r) => ({ row: r, added: r.published_day!, confirmations: r.confirmations + r.pending_confirmations })),
       ...added.filter((r) => r.repo === repo).map((r) => ({ row: r, added: day, confirmations: r.pending_confirmations })),
     ].sort(
       (a, b) =>
@@ -133,6 +199,10 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
         b.confirmations - a.confirmations ||
         a.row.file_sha256.localeCompare(b.row.file_sha256),
     );
+    if (entries.length === 0) {
+      emptied.push(repo);
+      continue;
+    }
     indexes.set(
       repo,
       JSON.stringify(
@@ -178,6 +248,12 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
     removedDirs.add(repoDir(row.repo));
   }
   for (const dir of removedDirs) tree.push({ path: `${dir}/index.json`, mode: "100644", type: "blob", sha: null });
+  for (const row of withdrawn) {
+    tree.push({ path: `${repoDir(row.repo)}/${row.file_sha256}.json`, mode: "100644", type: "blob", sha: null });
+  }
+  for (const repo of emptied) {
+    if (!removedDirs.has(repoDir(repo))) tree.push({ path: `${repoDir(repo)}/index.json`, mode: "100644", type: "blob", sha: null });
+  }
   tree.push({ path: "do-not-adapt.txt", mode: "100644", type: "blob", content: doNotAdapt });
   if (!hasReadme) tree.push({ path: "README.md", mode: "100644", type: "blob", content: README });
 
@@ -188,7 +264,7 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
   if (newTree.sha !== headCommit.tree.sha) {
     const stamp = { name: AUTHOR_NAME, email: AUTHOR_EMAIL, date: `${day}T00:00:00Z` };
     const commit = (await gh("POST", "/git/commits", {
-      message: `Adapters for ${day} (${added.length} new, ${confirmed.length} confirmed)`,
+      message: `Adapters for ${day} (${added.length} new, ${confirmed.length} confirmed${withdrawn.length ? `, ${withdrawn.length} withdrawn after review` : ""})`,
       tree: newTree.sha,
       parents: [head.object.sha],
       author: stamp,
@@ -217,7 +293,10 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
         )
         .bind(r.pending_confirmations, r.pending_confirmations, r.file_sha256),
     ),
-    ...[...removed, ...dropped].map((r) => db.prepare("DELETE FROM repo_adapters WHERE file_sha256 = ?").bind(r.file_sha256)),
+    ...[...removed, ...dropped, ...withdrawn].map((r) =>
+      db.prepare("DELETE FROM repo_adapters WHERE file_sha256 = ?").bind(r.file_sha256),
+    ),
+    ...reviewedNow.map((sha) => db.prepare("UPDATE repo_adapters SET review = 'rules+ai' WHERE file_sha256 = ?").bind(sha)),
     ...listChanges.map((c) =>
       c.state === "unlisting"
         ? db.prepare("DELETE FROM adapter_blocklist WHERE repo = ? AND state = 'unlisting'").bind(c.repo)
@@ -225,10 +304,17 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
     ),
   ];
   if (stmts.length) await db.batch(stmts);
-  const keys = added.flatMap((r) => (r.r2_key ? [r.r2_key] : []));
+  const keys = [...added, ...dropped.filter((r) => fresh.includes(r))].flatMap((r) => (r.r2_key ? [r.r2_key] : []));
   if (keys.length) await bucket.delete(keys);
 
-  return { published: true, commit: commitSha, added: added.length, confirmed: confirmed.length, removedRepos: removedDirs.size };
+  return {
+    published: true,
+    commit: commitSha,
+    added: added.length,
+    confirmed: confirmed.length,
+    removedRepos: removedDirs.size,
+    withdrawn: withdrawn.length,
+  };
 }
 
 function github(token: string, repoName: string) {

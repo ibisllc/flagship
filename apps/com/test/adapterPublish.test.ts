@@ -375,3 +375,101 @@ describe("scheduled()", () => {
     expect(gh.files()[`adapters/github.com/me/notes/${sha(1)}.json`]).toBeDefined();
   });
 });
+
+describe("review once a key exists", () => {
+  const MANIFEST = { schema_version: 1, name: "notes", version: "0.1.0", description: "notes", runtime: { image: "x", port: 8080 } };
+  const adapterFile = (marker: string) =>
+    JSON.stringify({
+      ...MANIFEST,
+      adapter: { version: 1, source: { repo: NOTES, base: BASE_A }, add: { Dockerfile: ["FROM node:20", `# ${marker}`, ""] } },
+    });
+  const reviewed: string[] = [];
+
+  beforeEach(() => {
+    reviewed.length = 0;
+    globalThis.fetch = vi.fn(async (input: Request | string | URL, init?: RequestInit) => {
+      const req = input instanceof Request ? input : new Request(input.toString(), init);
+      if (req.url.startsWith(API)) return gh.handle(req);
+      if (req.url.startsWith(`https://raw.githubusercontent.com/${REPO_NAME}/main/`)) {
+        const body = gh.files()[req.url.slice(`https://raw.githubusercontent.com/${REPO_NAME}/main/`.length)];
+        return body == null ? new Response("404", { status: 404 }) : new Response(body);
+      }
+      if (req.url === "https://api.anthropic.com/v1/messages") {
+        const text = JSON.stringify(await req.json());
+        reviewed.push(text);
+        const ok = !text.includes("evil");
+        return new Response(
+          JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({ ok, reason: "x" }) }] }),
+        );
+      }
+      return new Response("unexpected", { status: 500 });
+    }) as typeof globalThis.fetch;
+  });
+
+  async function queueFile(n: number, text: string) {
+    const key = `pending/${sha(n)}.json`;
+    bucket.objects.set(key, text);
+    await db
+      .prepare(
+        `INSERT INTO repo_adapters (file_sha256, repo, base, license, review, bytes, r2_key, confirmations, pending_confirmations, created_day)
+         VALUES (?, ?, ?, 'MIT', 'rules', 10, ?, 0, 1, '2026-10-11')`,
+      )
+      .bind(sha(n), NOTES, BASE_A, key)
+      .run();
+  }
+
+  it("without a key, everything that passed the rules goes out unreviewed", async () => {
+    await queueFile(1, adapterFile("evil"));
+    expect(await runAdapterPublish(env, NOW)).toMatchObject({ published: true, added: 1 });
+    expect(reviewed).toEqual([]);
+    expect(await all("SELECT review FROM repo_adapters")).toEqual([{ review: "rules" }]);
+  });
+
+  it("once a key is set, reviews what went out before it and withdraws what fails", async () => {
+    await queueFile(1, adapterFile("fine"));
+    await queueFile(2, adapterFile("evil"));
+    await queueFile(3, adapterFile("also fine"));
+    await runAdapterPublish(env, NOW);
+    expect(Object.keys(gh.files()).filter((p) => p.endsWith(".json"))).toHaveLength(4);
+
+    const later = new Date(Date.UTC(2026, 9, 13, 0, 0, 1));
+    const r = await runAdapterPublish({ ...env, ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" }, later);
+    expect(r).toMatchObject({ published: true, added: 0, withdrawn: 1 });
+    expect(reviewed).toHaveLength(3);
+    const files = gh.files();
+    expect(files[`adapters/github.com/me/notes/${sha(2)}.json`]).toBeUndefined();
+    expect(files[`adapters/github.com/me/notes/${sha(1)}.json`]).toBeDefined();
+    const index = JSON.parse(files["adapters/github.com/me/notes/index.json"]!);
+    expect(index.adapters.map((a: { file: string }) => a.file).sort()).toEqual([`${sha(1)}.json`, `${sha(3)}.json`]);
+    expect(gh.headCommit().message).toBe("Adapters for 2026-10-13 (0 new, 0 confirmed, 1 withdrawn after review)");
+    expect(await all("SELECT file_sha256, review FROM repo_adapters ORDER BY file_sha256")).toEqual([
+      { file_sha256: sha(1), review: "rules+ai" },
+      { file_sha256: sha(3), review: "rules+ai" },
+    ]);
+
+    // Reviewed once: the next run has nothing to do.
+    reviewed.length = 0;
+    expect(await runAdapterPublish({ ...env, ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" }, later)).toEqual({
+      published: false,
+      reason: "nothing to publish",
+    });
+    expect(reviewed).toEqual([]);
+  });
+
+  it("withdrawing a repo's only adapter removes its index too", async () => {
+    await queueFile(1, adapterFile("evil"));
+    await runAdapterPublish(env, NOW);
+    await runAdapterPublish({ ...env, ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" }, new Date(Date.UTC(2026, 9, 13, 0, 0, 1)));
+    expect(Object.keys(gh.files()).some((p) => p.startsWith("adapters/github.com/me/notes/"))).toBe(false);
+  });
+
+  it("with a key, a queued adapter that fails review is dropped before it is ever published", async () => {
+    await queueFile(1, adapterFile("evil"));
+    await queueFile(2, adapterFile("fine"));
+    const r = await runAdapterPublish({ ...env, ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" }, NOW);
+    expect(r).toMatchObject({ published: true, added: 1, withdrawn: 0 });
+    expect(gh.files()[`adapters/github.com/me/notes/${sha(1)}.json`]).toBeUndefined();
+    expect(await all("SELECT file_sha256, review FROM repo_adapters")).toEqual([{ file_sha256: sha(2), review: "rules+ai" }]);
+    expect(bucket.objects.size).toBe(0);
+  });
+});

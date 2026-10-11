@@ -407,7 +407,8 @@ const REVIEW_SYSTEM = [
   'Answer only with JSON: {"ok": boolean, "reason": string}.',
 ].join(" ");
 
-async function aiReview(apiKey: string, repo: string, manifestJson: string, adapter: RepoAdapter): Promise<boolean> {
+/** Whether a cheap model judges the adaptation reasonable. Fails closed. */
+export async function aiReview(apiKey: string, repo: string, manifestJson: string, adapter: RepoAdapter): Promise<boolean> {
   let payload = `Repository: ${repo}\n\nManifest:\n${manifestJson}\n\nAdapter:\n${JSON.stringify(adapter, null, 1)}`;
   let note = "";
   if (payload.length > REVIEW_MAX_CHARS) {
