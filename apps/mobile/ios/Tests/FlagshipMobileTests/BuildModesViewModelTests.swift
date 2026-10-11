@@ -85,14 +85,102 @@ final class BuildModesViewModelTests: XCTestCase {
     func test_gitVM_adapt_success_setsAdaptedPhase() async {
         let client = makeClient()
         let vm = BuildGitViewModel(client: client)
+        vm.pollInterval = .milliseconds(1)
         vm.gitUrl = "https://github.com/me/random"
         await vm.checkRepo()
         await vm.adapt()
+        XCTAssertEqual(client.buildAdaptStartCalls.first?.req.background, true)
         guard case .adapted(let n) = vm.phase else {
             return XCTFail("expected adapted, got \(vm.phase)")
         }
         XCTAssertEqual(n, 16)
         XCTAssertFalse(vm.shouldFallBackToScratch)
+    }
+
+    func test_gitVM_sendsTheTypedNameAsALabel() async {
+        let client = makeClient()
+        let vm = BuildGitViewModel(client: client)
+        vm.gitUrl = "https://github.com/me/random"
+        vm.name = "My App"
+        await vm.checkRepo()
+        XCTAssertEqual(client.buildGitCalls.last?.name, "myapp")
+        XCTAssertEqual(vm.assignedName, "myapp")
+
+        vm.name = ""
+        client.buildGitFixture = BuildGitResponse(buildId: "b", fit: false, reason: "no flagship.app.json", fileCount: 3, name: "random-dev")
+        await vm.checkRepo()
+        XCTAssertNil(client.buildGitCalls.last?.name)
+        XCTAssertEqual(vm.assignedName, "random-dev")
+    }
+
+    func test_gitVM_takenName_raisesTheConflict() async {
+        let client = makeClient()
+        client.buildGitError = ScreensClientError.http(
+            status: 409, message: #"{"error":"A build session already uses the name \"notes\".","ok":false,"kind":"session","sessionId":"s1","message":"x"}"#)
+        let vm = BuildGitViewModel(client: client)
+        vm.gitUrl = "https://github.com/me/notes"
+        vm.name = "notes"
+        await vm.checkRepo()
+        XCTAssertEqual(vm.conflict?.kind, "session")
+        XCTAssertEqual(vm.conflict?.sessionId, "s1")
+        XCTAssertNil(vm.buildId)
+        guard case .idle = vm.phase else { return XCTFail("expected idle, got \(vm.phase)") }
+    }
+
+    func test_gitVM_cloneFailure_showsTheBoxReason() async {
+        let client = makeClient()
+        client.buildGitError = ScreensClientError.http(
+            status: 422, message: #"{"error":"Couldn't clone this repo. Check the address, and that the repo is public."}"#)
+        let vm = BuildGitViewModel(client: client)
+        vm.gitUrl = "https://github.com/me/missing"
+        await vm.checkRepo()
+        XCTAssertEqual(vm.errorMessage, "Couldn't clone this repo. Check the address, and that the repo is public.")
+    }
+
+    func test_gitVM_adaptThatDeployed_showsItInstalled() async {
+        let client = makeClient()
+        client.buildAdaptStatusFixture = BuildAdaptStatus(status: "done", fileCount: 8, deployed: true, deployedUrl: "https://hello.home.me.flagship.services")
+        let vm = BuildGitViewModel(client: client)
+        vm.pollInterval = .milliseconds(1)
+        vm.gitUrl = "https://github.com/me/hello"
+        await vm.checkRepo()
+        await vm.adapt()
+        XCTAssertEqual(vm.phase, .installed(url: "https://hello.home.me.flagship.services"))
+    }
+
+    func test_gitVM_failedAdapt_restoresTheVerdictWithTheReason() async {
+        let client = makeClient()
+        client.buildAdaptStatusFixture = BuildAdaptStatus(status: "failed", reason: "adapt model call failed: bad key")
+        let vm = BuildGitViewModel(client: client)
+        vm.pollInterval = .milliseconds(1)
+        vm.gitUrl = "https://github.com/me/hello"
+        await vm.checkRepo()
+        await vm.adapt()
+        XCTAssertEqual(vm.errorMessage, "adapt model call failed: bad key")
+        guard case .verdict = vm.phase else { return XCTFail("expected verdict, got \(vm.phase)") }
+    }
+
+    func test_notReadyCard_saysItPlainly() {
+        let missing = BuildGitResponse(buildId: "b", fit: false, reason: "no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it", fileCount: 3)
+        XCTAssertEqual(BuildGitScreen.notReadyText(missing), "This repo has no flagship.app.json and is not yet adapted to run on Flagship.")
+        let broken = BuildGitResponse(buildId: "b", fit: false, reason: "flagship.app.json present but invalid: name", fileCount: 3)
+        XCTAssertEqual(BuildGitScreen.notReadyText(broken), broken.reason)
+    }
+
+    func test_journalVM_openBuilds_areSeparateAndDiscardable() async {
+        let client = makeClient()
+        client.buildSessionsFixture = BuildSessionsResponse(builds: [
+            BuildSummary(buildId: "g1", mode: "git", name: "notes", startedAt: 1, lastAt: 2, entryCount: 3, lastKind: "fitness-check", open: true),
+            BuildSummary(buildId: "g0", mode: "git", name: "old", startedAt: 1, lastAt: 2, entryCount: 5, lastKind: "deployed"),
+        ])
+        let vm = BuildJournalViewModel(client: client)
+        await vm.loadList()
+        guard case .loaded(let builds) = vm.list else { return XCTFail("not loaded") }
+        XCTAssertEqual(vm.openBuilds(builds).map(\.buildId), ["g1"])
+        XCTAssertEqual(vm.endedBuilds(builds).map(\.buildId), ["g0"])
+        await vm.discard(build: builds[0])
+        XCTAssertEqual(client.buildDiscardCalls, ["g1"])
+        XCTAssertNil(vm.discardError)
     }
 
     func test_gitVM_adapt_503_flagsScratchFallback() async {

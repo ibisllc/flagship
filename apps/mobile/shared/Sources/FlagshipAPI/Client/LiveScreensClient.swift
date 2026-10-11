@@ -336,8 +336,23 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func buildEnvRequests(buildId: String) async throws -> BuildEnvRequestsResponse {
         try await request("/api/build/sessions/\(esc(buildId))/env-requests")
     }
+    public func buildAdaptStart(buildId: String, _ req: BuildAdaptRequest) async throws -> BuildAdaptReply {
+        // An older box ignores `background` and answers when the AI is done.
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/build/sessions/\(esc(buildId))/adapt", method: "POST", body: body,
+                                 timeout: 30 * 60)
+    }
+    public func buildState(buildId: String) async throws -> BuildStateResponse {
+        try await request("/api/build/sessions/\(esc(buildId))")
+    }
+    public func buildDiscard(buildId: String) async throws {
+        struct Ok: Decodable { let ok: Bool }
+        let _: Ok = try await request("/api/build/sessions/\(esc(buildId))/discard", method: "POST", body: Data("{}".utf8))
+    }
     public func buildDeploy(buildId: String) async throws -> BuildDeployResponse {
-        try await request("/api/build/sessions/\(esc(buildId))/deploy", method: "POST", body: Data("{}".utf8))
+        // Answers once `docker build` and the install finish: minutes.
+        try await request("/api/build/sessions/\(esc(buildId))/deploy", method: "POST", body: Data("{}".utf8),
+                          timeout: 15 * 60)
     }
     /// The daemon's live vibe-code sessions (legacy `/api/llm/sessions`, same
     /// paired-session auth as the deploy trigger).

@@ -1,5 +1,6 @@
 import SwiftUI
 import FlagshipAPI
+import FlagshipCore
 
 // Build-a-service multi-mode screens. The create-a-service entry opens the
 // chooser, which fans into:
@@ -203,7 +204,13 @@ private struct BuildSourceTile: View {
 
 public struct BuildGitScreen: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
+    @Environment(\.screensClient) private var client
     @Bindable var vm: BuildGitViewModel
+    @State private var nameCheck: VibeCodeNameCheck?
+    @State private var checkedSlug = ""
+    /// A taken name sends the owner to the build that holds it.
+    var onOpenSessions: () -> Void = {}
     /// Open this build's journal timeline.
     var onViewJournal: (String) -> Void = { _ in }
     /// 503 fall-back hook: the box has no model wired → start from scratch.
@@ -217,30 +224,55 @@ public struct BuildGitScreen: View {
         vm: BuildGitViewModel,
         onViewJournal: @escaping (String) -> Void = { _ in },
         onFallBackToScratch: @escaping () -> Void = {},
-        onBuildWithAI: @escaping () -> Void = {}
+        onBuildWithAI: @escaping () -> Void = {},
+        onOpenSessions: @escaping () -> Void = {}
     ) {
         self.vm = vm
         self.onViewJournal = onViewJournal
         self.onFallBackToScratch = onFallBackToScratch
         self.onBuildWithAI = onBuildWithAI
+        self.onOpenSessions = onOpenSessions
     }
+
+    private var server: String {
+        let user = app.currentUser ?? "you"
+        return app.sessionPod?.fqdn ?? app.leaderPod?.fqdn ?? "\(user).flagship.services"
+    }
+    private var currentCheck: VibeCodeNameCheck? { checkedSlug == vm.slug ? nameCheck : nil }
+    private var nameRefused: Bool { currentCheck.map { !$0.ok } ?? false }
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
         FSScreen {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
-                    Spacer().frame(height: FS.space.s6)
-                    Text("Import from a Git repo").font(FS.font.h2())
-                    Text("Paste a repo URL. We clone it on your box and check whether it's ready to run as a Flagship service.")
-                        .font(FS.font.body()).foregroundColor(c.textMuted)
+                    Spacer().frame(height: FS.space.s4)
 
                     FSField(value: $vm.gitUrl, label: "Repository URL",
                             placeholder: "https://github.com/you/app", keyboard: .URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
                     FSField(value: $vm.ref, label: "Branch or tag (optional)",
                             placeholder: "main")
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
 
-                    FSPrimaryButton(checkLabel, enabled: vm.canCheck && !checking, block: true) {
+                    VStack(alignment: .leading, spacing: FS.space.s2) {
+                        FSField(value: $vm.name, label: "Name (optional)",
+                                placeholder: "From the repo's name")
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                            .accessibilityIdentifier("build-git-name")
+                        (Text("https://").foregroundColor(c.textMuted)
+                         + Text(addressLabel).foregroundColor(c.primary).fontWeight(.semibold)
+                         + Text(".\(server)").foregroundColor(c.textMuted))
+                            .font(FS.font.bodySm())
+                            .lineLimit(2)
+                            .accessibilityIdentifier("build-git-address")
+                        nameStatus(c: c)
+                    }
+
+                    FSPrimaryButton(checkLabel, enabled: vm.canCheck && !checking && !nameRefused, block: true) {
                         Task { await vm.checkRepo() }
                     }
                     .accessibilityIdentifier("build-git-check")
@@ -261,6 +293,62 @@ public struct BuildGitScreen: View {
         .onChange(of: vm.shouldFallBackToScratch) { _, fall in
             if fall { onFallBackToScratch() }
         }
+        .task(id: vm.slug) {
+            let s = vm.slug
+            guard !s.isEmpty else { return }
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            let result = (try? await client.vibeCodeNameCheck(name: s)) ?? .unknown
+            if s == vm.slug {
+                nameCheck = result
+                checkedSlug = s
+            }
+        }
+        .alert("That name is taken",
+               isPresented: Binding(get: { vm.conflict != nil }, set: { if !$0 { vm.conflict = nil } }),
+               presenting: vm.conflict) { c in
+            if c.kind == "session" {
+                Button("Open build sessions") { onOpenSessions() }
+                Button("Pick another name", role: .cancel) {}
+            } else {
+                Button("Pick another name", role: .cancel) {}
+            }
+        } message: { c in
+            Text(VibeCodeDescribeScreen.conflictMessage(c, name: vm.slug))
+        }
+    }
+
+    /// The label the address will have: the typed name, the one the box
+    /// chose, or a stand-in until the repo is checked.
+    private var addressLabel: String {
+        if !vm.slug.isEmpty { return vm.slug }
+        return vm.assignedName ?? "<repo name>"
+    }
+
+    @ViewBuilder
+    private func nameStatus(c: FSColors) -> some View {
+        if let ch = currentCheck, !ch.ok {
+            Label(ch.kind == "invalid" ? (ch.message ?? "That can't be a web address.")
+                  : VibeCodeDescribeScreen.conflictMessage(ch, name: vm.slug),
+                  systemImage: "exclamationmark.triangle.fill")
+                .font(FS.font.bodySm()).foregroundColor(c.danger)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("build-git-name-taken")
+        } else if let ch = currentCheck, ch.ok, ch.name != nil {
+            Label("Available", systemImage: "checkmark.circle.fill")
+                .font(FS.font.bodySm()).foregroundColor(c.success)
+        } else if vm.slug.isEmpty {
+            Text("Leave it blank to name it after the repo\(vm.ref.isEmpty ? "" : " and branch").")
+                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+        }
+    }
+
+    /// A repo without a manifest gets the plain sentence; a broken manifest
+    /// keeps the box's reason, which says what is wrong with it.
+    static func notReadyText(_ r: BuildGitResponse) -> String {
+        r.reason.hasPrefix("no flagship.app.json")
+            ? "This repo has no flagship.app.json and is not yet adapted to run on Flagship."
+            : r.reason
     }
 
     private var checking: Bool {
@@ -289,23 +377,27 @@ public struct BuildGitScreen: View {
                 }
             } else {
                 FSCard {
-                    Text("Not Flagship-ready yet").font(FS.font.h4()).foregroundColor(c.text)
-                    Text(r.reason).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                    Text(Self.notReadyText(r)).font(FS.font.body()).foregroundColor(c.text)
                         .fixedSize(horizontal: false, vertical: true)
-                    FSSecondaryButton("Build with AI instead", block: true) { onBuildWithAI() }
+                    FSSecondaryButton("Use AI to prepare repo for Flagship", block: true) { onBuildWithAI() }
                         .accessibilityIdentifier("build-git-adapt")
-                    Text("The AI rewrites this repo into a Flagship service — adds the app config, removes its own login, and wires it to your box's data layer.")
-                        .font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
                     journalLink(c: c)
                 }
             }
-        case .adapting:
+        case .adapting(let progress):
             FSCard {
                 HStack(spacing: FS.space.s2) {
                     ProgressView()
-                    Text("Adapting…").font(FS.font.body()).foregroundColor(c.textMuted)
+                    Text("The AI is adapting the repo…").font(FS.font.body()).foregroundColor(c.textMuted)
                 }
+                if let progress, !progress.isEmpty {
+                    Text(progress).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                        .lineLimit(2)
+                        .accessibilityIdentifier("build-git-progress")
+                }
+                Text("This can take several minutes. You can leave this screen; Build sessions shows how it went.")
+                    .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         case .adapted(let n):
             FSCard {
@@ -541,6 +633,7 @@ public struct BuildJournalScreen: View {
     @Bindable var vm: BuildJournalViewModel
     var onResume: (String) -> Void = { _ in }
     @State private var confirmDiscard: VibeCodeSessionMeta?
+    @State private var confirmDiscardBuild: BuildSummary?
 
     public init(vm: BuildJournalViewModel, onResume: @escaping (String) -> Void = { _ in }) {
         self.vm = vm
@@ -586,6 +679,16 @@ public struct BuildJournalScreen: View {
         } message: { session in
             Text(Self.discardMessage(session))
         }
+        .confirmationDialog(
+            "Discard this build?",
+            isPresented: Binding(get: { confirmDiscardBuild != nil }, set: { if !$0 { confirmDiscardBuild = nil } }),
+            titleVisibility: .visible,
+            presenting: confirmDiscardBuild
+        ) { b in
+            Button("Discard build", role: .destructive) { Task { await vm.discard(build: b) } }
+        } message: { b in
+            Text("This deletes what was imported or written on your server. Its name, \"\(b.displayName)\", becomes free again.")
+        }
     }
 
     static func discardMessage(_ session: VibeCodeSessionMeta) -> String {
@@ -601,8 +704,30 @@ public struct BuildJournalScreen: View {
         case .failed(let msg):
             ErrorCard(message: msg)
         case .loaded(let builds):
-            if !vm.liveSessions.isEmpty {
+            let open = vm.openBuilds(builds)
+            if !vm.liveSessions.isEmpty || !open.isEmpty {
                 Text("Open on your server").font(FS.font.caption()).foregroundColor(c.textMuted)
+                ForEach(open) { b in
+                    Button(action: { Task { await vm.loadDetail(buildId: b.buildId) } }) {
+                        FSListRow(
+                            leading: .icon(modeIcon(b.mode), color: c.primary),
+                            title: b.displayName,
+                            subtitle: "Started \(Self.timeString(b.startedAt))",
+                            detail: nil,
+                            below: { FSPill(b.methodLabel, kind: .idle) }
+                        ) {
+                            Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    HStack {
+                        Spacer()
+                        Button("Discard…", role: .destructive) { confirmDiscardBuild = b }
+                            .font(FS.font.bodySm())
+                            .accessibilityIdentifier("build-discard-\(b.buildId)")
+                    }
+                    .padding(.top, -FS.space.s2)
+                }
                 ForEach(vm.liveSessions) { session in
                     Button(action: { onResume(session.sessionId) }) {
                         FSListRow(
@@ -643,9 +768,9 @@ public struct BuildJournalScreen: View {
             let ended = vm.endedBuilds(builds)
             if !ended.isEmpty {
                 Text("Past builds").font(FS.font.caption()).foregroundColor(c.textMuted)
-                    .padding(.top, vm.liveSessions.isEmpty ? 0 : FS.space.s2)
+                    .padding(.top, vm.liveSessions.isEmpty && open.isEmpty ? 0 : FS.space.s2)
             }
-            if builds.isEmpty && vm.liveSessions.isEmpty {
+            if builds.isEmpty && vm.liveSessions.isEmpty && open.isEmpty {
                 FSCard {
                     Text("No builds yet.").font(FS.font.body()).foregroundColor(c.textMuted)
                 }

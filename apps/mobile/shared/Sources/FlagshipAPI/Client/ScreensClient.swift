@@ -155,6 +155,12 @@ public protocol ScreensClient: Sendable {
     /// Deploy the build artifact (mode-agnostic) → installed service.
     /// `POST /api/build/sessions/:id/deploy`
     func buildDeploy(buildId: String) async throws -> BuildDeployResponse
+    /// `POST …/adapt {background:true}`: start the AI adapt, then poll `buildState`.
+    func buildAdaptStart(buildId: String, _ req: BuildAdaptRequest) async throws -> BuildAdaptReply
+    /// `GET /api/build/sessions/:id`: the build's state, with `adapt` progress.
+    func buildState(buildId: String) async throws -> BuildStateResponse
+    /// `POST …/discard`: forget an open git or IDE build, freeing its name.
+    func buildDiscard(buildId: String) async throws
     /// The list of past builds across every mode (the journal index).
     /// `GET /api/build/sessions`
     func buildSessions() async throws -> BuildSessionsResponse
@@ -218,6 +224,16 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
         return "Couldn't reach the server. Check your connection and try again."
     }
 
+    /// The box's own explanation (`{"error": "…"}`) of a refused request, for
+    /// the build flows whose refusals are written for the owner (a repo that
+    /// won't clone, an invalid name, a failed deploy). Nil for anything else.
+    public static func boxReason(_ error: Error) -> String? {
+        guard case let ScreensClientError.http(status, message) = error, (400...599).contains(status),
+              let obj = try? JSONSerialization.jsonObject(with: Data(message.utf8)) as? [String: Any],
+              let reason = obj["error"] as? String, !reason.isEmpty else { return nil }
+        return reason
+    }
+
     /// The build-a-service `/api/build/*` surface is mounted only when the box
     /// has its service platform wired. When it isn't, the ENTIRE prefix 404s —
     /// so a 404 on a build ENTRY call (git "Check repo", MCP create, the build
@@ -266,6 +282,17 @@ public extension ScreensClient {
     }
     func vibeCodeNameCheck(name: String) async throws -> VibeCodeNameCheck { .unknown }
     func vibeCodeDiscard(sessionId: String) async throws {
+        throw ScreensClientError.notImplemented("discard")
+    }
+    /// Start the AI adapt without waiting for it. Default: the waiting call.
+    func buildAdaptStart(buildId: String, _ req: BuildAdaptRequest) async throws -> BuildAdaptReply {
+        let r = try await buildAdapt(buildId: buildId, req)
+        return BuildAdaptReply(ok: r.ok, fileCount: r.fileCount)
+    }
+    func buildState(buildId: String) async throws -> BuildStateResponse {
+        throw ScreensClientError.notImplemented("build state")
+    }
+    func buildDiscard(buildId: String) async throws {
         throw ScreensClientError.notImplemented("discard")
     }
 }

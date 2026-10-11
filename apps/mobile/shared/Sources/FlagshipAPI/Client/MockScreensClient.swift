@@ -815,9 +815,13 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return BuildMcpConnection(url: url, key: key, ideConfig: ideConfig)
     }
 
+    /// Thrown by `buildGit` instead of a verdict (a taken name, a failed clone).
+    public var buildGitError: Error?
+
     public func buildGit(_ req: BuildGitRequest) async throws -> BuildGitResponse {
         try await tick()
         buildGitCalls.append(req)
+        if let e = buildGitError { throw e }
         if let f = buildGitFixture { return f }
         let buildId = "bld-\(UUID().uuidString.prefix(8).lowercased())"
         let fit = req.gitUrl.lowercased().contains("flagship")
@@ -846,6 +850,34 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             throw ScreensClientError.http(status: 503, message: "AI adapt not configured")
         }
         return BuildAdaptResponse(ok: true, fileCount: 16)
+    }
+
+    /// Background adapts the mock has started; `buildState` reports them done.
+    public private(set) var buildAdaptStartCalls: [(buildId: String, req: BuildAdaptRequest)] = []
+    /// Override what a polled background adapt reports.
+    public var buildAdaptStatusFixture: BuildAdaptStatus?
+    public private(set) var buildDiscardCalls: [String] = []
+
+    public func buildAdaptStart(buildId: String, _ req: BuildAdaptRequest) async throws -> BuildAdaptReply {
+        try await tick()
+        buildAdaptStartCalls.append((buildId, req))
+        if buildAdaptUnavailable {
+            throw ScreensClientError.http(status: 503, message: "AI adapt not configured")
+        }
+        return BuildAdaptReply(ok: true, started: true)
+    }
+
+    public func buildState(buildId: String) async throws -> BuildStateResponse {
+        try await tick()
+        let adapt = buildAdaptStartCalls.contains { $0.buildId == buildId }
+            ? (buildAdaptStatusFixture ?? BuildAdaptStatus(status: "done", fileCount: 16, deployed: false))
+            : nil
+        return BuildStateResponse(state: .init(buildId: buildId, mode: "git", adapt: adapt))
+    }
+
+    public func buildDiscard(buildId: String) async throws {
+        try await tick()
+        buildDiscardCalls.append(buildId)
     }
 
     public func buildMcpCreate(_ req: BuildMcpRequest) async throws -> BuildMcpResponse {

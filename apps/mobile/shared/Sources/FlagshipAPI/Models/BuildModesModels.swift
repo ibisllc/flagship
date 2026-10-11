@@ -14,29 +14,37 @@ import Foundation
 
 // MARK: - git
 
-/// `POST /api/build/git {gitUrl, ref?}`
+/// `POST /api/build/git {gitUrl, ref?, name?}`. A taken `name` is a 409
+/// shaped like `VibeCodeNameCheck`; a repo that can't be cloned is a 422.
 public struct BuildGitRequest: Codable, Equatable, Sendable {
     public let gitUrl: String
     public let ref: String?
-    public init(gitUrl: String, ref: String? = nil) {
+    /// The service's name. Nil: the box names it from the repo and branch.
+    public let name: String?
+    public init(gitUrl: String, ref: String? = nil, name: String? = nil) {
         self.gitUrl = gitUrl
         self.ref = ref
+        self.name = name
     }
 }
 
-/// `→ {buildId, fit, reason, manifestName?, fileCount}`
+/// `→ {buildId, fit, reason, manifestName?, fileCount, name?}`
 public struct BuildGitResponse: Codable, Equatable, Sendable {
     public let buildId: String
     public let fit: Bool
     public let reason: String
     public let manifestName: String?
     public let fileCount: Int
-    public init(buildId: String, fit: Bool, reason: String, manifestName: String? = nil, fileCount: Int) {
+    /// The name it will be installed under (older boxes don't send one).
+    public let name: String?
+    public init(buildId: String, fit: Bool, reason: String, manifestName: String? = nil, fileCount: Int,
+                name: String? = nil) {
         self.buildId = buildId
         self.fit = fit
         self.reason = reason
         self.manifestName = manifestName
         self.fileCount = fileCount
+        self.name = name
     }
 }
 
@@ -49,9 +57,61 @@ public struct BuildAdaptRequest: Codable, Equatable, Sendable {
     /// has and may answer 503 ("AI adapt not configured" → fall back to
     /// scratch). MIRRORS the `credential` field parsed in buildModesHttp.ts.
     public let credential: LlmProviderCredential?
-    public init(instructions: String? = nil, credential: LlmProviderCredential? = nil) {
+    /// Answer at once and run in the background; poll `buildState` for
+    /// `adapt`. Older boxes ignore it and answer when the AI is done.
+    public let background: Bool?
+    public init(instructions: String? = nil, credential: LlmProviderCredential? = nil, background: Bool? = nil) {
         self.instructions = instructions
         self.credential = credential
+        self.background = background
+    }
+}
+
+/// The adapt reply when it was asked to run in the background: `started`
+/// from a current box, or the finished result from an older one.
+public struct BuildAdaptReply: Codable, Equatable, Sendable {
+    public let ok: Bool?
+    public let started: Bool?
+    public let fileCount: Int?
+    public let deployed: Bool?
+    public let deployedUrl: String?
+    public init(ok: Bool? = true, started: Bool? = nil, fileCount: Int? = nil, deployed: Bool? = nil, deployedUrl: String? = nil) {
+        self.ok = ok; self.started = started; self.fileCount = fileCount
+        self.deployed = deployed; self.deployedUrl = deployedUrl
+    }
+}
+
+/// How a background adapt is going. `status`: "running" | "done" | "failed".
+public struct BuildAdaptStatus: Codable, Equatable, Sendable {
+    public let status: String
+    public let fileCount: Int?
+    public let deployed: Bool?
+    public let deployedUrl: String?
+    public let reason: String?
+    public init(status: String, fileCount: Int? = nil, deployed: Bool? = nil, deployedUrl: String? = nil, reason: String? = nil) {
+        self.status = status; self.fileCount = fileCount; self.deployed = deployed
+        self.deployedUrl = deployedUrl; self.reason = reason
+    }
+}
+
+/// `GET /api/build/sessions/:id` → `{state, files}`
+public struct BuildStateResponse: Codable, Equatable, Sendable {
+    public struct State: Codable, Equatable, Sendable {
+        public let buildId: String
+        public let mode: String
+        public let name: String?
+        public let deployedUrl: String?
+        public let adapt: BuildAdaptStatus?
+        public init(buildId: String, mode: String, name: String? = nil, deployedUrl: String? = nil, adapt: BuildAdaptStatus? = nil) {
+            self.buildId = buildId; self.mode = mode; self.name = name
+            self.deployedUrl = deployedUrl; self.adapt = adapt
+        }
+    }
+    public let state: State
+    public let files: [String]
+    public init(state: State, files: [String] = []) {
+        self.state = state
+        self.files = files
     }
 }
 
@@ -176,6 +236,9 @@ public struct BuildSummary: Codable, Equatable, Sendable, Identifiable {
     public let lastAt: Int64
     public let entryCount: Int
     public let lastKind: String
+    /// The box still holds this git or IDE build: it holds its name until it
+    /// deploys or is discarded.
+    public let open: Bool?
     public var id: String { buildId }
     public init(
         buildId: String,
@@ -185,7 +248,8 @@ public struct BuildSummary: Codable, Equatable, Sendable, Identifiable {
         startedAt: Int64,
         lastAt: Int64,
         entryCount: Int,
-        lastKind: String
+        lastKind: String,
+        open: Bool? = nil
     ) {
         self.buildId = buildId
         self.mode = mode
@@ -195,6 +259,7 @@ public struct BuildSummary: Codable, Equatable, Sendable, Identifiable {
         self.lastAt = lastAt
         self.entryCount = entryCount
         self.lastKind = lastKind
+        self.open = open
     }
 }
 

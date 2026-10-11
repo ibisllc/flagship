@@ -55,7 +55,13 @@ public final class BuildJournalViewModel {
     /// Past builds the box no longer holds a session for.
     public func endedBuilds(_ builds: [BuildSummary]) -> [BuildSummary] {
         let live = Set(liveSessions.map(\.sessionId))
-        return builds.filter { !live.contains($0.buildId) }
+        return builds.filter { !live.contains($0.buildId) && $0.open != true }
+    }
+
+    /// Git imports and IDE builds the box still holds (and whose names it keeps).
+    public func openBuilds(_ builds: [BuildSummary]) -> [BuildSummary] {
+        let live = Set(liveSessions.map(\.sessionId))
+        return builds.filter { $0.open == true && !live.contains($0.buildId) }
     }
 
     /// The journal's service name for a live session, once it has one.
@@ -74,6 +80,17 @@ public final class BuildJournalViewModel {
             liveSessions.removeAll { $0.sessionId == session.sessionId }
         } catch {
             discardError = ScreensClientError.userFacing(error)
+        }
+    }
+
+    /// Forget an open git or IDE build on the box, which frees its name.
+    public func discard(build: BuildSummary) async {
+        discardError = nil
+        do {
+            try await client.buildDiscard(buildId: build.buildId)
+            await loadList()
+        } catch {
+            discardError = ScreensClientError.boxReason(error) ?? ScreensClientError.userFacing(error)
         }
     }
 

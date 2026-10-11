@@ -708,7 +708,8 @@ struct BuildGitContainer: View {
                     onBuildWithAI: {
                         guard let id = vm.buildId else { return }
                         path.append(.buildKey(purpose: .gitAdapt(buildId: id)))
-                    }
+                    },
+                    onOpenSessions: { path.openBuildSessions() }
                 )
                 .onAppear {
                     // Returning from the AI-key step: a credential was chosen
