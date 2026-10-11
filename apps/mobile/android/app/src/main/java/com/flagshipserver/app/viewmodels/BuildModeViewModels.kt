@@ -14,6 +14,7 @@ import com.flagshipserver.app.api.BuildMcpConnection
 import com.flagshipserver.app.api.BuildMcpRequest
 import com.flagshipserver.app.api.BuildSummary
 import com.flagshipserver.app.api.ScreensError
+import com.flagshipserver.app.api.VibeCodeNameCheck
 import com.flagshipserver.app.api.VibeCodeSessionMeta
 import com.flagshipserver.app.api.boxError
 import com.flagshipserver.app.api.userFacing
@@ -23,10 +24,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 private fun friendly(t: Throwable): String = when (t) {
     is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
@@ -74,13 +77,17 @@ class BuildGitViewModel(
      *  null so callers without a target (and all existing call sites) compile;
      *  only set when [operations] is wired. */
     private val operationTarget: com.flagshipserver.app.core.DeepLink? = null,
+    /** How often a background adapt is polled, and for how long at most. */
+    private val pollIntervalMs: Long = 2_000,
+    private val pollLimitMs: Long = 45 * 60 * 1_000L,
 ) {
     sealed interface GitPhase {
         data object Idle : GitPhase
         data object Checking : GitPhase
         /** Verdict in. `fit` true ⇒ deterministic install offer. */
         data class Verdict(val fit: Boolean, val reason: String, val fileCount: Int) : GitPhase
-        data object Adapting : GitPhase
+        /** `progress`: the AI's latest step, from the build's journal. */
+        data class Adapting(val progress: String? = null) : GitPhase
         /** Adapt succeeded; ready to deploy. */
         data class Adapted(val fileCount: Int) : GitPhase
         data object Deploying : GitPhase
@@ -93,21 +100,57 @@ class BuildGitViewModel(
     private val _phase = MutableStateFlow<GitPhase>(GitPhase.Idle)
     val phase: StateFlow<GitPhase> = _phase.asStateFlow()
 
+    /** Set when "Check repo" was refused because the name is taken; the
+     *  screen sends the owner to that build or asks for another name. */
+    private val _conflict = MutableStateFlow<VibeCodeNameCheck?>(null)
+    val conflict: StateFlow<VibeCodeNameCheck?> = _conflict.asStateFlow()
+
+    /** The name the box will install it under, once the repo is checked. */
+    private val _assignedName = MutableStateFlow<String?>(null)
+    val assignedName: StateFlow<String?> = _assignedName.asStateFlow()
+
+    /** A failed adapt, shown under the restored verdict so it can be retried. */
+    private val _adaptError = MutableStateFlow<String?>(null)
+    val adaptError: StateFlow<String?> = _adaptError.asStateFlow()
+
     /** Set once a repo is checked; reused by adapt/deploy. */
     var buildId: String? = null
         private set
 
-    fun checkRepo(gitUrl: String, ref: String): Job = scope.launch {
+    private var lastVerdict: GitPhase.Verdict? = null
+
+    fun dismissConflict() { _conflict.value = null }
+
+    fun checkRepo(gitUrl: String, ref: String, name: String = ""): Job = scope.launch {
+        val wanted = slug(name)
+        _conflict.value = null
+        _assignedName.value = null
+        _adaptError.value = null
+        buildId = null
         _phase.value = GitPhase.Checking
         try {
             val r = client.gitImport(
-                BuildGitRequest(gitUrl = gitUrl.trim(), ref = ref.trim().ifEmpty { null }),
+                BuildGitRequest(
+                    gitUrl = gitUrl.trim(),
+                    ref = ref.trim().ifEmpty { null },
+                    name = wanted.ifEmpty { null },
+                ),
             )
             buildId = r.buildId
-            _phase.value = GitPhase.Verdict(fit = r.fit, reason = r.reason, fileCount = r.fileCount)
+            _assignedName.value = r.name ?: wanted.ifEmpty { null }
+            val v = GitPhase.Verdict(fit = r.fit, reason = r.reason, fileCount = r.fileCount)
+            lastVerdict = v
+            _phase.value = v
         } catch (t: Throwable) {
+            val taken = VibeCodeNameCheck.conflict(t)
+            if (taken != null) {
+                _conflict.value = taken
+                _phase.value = GitPhase.Idle
+                return@launch
+            }
+            val reason = if (t is ScreensError.Http && (t.status == 400 || t.status == 422)) t.boxError() else null
             // A 404 here means the box has no build platform wired.
-            _phase.value = GitPhase.Failed(friendlyBuildEntry(t))
+            _phase.value = GitPhase.Failed(reason ?: friendlyBuildEntry(t))
         }
     }
 
@@ -116,20 +159,68 @@ class BuildGitViewModel(
         credential: com.flagshipserver.app.api.BuildCredential? = null,
     ): Job = scope.launch {
         val id = buildId ?: return@launch
-        _phase.value = GitPhase.Adapting
+        _adaptError.value = null
+        _phase.value = GitPhase.Adapting()
         try {
-            val r = client.adapt(
+            val r = client.adaptStart(
                 id,
-                com.flagshipserver.app.api.BuildAdaptRequest(instructions = instructions, credential = credential),
+                com.flagshipserver.app.api.BuildAdaptRequest(
+                    instructions = instructions, credential = credential, background = true,
+                ),
             )
-            _phase.value = GitPhase.Adapted(fileCount = r.fileCount)
+            if (r.started == true) {
+                if (withTimeoutOrNull(pollLimitMs) { followAdapt(id) } == null) {
+                    failAdapt("The AI is taking unusually long. Check Build sessions later to see how it went.")
+                }
+            } else {
+                finishAdapt(r.fileCount ?: 0, r.deployedUrl.takeIf { r.deployed == true })
+            }
         } catch (t: Throwable) {
             if (t is ScreensError.Http && t.status == 503) {
                 _phase.value = GitPhase.AdaptUnavailable
             } else {
-                _phase.value = GitPhase.Failed(friendly(t))
+                failAdapt(t.boxError() ?: friendly(t))
             }
         }
+    }
+
+    /** Polls the build's state until the background adapt ends. A dropped
+     *  poll (Wi-Fi blip, box restarting) isn't the end; five in a row are. */
+    private suspend fun followAdapt(id: String) {
+        var misses = 0
+        while (true) {
+            delay(pollIntervalMs)
+            val status = try {
+                client.state(id).state.adapt.also { misses = 0 }
+            } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException || ++misses >= 5) throw t
+                continue
+            }
+            when (status?.status) {
+                "done" -> {
+                    finishAdapt(status.fileCount ?: 0, status.deployedUrl.takeIf { status.deployed == true })
+                    return
+                }
+                "failed" -> {
+                    failAdapt(status.reason ?: "The AI couldn't adapt this repo.")
+                    return
+                }
+                else -> runCatching { client.journal(id).entries.lastOrNull() }.getOrNull()?.let {
+                    _phase.value = GitPhase.Adapting(progress = it.summary)
+                }
+            }
+        }
+    }
+
+    private fun finishAdapt(fileCount: Int, deployedUrl: String?) {
+        // The AI may have deployed it itself: then it's already live.
+        _phase.value = if (deployedUrl != null) GitPhase.Deployed(deployedUrl) else GitPhase.Adapted(fileCount)
+    }
+
+    private fun failAdapt(message: String) {
+        // Restore the not-fit verdict so the user can retry the adapt.
+        _adaptError.value = message
+        _phase.value = lastVerdict ?: GitPhase.Failed(message)
     }
 
     fun deploy(): Job = scope.launch {
@@ -149,7 +240,7 @@ class BuildGitViewModel(
             val r = client.deploy(id)
             _phase.value = GitPhase.Deployed(url = r.url)
         } catch (t: Throwable) {
-            _phase.value = GitPhase.Failed(friendly(t))
+            _phase.value = GitPhase.Failed(t.boxError() ?: friendly(t))
         } finally {
             // Deployed, failed, or cancelled — drop the phantom op either way.
             operations?.removeBuild(id)
@@ -159,7 +250,33 @@ class BuildGitViewModel(
     fun reset() {
         buildId?.let { operations?.removeBuild(it) }
         buildId = null
+        lastVerdict = null
+        _conflict.value = null
+        _assignedName.value = null
+        _adaptError.value = null
         _phase.value = GitPhase.Idle
+    }
+
+    companion object {
+        /** The typed name as the address label it becomes. */
+        fun slug(name: String): String = name.lowercase().filter { it.isLetterOrDigit() || it == '-' }
+
+        /** A repo without a manifest gets the plain sentence; a broken manifest
+         *  keeps the box's reason, which says what is wrong with it. */
+        fun notReadyText(reason: String): String =
+            if (reason.startsWith("no flagship.app.json")) {
+                "This repo has no flagship.app.json and is not yet adapted to run on Flagship."
+            } else {
+                reason
+            }
+
+        /** The label the address will have: the typed name, the one the box
+         *  chose, or a stand-in until the repo is checked. */
+        fun addressLabel(slug: String, assigned: String?): String = slug.ifEmpty { assigned ?: "<repo name>" }
+
+        /** The muted hint under a blank name. */
+        fun blankNameHint(ref: String): String =
+            "Leave it blank to name it after the repo${if (ref.isBlank()) "" else " and branch"}."
     }
 }
 
@@ -319,6 +436,17 @@ class BuildJournalViewModel(
             _discardError.value = t.userFacing()
         }
     }
+
+    /** Forget an open git or IDE build on the box, which frees its name. */
+    fun discard(build: BuildSummary): Job = scope.launch {
+        _discardError.value = null
+        try {
+            client.discard(build.buildId)
+            loadList().join()
+        } catch (t: Throwable) {
+            _discardError.value = t.boxError() ?: t.userFacing()
+        }
+    }
 }
 
 /** Pure parts of the build sessions screen. Mirror of iOS BuildJournalScreen /
@@ -327,7 +455,13 @@ object BuildSessions {
     /** Past builds the box no longer holds a session for. */
     fun endedBuilds(builds: List<BuildSummary>, sessions: List<VibeCodeSessionMeta>): List<BuildSummary> {
         val live = sessions.mapTo(HashSet()) { it.sessionId }
-        return builds.filter { it.buildId !in live }
+        return builds.filter { it.buildId !in live && it.open != true }
+    }
+
+    /** Git imports and IDE builds the box still holds (and whose names it keeps). */
+    fun openBuilds(builds: List<BuildSummary>, sessions: List<VibeCodeSessionMeta>): List<BuildSummary> {
+        val live = sessions.mapTo(HashSet()) { it.sessionId }
+        return builds.filter { it.open == true && it.buildId !in live }
     }
 
     /** A live session's title: its own name, else its journal build's, else
@@ -343,6 +477,9 @@ object BuildSessions {
         "Started $started · ${build.entryCount} step${if (build.entryCount == 1) "" else "s"}"
 
     const val DISCARD_TITLE = "Discard this build?"
+
+    fun discardBuildMessage(build: BuildSummary): String =
+        "This deletes what was imported or written on your server. Its name, \"${build.displayName}\", becomes free again."
 
     fun discardMessage(session: VibeCodeSessionMeta): String {
         val freed = session.name?.let { " Its name, \"$it\", becomes free again." } ?: ""

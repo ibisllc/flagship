@@ -1,14 +1,28 @@
-// Git build mode (webapp). One option: paste a repo URL. The box clones
-// it and reports whether it's Flagship-ready:
+// Git build mode (webapp). Paste a repo URL and, optionally, the name it
+// goes live under. The box clones it and reports whether it's Flagship-ready:
 //   - FIT     → install as-is (Deploy), no AI.
-//   - NOT FIT → explain, offer "build with AI instead" (scratch).
+//   - NOT FIT → offer the AI adapt, which runs in the background on the box
+//               while this view follows it.
 // Every step is recorded in the build journal.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError, buildEntryError } from "../lib/api.js";
+import { screensFetch, ScreensError, boxReason, getPodBaseUrl, getSessionToken } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
-import { enterVibeCode } from "./vibe-code.js";
+import { checkName, nameWarning, slugify } from "../lib/vibeNames.js";
+import {
+  ADAPTING,
+  ADAPTING_NOTE,
+  ADAPT_BUTTON,
+  adaptFinished,
+  addressLabel,
+  blankNameHint,
+  checkRepoFailure,
+  followAdapt,
+  gitRequestBody,
+  notReadyText,
+} from "../lib/gitImport.js";
+import { enterVibeCode, showConflict } from "./vibe-code.js";
 import { enterBuildJournal } from "./build-journal.js";
 import { enterBuildKey } from "./build-key.js";
 
@@ -17,45 +31,158 @@ registerView("view-build-git");
 let buildId = null;
 // The in-memory BYOK credential for the adapt pass, set from the AI-key step.
 let adaptCredential = null;
+// The not-fit verdict, restored when an adapt fails so it can be retried.
+let lastVerdict = null;
+// The name the box will install it under, once the repo is checked.
+let assignedName = null;
+// The box's latest answer for the name field, and the slug it answered for.
+let nameCheck = null;
+let checkedSlug = "";
+let nameCheckTimer = null;
+let checking = false;
 
 export function initBuildGitView() {
   $("build-git-check").addEventListener("click", checkRepo);
   $("build-git-back").addEventListener("click", () => show("view-build-source"));
+  $("build-git-name").addEventListener("input", onNameInput);
+  $("build-git-ref").addEventListener("input", renderNameStatus);
 }
 
 export function enterBuildGit() {
   buildId = null;
   adaptCredential = null;
+  lastVerdict = null;
+  assignedName = null;
+  nameCheck = null;
+  checkedSlug = "";
+  if (nameCheckTimer) clearTimeout(nameCheckTimer);
+  nameCheckTimer = null;
   $("build-git-url").value = "";
   $("build-git-ref").value = "";
+  $("build-git-name").value = "";
   $("build-git-verdict").classList.add("hidden");
   $("build-git-verdict").innerHTML = "";
+  renderNameStatus();
   show("view-build-git");
 }
 
-async function checkRepo() {
-  const gitUrl = $("build-git-url").value.trim();
-  const ref = $("build-git-ref").value.trim();
-  if (!gitUrl) return toast("Paste a repo URL first", "err");
-  const btn = $("build-git-check");
-  btn.disabled = true;
-  btn.textContent = "cloning…";
+function currentSlug() {
+  return slugify($("build-git-name")?.value);
+}
+
+function currentCheck() {
+  return checkedSlug === currentSlug() ? nameCheck : null;
+}
+
+function serverFqdn() {
+  const base = getPodBaseUrl();
+  if (!base) return "";
   try {
-    const body = { gitUrl };
-    if (ref) body.ref = ref;
-    const r = await screensFetch("/api/build/git", { method: "POST", body: JSON.stringify(body) });
-    buildId = r.buildId;
-    renderVerdict(r);
-  } catch (e) {
-    // A 404 here means the box has no service/build platform wired.
-    toast(buildEntryError(e), "err");
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Check repo";
+    return new URL(base).hostname;
+  } catch {
+    return "";
   }
 }
 
-function renderVerdict(r) {
+function renderNameStatus() {
+  const slug = currentSlug();
+  const addr = $("build-git-address");
+  if (addr) {
+    addr.innerHTML = `https://<strong class="vc-address-name">${escapeHtml(addressLabel(slug, assignedName))}</strong>.${escapeHtml(serverFqdn())}`;
+  }
+  const status = $("build-git-name-status");
+  if (status) {
+    const check = currentCheck();
+    const warning = nameWarning(check, slug);
+    status.classList.remove("is-taken", "is-free", "is-hint", "hidden");
+    if (warning) {
+      status.textContent = `⚠ ${warning}`;
+      status.classList.add("is-taken");
+    } else if (check?.ok && check.name) {
+      status.textContent = "✓ Available";
+      status.classList.add("is-free");
+    } else if (!slug) {
+      status.textContent = blankNameHint($("build-git-ref")?.value);
+      status.classList.add("is-hint");
+    } else {
+      status.textContent = "";
+      status.classList.add("hidden");
+    }
+  }
+  updateCheckButton();
+}
+
+function updateCheckButton() {
+  const btn = $("build-git-check");
+  if (!btn) return;
+  btn.textContent = checking ? "cloning…" : "Check repo";
+  btn.disabled = checking || currentCheck()?.ok === false;
+}
+
+async function runNameCheck(slug) {
+  const result = await checkName({ baseUrl: getPodBaseUrl(), token: getSessionToken(), name: slug });
+  if (slug === currentSlug()) {
+    nameCheck = result;
+    checkedSlug = slug;
+    renderNameStatus();
+  }
+}
+
+function onNameInput() {
+  if (nameCheckTimer) clearTimeout(nameCheckTimer);
+  renderNameStatus();
+  const slug = currentSlug();
+  if (!slug) return;
+  nameCheckTimer = setTimeout(() => void runNameCheck(slug), 350);
+}
+
+async function checkRepo() {
+  const body = gitRequestBody({
+    gitUrl: $("build-git-url").value,
+    ref: $("build-git-ref").value,
+    name: $("build-git-name").value,
+  });
+  if (!body.gitUrl) return toast("Paste a repo URL first", "err");
+  buildId = null;
+  lastVerdict = null;
+  assignedName = null;
+  $("build-git-verdict").classList.add("hidden");
+  $("build-git-verdict").innerHTML = "";
+  checking = true;
+  renderNameStatus();
+  try {
+    const r = await screensFetch("/api/build/git", { method: "POST", body: JSON.stringify(body) });
+    buildId = r.buildId;
+    assignedName = r.name ?? body.name ?? null;
+    renderVerdict(r);
+  } catch (e) {
+    const failure = checkRepoFailure(e);
+    if (failure.conflict) {
+      nameCheck = failure.conflict;
+      checkedSlug = body.name ?? "";
+      checking = false;
+      renderNameStatus();
+      await showConflict(failure.conflict, body.name ?? "");
+    } else {
+      // A 404 here means the box has no service/build platform wired.
+      toast(failure.message, "err");
+    }
+  } finally {
+    checking = false;
+    renderNameStatus();
+  }
+}
+
+function journalLink() {
+  return `<p class="note mt-2"><a id="build-git-journal" href="#">View build journal →</a></p>`;
+}
+
+function wireJournalLink() {
+  const j = $("build-git-journal");
+  if (j) j.addEventListener("click", (e) => { e.preventDefault(); enterBuildJournal(buildId); });
+}
+
+function renderVerdict(r, error = null) {
   const box = $("build-git-verdict");
   box.classList.remove("hidden");
   if (r.fit) {
@@ -64,17 +191,17 @@ function renderVerdict(r) {
         <p><strong>Flagship-ready ✓</strong></p>
         <p class="note">${escapeHtml(r.reason)} — ${r.fileCount} file(s).</p>
         <button id="build-git-deploy" class="full-width mt-2">Install it</button>
-        <p class="note mt-2"><a id="build-git-journal" href="#">View build journal →</a></p>
+        ${journalLink()}
       </div>`;
     $("build-git-deploy").addEventListener("click", deploy);
   } else {
+    lastVerdict = r;
     box.innerHTML = `
       <div class="card">
-        <p><strong>Not Flagship-ready yet</strong></p>
-        <p class="note">${escapeHtml(r.reason)}</p>
-        <button id="build-git-adapt" class="full-width mt-2">Build with AI instead</button>
-        <p class="note mt-2">The AI rewrites this repo into a Flagship app — adds the manifest, removes its own login, and wires it to your box's data layer.</p>
-        <p class="note mt-2"><a id="build-git-journal" href="#">View build journal →</a></p>
+        <p>${escapeHtml(notReadyText(r.reason))}</p>
+        ${error ? `<p class="err-text mt-2">${escapeHtml(error)}</p>` : ""}
+        <button id="build-git-adapt" class="full-width mt-2">${escapeHtml(ADAPT_BUTTON)}</button>
+        ${journalLink()}
       </div>`;
     // The adapt pass uses the box's model — confirm/provide the AI key first,
     // then run the adapt with that in-memory credential.
@@ -90,39 +217,73 @@ function renderVerdict(r) {
       }),
     );
   }
-  const j = $("build-git-journal");
-  if (j) j.addEventListener("click", (e) => { e.preventDefault(); enterBuildJournal(buildId); });
+  wireJournalLink();
 }
 
-// Run the AI adapt pass on a non-fit repo. On success, reveal an
-// "Install it" button reusing the same deploy call as the fit path. If
-// the box has no model wired (503), fall back to the from-scratch flow
-// with a friendly note.
+function renderAdapting(progress) {
+  $("build-git-verdict").innerHTML = `
+    <div class="card">
+      <p class="build-git-adapting"><span class="build-git-spinner" aria-hidden="true"></span>${escapeHtml(ADAPTING)}</p>
+      ${progress ? `<p class="note mt-2" id="build-git-progress">${escapeHtml(progress)}</p>` : ""}
+      <p class="note mt-2">${escapeHtml(ADAPTING_NOTE)}</p>
+    </div>`;
+}
+
+function renderAdapted(fileCount) {
+  $("build-git-verdict").innerHTML = `
+    <div class="card">
+      <p><strong>Adapted ✓</strong></p>
+      <p class="note">The AI rewrote this repo into a Flagship app (${fileCount} file(s)).</p>
+      <button id="build-git-deploy" class="full-width mt-2">Install it</button>
+      ${journalLink()}
+    </div>`;
+  $("build-git-deploy").addEventListener("click", deploy);
+  wireJournalLink();
+}
+
+function renderInstalled(url) {
+  $("build-git-verdict").innerHTML = `
+    <div class="card">
+      <p><strong>Installed ✓</strong></p>
+      <p class="note"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></p>
+    </div>`;
+}
+
+function failAdapt(message) {
+  toast(message, "err");
+  if (lastVerdict) renderVerdict(lastVerdict, message);
+}
+
+// Start the AI adapt on a non-fit repo in the background and follow it. An
+// older box ignores `background` and answers with the finished result. If
+// the box has no model wired (503), fall back to the from-scratch flow.
 async function adapt() {
   if (!buildId) return;
-  const btn = $("build-git-adapt");
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "adapting…";
-  }
+  const id = buildId;
+  const path = `/api/build/sessions/${encodeURIComponent(id)}`;
+  renderAdapting(null);
   try {
-    const body = adaptCredential ? JSON.stringify({ credential: adaptCredential }) : undefined;
-    const r = await screensFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/adapt`, {
-      method: "POST",
-      ...(body ? { body } : {}),
-    });
-    $("build-git-verdict").innerHTML = `
-      <div class="card">
-        <p><strong>Adapted ✓</strong></p>
-        <p class="note">The AI rewrote this repo into a Flagship app (${r.fileCount} file(s)).</p>
-        <button id="build-git-deploy" class="full-width mt-2">Install it</button>
-        <p class="note mt-2"><a id="build-git-journal" href="#">View build journal →</a></p>
-      </div>`;
-    $("build-git-deploy").addEventListener("click", deploy);
-    const j = $("build-git-journal");
-    if (j) j.addEventListener("click", (e) => { e.preventDefault(); enterBuildJournal(buildId); });
-    toast("Adapted — review and install", "ok");
+    const body = adaptCredential ? { credential: adaptCredential, background: true } : { background: true };
+    const r = await screensFetch(`${path}/adapt`, { method: "POST", body: JSON.stringify(body) });
+    const outcome = r?.started === true
+      ? await followAdapt({
+          fetchState: () => screensFetch(path),
+          fetchJournal: () => screensFetch(`${path}/journal`),
+          onProgress: (p) => { if (buildId === id) renderAdapting(p); },
+        })
+      : adaptFinished(r || {});
+    if (buildId !== id) return;
+    if (outcome.phase === "installed") {
+      renderInstalled(outcome.url);
+      toast("Deployed", "ok");
+    } else if (outcome.phase === "adapted") {
+      renderAdapted(outcome.fileCount);
+      toast("Adapted — review and install", "ok");
+    } else {
+      failAdapt(outcome.reason);
+    }
   } catch (e) {
+    if (buildId !== id) return;
     if (e instanceof ScreensError && e.status === 503) {
       toast("AI adapt isn't available on this server yet — starting from scratch instead", "warn");
       // Mirror iOS (ServicesTab `onFallBackToScratch`) + Android
@@ -138,11 +299,7 @@ async function adapt() {
       });
       return;
     }
-    toast(e instanceof ScreensError ? e.message : String(e), "err");
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = "Build with AI instead";
-    }
+    failAdapt(boxReason(e) ?? (e instanceof ScreensError ? e.message : String(e)));
   }
 }
 
@@ -153,14 +310,10 @@ async function deploy() {
   btn.textContent = "installing…";
   try {
     const r = await screensFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/deploy`, { method: "POST" });
-    $("build-git-verdict").innerHTML = `
-      <div class="card">
-        <p><strong>Installed ✓</strong></p>
-        <p class="note"><a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a></p>
-      </div>`;
+    renderInstalled(r.url);
     toast("Deployed", "ok");
   } catch (e) {
-    toast(e instanceof ScreensError ? e.message : String(e), "err");
+    toast(boxReason(e) ?? (e instanceof ScreensError ? e.message : String(e)), "err");
     btn.disabled = false;
     btn.textContent = "Install it";
   }

@@ -44,6 +44,7 @@ class LiveBuildClient(
         deserializer: DeserializationStrategy<R>?,
         method: String = "GET",
         body: ByteArray? = null,
+        readTimeoutSeconds: Long? = null,
     ): R {
         val base = base()
         val token = token()
@@ -59,8 +60,11 @@ class LiveBuildClient(
                 }
             }
             .build()
+        val c = readTimeoutSeconds?.let {
+            client.newBuilder().readTimeout(it, java.util.concurrent.TimeUnit.SECONDS).build()
+        } ?: client
         val resp = suspendCoroutine<okhttp3.Response> { cont ->
-            client.newCall(req).enqueue(object : okhttp3.Callback {
+            c.newCall(req).enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: IOException) { cont.resumeWithException(e) }
                 override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) { cont.resume(response) }
             })
@@ -85,7 +89,26 @@ class LiveBuildClient(
 
     override suspend fun adapt(buildId: String, req: BuildAdaptRequest): BuildAdaptResponse {
         val body = json.encodeToString(BuildAdaptRequest.serializer(), req).toByteArray()
-        return request("/api/build/sessions/$buildId/adapt", BuildAdaptResponse.serializer(), "POST", body)
+        return request(
+            "/api/build/sessions/$buildId/adapt", BuildAdaptResponse.serializer(), "POST", body,
+            readTimeoutSeconds = 30 * 60,
+        )
+    }
+
+    override suspend fun adaptStart(buildId: String, req: BuildAdaptRequest): BuildAdaptReply {
+        // An older box ignores `background` and answers when the AI is done.
+        val body = json.encodeToString(BuildAdaptRequest.serializer(), req).toByteArray()
+        return request(
+            "/api/build/sessions/$buildId/adapt", BuildAdaptReply.serializer(), "POST", body,
+            readTimeoutSeconds = 30 * 60,
+        )
+    }
+
+    override suspend fun state(buildId: String): BuildStateResponse =
+        request("/api/build/sessions/$buildId", BuildStateResponse.serializer())
+
+    override suspend fun discard(buildId: String) {
+        request<Unit>("/api/build/sessions/$buildId/discard", null, "POST", "{}".toByteArray())
     }
 
     override suspend fun mcpCreate(req: BuildMcpRequest): BuildMcpResponse {
@@ -110,6 +133,10 @@ class LiveBuildClient(
     override suspend fun journal(buildId: String): BuildJournalResponse =
         request("/api/build/sessions/$buildId/journal", BuildJournalResponse.serializer())
 
+    // Answers once `docker build` and the install finish: minutes.
     override suspend fun deploy(buildId: String): BuildDeployResponse =
-        request("/api/build/sessions/$buildId/deploy", BuildDeployResponse.serializer(), "POST", ByteArray(0))
+        request(
+            "/api/build/sessions/$buildId/deploy", BuildDeployResponse.serializer(), "POST", ByteArray(0),
+            readTimeoutSeconds = 15 * 60,
+        )
 }

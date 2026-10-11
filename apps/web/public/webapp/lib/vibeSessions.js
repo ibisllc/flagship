@@ -93,7 +93,41 @@ export function discardMessage(session) {
 /** Past builds the box no longer holds a session for. */
 export function endedBuilds(builds, sessions) {
   const live = new Set((sessions || []).map((s) => s.sessionId));
-  return (builds || []).filter((b) => !live.has(b.buildId));
+  return (builds || []).filter((b) => !live.has(b.buildId) && b.open !== true);
+}
+
+/** Git imports and IDE builds the box still holds (and whose names it keeps). */
+export function openBuilds(builds, sessions) {
+  const live = new Set((sessions || []).map((s) => s.sessionId));
+  return (builds || []).filter((b) => b.open === true && !live.has(b.buildId));
+}
+
+export function discardBuildMessage(build) {
+  return `This deletes what was imported or written on your server. Its name, "${buildDisplayName(build)}", becomes free again.`;
+}
+
+/** Forget an open git or IDE build on the box, which frees its name. Throws
+ *  the box's reason on failure. */
+export async function discardBuild({ baseUrl, token, buildId, fetchImpl = globalThis.fetch } = {}) {
+  if (!baseUrl || !token) throw new Error("Not paired to a server yet.");
+  const r = await fetchImpl(
+    `${String(baseUrl).replace(/\/+$/, "")}/api/build/sessions/${encodeURIComponent(buildId)}/discard`,
+    {
+      method: "POST",
+      headers: { "x-flagship-session": token, "content-type": "application/json" },
+      body: "{}",
+    },
+  );
+  if (!r.ok) {
+    let msg = `The build wasn't discarded (HTTP ${r.status}).`;
+    try {
+      const body = await r.json();
+      if (body?.error) msg = body.error;
+    } catch {
+      // keep the status message
+    }
+    throw new Error(msg);
+  }
 }
 
 /** Decode the wire body, keeping only well-formed entries. */

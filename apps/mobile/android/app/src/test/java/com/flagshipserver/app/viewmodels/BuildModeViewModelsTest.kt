@@ -5,7 +5,9 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.api.BuildAdaptReply
 import com.flagshipserver.app.api.BuildAdaptRequest
+import com.flagshipserver.app.api.BuildAdaptStatus
 import com.flagshipserver.app.api.BuildAdaptResponse
 import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.BuildDeployResponse
@@ -17,7 +19,9 @@ import com.flagshipserver.app.api.BuildJournalResponse
 import com.flagshipserver.app.api.BuildMcpRequest
 import com.flagshipserver.app.api.BuildMcpResponse
 import com.flagshipserver.app.api.BuildSessionsResponse
+import com.flagshipserver.app.api.BuildStateResponse
 import com.flagshipserver.app.api.MockBuildClient
+import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.core.ActiveOperation
 import com.flagshipserver.app.core.ActiveOperationsCenter
 import com.flagshipserver.app.core.DeepLink
@@ -137,8 +141,124 @@ class BuildModeViewModelsTest {
         assertTrue(!(verdict as BuildGitViewModel.GitPhase.Verdict).fit)
 
         vm.adapt().join()
-        assertTrue(vm.phase.value is BuildGitViewModel.GitPhase.Adapted)
-        assertEquals(1, client.adaptCalls.size)
+        assertEquals(BuildGitViewModel.GitPhase.Adapted(fileCount = 12), vm.phase.value)
+        assertEquals(true, client.adaptStartCalls.single().second.background)
+    }
+
+    @Test fun git_sendsTheTypedNameAsALabel() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0)
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/random", "", "My App").join()
+        assertEquals("myapp", client.gitImportCalls.last().name)
+        assertEquals("myapp", vm.assignedName.value)
+
+        client.gitAssignedNameFixture = "random-dev"
+        vm.checkRepo("https://github.com/me/random", "dev", "").join()
+        assertNull(client.gitImportCalls.last().name)
+        assertEquals("random-dev", vm.assignedName.value)
+    }
+
+    @Test fun git_takenName_raisesTheConflict() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply {
+            gitImportError = ScreensError.Http(
+                409,
+                """{"error":"A build session already uses the name \"notes\".","ok":false,"kind":"session","sessionId":"s1","message":"x"}""",
+            )
+        }
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/notes", "", "notes").join()
+        assertEquals("session", vm.conflict.value?.kind)
+        assertEquals("s1", vm.conflict.value?.sessionId)
+        assertNull(vm.buildId)
+        assertEquals(BuildGitViewModel.GitPhase.Idle, vm.phase.value)
+        vm.dismissConflict()
+        assertNull(vm.conflict.value)
+    }
+
+    @Test fun git_cloneFailure_showsTheBoxReason() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply {
+            gitImportError = ScreensError.Http(
+                422,
+                """{"error":"Couldn't clone this repo. Check the address, and that the repo is public."}""",
+            )
+        }
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/missing", "").join()
+        assertEquals(
+            BuildGitViewModel.GitPhase.Failed("Couldn't clone this repo. Check the address, and that the repo is public."),
+            vm.phase.value,
+        )
+    }
+
+    @Test fun git_adaptThatDeployed_showsItInstalled() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply {
+            gitFitFixture = false
+            adaptStatusFixture = BuildAdaptStatus(
+                status = "done", fileCount = 8, deployed = true, deployedUrl = "https://hello.home.me.flagship.services",
+            )
+        }
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/hello", "").join()
+        vm.adapt().join()
+        assertEquals(BuildGitViewModel.GitPhase.Deployed("https://hello.home.me.flagship.services"), vm.phase.value)
+    }
+
+    @Test fun git_failedAdapt_restoresTheVerdictWithTheReason() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply {
+            gitFitFixture = false
+            adaptStatusFixture = BuildAdaptStatus(status = "failed", reason = "adapt model call failed: bad key")
+        }
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/hello", "").join()
+        vm.adapt().join()
+        assertEquals("adapt model call failed: bad key", vm.adaptError.value)
+        assertTrue(vm.phase.value is BuildGitViewModel.GitPhase.Verdict)
+    }
+
+    @Test fun git_adaptOnAnOlderBox_usesTheFinishedReply() = runTest {
+        val mock = MockBuildClient(simulatedLatencyMs = 0).apply { gitFitFixture = false }
+        val oldBox = object : BuildClient by mock {
+            override suspend fun adaptStart(buildId: String, req: BuildAdaptRequest) =
+                BuildAdaptReply(ok = true, fileCount = 7)
+        }
+        val vm = BuildGitViewModel(oldBox, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/hello", "").join()
+        vm.adapt().join()
+        assertEquals(BuildGitViewModel.GitPhase.Adapted(fileCount = 7), vm.phase.value)
+    }
+
+    @Test fun git_adaptKeepsPollingThroughAFewDroppedPolls() = runTest {
+        val mock = MockBuildClient(simulatedLatencyMs = 0).apply { gitFitFixture = false }
+        var polls = 0
+        val flaky = object : BuildClient by mock {
+            override suspend fun state(buildId: String): BuildStateResponse {
+                polls++
+                if (polls <= 4) throw ScreensError.Http(502, "")
+                return mock.state(buildId)
+            }
+        }
+        val vm = BuildGitViewModel(flaky, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/hello", "").join()
+        vm.adapt().join()
+        assertEquals(BuildGitViewModel.GitPhase.Adapted(fileCount = 12), vm.phase.value)
+    }
+
+    @Test fun git_notReadyCard_saysItPlainly() {
+        assertEquals(
+            "This repo has no flagship.app.json and is not yet adapted to run on Flagship.",
+            BuildGitViewModel.notReadyText("no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it"),
+        )
+        val broken = "flagship.app.json present but invalid: name"
+        assertEquals(broken, BuildGitViewModel.notReadyText(broken))
+    }
+
+    @Test fun git_addressAndHint_followTheName() {
+        assertEquals("notes", BuildGitViewModel.addressLabel("notes", "random"))
+        assertEquals("random-dev", BuildGitViewModel.addressLabel("", "random-dev"))
+        assertEquals("<repo name>", BuildGitViewModel.addressLabel("", null))
+        assertEquals("Leave it blank to name it after the repo.", BuildGitViewModel.blankNameHint(""))
+        assertEquals("Leave it blank to name it after the repo and branch.", BuildGitViewModel.blankNameHint("dev"))
+        assertEquals("my-app2", BuildGitViewModel.slug("My-App_2!"))
     }
 
     @Test fun git_adapt503_fallsBackToScratchSignal() = runTest {

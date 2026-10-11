@@ -336,7 +336,7 @@ function onNameInput() {
   nameCheckTimer = setTimeout(() => void runNameCheck(slug), 350);
 }
 
-async function showConflict(check, name) {
+export async function showConflict(check, name) {
   if (check.kind === "session") {
     const open = await inlineConfirm({
       title: CONFLICT_TITLE,

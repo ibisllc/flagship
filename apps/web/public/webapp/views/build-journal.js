@@ -15,11 +15,14 @@ import {
   buildDisplayName,
   buildMethodLabel,
   canDiscard,
+  discardBuild,
+  discardBuildMessage,
   discardMessage,
   discardSession,
   endedBuilds,
   fetchVibeSessions,
   isActiveSession,
+  openBuilds,
   pastBuildSubtitle,
   sessionPillClass,
   sessionStatusLabel,
@@ -59,14 +62,30 @@ async function renderList() {
   }
   const sessions = sortSessionsNewestFirst(await sessionsP);
   const ended = endedBuilds(builds, sessions);
+  const open = openBuilds(builds, sessions);
   const list = $("build-journal-list");
   if (sessions.length === 0 && builds.length === 0) {
     list.innerHTML = `<div class="card placeholder">No builds yet.</div>`;
     return;
   }
   let html = "";
-  if (sessions.length > 0) {
+  if (sessions.length > 0 || open.length > 0) {
     html += `<p class="note build-section-caption">Open on your server</p>`;
+    html += open
+      .map(
+        (b) => `
+        <button class="card full-width build-session-row" data-build="${escapeHtml(b.buildId)}">
+          <span class="build-session-body">
+            <strong>${escapeHtml(buildDisplayName(b))}</strong>
+            <span class="note">Started ${escapeHtml(formatDateTime(b.startedAt))}</span>
+            <span class="build-session-pills">
+              <span class="pill">${escapeHtml(buildMethodLabel(b.mode))}</span>
+            </span>
+          </span>
+          <span class="build-session-action">Open</span>
+        </button><div class="build-session-discard"><button class="linklike" data-discard-build="${escapeHtml(b.buildId)}">Discard…</button></div>`,
+      )
+      .join("");
     html += sessions
       .map((s) => {
         const active = isActiveSession(s);
@@ -110,9 +129,30 @@ async function renderList() {
     const session = sessions.find((s) => s.sessionId === el.getAttribute("data-discard"));
     if (session) el.addEventListener("click", () => void confirmDiscard(session));
   }
+  for (const el of list.querySelectorAll("[data-discard-build]")) {
+    const build = open.find((b) => b.buildId === el.getAttribute("data-discard-build"));
+    if (build) el.addEventListener("click", () => void confirmDiscardBuild(build));
+  }
   for (const el of list.querySelectorAll("[data-build]")) {
     el.addEventListener("click", () => renderDetail(el.getAttribute("data-build")));
   }
+}
+
+async function confirmDiscardBuild(build) {
+  const ok = await inlineConfirm({
+    title: DISCARD_TITLE,
+    message: discardBuildMessage(build),
+    okLabel: "Discard build",
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    await discardBuild({ baseUrl: getPodBaseUrl(), token: getSessionToken(), buildId: build.buildId });
+  } catch (e) {
+    toast(e.message, "err");
+    return;
+  }
+  await renderList();
 }
 
 async function confirmDiscard(session) {

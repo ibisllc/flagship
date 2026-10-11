@@ -22,11 +22,15 @@ import kotlinx.serialization.Serializable
 
 // ---------- git mode ---------------------------------------------------
 
-/** POST /api/build/git body. `ref` optional (branch / tag / sha). */
+/** POST /api/build/git body. `ref` optional (branch / tag / sha). A taken
+ *  `name` is a 409 shaped like [VibeCodeNameCheck]; a repo that can't be
+ *  cloned is a 422. */
 @Serializable
 data class BuildGitRequest(
     val gitUrl: String,
     val ref: String? = null,
+    /** The service's name. Null: the box names it from the repo and branch. */
+    val name: String? = null,
 )
 
 /** POST /api/build/git response — the fitness verdict. `fit=true` ⇒
@@ -38,6 +42,8 @@ data class BuildGitResponse(
     val reason: String,
     val manifestName: String? = null,
     val fileCount: Int = 0,
+    /** The name it will be installed under (older boxes don't send one). */
+    val name: String? = null,
 )
 
 /** POST /api/build/sessions/:id/adapt body. Optional owner instructions
@@ -51,6 +57,9 @@ data class BuildGitResponse(
 data class BuildAdaptRequest(
     val instructions: String? = null,
     val credential: BuildCredential? = null,
+    /** Answer at once and run in the background; poll [BuildClient.state] for
+     *  `adapt`. Older boxes ignore it and answer when the AI is done. */
+    val background: Boolean? = null,
 )
 
 /** POST /api/build/sessions/:id/adapt response. A 503 means "AI adapt not
@@ -59,6 +68,43 @@ data class BuildAdaptRequest(
 data class BuildAdaptResponse(
     val ok: Boolean = false,
     val fileCount: Int = 0,
+)
+
+/** The adapt reply when it was asked to run in the background: `started`
+ *  from a current box, or the finished result from an older one. */
+@Serializable
+data class BuildAdaptReply(
+    val ok: Boolean? = null,
+    val started: Boolean? = null,
+    val fileCount: Int? = null,
+    val deployed: Boolean? = null,
+    val deployedUrl: String? = null,
+)
+
+/** How a background adapt is going. `status`: "running" | "done" | "failed". */
+@Serializable
+data class BuildAdaptStatus(
+    val status: String,
+    val fileCount: Int? = null,
+    val deployed: Boolean? = null,
+    val deployedUrl: String? = null,
+    val reason: String? = null,
+)
+
+/** `GET /api/build/sessions/:id` → `{state, files}`. */
+@Serializable
+data class BuildStateResponse(
+    val state: BuildState,
+    val files: List<String> = emptyList(),
+)
+
+@Serializable
+data class BuildState(
+    val buildId: String,
+    val mode: String,
+    val name: String? = null,
+    val deployedUrl: String? = null,
+    val adapt: BuildAdaptStatus? = null,
 )
 
 // ---------- mcp mode ---------------------------------------------------
@@ -123,6 +169,9 @@ data class BuildSummary(
     val lastAt: Long = 0,
     val entryCount: Int = 0,
     val lastKind: String = "",
+    /** The box still holds this git or IDE build: it holds its name until it
+     *  deploys or is discarded. */
+    val open: Boolean? = null,
 ) {
     /** The list title: the build's name, or its service's slug. */
     val displayName: String
@@ -196,4 +245,17 @@ interface BuildClient {
     suspend fun sessions(): BuildSessionsResponse
     suspend fun journal(buildId: String): BuildJournalResponse
     suspend fun deploy(buildId: String): BuildDeployResponse
+
+    /** `POST …/adapt {background:true}`: start the AI adapt, then poll [state].
+     *  Default: the waiting call. */
+    suspend fun adaptStart(buildId: String, req: BuildAdaptRequest): BuildAdaptReply {
+        val r = adapt(buildId, req)
+        return BuildAdaptReply(ok = r.ok, fileCount = r.fileCount)
+    }
+
+    /** `GET /api/build/sessions/:id`: the build's state, with `adapt` progress. */
+    suspend fun state(buildId: String): BuildStateResponse = throw ScreensError.NotImplemented("build state")
+
+    /** `POST …/discard`: forget an open git or IDE build, freeing its name. */
+    suspend fun discard(buildId: String): Unit = throw ScreensError.NotImplemented("discard")
 }

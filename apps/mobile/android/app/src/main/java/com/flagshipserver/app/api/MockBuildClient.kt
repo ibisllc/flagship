@@ -41,10 +41,18 @@ class MockBuildClient(
     /** Overridable verdict. Null → "fit" by default (deterministic install). */
     var gitFitFixture: Boolean? = null
 
+    /** Thrown by `gitImport` instead of a verdict (a taken name, a failed clone). */
+    var gitImportError: Throwable? = null
+
+    /** The name the box picks when none is sent. */
+    var gitAssignedNameFixture: String? = null
+
     override suspend fun gitImport(req: BuildGitRequest): BuildGitResponse {
         tick()
         failEntryIfRequested()
         gitImportCalls.add(req)
+        gitImportError?.let { throw it }
+        val name = req.name ?: gitAssignedNameFixture
         val fit = gitFitFixture ?: true
         return if (fit) {
             BuildGitResponse(
@@ -53,14 +61,16 @@ class MockBuildClient(
                 reason = "Found flagship.app.json at the repo root",
                 manifestName = "demo-app",
                 fileCount = 14,
+                name = name,
             )
         } else {
             BuildGitResponse(
                 buildId = mintBuildId(),
                 fit = false,
-                reason = "No flagship.app.json — this repo isn't a Flagship app yet",
+                reason = "no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it",
                 manifestName = null,
                 fileCount = 9,
+                name = name,
             )
         }
     }
@@ -72,6 +82,36 @@ class MockBuildClient(
         adaptCalls.add(buildId to req)
         if (adaptNotConfigured) throw ScreensError.Http(503, """{"error":"AI adapt not configured"}""")
         return BuildAdaptResponse(ok = true, fileCount = 12)
+    }
+
+    /** Background adapts the mock has started; `state` reports them done. */
+    val adaptStartCalls: MutableList<Pair<String, BuildAdaptRequest>> = mutableListOf()
+
+    /** Override what a polled background adapt reports. */
+    var adaptStatusFixture: BuildAdaptStatus? = null
+
+    override suspend fun adaptStart(buildId: String, req: BuildAdaptRequest): BuildAdaptReply {
+        tick()
+        adaptStartCalls.add(buildId to req)
+        if (adaptNotConfigured) throw ScreensError.Http(503, """{"error":"AI adapt not configured"}""")
+        return BuildAdaptReply(ok = true, started = true)
+    }
+
+    override suspend fun state(buildId: String): BuildStateResponse {
+        tick()
+        val adapt = if (adaptStartCalls.any { it.first == buildId }) {
+            adaptStatusFixture ?: BuildAdaptStatus(status = "done", fileCount = 12, deployed = false)
+        } else {
+            null
+        }
+        return BuildStateResponse(state = BuildState(buildId = buildId, mode = "git", adapt = adapt))
+    }
+
+    val discardCalls: MutableList<String> = mutableListOf()
+
+    override suspend fun discard(buildId: String) {
+        tick()
+        discardCalls.add(buildId)
     }
 
     val mcpCreateCalls: MutableList<BuildMcpRequest> = mutableListOf()

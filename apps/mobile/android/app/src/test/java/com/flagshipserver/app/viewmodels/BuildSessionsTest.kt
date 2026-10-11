@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.api.BuildSessionsResponse
 import com.flagshipserver.app.api.BuildSummary
 import com.flagshipserver.app.api.MockBuildClient
 import com.flagshipserver.app.api.VibeCodeSessionMeta
@@ -150,5 +151,43 @@ class BuildSessionsTest {
         failing.loadList().join()
         assertTrue(failing.liveSessions.value.isEmpty())
         assertTrue(failing.list.value is LoadingState.Loaded)
+    }
+
+    @Test fun openBuildsAreSeparateAndDiscardable() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply {
+            sessionsFixture = BuildSessionsResponse(
+                builds = listOf(
+                    BuildSummary(buildId = "g1", mode = "git", name = "notes", startedAt = 1, lastAt = 2, entryCount = 3, lastKind = "fitness-check", open = true),
+                    BuildSummary(buildId = "g0", mode = "git", name = "old", startedAt = 1, lastAt = 2, entryCount = 5, lastKind = "deployed"),
+                ),
+            )
+        }
+        val vm = BuildJournalViewModel(client, scope = backgroundScope)
+        vm.loadList().join()
+        val builds = (vm.list.value as LoadingState.Loaded).value
+        assertEquals(listOf("g1"), BuildSessions.openBuilds(builds, vm.liveSessions.value).map { it.buildId })
+        assertEquals(listOf("g0"), BuildSessions.endedBuilds(builds, vm.liveSessions.value).map { it.buildId })
+        vm.discard(builds[0]).join()
+        assertEquals(listOf("g1"), client.discardCalls)
+        assertNull(vm.discardError.value)
+        assertEquals(
+            "This deletes what was imported or written on your server. Its name, \"notes\", becomes free again.",
+            BuildSessions.discardBuildMessage(builds[0]),
+        )
+    }
+
+    @Test fun decodesAnOpenBuildAndABuildState() {
+        val list = json.decodeFromString(
+            BuildSessionsResponse.serializer(),
+            """{"builds":[{"buildId":"g1","mode":"git","name":"notes","startedAt":1,"lastAt":2,"entryCount":3,"lastKind":"x","open":true}]}""",
+        )
+        assertEquals(true, list.builds[0].open)
+        val st = json.decodeFromString(
+            com.flagshipserver.app.api.BuildStateResponse.serializer(),
+            """{"state":{"buildId":"g1","mode":"git","serverFqdn":"h","createdAt":1,"name":"notes","adapt":{"status":"running","startedAt":5}},"files":["a.ts"]}""",
+        )
+        assertEquals("running", st.state.adapt?.status)
+        assertEquals("notes", st.state.name)
+        assertEquals(listOf("a.ts"), st.files)
     }
 }

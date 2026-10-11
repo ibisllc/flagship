@@ -38,14 +38,17 @@ describe("webapp build-modes views", () => {
     expect(body).toContain("/api/build/git");
     expect(body).toContain("/deploy");
     expect(body).toMatch(/Flagship-ready/);
-    expect(body).toMatch(/Build with AI instead/);
+    expect(body).toContain("ADAPT_BUTTON");
+    expect(body).not.toMatch(/Build with AI instead/);
+    expect(body).not.toMatch(/Not Flagship-ready yet/);
   });
 
   it("the not-fit path runs the adapt endpoint and falls back to scratch on 503", async () => {
     const body = await asset("/webapp/views/build-git.js");
     // The AI button now calls the adapt endpoint (not a direct route to scratch).
     expect(body).toContain("/adapt");
-    expect(body).toMatch(/adapting/i);
+    expect(body).toContain("followAdapt");
+    expect(body).toContain("renderAdapting");
     // On success it reveals an Install (deploy) button reusing the deploy call.
     expect(body).toMatch(/Adapted/);
     expect(body).toContain("build-git-deploy");
@@ -66,7 +69,7 @@ describe("webapp build-modes views", () => {
     expect(body).toContain("enterBuildKey");
     // …and the adapt request carries the in-memory credential.
     expect(body).toContain("adaptCredential");
-    expect(body).toContain("{ credential: adaptCredential }");
+    expect(body).toContain("{ credential: adaptCredential, background: true }");
   });
 
   it("mcp view mints a connection and shows the key + IDE config", async () => {
@@ -117,10 +120,12 @@ describe("webapp build-modes views", () => {
   });
 
   it("git/mcp/journal entry views use the platform-absent mapper", async () => {
-    for (const view of ["build-git.js", "build-mcp.js", "build-journal.js"]) {
+    for (const view of ["build-mcp.js", "build-journal.js"]) {
       const body = await asset(`/webapp/views/${view}`);
       expect(body).toContain("buildEntryError");
     }
+    expect(await asset("/webapp/views/build-git.js")).toContain("checkRepoFailure(e)");
+    expect(await asset("/webapp/lib/gitImport.js")).toContain("buildEntryError(e)");
   });
 
   it("app.js wires the chooser as the create-service entry", async () => {

@@ -693,11 +693,22 @@
 
       <!-- Build mode: import from Git -->
       <section id="view-build-git" class="hidden">
-        <h2>Import from Git</h2>
+        <h2>Git import</h2>
         <div class="card">
-          <p class="note">The repo is cloned on your box and checked for a <code>flagship.app.json</code>.</p>
-          <input id="build-git-url" type="text" placeholder="https://github.com/you/app" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-          <input id="build-git-ref" type="text" placeholder="branch / tag (optional)" class="mt-2" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <label class="field">
+            <span class="field-label">Repository URL</span>
+            <input id="build-git-url" type="text" placeholder="https://github.com/you/app" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          </label>
+          <label class="field mt-2">
+            <span class="field-label">Branch or tag (optional)</span>
+            <input id="build-git-ref" type="text" placeholder="main" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          </label>
+          <label class="field mt-2">
+            <span class="field-label">Name (optional)</span>
+            <input id="build-git-name" type="text" placeholder="From the repo's name" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            <span class="note vc-address" id="build-git-address">https://<strong class="vc-address-name">&lt;repo name&gt;</strong></span>
+          </label>
+          <p class="vc-name-status" id="build-git-name-status" aria-live="polite"></p>
           <button id="build-git-check" class="full-width mt-2">Check repo</button>
         </div>
         <div id="build-git-verdict" class="hidden mt-2"></div>

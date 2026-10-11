@@ -55,7 +55,10 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -66,6 +69,7 @@ import com.flagshipserver.app.api.BuildEnvRequest
 import com.flagshipserver.app.api.BuildJournalEntry
 import com.flagshipserver.app.api.BuildMcpConnection
 import com.flagshipserver.app.api.BuildSummary
+import com.flagshipserver.app.api.VibeCodeNameCheck
 import com.flagshipserver.app.api.VibeCodeSessionMeta
 import com.flagshipserver.app.core.LocalActiveOperationsCenter
 import com.flagshipserver.app.core.LocalAppState
@@ -78,6 +82,7 @@ import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.ui.shell.tabs.openBuildSessions
 import com.flagshipserver.app.ui.shell.tabs.openVibeSession
 import com.flagshipserver.app.ui.shell.tabs.vibeSessionChatRoute
 import com.flagshipserver.app.ui.theme.FS
@@ -148,7 +153,7 @@ private fun ScreenScaffold(
 }
 
 @Composable
-private fun MonoField(value: String, onValueChange: (String) -> Unit, placeholder: String) {
+private fun MonoField(value: String, onValueChange: (String) -> Unit, placeholder: String, testTag: String? = null) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -165,7 +170,7 @@ private fun MonoField(value: String, onValueChange: (String) -> Unit, placeholde
             singleLine = true,
             cursorBrush = SolidColor(FS.colors.primary),
             textStyle = TextStyle(color = FS.colors.text, fontSize = 15.sp, fontFamily = FontFamily.Monospace),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
         ) { inner ->
             if (value.isEmpty()) {
                 Text(placeholder, color = FS.colors.textMuted, style = TextStyle(fontSize = 15.sp))
@@ -385,33 +390,90 @@ fun BuildGitScreen(nav: NavController) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    var name by remember { mutableStateOf("") }
+    val slug = BuildGitViewModel.slug(name)
+    val conflict by vm.conflict.collectAsState()
+    val assignedName by vm.assignedName.collectAsState()
+    val adaptError by vm.adaptError.collectAsState()
+    val screens = LocalScreensClient.current
+    val username = appState.currentUser.value ?: "you"
+    val server = (appState.sessionPod ?: appState.leaderPod)?.fqdn ?: "$username.flagship.services"
+    // The latest answer from the box, and the slug it answered for: a check
+    // only counts while the field still holds that slug.
+    var check by remember { mutableStateOf<VibeCodeNameCheck?>(null) }
+    var checkedSlug by remember { mutableStateOf("") }
+    val currentCheck = check.takeIf { checkedSlug == slug }
+    val nameRefused = currentCheck?.ok == false
+
+    LaunchedEffect(slug) {
+        if (slug.isEmpty()) return@LaunchedEffect
+        kotlinx.coroutines.delay(350)
+        val result = runCatching { screens.vibeCodeNameCheck(slug) }.getOrDefault(VibeCodeNameCheck.Unknown)
+        check = result
+        checkedSlug = slug
+    }
+
     ScreenScaffold(
-        title = "Import from Git",
-        subtitle = "Paste a repo URL. We'll clone it and tell you whether it's Flagship-ready.",
+        title = "Git import",
+        subtitle = null,
         onBack = { nav.popBackStack() },
     ) {
-        Text("Repo URL", color = FS.colors.text, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
-        Spacer(Modifier.height(FS.space.s2))
+        FieldLabel("Repository URL")
         MonoField(url, { url = it }, "https://github.com/you/app")
         Spacer(Modifier.height(FS.space.s4))
-        Text("Branch / tag (optional)", color = FS.colors.text, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
-        Spacer(Modifier.height(FS.space.s2))
+        FieldLabel("Branch or tag (optional)")
         MonoField(ref, { ref = it }, "main")
+        Spacer(Modifier.height(FS.space.s4))
+        FieldLabel("Name (optional)")
+        MonoField(name, { name = it }, "From the repo's name", testTag = "build-git-name")
+        Spacer(Modifier.height(FS.space.s2))
+        Text(
+            text = buildAnnotatedString {
+                withStyle(SpanStyle(color = FS.colors.textMuted)) { append("https://") }
+                withStyle(SpanStyle(color = FS.colors.primary, fontWeight = FontWeight.SemiBold)) {
+                    append(BuildGitViewModel.addressLabel(slug, assignedName))
+                }
+                withStyle(SpanStyle(color = FS.colors.textMuted)) { append(".$server") }
+            },
+            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            maxLines = 2,
+            modifier = Modifier.testTag("build-git-address"),
+        )
+        val warning = VibeCodeDescribe.warning(currentCheck, slug)
+        if (warning != null) {
+            Spacer(Modifier.height(FS.space.s2))
+            Text(
+                text = "⚠ $warning",
+                color = FS.colors.danger,
+                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                modifier = Modifier.testTag("build-git-name-taken"),
+            )
+        } else if (currentCheck != null && currentCheck.ok && currentCheck.name != null) {
+            Spacer(Modifier.height(FS.space.s2))
+            Text("✓ Available", color = FS.colors.success, style = TextStyle(fontSize = 14.sp))
+        } else if (slug.isEmpty()) {
+            Spacer(Modifier.height(FS.space.s2))
+            Text(
+                BuildGitViewModel.blankNameHint(ref),
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            )
+        }
         Spacer(Modifier.height(FS.space.s4))
 
         val checking = phase is BuildGitViewModel.GitPhase.Checking
         FSPrimaryButton(
             label = if (checking) "Cloning…" else "Check repo",
-            onClick = { if (url.isBlank()) toasts.error("Paste a repo URL first.") else vm.checkRepo(url, ref) },
-            enabled = !checking,
+            onClick = { if (url.isBlank()) toasts.error("Paste a repo URL first.") else vm.checkRepo(url, ref, name) },
+            enabled = !checking && !nameRefused,
             block = true,
             modifier = Modifier.testTag("build-git-check"),
         )
 
         Spacer(Modifier.height(FS.space.s4))
         when (val p = phase) {
-            is BuildGitViewModel.GitPhase.Verdict -> VerdictCard(p, vm, nav)
-            is BuildGitViewModel.GitPhase.Adapting -> InfoCard("Adapting…", "The AI is rewriting this repo into a Flagship service.")
+            is BuildGitViewModel.GitPhase.Verdict -> VerdictCard(p, vm, nav, adaptError)
+            is BuildGitViewModel.GitPhase.Adapting -> AdaptingCard(p.progress)
             is BuildGitViewModel.GitPhase.Adapted -> AdaptedCard(p, vm, nav)
             is BuildGitViewModel.GitPhase.Deploying -> InfoCard("Installing…", "Building and deploying to your box.")
             is BuildGitViewModel.GitPhase.Deployed -> DeployedCard(p.url)
@@ -419,10 +481,47 @@ fun BuildGitScreen(nav: NavController) {
             else -> {}
         }
     }
+
+    conflict?.let { c ->
+        AlertDialog(
+            onDismissRequest = { vm.dismissConflict() },
+            title = { Text(VibeCodeDescribe.CONFLICT_TITLE) },
+            text = { Text(VibeCodeDescribe.conflictMessage(c, slug)) },
+            confirmButton = {
+                if (c.kind == "session") {
+                    TextButton(
+                        onClick = {
+                            vm.dismissConflict()
+                            nav.openBuildSessions()
+                        },
+                        modifier = Modifier.testTag("build-git-open-sessions"),
+                    ) { Text("Open build sessions") }
+                } else {
+                    TextButton(onClick = { vm.dismissConflict() }) { Text("Pick another name") }
+                }
+            },
+            dismissButton = {
+                if (c.kind == "session") {
+                    TextButton(onClick = { vm.dismissConflict() }) { Text("Pick another name") }
+                }
+            },
+        )
+    }
 }
 
 @Composable
-private fun VerdictCard(p: BuildGitViewModel.GitPhase.Verdict, vm: BuildGitViewModel, nav: NavController) {
+private fun FieldLabel(text: String) {
+    Text(text, color = FS.colors.text, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
+    Spacer(Modifier.height(FS.space.s2))
+}
+
+@Composable
+private fun VerdictCard(
+    p: BuildGitViewModel.GitPhase.Verdict,
+    vm: BuildGitViewModel,
+    nav: NavController,
+    adaptError: String?,
+) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
         if (p.fit) {
             Text("Flagship-ready ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
@@ -431,22 +530,50 @@ private fun VerdictCard(p: BuildGitViewModel.GitPhase.Verdict, vm: BuildGitViewM
             Spacer(Modifier.height(FS.space.s4))
             FSPrimaryButton("Install it", onClick = { vm.deploy() }, block = true)
         } else {
-            Text("Not Flagship-ready yet", color = FS.colors.text, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
-            Spacer(Modifier.height(FS.space.s2))
-            Text(p.reason, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
-            Spacer(Modifier.height(FS.space.s3))
             Text(
-                "The AI rewrites this repo into a Flagship app — adds the app config, removes its own login, and wires it to your box's data layer.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                BuildGitViewModel.notReadyText(p.reason),
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
             )
             Spacer(Modifier.height(FS.space.s4))
             // The box's model rewrites the repo, so confirm an AI key first;
             // the git screen runs the adapt pass on return with it.
-            FSPrimaryButton("Build with AI instead", onClick = { nav.navigate("build/git/key") }, block = true)
+            FSPrimaryButton(
+                "Use AI to prepare repo for Flagship",
+                onClick = { nav.navigate("build/git/key") },
+                block = true,
+                modifier = Modifier.testTag("build-git-adapt"),
+            )
+            adaptError?.let {
+                Spacer(Modifier.height(FS.space.s3))
+                Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+            }
         }
         Spacer(Modifier.height(FS.space.s2))
         JournalLink(nav, vm.buildId)
+    }
+}
+
+@Composable
+private fun AdaptingCard(progress: String?) {
+    FSCard(padding = PaddingValues(FS.space.s5)) {
+        Text("The AI is adapting the repo…", color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+        if (!progress.isNullOrEmpty()) {
+            Spacer(Modifier.height(FS.space.s1))
+            Text(
+                progress,
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                maxLines = 2,
+                modifier = Modifier.testTag("build-git-progress"),
+            )
+        }
+        Spacer(Modifier.height(FS.space.s2))
+        Text(
+            "This can take several minutes. You can leave this screen; Build sessions shows how it went.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+        )
     }
 }
 
@@ -658,6 +785,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
     val liveSessions by vm.liveSessions.collectAsState()
     val discardError by vm.discardError.collectAsState()
     var confirmDiscard by remember { mutableStateOf<VibeCodeSessionMeta?>(null) }
+    var confirmDiscardBuild by remember { mutableStateOf<BuildSummary?>(null) }
 
     LaunchedEffect(buildId) {
         if (buildId != null) vm.loadDetail(buildId) else vm.loadList()
@@ -679,12 +807,25 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                 is LoadingState.Loaded -> {
                     val builds = l.value
                     val ended = BuildSessions.endedBuilds(builds, liveSessions)
+                    val open = BuildSessions.openBuilds(builds, liveSessions)
+                    val anyOpen = liveSessions.isNotEmpty() || open.isNotEmpty()
                     if (builds.isEmpty() && liveSessions.isEmpty()) {
                         InfoCard("No builds yet.", "Builds you start will show up here.")
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                            if (liveSessions.isNotEmpty()) {
+                            if (anyOpen) {
                                 SectionCaption("Open on your server")
+                                open.forEach { b ->
+                                    BuildTile(b, startedOnly = true) { nav.navigate("build/journal/${b.buildId}") }
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(
+                                            onClick = { confirmDiscardBuild = b },
+                                            modifier = Modifier.testTag("build-discard-${b.buildId}"),
+                                        ) {
+                                            Text("Discard…", color = FS.colors.danger, style = TextStyle(fontSize = 14.sp))
+                                        }
+                                    }
+                                }
                                 liveSessions.forEach { session ->
                                     SessionTile(session, BuildSessions.name(session, builds)) {
                                         nav.openVibeSession(vibeSessionChatRoute(session.sessionId))
@@ -703,7 +844,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                                 discardError?.let { ErrorCardSimple(it) }
                             }
                             if (ended.isNotEmpty()) {
-                                if (liveSessions.isNotEmpty()) Spacer(Modifier.height(FS.space.s2))
+                                if (anyOpen) Spacer(Modifier.height(FS.space.s2))
                                 SectionCaption("Past builds")
                                 ended.forEach { b -> BuildTile(b) { nav.navigate("build/journal/${b.buildId}") } }
                             }
@@ -728,6 +869,21 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                 }) { Text("Discard build", color = FS.colors.danger) }
             },
             dismissButton = { TextButton(onClick = { confirmDiscard = null }) { Text("Cancel") } },
+        )
+    }
+
+    confirmDiscardBuild?.let { b ->
+        AlertDialog(
+            onDismissRequest = { confirmDiscardBuild = null },
+            title = { Text(BuildSessions.DISCARD_TITLE) },
+            text = { Text(BuildSessions.discardBuildMessage(b)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDiscardBuild = null
+                    vm.discard(b)
+                }) { Text("Discard build", color = FS.colors.danger) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDiscardBuild = null }) { Text("Cancel") } },
         )
     }
 }
@@ -784,7 +940,7 @@ private fun sessionPill(status: String): FSPillKind = when (status) {
 }
 
 @Composable
-private fun BuildTile(b: BuildSummary, onClick: () -> Unit) {
+private fun BuildTile(b: BuildSummary, startedOnly: Boolean = false, onClick: () -> Unit) {
     FSCard(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         padding = PaddingValues(FS.space.s5),
@@ -796,7 +952,7 @@ private fun BuildTile(b: BuildSummary, onClick: () -> Unit) {
         )
         Spacer(Modifier.height(FS.space.s1))
         Text(
-            BuildSessions.pastBuildSubtitle(b, fmtTimestamp(b.startedAt)),
+            if (startedOnly) "Started ${fmtTimestamp(b.startedAt)}" else BuildSessions.pastBuildSubtitle(b, fmtTimestamp(b.startedAt)),
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )

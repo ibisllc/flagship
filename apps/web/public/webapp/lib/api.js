@@ -132,6 +132,15 @@ export function buildEntryError(e) {
   return e instanceof ScreensError ? e.message : String(e);
 }
 
+// The box's own explanation (`{"error": "…"}`) of a refused request, for the
+// build flows whose refusals are written for the owner (a repo that won't
+// clone, an invalid name, a failed deploy). Null for anything else.
+export function boxReason(e) {
+  if (!(e?.status >= 400 && e.status <= 599)) return null;
+  const reason = e.body && typeof e.body === "object" ? e.body.error : null;
+  return typeof reason === "string" && reason ? reason : null;
+}
+
 /**
  * Fetch a `/api/screens/*` endpoint on the user's pod. Returns the
  * parsed JSON body on 2xx; throws ScreensError with status + parsed
