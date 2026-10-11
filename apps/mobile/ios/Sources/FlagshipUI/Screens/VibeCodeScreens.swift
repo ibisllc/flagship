@@ -139,19 +139,25 @@ public struct VibeCodeDescribeScreen: View {
         return FSScreen {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s6) {
-                    Spacer().frame(height: FS.space.s12)
-                    Text("New service").font(FS.font.h2())
+                    Spacer().frame(height: FS.space.s4)
 
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         FSField(
                             value: $name,
                             label: "Name",
-                            placeholder: "plant-tracker",
-                            helper: "Its web address: \(slug.isEmpty ? "<name>" : slug).\(server)"
+                            placeholder: "plant-tracker"
                         )
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
                         .accessibilityIdentifier("describe-name-field")
+                        FSColorReader { c in
+                            (Text("https://").foregroundColor(c.textMuted)
+                             + Text(slug.isEmpty ? "<name>" : slug).foregroundColor(c.primary).fontWeight(.semibold)
+                             + Text(".\(server)").foregroundColor(c.textMuted))
+                                .font(FS.font.bodySm())
+                                .lineLimit(2)
+                                .accessibilityIdentifier("describe-address")
+                        }
                         nameStatus
                     }
 
@@ -210,6 +216,8 @@ public struct VibeCodeDescribeScreen: View {
                 }
             }
         }
+        .navigationTitle("New Service")
+        .navigationBarTitleDisplayMode(.inline)
         .task(id: slug) {
             guard !slug.isEmpty else { return }
             try? await Task.sleep(for: .milliseconds(350))
