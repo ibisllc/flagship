@@ -36,6 +36,7 @@ import {
   buildAdapterFile,
   deriveRepoAdapter,
   parseManifest,
+  normalizeRepoUrl,
   repoAdapterProblems,
   splitAdapterFile,
   type AppManifest,
@@ -88,7 +89,10 @@ export interface BuildState {
 
 /** What a git build remembers to share its adapter once it deploys. */
 interface GitSource {
+  /** Normalized address, if it's one the index takes. */
   repo: string | null;
+  /** Normalized address, whatever the host. */
+  repoUrl: string | null;
   commit?: string;
   ref?: string;
   original: Record<string, string>;
@@ -96,6 +100,7 @@ interface GitSource {
   origin: "repo" | "index" | "ai" | "as-is";
   /** The repo's own adapter, which no longer fits these files. */
   staleAdapter?: string[];
+  shared?: boolean;
 }
 
 export type AdaptStatus =
@@ -217,6 +222,28 @@ export interface McpConnectionInfo {
   ideConfig: Record<string, unknown>;
 }
 
+/** The single-file adapter for a git build, with the owner's choices taken out. */
+function adapterFileFor(src: GitSource, built: Record<string, string>): string | null {
+  const manifestText = built["flagship.app.json"];
+  if (!src.repoUrl || !src.commit || !manifestText) return null;
+  let manifest: Record<string, unknown>;
+  try {
+    manifest = JSON.parse(manifestText) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  delete manifest.adapter;
+  manifest.name = slugifyLabel(repoNameFromUrl(src.repoUrl)) || "app";
+  const manifestJson = JSON.stringify(manifest);
+  const adapter = deriveRepoAdapter(src.original, built, {
+    repo: src.repoUrl,
+    base: src.commit,
+    ...(src.ref ? { ref: src.ref } : {}),
+  });
+  if (repoAdapterProblems(adapter, manifestJson).length > 0) return null;
+  return buildAdapterFile(manifestJson, adapter);
+}
+
 export class BuildOrchestrator {
   private readonly states = new Map<string, BuildState>();
   private readonly workspaces = new Map<string, BuildWorkspace>();
@@ -327,7 +354,10 @@ export class BuildOrchestrator {
     }
     const repo = indexableRepo(args.gitUrl);
     let origin: GitSource["origin"] = fitness.fit ? (fitness.repoAdapter === "applied" ? "repo" : "as-is") : "ai";
-    if (!fitness.fit && repo && fitness.commit && fitness.original) {
+    // A repo with its own flagship.app.json is its author's to describe:
+    // never looked up in the index, never shared to it.
+    const authored = fitness.original?.["flagship.app.json"] != null;
+    if (!fitness.fit && repo && !authored && fitness.commit && fitness.original) {
       const known = await this.fromIndex(repo, fitness.commit, fitness.original);
       if (known) {
         const reason = "Flagship-ready: Flagship knows how to run this repo — installing as-is, no AI needed";
@@ -363,7 +393,8 @@ export class BuildOrchestrator {
     this.workspaces.set(buildId, new BuildWorkspace(fitness.files));
     if (fitness.binaries) this.binaries.set(buildId, fitness.binaries);
     this.gitSources.set(buildId, {
-      repo,
+      repo: authored ? null : repo,
+      repoUrl: normalizeRepoUrl(args.gitUrl),
       ...(fitness.commit ? { commit: fitness.commit } : {}),
       ...(args.ref ? { ref: args.ref } : {}),
       original: fitness.original ?? fitness.files,
@@ -770,8 +801,8 @@ export class BuildOrchestrator {
       st.serviceId = r.serviceId;
       st.deployedUrl = r.url;
       const src = this.gitSources.get(buildId);
-      if (src) {
-        this.gitSources.delete(buildId);
+      if (src && !src.shared) {
+        src.shared = true;
         void this.shareAdapter(src, ws.snapshot());
       }
     }
@@ -808,31 +839,23 @@ export class BuildOrchestrator {
    * choices (the name) taken out and nothing that says who sent it.
    */
   private async shareAdapter(src: GitSource, built: Record<string, string>): Promise<void> {
-    if (!this.deps.adapterIndex || !src.repo || !src.commit || src.origin === "repo" || src.origin === "as-is") return;
+    if (!this.deps.adapterIndex || !src.repo || src.origin === "repo" || src.origin === "as-is") return;
     const licensePath = licensePathOf(src.original);
-    const manifestText = built["flagship.app.json"];
-    if (!licensePath || !manifestText) return;
-    let manifest: Record<string, unknown>;
-    try {
-      manifest = JSON.parse(manifestText) as Record<string, unknown>;
-    } catch {
-      return;
-    }
-    delete manifest.adapter;
-    manifest.name = slugifyLabel(repoNameFromUrl(src.repo)) || "app";
-    const manifestJson = JSON.stringify(manifest);
-    const adapter = deriveRepoAdapter(src.original, built, {
-      repo: src.repo,
-      base: src.commit,
-      ...(src.ref ? { ref: src.ref } : {}),
-    });
-    if (repoAdapterProblems(adapter, manifestJson).length > 0) return;
-    await this.deps.adapterIndex.submit({
-      repo: src.repo,
-      base: src.commit,
-      licensePath,
-      file: buildAdapterFile(manifestJson, adapter),
-    });
+    const file = licensePath ? adapterFileFor(src, built) : null;
+    if (!file || !src.commit || !licensePath) return;
+    await this.deps.adapterIndex.submit({ repo: src.repo, base: src.commit, licensePath, file });
+  }
+
+  /**
+   * The flagship.app.json that makes this repo run the way this build does,
+   * for its author to commit: the manifest with an adapter from the cloned
+   * commit to the build's files. Null when the build isn't a git import or
+   * its commit is unknown.
+   */
+  adapterFile(buildId: string): string | null {
+    const src = this.gitSources.get(buildId);
+    const ws = this.workspaces.get(buildId);
+    return src && ws ? adapterFileFor(src, ws.snapshot()) : null;
   }
 
   // ----- internals -------------------------------------------------------

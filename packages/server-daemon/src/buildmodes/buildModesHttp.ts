@@ -141,6 +141,14 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
       return jok({ ok: true });
     }
 
+    // GET .../adapter → the flagship.app.json that makes this repo run the
+    // way this build does, for the repo's author to commit.
+    if (verb === "adapter" && req.method === "GET") {
+      const file = o.adapterFile(buildId);
+      if (!file) return jerr(404, "no flagship.app.json for this build");
+      return jok({ file });
+    }
+
     if (verb === "journal" && req.method === "GET") {
       return jok({ entries: await o.readJournal(buildId) });
     }

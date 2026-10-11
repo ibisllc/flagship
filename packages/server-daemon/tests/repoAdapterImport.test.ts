@@ -267,3 +267,64 @@ describe("non-text files and symlinks", () => {
     expect(await writeSourceTree(dir, { "../x": "" })).toEqual({ ok: false, unsafePath: "../x" });
   });
 });
+
+describe("a repo's own flagship.app.json is its author's", () => {
+  it("keeps the repo out of the index, even when the AI has to redo a stale adapter", async () => {
+    const turns: ChatResponse[] = [
+      {
+        content: "",
+        model: "m",
+        toolUses: [
+          { id: "1", name: "write_file", input: { path: "Dockerfile", content: ADAPTED.Dockerfile } },
+          { id: "2", name: "write_file", input: { path: "flagship.app.json", content: MANIFEST } },
+          { id: "3", name: "deploy", input: {} },
+        ],
+      },
+    ];
+    const { index, lookups, submitted } = fakeIndex([{ base: COMMIT, file: ADAPTER_FILE }]);
+    const { o } = setup({
+      clone: { ...ORIGINAL, "index.js": "rewritten\n", "flagship.app.json": ADAPTER_FILE },
+      index,
+      agent: () => turns.shift() ?? { content: "done", model: "m" },
+    });
+    const r = await o.createGit({ gitUrl: REPO });
+    if ("error" in r) throw new Error(r.error);
+    expect(r.fit).toBe(false);
+    expect(lookups).toEqual([]);
+    expect(await o.adaptGit(r.buildId)).toMatchObject({ deployed: true });
+    await settle();
+    expect(submitted).toEqual([]);
+  });
+
+  it("hands the author the file that makes their repo run this way", async () => {
+    const { buildBuildModesHttpHandlers } = await import("../src/buildmodes/buildModesHttp.js");
+    const { splitAdapterFile, applyRepoAdapter } = await import("@flagship/protocol");
+    const turns: ChatResponse[] = [
+      {
+        content: "",
+        model: "m",
+        toolUses: [
+          { id: "1", name: "write_file", input: { path: "index.js", content: ADAPTED["index.js"] } },
+          { id: "2", name: "write_file", input: { path: "Dockerfile", content: ADAPTED.Dockerfile } },
+          { id: "3", name: "write_file", input: { path: "flagship.app.json", content: MANIFEST.replace('"hello"', '"mine"') } },
+        ],
+      },
+    ];
+    const { o } = setup({ agent: () => turns.shift() ?? { content: "done", model: "m" } });
+    const handle = buildBuildModesHttpHandlers({ orchestrator: o, gate: { check: () => null } });
+    const r = await o.createGit({ gitUrl: "https://git.example.org/me/hello" });
+    if ("error" in r) throw new Error(r.error);
+    await o.adaptGit(r.buildId);
+    const res = await handle({ method: "GET", path: `/api/build/sessions/${r.buildId}/adapter`, headers: {}, body: Buffer.alloc(0) });
+    expect(res!.status).toBe(200);
+    const file = JSON.parse(String(res!.body)).file as string;
+    const split = splitAdapterFile(file);
+    if (!split.ok || !split.adapter) throw new Error("no adapter");
+    expect(split.adapter.source).toEqual({ repo: "https://git.example.org/me/hello", base: COMMIT });
+    expect(JSON.parse(split.manifestJson).name).toBe("hello");
+    const applied = applyRepoAdapter(ORIGINAL, split.adapter, split.manifestJson);
+    expect(applied.ok && applied.files["index.js"]).toBe(ADAPTED["index.js"]);
+    const none = await handle({ method: "GET", path: "/api/build/sessions/nope/adapter", headers: {}, body: Buffer.alloc(0) });
+    expect(none!.status).toBe(404);
+  });
+});
