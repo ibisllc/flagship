@@ -875,6 +875,11 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return BuildStateResponse(state: .init(buildId: buildId, mode: "git", adapt: adapt))
     }
 
+    public func buildAdapterFile(buildId: String) async throws -> String {
+        try await tick()
+        return #"{"schema_version": 1, "name": "imported-app", "adapter": {"version": 1}}"#
+    }
+
     public func buildDiscard(buildId: String) async throws {
         try await tick()
         buildDiscardCalls.append(buildId)

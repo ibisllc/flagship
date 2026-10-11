@@ -160,6 +160,17 @@ final class BuildModesViewModelTests: XCTestCase {
         guard case .verdict = vm.phase else { return XCTFail("expected verdict, got \(vm.phase)") }
     }
 
+    func test_gitVM_exportAdapter_savesTheFileToShare() async throws {
+        let client = makeClient()
+        let vm = BuildGitViewModel(client: client)
+        vm.gitUrl = "https://github.com/me/random"
+        await vm.checkRepo()
+        await vm.exportAdapter()
+        let url = try XCTUnwrap(vm.adapterFileURL)
+        XCTAssertEqual(url.lastPathComponent, "flagship.app.json")
+        XCTAssertTrue(try String(contentsOf: url, encoding: .utf8).contains("\"adapter\""))
+    }
+
     func test_notReadyCard_saysItPlainly() {
         let missing = BuildGitResponse(buildId: "b", fit: false, reason: "no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it", fileCount: 3)
         XCTAssertEqual(BuildGitScreen.notReadyText(missing), "This repo has no flagship.app.json and is not yet adapted to run on Flagship.")

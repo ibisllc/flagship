@@ -190,6 +190,29 @@ public final class BuildGitViewModel {
         }
     }
 
+    /// Set once the flagship.app.json for this repo is ready to share.
+    public var adapterFileURL: URL?
+    public private(set) var exportingAdapter = false
+
+    /// Fetch the file that makes this repo run the way this build does, and
+    /// save it where the share sheet can hand it on.
+    public func exportAdapter() async {
+        guard let buildId, !exportingAdapter else { return }
+        exportingAdapter = true
+        defer { exportingAdapter = false }
+        errorMessage = nil
+        do {
+            let text = try await client.buildAdapterFile(buildId: buildId)
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("adapter-\(buildId)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let url = dir.appendingPathComponent("flagship.app.json")
+            try Data(text.utf8).write(to: url, options: .atomic)
+            adapterFileURL = url
+        } catch {
+            errorMessage = ScreensClientError.boxReason(error) ?? ScreensClientError.userFacing(error)
+        }
+    }
+
     public func reset() {
         gitUrl = ""
         ref = ""

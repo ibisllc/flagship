@@ -161,6 +161,9 @@ public protocol ScreensClient: Sendable {
     func buildState(buildId: String) async throws -> BuildStateResponse
     /// `POST …/discard`: forget an open git or IDE build, freeing its name.
     func buildDiscard(buildId: String) async throws
+    /// `GET …/adapter`: the flagship.app.json that makes a git import's repo
+    /// run the way this build does, for the repo's author to commit.
+    func buildAdapterFile(buildId: String) async throws -> String
     /// The list of past builds across every mode (the journal index).
     /// `GET /api/build/sessions`
     func buildSessions() async throws -> BuildSessionsResponse
@@ -294,5 +297,8 @@ public extension ScreensClient {
     }
     func buildDiscard(buildId: String) async throws {
         throw ScreensClientError.notImplemented("discard")
+    }
+    func buildAdapterFile(buildId: String) async throws -> String {
+        throw ScreensClientError.notImplemented("flagship.app.json")
     }
 }

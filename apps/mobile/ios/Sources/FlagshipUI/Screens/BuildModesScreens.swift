@@ -304,6 +304,9 @@ public struct BuildGitScreen: View {
                 checkedSlug = s
             }
         }
+        .sheet(item: $vm.adapterFileURL) { url in
+            ShareSheet(items: [url]) { vm.adapterFileURL = nil }
+        }
         .alert("That name is taken",
                isPresented: Binding(get: { vm.conflict != nil }, set: { if !$0 { vm.conflict = nil } }),
                presenting: vm.conflict) { c in
@@ -409,6 +412,7 @@ public struct BuildGitScreen: View {
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 FSPrimaryButton("Install it", block: true) { Task { await vm.deploy() } }
                     .accessibilityIdentifier("build-git-deploy")
+                adapterExport(c: c)
                 journalLink(c: c)
             }
         case .deploying:
@@ -428,8 +432,22 @@ public struct BuildGitScreen: View {
                     Text(url).font(FS.font.mono()).foregroundColor(c.primary)
                         .lineLimit(1).truncationMode(.middle)
                 }
+                adapterExport(c: c)
             }
         }
+    }
+
+    /// For the repo's author: the file to commit so every Flagship server
+    /// runs the repo this way.
+    @ViewBuilder
+    private func adapterExport(c: FSColors) -> some View {
+        FSSecondaryButton(vm.exportingAdapter ? "Preparing…" : "Get flagship.app.json", block: true) {
+            Task { await vm.exportAdapter() }
+        }
+        .accessibilityIdentifier("build-git-export")
+        Text("Is this your repo? Commit this file at its root and every Flagship server will run it this way.")
+            .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder

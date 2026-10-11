@@ -345,6 +345,11 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func buildState(buildId: String) async throws -> BuildStateResponse {
         try await request("/api/build/sessions/\(esc(buildId))")
     }
+    public func buildAdapterFile(buildId: String) async throws -> String {
+        struct File: Decodable { let file: String }
+        let r: File = try await request("/api/build/sessions/\(esc(buildId))/adapter")
+        return r.file
+    }
     public func buildDiscard(buildId: String) async throws {
         struct Ok: Decodable { let ok: Bool }
         let _: Ok = try await request("/api/build/sessions/\(esc(buildId))/discard", method: "POST", body: Data("{}".utf8))
