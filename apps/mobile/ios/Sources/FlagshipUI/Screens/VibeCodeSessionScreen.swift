@@ -25,7 +25,10 @@ public struct VibeCodeSessionScreen: View {
     @State private var envValueDraft = ""
     @State private var submitting = false
     @State private var deploying = false
+    @State private var deployStartedAt: Date?
     @State private var deployedUrl: String?
+    @State private var shownLines: [VibeTranscript.Line] = []
+    @State private var hiddenMessages = 0
     @State private var pollTask: Task<Void, Never>?
     /// Follow new output only while the owner is at the bottom; scrolling up to
     /// read stops the box from jumping away under their finger.
@@ -113,6 +116,7 @@ public struct VibeCodeSessionScreen: View {
     }
 
     private var title: String {
+        if deploying { return "Deploying" }
         switch status {
         case "streaming": return stream.status == .building ? "Building" : "Generating"
         case "awaiting-tool-response": return "Your turn"
@@ -135,11 +139,15 @@ public struct VibeCodeSessionScreen: View {
     @ViewBuilder
     private func transcript(c: FSColors) -> some View {
         Text("session \(sessionId)").font(FS.font.caption()).foregroundColor(c.textMuted)
-        ForEach(Array((state?.messages ?? []).enumerated()), id: \.offset) { _, msg in
+        if hiddenMessages > 0 {
+            Text("… \(hiddenMessages) earlier message\(hiddenMessages == 1 ? "" : "s") not shown")
+                .font(FS.font.caption()).foregroundColor(c.textMuted)
+        }
+        ForEach(Array(shownLines.enumerated()), id: \.offset) { _, msg in
             line(role: msg.role, text: msg.text, c: c)
         }
         if status == "streaming", !stream.transcript.isEmpty {
-            Text(stream.transcript + " ▍")
+            Text(VibeTranscript.compact(stream.transcript, live: true) + " ▍")
                 .font(FS.font.mono())
                 .foregroundColor(c.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -159,14 +167,14 @@ public struct VibeCodeSessionScreen: View {
         if let pending = state?.pendingRequest {
             pendingLine(pending, c: c)
         }
+        if !["ready-to-deploy", "failed", "cancelled"].contains(status), let err = errorMessage ?? stream.errorMessage {
+            Text("✗ \(err)").font(FS.font.mono()).foregroundColor(c.danger)
+        }
         if let url = liveUrl, !url.isEmpty {
             Text("✓ Live at \(url)")
                 .font(FS.font.mono())
                 .foregroundColor(c.success)
                 .accessibilityIdentifier("vibecode-deployed-url")
-        }
-        if let err = errorMessage ?? stream.errorMessage {
-            Text("✗ \(err)").font(FS.font.mono()).foregroundColor(c.danger)
         }
     }
 
@@ -254,15 +262,40 @@ public struct VibeCodeSessionScreen: View {
                     }
                 }
             }
-        } else if status == "ready-to-deploy" || status == "deploying" || deploying {
-            FSPrimaryButton((deploying || status == "deploying") ? "Deploying…" : "Deploy",
-                            enabled: !deploying && status == "ready-to-deploy", block: true) {
-                Task { await deploy() }
+        } else if deploying || status == "deploying" {
+            TimelineView(.periodic(from: .now, by: 15)) { context in
+                let mins = deployStartedAt.map { Int(context.date.timeIntervalSince($0)) / 60 } ?? 0
+                HStack(spacing: FS.space.s2) {
+                    ProgressView()
+                    Text("Building and starting your app… \(mins > 0 ? "\(mins) min, " : "")this can take a few minutes")
+                        .font(FS.font.mono()).foregroundColor(c.textMuted)
+                    Spacer(minLength: 0)
+                }
             }
-            .accessibilityIdentifier("vibecode-deploy-btn")
+            .accessibilityIdentifier("vibecode-deploying")
+        } else if status == "ready-to-deploy" {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                if let err = errorMessage {
+                    Text("✗ \(err)").font(FS.font.mono()).foregroundColor(c.danger)
+                }
+                FSPrimaryButton("Deploy", enabled: true, block: true) {
+                    Task { await deploy() }
+                }
+                .accessibilityIdentifier("vibecode-deploy-btn")
+            }
         } else if status == "failed" || status == "cancelled" {
-            Text("Session stopped.").font(FS.font.mono()).foregroundColor(c.textMuted)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text("✗ \(errorMessage ?? stream.errorMessage ?? "Session stopped.")")
+                    .font(FS.font.mono()).foregroundColor(c.danger)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                if status == "failed", state?.appId != nil {
+                    FSPrimaryButton("Try deploying again", enabled: true, block: true) {
+                        Task { await deploy() }
+                    }
+                    .accessibilityIdentifier("vibecode-redeploy-btn")
+                }
+            }
         } else {
             HStack(spacing: FS.space.s2) {
                 ProgressView()
@@ -277,8 +310,21 @@ public struct VibeCodeSessionScreen: View {
 
     private func reload() async {
         do {
-            state = try await client.vibeCodeSessionState(sessionId: sessionId)
-            errorMessage = nil
+            let next = try await client.vibeCodeSessionState(sessionId: sessionId)
+            guard next != state else { return }
+            let wasEmpty = state == nil
+            let before = state?.status
+            state = next
+            let shown = VibeTranscript.lines(next.messages)
+            hiddenMessages = shown.hidden
+            shownLines = shown.lines
+            if wasEmpty { errorMessage = nil }
+            // The live URL and the failure reason ride the stream, which may
+            // have closed when the AI finished; reattaching replays them.
+            if before != next.status, ["deployed", "failed"].contains(next.status) {
+                deploying = false
+                stream.start()
+            }
         } catch {
             if state == nil { errorMessage = ScreensClientError.userFacing(error) }
         }
@@ -290,23 +336,42 @@ public struct VibeCodeSessionScreen: View {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 if Task.isCancelled { break }
-                if ["streaming", "awaiting-tool-response", "ready-to-deploy", "deploying"].contains(status) || state == nil {
+                if deploying || ["streaming", "awaiting-tool-response", "ready-to-deploy", "deploying"].contains(status) || state == nil {
                     await reload()
                 }
             }
         }
     }
 
+    /// The box replies only when the build and install are done. If the
+    /// connection drops first, the box keeps going, so keep watching the
+    /// session status (polled above) instead of reporting a failure.
     private func deploy() async {
+        guard !deploying else { return }
         deploying = true
-        defer { deploying = false }
+        deployStartedAt = Date()
+        errorMessage = nil
         do {
             let r = try await client.vibeCodeDeploy(sessionId: sessionId)
             if r.ok { deployedUrl = r.url } else { errorMessage = "Deploy was rejected by the box." }
+            deploying = false
+            await reload()
+        } catch ScreensClientError.http(let code, let message) where code != 0 {
+            deploying = false
+            errorMessage = Self.boxError(message) ?? ScreensClientError.plainLanguage(forStatus: code)
             await reload()
         } catch {
-            errorMessage = ScreensClientError.userFacing(error)
+            // Transport loss: the deploy goes on without us; the poll sees
+            // the session reach deployed or failed.
         }
+    }
+
+    /// The daemon's `{ "error": "<reason>" }` body, e.g. "docker build failed: …".
+    nonisolated static func boxError(_ body: String) -> String? {
+        guard let data = body.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let e = obj["error"] as? String, !e.isEmpty else { return nil }
+        return String(e.prefix(600))
     }
 
     private func submitReply() async {

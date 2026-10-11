@@ -59,6 +59,7 @@ class LiveScreensClient(
         deserializer: DeserializationStrategy<R>?,
         method: String = "GET",
         body: ByteArray? = null,
+        readTimeoutSeconds: Long? = null,
     ): R {
         val base = base()
         val token = token()
@@ -83,7 +84,10 @@ class LiveScreensClient(
         // (Main, from a Compose scope.launch) — main-thread work after the call
         // is safe again.
         val (status, bytes) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            client.newCall(req).execute().use { resp ->
+            val c = readTimeoutSeconds?.let {
+                client.newBuilder().readTimeout(it, java.util.concurrent.TimeUnit.SECONDS).build()
+            } ?: client
+            c.newCall(req).execute().use { resp ->
                 resp.code to (resp.body?.bytes() ?: ByteArray(0))
             }
         }
@@ -188,8 +192,12 @@ class LiveScreensClient(
         // BFF has no deploy route, and the WS stream is a pure relay. The vibe
         // session registry is shared between the screens-BFF start and this
         // legacy handler, so a session started via /api/screens/vibe-code/start
-        // is deployable here.
-        return request("/api/llm/sessions/$sessionId/deploy", BuildDeployResponse.serializer(), "POST", "{}".toByteArray())
+        // is deployable here. The box answers only once `docker build` and the
+        // install finish, which takes minutes, not the client's 60 s default.
+        return request(
+            "/api/llm/sessions/$sessionId/deploy", BuildDeployResponse.serializer(), "POST", "{}".toByteArray(),
+            readTimeoutSeconds = 15 * 60,
+        )
     }
 
     override suspend fun peerBackupStatus(): PeerBackupStatusResponse =

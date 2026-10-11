@@ -16,7 +16,8 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         self.store = store
     }
 
-    private func request<T: Decodable>(_ path: String, method: String = "GET", body: Data? = nil) async throws -> T {
+    private func request<T: Decodable>(_ path: String, method: String = "GET", body: Data? = nil,
+                                       timeout: TimeInterval? = nil) async throws -> T {
         guard let base = await store.podBaseUrl else { throw ScreensClientError.notPaired }
         guard let token = await store.sessionToken else { throw ScreensClientError.noSessionToken }
         guard let url = URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + path) else {
@@ -25,6 +26,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
 
         var req = URLRequest(url: url)
         req.httpMethod = method
+        if let timeout { req.timeoutInterval = timeout }
         req.setValue(token, forHTTPHeaderField: "x-flagship-session")
         if let body {
             req.httpBody = body
@@ -187,8 +189,10 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         // BFF has no deploy route, and the WS stream is a pure relay. The vibe
         // session registry is shared between the screens-BFF start and this
         // legacy handler, so a session started via /api/screens/vibe-code/start
-        // is deployable here.
-        return try await request("/api/llm/sessions/\(sessionId)/deploy", method: "POST", body: Data("{}".utf8))
+        // is deployable here. The box answers only once `docker build` and the
+        // install finish, which takes minutes, not the default 60 s.
+        return try await request("/api/llm/sessions/\(sessionId)/deploy", method: "POST", body: Data("{}".utf8),
+                                 timeout: 15 * 60)
     }
 
     public func peerBackupStatus() async throws -> PeerBackupStatusResponse {
