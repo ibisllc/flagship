@@ -56,6 +56,15 @@ export interface MembershipStoreOptions {
   ownerUsername?: string;
   /** Slice D — box-local active admin grants (`[]` box-side today). */
   activeGrants?: readonly AdminGrantView[];
+  /** Called after any change worth saving (a member or a redeemed invite). */
+  onChange?: () => void;
+}
+
+/** What an app's membership needs to come back after a daemon restart. */
+export interface AppMembershipSnapshot {
+  members: MembershipEntry[];
+  lastSeen: Record<string, number>;
+  redeemed: Record<string, { redeemedAt: number; accepterIrkPubHex: string }>;
 }
 
 /**
@@ -68,6 +77,7 @@ export class InviteStore {
   private readonly adminRootPub: Bytes | undefined;
   private readonly ownerUsername: string;
   private readonly activeGrants: readonly AdminGrantView[];
+  private readonly onChange: (() => void) | undefined;
 
   constructor(
     public readonly serviceId: string,
@@ -79,6 +89,16 @@ export class InviteStore {
     this.adminRootPub = opts.adminRootPub;
     this.ownerUsername = opts.ownerUsername ?? "";
     this.activeGrants = opts.activeGrants ?? [];
+    this.onChange = opts.onChange;
+  }
+
+  snapshot(): AppMembershipSnapshot["redeemed"] {
+    return Object.fromEntries(this.redeemed);
+  }
+
+  restore(redeemed: AppMembershipSnapshot["redeemed"]): void {
+    this.redeemed.clear();
+    for (const [k, v] of Object.entries(redeemed)) this.redeemed.set(k, v);
   }
 
   redeem(
@@ -124,6 +144,7 @@ export class InviteStore {
       redeemedAt: t,
       accepterIrkPubHex: bytesToHex(acceptance.accepterIrkPub),
     });
+    this.onChange?.();
     return {
       ok: true,
       role: token.role,
@@ -158,6 +179,7 @@ export class MembershipStore {
   private readonly adminRootPub: Bytes | undefined;
   private readonly ownerUsername: string;
   private readonly activeGrants: readonly AdminGrantView[];
+  private readonly onChange: (() => void) | undefined;
 
   constructor(
     public readonly serviceId: string,
@@ -171,6 +193,18 @@ export class MembershipStore {
     // The account name for the admin-grant check; default to the owner user id.
     this.ownerUsername = opts.ownerUsername ?? ownerUserId;
     this.activeGrants = opts.activeGrants ?? [];
+    this.onChange = opts.onChange;
+  }
+
+  snapshot(): Pick<AppMembershipSnapshot, "members" | "lastSeen"> {
+    return { members: this.list().map((m) => ({ ...m })), lastSeen: Object.fromEntries(this.lastSeen) };
+  }
+
+  restore(snap: Pick<AppMembershipSnapshot, "members" | "lastSeen">): void {
+    this.members.clear();
+    this.lastSeen.clear();
+    for (const m of snap.members) this.members.set(m.irkPubHex.toLowerCase(), { ...m });
+    for (const [k, v] of Object.entries(snap.lastSeen)) this.lastSeen.set(k, v);
   }
 
   applySignedMutation(m: MembershipMutation, signature: Bytes): ApplyResult {
@@ -204,6 +238,7 @@ export class MembershipStore {
         return { ok: false, reason: "no-such-member" };
       }
       this.members.delete(targetHex);
+      this.onChange?.();
       return { ok: true, effect: "removed" };
     }
 
@@ -214,6 +249,7 @@ export class MembershipStore {
       addedAt: this.now(),
       addedBy: this.ownerUserId,
     });
+    this.onChange?.();
     return { ok: true, effect: existed ? "updated" : "added" };
   }
 
@@ -230,6 +266,7 @@ export class MembershipStore {
       addedAt: this.now(),
       addedBy: this.ownerUserId,
     });
+    this.onChange?.();
     return existed ? "updated" : "added";
   }
 
@@ -240,7 +277,9 @@ export class MembershipStore {
    * and doesn't necessarily hold the raw pubkey bytes.
    */
   internalRemoveByHex(irkPubHex: string): boolean {
-    return this.members.delete(irkPubHex.toLowerCase());
+    const removed = this.members.delete(irkPubHex.toLowerCase());
+    if (removed) this.onChange?.();
+    return removed;
   }
 
   getRole(irkPub: Bytes): string | null {
@@ -306,6 +345,15 @@ export class AppMembership {
   /** Apply an owner-signed remove or role-change mutation. */
   applyMutation(m: MembershipMutation, sig: Bytes): ApplyResult {
     return this.members.applySignedMutation(m, sig);
+  }
+
+  snapshot(): AppMembershipSnapshot {
+    return { ...this.members.snapshot(), redeemed: this.invites.snapshot() };
+  }
+
+  restore(snap: AppMembershipSnapshot): void {
+    this.members.restore(snap);
+    this.invites.restore(snap.redeemed ?? {});
   }
 
   stableIdFor(irkPub: Bytes): string {

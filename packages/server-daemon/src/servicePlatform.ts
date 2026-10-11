@@ -30,7 +30,8 @@ import {
 import type { AppEnv } from "./serviceEnvStore.js";
 import type { SwkOps } from "./keyCustodian.js";
 import { AppRunner, type AppSpec } from "./serviceRunner.js";
-import { AppMembership } from "./membership.js";
+import { AppMembership, type AppMembershipSnapshot } from "./membership.js";
+import type { InstalledServicesStore, PersistedService } from "./installedServicesStore.js";
 import {
   DataProvisioner,
   credentialsToEnv,
@@ -141,6 +142,13 @@ export interface ServicePlatformDeps {
    * the uninstall.
    */
   onServiceRemoved?: ((slug: string) => void | Promise<void>) | null;
+  /**
+   * Where the installed-service list is kept across daemon restarts. Saved on
+   * every install, uninstall, alias and membership change; read once at boot
+   * by `restore()`. Null keeps it in memory only (tests).
+   */
+  registry?: InstalledServicesStore | null;
+  onLog?: (m: string) => void;
   /** Reject mutations whose `issuedAt` is more than this old (ms). Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -318,35 +326,15 @@ export class ServicePlatform {
     // `FLAGSHIP_` prefix are dropped defensively. Values are read
     // transiently for this deploy and never logged.
     const port = args.pickPort?.() ?? randomPort();
-    const ownerEnv = this.deps.envStore
-      ? sanitizeOwnerEnv(await this.deps.envStore.get(serviceId).catch(() => null))
-      : {};
-    const containerPort = parsed.manifest.runtime.port;
-    const env: Record<string, string> = {
-      ...ownerEnv,
-      ...(parsed.manifest.runtime.env ?? {}),
-      ...(data ? credentialsToEnv(data) : {}),
-      FLAGSHIP_APP_ID: serviceId,
-      FLAGSHIP_CREATOR: r.creator,
-      FLAGSHIP_SLUG: r.slug,
-      FLAGSHIP_HOST: this.deps.host.username,
-      // 12-factor: tell the app the port it should bind. It equals the
-      // manifest runtime.port the publish maps to, so a contract app that
-      // reads $PORT and an image that hardcodes its declared port both end up
-      // reachable by the proxy. (Set ABOVE the FLAGSHIP_* block? No — after
-      // runtime.env so the manifest can't override the platform's PORT.)
-      PORT: String(containerPort),
-      ...(apiToken ? { FLAGSHIP_APP_TOKEN: apiToken } : {}),
-    };
-    const spec: AppSpec = {
+    const spec = await this.containerSpec({
       serviceId,
-      image: parsed.manifest.runtime.image,
-      env,
-      // `port` = allocated host-loopback port the proxy dials; `containerPort`
-      // = the app's manifest listen port. Publish maps host→container.
-      port,
-      containerPort,
-    };
+      creator: r.creator,
+      slug: r.slug,
+      manifest: parsed.manifest,
+      data,
+      apiToken,
+      hostPort: port,
+    });
     try {
       await this.deps.appRunner.deploy(spec);
     } catch (e) {
@@ -365,14 +353,7 @@ export class ServicePlatform {
     }
 
     // 3. Build the per-app membership store (mutations gated by host's IRK).
-    const membership = new AppMembership(
-      serviceId,
-      this.deps.host.username,
-      this.deps.host.irkPub,
-      this.deps.swk,
-      {},
-      this.deps.host.adminRootPub,
-    );
+    const membership = this.newMembership(serviceId);
 
     const installed: InstalledService = {
       creator: r.creator,
@@ -387,6 +368,7 @@ export class ServicePlatform {
     };
     this.apps.set(serviceId, installed);
     this.byUrlLabel.set(urlLabel.toLowerCase(), installed);
+    this.persist();
 
     // Browser feature: register the domain grant if the manifest
     // declares one AND the daemon has the gate wired in. Without a
@@ -483,6 +465,160 @@ export class ServicePlatform {
    * the membership store records a real, auditable mutation rather
    * than a synthetic exception.
    */
+  private newMembership(serviceId: string): AppMembership {
+    return new AppMembership(
+      serviceId,
+      this.deps.host.username,
+      this.deps.host.irkPub,
+      this.deps.swk,
+      { onChange: () => this.persist() },
+      this.deps.host.adminRootPub,
+    );
+  }
+
+  /** The container a service runs as: its image, port and full environment. */
+  private async containerSpec(a: {
+    serviceId: string;
+    creator: string;
+    slug: string;
+    manifest: AppManifest;
+    data: AppDataCredentials | null;
+    apiToken: string | null;
+    hostPort: number;
+  }): Promise<AppSpec> {
+    // Owner-set generic env vars (sealed at rest) sit BELOW the data-layer +
+    // reserved FLAGSHIP_* vars so an owner can never shadow a reserved name.
+    // Values are read transiently for this deploy and never logged.
+    const ownerEnv = this.deps.envStore
+      ? sanitizeOwnerEnv(await this.deps.envStore.get(a.serviceId).catch(() => null))
+      : {};
+    const containerPort = a.manifest.runtime.port;
+    const env: Record<string, string> = {
+      ...ownerEnv,
+      ...(a.manifest.runtime.env ?? {}),
+      ...(a.data ? credentialsToEnv(a.data) : {}),
+      FLAGSHIP_APP_ID: a.serviceId,
+      FLAGSHIP_CREATOR: a.creator,
+      FLAGSHIP_SLUG: a.slug,
+      FLAGSHIP_HOST: this.deps.host.username,
+      // 12-factor: tell the app the port it should bind. After runtime.env so
+      // the manifest can't override the platform's PORT.
+      PORT: String(containerPort),
+      ...(a.apiToken ? { FLAGSHIP_APP_TOKEN: a.apiToken } : {}),
+    };
+    // `port` = allocated host-loopback port the proxy dials; `containerPort`
+    // = the app's manifest listen port. Publish maps host→container.
+    return { serviceId: a.serviceId, image: a.manifest.runtime.image, env, port: a.hostPort, containerPort };
+  }
+
+  private persistChain: Promise<void> = Promise.resolve();
+
+  /** Save the installed-service list. Ordered, never throws. */
+  private persist(): void {
+    const registry = this.deps.registry;
+    if (!registry) return;
+    const services: PersistedService[] = [...this.apps.values()].map((a) => ({
+      creator: a.creator,
+      slug: a.slug,
+      serviceId: a.serviceId,
+      manifestJson: JSON.stringify(a.manifest),
+      urlLabel: a.urlLabel,
+      hostPort: a.containerPort,
+      data: a.data,
+      installedAt: a.installedAt,
+      membership: a.membership.snapshot(),
+    }));
+    this.persistChain = this.persistChain
+      .then(() => registry.save(services))
+      .catch((e) => this.deps.onLog?.(`[service-platform] could not save the installed services: ${(e as Error).message}`));
+  }
+
+  /** Wait for pending saves (shutdown, tests). */
+  flush(): Promise<void> {
+    return this.persistChain;
+  }
+
+  /**
+   * Bring back the services saved before the daemon restarted: routing,
+   * members and browser grants at once, then each container, recreated from
+   * its image with the same port, data credentials and token. A container
+   * that won't start (Docker still coming up at boot) is retried; the service
+   * stays registered either way so the owner sees it and can remove it.
+   */
+  async restore(opts: { retries?: number; retryDelayMs?: number } = {}): Promise<{ restored: string[]; failed: string[] }> {
+    const registry = this.deps.registry;
+    if (!registry) return { restored: [], failed: [] };
+    let saved: PersistedService[];
+    try {
+      saved = await registry.load();
+    } catch (e) {
+      this.deps.onLog?.(`[service-platform] could not read the installed services: ${(e as Error).message}`);
+      return { restored: [], failed: [] };
+    }
+    const pending: { app: InstalledService; spec: AppSpec }[] = [];
+    for (const p of saved) {
+      if (this.apps.has(p.serviceId)) continue;
+      const parsed = parseManifest(safeJsonParse(p.manifestJson));
+      if (!parsed.ok) {
+        this.deps.onLog?.(`[service-platform] skipping saved ${p.serviceId}: manifest no longer valid (${parsed.errors.join("; ")})`);
+        continue;
+      }
+      const membership = this.newMembership(p.serviceId);
+      membership.restore(p.membership ?? ({ members: [], lastSeen: {}, redeemed: {} } as AppMembershipSnapshot));
+      const app: InstalledService = {
+        creator: p.creator,
+        slug: p.slug,
+        serviceId: p.serviceId,
+        manifest: parsed.manifest,
+        urlLabel: p.urlLabel,
+        membership,
+        containerPort: p.hostPort,
+        data: p.data,
+        installedAt: p.installedAt,
+      };
+      this.apps.set(app.serviceId, app);
+      this.byUrlLabel.set(app.urlLabel.toLowerCase(), app);
+      if (this.deps.domainGate && parsed.manifest.browser?.domains) {
+        this.deps.domainGate.setGrant(app.serviceId, parsed.manifest.browser.domains);
+      }
+      const apiToken = this.deps.appAuthTokens
+        ? await this.deps.appAuthTokens.tokenForApp(app.serviceId).catch(() => null)
+        : null;
+      pending.push({
+        app,
+        spec: await this.containerSpec({
+          serviceId: app.serviceId,
+          creator: app.creator,
+          slug: app.slug,
+          manifest: app.manifest,
+          data: app.data,
+          apiToken,
+          hostPort: app.containerPort,
+        }),
+      });
+    }
+    const restored: string[] = [];
+    let todo = pending;
+    const retries = opts.retries ?? 5;
+    for (let attempt = 0; todo.length > 0 && attempt <= retries; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, opts.retryDelayMs ?? 15_000));
+      const next: typeof todo = [];
+      for (const t of todo) {
+        try {
+          await this.deps.appRunner.restart(t.spec);
+          restored.push(t.app.serviceId);
+        } catch (e) {
+          if (attempt === retries) {
+            this.deps.onLog?.(`[service-platform] could not start ${t.app.serviceId}: ${(e as Error).message}`);
+          }
+          next.push(t);
+        }
+      }
+      todo = next;
+    }
+    return { restored, failed: todo.map((t) => t.app.serviceId) };
+  }
+
   /**
    * Add the host as a member of the freshly-installed app. The signing
    * key is supplied by the install handler — typically the host's IRK
@@ -571,6 +707,7 @@ export class ServicePlatform {
     }
     this.apps.delete(serviceId);
     this.byUrlLabel.delete(app.urlLabel.toLowerCase());
+    this.persist();
     // Per-service leadership teardown: release the box's `<slug>.<user>` route
     // at the hub + re-announce so the claim doesn't outlive the service. The
     // route is keyed by the bare slug (the gossip claimer maps slug → the tier-2
@@ -625,6 +762,7 @@ export class ServicePlatform {
     const updated: InstalledService = { ...app, urlLabel: lower };
     this.apps.set(serviceId, updated);
     this.byUrlLabel.set(lower, updated);
+    this.persist();
     // Domain gate, when present, is keyed by serviceId — no rebind
     // needed there. Caddy / Fastify routing is driven off byLabel(),
     // so the next inbound request to the new label will land in the

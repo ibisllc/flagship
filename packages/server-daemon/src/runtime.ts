@@ -1,3 +1,4 @@
+import { SealedInstalledServicesStore, type InstalledServicesStore } from "./installedServicesStore.js";
 import { connect as netConnect, type Socket } from "node:net";
 import { createServer as createTlsServer, type Server as TlsServer, type TLSSocket } from "node:tls";
 import acme from "acme-client";
@@ -327,6 +328,8 @@ export interface DaemonRuntimeOptions {
      * the runtime (and thus ServicePlatform) is up.
      */
     onServiceRemoved?: (slug: string) => void | Promise<void>;
+    /** Override the installed-service store (tests). Default: SWK-sealed under dataDir. */
+    registry?: InstalledServicesStore | null;
   };
 }
 
@@ -1181,6 +1184,21 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       cloneService: apOpts.cloneService ?? null,
       envStore,
       onServiceRemoved: apOpts.onServiceRemoved ?? null,
+      registry:
+        apOpts.registry !== undefined
+          ? apOpts.registry
+          : opts.dataDir
+            ? new SealedInstalledServicesStore(`${opts.dataDir}/data/installed-services.sealed`, apOpts.swk)
+            : null,
+      onLog: (m) => console.warn(m),
+    });
+    void servicePlatformRef.current.restore().then(({ restored, failed }) => {
+      if (restored.length > 0 || failed.length > 0) {
+        console.log(
+          `[runtime] restored ${restored.length} installed service(s)` +
+            (failed.length ? `; ${failed.length} would not start: ${failed.join(", ")}` : ""),
+        );
+      }
     });
     const extras: string[] = [];
     if (apOpts.appAuthTokens) extras.push("app-tokens");
