@@ -110,11 +110,22 @@ Be decisive. Prefer the simplest manifest that works (often no data stores, a si
  * are read via the read_file tool — we don't dump them all here, the model
  * pulls what it needs. We DO list paths so it can plan.)
  */
-function initialUserMessage(repoFiles: string[], extra?: string): string {
-  const list = repoFiles.length > 0 ? repoFiles.map((p) => `  - ${p}`).join("\n") : "  (empty)";
+const LISTED_FILES = 400;
+
+function listing(paths: string[]): string {
+  if (paths.length === 0) return "  (none)";
+  const shown = paths.slice(0, LISTED_FILES).map((p) => `  - ${p}`).join("\n");
+  return paths.length > LISTED_FILES ? `${shown}\n  … and ${paths.length - LISTED_FILES} more (call list_files)` : shown;
+}
+
+function initialUserMessage(repoFiles: string[], extra?: string, binaryFiles: string[] = []): string {
+  const binaries = binaryFiles.length
+    ? `Also in the repo, carried into the build unchanged (images, fonts and other non-text files; you can't read or edit them) (${binaryFiles.length}):\n${listing(binaryFiles)}\n\n`
+    : "";
   const base =
     `Adapt the repository now in your build workspace into a Flagship app, using the tools.\n\n` +
-    `Files present (${repoFiles.length}):\n${list}\n\n` +
+    `Files present (${repoFiles.length}):\n${listing(repoFiles)}\n\n` +
+    binaries +
     `Start by calling get_contract, then inspect the files you need with read_file. ` +
     `When you have written a valid flagship.app.json + Dockerfile and validate passes, call deploy.`;
   const steer = (extra ?? "").trim();
@@ -144,6 +155,8 @@ export async function runBuildAgent(args: {
   tools: BuildToolHost;
   journal: BuildJournal;
   repoFiles: string[];
+  /** Non-text files the build carries; the model can't see them. */
+  binaryFiles?: string[];
   instructions?: string;
   options?: BuildAgentOptions;
 }): Promise<BuildAgentResult> {
@@ -151,7 +164,7 @@ export async function runBuildAgent(args: {
   const specs = toolSpecs();
   const messages: ChatMessage[] = [
     { role: "system", content: BUILD_AGENT_SYSTEM_PROMPT },
-    { role: "user", content: initialUserMessage(args.repoFiles, args.instructions) },
+    { role: "user", content: initialUserMessage(args.repoFiles, args.instructions, args.binaryFiles) },
   ];
 
   let deployed = false;

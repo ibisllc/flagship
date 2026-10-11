@@ -219,3 +219,51 @@ describe("the adapter index", () => {
     expect(await failing.lookup(REPO, COMMIT)).toEqual([]);
   });
 });
+
+describe("non-text files and symlinks", () => {
+  it("carries images through to the build, and never follows a symlink out of the repo", async () => {
+    const { symlink } = await import("node:fs/promises");
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 3]);
+    const journal = new InMemoryBuildJournal();
+    const deployed: Array<{ files: Record<string, string>; binaries?: Record<string, Buffer> }> = [];
+    const o: BuildOrchestrator = new BuildOrchestrator({
+      journal,
+      gitImporter: new GitImporter({
+        cmd: { run: async () => {} },
+        workingDir: mkdtempSync(join(tmpdir(), "bin-")),
+        cloneInto: async ({ dest }) => {
+          await fixtureClone({ ...ORIGINAL, "flagship.app.json": ADAPTER_FILE })({ dest });
+          await mkdir(join(dest, "public"), { recursive: true });
+          await writeFile(join(dest, "public/logo.png"), png);
+          await symlink("/etc/hosts", join(dest, "public/hosts.txt"));
+        },
+      }),
+      mcpKeys: new InMemoryMcpKeyStore(),
+      serverFqdn: FQDN,
+      deployArtifact: async (a): Promise<DeployResult> => {
+        deployed.push({ files: a.files, ...(a.binaries ? { binaries: a.binaries } : {}) });
+        return { ok: true, serviceId: "harry--hello", url: `https://hello.${FQDN}`, image: "i" };
+      },
+    });
+    const r = await o.createGit({ gitUrl: REPO });
+    if ("error" in r) throw new Error(r.error);
+    await o.deploy(r.buildId);
+    expect(deployed[0]!.binaries?.["public/logo.png"]).toEqual(png);
+    expect(deployed[0]!.files["public/hosts.txt"]).toBeUndefined();
+    expect(deployed[0]!.binaries?.["public/hosts.txt"]).toBeUndefined();
+  });
+
+  it("an edit keeps the binaries the running version has", async () => {
+    const { writeSourceTree } = await import("../src/llm/serviceSource.js");
+    const { readFile } = await import("node:fs/promises");
+    const dir = join(mkdtempSync(join(tmpdir(), "tree-")), "harry--hello");
+    const png = Buffer.from([0x89, 0x50, 0, 7]);
+    await writeSourceTree(dir, { "index.js": "1" }, { binaries: { "logo.png": png } });
+    await writeSourceTree(dir, { "index.js": "2" }, { keepBinaries: true });
+    expect(await readFile(join(dir, "logo.png"))).toEqual(png);
+    expect(await readFile(join(dir, "index.js"), "utf8")).toBe("2");
+    await writeSourceTree(dir, { "index.js": "3" });
+    await expect(readFile(join(dir, "logo.png"))).rejects.toThrow();
+    expect(await writeSourceTree(dir, { "../x": "" })).toEqual({ ok: false, unsafePath: "../x" });
+  });
+});

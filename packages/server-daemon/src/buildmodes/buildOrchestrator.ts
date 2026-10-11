@@ -137,7 +137,7 @@ export interface BuildOrchestratorDeps {
   gitImporter: GitImporter;
   mcpKeys: McpKeyStore;
   /** Build + install a files map. Returns the live URL. */
-  deployArtifact: (a: { files: Record<string, string>; serverFqdn: string; buildId: string; mode: BuildMode; editsServiceId?: string; name?: string }) => Promise<DeployResult>;
+  deployArtifact: (a: { files: Record<string, string>; serverFqdn: string; buildId: string; mode: BuildMode; editsServiceId?: string; name?: string; binaries?: Record<string, Buffer> }) => Promise<DeployResult>;
   /**
    * What a git import's name is checked against: installed apps and every
    * open build's name (this orchestrator's included). Unset ⇒ git imports
@@ -224,6 +224,8 @@ export class BuildOrchestrator {
   /** Value-free per-build env requests an authoring agent made. */
   private readonly envRequests = new Map<string, PendingEnvRequest[]>();
   private readonly gitSources = new Map<string, GitSource>();
+  /** A git build's non-text files, carried to the deploy unchanged. */
+  private readonly binaries = new Map<string, Record<string, Buffer>>();
   private readonly now: () => number;
   private readonly rand: () => string;
 
@@ -359,6 +361,7 @@ export class BuildOrchestrator {
       ...(name ? { name } : {}),
     });
     this.workspaces.set(buildId, new BuildWorkspace(fitness.files));
+    if (fitness.binaries) this.binaries.set(buildId, fitness.binaries);
     this.gitSources.set(buildId, {
       repo,
       ...(fitness.commit ? { commit: fitness.commit } : {}),
@@ -403,6 +406,7 @@ export class BuildOrchestrator {
     this.mcpServers.delete(buildId);
     this.envRequests.delete(buildId);
     this.gitSources.delete(buildId);
+    this.binaries.delete(buildId);
     if (st.mode === "mcp") await this.deps.mcpKeys.revoke(buildId);
     await this.deps.journal.append(buildId, {
       mode: st.mode,
@@ -628,6 +632,7 @@ export class BuildOrchestrator {
         tools,
         journal: this.deps.journal,
         repoFiles,
+        binaryFiles: Object.keys(this.binaries.get(buildId) ?? {}).sort(),
         ...(opts.instructions != null ? { instructions: opts.instructions } : {}),
         ...(this.deps.agentMaxTurns != null ? { options: { maxTurns: this.deps.agentMaxTurns } } : {}),
       });
@@ -759,6 +764,7 @@ export class BuildOrchestrator {
       mode: st.mode,
       ...(st.editsServiceId ? { editsServiceId: st.editsServiceId } : {}),
       ...(st.name ? { name: st.name } : {}),
+      ...(this.binaries.has(buildId) ? { binaries: this.binaries.get(buildId)! } : {}),
     });
     if (r.ok) {
       st.serviceId = r.serviceId;

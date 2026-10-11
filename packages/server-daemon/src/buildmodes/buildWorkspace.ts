@@ -17,7 +17,7 @@
 
 const MAX_PATH_LEN = 512;
 const MAX_FILE_BYTES = 1024 * 1024; // 1 MiB per file
-const MAX_FILES = 500;
+const MAX_FILES = 2000;
 
 export type WriteResult = { ok: true } | { ok: false; reason: string };
 

@@ -12,7 +12,6 @@
  * map so git and mcp builds reuse it verbatim.
  */
 
-import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   verifyInstallService,
@@ -24,6 +23,7 @@ import type { BoxSigner } from "../keyCustodian.js";
 import type { ForgejoAppAdmin } from "../forgejoServiceAdmin.js";
 import type { BuildJournal, BuildMode } from "./buildJournal.js";
 import { migrationFiles, resolveDeployTarget, type NameHolders } from "../llm/serviceName.js";
+import { writeSourceTree } from "../llm/serviceSource.js";
 
 export interface DeployArtifactDeps {
   servicePlatform: ServicePlatform;
@@ -51,6 +51,8 @@ export interface DeployArtifactArgs {
   editsServiceId?: string;
   /** The name the build was given; it wins over the manifest's. */
   name?: string;
+  /** Non-text files (images, fonts) carried from the repo unchanged. */
+  binaries?: Record<string, Buffer>;
 }
 
 export type DeployResult =
@@ -116,16 +118,11 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
 
     // 1. Write the source tree (reproducible: blow away any prior tree).
     try {
-      await rm(appDir, { recursive: true, force: true });
-      await mkdir(appDir, { recursive: true });
-      for (const [path, content] of Object.entries(files)) {
-        if (path.includes("..") || path.startsWith("/")) {
-          return { ok: false, reason: `unsafe path in artifact files: ${path}` };
-        }
-        const full = join(appDir, path);
-        await mkdir(join(full, ".."), { recursive: true });
-        await writeFile(full, content, "utf8");
-      }
+      const w = await writeSourceTree(appDir, files, {
+        ...(args.binaries ? { binaries: args.binaries } : {}),
+        keepBinaries: target.edit,
+      });
+      if (!w.ok) return { ok: false, reason: `unsafe path in artifact files: ${w.unsafePath}` };
     } catch (e) {
       return { ok: false, reason: `failed to write source tree: ${(e as Error).message}` };
     }

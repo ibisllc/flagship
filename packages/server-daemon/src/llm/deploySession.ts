@@ -20,7 +20,6 @@
  *   7. Return the canonical URL the app will live at.
  */
 
-import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   verifyInstallService,
@@ -32,6 +31,7 @@ import type { BoxSigner } from "../keyCustodian.js";
 import type { ForgejoAppAdmin } from "../forgejoServiceAdmin.js";
 import type { VibeCodeSession, VibeCodeSessionRegistry } from "./vibeCodeSession.js";
 import { migrationFiles, resolveDeployTarget, type NameHolders } from "./serviceName.js";
+import { writeSourceTree } from "./serviceSource.js";
 
 export interface DeploySessionDeps {
   servicePlatform: ServicePlatform;
@@ -120,16 +120,8 @@ export function buildDeploySession(deps: DeploySessionDeps) {
     // 1. Write the source tree. We blow away any prior working tree
     // so a re-deploy is reproducible.
     try {
-      await rm(appDir, { recursive: true, force: true });
-      await mkdir(appDir, { recursive: true });
-      for (const [path, content] of Object.entries(files)) {
-        if (path.includes("..") || path.startsWith("/")) {
-          return { ok: false, reason: `unsafe path in session files: ${path}` };
-        }
-        const full = join(appDir, path);
-        await mkdir(join(full, ".."), { recursive: true });
-        await writeFile(full, content, "utf8");
-      }
+      const w = await writeSourceTree(appDir, files, { keepBinaries: target.edit });
+      if (!w.ok) return { ok: false, reason: `unsafe path in session files: ${w.unsafePath}` };
     } catch (e) {
       return { ok: false, reason: `failed to write source tree: ${(e as Error).message}` };
     }

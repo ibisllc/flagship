@@ -23,7 +23,7 @@
  * the git mode is as observable as the others.
  */
 
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { applyRepoAdapter, parseManifest, splitAdapterFile, type AppManifest } from "@flagship/protocol";
@@ -40,7 +40,7 @@ const MANIFEST_FILE = "flagship.app.json";
 const CLONE_TIMEOUT_MS = 3 * 60_000;
 
 /** Files we never read into memory (vcs, deps, build output, binaries). */
-const SKIP_DIRS = new Set([".git", "node_modules", ".next", "dist", "build", ".venv", "__pycache__"]);
+const SKIP_DIRS = new Set([".git", "node_modules", ".next", ".venv", "__pycache__"]);
 const TEXT_EXT = new Set([
   ".json", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".html", ".css",
   ".sql", ".md", ".txt", ".yml", ".yaml", ".toml", ".env", ".sh", ".py",
@@ -62,6 +62,11 @@ interface ReadRepo {
   commit?: string;
   /** The repo's own files, before any adapter was applied. */
   original?: Record<string, string>;
+  /**
+   * Everything else the app needs that isn't text (images, fonts, archives),
+   * carried to the build unchanged. The AI never sees or edits these.
+   */
+  binaries?: Record<string, Buffer>;
   /** The repo's flagship.app.json carried an adapter: whether it fit. */
   repoAdapter?: "applied" | { failed: string[] };
 }
@@ -99,6 +104,9 @@ export interface GitImportDeps {
   commitOf?: (dir: string) => Promise<string | undefined>;
   maxFiles?: number;
   maxBytesPerFile?: number;
+  /** Per binary file, and for all of them together. */
+  maxBinaryBytes?: number;
+  maxBinaryTotalBytes?: number;
   now?: () => number;
   /** Random suffix source for scratch dirs (Math.random is banned in some envs). */
   rand?: () => string;
@@ -146,14 +154,18 @@ function validRef(r: string): boolean {
 export class GitImporter {
   private readonly maxFiles: number;
   private readonly maxBytes: number;
+  private readonly maxBinaryBytes: number;
+  private readonly maxBinaryTotal: number;
   private readonly now: () => number;
   private readonly rand: () => string;
   private readonly hostGuard?: BaseUrlGuardOptions;
   private readonly resolveHost?: HostResolver;
 
   constructor(private readonly deps: GitImportDeps) {
-    this.maxFiles = deps.maxFiles ?? 400;
-    this.maxBytes = deps.maxBytesPerFile ?? 256 * 1024;
+    this.maxFiles = deps.maxFiles ?? 2000;
+    this.maxBytes = deps.maxBytesPerFile ?? 1024 * 1024;
+    this.maxBinaryBytes = deps.maxBinaryBytes ?? 25 * 1024 * 1024;
+    this.maxBinaryTotal = deps.maxBinaryTotalBytes ?? 250 * 1024 * 1024;
     this.now = deps.now ?? (() => Date.now());
     this.rand = deps.rand ?? (() => Math.random().toString(16).slice(2, 10));
     this.hostGuard = deps.hostGuard;
@@ -223,9 +235,13 @@ export class GitImporter {
     }
 
     const commit = await this.headCommit(dest);
-    const original = await this.readTree(dest);
+    const { text: original, binaries } = await this.readTree(dest);
     await rm(dest, { recursive: true, force: true });
-    const read: ReadRepo = { ...(commit ? { commit } : {}), original };
+    const read: ReadRepo = {
+      ...(commit ? { commit } : {}),
+      original,
+      ...(Object.keys(binaries).length ? { binaries } : {}),
+    };
 
     const rawManifest = original[MANIFEST_FILE];
     if (rawManifest == null) {
@@ -298,24 +314,29 @@ export class GitImporter {
     });
   }
 
-  /** Walk `dir`, returning a path→content map of text files within limits. */
-  private async readTree(dir: string): Promise<Record<string, string>> {
-    const out: Record<string, string> = {};
+  /**
+   * Walk `dir`: text files (what the AI reads and edits) and, separately,
+   * binary files carried through as bytes. Symlinks are never followed: a
+   * repo could point one at a file on this box and have it copied into the
+   * app.
+   */
+  private async readTree(dir: string): Promise<{ text: Record<string, string>; binaries: Record<string, Buffer> }> {
+    const text: Record<string, string> = {};
+    const binaries: Record<string, Buffer> = {};
     let count = 0;
+    let binaryTotal = 0;
     const walk = async (cur: string): Promise<void> => {
-      if (count >= this.maxFiles) return;
       let entries: string[];
       try {
         entries = readdirSync(cur);
       } catch {
         return;
       }
-      for (const name of entries) {
-        if (count >= this.maxFiles) return;
+      for (const name of entries.sort()) {
         const full = join(cur, name);
         let st;
         try {
-          st = statSync(full);
+          st = lstatSync(full);
         } catch {
           continue;
         }
@@ -325,21 +346,24 @@ export class GitImporter {
           continue;
         }
         if (!st.isFile()) continue;
-        if (!this.isTextCandidate(name)) continue;
-        if (st.size > this.maxBytes) continue;
         const rel = relative(dir, full).split(sep).join("/");
+        let buf: Buffer;
         try {
-          const buf = await readFile(full);
-          if (looksBinary(buf)) continue;
-          out[rel] = buf.toString("utf8");
-          count++;
+          buf = await readFile(full);
         } catch {
-          // unreadable — skip
+          continue;
+        }
+        if (this.isTextCandidate(name) && st.size <= this.maxBytes && !looksBinary(buf) && count < this.maxFiles) {
+          text[rel] = buf.toString("utf8");
+          count++;
+        } else if (st.size <= this.maxBinaryBytes && binaryTotal + st.size <= this.maxBinaryTotal) {
+          binaries[rel] = buf;
+          binaryTotal += st.size;
         }
       }
     };
     if (existsSync(dir)) await walk(dir);
-    return out;
+    return { text, binaries };
   }
 
   private isTextCandidate(name: string): boolean {
