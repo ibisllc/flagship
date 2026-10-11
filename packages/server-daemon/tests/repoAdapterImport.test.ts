@@ -183,7 +183,29 @@ describe("the adapter index", () => {
     expect(sent.file).not.toContain(FQDN);
     expect(sent.file).not.toContain("harry");
     expect(JSON.parse(sent.file).name).toBe("hello");
+    expect(JSON.parse(sent.file).description).toBe("hello");
     expect(JSON.parse(sent.file).adapter.source).toEqual({ repo: REPO, base: COMMIT });
+  });
+
+  it("doesn't share an adapt the owner steered in their own words", async () => {
+    const turns: ChatResponse[] = [
+      {
+        content: "",
+        model: "m",
+        toolUses: [
+          { id: "1", name: "write_file", input: { path: "Dockerfile", content: ADAPTED.Dockerfile } },
+          { id: "2", name: "write_file", input: { path: "flagship.app.json", content: MANIFEST } },
+          { id: "3", name: "deploy", input: {} },
+        ],
+      },
+    ];
+    const { index, submitted } = fakeIndex();
+    const { o } = setup({ index, agent: () => turns.shift() ?? { content: "done", model: "m" } });
+    const r = await o.createGit({ gitUrl: REPO });
+    if ("error" in r) throw new Error(r.error);
+    expect(await o.adaptGit(r.buildId, { instructions: "brand it for Acme Dental, 12 Rue X" })).toMatchObject({ deployed: true });
+    await settle();
+    expect(submitted).toEqual([]);
   });
 
   it("never asks about or shares a repo off the big public hosts, or one without a license", async () => {

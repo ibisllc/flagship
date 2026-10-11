@@ -1,84 +1,137 @@
-# Repo adapters: `flagship.app.json` as a recipe, not a rewrite
+# Repo adapters
 
-Status: **design, not built** (owner idea, 2026-10-11). Today's git import
-adapts a repo by having the AI write files into the box's copy (a manifest,
-a Dockerfile, edits to the source). The copy then drifts from upstream, and
-the next import starts from nothing.
+How a repo written for an ordinary server comes to run on Flagship, written
+down instead of done in place. Built 2026-10-11 (owner design).
 
-## The idea
+## The file
 
-`flagship.app.json` should tell a machine how to turn a repo written for an
-ordinary server into a Flagship app. The author keeps developing the app the
-usual way and touches the file only when something structural changes. Then:
+An adapter is the repo's `flagship.app.json` with an `adapter` section:
 
-1. **One API creates the file and updates it.** It takes the repo at HEAD
-   and, when the file exists, the commit it was written against
-   (`adapter.base`). It reads the changes since then and edits the file only
-   if they matter (a new env var, a new port, a new database). Any Flagship
-   server can run it, with its owner's AI key. Git import calls it today.
-2. **The file goes back upstream.** After an adapt, the app offers a pull
-   request that adds the file, naming the commit it was made from, so the
-   next import starts from there.
+```json
+{
+  "schema_version": 1,
+  "name": "notes",
+  "runtime": { "image": "x", "port": 8080 },
+  "adapter": {
+    "version": 1,
+    "source": { "repo": "https://github.com/me/notes", "base": "<40-hex commit>", "ref": "main" },
+    "add":    { "Dockerfile": ["FROM node:20-alpine", "…", ""] },
+    "patch":  [{ "path": "src/db.js", "hunks": [{ "oldStart": 3, "oldLines": 7, "newStart": 3, "newLines": 7, "lines": [" …", "-…", "+…"] }] }],
+    "remove": ["docker-compose.yml"]
+  }
+}
+```
 
-## Changing as little as possible
+- `source.base` is the commit the edits were made against.
+- Files and hunks are stored as arrays of lines, so even a big adapter diffs
+  readably in git.
+- There is no size limit.
+- Applying it means removing files, then applying hunks, then adding files.
+  The rest of the file, without `adapter`, is the manifest the box installs.
 
-The schema should let the adapter *describe* the changes rather than *make*
-them, in this order of preference:
+Format, derive, apply and rule checks: `packages/protocol/src/repoAdapter.ts`.
+The box and flagshipserver.com both use it.
 
-- **Build recipe:** a Dockerfile path, or language, install and start
-  commands, so no Dockerfile has to be added.
-- **Env remapping:** `DATABASE_URL ← FLAGSHIP_PG_URL`, `PORT ← runtime.port`.
-  This covers most persistence "rewrites" with no code edit.
-- **Identity mapping:** many apps already trust a proxy header for the user
-  (Grafana's `X-WEBAUTH-USER`, oauth2-proxy setups). Mapping
-  `X-Flagship-User` onto it replaces "remove the app's login" for those apps.
-- **Patches, last:** unified diffs against named files, each recorded against
-  `adapter.base`. On import they are applied first; only a patch that no
-  longer applies goes back to the AI to be rebased. A patch that fails is a
-  loud signal, unlike a silently stale copy.
+- **Apply** works like `patch`: a hunk may move if the lines around it moved,
+  and up to two context lines may be trimmed. A hunk that fits nowhere names
+  its file.
+- **Rule checks:**
+  - paths must be safe;
+  - the adapter can't add, edit or remove `flagship.app.json` itself;
+  - the manifest must be valid;
+  - nothing it writes may look like a secret (private keys and common API
+    token shapes).
 
-The adapt prompt already asks for the fewest edits, kept beside the author's
-code (`buildAgent.ts`).
+## On import (the box)
 
-## Problem 1: a malicious adapter
+`GitImporter` + `BuildOrchestrator`:
 
-An adapter runs on the importer's own box, inside the same container rules as
-any app: no `FLAGSHIP_*` variables, only the app's own data stores, behind
-the membership gate. It cannot do more than the repo's own code, which the
-importer already trusts by importing it. The new risk is a **third party's**
-adapter for someone else's repo, presented as if it were vetted.
+1. **The repo's own `flagship.app.json` wins.**
+   - With an adapter that fits: apply it and install without AI.
+   - With one that no longer fits: the AI gets it as a guide.
+   - Either way, the repo is its author's: the box never looks it up in the
+     public store and never sends an adaptation of it.
+2. **Otherwise, look in the public store** (below), but only for repos on github.com,
+   gitlab.com or codeberg.org that cloned without credentials. The box runs
+   the same checks on what comes back and applies the first one that fits.
+3. **Otherwise, the AI adapts it.** It is asked to change as little as
+   possible, beside the author's code. Once it deploys:
+   - the box derives the adapter from the clone and the deployed tree;
+   - the name, address label and description are replaced by the repo's
+     name, since the file is published;
+   - the adapter is sent for the public store if the repo has a license
+     file and the owner didn't steer the AI in their own words.
 
-Proposed answer: a review service checks a proposed adapter and **signs its
-hash** with a key under the maintainers chain we already run. The signature
-goes in the PR description and in the file. Importers verify it and show
-"checked by Flagship" or "unchecked". This is the same service as the
-marketplace security scanner (open item 8).
+Non-text files (images, fonts) are carried to the build as bytes; the AI
+can't see or edit them. Symlinks in a repo are never followed.
+`FLAGSHIP_ADAPTER_INDEX=off` keeps everything on the box.
 
-Prefer the **owner** opening the PR from their own GitHub account (the app
-prepares the branch) over a Flagship bot account. Unsolicited bot PRs to
-strangers' repos read as spam and get accounts flagged. It also keeps us from
-speaking for code we didn't write. Sending the adapter to the review service
-is opt-in and only for public repos, since `.services`/`.com` otherwise never
-see user content.
+## How a repo's author controls it
 
-## Problem 2: a repo that needs a substantial rewrite
+**Commit a `flagship.app.json` at the repo root.** Every Flagship server uses
+it, and the public store never takes adaptations of that repo.
 
-The platform runs any container, so the language itself is rarely the
-obstacle. The rules are: one port, no local disk, no login of its own.
+To get one:
+- write it by hand (`docs/manifest.md` plus the format above); or
+- import the repo on your own Flagship server, check it runs, then use **Get
+  flagship.app.json** on the import screen. That calls
+  `GET /api/build/sessions/:id/adapter`.
 
-Two things shrink the rewrite cases:
-- a persistent-volume data store, for apps that write to disk;
-- identity mapping, for apps with their own login.
+An author who doesn't want Flagship servers to run the repo at all can email
+legal@flagshipserver.com, and we add it to the do-not-adapt list. We can't
+stop anyone running open-source code on their own server, but we stop keeping
+adaptations of it.
 
-What still needs a rewrite is a **fork**, not an adapter. A "fat" file of
-whole-file replacements would conflict with every upstream change and can't
-be reviewed meaningfully. That code belongs in the owner's Forgejo copy, or a
-fork, with an ordinary adapter of its own.
+## The public store
 
-## Open questions
+Adapters live in a public git repo, **github.com/ibisllc/flagship-adapters**,
+from day one. An index only we could see would make us a hidden point of
+trust: we, or anyone who broke into the Worker, could serve one person a bad
+adapter and nobody would know. In the public store:
+- everyone gets the same bytes;
+- anyone can audit what Flagship servers will apply;
+- the git history is the log.
 
-- The schema: `adapter: { base, build, env, identity, patches }` inside
-  `flagship.app.json`, or a sibling `flagship.adapter.json` so the app
-  manifest stays the box's contract. Leaning to the sibling file.
-- Should the box re-run the adapter on a schedule (pull upstream, re-apply,
-  redeploy on green), or only on the owner's "Update from the repo"?
+**Layout:** for each repo, `adapters/<host>/<repo path>/index.json` lists
+`{base, file, added, confirmations}`, newest first. Each adapter sits beside
+it as `<sha256 of its text>.json`. `do-not-adapt.txt` lists blocked repos.
+
+**Reading:** boxes read the store directly over raw.githubusercontent.com,
+with no API of ours involved. They:
+- try an exact `base` match first, then the newest others, at most 3;
+- check each file against the hash in its name;
+- skip blocked repos.
+
+**Writing:** `POST /api/adapters/submit {repo, base, licensePath, file}` on
+flagshipserver.com.
+- It is anonymous: no account, server, IP or precise time is taken or kept.
+- It always answers 202 with the same body.
+- Before keeping a submission, the Worker checks that:
+  - it comes from a supported host;
+  - the repo isn't on the do-not-adapt list;
+  - the rule checks pass;
+  - the license file at that commit is public and an OSI license, because
+    public with no license means all rights reserved;
+  - the repo doesn't carry its own `flagship.app.json`;
+  - every edited file exists at `base` and every hunk fits it exactly, which
+    shows the adapter only edits public code;
+  - an optional cheap-AI review passes, when `ADAPTER_REVIEW_ANTHROPIC_KEY`
+    is set.
+- Accepted adapters queue up. A daily job publishes the queue in one commit
+  dated to the day, so commit times can't be matched to anyone's import.
+- A resubmitted adapter counts as a confirmation.
+
+**Do-not-adapt:** `POST`/`DELETE /api/admin/adapter-blocklist`, behind the
+admin secret. Adding a repo drops its queue, removes its folder at the next
+publish and lists it in `do-not-adapt.txt`. Git history keeps old commits;
+removal stops future use. The public copy is `apps/web/public/adapters.html`
+and the privacy policy.
+
+## Not yet
+
+- **No signature:** there is none on adapters. The repo's own file carries
+  its author's authority, and the public store is the same for everyone.
+- **No upstream pull request:** the app doesn't offer one yet. The author
+  commits the exported file themselves.
+- **Lost on restart:** git and IDE builds live only in daemon memory, so a
+  restart forgets them, and with them the export. Their journals survive.

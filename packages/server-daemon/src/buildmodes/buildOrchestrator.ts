@@ -101,6 +101,8 @@ interface GitSource {
   /** The repo's own adapter, which no longer fits these files. */
   staleAdapter?: string[];
   shared?: boolean;
+  /** The owner steered the AI in their own words, which may be personal. */
+  steered?: boolean;
 }
 
 export type AdaptStatus =
@@ -232,8 +234,15 @@ function adapterFileFor(src: GitSource, built: Record<string, string>): string |
   } catch {
     return null;
   }
+  // The file is published: nothing the owner chose or wrote may survive.
   delete manifest.adapter;
-  manifest.name = slugifyLabel(repoNameFromUrl(src.repoUrl)) || "app";
+  const repoName = repoNameFromUrl(src.repoUrl);
+  const slug = slugifyLabel(repoName) || "app";
+  manifest.name = slug;
+  manifest.description = repoName.slice(0, 30);
+  if (manifest.network && typeof manifest.network === "object") {
+    manifest.network = { ...(manifest.network as Record<string, unknown>), subdomain: slug };
+  }
   const manifestJson = JSON.stringify(manifest);
   const adapter = deriveRepoAdapter(src.original, built, {
     repo: src.repoUrl,
@@ -505,7 +514,9 @@ export class BuildOrchestrator {
     const st = this.states.get(buildId);
     if (!st || st.mode !== "git") return { ok: false, reason: "not a git build" };
     const notes: string[] = [];
-    const stale = this.gitSources.get(buildId)?.staleAdapter;
+    const source = this.gitSources.get(buildId);
+    if (source && opts.instructions?.trim()) source.steered = true;
+    const stale = source?.staleAdapter;
     if (stale) {
       notes.push(
         `The repo's flagship.app.json carries an adapter (its "adapter" section) written for an older commit; ` +
@@ -839,7 +850,7 @@ export class BuildOrchestrator {
    * choices (the name) taken out and nothing that says who sent it.
    */
   private async shareAdapter(src: GitSource, built: Record<string, string>): Promise<void> {
-    if (!this.deps.adapterIndex || !src.repo || src.origin === "repo" || src.origin === "as-is") return;
+    if (!this.deps.adapterIndex || !src.repo || src.steered || src.origin === "repo" || src.origin === "as-is") return;
     const licensePath = licensePathOf(src.original);
     const file = licensePath ? adapterFileFor(src, built) : null;
     if (!file || !src.commit || !licensePath) return;

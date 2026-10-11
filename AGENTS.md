@@ -280,12 +280,15 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
     the FLAGSHIP_BOOT partition (the Wi-Fi path's is), and the "taking longer
     than expected" stalled-boot advisory exists on Mac only, not Linux/Windows.
 15. **Obsolete plaintext display-name fixtures** remain in some active tests.
-16. **Repo adapters** (`docs/repo-adapters.md`, design only): make
-    `flagship.app.json` a recipe that re-applies to upstream (base commit, env
-    remaps, patches), one create-or-update API any box can run, an
-    owner-opened PR with a Flagship-signed review, and forks for rewrites.
-    Also: git and IDE builds still live only in daemon memory, so a restart
-    forgets them (their journals survive).
+16. **Repo adapters** (`docs/repo-adapters.md`): built 2026-10-11 — the
+    single-file format, apply on import, the public store
+    (github.com/ibisllc/flagship-adapters, read directly by boxes, written by
+    `.com`'s anonymous submit + daily publish), the do-not-adapt list, "Get
+    flagship.app.json". Remaining: create the store repo and its token, the
+    `.com` storage + migration 0085 before the Worker deploy, optionally
+    `ADAPTER_REVIEW_ANTHROPIC_KEY`, and a live try on a box. Git and IDE
+    builds still live only in daemon memory, so a restart forgets them
+    (journals survive).
 
 ### Feature branches (each = `main` + one feature; rebase when `main` moves)
 
