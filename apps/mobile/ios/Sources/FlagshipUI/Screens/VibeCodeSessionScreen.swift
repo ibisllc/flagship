@@ -27,6 +27,7 @@ public struct VibeCodeSessionScreen: View {
     @State private var deploying = false
     @State private var deployStartedAt: Date?
     @State private var deployedUrl: String?
+    @State private var leftOpen = false
     @State private var shownLines: [VibeTranscript.Line] = []
     @State private var hiddenMessages = 0
     @State private var pollTask: Task<Void, Never>?
@@ -223,11 +224,18 @@ public struct VibeCodeSessionScreen: View {
     @ViewBuilder
     private func footer(c: FSColors) -> some View {
         if let url = liveUrl, !url.isEmpty {
-            HStack(spacing: FS.space.s3) {
-                Text(url).font(FS.font.mono()).foregroundColor(c.text).lineLimit(1).truncationMode(.middle)
-                Spacer(minLength: 0)
-                FSPrimaryButton("Open") {
-                    if let u = URL(string: url.hasPrefix("http") ? url : "https://\(url)") { openURL(u) }
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                HStack(spacing: FS.space.s3) {
+                    Text(url).font(FS.font.mono()).foregroundColor(c.text).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 0)
+                    FSPrimaryButton("Open") {
+                        if let u = URL(string: url.hasPrefix("http") ? url : "https://\(url)") { openURL(u) }
+                    }
+                }
+                if leftOpen {
+                    Text("This server couldn't make it invite only, so anyone with the link can open it. You can restrict it from the service's Access settings.")
+                        .font(FS.font.bodySm()).foregroundColor(c.warning)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         } else if let pending = state?.pendingRequest {
@@ -363,7 +371,10 @@ public struct VibeCodeSessionScreen: View {
         errorMessage = nil
         do {
             let r = try await client.vibeCodeDeploy(sessionId: sessionId)
-            if r.ok { deployedUrl = r.url } else { errorMessage = "Deploy was rejected by the box." }
+            if r.ok {
+                deployedUrl = r.url
+                leftOpen = r.inviteOnly == false
+            } else { errorMessage = "Deploy was rejected by the box." }
             deploying = false
             await reload()
         } catch ScreensClientError.http(let code, let message) where code != 0 {

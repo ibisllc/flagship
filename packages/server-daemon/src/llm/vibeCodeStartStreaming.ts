@@ -56,16 +56,16 @@ export function ownerChoiceSupplement(
   const lines: string[] = [];
   if (preferredName && preferredName.length > 0) {
     lines.push(
-      `The owner named this service "${preferredName}". Use exactly this as the manifest \`name\` (the service's slug and web address) unless it is technically impossible.`,
+      `The owner named this service "${preferredName}". Use exactly this as the manifest \`name\` and \`network.subdomain\`: the box deploys it under this name whatever the manifest says.`,
     );
   }
   if (visibility === "just-me") {
     lines.push(
-      "The owner wants this service PRIVATE (visible to just them) — build it to assume only the authenticated owner reaches it; do not add public sign-up or open endpoints.",
+      "The owner chose INVITE ONLY: the box itself lets in only the owner and the people they invite on Flagship, so every visitor arrives signed in with Flagship (`X-Flagship-User` is a real member). Do not add public pages, sign-up or any login of your own; use the identity headers for who is who.",
     );
   } else if (visibility === "link") {
     lines.push(
-      "The owner wants this service reachable by anyone with the link — build it to be safe for unauthenticated visitors.",
+      "The owner chose OPEN: anyone with the link can reach it. List the pages strangers may see in `access.public_routes` and make them safe for unauthenticated visitors. Wherever the app needs to know who the visitor is (their own data, posting, settings), rely on Flagship sign-in: keep those routes out of `public_routes` and read the identity headers, instead of building accounts, passwords or a third-party login. Flagship sign-in shares nothing about the visitor beyond who they are on Flagship, which keeps them private.",
     );
   }
   return lines.length > 0 ? "\n\n" + lines.join("\n") : "";
@@ -290,6 +290,7 @@ export function buildVibeCodeResumeStreaming(
         existingApps: args.existingAppsSnapshot(),
         appEnvNames,
       }) +
+      ownerChoiceSupplement(session.meta.name, session.meta.visibility) +
       "\n\n" +
       TOOL_USE_PROMPT_SUPPLEMENT;
 

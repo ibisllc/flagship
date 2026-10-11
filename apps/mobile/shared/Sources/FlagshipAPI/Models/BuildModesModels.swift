@@ -147,10 +147,14 @@ public struct BuildDeployResponse: Codable, Equatable, Sendable {
     public let ok: Bool
     public let serviceId: String
     public let url: String
-    public init(ok: Bool, serviceId: String, url: String) {
+    /// Set by a vibe-code deploy the owner asked to be invite only: whether
+    /// the box put it behind its gate (false: it couldn't, so it is open).
+    public let inviteOnly: Bool?
+    public init(ok: Bool, serviceId: String, url: String, inviteOnly: Bool? = nil) {
         self.ok = ok
         self.serviceId = serviceId
         self.url = url
+        self.inviteOnly = inviteOnly
     }
 }
 
@@ -162,6 +166,8 @@ public struct BuildSummary: Codable, Equatable, Sendable, Identifiable {
     /// "scratch" | "git" | "mcp"
     public let mode: String
     public let serviceId: String?
+    /// The name it was given (owner, repo or IDE), else its service's slug.
+    public let name: String?
     public let startedAt: Int64
     public let lastAt: Int64
     public let entryCount: Int
@@ -171,6 +177,7 @@ public struct BuildSummary: Codable, Equatable, Sendable, Identifiable {
         buildId: String,
         mode: String,
         serviceId: String? = nil,
+        name: String? = nil,
         startedAt: Int64,
         lastAt: Int64,
         entryCount: Int,
@@ -179,10 +186,29 @@ public struct BuildSummary: Codable, Equatable, Sendable, Identifiable {
         self.buildId = buildId
         self.mode = mode
         self.serviceId = serviceId
+        self.name = name
         self.startedAt = startedAt
         self.lastAt = lastAt
         self.entryCount = entryCount
         self.lastKind = lastKind
+    }
+}
+
+public extension BuildSummary {
+    /// The list title: the build's name, or its service, or when it started.
+    var displayName: String {
+        if let name, !name.isEmpty { return name }
+        if let serviceId, let slug = serviceId.components(separatedBy: "--").last, !slug.isEmpty { return slug }
+        return "Unnamed build"
+    }
+    /// How it was made, for the pill beside the name.
+    var methodLabel: String { Self.methodLabel(mode) }
+    static func methodLabel(_ mode: String) -> String {
+        switch mode {
+        case "git": return "From Git"
+        case "mcp": return "From your IDE"
+        default: return "AI chat"
+        }
     }
 }
 

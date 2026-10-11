@@ -31,6 +31,7 @@ import {
 } from "../llm/vibeCodeAttachments.js";
 import type { Attachment, FetchLike } from "@flagship/llm-providers";
 import { verifySetServiceEnv } from "@flagship/protocol";
+import { checkServiceName, type ServiceNameDeps } from "../llm/serviceName.js";
 import type {
   AppBackupStartRequest,
   AppBackupStartResponse,
@@ -43,6 +44,7 @@ import type {
   AppInviteRevokeResponse,
   AppsListResponse,
   AppSummary,
+  VibeCodeNameCheckResponse,
   BrowserTab,
   BrowserTabsListResponse,
   LineagePausedListResponse,
@@ -333,6 +335,8 @@ export interface VibeCodeRuntime {
     sessionId: string;
     text: string;
     attachmentSummaries: string[];
+    /** On the opening turn: the owner's name for the build. */
+    name?: string;
   }) => void;
 }
 
@@ -345,6 +349,11 @@ export interface OrdersDispatchLike {
 
 export function buildScreensHttp(deps: ScreensHttpDeps) {
   const now = deps.now ?? (() => Date.now());
+  const nameDeps = (v: VibeCodeRuntime): ServiceNameDeps => ({
+    registry: v.registry,
+    hostUsername: v.username,
+    installed: deps.servicePlatform ?? null,
+  });
 
   return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
     const rawPath = req.path.split("?")[0]!;
@@ -708,9 +717,18 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         body.visibility === "just-me" || body.visibility === "link"
           ? body.visibility
           : undefined;
+      if (preferredName) {
+        const check = checkServiceName(preferredName, nameDeps(deps.vibeCode));
+        if (!check.ok) {
+          const out: VibeCodeNameCheckResponse = { ...check, error: check.message };
+          return { status: 409, headers: J, body: JSON.stringify(out) };
+        }
+      }
       const session = deps.vibeCode.registry.create({
         username: deps.vibeCode.username,
         serverFqdn: deps.vibeCode.serverFqdn,
+        ...(preferredName ? { name: preferredName } : {}),
+        ...(visibility ? { visibility } : {}),
       });
       session.pushUserMessage(body.prompt, attach.attachments);
       // Value-free journal: a short text preview + per-attachment
@@ -720,6 +738,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         sessionId: session.meta.sessionId,
         text: body.prompt,
         attachmentSummaries: attach.attachments.map(summarizeAttachment),
+        ...(preferredName ? { name: preferredName } : {}),
       });
       // Seal the delivered BYOK credential for the session, if one came
       // (and a store is wired). flagshipserver.com is never in this path —
@@ -760,6 +779,14 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         sessionId: session.meta.sessionId,
         needsCredential: true,
       };
+      return jok(out);
+    }
+
+    if (path === "/api/screens/vibe-code/name-check" && method === "GET") {
+      if (!deps.vibeCode) return jerr(503, "vibe-code not configured");
+      const q = req.path.indexOf("?");
+      const name = q >= 0 ? new URLSearchParams(req.path.slice(q + 1)).get("name") ?? "" : "";
+      const out: VibeCodeNameCheckResponse = checkServiceName(name, nameDeps(deps.vibeCode));
       return jok(out);
     }
 

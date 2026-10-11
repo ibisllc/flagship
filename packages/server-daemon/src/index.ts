@@ -892,6 +892,8 @@ async function main(): Promise<void> {
   const servicePlatformRefForServer: { current: ServicePlatform | null } = {
     current: null,
   };
+  // Set by wireOwnerHandlers; read when a vibe-coded app deploys invite-only.
+  const serviceAccessRef: { current: ServiceAccessStore | null } = { current: null };
   const {
     pullStateStore,
     updateServer,
@@ -1183,6 +1185,7 @@ async function main(): Promise<void> {
     // threading ~15 values through separate builders. Also starts the
     // update-pack scheduler. Same order + side effects as before.
     await wireRuntimeSurfaces({
+      serviceAccessRef,
       runtime,
       cfg,
       env: env as RuntimeEnv,
@@ -1225,6 +1228,7 @@ async function main(): Promise<void> {
   // no timer, no behavior change. Mounts onto the live runtime + arms the
   // dead-man SIGTERM/SIGINT stop hooks.
   await wireOwnerHandlers({
+    serviceAccessRef,
     runtime,
     cfg,
     env: env as RuntimeEnv,
@@ -1970,6 +1974,7 @@ async function loadEntitlementsOrExit(deps: {
  * original inline block.
  */
 async function wireRuntimeSurfaces(deps: {
+  serviceAccessRef: { current: ServiceAccessStore | null };
   runtime: DaemonRuntime;
   cfg: ServerConfig | null;
   env: RuntimeEnv;
@@ -2053,6 +2058,7 @@ async function wireRuntimeSurfaces(deps: {
     sessionId: string;
     text: string;
     attachmentSummaries: string[];
+    name?: string;
   }): void => {
     const preview = a.text.length > 120 ? `${a.text.slice(0, 117)}…` : a.text;
     void buildJournal
@@ -2061,6 +2067,7 @@ async function wireRuntimeSurfaces(deps: {
         kind: "user-message",
         actor: "owner",
         summary: preview.length > 0 ? preview : "(no text)",
+        ...(a.name ? { name: a.name } : {}),
       })
       .catch(() => {});
     for (const summary of a.attachmentSummaries) {
@@ -2111,6 +2118,16 @@ async function wireRuntimeSurfaces(deps: {
         workingDir: vibeAppDir,
         cmd: (await import("./serviceRunner.js")).realCommandRunner,
         forgejoAdmin,
+        registry: vibeRegistry,
+        restrictToInvited: async (serviceId) => {
+          const accessStore = deps.serviceAccessRef.current;
+          if (!accessStore?.knowsOwner()) {
+            console.warn(`[vibe] ${serviceId} stays open: no owner key pinned to let the owner through an invite-only gate`);
+            return false;
+          }
+          await accessStore.setMode(serviceId, "restricted");
+          return true;
+        },
       })
     : undefined;
   const vibeCodeHandle = buildVibeCodeHttpHandlers({
@@ -2572,6 +2589,7 @@ async function wireRuntimeSurfaces(deps: {
  * SIGTERM/SIGINT stop hooks. No-op (and no behavior change) when cfg is null.
  */
 async function wireOwnerHandlers(deps: {
+  serviceAccessRef: { current: ServiceAccessStore | null };
   runtime: DaemonRuntime;
   cfg: ServerConfig | null;
   env: RuntimeEnv;
@@ -2639,12 +2657,14 @@ async function wireOwnerHandlers(deps: {
   // store falls open (so an OPEN service is never bricked) but raises a visible
   // owner-facing flag instead of failing silently.
   const accessStore = new ServiceAccessStore("/var/flagship/service-access.json", {
+    ...(cfg.ownerAidPub ? { ownerAidHex: bytesToHexStr(cfg.ownerAidPub) } : {}),
     onFailOpen: ({ error }) =>
       console.error(
         `[daemon] ⚠️  service-access state corrupt (${error}); restricted services FELL OPEN — owner action required`,
       ),
   });
   await accessStore.load();
+  deps.serviceAccessRef.current = accessStore;
   // Browser-session cookie store: lets a redeemed friend reach a restricted
   // service's WEBSITE in a plain browser (which can't sign the visit header).
   const sessionStore = new ServiceSessionStore();

@@ -60,7 +60,21 @@ public final class BuildJournalViewModel {
 
     /// The journal's service name for a live session, once it has one.
     public func name(for session: VibeCodeSessionMeta, builds: [BuildSummary]) -> String {
-        session.serviceId ?? builds.first { $0.buildId == session.sessionId }?.serviceId ?? "AI build"
+        session.name ?? builds.first { $0.buildId == session.sessionId }?.displayName
+            ?? session.serviceId?.components(separatedBy: "--").last ?? "Unnamed build"
+    }
+
+    public private(set) var discardError: String?
+
+    /// Stop a session and delete it on the box, which frees its name.
+    public func discard(_ session: VibeCodeSessionMeta) async {
+        discardError = nil
+        do {
+            try await client.vibeCodeDiscard(sessionId: session.sessionId)
+            liveSessions.removeAll { $0.sessionId == session.sessionId }
+        } catch {
+            discardError = ScreensClientError.userFacing(error)
+        }
     }
 
     /// Pop from a timeline back to the list view.

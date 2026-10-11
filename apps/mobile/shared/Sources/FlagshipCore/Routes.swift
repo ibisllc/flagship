@@ -259,4 +259,15 @@ public extension Array where Element == AppsRoute {
         }
         append(.vibeCodeChat(sessionId: sessionId))
     }
+
+    /// The build-sessions list, one level above "Build a service", so Back
+    /// from it returns to the chooser rather than to a half-filled form.
+    mutating func openBuildSessions() {
+        if let i = firstIndex(of: .buildSource) {
+            removeSubrange((i + 1)...)
+        } else {
+            append(.buildSource)
+        }
+        append(.buildJournal(buildId: nil))
+    }
 }

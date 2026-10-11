@@ -110,10 +110,11 @@ describe("ownerChoiceSupplement — Describe-form name + visibility steer the pr
     expect(s).toContain("manifest `name`");
   });
 
-  it("encodes the private vs link reach the owner picked", () => {
-    expect(ownerChoiceSupplement(undefined, "just-me")).toMatch(/PRIVATE/);
+  it("encodes the invite-only vs link reach the owner picked", () => {
+    expect(ownerChoiceSupplement(undefined, "just-me")).toMatch(/INVITE ONLY/);
     expect(ownerChoiceSupplement(undefined, "just-me")).not.toMatch(/anyone with the link/);
     expect(ownerChoiceSupplement(undefined, "link")).toMatch(/anyone with the link/);
+    expect(ownerChoiceSupplement(undefined, "link")).toMatch(/Flagship sign-in/);
   });
 
   it("combines both choices when both are set", () => {

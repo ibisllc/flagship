@@ -92,12 +92,27 @@ export class ServiceAccessStore {
   private loadError: string | null = null;
   private readonly onFailOpen?: (info: { error: string }) => void;
 
+  private readonly ownerAidHex: string | null;
+
   constructor(
     statePath = "/var/flagship/service-access.json",
-    opts: { onFailOpen?: (info: { error: string }) => void } = {},
+    opts: {
+      onFailOpen?: (info: { error: string }) => void;
+      /**
+       * The owner's stable AID. The owner always passes the gate of their own
+       * services: restricting a service keeps others out, never its owner.
+       */
+      ownerAidHex?: string;
+    } = {},
   ) {
     this.statePath = statePath;
     this.onFailOpen = opts.onFailOpen;
+    this.ownerAidHex = opts.ownerAidHex?.toLowerCase() ?? null;
+  }
+
+  /** Whether the owner can be let through a restricted gate on this box. */
+  knowsOwner(): boolean {
+    return this.ownerAidHex !== null;
   }
 
   async load(): Promise<void> {
@@ -156,6 +171,7 @@ export class ServiceAccessStore {
   }
 
   isAllowed(serviceRef: string, visitorAidHex: string): boolean {
+    if (this.ownerAidHex !== null && visitorAidHex.toLowerCase() === this.ownerAidHex) return true;
     const e = this.byService.get(serviceRef);
     if (!e) return false; // only relevant when restricted; no row ⇒ no allow-list
     return e.allow.includes(visitorAidHex.toLowerCase());

@@ -19,6 +19,9 @@
  *     → { meta, files }
  *
  *   POST /api/llm/sessions/<id>/cancel
+ *   POST /api/llm/sessions/<id>/discard
+ *       stops the session and deletes it, its files and its AI key, which
+ *       frees its name.
  *     → { ok: true }
  *
  *   POST /api/llm/sessions/<id>/deploy
@@ -51,7 +54,7 @@ export interface VibeCodeHttpDeps {
    * wires this to ServicePlatform.install with the session's manifest +
    * files; tests inject a stub.
    */
-  deploySession?: (session: VibeCodeSession) => Promise<{ ok: true; serviceId: string; url: string } | { ok: false; reason: string }>;
+  deploySession?: (session: VibeCodeSession) => Promise<{ ok: true; serviceId: string; url: string; inviteOnly?: boolean } | { ok: false; reason: string }>;
   /**
    * Re-invoke the model after a `user-reply` / `tool-ack` so a chat-guided
    * build continues (the reply alone only flips the session back to
@@ -159,6 +162,10 @@ export function buildVibeCodeHttpHandlers(deps: VibeCodeHttpDeps) {
     }
     if (verb === "cancel" && req.method === "POST") {
       session.cancel();
+      return jok({ ok: true });
+    }
+    if (verb === "discard" && req.method === "POST") {
+      deps.registry.discard(session.meta.sessionId);
       return jok({ ok: true });
     }
     if (verb === "user-reply" && req.method === "POST") {
@@ -272,7 +279,12 @@ export function buildVibeCodeHttpHandlers(deps: VibeCodeHttpDeps) {
         return jerr(502, r.reason);
       }
       session.markDeployed({ serviceId: r.serviceId, url: r.url });
-      return jok({ ok: true, serviceId: r.serviceId, url: r.url });
+      return jok({
+        ok: true,
+        serviceId: r.serviceId,
+        url: r.url,
+        ...(r.inviteOnly !== undefined ? { inviteOnly: r.inviteOnly } : {}),
+      });
     }
     return jerr(405, "method not allowed");
   };

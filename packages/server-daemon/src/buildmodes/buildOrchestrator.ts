@@ -236,7 +236,14 @@ export class BuildOrchestrator {
   async createGit(args: { gitUrl: string; ref?: string }): Promise<{ buildId: string; fit: boolean; reason: string; manifestName?: string; fileCount: number }> {
     const buildId = this.newBuildId();
     this.states.set(buildId, { buildId, mode: "git", serverFqdn: this.deps.serverFqdn, createdAt: this.now() });
-    await this.deps.journal.append(buildId, { mode: "git", kind: "session-started", actor: "owner", summary: `import ${args.gitUrl}` });
+    const repoName = args.gitUrl.replace(/\/+$/, "").split("/").pop()?.replace(/\.git$/i, "");
+    await this.deps.journal.append(buildId, {
+      mode: "git",
+      kind: "session-started",
+      actor: "owner",
+      summary: `import ${args.gitUrl}`,
+      ...(repoName ? { name: repoName } : {}),
+    });
     const fitness = await this.deps.gitImporter.inspect({ gitUrl: args.gitUrl, ref: args.ref, buildId });
     const ws = new BuildWorkspace(fitness.files);
     this.workspaces.set(buildId, ws);
@@ -475,7 +482,13 @@ export class BuildOrchestrator {
     const ws = new BuildWorkspace();
     this.workspaces.set(buildId, ws);
     this.mcpServers.set(buildId, this.makeMcpServer(buildId, ws));
-    await this.deps.journal.append(buildId, { mode: "mcp", kind: "session-started", actor: "owner", summary: "connect IDE via MCP" });
+    await this.deps.journal.append(buildId, {
+      mode: "mcp",
+      kind: "session-started",
+      actor: "owner",
+      summary: "connect IDE via MCP",
+      ...(args.label ? { name: args.label } : {}),
+    });
     const rec = await this.deps.mcpKeys.mint(buildId, args.label);
     return { buildId, connection: this.connectionInfo(buildId, rec.key) };
   }

@@ -28,6 +28,19 @@ function suite(name: string, make: () => BuildJournal) {
       expect(a.buildId).toBe("b1");
     });
 
+    it("lists each build under the name it was given, else its service's slug", async () => {
+      const j = make();
+      await j.append("n1", { mode: "scratch", kind: "user-message", actor: "owner", summary: "a garden log", name: "garden" });
+      await j.append("n1", { mode: "scratch", kind: "deployed", actor: "system", summary: "up", serviceId: "alice--garden" });
+      await j.append("n2", { mode: "mcp", kind: "deployed", actor: "system", summary: "up", serviceId: "alice--notes" });
+      await j.append("n3", { mode: "git", kind: "session-started", actor: "owner", summary: "import" });
+      const byId = Object.fromEntries((await j.list()).map((b) => [b.buildId, b]));
+      expect(byId.n1!.name).toBe("garden");
+      expect(byId.n2!.name).toBe("notes");
+      expect(byId.n3!.name).toBeUndefined();
+      expect((await j.read("n1"))[0]!.name).toBe("garden");
+    });
+
     it("reads back entries in order", async () => {
       const j = make();
       await j.append("b2", { mode: "git", kind: "git-clone", actor: "system", summary: "cloning" });

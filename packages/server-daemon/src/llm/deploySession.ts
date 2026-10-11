@@ -30,7 +30,8 @@ import { runDockerBuild, type CommandRunner } from "../serviceRunner.js";
 import type { ServicePlatform } from "../servicePlatform.js";
 import type { BoxSigner } from "../keyCustodian.js";
 import type { ForgejoAppAdmin } from "../forgejoServiceAdmin.js";
-import type { VibeCodeSession } from "./vibeCodeSession.js";
+import type { VibeCodeSession, VibeCodeSessionRegistry } from "./vibeCodeSession.js";
+import { checkServiceName } from "./serviceName.js";
 
 export interface DeploySessionDeps {
   servicePlatform: ServicePlatform;
@@ -59,10 +60,21 @@ export interface DeploySessionDeps {
   forgejoAdmin?: ForgejoAppAdmin | null;
   /** Override for tests / observability. */
   now?: () => number;
+  /**
+   * Open build sessions, so a deploy never takes a name another session
+   * holds (sessions from before names were kept have only the manifest's).
+   */
+  registry?: Pick<VibeCodeSessionRegistry, "holderOf">;
+  /**
+   * Put a freshly installed service behind the box's invite-only gate. Returns
+   * false when the box can't (it has no owner key pinned to let the owner
+   * through), in which case the service stays open and the owner is told.
+   */
+  restrictToInvited?: (serviceId: string) => Promise<boolean>;
 }
 
 export type DeployResult =
-  | { ok: true; serviceId: string; url: string; image: string }
+  | { ok: true; serviceId: string; url: string; image: string; inviteOnly?: boolean }
   | { ok: false; reason: string };
 
 export function buildDeploySession(deps: DeploySessionDeps) {
@@ -87,7 +99,23 @@ export function buildDeploySession(deps: DeploySessionDeps) {
     // Self-authored: creator is the host. Cross-creator vibe-coding
     // would need a different signing path (the original creator's IRK).
     const creator = deps.hostUsername;
-    const slug = manifest.name;
+    const slug = (session.meta.name ?? manifest.name).toLowerCase();
+    const name = checkServiceName(
+      slug,
+      {
+        registry: deps.registry ?? { holderOf: () => undefined },
+        hostUsername: creator,
+        installed: deps.servicePlatform,
+      },
+      session.meta.sessionId,
+    );
+    if (!name.ok) {
+      return {
+        ok: false,
+        reason: name.kind === "invalid" ? `"${slug}" can't be a web address. ${name.message}` : `${name.message} Pick another name and start a new build.`,
+      };
+    }
+    manifest = { ...manifest, name: slug };
     // Single-dash composite (creator is hyphen-free → unambiguous).
     // Kept inline rather than importing ServicePlatform as a value just
     // for the static; the format is pinned by servicePlatform.serviceId +
@@ -184,6 +212,10 @@ export function buildDeploySession(deps: DeploySessionDeps) {
     // its static helper; we rebuild it here to avoid coupling.
     const urlLabel = creator === deps.hostUsername ? slug : `${slug}--${creator}`;
     const url = `https://${urlLabel}.${session.meta.serverFqdn}`;
-    return { ok: true, serviceId, url, image };
+    let inviteOnly: boolean | undefined;
+    if (session.meta.visibility === "just-me" && deps.restrictToInvited) {
+      inviteOnly = await deps.restrictToInvited(serviceId).catch(() => false);
+    }
+    return { ok: true, serviceId, url, image, ...(inviteOnly !== undefined ? { inviteOnly } : {}) };
   };
 }

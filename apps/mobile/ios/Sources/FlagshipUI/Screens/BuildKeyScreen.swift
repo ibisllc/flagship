@@ -41,16 +41,10 @@ public struct BuildKeyScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Spacer().frame(height: FS.space.s6)
-                    Text("AI key").font(FS.font.h2())
-                    Text("\(contextLabel) uses your box's AI. Provide or confirm the AI key it should use.")
-                        .font(FS.font.body()).foregroundColor(c.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
 
-                    // Reassurance — the key stays on this device; the box calls
-                    // the provider directly; flagshipserver.com never sees it.
                     HStack(alignment: .top, spacing: FS.space.s2) {
                         Image(systemName: "lock.shield").foregroundColor(c.primary)
-                        Text("The key stays on this device. Your box calls the provider directly with it — flagshipserver.com never sees it.")
+                        Text("The keys are stored safely in your mobile app and your own servers.")
                             .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
                     }

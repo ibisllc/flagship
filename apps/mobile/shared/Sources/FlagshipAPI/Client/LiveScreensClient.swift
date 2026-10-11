@@ -344,6 +344,18 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func vibeCodeSessions() async throws -> VibeCodeSessionsResponse {
         try await request("/api/llm/sessions")
     }
+    public func vibeCodeNameCheck(name: String) async throws -> VibeCodeNameCheck {
+        let q = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+        do {
+            return try await request("/api/screens/vibe-code/name-check?name=\(q)")
+        } catch ScreensClientError.http(status: 404, _) {
+            return .unknown
+        }
+    }
+    public func vibeCodeDiscard(sessionId: String) async throws {
+        struct Ok: Decodable { let ok: Bool }
+        let _: Ok = try await request("/api/llm/sessions/\(esc(sessionId))/discard", method: "POST", body: Data("{}".utf8))
+    }
     public func buildSessions() async throws -> BuildSessionsResponse {
         try await request("/api/build/sessions")
     }

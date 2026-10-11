@@ -968,14 +968,46 @@ public struct VibeCodeSessionMeta: Codable, Equatable, Sendable, Identifiable {
     public let status: String
     public let serviceId: String?
     public let url: String?
+    /// The owner's chosen name, which the session holds until it is deployed
+    /// or discarded. Absent on sessions from before names were kept.
+    public let name: String?
     public var id: String { sessionId }
-    public init(sessionId: String, startedAt: Int64, status: String, serviceId: String? = nil, url: String? = nil) {
+    public init(sessionId: String, startedAt: Int64, status: String, serviceId: String? = nil, url: String? = nil,
+                name: String? = nil) {
         self.sessionId = sessionId; self.startedAt = startedAt; self.status = status
-        self.serviceId = serviceId; self.url = url
+        self.serviceId = serviceId; self.url = url; self.name = name
     }
+    /// Discarding frees the name; a deployed session's name is its app's.
+    public var canDiscard: Bool { status != "deployed" }
     /// Still working or waiting on the owner: worth resuming.
     public var isActive: Bool {
         ["streaming", "awaiting-tool-response", "ready-to-deploy", "deploying"].contains(status)
+    }
+}
+
+/// `GET /api/screens/vibe-code/name-check`, and the body of a 409 from
+/// `vibeCodeStart`. `kind` is "invalid", "app" (an installed service) or
+/// "session" (an open build session, stopped from the build-sessions list).
+public struct VibeCodeNameCheck: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let name: String?
+    public let kind: String?
+    public let serviceId: String?
+    public let sessionId: String?
+    public let message: String?
+    public init(ok: Bool, name: String? = nil, kind: String? = nil, serviceId: String? = nil,
+                sessionId: String? = nil, message: String? = nil) {
+        self.ok = ok; self.name = name; self.kind = kind
+        self.serviceId = serviceId; self.sessionId = sessionId; self.message = message
+    }
+    public static let unknown = VibeCodeNameCheck(ok: true)
+
+    /// A refused start, if `error` is the box's 409 for a taken name.
+    public static func conflict(in error: Error) -> VibeCodeNameCheck? {
+        guard case let ScreensClientError.http(status, message) = error, status == 409,
+              let check = try? JSONDecoder().decode(VibeCodeNameCheck.self, from: Data(message.utf8)),
+              !check.ok else { return nil }
+        return check
     }
 }
 

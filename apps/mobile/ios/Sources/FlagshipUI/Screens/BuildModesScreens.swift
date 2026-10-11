@@ -534,6 +534,7 @@ public struct BuildJournalScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: BuildJournalViewModel
     var onResume: (String) -> Void = { _ in }
+    @State private var confirmDiscard: VibeCodeSessionMeta?
 
     public init(vm: BuildJournalViewModel, onResume: @escaping (String) -> Void = { _ in }) {
         self.vm = vm
@@ -569,6 +570,21 @@ public struct BuildJournalScreen: View {
         .navigationTitle("Build sessions")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await vm.loadList() }
+        .confirmationDialog(
+            "Discard this build?",
+            isPresented: Binding(get: { confirmDiscard != nil }, set: { if !$0 { confirmDiscard = nil } }),
+            titleVisibility: .visible,
+            presenting: confirmDiscard
+        ) { session in
+            Button("Discard build", role: .destructive) { Task { await vm.discard(session) } }
+        } message: { session in
+            Text(Self.discardMessage(session))
+        }
+    }
+
+    static func discardMessage(_ session: VibeCodeSessionMeta) -> String {
+        let freed = session.name.map { " Its name, \"\($0)\", becomes free again." } ?? ""
+        return "This stops the AI and deletes what it has written on your server.\(freed)"
     }
 
     @ViewBuilder
@@ -588,7 +604,12 @@ public struct BuildJournalScreen: View {
                             title: vm.name(for: session, builds: builds),
                             subtitle: "Started \(Self.timeString(session.startedAt))",
                             detail: nil,
-                            below: { FSPill(Self.sessionLabel(session.status), kind: Self.sessionPill(session.status)) }
+                            below: {
+                                HStack(spacing: FS.space.s2) {
+                                    FSPill(Self.sessionLabel(session.status), kind: Self.sessionPill(session.status))
+                                    FSPill(BuildSummary.methodLabel("scratch"), kind: .idle)
+                                }
+                            }
                         ) {
                             Text(session.isActive ? "Resume" : "Open")
                                 .font(.system(size: 14, weight: .semibold))
@@ -599,6 +620,18 @@ public struct BuildJournalScreen: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("build-session-\(session.sessionId)")
+                    if session.canDiscard {
+                        HStack {
+                            Spacer()
+                            Button("Discard…", role: .destructive) { confirmDiscard = session }
+                                .font(FS.font.bodySm())
+                                .accessibilityIdentifier("build-session-discard-\(session.sessionId)")
+                        }
+                        .padding(.top, -FS.space.s2)
+                    }
+                }
+                if let err = vm.discardError {
+                    ErrorCard(message: err)
                 }
             }
             let ended = vm.endedBuilds(builds)
@@ -615,9 +648,10 @@ public struct BuildJournalScreen: View {
                     Button(action: { Task { await vm.loadDetail(buildId: b.buildId) } }) {
                         FSListRow(
                             leading: .icon(modeIcon(b.mode), color: c.primary),
-                            title: b.serviceId ?? b.mode.capitalized,
-                            subtitle: "\(b.mode) · \(b.entryCount) step\(b.entryCount == 1 ? "" : "s") · last: \(b.lastKind)",
-                            detail: nil
+                            title: b.displayName,
+                            subtitle: "Started \(Self.timeString(b.startedAt)) · \(b.entryCount) step\(b.entryCount == 1 ? "" : "s")",
+                            detail: nil,
+                            below: { FSPill(b.methodLabel, kind: .idle) }
                         ) {
                             Image(systemName: "chevron.right").foregroundColor(c.textMuted)
                         }

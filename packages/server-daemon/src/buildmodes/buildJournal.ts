@@ -69,6 +69,8 @@ export interface BuildJournalEntry {
   detail?: string;
   /** Set once the build is bound to an installed service. */
   serviceId?: string;
+  /** The name the build was given (the owner's, the repo's or the IDE's). */
+  name?: string;
 }
 
 /** The caller-supplied fields; `seq`/`ts`/`buildId` are assigned by the store. */
@@ -79,6 +81,7 @@ export interface BuildJournalAppend {
   summary: string;
   detail?: string;
   serviceId?: string;
+  name?: string;
 }
 
 /** Compact per-build header for the "your builds" list. */
@@ -86,6 +89,8 @@ export interface BuildJournalSummary {
   buildId: string;
   mode: BuildMode;
   serviceId?: string;
+  /** What to call the build in a list: its given name, else its service's slug. */
+  name?: string;
   startedAt: number;
   lastAt: number;
   entryCount: number;
@@ -141,10 +146,14 @@ function summarize(entries: BuildJournalEntry[]): BuildJournalSummary | null {
       break;
     }
   }
+  let name: string | undefined;
+  for (let i = entries.length - 1; i >= 0 && !name; i--) name = entries[i]!.name || undefined;
+  name ??= serviceId?.split("--").slice(1).join("--") || undefined;
   return {
     buildId: first.buildId,
     mode: first.mode,
     serviceId,
+    ...(name ? { name } : {}),
     startedAt: first.ts,
     lastAt: last.ts,
     entryCount: entries.length,
@@ -172,6 +181,7 @@ export class InMemoryBuildJournal implements BuildJournal {
       summary: clean.summary,
       ...(clean.detail != null ? { detail: clean.detail } : {}),
       ...(clean.serviceId != null ? { serviceId: clean.serviceId } : {}),
+      ...(clean.name ? { name: clean.name } : {}),
     };
     list.push(full);
     this.byBuild.set(buildId, list);
@@ -240,6 +250,7 @@ export class FileBuildJournal implements BuildJournal {
       summary: clean.summary,
       ...(clean.detail != null ? { detail: clean.detail } : {}),
       ...(clean.serviceId != null ? { serviceId: clean.serviceId } : {}),
+      ...(clean.name ? { name: clean.name } : {}),
     };
     await appendFile(this.file(buildId), JSON.stringify(full) + "\n", { mode: 0o600 });
     this.seqCache.set(buildId, seq);

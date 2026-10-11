@@ -546,44 +546,44 @@ struct VibeCodeDescribeContainer: View {
     @Environment(AppState.self) private var app
     var body: some View {
         VibeCodeDescribeScreen(onBuild: { prompt, name, visibility in
-            Task {
-                do {
-                    // Seed the box's model with the credential chosen at the
-                    // AI-key step (kept on the holder so the describe screen
-                    // could re-render without losing it). Name + visibility are
-                    // the owner's choices on the form (no longer fixed).
-                    let selection = VibeCodeCredentialSelection.compatible(with: holder.credential)
-                    let resp = try await client.vibeCodeStart(
-                        VibeCodeStartRequest(
-                            prompt: prompt, model: selection.model, credential: selection.credential,
-                            name: name, visibility: visibility
-                        )
+            do {
+                // Seed the box's model with the credential chosen at the
+                // AI-key step (kept on the holder so the describe screen
+                // could re-render without losing it). Name + visibility are
+                // the owner's choices on the form (no longer fixed).
+                let selection = VibeCodeCredentialSelection.compatible(with: holder.credential)
+                let resp = try await client.vibeCodeStart(
+                    VibeCodeStartRequest(
+                        prompt: prompt, model: selection.model, credential: selection.credential,
+                        name: name, visibility: visibility
                     )
-                    if resp.needsCredential == true {
-                        // The box still has no usable model — route BACK into
-                        // the AI-key step to provide one, then retry.
-                        path.append(.buildKey(purpose: .scratch))
-                        return
-                    }
-                    path.openVibeSession(resp.sessionId)
-                } catch {
-                    switch await repairMissingServicePlatform(for: error) {
-                    case .accepted:
-                        toasts.warning("This server was missing its app key. We sent it again; the server will restart within a few minutes. Then retry the build.")
-                        return
-                    case .deferred:
-                        toasts.warning("This server still needs its app key. Return Home, unlock the app if asked, and pull down to refresh before retrying.")
-                        return
-                    case .notApplicable:
-                        break
-                    }
-                    // Don't swallow — a tap that does nothing with no feedback
-                    // is a dead control. Surface the failure so the owner knows
-                    // the build didn't start (and a test can see why).
-                    toasts.error("Couldn't start the build: \(HumanError.humanize(error))")
+                )
+                if resp.needsCredential == true {
+                    // The box still has no usable model — route BACK into
+                    // the AI-key step to provide one, then retry.
+                    path.append(.buildKey(purpose: .scratch))
+                    return nil
                 }
+                path.openVibeSession(resp.sessionId)
+            } catch {
+                if let taken = VibeCodeNameCheck.conflict(in: error) { return taken }
+                switch await repairMissingServicePlatform(for: error) {
+                case .accepted:
+                    toasts.warning("This server was missing its app key. We sent it again; the server will restart within a few minutes. Then retry the build.")
+                    return nil
+                case .deferred:
+                    toasts.warning("This server still needs its app key. Return Home, unlock the app if asked, and pull down to refresh before retrying.")
+                    return nil
+                case .notApplicable:
+                    break
+                }
+                // Don't swallow — a tap that does nothing with no feedback
+                // is a dead control. Surface the failure so the owner knows
+                // the build didn't start (and a test can see why).
+                toasts.error("Couldn't start the build: \(HumanError.humanize(error))")
             }
-        })
+            return nil
+        }, onOpenSessions: { path.openBuildSessions() })
     }
 
     private enum ServicePlatformRepair {

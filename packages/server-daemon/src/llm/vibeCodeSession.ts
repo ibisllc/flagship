@@ -152,6 +152,14 @@ export interface VibeCodeSessionMeta {
   failureReason?: string;
   /** Unix-ms of the last change; drives eviction and the 30-day expiry. */
   updatedAt?: number;
+  /**
+   * The owner's chosen name: the deployed service's slug and web-address
+   * label. Held by the session until it is deployed or discarded, so no other
+   * build can take it.
+   */
+  name?: string;
+  /** Who the owner chose can reach it: "just-me" is invite only. */
+  visibility?: "just-me" | "link";
 }
 
 const FILE_BOUNDARY = /^===\s+(.+?)\s+===\s*$/;
@@ -342,7 +350,13 @@ export class VibeCodeSession extends EventEmitter {
   /** W10 — owner-notify hook fired on awaiting-tool-response transition. */
   private notifyOwner: NotifyOwnerCallback | null = null;
 
-  constructor(args: { username: string; serverFqdn: string; sessionId?: string }) {
+  constructor(args: {
+    username: string;
+    serverFqdn: string;
+    sessionId?: string;
+    name?: string;
+    visibility?: "just-me" | "link";
+  }) {
     super();
     this.meta = {
       sessionId: args.sessionId ?? generateSessionId(),
@@ -350,6 +364,8 @@ export class VibeCodeSession extends EventEmitter {
       serverFqdn: args.serverFqdn,
       startedAt: Date.now(),
       status: "streaming",
+      ...(args.name ? { name: args.name } : {}),
+      ...(args.visibility ? { visibility: args.visibility } : {}),
     };
     this.parser.on("event", (e: VibeCodeEvent) => this.emit("event", e));
   }
@@ -804,7 +820,12 @@ export class VibeCodeSessionRegistry {
     this.saveTimers.clear();
   }
 
-  create(args: { username: string; serverFqdn: string }): VibeCodeSession {
+  create(args: {
+    username: string;
+    serverFqdn: string;
+    name?: string;
+    visibility?: "just-me" | "link";
+  }): VibeCodeSession {
     const session = this.adopt(new VibeCodeSession(args));
     session.meta.updatedAt = this.now();
     this.saveNow(session);
@@ -830,6 +851,33 @@ export class VibeCodeSessionRegistry {
     }
     for (const s of this.byId.values()) out.set(s.meta.sessionId, { ...s.meta });
     return [...out.values()].sort((a, b) => b.startedAt - a.startedAt);
+  }
+
+  /**
+   * The open session holding `name`, if any. A deployed session's name now
+   * belongs to its app and a cancelled one has let it go; any other session,
+   * a failed one included, still holds it, because it can still deploy.
+   */
+  holderOf(name: string, exceptId?: string): VibeCodeSessionMeta | undefined {
+    const wanted = name.toLowerCase();
+    return this.list().find((m) =>
+      m.sessionId !== exceptId &&
+      m.name?.toLowerCase() === wanted &&
+      m.status !== "deployed" &&
+      m.status !== "cancelled");
+  }
+
+  /** Stop the session and delete it, its files and its AI key. */
+  discard(id: string): boolean {
+    const session = this.get(id);
+    if (!session) return false;
+    session.removeAllListeners();
+    session.cancel();
+    const t = this.saveTimers.get(id);
+    if (t) clearTimeout(t);
+    this.saveTimers.delete(id);
+    this.remove(id);
+    return true;
   }
 
   remove(id: string): void {

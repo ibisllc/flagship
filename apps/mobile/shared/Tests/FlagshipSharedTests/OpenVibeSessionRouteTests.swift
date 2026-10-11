@@ -17,4 +17,10 @@ final class OpenVibeSessionRouteTests: XCTestCase {
         path.openVibeSession("s3")
         XCTAssertEqual(path, [.appDetail(serviceId: "a"), .buildSource, .vibeCodeChat(sessionId: "s3")])
     }
+
+    func testATakenNameOpensTheSessionsListAboveTheChooser() {
+        var path: [AppsRoute] = [.buildSource, .buildKey(purpose: .scratch), .vibeCodeDescribe]
+        path.openBuildSessions()
+        XCTAssertEqual(path, [.buildSource, .buildJournal(buildId: nil)])
+    }
 }

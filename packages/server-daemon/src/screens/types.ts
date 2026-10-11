@@ -165,6 +165,22 @@ export type VibeCodeAttachment =
   | { kind: "image"; mediaType: string; dataBase64: string; name?: string }
   | { kind: "text"; text: string; name?: string };
 
+/**
+ * `GET /api/screens/vibe-code/name-check?name=…`, and the body of a 409 from
+ * `start` when the name is taken. `kind` says what holds it: an installed
+ * service (`serviceId`) or an open build session (`sessionId`), which the
+ * owner stops from the build-sessions list.
+ */
+export interface VibeCodeNameCheckResponse {
+  ok: boolean;
+  name?: string;
+  kind?: "invalid" | "app" | "session";
+  serviceId?: string;
+  sessionId?: string;
+  message?: string;
+  error?: string;
+}
+
 export interface VibeCodeStartResponse {
   sessionId: string;
   /**

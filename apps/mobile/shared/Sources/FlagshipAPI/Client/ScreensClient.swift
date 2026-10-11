@@ -80,6 +80,11 @@ public protocol ScreensClient: Sendable {
     // awaiting a tool response (talkToUser or requestEnvVar ack).
     func vibeCodeSessionState(sessionId: String) async throws -> VibeCodeSessionPublicState
     func vibeCodeSessions() async throws -> VibeCodeSessionsResponse
+    /// Is this name free for a new service? Boxes too old to answer say yes;
+    /// they refuse a clash at deploy instead.
+    func vibeCodeNameCheck(name: String) async throws -> VibeCodeNameCheck
+    /// Stop a build session and delete it, its files and its AI key.
+    func vibeCodeDiscard(sessionId: String) async throws
     func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse
     /// Deploy a `ready-to-deploy` scratch (vibe-code) session: builds the
     /// emitted manifest + files into a container and installs it on the box.
@@ -258,5 +263,9 @@ public extension ScreensClient {
     }
     func vibeCodeSessions() async throws -> VibeCodeSessionsResponse {
         VibeCodeSessionsResponse(sessions: [])
+    }
+    func vibeCodeNameCheck(name: String) async throws -> VibeCodeNameCheck { .unknown }
+    func vibeCodeDiscard(sessionId: String) async throws {
+        throw ScreensClientError.notImplemented("discard")
     }
 }
