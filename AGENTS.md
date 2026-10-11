@@ -199,9 +199,9 @@ with `node scripts/endorse-release.mjs --to <sha> --from <box commit> --sign`
 box applies it, and a release that fails its boot health gate rolls back on its
 own (drilled on `drill-1010`). Boxes now record the verdict in
 `/var/flagship/update-outcome.json` and server-detail returns it as
-`lastUpdate`. Remaining: send an order from the webapp, iOS and Android on a
-real (non-demo) account (demo sessions are keyless), and see the new
-`lastUpdate` line live once a box runs that code.
+`lastUpdate`. **iOS on a real account validated 2026-10-11:** `home2.plucky-avocet`
+went `7ac1b50a` → `9873b83e` from the phone's Update button (~20 s down).
+Remaining: the same from the webapp and Android.
 
 ### Desktop Studio
 
