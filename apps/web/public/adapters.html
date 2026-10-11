@@ -38,14 +38,23 @@
 
       <h2>Shared, and public</h2>
       <p>
-        When a Flagship server adapts a public open-source repo, it shares the adaptation so the next person can install that repo without needing AI. We publish every adaptation at <a href="https://github.com/ibisllc/flagship-adapters">github.com/ibisllc/flagship-adapters</a>, so anyone can see exactly what Flagship servers will apply, and every server gets the same files.
+        When a Flagship server's AI adapts a public open-source repo, the server shares the adaptation by default, so the next person can install that repo without needing AI. The server's owner can switch sharing off on the import screen. We publish every adaptation at <a href="https://github.com/ibisllc/flagship-adapters">github.com/ibisllc/flagship-adapters</a>, so anyone can see exactly what Flagship servers will apply, and every server gets the same files.
       </p>
       <ul class="bullets">
         <li>We never record who sent one. No account, server or address is attached.</li>
         <li>We publish them in daily batches, dated to the day.</li>
         <li>We only keep adaptations of public repos under an open-source license, and we check them first.</li>
         <li>Each adaptation is under the license of the repo it adapts.</li>
+        <li>When we refuse one for a reason it can fix, the server's own AI may fix it and send it again.</li>
       </ul>
+
+      <h2 id="problems">When an adaptation breaks</h2>
+      <p>
+        If an adaptation fails to build or start during an install, the server tells us which adaptation it was and whether it failed to build or to start. Nothing else is sent. A server's owner can also report a problem from the service page, with a short note. We keep notes privately, never publish them, use them only to review the adaptation, and delete them within 90 days, or 180 days after we retire the adaptation so we can learn what went wrong. Please don't put anything in a note that identifies you.
+      </p>
+      <p>
+        When 3 problems are reported for an adaptation, we retire it, and the next server's AI makes a new one.
+      </p>
       <p>The details are in our <a href="/privacy#repo-adaptations">privacy policy</a>.</p>
 
       <h2 id="developers">Control how your repo runs on Flagship</h2>

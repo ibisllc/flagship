@@ -49,6 +49,7 @@ Bare `ALTER TABLE ... ADD COLUMN` (apply-once; re-run ⇒ `duplicate column name
 | `0036_demo_server_identity.sql`    | `active_server_ip`, `image` |
 | `0045_recovery_acme_account_key.sql` | `wrapped_acme_account_key_b64` |
 | `0048_daemon_status_signed.sql`    | `report_json`, `signature_hex` |
+| `0086_repo_adapter_attempts_and_complaints.sql` | `repo_adapters.retired_day`, `repo_adapters.retired_reason` (the ALTERs are last; the CREATEs above them re-run cleanly) |
 
 Apply-once `RENAME COLUMN` (re-run ⇒ `no such column`):
 

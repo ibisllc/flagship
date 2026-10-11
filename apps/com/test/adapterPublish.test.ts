@@ -8,6 +8,7 @@ import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1
 import { handleAdapterIndex, type AdapterBucketLike } from "../src/adapterIndex.js";
 import { MAX_NEW_PER_PUBLISH, README, repoDir, runAdapterPublish, type AdapterPublishEnv } from "../src/adapterPublish.js";
 import { scheduled } from "../src/scheduled.js";
+import { runAdapterInsights } from "../src/adapterInsights.js";
 
 const REPO_NAME = "ibisllc/flagship-adapters";
 const API = `https://api.github.com/repos/${REPO_NAME}`;
@@ -237,8 +238,8 @@ describe("runAdapterPublish", () => {
       repo: NOTES,
       license: "MIT",
       adapters: [
-        { base: BASE_A, file: `${sha(1)}.json`, added: DAY, confirmations: 2 },
-        { base: BASE_B, file: `${sha(2)}.json`, added: DAY, confirmations: 1 },
+        { base: BASE_A, file: `${sha(1)}.json`, added: DAY, confirmations: 2, complaints: 0 },
+        { base: BASE_B, file: `${sha(2)}.json`, added: DAY, confirmations: 1, complaints: 0 },
       ],
     });
     expect(JSON.parse(files["adapters/gitlab.com/group/sub/app/index.json"]!).license).toBe("AGPL-3.0");
@@ -272,8 +273,8 @@ describe("runAdapterPublish", () => {
     expect(await runAdapterPublish(env, later)).toMatchObject({ published: true, added: 1, confirmed: 1 });
     expect(gh.headCommit().message).toBe("Adapters for 2026-10-13 (1 new, 1 confirmed)");
     expect(JSON.parse(gh.files()["adapters/github.com/me/notes/index.json"]!).adapters).toEqual([
-      { base: BASE_B, file: `${sha(2)}.json`, added: "2026-10-13", confirmations: 1 },
-      { base: BASE_A, file: `${sha(1)}.json`, added: DAY, confirmations: 5 },
+      { base: BASE_B, file: `${sha(2)}.json`, added: "2026-10-13", confirmations: 1, complaints: 0 },
+      { base: BASE_A, file: `${sha(1)}.json`, added: DAY, confirmations: 5, complaints: 0 },
     ]);
     expect(await all(`SELECT confirmations, pending_confirmations FROM repo_adapters WHERE file_sha256 = '${sha(1)}'`)).toEqual([
       { confirmations: 5, pending_confirmations: 0 },
@@ -371,7 +372,8 @@ describe("scheduled()", () => {
     const e = { ...env, BACKUPS_BUCKET: { put: async () => undefined, list: async () => ({ objects: [], truncated: false }), delete: async () => undefined } };
     expect(await run(6, e)).toBe(4);
     expect(gh.calls).toHaveLength(0);
-    expect(await run(0, e)).toBe(5);
+    // 2026-10-12 is a Monday: the weekly insight is scheduled too.
+    expect(await run(0, e)).toBe(6);
     expect(gh.files()[`adapters/github.com/me/notes/${sha(1)}.json`]).toBeDefined();
   });
 });
@@ -441,11 +443,13 @@ describe("review once a key exists", () => {
     expect(files[`adapters/github.com/me/notes/${sha(1)}.json`]).toBeDefined();
     const index = JSON.parse(files["adapters/github.com/me/notes/index.json"]!);
     expect(index.adapters.map((a: { file: string }) => a.file).sort()).toEqual([`${sha(1)}.json`, `${sha(3)}.json`]);
-    expect(gh.headCommit().message).toBe("Adapters for 2026-10-13 (0 new, 0 confirmed, 1 withdrawn after review)");
-    expect(await all("SELECT file_sha256, review FROM repo_adapters ORDER BY file_sha256")).toEqual([
-      { file_sha256: sha(1), review: "rules+ai" },
-      { file_sha256: sha(3), review: "rules+ai" },
+    expect(gh.headCommit().message).toBe("Adapters for 2026-10-13 (0 new, 0 confirmed, 1 withdrawn)");
+    expect(await all("SELECT file_sha256, review, retired_day, retired_reason FROM repo_adapters ORDER BY file_sha256")).toEqual([
+      { file_sha256: sha(1), review: "rules+ai", retired_day: null, retired_reason: null },
+      { file_sha256: sha(2), review: "rules", retired_day: "2026-10-13", retired_reason: "review" },
+      { file_sha256: sha(3), review: "rules+ai", retired_day: null, retired_reason: null },
     ]);
+    expect(bucket.objects.get(`retired/${sha(2)}.json`)).toBe(adapterFile("evil"));
 
     // Reviewed once: the next run has nothing to do.
     reviewed.length = 0;
@@ -471,5 +475,272 @@ describe("review once a key exists", () => {
     expect(gh.files()[`adapters/github.com/me/notes/${sha(1)}.json`]).toBeUndefined();
     expect(await all("SELECT file_sha256, review FROM repo_adapters")).toEqual([{ file_sha256: sha(2), review: "rules+ai" }]);
     expect(bucket.objects.size).toBe(0);
+  });
+});
+
+describe("complaints, retirement and insights", () => {
+  const MANIFEST = { schema_version: 1, name: "notes", version: "0.1.0", description: "notes", runtime: { image: "x", port: 8080 } };
+  const fileText = (marker: string) =>
+    JSON.stringify({
+      ...MANIFEST,
+      adapter: { version: 1, source: { repo: NOTES, base: BASE_A }, add: { Dockerfile: ["FROM node:20", `# ${marker}`, ""] } },
+    });
+  const KEY = { ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" };
+  let prompts: string[];
+  let answer: (prompt: string) => Response;
+
+  beforeEach(() => {
+    prompts = [];
+    answer = (p) => verdictFor(!p.includes("evil"));
+    globalThis.fetch = vi.fn(async (input: Request | string | URL, init?: RequestInit) => {
+      const req = input instanceof Request ? input : new Request(input.toString(), init);
+      if (req.url.startsWith(API)) return gh.handle(req);
+      const rawPrefix = `https://raw.githubusercontent.com/${REPO_NAME}/main/`;
+      if (req.url.startsWith(rawPrefix)) {
+        const body = gh.files()[req.url.slice(rawPrefix.length)];
+        return body == null ? new Response("404", { status: 404 }) : new Response(body);
+      }
+      if (req.url === "https://api.anthropic.com/v1/messages") {
+        const text = JSON.stringify(await req.json());
+        prompts.push(text);
+        return answer(text);
+      }
+      return new Response("unexpected", { status: 500 });
+    }) as typeof globalThis.fetch;
+  });
+
+  function verdictFor(ok: boolean): Response {
+    return new Response(
+      JSON.stringify({
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: JSON.stringify({ ok, category: ok ? "none" : "sends data out of the server" }) }],
+      }),
+    );
+  }
+
+  async function publishFiles(...markers: string[]) {
+    for (const [i, m] of markers.entries()) {
+      const key = `pending/${sha(i + 1)}.json`;
+      bucket.objects.set(key, fileText(m));
+      await db
+        .prepare(
+          `INSERT INTO repo_adapters (file_sha256, repo, base, license, review, bytes, r2_key, confirmations, pending_confirmations, created_day)
+           VALUES (?, ?, ?, 'MIT', 'rules+ai', 10, ?, 0, 1, '2026-10-10')`,
+        )
+        .bind(sha(i + 1), NOTES, BASE_A, key)
+        .run();
+    }
+    await runAdapterPublish(env, new Date(Date.UTC(2026, 9, 11, 0, 0, 0)));
+  }
+
+  async function complaint(n: number, stage: string, detail: string | null = null, day = "2026-10-11") {
+    await db
+      .prepare("INSERT INTO adapter_complaints (file_sha256, stage, detail, day) VALUES (?, ?, ?, ?)")
+      .bind(sha(n), stage, detail, day)
+      .run();
+  }
+
+  const index = () => JSON.parse(gh.files()["adapters/github.com/me/notes/index.json"]!) as {
+    adapters: Array<{ file: string; complaints: number; confirmations: number }>;
+  };
+
+  it("counts build and start complaints into index.json and sorts failing adapters last", async () => {
+    await publishFiles("one", "two");
+    await complaint(1, "build");
+    await complaint(1, "start");
+    await complaint(2, "report", "the page is blank");
+    const r = await runAdapterPublish(env, NOW);
+    expect(r).toMatchObject({ published: true, added: 0, withdrawn: 0 });
+    const entries = index().adapters;
+    expect(entries.map((e) => [e.file, e.complaints])).toEqual([
+      [`${sha(2)}.json`, 0],
+      [`${sha(1)}.json`, 2],
+    ]);
+    // Counted once: nothing more to publish.
+    expect(await runAdapterPublish(env, NOW)).toEqual({ published: false, reason: "nothing to publish" });
+    // The note itself is never published.
+    expect(JSON.stringify(gh.files())).not.toContain("the page is blank");
+  });
+
+  it("retires an adapter at three complaints of any kind, keeping its row and complaints", async () => {
+    await publishFiles("one", "two");
+    await db.prepare(`UPDATE repo_adapters SET confirmations = 9 WHERE file_sha256 = '${sha(1)}'`).bind().run();
+    await complaint(1, "build");
+    await complaint(1, "start");
+    await complaint(1, "report", "crashes on login");
+    await complaint(2, "build");
+    await complaint(2, "build");
+    const r = await runAdapterPublish(env, NOW);
+    expect(r).toMatchObject({ published: true, withdrawn: 1 });
+    expect(gh.headCommit().message).toBe(`Adapters for ${DAY} (0 new, 0 confirmed, 1 withdrawn)`);
+    expect(gh.files()[`adapters/github.com/me/notes/${sha(1)}.json`]).toBeUndefined();
+    expect(index().adapters.map((e) => e.file)).toEqual([`${sha(2)}.json`]);
+    expect(await all(`SELECT retired_day, retired_reason FROM repo_adapters WHERE file_sha256 = '${sha(1)}'`)).toEqual([
+      { retired_day: DAY, retired_reason: "reports" },
+    ]);
+    expect(await all(`SELECT count(*) AS n FROM adapter_complaints WHERE file_sha256 = '${sha(1)}'`)).toEqual([{ n: 3 }]);
+    expect(bucket.objects.get(`retired/${sha(1)}.json`)).toBe(fileText("one"));
+  });
+
+  it("retiring a repo's last adapter removes its index", async () => {
+    await publishFiles("one");
+    for (const s of ["build", "build", "start"]) await complaint(1, s);
+    await runAdapterPublish(env, NOW);
+    expect(Object.keys(gh.files()).some((p) => p.startsWith("adapters/github.com/me/notes/"))).toBe(false);
+  });
+
+  it("without a key, owners' reports are only stored", async () => {
+    await publishFiles("one");
+    await complaint(1, "report", "it sends my files somewhere");
+    expect(await runAdapterPublish(env, NOW)).toEqual({ published: false, reason: "nothing to publish" });
+    expect(prompts).toEqual([]);
+    expect(await all("SELECT reviewed FROM adapter_complaints")).toEqual([{ reviewed: 0 }]);
+  });
+
+  it("with a key, a reported adapter is reviewed again once, with the reports as untrusted text", async () => {
+    await publishFiles("one");
+    await complaint(1, "report", "it sends my files somewhere");
+    await runAdapterPublish({ ...env, ...KEY }, NOW);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain("<user_reports>");
+    expect(prompts[0]).toContain("it sends my files somewhere");
+    expect(prompts[0]).toMatch(/untrusted/);
+    expect(await all("SELECT reviewed FROM adapter_complaints")).toEqual([{ reviewed: 1 }]);
+    prompts.length = 0;
+    await runAdapterPublish({ ...env, ...KEY }, NOW);
+    expect(prompts).toEqual([]);
+    // A new report earns another review.
+    await complaint(1, "report", "still odd");
+    await runAdapterPublish({ ...env, ...KEY }, NOW);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain("still odd");
+    expect(prompts[0]).not.toContain("it sends my files somewhere");
+  });
+
+  it("a re-review that fails retires the adapter for review; one that can't run changes nothing", async () => {
+    await publishFiles("one");
+    await complaint(1, "report", "odd");
+    answer = () => new Response("overloaded", { status: 529 });
+    await runAdapterPublish({ ...env, ...KEY }, NOW);
+    expect(await all("SELECT retired_day FROM repo_adapters")).toEqual([{ retired_day: null }]);
+    expect(await all("SELECT reviewed FROM adapter_complaints")).toEqual([{ reviewed: 0 }]);
+    answer = () => verdictFor(false);
+    expect(await runAdapterPublish({ ...env, ...KEY }, NOW)).toMatchObject({ withdrawn: 1 });
+    expect(await all("SELECT retired_reason FROM repo_adapters")).toEqual([{ retired_reason: "review" }]);
+    expect(gh.files()[`adapters/github.com/me/notes/${sha(1)}.json`]).toBeUndefined();
+  });
+
+  it("a catch-up review that can't run no longer withdraws", async () => {
+    await publishFiles("one");
+    await db.prepare("UPDATE repo_adapters SET review = 'rules'").bind().run();
+    answer = () => new Response("down", { status: 500 });
+    await runAdapterPublish({ ...env, ...KEY }, NOW);
+    expect(await all("SELECT review, retired_day FROM repo_adapters")).toEqual([{ review: "rules", retired_day: null }]);
+  });
+
+  it("prunes live complaints after 90 days, retired adapters after 180, attempts after 7", async () => {
+    await publishFiles("one", "two");
+    await complaint(1, "report", "old note", "2026-07-13");
+    await complaint(1, "build", null, "2026-07-14");
+    await complaint(2, "build", null, "2026-10-11");
+    await db
+      .prepare(`UPDATE repo_adapters SET published_day = '2026-03-01', retired_day = '2026-04-01', retired_reason = 'reports' WHERE file_sha256 = '${sha(2)}'`)
+      .bind()
+      .run();
+    bucket.objects.set(`retired/${sha(2)}.json`, "{}");
+    await db.prepare("INSERT INTO adapter_attempts (repo, base, day, count) VALUES (?, ?, '2026-10-04', 3), (?, ?, '2026-10-05', 1)").bind(NOTES, BASE_A, NOTES, BASE_B).run();
+    await runAdapterPublish(env, NOW);
+    expect(await all("SELECT file_sha256, day FROM adapter_complaints ORDER BY id")).toEqual([{ file_sha256: sha(1), day: "2026-07-14" }]);
+    expect(await all("SELECT file_sha256 FROM repo_adapters")).toEqual([{ file_sha256: sha(1) }]);
+    expect(bucket.objects.has(`retired/${sha(2)}.json`)).toBe(false);
+    expect(await all("SELECT day FROM adapter_attempts")).toEqual([{ day: "2026-10-05" }]);
+    // The published count is the build complaint still inside the 90 days.
+    expect(index().adapters.find((e) => e.file === `${sha(1)}.json`)!.complaints).toBe(1);
+  });
+
+  it("prunes even when publishing isn't configured", async () => {
+    await complaint(7, "report", "old", "2026-01-01");
+    expect(await runAdapterPublish({ DB: db }, NOW)).toEqual({ published: false, reason: "not configured" });
+    expect(await all("SELECT * FROM adapter_complaints")).toEqual([]);
+  });
+
+  it("listing a repo forgets its retired adapters too", async () => {
+    await publishFiles("one", "two");
+    for (const s of ["build", "build", "start"]) await complaint(1, s);
+    await runAdapterPublish(env, NOW);
+    await block(NOTES);
+    await runAdapterPublish(env, new Date(Date.UTC(2026, 9, 13, 0, 0, 0)));
+    expect(await all("SELECT * FROM repo_adapters")).toEqual([]);
+    expect(await all("SELECT * FROM adapter_complaints")).toEqual([]);
+    expect(bucket.objects.has(`retired/${sha(1)}.json`)).toBe(false);
+  });
+
+  describe("weekly insight", () => {
+    const insightAnswer = {
+      patterns: [{ what_went_wrong: "listens on a fixed port", how_often: 2 }],
+      harness_suggestions: [{ area: "adapt prompt", suggestion: "map the app's port to runtime.port" }],
+    };
+
+    async function retireOne(n: number, marker: string, day: string, reason = "reports") {
+      bucket.objects.set(`retired/${sha(n)}.json`, fileText(marker));
+      await db
+        .prepare(
+          `INSERT INTO repo_adapters (file_sha256, repo, base, license, review, bytes, confirmations, pending_confirmations, created_day, published_day, retired_day, retired_reason)
+           VALUES (?, ?, ?, 'MIT', 'rules', 10, 1, 0, '2026-09-01', '2026-09-02', ?, ?)`,
+        )
+        .bind(sha(n), NOTES, BASE_A, day, reason)
+        .run();
+    }
+
+    it("does nothing without a key or without retirements", async () => {
+      await retireOne(1, "one", "2026-10-10");
+      expect(await runAdapterInsights({ DB: db, ADAPTERS_BUCKET: bucket }, NOW)).toEqual({ stored: false, reason: "not configured" });
+      await db.prepare("DELETE FROM repo_adapters").bind().run();
+      expect(await runAdapterInsights({ DB: db, ADAPTERS_BUCKET: bucket, ...KEY }, NOW)).toEqual({
+        stored: false,
+        reason: "nothing retired",
+      });
+      expect(prompts).toEqual([]);
+    });
+
+    it("summarizes the week's retirements privately, with reports marked untrusted", async () => {
+      await retireOne(1, "fixed port", "2026-10-08");
+      await retireOne(2, "another", "2026-10-11", "review");
+      await complaint(1, "build");
+      await complaint(1, "report", "fails at boot, my email is me@example.com");
+      answer = () =>
+        new Response(JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(insightAnswer) }] }));
+      const r = await runAdapterInsights({ DB: db, ADAPTERS_BUCKET: bucket, ...KEY }, NOW);
+      expect(r).toMatchObject({ stored: true, retired: 2 });
+      expect(prompts).toHaveLength(1);
+      const sent = JSON.parse(prompts[0]!);
+      expect(sent.model).toBe("claude-haiku-5-5");
+      expect(sent.system).toMatch(/Never quote or paraphrase anything from the user reports that could identify/);
+      expect(sent.output_config.format.schema.required).toEqual(["patterns", "harness_suggestions"]);
+      const content = sent.messages[0].content as string;
+      expect(content).toContain("<user_reports>");
+      expect(content).toContain("Retired because of: problem reports");
+      expect(content).toContain("Retired because of: a failed review");
+      expect(content).toMatch(/Complaints: build 1, report 1/);
+      expect(content).toContain("fixed port");
+      expect(await all("SELECT day, json FROM adapter_insights")).toEqual([{ day: DAY, json: JSON.stringify(insightAnswer) }]);
+      // The same day again finds nothing new; nothing went public.
+      prompts.length = 0;
+      expect(await runAdapterInsights({ DB: db, ADAPTERS_BUCKET: bucket, ...KEY }, NOW)).toMatchObject({ stored: false });
+      expect(gh.calls).toHaveLength(0);
+    });
+
+    it("a failed call stores nothing, so next week covers both weeks", async () => {
+      await retireOne(1, "one", "2026-10-08");
+      answer = () => new Response("down", { status: 500 });
+      expect(await runAdapterInsights({ DB: db, ADAPTERS_BUCKET: bucket, ...KEY }, NOW)).toMatchObject({ stored: false });
+      await retireOne(2, "two", "2026-10-15");
+      answer = () =>
+        new Response(JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(insightAnswer) }] }));
+      expect(await runAdapterInsights({ DB: db, ADAPTERS_BUCKET: bucket, ...KEY }, new Date(Date.UTC(2026, 9, 19)))).toMatchObject({
+        stored: true,
+        retired: 2,
+      });
+    });
   });
 });

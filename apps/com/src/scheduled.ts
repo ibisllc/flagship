@@ -59,6 +59,7 @@ import { createDemoServerRouter, hasAnyDemoCloudToken } from "./demoCloud.js";
 import { activeCaLeaseNotAfterMs } from "./caTrustChainLoader.js";
 import { notifyCaLeaseViaGithubIssue } from "./caLeaseGithubNotifier.js";
 import { runAdapterPublish } from "./adapterPublish.js";
+import { runAdapterInsights } from "./adapterInsights.js";
 import type { AdapterBucketLike } from "./adapterIndex.js";
 
 /** Scope of one row that the dump emits. */
@@ -113,6 +114,8 @@ export interface ScheduledEnv {
   ADAPTERS_BUCKET?: AdapterBucketLike;
   ADAPTERS_GITHUB_TOKEN?: string;
   ADAPTERS_REPO?: string;
+  /** Optional: AI review of adapters, and the weekly private insight on retired ones. */
+  ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
 }
 
 /**
@@ -386,6 +389,14 @@ export async function scheduled(
           console.error("[adapters] publish failed", (e as Error).message);
         }),
       );
+      // Mondays: the private weekly insight on adapters retired since the last.
+      if (now.getUTCDay() === 1) {
+        ctx.waitUntil(
+          runAdapterInsights(env, now).catch((e) => {
+            console.error("[adapters] insight failed", (e as Error).message);
+          }),
+        );
+      }
     }
     return;
   }

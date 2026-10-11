@@ -251,6 +251,8 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).toContain("Control how your repo runs on Flagship");
     expect(r.body).toContain("https://github.com/ibisllc/flagship-adapters");
     expect(r.body).toContain("do-not-adapt.txt");
+    expect(r.body).toContain('id="problems"');
+    expect(r.body).toMatch(/3 problems are reported/);
     const priv = await app.inject({ method: "GET", url: "/privacy.html" });
     expect(priv.body).toContain('id="repo-adaptations"');
     expect(priv.body).toContain('href="/adapters');

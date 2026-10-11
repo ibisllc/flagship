@@ -32,6 +32,8 @@
 -- are PRESERVED. The adapter queue is anonymous (no account, server or IP in
 -- it) and mirrors a public repo, so it is not user data; the blocklist records
 -- repo owners' opt-outs, and wiping it would republish their repos.
+-- adapter_attempts + adapter_complaints (0086) are PRESERVED too: they carry
+-- no identity and belong to the adapter index, not to any account.
 --
 -- ⚠️ DO NOT run this file via `wrangler d1 execute --file`. Prod D1's schema
 -- DRIFTS from the repo (migrations are applied by hand; e.g. nfc_rendezvous/0040

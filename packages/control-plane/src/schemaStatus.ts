@@ -47,6 +47,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0084",
   // The anonymous repo adapter queue (published to a public repo) + do-not-adapt list.
   "0085",
+  // Repo adapter verdict attempts + install complaints.
+  "0086",
 ];
 
 export interface SchemaStatusDeps {

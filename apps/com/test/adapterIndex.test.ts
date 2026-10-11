@@ -10,6 +10,8 @@ import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1
 import {
   handleAdapterIndex,
   identifyLicense,
+  MAX_ATTEMPTS_PER_DAY,
+  REVIEW_CATEGORIES,
   type AdapterBucketLike,
   type AdapterIndexEnv,
 } from "../src/adapterIndex.js";
@@ -203,7 +205,7 @@ describe("POST /api/adapters/submit", () => {
     expect(row!.created_day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(Object.keys(row!).sort()).toEqual([
       "base", "bytes", "confirmations", "created_day", "file_sha256", "license",
-      "pending_confirmations", "published_day", "r2_key", "repo", "review",
+      "pending_confirmations", "published_day", "r2_key", "repo", "retired_day", "retired_reason", "review",
     ]);
     expect(fx.bucket.objects.get(`pending/${row!.file_sha256}.json`)).toBe(file);
     // Every check read the public raw URL at base, without following redirects.
@@ -572,6 +574,14 @@ describe("route() wiring", () => {
     expect(fetchCalls.some((c) => c.url.startsWith("https://flagship.services"))).toBe(false);
   });
 
+  it("serves complaints and the admin insights here too", async () => {
+    const complaint = await route(post("/api/adapters/complain", { repo: REPO, file: "a".repeat(64), stage: "build" }), routeEnv());
+    expect(complaint.status).toBe(202);
+    const insights = await route(new Request(`${ORIGIN}/api/admin/adapter-insights`, { headers: { "x-admin-secret": ADMIN } }), routeEnv());
+    expect(insights.status).toBe(200);
+    expect(fetchCalls.some((c) => c.url.startsWith("https://flagship.services"))).toBe(false);
+  });
+
   it("404s any other /api/adapters path (there is no lookup) instead of proxying it", async () => {
     for (const path of ["/api/adapters/lookup", "/api/adapters/list", "/api/adapters", "/api/adapters/"]) {
       const res = await route(new Request(`${ORIGIN}${path}`), routeEnv());
@@ -581,3 +591,291 @@ describe("route() wiring", () => {
   });
 });
 
+
+// ---- wait mode: the verdict ------------------------------------------------
+
+async function sha256(text: string): Promise<string> {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+interface VerdictBody {
+  status: string;
+  file: string;
+  reasons?: Array<{ code: string; message: string; fixable: boolean }>;
+}
+
+async function ask(over: Record<string, unknown> = {}, f: Fixture = fx): Promise<{ res: Response; body: VerdictBody }> {
+  const res = await call(post("/api/adapters/submit", { ...submission(over), wait: true }), f);
+  return { res, body: (await res.json()) as VerdictBody };
+}
+
+const codes = (b: VerdictBody) => (b.reasons ?? []).map((r) => r.code);
+
+function categoryVerdict(ok: boolean, category: string, extra: Record<string, unknown> = {}): Response {
+  return new Response(
+    JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({ ok, category, ...extra }) }] }),
+    { status: 200 },
+  );
+}
+
+describe("POST /api/adapters/submit with wait", () => {
+  it("answers kept, then known, with the file's sha256 and no reasons", async () => {
+    const file = adapterFile();
+    const first = await ask({ file });
+    expect(first.res.status).toBe(200);
+    expect(first.res.headers.get("cache-control")).toBe("no-store");
+    expect(first.body).toEqual({ status: "kept", file: await sha256(file) });
+    expect(await rows()).toHaveLength(1);
+    expect((await ask({ file })).body).toEqual({ status: "known", file: await sha256(file) });
+    expect((await rows())[0]!.pending_confirmations).toBe(2);
+    expect(fx.pending).toHaveLength(0);
+  });
+
+  it("400s on a wait that isn't a boolean", async () => {
+    expect((await call(post("/api/adapters/submit", { ...submission(), wait: "yes" }))).status).toBe(400);
+  });
+
+  it("refuses with the reason a box can't fix", async () => {
+    const cases: Array<[Record<string, unknown>, string, () => void]> = [
+      [{ repo: "https://example.com/me/notes", file: adapterFile({ repo: "https://example.com/me/notes" }) }, "unsupported-host", () => {}],
+      [{ file: "{nope" }, "malformed", () => {}],
+      [{ file: MANIFEST }, "malformed", () => {}],
+      [{ file: adapterFile({ base: OTHER_BASE }) }, "wrong-source", () => {}],
+      [{}, "no-license", () => raw.delete(`${RAW}LICENSE`)],
+      [{}, "repo-has-own-file", () => raw.set(`${RAW}flagship.app.json`, MANIFEST)],
+      [{}, "edits-dont-fit", () => raw.set(`${RAW}index.js`, "changed\n")],
+    ];
+    for (const [over, code, setup] of cases) {
+      const f = makeFixture();
+      try {
+        raw.set(`${RAW}LICENSE`, MIT);
+        raw.delete(`${RAW}flagship.app.json`);
+        raw.set(`${RAW}index.js`, ORIGINAL["index.js"]!);
+        setup();
+        const { body } = await ask(over, f);
+        expect(body.status, code).toBe("refused");
+        expect(codes(body), code).toEqual([code]);
+        expect(body.reasons![0]!.fixable, code).toBe(false);
+        expect(body.reasons![0]!.message.length, code).toBeGreaterThan(0);
+        expect(await rows(f), code).toHaveLength(0);
+      } finally {
+        f.close();
+      }
+    }
+  });
+
+  it("refuses a repo on the do-not-adapt list", async () => {
+    await call(post("/api/admin/adapter-blocklist", { repo: REPO }, { "x-admin-secret": ADMIN }));
+    expect(codes((await ask()).body)).toEqual(["do-not-adapt"]);
+  });
+
+  it("refuses an adapter that edits more files than we can check", async () => {
+    const adapter = {
+      version: 1,
+      source: { repo: REPO, base: BASE },
+      patch: Array.from({ length: 801 }, (_, i) => ({
+        path: `f${i}.js`,
+        hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-a", "+b"] }],
+      })),
+    };
+    const file = JSON.stringify({ ...JSON.parse(MANIFEST), adapter });
+    expect(codes((await ask({ file })).body)).toEqual(["too-large"]);
+  });
+
+  it("collects every fixable reason in one pass", async () => {
+    const file = adapterFile({
+      manifest: JSON.stringify({ ...JSON.parse(MANIFEST), version: "not-semver" }),
+      adapted: { ...ADAPTED, ".env": "KEY=AKIAABCDEFGHIJKLMNOP\nHOST=home.harry.flagship.services\n" },
+    });
+    const { body } = await ask({ file });
+    expect(body.status).toBe("refused");
+    expect(codes(body)).toEqual(["rule", "adds-secret", "adds-server-address"]);
+    expect(body.reasons!.every((r) => r.fixable)).toBe(true);
+    expect(body.reasons![0]!.message).toMatch(/version/);
+    expect(body.reasons![1]!.message).toMatch(/AWS access key/);
+    // The box's own address is never echoed back.
+    expect(JSON.stringify(body)).not.toContain("home.harry");
+  });
+
+  it("stops at the first reason it can't fix, keeping the fixable ones found so far", async () => {
+    raw.delete(`${RAW}LICENSE`);
+    const file = adapterFile({ manifest: JSON.stringify({ ...JSON.parse(MANIFEST), version: "x" }) });
+    const { body } = await ask({ file });
+    expect(codes(body)).toEqual(["rule", "no-license"]);
+    expect(body.reasons!.map((r) => r.fixable)).toEqual([true, false]);
+  });
+
+  it("doesn't fetch an unsafe path a rule already refused", async () => {
+    const adapter = {
+      version: 1,
+      source: { repo: REPO, base: BASE },
+      remove: ["../../etc/passwd"],
+    };
+    const file = JSON.stringify({ ...JSON.parse(MANIFEST), adapter });
+    const { body } = await ask({ file });
+    expect(codes(body)).toEqual(["rule"]);
+    expect(fetchCalls.some((c) => c.url.includes("passwd") || c.url.includes(".."))).toBe(false);
+  });
+
+  it("reports a review refusal as a fixed category, never the model's words", async () => {
+    const f = makeFixture({ ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" });
+    try {
+      anthropic = () => categoryVerdict(false, "sends data out of the server", { note: "SECRET MODEL TEXT" });
+      let { body } = await ask({}, f);
+      expect(body.reasons).toEqual([{ code: "review", message: "sends data out of the server", fixable: true }]);
+      expect(JSON.stringify(body)).not.toContain("SECRET MODEL TEXT");
+      anthropic = () => categoryVerdict(false, "something the model made up");
+      ({ body } = await ask({}, f));
+      expect(body.reasons).toEqual([{ code: "review", message: "other concern", fixable: true }]);
+      anthropic = () => new Response("overloaded", { status: 529 });
+      ({ body } = await ask({}, f));
+      expect(codes(body)).toEqual(["review-unavailable"]);
+      expect(body.reasons![0]!.fixable).toBe(false);
+      anthropic = () => categoryVerdict(true, "none");
+      ({ body } = await ask({}, f));
+      expect(body.status).toBe("kept");
+      expect((await rows(f))[0]!.review).toBe("rules+ai");
+    } finally {
+      f.close();
+    }
+  });
+
+  it("asks for the fixed categories in the review schema", async () => {
+    const f = makeFixture({ ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" });
+    try {
+      anthropic = () => categoryVerdict(true, "none");
+      await ask({}, f);
+      const ai = fetchCalls.find((c) => c.url.includes("anthropic"))!;
+      const schema = JSON.parse(ai.init!.body as string).output_config.format.schema;
+      expect(schema.required).toEqual(["ok", "category"]);
+      expect(schema.properties.category.enum).toEqual([...REVIEW_CATEGORIES, "none"]);
+    } finally {
+      f.close();
+    }
+  });
+
+  it("allows six attempts per repo, commit and day, then refuses", async () => {
+    const bad = adapterFile({ manifest: JSON.stringify({ ...JSON.parse(MANIFEST), version: "x" }) });
+    for (let i = 0; i < MAX_ATTEMPTS_PER_DAY; i++) expect(codes((await ask({ file: bad })).body)).toEqual(["rule"]);
+    const seventh = await ask({ file: adapterFile() });
+    expect(seventh.body).toMatchObject({ status: "refused" });
+    expect(codes(seventh.body)).toEqual(["too-many-attempts"]);
+    expect(seventh.body.reasons![0]!.fixable).toBe(false);
+    // Another commit has its own allowance; a plain submit doesn't count.
+    await submit(submission());
+    expect(await rows()).toHaveLength(1);
+    const counts = await fx.db.prepare("SELECT repo, base, count FROM adapter_attempts").bind().all<Record<string, unknown>>();
+    expect(counts.results).toEqual([{ repo: REPO, base: BASE, count: 7 }]);
+  });
+
+  it("doesn't count attempts that fail the host check", async () => {
+    for (let i = 0; i < 8; i++) await ask({ repo: "https://example.com/a/b" });
+    const counts = await fx.db.prepare("SELECT count(*) AS n FROM adapter_attempts").bind().first<{ n: number }>();
+    expect(counts!.n).toBe(0);
+  });
+
+  it("refuses an identical file once it has been retired", async () => {
+    const file = adapterFile();
+    await ask({ file });
+    await fx.db.prepare("UPDATE repo_adapters SET published_day = '2026-10-01', retired_day = '2026-10-05', retired_reason = 'reports'").bind().run();
+    const { body } = await ask({ file });
+    expect(body.reasons).toEqual([
+      { code: "retired", message: "This exact adaptation was retired after problem reports; a new one is welcome.", fixable: false },
+    ]);
+    expect((await rows())[0]!.pending_confirmations).toBe(1);
+    // A new adaptation of the same repo is welcome.
+    expect((await ask({ file: adapterFile({ adapted: { ...ADAPTED, Dockerfile: "FROM node:22\n" } }) })).body.status).toBe("kept");
+  });
+});
+
+// ---- complaints -------------------------------------------------------------
+
+describe("POST /api/adapters/complain", () => {
+  async function publishOne(): Promise<string> {
+    const file = adapterFile();
+    await submit(submission({ file }));
+    await fx.db.prepare("UPDATE repo_adapters SET published_day = '2026-10-01', r2_key = NULL").bind().run();
+    return sha256(file);
+  }
+  const complain = (body: unknown) => call(post("/api/adapters/complain", body));
+  const complaints = async () =>
+    (await fx.db.prepare("SELECT file_sha256, stage, detail, day FROM adapter_complaints ORDER BY id").bind().all<Record<string, unknown>>()).results;
+
+  it("400s on a malformed complaint", async () => {
+    const file = "a".repeat(64);
+    for (const body of [
+      "nope",
+      { file, stage: "build" },
+      { repo: REPO, file: "A".repeat(64), stage: "build" },
+      { repo: REPO, file: "abc", stage: "build" },
+      { repo: REPO, file, stage: "crash" },
+      { repo: REPO, file, stage: "build", detail: "it broke" },
+      { repo: REPO, file, stage: "start", detail: "" },
+      { repo: REPO, file, stage: "report", detail: 7 },
+      { repo: REPO, file, stage: "report", detail: "x".repeat(2001) },
+    ]) {
+      expect((await complain(body)).status, JSON.stringify(body).slice(0, 80)).toBe(400);
+    }
+    expect(fx.pending).toHaveLength(0);
+  });
+
+  it("keeps a complaint about a published adapter of that repo, day only, and answers 202 either way", async () => {
+    const file = await publishOne();
+    for (const body of [
+      { repo: REPO, file, stage: "build" },
+      { repo: "https://github.com/me/notes.git", file, stage: "start" },
+      { repo: REPO, file, stage: "report", detail: "x".repeat(2000) },
+      { repo: REPO, file, stage: "report", detail: "" },
+      { repo: "https://github.com/me/other", file, stage: "build" },
+      { repo: REPO, file: "b".repeat(64), stage: "build" },
+    ]) {
+      const res = await complain(body);
+      expect(res.status).toBe(202);
+      expect(await res.text()).toBe(ACCEPTED);
+    }
+    await Promise.all(fx.pending.splice(0));
+    const kept = await complaints();
+    expect(kept.map((c) => [c.stage, c.detail === null ? null : (c.detail as string).length])).toEqual([
+      ["build", null],
+      ["start", null],
+      ["report", 2000],
+      ["report", null],
+    ]);
+    expect(kept.every((c) => c.file_sha256 === file && /^\d{4}-\d{2}-\d{2}$/.test(c.day as string))).toBe(true);
+    const cols = await fx.db.prepare("SELECT * FROM adapter_complaints LIMIT 1").bind().first<Record<string, unknown>>();
+    expect(Object.keys(cols!).sort()).toEqual(["counted", "day", "detail", "file_sha256", "id", "reviewed", "stage"]);
+  });
+
+  it("drops a complaint about a pending or retired adapter", async () => {
+    const file = adapterFile();
+    await submit(submission({ file }));
+    const sha = await sha256(file);
+    await complain({ repo: REPO, file: sha, stage: "build" });
+    await fx.db.prepare("UPDATE repo_adapters SET published_day = '2026-10-01', retired_day = '2026-10-02'").bind().run();
+    await complain({ repo: REPO, file: sha, stage: "start" });
+    await Promise.all(fx.pending.splice(0));
+    expect(await complaints()).toEqual([]);
+  });
+});
+
+// ---- insights ---------------------------------------------------------------
+
+describe("GET /api/admin/adapter-insights", () => {
+  it("is admin-gated and lists the newest 20", async () => {
+    expect((await call(new Request(`${ORIGIN}/api/admin/adapter-insights`))).status).toBe(401);
+    for (let i = 1; i <= 22; i++) {
+      await fx.db
+        .prepare("INSERT INTO adapter_insights (day, json) VALUES (?, ?)")
+        .bind(`2026-${String(Math.ceil(i / 2)).padStart(2, "0")}-0${(i % 2) + 1}`, JSON.stringify({ patterns: [], harness_suggestions: [], n: i }))
+        .run();
+    }
+    const res = await call(new Request(`${ORIGIN}/api/admin/adapter-insights`, { headers: { "x-admin-secret": ADMIN } }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { insights: Array<{ day: string; insight: { n: number } }> };
+    expect(body.insights).toHaveLength(20);
+    expect(body.insights[0]!.day).toBe("2026-11-02");
+    expect(body.insights.map((i) => i.day)).toEqual([...body.insights.map((i) => i.day)].sort().reverse());
+    expect((await call(post("/api/admin/adapter-insights", {}, { "x-admin-secret": ADMIN }))).status).toBe(405);
+  });
+});

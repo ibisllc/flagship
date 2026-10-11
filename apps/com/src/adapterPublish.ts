@@ -7,7 +7,7 @@
  * do-not-adapt.txt is rendered from it, never read back from GitHub.
  *
  * Layout (boxes read it straight from raw.githubusercontent.com):
- *   adapters/<host>/<repo path>/index.json         {repo, license, adapters:[...]}
+ *   adapters/<host>/<repo path>/index.json         {repo, license, adapters:[{base, file, added, confirmations, complaints}]}
  *   adapters/<host>/<repo path>/<file_sha256>.json the exact submitted file
  *   do-not-adapt.txt                               one repo URL per line
  *   README.md                                      written only if missing
@@ -25,9 +25,10 @@ export interface AdapterPublishEnv {
   /** "owner/name" of the public index repo. Unset ⇒ no publish. */
   ADAPTERS_REPO?: string;
   /**
-   * Unset: adapters are published after the rule checks alone. Once set,
-   * each publish also reviews what went out without it, and withdraws what
-   * fails.
+   * Unset: adapters are published after the rule checks alone, and owners'
+   * reports are only stored. Once set, each publish also reviews what went
+   * out without it and every adapter reported since its last review, and
+   * withdraws what fails.
    */
   ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
 }
@@ -57,6 +58,7 @@ interface Row {
   confirmations: number;
   pending_confirmations: number;
   published_day: string | null;
+  retired_day?: string | null;
 }
 
 /** `adapters/<host>/<repo path>` for a normalized repo URL. */
@@ -65,66 +67,145 @@ export function repoDir(repo: string): string {
   return `adapters/${u.hostname}${u.pathname}`;
 }
 
+const DAY_MS = 86_400_000;
+// Complaints of any kind (build, start, report) that retire an adapter.
+export const RETIRE_AT_COMPLAINTS = 3;
+// A live adapter's complaints expire after this; a retired adapter keeps its
+// own until the adapter itself is pruned, RETIRED_TTL_DAYS after retirement.
+const COMPLAINT_TTL_DAYS = 90;
+export const RETIRED_TTL_DAYS = 180;
+const ATTEMPT_TTL_DAYS = 7;
+const LIVE = "published_day IS NOT NULL AND retired_day IS NULL";
+const RETIRED_FILES = "SELECT file_sha256 FROM repo_adapters WHERE retired_day IS NOT NULL";
+
+/** Delete what has outlived its use: old attempt counters, retired adapters. */
+async function pruneOld(db: D1Database, bucket: AdapterBucketLike | undefined, now: Date): Promise<void> {
+  await db
+    .prepare("DELETE FROM adapter_attempts WHERE day < ?")
+    .bind(utcDay(new Date(now.getTime() - ATTEMPT_TTL_DAYS * DAY_MS)))
+    .run();
+  const cutoff = utcDay(new Date(now.getTime() - RETIRED_TTL_DAYS * DAY_MS));
+  const old = (
+    await db
+      .prepare("SELECT file_sha256 FROM repo_adapters WHERE retired_day IS NOT NULL AND retired_day < ?")
+      .bind(cutoff)
+      .all<{ file_sha256: string }>()
+  ).results.map((r) => r.file_sha256);
+  if (!old.length) return;
+  await db.batch(
+    old.flatMap((sha) => [
+      db.prepare("DELETE FROM adapter_complaints WHERE file_sha256 = ?").bind(sha),
+      db.prepare("DELETE FROM repo_adapters WHERE file_sha256 = ?").bind(sha),
+    ]),
+  );
+  if (bucket) await bucket.delete(old.map((sha) => `retired/${sha}.json`));
+}
+
 export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Promise<PublishResult> {
   const { DB: db, ADAPTERS_BUCKET: bucket, ADAPTERS_GITHUB_TOKEN: token, ADAPTERS_REPO: repoName } = env;
-  if (!db || !bucket || !token || !repoName) return { published: false, reason: "not configured" };
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoName)) return { published: false, reason: "bad ADAPTERS_REPO" };
+  if (!db) return { published: false, reason: "not configured" };
   const day = utcDay(now);
+  const complaintCutoff = utcDay(new Date(now.getTime() - COMPLAINT_TTL_DAYS * DAY_MS));
+  await pruneOld(db, bucket, now);
+  const pruneStmt = () =>
+    db
+      .prepare(`DELETE FROM adapter_complaints WHERE day < ? AND file_sha256 NOT IN (${RETIRED_FILES})`)
+      .bind(complaintCutoff);
+  const pruneComplaints = () => pruneStmt().run();
+  if (!bucket || !token || !repoName) {
+    // Nothing goes public, but owners' notes still expire on time.
+    await pruneComplaints();
+    return { published: false, reason: "not configured" };
+  }
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoName)) return { published: false, reason: "bad ADAPTERS_REPO" };
 
-  const fresh = (
-    await db
-      .prepare(`SELECT * FROM repo_adapters WHERE published_day IS NULL ORDER BY created_day, file_sha256 LIMIT ${MAX_NEW_PER_PUBLISH}`)
-      .bind()
-      .all<Row>()
-  ).results;
-  const bumped = (
-    await db
-      .prepare("SELECT * FROM repo_adapters WHERE published_day IS NOT NULL AND pending_confirmations > 0")
-      .bind()
-      .all<Row>()
-  ).results;
-  const listChanges = (
-    await db
-      .prepare("SELECT repo, state FROM adapter_blocklist WHERE state IN ('pending', 'unlisting')")
-      .bind()
-      .all<{ repo: string; state: string }>()
-  ).results;
+  const all = async <T>(sql: string, ...args: unknown[]) => (await db.prepare(sql).bind(...args).all<T>()).results;
+
+  const fresh = await all<Row>(
+    `SELECT * FROM repo_adapters WHERE published_day IS NULL ORDER BY created_day, file_sha256 LIMIT ${MAX_NEW_PER_PUBLISH}`,
+  );
+  const bumped = await all<Row>(`SELECT * FROM repo_adapters WHERE ${LIVE} AND pending_confirmations > 0`);
+  const listChanges = await all<{ repo: string; state: string }>(
+    "SELECT repo, state FROM adapter_blocklist WHERE state IN ('pending', 'unlisting')",
+  );
   const reviewKey = env.ADAPTER_REVIEW_ANTHROPIC_KEY;
   // Published before there was a key to review them with: review them now.
   const unreviewed = reviewKey
-    ? (
-        await db
-          .prepare(
-            `SELECT * FROM repo_adapters WHERE published_day IS NOT NULL AND review = 'rules'
-             ORDER BY published_day, file_sha256 LIMIT ${MAX_REVIEWS_PER_PUBLISH}`,
-          )
-          .bind()
-          .all<Row>()
-      ).results
+    ? await all<Row>(
+        `SELECT * FROM repo_adapters WHERE ${LIVE} AND review = 'rules'
+         ORDER BY published_day, file_sha256 LIMIT ${MAX_REVIEWS_PER_PUBLISH}`,
+      )
     : [];
-  if (!fresh.length && !bumped.length && !listChanges.length && !unreviewed.length) {
+
+  // Complaints, as of this snapshot (later ones wait for the next publish).
+  const maxComplaint =
+    (await db.prepare("SELECT max(id) AS m FROM adapter_complaints").bind().first<{ m: number | null }>())?.m ?? 0;
+  const complaintCounts = new Map(
+    (
+      await all<{ file_sha256: string; n: number }>(
+        `SELECT file_sha256, count(*) AS n FROM adapter_complaints
+         WHERE stage IN ('build', 'start') AND day >= ? AND id <= ? GROUP BY file_sha256`,
+        complaintCutoff,
+        maxComplaint,
+      )
+    ).map((r) => [r.file_sha256, r.n]),
+  );
+  // Repos whose published counts change: new build/start complaints, or old
+  // ones expiring.
+  const recount = (
+    await all<{ repo: string }>(
+      `SELECT DISTINCT r.repo FROM adapter_complaints c JOIN repo_adapters r ON r.file_sha256 = c.file_sha256
+       WHERE c.stage IN ('build', 'start') AND c.id <= ? AND (c.counted = 0 OR c.day < ?)
+         AND r.published_day IS NOT NULL AND r.retired_day IS NULL`,
+      maxComplaint,
+      complaintCutoff,
+    )
+  ).map((r) => r.repo);
+  // Three problems of any kind, from installs or owners, retire an adapter.
+  const broken = await all<Row>(
+    `SELECT * FROM repo_adapters WHERE ${LIVE} AND file_sha256 IN (
+       SELECT file_sha256 FROM adapter_complaints WHERE day >= ? AND id <= ?
+       GROUP BY file_sha256 HAVING count(*) >= ?)`,
+    complaintCutoff,
+    maxComplaint,
+    RETIRE_AT_COMPLAINTS,
+  );
+  const reported = reviewKey
+    ? await all<Row>(
+        `SELECT * FROM repo_adapters WHERE ${LIVE} AND file_sha256 IN (
+           SELECT file_sha256 FROM adapter_complaints WHERE stage = 'report' AND reviewed = 0 AND id <= ?)
+         ORDER BY published_day, file_sha256`,
+        maxComplaint,
+      )
+    : [];
+  const expiring = await db
+    .prepare(`SELECT 1 AS x FROM adapter_complaints WHERE day < ? AND file_sha256 NOT IN (${RETIRED_FILES}) LIMIT 1`)
+    .bind(complaintCutoff)
+    .first();
+
+  if (
+    !fresh.length && !bumped.length && !listChanges.length && !unreviewed.length &&
+    !recount.length && !broken.length && !reported.length
+  ) {
+    if (expiring) await pruneComplaints();
     return { published: false, reason: "nothing to publish" };
   }
 
   const blocked = new Set(
-    (
-      await db
-        .prepare("SELECT repo FROM adapter_blocklist WHERE state != 'unlisting'")
-        .bind()
-        .all<{ repo: string }>()
-    ).results.map((r) => r.repo.toLowerCase()),
+    (await all<{ repo: string }>("SELECT repo FROM adapter_blocklist WHERE state != 'unlisting'")).map((r) =>
+      r.repo.toLowerCase(),
+    ),
   );
   const isBlocked = (repo: string) => blocked.has(repo.toLowerCase());
   const newlyBlocked = listChanges.filter((c) => c.state === "pending").map((c) => c.repo);
 
-  // Published files of newly listed repos come out of the tree.
+  // Published files of newly listed repos come out of the tree; what we kept
+  // of their retired adapters goes too.
   const removed: Row[] = [];
+  const forgotten: Row[] = [];
   for (const repo of newlyBlocked) {
-    const r = await db
-      .prepare("SELECT * FROM repo_adapters WHERE lower(repo) = lower(?) AND published_day IS NOT NULL")
-      .bind(repo)
-      .all<Row>();
-    removed.push(...r.results);
+    removed.push(...(await all<Row>(`SELECT * FROM repo_adapters WHERE lower(repo) = lower(?) AND ${LIVE}`, repo)));
+    forgotten.push(...(await all<Row>("SELECT * FROM repo_adapters WHERE lower(repo) = lower(?) AND retired_day IS NOT NULL", repo)));
   }
 
   const bodies = new Map<string, string>();
@@ -135,18 +216,60 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
     if (obj) bodies.set(row.file_sha256, await obj.text());
     else dropped.push(row);
   }
-  // With a key, nothing goes out unreviewed, and what went out before the
-  // key existed is reviewed too; a failure is dropped or withdrawn.
+
+  // Retired in this commit (out of the tree, kept in D1), for problem
+  // reports or a failed review.
+  const withdrawn = new Map<string, Row>();
+  const retireReason = new Map<string, "reports" | "review">();
+  const retire = (row: Row, why: "reports" | "review") => {
+    withdrawn.set(row.file_sha256, row);
+    retireReason.set(row.file_sha256, why);
+  };
+  for (const row of broken) if (!isBlocked(row.repo)) retire(row, "reports");
+
+  // With a key, nothing goes out unreviewed: reported adapters are reviewed
+  // again (once per report), then the queue, then what went out before the
+  // key existed. A review that can't run leaves things as they are.
   let reviewBudget = MAX_REVIEWS_PER_PUBLISH;
   const deferred = new Set<string>();
   const reviewedNow: string[] = [];
-  const withdrawn: Row[] = [];
-  const passes = async (row: Row, body: string): Promise<boolean> => {
+  const rereviewed: string[] = [];
+  const review = async (row: Row, body: string, reports: string[] = []) => {
     const split = splitAdapterFile(body);
-    if (!split.ok || !split.adapter) return false;
-    return aiReview(reviewKey!, row.repo, split.manifestJson, split.adapter);
+    if (!split.ok || !split.adapter) return { kind: "fail" } as const;
+    return aiReview(reviewKey!, row.repo, split.manifestJson, split.adapter, reports);
+  };
+  const reviewedBodies = new Map<string, string>();
+  const publishedBody = async (row: Row): Promise<string | null> => {
+    const res = await fetch(`https://raw.githubusercontent.com/${repoName}/main/${repoDir(row.repo)}/${row.file_sha256}.json`, {
+      redirect: "manual",
+    });
+    if (!res.ok) {
+      await res.body?.cancel();
+      return null;
+    }
+    return res.text();
   };
   if (reviewKey) {
+    for (const row of reported) {
+      if (reviewBudget <= 0) break;
+      if (isBlocked(row.repo) || withdrawn.has(row.file_sha256)) continue;
+      const body = await publishedBody(row);
+      if (body == null) continue;
+      reviewedBodies.set(row.file_sha256, body);
+      const reports = (
+        await all<{ detail: string | null }>(
+          `SELECT detail FROM adapter_complaints WHERE file_sha256 = ? AND stage = 'report' AND reviewed = 0 AND id <= ?
+           ORDER BY id DESC`,
+          row.file_sha256,
+          maxComplaint,
+        )
+      ).flatMap((r) => (r.detail ? [r.detail] : []));
+      reviewBudget--;
+      const v = await review(row, body, reports);
+      if (v.kind === "pass") rereviewed.push(row.file_sha256);
+      else if (v.kind === "fail") retire(row, "review");
+    }
     for (const row of fresh) {
       const body = bodies.get(row.file_sha256);
       if (!body || row.review !== "rules") continue;
@@ -155,50 +278,54 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
         continue;
       }
       reviewBudget--;
-      if (await passes(row, body)) reviewedNow.push(row.file_sha256);
+      const v = await review(row, body);
+      if (v.kind === "pass") reviewedNow.push(row.file_sha256);
+      else if (v.kind === "unavailable") deferred.add(row.file_sha256);
       else {
         bodies.delete(row.file_sha256);
         dropped.push(row);
       }
     }
     for (const row of unreviewed) {
-      if (reviewBudget <= 0 || isBlocked(row.repo)) break;
-      const res = await fetch(`https://raw.githubusercontent.com/${repoName}/main/${repoDir(row.repo)}/${row.file_sha256}.json`, {
-        redirect: "manual",
-      });
-      if (!res.ok) continue;
+      if (reviewBudget <= 0) break;
+      if (isBlocked(row.repo) || withdrawn.has(row.file_sha256) || rereviewed.includes(row.file_sha256)) continue;
+      const body = await publishedBody(row);
+      if (body == null) continue;
+      reviewedBodies.set(row.file_sha256, body);
       reviewBudget--;
-      if (await passes(row, await res.text())) reviewedNow.push(row.file_sha256);
-      else withdrawn.push(row);
+      const v = await review(row, body);
+      if (v.kind === "pass") reviewedNow.push(row.file_sha256);
+      else if (v.kind === "fail") retire(row, "review");
     }
   }
   const added = fresh.filter((r) => bodies.has(r.file_sha256) && !deferred.has(r.file_sha256));
-  const confirmed = bumped.filter((r) => !isBlocked(r.repo));
-  const gone = new Set(withdrawn.map((r) => r.file_sha256));
+  const confirmed = bumped.filter((r) => !isBlocked(r.repo) && !withdrawn.has(r.file_sha256));
 
   // Each touched repo's index.json, rendered from every published row plus
   // this batch, with the counts this commit makes true.
-  const touched = new Set([...added, ...confirmed, ...withdrawn].map((r) => r.repo));
+  const touched = new Set(
+    [...added.map((r) => r.repo), ...confirmed.map((r) => r.repo), ...[...withdrawn.values()].map((r) => r.repo), ...recount].filter(
+      (repo) => !isBlocked(repo),
+    ),
+  );
   const emptied: string[] = [];
   const indexes = new Map<string, string>();
   for (const repo of touched) {
-    const all = (
-      await db
-        .prepare("SELECT * FROM repo_adapters WHERE repo = ? AND published_day IS NOT NULL")
-        .bind(repo)
-        .all<Row>()
-    ).results;
+    const rows = await all<Row>(`SELECT * FROM repo_adapters WHERE repo = ? AND ${LIVE}`, repo);
     const entries = [
-      ...all
-        .filter((r) => !gone.has(r.file_sha256))
+      ...rows
+        .filter((r) => !withdrawn.has(r.file_sha256))
         .map((r) => ({ row: r, added: r.published_day!, confirmations: r.confirmations + r.pending_confirmations })),
       ...added.filter((r) => r.repo === repo).map((r) => ({ row: r, added: day, confirmations: r.pending_confirmations })),
-    ].sort(
-      (a, b) =>
-        b.added.localeCompare(a.added) ||
-        b.confirmations - a.confirmations ||
-        a.row.file_sha256.localeCompare(b.row.file_sha256),
-    );
+    ]
+      .map((e) => ({ ...e, complaints: complaintCounts.get(e.row.file_sha256) ?? 0 }))
+      .sort(
+        (a, b) =>
+          Number(a.complaints > a.confirmations) - Number(b.complaints > b.confirmations) ||
+          b.added.localeCompare(a.added) ||
+          b.confirmations - a.confirmations ||
+          a.row.file_sha256.localeCompare(b.row.file_sha256),
+      );
     if (entries.length === 0) {
       emptied.push(repo);
       continue;
@@ -214,6 +341,7 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
             file: `${e.row.file_sha256}.json`,
             added: e.added,
             confirmations: e.confirmations,
+            complaints: e.complaints,
           })),
         },
         null,
@@ -222,13 +350,17 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
     );
   }
 
-  const listed = (
-    await db
-      .prepare("SELECT repo FROM adapter_blocklist WHERE state != 'unlisting' ORDER BY rowid")
-      .bind()
-      .all<{ repo: string }>()
-  ).results.map((r) => r.repo);
+  const listed = (await all<{ repo: string }>("SELECT repo FROM adapter_blocklist WHERE state != 'unlisting' ORDER BY rowid")).map(
+    (r) => r.repo,
+  );
   const doNotAdapt = listed.map((r) => `${r}\n`).join("");
+
+  // What the weekly insight learns from, once the file is out of the tree.
+  const retiredBodies = new Map<string, string>();
+  for (const row of withdrawn.values()) {
+    const body = reviewedBodies.get(row.file_sha256) ?? (await publishedBody(row));
+    if (body != null) retiredBodies.set(row.file_sha256, body);
+  }
 
   const gh = github(token, repoName);
   const head = (await gh("GET", "/git/ref/heads/main")) as { object: { sha: string } };
@@ -248,7 +380,7 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
     removedDirs.add(repoDir(row.repo));
   }
   for (const dir of removedDirs) tree.push({ path: `${dir}/index.json`, mode: "100644", type: "blob", sha: null });
-  for (const row of withdrawn) {
+  for (const row of withdrawn.values()) {
     tree.push({ path: `${repoDir(row.repo)}/${row.file_sha256}.json`, mode: "100644", type: "blob", sha: null });
   }
   for (const repo of emptied) {
@@ -264,7 +396,7 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
   if (newTree.sha !== headCommit.tree.sha) {
     const stamp = { name: AUTHOR_NAME, email: AUTHOR_EMAIL, date: `${day}T00:00:00Z` };
     const commit = (await gh("POST", "/git/commits", {
-      message: `Adapters for ${day} (${added.length} new, ${confirmed.length} confirmed${withdrawn.length ? `, ${withdrawn.length} withdrawn after review` : ""})`,
+      message: `Adapters for ${day} (${added.length} new, ${confirmed.length} confirmed${withdrawn.size ? `, ${withdrawn.size} withdrawn` : ""})`,
       tree: newTree.sha,
       parents: [head.object.sha],
       author: stamp,
@@ -275,6 +407,7 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
   }
 
   // Only now is the batch public; settle the queue to match.
+  const gone = [...removed, ...forgotten, ...dropped];
   const stmts = [
     ...added.map((r) =>
       db
@@ -293,19 +426,36 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
         )
         .bind(r.pending_confirmations, r.pending_confirmations, r.file_sha256),
     ),
-    ...[...removed, ...dropped, ...withdrawn].map((r) =>
-      db.prepare("DELETE FROM repo_adapters WHERE file_sha256 = ?").bind(r.file_sha256),
+    ...gone.map((r) => db.prepare("DELETE FROM repo_adapters WHERE file_sha256 = ?").bind(r.file_sha256)),
+    ...gone.map((r) => db.prepare("DELETE FROM adapter_complaints WHERE file_sha256 = ?").bind(r.file_sha256)),
+    ...[...withdrawn.values()].map((r) =>
+      db
+        .prepare("UPDATE repo_adapters SET retired_day = ?, retired_reason = ?, pending_confirmations = 0 WHERE file_sha256 = ?")
+        .bind(day, retireReason.get(r.file_sha256)!, r.file_sha256),
     ),
-    ...reviewedNow.map((sha) => db.prepare("UPDATE repo_adapters SET review = 'rules+ai' WHERE file_sha256 = ?").bind(sha)),
+    ...[...reviewedNow, ...rereviewed].map((sha) =>
+      db.prepare("UPDATE repo_adapters SET review = 'rules+ai' WHERE file_sha256 = ?").bind(sha),
+    ),
+    ...rereviewed.map((sha) =>
+      db
+        .prepare("UPDATE adapter_complaints SET reviewed = 1 WHERE file_sha256 = ? AND stage = 'report' AND id <= ?")
+        .bind(sha, maxComplaint),
+    ),
+    db.prepare("UPDATE adapter_complaints SET counted = 1 WHERE counted = 0 AND id <= ?").bind(maxComplaint),
+    pruneStmt(),
     ...listChanges.map((c) =>
       c.state === "unlisting"
         ? db.prepare("DELETE FROM adapter_blocklist WHERE repo = ? AND state = 'unlisting'").bind(c.repo)
         : db.prepare("UPDATE adapter_blocklist SET state = 'published' WHERE repo = ? AND state = 'pending'").bind(c.repo),
     ),
   ];
-  if (stmts.length) await db.batch(stmts);
+  await db.batch(stmts);
   const keys = [...added, ...dropped.filter((r) => fresh.includes(r))].flatMap((r) => (r.r2_key ? [r.r2_key] : []));
+  keys.push(...forgotten.map((r) => `retired/${r.file_sha256}.json`));
   if (keys.length) await bucket.delete(keys);
+  for (const [sha, body] of retiredBodies) {
+    await bucket.put(`retired/${sha}.json`, body, { httpMetadata: { contentType: "application/json" } });
+  }
 
   return {
     published: true,
@@ -313,7 +463,7 @@ export async function runAdapterPublish(env: AdapterPublishEnv, now: Date): Prom
     added: added.length,
     confirmed: confirmed.length,
     removedRepos: removedDirs.size,
-    withdrawn: withdrawn.length,
+    withdrawn: withdrawn.size,
   };
 }
 
@@ -366,8 +516,11 @@ Flagship servers will apply, and every server gets the same bytes.
     do-not-adapt.txt
 
 \`index.json\` lists a repo's adapters, newest first: the commit each was made
-against (\`base\`), its file, the day it was added and how many servers sent
-the identical file (\`confirmations\`). It also records the repo's license.
+against (\`base\`), its file, the day it was added, how many servers sent the
+identical file (\`confirmations\`) and how many installs of it failed to build
+or start (\`complaints\`). Adapters that fail more often than they are
+confirmed sort last, and are withdrawn once that happens three times. It also
+records the repo's license.
 
 ## Licensing
 

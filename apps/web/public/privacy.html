@@ -175,8 +175,9 @@
       </table>
 
       <h3 id="repo-adaptations">2.6 Repo adaptations (anonymous, public)</h3>
-      <p>When your Flagship server adapts a public open-source repo so it runs on Flagship, it shares the adaptation with us so the next person can install that repo without needing AI (<a href="/adapters">what a repo adapter is</a>). Adaptations are public: we publish them at <a href="https://github.com/ibisllc/flagship-adapters">github.com/ibisllc/flagship-adapters</a>, so anyone can see exactly what Flagship servers will apply. For each one we keep and publish the repo's address, the commit it was made against, the repo's license, the adaptation itself, the day it was published, and how many servers sent the identical file.</p>
-      <p>We never record who sent one: no account, server, IP address or user agent is attached or stored, and nothing in the operational logs in §2.5 is joined to it. Until it is published, an adaptation waits with us, with only the day it arrived; we publish in daily batches, dated to the day. We only keep adaptations of public repos under an open-source license, after checking them; when the optional automated review is on, the adaptation (never anything about you) is sent to Anthropic for that check. A repo owner can have their repo added to our public do-not-adapt list; see <a href="/adapters#opt-out">/adapters</a>.</p>
+      <p>When your Flagship server's AI adapts a public open-source repo so it runs on Flagship, the server shares the adaptation with us by default, so the next person can install that repo without needing AI (<a href="/adapters">what a repo adapter is</a>). You can switch sharing off on the import screen. Adaptations are public: we publish them at <a href="https://github.com/ibisllc/flagship-adapters">github.com/ibisllc/flagship-adapters</a>, so anyone can see exactly what Flagship servers will apply. For each one we keep and publish the repo's address, the commit it was made against, the repo's license, the adaptation itself, the day it was published, and how many servers sent the identical file.</p>
+      <p>We never record who sent one: no account, server, IP address or user agent is attached or stored, and nothing in the operational logs in §2.5 is joined to it. Until it is published, an adaptation waits with us, with only the day it arrived; we publish in daily batches, dated to the day. We only keep adaptations of public repos under an open-source license, after checking them; when the optional automated review is on, the adaptation (never anything about you) is sent to Anthropic for that check. When we refuse an adaptation for a reason it can fix, your server's own AI may fix it and send it again. A repo owner can have their repo added to our public do-not-adapt list; see <a href="/adapters#opt-out">/adapters</a>.</p>
+      <p>When an adaptation fails to build or start during an install, your server reports which adaptation it was and whether it failed to build or to start, nothing else, so broken ones get withdrawn. You can also report a problem from the service page with a short note. We keep notes privately and never publish them; we use them only to review the adaptation (with the automated review, when it is on), and we delete them within 90 days, except for a retired adaptation (below). Please don't put anything in a note that identifies you. These reports, like adaptations, carry no account, server or address. After 3 reported problems we retire an adaptation; we keep a retired adaptation and its reports privately for up to 180 days to learn from, including a weekly automated summary, sent to Anthropic, of what went wrong, and then delete them.</p>
 
       <h3>2.7 What we explicitly don't collect</h3>
       <ul>
@@ -201,7 +202,7 @@
           <tr><td>Apple (APNs)</td><td>iOS push delivery</td><td>US</td></tr>
           <tr><td>Google (FCM)</td><td>Android push delivery</td><td>US</td></tr>
           <tr><td>Let's Encrypt (ISRG)</td><td>TLS certificate issuance</td><td>US</td></tr>
-          <tr><td>Anthropic, OpenAI, others</td><td>Only on the optional AI promo path; routed for one-shot key issuance, not proxied. Anthropic also checks shared repo adaptations when that review is on (§2.6)</td><td>US</td></tr>
+          <tr><td>Anthropic, OpenAI, others</td><td>Only on the optional AI promo path; routed for one-shot key issuance, not proxied. Anthropic also checks shared repo adaptations, and summarizes retired ones, when that review is on (§2.6)</td><td>US</td></tr>
         </tbody>
       </table>
       <p>If you BYOK (bring your own key), prompts go directly from your daemon to the provider you chose. We are not a sub-processor in that flow.</p>
@@ -217,6 +218,7 @@
         <li><strong>Shipping addresses</strong>: kept until delivered, plus 90 days for return-window handling.</li>
         <li><strong>Logs</strong>: 30 days, then aggregated counters only.</li>
         <li><strong>Repo adaptations</strong>: published, and kept public; our own copy of the file is deleted once it is published, usually within a day. Taken out of the index when the repo's owner asks; git history keeps earlier versions. They carry no personal data.</li>
+        <li><strong>Problem reports on adaptations</strong>: notes deleted within 90 days. For a retired adaptation, its private copy and its reports are deleted 180 days after it was retired.</li>
       </ul>
     </section>
 
