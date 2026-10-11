@@ -151,10 +151,8 @@ public struct ServicesTab: View {
             )
         case .vibeCodeDescribe:
             VibeCodeDescribeContainer(path: $path, holder: buildCred)
-        case .vibeCodeGenerating(let sessionId):
-            VibeCodeGeneratingContainer(sessionId: sessionId, path: $path)
-        case .vibeCodeChat(let sessionId):
-            VibeCodeChatContainer(sessionId: sessionId)
+        case .vibeCodeGenerating(let sessionId), .vibeCodeChat(let sessionId):
+            VibeCodeSessionContainer(sessionId: sessionId)
         case .serviceEnv(let appId, let creator, let slug):
             ServiceEnvContainer(appId: appId, creator: creator, slug: slug)
         case .browserTabs(let serviceId):
@@ -475,23 +473,42 @@ struct ServiceDetailContainer: View {
     }
 }
 
-// W10 — chat-surface container. Resolves the serverFqdn from AppState
-// and wires a default signEnvelope closure that's a no-op stub for
-// previews; production replaces this via an environment value.
-struct VibeCodeChatContainer: View {
+// One vibe-code session screen for both the fresh build (from Describe) and
+// a reopened one (push deep link, operations sliver). The stream + the polled
+// session state both live in VibeCodeSessionScreen.
+struct VibeCodeSessionContainer: View {
     let sessionId: String
     @Environment(\.screensClient) private var client
+    @Environment(ActiveOperationsCenter.self) private var operations
     @Environment(AppState.self) private var app
     @Environment(\.vibeCodeEnvelopeSigner) private var signer
+    @State private var stream: VibeCodeStreamViewModel?
 
     var body: some View {
-        VibeCodeChatScreen(
-            sessionId: sessionId,
-            serverFqdn: app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown",
-            username: app.currentUser ?? "user",
-            client: client,
-            signEnvelope: signer
-        )
+        Group {
+            if let stream {
+                VibeCodeSessionScreen(
+                    stream: stream,
+                    serverFqdn: app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown",
+                    client: client,
+                    signEnvelope: signer
+                )
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            if stream == nil {
+                // Surfaces the build in the global operations sliver as
+                // "building … on <server>" while it runs.
+                stream = VibeCodeStreamViewModel(
+                    sessionId: sessionId,
+                    client: client,
+                    operations: operations,
+                    serverLabel: app.currentPod?.name
+                )
+            }
+        }
     }
 }
 
@@ -596,73 +613,6 @@ struct VibeCodeDescribeContainer: View {
             allowAuthentication: true
         )
         return store.isDeposited(for: pod.fqdn) ? .accepted : .deferred
-    }
-}
-
-struct VibeCodeGeneratingContainer: View {
-    let sessionId: String
-    @Binding var path: [AppsRoute]
-    @Environment(\.screensClient) private var client
-    @Environment(ActiveOperationsCenter.self) private var operations
-    @Environment(AppState.self) private var app
-    @State private var vm: VibeCodeStreamViewModel?
-    @State private var routeTask: Task<Void, Never>?
-    @State private var routed = false
-
-    var body: some View {
-        ZStack {
-            FSColors.scheme(.light).bg.ignoresSafeArea()
-            if let vm {
-                VibeCodeGeneratingScreen(vm: vm)
-            } else {
-                ProgressView()
-            }
-        }
-        .task {
-            if vm == nil {
-                // The build runs on the currently-selected box; surface it in
-                // the global operations sliver as "building … on <server>".
-                vm = VibeCodeStreamViewModel(
-                    sessionId: sessionId,
-                    client: client,
-                    operations: operations,
-                    serverLabel: app.currentPod?.name
-                )
-            }
-            startStatusRouter()
-        }
-        .onDisappear {
-            routeTask?.cancel()
-            routeTask = nil
-        }
-    }
-
-    /// The WS stream is display-only and carries NO `talkToUser` frame and NO
-    /// deploy trigger. So we poll the session status here and hand off to the
-    /// chat surface the moment the AI needs the owner (`awaiting-tool-response`)
-    /// or the build is finished and shippable (`ready-to-deploy`/`deploying`/
-    /// `deployed`). The chat screen is where the owner replies to the AI AND
-    /// taps Deploy — making it the single interaction+deploy surface for a
-    /// scratch build.
-    private func startStatusRouter() {
-        routeTask?.cancel()
-        routeTask = Task { @MainActor in
-            while !Task.isCancelled && !routed {
-                do {
-                    let st = try await client.vibeCodeStatus(sessionId: sessionId)
-                    if ["awaiting-tool-response", "ready-to-deploy", "deploying", "deployed"].contains(st.status) {
-                        routed = true
-                        if path.last != .vibeCodeChat(sessionId: sessionId) {
-                            path.append(.vibeCodeChat(sessionId: sessionId))
-                        }
-                        break
-                    }
-                } catch {
-                    // transient — keep polling
-                }
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
-            }
-        }
     }
 }
 
