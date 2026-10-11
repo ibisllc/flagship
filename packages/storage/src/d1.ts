@@ -68,6 +68,8 @@ import type {
   UsernameStorage,
   DaemonStatusRecord,
   DaemonStatusStorage,
+  ServerHealthRecord,
+  ServerHealthStorage,
   UserServiceAliasRecord,
   UserServiceAliasStorage,
   VoiciLinkRecord,
@@ -3422,6 +3424,27 @@ export class D1UserIdentityRecordStorage implements UserIdentityRecordStorage {
   }
 }
 
+export class D1ServerHealthStorage implements ServerHealthStorage {
+  constructor(private db: D1Database) {}
+  async put(rec: ServerHealthRecord) {
+    await this.db
+      .prepare(
+        `INSERT OR REPLACE INTO server_health (server_domain, report_json, reported_at, received_at)
+         VALUES (?1, ?2, ?3, ?4)`,
+      )
+      .bind(rec.serverDomain.toLowerCase(), rec.reportJson, rec.reportedAt, rec.receivedAt)
+      .run();
+  }
+  async get(serverDomain: string) {
+    const r = await this.db
+      .prepare(`SELECT * FROM server_health WHERE server_domain = ?1`)
+      .bind(serverDomain.toLowerCase())
+      .first<{ server_domain: string; report_json: string; reported_at: number; received_at: number }>();
+    if (!r) return undefined;
+    return { serverDomain: r.server_domain, reportJson: r.report_json, reportedAt: r.reported_at, receivedAt: r.received_at };
+  }
+}
+
 export class D1DaemonStatusStorage implements DaemonStatusStorage {
   constructor(private db: D1Database) {}
   async put(rec: DaemonStatusRecord) {
@@ -4295,6 +4318,7 @@ export class D1Storage implements Storage {
   usernameOffers: UsernameOfferStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
+  serverHealth: ServerHealthStorage;
   authCodes: AuthCodeStorage;
   servers: ServerStorage;
   routing: RoutingStorage;
@@ -4347,6 +4371,7 @@ export class D1Storage implements Storage {
     this.usernameOffers = new D1UsernameOfferStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
     this.daemonStatus = new D1DaemonStatusStorage(db);
+    this.serverHealth = new D1ServerHealthStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
     this.servers = new D1ServerStorage(db);
     this.routing = new D1RoutingStorage(db);

@@ -88,6 +88,8 @@ import type {
   UsernameStorage,
   DaemonStatusRecord,
   DaemonStatusStorage,
+  ServerHealthRecord,
+  ServerHealthStorage,
   UserServiceAliasRecord,
   UserServiceAliasStorage,
   VoiciLinkRecord,
@@ -1612,6 +1614,17 @@ export class InMemoryUserIdentityRecordStorage implements UserIdentityRecordStor
   }
 }
 
+export class InMemoryServerHealthStorage implements ServerHealthStorage {
+  private rows = new Map<string, ServerHealthRecord>();
+  async put(rec: ServerHealthRecord) {
+    this.rows.set(rec.serverDomain.toLowerCase(), { ...rec, serverDomain: rec.serverDomain.toLowerCase() });
+  }
+  async get(serverDomain: string) {
+    const r = this.rows.get(serverDomain.toLowerCase());
+    return r ? { ...r } : undefined;
+  }
+}
+
 export class InMemoryDaemonStatusStorage implements DaemonStatusStorage {
   private rows = new Map<string, DaemonStatusRecord>();
   async put(rec: DaemonStatusRecord) {
@@ -2076,6 +2089,7 @@ export class InMemoryStorage implements Storage {
   usernameOffers = new InMemoryUsernameOfferStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
   daemonStatus = new InMemoryDaemonStatusStorage();
+  serverHealth = new InMemoryServerHealthStorage();
   authCodes = new InMemoryAuthCodeStorage();
   servers = new InMemoryServerStorage();
   routing = new InMemoryRoutingStorage();

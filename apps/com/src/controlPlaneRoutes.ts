@@ -147,6 +147,7 @@ import {
   handlePutAccountDirectoryKeyGrant,
   handleGetAuditEvents,
   handlePostDaemonStatus,
+  handlePostServerHealth,
   handleUserPubKeyCert,
   buildPushForwarder,
   wrapForwarderAsV12Fanout,
@@ -646,6 +647,7 @@ const ROUTE_RE = {
   // on the caller's push_token row.
   USER_AUDIT: /^\/api\/users\/([^/]+)\/audit$/,
   DAEMON_STATUS: /^\/api\/daemon-status$/,
+  SERVER_HEALTH: /^\/api\/server\/([^/]+)\/health$/,
   RE_PAIR_INITIATE: /^\/api\/users\/([^/]+)\/re-pair$/,
   RE_PAIR_OBJECT: /^\/api\/users\/([^/]+)\/re-pair\/object$/,
   RE_PAIR_COMPLETE: /^\/api\/users\/([^/]+)\/re-pair\/complete$/,
@@ -2185,6 +2187,7 @@ export async function tryControlPlane(
       await handleGetUserPods(
         {
           daemonStatus: storage.daemonStatus,
+          serverHealth: storage.serverHealth,
           servers: storage.servers,
           routing: storage.routing,
           authCodes: storage.authCodes,
@@ -2200,6 +2203,7 @@ export async function tryControlPlane(
       await handleUserStream(
         {
           daemonStatus: storage.daemonStatus,
+          serverHealth: storage.serverHealth,
           servers: storage.servers,
           routing: storage.routing,
           authCodes: storage.authCodes,
@@ -2481,6 +2485,15 @@ export async function tryControlPlane(
         decodeURIComponent(m[1]!),
         since,
         limit,
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_HEALTH))) {
+    return finish(
+      await handlePostServerHealth(
+        { servers: storage.servers, serverHealth: storage.serverHealth },
+        decodeURIComponent(m[1]!),
+        (await readJson(request)) as { report?: unknown; signature?: unknown } | undefined,
       ),
     );
   }

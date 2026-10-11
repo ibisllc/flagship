@@ -43,6 +43,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0082",
   // Private account/device naming: the clean directory schema.
   "0083",
+  // Box-signed health reports (memory, OOM kills, daemon restarts, tunnel).
+  "0084",
 ];
 
 export interface SchemaStatusDeps {

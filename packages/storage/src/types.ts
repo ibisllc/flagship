@@ -1393,6 +1393,22 @@ export interface DaemonStatusRecord {
   signatureHex?: string | null;
 }
 
+/** Latest box-signed health report (migration 0084). */
+export interface ServerHealthRecord {
+  serverDomain: string;
+  /** The verbatim signed report JSON. */
+  reportJson: string;
+  /** The report's own `at` (box clock, ms). */
+  reportedAt: number;
+  /** When `.com` accepted it (ms). */
+  receivedAt: number;
+}
+
+export interface ServerHealthStorage {
+  put(rec: ServerHealthRecord): Promise<void>;
+  get(serverDomain: string): Promise<ServerHealthRecord | undefined>;
+}
+
 export interface DaemonStatusStorage {
   put(rec: DaemonStatusRecord): Promise<void>;
   get(serverDomain: string): Promise<DaemonStatusRecord | undefined>;
@@ -1598,6 +1614,7 @@ export interface Storage {
   usernameOffers: UsernameOfferStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
+  serverHealth: ServerHealthStorage;
   authCodes: AuthCodeStorage;
   servers: ServerStorage;
   routing: RoutingStorage;

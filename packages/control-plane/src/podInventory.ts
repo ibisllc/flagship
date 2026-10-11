@@ -31,6 +31,7 @@ import {
 import { sha256 } from "@noble/hashes/sha256";
 import type {
   DaemonStatusStorage,
+  ServerHealthStorage,
   ServerStorage,
   RoutingStorage,
   AuthCodeStorage,
@@ -40,6 +41,7 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, bytesToHex, hexToBytes } from "./hex.js";
+import { healthForPods, type BoxHealthReport } from "./serverHealth.js";
 import {
   forbidden,
   malformed,
@@ -49,6 +51,8 @@ import {
 
 export interface PodInventoryDeps {
   daemonStatus: DaemonStatusStorage;
+  /** Latest box-signed health report per server (serverHealth.ts). */
+  serverHealth?: ServerHealthStorage;
   servers: ServerStorage;
   routing: RoutingStorage;
   /** #56 — outstanding (active, unexpired) install orders, surfaced in the
@@ -194,6 +198,9 @@ export interface OnlinePodEntry {
    * report leads (old daemon / no gossip / no CGK). Clients badge "lead" from this.
    */
   leadsServices: string[];
+  /** Latest box-signed health report (memory, OOM kills, daemon restarts,
+   *  tunnel, disk), or absent when the box never sent one. */
+  health?: BoxHealthReport & { receivedAt: number };
   pendingRequests: PendingRequestSummary[];
   state: "online";
 }
@@ -356,7 +363,16 @@ export async function buildPodInventory(
         }
       }
       const { liveness, lastSeenMsAgo } = computeLiveness(realLastReported, now);
+      let health: (BoxHealthReport & { receivedAt: number }) | undefined;
+      if (deps.serverHealth) {
+        try {
+          health = await healthForPods(deps.serverHealth, s.serverDomain);
+        } catch {
+          /* a health lookup failure must never drop the server */
+        }
+      }
       return {
+        ...(health ? { health } : {}),
         serverDomain: s.serverDomain,
         identityPubKey: s.identityPubKeyHex,
         registeredAt: s.registeredAt,

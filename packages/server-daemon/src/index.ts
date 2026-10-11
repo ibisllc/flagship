@@ -220,6 +220,7 @@ import {
 } from "./updateHealthGate.js";
 import { fileUpdateOutcomeStore } from "./updateOutcome.js";
 import { buildReleaseCatalog } from "./updateReleases.js";
+import { installHealthReporter } from "./healthReporter.js";
 import { daemonRestarts as restarts } from "./restartCoordinator.js";
 import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
@@ -620,6 +621,18 @@ async function main(): Promise<void> {
       }),
     onLog: (m) => console.log(m),
   }).catch(() => {});
+
+  // ---- Box health reporter (healthReporter.ts) ----
+  // A systemd timer, separate from this process, so the owner still gets
+  // memory / OOM / restart numbers when this daemon is the thing failing.
+  if (cfg && env.controlPlaneBaseUrl) {
+    void installHealthReporter({
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      serverDomain: env.serverFqdn,
+      run: (cmd, args) => realUpdateCommandRunner(cmd, args),
+      onLog: (m) => console.log(m),
+    }).catch((e) => console.log(`[health] reporter not installed: ${(e as Error).message}`));
+  }
 
   // ---- Service Workload Key (SWK) resolution ----
   // The SWK gates the service/build platform (and peer-backup participation,
