@@ -37,17 +37,27 @@ public struct VibeCodeSessionScreen: View {
     public let serverFqdn: String
     public let client: any ScreensClient
     public let signEnvelope: @MainActor (ServiceEnvSetEnvelope) async throws -> String
+    /// The owner's saved AI key, sent with a reply only when the box says it
+    /// has none for this session.
+    public let savedCredential: () -> LlmProviderCredential?
 
     public init(
         stream: VibeCodeStreamViewModel,
         serverFqdn: String,
         client: any ScreensClient,
-        signEnvelope: @escaping @MainActor (ServiceEnvSetEnvelope) async throws -> String
+        signEnvelope: @escaping @MainActor (ServiceEnvSetEnvelope) async throws -> String,
+        savedCredential: @escaping () -> LlmProviderCredential? = { nil }
     ) {
         self.stream = stream
         self.serverFqdn = serverFqdn
         self.client = client
         self.signEnvelope = signEnvelope
+        self.savedCredential = savedCredential
+    }
+
+    /// A key for the reply when the box lacks one, else nil.
+    private var replyCredential: LlmProviderCredential? {
+        state?.needsCredential == true ? savedCredential() : nil
     }
 
     private var sessionId: String { stream.sessionId }
@@ -285,7 +295,7 @@ public struct VibeCodeSessionScreen: View {
             }
         } else if status == "failed" || status == "cancelled" {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("✗ \(errorMessage ?? stream.errorMessage ?? "Session stopped.")")
+                Text("✗ \(errorMessage ?? state?.failureReason ?? stream.errorMessage ?? "Session stopped.")")
                     .font(FS.font.mono()).foregroundColor(c.danger)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
@@ -380,7 +390,7 @@ public struct VibeCodeSessionScreen: View {
         defer { submitting = false }
         do {
             _ = try await client.vibeCodeSessionReply(
-                sessionId: sessionId, VibeCodeReplyRequest(text: replyDraft, envVarStatus: nil))
+                sessionId: sessionId, VibeCodeReplyRequest(text: replyDraft, envVarStatus: nil, credential: replyCredential))
             replyDraft = ""
             followTail = true
             await reload()
@@ -411,7 +421,7 @@ public struct VibeCodeSessionScreen: View {
                 appId: appId,
                 ServiceEnvSetRequest(name: name, value: envValueDraft, request: envelope, signature: signature))
             _ = try await client.vibeCodeSessionReply(
-                sessionId: sessionId, VibeCodeReplyRequest(text: nil, envVarStatus: "set"))
+                sessionId: sessionId, VibeCodeReplyRequest(text: nil, envVarStatus: "set", credential: replyCredential))
             envValueDraft = ""
             await reload()
         } catch {
@@ -424,7 +434,7 @@ public struct VibeCodeSessionScreen: View {
         defer { submitting = false }
         do {
             _ = try await client.vibeCodeSessionReply(
-                sessionId: sessionId, VibeCodeReplyRequest(text: nil, envVarStatus: "declined"))
+                sessionId: sessionId, VibeCodeReplyRequest(text: nil, envVarStatus: "declined", credential: replyCredential))
             await reload()
         } catch {
             errorMessage = ScreensClientError.userFacing(error)

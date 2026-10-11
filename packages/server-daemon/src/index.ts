@@ -103,7 +103,7 @@ import {
 import { buildRunMigration } from "./runMigration.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
 import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
-import { VibeCodeSessionRegistry } from "./llm/vibeCodeSession.js";
+import { VibeCodeSessionRegistry, fileVibeCodeSessionStore } from "./llm/vibeCodeSession.js";
 import { buildVibeCodeHttpHandlers } from "./llm/vibeCodeHttp.js";
 import { buildDeploySession } from "./llm/deploySession.js";
 import { LlmHarness } from "./llmHarness.js";
@@ -2019,7 +2019,15 @@ async function wireRuntimeSurfaces(deps: {
   // Wire vibe-code (legacy /api/llm/sessions) + the BFF /api/screens/*
   // surface now that runtime.servicePlatform / appBackup / urlController
   // are populated. Both surfaces are paired-session gated.
-  const vibeRegistry = new VibeCodeSessionRegistry();
+  // Saved under the data dir so an update or reboot doesn't end open builds.
+  const vibeRegistry = new VibeCodeSessionRegistry(
+    fileVibeCodeSessionStore(join(dataDir, "vibe-sessions")),
+    {
+      onLog: (m) => console.warn(m),
+      onDelete: (id) => void llmCredentials.forget(id).catch(() => {}),
+    },
+  );
+  process.on("exit", () => vibeRegistry.flush());
   const forgejoBaseUrl = process.env.FLAGSHIP_FORGEJO_BASE_URL;
   const forgejoToken = process.env.FLAGSHIP_FORGEJO_TOKEN;
   const forgejoOrg =
@@ -2091,6 +2099,8 @@ async function wireRuntimeSurfaces(deps: {
     custodian.asSwkOps(),
   );
   await llmCredentials.load();
+  vibeRegistry.sweep();
+  setInterval(() => vibeRegistry.sweep(), 60 * 60_000).unref();
   const defaultLlmModels = defaultModelsFromEnv(process.env);
 
   const deploySession = runtime.servicePlatform

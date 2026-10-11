@@ -598,6 +598,13 @@ export interface VibeCodeSessionPublicState {
   messages: VibeCodeSessionMessage[];
   /** The tool the AI is waiting on, when status === "awaiting-tool-response". */
   pendingRequest?: VibeCodePendingRequest;
+  /** Why the session failed, when status === "failed". */
+  failureReason?: string;
+  /**
+   * The AI is waiting but the box holds no key for this session (keys stay
+   * in memory only, so a restart drops them): the reply must carry one.
+   */
+  needsCredential?: boolean;
 }
 
 export interface VibeCodeReplyRequest {

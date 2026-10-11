@@ -1628,6 +1628,12 @@ function toVibeCodePublicState(
         payload: { name, description, why, example, secret },
       };
     }
+    if (deps.vibeCode?.credentials && !deps.vibeCode.credentials.has(session.meta.sessionId)) {
+      out.needsCredential = true;
+    }
+  }
+  if (session.meta.status === "failed" && session.meta.failureReason) {
+    out.failureReason = session.meta.failureReason;
   }
   return out;
 }

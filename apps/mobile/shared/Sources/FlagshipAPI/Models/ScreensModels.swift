@@ -990,15 +990,23 @@ public struct VibeCodeSessionPublicState: Codable, Equatable, Sendable {
     public let status: String
     public let messages: [VibeCodeSessionMessage]
     public let pendingRequest: VibeCodePendingRequest?
+    /// Why the session failed (status "failed").
+    public let failureReason: String?
+    /// The AI is waiting but the box has no key for this session: the reply
+    /// must carry one.
+    public let needsCredential: Bool?
     public init(
         id: String,
         appId: String?,
         status: String,
         messages: [VibeCodeSessionMessage],
-        pendingRequest: VibeCodePendingRequest?
+        pendingRequest: VibeCodePendingRequest?,
+        failureReason: String? = nil,
+        needsCredential: Bool? = nil
     ) {
         self.id = id; self.appId = appId; self.status = status
         self.messages = messages; self.pendingRequest = pendingRequest
+        self.failureReason = failureReason; self.needsCredential = needsCredential
     }
 }
 

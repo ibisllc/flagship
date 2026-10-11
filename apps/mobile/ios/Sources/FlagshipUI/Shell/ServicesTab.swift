@@ -491,7 +491,10 @@ struct VibeCodeSessionContainer: View {
                     stream: stream,
                     serverFqdn: app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown",
                     client: client,
-                    signEnvelope: signer
+                    signEnvelope: signer,
+                    savedCredential: {
+                        VibeCodeCredentialSelection.compatible(with: SavedKeyStore().active()?.credential).credential
+                    }
                 )
             } else {
                 ProgressView()

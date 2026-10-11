@@ -44,6 +44,8 @@
 
 import { EventEmitter } from "node:events";
 import { randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Attachment } from "@flagship/llm-providers";
 
 export type VibeCodeEvent =
@@ -148,6 +150,8 @@ export interface VibeCodeSessionMeta {
    * generic "session failed" — the original error event is long gone by then.
    */
   failureReason?: string;
+  /** Unix-ms of the last change; drives eviction and the 30-day expiry. */
+  updatedAt?: number;
 }
 
 const FILE_BOUNDARY = /^===\s+(.+?)\s+===\s*$/;
@@ -244,6 +248,12 @@ export class VibeCodeStreamParser extends EventEmitter {
     this.emit("event", { kind: "done", manifestJson, files: { ...this.files } } as VibeCodeEvent);
   }
 
+  /** Restore a saved parse: its files, already finished. */
+  seed(files: Record<string, string>): void {
+    this.files = { ...files };
+    this.done = true;
+  }
+
   /** Snapshot of files emitted so far. */
   snapshot(): Record<string, string> {
     return { ...this.files };
@@ -291,6 +301,18 @@ export type NotifyOwnerCallback = (args: {
   kind: "requestEnvVar" | "talkToUser";
   toolUseId: string;
 }) => void;
+
+export interface VibeCodeSessionSnapshot {
+  v: 1;
+  meta: VibeCodeSessionMeta;
+  history: Array<{ role: "user" | "assistant"; content: string; attachments?: Attachment[] }>;
+  historyTimestamps: number[];
+  files: Record<string, string>;
+  pendingTools: PendingToolUse[];
+  cancelled: boolean;
+}
+
+export const INTERRUPTED_REASON = "The server restarted while this build was running. Its files are kept; deploy again, or start a new build.";
 
 /**
  * One end-to-end session. Holds the parser, the conversation history,
@@ -355,6 +377,7 @@ export class VibeCodeSession extends EventEmitter {
       ...(attachments && attachments.length > 0 ? { attachments } : {}),
     });
     this.historyTimestamps.push(Date.now());
+    this.emit("persist");
   }
 
   /** Feed a chunk of streamed assistant output. */
@@ -462,6 +485,7 @@ export class VibeCodeSession extends EventEmitter {
     if (this.pendingTools.size === 0 && this.meta.status === "awaiting-tool-response") {
       this.meta.status = "streaming";
     }
+    this.emit("persist");
     return { ok: true };
   }
 
@@ -493,6 +517,7 @@ export class VibeCodeSession extends EventEmitter {
     if (this.pendingTools.size === 0 && this.meta.status === "awaiting-tool-response") {
       this.meta.status = "streaming";
     }
+    this.emit("persist");
     return { ok: true };
   }
 
@@ -559,6 +584,47 @@ export class VibeCodeSession extends EventEmitter {
     // Drop any pending tool-uses — callers waiting on a tool-ack will
     // get a "no pending tool" reason if they race the cancel.
     this.pendingTools.clear();
+    this.emit("persist");
+  }
+
+  /** Everything needed to bring the session back after a daemon restart. */
+  toSnapshot(): VibeCodeSessionSnapshot {
+    return {
+      v: 1,
+      meta: { ...this.meta },
+      history: this.history.map((h) => ({ ...h })),
+      historyTimestamps: [...this.historyTimestamps],
+      files: this.parser.snapshot(),
+      pendingTools: [...this.pendingTools.values()],
+      cancelled: this.cancelled,
+    };
+  }
+
+  /**
+   * Rebuild a saved session. One that was mid-stream or mid-deploy when the
+   * daemon stopped can't continue that work, so it comes back failed with
+   * the reason; its files and conversation are intact, so a deploy can be
+   * retried.
+   */
+  static fromSnapshot(snap: VibeCodeSessionSnapshot): VibeCodeSession {
+    const s = new VibeCodeSession({
+      username: snap.meta.username,
+      serverFqdn: snap.meta.serverFqdn,
+      sessionId: snap.meta.sessionId,
+    });
+    Object.assign(s.meta, snap.meta);
+    for (let i = 0; i < snap.history.length; i++) {
+      s.history.push({ ...snap.history[i]! });
+      s.historyTimestamps.push(snap.historyTimestamps[i] ?? snap.meta.startedAt);
+    }
+    s.parser.seed(snap.files);
+    for (const t of snap.pendingTools) s.pendingTools.set(t.id, t);
+    s.cancelled = snap.cancelled;
+    if (s.meta.status === "streaming" || s.meta.status === "deploying") {
+      s.meta.status = "failed";
+      s.meta.failureReason = INTERRUPTED_REASON;
+    }
+    return s;
   }
 
   /**
@@ -662,40 +728,201 @@ function generateSessionId(): string {
 }
 
 /**
- * In-memory session registry. Production daemon-startup builds this
- * once; HTTP handlers look up sessions by ID.
+ * Session registry. Sessions live in memory while in use; with a store they
+ * are also saved on every change, so a daemon restart (an update, a reboot)
+ * no longer ends them: `get` reloads one from disk on demand and `list`
+ * includes the saved ones. `sweep` drops finished sessions from memory after
+ * a day and deletes saved sessions a month after their last change.
  *
  * W10 — accepts an optional `notifyOwner` callback that the registry
- * installs on every freshly-`create()`'d session so the production
- * Web Push fan-out fires on the awaiting-tool-response transition.
- * Tests pass a stub here and assert it fires once per tool_use.
+ * installs on every session so the production Web Push fan-out fires on
+ * the awaiting-tool-response transition.
  */
 export class VibeCodeSessionRegistry {
   private byId = new Map<string, VibeCodeSession>();
   private notifyOwner: NotifyOwnerCallback | null = null;
+  private saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  constructor(
+    private readonly store: VibeCodeSessionStore | null = null,
+    private readonly opts: {
+      saveDelayMs?: number;
+      now?: () => number;
+      onLog?: (m: string) => void;
+      /** A session's saved state is gone for good; drop what else it holds (its AI key). */
+      onDelete?: (id: string) => void;
+    } = {},
+  ) {}
+
+  private now(): number {
+    return (this.opts.now ?? Date.now)();
+  }
 
   setNotifyOwner(cb: NotifyOwnerCallback | null): void {
     this.notifyOwner = cb;
-    // Apply to any already-created sessions so a late wiring still
-    // gets coverage on the next tool_use that fires.
     for (const s of this.byId.values()) s.setNotifyOwner(cb);
   }
 
-  create(args: { username: string; serverFqdn: string }): VibeCodeSession {
-    const session = new VibeCodeSession(args);
+  private adopt(session: VibeCodeSession): VibeCodeSession {
     if (this.notifyOwner) session.setNotifyOwner(this.notifyOwner);
     this.byId.set(session.meta.sessionId, session);
+    if (this.store) {
+      const schedule = () => this.scheduleSave(session);
+      session.on("event", schedule);
+      session.on("persist", schedule);
+    }
     return session;
   }
+
+  private scheduleSave(session: VibeCodeSession): void {
+    const id = session.meta.sessionId;
+    session.meta.updatedAt = this.now();
+    if (this.saveTimers.has(id)) return;
+    const t = setTimeout(() => {
+      this.saveTimers.delete(id);
+      this.saveNow(session);
+    }, this.opts.saveDelayMs ?? 1500);
+    t.unref?.();
+    this.saveTimers.set(id, t);
+  }
+
+  private saveNow(session: VibeCodeSession): void {
+    try {
+      this.store?.save(session.toSnapshot());
+    } catch (e) {
+      this.opts.onLog?.(`[vibe] could not save session ${session.meta.sessionId}: ${(e as Error).message}`);
+    }
+  }
+
+  /** Write any pending saves now (daemon shutdown, tests). */
+  flush(): void {
+    for (const [id, t] of this.saveTimers) {
+      clearTimeout(t);
+      const s = this.byId.get(id);
+      if (s) this.saveNow(s);
+    }
+    this.saveTimers.clear();
+  }
+
+  create(args: { username: string; serverFqdn: string }): VibeCodeSession {
+    const session = this.adopt(new VibeCodeSession(args));
+    session.meta.updatedAt = this.now();
+    this.saveNow(session);
+    return session;
+  }
+
   get(id: string): VibeCodeSession | undefined {
-    return this.byId.get(id);
+    const live = this.byId.get(id);
+    if (live || !this.store) return live;
+    const snap = this.store.load(id);
+    if (!snap) return undefined;
+    const session = this.adopt(VibeCodeSession.fromSnapshot(snap));
+    if (session.meta.status !== snap.meta.status) this.saveNow(session);
+    return session;
   }
+
   list(): VibeCodeSessionMeta[] {
-    return [...this.byId.values()].map((s) => ({ ...s.meta }));
+    const out = new Map<string, VibeCodeSessionMeta>();
+    for (const m of this.store?.listMeta() ?? []) {
+      out.set(m.sessionId, m.status === "streaming" || m.status === "deploying"
+        ? { ...m, status: "failed", failureReason: INTERRUPTED_REASON }
+        : m);
+    }
+    for (const s of this.byId.values()) out.set(s.meta.sessionId, { ...s.meta });
+    return [...out.values()].sort((a, b) => b.startedAt - a.startedAt);
   }
+
   remove(id: string): void {
     this.byId.delete(id);
+    this.store?.delete(id);
+    this.opts.onDelete?.(id);
   }
+
+  sweep(): void {
+    const now = this.now();
+    for (const [id, s] of this.byId) {
+      const finished = ["deployed", "failed", "cancelled"].includes(s.meta.status);
+      if (finished && now - (s.meta.updatedAt ?? s.meta.startedAt) > SESSION_IDLE_EVICT_MS && !this.saveTimers.has(id)) {
+        this.byId.delete(id);
+        s.removeAllListeners();
+      }
+    }
+    for (const m of this.store?.listMeta() ?? []) {
+      if (now - (m.updatedAt ?? m.startedAt) > SESSION_RETENTION_MS && !this.byId.has(m.sessionId)) {
+        this.store?.delete(m.sessionId);
+        this.opts.onDelete?.(m.sessionId);
+      }
+    }
+  }
+}
+
+/** A finished session leaves memory after a day without changes. */
+export const SESSION_IDLE_EVICT_MS = 24 * 60 * 60_000;
+/** Saved sessions are deleted a month after their last change. */
+export const SESSION_RETENTION_MS = 30 * 24 * 60 * 60_000;
+
+/**
+ * Where sessions are saved. The full snapshot (conversation + files) and a
+ * small meta file are kept apart so listing never reads the code.
+ */
+export interface VibeCodeSessionStore {
+  save(snap: VibeCodeSessionSnapshot): void;
+  load(id: string): VibeCodeSessionSnapshot | null;
+  listMeta(): VibeCodeSessionMeta[];
+  delete(id: string): void;
+}
+
+const SESSION_ID_RE = /^[0-9a-f]{16}$/;
+
+export function fileVibeCodeSessionStore(dir: string): VibeCodeSessionStore {
+  const full = (id: string) => join(dir, `${id}.json`);
+  const meta = (id: string) => join(dir, `${id}.meta.json`);
+  const write = (path: string, body: string) => {
+    const tmp = `${path}.tmp`;
+    writeFileSync(tmp, body, { mode: 0o600 });
+    renameSync(tmp, path);
+  };
+  return {
+    save(snap) {
+      if (!SESSION_ID_RE.test(snap.meta.sessionId)) return;
+      mkdirSync(dir, { recursive: true, mode: 0o700 });
+      write(full(snap.meta.sessionId), JSON.stringify(snap));
+      write(meta(snap.meta.sessionId), JSON.stringify(snap.meta));
+    },
+    load(id) {
+      if (!SESSION_ID_RE.test(id)) return null;
+      try {
+        const snap = JSON.parse(readFileSync(full(id), "utf8")) as VibeCodeSessionSnapshot;
+        return snap?.v === 1 && snap.meta?.sessionId === id ? snap : null;
+      } catch {
+        return null;
+      }
+    },
+    listMeta() {
+      let names: string[];
+      try {
+        names = readdirSync(dir);
+      } catch {
+        return [];
+      }
+      const out: VibeCodeSessionMeta[] = [];
+      for (const n of names) {
+        if (!n.endsWith(".meta.json")) continue;
+        try {
+          const m = JSON.parse(readFileSync(join(dir, n), "utf8")) as VibeCodeSessionMeta;
+          if (SESSION_ID_RE.test(m.sessionId)) out.push(m);
+        } catch {
+          // A torn write leaves the previous rename in place; skip anything unreadable.
+        }
+      }
+      return out;
+    },
+    delete(id) {
+      if (!SESSION_ID_RE.test(id)) return;
+      rmSync(full(id), { force: true });
+      rmSync(meta(id), { force: true });
+    },
+  };
 }
 
 /**
