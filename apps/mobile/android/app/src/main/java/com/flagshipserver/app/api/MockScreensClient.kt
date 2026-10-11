@@ -30,6 +30,34 @@ class MockScreensClient(
 
     private fun now(): Long = System.currentTimeMillis()
 
+    override suspend fun serverUpdates(refresh: Boolean): ReleaseCatalogResponse {
+        tick()
+        val running = "9f2c1ab3de4567890abcdef1234567890abcdef1"
+        val latest = ReleaseEntry(
+            commit = "4b1e0c9d8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c",
+            releaseId = "mock-new",
+            tag = "v0.0.0-2026-10-11-4b1e0c9d",
+            endorsedAt = "2026-10-11T12:00:00.000Z",
+            relation = "newer",
+        )
+        return ReleaseCatalogResponse(
+            checkedAt = now(),
+            currentCommit = running,
+            latest = latest,
+            releases = listOf(
+                latest,
+                ReleaseEntry(running, "mock-cur", "v0.0.0-2026-10-10-9f2c1ab3", "2026-10-10T12:00:00.000Z", "current"),
+                ReleaseEntry(
+                    "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
+                    "mock-old",
+                    "v0.0.0-2026-10-09-1a2b3c4d",
+                    "2026-10-09T12:00:00.000Z",
+                    "older",
+                ),
+            ),
+        )
+    }
+
     override suspend fun serverDetail(): ServerDetailResponse {
         tick()
         val day = 24L * 3600 * 1000

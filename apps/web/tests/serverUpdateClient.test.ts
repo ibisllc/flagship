@@ -226,3 +226,56 @@ describe("describeLastUpdate — the box's update verdict in the update card", (
     expect(describeLastUpdate(undefined)).toBeNull();
   });
 });
+
+describe("release list — what the update dialog offers", () => {
+  const CUR = "a".repeat(40);
+  const NEWEST = "b".repeat(40);
+  const NEWER = "c".repeat(40);
+  const OLD = "d".repeat(40);
+  const entry = (commit: string, tag: string, relation: string) => ({
+    commit,
+    releaseId: `r-${tag}`,
+    tag,
+    endorsedAt: "2026-10-11T12:00:00.000Z",
+    relation,
+  });
+  const catalog = {
+    checkedAt: 1,
+    currentCommit: CUR,
+    latest: entry(NEWEST, "v3", "newer"),
+    releases: [entry(NEWEST, "v3", "newer"), entry(NEWER, "v2", "newer"), entry(CUR, "v1", "current"), entry(OLD, "v0", "older")],
+  };
+
+  it("asks the box for its list, refreshing only on request", async () => {
+    const { releaseCatalogPath } = await loadServerUpdate();
+    expect(releaseCatalogPath()).toBe("/api/screens/updates");
+    expect(releaseCatalogPath(true)).toBe("/api/screens/updates?refresh=1");
+  });
+
+  it("splits latest, other newer and older releases", async () => {
+    const { groupReleases } = await loadServerUpdate();
+    const g = groupReleases(catalog);
+    expect(g.latest.commit).toBe(NEWEST);
+    expect(g.currentTag).toBe("v1");
+    expect(g.otherNewer.map((r: { commit: string }) => r.commit)).toEqual([NEWER]);
+    expect(g.older.map((r: { commit: string }) => r.commit)).toEqual([OLD]);
+    expect(g.stale).toBe(false);
+  });
+
+  it("handles an up-to-date, stale or missing list", async () => {
+    const { groupReleases } = await loadServerUpdate();
+    const upToDate = groupReleases({ checkedAt: 1, currentCommit: CUR, latest: null, releases: [entry(CUR, "v1", "current")], stale: true });
+    expect(upToDate.latest).toBeNull();
+    expect(upToDate.stale).toBe(true);
+    expect(groupReleases(null)).toEqual({ latest: null, currentTag: null, otherNewer: [], older: [], stale: false });
+    expect(groupReleases({ latest: { commit: "nope", tag: "v9" }, releases: [{ commit: "short", relation: "newer" }] }).latest).toBeNull();
+  });
+
+  it("only a pasted known-newer release skips the confirmation", async () => {
+    const { pastedNeedsConfirm } = await loadServerUpdate();
+    expect(pastedNeedsConfirm(catalog, ` ${NEWER.toUpperCase()} `)).toBe(false);
+    expect(pastedNeedsConfirm(catalog, OLD)).toBe(true);
+    expect(pastedNeedsConfirm(catalog, "e".repeat(40))).toBe(true);
+    expect(pastedNeedsConfirm(null, NEWER)).toBe(true);
+  });
+});

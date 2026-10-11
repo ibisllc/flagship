@@ -57,6 +57,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.api.LastUpdate
+import com.flagshipserver.app.api.ReleaseCatalogResponse
+import com.flagshipserver.app.api.ReleaseEntry
+import com.flagshipserver.app.api.ScreensError
+import com.flagshipserver.app.api.userFacing
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.style.TextOverflow
 import com.flagshipserver.app.api.ServerMetricsResponse
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -1285,11 +1291,15 @@ private fun shortCommit(sha: String?): String? =
 private fun UpdateServerCard(serverDomain: String, currentCommit: String?, lastUpdate: LastUpdate? = null) {
     val app = LocalAppState.current
     val mailbox = LocalSecretMailboxClient.current
-    val toasts = LocalToastCenter.current
+    val screens = LocalScreensClient.current
     val username by app.currentUser.collectAsState()
-    val scope = rememberCoroutineScope()
     var showSheet by remember { mutableStateOf(false) }
+    var latestTag by remember { mutableStateOf<String?>(null) }
     val reported = shortCommit(currentCommit) != null
+
+    LaunchedEffect(currentCommit) {
+        latestTag = runCatching { screens.serverUpdates(refresh = false).latest?.tag }.getOrNull()
+    }
 
     Text(
         "Update",
@@ -1311,6 +1321,14 @@ private fun UpdateServerCard(serverDomain: String, currentCommit: String?, lastU
                     style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
                 )
             }
+            latestTag?.let { tag ->
+                Text(
+                    "New release available: $tag",
+                    color = FS.colors.primary,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold),
+                    modifier = Modifier.semantics { contentDescription = "sd-update-available" },
+                )
+            }
             lastUpdate?.summary?.let { summary ->
                 Text(
                     summary,
@@ -1320,7 +1338,7 @@ private fun UpdateServerCard(serverDomain: String, currentCommit: String?, lastU
                 )
             }
             FSDangerButton(
-                label = "Update this server",
+                label = if (latestTag == null) "Update this server" else "Update to latest",
                 onClick = { showSheet = true },
                 block = true,
                 enabled = reported,
@@ -1345,86 +1363,241 @@ private fun UpdateServerCard(serverDomain: String, currentCommit: String?, lastU
                 mailbox = mailbox,
             )
         }
-        val phase by vm.phase.collectAsState()
-        var target by remember { mutableStateOf("") }
-        val working = phase is UpdateServerViewModel.Phase.Signing ||
-            phase is UpdateServerViewModel.Phase.Posting
         Dialog(
             onDismissRequest = { showSheet = false },
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
-            Column(Modifier.fillMaxSize().background(FS.colors.bg)) {
-                Row(Modifier.fillMaxWidth().padding(FS.space.s4)) {
-                    FSGhostButton(label = "Done", onClick = { showSheet = false })
-                }
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = FS.space.s4)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(FS.space.s3),
-                ) {
-                    Text(
-                        "Update $serverDomain?",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
-                    )
-                    Text(
-                        "The server moves to the release you name below — only if Flagship's maintainers have blessed it. It restarts into the new version and rolls back automatically if that version fails to boot.",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-                    )
-                    vm.runningShort?.let { short ->
-                        Text(
-                            "Running $short",
-                            color = FS.colors.text,
-                            style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
-                        )
+            UpdateServerSheet(serverDomain = serverDomain, vm = vm, onDone = { showSheet = false })
+        }
+    }
+}
+
+private const val DOWNGRADE_WARNING =
+    "Older releases don't have the fixes made since, and may not understand changes made to this server after them, such as a rotated admin key. In the worst case the server stops accepting updates and has to be reinstalled. Only go back if a newer release broke something."
+
+/** Plain copy for a failed release-list call; a bare status code never reaches the UI. */
+private fun releaseCheckProblem(t: Throwable): String = when ((t as? ScreensError.Http)?.status) {
+    null -> t.userFacing()
+    401, 403 -> "You're not signed in for that. Try signing in again."
+    404 -> "We couldn't find that. It may have moved or been removed."
+    408, 429 -> "The server is busy right now. Give it a moment and try again."
+    in 500..599 -> "Service temporarily unavailable. Try again in a few minutes."
+    else -> "That didn't work. Check your connection and try again."
+}
+
+// The box lists the releases it verified for itself; the main action is
+// "Update to latest", other newer releases sit below, and going back to an
+// older release (or pasting any commit) is under Advanced behind a warning and
+// a confirmation. Whatever is picked, the signed order names one exact commit.
+// Mirror of iOS UpdateServerSheet.
+@Composable
+private fun UpdateServerSheet(serverDomain: String, vm: UpdateServerViewModel, onDone: () -> Unit) {
+    val screens = LocalScreensClient.current
+    val toasts = LocalToastCenter.current
+    val scope = rememberCoroutineScope()
+    val phase by vm.phase.collectAsState()
+    var target by remember { mutableStateOf("") }
+    var catalog by remember { mutableStateOf<ReleaseCatalogResponse?>(null) }
+    var catalogError by remember { mutableStateOf<String?>(null) }
+    var loadingCatalog by remember { mutableStateOf(false) }
+    var showAdvanced by remember { mutableStateOf(false) }
+    var confirmDowngrade by remember { mutableStateOf<String?>(null) }
+    val working = phase is UpdateServerViewModel.Phase.Signing ||
+        phase is UpdateServerViewModel.Phase.Posting
+
+    suspend fun loadCatalog(refresh: Boolean) {
+        loadingCatalog = true
+        try {
+            catalog = screens.serverUpdates(refresh)
+            catalogError = null
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            if (catalog == null) catalogError = releaseCheckProblem(t)
+        } finally {
+            loadingCatalog = false
+        }
+    }
+
+    fun order(commit: String) {
+        if (working) return
+        scope.launch {
+            if (vm.update(commit)) toasts.success("Update ordered")
+        }
+    }
+
+    LaunchedEffect(Unit) { loadCatalog(refresh = false) }
+
+    val muted = TextStyle(fontSize = 13.sp, lineHeight = 18.sp)
+    val mono = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+
+    @Composable
+    fun releaseRow(r: ReleaseEntry, actionLabel: String, action: () -> Unit) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                r.tag,
+                color = FS.colors.text,
+                style = mono,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            FSGhostButton(label = actionLabel, onClick = action, enabled = vm.canUpdate && !working)
+        }
+    }
+
+    Column(Modifier.fillMaxSize().background(FS.colors.bg)) {
+        Row(Modifier.fillMaxWidth().padding(FS.space.s4)) {
+            FSGhostButton(label = "Done", onClick = onDone)
+        }
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = FS.space.s4)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+        ) {
+            Text(
+                "Update $serverDomain",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
+            )
+            vm.runningShort?.let { short ->
+                Text("Running ${catalog?.currentTag ?: short}", color = FS.colors.text, style = mono)
+            }
+            if (phase is UpdateServerViewModel.Phase.Done) {
+                Text(
+                    "Update sent. The server picks it up within about five minutes, checks the maintainers' signature, restarts into the new version, and goes back by itself if that version doesn't start.",
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                )
+            } else {
+                val latest = catalog?.latest
+                when {
+                    latest != null -> FSCard(padding = PaddingValues(FS.space.s4)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                            Text("Latest release", color = FS.colors.textMuted, style = muted)
+                            Text(latest.tag, color = FS.colors.text, style = mono)
+                            FSPrimaryButton(
+                                label = if (working) "Working…" else "Update to latest",
+                                onClick = { order(latest.commit) },
+                                block = true,
+                                enabled = vm.canUpdate && !working,
+                                modifier = Modifier.semantics { contentDescription = "update-latest-btn" },
+                            )
+                            Text(
+                                "Approve with biometrics. The server rolls back by itself if the new version doesn't start.",
+                                color = FS.colors.textMuted,
+                                style = muted,
+                            )
+                        }
                     }
-                    if (phase is UpdateServerViewModel.Phase.Done) {
+                    loadingCatalog && catalog == null -> Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.height(16.dp).width(16.dp), strokeWidth = 2.dp)
+                        Text("Checking for new releases…", color = FS.colors.textMuted, style = muted)
+                    }
+                    catalog != null -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "Update ordered — the server picks it up on its next check-in, verifies the release is maintainer-blessed, applies it, and rolls back if the new version fails to boot.",
+                            "This server is on the latest release.",
                             color = FS.colors.text,
                             style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                            modifier = Modifier.weight(1f),
                         )
-                    } else {
-                        FSField(
-                            value = target,
-                            onValueChange = { target = it },
-                            label = "Target release (full commit)",
-                            placeholder = "40-character commit hash",
-                            fieldTag = "update-target-field",
-                        )
-                        vm.targetProblem(target)?.let { problem ->
-                            Text(
-                                problem,
-                                color = FS.colors.textMuted,
-                                style = TextStyle(fontSize = 13.sp),
-                            )
-                        }
-                        (phase as? UpdateServerViewModel.Phase.Failed)?.let { f ->
-                            Text(
-                                f.message,
-                                color = FS.colors.danger,
-                                style = TextStyle(fontSize = 13.sp),
-                            )
-                        }
-                        FSDangerButton(
-                            label = if (working) "Working…" else "Order update",
-                            onClick = onClick@{
-                                if (!vm.canOrder(target) || working) return@onClick
-                                scope.launch {
-                                    if (vm.update(target)) toasts.success("Update ordered")
-                                }
-                            },
-                            block = true,
-                            enabled = vm.canOrder(target) && !working,
-                            modifier = Modifier.semantics { contentDescription = "update-order-btn" },
+                        FSGhostButton(
+                            label = "Check again",
+                            onClick = { scope.launch { loadCatalog(refresh = true) } },
+                            enabled = !loadingCatalog,
                         )
                     }
+                    catalogError != null -> Text(
+                        "Couldn't check for releases: $catalogError You can still enter a release under Advanced.",
+                        color = FS.colors.textMuted,
+                        style = muted,
+                    )
+                }
+                if (catalog?.stale == true) {
+                    Text(
+                        "The server couldn't reach GitHub, so this list may be out of date.",
+                        color = FS.colors.textMuted,
+                        style = muted,
+                    )
+                }
+
+                val others = catalog?.otherNewer.orEmpty()
+                if (others.isNotEmpty()) {
+                    Text("Other new releases", color = FS.colors.textMuted, style = muted)
+                    others.forEach { r -> releaseRow(r, "Update") { order(r.commit) } }
+                }
+
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { showAdvanced = !showAdvanced }
+                        .padding(vertical = FS.space.s2)
+                        .semantics { contentDescription = "update-advanced" },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Advanced",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 14.sp),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(if (showAdvanced) "▾" else "▸", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp))
+                }
+                if (showAdvanced) {
+                    Text(DOWNGRADE_WARNING, color = FS.colors.warning, style = muted)
+                    catalog?.older.orEmpty().forEach { r ->
+                        releaseRow(r, "Go back") { confirmDowngrade = r.commit }
+                    }
+                    FSField(
+                        value = target,
+                        onValueChange = { target = it },
+                        label = "Or enter any release (full commit)",
+                        placeholder = "40-character commit hash",
+                        fieldTag = "update-target-field",
+                    )
+                    vm.targetProblem(target)?.let { problem ->
+                        Text(problem, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                    }
+                    FSDangerButton(
+                        label = if (working) "Working…" else "Order update",
+                        onClick = onClick@{
+                            if (!vm.canOrder(target) || working) return@onClick
+                            val t = target.trim().lowercase()
+                            if (catalog?.pastedNeedsConfirm(t) == false) order(t) else confirmDowngrade = t
+                        },
+                        block = true,
+                        enabled = vm.canOrder(target) && !working,
+                        modifier = Modifier.semantics { contentDescription = "update-order-btn" },
+                    )
+                }
+                (phase as? UpdateServerViewModel.Phase.Failed)?.let { f ->
+                    Text(f.message, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
                 }
             }
+            Spacer(Modifier.height(FS.space.s6))
         }
+    }
+
+    confirmDowngrade?.let { commit ->
+        AlertDialog(
+            onDismissRequest = { confirmDowngrade = null },
+            title = { Text("Go back to an older release?") },
+            text = { Text(DOWNGRADE_WARNING) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDowngrade = null
+                    order(commit)
+                }) { Text("Go back to ${commit.take(8)}", color = FS.colors.danger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDowngrade = null }) { Text("Cancel") }
+            },
+        )
     }
 }
 

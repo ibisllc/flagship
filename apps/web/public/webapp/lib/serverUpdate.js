@@ -230,3 +230,38 @@ export function describeLastUpdate(lastUpdate) {
   }
   return null;
 }
+
+export const DOWNGRADE_WARNING =
+  "Older releases don't have the fixes made since, and may not understand changes made to this server after them, such as a rotated admin key. In the worst case the server stops accepting updates and has to be reinstalled. Only go back if a newer release broke something.";
+
+/** GET /api/screens/updates path (the box's own verified release list). */
+export function releaseCatalogPath(refresh = false) {
+  return refresh ? "/api/screens/updates?refresh=1" : "/api/screens/updates";
+}
+
+/**
+ * The update dialog's view of the box's release list: the latest newer
+ * release, the other newer ones, the older ones (Advanced only) and the tag of
+ * the running release. Entries without a full commit are dropped, since an
+ * order must name one exact commit.
+ */
+export function groupReleases(catalog) {
+  const valid = (r) => r && typeof r === "object" && COMMIT_SHA_RE.test(String(r.commit));
+  const releases = Array.isArray(catalog?.releases) ? catalog.releases.filter(valid) : [];
+  const latest = valid(catalog?.latest) ? catalog.latest : null;
+  return {
+    latest,
+    currentTag: releases.find((r) => r.relation === "current")?.tag ?? null,
+    otherNewer: releases.filter((r) => r.relation === "newer" && r.commit !== latest?.commit),
+    older: releases.filter((r) => r.relation === "older"),
+    stale: catalog?.stale === true,
+  };
+}
+
+/** A pasted commit orders straight away only when the box lists it as a newer
+ *  release; older, unrelated and unknown commits ask first. */
+export function pastedNeedsConfirm(catalog, raw) {
+  const t = String(raw ?? "").trim().toLowerCase();
+  const hit = Array.isArray(catalog?.releases) ? catalog.releases.find((r) => r?.commit === t) : null;
+  return hit?.relation !== "newer";
+}

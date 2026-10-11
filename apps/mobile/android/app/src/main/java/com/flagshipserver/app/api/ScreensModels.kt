@@ -102,6 +102,47 @@ data class LastUpdate(
     }
 }
 
+/** One maintainer-endorsed release, placed relative to the box's running commit. */
+@Serializable
+data class ReleaseEntry(
+    val commit: String,
+    val releaseId: String,
+    val tag: String,
+    /** ISO 8601. */
+    val endorsedAt: String,
+    /** "current" | "newer" | "older" | "unrelated". */
+    val relation: String,
+)
+
+/** GET /api/screens/updates: the releases the box verified for itself. */
+@Serializable
+data class ReleaseCatalogResponse(
+    val checkedAt: Long,
+    val currentCommit: String? = null,
+    /** Newest endorsed release after the running one, or null when up to date. */
+    val latest: ReleaseEntry? = null,
+    /** Newest first. */
+    val releases: List<ReleaseEntry> = emptyList(),
+    /** True when the box couldn't fetch and listed from its local copy. */
+    val stale: Boolean? = null,
+) {
+    val currentTag: String?
+        get() = releases.firstOrNull { it.relation == "current" }?.tag
+
+    val otherNewer: List<ReleaseEntry>
+        get() = releases.filter { it.relation == "newer" && it.commit != latest?.commit }
+
+    val older: List<ReleaseEntry>
+        get() = releases.filter { it.relation == "older" }
+
+    /** A pasted commit orders straight away only when it is a known newer
+     *  release; anything else (older, unrelated, unknown) asks first. */
+    fun pastedNeedsConfirm(raw: String): Boolean {
+        val t = raw.trim().lowercase()
+        return releases.firstOrNull { it.commit == t }?.relation != "newer"
+    }
+}
+
 // ---------- P1.2 apps-list ---------------------------------------------
 
 @Serializable

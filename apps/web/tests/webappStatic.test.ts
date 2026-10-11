@@ -371,8 +371,8 @@ describe("/webapp PWA static surface", () => {
     // v18 refreshes Home so demo login renders its server without a paired id.
     // v19 adds demo-only paired-session minting before server detail opens.
     // v25 adds direct recipe download on top of the quieter Settings + dock shell.
-    // v34 drops the USB-only "unplug" from the install-complete step.
-    expect(r.body).toContain('SHELL_VERSION = "v34"');
+    // v35 lists the box's releases in the update dialog ("Update to latest").
+    expect(r.body).toContain('SHELL_VERSION = "v35"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

@@ -59,7 +59,8 @@
 //  v32: apex.js drops the retired `web.` sub-origin prefix.
 //  v33: the update card shows the box's last update verdict.
 //  v34: "Install complete" without the USB-only instruction.
-const SHELL_VERSION = "v34";
+//  v35: the update dialog lists the box's releases ("Update to latest").
+const SHELL_VERSION = "v35";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

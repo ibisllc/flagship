@@ -38,7 +38,15 @@ import {
 import { signWithIrk, bytesToHex } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
 import { setPreferredServer, isPreferredServer } from "../lib/setLeader.js";
-import { depositUpdateOrder, describeLastUpdate, COMMIT_SHA_RE } from "../lib/serverUpdate.js";
+import {
+  depositUpdateOrder,
+  describeLastUpdate,
+  groupReleases,
+  pastedNeedsConfirm,
+  releaseCatalogPath,
+  COMMIT_SHA_RE,
+  DOWNGRADE_WARNING,
+} from "../lib/serverUpdate.js";
 import {
   createTransferOffer,
   buildTransferLink,
@@ -294,6 +302,7 @@ export async function renderServerDetail() {
           <span class="label">Running</span>
           <span class="value" id="update-current-commit">${escapeHtml(shortCommit(body.currentCommit))}</span>
         </div>
+        <p class="note small mt-2 hidden" id="update-available"></p>
         ${describeLastUpdate(body.lastUpdate) ? `<p class="note small mt-2" id="update-last-outcome">${escapeHtml(describeLastUpdate(body.lastUpdate))}</p>` : ""}
         <button id="update-server-btn" class="danger full-width mt-2"${body.currentCommit ? "" : " disabled"}>Update this server</button>
         <p class="note small${body.currentCommit ? " hidden" : ""}" id="update-hint">
@@ -1244,13 +1253,29 @@ function wireUpdate(body) {
       }
     });
   });
+  // An older daemon 404s the release list; the card then stays as it was.
+  screensFetch(releaseCatalogPath())
+    .then((catalog) => {
+      const { latest } = groupReleases(catalog);
+      if (!latest) return;
+      const note = $("update-available");
+      if (note) {
+        note.textContent = `New release available: ${latest.tag}`;
+        note.classList.remove("hidden");
+      }
+      const btn = $("update-server-btn");
+      if (btn) btn.textContent = "Update to latest";
+    })
+    .catch(() => {});
 }
 
-// "Update this server": show the box-reported running commit, take a blessed
-// target commit (40-hex), then sign the UpdateOrder with the sensitive signer
-// (admin master root when present) and deposit it on `.com`'s update lane.
-// The box only applies it if the commit is ALSO maintainer-endorsed — this
-// order alone can never push unblessed code.
+// "Update this server": the box lists the releases it verified for itself.
+// The main action is "Update to latest", other newer releases sit below, and
+// going back to an older release (or pasting any commit) is under Advanced
+// behind a warning and a confirmation. Whatever is picked, the UpdateOrder is
+// signed for that one exact commit with the sensitive signer (admin master
+// root when present) and deposited on `.com`'s update lane. The box only
+// applies it if the commit is ALSO maintainer-endorsed.
 async function openUpdateDialog(body) {
   const session = getSession();
   if (!session.umk || !session.irk) {
@@ -1268,97 +1293,216 @@ async function openUpdateDialog(body) {
   dlg.className = "modal-card";
   dlg.setAttribute("aria-label", "Update this server");
   dlg.innerHTML = `
-    <h3 class="modal-title">Update ${escapeHtml(serverFqdn)}?</h3>
-    <p class="modal-message">
-      The server moves to the release you name below — only if Flagship's
-      maintainers have blessed it. It restarts into the new version and rolls
-      back automatically if that version fails to boot.
-    </p>
+    <h3 class="modal-title">Update ${escapeHtml(serverFqdn)}</h3>
     <div class="row mt-2">
       <span class="label">Running</span>
-      <span class="value">${escapeHtml(shortCommit(currentCommit))}</span>
+      <span class="value" data-update-running>${escapeHtml(shortCommit(currentCommit))}</span>
     </div>
-    <label class="caption mt-2">Target release (full commit)</label>
-    <input class="full-width" data-update-target placeholder="40-character commit hash" autocomplete="off" spellcheck="false" />
-    <p class="note small hidden" data-update-target-hint></p>
+    <div data-update-choose>
+      <div class="mt-3" data-update-latest>
+        <p class="note small">Checking for new releases…</p>
+      </div>
+      <p class="note small hidden" data-update-stale>The server couldn't reach GitHub, so this list may be out of date.</p>
+      <div class="mt-3 hidden" data-update-others></div>
+      <details class="advanced-disclosure mt-3" data-update-advanced>
+        <summary>Advanced</summary>
+        <p class="note small mt-2" data-update-warning>${escapeHtml(DOWNGRADE_WARNING)}</p>
+        <div data-update-older></div>
+        <label class="caption mt-2">Or enter any release (full commit)</label>
+        <input class="full-width" data-update-target placeholder="40-character commit hash" autocomplete="off" spellcheck="false" />
+        <p class="note small hidden" data-update-target-hint></p>
+        <button class="danger full-width mt-2" data-update-go disabled>Order update</button>
+      </details>
+    </div>
+    <div class="mt-3 hidden" data-update-confirm>
+      <h4>Go back to an older release?</h4>
+      <p class="note">${escapeHtml(DOWNGRADE_WARNING)}</p>
+      <div class="row-2 mt-3">
+        <button class="secondary" data-update-confirm-no>Cancel</button>
+        <button class="danger" data-update-confirm-yes></button>
+      </div>
+    </div>
     <p class="modal-error err-text hidden" data-update-error></p>
+    <div class="mt-3 hidden" data-update-result>
+      <p class="note">Update sent. The server picks it up within about five
+      minutes, checks the maintainers' signature, restarts into the new version,
+      and goes back by itself if that version doesn't start.</p>
+    </div>
     <div class="row-2 mt-3">
       <button class="secondary" data-update-cancel>Cancel</button>
-      <button class="danger" data-update-go disabled>Order update</button>
-    </div>
-    <div class="mt-3 hidden" data-update-result>
-      <p class="note">Update ordered — the server picks it up on its next
-      check-in, verifies the release is maintainer-blessed, applies it, and
-      rolls back if the new version fails to boot.</p>
     </div>
   `;
   document.body.appendChild(dlg);
   dlg.showModal();
 
+  const q = (sel) => dlg.querySelector(sel);
   const cleanup = () => { if (dlg.open) dlg.close(); dlg.remove(); };
-  const targetEl = dlg.querySelector("[data-update-target]");
-  const hintEl = dlg.querySelector("[data-update-target-hint]");
-  const errEl = dlg.querySelector("[data-update-error]");
-  const goBtn = dlg.querySelector("[data-update-go]");
-  const cancelBtn = dlg.querySelector("[data-update-cancel]");
-  const resultEl = dlg.querySelector("[data-update-result]");
+  const chooseEl = q("[data-update-choose]");
+  const latestEl = q("[data-update-latest]");
+  const staleEl = q("[data-update-stale]");
+  const othersEl = q("[data-update-others]");
+  const olderEl = q("[data-update-older]");
+  const runningEl = q("[data-update-running]");
+  const targetEl = q("[data-update-target]");
+  const hintEl = q("[data-update-target-hint]");
+  const errEl = q("[data-update-error]");
+  const goBtn = q("[data-update-go]");
+  const cancelBtn = q("[data-update-cancel]");
+  const resultEl = q("[data-update-result]");
+  const confirmEl = q("[data-update-confirm]");
+  const confirmYes = q("[data-update-confirm-yes]");
+  const from = currentCommit.toLowerCase();
 
-  const refresh = () => {
-    const t = targetEl.value.trim().toLowerCase();
-    if (t.length === 0) {
-      hintEl.classList.add("hidden");
-      goBtn.disabled = true;
-    } else if (!COMMIT_SHA_RE.test(t)) {
-      hintEl.textContent = "Enter the full 40-character commit hash of the blessed release.";
-      hintEl.classList.remove("hidden");
-      goBtn.disabled = true;
-    } else if (t === currentCommit.toLowerCase()) {
-      hintEl.textContent = "The server is already running this release.";
-      hintEl.classList.remove("hidden");
-      goBtn.disabled = true;
+  let catalog = null;
+  let working = false;
+  let done = false;
+  let pendingDowngrade = null;
+
+  const orderButtons = () => dlg.querySelectorAll("[data-update-commit]");
+  const setWorking = (on) => {
+    working = on;
+    orderButtons().forEach((b) => { b.disabled = on; });
+    refreshTarget();
+  };
+
+  const releaseRows = (rows, label, action) => rows.map((r) => `
+    <div class="row mt-2">
+      <span class="value mono">${escapeHtml(r.tag)}</span>
+      <button class="secondary btn-xs" data-update-commit="${escapeHtml(r.commit)}" data-update-action="${action}">${escapeHtml(label)}</button>
+    </div>
+  `).join("");
+
+  const renderCatalog = () => {
+    const g = groupReleases(catalog);
+    if (g.currentTag) runningEl.textContent = g.currentTag;
+    if (g.latest) {
+      latestEl.innerHTML = `
+        <div class="card">
+          <p class="caption">Latest release</p>
+          <p class="mono">${escapeHtml(g.latest.tag)}</p>
+          <button class="full-width mt-2" id="update-latest-btn" data-update-commit="${escapeHtml(g.latest.commit)}" data-update-action="update">Update to latest</button>
+          <p class="note small mt-2">The server rolls back by itself if the new version doesn't start.</p>
+        </div>
+      `;
     } else {
-      hintEl.classList.add("hidden");
-      goBtn.disabled = false;
+      latestEl.innerHTML = `
+        <div class="row">
+          <span class="value">This server is on the latest release.</span>
+          <button class="secondary btn-xs" data-update-recheck>Check again</button>
+        </div>
+      `;
+      q("[data-update-recheck]")?.addEventListener("click", () => loadCatalog(true));
+    }
+    staleEl.classList.toggle("hidden", !g.stale);
+    othersEl.innerHTML = g.otherNewer.length
+      ? `<p class="caption">Other new releases</p>${releaseRows(g.otherNewer, "Update", "update")}`
+      : "";
+    othersEl.classList.toggle("hidden", g.otherNewer.length === 0);
+    olderEl.innerHTML = releaseRows(g.older, "Go back", "downgrade");
+    orderButtons().forEach((b) => {
+      b.disabled = working;
+      b.addEventListener("click", () => {
+        const commit = b.getAttribute("data-update-commit");
+        if (b.getAttribute("data-update-action") === "downgrade") askDowngrade(commit);
+        else order(commit);
+      });
+    });
+  };
+
+  const loadCatalog = async (refresh) => {
+    const recheck = q("[data-update-recheck]");
+    if (recheck) recheck.disabled = true;
+    try {
+      catalog = await screensFetch(releaseCatalogPath(refresh));
+      renderCatalog();
+    } catch (e) {
+      if (!catalog) {
+        latestEl.innerHTML = `<p class="note small">Couldn't check for releases: ${escapeHtml(humanError(e))} You can still enter a release under Advanced.</p>`;
+      } else if (recheck) {
+        recheck.disabled = false;
+      }
     }
   };
 
-  return new Promise((resolve, reject) => {
-    const onCancel = () => { cleanup(); reject({ code: "cancelled" }); };
-    dlg.addEventListener("close", onCancel, { once: true });
-    cancelBtn.addEventListener("click", onCancel);
-    targetEl.addEventListener("input", refresh);
+  const targetValue = () => targetEl.value.trim().toLowerCase();
+  function refreshTarget() {
+    const t = targetValue();
+    let problem = null;
+    if (t.length > 0 && !COMMIT_SHA_RE.test(t)) {
+      problem = "Enter the full 40-character commit hash of the blessed release.";
+    } else if (t === from) {
+      problem = "The server is already running this release.";
+    }
+    hintEl.textContent = problem || "";
+    hintEl.classList.toggle("hidden", !problem);
+    goBtn.disabled = working || problem !== null || t.length === 0;
+  }
 
-    goBtn.addEventListener("click", async () => {
-      errEl.classList.add("hidden");
-      goBtn.disabled = true;
-      const orig = goBtn.textContent;
-      goBtn.textContent = "Signing…";
-      try {
-        await depositUpdateOrder({
-          serverDomain: serverFqdn,
-          targetCommit: targetEl.value.trim().toLowerCase(),
-          fromCommit: currentCommit,
-          username: session.username || body.username,
-          umk: session.umk,
-          irkPubHex: bytesToHex(session.irk.publicKey),
-          // Slice D: the update order is a SENSITIVE order — signed with the
-          // admin root (when present); the co-signed mailbox-auth stays the
-          // IRK (tag-routed by the gated signer).
-          signWithIrk: sensitiveSigner(),
-        });
-        resultEl.classList.remove("hidden");
-        goBtn.classList.add("hidden");
-        targetEl.disabled = true;
-        cancelBtn.textContent = "Done";
-        toast("Update ordered", "ok");
-        resolve({ ok: true });
-      } catch (e) {
-        errEl.textContent = humanError(e);
-        errEl.classList.remove("hidden");
-        goBtn.textContent = orig;
-        refresh();
-      }
+  const askDowngrade = (commit) => {
+    if (working) return;
+    pendingDowngrade = commit;
+    confirmYes.textContent = `Go back to ${commit.slice(0, 8)}`;
+    chooseEl.classList.add("hidden");
+    confirmEl.classList.remove("hidden");
+  };
+  const closeConfirm = () => {
+    pendingDowngrade = null;
+    confirmEl.classList.add("hidden");
+    chooseEl.classList.remove("hidden");
+  };
+
+  async function order(targetCommit) {
+    if (working || done) return;
+    errEl.classList.add("hidden");
+    setWorking(true);
+    try {
+      await depositUpdateOrder({
+        serverDomain: serverFqdn,
+        targetCommit,
+        fromCommit: currentCommit,
+        username: session.username || body.username,
+        umk: session.umk,
+        irkPubHex: bytesToHex(session.irk.publicKey),
+        // Slice D: the update order is a SENSITIVE order — signed with the
+        // admin root (when present); the co-signed mailbox-auth stays the
+        // IRK (tag-routed by the gated signer).
+        signWithIrk: sensitiveSigner(),
+      });
+      done = true;
+      chooseEl.classList.add("hidden");
+      confirmEl.classList.add("hidden");
+      resultEl.classList.remove("hidden");
+      cancelBtn.textContent = "Done";
+      toast("Update ordered", "ok");
+    } catch (e) {
+      errEl.textContent = humanError(e);
+      errEl.classList.remove("hidden");
+      setWorking(false);
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    const onClose = () => {
+      cleanup();
+      if (done) resolve({ ok: true });
+      else reject({ code: "cancelled" });
+    };
+    dlg.addEventListener("close", onClose, { once: true });
+    cancelBtn.addEventListener("click", () => dlg.close());
+    targetEl.addEventListener("input", refreshTarget);
+    goBtn.addEventListener("click", () => {
+      const t = targetValue();
+      if (goBtn.disabled || !COMMIT_SHA_RE.test(t) || t === from) return;
+      if (pastedNeedsConfirm(catalog, t)) askDowngrade(t);
+      else order(t);
     });
+    q("[data-update-confirm-no]").addEventListener("click", closeConfirm);
+    confirmYes.addEventListener("click", () => {
+      const commit = pendingDowngrade;
+      closeConfirm();
+      if (commit) order(commit);
+    });
+    loadCatalog(false);
   });
 }
 

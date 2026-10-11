@@ -101,6 +101,12 @@ class LiveScreensClient(
     override suspend fun serverDetail(): ServerDetailResponse =
         request("/api/screens/server-detail", ServerDetailResponse.serializer())
 
+    override suspend fun serverUpdates(refresh: Boolean): ReleaseCatalogResponse =
+        request(
+            if (refresh) "/api/screens/updates?refresh=1" else "/api/screens/updates",
+            ReleaseCatalogResponse.serializer(),
+        )
+
     override suspend fun appsList(): AppsListResponse =
         request("/api/screens/apps-list", AppsListResponse.serializer())
 

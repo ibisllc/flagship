@@ -18,6 +18,10 @@ interface ScreensClient {
     // P1.1 server-detail
     suspend fun serverDetail(): ServerDetailResponse
 
+    /** Endorsed releases the box verified for itself (GET /api/screens/updates). */
+    suspend fun serverUpdates(refresh: Boolean): ReleaseCatalogResponse =
+        throw ScreensError.NotImplemented("release list")
+
     // P1.2 apps-list
     suspend fun appsList(): AppsListResponse
 
