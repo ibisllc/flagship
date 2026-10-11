@@ -280,6 +280,12 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
     the FLAGSHIP_BOOT partition (the Wi-Fi path's is), and the "taking longer
     than expected" stalled-boot advisory exists on Mac only, not Linux/Windows.
 15. **Obsolete plaintext display-name fixtures** remain in some active tests.
+16. **Repo adapters** (`docs/repo-adapters.md`, design only): make
+    `flagship.app.json` a recipe that re-applies to upstream (base commit, env
+    remaps, patches), one create-or-update API any box can run, an
+    owner-opened PR with a Flagship-signed review, and forks for rewrites.
+    Also: git and IDE builds still live only in daemon memory, so a restart
+    forgets them (their journals survive).
 
 ### Feature branches (each = `main` + one feature; rebase when `main` moves)
 
@@ -352,6 +358,6 @@ spec in `docs/`, the runbooks in `docs/runbooks/`, or — for architecture —
 - **Install / ISO / builder** — `recipe-schema-v2.md`, `installer-tiny.md`, `installer-netboot.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`, `recipe-delivery-and-remote-install.md`
 - **NFC retail box** — `nfc-box-pairing.md`, `v1-operational-tasks.md § N`, `n-cloud-2-design-discussion.md`
 - **CA / maintainers** — `ca-operations.md`, `maintainer-ca-endorsement.md`, `maintainers-checkpoints-spec-v0.1.md`, `maintainers-deployment.md`
-- **Marketplace / apps / monetization** — `app-developer-guide.md`, `manifest.md`, `monetization-free-tier-first.md`, `multi-device-monetization.md`, `vibe-code-experience.md`
+- **Marketplace / apps / monetization** — `app-developer-guide.md`, `manifest.md`, `repo-adapters.md`, `monetization-free-tier-first.md`, `multi-device-monetization.md`, `vibe-code-experience.md`
 - **Testing** — `e2e-test-plan.md`, `ui-test-gym.md`
 - **Design / ops** — `design-system.md`, `psl-submission-flagship-services.md`, `main-reconciliation-plan.md`, `runbooks/`, `policy/`
