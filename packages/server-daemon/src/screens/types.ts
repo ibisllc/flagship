@@ -104,6 +104,11 @@ export interface AppDetailResponse {
   lastBackup?: { backupId: string; createdAt: number; bytes: number };
   /** Recent log lines tailed from the container, when available. */
   recentLogs: string[];
+  /**
+   * Whether the owner can change its code from the phone: it was built on
+   * this box and its source is here. Absent on boxes from before editing.
+   */
+  editable?: boolean;
 }
 
 // ---------- P1.5 — /api/screens/vibe-code/start ------------------------
@@ -139,6 +144,12 @@ export interface VibeCodeStartRequest {
    * doesn't dictate one. Lowercased `[a-z0-9-]`. Absent ⇒ the build/manifest
    * names it.
    */
+  /**
+   * Change this installed service (`<creator>--<slug>`) instead of building a
+   * new one: the session starts from its current code and deploying replaces
+   * it in place. `name` and `visibility` are ignored.
+   */
+  editServiceId?: string;
   name?: string;
   /**
    * Owner-chosen reach for the built service: "just-me" (gated to the owner)

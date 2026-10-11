@@ -32,6 +32,8 @@ import {
 import type { Attachment, FetchLike } from "@flagship/llm-providers";
 import { verifySetServiceEnv } from "@flagship/protocol";
 import { checkServiceName, type ServiceNameDeps } from "../llm/serviceName.js";
+import type { EditableService } from "../buildmodes/buildOrchestrator.js";
+import { EDIT_SOURCE_MAX_BYTES } from "../llm/vibeCodeStartStreaming.js";
 import type {
   AppBackupStartRequest,
   AppBackupStartResponse,
@@ -322,6 +324,10 @@ export interface VibeCodeRuntime {
    * (the pre-existing behaviour).
    */
   resumeStreaming?: (sessionId: string, model?: string) => Promise<void>;
+  /** An installed service's current code, for a session that changes it. */
+  editableService?: (serviceId: string) => Promise<EditableService>;
+  /** Cheap check for the detail screen: built here, with its source on disk. */
+  canEdit?: (serviceId: string) => boolean;
   /**
    * Value-free journal hook for a scratch chat turn. The daemon wires
    * this to the shared build journal (buildId = the vibe sessionId) so
@@ -717,7 +723,31 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         body.visibility === "just-me" || body.visibility === "link"
           ? body.visibility
           : undefined;
-      if (preferredName) {
+      // Changing an installed service instead of building a new one.
+      let edit: Extract<EditableService, { ok: true }> | null = null;
+      if (typeof body.editServiceId === "string") {
+        if (!deps.vibeCode.editableService) return jerr(503, "editing isn't available on this server");
+        const r = await deps.vibeCode.editableService(body.editServiceId);
+        if (!r.ok) return jerr(r.status, r.reason);
+        const open = deps.vibeCode.registry
+          .list()
+          .find((m) => m.editsServiceId === r.serviceId && m.status !== "deployed" && m.status !== "cancelled");
+        if (open) {
+          const out: VibeCodeNameCheckResponse = {
+            ok: false,
+            kind: "session",
+            sessionId: open.sessionId,
+            name: r.slug,
+            message: `A build session is already changing "${r.slug}".`,
+          };
+          return { status: 409, headers: J, body: JSON.stringify({ ...out, error: out.message }) };
+        }
+        if (r.bytes > EDIT_SOURCE_MAX_BYTES) {
+          return jerr(413, `"${r.slug}" is too big to change in the AI chat. Connect your IDE to change it instead.`);
+        }
+        edit = r;
+      }
+      if (preferredName && !edit) {
         const check = checkServiceName(preferredName, nameDeps(deps.vibeCode));
         if (!check.ok) {
           const out: VibeCodeNameCheckResponse = { ...check, error: check.message };
@@ -727,8 +757,12 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       const session = deps.vibeCode.registry.create({
         username: deps.vibeCode.username,
         serverFqdn: deps.vibeCode.serverFqdn,
-        ...(preferredName ? { name: preferredName } : {}),
-        ...(visibility ? { visibility } : {}),
+        ...(edit
+          ? { name: edit.slug, editsServiceId: edit.serviceId, files: edit.files }
+          : {
+              ...(preferredName ? { name: preferredName } : {}),
+              ...(visibility ? { visibility } : {}),
+            }),
       });
       session.pushUserMessage(body.prompt, attach.attachments);
       // Value-free journal: a short text preview + per-attachment
@@ -738,7 +772,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         sessionId: session.meta.sessionId,
         text: body.prompt,
         attachmentSummaries: attach.attachments.map(summarizeAttachment),
-        ...(preferredName ? { name: preferredName } : {}),
+        ...(edit ? { name: edit.slug } : preferredName ? { name: preferredName } : {}),
       });
       // Seal the delivered BYOK credential for the session, if one came
       // (and a store is wired). flagshipserver.com is never in this path —
@@ -764,8 +798,8 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
           prompt: body.prompt,
           model: body.model,
           ...(attach.attachments.length > 0 ? { attachments: attach.attachments } : {}),
-          ...(preferredName ? { preferredName } : {}),
-          ...(visibility ? { visibility } : {}),
+          ...(preferredName && !edit ? { preferredName } : {}),
+          ...(visibility && !edit ? { visibility } : {}),
         }).catch((e: Error) => {
           session.fail(e.message ?? "stream failed", true);
         });
@@ -1430,6 +1464,7 @@ function appDetail(app: InstalledService, deps: ScreensHttpDeps): AppDetailRespo
     members,
     browserTabs,
     recentLogs: [],
+    editable: deps.vibeCode?.canEdit?.(app.serviceId) ?? false,
   };
 }
 

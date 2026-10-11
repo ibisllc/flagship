@@ -31,7 +31,7 @@ import type { ServicePlatform } from "../servicePlatform.js";
 import type { BoxSigner } from "../keyCustodian.js";
 import type { ForgejoAppAdmin } from "../forgejoServiceAdmin.js";
 import type { VibeCodeSession, VibeCodeSessionRegistry } from "./vibeCodeSession.js";
-import { checkServiceName } from "./serviceName.js";
+import { migrationFiles, resolveDeployTarget } from "./serviceName.js";
 
 export interface DeploySessionDeps {
   servicePlatform: ServicePlatform;
@@ -99,22 +99,16 @@ export function buildDeploySession(deps: DeploySessionDeps) {
     // Self-authored: creator is the host. Cross-creator vibe-coding
     // would need a different signing path (the original creator's IRK).
     const creator = deps.hostUsername;
-    const slug = (session.meta.name ?? manifest.name).toLowerCase();
-    const name = checkServiceName(
-      slug,
-      {
-        registry: deps.registry ?? { holderOf: () => undefined },
-        hostUsername: creator,
-        installed: deps.servicePlatform,
-      },
-      session.meta.sessionId,
-    );
-    if (!name.ok) {
-      return {
-        ok: false,
-        reason: name.kind === "invalid" ? `"${slug}" can't be a web address. ${name.message}` : `${name.message} Pick another name and start a new build.`,
-      };
-    }
+    const target = resolveDeployTarget({
+      ...(session.meta.editsServiceId ? { editsServiceId: session.meta.editsServiceId } : {}),
+      name: session.meta.name ?? manifest.name,
+      hostUsername: creator,
+      installed: deps.servicePlatform,
+      ...(deps.registry ? { registry: deps.registry } : {}),
+      sessionId: session.meta.sessionId,
+    });
+    if (!target.ok) return { ok: false, reason: target.reason };
+    const slug = target.slug;
     manifest = { ...manifest, name: slug };
     // Single-dash composite (creator is hyphen-free → unambiguous).
     // Kept inline rather than importing ServicePlatform as a value just
@@ -199,10 +193,17 @@ export function buildDeploySession(deps: DeploySessionDeps) {
     // via a separate signed set-app-env order and injected into the
     // container's process env on deploy; they are NOT part of this
     // signed install envelope.
+    const migrations = migrationFiles(files);
+    if (target.edit) {
+      const r = await deps.servicePlatform.redeploy({ request, signature, verify: verifyInstallService, migrations });
+      if (!r.ok) return { ok: false, reason: r.reason };
+      return { ok: true, serviceId, url: `https://${target.urlLabel}.${session.meta.serverFqdn}`, image };
+    }
     const installResult = await deps.servicePlatform.install({
       request,
       signature,
       verify: verifyInstallService,
+      migrations,
     });
     if (!installResult.ok) {
       return { ok: false, reason: `install rejected: ${installResult.reason}` };

@@ -71,6 +71,35 @@ export function ownerChoiceSupplement(
   return lines.length > 0 ? "\n\n" + lines.join("\n") : "";
 }
 
+/** Over this, the AI chat can't hold the whole app; the IDE route can. */
+export const EDIT_SOURCE_MAX_BYTES = 300 * 1024;
+
+/**
+ * For a session that changes an installed service: its current files and how
+ * to change them. Empty for a new build.
+ */
+export function editSupplement(slug: string | undefined, files: Record<string, string> | null): string {
+  if (!slug || !files) return "";
+  const dump = Object.entries(files)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([p, c]) => `=== ${p} ===\n${c.endsWith("\n") ? c : c + "\n"}`)
+    .join("") + "=== END ===";
+  return `
+
+# You are changing an app that is already running
+
+The owner is changing "${slug}", which is installed and in use on this server. Its current files are below. Make the change the owner asks for, and nothing else.
+
+- Write ONLY the files you change or add, each one complete, in the usual \`=== path ===\` format. Every file you don't write stays exactly as it is.
+- Keep \`flagship.app.json\`'s \`name\` as "${slug}". Bump its \`version\`.
+- Its data is kept across this change. A schema change is a NEW numbered file such as \`migrations/0002_add_due_date.sql\` that upgrades the existing data; the box runs each new migration once, in order, before starting the new version. Never edit or delete a migration that already exists, and never drop data the owner didn't ask to remove.
+- Adding a data store to the manifest is fine; removing one doesn't delete its data.
+
+Current files:
+
+${dump}`;
+}
+
 export interface BuildVibeCodeStartStreamingArgs {
   registry: VibeCodeSessionRegistry;
   /** The harness holds no key — it opens the credential per-call. */
@@ -200,6 +229,7 @@ export function buildVibeCodeStartStreaming(
         appEnvNames,
       }) +
       ownerChoiceSupplement(s.preferredName, s.visibility) +
+      editSupplement(session.meta.editsServiceId ? session.meta.name : undefined, session.meta.editsServiceId ? session.files() : null) +
       "\n\n" +
       TOOL_USE_PROMPT_SUPPLEMENT;
     const request: ChatRequest = {
@@ -290,7 +320,8 @@ export function buildVibeCodeResumeStreaming(
         existingApps: args.existingAppsSnapshot(),
         appEnvNames,
       }) +
-      ownerChoiceSupplement(session.meta.name, session.meta.visibility) +
+      ownerChoiceSupplement(session.meta.editsServiceId ? undefined : session.meta.name, session.meta.visibility) +
+      editSupplement(session.meta.editsServiceId ? session.meta.name : undefined, session.meta.editsServiceId ? session.files() : null) +
       "\n\n" +
       TOOL_USE_PROMPT_SUPPLEMENT;
 

@@ -160,6 +160,11 @@ export interface VibeCodeSessionMeta {
   name?: string;
   /** Who the owner chose can reach it: "just-me" is invite only. */
   visibility?: "just-me" | "link";
+  /**
+   * Set when this session changes an installed service rather than building a
+   * new one: deploying replaces that service in place.
+   */
+  editsServiceId?: string;
 }
 
 const FILE_BOUNDARY = /^===\s+(.+?)\s+===\s*$/;
@@ -262,6 +267,15 @@ export class VibeCodeStreamParser extends EventEmitter {
     this.done = true;
   }
 
+  /**
+   * Start from files written earlier (a previous turn, or the service being
+   * edited) while still parsing new output; a file the model writes again
+   * replaces its earlier version.
+   */
+  carry(files: Record<string, string>): void {
+    this.files = { ...files, ...this.files };
+  }
+
   /** Snapshot of files emitted so far. */
   snapshot(): Record<string, string> {
     return { ...this.files };
@@ -356,6 +370,7 @@ export class VibeCodeSession extends EventEmitter {
     sessionId?: string;
     name?: string;
     visibility?: "just-me" | "link";
+    editsServiceId?: string;
   }) {
     super();
     this.meta = {
@@ -366,6 +381,7 @@ export class VibeCodeSession extends EventEmitter {
       status: "streaming",
       ...(args.name ? { name: args.name } : {}),
       ...(args.visibility ? { visibility: args.visibility } : {}),
+      ...(args.editsServiceId ? { editsServiceId: args.editsServiceId } : {}),
     };
     this.parser.on("event", (e: VibeCodeEvent) => this.emit("event", e));
   }
@@ -590,6 +606,7 @@ export class VibeCodeSession extends EventEmitter {
    */
   prepareForResume(): void {
     const next = new VibeCodeStreamParser();
+    next.carry(this.parser.snapshot());
     next.on("event", (e: VibeCodeEvent) => this.emit("event", e));
     this.parser = next;
   }
@@ -825,8 +842,13 @@ export class VibeCodeSessionRegistry {
     serverFqdn: string;
     name?: string;
     visibility?: "just-me" | "link";
+    editsServiceId?: string;
+    /** The edited service's current files, which the session starts from. */
+    files?: Record<string, string>;
   }): VibeCodeSession {
-    const session = this.adopt(new VibeCodeSession(args));
+    const { files, ...meta } = args;
+    const session = this.adopt(new VibeCodeSession(meta));
+    if (files) session.parser.carry(files);
     session.meta.updatedAt = this.now();
     this.saveNow(session);
     return session;
@@ -862,6 +884,7 @@ export class VibeCodeSessionRegistry {
     const wanted = name.toLowerCase();
     return this.list().find((m) =>
       m.sessionId !== exceptId &&
+      !m.editsServiceId &&
       m.name?.toLowerCase() === wanted &&
       m.status !== "deployed" &&
       m.status !== "cancelled");

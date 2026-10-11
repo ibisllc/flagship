@@ -15,6 +15,9 @@
 
 import {
   parseManifest,
+  normalizeStoreFlag,
+  isSingletonStore,
+  type AppDataStores,
   signMembershipMutation,
   composeServiceId,
   parseServiceId as parseServiceIdShared,
@@ -32,6 +35,7 @@ import type { SwkOps } from "./keyCustodian.js";
 import { AppRunner, type AppSpec } from "./serviceRunner.js";
 import { AppMembership, type AppMembershipSnapshot } from "./membership.js";
 import type { InstalledServicesStore, PersistedService } from "./installedServicesStore.js";
+import { pickPgUrlForApp } from "./runMigration.js";
 import {
   DataProvisioner,
   credentialsToEnv,
@@ -58,6 +62,14 @@ export interface InstalledService {
   /** Provisioned data credentials (null if the app declared no stores). */
   data: AppDataCredentials | null;
   installedAt: number;
+  /** SQL migrations already run against its database, by filename. */
+  appliedMigrations?: string[];
+}
+
+/** A schema migration shipped with a version of an app (`migrations/*.sql`). */
+export interface AppMigrationFile {
+  filename: string;
+  sql: string;
 }
 
 export interface ServicePlatformDeps {
@@ -149,6 +161,11 @@ export interface ServicePlatformDeps {
    */
   registry?: InstalledServicesStore | null;
   onLog?: (m: string) => void;
+  /**
+   * Run one SQL migration as the app's own database role, in a transaction.
+   * Unset ⇒ migrations are not run (tests that don't exercise them).
+   */
+  runSql?: ((a: { pgUrl: string; sql: string }) => Promise<void>) | null;
   /** Reject mutations whose `issuedAt` is more than this old (ms). Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -253,6 +270,8 @@ export class ServicePlatform {
     verify: (req: InstallServiceRequest, sig: Bytes, irkPub: Bytes) => boolean;
     /** For tests + future port allocators. Default picks a random 49152–65535. */
     pickPort?: () => number;
+    /** The version's `migrations/*.sql`, run once each before it starts. */
+    migrations?: AppMigrationFile[];
   }): Promise<InstallResult> {
     const { request: r, signature, verify } = args;
 
@@ -335,7 +354,9 @@ export class ServicePlatform {
       apiToken,
       hostPort: port,
     });
+    const migrated = await this.migrate(serviceId, data, [], args.migrations);
     try {
+      if (!migrated.ok) throw new Error(migrated.reason);
       await this.deps.appRunner.deploy(spec);
     } catch (e) {
       // Roll back the provisioned data so a failed deploy doesn't leak a half-done tenant.
@@ -349,7 +370,10 @@ export class ServicePlatform {
       if (apiToken && this.deps.appAuthTokens) {
         await this.deps.appAuthTokens.forget(serviceId).catch(() => {});
       }
-      return { ok: false, reason: `container deploy failed: ${(e as Error).message}` };
+      return {
+        ok: false,
+        reason: migrated.ok ? `container deploy failed: ${(e as Error).message}` : migrated.reason,
+      };
     }
 
     // 3. Build the per-app membership store (mutations gated by host's IRK).
@@ -365,6 +389,7 @@ export class ServicePlatform {
       containerPort: port,
       data,
       installedAt: this.now(),
+      appliedMigrations: migrated.ok ? migrated.applied : [],
     };
     this.apps.set(serviceId, installed);
     this.byUrlLabel.set(urlLabel.toLowerCase(), installed);
@@ -465,6 +490,151 @@ export class ServicePlatform {
    * the membership store records a real, auditable mutation rather
    * than a synthetic exception.
    */
+  /**
+   * Replace an installed service's code in place: a new image and manifest
+   * under the same service id, address, loopback port, app token, members and
+   * data. Stores the new manifest adds are provisioned; stores it drops keep
+   * their data and credentials (removing data is uninstall's job, never an
+   * edit's). Same host authority as install. If the new container won't
+   * start, the previous one is brought back and the service is unchanged.
+   */
+  async redeploy(args: {
+    request: InstallServiceRequest;
+    signature: Bytes;
+    verify: (req: InstallServiceRequest, sig: Bytes, irkPub: Bytes) => boolean;
+    migrations?: AppMigrationFile[];
+  }): Promise<RedeployResult> {
+    const { request: r, signature, verify } = args;
+    if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
+      return { ok: false, reason: "stale request" };
+    }
+    if (!this.verifyHostAuthority(r, signature, verify)) {
+      return { ok: false, reason: "invalid signature (must be host's IRK)" };
+    }
+    const serviceId = ServicePlatform.serviceId(r.creator, r.slug);
+    const old = this.apps.get(serviceId);
+    if (!old) return { ok: false, reason: `app ${serviceId} is not installed` };
+    const parsed = parseManifest(safeJsonParse(r.manifestJson));
+    if (!parsed.ok) {
+      return { ok: false, reason: `manifest invalid: ${parsed.errors.join("; ")}` };
+    }
+    const manifest = parsed.manifest;
+
+    const held = storesHeld(old.data);
+    const want = manifest.data.stores ?? {};
+    const added: AppDataStores = {};
+    const addedNames: string[] = [];
+    for (const kind of ["postgres", "objects", "kv"] as const) {
+      const have = new Set(normalizeStoreFlag(held[kind]));
+      const missing = normalizeStoreFlag(want[kind]).filter((n) => !have.has(n));
+      if (missing.length > 0) {
+        added[kind] = missing;
+        addedNames.push(...missing.map((n) => `${kind}:${n}`));
+      }
+    }
+    // `held2`: the old credentials plus any store made just now (kept even if
+    // the new version fails, so a retry reuses it); `data`: the same with the
+    // new manifest's single-vs-named store flags, which set the env names.
+    let held2 = old.data;
+    if (addedNames.length > 0) {
+      if (!this.deps.dataProvisioner) {
+        return { ok: false, reason: "the new version declares data stores but this server has no data layer" };
+      }
+      let fresh: AppDataCredentials;
+      try {
+        fresh = await this.deps.dataProvisioner.provisionApp({ creator: r.creator, slug: r.slug, stores: added });
+      } catch (e) {
+        return { ok: false, reason: `data provisioning failed: ${(e as Error).message}` };
+      }
+      held2 = {
+        ...(old.data ?? { creator: r.creator, slug: r.slug }),
+        ...(old.data?.postgres || fresh.postgres ? { postgres: { ...old.data?.postgres, ...fresh.postgres } } : {}),
+        ...(old.data?.objects || fresh.objects ? { objects: { ...old.data?.objects, ...fresh.objects } } : {}),
+        ...(old.data?.kv || fresh.kv ? { kv: { ...old.data?.kv, ...fresh.kv } } : {}),
+      };
+    }
+    const data: AppDataCredentials | null = held2 && {
+      ...held2,
+      ...(want.postgres !== undefined ? { postgresSingleton: isSingletonStore(want.postgres) } : {}),
+      ...(want.objects !== undefined ? { objectsSingleton: isSingletonStore(want.objects) } : {}),
+      ...(want.kv !== undefined ? { kvSingleton: isSingletonStore(want.kv) } : {}),
+    };
+
+    const apiToken = this.deps.appAuthTokens
+      ? await this.deps.appAuthTokens.tokenForApp(serviceId).catch(() => null)
+      : null;
+    const base = { serviceId, creator: r.creator, slug: r.slug, apiToken, hostPort: old.containerPort };
+    const spec = await this.containerSpec({ ...base, manifest, data });
+    const migrated = await this.migrate(serviceId, data, old.appliedMigrations ?? [], args.migrations);
+    if (!migrated.ok) {
+      // Each file runs in its own transaction: the failed one left nothing
+      // behind, and any before it in this batch are recorded as done.
+      const kept: InstalledService = { ...old, data: held2, appliedMigrations: migrated.applied };
+      this.apps.set(serviceId, kept);
+      this.byUrlLabel.set(old.urlLabel.toLowerCase(), kept);
+      this.persist();
+      return { ok: false, reason: migrated.reason };
+    }
+    try {
+      await this.deps.appRunner.restart(spec);
+    } catch (e) {
+      const reason = (e as Error).message;
+      try {
+        await this.deps.appRunner.restart(await this.containerSpec({ ...base, manifest: old.manifest, data: old.data }));
+      } catch (back) {
+        this.deps.onLog?.(`[service-platform] ${serviceId}: new version failed and the previous one didn't come back: ${(back as Error).message}`);
+      }
+      if (held2 !== old.data || migrated.applied.length !== (old.appliedMigrations ?? []).length) {
+        const kept: InstalledService = { ...old, data: held2, appliedMigrations: migrated.applied };
+        this.apps.set(serviceId, kept);
+        this.byUrlLabel.set(old.urlLabel.toLowerCase(), kept);
+        this.persist();
+      }
+      return { ok: false, reason: `the new version didn't start: ${reason}` };
+    }
+
+    const updated: InstalledService = { ...old, manifest, data, appliedMigrations: migrated.applied };
+    this.apps.set(serviceId, updated);
+    this.byUrlLabel.set(updated.urlLabel.toLowerCase(), updated);
+    if (this.deps.domainGate) {
+      if (manifest.browser?.domains) this.deps.domainGate.setGrant(serviceId, manifest.browser.domains);
+      else if (old.manifest.browser?.domains) this.deps.domainGate.revoke(serviceId);
+    }
+    this.persist();
+    return { ok: true, app: updated, addedStores: addedNames };
+  }
+
+  /**
+   * Run the SQL migrations not yet applied, in filename order. Returns the
+   * full applied list (earlier ones plus those that ran), or why one failed.
+   */
+  private async migrate(
+    serviceId: string,
+    data: AppDataCredentials | null,
+    applied: string[],
+    files: AppMigrationFile[] | undefined,
+  ): Promise<{ ok: true; applied: string[] } | { ok: false; reason: string; applied: string[] }> {
+    const done = [...applied];
+    const pending = (files ?? [])
+      .filter((f) => f.filename.toLowerCase().endsWith(".sql") && !done.includes(f.filename))
+      .sort((a, b) => a.filename.localeCompare(b.filename));
+    if (pending.length === 0 || !this.deps.runSql) return { ok: true, applied: done };
+    const pgUrl = pickPgUrlForApp(data);
+    if (!pgUrl) {
+      return { ok: false, reason: `migration ${pending[0]!.filename} needs a Postgres store, and the manifest declares none`, applied: done };
+    }
+    for (const f of pending) {
+      try {
+        await this.deps.runSql({ pgUrl, sql: f.sql });
+      } catch (e) {
+        return { ok: false, reason: `migration ${f.filename} failed: ${(e as Error).message}`, applied: done };
+      }
+      done.push(f.filename);
+      this.deps.onLog?.(`[service-platform] ${serviceId}: ran migration ${f.filename}`);
+    }
+    return { ok: true, applied: done };
+  }
+
   private newMembership(serviceId: string): AppMembership {
     return new AppMembership(
       serviceId,
@@ -526,6 +696,7 @@ export class ServicePlatform {
       hostPort: a.containerPort,
       data: a.data,
       installedAt: a.installedAt,
+      appliedMigrations: a.appliedMigrations ?? [],
       membership: a.membership.snapshot(),
     }));
     this.persistChain = this.persistChain
@@ -575,6 +746,7 @@ export class ServicePlatform {
         containerPort: p.hostPort,
         data: p.data,
         installedAt: p.installedAt,
+        appliedMigrations: p.appliedMigrations ?? [],
       };
       this.apps.set(app.serviceId, app);
       this.byUrlLabel.set(app.urlLabel.toLowerCase(), app);
@@ -670,13 +842,14 @@ export class ServicePlatform {
     } catch {
       // container may already be gone
     }
-    // Drop data stores.
+    // Drop data stores: every one it holds, including any a later version's
+    // manifest stopped declaring (redeploy keeps those rather than lose data).
     if (app.data && this.deps.dataProvisioner) {
       try {
         await this.deps.dataProvisioner.deprovisionApp({
           creator: r.creator,
           slug: r.slug,
-          stores: app.manifest.data.stores ?? {},
+          stores: storesHeld(app.data),
         });
       } catch {
         // best-effort
@@ -774,6 +947,22 @@ export class ServicePlatform {
 export type SetAliasResult =
   | { ok: true; unchanged?: boolean; oldLabel?: string; newLabel?: string }
   | { ok: false; reason: string };
+
+export type RedeployResult =
+  | { ok: true; app: InstalledService; addedStores: string[] }
+  | { ok: false; reason: string };
+
+/** Every store an app holds credentials for, as a manifest-shaped spec. */
+function storesHeld(data: AppDataCredentials | null): AppDataStores {
+  if (!data) return {};
+  const pick = (m: Record<string, unknown> | undefined) => (m && Object.keys(m).length > 0 ? Object.keys(m) : undefined);
+  const out: AppDataStores = {};
+  const pg = pick(data.postgres), s3 = pick(data.objects), kv = pick(data.kv);
+  if (pg) out.postgres = pg;
+  if (s3) out.objects = s3;
+  if (kv) out.kv = kv;
+  return out;
+}
 
 export type InstallResult =
   | { ok: true; app: InstalledService }

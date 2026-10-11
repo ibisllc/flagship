@@ -150,7 +150,7 @@ export function buildRunMigration(deps: RunMigrationDeps): (args: {
  * apps that need to migrate a non-default instance should use a .ts
  * migration that reads the named env var.
  */
-function pickPgUrlForApp(data: AppDataCredentials | null): string | null {
+export function pickPgUrlForApp(data: AppDataCredentials | null): string | null {
   if (!data?.postgres) return null;
   // credentialsToEnv emits FLAGSHIP_PG_URL for the singleton case and
   // FLAGSHIP_PG_URL_<INSTANCE> for named ones. The `default` instance

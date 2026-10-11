@@ -46,6 +46,10 @@ export type AdaptRunner = (args: {
   model?: string;
 }) => Promise<string>;
 
+export type EditableService =
+  | { ok: true; serviceId: string; slug: string; files: Record<string, string>; bytes: number }
+  | { ok: false; status: number; reason: string };
+
 export interface BuildState {
   buildId: string;
   mode: BuildMode;
@@ -56,6 +60,8 @@ export interface BuildState {
   /** Last git fitness verdict (git mode). */
   gitFit?: boolean;
   deployedUrl?: string;
+  /** The installed service this build changes; deploying replaces it. */
+  editsServiceId?: string;
 }
 
 /**
@@ -84,7 +90,12 @@ export interface BuildOrchestratorDeps {
   gitImporter: GitImporter;
   mcpKeys: McpKeyStore;
   /** Build + install a files map. Returns the live URL. */
-  deployArtifact: (a: { files: Record<string, string>; serverFqdn: string; buildId: string; mode: BuildMode }) => Promise<DeployResult>;
+  deployArtifact: (a: { files: Record<string, string>; serverFqdn: string; buildId: string; mode: BuildMode; editsServiceId?: string }) => Promise<DeployResult>;
+  /**
+   * An installed service's current code, if it can be edited here (built on
+   * this box, still installed). Unset ⇒ edits aren't offered.
+   */
+  editableService?: (serviceId: string) => Promise<EditableService>;
   serverFqdn: string;
   /** Owner-set env var NAMES (never values) for the mcp request_env_var tool. */
   envNames?: () => Promise<string[]>;
@@ -476,18 +487,33 @@ export class BuildOrchestrator {
   // ----- mcp mode --------------------------------------------------------
 
   /** Create an mcp build, mint its auth key, and return IDE connection info. */
-  async createMcp(args: { label?: string } = {}): Promise<{ buildId: string; connection: McpConnectionInfo }> {
+  async createMcp(
+    args: { label?: string; editServiceId?: string } = {},
+  ): Promise<{ buildId: string; connection: McpConnectionInfo } | { error: string; status: number }> {
+    let edit: Extract<EditableService, { ok: true }> | null = null;
+    if (args.editServiceId) {
+      if (!this.deps.editableService) return { error: "editing isn't available on this server", status: 503 };
+      const r = await this.deps.editableService(args.editServiceId);
+      if (!r.ok) return { error: r.reason, status: r.status };
+      edit = r;
+    }
     const buildId = this.newBuildId();
-    this.states.set(buildId, { buildId, mode: "mcp", serverFqdn: this.deps.serverFqdn, createdAt: this.now() });
-    const ws = new BuildWorkspace();
+    this.states.set(buildId, {
+      buildId,
+      mode: "mcp",
+      serverFqdn: this.deps.serverFqdn,
+      createdAt: this.now(),
+      ...(edit ? { editsServiceId: edit.serviceId } : {}),
+    });
+    const ws = new BuildWorkspace(edit?.files);
     this.workspaces.set(buildId, ws);
     this.mcpServers.set(buildId, this.makeMcpServer(buildId, ws));
     await this.deps.journal.append(buildId, {
       mode: "mcp",
       kind: "session-started",
       actor: "owner",
-      summary: "connect IDE via MCP",
-      ...(args.label ? { name: args.label } : {}),
+      summary: edit ? `change ${edit.slug} from the IDE` : "connect IDE via MCP",
+      ...(edit ? { name: edit.slug, serviceId: edit.serviceId } : args.label ? { name: args.label } : {}),
     });
     const rec = await this.deps.mcpKeys.mint(buildId, args.label);
     return { buildId, connection: this.connectionInfo(buildId, rec.key) };
@@ -539,7 +565,13 @@ export class BuildOrchestrator {
     if (!st) return { ok: false, reason: "unknown build" };
     const ws = this.workspaces.get(buildId);
     if (!ws) return { ok: false, reason: "no workspace for build" };
-    const r = await this.deps.deployArtifact({ files: ws.snapshot(), serverFqdn: st.serverFqdn, buildId, mode: st.mode });
+    const r = await this.deps.deployArtifact({
+      files: ws.snapshot(),
+      serverFqdn: st.serverFqdn,
+      buildId,
+      mode: st.mode,
+      ...(st.editsServiceId ? { editsServiceId: st.editsServiceId } : {}),
+    });
     if (r.ok) {
       st.serviceId = r.serviceId;
       st.deployedUrl = r.url;

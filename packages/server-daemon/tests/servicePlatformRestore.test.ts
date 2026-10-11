@@ -44,7 +44,8 @@ function world(registry: InMemoryInstalledServicesStore | SealedInstalledService
   let failing = 0;
   const cmd: CommandRunner = {
     run: async (c, args) => {
-      if (args[0] === "run" && failing > 0) {
+      if (args[0] === "run" && (failing > 0 || args.some((a) => a.endsWith(":broken")))) {
+        if (args.some((a) => a.endsWith(":broken"))) throw new Error("exec format error");
         failing--;
         throw new Error("Cannot connect to the Docker daemon");
       }
@@ -167,5 +168,73 @@ describe("SealedInstalledServicesStore", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+function manifest(over: Record<string, unknown>) {
+  return JSON.stringify({ ...JSON.parse(MANIFEST), ...over });
+}
+
+describe("redeploy in place", () => {
+  async function installed() {
+    const swk = crypto.getRandomValues(new Uint8Array(32));
+    const registry = new InMemoryInstalledServicesStore();
+    const tokens = new InMemoryAppAuthTokens();
+    const w = world(registry, swk, tokens);
+    await install(w);
+    const redeploy = (manifestJson: string, signer = w.irk) => {
+      const request = { serverId: FQDN, creator: HOST, slug: "notes", manifestJson, addOwnerToMembership: true, issuedAt: Date.now() };
+      return w.platform.redeploy({ request, signature: signInstallService(request, signer), verify: verifyInstallService });
+    };
+    return { w, registry, tokens, swk, redeploy, was: w.platform.byServiceId("alice--notes")! };
+  }
+
+  it("swaps the image and keeps the address, port, token, data and members", async () => {
+    const { w, registry, tokens, swk, redeploy, was } = await installed();
+    w.calls.length = 0;
+    const r = await redeploy(manifest({ version: "0.2.0", runtime: { image: "flagship-vibe-alice--notes:2", port: 8080 } }));
+    expect(r).toMatchObject({ ok: true, addedStores: [] });
+    const now = w.platform.byLabel("notes")!;
+    expect(now.manifest.version).toBe("0.2.0");
+    expect(now.containerPort).toBe(was.containerPort);
+    expect(now.data).toEqual(was.data);
+    expect(now.membership).toBe(was.membership);
+    expect(w.calls.some((c) => c.startsWith("docker stop flagship-alice--notes"))).toBe(true);
+    const run = w.calls.find((c) => c.startsWith("docker run "))!;
+    expect(run).toContain("flagship-vibe-alice--notes:2");
+    expect(run).toContain(`FLAGSHIP_APP_TOKEN=${await tokens.tokenForApp("alice--notes")}`);
+    await w.platform.flush();
+    const after = world(registry, swk, tokens);
+    await after.platform.restore({ retryDelayMs: 0 });
+    expect(after.platform.byLabel("notes")!.manifest.version).toBe("0.2.0");
+  });
+
+  it("provisions only the stores the new version adds, and keeps ones it drops", async () => {
+    const { w, redeploy, was } = await installed();
+    const r = await redeploy(manifest({ data: { stores: { kv: true } } }));
+    expect(r).toMatchObject({ ok: true, addedStores: ["kv:default"] });
+    const now = w.platform.byLabel("notes")!;
+    expect(now.data!.postgres).toEqual(was.data!.postgres);
+    expect(now.data!.kv!.default).toBeDefined();
+    const run = w.calls.filter((c) => c.startsWith("docker run ")).pop()!;
+    expect(run).toContain("FLAGSHIP_PG_URL=");
+  });
+
+  it("brings the previous version back when the new one won't start", async () => {
+    const { w, redeploy } = await installed();
+    w.calls.length = 0;
+    const r = await redeploy(manifest({ version: "0.3.0", runtime: { image: "flagship-vibe-alice--notes:broken", port: 8080 } }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toMatch(/didn't start: exec format error/);
+    expect(w.platform.byLabel("notes")!.manifest.version).toBe("0.1.0");
+    expect(w.calls.filter((c) => c.startsWith("docker run ")).pop()).toContain("flagship-vibe-alice--notes:1");
+  });
+
+  it("refuses a service that isn't installed, or a request not signed by the host", async () => {
+    const { w, redeploy } = await installed();
+    expect(await redeploy(manifest({}), key())).toMatchObject({ ok: false });
+    const request = { serverId: FQDN, creator: HOST, slug: "other", manifestJson: manifest({ name: "other" }), addOwnerToMembership: true, issuedAt: Date.now() };
+    const r = await w.platform.redeploy({ request, signature: signInstallService(request, w.irk), verify: verifyInstallService });
+    expect(r).toEqual({ ok: false, reason: "app alice--other is not installed" });
   });
 });

@@ -81,8 +81,12 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
 
     // POST /api/build/mcp   { label? }  → create + mint key
     if (path === "/api/build/mcp" && req.method === "POST") {
-      const body = parseJson(req.body) as { label?: string } | null;
-      const r = await o.createMcp(body?.label ? { label: body.label } : {});
+      const body = parseJson(req.body) as { label?: string; editServiceId?: string } | null;
+      const r = await o.createMcp({
+        ...(body?.label ? { label: body.label } : {}),
+        ...(typeof body?.editServiceId === "string" ? { editServiceId: body.editServiceId } : {}),
+      });
+      if ("error" in r) return jerr(r.status, r.error);
       return jok(r);
     }
 

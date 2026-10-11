@@ -1191,6 +1191,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
             ? new SealedInstalledServicesStore(`${opts.dataDir}/data/installed-services.sealed`, apOpts.swk)
             : null,
       onLog: (m) => console.warn(m),
+      runSql: dataProvisioner ? runAppSql : null,
     });
     void servicePlatformRef.current.restore().then(({ restored, failed }) => {
       if (restored.length > 0 || failed.length > 0) {
@@ -1464,6 +1465,31 @@ async function maybeBuildDataProvisioner(
       s3Endpoint: `http://${appHost}:9000`,
     },
   });
+}
+
+/**
+ * Run an app's SQL migration as the app's own role. Its credential URL names
+ * the container-side alias of the data host; this runs on the host, which
+ * reaches Postgres over loopback.
+ */
+async function runAppSql(a: { pgUrl: string; sql: string }): Promise<void> {
+  const url = new URL(a.pgUrl);
+  url.hostname = "127.0.0.1";
+  const { Client } = await import("pg");
+  const c = new Client({ connectionString: url.toString(), connectionTimeoutMillis: 5000 });
+  await c.connect();
+  try {
+    await c.query("BEGIN");
+    try {
+      await c.query(a.sql);
+      await c.query("COMMIT");
+    } catch (e) {
+      await c.query("ROLLBACK").catch(() => {});
+      throw e;
+    }
+  } finally {
+    await c.end().catch(() => {});
+  }
 }
 
 /** Parse a flat KEY=VALUE env file. Lines starting with # are comments. */

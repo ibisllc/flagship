@@ -25,6 +25,7 @@ export interface PersistedService {
   hostPort: number;
   data: AppDataCredentials | null;
   installedAt: number;
+  appliedMigrations?: string[];
   membership: AppMembershipSnapshot;
 }
 

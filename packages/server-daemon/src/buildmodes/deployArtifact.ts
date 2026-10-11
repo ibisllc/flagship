@@ -23,6 +23,7 @@ import type { ServicePlatform } from "../servicePlatform.js";
 import type { BoxSigner } from "../keyCustodian.js";
 import type { ForgejoAppAdmin } from "../forgejoServiceAdmin.js";
 import type { BuildJournal, BuildMode } from "./buildJournal.js";
+import { migrationFiles, resolveDeployTarget, type ServiceNameDeps } from "../llm/serviceName.js";
 
 export interface DeployArtifactDeps {
   servicePlatform: ServicePlatform;
@@ -35,6 +36,8 @@ export interface DeployArtifactDeps {
   forgejoAdmin?: ForgejoAppAdmin | null;
   journal?: BuildJournal | null;
   now?: () => number;
+  /** Open AI-chat sessions, so a deploy never takes a name one holds. */
+  registry?: ServiceNameDeps["registry"];
 }
 
 export interface DeployArtifactArgs {
@@ -44,6 +47,8 @@ export interface DeployArtifactArgs {
   buildId?: string;
   /** The build mode, so deploy entries carry the correct mode. */
   mode?: BuildMode;
+  /** The installed service this build edits; it is replaced in place. */
+  editsServiceId?: string;
 }
 
 export type DeployResult =
@@ -87,7 +92,19 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
     }
 
     const creator = deps.hostUsername;
-    const slug = manifest.name;
+    const target = resolveDeployTarget({
+      ...(args.editsServiceId ? { editsServiceId: args.editsServiceId } : {}),
+      name: manifest.name,
+      hostUsername: creator,
+      installed: deps.servicePlatform,
+      ...(deps.registry ? { registry: deps.registry } : {}),
+    });
+    if (!target.ok) {
+      await note(buildId, mode, "error", target.reason);
+      return { ok: false, reason: target.reason };
+    }
+    const slug = target.slug;
+    manifest = { ...manifest, name: slug };
     const serviceId = `${creator}--${slug}`; // docs/service-addressing-double-dash.md
     const appDir = join(deps.workingDir, serviceId);
 
@@ -150,13 +167,24 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
       issuedAt: now(),
     };
     const signature = deps.signer.signInstallService(request);
-    const installResult = await deps.servicePlatform.install({ request, signature, verify: verifyInstallService });
+    const migrations = migrationFiles(files);
+    if (target.edit) {
+      const r = await deps.servicePlatform.redeploy({ request, signature, verify: verifyInstallService, migrations });
+      if (!r.ok) {
+        await note(buildId, mode, "error", r.reason);
+        return { ok: false, reason: r.reason };
+      }
+      const url = `https://${target.urlLabel}.${serverFqdn}`;
+      await note(buildId, mode, "deployed", `updated at ${url}`, serviceId);
+      return { ok: true, serviceId, url, image };
+    }
+    const installResult = await deps.servicePlatform.install({ request, signature, verify: verifyInstallService, migrations });
     if (!installResult.ok) {
       await note(buildId, mode, "error", `install rejected: ${installResult.reason}`);
       return { ok: false, reason: `install rejected: ${installResult.reason}` };
     }
 
-    const urlLabel = creator === deps.hostUsername ? slug : `${slug}-${creator}`;
+    const urlLabel = creator === deps.hostUsername ? slug : `${slug}--${creator}`;
     const url = `https://${urlLabel}.${serverFqdn}`;
     await note(buildId, mode, "deployed", `live at ${url}`, serviceId);
     return { ok: true, serviceId, url, image };

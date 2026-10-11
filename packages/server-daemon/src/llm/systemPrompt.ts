@@ -28,7 +28,7 @@ A single response containing, in order:
 1. \`flagship.app.json\` — manifest that conforms to schema_version 1.
 2. \`Dockerfile\` — multi-stage where useful, final stage exposes \`runtime.port\`.
 3. One or more source files under \`src/\` (or another single source root). Keep it minimal — a working v0.1.0, not a finished product.
-4. At most one initial migration at \`migrations/0001_init.sql\` if the app uses Postgres. SQL only on the first turn; later turns may add \`.ts\` migrations.
+4. At most one initial migration at \`migrations/0001_init.sql\` if the app uses Postgres. Migrations are plain SQL; the daemon runs each new \`migrations/*.sql\` file once, in filename order, before the version that ships it starts. A later schema change is a new numbered file, never an edit to one that already ran.
 
 If the user's request is ambiguous on something that materially changes the manifest (data stores needed, public/private, browser domains), ask one short clarifying question and stop. Do not guess at data stores or browser domains — those become permission prompts on the user's phone, and bad guesses train the user to dismiss the prompts. For pure cosmetic ambiguity ("what color"), pick something tasteful and proceed.
 

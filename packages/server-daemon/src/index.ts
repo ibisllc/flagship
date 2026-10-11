@@ -103,7 +103,9 @@ import {
 import { buildRunMigration } from "./runMigration.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
 import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
-import { VibeCodeSessionRegistry, fileVibeCodeSessionStore } from "./llm/vibeCodeSession.js";
+import { readServiceSource } from "./llm/serviceSource.js";
+import type { EditableService } from "./buildmodes/buildOrchestrator.js";
+import { VibeCodeSessionRegistry, fileVibeCodeSessionStore, type VibeCodeSession } from "./llm/vibeCodeSession.js";
 import { buildVibeCodeHttpHandlers } from "./llm/vibeCodeHttp.js";
 import { buildDeploySession } from "./llm/deploySession.js";
 import { LlmHarness } from "./llmHarness.js";
@@ -2046,6 +2048,18 @@ async function wireRuntimeSurfaces(deps: {
         })
       : null;
   const vibeAppDir = join(dataDir, "data", "app-clones");
+  // An installed service's current code, when it can be edited here: built on
+  // this box (the owner is its creator) and still installed.
+  const editableService = async (serviceId: string): Promise<EditableService> => {
+    const app = runtime.servicePlatform?.byServiceId(serviceId);
+    if (!app) return { ok: false, status: 404, reason: "That service isn't installed." };
+    if (app.creator !== username) {
+      return { ok: false, status: 403, reason: "Only services made on this server can be edited here." };
+    }
+    const src = await readServiceSource(vibeAppDir, serviceId);
+    if (!src.ok) return { ok: false, status: 422, reason: src.reason };
+    return { ok: true, serviceId, slug: app.slug, files: src.files, bytes: src.bytes };
+  };
   const username = cfg?.userId ?? env.serverFqdn.split(".")[1] ?? "user";
 
   // The shared build journal — written by every mode (scratch / git /
@@ -2195,11 +2209,13 @@ async function wireRuntimeSurfaces(deps: {
       cmd: realCmd,
       forgejoAdmin,
       journal: buildJournal,
+      registry: vibeRegistry,
     });
     const buildOrchestrator = new BuildOrchestrator({
       journal: buildJournal,
       gitImporter,
       mcpKeys,
+      editableService,
       deployArtifact: artifactDeployer,
       serverFqdn: env.serverFqdn,
       mcpBaseUrl: `https://${env.serverFqdn}`,
@@ -2353,19 +2369,25 @@ async function wireRuntimeSurfaces(deps: {
   // shared by startStreaming + the screens `resolveSessionAppId`.
   const resolveSessionServiceId = (sessionId: string): string | null => {
     const session = vibeRegistry.get(sessionId);
-    if (!session) return null;
+    return session ? serviceIdForSession(session) : null;
+  };
+  // The service a session builds or changes: `<creator>--<slug>`, the same id
+  // the env store and the platform key it by.
+  function serviceIdForSession(session: VibeCodeSession): string | null {
+    if (session.meta.editsServiceId) return session.meta.editsServiceId;
+    if (session.meta.name) return `${username}--${session.meta.name}`;
     const mj = session.manifestJson();
     if (!mj) return null;
     try {
       const m = JSON.parse(mj) as { name?: unknown };
       if (typeof m.name === "string" && m.name.length > 0) {
-        return `${username}-${m.name}`;
+        return `${username}--${m.name.toLowerCase()}`;
       }
     } catch {
       // ignore malformed mid-stream JSON
     }
     return null;
-  };
+  }
 
   // The live scratch-streaming thunk: resolves the session's transient
   // BYOK credential, assembles the system prompt from env-var NAMES
@@ -2444,6 +2466,11 @@ async function wireRuntimeSurfaces(deps: {
           serverFqdn: env.serverFqdn,
           recordScratchTurn,
           credentials: llmCredentials,
+          editableService,
+          canEdit: (serviceId: string) =>
+            runtime.servicePlatform?.byServiceId(serviceId)?.creator === username &&
+            /^[a-z0-9-]+$/.test(serviceId) &&
+            existsSync(join(vibeAppDir, serviceId, "flagship.app.json")),
           ...(vibeStartStreaming ? { startStreaming: vibeStartStreaming } : {}),
           ...(vibeResumeStreaming ? { resumeStreaming: vibeResumeStreaming } : {}),
         }
@@ -2488,23 +2515,9 @@ async function wireRuntimeSurfaces(deps: {
     postRecoveryStatus: () => rePairWatcherRef.current?.snapshot() ?? null,
     // W10 — per-app env-var KV editor + vibe-code session BFF deps.
     appEnvStore: runtime.envStore,
-    // Resolve the session's app id from the pending manifest. The
-    // session emits `flagship.app.json` mid-stream; once the manifest
-    // is parsed we derive `<creator>-<slug>`. Pre-manifest sessions
-    // surface a null appId — the chat UI shows "(pre-manifest)".
-    resolveSessionAppId: (session) => {
-      const mj = session.manifestJson();
-      if (!mj) return null;
-      try {
-        const m = JSON.parse(mj) as { name?: unknown };
-        if (typeof m.name === "string" && m.name.length > 0) {
-          return `${username}-${m.name}`;
-        }
-      } catch {
-        // ignore malformed mid-stream JSON
-      }
-      return null;
-    },
+    // The session's app id (`<creator>--<slug>`): the edited service, else
+    // the owner's chosen name, else the manifest's once the AI writes it.
+    resolveSessionAppId: (session) => serviceIdForSession(session),
   });
   runtime.addHandler(screensHandle);
   runtime.addUpgradeHandler(

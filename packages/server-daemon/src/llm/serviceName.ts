@@ -61,3 +61,52 @@ export function checkServiceName(
   }
   return { ok: true, name };
 }
+
+export type DeployTarget =
+  | { ok: true; slug: string; edit: false }
+  | { ok: true; slug: string; edit: true; serviceId: string; urlLabel: string }
+  | { ok: false; reason: string };
+
+/**
+ * Where a build deploys: over the installed service it edits (same slug, same
+ * address), or as a new service under a name nothing else holds. Checked
+ * before any file is written, so a clash never touches another app's tree.
+ */
+export function resolveDeployTarget(a: {
+  editsServiceId?: string;
+  name: string;
+  hostUsername: string;
+  installed: {
+    byLabel(label: string): { serviceId: string } | undefined;
+    byServiceId(id: string): { serviceId: string; creator: string; slug: string; urlLabel: string } | undefined;
+  } | null;
+  registry?: ServiceNameDeps["registry"];
+  sessionId?: string;
+}): DeployTarget {
+  if (a.editsServiceId) {
+    const app = a.installed?.byServiceId(a.editsServiceId);
+    if (!app) return { ok: false, reason: "The service this build changes is no longer installed." };
+    if (app.creator !== a.hostUsername) return { ok: false, reason: "Only services made on this server can be edited here." };
+    return { ok: true, slug: app.slug, edit: true, serviceId: app.serviceId, urlLabel: app.urlLabel };
+  }
+  const slug = a.name.toLowerCase();
+  const check = checkServiceName(
+    slug,
+    { registry: a.registry ?? { holderOf: () => undefined }, hostUsername: a.hostUsername, installed: a.installed },
+    a.sessionId,
+  );
+  if (!check.ok) {
+    return {
+      ok: false,
+      reason: check.kind === "invalid" ? `"${slug}" can't be a web address. ${check.message}` : `${check.message} Pick another name and start a new build.`,
+    };
+  }
+  return { ok: true, slug, edit: false };
+}
+
+/** A version's SQL migrations, from its files. */
+export function migrationFiles(files: Record<string, string>): { filename: string; sql: string }[] {
+  return Object.entries(files)
+    .filter(([p]) => /^migrations\/[^/]+\.sql$/i.test(p))
+    .map(([p, sql]) => ({ filename: p.slice("migrations/".length), sql }));
+}
