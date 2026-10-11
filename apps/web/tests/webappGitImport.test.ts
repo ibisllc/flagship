@@ -160,6 +160,82 @@ describe("git import helpers", () => {
   });
 });
 
+describe("Get flagship.app.json", () => {
+  function fakeDom() {
+    const links: Array<{ href: string; download: string; clicked: boolean; removed: boolean }> = [];
+    const revoked: string[] = [];
+    const doc = {
+      createElement: () => {
+        const a = { href: "", download: "", clicked: false, removed: false, click() { a.clicked = true; }, remove() { a.removed = true; } };
+        links.push(a);
+        return a;
+      },
+      body: { appendChild: () => {} },
+    };
+    const urls = { createObjectURL: () => "blob:adapter", revokeObjectURL: (u: string) => revoked.push(u) };
+    return { doc, urls, links, revoked, later: (fn: () => void) => fn() };
+  }
+
+  it("fetches the build's file and downloads it as flagship.app.json", async () => {
+    const { exportAdapter, downloadAdapterFile } = await loadGit();
+    const dom = fakeDom();
+    const fetchJson = vi.fn(async () => ({ file: '{"schema_version": 1, "name": "imported-app", "adapter": {"version": 1}}' }));
+    let blob: Blob | null = null;
+    const r = await exportAdapter({
+      buildId: "bld 1",
+      fetchJson,
+      save: (text: string) => { blob = downloadAdapterFile(text, dom); },
+    });
+    expect(r).toEqual({ ok: true });
+    expect(fetchJson).toHaveBeenCalledWith("/api/build/sessions/bld%201/adapter");
+    expect(dom.links).toHaveLength(1);
+    expect(dom.links[0]!.download).toBe("flagship.app.json");
+    expect(dom.links[0]!.clicked).toBe(true);
+    expect(dom.links[0]!.removed).toBe(true);
+    expect(dom.revoked).toEqual(["blob:adapter"]);
+    expect(await blob!.text()).toContain('"adapter"');
+  });
+
+  it("shows the box's reason when there's no file, else the usual message", async () => {
+    const { exportAdapter } = await loadGit();
+    const save = vi.fn();
+    const missing = await exportAdapter({
+      buildId: "b",
+      fetchJson: async () => {
+        throw new ScreensError("HTTP 404", 404, { error: "no flagship.app.json for this build" });
+      },
+      save,
+    });
+    expect(missing).toEqual({ ok: false, message: "no flagship.app.json for this build" });
+    const offline = await exportAdapter({
+      buildId: "b",
+      fetchJson: async () => {
+        throw new ScreensError("not paired to a server yet", 0);
+      },
+      save,
+    });
+    expect(offline).toEqual({ ok: false, message: "not paired to a server yet" });
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("is offered on the Adapted and Installed cards with what to do with it", async () => {
+    const js = await asset("/webapp/views/build-git.js");
+    const adapted = js.slice(js.indexOf("function renderAdapted"), js.indexOf("function renderInstalled"));
+    const installed = js.slice(js.indexOf("function renderInstalled"), js.indexOf("function adapterExport"));
+    for (const card of [adapted, installed]) {
+      expect(card).toContain("${adapterExport()}");
+      expect(card).toContain("wireAdapterExport();");
+    }
+    expect(js).toContain('id="build-git-export" class="secondary full-width mt-2"');
+    expect(js).toContain("btn.textContent = EXPORT_PREPARING;");
+    expect(js).toContain('toast(r.message, "err")');
+    const { EXPORT_BUTTON, EXPORT_PREPARING, EXPORT_NOTE } = await loadGit();
+    expect(EXPORT_BUTTON).toBe("Get flagship.app.json");
+    expect(EXPORT_PREPARING).toBe("Preparing…");
+    expect(EXPORT_NOTE).toBe("Is this your repo? Commit this file at its root and every Flagship server will run it this way.");
+  });
+});
+
 describe("open git and IDE builds in Build sessions", () => {
   it("are listed apart from past builds and can be discarded", async () => {
     const { openBuilds, endedBuilds, discardBuild, discardBuildMessage } = await loadSessions();

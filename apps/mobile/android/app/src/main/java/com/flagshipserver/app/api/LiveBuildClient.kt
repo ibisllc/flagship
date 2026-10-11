@@ -111,6 +111,9 @@ class LiveBuildClient(
         request<Unit>("/api/build/sessions/$buildId/discard", null, "POST", "{}".toByteArray())
     }
 
+    override suspend fun adapterFile(buildId: String): String =
+        request("/api/build/sessions/$buildId/adapter", BuildAdapterFileResponse.serializer()).file
+
     override suspend fun mcpCreate(req: BuildMcpRequest): BuildMcpResponse {
         val body = json.encodeToString(BuildMcpRequest.serializer(), req).toByteArray()
         return request("/api/build/mcp", BuildMcpResponse.serializer(), "POST", body)

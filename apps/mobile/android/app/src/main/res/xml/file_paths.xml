@@ -2,4 +2,6 @@
 <paths>
     <!-- Minted recipe files shared from the create-server delivery chooser. -->
     <cache-path name="recipes" path="recipes/" />
+    <!-- flagship.app.json shared from the git import screen. -->
+    <cache-path name="adapters" path="adapters/" />
 </paths>

@@ -215,6 +215,42 @@ class BuildModeViewModelsTest {
         assertTrue(vm.phase.value is BuildGitViewModel.GitPhase.Verdict)
     }
 
+    @Test fun git_exportAdapter_savesTheFileToShare() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0)
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/random", "").join()
+        val dir = java.nio.file.Files.createTempDirectory("adapters").toFile()
+        try {
+            vm.exportAdapter(dir)!!.join()
+            val file = requireNotNull(vm.adapterFile.value)
+            assertEquals("flagship.app.json", file.name)
+            assertTrue(file.readText().contains("\"adapter\""))
+            assertNull(vm.exportError.value)
+            assertEquals(false, vm.exportingAdapter.value)
+            vm.adapterFileShared()
+            assertNull(vm.adapterFile.value)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test fun git_exportAdapter_showsTheBoxReason() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply {
+            adapterFileError = ScreensError.Http(404, """{"error":"no flagship.app.json for this build"}""")
+        }
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/random", "").join()
+        val dir = java.nio.file.Files.createTempDirectory("adapters").toFile()
+        try {
+            vm.exportAdapter(dir)!!.join()
+            assertNull(vm.adapterFile.value)
+            assertEquals("no flagship.app.json for this build", vm.exportError.value)
+            assertEquals(false, vm.exportingAdapter.value)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
     @Test fun git_adaptOnAnOlderBox_usesTheFinishedReply() = runTest {
         val mock = MockBuildClient(simulatedLatencyMs = 0).apply { gitFitFixture = false }
         val oldBox = object : BuildClient by mock {

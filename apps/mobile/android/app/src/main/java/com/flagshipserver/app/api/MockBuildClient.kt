@@ -114,6 +114,15 @@ class MockBuildClient(
         discardCalls.add(buildId)
     }
 
+    /** Thrown by `adapterFile` instead of the file (a build with none). */
+    var adapterFileError: Throwable? = null
+
+    override suspend fun adapterFile(buildId: String): String {
+        tick()
+        adapterFileError?.let { throw it }
+        return """{"schema_version": 1, "name": "imported-app", "adapter": {"version": 1}}"""
+    }
+
     val mcpCreateCalls: MutableList<BuildMcpRequest> = mutableListOf()
     val mcpRotateCalls: MutableList<Pair<String, BuildMcpRequest>> = mutableListOf()
 

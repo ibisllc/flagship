@@ -4,7 +4,7 @@
 // MIRRORS: iOS BuildGitViewModel + BuildGitScreen, Android BuildGit.
 
 import { slugify, conflictFromError } from "./vibeNames.js";
-import { boxReason, buildEntryError } from "./api.js";
+import { ScreensError, boxReason, buildEntryError } from "./api.js";
 
 export const NOT_READY_MISSING = "This repo has no flagship.app.json and is not yet adapted to run on Flagship.";
 export const ADAPT_BUTTON = "Use AI to prepare repo for Flagship";
@@ -12,6 +12,10 @@ export const ADAPTING = "The AI is adapting the repo…";
 export const ADAPTING_NOTE = "This can take several minutes. You can leave this screen; Build sessions shows how it went.";
 export const ADAPT_TOO_LONG = "The AI is taking unusually long. Check Build sessions later to see how it went.";
 export const ADAPT_FAILED = "The AI couldn't adapt this repo.";
+export const ADAPTER_FILE_NAME = "flagship.app.json";
+export const EXPORT_BUTTON = "Get flagship.app.json";
+export const EXPORT_PREPARING = "Preparing…";
+export const EXPORT_NOTE = "Is this your repo? Commit this file at its root and every Flagship server will run it this way.";
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_LIMIT_MS = 45 * 60 * 1000;
@@ -101,4 +105,34 @@ export async function followAdapt({
     }
   }
   return { phase: "failed", reason: ADAPT_TOO_LONG };
+}
+
+/** Save `text` as flagship.app.json through a temporary <a download>. */
+export function downloadAdapterFile(text, { doc = globalThis.document, urls = globalThis.URL, later = setTimeout } = {}) {
+  const blob = new Blob([text], { type: "application/json" });
+  const href = urls.createObjectURL(blob);
+  const a = doc.createElement("a");
+  a.href = href;
+  a.download = ADAPTER_FILE_NAME;
+  doc.body.appendChild(a);
+  a.click();
+  a.remove();
+  later(() => urls.revokeObjectURL(href), 4000);
+  return blob;
+}
+
+/**
+ * Fetch the flagship.app.json that makes this repo run the way this build
+ * does, for the repo's author to commit, and hand it to `save`. Resolves to
+ * `{ok:true}` or `{ok:false, message}` with the box's reason when it gave one.
+ */
+export async function exportAdapter({ buildId, fetchJson, save = downloadAdapterFile }) {
+  try {
+    const r = await fetchJson(`/api/build/sessions/${encodeURIComponent(buildId)}/adapter`);
+    if (typeof r?.file !== "string") throw new ScreensError("The box sent no flagship.app.json.", 0);
+    save(r.file);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, message: boxReason(e) ?? (e instanceof ScreensError ? e.message : String(e)) };
+  }
 }

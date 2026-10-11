@@ -13,6 +13,7 @@ package com.flagshipserver.app.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -63,6 +64,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.BuildCredential
 import com.flagshipserver.app.api.BuildEnvRequest
@@ -98,6 +100,7 @@ import com.flagshipserver.app.viewmodels.LoadingState
 import com.flagshipserver.app.viewmodels.PendingBuildCredential
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import java.io.File
 
 // ── shared bits ─────────────────────────────────────────────────
 
@@ -395,6 +398,13 @@ fun BuildGitScreen(nav: NavController) {
     val conflict by vm.conflict.collectAsState()
     val assignedName by vm.assignedName.collectAsState()
     val adaptError by vm.adaptError.collectAsState()
+    val adapterFile by vm.adapterFile.collectAsState()
+    val ctx = LocalContext.current
+    LaunchedEffect(adapterFile) {
+        val file = adapterFile ?: return@LaunchedEffect
+        shareAdapterFile(ctx, file)
+        vm.adapterFileShared()
+    }
     val screens = LocalScreensClient.current
     val username = appState.currentUser.value ?: "you"
     val server = (appState.sessionPod ?: appState.leaderPod)?.fqdn ?: "$username.flagship.services"
@@ -476,7 +486,7 @@ fun BuildGitScreen(nav: NavController) {
             is BuildGitViewModel.GitPhase.Adapting -> AdaptingCard(p.progress)
             is BuildGitViewModel.GitPhase.Adapted -> AdaptedCard(p, vm, nav)
             is BuildGitViewModel.GitPhase.Deploying -> InfoCard("Installing…", "Building and deploying to your box.")
-            is BuildGitViewModel.GitPhase.Deployed -> DeployedCard(p.url)
+            is BuildGitViewModel.GitPhase.Deployed -> DeployedCard(p.url, vm)
             is BuildGitViewModel.GitPhase.Failed -> ErrorCardSimple(p.message)
             else -> {}
         }
@@ -586,17 +596,62 @@ private fun AdaptedCard(p: BuildGitViewModel.GitPhase.Adapted, vm: BuildGitViewM
         Spacer(Modifier.height(FS.space.s4))
         FSPrimaryButton("Install it", onClick = { vm.deploy() }, block = true)
         Spacer(Modifier.height(FS.space.s2))
+        AdapterExport(vm)
+        Spacer(Modifier.height(FS.space.s2))
         JournalLink(nav, vm.buildId)
     }
 }
 
 @Composable
-private fun DeployedCard(url: String) {
+private fun DeployedCard(url: String, vm: BuildGitViewModel) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
         Text("Installed ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(FS.space.s2))
         Text(url, color = FS.colors.primary, style = TextStyle(fontSize = 14.sp, fontFamily = FontFamily.Monospace))
+        Spacer(Modifier.height(FS.space.s4))
+        AdapterExport(vm)
     }
+}
+
+/** For the repo's author: the file to commit so every Flagship server runs
+ *  the repo this way. */
+@Composable
+private fun AdapterExport(vm: BuildGitViewModel) {
+    val ctx = LocalContext.current
+    val exporting by vm.exportingAdapter.collectAsState()
+    val error by vm.exportError.collectAsState()
+    FSSecondaryButton(
+        if (exporting) "Preparing…" else "Get flagship.app.json",
+        onClick = { vm.exportAdapter(File(ctx.cacheDir, "adapters")) },
+        enabled = !exporting,
+        block = true,
+        modifier = Modifier.testTag("build-git-export"),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    Text(
+        "Is this your repo? Commit this file at its root and every Flagship server will run it this way.",
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+    )
+    error?.let {
+        Spacer(Modifier.height(FS.space.s2))
+        Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+    }
+}
+
+// The FileProvider authority is "<applicationId>.fileprovider" (AndroidManifest
+// + res/xml/file_paths.xml); mirrors CreateServerScreen.shareRecipeFile.
+private fun shareAdapterFile(ctx: Context, file: File) {
+    val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "application/json"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_SUBJECT, BuildGitViewModel.ADAPTER_FILE_NAME)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    val chooser = Intent.createChooser(send, "Share flagship.app.json")
+    chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    ctx.startActivity(chooser)
 }
 
 @Composable

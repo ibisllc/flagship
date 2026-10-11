@@ -98,6 +98,10 @@ data class BuildStateResponse(
     val files: List<String> = emptyList(),
 )
 
+/** `GET /api/build/sessions/:id/adapter` → `{file}`. */
+@Serializable
+data class BuildAdapterFileResponse(val file: String)
+
 @Serializable
 data class BuildState(
     val buildId: String,
@@ -258,4 +262,8 @@ interface BuildClient {
 
     /** `POST …/discard`: forget an open git or IDE build, freeing its name. */
     suspend fun discard(buildId: String): Unit = throw ScreensError.NotImplemented("discard")
+
+    /** `GET …/adapter`: the flagship.app.json that makes a git import's repo
+     *  run the way this build does, for the repo's author to commit. */
+    suspend fun adapterFile(buildId: String): String = throw ScreensError.NotImplemented("flagship.app.json")
 }

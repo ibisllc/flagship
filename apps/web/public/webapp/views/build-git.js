@@ -14,10 +14,14 @@ import {
   ADAPTING,
   ADAPTING_NOTE,
   ADAPT_BUTTON,
+  EXPORT_BUTTON,
+  EXPORT_NOTE,
+  EXPORT_PREPARING,
   adaptFinished,
   addressLabel,
   blankNameHint,
   checkRepoFailure,
+  exportAdapter,
   followAdapt,
   gitRequestBody,
   notReadyText,
@@ -235,9 +239,11 @@ function renderAdapted(fileCount) {
       <p><strong>Adapted ✓</strong></p>
       <p class="note">The AI rewrote this repo into a Flagship app (${fileCount} file(s)).</p>
       <button id="build-git-deploy" class="full-width mt-2">Install it</button>
+      ${adapterExport()}
       ${journalLink()}
     </div>`;
   $("build-git-deploy").addEventListener("click", deploy);
+  wireAdapterExport();
   wireJournalLink();
 }
 
@@ -246,7 +252,30 @@ function renderInstalled(url) {
     <div class="card">
       <p><strong>Installed ✓</strong></p>
       <p class="note"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></p>
+      ${adapterExport()}
     </div>`;
+  wireAdapterExport();
+}
+
+// For the repo's author: the file to commit so every Flagship server runs
+// the repo this way.
+function adapterExport() {
+  return `<button id="build-git-export" class="secondary full-width mt-2">${escapeHtml(EXPORT_BUTTON)}</button>
+      <p class="note mt-2">${escapeHtml(EXPORT_NOTE)}</p>`;
+}
+
+function wireAdapterExport() {
+  const btn = $("build-git-export");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    if (!buildId || btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = EXPORT_PREPARING;
+    const r = await exportAdapter({ buildId, fetchJson: (path) => screensFetch(path) });
+    btn.disabled = false;
+    btn.textContent = EXPORT_BUTTON;
+    if (!r.ok) toast(r.message, "err");
+  });
 }
 
 function failAdapt(message) {

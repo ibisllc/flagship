@@ -126,6 +126,7 @@ class BuildGitViewModel(
         _conflict.value = null
         _assignedName.value = null
         _adaptError.value = null
+        _exportError.value = null
         buildId = null
         _phase.value = GitPhase.Checking
         try {
@@ -247,10 +248,48 @@ class BuildGitViewModel(
         }
     }
 
+    /** Set once the flagship.app.json for this repo is written, ready to share. */
+    private val _adapterFile = MutableStateFlow<java.io.File?>(null)
+    val adapterFile: StateFlow<java.io.File?> = _adapterFile.asStateFlow()
+
+    private val _exportingAdapter = MutableStateFlow(false)
+    val exportingAdapter: StateFlow<Boolean> = _exportingAdapter.asStateFlow()
+
+    private val _exportError = MutableStateFlow<String?>(null)
+    val exportError: StateFlow<String?> = _exportError.asStateFlow()
+
+    /** Fetch the file that makes this repo run the way this build does, and
+     *  save it as `<dir>/<build>/flagship.app.json` for the share sheet. */
+    fun exportAdapter(dir: java.io.File): Job? {
+        val id = buildId ?: return null
+        if (_exportingAdapter.value) return null
+        _exportingAdapter.value = true
+        _exportError.value = null
+        return scope.launch {
+            try {
+                val text = client.adapterFile(id)
+                val buildDir = java.io.File(dir, id.filter { it.isLetterOrDigit() || it == '-' || it == '_' }.ifEmpty { "build" })
+                buildDir.mkdirs()
+                val file = java.io.File(buildDir, ADAPTER_FILE_NAME)
+                file.writeText(text)
+                _adapterFile.value = file
+            } catch (t: Throwable) {
+                _exportError.value = t.boxError() ?: friendly(t)
+            } finally {
+                _exportingAdapter.value = false
+            }
+        }
+    }
+
+    /** The share sheet has the file; don't offer it again on recomposition. */
+    fun adapterFileShared() { _adapterFile.value = null }
+
     fun reset() {
         buildId?.let { operations?.removeBuild(it) }
         buildId = null
         lastVerdict = null
+        _adapterFile.value = null
+        _exportError.value = null
         _conflict.value = null
         _assignedName.value = null
         _adaptError.value = null
@@ -258,6 +297,8 @@ class BuildGitViewModel(
     }
 
     companion object {
+        const val ADAPTER_FILE_NAME = "flagship.app.json"
+
         /** The typed name as the address label it becomes. */
         fun slug(name: String): String = name.lowercase().filter { it.isLetterOrDigit() || it == '-' }
 

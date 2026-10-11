@@ -70,7 +70,8 @@
 //       + lib/editService.js.
 //  v41: name a git import, follow the AI adapt in the background, Discard
 //       open git and IDE builds; precaches lib/gitImport.js.
-const SHELL_VERSION = "v41";
+//  v42: "Get flagship.app.json" on an adapted or installed git import.
+const SHELL_VERSION = "v42";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
