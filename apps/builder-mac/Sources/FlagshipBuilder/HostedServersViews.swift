@@ -55,6 +55,9 @@ struct HostedServersSidebar: View {
                 } message: { _ in
                     Text("The VM and its encrypted disk image are removed from this Mac. The server's identity and any backups live with your phone/account, not here.")
                 }
+                if vmManager.isKeepingMacAwake {
+                    keepAwakeNotice
+                }
                 Spacer(minLength: 0)
             }
             Divider()
@@ -177,6 +180,24 @@ struct HostedServersSidebar: View {
                 .font(FB.Font.caption())
                 .foregroundStyle(FB.Colors.textMuted)
         }
+    }
+
+    /// Studio keeps the Mac out of idle sleep while servers run, but a laptop
+    /// whose lid closes sleeps anyway (unless it drives an external display),
+    /// taking every hosted server off the internet.
+    private var keepAwakeNotice: some View {
+        HStack(alignment: .top, spacing: FB.Spacing.s2) {
+            Image(systemName: "bolt.horizontal.circle")
+                .foregroundStyle(FB.Colors.textMuted)
+            Text(HostPower.hasInternalBattery
+                 ? "Keeping this Mac awake while servers run. Closing the lid still puts it to sleep and takes them offline, unless it's connected to a display."
+                 : "Keeping this Mac awake while servers run.")
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, FB.Spacing.s3)
+        .padding(.top, FB.Spacing.s2)
     }
 
     private func elapsed(since start: Date, now: Date) -> String {

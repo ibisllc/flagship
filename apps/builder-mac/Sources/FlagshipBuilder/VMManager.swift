@@ -28,6 +28,13 @@ final class VMManager: ObservableObject {
     private var unlockPolls: [String: Task<Void, Never>] = [:]
     private var installPolls: [String: Task<Void, Never>] = [:]
     private var installStallLogged: Set<String> = []
+    /// Held while any server is up: a Mac that idles to sleep takes every
+    /// hosted server off the internet (seen 2026-10-11: "Maintenance Sleep"
+    /// froze the VM and its heartbeat stopped).
+    private var wakeActivity: NSObjectProtocol?
+
+    /// True while a hosted server needs this Mac awake.
+    var isKeepingMacAwake: Bool { wakeActivity != nil }
 
     init(layout: VMBundleLayout = VMBundleLayout(root: VMBundleLayout.defaultRoot())) {
         store = VMInventoryStore(layout: layout)
@@ -110,6 +117,7 @@ final class VMManager: ObservableObject {
         installStallLogged.remove(name)
         try? store.delete(name: name)
         servers.removeAll { $0.id == name }
+        syncWakeHold()
     }
 
     // MARK: - Lifecycle driving
@@ -149,6 +157,31 @@ final class VMManager: ObservableObject {
         await run(effects: effects, on: server.record.config)
         syncUnlockPoll(for: server.record.config)
         syncInstallPoll(for: server.record.config)
+        syncWakeHold()
+    }
+
+    /// Prevent idle system sleep while any server is installing, waiting for
+    /// its phone unlock, or running; the display may still sleep. (A closed
+    /// laptop lid sleeps the Mac regardless; the sidebar says so.)
+    private func syncWakeHold() {
+        let needsAwake = servers.contains { server in
+            switch server.record.state {
+            case .installing, .awaitingPhoneUnlock, .running: return true
+            default: return false
+            }
+        }
+        if needsAwake, wakeActivity == nil {
+            wakeActivity = ProcessInfo.processInfo.beginActivity(
+                options: [.idleSystemSleepDisabled, .suddenTerminationDisabled],
+                reason: "Hosting Flagship servers for the internet")
+            log("Keeping this Mac awake while it hosts servers")
+            objectWillChange.send()
+        } else if !needsAwake, let activity = wakeActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            wakeActivity = nil
+            log("No servers running; this Mac may sleep again")
+            objectWillChange.send()
+        }
     }
 
     private func run(effects: [VMEffect], on config: VMConfig) async {
