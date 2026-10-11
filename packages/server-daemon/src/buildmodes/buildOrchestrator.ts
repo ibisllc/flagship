@@ -879,9 +879,13 @@ export class BuildOrchestrator {
     st.gitFit = false;
     src.origin = "ai";
     delete src.indexFile;
+    // The owner's own AI makes a better one; if this build already has a
+    // key, it starts now.
+    if (this.adaptConfigured(buildId)) this.startAdaptGit(buildId);
     return {
       ok: false,
-      reason: `${reason}. The shared adaptation of this repo didn't work on this server, so it has been reported. Check the repo again to prepare it with AI instead.`,
+      reason: `${reason}. The shared adaptation of this repo didn't work on this server, so it has been reported. Use AI to prepare the repo for Flagship instead.`,
+      needsAdapt: true,
     };
   }
 

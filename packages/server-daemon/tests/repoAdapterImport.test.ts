@@ -534,6 +534,7 @@ describe("the store's answer, and fixing what it refused", () => {
     const d = await o.deploy(r.buildId);
     expect(d.ok).toBe(false);
     expect(!d.ok && d.reason).toMatch(/didn't work on this server, so it has been reported/);
+    expect(!d.ok && d.needsAdapt).toBe(true);
     await settle();
     expect(complaints).toEqual([{ repo: REPO, file: fileSha, stage: "build" }]);
     expect(o.workspace(r.buildId)!.read("Dockerfile")).toBeNull();

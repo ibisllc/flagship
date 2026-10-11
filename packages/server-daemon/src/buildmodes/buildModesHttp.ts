@@ -216,7 +216,9 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
 
     if (verb === "deploy" && req.method === "POST") {
       const r = await o.deploy(buildId);
-      if (!r.ok) return jerr(502, r.reason);
+      if (!r.ok) {
+        return { status: 502, headers: J, body: JSON.stringify({ error: r.reason, ...(r.needsAdapt ? { needsAdapt: true } : {}) }) };
+      }
       return jok({ ok: true, serviceId: r.serviceId, url: r.url });
     }
 

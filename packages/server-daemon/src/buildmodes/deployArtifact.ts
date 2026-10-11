@@ -57,7 +57,12 @@ export interface DeployArtifactArgs {
 
 export type DeployResult =
   | { ok: true; serviceId: string; url: string; image: string }
-  | { ok: false; reason: string };
+  | {
+      ok: false;
+      reason: string;
+      /** A shared adapter failed here: the repo now needs the owner's AI. */
+      needsAdapt?: true;
+    };
 
 export function buildArtifactDeployer(deps: DeployArtifactDeps) {
   const now = deps.now ?? (() => Date.now());
