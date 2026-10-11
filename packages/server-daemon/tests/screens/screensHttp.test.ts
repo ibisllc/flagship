@@ -1095,3 +1095,31 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
     expect(r?.status).toBe(502);
   });
 });
+
+
+describe("screens HTTP — GET /api/screens/updates", () => {
+  const catalog = {
+    checkedAt: 1, currentCommit: "b".repeat(40),
+    latest: { commit: "e".repeat(40), releaseId: "r", tag: "v0.0.0-2026-10-11-eeeeeeee", endorsedAt: "2026-10-11T00:00:00.000Z", relation: "newer" as const },
+    releases: [],
+  };
+
+  it("returns the box's catalog and forwards a refresh", async () => {
+    const seen: boolean[] = [];
+    const handle = buildScreensHttp({
+      ...COMMON,
+      gate: fakeGate(),
+      releaseCatalog: { get: async (o) => { seen.push(o?.refresh === true); return catalog; } },
+    });
+    const r = await handle(req({ path: "/api/screens/updates?refresh=1", headers: { "x-flagship-session": "tok-good" } }));
+    expect(r?.status).toBe(200);
+    expect(JSON.parse(r!.body as string).latest.tag).toBe("v0.0.0-2026-10-11-eeeeeeee");
+    expect(seen).toEqual([true]);
+  });
+
+  it("is 503 on a box that isn't a git checkout", async () => {
+    const handle = buildScreensHttp({ ...COMMON, gate: fakeGate() });
+    const r = await handle(req({ path: "/api/screens/updates", headers: { "x-flagship-session": "tok-good" } }));
+    expect(r?.status).toBe(503);
+  });
+});

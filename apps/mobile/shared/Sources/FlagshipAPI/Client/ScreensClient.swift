@@ -11,6 +11,8 @@ import Foundation
 public protocol ScreensClient: Sendable {
     // P1.1 server-detail
     func serverDetail() async throws -> ServerDetailResponse
+    /// Endorsed releases the box verified for itself (GET /api/screens/updates).
+    func serverUpdates(refresh: Bool) async throws -> ReleaseCatalogResponse
 
     // P1.2 apps-list
     func appsList() async throws -> AppsListResponse
@@ -246,5 +248,11 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
         default:
             return "Something went wrong. Try again in a moment."
         }
+    }
+}
+
+public extension ScreensClient {
+    func serverUpdates(refresh: Bool) async throws -> ReleaseCatalogResponse {
+        throw ScreensClientError.decoding("release list unavailable")
     }
 }

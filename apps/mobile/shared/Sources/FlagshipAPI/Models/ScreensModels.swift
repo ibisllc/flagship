@@ -51,6 +51,40 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public var lastUpdate: LastUpdate? = nil
 }
 
+/// One maintainer-endorsed release, placed relative to the box's running commit.
+public struct ReleaseEntry: Codable, Equatable, Sendable, Identifiable {
+    public let commit: String
+    public let releaseId: String
+    public let tag: String
+    /// ISO 8601.
+    public let endorsedAt: String
+    /// "current" | "newer" | "older" | "unrelated".
+    public let relation: String
+    public var id: String { commit }
+
+    public init(commit: String, releaseId: String, tag: String, endorsedAt: String, relation: String) {
+        self.commit = commit; self.releaseId = releaseId; self.tag = tag
+        self.endorsedAt = endorsedAt; self.relation = relation
+    }
+}
+
+/// GET /api/screens/updates: the releases the box verified for itself.
+public struct ReleaseCatalogResponse: Codable, Equatable, Sendable {
+    public let checkedAt: Int64
+    public let currentCommit: String?
+    /// Newest endorsed release after the running one, or nil when up to date.
+    public let latest: ReleaseEntry?
+    /// Newest first.
+    public let releases: [ReleaseEntry]
+    /// True when the box couldn't fetch and listed from its local copy.
+    public let stale: Bool?
+
+    public init(checkedAt: Int64, currentCommit: String?, latest: ReleaseEntry?, releases: [ReleaseEntry], stale: Bool?) {
+        self.checkedAt = checkedAt; self.currentCommit = currentCommit; self.latest = latest
+        self.releases = releases; self.stale = stale
+    }
+}
+
 /// The box's record of the last update order: applied, rolled back after the
 /// new code failed its boot health gate, or refused with a reason.
 public struct LastUpdate: Codable, Equatable, Sendable {

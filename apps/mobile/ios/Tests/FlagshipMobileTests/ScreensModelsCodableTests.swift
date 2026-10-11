@@ -36,6 +36,19 @@ final class ScreensModelsCodableTests: XCTestCase {
         XCTAssertNil(decoded.lastUpdate)
     }
 
+    func test_releaseCatalog_decodesTheBoxsReleaseList() throws {
+        let json = """
+        {"checkedAt":1,"currentCommit":"\(String(repeating: "b", count: 40))",
+         "latest":{"commit":"\(String(repeating: "e", count: 40))","releaseId":"r1","tag":"v0.0.0-2026-10-11-eeeeeeee","endorsedAt":"2026-10-11T00:00:00.000Z","relation":"newer"},
+         "releases":[{"commit":"\(String(repeating: "e", count: 40))","releaseId":"r1","tag":"v0.0.0-2026-10-11-eeeeeeee","endorsedAt":"2026-10-11T00:00:00.000Z","relation":"newer"},
+                     {"commit":"\(String(repeating: "a", count: 40))","releaseId":"r0","tag":"v0.0.0-2026-10-09-aaaaaaaa","endorsedAt":"2026-10-09T00:00:00.000Z","relation":"older"}]}
+        """
+        let c = try JSONDecoder().decode(ReleaseCatalogResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(c.latest?.tag, "v0.0.0-2026-10-11-eeeeeeee")
+        XCTAssertEqual(c.releases.map(\.relation), ["newer", "older"])
+        XCTAssertNil(c.stale)
+    }
+
     func test_serverDetailResponse_decodesLastUpdateVerdict() throws {
         let a = String(repeating: "a", count: 40), b = String(repeating: "b", count: 40)
         let json = """

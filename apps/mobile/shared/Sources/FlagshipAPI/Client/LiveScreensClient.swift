@@ -63,6 +63,9 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func serverDetail() async throws -> ServerDetailResponse {
         try await request("/api/screens/server-detail")
     }
+    public func serverUpdates(refresh: Bool) async throws -> ReleaseCatalogResponse {
+        try await request(refresh ? "/api/screens/updates?refresh=1" : "/api/screens/updates")
+    }
     public func appsList() async throws -> AppsListResponse {
         try await request("/api/screens/apps-list")
     }

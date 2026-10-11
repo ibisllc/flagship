@@ -111,6 +111,7 @@ import {
   type ReleaseStatusProvider,
 } from "../releaseStatusProvider.js";
 import type { UpdateOutcomeRecord } from "../updateOutcome.js";
+import type { ReleaseCatalogSource } from "../updateReleases.js";
 
 const J = { "content-type": "application/json" } as const;
 
@@ -172,6 +173,8 @@ export interface ScreensHttpDeps {
   currentCommit?: (() => string | null) | null;
   /** The last update order's verdict (updateOutcome.ts), or null. */
   lastUpdate?: (() => UpdateOutcomeRecord | null) | null;
+  /** Endorsed releases this box could move to (updateReleases.ts). */
+  releaseCatalog?: ReleaseCatalogSource | null;
   /** Recent install/uninstall events for server-detail. */
   installEventLog?: InstallEventLog | null;
   /** Tab ownership for app-detail / browser-tabs. */
@@ -553,6 +556,18 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     // ---- P1.1 GET /api/screens/server-detail
     if (path === "/api/screens/server-detail" && method === "GET") {
       return jok(serverDetail(deps, now));
+    }
+
+    // ---- GET /api/screens/updates[?refresh=1] — releases this box verified.
+    if (path === "/api/screens/updates" && method === "GET") {
+      if (!deps.releaseCatalog) return jerr(503, "this server isn't running from a git checkout");
+      const q = req.path.indexOf("?");
+      const refresh = q >= 0 && new URLSearchParams(req.path.slice(q + 1)).get("refresh") === "1";
+      try {
+        return jok(await deps.releaseCatalog.get({ refresh }));
+      } catch (e) {
+        return jerr(502, `couldn't list releases: ${(e as Error).message}`);
+      }
     }
 
     // ---- P1.2 GET /api/screens/apps-list

@@ -32,6 +32,27 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// achieves the same by swapping `SessionStore.podBaseUrl`.
     public var podContext: String = "home"
 
+    // MARK: - Releases
+
+    public func serverUpdates(refresh: Bool) async throws -> ReleaseCatalogResponse {
+        try await tick()
+        let running = "9f2c1ab3de4567890abcdef1234567890abcdef1"
+        let newer = "4b1e0c9d8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c"
+        let older = "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"
+        let latest = ReleaseEntry(commit: newer, releaseId: "mock-new", tag: "v0.0.0-2026-10-11-4b1e0c9d",
+                                  endorsedAt: "2026-10-11T12:00:00.000Z", relation: "newer")
+        return ReleaseCatalogResponse(
+            checkedAt: Int64(Date().timeIntervalSince1970 * 1000), currentCommit: running, latest: latest,
+            releases: [
+                latest,
+                ReleaseEntry(commit: running, releaseId: "mock-cur", tag: "v0.0.0-2026-10-10-9f2c1ab3",
+                             endorsedAt: "2026-10-10T12:00:00.000Z", relation: "current"),
+                ReleaseEntry(commit: older, releaseId: "mock-old", tag: "v0.0.0-2026-10-09-1a2b3c4d",
+                             endorsedAt: "2026-10-09T12:00:00.000Z", relation: "older"),
+            ],
+            stale: nil)
+    }
+
     // MARK: - P1.1 server-detail
 
     public func serverDetail() async throws -> ServerDetailResponse {

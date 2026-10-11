@@ -219,6 +219,7 @@ import {
   type UpdateHealthSignal,
 } from "./updateHealthGate.js";
 import { fileUpdateOutcomeStore } from "./updateOutcome.js";
+import { buildReleaseCatalog } from "./updateReleases.js";
 import { daemonRestarts as restarts } from "./restartCoordinator.js";
 import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
@@ -2377,6 +2378,12 @@ async function wireRuntimeSurfaces(deps: {
     currentCommit: buildCurrentCommitProvider(
       process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
     ),
+    releaseCatalog: existsSync(join(process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship", ".git"))
+      ? buildReleaseCatalog({
+          repoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+          onLog: (m) => console.log(m),
+        })
+      : null,
     lastUpdate: (() => {
       const store = fileUpdateOutcomeStore(
         `${process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship"}/update-outcome.json`,

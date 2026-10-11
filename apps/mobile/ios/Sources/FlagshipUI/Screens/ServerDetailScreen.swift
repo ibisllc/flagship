@@ -1091,7 +1091,9 @@ struct UpdateServerCard: View {
     /// The box's verdict on the last update order, or nil.
     var lastUpdate: LastUpdate? = nil
 
+    @Environment(\.screensClient) private var client
     @State private var showSheet = false
+    @State private var latestTag: String?
 
     private var reported: Bool { ServerDetailScreen.shortCommit(currentCommit) != nil }
 
@@ -1114,13 +1116,19 @@ struct UpdateServerCard: View {
                             Text(short).font(FS.font.mono()).foregroundColor(c.text)
                         }
                     }
+                    if let latestTag {
+                        Label("New release available: \(latestTag)", systemImage: "arrow.up.circle.fill")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.primary)
+                            .accessibilityIdentifier("sd-update-available")
+                    }
                     if let summary = lastUpdate?.summary {
                         Text(summary)
                             .font(FS.font.caption())
                             .foregroundColor(lastUpdate?.outcome == "applied" ? c.textMuted : c.danger)
                             .accessibilityIdentifier("sd-update-last-outcome")
                     }
-                    FSDangerButton("Update this server", block: true) {
+                    FSDangerButton(latestTag == nil ? "Update this server" : "Update to latest", block: true) {
                         showSheet = true
                     }
                     .disabled(!reported)
@@ -1133,6 +1141,9 @@ struct UpdateServerCard: View {
                     }
                 }
             }
+        }
+        .task(id: currentCommit) {
+            latestTag = (try? await client.serverUpdates(refresh: false))?.latest?.tag
         }
         .sheet(isPresented: $showSheet) {
             NavigationStack {
@@ -1155,16 +1166,26 @@ struct UpdateServerCard: View {
     }
 }
 
-/// Sheet body for the update order: running version + target-commit field +
-/// the confirm CTA. The biometric fires ONCE, on the tap (inside the VM's
-/// signer) — never on appearance.
+/// Sheet body for the update order. The box lists the releases it verified for
+/// itself; the main action is "Update to latest", other newer releases sit
+/// below, and going back to an older release (or pasting any commit) is under
+/// Advanced behind a warning and a confirmation. Whatever is picked, the signed
+/// order names one exact commit. The biometric fires ONCE, on the tap.
 struct UpdateServerSheet: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.screensClient) private var client
 
     @State var vm: UpdateServerViewModel
     let serverFqdn: String
 
     @State private var target = ""
+    @State private var catalog: ReleaseCatalogResponse?
+    @State private var catalogError: String?
+    @State private var loadingCatalog = false
+    @State private var showAdvanced = false
+    @State private var confirmDowngrade: String?
+
+    static let downgradeWarning = "Older releases don't have the fixes made since, and may not understand changes made to this server after them, such as a rotated admin key. In the worst case the server stops accepting updates and has to be reinstalled. Only go back if a newer release broke something."
 
     private var working: Bool {
         if case .signing = vm.phase { return true }
@@ -1172,49 +1193,37 @@ struct UpdateServerSheet: View {
         return false
     }
 
+    private var currentTag: String? {
+        catalog?.releases.first { $0.relation == "current" }?.tag
+    }
+
+    private func relation(of commit: String) -> String {
+        catalog?.releases.first { $0.commit == commit.lowercased() }?.relation ?? "unknown"
+    }
+
     var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
-                Text("Update \(serverFqdn)?")
+                Text("Update \(serverFqdn)")
                     .font(FS.font.h2()).foregroundColor(c.text)
-                Text("The server moves to the release you name below — only if Flagship's maintainers have blessed it. It restarts into the new version and rolls back automatically if that version fails to boot.")
-                    .font(FS.font.body()).foregroundColor(c.textMuted)
                 if let short = vm.runningShort {
                     HStack {
                         Text("Running").font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         Spacer()
-                        Text(short).font(FS.font.mono()).foregroundColor(c.text)
+                        Text(currentTag ?? short).font(FS.font.mono()).foregroundColor(c.text)
                     }
                 }
                 if case .done = vm.phase {
-                    Text("Update ordered — the server picks it up on its next check-in, verifies the release is maintainer-blessed, applies it, and rolls back if the new version fails to boot.")
+                    Text("Update sent. The server picks it up within about five minutes, checks the maintainers' signature, restarts into the new version, and goes back by itself if that version doesn't start.")
                         .font(FS.font.body()).foregroundColor(c.text)
                 } else {
-                    Text("Target release (full commit)")
-                        .font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                    TextField("40-character commit hash", text: $target)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .font(FS.font.mono())
-                        .padding(FS.space.s3)
-                        .background(c.surface)
-                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
-                        .accessibilityIdentifier("update-target-field")
-                    if let problem = vm.targetProblem(target) {
-                        Text(problem).font(FS.font.caption()).foregroundColor(c.textMuted)
-                    }
+                    latestSection(c: c)
+                    otherNewer(c: c)
+                    advanced(c: c)
                     if case .failed(let msg) = vm.phase {
                         Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
                     }
-                    FSDangerButton(working ? "Working…" : "Order update", block: true) {
-                        if vm.canOrder(target) && !working {
-                            Task { await vm.update(targetCommit: target) }
-                        }
-                    }
-                    .disabled(!vm.canOrder(target) || working)
-                    .opacity(vm.canOrder(target) && !working ? 1 : 0.4)
-                    .accessibilityIdentifier("update-order-btn")
                 }
             }
             .padding(FS.space.s6)
@@ -1222,6 +1231,127 @@ struct UpdateServerSheet: View {
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Update server")
         .navigationBarTitleDisplayMode(.inline)
+        .task { await loadCatalog(refresh: false) }
+        .confirmationDialog(
+            "Go back to an older release?",
+            isPresented: Binding(get: { confirmDowngrade != nil }, set: { if !$0 { confirmDowngrade = nil } }),
+            titleVisibility: .visible,
+            presenting: confirmDowngrade
+        ) { commit in
+            Button("Go back to \(String(commit.prefix(8)))", role: .destructive) { order(commit) }
+        } message: { _ in
+            Text(Self.downgradeWarning)
+        }
+    }
+
+    @ViewBuilder
+    private func latestSection(c: FSColors) -> some View {
+        if let latest = catalog?.latest {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    Text("Latest release").font(FS.font.caption()).foregroundColor(c.textMuted)
+                    Text(latest.tag).font(FS.font.mono()).foregroundColor(c.text)
+                    FSPrimaryButton(working ? "Working…" : "Update to latest", enabled: vm.canUpdate && !working, block: true) {
+                        order(latest.commit)
+                    }
+                    .accessibilityIdentifier("update-latest-btn")
+                    Text("Approve with Face ID. The server rolls back by itself if the new version doesn't start.")
+                        .font(FS.font.caption()).foregroundColor(c.textMuted)
+                }
+            }
+        } else if loadingCatalog && catalog == nil {
+            HStack(spacing: FS.space.s2) {
+                ProgressView()
+                Text("Checking for new releases…").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+            }
+        } else if catalog != nil {
+            HStack {
+                Image(systemName: "checkmark.circle.fill").foregroundColor(c.success)
+                Text("This server is on the latest release.").font(FS.font.body()).foregroundColor(c.text)
+                Spacer()
+                Button("Check again") { Task { await loadCatalog(refresh: true) } }
+                    .font(FS.font.bodySm()).disabled(loadingCatalog)
+            }
+        } else if let err = catalogError {
+            Text("Couldn't check for releases: \(err) You can still enter a release under Advanced.")
+                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+        }
+        if catalog?.stale == true {
+            Text("The server couldn't reach GitHub, so this list may be out of date.")
+                .font(FS.font.caption()).foregroundColor(c.textMuted)
+        }
+    }
+
+    @ViewBuilder
+    private func otherNewer(c: FSColors) -> some View {
+        let others = (catalog?.releases ?? []).filter { $0.relation == "newer" && $0.commit != catalog?.latest?.commit }
+        if !others.isEmpty {
+            Text("Other new releases").font(FS.font.caption()).foregroundColor(c.textMuted)
+            ForEach(others) { r in
+                releaseRow(r, actionLabel: "Update", c: c) { order(r.commit) }
+            }
+        }
+    }
+
+    private func advanced(c: FSColors) -> some View {
+        DisclosureGroup(isExpanded: $showAdvanced) {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                HStack(alignment: .top, spacing: FS.space.s2) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(c.warning)
+                    Text(Self.downgradeWarning).font(FS.font.caption()).foregroundColor(c.textMuted)
+                }
+                ForEach((catalog?.releases ?? []).filter { $0.relation == "older" }) { r in
+                    releaseRow(r, actionLabel: "Go back", c: c) { confirmDowngrade = r.commit }
+                }
+                Text("Or enter any release (full commit)").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                TextField("40-character commit hash", text: $target)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(FS.font.mono())
+                    .padding(FS.space.s3)
+                    .background(c.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                    .accessibilityIdentifier("update-target-field")
+                if let problem = vm.targetProblem(target) {
+                    Text(problem).font(FS.font.caption()).foregroundColor(c.textMuted)
+                }
+                FSDangerButton(working ? "Working…" : "Order update", block: true) {
+                    guard vm.canOrder(target), !working else { return }
+                    let t = target.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    if relation(of: t) == "newer" { order(t) } else { confirmDowngrade = t }
+                }
+                .disabled(!vm.canOrder(target) || working)
+                .opacity(vm.canOrder(target) && !working ? 1 : 0.4)
+                .accessibilityIdentifier("update-order-btn")
+            }
+            .padding(.top, FS.space.s2)
+        } label: {
+            Text("Advanced").font(FS.font.bodySm()).foregroundColor(c.text)
+        }
+    }
+
+    private func releaseRow(_ r: ReleaseEntry, actionLabel: String, c: FSColors, action: @escaping () -> Void) -> some View {
+        HStack {
+            Text(r.tag).font(FS.font.mono()).foregroundColor(c.text).lineLimit(1).truncationMode(.middle)
+            Spacer()
+            Button(actionLabel, action: action).font(FS.font.bodySm()).disabled(!vm.canUpdate || working)
+        }
+    }
+
+    private func order(_ commit: String) {
+        guard !working else { return }
+        Task { await vm.update(targetCommit: commit) }
+    }
+
+    private func loadCatalog(refresh: Bool) async {
+        loadingCatalog = true
+        defer { loadingCatalog = false }
+        do {
+            catalog = try await client.serverUpdates(refresh: refresh)
+            catalogError = nil
+        } catch {
+            if catalog == nil { catalogError = ScreensClientError.userFacing(error) }
+        }
     }
 }
 
