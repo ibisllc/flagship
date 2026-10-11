@@ -31,7 +31,7 @@ import {
 } from "../llm/vibeCodeAttachments.js";
 import type { Attachment, FetchLike } from "@flagship/llm-providers";
 import { verifySetServiceEnv } from "@flagship/protocol";
-import { checkServiceName, type ServiceNameDeps } from "../llm/serviceName.js";
+import { checkServiceName, type NameHolders, type ServiceNameDeps } from "../llm/serviceName.js";
 import type { EditableService } from "../buildmodes/buildOrchestrator.js";
 import { EDIT_SOURCE_MAX_BYTES } from "../llm/vibeCodeStartStreaming.js";
 import type {
@@ -285,6 +285,8 @@ export interface ScreensHttpDeps {
 
 export interface VibeCodeRuntime {
   registry: VibeCodeSessionRegistry;
+  /** Every holder of a name (AI chats and git imports); default the registry. */
+  nameHolders?: NameHolders;
   /** Username on whose behalf to spawn sessions. */
   username: string;
   /** Server FQDN for the spawned session metadata. */
@@ -356,7 +358,7 @@ export interface OrdersDispatchLike {
 export function buildScreensHttp(deps: ScreensHttpDeps) {
   const now = deps.now ?? (() => Date.now());
   const nameDeps = (v: VibeCodeRuntime): ServiceNameDeps => ({
-    registry: v.registry,
+    registry: v.nameHolders ?? v.registry,
     hostUsername: v.username,
     installed: deps.servicePlatform ?? null,
   });

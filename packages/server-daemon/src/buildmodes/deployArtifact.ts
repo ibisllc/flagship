@@ -23,7 +23,7 @@ import type { ServicePlatform } from "../servicePlatform.js";
 import type { BoxSigner } from "../keyCustodian.js";
 import type { ForgejoAppAdmin } from "../forgejoServiceAdmin.js";
 import type { BuildJournal, BuildMode } from "./buildJournal.js";
-import { migrationFiles, resolveDeployTarget, type ServiceNameDeps } from "../llm/serviceName.js";
+import { migrationFiles, resolveDeployTarget, type NameHolders } from "../llm/serviceName.js";
 
 export interface DeployArtifactDeps {
   servicePlatform: ServicePlatform;
@@ -37,7 +37,7 @@ export interface DeployArtifactDeps {
   journal?: BuildJournal | null;
   now?: () => number;
   /** Open AI-chat sessions, so a deploy never takes a name one holds. */
-  registry?: ServiceNameDeps["registry"];
+  registry?: NameHolders;
 }
 
 export interface DeployArtifactArgs {
@@ -49,6 +49,8 @@ export interface DeployArtifactArgs {
   mode?: BuildMode;
   /** The installed service this build edits; it is replaced in place. */
   editsServiceId?: string;
+  /** The name the build was given; it wins over the manifest's. */
+  name?: string;
 }
 
 export type DeployResult =
@@ -87,17 +89,19 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
     } catch (e) {
       return { ok: false, reason: `manifest is not valid JSON: ${(e as Error).message}` };
     }
-    if (typeof manifest.name !== "string" || !manifest.name) {
+    const wanted = args.name ?? manifest.name;
+    if (typeof wanted !== "string" || !wanted) {
       return { ok: false, reason: "manifest.name missing" };
     }
 
     const creator = deps.hostUsername;
     const target = resolveDeployTarget({
       ...(args.editsServiceId ? { editsServiceId: args.editsServiceId } : {}),
-      name: manifest.name,
+      name: wanted,
       hostUsername: creator,
       installed: deps.servicePlatform,
       ...(deps.registry ? { registry: deps.registry } : {}),
+      ...(buildId ? { sessionId: buildId } : {}),
     });
     if (!target.ok) {
       await note(buildId, mode, "error", target.reason);

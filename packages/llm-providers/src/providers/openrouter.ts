@@ -10,6 +10,7 @@ import type {
 } from "../types.js";
 import { ProviderError } from "../types.js";
 import { openaiStreaming, toOpenAiMessages } from "./openai.js";
+import { sendAdapting } from "../requestShape.js";
 
 const DEFAULT_BASE = "https://openrouter.ai/api";
 
@@ -34,16 +35,18 @@ export const openrouter: LLMProvider = {
         },
       }));
     }
-    const res = await f(`${base}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${cfg.apiKey}`,
-        "x-title": "Flagship",
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new ProviderError("openrouter", res.status, await res.text());
+    const { res, errorText } = await sendAdapting(`${base}|${req.model}`, body, (b) =>
+      f(`${base}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${cfg.apiKey}`,
+          "x-title": "Flagship",
+        },
+        body: JSON.stringify(b),
+      }),
+    );
+    if (!res.ok) throw new ProviderError("openrouter", res.status, errorText ?? "");
     const data = (await res.json()) as {
       choices: {
         message: {

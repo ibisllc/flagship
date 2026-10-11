@@ -9,6 +9,7 @@ import type {
   StreamingLLMProvider,
 } from "../types.js";
 import { ProviderError } from "../types.js";
+import { openAiTokenField, sendAdapting } from "../requestShape.js";
 
 const DEFAULT_BASE = "https://api.openai.com";
 
@@ -55,7 +56,7 @@ export const openai: LLMProvider = {
     const body: Record<string, unknown> = {
       model: req.model,
       messages: toOpenAiMessages(req.messages),
-      max_tokens: req.maxTokens,
+      [openAiTokenField(base)]: req.maxTokens,
       temperature: req.temperature,
     };
     if (req.tools && req.tools.length > 0) {
@@ -68,15 +69,17 @@ export const openai: LLMProvider = {
         },
       }));
     }
-    const res = await f(`${base}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${cfg.apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new ProviderError("openai", res.status, await res.text());
+    const { res, errorText } = await sendAdapting(`${base}|${req.model}`, body, (b) =>
+      f(`${base}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${cfg.apiKey}`,
+        },
+        body: JSON.stringify(b),
+      }),
+    );
+    if (!res.ok) throw new ProviderError("openai", res.status, errorText ?? "");
     const data = (await res.json()) as {
       choices: {
         message: {
@@ -149,7 +152,7 @@ export const openaiStreaming: StreamingLLMProvider = {
     const body: Record<string, unknown> = {
       model: req.model,
       messages: toOpenAiMessages(req.messages),
-      max_tokens: req.maxTokens,
+      [openAiTokenField(base)]: req.maxTokens,
       temperature: req.temperature,
       stream: true,
     };
@@ -164,22 +167,24 @@ export const openaiStreaming: StreamingLLMProvider = {
       }));
     }
     let res: Awaited<ReturnType<StreamingFetchLike>>;
+    let errorText: string | undefined;
     try {
-      res = await f(`${base}/v1/chat/completions`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${cfg.apiKey}`,
-        },
-        body: JSON.stringify(body),
-      });
+      ({ res, errorText } = await sendAdapting(`${base}|${req.model}`, body, (b) =>
+        f(`${base}/v1/chat/completions`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${cfg.apiKey}`,
+          },
+          body: JSON.stringify(b),
+        }),
+      ));
     } catch (e) {
       onEvent({ kind: "error", message: e instanceof Error ? e.message : String(e) });
       return;
     }
     if (!res.ok) {
-      const text = await res.text().catch(() => "<no body>");
-      onEvent({ kind: "error", message: text.slice(0, 512), status: res.status });
+      onEvent({ kind: "error", message: (errorText || "<no body>").slice(0, 512), status: res.status });
       return;
     }
     let stopReason: string | undefined;

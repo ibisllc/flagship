@@ -10,9 +10,15 @@ import type {
 } from "../types.js";
 import { ProviderError } from "../types.js";
 import { defaultStreamingFetch } from "../streamingFetch.js";
+import { sendAdapting } from "../requestShape.js";
 
 const DEFAULT_BASE = "https://api.anthropic.com";
 const ANTHROPIC_VERSION = "2023-06-01";
+/**
+ * The API requires a cap. Enough for a whole app in one reply; a model with a
+ * lower ceiling says so and the request is resent at its ceiling.
+ */
+const DEFAULT_MAX_TOKENS = 32_000;
 
 /**
  * Map a message's content to Anthropic's wire shape. With no attachments
@@ -82,7 +88,7 @@ export const anthropic: LLMProvider = {
     const { system, conv } = splitSystem(req.messages);
     const body: Record<string, unknown> = {
       model: req.model,
-      max_tokens: req.maxTokens ?? 1024,
+      max_tokens: req.maxTokens ?? DEFAULT_MAX_TOKENS,
       temperature: req.temperature,
       system: system.length > 0 ? system : undefined,
       messages: conv,
@@ -94,16 +100,18 @@ export const anthropic: LLMProvider = {
         input_schema: t.inputSchema,
       }));
     }
-    const res = await f(`${base}/v1/messages`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": cfg.apiKey,
-        "anthropic-version": ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new ProviderError("anthropic", res.status, await res.text());
+    const { res, errorText } = await sendAdapting(`${base}|${req.model}`, body, (b) =>
+      f(`${base}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": cfg.apiKey,
+          "anthropic-version": ANTHROPIC_VERSION,
+        },
+        body: JSON.stringify(b),
+      }),
+    );
+    if (!res.ok) throw new ProviderError("anthropic", res.status, errorText ?? "");
     const data = (await res.json()) as {
       content: Array<
         | { type: "text"; text: string }
@@ -163,7 +171,7 @@ export const anthropicStreaming: StreamingLLMProvider = {
     const { system, conv } = splitSystem(req.messages);
     const body: Record<string, unknown> = {
       model: req.model,
-      max_tokens: req.maxTokens ?? 1024,
+      max_tokens: req.maxTokens ?? DEFAULT_MAX_TOKENS,
       temperature: req.temperature,
       system: system.length > 0 ? system : undefined,
       messages: conv,
@@ -177,16 +185,19 @@ export const anthropicStreaming: StreamingLLMProvider = {
       }));
     }
     let res: Awaited<ReturnType<StreamingFetchLike>>;
+    let errorText: string | undefined;
     try {
-      res = await f(`${base}/v1/messages`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": cfg.apiKey,
-          "anthropic-version": ANTHROPIC_VERSION,
-        },
-        body: JSON.stringify(body),
-      });
+      ({ res, errorText } = await sendAdapting(`${base}|${req.model}`, body, (b) =>
+        f(`${base}/v1/messages`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-api-key": cfg.apiKey,
+            "anthropic-version": ANTHROPIC_VERSION,
+          },
+          body: JSON.stringify(b),
+        }),
+      ));
     } catch (e) {
       onEvent({
         kind: "error",
@@ -195,10 +206,9 @@ export const anthropicStreaming: StreamingLLMProvider = {
       return;
     }
     if (!res.ok) {
-      const text = await res.text().catch(() => "<no body>");
       onEvent({
         kind: "error",
-        message: text.slice(0, 512),
+        message: (errorText || "<no body>").slice(0, 512),
         status: res.status,
       });
       return;

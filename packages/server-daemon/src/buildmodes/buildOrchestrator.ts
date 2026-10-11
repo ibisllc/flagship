@@ -23,6 +23,7 @@ import type { BuildJournal, BuildJournalEntry, BuildJournalSummary, BuildMode } 
 import type { DeployResult } from "./deployArtifact.js";
 import { VibeCodeStreamParser } from "../llm/vibeCodeSession.js";
 import { SYSTEM_PROMPT_V1 } from "../llm/systemPrompt.js";
+import { checkServiceName, deriveServiceName, type ServiceNameCheck, type ServiceNameDeps } from "../llm/serviceName.js";
 
 /**
  * The model call the AI "adapt" pass makes. Provider-agnostic by design:
@@ -62,7 +63,24 @@ export interface BuildState {
   deployedUrl?: string;
   /** The installed service this build changes; deploying replaces it. */
   editsServiceId?: string;
+  /** The name it deploys under (git imports); held until it deploys. */
+  name?: string;
+  /** The AI adapt pass, when one was started in the background. */
+  adapt?: AdaptStatus;
 }
+
+export type AdaptStatus =
+  | { status: "running"; startedAt: number }
+  | { status: "done"; fileCount: number; deployed: boolean; deployedUrl?: string; serviceId?: string; turns?: number }
+  | { status: "failed"; reason: string; notConfigured?: boolean };
+
+export type AdaptResult =
+  | { ok: true; fileCount: number; deployed?: boolean; deployedUrl?: string; serviceId?: string; turns?: number }
+  | { ok: false; reason: string };
+
+export type CreateGitResult =
+  | { buildId: string; fit: boolean; reason: string; manifestName?: string; fileCount: number; name?: string }
+  | { error: string; status: number; check?: Extract<ServiceNameCheck, { ok: false }> };
 
 /**
  * A value-free record of an env var an authoring agent asked the owner to
@@ -90,7 +108,13 @@ export interface BuildOrchestratorDeps {
   gitImporter: GitImporter;
   mcpKeys: McpKeyStore;
   /** Build + install a files map. Returns the live URL. */
-  deployArtifact: (a: { files: Record<string, string>; serverFqdn: string; buildId: string; mode: BuildMode; editsServiceId?: string }) => Promise<DeployResult>;
+  deployArtifact: (a: { files: Record<string, string>; serverFqdn: string; buildId: string; mode: BuildMode; editsServiceId?: string; name?: string }) => Promise<DeployResult>;
+  /**
+   * What a git import's name is checked against: installed apps and every
+   * open build's name (this orchestrator's included). Unset ⇒ git imports
+   * deploy under their manifest's name, as before.
+   */
+  names?: () => ServiceNameDeps;
   /**
    * An installed service's current code, if it can be edited here (built on
    * this box, still installed). Unset ⇒ edits aren't offered.
@@ -244,29 +268,129 @@ export class BuildOrchestrator {
    * deploy as-is; on NOT-FIT, the tree is loaded too (so the AI adapt
    * path can pick it up) and `gitFit:false` is returned.
    */
-  async createGit(args: { gitUrl: string; ref?: string }): Promise<{ buildId: string; fit: boolean; reason: string; manifestName?: string; fileCount: number }> {
+  async createGit(args: { gitUrl: string; ref?: string; name?: string }): Promise<CreateGitResult> {
+    const names = this.deps.names?.();
+    const given = args.name?.trim().toLowerCase();
+    if (given && names) {
+      const check = checkServiceName(given, names);
+      if (!check.ok) return { error: check.message, status: check.kind === "invalid" ? 400 : 409, check };
+    }
     const buildId = this.newBuildId();
-    this.states.set(buildId, { buildId, mode: "git", serverFqdn: this.deps.serverFqdn, createdAt: this.now() });
     const repoName = args.gitUrl.replace(/\/+$/, "").split("/").pop()?.replace(/\.git$/i, "");
     await this.deps.journal.append(buildId, {
       mode: "git",
       kind: "session-started",
       actor: "owner",
       summary: `import ${args.gitUrl}`,
-      ...(repoName ? { name: repoName } : {}),
+      ...(given ? { name: given } : repoName ? { name: repoName } : {}),
     });
     const fitness = await this.deps.gitImporter.inspect({ gitUrl: args.gitUrl, ref: args.ref, buildId });
-    const ws = new BuildWorkspace(fitness.files);
-    this.workspaces.set(buildId, ws);
-    const st = this.states.get(buildId)!;
-    st.gitFit = fitness.fit;
+    if (!fitness.fit && fitness.unreadable) {
+      return { error: fitness.reason, status: 422 };
+    }
+    let name: string | undefined;
+    if (names) {
+      name = given ?? deriveServiceName({ gitUrl: args.gitUrl, ...(args.ref ? { ref: args.ref } : {}) }, names);
+      // A build that started meanwhile may have taken it while we cloned.
+      const check = checkServiceName(name, names);
+      if (!check.ok) return { error: check.message, status: check.kind === "invalid" ? 400 : 409, check };
+      if (!given) {
+        await this.deps.journal.append(buildId, {
+          mode: "git",
+          kind: "fitness-check",
+          actor: "system",
+          summary: `named ${name}`,
+          name,
+        });
+      }
+    }
+    this.states.set(buildId, {
+      buildId,
+      mode: "git",
+      serverFqdn: this.deps.serverFqdn,
+      createdAt: this.now(),
+      gitFit: fitness.fit,
+      ...(name ? { name } : {}),
+    });
+    this.workspaces.set(buildId, new BuildWorkspace(fitness.files));
     return {
       buildId,
       fit: fitness.fit,
       reason: fitness.reason,
       ...(fitness.fit ? { manifestName: fitness.manifest.name } : {}),
       fileCount: Object.keys(fitness.files).length,
+      ...(name ? { name } : {}),
     };
+  }
+
+  /** The open build holding a name, if any: a git import not yet deployed. */
+  holderOf(name: string, exceptId?: string): { sessionId: string } | undefined {
+    const wanted = name.toLowerCase();
+    for (const st of this.states.values()) {
+      if (st.buildId === exceptId || st.deployedUrl || st.name !== wanted) continue;
+      return { sessionId: st.buildId };
+    }
+    return undefined;
+  }
+
+  /** Whether the box still holds this build (it can be resumed or discarded). */
+  isOpen(buildId: string): boolean {
+    const st = this.states.get(buildId);
+    return st != null && st.deployedUrl == null;
+  }
+
+  /** Forget a build: its files, its IDE key and the name it held. */
+  async discard(buildId: string): Promise<boolean> {
+    const st = this.states.get(buildId);
+    if (!st) return false;
+    if (st.adapt?.status === "running") return false;
+    this.states.delete(buildId);
+    this.workspaces.delete(buildId);
+    this.mcpServers.delete(buildId);
+    this.envRequests.delete(buildId);
+    if (st.mode === "mcp") await this.deps.mcpKeys.revoke(buildId);
+    await this.deps.journal.append(buildId, {
+      mode: st.mode,
+      kind: "cancelled",
+      actor: "owner",
+      summary: "discarded",
+    });
+    return true;
+  }
+
+  /**
+   * Start the adapt pass and return at once; its outcome lands on the
+   * build's state (`adapt`), which the phone polls. The pass can run for
+   * many minutes, longer than a phone keeps one request open.
+   */
+  startAdaptGit(buildId: string, opts: { instructions?: string } = {}): { ok: true } | { ok: false; status: number; reason: string } {
+    const st = this.states.get(buildId);
+    if (!st || st.mode !== "git") return { ok: false, status: 404, reason: "not a git build" };
+    if (st.adapt?.status === "running") return { ok: false, status: 409, reason: "the AI is already adapting this repo" };
+    if (!this.adaptConfigured(buildId)) return { ok: false, status: 503, reason: "AI adapt not configured" };
+    st.adapt = { status: "running", startedAt: this.now() };
+    void this.adaptGit(buildId, opts)
+      .catch((e: unknown): AdaptResult => ({ ok: false, reason: (e as Error).message }))
+      .then((r) => {
+        const cur = this.states.get(buildId);
+        if (!cur) return;
+        cur.adapt = r.ok
+          ? {
+              status: "done",
+              fileCount: r.fileCount,
+              deployed: r.deployed === true,
+              ...(r.deployedUrl != null ? { deployedUrl: r.deployedUrl } : {}),
+              ...(r.serviceId != null ? { serviceId: r.serviceId } : {}),
+              ...(r.turns != null ? { turns: r.turns } : {}),
+            }
+          : { status: "failed", reason: r.reason };
+      });
+    return { ok: true };
+  }
+
+  private adaptConfigured(buildId: string): boolean {
+    if (!this.deps.adaptRunner && !this.deps.agentRunner) return false;
+    return !this.deps.adaptCredentialAvailable || this.deps.adaptCredentialAvailable(buildId);
   }
 
   /**
@@ -287,12 +411,13 @@ export class BuildOrchestrator {
   async adaptGit(
     buildId: string,
     opts: { instructions?: string } = {},
-  ): Promise<
-    | { ok: true; fileCount: number; deployed?: boolean; deployedUrl?: string; serviceId?: string; turns?: number }
-    | { ok: false; reason: string }
-  > {
+  ): Promise<AdaptResult> {
     const st = this.states.get(buildId);
     if (!st || st.mode !== "git") return { ok: false, reason: "not a git build" };
+    if (st.name) {
+      const named = `The app's name is "${st.name}": use exactly that as "name" in flagship.app.json.`;
+      opts = { ...opts, instructions: opts.instructions?.trim() ? `${opts.instructions.trim()}\n${named}` : named };
+    }
     const ws = this.workspaces.get(buildId);
     if (!ws) return { ok: false, reason: "no workspace for build" };
     if (!this.deps.adaptRunner && !this.deps.agentRunner) {
@@ -394,10 +519,7 @@ export class BuildOrchestrator {
     buildId: string,
     ws: BuildWorkspace,
     opts: { instructions?: string },
-  ): Promise<
-    | { ok: true; fileCount: number; deployed?: boolean; deployedUrl?: string; serviceId?: string; turns?: number }
-    | { ok: false; reason: string }
-  > {
+  ): Promise<AdaptResult> {
     const repoFiles = ws.list();
     await this.deps.journal.append(buildId, {
       mode: "git",
@@ -571,6 +693,7 @@ export class BuildOrchestrator {
       buildId,
       mode: st.mode,
       ...(st.editsServiceId ? { editsServiceId: st.editsServiceId } : {}),
+      ...(st.name ? { name: st.name } : {}),
     });
     if (r.ok) {
       st.serviceId = r.serviceId;
@@ -615,6 +738,7 @@ export class BuildOrchestrator {
       ideConfig: {
         mcpServers: {
           [`flagship-${buildId}`]: {
+            type: "http",
             url,
             headers: { Authorization: `Bearer ${key}` },
           },

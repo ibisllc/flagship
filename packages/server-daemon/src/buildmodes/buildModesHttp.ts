@@ -56,17 +56,42 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
     const denied = deps.gate.check(req);
     if (denied) return denied;
 
-    // POST /api/build/git   { gitUrl, ref?, credential? }  → create + inspect
+    // POST /api/build/git   { gitUrl, ref?, name?, credential? }  → create + inspect
+    // A taken name is a 409 carrying who holds it, like the AI chat's
+    // name check, so the phone can send the owner to that build.
     if (path === "/api/build/git" && req.method === "POST") {
       const body = parseJson(req.body) as
-        | { gitUrl?: string; ref?: string; credential?: unknown }
+        | { gitUrl?: string; ref?: string; name?: string; credential?: unknown }
         | null;
       if (!body || typeof body.gitUrl !== "string" || body.gitUrl.length === 0) {
         return jerr(400, "gitUrl required");
       }
       const cred = parseCredential(body.credential);
       if (cred === "invalid") return jerr(400, "malformed credential");
-      const r = await o.createGit({ gitUrl: body.gitUrl, ...(typeof body.ref === "string" ? { ref: body.ref } : {}) });
+      const r = await o.createGit({
+        gitUrl: body.gitUrl.trim(),
+        ...(typeof body.ref === "string" && body.ref.trim() ? { ref: body.ref.trim() } : {}),
+        ...(typeof body.name === "string" && body.name.trim() ? { name: body.name } : {}),
+      });
+      if ("error" in r) {
+        const c = r.check;
+        return {
+          status: r.status,
+          headers: J,
+          body: JSON.stringify({
+            error: r.error,
+            ...(c
+              ? {
+                  ok: false,
+                  kind: c.kind,
+                  message: c.message,
+                  ...(c.kind === "app" ? { serviceId: c.serviceId } : {}),
+                  ...(c.kind === "session" ? { sessionId: c.sessionId } : {}),
+                }
+              : {}),
+          }),
+        };
+      }
       // Seal the BYOK credential for the new build, if delivered. The
       // adapt pass reuses it; never echoed, never logged.
       if (cred && deps.credentials) {
@@ -92,7 +117,8 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
 
     // GET /api/build/sessions  → list build summaries
     if (path === "/api/build/sessions" && req.method === "GET") {
-      return jok({ builds: await o.list() });
+      const builds = (await o.list()).map((b) => (o.isOpen(b.buildId) ? { ...b, open: true } : b));
+      return jok({ builds });
     }
 
     const m = /^\/api\/build\/sessions\/([^/]+)(\/.*)?$/.exec(path);
@@ -105,6 +131,14 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
       if (!state) return jerr(404, "build not found");
       const ws = o.workspace(buildId);
       return jok({ state, files: ws ? ws.list() : [] });
+    }
+
+    // POST .../discard → forget an open git or IDE build, freeing its name.
+    if (verb === "discard" && req.method === "POST") {
+      if (!o.state(buildId)) return jerr(404, "build not found");
+      if (!(await o.discard(buildId))) return jerr(409, "the AI is still working on this build");
+      await deps.credentials?.forget(buildId).catch(() => {});
+      return jok({ ok: true });
     }
 
     if (verb === "journal" && req.method === "GET") {
@@ -132,7 +166,7 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
       // server-minted build always has state; anything else 404s here.
       if (!o.state(buildId)) return jerr(404, "build not found");
       const body = parseJson(req.body) as
-        | { instructions?: string; credential?: unknown }
+        | { instructions?: string; credential?: unknown; background?: boolean }
         | null;
       // A credential may be delivered here too (e.g. the owner adds an AI
       // key only when the adapt pass is actually needed). Same box-only,
@@ -146,7 +180,15 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
           return jerr(500, "failed to store credential");
         }
       }
-      const r = await o.adaptGit(buildId, typeof body?.instructions === "string" ? { instructions: body.instructions } : {});
+      const adaptOpts = typeof body?.instructions === "string" ? { instructions: body.instructions } : {};
+      // `background`: answer at once; the phone polls GET .../:id for
+      // `state.adapt`. Older apps wait on this request instead.
+      if (body?.background === true) {
+        const started = o.startAdaptGit(buildId, adaptOpts);
+        if (!started.ok) return jerr(started.status, started.reason);
+        return { status: 202, headers: J, body: JSON.stringify({ ok: true, started: true }) };
+      }
+      const r = await o.adaptGit(buildId, adaptOpts);
       if (!r.ok) {
         return jerr(r.reason === "AI adapt not configured" ? 503 : 502, r.reason);
       }

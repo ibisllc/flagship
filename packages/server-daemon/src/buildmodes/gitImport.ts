@@ -37,6 +37,7 @@ import type { CommandRunner } from "../serviceRunner.js";
 import type { BuildJournal } from "./buildJournal.js";
 
 const MANIFEST_FILE = "flagship.app.json";
+const CLONE_TIMEOUT_MS = 3 * 60_000;
 
 /** Files we never read into memory (vcs, deps, build output, binaries). */
 const SKIP_DIRS = new Set([".git", "node_modules", ".next", "dist", "build", ".venv", "__pycache__"]);
@@ -71,6 +72,8 @@ export type GitFitness =
       ref?: string;
       /** Present when a manifest file existed but failed to parse. */
       manifestErrors?: string[];
+      /** The repo was never read: a bad URL or ref, an unsafe host, or the clone failed. */
+      unreadable?: true;
       files: Record<string, string>;
       reason: string;
     };
@@ -150,12 +153,12 @@ export class GitImporter {
     if (!validGitUrl(gitUrl)) {
       const reason = "not a valid https or git@ URL";
       await this.note(buildId, "git-clone", `rejected: ${reason}`, gitUrl);
-      return { fit: false, gitUrl, ref, files: {}, reason };
+      return { fit: false, gitUrl, ref, files: {}, reason, unreadable: true };
     }
     if (ref != null && !validRef(ref)) {
       const reason = "invalid git ref";
       await this.note(buildId, "git-clone", `rejected: ${reason}`, ref);
-      return { fit: false, gitUrl, ref, files: {}, reason };
+      return { fit: false, gitUrl, ref, files: {}, reason, unreadable: true };
     }
 
     // SSRF guard: a clone URL must not point at the box's loopback data
@@ -169,7 +172,7 @@ export class GitImporter {
       if (!host) {
         const reason = "could not parse clone host";
         await this.note(buildId, "git-clone", `rejected: ${reason}`, gitUrl);
-        return { fit: false, gitUrl, ref, files: {}, reason };
+        return { fit: false, gitUrl, ref, files: {}, reason, unreadable: true };
       }
       try {
         await assertResolvedHostSafe(host, gitUrl, this.hostGuard, this.resolveHost);
@@ -177,7 +180,7 @@ export class GitImporter {
         const reason =
           e instanceof UnsafeBaseUrlError ? `unsafe clone host (${e.reason})` : "unsafe clone host";
         await this.note(buildId, "git-clone", `rejected: ${reason}`, host);
-        return { fit: false, gitUrl, ref, files: {}, reason };
+        return { fit: false, gitUrl, ref, files: {}, reason, unreadable: true };
       }
     }
 
@@ -190,16 +193,21 @@ export class GitImporter {
       if (this.deps.cloneInto) {
         await this.deps.cloneInto({ gitUrl, ref, dest });
       } else {
-        const cloneArgs = ["clone", "--depth", "1"];
+        // Never ask for a password (a private repo fails at once instead of
+        // waiting on a prompt nobody sees), and give up on a stalled server.
+        const cloneArgs = ["-c", "core.askPass=false", "clone", "--depth", "1"];
         if (ref) cloneArgs.push("--branch", ref);
         cloneArgs.push("--", gitUrl, dest);
-        await this.deps.cmd.run("git", cloneArgs);
+        await this.deps.cmd.run("git", cloneArgs, { timeoutMs: CLONE_TIMEOUT_MS });
       }
     } catch (e) {
-      const reason = `clone failed: ${(e as Error).message}`;
+      const why = (e as Error).message;
+      const reason = /timed out/.test(why)
+        ? "The clone took too long. Try a smaller repo."
+        : `Couldn't clone this repo${ref ? ` at "${ref}"` : ""}. Check the address${ref ? " and the branch" : ""}, and that the repo is public. (clone failed: ${why})`;
       await this.note(buildId, "error", reason);
       await rm(dest, { recursive: true, force: true });
-      return { fit: false, gitUrl, ref, files: {}, reason };
+      return { fit: false, gitUrl, ref, files: {}, reason, unreadable: true };
     }
 
     const files = await this.readTree(dest);
@@ -331,7 +339,10 @@ export function buildAdaptPrompt(files: Record<string, string>, maxChars = 60_00
     `flagship.app.json, a Dockerfile, and any migrations; rewrite storage ` +
     `to the FLAGSHIP_* env vars; remove the app's own auth (the daemon ` +
     `injects identity headers); expose only the manifest's single port; ` +
-    `respect the platform hard-rules.\n\n` +
+    `respect the platform hard-rules. Change as little as possible: the ` +
+    `author keeps building this repo for ordinary servers, so add files ` +
+    `rather than editing theirs, keep any edit minimal, and never reformat, ` +
+    `rename or restructure working code.\n\n` +
     `Repository files (${names.length} total${omitted.length ? `, ${omitted.length} omitted for size: ${omitted.join(", ")}` : ""}):\n`;
   return header + body;
 }

@@ -71,7 +71,7 @@ export interface BuildAgentOptions {
   maxToolResultChars?: number;
   /** Model id (the runner may also default it). */
   model?: string;
-  /** maxTokens per model turn (default 4096 — enough for a file write). */
+  /** maxTokens per model turn. Unset: the provider's own default, which is its ceiling. */
   maxTokens?: number;
 }
 
@@ -79,7 +79,6 @@ const DEFAULTS = {
   maxTurns: 24,
   maxToolCallsPerTurn: 8,
   maxToolResultChars: 24_000,
-  maxTokens: 4096,
 } as const;
 
 /**
@@ -92,7 +91,7 @@ export const BUILD_AGENT_SYSTEM_PROMPT = `You are Flagship's app-adapter agent. 
 
 How to work:
 1. Call get_contract FIRST to learn the platform's hard rules, the flagship.app.json manifest schema, and the FLAGSHIP_* env vars the daemon injects. The repository's files are ALREADY in your build workspace — call list_files and read_file to inspect what you were given.
-2. Decide the smallest set of changes that make this repo a valid Flagship app: add a correct flagship.app.json, add or fix the Dockerfile (its final stage must EXPOSE the manifest runtime.port and start the app), make the app LISTEN ON the port the daemon injects as the PORT environment variable — read process.env.PORT (or the $PORT equivalent for the app's language) and bind 0.0.0.0:$PORT; this value equals your manifest runtime.port, so do NOT hardcode a port number — remove the app's own authentication (the daemon injects identity headers), and rewrite any persistence to the FLAGSHIP_* data-layer env vars. Keep the app's actual behaviour — adapt it, don't rewrite it from scratch.
+2. Change as little as you can. The author keeps developing this repo for ordinary servers; your changes should sit beside their code, not rewrite it, so they can keep building the app the way they do now and a later re-import only has to revisit flagship.app.json. Prefer ADDING files (flagship.app.json, a Dockerfile) over editing theirs. Edit an existing file only where a rule below forces it, keep each such edit as small as possible (read config from environment variables rather than restructuring code), and never reformat, rename, move, or "improve" code that already works. Decide the smallest set of changes that make this repo a valid Flagship app: add a correct flagship.app.json, add or fix the Dockerfile (its final stage must EXPOSE the manifest runtime.port and start the app), make the app LISTEN ON the port the daemon injects as the PORT environment variable — read process.env.PORT (or the $PORT equivalent for the app's language) and bind 0.0.0.0:$PORT; this value equals your manifest runtime.port, so do NOT hardcode a port number — remove the app's own authentication (the daemon injects identity headers), and rewrite any persistence to the FLAGSHIP_* data-layer env vars. Keep the app's actual behaviour — adapt it, don't rewrite it from scratch.
 3. write_file each change. Then call validate. If validate reports problems, fix them and validate again. Do NOT deploy until validate returns ok.
 4. When validate is ok, call deploy. deploy builds the container and installs the app; it returns the live URL. After a successful deploy you are DONE — stop.
 
@@ -169,7 +168,7 @@ export async function runBuildAgent(args: {
         model: opts.model ?? "",
         messages,
         tools: specs,
-        maxTokens: opts.maxTokens,
+        ...(args.options?.maxTokens != null ? { maxTokens: args.options.maxTokens } : {}),
       };
       resp = await args.runner(req);
     } catch (e) {

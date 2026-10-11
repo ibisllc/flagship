@@ -6,16 +6,19 @@
  * again because the box, not the phone, is the authority.
  */
 
-import type { VibeCodeSessionRegistry } from "./vibeCodeSession.js";
-
 export type ServiceNameCheck =
   | { ok: true; name: string }
   | { ok: false; kind: "invalid"; message: string }
   | { ok: false; kind: "app"; serviceId: string; message: string }
   | { ok: false; kind: "session"; sessionId: string; message: string };
 
+export interface NameHolders {
+  holderOf(name: string, exceptId?: string): { sessionId: string } | undefined;
+}
+
 export interface ServiceNameDeps {
-  registry: Pick<VibeCodeSessionRegistry, "holderOf">;
+  /** Open builds (AI chats, git imports) and the names they hold. */
+  registry: NameHolders;
   /** Host username: self-authored apps are `<host>--<slug>`. */
   hostUsername: string;
   /** The installed app serving this label or service id, if any. */
@@ -62,6 +65,62 @@ export function checkServiceName(
   return { ok: true, name };
 }
 
+/** Several holders read as one: the first that holds a name wins. */
+export function combineNameHolders(...holders: (NameHolders | null | undefined)[]): NameHolders {
+  return {
+    holderOf: (name, exceptId) => {
+      for (const h of holders) {
+        const held = h?.holderOf(name, exceptId);
+        if (held) return held;
+      }
+      return undefined;
+    },
+  };
+}
+
+const FALLBACK_NAME = "app";
+const DEFAULT_BRANCHES = new Set(["main", "master", "trunk", "default", "head", "develop"]);
+
+/** A label made from free text: lowercase, single dashes, at most `max` long. */
+export function slugifyLabel(raw: string, max = 63): string {
+  return raw
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, max)
+    .replace(/-+$/g, "");
+}
+
+/** The repository's own name, from an https or git@ clone URL. */
+export function repoNameFromUrl(gitUrl: string): string {
+  const path = gitUrl.trim().replace(/[?#].*$/, "").replace(/\/+$/, "");
+  const last = path.split(/[/:]/).pop() ?? "";
+  return last.replace(/\.git$/i, "");
+}
+
+/**
+ * The name a git import gets when the owner leaves it blank: the repo's name,
+ * plus the branch when it isn't the usual default one, then -2, -3… past any
+ * name an app or an open build already holds.
+ */
+export function deriveServiceName(
+  a: { gitUrl: string; ref?: string },
+  deps: ServiceNameDeps,
+  exceptSessionId?: string,
+): string {
+  const repo = slugifyLabel(repoNameFromUrl(a.gitUrl), 40) || FALLBACK_NAME;
+  const ref = (a.ref ?? "").trim();
+  const branch = ref && !DEFAULT_BRANCHES.has(ref.toLowerCase()) ? slugifyLabel(ref.split("/").pop() ?? ref, 18) : "";
+  const base = branch && branch !== repo ? `${repo}-${branch}` : repo;
+  for (let n = 1; n < 1000; n++) {
+    const candidate = n === 1 ? base : `${base}-${n}`;
+    if (checkServiceName(candidate, deps, exceptSessionId).ok) return candidate;
+  }
+  return `${base}-${Date.now().toString(36)}`;
+}
+
 export type DeployTarget =
   | { ok: true; slug: string; edit: false }
   | { ok: true; slug: string; edit: true; serviceId: string; urlLabel: string }
@@ -80,7 +139,7 @@ export function resolveDeployTarget(a: {
     byLabel(label: string): { serviceId: string } | undefined;
     byServiceId(id: string): { serviceId: string; creator: string; slug: string; urlLabel: string } | undefined;
   } | null;
-  registry?: ServiceNameDeps["registry"];
+  registry?: NameHolders;
   sessionId?: string;
 }): DeployTarget {
   if (a.editsServiceId) {

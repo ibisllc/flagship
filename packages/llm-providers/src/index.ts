@@ -8,3 +8,4 @@ export { google, googleStreaming } from "./providers/google.js";
 export { openrouter, openrouterStreaming } from "./providers/openrouter.js";
 export { ollama } from "./providers/ollama.js";
 export { flagship, flagshipStreaming } from "./providers/flagship.js";
+export * from "./requestShape.js";

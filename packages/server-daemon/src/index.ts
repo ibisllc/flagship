@@ -119,6 +119,7 @@ import {
 import { FileBuildJournal } from "./buildmodes/buildJournal.js";
 import { FileMcpKeyStore } from "./buildmodes/mcpKeyStore.js";
 import { GitImporter } from "./buildmodes/gitImport.js";
+import { combineNameHolders, type NameHolders } from "./llm/serviceName.js";
 import { buildArtifactDeployer } from "./buildmodes/deployArtifact.js";
 import { BuildOrchestrator } from "./buildmodes/buildOrchestrator.js";
 import { buildBuildModesHttpHandlers } from "./buildmodes/buildModesHttp.js";
@@ -2035,6 +2036,12 @@ async function wireRuntimeSurfaces(deps: {
     },
   );
   process.on("exit", () => vibeRegistry.flush());
+  // Names are held by open AI chats and by git imports not yet deployed;
+  // every name check reads both. The build orchestrator is made further down.
+  const buildNameHoldersRef: { current: NameHolders | null } = { current: null };
+  const nameHolders = combineNameHolders(vibeRegistry, {
+    holderOf: (name, exceptId) => buildNameHoldersRef.current?.holderOf(name, exceptId),
+  });
   const forgejoBaseUrl = process.env.FLAGSHIP_FORGEJO_BASE_URL;
   const forgejoToken = process.env.FLAGSHIP_FORGEJO_TOKEN;
   const forgejoOrg =
@@ -2132,7 +2139,7 @@ async function wireRuntimeSurfaces(deps: {
         workingDir: vibeAppDir,
         cmd: (await import("./serviceRunner.js")).realCommandRunner,
         forgejoAdmin,
-        registry: vibeRegistry,
+        registry: nameHolders,
         restrictToInvited: async (serviceId) => {
           const accessStore = deps.serviceAccessRef.current;
           if (!accessStore?.knowsOwner()) {
@@ -2209,7 +2216,7 @@ async function wireRuntimeSurfaces(deps: {
       cmd: realCmd,
       forgejoAdmin,
       journal: buildJournal,
-      registry: vibeRegistry,
+      registry: nameHolders,
     });
     const buildOrchestrator = new BuildOrchestrator({
       journal: buildJournal,
@@ -2217,6 +2224,7 @@ async function wireRuntimeSurfaces(deps: {
       mcpKeys,
       editableService,
       deployArtifact: artifactDeployer,
+      names: () => ({ registry: nameHolders, hostUsername: username, installed: runtime.servicePlatform ?? null }),
       serverFqdn: env.serverFqdn,
       mcpBaseUrl: `https://${env.serverFqdn}`,
       // AI "adapt" pass for non-fit git imports — LIVE. One non-streaming
@@ -2298,6 +2306,7 @@ async function wireRuntimeSurfaces(deps: {
         );
       },
     });
+    buildNameHoldersRef.current = buildOrchestrator;
     runtime.addHandler(
       buildBuildModesHttpHandlers({
         orchestrator: buildOrchestrator,
@@ -2462,6 +2471,7 @@ async function wireRuntimeSurfaces(deps: {
     vibeCode: deploySession
       ? {
           registry: vibeRegistry,
+          nameHolders,
           username,
           serverFqdn: env.serverFqdn,
           recordScratchTurn,

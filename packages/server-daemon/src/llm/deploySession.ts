@@ -31,7 +31,7 @@ import type { ServicePlatform } from "../servicePlatform.js";
 import type { BoxSigner } from "../keyCustodian.js";
 import type { ForgejoAppAdmin } from "../forgejoServiceAdmin.js";
 import type { VibeCodeSession, VibeCodeSessionRegistry } from "./vibeCodeSession.js";
-import { migrationFiles, resolveDeployTarget } from "./serviceName.js";
+import { migrationFiles, resolveDeployTarget, type NameHolders } from "./serviceName.js";
 
 export interface DeploySessionDeps {
   servicePlatform: ServicePlatform;
@@ -64,7 +64,7 @@ export interface DeploySessionDeps {
    * Open build sessions, so a deploy never takes a name another session
    * holds (sessions from before names were kept have only the manifest's).
    */
-  registry?: Pick<VibeCodeSessionRegistry, "holderOf">;
+  registry?: NameHolders;
   /**
    * Put a freshly installed service behind the box's invite-only gate. Returns
    * false when the box can't (it has no owner key pinned to let the owner
