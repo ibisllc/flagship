@@ -178,7 +178,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 ### Built, waiting on deploys or rebuilds
 
-- **`.com` Worker:** current with `main` as of 2026-10-10 (webapp shell **v33**).
+- **`.com` Worker:** current with `main` as of 2026-10-11 (webapp shell **v43**).
   Always `npx tsc -b` first and apply pending D1 migrations before deploying.
 - **iOS / Android:** `main` has fixes not yet in a store build: the iOS
   known-bug fixes (retried account creation registered a second device; Wipe &
@@ -280,15 +280,17 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
     the FLAGSHIP_BOOT partition (the Wi-Fi path's is), and the "taking longer
     than expected" stalled-boot advisory exists on Mac only, not Linux/Windows.
 15. **Obsolete plaintext display-name fixtures** remain in some active tests.
-16. **Repo adapters** (`docs/repo-adapters.md`): built 2026-10-11 — the
-    single-file format, apply on import, the public store
-    (github.com/ibisllc/flagship-adapters, read directly by boxes, written by
-    `.com`'s anonymous submit + daily publish), the do-not-adapt list, "Get
-    flagship.app.json". Remaining: create the store repo and its token, the
-    `.com` storage + migration 0085 before the Worker deploy, optionally
-    `ADAPTER_REVIEW_ANTHROPIC_KEY`, and a live try on a box. Git and IDE
-    builds still live only in daemon memory, so a restart forgets them
-    (journals survive).
+16. **Repo adapters** (`docs/repo-adapters.md`): built and deployed
+    2026-10-11 — single-file format, the public store
+    (github.com/ibisllc/flagship-adapters, token set, migrations 0085–0086
+    applied), share by default with up to 2 fix rounds, crash/report
+    complaints (3 retire an adapter), weekly insights at
+    `/api/admin/adapter-insights`. Endorsed for boxes as `1584bfe8`.
+    Remaining: a live import on a box and the first 00:00 UTC publish;
+    `ADAPTER_REVIEW_ANTHROPIC_KEY` before release (no key = no review, no
+    insights); per-IP limits on submit/complain (anyone can retire an
+    adapter with 3 anonymous complaints). Git and IDE builds still live only
+    in daemon memory, so a restart forgets them (journals survive).
 
 ### Feature branches (each = `main` + one feature; rebase when `main` moves)
 
