@@ -47,6 +47,49 @@ public final class BuildKeyViewModel {
     public func reload() {
         saved = store.list()
         active = store.active()
+        if saved.isEmpty { showingForm = true }
+    }
+
+    /// The saved keys, the last-used one first.
+    public var orderedEntries: [SavedKeyStore.Entry] {
+        guard let active else { return saved }
+        return [active] + saved.filter { $0.id != active.id }
+    }
+
+    /// Save the form's key to the list and close the form. Choosing a key is a
+    /// separate step, so adding one never moves the build on.
+    @discardableResult
+    public func addFromForm() -> Bool {
+        errorMessage = nil
+        let key = formApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            errorMessage = "Enter an API key."
+            return false
+        }
+        let base = formBaseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        let label = formLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            let added = try store.add(
+                provider: formProvider,
+                label: label.isEmpty ? formProvider : label,
+                apiKey: key,
+                baseUrl: base.isEmpty ? nil : base
+            )
+            try? store.setActive(id: added.id)
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+        resetForm()
+        showingForm = false
+        reload()
+        return true
+    }
+
+    /// Remove a saved key from this phone (the caller has confirmed it).
+    public func delete(_ e: SavedKeyStore.Entry) {
+        try? store.remove(id: e.id)
+        reload()
     }
 
     public func slug(for e: SavedKeyStore.Entry) -> String { store.slug(for: e) }

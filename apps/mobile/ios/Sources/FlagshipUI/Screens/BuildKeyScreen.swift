@@ -10,9 +10,9 @@ import FlagshipAPI
 /// box's model (marketplace install, IDE/MCP — which uses the user's own
 /// editor AI) skip this entirely.
 ///
-/// It recalls the device-local saved keys as masked slugs (one-tap recall),
-/// pre-selects the active one with a clear Confirm affordance, and offers a
-/// "use a different key" form with an optional "Save on this device" toggle.
+/// Adding and choosing are separate: "Add an API key" at the top opens a form
+/// that saves the key to the device-local list, and each saved key below has
+/// "Use this" (which moves the build on) and a Face ID-confirmed delete.
 /// `onChosen` is handed the in-memory `{provider, apiKey, baseUrl?}` — the
 /// raw key never touches flagshipserver.com.
 ///
@@ -35,6 +35,9 @@ public struct BuildKeyScreen: View {
         self.onChosen = onChosen
     }
 
+    @State private var confirmDelete: SavedKeyStore.Entry?
+    @State private var deleteError: String?
+
     public var body: some View {
         let c = FSColors.scheme(scheme)
         FSScreen {
@@ -42,23 +45,7 @@ public struct BuildKeyScreen: View {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Spacer().frame(height: FS.space.s6)
 
-                    HStack(alignment: .top, spacing: FS.space.s2) {
-                        Image(systemName: "lock.shield").foregroundColor(c.primary)
-                        Text("The keys are stored safely in your mobile app and your own servers.")
-                            .font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.bottom, FS.space.s1)
-
-                    savedKeys(c: c)
-
-                    if !vm.showingForm {
-                        FSSecondaryButton("Use a different key", block: true) {
-                            vm.resetForm()
-                            vm.showingForm = true
-                        }
-                        .accessibilityIdentifier("build-key-different")
-                    } else {
+                    if vm.showingForm {
                         AiKeyForm(
                             vm: AiKeyFormBinding(
                                 provider: $vm.formProvider,
@@ -67,20 +54,40 @@ public struct BuildKeyScreen: View {
                                 label: $vm.formLabel,
                                 providers: vm.providers
                             ),
-                            showSaveToggle: true,
+                            showSaveToggle: false,
                             saveOnDevice: $vm.saveOnDevice,
                             errorMessage: vm.errorMessage,
-                            primaryLabel: "Use this key",
-                            primaryId: "build-key-use",
-                            onPrimary: {
-                                if let cred = vm.credentialFromForm() { onChosen(cred) }
-                            },
+                            primaryLabel: "Add key",
+                            primaryId: "build-key-add-save",
+                            onPrimary: { vm.addFromForm() },
                             onCancel: {
                                 vm.resetForm()
                                 vm.showingForm = false
-                            }
+                            },
+                            showCancel: !vm.saved.isEmpty
                         )
+                    } else {
+                        Button {
+                            vm.resetForm()
+                            vm.showingForm = true
+                        } label: {
+                            Label("Add an API key", systemImage: "plus")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(c.primary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("build-key-add")
                     }
+
+                    savedKeys(c: c)
+
+                    HStack(alignment: .top, spacing: FS.space.s2) {
+                        Image(systemName: "lock.shield").foregroundColor(c.primary)
+                        Text("The keys are stored safely in your mobile app and your own servers.")
+                            .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, FS.space.s2)
 
                     Spacer().frame(height: FS.space.s8)
                 }
@@ -88,42 +95,64 @@ public struct BuildKeyScreen: View {
                 .fsReadingColumn()
             }
         }
-        .navigationTitle("AI key")
+        .navigationTitle("AI Key")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { vm.reload() }
+        .confirmationDialog(
+            "Delete this key?",
+            isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: confirmDelete
+        ) { e in
+            Button("Delete key", role: .destructive) { Task { await delete(e) } }
+        } message: { e in
+            Text("\(e.label) will be removed from this phone. Builds that are already running keep working.")
+        }
+    }
+
+    private func delete(_ e: SavedKeyStore.Entry) async {
+        deleteError = nil
+        do {
+            try await BiometricGate().evaluate(reason: "Delete the AI key \(e.label)")
+            vm.delete(e)
+        } catch BiometricGate.GateError.notAvailable {
+            vm.delete(e)
+        } catch {
+            deleteError = "The key wasn't deleted."
+        }
     }
 
     @ViewBuilder
     private func savedKeys(c: FSColors) -> some View {
-        if vm.saved.isEmpty {
-            FSCard {
-                Text("No saved keys yet — add one below.")
-                    .font(FS.font.body()).foregroundColor(c.textMuted)
-            }
-        } else {
-            if let active = vm.active {
+        if !vm.saved.isEmpty {
+            Text("Saved keys").font(FS.font.caption()).foregroundColor(c.textMuted)
+                .padding(.top, FS.space.s2)
+            ForEach(vm.orderedEntries) { e in
                 FSCard {
-                    Text("Confirm this key").font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
-                    Text(vm.slug(for: active)).font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                        .lineLimit(1).truncationMode(.middle)
-                    FSPrimaryButton("Use this key", block: true) {
-                        onChosen(vm.credential(for: active))
-                    }
-                    .accessibilityIdentifier("build-key-confirm-active")
-                }
-            }
-            ForEach(vm.otherEntries) { e in
-                FSCard {
-                    HStack(spacing: FS.space.s2) {
-                        Text(vm.slug(for: e)).font(FS.font.bodySm()).foregroundColor(c.text)
-                            .lineLimit(1).truncationMode(.middle)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        FSSecondaryButton("Use") {
-                            onChosen(vm.credential(for: e))
+                    HStack(spacing: FS.space.s3) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(e.label).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+                                .lineLimit(1)
+                            Text(vm.slug(for: e)).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                                .lineLimit(1).truncationMode(.middle)
+                            if e.id == vm.active?.id {
+                                Text("Last used").font(FS.font.caption()).foregroundColor(c.textMuted)
+                            }
                         }
-                        .accessibilityIdentifier("build-key-use-saved")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Button { confirmDelete = e } label: {
+                            Image(systemName: "trash").foregroundColor(c.danger)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Delete \(e.label)")
+                        .accessibilityIdentifier("build-key-delete")
+                        FSPrimaryButton("Use this") { onChosen(vm.credential(for: e)) }
+                            .accessibilityIdentifier(e.id == vm.active?.id ? "build-key-confirm-active" : "build-key-use-saved")
                     }
                 }
+            }
+            if let err = deleteError {
+                Text(err).font(FS.font.bodySm()).foregroundColor(c.danger)
             }
         }
     }
@@ -165,6 +194,7 @@ struct AiKeyForm: View {
     let primaryId: String
     let onPrimary: () -> Void
     let onCancel: () -> Void
+    var showCancel: Bool = true
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -201,7 +231,7 @@ struct AiKeyForm: View {
                 Text(err).font(FS.font.bodySm()).foregroundColor(c.danger)
             }
             HStack(spacing: FS.space.s2) {
-                FSSecondaryButton("Cancel", block: true, action: onCancel)
+                if showCancel { FSSecondaryButton("Cancel", block: true, action: onCancel) }
                 FSPrimaryButton(primaryLabel, block: true, action: onPrimary)
                     .accessibilityIdentifier(primaryId)
             }

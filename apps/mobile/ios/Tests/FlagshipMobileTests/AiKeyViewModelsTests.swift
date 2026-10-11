@@ -76,6 +76,36 @@ final class AiKeyViewModelsTests: XCTestCase {
         XCTAssertNotNil(vm.errorMessage)
     }
 
+    func test_buildKey_addingAKeyListsItWithoutChoosingIt() throws {
+        let vm = BuildKeyViewModel(store: store)
+        vm.reload()
+        XCTAssertTrue(vm.showingForm, "with no saved keys the add form opens straight away")
+        vm.formProvider = "openai"
+        vm.formApiKey = "sk-openai-9999iiii"
+        vm.formLabel = "Work"
+        XCTAssertTrue(vm.addFromForm())
+        XCTAssertFalse(vm.showingForm)
+        XCTAssertEqual(vm.orderedEntries.map(\.label), ["Work"])
+        XCTAssertEqual(vm.formApiKey, "", "the form is cleared")
+
+        _ = try store.add(provider: "anthropic", label: "Home", apiKey: "sk-anthropic-1010jjjj")
+        vm.reload()
+        XCTAssertEqual(vm.orderedEntries.first?.label, "Work", "the last-used key comes first")
+        vm.delete(vm.orderedEntries.first!)
+        XCTAssertEqual(vm.saved.map(\.label), ["Home"])
+        vm.delete(vm.saved.first!)
+        XCTAssertTrue(vm.showingForm)
+    }
+
+    func test_buildKey_addWithBlankKeyKeepsTheFormOpen() {
+        let vm = BuildKeyViewModel(store: store)
+        vm.showingForm = true
+        vm.formApiKey = " "
+        XCTAssertFalse(vm.addFromForm())
+        XCTAssertTrue(vm.showingForm)
+        XCTAssertNotNil(vm.errorMessage)
+    }
+
     // MARK: - AiKeysViewModel
 
     func test_aiKeys_addFromForm_appendsAndHidesForm() {

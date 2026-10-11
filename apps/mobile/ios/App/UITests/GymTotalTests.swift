@@ -202,15 +202,16 @@ final class GymTotalTests: XCTestCase {
         let scratch = app.buttons["build-src-scratch"]
         XCTAssertTrue(scratch.waitForExistence(timeout: 15))
         scratch.tap()
-        // The AI-key step's nav title is "AI key"; the "use a different key"
-        // control is present whether or not a saved key exists.
+        // The AI-key step's nav title is "AI Key". With saved keys it offers
+        // "Add an API key"; with none, the add form is already open.
         XCTAssertTrue(
-            app.navigationBars["AI key"].waitForExistence(timeout: 15),
+            app.navigationBars["AI Key"].waitForExistence(timeout: 15),
             "Scratch should route through the AI-key step."
         )
         XCTAssertTrue(
-            app.buttons["build-key-different"].exists,
-            "The AI-key step should offer the use-a-different-key affordance."
+            app.buttons["build-key-add"].exists || app.secureTextFields["ai-key-field"].exists
+                || app.otherElements["ai-key-field"].exists,
+            "The AI-key step should offer a way to add a key."
         )
         gymShot(app, "build-key")
     }
