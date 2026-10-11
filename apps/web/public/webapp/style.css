@@ -1933,6 +1933,24 @@ button[data-device-restricted] {
 .build-tile strong { font-size: 1rem; }
 .build-tile .note { margin: 0; }
 .badge { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: var(--radius-sm); background: var(--surface-elev); font-size: 0.72rem; font-family: var(--font-mono); }
+.build-source-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.build-help-btn { flex: 0 0 auto; width: 36px; height: 36px; padding: 0; border-radius: 50%; font-weight: 600; }
+.build-resume-row { display: flex; align-items: center; gap: var(--space-2); text-align: left; cursor: pointer; }
+.build-resume-row strong { flex: 1; font-size: 1rem; }
+.build-resume-row.has-active, .build-session-row.is-active { border-color: var(--ok); }
+.build-resume-count { padding: 1px 8px; border-radius: var(--radius-pill); background: var(--ok); color: #fff; font-size: 13px; font-weight: 700; }
+.build-resume-chevron { color: var(--ink-muted); font-size: 1.2rem; }
+.build-new-caption { margin-bottom: var(--space-2); }
+.build-section-caption { margin: var(--space-3) 0 var(--space-2); }
+.build-session-row { display: flex; align-items: center; gap: var(--space-3); text-align: left; cursor: pointer; }
+.build-session-row + .build-session-row { margin-top: var(--space-2); }
+.build-session-body { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.build-session-body .note { margin: 0; }
+.build-session-action { color: var(--accent); font-weight: 600; font-size: 14px; }
+.build-session-row.is-active .build-session-action { color: var(--ok); }
+.build-help-list { display: flex; flex-direction: column; gap: var(--space-3); margin: var(--space-3) 0; }
+.build-help-list h4 { margin: 0 0 4px; font-size: 14px; }
+.build-help-list p { margin: 0; font-size: 13px; color: var(--ink-muted); line-height: 1.5; }
 .build-journal-timeline { list-style: none; padding: 0; margin: 0; }
 .build-journal-timeline li { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .build-journal-timeline li:last-child { border-bottom: none; }

@@ -603,6 +603,35 @@ sealed class VibeCodePendingRequest {
     ) : VibeCodePendingRequest()
 }
 
+/**
+ * One entry of the daemon's in-memory vibe-code registry
+ * (`GET /api/llm/sessions`). A session listed here can be reopened; one
+ * missing from it ended with a daemon restart and survives only as its
+ * build-journal timeline. Mirror of iOS VibeCodeSessionMeta.
+ */
+@Serializable
+data class VibeCodeSessionMeta(
+    val sessionId: String,
+    val startedAt: Long = 0,
+    /** streaming | awaiting-tool-response | ready-to-deploy | deploying | deployed | failed | cancelled */
+    val status: String,
+    val serviceId: String? = null,
+    val url: String? = null,
+) {
+    /** Still working or waiting on the owner: worth resuming. */
+    val isActive: Boolean
+        get() = status in ACTIVE_STATUSES
+
+    private companion object {
+        val ACTIVE_STATUSES = setOf("streaming", "awaiting-tool-response", "ready-to-deploy", "deploying")
+    }
+}
+
+@Serializable
+data class VibeCodeSessionsResponse(
+    val sessions: List<VibeCodeSessionMeta> = emptyList(),
+)
+
 @Serializable
 data class VibeCodeSessionPublicState(
     val id: String,

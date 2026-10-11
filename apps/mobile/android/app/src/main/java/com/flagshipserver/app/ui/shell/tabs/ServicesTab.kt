@@ -50,10 +50,9 @@ fun ServicesTab() {
             // Mirror iOS's guard: don't re-push if we're already on it.
             is DeepLink.VibeCodeChat -> {
                 deepLinker.consume()
-                val route = "vibe-code-chat/${link.sessionId}"
-                if (nav.currentDestination?.route != "vibe-code-chat/{sessionId}") {
-                    nav.navigate(route)
-                }
+                val onIt = nav.currentDestination?.route == "vibe-code-chat/{sessionId}" &&
+                    nav.currentBackStackEntry?.arguments?.getString("sessionId") == link.sessionId
+                if (!onIt) nav.openVibeSession(vibeSessionChatRoute(link.sessionId))
             }
             // A tap on the ops sliver for a git/mcp build opens its journal —
             // the build's own surface (it has no vibe-code chat session).
@@ -105,7 +104,7 @@ fun ServicesTab() {
             val slug = if (delimIdx > 0) id.substring(delimIdx + 2) else id
             ServiceEnvScreen(nav, appId = id, creator = creator, slug = slug)
         }
-        composable("build/source") { BuildSourceChooserScreen(nav) }
+        composable(BUILD_CHOOSER_ROUTE) { BuildSourceChooserScreen(nav) }
         composable("build/git") { BuildGitScreen(nav) }
         // AI-key step for the git-adapt path. On confirm it stows the chosen
         // credential and pops back to the git screen, whose onAppear takes it

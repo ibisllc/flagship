@@ -1,12 +1,16 @@
-// Build-a-service source chooser — the first question of the create-a-
-// service flow: "how do you want to build it?". Fans out to the build
-// modes; each mode converges on the same deploy + journal on the box.
+// Build-a-service source chooser — the first screen of the create-a-service
+// flow. Resuming comes first, so an unfinished build isn't abandoned for a
+// new one; the help dialog carries the explanations the tiles leave out.
+// Fans out to the build modes; each converges on the same deploy + journal:
 //
 //   - scratch     → describe it, the AI writes + deploys it (existing vibe flow)
 //   - git         → import a repo; if Flagship-ready install as-is, else AI-adapt
 //   - mcp         → connect Cursor/Cline; build from your editor with your own AI
 
 import { $, registerView, show } from "../lib/router.js";
+import { getPodBaseUrl, getSessionToken } from "../lib/api.js";
+import { escapeHtml } from "../lib/util.js";
+import { countActiveSessions, fetchVibeSessions } from "../lib/vibeSessions.js";
 import { enterVibeCode } from "./vibe-code.js";
 import { enterBuildGit } from "./build-git.js";
 import { enterBuildMcp } from "./build-mcp.js";
@@ -14,6 +18,17 @@ import { enterBuildJournal } from "./build-journal.js";
 import { enterBuildKey } from "./build-key.js";
 
 registerView("view-build-source");
+
+const HELP_ITEMS = [
+  ["Resume or view past builds",
+    "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts."],
+  ["Start from scratch with AI",
+    "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server."],
+  ["Import from a Git repo",
+    "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you."],
+  ["Connect your IDE",
+    "For developers: work in Cursor or Cline on your computer with your own AI, connected to your server over MCP. No AI key is stored on the server."],
+];
 
 export function initBuildSourceView() {
   // Scratch uses the box's model — the next screen asks for / confirms the
@@ -30,9 +45,49 @@ export function initBuildSourceView() {
     e.preventDefault();
     enterBuildJournal();
   });
+  $("build-source-help").addEventListener("click", openBuildHelp);
   $("build-source-back").addEventListener("click", () => show("view-services-list"));
+  // Re-counted every time the chooser shows (e.g. Back from a session).
+  document.addEventListener("flagship:view-shown", (e) => {
+    if (e.detail?.id === "view-build-source") void refreshActiveCount();
+  });
 }
 
 export function enterBuildSource() {
   show("view-build-source");
+}
+
+async function refreshActiveCount() {
+  const sessions = await fetchVibeSessions({ baseUrl: getPodBaseUrl(), token: getSessionToken() });
+  const n = countActiveSessions(sessions);
+  const badge = $("build-source-active-count");
+  badge.textContent = n > 0 ? String(n) : "";
+  badge.setAttribute("aria-label", `${n} active`);
+  badge.classList.toggle("hidden", n === 0);
+  $("build-source-journal-link").classList.toggle("has-active", n > 0);
+}
+
+function openBuildHelp() {
+  const dlg = document.createElement("dialog");
+  dlg.className = "modal-card";
+  dlg.setAttribute("aria-label", "How building works");
+  dlg.innerHTML = `
+    <h3 class="modal-title">How building works</h3>
+    <p class="modal-message">Every option ends the same way: the app is installed and running on your own server, at its own web address.</p>
+    <div class="build-help-list">
+      ${HELP_ITEMS.map(([title, body]) => `<div><h4>${escapeHtml(title)}</h4><p>${escapeHtml(body)}</p></div>`).join("")}
+    </div>
+    <button class="full-width" data-help-done>Done</button>
+  `;
+  document.body.appendChild(dlg);
+  const close = () => {
+    if (dlg.open) dlg.close();
+    dlg.remove();
+  };
+  dlg.querySelector("[data-help-done]").addEventListener("click", close);
+  dlg.addEventListener("cancel", (e) => {
+    e.preventDefault();
+    close();
+  });
+  dlg.showModal();
 }

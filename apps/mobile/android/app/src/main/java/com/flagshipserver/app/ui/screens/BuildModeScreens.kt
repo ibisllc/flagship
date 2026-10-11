@@ -1,9 +1,9 @@
 // "Build a service" modes — Compose screens. The create-a-service entry
-// opens the chooser ("how do you want to build it?") which fans into:
+// opens the chooser, which fans into:
 //   - scratch     → the existing vibe-code flow
 //   - git         → import a repo (fit → install / not fit → AI-adapt)
 //   - mcp         → connect Cursor/Cline with your own AI
-// plus a "View past builds" link to the build journal.
+// plus "Resume or view past builds" into the build sessions list.
 //
 // MIRRORS the webapp reference apps/web/public/webapp/views/build-*.js and
 // the iOS BuildModeScreens.swift. Plain, reassuring copy throughout.
@@ -30,7 +30,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,7 +50,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -55,14 +66,20 @@ import com.flagshipserver.app.api.BuildEnvRequest
 import com.flagshipserver.app.api.BuildJournalEntry
 import com.flagshipserver.app.api.BuildMcpConnection
 import com.flagshipserver.app.api.BuildSummary
+import com.flagshipserver.app.api.VibeCodeSessionMeta
 import com.flagshipserver.app.core.LocalActiveOperationsCenter
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalBuildClient
+import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSPill
+import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.ui.shell.tabs.openVibeSession
+import com.flagshipserver.app.ui.shell.tabs.vibeSessionChatRoute
 import com.flagshipserver.app.ui.theme.FS
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -71,6 +88,7 @@ import androidx.compose.runtime.DisposableEffect
 import com.flagshipserver.app.viewmodels.BuildGitViewModel
 import com.flagshipserver.app.viewmodels.BuildJournalViewModel
 import com.flagshipserver.app.viewmodels.BuildMcpViewModel
+import com.flagshipserver.app.viewmodels.BuildSessions
 import com.flagshipserver.app.viewmodels.LoadingState
 import com.flagshipserver.app.viewmodels.PendingBuildCredential
 import kotlinx.serialization.json.Json
@@ -91,8 +109,9 @@ private fun copyToClipboard(ctx: Context, label: String, text: String) {
 @Composable
 private fun ScreenScaffold(
     title: String,
-    subtitle: String,
+    subtitle: String?,
     onBack: () -> Unit,
+    action: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val scroll = rememberScrollState()
@@ -103,17 +122,23 @@ private fun ScreenScaffold(
             .padding(horizontal = FS.space.s6),
     ) {
         Spacer(Modifier.height(FS.space.s12))
-        Text(
-            text = title,
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            text = subtitle,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+                modifier = Modifier.weight(1f),
+            )
+            action?.invoke()
+        }
+        if (subtitle != null) {
+            Spacer(Modifier.height(FS.space.s3))
+            Text(
+                text = subtitle,
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp),
+            )
+        }
         Spacer(Modifier.height(FS.space.s6))
         content()
         Spacer(Modifier.height(FS.space.s6))
@@ -153,17 +178,36 @@ private fun MonoField(value: String, onValueChange: (String) -> Unit, placeholde
 // ── chooser ─────────────────────────────────────────────────────
 
 /**
- * "Build a service — how do you want to build it?" Three tiles + a
- * "View past builds" link. The scratch tile routes to the existing vibe
- * flow.
+ * The first screen of the create-a-service flow. Resuming comes first, so an
+ * unfinished build isn't abandoned for a new one; the help dialog carries the
+ * explanations the tiles leave out. The scratch tile routes to the existing
+ * vibe flow.
  */
 @Composable
 fun BuildSourceChooserScreen(nav: NavController) {
+    val screens = LocalScreensClient.current
+    var activeSessions by remember { mutableStateOf(0) }
+    var showHelp by remember { mutableStateOf(false) }
+    // Composition restarts each time the chooser comes back on top (e.g.
+    // Back from a session), so this re-counts then.
+    LaunchedEffect(Unit) {
+        val sessions = runCatching { screens.vibeCodeSessions().sessions }.getOrDefault(emptyList())
+        activeSessions = sessions.count { it.isActive }
+    }
     ScreenScaffold(
         title = "Build a service",
-        subtitle = "How do you want to build it?",
+        subtitle = null,
         onBack = { nav.popBackStack() },
+        action = {
+            IconButton(onClick = { showHelp = true }, modifier = Modifier.testTag("build-source-help")) {
+                Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help", tint = FS.colors.textMuted)
+            }
+        },
     ) {
+        ResumeRow(activeSessions) { nav.navigate("build/journal") }
+        Spacer(Modifier.height(FS.space.s5))
+        Text("New build", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
+        Spacer(Modifier.height(FS.space.s2))
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             SourceTile(
                 title = "Start from scratch with AI",
@@ -185,13 +229,84 @@ fun BuildSourceChooserScreen(nav: NavController) {
                 testTag = "build-src-mcp",
             )
         }
-        Spacer(Modifier.height(FS.space.s4))
-        FSGhostButton(
-            "View past builds →",
-            onClick = { nav.navigate("build/journal") },
-            block = true,
-        )
     }
+    if (showHelp) BuildHelpDialog { showHelp = false }
+}
+
+@Composable
+private fun ResumeRow(activeSessions: Int, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(FS.radius.md)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(FS.colors.surface)
+            .border(1.dp, if (activeSessions > 0) FS.colors.success else FS.colors.border, shape)
+            .clickable(onClick = onClick)
+            .padding(FS.space.s4)
+            .testTag("build-source-journal-link"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+    ) {
+        Icon(Icons.Outlined.History, contentDescription = null, tint = FS.colors.primary)
+        Text(
+            "Resume or view past builds",
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier.weight(1f),
+        )
+        if (activeSessions > 0) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(FS.radius.pill))
+                    .background(FS.colors.success)
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                    .semantics { contentDescription = "$activeSessions active" },
+            ) {
+                Text("$activeSessions", color = Color.White, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold))
+            }
+        }
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = FS.colors.textMuted)
+    }
+}
+
+private val BUILD_HELP_ITEMS = listOf(
+    "Resume or view past builds" to
+        "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts.",
+    "Start from scratch with AI" to
+        "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server.",
+    "Import from a Git repo" to
+        "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you.",
+    "Connect your IDE" to
+        "For developers: work in Cursor or Cline on your computer with your own AI, connected to your server over MCP. No AI key is stored on the server.",
+)
+
+@Composable
+private fun BuildHelpDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        title = { Text("How building works") },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(FS.space.s4),
+            ) {
+                Text(
+                    "Every option ends the same way: the app is installed and running on your own server, at its own web address.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                )
+                BUILD_HELP_ITEMS.forEach { (title, body) ->
+                    Column {
+                        Text(title, color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+                        Spacer(Modifier.height(FS.space.s1))
+                        Text(body, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+                    }
+                }
+            }
+        },
+    )
 }
 
 @Composable
@@ -529,17 +644,19 @@ private fun CodeBlock(text: String) {
 @Composable
 fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
     val client = LocalBuildClient.current
-    val vm = remember { BuildJournalViewModel(client) }
+    val screens = LocalScreensClient.current
+    val vm = remember { BuildJournalViewModel(client, fetchLiveSessions = { screens.vibeCodeSessions().sessions }) }
     val list by vm.list.collectAsState()
     val detail by vm.detail.collectAsState()
+    val liveSessions by vm.liveSessions.collectAsState()
 
     LaunchedEffect(buildId) {
         if (buildId != null) vm.loadDetail(buildId) else vm.loadList()
     }
 
     ScreenScaffold(
-        title = "Build journal",
-        subtitle = if (buildId != null) "How this service was built." else "How each service was built, across every mode.",
+        title = "Build sessions",
+        subtitle = if (buildId != null) "How this service was built." else null,
         onBack = { nav.popBackStack() },
     ) {
         if (buildId != null) {
@@ -551,19 +668,81 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
         } else {
             when (val l = list) {
                 is LoadingState.Loaded -> {
-                    if (l.value.isEmpty()) {
-                        InfoCard("No builds yet", "Builds you start will show up here.")
+                    val builds = l.value
+                    val ended = BuildSessions.endedBuilds(builds, liveSessions)
+                    if (builds.isEmpty() && liveSessions.isEmpty()) {
+                        InfoCard("No builds yet.", "Builds you start will show up here.")
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                            l.value.forEach { b -> BuildTile(b) { nav.navigate("build/journal/${b.buildId}") } }
+                            if (liveSessions.isNotEmpty()) {
+                                SectionCaption("Open on your server")
+                                liveSessions.forEach { session ->
+                                    SessionTile(session, BuildSessions.name(session, builds)) {
+                                        nav.openVibeSession(vibeSessionChatRoute(session.sessionId))
+                                    }
+                                }
+                            }
+                            if (ended.isNotEmpty()) {
+                                if (liveSessions.isNotEmpty()) Spacer(Modifier.height(FS.space.s2))
+                                SectionCaption("Past builds")
+                                ended.forEach { b -> BuildTile(b) { nav.navigate("build/journal/${b.buildId}") } }
+                            }
                         }
                     }
                 }
                 is LoadingState.Failed -> ErrorCardSimple(l.message)
-                else -> InfoCard("Loading…", "Fetching past builds.")
+                else -> InfoCard("Loading…", "Fetching your builds.")
             }
         }
     }
+}
+
+@Composable
+private fun SectionCaption(text: String) {
+    Text(text, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
+}
+
+@Composable
+private fun SessionTile(session: VibeCodeSessionMeta, title: String, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(FS.radius.md)
+    val active = session.isActive
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(FS.colors.surface)
+            .border(1.dp, if (active) FS.colors.success.copy(alpha = 0.6f) else FS.colors.border, shape)
+            .clickable(onClick = onClick)
+            .padding(FS.space.s5)
+            .testTag("build-session-${session.sessionId}"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+            Spacer(Modifier.height(FS.space.s1))
+            Text(
+                "Started ${fmtTimestamp(session.startedAt)}",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp),
+            )
+            Spacer(Modifier.height(FS.space.s2))
+            FSPill(BuildSessions.label(session.status), sessionPill(session.status))
+        }
+        Text(
+            if (active) "Resume" else "Open",
+            color = if (active) FS.colors.success else FS.colors.primary,
+            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+        )
+    }
+}
+
+private fun sessionPill(status: String): FSPillKind = when (status) {
+    "awaiting-tool-response", "ready-to-deploy" -> FSPillKind.Pending
+    "streaming", "deploying" -> FSPillKind.Provisioning
+    "deployed" -> FSPillKind.Online
+    "failed" -> FSPillKind.Offline
+    else -> FSPillKind.Idle
 }
 
 @Composable

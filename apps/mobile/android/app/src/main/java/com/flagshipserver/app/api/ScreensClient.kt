@@ -82,6 +82,10 @@ interface ScreensClient {
      *  build-modes deploy). Mirror of iOS ScreensClient.vibeCodeDeploy. */
     suspend fun vibeCodeDeploy(sessionId: String): BuildDeployResponse
 
+    /** The daemon's live vibe-code sessions (legacy `GET /api/llm/sessions`,
+     *  same paired-session auth as [vibeCodeDeploy]). */
+    suspend fun vibeCodeSessions(): VibeCodeSessionsResponse = VibeCodeSessionsResponse()
+
     // P9 — peer-backup management.
     suspend fun peerBackupStatus(): PeerBackupStatusResponse
     suspend fun peerBackupToggle(participate: Boolean): PeerBackupStatusResponse

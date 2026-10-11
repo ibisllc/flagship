@@ -62,7 +62,8 @@
 //  v35: the update dialog lists the box's releases ("Update to latest").
 //  v36: the server page shows the box's health report.
 //  v37: the update sheet no longer asks again before going back.
-const SHELL_VERSION = "v37";
+//  v38: open build sessions can be resumed; Back from a build goes to the chooser.
+const SHELL_VERSION = "v38";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

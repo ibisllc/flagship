@@ -14,11 +14,13 @@ import com.flagshipserver.app.api.BuildMcpConnection
 import com.flagshipserver.app.api.BuildMcpRequest
 import com.flagshipserver.app.api.BuildSummary
 import com.flagshipserver.app.api.ScreensError
+import com.flagshipserver.app.api.VibeCodeSessionMeta
 import com.flagshipserver.app.core.NetworkErrorHumanizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -247,12 +249,14 @@ class BuildMcpViewModel(
 // ---------- journal ----------------------------------------------------
 
 /**
- * Build journal viewer: a list of past builds → a per-build timeline.
- * Opening with a [buildId] jumps straight to the detail.
+ * Build sessions: the sessions the box still holds (resumable) above the
+ * past builds, each of which opens a per-build timeline. Opening with a
+ * [buildId] jumps straight to the detail.
  */
 class BuildJournalViewModel(
     private val client: BuildClient,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    private val fetchLiveSessions: suspend () -> List<VibeCodeSessionMeta> = { emptyList() },
 ) {
     private val _list = MutableStateFlow<LoadingState<List<BuildSummary>>>(LoadingState.Idle)
     val list: StateFlow<LoadingState<List<BuildSummary>>> = _list.asStateFlow()
@@ -260,11 +264,20 @@ class BuildJournalViewModel(
     private val _detail = MutableStateFlow<LoadingState<List<BuildJournalEntry>>>(LoadingState.Idle)
     val detail: StateFlow<LoadingState<List<BuildJournalEntry>>> = _detail.asStateFlow()
 
+    /** Sessions still held by the box, newest first. A daemon restart empties
+     *  this; their journals stay in [list]. */
+    private val _liveSessions = MutableStateFlow<List<VibeCodeSessionMeta>>(emptyList())
+    val liveSessions: StateFlow<List<VibeCodeSessionMeta>> = _liveSessions.asStateFlow()
+
     fun loadList(): Job = scope.launch {
         _list.value = LoadingState.Loading
+        val sessions = async { runCatching { fetchLiveSessions() }.getOrDefault(emptyList()) }
         try {
-            _list.value = LoadingState.Loaded(client.sessions().builds)
+            val builds = client.sessions().builds
+            _liveSessions.value = sessions.await().sortedByDescending { it.startedAt }
+            _list.value = LoadingState.Loaded(builds)
         } catch (t: Throwable) {
+            sessions.cancel()
             // The sessions list is a build-platform ENTRY call — a 404 means the
             // box can't build services (unlike loadDetail's session-scoped 404).
             _list.value = LoadingState.Failed(friendlyBuildEntry(t))
@@ -281,4 +294,28 @@ class BuildJournalViewModel(
     }
 
     fun clearDetail() { _detail.value = LoadingState.Idle }
+}
+
+/** Pure parts of the build sessions screen. Mirror of iOS BuildJournalScreen /
+ *  BuildJournalViewModel and the webapp lib/vibeSessions.js. */
+object BuildSessions {
+    /** Past builds the box no longer holds a session for. */
+    fun endedBuilds(builds: List<BuildSummary>, sessions: List<VibeCodeSessionMeta>): List<BuildSummary> {
+        val live = sessions.mapTo(HashSet()) { it.sessionId }
+        return builds.filter { it.buildId !in live }
+    }
+
+    /** The journal's service name for a live session, once it has one. */
+    fun name(session: VibeCodeSessionMeta, builds: List<BuildSummary>): String =
+        session.serviceId ?: builds.firstOrNull { it.buildId == session.sessionId }?.serviceId ?: "AI build"
+
+    fun label(status: String): String = when (status) {
+        "streaming" -> "AI is working"
+        "awaiting-tool-response" -> "Waiting for you"
+        "ready-to-deploy" -> "Ready to deploy"
+        "deploying" -> "Deploying"
+        "deployed" -> "Deployed"
+        "cancelled" -> "Cancelled"
+        else -> "Stopped"
+    }
 }

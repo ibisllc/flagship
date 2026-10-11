@@ -200,6 +200,9 @@ class LiveScreensClient(
         )
     }
 
+    override suspend fun vibeCodeSessions(): VibeCodeSessionsResponse =
+        request("/api/llm/sessions", VibeCodeSessionsResponse.serializer())
+
     override suspend fun peerBackupStatus(): PeerBackupStatusResponse =
         request("/api/screens/peer-backup/status", PeerBackupStatusResponse.serializer())
 

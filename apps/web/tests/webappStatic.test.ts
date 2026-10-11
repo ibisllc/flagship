@@ -373,7 +373,8 @@ describe("/webapp PWA static surface", () => {
     // v25 adds direct recipe download on top of the quieter Settings + dock shell.
     // v35 lists the box's releases in the update dialog ("Update to latest").
     // v37 drops the update sheet's second downgrade confirmation.
-    expect(r.body).toContain('SHELL_VERSION = "v37"');
+    // v38 resumes open build sessions; Back from a build goes to the chooser.
+    expect(r.body).toContain('SHELL_VERSION = "v38"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

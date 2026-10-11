@@ -36,7 +36,7 @@ export async function enterVibeCodeChat(sessionId, serverFqdn) {
 export function initVibeCodeChatView() {
   $("vibecode-chat-back")?.addEventListener("click", () => {
     stopPolling();
-    show("view-services-list");
+    show("view-build-source");
   });
 }
 

@@ -504,7 +504,7 @@ export function initVibeCodeView() {
   });
   $("vibe-code-back")?.addEventListener("click", () => {
     clearPoll();
-    show("view-home");
+    show("view-build-source");
   });
 }
 
@@ -533,5 +533,15 @@ export async function resumeVibeCode() {
   if (!activeSessionId) return enterVibeCode();
   show("view-vibe-code");
   schedulePoll();
+  await poll().catch(() => {});
+}
+
+/** Reopen a session the box still holds (from the build sessions list). */
+export async function openVibeCodeSession(sessionId) {
+  if (activeSessionId === sessionId) return resumeVibeCode();
+  show("view-vibe-code");
+  reset();
+  activeSessionId = sessionId;
+  $("vc-first-turn")?.classList.add("hidden");
   await poll().catch(() => {});
 }

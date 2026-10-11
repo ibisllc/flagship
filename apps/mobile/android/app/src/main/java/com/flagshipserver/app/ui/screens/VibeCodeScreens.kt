@@ -53,6 +53,8 @@ import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.ui.shell.tabs.openVibeSession
+import com.flagshipserver.app.ui.shell.tabs.vibeSessionChatRoute
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.PendingBuildCredential
 import com.flagshipserver.app.viewmodels.VibeCodeStreamViewModel
@@ -339,7 +341,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                             nav.navigate("vibe/key")
                         } else {
                             PendingBuildCredential.take()
-                            nav.navigate("vibe/generating/${resp.sessionId}")
+                            nav.openVibeSession("vibe/generating/${resp.sessionId}")
                         }
                     } catch (t: Throwable) {
                         // Don't swallow — a tap that does nothing with no
@@ -457,10 +459,10 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
                     routed = true
                     // nav.navigate must run on Main (the live call's
                     // withContext(IO) + the test's continuation interceptor can
-                    // leave us off-main); launchSingleTop avoids a
-                    // generating⇄chat loop.
+                    // leave us off-main). The chat replaces this screen, so
+                    // Back from it can't bounce through here again.
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        nav.navigate("vibe-code-chat/$sessionId") { launchSingleTop = true }
+                        nav.openVibeSession(vibeSessionChatRoute(sessionId))
                     }
                     break
                 }

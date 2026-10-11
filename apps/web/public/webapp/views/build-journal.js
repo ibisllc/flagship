@@ -1,13 +1,24 @@
-// Build journal viewer (webapp). Shows the append-only history of how a
-// service was built, across every mode. Two entry points:
-//   enterBuildJournal()        → the list of past builds
+// Build sessions (webapp). Sessions still open on the box come first and
+// reopen the vibe-code session; below them, the append-only history of how
+// each service was built, across every mode. Two entry points:
+//   enterBuildJournal()        → open sessions + past builds
 //   enterBuildJournal(buildId) → that build's timeline directly
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError, buildEntryError } from "../lib/api.js";
+import { screensFetch, ScreensError, buildEntryError, getPodBaseUrl, getSessionToken } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { formatDateTime } from "../lib/dateFormat.js";
+import {
+  endedBuilds,
+  fetchVibeSessions,
+  isActiveSession,
+  sessionPillClass,
+  sessionStatusLabel,
+  sessionTitle,
+  sortSessionsNewestFirst,
+} from "../lib/vibeSessions.js";
+import { openVibeCodeSession } from "./vibe-code.js";
 
 registerView("view-build-journal");
 
@@ -27,14 +38,46 @@ export async function enterBuildJournal(buildId) {
 }
 
 async function renderList() {
+  const sessionsP = fetchVibeSessions({ baseUrl: getPodBaseUrl(), token: getSessionToken() });
+  let builds;
   try {
     const r = await screensFetch("/api/build/sessions");
-    const builds = r.builds || [];
-    if (builds.length === 0) {
-      $("build-journal-list").innerHTML = `<div class="card placeholder">No builds yet.</div>`;
-      return;
-    }
-    $("build-journal-list").innerHTML = builds
+    builds = r.builds || [];
+  } catch (e) {
+    // The sessions list is a build-platform ENTRY call — a 404 means the box
+    // can't build services (unlike renderDetail's session-scoped 404).
+    toast(buildEntryError(e), "err");
+    return;
+  }
+  const sessions = sortSessionsNewestFirst(await sessionsP);
+  const ended = endedBuilds(builds, sessions);
+  const list = $("build-journal-list");
+  if (sessions.length === 0 && builds.length === 0) {
+    list.innerHTML = `<div class="card placeholder">No builds yet.</div>`;
+    return;
+  }
+  let html = "";
+  if (sessions.length > 0) {
+    html += `<p class="note build-section-caption">Open on your server</p>`;
+    html += sessions
+      .map((s) => {
+        const active = isActiveSession(s);
+        const pill = sessionPillClass(s.status);
+        return `
+        <button class="card full-width build-session-row${active ? " is-active" : ""}" data-session="${escapeHtml(s.sessionId)}">
+          <span class="build-session-body">
+            <strong>${escapeHtml(sessionTitle(s, builds))}</strong>
+            <span class="note">Started ${escapeHtml(formatDateTime(s.startedAt))}</span>
+            <span class="pill${pill ? ` ${pill}` : ""}">${escapeHtml(sessionStatusLabel(s.status))}</span>
+          </span>
+          <span class="build-session-action">${active ? "Resume" : "Open"}</span>
+        </button>`;
+      })
+      .join("");
+  }
+  if (ended.length > 0) {
+    html += `<p class="note build-section-caption">Past builds</p>`;
+    html += ended
       .map(
         (b) => `
         <button class="card full-width build-tile" data-build="${escapeHtml(b.buildId)}">
@@ -43,13 +86,13 @@ async function renderList() {
         </button>`,
       )
       .join("");
-    for (const el of $("build-journal-list").querySelectorAll("[data-build]")) {
-      el.addEventListener("click", () => renderDetail(el.getAttribute("data-build")));
-    }
-  } catch (e) {
-    // The sessions list is a build-platform ENTRY call — a 404 means the box
-    // can't build services (unlike renderDetail's session-scoped 404).
-    toast(buildEntryError(e), "err");
+  }
+  list.innerHTML = html;
+  for (const el of list.querySelectorAll("[data-session]")) {
+    el.addEventListener("click", () => openVibeCodeSession(el.getAttribute("data-session")));
+  }
+  for (const el of list.querySelectorAll("[data-build]")) {
+    el.addEventListener("click", () => renderDetail(el.getAttribute("data-build")));
   }
 }
 
