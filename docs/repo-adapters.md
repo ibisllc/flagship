@@ -127,6 +127,47 @@ publish and lists it in `do-not-adapt.txt`. Git history keeps old commits;
 removal stops future use. The public copy is `apps/web/public/adapters.html`
 and the privacy policy.
 
+## Feedback, crashes and retirement
+
+The loop is designed to run with nobody watching it.
+
+- **The submitter hears why.** A box submits with `wait: true` and gets
+  `kept`, `known` or `refused` with reasons, each marked fixable or not. When
+  every reason is fixable, the box's own AI:
+  1. gets the reasons;
+  2. makes the smallest change;
+  3. validates and redeploys in place;
+  4. submits again.
+
+  It does this at most twice. The owner's AI, not ours, does the work.
+  Sharing is on by default; the owner can switch it off on the import
+  screen.
+- **Probing:** rule failures come with full reasons, since the rules are
+  public anyway. AI refusals give only a category. Submissions are capped at
+  6 per repo and commit per day.
+- **Crashes at install:** when a published adapter fails to build or start,
+  the box:
+  - reports which adapter and at which stage, and nothing else
+    (`POST /api/adapters/complain`);
+  - never offers it on that box again;
+  - hands the repo to the owner's AI, starting it at once if the build
+    already has a key.
+
+  There is no other telemetry.
+- **Owner reports:** a service built from a shared adapter offers "Report a
+  problem with this adaptation" on its page. A short note goes with the
+  adapter's hash, and only that. The note is never published, and is
+  deleted after 90 days (180 days for a retired adapter).
+- **Retirement:** at 3 reports of any kind, crash or owner note, the next
+  publish retires the adapter, removing it from the public store. A review
+  failure retires one too. Retired adapters stay in D1 with their reports,
+  and an identical file can't come back. The next box's AI makes a new one.
+- **Learning:** once a week, with the review key set, the Worker asks a cheap
+  model what went wrong across new retirements and how the harness (adapt
+  prompt, build tools, manifest contract) could prevent it. Answers are kept
+  privately at `GET /api/admin/adapter-insights`, behind the admin secret;
+  read them when improving the harness.
+
 ## Not yet
 
 - **No signature:** there is none on adapters. The repo's own file carries
