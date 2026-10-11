@@ -1448,7 +1448,6 @@ private fun UpdateServerSheet(serverDomain: String, vm: UpdateServerViewModel, o
     var catalogError by remember { mutableStateOf<String?>(null) }
     var loadingCatalog by remember { mutableStateOf(false) }
     var showAdvanced by remember { mutableStateOf(false) }
-    var confirmDowngrade by remember { mutableStateOf<String?>(null) }
     val working = phase is UpdateServerViewModel.Phase.Signing ||
         phase is UpdateServerViewModel.Phase.Posting
 
@@ -1598,7 +1597,7 @@ private fun UpdateServerSheet(serverDomain: String, vm: UpdateServerViewModel, o
                 if (showAdvanced) {
                     Text(DOWNGRADE_WARNING, color = FS.colors.warning, style = muted)
                     catalog?.older.orEmpty().forEach { r ->
-                        releaseRow(r, "Go back") { confirmDowngrade = r.commit }
+                        releaseRow(r, "Go back") { order(r.commit) }
                     }
                     FSField(
                         value = target,
@@ -1614,8 +1613,7 @@ private fun UpdateServerSheet(serverDomain: String, vm: UpdateServerViewModel, o
                         label = if (working) "Working…" else "Order update",
                         onClick = onClick@{
                             if (!vm.canOrder(target) || working) return@onClick
-                            val t = target.trim().lowercase()
-                            if (catalog?.pastedNeedsConfirm(t) == false) order(t) else confirmDowngrade = t
+                            order(target.trim().lowercase())
                         },
                         block = true,
                         enabled = vm.canOrder(target) && !working,
@@ -1628,23 +1626,6 @@ private fun UpdateServerSheet(serverDomain: String, vm: UpdateServerViewModel, o
             }
             Spacer(Modifier.height(FS.space.s6))
         }
-    }
-
-    confirmDowngrade?.let { commit ->
-        AlertDialog(
-            onDismissRequest = { confirmDowngrade = null },
-            title = { Text("Go back to an older release?") },
-            text = { Text(DOWNGRADE_WARNING) },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDowngrade = null
-                    order(commit)
-                }) { Text("Go back to ${commit.take(8)}", color = FS.colors.danger) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDowngrade = null }) { Text("Cancel") }
-            },
-        )
     }
 }
 

@@ -372,8 +372,8 @@ describe("/webapp PWA static surface", () => {
     // v19 adds demo-only paired-session minting before server detail opens.
     // v25 adds direct recipe download on top of the quieter Settings + dock shell.
     // v35 lists the box's releases in the update dialog ("Update to latest").
-    // v36 shows the box's health report on the server page.
-    expect(r.body).toContain('SHELL_VERSION = "v36"');
+    // v37 drops the update sheet's second downgrade confirmation.
+    expect(r.body).toContain('SHELL_VERSION = "v37"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

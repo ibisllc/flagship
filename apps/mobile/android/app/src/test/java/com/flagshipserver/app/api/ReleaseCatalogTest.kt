@@ -5,7 +5,6 @@ package com.flagshipserver.app.api
 
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -49,13 +48,5 @@ class ReleaseCatalogTest {
         val c = json.decodeFromString(ReleaseCatalogResponse.serializer(), body)
         assertEquals(listOf(newer), c.otherNewer.map { it.commit })
         assertEquals(listOf(old), c.older.map { it.commit })
-    }
-
-    @Test
-    fun onlyAKnownNewerPasteSkipsTheConfirmation() {
-        val c = json.decodeFromString(ReleaseCatalogResponse.serializer(), body)
-        assertFalse(c.pastedNeedsConfirm(" ${newer.uppercase()} "))
-        assertTrue(c.pastedNeedsConfirm(old))
-        assertTrue(c.pastedNeedsConfirm("e".repeat(40)))
     }
 }

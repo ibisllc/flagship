@@ -42,7 +42,6 @@ import {
   depositUpdateOrder,
   describeLastUpdate,
   groupReleases,
-  pastedNeedsConfirm,
   releaseCatalogPath,
   COMMIT_SHA_RE,
   DOWNGRADE_WARNING,
@@ -1352,14 +1351,6 @@ async function openUpdateDialog(body) {
         <button class="danger full-width mt-2" data-update-go disabled>Order update</button>
       </details>
     </div>
-    <div class="mt-3 hidden" data-update-confirm>
-      <h4>Go back to an older release?</h4>
-      <p class="note">${escapeHtml(DOWNGRADE_WARNING)}</p>
-      <div class="row-2 mt-3">
-        <button class="secondary" data-update-confirm-no>Cancel</button>
-        <button class="danger" data-update-confirm-yes></button>
-      </div>
-    </div>
     <p class="modal-error err-text hidden" data-update-error></p>
     <div class="mt-3 hidden" data-update-result>
       <p class="note">Update sent. The server picks it up within about five
@@ -1387,14 +1378,11 @@ async function openUpdateDialog(body) {
   const goBtn = q("[data-update-go]");
   const cancelBtn = q("[data-update-cancel]");
   const resultEl = q("[data-update-result]");
-  const confirmEl = q("[data-update-confirm]");
-  const confirmYes = q("[data-update-confirm-yes]");
   const from = currentCommit.toLowerCase();
 
   let catalog = null;
   let working = false;
   let done = false;
-  let pendingDowngrade = null;
 
   const orderButtons = () => dlg.querySelectorAll("[data-update-commit]");
   const setWorking = (on) => {
@@ -1439,11 +1427,7 @@ async function openUpdateDialog(body) {
     olderEl.innerHTML = releaseRows(g.older, "Go back", "downgrade");
     orderButtons().forEach((b) => {
       b.disabled = working;
-      b.addEventListener("click", () => {
-        const commit = b.getAttribute("data-update-commit");
-        if (b.getAttribute("data-update-action") === "downgrade") askDowngrade(commit);
-        else order(commit);
-      });
+      b.addEventListener("click", () => order(b.getAttribute("data-update-commit")));
     });
   };
 
@@ -1475,19 +1459,6 @@ async function openUpdateDialog(body) {
     hintEl.classList.toggle("hidden", !problem);
     goBtn.disabled = working || problem !== null || t.length === 0;
   }
-
-  const askDowngrade = (commit) => {
-    if (working) return;
-    pendingDowngrade = commit;
-    confirmYes.textContent = `Go back to ${commit.slice(0, 8)}`;
-    chooseEl.classList.add("hidden");
-    confirmEl.classList.remove("hidden");
-  };
-  const closeConfirm = () => {
-    pendingDowngrade = null;
-    confirmEl.classList.add("hidden");
-    chooseEl.classList.remove("hidden");
-  };
 
   async function order(targetCommit) {
     if (working || done) return;
@@ -1531,14 +1502,7 @@ async function openUpdateDialog(body) {
     goBtn.addEventListener("click", () => {
       const t = targetValue();
       if (goBtn.disabled || !COMMIT_SHA_RE.test(t) || t === from) return;
-      if (pastedNeedsConfirm(catalog, t)) askDowngrade(t);
-      else order(t);
-    });
-    q("[data-update-confirm-no]").addEventListener("click", closeConfirm);
-    confirmYes.addEventListener("click", () => {
-      const commit = pendingDowngrade;
-      closeConfirm();
-      if (commit) order(commit);
+      order(t);
     });
     loadCatalog(false);
   });

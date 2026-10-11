@@ -1177,7 +1177,7 @@ struct UpdateServerCard: View {
 /// Sheet body for the update order. The box lists the releases it verified for
 /// itself; the main action is "Update to latest", other newer releases sit
 /// below, and going back to an older release (or pasting any commit) is under
-/// Advanced behind a warning and a confirmation. Whatever is picked, the signed
+/// Advanced, beside its warning. Whatever is picked, the signed
 /// order names one exact commit. The biometric fires ONCE, on the tap.
 struct UpdateServerSheet: View {
     @Environment(\.colorScheme) private var scheme
@@ -1191,7 +1191,6 @@ struct UpdateServerSheet: View {
     @State private var catalogError: String?
     @State private var loadingCatalog = false
     @State private var showAdvanced = false
-    @State private var confirmDowngrade: String?
 
     static let downgradeWarning = "Older releases don't have the fixes made since, and may not understand changes made to this server after them, such as a rotated admin key. In the worst case the server stops accepting updates and has to be reinstalled. Only go back if a newer release broke something."
 
@@ -1203,10 +1202,6 @@ struct UpdateServerSheet: View {
 
     private var currentTag: String? {
         catalog?.releases.first { $0.relation == "current" }?.tag
-    }
-
-    private func relation(of commit: String) -> String {
-        catalog?.releases.first { $0.commit == commit.lowercased() }?.relation ?? "unknown"
     }
 
     var body: some View {
@@ -1240,16 +1235,6 @@ struct UpdateServerSheet: View {
         .navigationTitle("Update server")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadCatalog(refresh: false) }
-        .confirmationDialog(
-            "Go back to an older release?",
-            isPresented: Binding(get: { confirmDowngrade != nil }, set: { if !$0 { confirmDowngrade = nil } }),
-            titleVisibility: .visible,
-            presenting: confirmDowngrade
-        ) { commit in
-            Button("Go back to \(String(commit.prefix(8)))", role: .destructive) { order(commit) }
-        } message: { _ in
-            Text(Self.downgradeWarning)
-        }
     }
 
     @ViewBuilder
@@ -1309,7 +1294,7 @@ struct UpdateServerSheet: View {
                     Text(Self.downgradeWarning).font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
                 ForEach((catalog?.releases ?? []).filter { $0.relation == "older" }) { r in
-                    releaseRow(r, actionLabel: "Go back", c: c) { confirmDowngrade = r.commit }
+                    releaseRow(r, actionLabel: "Go back", c: c) { order(r.commit) }
                 }
                 Text("Or enter any release (full commit)").font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 TextField("40-character commit hash", text: $target)
@@ -1325,8 +1310,7 @@ struct UpdateServerSheet: View {
                 }
                 FSDangerButton(working ? "Working…" : "Order update", block: true) {
                     guard vm.canOrder(target), !working else { return }
-                    let t = target.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                    if relation(of: t) == "newer" { order(t) } else { confirmDowngrade = t }
+                    order(target.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
                 }
                 .disabled(!vm.canOrder(target) || working)
                 .opacity(vm.canOrder(target) && !working ? 1 : 0.4)

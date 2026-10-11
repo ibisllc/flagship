@@ -134,13 +134,6 @@ data class ReleaseCatalogResponse(
 
     val older: List<ReleaseEntry>
         get() = releases.filter { it.relation == "older" }
-
-    /** A pasted commit orders straight away only when it is a known newer
-     *  release; anything else (older, unrelated, unknown) asks first. */
-    fun pastedNeedsConfirm(raw: String): Boolean {
-        val t = raw.trim().lowercase()
-        return releases.firstOrNull { it.commit == t }?.relation != "newer"
-    }
 }
 
 // ---------- P1.2 apps-list ---------------------------------------------

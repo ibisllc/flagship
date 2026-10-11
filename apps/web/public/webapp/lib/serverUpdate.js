@@ -257,11 +257,3 @@ export function groupReleases(catalog) {
     stale: catalog?.stale === true,
   };
 }
-
-/** A pasted commit orders straight away only when the box lists it as a newer
- *  release; older, unrelated and unknown commits ask first. */
-export function pastedNeedsConfirm(catalog, raw) {
-  const t = String(raw ?? "").trim().toLowerCase();
-  const hit = Array.isArray(catalog?.releases) ? catalog.releases.find((r) => r?.commit === t) : null;
-  return hit?.relation !== "newer";
-}

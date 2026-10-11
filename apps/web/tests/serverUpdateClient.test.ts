@@ -270,12 +270,4 @@ describe("release list — what the update dialog offers", () => {
     expect(groupReleases(null)).toEqual({ latest: null, currentTag: null, otherNewer: [], older: [], stale: false });
     expect(groupReleases({ latest: { commit: "nope", tag: "v9" }, releases: [{ commit: "short", relation: "newer" }] }).latest).toBeNull();
   });
-
-  it("only a pasted known-newer release skips the confirmation", async () => {
-    const { pastedNeedsConfirm } = await loadServerUpdate();
-    expect(pastedNeedsConfirm(catalog, ` ${NEWER.toUpperCase()} `)).toBe(false);
-    expect(pastedNeedsConfirm(catalog, OLD)).toBe(true);
-    expect(pastedNeedsConfirm(catalog, "e".repeat(40))).toBe(true);
-    expect(pastedNeedsConfirm(null, NEWER)).toBe(true);
-  });
 });
