@@ -957,6 +957,33 @@ public enum VibeCodePendingRequest: Codable, Equatable, Sendable {
     }
 }
 
+/// One entry of the daemon's in-memory vibe-code registry
+/// (`GET /api/llm/sessions`). A session listed here can be reopened; one
+/// missing from it ended with a daemon restart and survives only as its
+/// build-journal timeline.
+public struct VibeCodeSessionMeta: Codable, Equatable, Sendable, Identifiable {
+    public let sessionId: String
+    public let startedAt: Int64
+    /// streaming | awaiting-tool-response | ready-to-deploy | deploying | deployed | failed | cancelled
+    public let status: String
+    public let serviceId: String?
+    public let url: String?
+    public var id: String { sessionId }
+    public init(sessionId: String, startedAt: Int64, status: String, serviceId: String? = nil, url: String? = nil) {
+        self.sessionId = sessionId; self.startedAt = startedAt; self.status = status
+        self.serviceId = serviceId; self.url = url
+    }
+    /// Still working or waiting on the owner: worth resuming.
+    public var isActive: Bool {
+        ["streaming", "awaiting-tool-response", "ready-to-deploy", "deploying"].contains(status)
+    }
+}
+
+public struct VibeCodeSessionsResponse: Codable, Equatable, Sendable {
+    public let sessions: [VibeCodeSessionMeta]
+    public init(sessions: [VibeCodeSessionMeta]) { self.sessions = sessions }
+}
+
 public struct VibeCodeSessionPublicState: Codable, Equatable, Sendable {
     public let id: String
     public let appId: String?

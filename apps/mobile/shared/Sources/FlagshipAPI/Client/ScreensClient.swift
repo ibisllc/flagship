@@ -79,6 +79,7 @@ public protocol ScreensClient: Sendable {
     // polls /sessions/<id>; the owner POSTs /reply when the AI is
     // awaiting a tool response (talkToUser or requestEnvVar ack).
     func vibeCodeSessionState(sessionId: String) async throws -> VibeCodeSessionPublicState
+    func vibeCodeSessions() async throws -> VibeCodeSessionsResponse
     func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse
     /// Deploy a `ready-to-deploy` scratch (vibe-code) session: builds the
     /// emitted manifest + files into a container and installs it on the box.
@@ -254,5 +255,8 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
 public extension ScreensClient {
     func serverUpdates(refresh: Bool) async throws -> ReleaseCatalogResponse {
         throw ScreensClientError.decoding("release list unavailable")
+    }
+    func vibeCodeSessions() async throws -> VibeCodeSessionsResponse {
+        VibeCodeSessionsResponse(sessions: [])
     }
 }

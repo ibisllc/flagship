@@ -2,30 +2,36 @@ import SwiftUI
 import FlagshipAPI
 
 // Build-a-service multi-mode screens. The create-a-service entry opens the
-// chooser ("how do you want to build it?"), which fans into:
+// chooser, which fans into:
 //   - scratch     → the existing vibe-code flow
 //   - git         → BuildGitScreen (URL → verdict → install / adapt)
 //   - mcp         → BuildMcpScreen (connect Cursor/Cline with your own AI)
-// plus a "View past builds" link into BuildJournalScreen.
+// plus "Resume or view past builds" into BuildJournalScreen.
 //
 // Mirrors the canonical webapp `views/build-*.js`.
 
 // MARK: - Chooser
 
-/// The first question of the create-a-service flow.
+/// The first screen of the create-a-service flow. Resuming comes first, so
+/// an unfinished build isn't abandoned for a new one; the help sheet carries
+/// the explanations the tiles leave out.
 public struct BuildSourceChooserScreen: View {
     @Environment(\.colorScheme) private var scheme
+    var activeSessions: Int = 0
     var onScratch: () -> Void = {}
     var onGit: () -> Void = {}
     var onMcp: () -> Void = {}
     var onPastBuilds: () -> Void = {}
+    @State private var showHelp = false
 
     public init(
+        activeSessions: Int = 0,
         onScratch: @escaping () -> Void = {},
         onGit: @escaping () -> Void = {},
         onMcp: @escaping () -> Void = {},
         onPastBuilds: @escaping () -> Void = {}
     ) {
+        self.activeSessions = activeSessions
         self.onScratch = onScratch
         self.onGit = onGit
         self.onMcp = onMcp
@@ -37,11 +43,35 @@ public struct BuildSourceChooserScreen: View {
         FSScreen {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
-                    Spacer().frame(height: FS.space.s8)
-                    Text("How do you want to build it?").font(FS.font.h2())
-                    Text("Every option ends up the same way — installed and running on your own server.")
-                        .font(FS.font.body()).foregroundColor(c.textMuted)
-                        .padding(.bottom, FS.space.s2)
+                    Spacer().frame(height: FS.space.s4)
+
+                    Button(action: onPastBuilds) {
+                        HStack(spacing: FS.space.s3) {
+                            Image(systemName: "clock.arrow.circlepath").foregroundColor(c.primary)
+                            Text("Resume or view past builds")
+                                .font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+                            Spacer()
+                            if activeSessions > 0 {
+                                Text("\(activeSessions)")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 8).padding(.vertical, 2)
+                                    .background(Capsule().fill(c.success))
+                                    .accessibilityLabel("\(activeSessions) active")
+                            }
+                            Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                        }
+                        .padding(FS.space.s4)
+                        .background(c.surface)
+                        .overlay(RoundedRectangle(cornerRadius: FS.radius.lg)
+                            .stroke(activeSessions > 0 ? c.success : c.border, lineWidth: 1))
+                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.lg))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("build-source-journal-link")
+
+                    Text("New build").font(FS.font.caption()).foregroundColor(c.textMuted)
+                        .padding(.top, FS.space.s2)
 
                     BuildSourceTile(
                         icon: "sparkles",
@@ -67,17 +97,6 @@ public struct BuildSourceChooserScreen: View {
                     )
                     .accessibilityIdentifier("build-src-mcp")
 
-                    Button(action: onPastBuilds) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "clock.arrow.circlepath").foregroundColor(c.primary)
-                            Text("View past builds").font(.system(size: 15, weight: .semibold)).foregroundColor(c.primary)
-                            Spacer()
-                        }
-                        .padding(.vertical, FS.space.s2)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("build-source-journal-link")
-
                     Spacer().frame(height: FS.space.s8)
                 }
                 .padding(.horizontal, FS.space.s6)
@@ -86,6 +105,61 @@ public struct BuildSourceChooserScreen: View {
         }
         .navigationTitle("Build a service")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showHelp = true } label: { Image(systemName: "questionmark.circle") }
+                    .accessibilityLabel("Help")
+                    .accessibilityIdentifier("build-source-help")
+            }
+        }
+        .sheet(isPresented: $showHelp) { BuildHelpSheet() }
+    }
+}
+
+/// Plain explanations for someone who doesn't know which option to pick.
+private struct BuildHelpSheet: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.dismiss) private var dismiss
+
+    private let items: [(String, String, String)] = [
+        ("clock.arrow.circlepath", "Resume or view past builds",
+         "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts."),
+        ("sparkles", "Start from scratch with AI",
+         "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server."),
+        ("arrow.down.circle", "Import from a Git repo",
+         "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you."),
+        ("laptopcomputer", "Connect your IDE",
+         "For developers: work in Cursor or Cline on your computer with your own AI, connected to your server over MCP. No AI key is stored on the server."),
+    ]
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: FS.space.s5) {
+                    Text("Every option ends the same way: the app is installed and running on your own server, at its own web address.")
+                        .font(FS.font.body()).foregroundColor(c.textMuted)
+                    ForEach(items, id: \.1) { icon, title, body in
+                        HStack(alignment: .top, spacing: FS.space.s3) {
+                            Image(systemName: icon).foregroundColor(c.primary).frame(width: 24)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(title).font(FS.font.h4()).foregroundColor(c.text)
+                                Text(body).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+                .padding(FS.space.s6)
+            }
+            .background(c.bg.ignoresSafeArea())
+            .navigationTitle("How building works")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }
 
@@ -459,9 +533,11 @@ private struct CopyableRow: View {
 public struct BuildJournalScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: BuildJournalViewModel
+    var onResume: (String) -> Void = { _ in }
 
-    public init(vm: BuildJournalViewModel) {
+    public init(vm: BuildJournalViewModel, onResume: @escaping (String) -> Void = { _ in }) {
         self.vm = vm
+        self.onResume = onResume
     }
 
     public var body: some View {
@@ -471,7 +547,6 @@ public struct BuildJournalScreen: View {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Spacer().frame(height: FS.space.s6)
                     if vm.openedBuildId == nil {
-                        Text("Past builds").font(FS.font.h2())
                         listBody(c: c)
                     } else {
                         Button(action: { Task { await vm.loadList() } }) {
@@ -491,8 +566,9 @@ public struct BuildJournalScreen: View {
                 .fsReadingColumn()
             }
         }
-        .navigationTitle("Build journal")
+        .navigationTitle("Build sessions")
         .navigationBarTitleDisplayMode(.inline)
+        .refreshable { await vm.loadList() }
     }
 
     @ViewBuilder
@@ -503,12 +579,39 @@ public struct BuildJournalScreen: View {
         case .failed(let msg):
             ErrorCard(message: msg)
         case .loaded(let builds):
-            if builds.isEmpty {
+            if !vm.liveSessions.isEmpty {
+                Text("Open on your server").font(FS.font.caption()).foregroundColor(c.textMuted)
+                ForEach(vm.liveSessions) { session in
+                    Button(action: { onResume(session.sessionId) }) {
+                        FSListRow(
+                            leading: .icon("sparkles", color: session.isActive ? c.success : c.textMuted),
+                            title: vm.name(for: session, builds: builds),
+                            subtitle: "Started \(Self.timeString(session.startedAt))",
+                            detail: nil,
+                            below: { FSPill(Self.sessionLabel(session.status), kind: Self.sessionPill(session.status)) }
+                        ) {
+                            Text(session.isActive ? "Resume" : "Open")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(session.isActive ? c.success : c.primary)
+                        }
+                        .overlay(RoundedRectangle(cornerRadius: FS.radius.md)
+                            .stroke(session.isActive ? c.success.opacity(0.6) : .clear, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("build-session-\(session.sessionId)")
+                }
+            }
+            let ended = vm.endedBuilds(builds)
+            if !ended.isEmpty {
+                Text("Past builds").font(FS.font.caption()).foregroundColor(c.textMuted)
+                    .padding(.top, vm.liveSessions.isEmpty ? 0 : FS.space.s2)
+            }
+            if builds.isEmpty && vm.liveSessions.isEmpty {
                 FSCard {
                     Text("No builds yet.").font(FS.font.body()).foregroundColor(c.textMuted)
                 }
             } else {
-                ForEach(builds) { b in
+                ForEach(ended) { b in
                     Button(action: { Task { await vm.loadDetail(buildId: b.buildId) } }) {
                         FSListRow(
                             leading: .icon(modeIcon(b.mode), color: c.primary),
@@ -560,6 +663,28 @@ public struct BuildJournalScreen: View {
                     }
                 }
             }
+        }
+    }
+
+    static func sessionLabel(_ status: String) -> String {
+        switch status {
+        case "streaming": return "AI is working"
+        case "awaiting-tool-response": return "Waiting for you"
+        case "ready-to-deploy": return "Ready to deploy"
+        case "deploying": return "Deploying"
+        case "deployed": return "Deployed"
+        case "cancelled": return "Cancelled"
+        default: return "Stopped"
+        }
+    }
+
+    static func sessionPill(_ status: String) -> FSPillKind {
+        switch status {
+        case "awaiting-tool-response", "ready-to-deploy": return .pending
+        case "streaming", "deploying": return .provisioning
+        case "deployed": return .online
+        case "failed": return .offline
+        default: return .idle
         }
     }
 

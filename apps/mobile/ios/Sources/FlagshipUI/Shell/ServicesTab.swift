@@ -55,7 +55,7 @@ public struct ServicesTab: View {
             _ = linker.consume()
         case .vibeCodeChat(let sessionId):
             if path.last != .vibeCodeChat(sessionId: sessionId) {
-                path.append(.vibeCodeChat(sessionId: sessionId))
+                path.openVibeSession(sessionId)
             }
             _ = linker.consume()
         case .startVibeCode:
@@ -141,7 +141,7 @@ public struct ServicesTab: View {
         case .buildMcp:
             BuildMcpContainer(path: $path)
         case .buildJournal(let buildId):
-            BuildJournalContainer(buildId: buildId)
+            BuildJournalContainer(buildId: buildId, onResume: { path.openVibeSession($0) })
         case .buildKey(let purpose):
             BuildKeyContainer(purpose: purpose, path: $path, holder: buildCred)
         case .vibeCodeProviderPick:
@@ -562,7 +562,7 @@ struct VibeCodeDescribeContainer: View {
                         path.append(.buildKey(purpose: .scratch))
                         return
                     }
-                    path.append(.vibeCodeGenerating(sessionId: resp.sessionId))
+                    path.openVibeSession(resp.sessionId)
                 } catch {
                     switch await repairMissingServicePlatform(for: error) {
                     case .accepted:
@@ -620,13 +620,21 @@ struct VibeCodeDescribeContainer: View {
 // into the build modes. Scratch reuses the existing vibe flow.
 struct BuildSourceChooserContainer: View {
     @Binding var path: [AppsRoute]
+    @Environment(\.screensClient) private var client
+    @State private var activeSessions = 0
     var body: some View {
         BuildSourceChooserScreen(
+            activeSessions: activeSessions,
             onScratch: { path.append(.buildKey(purpose: .scratch)) },
             onGit: { path.append(.buildGit) },
             onMcp: { path.append(.buildMcp) },
             onPastBuilds: { path.append(.buildJournal(buildId: nil)) }
         )
+        // Re-counted each time the chooser shows (e.g. Back from a session).
+        .task(id: path.count) {
+            let sessions = (try? await client.vibeCodeSessions().sessions) ?? []
+            activeSessions = sessions.filter(\.isActive).count
+        }
     }
 }
 
@@ -727,12 +735,13 @@ struct BuildMcpContainer: View {
 // when `buildId` is non-nil.
 struct BuildJournalContainer: View {
     let buildId: String?
+    var onResume: (String) -> Void = { _ in }
     @Environment(\.screensClient) private var client
     @State private var vm: BuildJournalViewModel?
     var body: some View {
         Group {
             if let vm {
-                BuildJournalScreen(vm: vm)
+                BuildJournalScreen(vm: vm, onResume: onResume)
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }

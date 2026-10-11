@@ -255,8 +255,8 @@ final class GymTotalDetailTests: XCTestCase {
         XCTAssertTrue(journalLink.waitForExistence(timeout: 15), "Chooser should offer the View-past-builds link.")
         journalLink.tap()
         XCTAssertTrue(
-            app.navigationBars["Build journal"].waitForExistence(timeout: 15),
-            "The journal link should push the Build journal screen."
+            app.navigationBars["Build sessions"].waitForExistence(timeout: 15),
+            "The journal link should push the Build sessions screen."
         )
         gymShot(app, "build-journal")
     }

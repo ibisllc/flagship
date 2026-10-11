@@ -246,3 +246,17 @@ public enum OnboardingRoute: Hashable, Sendable {
     /// into a new per-profile slot, then completes onboarding paired.
     case joinByPairing(joinUrl: String?)
 }
+
+public extension Array where Element == AppsRoute {
+    /// Open a vibe-code session so that Back lands on the build chooser:
+    /// the AI-key and describe steps (or the session list) that led here are
+    /// dropped, and a session reached from elsewhere gets the chooser under it.
+    mutating func openVibeSession(_ sessionId: String) {
+        if let i = firstIndex(of: .buildSource) {
+            removeSubrange((i + 1)...)
+        } else {
+            append(.buildSource)
+        }
+        append(.vibeCodeChat(sessionId: sessionId))
+    }
+}

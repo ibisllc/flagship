@@ -339,6 +339,11 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func buildDeploy(buildId: String) async throws -> BuildDeployResponse {
         try await request("/api/build/sessions/\(esc(buildId))/deploy", method: "POST", body: Data("{}".utf8))
     }
+    /// The daemon's live vibe-code sessions (legacy `/api/llm/sessions`, same
+    /// paired-session auth as the deploy trigger).
+    public func vibeCodeSessions() async throws -> VibeCodeSessionsResponse {
+        try await request("/api/llm/sessions")
+    }
     public func buildSessions() async throws -> BuildSessionsResponse {
         try await request("/api/build/sessions")
     }
