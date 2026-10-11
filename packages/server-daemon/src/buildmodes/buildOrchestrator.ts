@@ -249,7 +249,7 @@ function adapterFileFor(src: GitSource, built: Record<string, string>): string |
     base: src.commit,
     ...(src.ref ? { ref: src.ref } : {}),
   });
-  if (repoAdapterProblems(adapter, manifestJson).length > 0) return null;
+  if (repoAdapterProblems(adapter, manifestJson, { publicText: Object.values(src.original) }).length > 0) return null;
   return buildAdapterFile(manifestJson, adapter);
 }
 
@@ -833,7 +833,7 @@ export class BuildOrchestrator {
     for (const candidate of await this.deps.adapterIndex.lookup(repo, commit)) {
       const split = splitAdapterFile(candidate.file);
       if (!split.ok || !split.adapter || split.adapter.source.repo !== repo) continue;
-      if (repoAdapterProblems(split.adapter, split.manifestJson).length > 0) continue;
+      if (repoAdapterProblems(split.adapter, split.manifestJson, { publicText: Object.values(original) }).length > 0) continue;
       const parsed = parseManifest(JSON.parse(split.manifestJson));
       if (!parsed.ok) continue;
       const applied = applyRepoAdapter(original, split.adapter, split.manifestJson);

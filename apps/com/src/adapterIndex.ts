@@ -29,6 +29,7 @@ import {
   MANIFEST_PATH,
   normalizeRepoUrl,
   patchedPaths,
+  addedSecrets,
   repoAdapterProblems,
   splitAdapterFile,
   type RepoAdapter,
@@ -129,8 +130,7 @@ export async function processSubmission(s: Submission, env: AdapterIndexEnv): Pr
   if (!split.ok || !split.adapter) return "dropped";
   const adapter = split.adapter;
   if (adapter.source.repo !== repo || adapter.source.base !== s.base) return "dropped";
-  if (repoAdapterProblems(adapter, split.manifestJson).length > 0) return "dropped";
-  if (mentionsUserHost(s.file)) return "dropped";
+  if (repoAdapterProblems(adapter, split.manifestJson, { skipSecrets: true }).length > 0) return "dropped";
 
   // A byte-identical file (pending or published) already passed every check
   // below; the file names its repo, so the hash alone identifies it.
@@ -142,7 +142,12 @@ export async function processSubmission(s: Submission, env: AdapterIndexEnv): Pr
   // A repo that carries its own flagship.app.json is its author's call on how
   // it runs on Flagship; we never index adaptations of it.
   if ((await rawStatus(host, s.base, MANIFEST_PATH)) !== 404) return "dropped";
-  if (!(await fitsPublicBase(host, s.base, adapter))) return "dropped";
+  const publicText = await fitsPublicBase(host, s.base, adapter);
+  if (!publicText) return "dropped";
+  // What the repo already has publicly isn't ours to judge; what the
+  // adaptation brings in is: secrets, or a box's own address.
+  if (addedSecrets(adapter, split.manifestJson, publicText).length > 0) return "dropped";
+  if (addedUserHosts(s.file, publicText)) return "dropped";
 
   let review = "rules";
   if (env.ADAPTER_REVIEW_ANTHROPIC_KEY) {
@@ -181,8 +186,10 @@ async function confirm(db: D1Database, fileSha: string): Promise<boolean> {
  * A per-box address (`<server>.<user>.flagship.services`, any service
  * prefix) written into the adapter would identify whoever sent it.
  */
-function mentionsUserHost(text: string): boolean {
-  return /[a-z0-9-]+\.[a-z0-9-]+\.flagship\.services/i.test(text);
+function addedUserHosts(text: string, publicText: readonly string[]): boolean {
+  return [...text.matchAll(/[a-z0-9-]+\.[a-z0-9-]+\.flagship\.services/gi)].some(
+    (m) => !publicText.some((t) => t.toLowerCase().includes(m[0].toLowerCase())),
+  );
 }
 
 // ---- hosts -----------------------------------------------------------------
@@ -371,18 +378,25 @@ export function identifyLicense(text: string): string | null {
  * every edit fits it exactly: so the adapter only touches public code and its
  * context lines carry nothing that isn't already public.
  */
-async function fitsPublicBase(r: HostedRepo, sha: string, adapter: RepoAdapter): Promise<boolean> {
+/** The public files the adapter edits or removes, if each exists and every edit fits it exactly. */
+async function fitsPublicBase(r: HostedRepo, sha: string, adapter: RepoAdapter): Promise<string[] | null> {
   const patches = adapter.patch ?? [];
   const removed = [...new Set(adapter.remove ?? [])].filter((p) => !patches.some((x) => x.path === p));
-  if (patches.length + removed.length > MAX_SOURCE_FETCHES) return false;
+  if (patches.length + removed.length > MAX_SOURCE_FETCHES) return null;
+  const texts: string[] = [];
   const jobs: Array<() => Promise<boolean>> = [
     ...patches.map(({ path, hunks }) => async () => {
       const text = await fetchRaw(r, sha, path);
       if (text == null) return false;
+      texts.push(text);
       const applied = applyHunks(text, hunks);
       return applied != null && applied.fuzzy === false;
     }),
-    ...removed.map((path) => async () => (await fetchRaw(r, sha, path)) != null),
+    ...removed.map((path) => async () => {
+      const text = await fetchRaw(r, sha, path);
+      if (text != null) texts.push(text);
+      return text != null;
+    }),
   ];
   let ok = true;
   let next = 0;
@@ -393,7 +407,7 @@ async function fitsPublicBase(r: HostedRepo, sha: string, adapter: RepoAdapter):
     }
   };
   await Promise.all(Array.from({ length: Math.min(FETCH_CONCURRENCY, jobs.length) }, worker));
-  return ok;
+  return ok ? texts : null;
 }
 
 // ---- AI review -------------------------------------------------------------

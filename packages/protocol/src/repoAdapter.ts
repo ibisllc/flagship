@@ -434,9 +434,18 @@ function unsafePath(p: string): boolean {
 
 /**
  * What's wrong with an adapter, before anyone stores or applies it: unsafe
- * paths, a manifest that isn't valid, secrets in what it writes. Empty: fine.
+ * paths, a manifest that isn't valid, secrets it adds. Empty: fine.
+ *
+ * A secret already in the public repo (`publicText`: its files) isn't the
+ * adapter's doing, so it doesn't count; only one the adaptation brings in
+ * does. `skipSecrets` leaves that check to a later `addedSecrets` call, once
+ * the repo's files are at hand.
  */
-export function repoAdapterProblems(adapter: RepoAdapter, manifestJson: string): string[] {
+export function repoAdapterProblems(
+  adapter: RepoAdapter,
+  manifestJson: string,
+  opts: { publicText?: readonly string[]; skipSecrets?: boolean } = {},
+): string[] {
   const problems: string[] = [];
   if (!SHA.test(adapter.source.base)) problems.push("source.base must be a full commit hash");
   if (normalizeRepoUrl(adapter.source.repo) !== adapter.source.repo) problems.push("source.repo must be a normalized https URL");
@@ -457,13 +466,22 @@ export function repoAdapterProblems(adapter: RepoAdapter, manifestJson: string):
     if (unsafePath(p)) problems.push(`unsafe path: ${p}`);
     if (p === MANIFEST_PATH) problems.push(`${MANIFEST_PATH} can't be added, edited or removed by its own adapter`);
   }
+  if (!opts.skipSecrets) problems.push(...addedSecrets(adapter, manifestJson, opts.publicText ?? []));
+  return [...new Set(problems)];
+}
+
+/** Secrets the adaptation writes that the public repo doesn't already contain. */
+export function addedSecrets(adapter: RepoAdapter, manifestJson: string, publicText: readonly string[]): string[] {
   const written = [
     ...Object.values(adapter.add ?? {}).flat(),
     ...(adapter.patch ?? []).flatMap((p) => p.hunks.flatMap((h) => h.lines.filter((l) => l[0] === "+"))),
     manifestJson,
   ];
+  const problems: string[] = [];
   for (const [what, re] of SECRET_SHAPES) {
-    if (written.some((l) => re.test(l))) problems.push(`it writes what looks like ${what}`);
+    const global = new RegExp(re.source, "g");
+    const added = written.some((l) => [...l.matchAll(global)].some((m) => !publicText.some((t) => t.includes(m[0]))));
+    if (added) problems.push(`it adds what looks like ${what}`);
   }
-  return [...new Set(problems)];
+  return problems;
 }

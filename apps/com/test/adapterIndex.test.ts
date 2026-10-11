@@ -343,6 +343,18 @@ describe("POST /api/adapters/submit", () => {
     expect(await rows()).toHaveLength(0);
   });
 
+  it("keeps an adapter that only moves a secret the public repo already has", async () => {
+    const key = "AKIAABCDEFGHIJKLMNOP";
+    const original = { ...ORIGINAL, "old.txt": `KEY=${key}\n` };
+    raw.set(`${RAW}old.txt`, original["old.txt"]);
+    const moved = buildAdapterFile(
+      MANIFEST,
+      deriveRepoAdapter(original, { ...ADAPTED, "config/keys.txt": `KEY=${key}\n` }, { repo: REPO, base: BASE }),
+    );
+    await submit(submission({ file: moved }));
+    expect(await rows()).toHaveLength(1);
+  });
+
   it("drops an adapter that names a box's own address", async () => {
     await submit(
       submission({ file: adapterFile({ adapted: { ...ADAPTED, ".env": "HOST=home.harry.flagship.services\n" } }) }),

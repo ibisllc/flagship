@@ -119,6 +119,16 @@ describe("repo adapters", () => {
     expect(repoAdapterProblems(good, MANIFEST)).toEqual([]);
   });
 
+  it("counts only secrets the adaptation brings in, not ones the public repo already has", () => {
+    const key = "AKIAABCDEFGHIJKLMNOP";
+    const moved = deriveRepoAdapter({ "a.js": `const k = "${key}";\n` }, { "b.js": `const k = "${key}";\n` }, SRC);
+    expect(repoAdapterProblems(moved, MANIFEST, { publicText: [`const k = "${key}";\n`] })).toEqual([]);
+    expect(repoAdapterProblems(moved, MANIFEST).join()).toMatch(/adds what looks like an AWS access key/);
+    const added = deriveRepoAdapter({ "a.js": "x\n" }, { "a.js": `x\nconst k = "AKIAZZZZZZZZZZZZZZZZ";\n` }, SRC);
+    expect(repoAdapterProblems(added, MANIFEST, { publicText: [`const k = "${key}";`] }).join()).toMatch(/AWS access key/);
+    expect(repoAdapterProblems(added, MANIFEST, { skipSecrets: true })).toEqual([]);
+  });
+
   it("rejects a malformed adapter section", () => {
     expect(splitAdapterFile(JSON.stringify({ adapter: { version: 2 } }))).toMatchObject({ ok: false });
     expect(splitAdapterFile(JSON.stringify({ adapter: { version: 1, source: { repo: "r", base: BASE }, patch: [{ path: "a", hunks: [{ lines: ["?x"] }] }] } }))).toMatchObject({ ok: false, reason: "adapter: malformed hunk" });
