@@ -109,7 +109,7 @@ export function hostsFromPods(pods) {
  * The identity to sign a knock on `serverId` with, or null to refuse:
  *  - one of our own servers (`ownServers`) → the global AID;
  *  - a box we redeemed a v2 invite for → the contact AID for its owner (a
- *    record naming our own AID is our own box → the global AID);
+ *    record naming our own AID is ignored: only `ownServers` makes a box ours);
  *  - anything else → null. The global AID is never offered to someone else's
  *    box: it would link us across owners, and it isn't on their list anyway.
  *
@@ -128,8 +128,9 @@ export async function knockIdentity(umk, serverId, opts = {}) {
   const asAccount = { kind: "account", visitorAID: global.publicKey, sign: signWithAccountId };
   if (own.has(host)) return asAccount;
   const ownerHex = inviteOwnerFor(host, storage);
-  if (!ownerHex) return null;
-  if (ownerHex === bytesToHex(global.publicKey)) return asAccount;
+  // `a=` is written by whoever made the invite link: a record naming our own
+  // AID must never unlock the global AID (a hostile owner could plant it).
+  if (!ownerHex || ownerHex === bytesToHex(global.publicKey)) return null;
   const ownerAid = hexToBytes(ownerHex);
   const contact = await deriveContactAccountIdFromSeed(umk, ownerAid);
   return {

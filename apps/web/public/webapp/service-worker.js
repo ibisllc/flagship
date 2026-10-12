@@ -103,7 +103,7 @@
 //       for its owner (remembered from the invite link), and Process URL
 //       reads "Open <app> on <server>" for any private app; a box that is
 //       neither yours nor invited is refused; precaches lib/knockIdentity.js.
-const SHELL_VERSION = "v54";
+const SHELL_VERSION = "v55";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

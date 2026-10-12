@@ -20,7 +20,7 @@
 
 import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
-import { authorizeKnockFor, hostsFromPods, inviteOwnerFor, NOT_YOUR_SERVER } from "../lib/knockIdentity.js";
+import { authorizeKnockFor, hostsFromPods, NOT_YOUR_SERVER } from "../lib/knockIdentity.js";
 import { parseAccessDeepLink, serviceUrlFromDeepLink } from "../lib/serviceInvite.js";
 import { liveSync } from "../lib/liveSync.js";
 import { listPodTokenIds } from "../lib/profilesStore.js";
@@ -173,8 +173,7 @@ async function onAuthorize() {
 /**
  * The user's own server hosts: the LiveSync list, the boxes this device holds
  * a session for, and a demo account's server. When `serverId` isn't among
- * them and no invite named its owner, read `/pods` once in case LiveSync
- * hasn't loaded yet.
+ * them, read `/pods` once in case LiveSync hasn't loaded yet.
  */
 async function ownServerHosts(serverId, username) {
   const hosts = new Set(hostsFromPods(liveSync.get?.()?.pods));
@@ -190,7 +189,7 @@ async function ownServerHosts(serverId, username) {
     /* no profile */
   }
   const host = String(serverId || "").toLowerCase();
-  if (hosts.has(host) || inviteOwnerFor(host) || !username) return hosts;
+  if (hosts.has(host) || !username) return hosts;
   try {
     const r = await fetch(`${controlApex()}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" });
     if (r.ok) for (const h of hostsFromPods((await r.json())?.pods)) hosts.add(h);

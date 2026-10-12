@@ -387,7 +387,7 @@ describe("/webapp PWA static surface", () => {
     // v52 adds app API keys on the app's page.
     // v53 adds suggested access lists and the owner's Database section.
     // v54 signs knocks on invited boxes with the contact AID and words Process URL for any private app.
-    expect(r.body).toContain('SHELL_VERSION = "v54"');
+    expect(r.body).toContain('SHELL_VERSION = "v55"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

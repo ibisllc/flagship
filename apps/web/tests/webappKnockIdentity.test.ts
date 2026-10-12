@@ -90,13 +90,23 @@ describe("knock identity — which boxes get which id", () => {
     expect((await ki.knockIdentity(ownerUmk.seed, FQDN, { storage, ownServers: [FQDN] })).kind).toBe("account");
   });
 
-  it("a record naming our own AID is our own box", async () => {
+  it("a record naming our own AID is ignored (an invite author could plant it to harvest our global AID)", async () => {
     const ki = await loadKnockIdentity();
     const storage = new MemStorage();
     ki.rememberInviteOwner({ serverId: FQDN, ownerAidHex }, storage);
-    const self = await ki.knockIdentity(ownerUmk.seed, FQDN, { storage });
-    expect(self.kind).toBe("account");
-    expect(hex(self.visitorAID)).toBe(ownerAidHex);
+    expect(await ki.knockIdentity(ownerUmk.seed, FQDN, { storage, ownServers: ["other.alice.flagship.services"] })).toBeNull();
+    // Nothing reaches the box either.
+    const calls: string[] = [];
+    const spy = (async (url: string) => {
+      calls.push(url);
+      throw new Error("must not be called");
+    }) as unknown as typeof fetch;
+    await expect(
+      ki.authorizeKnockFor({ serverId: FQDN, serviceRef: SERVICE, pageId: "p1", svc: "notes" }, ownerUmk.seed, { storage, fetch: spy }),
+    ).rejects.toMatchObject({ code: "not-own" });
+    expect(calls).toEqual([]);
+    // Only the own-server set makes it ours.
+    expect((await ki.knockIdentity(ownerUmk.seed, FQDN, { storage, ownServers: [FQDN] }))?.kind).toBe("account");
   });
 
   it("a box that is neither ours nor invited gets no identity at all", async () => {
