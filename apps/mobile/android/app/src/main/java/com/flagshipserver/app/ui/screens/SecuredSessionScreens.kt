@@ -76,7 +76,7 @@ fun SecuredSessionsScreen(
             modifier = Modifier.testTag("secured-sessions-title"),
         )
         Text(
-            "Browser sessions you authorized for restricted sites. Stop one to log that browser out.",
+            "Browsers you signed in to private apps. Stop one to sign that browser out.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 14.sp, lineHeight = 19.sp),
         )
@@ -84,7 +84,7 @@ fun SecuredSessionsScreen(
         if (rows.isEmpty()) {
             FSCard(padding = PaddingValues(FS.space.s4)) {
                 Text(
-                    "No secured sessions yet. Scan a restricted site's QR with this app to authorize one.",
+                    "No secured sessions yet. Scan a private app's sign-in QR with this app to sign a browser in.",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 14.sp),
                     modifier = Modifier.testTag("secured-sessions-empty"),
@@ -203,7 +203,7 @@ fun ProcessUrlScreen(nav: NavController) {
             modifier = Modifier.testTag("process-url-title"),
         )
         Text(
-            "Paste a Flagship link — a restricted site's \"Get link\" string, or a " +
+            "Paste a Flagship link: a private app's \"Get link\" string, or a " +
                 "\"take over this box\" transfer link someone shared with you.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 14.sp, lineHeight = 19.sp),

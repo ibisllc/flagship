@@ -214,6 +214,7 @@ class MainActivity : FragmentActivity() {
         }
         AiKeyStore.attach(applicationContext)
         com.flagshipserver.app.core.SecuredSessionStore.attach(applicationContext)
+        com.flagshipserver.app.core.InviteOwners.attach(applicationContext)
         val okHttp = buildOkHttp()
 
         // Identity / security plane. Mock for emulator/dev; Live talks to the

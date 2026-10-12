@@ -318,14 +318,14 @@ fun SettingsScreen(nav: NavController) {
         Spacer(Modifier.height(FS.space.s4))
 
         // 4 — WEB ACCESS: the QR-login surfaces (authorize a browser for a
-        //     restricted site + manage the sessions you authorized).
+        //     private app + manage the sessions you signed in).
         FSSettingsGroup(
             header = "WEB ACCESS",
             rows = listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Public,
                     title = "Open secured sessions",
-                    subtitle = "Browser logins you authorized for restricted sites.",
+                    subtitle = "Browsers you signed in to private apps.",
                     onClick = { nav.navigate("secured-sessions") },
                     testTag = "settings-secured-sessions",
                 ),

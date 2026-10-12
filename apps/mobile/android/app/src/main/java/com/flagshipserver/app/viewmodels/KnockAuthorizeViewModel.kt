@@ -4,9 +4,15 @@
 // .com is never in the path), and on success persists a SecuredSession so the
 // user can later see / refresh / stop the browser session from Settings.
 //
-// Signing rides the SAME stable AID + biometric gate the invite-redeem flow
-// uses (Keystore.deriveAccountId). The box checks the signature + that the AID
-// is allow-listed for the (restricted) service, mints a browser session, and
+// The box accepts its owner's AID and the AIDs on the app's allow-list
+// (docs/app-apis.md §5). Invites put the friend's PER-AUTHOR contact AID on that
+// list, so the identity depends on the box: one of our own servers gets the
+// global AID; a box we were invited to (its owner AID was remembered at redeem,
+// InviteOwnerBook) gets deriveContactAccountId(UMK, ownerAID), unless that owner
+// AID is our own (then it's our box: global AID). A box that is neither in the
+// loaded pods nor remembered triggers one fresh pods load (a cold start from a
+// deep link may not have loaded them yet); still unknown, nothing is signed or
+// sent, so a stranger's box never learns an AID of ours. On success the box
 // returns the phone-held secretId (never to the browser).
 
 package com.flagshipserver.app.viewmodels
@@ -16,6 +22,8 @@ import com.flagshipserver.app.api.KnockAuthorizeError
 import com.flagshipserver.app.api.KnockAuthorizeResult
 import com.flagshipserver.app.api.ServiceAccessClient
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.InviteOwnerBook
+import com.flagshipserver.app.core.InviteOwners
 import com.flagshipserver.app.core.SecuredSession
 import com.flagshipserver.app.core.SecuredSessionStore
 import com.flagshipserver.app.core.ServiceInvite
@@ -41,9 +49,21 @@ class KnockAuthorizeViewModel(
     private val serviceRef: String,
     private val pageId: String,
     private val client: ServiceAccessClient = ServiceAccessClient(),
-    /** Friend's AID signer + pub (biometric-gated by default). */
+    /** The user's GLOBAL AID signer + pub (biometric-gated by default). */
     private val aidSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveAccountId(r) },
     private val aidPubHex: suspend (reason: String) -> String = { r -> Keystore.accountIdPubHex(r) },
+    /** The user's per-owner CONTACT AID signer + pub (biometric-gated by default). */
+    private val contactAidSigner: suspend (ownerAid: ByteArray, reason: String) -> Ed25519Sign =
+        { a, r -> Keystore.deriveContactAccountId(a, r) },
+    private val contactAidPubHex: suspend (ownerAid: ByteArray, reason: String) -> String =
+        { a, r -> Keystore.contactAccountIdPubHex(a, r) },
+    /** FQDNs of the user's own servers (the app's pods). */
+    private val ownServers: () -> List<String> = { emptyList() },
+    /** Load the user's servers afresh (the `.com` pods directory); used once,
+     *  only when the box is neither in [ownServers] nor remembered. */
+    private val reloadOwnServers: suspend () -> List<String> = { emptyList() },
+    /** Owner AIDs remembered from redeemed invites, by box. */
+    private val owners: InviteOwnerBook = InviteOwners.book,
     private val now: () -> Long = { System.currentTimeMillis() },
     /** Persist the authorized session. Injectable for tests. */
     private val persist: (SecuredSession) -> Unit = { SecuredSessionStore.upsert(it) },
@@ -54,6 +74,12 @@ class KnockAuthorizeViewModel(
     /** Display: `<svc>.<server>` (or just `<server>` for an apex service). */
     val target: String get() = if (svc.isBlank()) serverId else "$svc.$serverId"
 
+    /** The box's short name: the first label of [serverId]. */
+    val serverName: String get() = serverId.substringBefore('.').ifEmpty { serverId }
+
+    /** "Open <app> on <server>?" (or "Open <server>?" for an apex service). */
+    val title: String get() = if (svc.isBlank()) "Open $serverName?" else "Open $svc on $serverName?"
+
     suspend fun authorize() {
         if (_phase.value is KnockAuthorizePhase.Authorizing) return
         if (serverId.isEmpty() || serviceRef.isEmpty() || pageId.isEmpty()) {
@@ -61,10 +87,30 @@ class KnockAuthorizeViewModel(
             return
         }
         _phase.value = KnockAuthorizePhase.Authorizing
+        val host = InviteOwnerBook.normHost(serverId)
+        fun List<String>.hasBox() = any { InviteOwnerBook.normHost(it) == host }
+        var isOwnServer = ownServers().hasBox()
+        val ownerHex = if (isOwnServer) null else owners.ownerFor(serverId)
+        if (!isOwnServer && ownerHex == null) {
+            isOwnServer = runCatching { reloadOwnServers() }.getOrDefault(emptyList()).hasBox()
+            if (!isOwnServer) {
+                _phase.value = KnockAuthorizePhase.Failed(NOT_YOURS)
+                return
+            }
+        }
         try {
-            val reason = "Authorize this site"
-            val key = aidSigner(reason)
-            val aidPub = HexUtil.decode(aidPubHex(reason))!!
+            val reason = title.removeSuffix("?")
+            val globalPubHex = if (ownerHex == null) null else aidPubHex(reason).lowercase()
+            val key: Ed25519Sign
+            val aidPub: ByteArray
+            if (ownerHex == null || ownerHex == globalPubHex) {
+                key = aidSigner(reason)
+                aidPub = HexUtil.decode(globalPubHex ?: aidPubHex(reason))!!
+            } else {
+                val ownerAid = HexUtil.decode(ownerHex)!!
+                key = contactAidSigner(ownerAid, reason)
+                aidPub = HexUtil.decode(contactAidPubHex(ownerAid, reason))!!
+            }
             val issuedAt = now()
             val sig = ServiceInvite.signKnockAuthorization(serverId, serviceRef, pageId, aidPub, issuedAt, key)
             val request: JsonObject = buildJsonObject {
@@ -93,12 +139,16 @@ class KnockAuthorizeViewModel(
             _phase.value = KnockAuthorizePhase.Failed(
                 when (e) {
                     is KnockAuthorizeError.NotAllowed -> "You don't have access to this service."
-                    is KnockAuthorizeError.Refused -> "Couldn't authorize — try refreshing the page."
+                    is KnockAuthorizeError.Refused -> "Couldn't sign in. Refresh the page and try again."
                     is KnockAuthorizeError.PageExpired -> "The page expired — refresh it and try again."
                 },
             )
         } catch (e: Throwable) {
             _phase.value = KnockAuthorizePhase.Failed("Couldn't reach the server. Check your connection and try again.")
         }
+    }
+
+    companion object {
+        const val NOT_YOURS = "This isn't one of your servers. Open its invite link on this phone first, then try again."
     }
 }

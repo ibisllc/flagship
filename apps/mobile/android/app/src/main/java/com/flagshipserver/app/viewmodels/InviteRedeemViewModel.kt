@@ -21,6 +21,8 @@ import com.flagshipserver.app.api.ServiceAccessClient
 import com.flagshipserver.app.api.ServiceAccessError
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.InviteLink
+import com.flagshipserver.app.core.InviteOwnerBook
+import com.flagshipserver.app.core.InviteOwners
 import com.flagshipserver.app.core.ServiceInvite
 import com.flagshipserver.app.keystore.Keystore
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -63,6 +65,9 @@ class InviteRedeemViewModel(
     private val contactAidPubHex: suspend (authorAid: ByteArray, reason: String) -> String =
         { a, r -> Keystore.contactAccountIdPubHex(a, r) },
     private val now: () -> Long = { System.currentTimeMillis() },
+    /** Where a v2 redeem records the box's owner AID, so a later knock on that
+     *  box signs with the same contact AID the invite bound. */
+    private val owners: InviteOwnerBook = InviteOwners.book,
 ) : ViewModel() {
     private val _phase = MutableStateFlow<InviteRedeemPhase>(InviteRedeemPhase.Idle)
     val phase: StateFlow<InviteRedeemPhase> = _phase.asStateFlow()
@@ -103,6 +108,7 @@ class InviteRedeemViewModel(
             val result: RedeemResult = client.redeemInvite(
                 serverDomain, secret, HexUtil.encode(redeemPub), HexUtil.encode(sig), ts,
             )
+            if (authorAid != null) owners.remember(serverDomain, authorAid)
             if (result.pending) {
                 emitAcceptance(result, redeemPub, redeemSigner)
             } else {

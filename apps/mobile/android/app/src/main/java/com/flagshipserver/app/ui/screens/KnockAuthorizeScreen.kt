@@ -1,9 +1,9 @@
 // Web-experience gating authorizer screen (docs/service-access-gating.md,
 // "Web-experience gating"). Reached from the knock page's
-// flagship://access?... deep-link or a pasted "Get link" string. "Authorize"
-// AID-signs the knock against the box (behind the biometric gate the other
-// AID-signing flows use), then confirms — the browser's poll picks up the
-// session and reloads into the content.
+// flagship://access?... deep-link or a pasted "Get link" string. "Open" signs
+// the knock against the box (behind the biometric gate the other AID-signing
+// flows use) with the identity that box knows us by, then confirms; the
+// browser's poll picks up the session and reloads into the app.
 
 package com.flagshipserver.app.ui.screens
 
@@ -28,6 +28,8 @@ import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.flagshipserver.app.core.LocalAppState
+import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
@@ -48,8 +50,21 @@ fun KnockAuthorizeScreen(
     onDone: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val appState = LocalAppState.current
+    val mailbox = LocalSecretMailboxClient.current
     val vm = remember(serverId, svc, serviceRef, pageId) {
-        KnockAuthorizeViewModel(serverId = serverId, svc = svc, serviceRef = serviceRef, pageId = pageId)
+        KnockAuthorizeViewModel(
+            serverId = serverId,
+            svc = svc,
+            serviceRef = serviceRef,
+            pageId = pageId,
+            ownServers = { appState.pods.value.map { it.fqdn } },
+            reloadOwnServers = {
+                val user = appState.currentUser.value
+                if (user.isNullOrEmpty()) emptyList()
+                else mailbox.fetchPods(user).pods.filter { it.revokedAt == null }.map { it.serverDomain }
+            },
+        )
     }
     val phase by vm.phase.collectAsState()
 
@@ -63,9 +78,9 @@ fun KnockAuthorizeScreen(
         when (val p = phase) {
             is KnockAuthorizePhase.Done -> FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    Text("Authorized", color = FS.colors.text, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
+                    Text("Signed in", color = FS.colors.text, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
                     Text(
-                        "Return to the website — it'll load now." +
+                        "Go back to that page: it opens ${svc.ifBlank { "the app" }} on its own." +
                             if (p.browserAgent.isNotBlank()) "\n\nBrowser: ${p.browserAgent}" else "",
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 15.sp, lineHeight = 20.sp),
@@ -81,7 +96,7 @@ fun KnockAuthorizeScreen(
             }
             else -> FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    Text("Authorize this site?", color = FS.colors.text, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
+                    Text(vm.title, color = FS.colors.text, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
                     Text(
                         vm.target,
                         color = FS.colors.text,
@@ -89,14 +104,14 @@ fun KnockAuthorizeScreen(
                         modifier = Modifier.semantics { testTag = "knock-authorize-target" },
                     )
                     Text(
-                        "A browser is asking to open this restricted site. Authorizing lets " +
-                            "that browser in using your account — only do this if you started it.",
+                        "This signs the browser at ${vm.target} in as you. " +
+                            "Only do this for a browser you opened yourself.",
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 15.sp, lineHeight = 20.sp),
                     )
                     val busy = p is KnockAuthorizePhase.Authorizing
                     FSPrimaryButton(
-                        label = if (busy) "Authorizing…" else "Authorize",
+                        label = if (busy) "Signing in…" else "Open",
                         enabled = !busy,
                         block = true,
                         large = true,

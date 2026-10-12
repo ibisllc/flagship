@@ -9,6 +9,7 @@ package com.flagshipserver.app.viewmodels
 import com.flagshipserver.app.api.ServiceAccessClient
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpResponse
+import com.flagshipserver.app.core.InMemoryInviteOwnerBook
 import com.flagshipserver.app.core.InviteLink
 import com.flagshipserver.app.core.JsonHttpTransport
 import com.flagshipserver.app.core.ServerKeys
@@ -37,15 +38,18 @@ class InviteRedeemViewModelTest {
     private val contactPub = ServerKeys.deriveContactAccountIdPub(friendUmk, authorAidPub)
     private val globalPub = ServerKeys.deriveAccountIdPub(friendUmk)
 
-    private fun makeVM(t: JsonHttpTransport, authorHex: String? = authorAidHex, inviteIdHex: String? = null, secretHex: String = secret, now: () -> Long = { 1700 }) =
+    private val owners = InMemoryInviteOwnerBook()
+
+    private fun makeVM(t: JsonHttpTransport, authorHex: String? = authorAidHex, inviteIdHex: String? = null, secretHex: String = secret, now: () -> Long = { 1700 }, serverDomain: String = server) =
         InviteRedeemViewModel(
-            serverDomain = server, secretHex = secretHex, authorAidHex = authorHex, inviteIdHex = inviteIdHex,
+            serverDomain = serverDomain, secretHex = secretHex, authorAidHex = authorHex, inviteIdHex = inviteIdHex,
             client = ServiceAccessClient(boxTransport = t, comTransport = t),
             globalAidSigner = { ServerKeys.deriveAccountId(friendUmk) },
             globalAidPubHex = { HexUtil.encode(globalPub) },
             contactAidSigner = { a, _ -> ServerKeys.deriveContactAccountId(friendUmk, a) },
             contactAidPubHex = { a, _ -> HexUtil.encode(ServerKeys.deriveContactAccountIdPub(friendUmk, a)) },
             now = now,
+            owners = owners,
         )
 
     @Test fun redeem_usesContactAid_andPostsRawSecret() = runTest {
@@ -112,6 +116,36 @@ class InviteRedeemViewModelTest {
         assertEquals(linkInviteId, acc.accept["inviteId"]!!.jsonPrimitive.content)
         val acceptBytes = ServiceInvite.canonicalAccept(linkInviteId, "alice--notes", contactPub, 1700)
         assertTrue(ServiceInvite.verify(HexUtil.decode(acc.acceptSigHex)!!, acceptBytes, contactPub))
+    }
+
+    @Test fun redeem_storesOwnerAidForTheBox() = runTest {
+        val t = RedeemTransport(status = 200, respBody = """{"serviceRef":"alice--notes","boundAID":"${HexUtil.encode(contactPub)}","firstBind":true}""")
+        makeVM(t, authorHex = authorAidHex.uppercase(), serverDomain = "Home.Alice.Flagship.Services").redeem()
+        assertEquals(mapOf(server to authorAidHex), owners.entries)
+        assertEquals(authorAidHex, owners.ownerFor(server))
+    }
+
+    @Test fun redeem_latestOwnerWins() = runTest {
+        owners.remember(server, "aa".repeat(32))
+        val t = RedeemTransport(status = 200, respBody = """{"serviceRef":"alice--notes","firstBind":false}""")
+        makeVM(t).redeem()
+        assertEquals(authorAidHex, owners.ownerFor(server))
+    }
+
+    @Test fun redeem_manualPending_storesOwnerAid() = runTest {
+        val iid = "ea".repeat(32)
+        val create = """{"inviteId":"$iid","authorAID":"$authorAidHex","serviceRef":"alice--notes","secretHash":"${"d".repeat(64)}","encryptedBundle":"00","issuedAt":1500}"""
+        val t = RedeemTransport(status = 200, respBody = """{"pending":true,"approvalMode":"manual","serviceRef":"alice--notes","create":$create,"createSig":"${"b".repeat(128)}"}""")
+        val vm = makeVM(t, inviteIdHex = iid)
+        vm.redeem()
+        assertTrue(vm.phase.value is InviteRedeemPhase.AwaitingApproval)
+        assertEquals(authorAidHex, owners.ownerFor(server))
+    }
+
+    @Test fun redeem_legacyOrFailed_storesNothing() = runTest {
+        makeVM(RedeemTransport(status = 200, respBody = """{"serviceRef":"alice--notes","firstBind":true}"""), authorHex = null).redeem()
+        makeVM(RedeemTransport(status = 404)).redeem()
+        assertTrue(owners.entries.isEmpty())
     }
 
     @Test fun unknownInvite404() = runTest {
