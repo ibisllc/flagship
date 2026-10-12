@@ -46,6 +46,9 @@ _PROVISION_PHASES = {
     "sealing", "installed", "pairing", "live", "error",
 }
 _SERIAL_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+# How long Stop/Quit wait for a guest to power off after the power button
+# before pulling the plug. Matches the Mac and Windows Studio.
+STOP_GRACE_SECONDS = 60.0
 
 
 class InstallObservation:
@@ -261,6 +264,10 @@ class VMManager:
         self._unlock_polls: Dict[str, threading.Event] = {}
         self._install_polls: Dict[str, threading.Event] = {}
         self._install_stall_logged: set[str] = set()
+        # Guests powering off after Stop; a Start of the same server waits on
+        # its event so the disk is never open in two QEMUs.
+        self._stopping: Dict[str, threading.Event] = {}
+        self._stopping_lock = threading.Lock()
         self._load_and_normalize()
 
     @staticmethod
@@ -429,7 +436,48 @@ class VMManager:
         self._apply(VMEvent.power_on(), name)
 
     def power_off(self, name: str) -> None:
+        """Blocks until the guest has powered off (up to STOP_GRACE_SECONDS),
+        so call it off the UI thread."""
         self._apply(VMEvent.power_off(), name)
+
+    @property
+    def has_live_servers(self) -> bool:
+        """True while quitting now would cut power to a guest: one is booted,
+        still installing, or still shutting down after Stop."""
+        with self._stopping_lock:
+            if self._stopping:
+                return True
+        return bool(self._hosts) or any(s.can_stop for s in self.servers)
+
+    def shut_down_all(self) -> None:
+        """Power every live server off gracefully, all at once, and return when
+        they are all down. Used on quit: QEMU outlives a quitting app only as
+        an orphan, and dying with it would be a power cut. An install still
+        running is abandoned anyway (relaunch marks it failed), so it is
+        force-stopped rather than left holding the disk."""
+        names = [s.name for s in self.servers if s.can_stop]
+        threads = [
+            threading.Thread(target=self.power_off, args=(name,), daemon=True)
+            for name in names
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        with self._stopping_lock:
+            in_flight = list(self._stopping.values())
+        for done in in_flight:
+            done.wait()
+        for name in list(self._hosts):
+            host = self._hosts.pop(name, None)
+            if host is None:
+                continue
+            try:
+                host.on_guest_stopped = None
+                host.force_stop()
+            except Exception:
+                pass
+            self.log(f"VM {name}: stopped because the app quit")
 
     def _apply(self, event: VMEvent, name: str) -> None:
         """Feed one event through the pure state machine, persist the new
@@ -470,9 +518,11 @@ class VMManager:
         except VMStoreError:
             pass
         self.on_change()
-        self._run_effects(effects, server.record.config)
+        # Polls first: a graceful stop blocks in _run_effects for up to a
+        # minute, and a stopped server must not be probed meanwhile.
         self._sync_unlock_poll(server.record.config)
         self._sync_install_poll(server.record.config)
+        self._run_effects(effects, server.record.config)
 
     def _run_effects(self, effects, config: VMConfig) -> None:
         import os
@@ -501,12 +551,46 @@ class VMManager:
                 self._start_vm(config)
             elif effect == VMEffect.STOP_VIRTUAL_MACHINE:
                 host = self._hosts.pop(name, None)
-                if host is not None:
+                if host is None:
+                    continue
+                # The lifecycle has already recorded the outcome (stopped, or
+                # a failed install), so the guest's own exit means nothing
+                # more; detaching also keeps a late exit from unregistering
+                # the host of a Start that follows.
+                host.on_guest_stopped = None
+                if self._current_state_kind(name) == VMStateKind.STOPPED:
+                    self._shut_down(name, host)
+                else:
+                    # A cancelled or failed install: the disk is reinstalled
+                    # on retry, so there is nothing to flush.
                     try:
-                        host.on_guest_stopped = None
                         host.force_stop()
                     except Exception:
                         pass
+
+    def _shut_down(self, name: str, host: QemuHost) -> None:
+        done = threading.Event()
+        with self._stopping_lock:
+            self._stopping[name] = done
+        try:
+            host.stop(grace_seconds=STOP_GRACE_SECONDS)
+        except Exception:
+            try:
+                host.force_stop()
+            except Exception:
+                pass
+        finally:
+            done.set()
+            with self._stopping_lock:
+                if self._stopping.get(name) is done:
+                    del self._stopping[name]
+
+    def _wait_for_stop(self, name: str) -> None:
+        with self._stopping_lock:
+            done = self._stopping.get(name)
+        if done is not None:
+            self.log(f"VM {name}: waiting for the previous shutdown to finish")
+            done.wait()
 
     def _current_state_kind(self, name: str) -> VMStateKind:
         server = self.server(name)
@@ -514,6 +598,9 @@ class VMManager:
 
     def _start_vm(self, config: VMConfig) -> None:
         name = config.name
+        # A Start pressed while the guest is still shutting down must not open
+        # the same disk in a second VM.
+        self._wait_for_stop(name)
         if self.toolchain is None:
             reason = self.toolchain_error or "QEMU is not installed."
             self.log(f"VM {name}: cannot start — {reason}")

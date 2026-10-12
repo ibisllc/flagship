@@ -148,9 +148,12 @@ class QemuHost:
             tail = _tail(stderr_box[0] if stderr_box else "")
             raise QemuHostError(f"QEMU failed to start (exit {proc.returncode}): {tail.strip()}")
 
-    def stop(self, grace_seconds: int = 90) -> None:
-        """Ask the guest to power down cleanly (ACPI); after grace_seconds
-        without an exit, hard-stop. on_guest_stopped carries the final word."""
+    def stop(self, grace_seconds: float = 60) -> None:
+        """Press the guest's power button (ACPI) and wait for it to power off,
+        so systemd stops the daemon and flushes the disk; pull the plug only
+        after grace_seconds. A forced stop mid-update once left a server half
+        updated. Blocks for up to grace_seconds; on_guest_stopped carries the
+        final word."""
         proc = self._proc
         if proc is None or proc.poll() is not None:
             return
@@ -158,7 +161,10 @@ class QemuHost:
             with QmpClient.connect(self.qmp_port, timeout=5.0) as qmp:
                 qmp.system_powerdown()
         except (OSError, QmpError):
-            pass  # QMP unreachable — fall through to the hard stop below.
+            # The button can't be pressed, so waiting would only delay the
+            # same hard stop.
+            self.force_stop()
+            return
         try:
             proc.wait(timeout=grace_seconds)
             return

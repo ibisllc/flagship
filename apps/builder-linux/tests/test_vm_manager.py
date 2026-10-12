@@ -12,7 +12,7 @@ from vm import resource_plan
 from vm.config import VMConfig, VMNetworkMode
 from vm.inventory import VMBundleLayout, VMInventoryStore, VMRecord
 from vm.lifecycle import VMFailurePhase, VMState, VMStateKind
-from vm.manager import HostedServer, VMManager
+from vm.manager import STOP_GRACE_SECONDS, HostedServer, VMManager
 from vm.qemu_locator import QemuToolchain
 from vm.server_tier import ServerTier
 
@@ -40,12 +40,18 @@ def config(
 
 
 class FakeHost:
-    """Stands in for QemuHost: records starts/stops, exposes the port trio."""
+    """Stands in for QemuHost: records starts/stops, exposes the port trio.
+    A graceful stop blocks while `hold_stop` is clear, like a guest still
+    shutting down."""
 
     def __init__(self) -> None:
         self.on_guest_stopped = None
         self.started: list = []
         self.force_stops = 0
+        self.graceful_stops: list = []
+        self.hold_stop = threading.Event()
+        self.hold_stop.set()
+        self.stop_entered = threading.Event()
         self.qmp_port = 4444
         self.serial_port = 0
         self.ssh_port = 0
@@ -57,6 +63,11 @@ class FakeHost:
 
             raise QemuHostError(self.fail_start)
         self.started.append((cfg.name, attach))
+
+    def stop(self, grace_seconds: float = 60) -> None:
+        self.graceful_stops.append(grace_seconds)
+        self.stop_entered.set()
+        self.hold_stop.wait(timeout=5.0)
 
     def force_stop(self) -> None:
         self.force_stops += 1
@@ -196,6 +207,7 @@ def test_cancel_install_stops_host_and_keeps_retryable_installer(store):
     assert m.servers[0].can_cancel_install
     m.cancel_install("a.h.flagship.services")
     assert host.force_stops == 1
+    assert host.graceful_stops == []
     assert m.servers[0].record.state.kind == VMStateKind.FAILED
     assert m.servers[0].can_retry_install
     import os
@@ -294,7 +306,9 @@ def test_power_cycle_from_stopped(store):
     assert m.servers[-1].record.state.kind == VMStateKind.AWAITING_PHONE_UNLOCK
     m.power_off("z.h.flagship.services")
     assert m.servers[-1].record.state.kind == VMStateKind.STOPPED
-    assert host.force_stops == 1
+    # Stop presses the power button and waits; it never pulls the plug itself.
+    assert host.graceful_stops == [STOP_GRACE_SECONDS]
+    assert host.force_stops == 0
 
 
 def test_invalid_event_is_logged_and_ignored(store):
@@ -396,3 +410,114 @@ def test_status_subtitles_follow_state_and_unlock_mode():
     )
     assert failed_run.status_subtitle == "died"
     assert failed_run.can_start and not failed_run.can_retry_install
+
+
+# ---- graceful stop / quit ----
+
+
+def test_guest_exit_after_graceful_stop_reads_as_stopped_not_crashed(store):
+    host = FakeHost()
+    seed(store, "z.h.flagship.services", VMState.stopped())
+    m = manager(store, host=host)
+    m.power_on("z.h.flagship.services")
+    callback = host.on_guest_stopped
+    m.power_off("z.h.flagship.services")
+    assert host.on_guest_stopped is None
+    # Even if the watcher had already captured the callback, a forced exit
+    # code after the grace can't turn a requested stop into a crash.
+    callback(137, "killed")
+    s = m.servers[-1]
+    assert s.record.state.kind == VMStateKind.STOPPED
+    assert store.load("z.h.flagship.services").state.kind == VMStateKind.STOPPED
+
+
+def test_start_waits_for_an_in_flight_stop(store):
+    first, second = FakeHost(), FakeHost()
+    hosts = iter([first, second])
+    seed(store, "z.h.flagship.services", VMState.stopped())
+    m = VMManager(
+        store,
+        TOOLCHAIN,
+        host_factory=lambda: next(hosts),
+        unlock_probe=lambda url: False,
+        unlock_interval=0.01,
+    )
+    m.power_on("z.h.flagship.services")
+    first.hold_stop.clear()
+    stopper = threading.Thread(target=m.power_off, args=("z.h.flagship.services",))
+    stopper.start()
+    assert first.stop_entered.wait(timeout=5.0)
+    assert m.has_live_servers  # still shutting down
+    starter = threading.Thread(target=m.power_on, args=("z.h.flagship.services",))
+    starter.start()
+    starter.join(timeout=0.2)
+    assert starter.is_alive(), "Start opened the disk while the guest was still shutting down"
+    assert second.started == []
+    first.hold_stop.set()
+    stopper.join(timeout=5.0)
+    starter.join(timeout=5.0)
+    assert not starter.is_alive()
+    assert second.started == [("z.h.flagship.services", False)]
+    assert m.host("z.h.flagship.services") is second
+    m._cancel_unlock_poll("z.h.flagship.services")
+
+
+def test_quit_shuts_down_every_live_server_gracefully_in_parallel(store):
+    names = ["a.h.flagship.services", "b.h.flagship.services", "c.h.flagship.services"]
+    for n in names[:2]:
+        seed(store, n, VMState.stopped())
+    hosts = {n: FakeHost() for n in names}
+    queue = iter(hosts[n] for n in names)
+    m = VMManager(
+        store,
+        TOOLCHAIN,
+        host_factory=lambda: next(queue),
+        unlock_probe=lambda url: False,
+        unlock_interval=0.01,
+    )
+    assert not m.has_live_servers
+    for n in names[:2]:
+        m.power_on(n)
+    # The third is mid-install: the app quitting abandons that install anyway.
+    m.create_server(config(names[2]))
+    m.begin_install(names[2])
+    assert m.server(names[2]).record.state.kind == VMStateKind.INSTALLING
+    assert m.has_live_servers
+    for n in names[:2]:
+        hosts[n].hold_stop.clear()
+    quitter = threading.Thread(target=m.shut_down_all)
+    quitter.start()
+    # Both live guests got the power button before either finished.
+    assert hosts[names[0]].stop_entered.wait(timeout=5.0)
+    assert hosts[names[1]].stop_entered.wait(timeout=5.0)
+    assert quitter.is_alive()
+    for n in names[:2]:
+        hosts[n].hold_stop.set()
+    quitter.join(timeout=5.0)
+    assert not quitter.is_alive()
+    for n in names[:2]:
+        assert hosts[n].graceful_stops == [STOP_GRACE_SECONDS]
+        assert hosts[n].force_stops == 0
+        assert store.load(n).state.kind == VMStateKind.STOPPED
+    assert hosts[names[2]].force_stops == 1
+    assert not m.has_live_servers
+
+
+def test_quit_waits_for_a_stop_already_in_flight(store):
+    host = FakeHost()
+    seed(store, "z.h.flagship.services", VMState.stopped())
+    m = manager(store, host=host)
+    m.power_on("z.h.flagship.services")
+    host.hold_stop.clear()
+    stopper = threading.Thread(target=m.power_off, args=("z.h.flagship.services",))
+    stopper.start()
+    assert host.stop_entered.wait(timeout=5.0)
+    quitter = threading.Thread(target=m.shut_down_all)
+    quitter.start()
+    quitter.join(timeout=0.2)
+    assert quitter.is_alive()
+    host.hold_stop.set()
+    quitter.join(timeout=5.0)
+    stopper.join(timeout=5.0)
+    assert not quitter.is_alive()
+    assert host.graceful_stops == [STOP_GRACE_SECONDS]

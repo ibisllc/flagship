@@ -39,6 +39,9 @@ class FakeHost:
     def start(self, cfg, layout, attach) -> None:
         self.started.append((cfg.name, attach))
 
+    def stop(self, grace_seconds: float = 60) -> None:
+        pass
+
     def force_stop(self) -> None:
         pass
 

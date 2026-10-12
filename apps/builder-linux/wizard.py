@@ -2065,6 +2065,47 @@ def build_window(application, model: Optional[WizardModel] = None):
 
     GLib.timeout_add_seconds(30, _stall_tick)
 
+    # Closing the window quits the app (Quit in the menu closes it too). Hold
+    # the close until every hosted server has powered off: a quit is otherwise
+    # a power cut to a guest that may be mid-update.
+    shutdown = {"started": False}
+
+    def _on_close_request(_win) -> bool:
+        if shutdown["started"]:
+            return True
+        if not wizard_model.vm.has_live_servers:
+            return False
+        shutdown["started"] = True
+        busy = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        busy.set_valign(Gtk.Align.CENTER)
+        busy.set_halign(Gtk.Align.CENTER)
+        spinner = Gtk.Spinner()
+        spinner.set_size_request(32, 32)
+        spinner.start()
+        busy.append(spinner)
+        title = Gtk.Label(label="Shutting down your servers…")
+        title.add_css_class("title-2")
+        busy.append(title)
+        hint = Gtk.Label(label="This can take up to a minute.")
+        hint.add_css_class("dim-label")
+        busy.append(hint)
+        window.set_content(busy)
+
+        def _finish() -> bool:
+            window.destroy()
+            return False
+
+        def _work() -> None:
+            try:
+                wizard_model.vm.shut_down_all()
+            finally:
+                GLib.idle_add(_finish)
+
+        threading.Thread(target=_work, daemon=True).start()
+        return True
+
+    window.connect("close-request", _on_close_request)
+
     # Kick off the initial disk scan once the window is shown.
     GLib.idle_add(wizard_model.refresh_disks)
 
