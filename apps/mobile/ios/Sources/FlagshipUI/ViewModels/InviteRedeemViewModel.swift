@@ -49,6 +49,9 @@ public final class InviteRedeemViewModel {
     /// Redemption-AID provider for a given author (one biometric): the per-author
     /// contact AID when `authorAID` is present, else the global AID.
     private let redeemAid: @MainActor (_ authorAidHex: String?, _ reason: String) async throws -> Curve25519.Signing.PrivateKey
+    /// Where the box's owner AID is remembered so a later knock on it signs
+    /// with the same contact AID this redeem bound (KnockAuthorizeViewModel).
+    private let owners: any InviteOwnerStoring
     private let now: () -> Int64
 
     public init(
@@ -58,6 +61,7 @@ public final class InviteRedeemViewModel {
         authorAidHex: String? = nil,
         inviteId: String? = nil,
         redeemAid: (@MainActor (_ authorAidHex: String?, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        owners: any InviteOwnerStoring = InviteOwnerStore(),
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
         self.client = client
@@ -65,6 +69,7 @@ public final class InviteRedeemViewModel {
         self.secretHex = secretHex.lowercased()
         self.authorAidHex = authorAidHex?.lowercased()
         self.inviteId = inviteId?.lowercased()
+        self.owners = owners
         self.now = now
         self.redeemAid = redeemAid ?? { authorAidHex, reason in
             if let a = authorAidHex, let authorPub = HexUtil.decode(a) {
@@ -100,6 +105,9 @@ public final class InviteRedeemViewModel {
                 visitorAidHex: HexUtil.encode(aidPub),
                 aidSigHex: HexUtil.encode(sig),
                 redeemedAt: ts)
+            if let authorAidHex {
+                owners.remember(serverDomain: serverDomain, ownerAidHex: authorAidHex)
+            }
             if result.pending {
                 await handlePending(serviceRef: result.serviceRef, contactAid: key)
             } else {

@@ -4,16 +4,18 @@ import FlagshipCore
 
 /// Visitor-side knock-authorize screen (docs/service-access-gating.md,
 /// "Web-experience gating"). Reached from a `flagship://access?…` deeplink (the
-/// box's knock page / QR) or a pasted "Process URL". Shows "Authorize this
-/// site? <svc>.<server>" with Authorize / Cancel; Authorize AID-signs the
-/// authorization behind the biometric gate (Keystore.deriveAccountId, like the
-/// invite redeem) and POSTs it to the box. On success the browser session is
-/// live and the owner is told to return to the website.
+/// box's knock page / QR) or a pasted "Process URL". Shows "Open <app> on
+/// <server>?" with Open / Cancel; Open signs the authorization behind the
+/// biometric gate (global AID on our own servers, the invite's contact AID on a
+/// friend's; see KnockAuthorizeViewModel) and POSTs it to the box. On success
+/// the browser is signed in and the user is told to return to it.
 public struct KnockAuthorizeScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.serviceAccessClient) private var client
     @Environment(\.securedSessionStore) private var store
     @Environment(ToastCenter.self) private var toasts
+    @Environment(AppState.self) private var app
+    @Environment(\.secretMailboxClient) private var mailbox
 
     private let serverDomain: String
     private let svc: String
@@ -53,7 +55,7 @@ public struct KnockAuthorizeScreen: View {
             .padding(.top, FS.space.s4)
         }
         .background(c.bg.ignoresSafeArea())
-        .navigationTitle("Authorize site")
+        .navigationTitle("Open app")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             if vm == nil {
@@ -63,7 +65,16 @@ public struct KnockAuthorizeScreen: View {
                     serverDomain: serverDomain,
                     svc: svc,
                     serviceRef: serviceRef,
-                    pageId: pageId)
+                    pageId: pageId,
+                    ownServers: app.pods.map(\.fqdn),
+                    refreshOwnServers: { [app, mailbox] in
+                        // A cold start from a deep link may not have loaded the
+                        // server list yet: one `/pods` read, no biometric.
+                        guard let user = app.currentUser, !user.isEmpty,
+                              let dir = try? await mailbox.fetchPods(username: user)
+                        else { return app.pods.map(\.fqdn) }
+                        return app.pods.map(\.fqdn) + dir.pods.map(\.serverDomain)
+                    })
             }
         }
     }
@@ -79,17 +90,18 @@ public struct KnockAuthorizeScreen: View {
     private func authorizeCard(c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text("Authorize this site?")
+                Text(title)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(c.text)
+                    .accessibilityIdentifier("knock-authorize-title")
                 Text(siteLabel)
                     .font(FS.font.mono())
                     .foregroundColor(c.text)
                     .accessibilityIdentifier("knock-authorize-site")
-                Text("A browser is asking to open a restricted site on your Flagship cloud. Authorizing signs it in with your account so it can view the page; nothing else about you is shared.")
+                Text("This signs the browser at \(siteLabel) in as you. Only do this for a browser you opened yourself.")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
-                FSPrimaryButton(isAuthorizing ? "Authorizing…" : "Authorize", block: true, large: true) {
+                FSPrimaryButton(isAuthorizing ? "Signing in…" : "Open", block: true, large: true) {
                     Task { await authorize() }
                 }
                 .disabled(isAuthorizing)
@@ -111,16 +123,20 @@ public struct KnockAuthorizeScreen: View {
     private func authorizedCard(c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Label("Authorized", systemImage: "checkmark.seal.fill")
+                Label("Signed in", systemImage: "checkmark.seal.fill")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(c.text)
-                Text("Return to the website — it'll load now. You can refresh or stop this session anytime from Settings → Open secured sessions.")
+                Text("Go back to the browser: it opens \(svc.isEmpty ? "the app" : svc) on its own. You can refresh or stop this session anytime from Settings → Open secured sessions.")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
                 FSPrimaryButton("Done", block: true, large: true) { onDone() }
                     .accessibilityIdentifier("knock-authorize-done")
             }
         }
+    }
+
+    private var title: String {
+        KnockAuthorizeViewModel.title(svc: svc, serverDomain: serverDomain)
     }
 
     private var isAuthorizing: Bool {

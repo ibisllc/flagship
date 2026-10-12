@@ -63,7 +63,7 @@ public struct SecuredSessionsScreen: View {
                 Image(systemName: "globe").foregroundColor(c.textMuted)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("No open sessions").font(FS.font.bodySm()).foregroundColor(c.text)
-                    Text("When you authorize a browser to open a restricted site, it shows up here.")
+                    Text("When you sign a browser in to a private app, it shows up here.")
                         .font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
             }

@@ -16,18 +16,81 @@ final class InviteRedeemViewModelTests: XCTestCase {
         try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 5, count: 32))
     }
 
+    private func ownerStore() -> InviteOwnerStore {
+        let suite = "redeem-tests-\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        d.removePersistentDomain(forName: suite)
+        return InviteOwnerStore(defaults: d)
+    }
+
     private func makeVM(
         _ mock: MockServiceAccessClient,
         secret: String? = nil,
         authorAidHex: String? = nil,
         inviteId: String? = nil,
+        serverDomain: String? = nil,
+        owners: InviteOwnerStore? = nil,
         now: @escaping () -> Int64 = { 1700 }
     ) -> InviteRedeemViewModel {
         let k = contactAid()
         return InviteRedeemViewModel(
-            client: mock, serverDomain: server, secretHex: secret ?? self.secret,
+            client: mock, serverDomain: serverDomain ?? server, secretHex: secret ?? self.secret,
             authorAidHex: authorAidHex, inviteId: inviteId,
-            redeemAid: { _, _ in k }, now: now)
+            redeemAid: { _, _ in k }, owners: owners ?? ownerStore(), now: now)
+    }
+
+    func testRedeemRemembersTheBoxOwner() async {
+        let owners = ownerStore()
+        let mock = MockServiceAccessClient()
+        mock.redeemResult = RedeemResult(serviceRef: "alice--notes", boundAidHex: "", firstBind: true)
+        let vm = makeVM(mock, authorAidHex: authorAid.uppercased(), serverDomain: "Home.Alice.Flagship.Services", owners: owners)
+        await vm.redeem()
+        guard case .done = vm.phase else { return XCTFail("expected .done, got \(vm.phase)") }
+        XCTAssertEqual(owners.ownerAidHex(forServer: server), authorAid)
+    }
+
+    func testPendingRedeemRemembersTheBoxOwner() async {
+        let owners = ownerStore()
+        let mock = MockServiceAccessClient()
+        mock.redeemResult = RedeemResult(serviceRef: "alice--notes", boundAidHex: "", firstBind: false, pending: true)
+        let vm = makeVM(mock, authorAidHex: authorAid, inviteId: inviteId, owners: owners)
+        await vm.redeem()
+        guard case .pendingApproval = vm.phase else { return XCTFail("expected .pendingApproval, got \(vm.phase)") }
+        XCTAssertEqual(owners.ownerAidHex(forServer: server), authorAid)
+    }
+
+    func testFailedOrV1RedeemRemembersNothing() async {
+        let owners = ownerStore()
+        let failing = MockServiceAccessClient()
+        failing.nextError = ServiceAccessError.inviteUnknown
+        await makeVM(failing, authorAidHex: authorAid, owners: owners).redeem()
+        XCTAssertNil(owners.ownerAidHex(forServer: server))
+
+        let v1 = MockServiceAccessClient()
+        v1.redeemResult = RedeemResult(serviceRef: "alice--notes", boundAidHex: "", firstBind: true)
+        await makeVM(v1, authorAidHex: nil, owners: owners).redeem()
+        XCTAssertNil(owners.ownerAidHex(forServer: server))
+    }
+
+    func testOwnerStoreLatestWinsAndMatchesAppHosts() {
+        var clock = 1.0
+        let suite = "owner-store-\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        d.removePersistentDomain(forName: suite)
+        let owners = InviteOwnerStore(defaults: d, now: { clock })
+        let other = String(repeating: "c5", count: 32)
+        owners.remember(serverDomain: "notes.\(server)", ownerAidHex: authorAid)
+        clock = 2
+        owners.remember(serverDomain: "chat.\(server)", ownerAidHex: other)
+        XCTAssertEqual(owners.ownerAidHex(forServer: server), other)
+        owners.remember(serverDomain: server, ownerAidHex: authorAid)
+        XCTAssertEqual(owners.ownerAidHex(forServer: server + "."), authorAid)
+        owners.remember(serverDomain: server, ownerAidHex: other)
+        XCTAssertEqual(owners.ownerAidHex(forServer: server), other)
+        // Not a suffix match on a different box, and junk isn't stored.
+        XCTAssertNil(owners.ownerAidHex(forServer: "alice.flagship.services.evil"))
+        owners.remember(serverDomain: "x.example", ownerAidHex: "nothex")
+        XCTAssertNil(owners.ownerAidHex(forServer: "x.example"))
     }
 
     func testRedeemPresentsContactAidNotGlobal() async {
