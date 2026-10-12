@@ -1,381 +1,343 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+const pgCalls: Array<{ url: string; sql: string; params?: unknown[] }> = [];
+vi.mock("pg", () => {
+  class Client {
+    private readonly url: string;
+    constructor(opts: { connectionString: string }) {
+      this.url = opts.connectionString;
+    }
+    async connect(): Promise<void> {}
+    async end(): Promise<void> {}
+    async query(sql: string, params?: unknown[]): Promise<{ rows: unknown[]; fields: unknown[] }> {
+      pgCalls.push({ url: this.url, sql, ...(params ? { params } : {}) });
+      return { rows: [], fields: [] };
+    }
+  }
+  return { Client, default: { Client } };
+});
+
 import {
+  APP_PG_EXTENSIONS,
   DataProvisioner,
-  InMemoryMinioAdmin,
+  FILES_MOUNT,
+  InMemoryFilesAdmin,
   InMemoryPostgresAdmin,
-  InMemoryRedisAdmin,
+  RealFilesAdmin,
+  RealPostgresAdmin,
   credentialsToEnv,
+  filesVolume,
+  filesVolumeOf,
   generateSecret,
   pgDatabase,
-  pgRole,
-  redisPrefix,
-  redisUser,
-  s3AccessKey,
-  s3Bucket,
+  postgresStoreNames,
+  wantsAnyStore,
 } from "../src/dataLayer/index.js";
+import type { CommandRunner } from "../src/serviceRunner.js";
 
-describe("naming helpers — host-independent (creator, slug, storeName) identity", () => {
-  it("Postgres database is `_<creator>_<slug>` with dashes folded to underscores", () => {
-    expect(pgDatabase({ creator: "harry", slug: "habit-tracker" })).toBe(
-      "_harry_habit_tracker",
-    );
+const KEY = "n".repeat(40);
+const db = (creator: string, slug: string, storeName?: string, space?: "dev" | "prod") =>
+  pgDatabase({ creator, slug, ...(storeName ? { storeName } : {}), ...(space ? { space } : {}) }, KEY);
+
+function rig(opts: { secret?: () => string } = {}) {
+  const pg = new InMemoryPostgresAdmin();
+  const files = new InMemoryFilesAdmin();
+  const prov = new DataProvisioner({
+    postgres: pg,
+    files,
+    nameKey: KEY,
+    generateSecret: opts.secret ?? (() => "secret"),
   });
-  it("Postgres database includes a dashless storeName suffix when present", () => {
-    expect(
-      pgDatabase({ creator: "harry", slug: "game1", storeName: "sprites" }),
-    ).toBe("_harry_game1_sprites");
-  });
-  it("default storeName renders as if absent (single-store apps stay clean)", () => {
-    expect(
-      pgDatabase({ creator: "harry", slug: "game1", storeName: "default" }),
-    ).toBe("_harry_game1");
-  });
-  it("S3 bucket is dash-joined and preserves dashes in slug", () => {
-    expect(s3Bucket({ creator: "harry", slug: "habit-tracker" })).toBe("harry-habit-tracker");
-    expect(
-      s3Bucket({ creator: "harry", slug: "game1", storeName: "sprites" }),
-    ).toBe("harry-game1-sprites");
-  });
-  it("Redis prefix uses colon separators, dashes preserved", () => {
-    expect(redisPrefix({ creator: "harry", slug: "habit-tracker" })).toBe(
-      "harry:habit-tracker:",
-    );
-    expect(
-      redisPrefix({ creator: "harry", slug: "game1", storeName: "sprites" }),
-    ).toBe("harry:game1:sprites:");
-  });
-  it("rejects creator with dashes (parsing ambiguity defense)", () => {
-    expect(() => pgDatabase({ creator: "har-ry", slug: "x" })).toThrow();
-  });
-  it("rejects slug with leading/trailing dash or double dash", () => {
-    expect(() => pgDatabase({ creator: "harry", slug: "-foo" })).toThrow();
-    expect(() => pgDatabase({ creator: "harry", slug: "foo-" })).toThrow();
-    expect(() => pgDatabase({ creator: "harry", slug: "foo--bar" })).toThrow();
-  });
-  it("rejects storeName with dashes (storeNames are dashless)", () => {
-    expect(() =>
-      pgDatabase({ creator: "harry", slug: "x", storeName: "main-data" }),
-    ).toThrow();
-  });
-  it("generateSecret produces 32 bytes of base64url with no padding chars", () => {
+  return { pg, files, prov };
+}
+
+describe("generateSecret", () => {
+  it("produces 32 bytes of base64url with no padding chars", () => {
     const s = generateSecret();
     expect(s).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(s.length).toBeGreaterThan(40);
   });
-  it("pgRole equals pgDatabase (one role per app keeps RBAC predictable)", () => {
-    const id = { creator: "harry", slug: "x" };
-    expect(pgRole(id)).toBe(pgDatabase(id));
-  });
-  it("redisUser equals pgRole (callers can refer to one identifier)", () => {
-    const id = { creator: "harry", slug: "x" };
-    expect(redisUser(id)).toBe(pgRole(id));
-  });
-  it("s3AccessKey equals s3Bucket", () => {
-    const id = { creator: "harry", slug: "x" };
-    expect(s3AccessKey(id)).toBe(s3Bucket(id));
+});
+
+describe("store flags", () => {
+  it("an older `kv` store asks for the default Postgres database; `objects` asks for the files folder", () => {
+    expect(postgresStoreNames({ kv: true })).toEqual(["default"]);
+    expect(postgresStoreNames({ postgres: ["a", "b"], kv: true })).toEqual(["a", "b"]);
+    expect(wantsAnyStore({ objects: true })).toBe(true);
+    expect(wantsAnyStore({})).toBe(false);
+    expect(wantsAnyStore(undefined)).toBe(false);
   });
 });
 
 describe("DataProvisioner.provisionApp", () => {
-  function setup() {
-    return {
-      pg: new InMemoryPostgresAdmin(),
-      objects: new InMemoryMinioAdmin(),
-      kv: new InMemoryRedisAdmin(),
-    };
-  }
-
   it("provisions only the stores declared in the manifest", async () => {
-    const { pg, objects, kv } = setup();
-    const prov = new DataProvisioner({
-      postgres: pg,
-      objects,
-      kv,
-      generateSecret: () => "fixed-secret",
-    });
-    const creds = await prov.provisionApp({
-      creator: "harry",
-      slug: "habit-tracker",
-      stores: { postgres: true, objects: false, kv: false },
-    });
+    const { pg, files, prov } = rig();
+    const creds = await prov.provisionApp({ creator: "harry", slug: "habit-tracker", stores: { postgres: true } });
     expect(creds.postgres).toBeDefined();
-    expect(creds.objects).toBeUndefined();
-    expect(creds.kv).toBeUndefined();
-    expect(pg.databases.has("_harry_habit_tracker")).toBe(true);
-    expect(objects.buckets.size).toBe(0);
-    expect(kv.users.size).toBe(0);
+    expect(creds.files).toBeUndefined();
+    expect(pg.databases.has(db("harry", "habit-tracker"))).toBe(true);
+    expect(files.volumes.size).toBe(0);
   });
 
-  it("provisions all three when all flags are true and produces matching env", async () => {
-    const { pg, objects, kv } = setup();
-    const prov = new DataProvisioner({
-      postgres: pg,
-      objects,
-      kv,
-      generateSecret: () => "secret",
-    });
-    const creds = await prov.provisionApp({
-      creator: "harry",
-      slug: "habits",
-      stores: { postgres: true, objects: true, kv: true },
-    });
+  it("creates every app database with the extension list", async () => {
+    const { pg, prov } = rig();
+    await prov.provisionApp({ creator: "harry", slug: "x", stores: { postgres: true } });
+    expect(pg.databases.get(db("harry", "x"))!.extensions).toEqual([...APP_PG_EXTENSIONS]);
+  });
+
+  it("provisions Postgres and a files folder, and produces matching env", async () => {
+    const { files, prov } = rig();
+    const creds = await prov.provisionApp({ creator: "harry", slug: "habits", stores: { postgres: true, files: true } });
     const env = credentialsToEnv(creds);
-    expect(env.FLAGSHIP_PG_URL).toContain("_harry_habits");
-    expect(env.FLAGSHIP_S3_BUCKET).toBe("harry-habits");
-    expect(env.FLAGSHIP_REDIS_URL).toContain(encodeURIComponent("harry:habits:"));
-    expect(env.FLAGSHIP_REDIS_PREFIX).toBe("harry:habits:");
-    // No app-supplied env can use FLAGSHIP_ — all of these come from the runtime.
+    expect(env.FLAGSHIP_PG_URL).toContain(db("harry", "habits"));
+    expect(env.FLAGSHIP_PG_DATABASE).toBe(db("harry", "habits"));
+    expect(env.FLAGSHIP_PG_ROLE).toBe(db("harry", "habits"));
+    expect(env.FLAGSHIP_FILES_DIR).toBe(FILES_MOUNT);
+    expect(FILES_MOUNT).toBe("/data");
+    expect(creds.files).toEqual({ volume: "flagship-files-harry-habits" });
+    expect(filesVolumeOf(creds)).toBe("flagship-files-harry-habits");
+    expect(files.volumes.get("flagship-files-harry-habits")!.labels).toEqual({
+      "flagship.files": "prod",
+      "flagship.app": "harry-habits",
+    });
     for (const k of Object.keys(env)) expect(k).toMatch(/^FLAGSHIP_/);
+    // No S3 or Redis env any more.
+    expect(Object.keys(env).some((k) => k.startsWith("FLAGSHIP_S3_") || k.startsWith("FLAGSHIP_REDIS_"))).toBe(false);
+  });
+
+  it("maps an older manifest's objects → files folder and kv → the Postgres database", async () => {
+    const { pg, files, prov } = rig();
+    const creds = await prov.provisionApp({ creator: "harry", slug: "old", stores: { objects: true, kv: true } });
+    expect(Object.keys(creds.postgres!)).toEqual(["default"]);
+    expect(pg.databases.has(db("harry", "old"))).toBe(true);
+    expect(files.volumes.has("flagship-files-harry-old")).toBe(true);
   });
 
   it("URL-encodes generated passwords (defense against / # @ ? in secrets)", async () => {
-    const { pg, objects, kv } = setup();
-    const prov = new DataProvisioner({
-      postgres: pg,
-      objects,
-      kv,
-      generateSecret: () => "p/a@ss?word#",
-    });
-    const creds = await prov.provisionApp({
-      creator: "harry",
-      slug: "x",
-      stores: { postgres: true, kv: true },
-    });
+    const { prov } = rig({ secret: () => "p/a@ss?word#" });
+    const creds = await prov.provisionApp({ creator: "harry", slug: "x", stores: { postgres: true } });
     expect(creds.postgres!.default!.url).toContain("p%2Fa%40ss%3Fword%23");
-    expect(creds.kv!.default!.url).toContain("p%2Fa%40ss%3Fword%23");
+  });
+
+  it("writes the configured host and port into the URL", async () => {
+    const prov = new DataProvisioner({
+      postgres: new InMemoryPostgresAdmin(),
+      nameKey: KEY,
+      endpoints: { postgresHost: "host.flagship.internal", postgresPort: 5432 },
+      generateSecret: () => "s",
+    });
+    const creds = await prov.provisionApp({ creator: "harry", slug: "x", stores: { postgres: true } });
+    expect(creds.postgres!.default!.url).toBe(`postgresql://${db("harry", "x")}:s@host.flagship.internal:5432/${db("harry", "x")}`);
   });
 
   it("multi-store Postgres: each named store gets its own DB + role + suffixed env var", async () => {
-    const { pg, objects, kv } = setup();
-    const prov = new DataProvisioner({
-      postgres: pg,
-      objects,
-      kv,
-      generateSecret: () => "s",
-    });
-    const creds = await prov.provisionApp({
-      creator: "harry",
-      slug: "habits",
-      stores: { postgres: ["main", "analytics"] },
-    });
+    const { pg, prov } = rig();
+    const creds = await prov.provisionApp({ creator: "harry", slug: "habits", stores: { postgres: ["main", "analytics"] } });
     expect(Object.keys(creds.postgres!).sort()).toEqual(["analytics", "main"]);
-    expect(pg.databases.has("_harry_habits_main")).toBe(true);
-    expect(pg.databases.has("_harry_habits_analytics")).toBe(true);
+    expect(pg.databases.has(db("harry", "habits", "main"))).toBe(true);
+    expect(pg.databases.has(db("harry", "habits", "analytics"))).toBe(true);
     const env = credentialsToEnv(creds);
-    expect(env.FLAGSHIP_PG_URL_MAIN).toContain("_harry_habits_main");
-    expect(env.FLAGSHIP_PG_URL_ANALYTICS).toContain("_harry_habits_analytics");
-    expect(env.FLAGSHIP_PG_URL).toBeUndefined(); // no singleton when multi-store
+    expect(env.FLAGSHIP_PG_URL_MAIN).toContain(db("harry", "habits", "main"));
+    expect(env.FLAGSHIP_PG_URL_ANALYTICS).toContain(db("harry", "habits", "analytics"));
+    expect(env.FLAGSHIP_PG_URL).toBeUndefined();
     expect(env.FLAGSHIP_PG_STORES).toBe("main,analytics");
   });
 
-  it("multi-store MinIO: dash suffix in bucket names, _<NAME> suffix in env vars", async () => {
-    const { pg, objects, kv } = setup();
-    const prov = new DataProvisioner({
-      postgres: pg,
-      objects,
-      kv,
-      generateSecret: () => "s",
-    });
-    const creds = await prov.provisionApp({
-      creator: "harry",
-      slug: "habits",
-      stores: { objects: ["public", "private"] },
-    });
-    expect(objects.buckets.has("harry-habits-public")).toBe(true);
-    expect(objects.buckets.has("harry-habits-private")).toBe(true);
+  it("a dashed store name gives env names with `_` (a dash is no env-name character)", async () => {
+    const { prov } = rig();
+    const creds = await prov.provisionApp({ creator: "harry", slug: "pics", stores: { postgres: ["main-photos"] } });
     const env = credentialsToEnv(creds);
-    expect(env.FLAGSHIP_S3_BUCKET_PUBLIC).toBe("harry-habits-public");
-    expect(env.FLAGSHIP_S3_BUCKET_PRIVATE).toBe("harry-habits-private");
+    expect(env.FLAGSHIP_PG_URL_MAIN_PHOTOS).toContain(db("harry", "pics", "main-photos"));
+    expect(Object.keys(env).every((k) => /^[A-Z_][A-Z0-9_]*$/.test(k))).toBe(true);
+    expect(env.FLAGSHIP_PG_STORES).toBe("main-photos");
   });
 
-  it("multi-store Redis: prefix carries the storeName (`<creator>:<slug>:<storeName>:`)", async () => {
-    const { pg, objects, kv } = setup();
-    const prov = new DataProvisioner({
-      postgres: pg,
-      objects,
-      kv,
-      generateSecret: () => "s",
-    });
-    const creds = await prov.provisionApp({
-      creator: "harry",
-      slug: "habits",
-      stores: { kv: ["cache", "queue"] },
-    });
-    expect(creds.kv!.cache.prefix).toBe("harry:habits:cache:");
-    expect(creds.kv!.queue.prefix).toBe("harry:habits:queue:");
+  it("an empty seed map needs no execSql", async () => {
+    const pg = new InMemoryPostgresAdmin();
+    (pg as { execSql?: unknown }).execSql = undefined;
+    const prov = new DataProvisioner({ postgres: pg, nameKey: KEY, generateSecret: () => "s" });
+    const creds = await prov.provisionDevDataspace({ creator: "owner", slug: "stg-1", stores: { postgres: true }, seedSqlByStore: {} });
+    expect(creds.postgres!.default!.database).toBe(db("owner", "stg-1", undefined, "dev"));
   });
 
-  it("rejects manifest with duplicate storeNames at the provisioner boundary", async () => {
-    const prov = new DataProvisioner({ postgres: new InMemoryPostgresAdmin() });
+  it("rejects a manifest with duplicate storeNames", async () => {
+    const { prov } = rig();
     await expect(
-      prov.provisionApp({
-        creator: "harry",
-        slug: "x",
-        stores: { postgres: ["main", "main"] },
-      }),
+      prov.provisionApp({ creator: "harry", slug: "x", stores: { postgres: ["main", "main"] } }),
     ).rejects.toThrow(/duplicate/);
   });
 
-  it("throws if a store is requested but no admin is configured", async () => {
-    const prov = new DataProvisioner({});
+  it("throws if a store is requested but no admin or name key is configured", async () => {
     await expect(
-      prov.provisionApp({
+      new DataProvisioner({}).provisionApp({ creator: "harry", slug: "x", stores: { postgres: true } }),
+    ).rejects.toThrow(/postgres admin/);
+    await expect(
+      new DataProvisioner({ postgres: new InMemoryPostgresAdmin() }).provisionApp({
         creator: "harry",
         slug: "x",
         stores: { postgres: true },
       }),
-    ).rejects.toThrow(/postgres admin/);
+    ).rejects.toThrow(/name key/);
+    await expect(
+      new DataProvisioner({ postgres: new InMemoryPostgresAdmin(), nameKey: KEY }).provisionApp({
+        creator: "harry",
+        slug: "x",
+        stores: { files: true },
+      }),
+    ).rejects.toThrow(/files admin/);
   });
-});
 
-describe("DataProvisioner.deprovisionApp", () => {
-  it("drops only the stores that were provisioned", async () => {
+  it("files never wait on the Postgres stack", async () => {
+    const files = new InMemoryFilesAdmin();
+    const prov = new DataProvisioner({
+      files,
+      ready: async () => {
+        throw new Error("postgres down");
+      },
+    });
+    const creds = await prov.provisionApp({ creator: "harry", slug: "pics", stores: { files: true } });
+    expect(creds.files!.volume).toBe("flagship-files-harry-pics");
+  });
+
+  it("leaves nothing half-made when a later store fails", async () => {
     const pg = new InMemoryPostgresAdmin();
-    const objects = new InMemoryMinioAdmin();
-    const kv = new InMemoryRedisAdmin();
-    const prov = new DataProvisioner({ postgres: pg, objects, kv });
-    await prov.provisionApp({
-      creator: "harry",
-      slug: "x",
-      stores: { postgres: true, objects: true, kv: true },
-    });
-    await prov.deprovisionApp({
-      creator: "harry",
-      slug: "x",
-      stores: { postgres: true, objects: false, kv: true },
-    });
+    const files = new InMemoryFilesAdmin();
+    await files.createVolume({ volume: "flagship-files-harry-x" });
+    const prov = new DataProvisioner({ postgres: pg, files, nameKey: KEY, generateSecret: () => "s" });
+    await expect(
+      prov.provisionApp({ creator: "harry", slug: "x", stores: { postgres: true, files: true } }),
+    ).rejects.toThrow(/already exists/);
     expect(pg.databases.size).toBe(0);
-    expect(objects.buckets.size).toBe(1); // not asked to drop objects
-    expect(kv.users.size).toBe(0);
   });
 });
 
-describe("cross-host portability — same data identity regardless of where the app runs", () => {
-  it("a `<creator>=alice, slug=game1` app produces the same names on alice's box and on bob's", async () => {
-    // Simulates the migration story: alice creates the app; later bob's box
-    // runs the same identity. The data namespace doesn't include the host,
-    // so the names match regardless of which box the test is "running on."
-    const onAlicesBox = pgDatabase({ creator: "alice", slug: "game1" });
-    const onBobsBox = pgDatabase({ creator: "alice", slug: "game1" });
-    expect(onAlicesBox).toBe(onBobsBox);
-    expect(onAlicesBox).toBe("_alice_game1");
+describe("DataProvisioner.dropCredentials / deprovisionApp", () => {
+  it("drops exactly what a set of credentials names", async () => {
+    const { pg, files, prov } = rig();
+    const creds = await prov.provisionApp({ creator: "harry", slug: "x", stores: { postgres: true, files: true } });
+    await prov.dropCredentials(creds);
+    expect(pg.databases.size).toBe(0);
+    expect(files.volumes.size).toBe(0);
+  });
 
-    // The host appears in the URL but never in data names.
-    expect(s3Bucket({ creator: "alice", slug: "game1" })).toBe("alice-game1");
-    expect(redisPrefix({ creator: "alice", slug: "game1" })).toBe("alice:game1:");
+  it("deprovisionApp drops only the stores it is asked to", async () => {
+    const { pg, files, prov } = rig();
+    await prov.provisionApp({ creator: "harry", slug: "x", stores: { postgres: true, files: true } });
+    await prov.deprovisionApp({ creator: "harry", slug: "x", stores: { postgres: true } });
+    expect(pg.databases.size).toBe(0);
+    expect(files.volumes.size).toBe(1);
   });
 });
 
-describe("dev dataspace naming — provably disjoint from prod (feat/dev-prod-dataspace)", () => {
-  const id = { creator: "harry", slug: "habit-tracker" } as const;
-
-  it("prod names are byte-identical to the pre-dev-dataspace form (no migration)", () => {
-    expect(pgDatabase({ ...id, space: "prod" })).toBe(pgDatabase(id));
-    expect(redisPrefix({ ...id, space: "prod" })).toBe(redisPrefix(id));
-    expect(s3Bucket({ ...id, space: "prod" })).toBe(s3Bucket(id));
-    expect(pgDatabase(id)).toBe("_harry_habit_tracker");
-  });
-
-  it("dev names carry a store-valid dev marker", () => {
-    expect(pgDatabase({ ...id, space: "dev" })).toBe("__dev_harry_habit_tracker");
-    expect(redisPrefix({ ...id, space: "dev" })).toBe("dev:harry:habit-tracker:");
-    expect(s3Bucket({ ...id, space: "dev" })).toBe("dev.harry-habit-tracker");
-  });
-
-  it("dev and prod names NEVER collide across creators/slugs (incl. a creator literally named 'dev')", () => {
-    const cases = [
-      { creator: "dev", slug: "notes" },
-      { creator: "harry", slug: "dev-notes" },
-      { creator: "d", slug: "e-v" },
-      { creator: "harry", slug: "habit-tracker" },
-    ] as const;
-    for (const c of cases) {
-      expect(pgDatabase({ ...c, space: "dev" })).not.toBe(pgDatabase({ ...c, space: "prod" }));
-      expect(redisPrefix({ ...c, space: "dev" })).not.toBe(redisPrefix({ ...c, space: "prod" }));
-      expect(s3Bucket({ ...c, space: "dev" })).not.toBe(s3Bucket({ ...c, space: "prod" }));
-      // A prod pg name can never begin with the dev sentinel `__`.
-      expect(pgDatabase({ ...c, space: "prod" }).startsWith("__")).toBe(false);
-      expect(pgDatabase({ ...c, space: "dev" }).startsWith("__dev_")).toBe(true);
-    }
-  });
-
-  it("pgRole/redisUser follow pgDatabase into the dev namespace", () => {
-    expect(pgRole({ ...id, space: "dev" })).toBe("__dev_harry_habit_tracker");
-    expect(redisUser({ ...id, space: "dev" })).toBe("__dev_harry_habit_tracker");
-    expect(s3AccessKey({ ...id, space: "dev" })).toBe("dev.harry-habit-tracker");
-  });
-});
-
-describe("dev dataspace provisioning (Component B)", () => {
-  function rig() {
-    const pg = new InMemoryPostgresAdmin();
-    const objects = new InMemoryMinioAdmin();
-    const kv = new InMemoryRedisAdmin();
-    let n = 0;
-    const provisioner = new DataProvisioner({
-      postgres: pg,
-      objects,
-      kv,
-      generateSecret: () => `secret${n++}`,
-    });
-    return { pg, objects, kv, provisioner };
-  }
-  const stores = { postgres: true, objects: true, kv: true } as const;
+describe("dev dataspace provisioning", () => {
   const app = { creator: "harry", slug: "notes" };
+  const stores = { postgres: true, files: true } as const;
 
   it("provisions dev stores under the disjoint dev namespace", async () => {
-    const { pg, objects, kv, provisioner } = rig();
-    const creds = await provisioner.provisionDevDataspace({ ...app, stores });
-    expect(creds.postgres!.default!.database).toBe("__dev_harry_notes");
-    expect(objects.buckets.has("dev.harry-notes")).toBe(true);
-    expect([...kv.users.keys()]).toContain("__dev_harry_notes");
-    expect(pg.databases.has("__dev_harry_notes")).toBe(true);
-    // The prod name is NOT created by a dev provision.
-    expect(pg.databases.has("_harry_notes")).toBe(false);
+    const { pg, files, prov } = rig();
+    const creds = await prov.provisionDevDataspace({ ...app, stores });
+    expect(creds.postgres!.default!.database).toBe(db("harry", "notes", undefined, "dev"));
+    expect(creds.postgres!.default!.database.startsWith("__dev_")).toBe(true);
+    expect(files.volumes.has("flagship-files-dev--harry-notes")).toBe(true);
+    expect(files.volumes.get("flagship-files-dev--harry-notes")!.labels["flagship.files"]).toBe("dev");
+    expect(pg.databases.has(db("harry", "notes"))).toBe(false);
   });
 
   it("seeds the dev Postgres store from synthesizer SQL", async () => {
-    const { pg, provisioner } = rig();
+    const { pg, prov } = rig();
     const seed = `INSERT INTO "users" (id) VALUES (1);\nINSERT INTO "users" (id) VALUES (2);\nINSERT INTO "notes" (id) VALUES (1);`;
-    await provisioner.provisionDevDataspace({ ...app, stores: { postgres: true }, seedSqlByStore: { default: seed } });
-    const tables = await pg.listTables("__dev_harry_notes");
+    await prov.provisionDevDataspace({ ...app, stores: { postgres: true }, seedSqlByStore: { default: seed } });
+    const tables = await pg.listTables(db("harry", "notes", undefined, "dev"));
     expect(tables.sort()).toEqual(["notes", "users"]);
   });
 
-  it("dev and prod coexist without collision", async () => {
-    const { pg, provisioner } = rig();
-    await provisioner.provisionApp({ ...app, stores: { postgres: true } });
-    await provisioner.provisionDevDataspace({ ...app, stores: { postgres: true } });
-    expect(pg.databases.has("_harry_notes")).toBe(true);
-    expect(pg.databases.has("__dev_harry_notes")).toBe(true);
-  });
-
   it("teardownDevDataspace drops ONLY the dev stores, never prod", async () => {
-    const { pg, objects, kv, provisioner } = rig();
-    await provisioner.provisionApp({ ...app, stores });
-    await provisioner.provisionDevDataspace({ ...app, stores });
-    await provisioner.teardownDevDataspace({ ...app, stores });
-    // Dev gone.
-    expect(pg.databases.has("__dev_harry_notes")).toBe(false);
-    expect(objects.buckets.has("dev.harry-notes")).toBe(false);
-    expect(kv.users.has("__dev_harry_notes")).toBe(false);
-    // Prod untouched.
-    expect(pg.databases.has("_harry_notes")).toBe(true);
-    expect(objects.buckets.has("harry-notes")).toBe(true);
-    expect(kv.users.has("_harry_notes")).toBe(true);
+    const { pg, files, prov } = rig();
+    await prov.provisionApp({ ...app, stores });
+    await prov.provisionDevDataspace({ ...app, stores });
+    await prov.teardownDevDataspace({ ...app, stores });
+    expect(pg.databases.has(db("harry", "notes", undefined, "dev"))).toBe(false);
+    expect(files.volumes.has(filesVolume({ ...app, space: "dev" }))).toBe(false);
+    expect(pg.databases.has(db("harry", "notes"))).toBe(true);
+    expect(files.volumes.has(filesVolume(app))).toBe(true);
+  });
+});
+
+describe("RealPostgresAdmin", () => {
+  const adminUrl = "postgresql://flagship_admin:pw@127.0.0.1:5432/postgres";
+
+  it("locks every database to its own role and creates the extensions as the admin, in the app's database", async () => {
+    pgCalls.length = 0;
+    const name = db("harry", "x");
+    await new RealPostgresAdmin({ adminUrl }).createRoleAndDb({
+      db: name,
+      role: name,
+      password: "it's",
+      extensions: APP_PG_EXTENSIONS,
+    });
+    const onPostgres = pgCalls.filter((c) => c.url === adminUrl).map((c) => c.sql);
+    expect(onPostgres).toEqual([
+      `REVOKE CONNECT, TEMPORARY ON DATABASE "postgres" FROM PUBLIC`,
+      `REVOKE CONNECT, TEMPORARY ON DATABASE "template1" FROM PUBLIC`,
+      `CREATE ROLE "${name}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD 'it''s'`,
+      `CREATE DATABASE "${name}" OWNER "${name}"`,
+      `REVOKE ALL ON DATABASE "${name}" FROM PUBLIC`,
+      `GRANT CONNECT, TEMPORARY ON DATABASE "${name}" TO "${name}"`,
+    ]);
+    const inApp = pgCalls.filter((c) => c.url !== adminUrl);
+    expect(new Set(inApp.map((c) => new URL(c.url).pathname))).toEqual(new Set([`/${name}`]));
+    expect(inApp.map((c) => c.sql)).toEqual(APP_PG_EXTENSIONS.map((e) => `CREATE EXTENSION IF NOT EXISTS "${e}"`));
   });
 
-  it("refuses to seed if the resolved database is somehow not dev-namespaced", async () => {
-    // Guard test: a bug that passed space:"prod" must never seed via this path.
-    const { provisioner } = rig();
-    // provisionDevDataspace always uses space:"dev", so this is the belt-and-braces
-    // check inside it; we assert the dev path DID seed a dev db (positive) and that
-    // the prod provision path has no execSql seeding at all.
-    const creds = await provisioner.provisionDevDataspace({
-      ...app,
-      stores: { postgres: true },
-      seedSqlByStore: { default: 'INSERT INTO "t" (id) VALUES (1);' },
-    });
-    expect(creds.postgres!.default!.database.startsWith("__dev_")).toBe(true);
+  it("refuses unsafe identifiers before touching the server", async () => {
+    pgCalls.length = 0;
+    const admin = new RealPostgresAdmin({ adminUrl });
+    await expect(admin.createRoleAndDb({ db: `x"; DROP`, role: "x", password: "p" })).rejects.toThrow(/unsafe/);
+    await expect(admin.createRoleAndDb({ db: "x", role: "x", password: "p", extensions: ["bad-ext"] })).rejects.toThrow(/unsafe/);
+    expect(pgCalls).toEqual([]);
+  });
+});
+
+describe("RealFilesAdmin", () => {
+  function fakeDocker(existing: Set<string>) {
+    const calls: string[] = [];
+    const cmd: CommandRunner = {
+      run: async (c, args) => {
+        calls.push(`${c} ${args.join(" ")}`);
+      },
+      capture: async (c, args) => {
+        calls.push(`${c} ${args.join(" ")}`);
+        if (args[0] === "volume" && args[1] === "inspect") {
+          const v = args[args.length - 1]!;
+          if (!existing.has(v)) throw new Error("no such volume");
+          return { stdout: args[3] === "{{.Mountpoint}}" ? `/var/lib/docker/volumes/${v}/_data\n` : `${v}\n`, stderr: "" };
+        }
+        if (args[0] === "volume" && args[1] === "create") existing.add(args[args.length - 1]!);
+        if (args[0] === "volume" && args[1] === "rm") existing.delete(args[args.length - 1]!);
+        if (c === "du") return { stdout: "12\t/x\n", stderr: "" };
+        return { stdout: "", stderr: "" };
+      },
+    };
+    return { calls, cmd };
+  }
+
+  it("creates a labelled named volume and opens its root to the app's uid", async () => {
+    const { calls, cmd } = fakeDocker(new Set());
+    await new RealFilesAdmin(cmd).createVolume({ volume: "flagship-files-harry-x", labels: { "flagship.files": "prod" } });
+    expect(calls).toContain("docker volume create --label flagship.files=prod flagship-files-harry-x");
+    expect(calls).toContain("chmod 0777 /var/lib/docker/volumes/flagship-files-harry-x/_data");
+  });
+
+  it("refuses an existing volume and any name that isn't a files volume", async () => {
+    const admin = new RealFilesAdmin(fakeDocker(new Set(["flagship-files-harry-x"])).cmd);
+    await expect(admin.createVolume({ volume: "flagship-files-harry-x" })).rejects.toThrow(/already exists/);
+    await expect(admin.createVolume({ volume: "/var/flagship/data" })).rejects.toThrow(/not a files volume/);
+    await expect(admin.removeVolume("flagship-postgres")).rejects.toThrow(/not a files volume/);
+  });
+
+  it("reports the volume's size from du", async () => {
+    const admin = new RealFilesAdmin(fakeDocker(new Set(["flagship-files-harry-x"])).cmd);
+    expect(await admin.volumeBytes("flagship-files-harry-x")).toBe(12 * 1024);
+    expect(await admin.volumeBytes("flagship-files-harry-y")).toBeNull();
   });
 });

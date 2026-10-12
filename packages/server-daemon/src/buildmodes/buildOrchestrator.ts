@@ -33,6 +33,7 @@ import type { McpKeyStore } from "./mcpKeyStore.js";
 import type { BuildJournal, BuildJournalEntry, BuildJournalSummary, BuildMode } from "./buildJournal.js";
 import type { DeployResult } from "./deployArtifact.js";
 import { filesDigest, type StagingHost } from "./staging.js";
+import { classifyEnvironmentFailure } from "./environmentFailure.js";
 import { VibeCodeStreamParser } from "../llm/vibeCodeSession.js";
 import { SYSTEM_PROMPT_V1 } from "../llm/systemPrompt.js";
 import {
@@ -779,6 +780,13 @@ export class BuildOrchestrator {
     const st = this.states.get(buildId);
     if (st) st.gitFit = true;
 
+    // The box itself failed (its data layer, fence, docker…): nothing the AI
+    // wrote is at fault or goes live, and the owner gets the reason.
+    if (result.stopReason === "environment" && result.environment) {
+      await this.deps.staging?.teardown(buildId).catch(() => {});
+      return { ok: false, reason: result.environment.ownerReason };
+    }
+
     // Finished, or stopped with a tested copy of exactly these files: the
     // box puts it live. Otherwise nothing goes live and the copy goes away.
     const live = result.finished || this.stagedMatches(buildId);
@@ -878,7 +886,20 @@ export class BuildOrchestrator {
       slug,
       envNames: await this.stagingEnvNames(buildId, st, slug),
     });
-    return r.ok ? { ok: true } : { ok: false, reason: r.reason };
+    if (st.mode === "mcp" && st.adapt?.status !== "running") {
+      // An IDE build has no loop on the box to stop: the owner sees the
+      // server's problem on the build, and the IDE is told to stop.
+      if (!r.ok && r.environment) {
+        st.adapt = { status: "failed", reason: r.environment.ownerReason };
+        await this.deps.journal
+          .append(buildId, { mode: "mcp", kind: "error", actor: "system", summary: r.environment.ownerReason })
+          .catch(() => {});
+      } else if (st.adapt?.status === "failed") {
+        delete st.adapt;
+      }
+    }
+    if (r.ok) return { ok: true };
+    return { ok: false, reason: r.reason, ...(r.environment ? { environment: r.environment } : {}) };
   }
 
   /** The owner env var names the copy gets placeholders for: set ones and requested ones. */
@@ -1165,6 +1186,10 @@ export class BuildOrchestrator {
    * again; the build goes back to the repo's own files for the AI.
    */
   private installFailed(buildId: string, st: BuildState, src: GitSource, reason: string): DeployResult {
+    // The server failing (its data layer, docker, a registry…) says nothing
+    // about the adapter: no complaint to the public store, no AI.
+    const environment = classifyEnvironmentFailure(reason);
+    if (environment) return { ok: false, reason: environment.ownerReason };
     const stage = /^docker build failed/.test(reason) ? "build" : /^install rejected/.test(reason) ? "start" : null;
     if (src.origin !== "index" || !src.indexFile || !src.repo || !stage) return { ok: false, reason };
     void this.deps.adapterIndex?.complain({ repo: src.repo, file: src.indexFile, stage }).catch(() => {});

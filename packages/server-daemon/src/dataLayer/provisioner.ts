@@ -1,83 +1,128 @@
-import { normalizeStoreFlag, isSingletonStore, type AppDataStores } from "@flagship/protocol";
-import type { MinioAdmin, PostgresAdmin, RedisAdmin } from "./admin.js";
+import { normalizeStoreFlag, isSingletonStore, wantsFiles, type AppDataStores } from "@flagship/protocol";
+import type { FilesAdmin, PostgresAdmin } from "./admin.js";
 import {
+  APP_PG_EXTENSIONS,
+  DEFAULT_STORE_NAME,
+  DEV_PG_PREFIX,
+  FILES_MOUNT,
+  filesVolume,
   generateSecret,
   pgDatabase,
   pgRole,
-  redisPrefix,
-  redisUser,
-  s3AccessKey,
-  s3Bucket,
   type AppDataIdentity,
 } from "./naming.js";
 
 /**
- * Per-app credentials minted at deploy time. The daemon stores these wrapped
- * under SWK and re-derives the env-var bundle on each AppRunner deploy /
- * restart.
+ * Per-app credentials minted at deploy time. The daemon keeps them sealed
+ * (the installed-services registry) and re-derives the env bundle on each
+ * deploy / restart.
  *
- * Each store carries a map of `storeName → store-credential` so a single
- * app can have e.g. a `sprites` Postgres database alongside a `levels`
- * one. Single-store apps (`"postgres": true` in the manifest) live under
- * the implicit `"default"` storeName and produce unsuffixed env vars.
+ * Postgres carries a map of `storeName → credential`, so one app can hold
+ * e.g. a `sprites` database next to a `levels` one; single-store apps
+ * (`"postgres": true`) live under `"default"` and get unsuffixed env vars.
+ * The files folder is one Docker volume per app.
+ *
+ * A registry saved by older code may also carry `objects` / `kv` entries:
+ * nothing reads them (the box has no S3 or Redis), so they are inert.
  */
 export interface PostgresStore {
   url: string;
   database: string;
   role: string;
 }
-export interface ObjectsStore {
-  endpoint: string;
-  bucket: string;
-  accessKey: string;
-  secretKey: string;
-}
-export interface KvStore {
-  url: string;
-  user: string;
-  prefix: string;
+export interface FilesStore {
+  /** The Docker named volume mounted at `/data`. */
+  volume: string;
 }
 
 export interface AppDataCredentials {
   creator: string;
   slug: string;
-  /** True when the corresponding store flag was `true` (single-store); drives env-var naming. */
+  /** True when the Postgres flag was `true` (single-store); drives env-var naming. */
   postgresSingleton?: boolean;
-  objectsSingleton?: boolean;
-  kvSingleton?: boolean;
   postgres?: Record<string, PostgresStore>;
-  objects?: Record<string, ObjectsStore>;
-  kv?: Record<string, KvStore>;
+  files?: FilesStore;
 }
 
 export interface DataProvisionerOptions {
   postgres?: PostgresAdmin;
-  objects?: MinioAdmin;
-  kv?: RedisAdmin;
-  /** Local endpoints written into the credential URLs. Sensible defaults for the in-server data layer. */
+  files?: FilesAdmin;
+  /**
+   * The box's secret for opaque database/role names (DATA_NAME_KEY in
+   * data-services.env). Required to make a Postgres store.
+   */
+  nameKey?: string;
+  /** Local endpoints written into the credential URLs. */
   endpoints?: {
     postgresHost?: string;
     postgresPort?: number;
-    s3Endpoint?: string;
-    redisHost?: string;
-    redisPort?: number;
   };
   /** Override for tests so secrets are deterministic. */
   generateSecret?: () => string;
+  /**
+   * Resolves when Postgres can be used; throws (a `DataLayerUnavailableError`)
+   * when it can't. Awaited before any Postgres work, so a down stack fails
+   * fast with its reason. Files never wait on it.
+   */
+  ready?: () => Promise<void>;
+}
+
+/** The Postgres store names a spec asks for (an older `kv` asks for the default one). */
+export function postgresStoreNames(stores: AppDataStores | undefined): string[] {
+  if (!stores) return [];
+  const names = normalizeStoreFlag(stores.postgres);
+  if (names.length > 0) return names;
+  return normalizeStoreFlag(stores.kv).length > 0 ? [DEFAULT_STORE_NAME] : [];
+}
+
+/** Whether the spec asks for any store at all. */
+export function wantsAnyStore(stores: AppDataStores | undefined): boolean {
+  return postgresStoreNames(stores).length > 0 || wantsFiles(stores);
 }
 
 export class DataProvisioner {
-  constructor(private readonly opts: DataProvisionerOptions = {}) {}
+  private opts: DataProvisionerOptions;
+  constructor(opts: DataProvisionerOptions = {}) {
+    this.opts = opts;
+  }
+
+  /**
+   * Attach Postgres once it exists: on a box whose data-services secrets
+   * appear after the daemon started (first boot), the runtime builds the
+   * provisioner with files only and attaches Postgres when the stack turns
+   * healthy.
+   */
+  attach(admins: Pick<DataProvisionerOptions, "postgres" | "files" | "endpoints" | "nameKey">): void {
+    this.opts = { ...this.opts, ...admins };
+  }
+
+  /** Resolves when Postgres can be used; throws why not (see `ready`). */
+  async checkReady(): Promise<void> {
+    await this.opts.ready?.();
+    if (!this.hasAdmins()) throw new Error("the data layer isn't set up on this server yet");
+  }
+
+  /** Whether Postgres is attached (false until the stack is first healthy). */
+  hasAdmins(): boolean {
+    return !!this.opts.postgres;
+  }
+
+  /** Whether this box can make files folders. */
+  hasFiles(): boolean {
+    return !!this.opts.files;
+  }
+
+  private pgAdmin(): { admin: PostgresAdmin; nameKey: string } {
+    if (!this.opts.postgres) throw new Error("postgres admin not configured");
+    if (!this.opts.nameKey) throw new Error("the data layer's name key isn't set up on this server");
+    return { admin: this.opts.postgres, nameKey: this.opts.nameKey };
+  }
 
   async provisionApp(args: {
     creator: string;
     slug: string;
     stores: AppDataStores;
-    /**
-     * Which dataspace to provision. "prod" (default) is byte-identical to the
-     * historical behaviour. "dev" provisions the parallel, provably-disjoint
-     * synthetic dataspace (see `provisionDevDataspace` for the seeding variant).
-     */
+    /** "prod" (default) or the disjoint "dev" dataspace a staging copy uses. */
     space?: "dev" | "prod";
   }): Promise<AppDataCredentials> {
     const { creator, slug, stores } = args;
@@ -85,74 +130,62 @@ export class DataProvisioner {
     const secret = this.opts.generateSecret ?? generateSecret;
     const ep = this.opts.endpoints ?? {};
     const out: AppDataCredentials = { creator, slug };
+    const pgStores = postgresStoreNames(stores);
+    const files = wantsFiles(stores);
+    if (files && !this.opts.files) throw new Error("files admin not configured");
 
-    const pgStores = normalizeStoreFlag(stores.postgres);
-    if (pgStores.length > 0) {
-      if (!this.opts.postgres) throw new Error("postgres admin not configured");
-      out.postgresSingleton = isSingletonStore(stores.postgres);
-      out.postgres = {};
-      for (const storeName of pgStores) {
-        const id: AppDataIdentity = { creator, slug, storeName, space };
-        const db = pgDatabase(id);
-        const role = pgRole(id);
-        const password = secret();
-        await this.opts.postgres.createRoleAndDb({ db, role, password });
-        const host = ep.postgresHost ?? "127.0.0.1";
-        const port = ep.postgresPort ?? 5432;
-        out.postgres[storeName] = {
-          url: `postgresql://${role}:${encodeURIComponent(password)}@${host}:${port}/${db}`,
-          database: db,
-          role,
-        };
+    try {
+      if (pgStores.length > 0) {
+        await this.opts.ready?.();
+        const { admin, nameKey } = this.pgAdmin();
+        out.postgresSingleton = isSingletonStore(stores.postgres) || normalizeStoreFlag(stores.postgres).length === 0;
+        out.postgres = {};
+        for (const storeName of pgStores) {
+          const id: AppDataIdentity = { creator, slug, storeName, space };
+          const db = pgDatabase(id, nameKey);
+          const role = pgRole(id, nameKey);
+          const password = secret();
+          await admin.createRoleAndDb({ db, role, password, extensions: APP_PG_EXTENSIONS });
+          const host = ep.postgresHost ?? "127.0.0.1";
+          const port = ep.postgresPort ?? 5432;
+          out.postgres[storeName] = {
+            url: `postgresql://${role}:${encodeURIComponent(password)}@${host}:${port}/${db}`,
+            database: db,
+            role,
+          };
+        }
       }
-    }
-
-    const s3Stores = normalizeStoreFlag(stores.objects);
-    if (s3Stores.length > 0) {
-      if (!this.opts.objects) throw new Error("objects admin not configured");
-      out.objectsSingleton = isSingletonStore(stores.objects);
-      out.objects = {};
-      for (const storeName of s3Stores) {
-        const id: AppDataIdentity = { creator, slug, storeName, space };
-        const bucket = s3Bucket(id);
-        const accessKey = s3AccessKey(id);
-        // MinIO service-account secrets must be 8–40 chars; generateSecret
-        // emits 43-char base64url. 40 chars of base64url is ~240 bits of
-        // entropy, well past anything that matters for an internal key.
-        const secretKey = secret().slice(0, 40);
-        await this.opts.objects.createBucketAndKey({ bucket, accessKey, secretKey });
-        out.objects[storeName] = {
-          endpoint: ep.s3Endpoint ?? "http://127.0.0.1:9000",
-          bucket,
-          accessKey,
-          secretKey,
-        };
+      if (files) {
+        const volume = filesVolume({ creator, slug, space });
+        await this.opts.files!.createVolume({
+          volume,
+          labels: { "flagship.files": space, "flagship.app": `${creator}-${slug}` },
+        });
+        out.files = { volume };
       }
-    }
-
-    const kvStores = normalizeStoreFlag(stores.kv);
-    if (kvStores.length > 0) {
-      if (!this.opts.kv) throw new Error("kv admin not configured");
-      out.kvSingleton = isSingletonStore(stores.kv);
-      out.kv = {};
-      for (const storeName of kvStores) {
-        const id: AppDataIdentity = { creator, slug, storeName, space };
-        const user = redisUser(id);
-        const prefix = redisPrefix(id);
-        const password = secret();
-        await this.opts.kv.createAclUser({ user, password, prefix });
-        const host = ep.redisHost ?? "127.0.0.1";
-        const port = ep.redisPort ?? 6379;
-        out.kv[storeName] = {
-          url: `redis://${user}:${encodeURIComponent(password)}@${host}:${port}/0?prefix=${encodeURIComponent(prefix)}`,
-          user,
-          prefix,
-        };
-      }
+    } catch (e) {
+      // Leave nothing half-made behind.
+      await this.dropCredentials(out).catch(() => {});
+      throw e;
     }
     return out;
   }
 
+  /**
+   * Drop every store a set of credentials names (uninstall, a failed
+   * install): by the names it holds, so an app restored from another box
+   * loses exactly what it had.
+   */
+  async dropCredentials(creds: AppDataCredentials): Promise<void> {
+    const pg = Object.values(creds.postgres ?? {});
+    if (pg.length > 0 && this.opts.postgres) {
+      await this.opts.ready?.();
+      for (const s of pg) await this.opts.postgres.dropRoleAndDb({ db: s.database, role: s.role });
+    }
+    if (creds.files && this.opts.files) await this.opts.files.removeVolume(creds.files.volume);
+  }
+
+  /** Drop the stores an identity's names point at (the dev dataspace). */
   async deprovisionApp(args: {
     creator: string;
     slug: string;
@@ -160,39 +193,29 @@ export class DataProvisioner {
     space?: "dev" | "prod";
   }): Promise<void> {
     const space = args.space ?? "prod";
-    for (const storeName of normalizeStoreFlag(args.stores.postgres)) {
-      if (!this.opts.postgres) continue;
-      const id: AppDataIdentity = { creator: args.creator, slug: args.slug, storeName, space };
-      await this.opts.postgres.dropRoleAndDb({ db: pgDatabase(id), role: pgRole(id) });
+    const pgStores = postgresStoreNames(args.stores);
+    if (pgStores.length > 0 && this.opts.postgres && this.opts.nameKey) {
+      await this.opts.ready?.();
+      for (const storeName of pgStores) {
+        const id: AppDataIdentity = { creator: args.creator, slug: args.slug, storeName, space };
+        await this.opts.postgres.dropRoleAndDb({ db: pgDatabase(id, this.opts.nameKey), role: pgRole(id, this.opts.nameKey) });
+      }
     }
-    for (const storeName of normalizeStoreFlag(args.stores.objects)) {
-      if (!this.opts.objects) continue;
-      const id: AppDataIdentity = { creator: args.creator, slug: args.slug, storeName, space };
-      await this.opts.objects.dropBucketAndKey({
-        bucket: s3Bucket(id),
-        accessKey: s3AccessKey(id),
-      });
-    }
-    for (const storeName of normalizeStoreFlag(args.stores.kv)) {
-      if (!this.opts.kv) continue;
-      const id: AppDataIdentity = { creator: args.creator, slug: args.slug, storeName, space };
-      await this.opts.kv.dropAclUser(redisUser(id));
+    if (wantsFiles(args.stores) && this.opts.files) {
+      await this.opts.files.removeVolume(filesVolume({ creator: args.creator, slug: args.slug, space }));
     }
   }
 
   /**
    * Provision the DEV dataspace for an app and seed its Postgres store(s) with
    * the synthesizer's fabricated rows. Returns dev credentials (same shape as
-   * prod, but every name is `dev`-namespaced and provably disjoint from prod).
+   * prod, but every name is in the disjoint dev namespace).
    *
    * The `seedSqlByStore` map is `storeName → seed SQL` from
    * `synth.datasetToSql(...)`. Absent stores are provisioned empty. This method
-   * NEVER touches a prod database: every identity it builds carries
-   * `space:"dev"`, so `pgDatabase`/`s3Bucket`/`redisPrefix` render the disjoint
-   * dev names — a prod name can never begin with the dev sentinel.
+   * NEVER touches a prod store: every identity it builds carries `space:"dev"`.
    *
-   * Idempotent-friendly: if a dev store already exists (a re-mint from the same
-   * recorded seed), the caller should `teardownDevDataspace` first.
+   * If a dev store already exists (a re-mint), call `teardownDevDataspace` first.
    */
   async provisionDevDataspace(args: {
     creator: string;
@@ -206,16 +229,15 @@ export class DataProvisioner {
       stores: args.stores,
       space: "dev",
     });
-    // Seed each Postgres dev store from the synthesizer output.
     if (creds.postgres && args.seedSqlByStore) {
-      if (!this.opts.postgres?.execSql) {
-        throw new Error("postgres admin does not support execSql; cannot seed dev dataspace");
-      }
       for (const [storeName, store] of Object.entries(creds.postgres)) {
         const seed = args.seedSqlByStore[storeName];
         if (!seed) continue;
+        if (!this.opts.postgres?.execSql) {
+          throw new Error("postgres admin does not support execSql; cannot seed dev dataspace");
+        }
         // Defence in depth: refuse to seed anything that isn't a dev database.
-        if (!store.database.startsWith("__dev_")) {
+        if (!store.database.startsWith(DEV_PG_PREFIX)) {
           throw new Error(`refusing to seed non-dev database ${store.database}`);
         }
         await this.opts.postgres.execSql({ db: store.database, sql: seed });
@@ -224,7 +246,7 @@ export class DataProvisioner {
     return creds;
   }
 
-  /** Tear down an app's DEV dataspace. Only ever drops `dev`-namespaced stores. */
+  /** Tear down an app's DEV dataspace. Only ever drops dev-namespaced stores. */
   async teardownDevDataspace(args: {
     creator: string;
     slug: string;
@@ -238,8 +260,7 @@ export class DataProvisioner {
     });
   }
 
-  // Read-only accessors used by the data dashboard. Each throws if the
-  // corresponding admin isn't configured.
+  // Read-only accessors used by the data dashboard.
   async listPostgresTables(db: string): Promise<string[]> {
     if (!this.opts.postgres) throw new Error("postgres admin not configured");
     return this.opts.postgres.listTables(db);
@@ -248,32 +269,30 @@ export class DataProvisioner {
     if (!this.opts.postgres) throw new Error("postgres admin not configured");
     return this.opts.postgres.query(args);
   }
-  async listObjects(bucket: string, prefix: string, max: number): Promise<{ key: string; size: number }[]> {
-    if (!this.opts.objects) throw new Error("objects admin not configured");
-    return this.opts.objects.listObjects(bucket, prefix, max);
+  /** Bytes an app's files folder uses, or null when unknown. */
+  async filesBytes(volume: string): Promise<number | null> {
+    if (!this.opts.files) return null;
+    return this.opts.files.volumeBytes(volume);
   }
-  async listKvKeys(prefix: string, max: number): Promise<string[]> {
-    if (!this.opts.kv) throw new Error("kv admin not configured");
-    return this.opts.kv.listKeys(prefix, max);
-  }
+}
+
+/** `_<INSTANCE>` for a named store; a dash in its name becomes `_` (env names have none). */
+function envSuffix(storeName: string): string {
+  return `_${storeName.toUpperCase().replace(/-/g, "_")}`;
 }
 
 /**
  * Translate AppDataCredentials → the FLAGSHIP_* env bundle for AppRunner.
  *
  * Single-store apps produce unsuffixed env vars (FLAGSHIP_PG_URL); multi-
- * store apps produce one suffix per store name (FLAGSHIP_PG_URL_SPRITES,
- * FLAGSHIP_PG_URL_LEVELS).
- *
- * Helper var `FLAGSHIP_<STORE>_STORES` lists comma-separated store names
- * for multi-store apps; absent for single-store.
+ * store apps one suffix per store name (FLAGSHIP_PG_URL_SPRITES) plus
+ * FLAGSHIP_PG_STORES. An app with files gets FLAGSHIP_FILES_DIR.
  */
 export function credentialsToEnv(creds: AppDataCredentials): Record<string, string> {
   const env: Record<string, string> = {};
-
   if (creds.postgres) {
     for (const [storeName, c] of Object.entries(creds.postgres)) {
-      const suffix = creds.postgresSingleton ? "" : `_${storeName.toUpperCase()}`;
+      const suffix = creds.postgresSingleton ? "" : envSuffix(storeName);
       env[`FLAGSHIP_PG_URL${suffix}`] = c.url;
       env[`FLAGSHIP_PG_DATABASE${suffix}`] = c.database;
       env[`FLAGSHIP_PG_ROLE${suffix}`] = c.role;
@@ -282,31 +301,11 @@ export function credentialsToEnv(creds: AppDataCredentials): Record<string, stri
       env.FLAGSHIP_PG_STORES = Object.keys(creds.postgres).join(",");
     }
   }
-
-  if (creds.objects) {
-    for (const [storeName, c] of Object.entries(creds.objects)) {
-      const suffix = creds.objectsSingleton ? "" : `_${storeName.toUpperCase()}`;
-      env[`FLAGSHIP_S3_ENDPOINT${suffix}`] = c.endpoint;
-      env[`FLAGSHIP_S3_BUCKET${suffix}`] = c.bucket;
-      env[`FLAGSHIP_S3_ACCESS_KEY${suffix}`] = c.accessKey;
-      env[`FLAGSHIP_S3_SECRET_KEY${suffix}`] = c.secretKey;
-    }
-    if (!creds.objectsSingleton) {
-      env.FLAGSHIP_S3_STORES = Object.keys(creds.objects).join(",");
-    }
-  }
-
-  if (creds.kv) {
-    for (const [storeName, c] of Object.entries(creds.kv)) {
-      const suffix = creds.kvSingleton ? "" : `_${storeName.toUpperCase()}`;
-      env[`FLAGSHIP_REDIS_URL${suffix}`] = c.url;
-      env[`FLAGSHIP_REDIS_USER${suffix}`] = c.user;
-      env[`FLAGSHIP_REDIS_PREFIX${suffix}`] = c.prefix;
-    }
-    if (!creds.kvSingleton) {
-      env.FLAGSHIP_REDIS_STORES = Object.keys(creds.kv).join(",");
-    }
-  }
-
+  if (creds.files) env.FLAGSHIP_FILES_DIR = FILES_MOUNT;
   return env;
+}
+
+/** The files volume a set of credentials mounts, if any. */
+export function filesVolumeOf(creds: AppDataCredentials | null | undefined): string | undefined {
+  return creds?.files?.volume;
 }

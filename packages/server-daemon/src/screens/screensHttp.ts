@@ -155,6 +155,8 @@ export interface LineageResolverLike {
 
 export interface ScreensHttpDeps {
   gate: PairedSessionGate;
+  /** Bytes an app's files volume uses (null when unknown); shown on its page. */
+  filesBytes?: ((volume: string) => Promise<number | null>) | null;
   /**
    * Live apps' internet access (egress/approvals.ts): the signed access-list
    * endpoints (`/services/:id/access`, `.../access/dismiss`,
@@ -642,7 +644,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (!deps.servicePlatform) return jerr(503, "app-platform not configured");
       const app = deps.servicePlatform.byServiceId(serviceId);
       if (!app) return jerr(404, "app not found");
-      return jok(appDetail(app, deps));
+      return jok(await appDetail(app, deps));
     }
 
     // POST /api/screens/adapter-report/:serviceId {detail} — the owner says
@@ -1514,8 +1516,8 @@ function toSummary(
   };
 }
 
-function appDetail(app: InstalledService, deps: ScreensHttpDeps): AppDetailResponse {
-  const dataLayerInstances = collectDataLayerInstances(app);
+async function appDetail(app: InstalledService, deps: ScreensHttpDeps): Promise<AppDetailResponse> {
+  const dataLayerInstances = await collectDataLayerInstances(app, deps.filesBytes);
   const members = collectMembers(app.membership);
   const browserTabs = (deps.tabRegistry?.tabsForApp(app.serviceId) ?? []).map((tabId) => ({
     tabId,
@@ -1532,20 +1534,18 @@ function appDetail(app: InstalledService, deps: ScreensHttpDeps): AppDetailRespo
   };
 }
 
-function collectDataLayerInstances(app: InstalledService): Array<{ store: string; instanceName: string }> {
+/** The stores an app holds: each Postgres database, and its files folder with its size. */
+async function collectDataLayerInstances(
+  app: InstalledService,
+  filesBytes?: ScreensHttpDeps["filesBytes"],
+): Promise<AppDetailResponse["dataLayerInstances"]> {
   if (!app.data) return [];
-  const out: Array<{ store: string; instanceName: string }> = [];
-  for (const store of ["postgres", "objects", "kv"] as const) {
-    const inst = (app.data as unknown as Record<string, unknown>)[store];
-    if (!inst) continue;
-    if (Array.isArray(inst)) {
-      for (const i of inst as Array<{ instanceName?: string }>) {
-        if (i?.instanceName) out.push({ store, instanceName: i.instanceName });
-      }
-    } else if (typeof inst === "object" && inst !== null) {
-      const i = inst as { instanceName?: string };
-      if (i.instanceName) out.push({ store, instanceName: i.instanceName });
-    }
+  const out: AppDetailResponse["dataLayerInstances"] = [];
+  for (const instanceName of Object.keys(app.data.postgres ?? {})) out.push({ store: "postgres", instanceName });
+  const volume = app.data.files?.volume;
+  if (volume) {
+    const bytes = filesBytes ? await filesBytes(volume).catch(() => null) : null;
+    out.push({ store: "files", instanceName: "default", ...(typeof bytes === "number" ? { bytes } : {}) });
   }
   return out;
 }

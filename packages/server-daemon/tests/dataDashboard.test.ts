@@ -7,10 +7,13 @@ import { IdentityInjector } from "../src/identityInjector.js";
 import { buildDaemonHttp, type DaemonContext, type DeployedApp } from "../src/httpApi.js";
 import {
   DataProvisioner,
-  InMemoryMinioAdmin,
+  InMemoryFilesAdmin,
   InMemoryPostgresAdmin,
-  InMemoryRedisAdmin,
+  pgDatabase,
 } from "../src/dataLayer/index.js";
+
+const NAME_KEY = "n".repeat(40);
+const HABIT_DB = pgDatabase({ creator: "harry", slug: "habit-tracker" }, NAME_KEY);
 
 const umk = { seed: new Uint8Array(32).fill(11) };
 const ownerIrk = deriveIRK(umk);
@@ -26,7 +29,7 @@ function manifest(over: Partial<AppManifest> = {}): AppManifest {
     name: "habit-tracker",
     version: "0.1.0",
     runtime: { image: "x", port: 8080 },
-    data: { stores: { postgres: true, objects: true, kv: true } },
+    data: { stores: { postgres: true, files: true } },
     network: { subdomain: "habits" },
     access: { enabled: true, default_role: "viewer" },
     migration: { verification: "standard" },
@@ -39,8 +42,7 @@ function makeCtx() {
   apps.set("habit-tracker", new AppMembership("habit-tracker", "harry", ownerIrk.publicKey, swk));
   const sessions = new Map<string, Uint8Array>([["phone-token", ownerIrk.publicKey]]);
   const pg = new InMemoryPostgresAdmin();
-  const objects = new InMemoryMinioAdmin();
-  const kv = new InMemoryRedisAdmin();
+  const files = new InMemoryFilesAdmin();
   const ctx: DaemonContext = {
     serverId: "srv-1",
     userId: "harry",
@@ -51,12 +53,12 @@ function makeCtx() {
     deployedApps: new Map<string, DeployedApp>(),
     dataProvisioner: new DataProvisioner({
       postgres: pg,
-      objects,
-      kv,
+      files,
+      nameKey: NAME_KEY,
       generateSecret: () => "secret",
     }),
   };
-  return { ctx, pg, objects, kv };
+  return { ctx, pg, files };
 }
 
 async function deploy(http: ReturnType<typeof buildDaemonHttp>) {
@@ -73,14 +75,14 @@ describe("/data dashboard endpoints", () => {
     const { ctx, pg } = makeCtx();
     const http = buildDaemonHttp(ctx);
     await deploy(http);
-    pg.databases.get("_harry_habit_tracker")!.tables.set("habits", []);
+    pg.databases.get(HABIT_DB)!.tables.set("habits", []);
     const r = await http.inject({
       method: "GET",
       url: "/data/postgres/habit-tracker/tables?sessionToken=phone-token",
     });
     expect(r.statusCode).toBe(200);
     const body = JSON.parse(r.body);
-    expect(body.database).toBe("_harry_habit_tracker");
+    expect(body.database).toBe(HABIT_DB);
     expect(body.tables).toEqual(["habits"]);
   });
 
@@ -88,7 +90,7 @@ describe("/data dashboard endpoints", () => {
     const { ctx, pg } = makeCtx();
     const http = buildDaemonHttp(ctx);
     await deploy(http);
-    pg.databases.get("_harry_habit_tracker")!.tables.set("habits", [
+    pg.databases.get(HABIT_DB)!.tables.set("habits", [
       [{ id: 1 }],
       [{ id: 2 }],
     ]);
@@ -100,33 +102,17 @@ describe("/data dashboard endpoints", () => {
     expect(JSON.parse(tooHigh.body).max).toBe(1000);
   });
 
-  it("/data/objects/:serviceId/list returns objects with size", async () => {
-    const { ctx, objects } = makeCtx();
+  it("/data/files/:serviceId reports the folder and its size", async () => {
+    const { ctx, files } = makeCtx();
     const http = buildDaemonHttp(ctx);
     await deploy(http);
-    objects.buckets.get("harry-habit-tracker")!.objects.set("a/b.txt", new Uint8Array(42));
+    files.volumes.get("flagship-files-harry-habit-tracker")!.bytes = 4096;
     const r = await http.inject({
       method: "GET",
-      url: "/data/objects/habit-tracker/list?sessionToken=phone-token",
+      url: "/data/files/habit-tracker?sessionToken=phone-token",
     });
     expect(r.statusCode).toBe(200);
-    const body = JSON.parse(r.body);
-    expect(body.bucket).toBe("harry-habit-tracker");
-    expect(body.objects).toEqual([{ key: "a/b.txt", size: 42 }]);
-  });
-
-  it("/data/kv/:serviceId/keys filters by the per-app prefix", async () => {
-    const { ctx, kv } = makeCtx();
-    const http = buildDaemonHttp(ctx);
-    await deploy(http);
-    kv.data.set("harry:habit-tracker:foo", "1");
-    kv.data.set("other:bar:baz", "2"); // should not appear
-    const r = await http.inject({
-      method: "GET",
-      url: "/data/kv/habit-tracker/keys?sessionToken=phone-token",
-    });
-    expect(r.statusCode).toBe(200);
-    expect(JSON.parse(r.body).keys).toEqual(["harry:habit-tracker:foo"]);
+    expect(JSON.parse(r.body)).toEqual({ dir: "/data", bytes: 4096 });
   });
 
   it("rejects unauthenticated callers across every dashboard route", async () => {
@@ -136,8 +122,7 @@ describe("/data dashboard endpoints", () => {
     const urls = [
       "/data/postgres/habit-tracker/tables",
       "/data/postgres/habit-tracker/query?sql=SELECT+1",
-      "/data/objects/habit-tracker/list",
-      "/data/kv/habit-tracker/keys",
+      "/data/files/habit-tracker",
     ];
     for (const u of urls) {
       const r = await http.inject({ method: "GET", url: u });
@@ -147,7 +132,7 @@ describe("/data dashboard endpoints", () => {
 
   it("returns 404 when the app exists but doesn't use the requested store", async () => {
     const { ctx } = makeCtx();
-    // deploy an app that opts out of objects + kv
+    // deploy an app that opts out of files
     const http = buildDaemonHttp(ctx);
     const r = await http.inject({
       method: "POST",
@@ -159,16 +144,17 @@ describe("/data dashboard endpoints", () => {
     });
     expect(r.statusCode).toBe(200);
 
-    const objects = await http.inject({
+    const filesRes = await http.inject({
+      method: "GET",
+      url: "/data/files/habit-tracker?sessionToken=phone-token",
+    });
+    expect(filesRes.statusCode).toBe(404);
+
+    // The S3 and Redis dashboards are gone with their stores.
+    const gone = await http.inject({
       method: "GET",
       url: "/data/objects/habit-tracker/list?sessionToken=phone-token",
     });
-    expect(objects.statusCode).toBe(404);
-
-    const kv = await http.inject({
-      method: "GET",
-      url: "/data/kv/habit-tracker/keys?sessionToken=phone-token",
-    });
-    expect(kv.statusCode).toBe(404);
+    expect(gone.statusCode).toBe(404);
   });
 });

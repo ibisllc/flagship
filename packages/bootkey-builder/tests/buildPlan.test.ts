@@ -67,20 +67,15 @@ describe("planBuild", () => {
     expect(forgejo.image).toMatch(/forgejo/);
   });
 
-  it("ships the unified data layer (Postgres + MinIO + Redis) as system containers", () => {
+  it("ships the unified data layer (Postgres 18 only) as a system container", () => {
     const plan = planBuild(baseSpec);
     const names = plan.systemContainers.map((c) => c.name);
     expect(names).toContain("postgres");
-    expect(names).toContain("minio");
-    expect(names).toContain("redis");
+    expect(names).not.toContain("minio");
+    expect(names).not.toContain("redis");
     const pg = plan.systemContainers.find((c) => c.name === "postgres")!;
-    expect(pg.image).toMatch(/postgres:1[6-9]/);
-    expect(pg.volumes).toEqual({ "/var/lib/postgresql/data": "postgres-data" });
-    const minio = plan.systemContainers.find((c) => c.name === "minio")!;
-    expect(minio.image).toMatch(/minio\/minio/);
-    expect(Object.keys(minio.volumes ?? {})).toContain("/data");
-    const redis = plan.systemContainers.find((c) => c.name === "redis")!;
-    expect(redis.image).toMatch(/redis:7\.2/);
+    expect(pg.image).toMatch(/pgvector:[0-9.]+-pg18/);
+    expect(pg.volumes).toEqual({ "/var/lib/postgresql": "postgres-data" });
   });
 
   it("writes wifi config with provided SSID and PSK", () => {

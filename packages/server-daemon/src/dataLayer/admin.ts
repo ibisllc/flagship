@@ -1,11 +1,16 @@
 /**
- * Admin interfaces for each store. Real implementations connect to the
- * running system containers; in-memory implementations satisfy the same
- * contract for tests and offline orchestration.
+ * Admin interfaces for the data layer: the box's Postgres and the per-app
+ * files volumes. Real implementations talk to the running container and to
+ * dockerd; in-memory ones satisfy the same contract for tests.
  */
 
 export interface PostgresAdmin {
-  createRoleAndDb(args: { db: string; role: string; password: string }): Promise<void>;
+  /**
+   * Create the app's role and database, lock the database to that role
+   * (CONNECT revoked from PUBLIC, also on `postgres` and `template1`), and
+   * create `extensions` in it as the admin.
+   */
+  createRoleAndDb(args: { db: string; role: string; password: string; extensions?: readonly string[] }): Promise<void>;
   dropRoleAndDb(args: { db: string; role: string }): Promise<void>;
   /** For the data dashboard. Returns table names in the per-app database. */
   listTables(db: string): Promise<string[]>;
@@ -22,30 +27,22 @@ export interface PostgresAdmin {
   execSql?(args: { db: string; sql: string }): Promise<void>;
 }
 
-export interface MinioAdmin {
-  createBucketAndKey(args: { bucket: string; accessKey: string; secretKey: string }): Promise<void>;
-  dropBucketAndKey(args: { bucket: string; accessKey: string }): Promise<void>;
-  listObjects(bucket: string, prefix: string, max: number): Promise<{ key: string; size: number }[]>;
+/** Per-app files folders: Docker named volumes, mounted at `/data`. */
+export interface FilesAdmin {
+  /** Create the volume; throws when it already exists (a fresh app gets an empty folder). */
+  createVolume(args: { volume: string; labels?: Record<string, string> }): Promise<void>;
+  /** Remove the volume and everything in it; a volume already gone is fine. */
+  removeVolume(volume: string): Promise<void>;
+  /** Bytes the volume uses on disk, or null when the box can't tell. */
+  volumeBytes(volume: string): Promise<number | null>;
 }
-
-export interface RedisAdmin {
-  createAclUser(args: { user: string; password: string; prefix: string }): Promise<void>;
-  dropAclUser(user: string): Promise<void>;
-  listKeys(prefix: string, max: number): Promise<string[]>;
-}
-
-/**
- * In-memory fakes for tests and offline orchestration. They model just
- * enough state to verify provision / deprovision / dashboard behavior
- * without spinning real containers.
- */
 
 export class InMemoryPostgresAdmin implements PostgresAdmin {
-  databases = new Map<string, { role: string; tables: Map<string, unknown[][]> }>();
-  async createRoleAndDb(args: { db: string; role: string; password: string }): Promise<void> {
+  databases = new Map<string, { role: string; tables: Map<string, unknown[][]>; extensions: string[] }>();
+  async createRoleAndDb(args: { db: string; role: string; password: string; extensions?: readonly string[] }): Promise<void> {
     if (this.databases.has(args.db)) throw new Error(`db ${args.db} already exists`);
     void args.password;
-    this.databases.set(args.db, { role: args.role, tables: new Map() });
+    this.databases.set(args.db, { role: args.role, tables: new Map(), extensions: [...(args.extensions ?? [])] });
   }
   async dropRoleAndDb(args: { db: string; role: string }): Promise<void> {
     void args.role;
@@ -83,39 +80,16 @@ export class InMemoryPostgresAdmin implements PostgresAdmin {
   }
 }
 
-export class InMemoryMinioAdmin implements MinioAdmin {
-  buckets = new Map<string, { accessKey: string; objects: Map<string, Uint8Array> }>();
-  async createBucketAndKey(args: { bucket: string; accessKey: string; secretKey: string }): Promise<void> {
-    if (this.buckets.has(args.bucket)) throw new Error(`bucket ${args.bucket} already exists`);
-    void args.secretKey;
-    this.buckets.set(args.bucket, { accessKey: args.accessKey, objects: new Map() });
+export class InMemoryFilesAdmin implements FilesAdmin {
+  volumes = new Map<string, { labels: Record<string, string>; bytes: number }>();
+  async createVolume(args: { volume: string; labels?: Record<string, string> }): Promise<void> {
+    if (this.volumes.has(args.volume)) throw new Error(`files volume ${args.volume} already exists`);
+    this.volumes.set(args.volume, { labels: { ...(args.labels ?? {}) }, bytes: 0 });
   }
-  async dropBucketAndKey(args: { bucket: string; accessKey: string }): Promise<void> {
-    void args.accessKey;
-    this.buckets.delete(args.bucket);
+  async removeVolume(volume: string): Promise<void> {
+    this.volumes.delete(volume);
   }
-  async listObjects(bucket: string, prefix: string, max: number): Promise<{ key: string; size: number }[]> {
-    const b = this.buckets.get(bucket);
-    if (!b) return [];
-    return [...b.objects.entries()]
-      .filter(([k]) => k.startsWith(prefix))
-      .slice(0, max)
-      .map(([k, v]) => ({ key: k, size: v.length }));
-  }
-}
-
-export class InMemoryRedisAdmin implements RedisAdmin {
-  users = new Map<string, { prefix: string }>();
-  data = new Map<string, string>();
-  async createAclUser(args: { user: string; password: string; prefix: string }): Promise<void> {
-    if (this.users.has(args.user)) throw new Error(`user ${args.user} already exists`);
-    void args.password;
-    this.users.set(args.user, { prefix: args.prefix });
-  }
-  async dropAclUser(user: string): Promise<void> {
-    this.users.delete(user);
-  }
-  async listKeys(prefix: string, max: number): Promise<string[]> {
-    return [...this.data.keys()].filter((k) => k.startsWith(prefix)).slice(0, max);
+  async volumeBytes(volume: string): Promise<number | null> {
+    return this.volumes.get(volume)?.bytes ?? null;
   }
 }

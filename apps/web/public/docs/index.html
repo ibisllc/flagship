@@ -226,7 +226,7 @@
 
     <section class="doc-section" id="apps">
       <h2>Apps &amp; manifest</h2>
-      <p>An app is a Docker container with a <code>flagship.app.json</code> manifest. The manifest declares which data stores the app needs (Postgres, MinIO, Redis), which web hosts it can navigate to, and what's public. The daemon injects identity headers so apps never have to handle login.</p>
+      <p>An app is a Docker container with a <code>flagship.app.json</code> manifest. The manifest declares which data stores the app needs (Postgres, a files folder), which web hosts it can navigate to, and what's public. The daemon injects identity headers so apps never have to handle login.</p>
       <p>You vibe-code an app from the phone (the LLM emits the manifest + Dockerfile + sources) or you write it by hand and push to your Forgejo. Either way the daemon builds, deploys, and routes.</p>
       <p>Manifest reference: TODO (in progress).</p>
     </section>

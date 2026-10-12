@@ -5,9 +5,8 @@ import { ServicePlatform } from "../src/servicePlatform.js";
 import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 import {
   DataProvisioner,
-  InMemoryMinioAdmin,
+  InMemoryFilesAdmin,
   InMemoryPostgresAdmin,
-  InMemoryRedisAdmin,
 } from "../src/dataLayer/index.js";
 import {
   InMemoryJournalStore,
@@ -64,8 +63,8 @@ async function buildPlatformWith(memberKeys: Keypair[]): Promise<ServicePlatform
     appRunner: fakeRunner(),
     dataProvisioner: new DataProvisioner({
       postgres: new InMemoryPostgresAdmin(),
-      objects: new InMemoryMinioAdmin(),
-      kv: new InMemoryRedisAdmin(),
+      files: new InMemoryFilesAdmin(),
+      nameKey: "n".repeat(40),
     }),
   });
   for (const slug of ["habits", "notes", "photos"]) {

@@ -68,13 +68,11 @@ export interface AppData {
   /** Subpaths to exclude when migrating data. */
   excludes?: string[];
   /**
-   * Unified data-layer access. Vibe-coded apps must use these for persistent
-   * state — Postgres for relational, MinIO for blobs/files, Redis for
-   * cache/pubsub. The runtime injects FLAGSHIP_PG_URL / FLAGSHIP_S3_* /
-   * FLAGSHIP_REDIS_URL into the container's env when each is enabled.
-   *
-   * Names are scoped to `<username>_<appname>` so the data layer is
-   * portable: `pg_dump` filtered on the prefix is the migration unit.
+   * Unified data-layer access. Apps must use these for persistent state:
+   * Postgres for relational data, file metadata, caches, queues and pub/sub,
+   * and a per-app files folder for uploads and other blobs. The runtime
+   * injects FLAGSHIP_PG_URL / FLAGSHIP_FILES_DIR into the container's env when
+   * each is enabled. There is no S3 server and no Redis.
    */
   stores?: AppDataStores;
 }
@@ -89,8 +87,49 @@ export type StoreFlag = boolean | string[];
 
 export interface AppDataStores {
   postgres?: StoreFlag;
+  /**
+   * One writable folder for the app, mounted at FLAGSHIP_FILES_DIR (`/data`)
+   * and kept across restarts and redeploys. Only `true`/`false`.
+   */
+  files?: boolean;
+  /**
+   * Older manifests' S3 buckets. Still accepted, but there is no S3 server:
+   * the parser turns any `objects` into `files: true` and drops it, so a
+   * parsed manifest never carries it.
+   */
   objects?: StoreFlag;
+  /**
+   * Older manifests' Redis. Still accepted, but there is no Redis: the parser
+   * turns it into the app's Postgres database (`postgres: true` unless one is
+   * declared) and drops it, so a parsed manifest never carries it.
+   */
   kv?: StoreFlag;
+}
+
+/** The note `parseManifest` gives a manifest that still asks for S3. */
+export const OBJECTS_STORE_NOTE =
+  "data.stores.objects is no longer supported: there is no S3 server, so the app gets one files folder instead " +
+  "(FLAGSHIP_FILES_DIR=/data, the same as data.stores.files: true). Store uploads there, keep their metadata in " +
+  'Postgres, and serve them through the app. Replace objects with "files": true.';
+
+/** The note `parseManifest` gives a manifest that still asks for Redis. */
+export const KV_STORE_NOTE =
+  "data.stores.kv is no longer supported: there is no Redis, so the app gets its Postgres database instead " +
+  "(FLAGSHIP_PG_URL). Use Postgres: UNLOGGED tables for caches, LISTEN/NOTIFY for pub/sub. Replace kv with " +
+  '"postgres": true.';
+
+function flagUsed(flag: StoreFlag | undefined): boolean {
+  return flag === true || (Array.isArray(flag) && flag.length > 0);
+}
+
+/** Whether the stores ask for the per-app files folder (an older `objects` counts). */
+export function wantsFiles(stores: AppDataStores | undefined): boolean {
+  return !!stores && (stores.files === true || flagUsed(stores.objects));
+}
+
+/** Whether the stores need a Postgres database (an older `kv` counts). */
+export function wantsPostgres(stores: AppDataStores | undefined): boolean {
+  return !!stores && (flagUsed(stores.postgres) || flagUsed(stores.kv));
 }
 
 const INSTANCE_RE = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/;
@@ -229,7 +268,12 @@ export interface AppMigration {
 }
 
 export type ManifestParseResult =
-  | { ok: true; manifest: AppManifest }
+  | {
+      ok: true;
+      manifest: AppManifest;
+      /** Accepted, but worth telling the author: an older `objects` or `kv` store and what replaced it. */
+      notes?: string[];
+    }
   | { ok: false; errors: string[] };
 
 const RESERVED_ENV_PREFIX = "FLAGSHIP_";
@@ -279,7 +323,8 @@ export function parseManifest(input: unknown): ManifestParseResult {
   //   - access  ⇒ {enabled:true} — apps cannot OPT OUT of platform identity, so absent
   //               is treated as the only valid value (enabled:true), not a rejection.
   //   - migration ⇒ {verification:"standard"}
-  const data = parseData(m.data ?? {}, e);
+  const notes: string[] = [];
+  const data = parseData(m.data ?? {}, e, notes);
   const network = parseNetwork(m.network ?? {}, e);
   const access = parseAccess(m.access ?? { enabled: true }, e);
   const migration = parseMigration(m.migration ?? { verification: "standard" }, e);
@@ -303,6 +348,7 @@ export function parseManifest(input: unknown): ManifestParseResult {
       browser,
       distribution,
     },
+    ...(notes.length > 0 ? { notes } : {}),
   };
 }
 
@@ -364,7 +410,7 @@ function parseRuntime(v: unknown, e: (m: string) => void): AppRuntime | undefine
   return { image, port, env };
 }
 
-function parseData(v: unknown, e: (m: string) => void): AppData | undefined {
+function parseData(v: unknown, e: (m: string) => void, notes: string[]): AppData | undefined {
   if (typeof v !== "object" || v === null) {
     e("data must be an object");
     return undefined;
@@ -402,6 +448,10 @@ function parseData(v: unknown, e: (m: string) => void): AppData | undefined {
     } else {
       stores = {};
       const s = d.stores as Record<string, unknown>;
+      if (s.files !== undefined) {
+        if (typeof s.files === "boolean") stores.files = s.files;
+        else e("data.stores.files must be true or false");
+      }
       for (const k of ["postgres", "objects", "kv"] as const) {
         if (s[k] !== undefined) {
           const v = s[k];
@@ -421,9 +471,24 @@ function parseData(v: unknown, e: (m: string) => void): AppData | undefined {
       }
       // Reject any unknown store flags so typos don't silently disable a store.
       for (const k of Object.keys(s)) {
-        if (k !== "postgres" && k !== "objects" && k !== "kv") {
+        if (k !== "postgres" && k !== "files" && k !== "objects" && k !== "kv") {
           e(`data.stores.${k} is not a recognized store flag`);
         }
+      }
+      // Older stores the box no longer runs become the ones that replace them.
+      if (stores.objects !== undefined) {
+        if (flagUsed(stores.objects)) {
+          stores.files = true;
+          notes.push(OBJECTS_STORE_NOTE);
+        }
+        delete stores.objects;
+      }
+      if (stores.kv !== undefined) {
+        if (flagUsed(stores.kv)) {
+          if (!flagUsed(stores.postgres)) stores.postgres = true;
+          notes.push(KV_STORE_NOTE);
+        }
+        delete stores.kv;
       }
     }
   }

@@ -25,6 +25,7 @@ import {
 import {
   claimAndRunSelfDelete,
   decodeAndVerifySelfDeleteCarrier,
+  removeFilesVolumes,
   type SelfDeleteMarkerStore,
 } from "../src/selfDeleteConsumer.js";
 
@@ -241,5 +242,46 @@ describe("claimAndRunSelfDelete", () => {
     });
     expect(out).toEqual({ wiped: true });
     expect(marker.marked).toBe(true);
+  });
+});
+
+describe("removeFilesVolumes", () => {
+  it("removes every files volume, and the containers using it first; leaves other volumes", async () => {
+    const calls: string[] = [];
+    const left = await removeFilesVolumes(
+      {
+        run: async (_cmd, args) => {
+          calls.push(args.join(" "));
+        },
+        capture: async (_cmd, args) => {
+          if (args[0] === "volume") {
+            return "flagship-files-alice-notes\nflagship-files-dev--alice-notes\nsome-other-volume\nflagship-files-bob-photos\n";
+          }
+          return args[3] === "volume=flagship-files-alice-notes" ? "abc123\n" : "";
+        },
+      },
+      () => {},
+    );
+    expect(left).toEqual([]);
+    expect(calls).toEqual([
+      "rm -f abc123",
+      "volume rm -f flagship-files-alice-notes",
+      "volume rm -f flagship-files-dev--alice-notes",
+      "volume rm -f flagship-files-bob-photos",
+    ]);
+  });
+
+  it("keeps going past a volume it can't remove and reports it", async () => {
+    const left = await removeFilesVolumes(
+      {
+        run: async (_cmd, args) => {
+          if (args.includes("flagship-files-alice-notes")) throw new Error("in use");
+        },
+        capture: async (_cmd, args) =>
+          args[0] === "volume" ? "flagship-files-alice-notes\nflagship-files-bob-photos\n" : "",
+      },
+      () => {},
+    );
+    expect(left).toEqual(["flagship-files-alice-notes"]);
   });
 });

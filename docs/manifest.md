@@ -40,7 +40,7 @@ This page is a field-by-field reference. For workflow + how-to, see
 | `description` | no | Free text. |
 | `version` | yes | Semver. `1.2.3` or `1.2.3-beta.4`. |
 | `runtime` | yes | Container image + port + env. |
-| `data` | yes | Persistence (Postgres / objects / kv) + scratch path. |
+| `data` | yes | Persistence (Postgres / a files folder) + scratch path. |
 | `network` | yes | Subdomain under `<user>.flagship.services`. |
 | `access` | yes | Identity gate + roles + public routes + sister-service allowlist. |
 | `migration` | yes | "standard" (biometric only) or "elevated" (biometric + 2FA). |
@@ -70,8 +70,7 @@ This page is a field-by-field reference. For workflow + how-to, see
   "path": "/scratch",
   "stores": {
     "postgres": true,
-    "objects":  ["uploads", "thumbnails"],
-    "kv":       false
+    "files":    true
   }
 }
 ```
@@ -81,16 +80,36 @@ For durable state use `stores`:
 
 | Store | Single instance | Multiple instances |
 |---|---|---|
-| `postgres` | `FLAGSHIP_PG_URL` | `FLAGSHIP_PG_URL_<INSTANCE>` |
-| `objects` (MinIO) | `FLAGSHIP_S3_URL`, `FLAGSHIP_S3_BUCKET`, `FLAGSHIP_S3_KEY`, `FLAGSHIP_S3_SECRET` | `FLAGSHIP_S3_URL_<INSTANCE>`, etc. |
-| `kv` (Redis) | `FLAGSHIP_REDIS_URL` | `FLAGSHIP_REDIS_URL_<INSTANCE>` |
+| `postgres` | `FLAGSHIP_PG_URL`, `FLAGSHIP_PG_DATABASE`, `FLAGSHIP_PG_ROLE` | `FLAGSHIP_PG_URL_<INSTANCE>`, etc., plus `FLAGSHIP_PG_STORES` |
+| `files` | `FLAGSHIP_FILES_DIR` (`/data`) | — (`true` / `false` only) |
 
-Set a flag to `true` for a single default instance; to a string list
-for named instances; to `false`/omit if the store is unused. Instance
-names are RFC 1035 labels (lowercase, 1-32 chars, `[a-z0-9-]`).
+Set `postgres` to `true` for a single default database, to a string
+list for named ones (RFC 1035 labels, lowercase, 1-32 chars,
+`[a-z0-9-]`), or to `false`/omit it. Each database is Postgres 18 with
+`pgcrypto`, `citext`, `pg_trgm`, `unaccent`, `fuzzystrmatch`, `hstore`,
+`ltree`, `btree_gin`, `btree_gist` and `vector` (pgvector) already
+created (`CREATE EXTENSION IF NOT EXISTS` on them is a no-op). The app's
+role owns its database, so it may add another trusted contrib extension
+(`uuid-ossp`, `tablefunc`, …); one that needs a superuser (`dblink`,
+`pg_stat_statements`, untrusted languages) is refused. The role can
+connect to its own databases only.
 
-Names are scoped to `<username>_<servicename>` so the data layer is
-portable: `pg_dump` filtered on the prefix is the migration unit.
+`files: true` gives the app one writable folder, a Docker named volume
+mounted at `/data`, kept across restarts and redeploys (the rest of the
+container's filesystem is read-only). Keep file metadata in Postgres and
+serve files through the app's own routes.
+
+There is no S3 and no Redis. An older manifest's `objects` is accepted
+and becomes `files: true`, and `kv` becomes the app's Postgres database;
+`parseManifest` returns a note saying so. Use Postgres for what Redis
+did: UNLOGGED tables for caches, `LISTEN/NOTIFY` for pub/sub,
+`SELECT … FOR UPDATE SKIP LOCKED` for job queues.
+
+Database and role names are opaque (an HMAC under a key only the box
+holds), so they tell code nothing about the box's other apps; always
+connect through the env vars. Backups and migrations carry each
+database by the names in the app's credentials, and the files folder as
+an archive.
 
 ## `network`
 

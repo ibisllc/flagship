@@ -4,6 +4,7 @@ import {
   DEFAULT_CONTAINER_LIMITS,
   DEFAULT_DOCKER_BUILD_LIMITS,
   assertNoHostPathInDockerArgs,
+  filesMountArgs,
   dockerBuildArgs,
   realCommandRunner,
   runDockerBuild,
@@ -221,6 +222,42 @@ describe("assertNoHostPathInDockerArgs (Part-3 regression guard)", () => {
     expect(() => assertNoHostPathInDockerArgs(["run", "--volume", "/etc:/etc", "img"])).toThrow(/mount/);
     expect(() => assertNoHostPathInDockerArgs(["run", "--mount", "type=bind,src=/etc,dst=/etc", "img"])).toThrow(/mount/);
     expect(() => assertNoHostPathInDockerArgs(["run", "--mount=type=bind,src=/x", "img"])).toThrow(/mount/);
+  });
+  it("allows exactly one shape of mount: an app's files volume at /data, as filesMountArgs writes it", () => {
+    expect(() => assertNoHostPathInDockerArgs(["run", ...filesMountArgs("flagship-files-harry-notes"), "img"])).not.toThrow();
+    expect(() =>
+      assertNoHostPathInDockerArgs(["run", ...filesMountArgs("flagship-files-dev--owner-stg-b1", { readonly: true }), "img"]),
+    ).not.toThrow();
+    for (const spec of [
+      "type=volume,src=flagship-postgres,dst=/data",
+      "type=volume,src=other-volume,dst=/data",
+      "type=volume,src=flagship-files-harry-notes,dst=/etc",
+      "type=volume,src=flagship-files-harry-notes,dst=/data,volume-driver=local",
+      "type=volume,src=flagship-files-harry-notes,dst=/data,volume-opt=device=/var/flagship",
+      "type=bind,src=/var/lib/docker/volumes/flagship-files-harry-notes/_data,dst=/data",
+      "type=tmpfs,dst=/data",
+      "src=flagship-files-harry-notes,dst=/data",
+    ]) {
+      expect(() => assertNoHostPathInDockerArgs(["run", "--mount", spec, "img"]), spec).toThrow(/files volume|var\/flagship/);
+    }
+    // A mount on anything but `docker run`, or with no value, is refused too.
+    expect(() => assertNoHostPathInDockerArgs(["create", ...filesMountArgs("flagship-files-harry-notes"), "img"])).toThrow(/files volume/);
+    expect(() => assertNoHostPathInDockerArgs(["run", "img", "--mount"])).toThrow(/files volume/);
+    expect(() => assertNoHostPathInDockerArgs(["run", "--volumes-from", "flagship-x", "img"])).toThrow(/volumes-from/);
+    expect(() => filesMountArgs("/var/flagship/data")).toThrow(/not a files volume/);
+  });
+  it("AppRunner mounts the files volume and nothing else", async () => {
+    const calls: string[][] = [];
+    const runner = new AppRunner({ run: async (_c, args) => void calls.push(args) });
+    await runner.deploy({ serviceId: "alice--notes", image: "img:1", port: 40000, containerPort: 8080, filesVolume: "flagship-files-alice-notes" });
+    const args = calls.find((a) => a[0] === "run")!;
+    expect(args.filter((a) => a === "--mount")).toHaveLength(1);
+    expect(args[args.indexOf("--mount") + 1]).toBe("type=volume,src=flagship-files-alice-notes,dst=/data");
+    expect(args).toContain("--read-only");
+    expect(args).toContain("--cap-drop=ALL");
+    await expect(
+      runner.deploy({ serviceId: "alice--notes", image: "img:1", filesVolume: "/var/flagship/data" }),
+    ).rejects.toThrow(/not a files volume/);
   });
 });
 

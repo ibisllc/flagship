@@ -9,9 +9,8 @@ import { ServicePlatform } from "../../src/servicePlatform.js";
 import { AppRunner, type CommandRunner } from "../../src/serviceRunner.js";
 import {
   DataProvisioner,
-  InMemoryMinioAdmin,
+  InMemoryFilesAdmin,
   InMemoryPostgresAdmin,
-  InMemoryRedisAdmin,
 } from "../../src/dataLayer/index.js";
 import { ForgejoAppAdmin } from "../../src/forgejoServiceAdmin.js";
 import { buildDeploySession } from "../../src/llm/deploySession.js";
@@ -97,8 +96,8 @@ describe("buildDeploySession", () => {
         appRunner: new AppRunner(cmd),
         dataProvisioner: new DataProvisioner({
           postgres: new InMemoryPostgresAdmin(),
-          objects: new InMemoryMinioAdmin(),
-          kv: new InMemoryRedisAdmin(),
+          files: new InMemoryFilesAdmin(),
+          nameKey: "n".repeat(40),
         }),
         appAuthTokens: null,
         domainGate: null,
@@ -324,8 +323,8 @@ describe("buildDeploySession", () => {
         appRunner: new AppRunner(teeingCmd),
         dataProvisioner: new DataProvisioner({
           postgres: new InMemoryPostgresAdmin(),
-          objects: new InMemoryMinioAdmin(),
-          kv: new InMemoryRedisAdmin(),
+          files: new InMemoryFilesAdmin(),
+          nameKey: "n".repeat(40),
         }),
         appAuthTokens: null,
         domainGate: null,
@@ -427,8 +426,8 @@ describe("buildDeploySession", () => {
         appRunner: new AppRunner(cmd),
         dataProvisioner: new DataProvisioner({
           postgres: new InMemoryPostgresAdmin(),
-          objects: new InMemoryMinioAdmin(),
-          kv: new InMemoryRedisAdmin(),
+          files: new InMemoryFilesAdmin(),
+          nameKey: "n".repeat(40),
         }),
         appAuthTokens: null,
         domainGate: null,
@@ -492,8 +491,8 @@ describe("buildDeploySession", () => {
         appRunner: new AppRunner(cmd),
         dataProvisioner: new DataProvisioner({
           postgres: new InMemoryPostgresAdmin(),
-          objects: new InMemoryMinioAdmin(),
-          kv: new InMemoryRedisAdmin(),
+          files: new InMemoryFilesAdmin(),
+          nameKey: "n".repeat(40),
         }),
         appAuthTokens: null,
         domainGate: null,

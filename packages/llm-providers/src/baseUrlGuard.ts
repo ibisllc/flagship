@@ -3,7 +3,7 @@
  * today, but it sits one hop from the prompt-injection surface: the model
  * drives tool calls, and a future path that lets a tool influence the base
  * URL would turn the daemon into a confused deputy able to reach the box's
- * own internal services (the daemon control API, the app Postgres/Redis on
+ * own internal services (the daemon control API, the app Postgres on
  * loopback, the cloud metadata endpoint). This validator is the
  * defense-in-depth layer that blocks a base URL from pointing at anything
  * internal.
@@ -223,7 +223,7 @@ const defaultHostResolver: HostResolver = async (host) => {
 /**
  * Resolve + classify a bare HOST (no scheme/URL) against the internal-range
  * policy. The git-clone SSRF guard reuses this so a clone URL can't point
- * at the box's loopback data plane (Redis/Postgres/Forgejo) or the cloud
+ * at the box's loopback data plane (Postgres/Forgejo) or the cloud
  * metadata endpoint via either a literal internal IP or a name with an
  * internal A record. Mirrors `assertSafeResolvedUrl`'s classification (incl.
  * the unconditional metadata block + the allowlist / allowPrivate

@@ -369,7 +369,7 @@ ENVEOF
 chmod 600 /etc/flagship/daemon.env
 
 # 8. Write systemd units. Three pieces, in order:
-#      flagship-data-services  — docker-compose'd postgres/minio/redis/adminer
+#      flagship-data-services  — docker-compose'd postgres/forgejo/chromium
 #      flagship-daemon         — the actual server-daemon
 #      flagship-first-boot-register — one-shot, POSTs /api/server/register
 cat > /etc/systemd/system/flagship-daemon.service <<'UNIT'
@@ -461,24 +461,28 @@ SEALED_LUKS_KEY_HEX=$SEALED_LUKS_KEY_HEX
 ENV
 chmod 600 /etc/flagship-bootstrap.env
 
-# Data-services oneshot — brings up the docker stack (postgres/minio/redis/
-# forgejo/chromium) that data-backed apps + the git/vibe BUILD path need. Gated
-# on the env file NOT existing (init.sh writes it), so it's idempotent. The
-# daemon degrades gracefully if it's not up yet (data layer disabled) and picks
-# up the creds on its next restart, so this never blocks the cert/serve bring-up.
+# Data-services oneshot — brings up the docker stack (postgres/forgejo/
+# chromium) that data-backed apps + the git/vibe BUILD path need. init.sh
+# is idempotent and runs on every boot, retried on failure; the daemon picks the
+# stack up once it is healthy, so this never blocks the cert/serve bring-up.
+# Same unit as installer/data-services/flagship-data-services.service (a test
+# pins them together).
 cat > /etc/systemd/system/flagship-data-services.service <<'DSUNIT'
 [Unit]
-Description=Flagship data-services (docker stack)
+Description=Flagship data-layer (postgres/forgejo/chromium)
 After=docker.service network-online.target
 Wants=docker.service network-online.target
-ConditionPathExists=!/var/flagship/data-services.env
+StartLimitIntervalSec=2h
+StartLimitBurst=40
 
 [Service]
 Type=oneshot
-WorkingDirectory=/opt/flagship
-ExecStart=/bin/bash /opt/flagship/installer/data-services/init.sh
 RemainAfterExit=yes
-TimeoutStartSec=600
+WorkingDirectory=/opt/flagship/installer/data-services
+ExecStart=/opt/flagship/installer/data-services/init.sh
+TimeoutStartSec=20min
+Restart=on-failure
+RestartSec=60s
 
 [Install]
 WantedBy=multi-user.target

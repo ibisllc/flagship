@@ -39,7 +39,7 @@ async function makeApp(opts: {
     host: { username: HOST, irkPub: hostIrk.publicKey },
     swk: fakeSwk(),
     appRunner: new AppRunner(NOOP_CMD),
-    dataProvisioner: new DataProvisioner({ postgres: new InMemoryPostgresAdmin() }),
+    dataProvisioner: new DataProvisioner({ postgres: new InMemoryPostgresAdmin(), nameKey: "n".repeat(40) }),
   });
   const manifestJson = JSON.stringify({
     schema_version: 1,

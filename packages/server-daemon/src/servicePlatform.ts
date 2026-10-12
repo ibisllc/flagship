@@ -15,8 +15,8 @@
 
 import {
   parseManifest,
-  normalizeStoreFlag,
   isSingletonStore,
+  wantsFiles,
   type AppDataStores,
   signMembershipMutation,
   composeServiceId,
@@ -39,6 +39,9 @@ import { pickPgUrlForApp } from "./runMigration.js";
 import {
   DataProvisioner,
   credentialsToEnv,
+  filesVolumeOf,
+  postgresStoreNames,
+  wantsAnyStore,
   type AppDataCredentials,
 } from "./dataLayer/index.js";
 import type { AppAuthTokens } from "./serviceAuthToken.js";
@@ -315,8 +318,7 @@ export class ServicePlatform {
     // 1. Provision data stores per the manifest.
     let data: AppDataCredentials | null = null;
     const stores = parsed.manifest.data.stores;
-    const wantsStores = !!(stores?.postgres || stores?.objects || stores?.kv);
-    if (wantsStores) {
+    if (wantsAnyStore(stores)) {
       if (!this.deps.dataProvisioner) {
         return { ok: false, reason: "manifest declares data.stores but daemon has no DataProvisioner (data-services compose stack not running?)" };
       }
@@ -370,9 +372,7 @@ export class ServicePlatform {
     } catch (e) {
       // Roll back the provisioned data so a failed deploy doesn't leak a half-done tenant.
       if (data && this.deps.dataProvisioner) {
-        await this.deps.dataProvisioner
-          .deprovisionApp({ creator: r.creator, slug: r.slug, stores: stores ?? {} })
-          .catch(() => {});
+        await this.deps.dataProvisioner.dropCredentials(data).catch(() => {});
       }
       // Roll back the minted token too — a stale entry would let a
       // re-attempted install collide on the same serviceId.
@@ -538,17 +538,18 @@ export class ServicePlatform {
     }
     const manifest = parsed.manifest;
 
-    const held = storesHeld(old.data);
     const want = manifest.data.stores ?? {};
     const added: AppDataStores = {};
     const addedNames: string[] = [];
-    for (const kind of ["postgres", "objects", "kv"] as const) {
-      const have = new Set(normalizeStoreFlag(held[kind]));
-      const missing = normalizeStoreFlag(want[kind]).filter((n) => !have.has(n));
-      if (missing.length > 0) {
-        added[kind] = missing;
-        addedNames.push(...missing.map((n) => `${kind}:${n}`));
-      }
+    const havePg = new Set(Object.keys(old.data?.postgres ?? {}));
+    const missingPg = postgresStoreNames(want).filter((n) => !havePg.has(n));
+    if (missingPg.length > 0) {
+      added.postgres = missingPg;
+      addedNames.push(...missingPg.map((n) => `postgres:${n}`));
+    }
+    if (wantsFiles(want) && !old.data?.files) {
+      added.files = true;
+      addedNames.push("files");
     }
     // `held2`: the old credentials plus any store made just now (kept even if
     // the new version fails, so a retry reuses it); `data`: the same with the
@@ -567,15 +568,12 @@ export class ServicePlatform {
       held2 = {
         ...(old.data ?? { creator: r.creator, slug: r.slug }),
         ...(old.data?.postgres || fresh.postgres ? { postgres: { ...old.data?.postgres, ...fresh.postgres } } : {}),
-        ...(old.data?.objects || fresh.objects ? { objects: { ...old.data?.objects, ...fresh.objects } } : {}),
-        ...(old.data?.kv || fresh.kv ? { kv: { ...old.data?.kv, ...fresh.kv } } : {}),
+        ...(old.data?.files || fresh.files ? { files: old.data?.files ?? fresh.files! } : {}),
       };
     }
     const data: AppDataCredentials | null = held2 && {
       ...held2,
       ...(want.postgres !== undefined ? { postgresSingleton: isSingletonStore(want.postgres) } : {}),
-      ...(want.objects !== undefined ? { objectsSingleton: isSingletonStore(want.objects) } : {}),
-      ...(want.kv !== undefined ? { kvSingleton: isSingletonStore(want.kv) } : {}),
     };
 
     const apiToken = this.deps.appAuthTokens
@@ -707,7 +705,15 @@ export class ServicePlatform {
     };
     // `port` = allocated host-loopback port the proxy dials; `containerPort`
     // = the app's manifest listen port. Publish maps host→container.
-    return { serviceId: a.serviceId, image: a.manifest.runtime.image, env, port: a.hostPort, containerPort };
+    const filesVolume = filesVolumeOf(a.data);
+    return {
+      serviceId: a.serviceId,
+      image: a.manifest.runtime.image,
+      env,
+      port: a.hostPort,
+      containerPort,
+      ...(filesVolume ? { filesVolume } : {}),
+    };
   }
 
   private persistChain: Promise<void> = Promise.resolve();
@@ -871,15 +877,12 @@ export class ServicePlatform {
     } catch {
       // container may already be gone
     }
-    // Drop data stores: every one it holds, including any a later version's
-    // manifest stopped declaring (redeploy keeps those rather than lose data).
+    // Drop data stores: every one it holds (its databases and its files
+    // folder), including any a later version's manifest stopped declaring
+    // (redeploy keeps those rather than lose data).
     if (app.data && this.deps.dataProvisioner) {
       try {
-        await this.deps.dataProvisioner.deprovisionApp({
-          creator: r.creator,
-          slug: r.slug,
-          stores: storesHeld(app.data),
-        });
+        await this.deps.dataProvisioner.dropCredentials(app.data);
       } catch {
         // best-effort
       }
@@ -980,18 +983,6 @@ export type SetAliasResult =
 export type RedeployResult =
   | { ok: true; app: InstalledService; addedStores: string[] }
   | { ok: false; reason: string };
-
-/** Every store an app holds credentials for, as a manifest-shaped spec. */
-function storesHeld(data: AppDataCredentials | null): AppDataStores {
-  if (!data) return {};
-  const pick = (m: Record<string, unknown> | undefined) => (m && Object.keys(m).length > 0 ? Object.keys(m) : undefined);
-  const out: AppDataStores = {};
-  const pg = pick(data.postgres), s3 = pick(data.objects), kv = pick(data.kv);
-  if (pg) out.postgres = pg;
-  if (s3) out.objects = s3;
-  if (kv) out.kv = kv;
-  return out;
-}
 
 export type InstallResult =
   | { ok: true; app: InstalledService }

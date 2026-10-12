@@ -20,6 +20,7 @@ import { InMemoryBuildCredentialStore } from "../src/llm/buildCredentialStore.js
 import { buildModelRedactor } from "../src/llm/modelPrivacy.js";
 import type { DeployResult } from "../src/buildmodes/deployArtifact.js";
 import { FakeStaging } from "./helpers/fakeStaging.js";
+import { environmentFailure } from "../src/buildmodes/environmentFailure.js";
 
 const FQDN = "home3.plucky-avocet.flagship.services";
 const MANIFEST = JSON.stringify({
@@ -274,5 +275,55 @@ describe("IDE builds and edits", () => {
     expect((await ideCall(restarted, leaked.key, "deploy")).authed).toBe(false);
     expect(await s.mcpKeys.get(created.buildId)).toBeNull();
     expect(restarted.isSealed(created.buildId)).toBe(true);
+  });
+});
+
+describe("the server's own failures (docs/ai-privacy-and-staging.md §2)", () => {
+  const DOWN = {
+    ok: false as const,
+    reason: "data provisioning failed: connect ECONNREFUSED 127.0.0.1:5432",
+    environment: environmentFailure("data-layer"),
+  };
+
+  it("a git adapt stops at the first one: no more model turns, nothing live, the owner's reason", async () => {
+    const s = setup({
+      script: [
+        ...ADAPT_AND_TEST.slice(0, 2),
+        { content: "", model: "m", toolUses: [tu("9", "delete_file", { path: "flagship.app.json" })] },
+      ],
+    });
+    s.staging.results = [DOWN];
+    const id = await gitBuild(s);
+    const r = await s.o.adaptGit(id);
+    expect(r).toEqual({ ok: false, reason: environmentFailure("data-layer").ownerReason });
+    expect(s.requests).toHaveLength(2);
+    expect(s.installs).toEqual([]);
+    expect(s.o.workspace(id)!.read("flagship.app.json")).toBe(MANIFEST);
+    expect(s.staging.teardowns).toContain(id);
+    const journal = await s.journal.read(id);
+    expect(journal.some((e) => e.kind === "error" && /database isn't running/.test(e.summary))).toBe(true);
+  });
+
+  it("an IDE is told it's the server's problem and to stop, and the owner sees it on the build", async () => {
+    const s = setup();
+    const created = await s.o.createMcp();
+    if ("error" in created) throw new Error(created.error);
+    const { buildId, connection } = created;
+    const call = async (name: string, args: Record<string, unknown> = {}) => {
+      const r = await s.o.handleMcpRpc(connection.key, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } });
+      return r.response!.result as { content: Array<{ text: string }>; isError?: boolean };
+    };
+    await call("write_file", { path: "flagship.app.json", content: MANIFEST });
+    s.staging.results = [DOWN];
+    const r = await call("deploy");
+    expect(r.isError).toBe(true);
+    const text = r.content[0]!.text;
+    expect(text).toMatch(/nothing in the app's files caused it/);
+    expect(text).toMatch(/Don't change or delete any files/);
+    expect(text).not.toMatch(/ECONNREFUSED|127\.0\.0\.1/);
+    expect(s.o.state(buildId)!.adapt).toEqual({ status: "failed", reason: environmentFailure("data-layer").ownerReason });
+    // Once the server works again, a good deploy clears it.
+    expect((await call("deploy")).isError).toBeFalsy();
+    expect(s.o.state(buildId)!.adapt).toBeUndefined();
   });
 });

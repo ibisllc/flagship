@@ -186,7 +186,7 @@ export class GitImporter {
     }
 
     // SSRF guard: a clone URL must not point at the box's loopback data
-    // plane (Redis/Postgres/Forgejo on localhost) or the cloud metadata
+    // plane (Postgres/Forgejo on localhost) or the cloud metadata
     // endpoint — by literal internal IP OR by a public name with an
     // internal A record. Only on the real-network clone path; an injected
     // `cloneInto` (tests / a future non-network source) supplies bytes

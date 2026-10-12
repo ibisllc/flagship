@@ -14,7 +14,7 @@ import { ed, signInstallService, signUninstallService, verifyInstallService, ver
 import { swkOps } from "./helpers/keyCustody.js";
 import { ServicePlatform } from "../src/servicePlatform.js";
 import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
-import { DataProvisioner, InMemoryMinioAdmin, InMemoryPostgresAdmin, InMemoryRedisAdmin } from "../src/dataLayer/index.js";
+import { DataProvisioner, InMemoryFilesAdmin, InMemoryPostgresAdmin } from "../src/dataLayer/index.js";
 import { InMemoryAppAuthTokens } from "../src/serviceAuthToken.js";
 import { InMemoryInstalledServicesStore, SealedInstalledServicesStore } from "../src/installedServicesStore.js";
 
@@ -61,8 +61,8 @@ function world(registry: InMemoryInstalledServicesStore | SealedInstalledService
     appRunner: new AppRunner(cmd),
     dataProvisioner: new DataProvisioner({
       postgres: new InMemoryPostgresAdmin(),
-      objects: new InMemoryMinioAdmin(),
-      kv: new InMemoryRedisAdmin(),
+      files: new InMemoryFilesAdmin(),
+      nameKey: "n".repeat(40),
     }),
     appAuthTokens: tokens,
     domainGate: { setGrant: (id: string, d: string[]) => { grants[id] = d; }, revoke: (id: string) => { delete grants[id]; } } as never,
@@ -211,13 +211,17 @@ describe("redeploy in place", () => {
 
   it("provisions only the stores the new version adds, and keeps ones it drops", async () => {
     const { w, redeploy, was } = await installed();
-    const r = await redeploy(manifest({ data: { stores: { kv: true } } }));
-    expect(r).toMatchObject({ ok: true, addedStores: ["kv:default"] });
+    const r = await redeploy(manifest({ data: { stores: { files: true } } }));
+    expect(r).toMatchObject({ ok: true, addedStores: ["files"] });
     const now = w.platform.byLabel("notes")!;
     expect(now.data!.postgres).toEqual(was.data!.postgres);
-    expect(now.data!.kv!.default).toBeDefined();
+    expect(now.data!.files).toEqual({ volume: "flagship-files-alice-notes" });
     const run = w.calls.filter((c) => c.startsWith("docker run ")).pop()!;
     expect(run).toContain("FLAGSHIP_PG_URL=");
+    expect(run).toContain("--mount type=volume,src=flagship-files-alice-notes,dst=/data");
+    expect(run).toContain("FLAGSHIP_FILES_DIR=/data");
+    // An older manifest's kv asks for the Postgres database the app already has.
+    expect(await redeploy(manifest({ data: { stores: { postgres: true, kv: true } } }))).toMatchObject({ ok: true, addedStores: [] });
   });
 
   it("brings the previous version back when the new one won't start", async () => {

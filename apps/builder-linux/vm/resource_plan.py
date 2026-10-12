@@ -1,6 +1,6 @@
 """Pure resource-cap math for hosted VMs.
 
-Each VM + the full data stack (postgres/minio/redis/forgejo/chromium) is
+Each VM + the full data stack (postgres/forgejo/chromium) is
 several GB of RAM, so the plan keeps the cost legible and caps the total by
 host specs — a modest box must never be oversubscribed by the default path.
 

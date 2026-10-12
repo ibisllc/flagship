@@ -32,6 +32,28 @@ can build it yourself and push to a registry, or include a Dockerfile
 that the daemon's build pipeline (when the user vibe-codes the service)
 runs in-place.
 
+## Storing data
+
+The container's root filesystem is read-only and replaced on every
+deploy. A service keeps state in two places, both declared in
+`data.stores` ([manifest reference](manifest.md#data)):
+
+- **Postgres 18** (`"postgres": true`): connect with `FLAGSHIP_PG_URL`.
+  Every database already has `pgcrypto`, `citext`, `pg_trgm`,
+  `unaccent`, `fuzzystrmatch`, `hstore`, `ltree`, `btree_gin`,
+  `btree_gist` and `vector`; other trusted contrib extensions can be
+  added with `CREATE EXTENSION`, superuser-only ones can't. Its name is
+  opaque and its role can reach only your databases.
+- **A files folder** (`"files": true`): `FLAGSHIP_FILES_DIR` (`/data`),
+  a volume only your container mounts. Name files by a generated id,
+  keep their metadata in Postgres, and serve them through your routes.
+
+There is no S3 and no Redis. In Postgres: a cache is an UNLOGGED table
+with an expiry column, pub/sub is `LISTEN/NOTIFY` (payloads up to 8000
+bytes, so send ids), a job queue is `SELECT … FOR UPDATE SKIP LOCKED`,
+search is `tsvector` or `pg_trgm`, embeddings are a `vector(N)` column.
+Scheduled work is a timer in your process.
+
 ## Identity injection
 
 The daemon terminates TLS and injects per-request headers before
@@ -121,7 +143,7 @@ pod for this user — including this pod itself. Compare
 the new holder, an old holder who just lost it, or simply tracking
 ownership in your user's zone. Nothing changes silently.
 
-The harness does NOT replicate Postgres / MinIO / Redis for you. If
+The harness does NOT replicate Postgres or the files folder for you. If
 your service needs cross-pod consistency, you implement it on top of these
 primitives. Three patterns the LLM is taught to use (see N0k):
 
@@ -159,7 +181,7 @@ otherwise the canonical-home's subscriber list is the gate.
 
 ## Hooks the daemon explicitly does NOT offer
 
-- ❌ Postgres / MinIO / Redis replication.
+- ❌ Postgres or files-folder replication.
 - ❌ Leader election (the URL holder is the leader).
 - ❌ Heartbeat-based auto-failover.
 - ❌ Schema-migration coordination during replication.

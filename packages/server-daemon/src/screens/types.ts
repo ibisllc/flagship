@@ -106,8 +106,12 @@ export interface AppDetailResponse {
   app: AppSummary;
   /** Full manifest JSON (parsed). */
   manifest: Record<string, unknown>;
-  /** Per-store handles the app uses (postgres / minio / redis). */
-  dataLayerInstances: Array<{ store: string; instanceName: string }>;
+  /**
+   * The stores the app holds: one `postgres` entry per database (by store
+   * name) and one `files` entry (`instanceName: "default"`) carrying the
+   * folder's size in `bytes` when the box can tell.
+   */
+  dataLayerInstances: Array<{ store: string; instanceName: string; bytes?: number }>;
   /** App membership view (count + list of stable-id prefixes). */
   members: Array<{ stableIdPrefix: string; role: string; addedAt: number }>;
   /** Browser tab handles owned by this app (empty when no browser bundle). */

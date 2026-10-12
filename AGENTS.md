@@ -231,6 +231,28 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   known-bug fixes (retried account creation registered a second device; Wipe &
   restart kept the old key), Android's matching retry fix, the Android parity
   fixes, and the update card's "last update" line. Both need rebuilds.
+- **Data layer = Postgres 18 + a files folder per app (2026-10-12):** on
+  `main`, needs an endorsed update for existing boxes (and a `.com` redeploy
+  for the demo cloud-init copy of the unit). MinIO, Redis, Adminer,
+  redis-commander and the admin proxy are gone (and the `minio` / `ioredis`
+  deps); Forgejo and Chromium stay. Postgres is
+  `pgvector/pgvector:0.8.7-pg18-trixie` pinned by digest, PGDATA under
+  `/var/flagship/data/postgres/18/docker` (init.sh moves an old Postgres 16
+  cluster aside to `postgres/old-pg16`, nothing migrates it). Every app
+  database gets pgcrypto, citext, pg_trgm, unaccent, fuzzystrmatch, hstore,
+  ltree, btree_gin, btree_gist and vector; database/role names are opaque
+  (HMAC under `DATA_NAME_KEY`), and an app role can connect only to its own
+  database. `data.stores.files` mounts a per-app named volume at `/data`
+  (`FLAGSHIP_FILES_DIR`); an old manifest's `objects` becomes files and `kv`
+  its Postgres database. Backups dump Postgres and each files volume (also
+  without the Postgres creds); self-delete removes the files volumes. The
+  unit runs `init.sh` on every boot and retries, removes the old containers
+  (`--remove-orphans`), and the daemon brings Postgres up in the background
+  at boot; the box's own failures fail an AI deploy with the owner's reason
+  instead of going to the AI. Verified on a Debian 13 arm64 VM (Docker 26):
+  bring-up from the real unit, a hardened app container on `/data`,
+  isolation, extensions, LISTEN/NOTIFY, SKIP LOCKED, dump → restore. Not yet
+  on a real box. iOS/Android show the raw store names (no Files size yet).
 - **Box-side changes** reach existing boxes only through an endorsed update or a
   reburn. Not yet validated live on a phone-created box: phone-approval unlock
   on a box sealed with current code, the post-boot SWK / pairing / entitlement

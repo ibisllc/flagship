@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { MANIFEST_SCHEMA_VERSION, parseManifest } from "../src/manifest.js";
+import {
+  KV_STORE_NOTE,
+  MANIFEST_SCHEMA_VERSION,
+  OBJECTS_STORE_NOTE,
+  parseManifest,
+  wantsFiles,
+  wantsPostgres,
+} from "../src/manifest.js";
 
 const valid = () => ({
   schema_version: MANIFEST_SCHEMA_VERSION,
@@ -233,12 +240,57 @@ describe("parseManifest — migration verification levels", () => {
 
 describe("parseManifest — data.stores (unified data layer)", () => {
   it("accepts a manifest with no data.path when data.stores is declared", () => {
-    const m = { ...valid(), data: { stores: { postgres: true, objects: true, kv: false } } };
+    const m = { ...valid(), data: { stores: { postgres: true, files: true } } };
     const r = parseManifest(m);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.manifest.data.stores).toEqual({ postgres: true, objects: true, kv: false });
+    expect(r.manifest.data.stores).toEqual({ postgres: true, files: true });
     expect(r.manifest.data.path).toBeUndefined();
+    expect(r.notes).toBeUndefined();
+  });
+
+  it("accepts files only as a boolean", () => {
+    for (const files of ["yes", ["a"], 1]) {
+      const r = parseManifest({ ...valid(), data: { stores: { files } } });
+      expect(r.ok).toBe(false);
+      if (r.ok) continue;
+      expect(r.errors.join(" ")).toMatch(/data\.stores\.files must be true or false/);
+    }
+    const off = parseManifest({ ...valid(), data: { stores: { files: false } } });
+    expect(off.ok && wantsFiles(off.manifest.data.stores)).toBe(false);
+  });
+
+  it("turns an older objects store into the files folder, with a note that S3 isn't available", () => {
+    for (const objects of [true, ["avatars", "uploads"]]) {
+      const r = parseManifest({ ...valid(), data: { stores: { postgres: true, objects } } });
+      expect(r.ok).toBe(true);
+      if (!r.ok) continue;
+      expect(r.manifest.data.stores).toEqual({ postgres: true, files: true });
+      expect(wantsFiles(r.manifest.data.stores)).toBe(true);
+      expect(r.notes).toEqual([OBJECTS_STORE_NOTE]);
+      expect(OBJECTS_STORE_NOTE).toMatch(/no S3 server/);
+      expect(OBJECTS_STORE_NOTE).toMatch(/FLAGSHIP_FILES_DIR/);
+    }
+    const off = parseManifest({ ...valid(), data: { stores: { objects: false } } });
+    expect(off.ok).toBe(true);
+    if (!off.ok) return;
+    expect(off.manifest.data.stores).toEqual({});
+    expect(off.notes).toBeUndefined();
+  });
+
+  it("turns an older kv store into the app's Postgres database, with a note", () => {
+    const r = parseManifest({ ...valid(), data: { stores: { kv: true } } });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.data.stores).toEqual({ postgres: true });
+    expect(wantsPostgres(r.manifest.data.stores)).toBe(true);
+    expect(r.notes).toEqual([KV_STORE_NOTE]);
+    expect(KV_STORE_NOTE).toMatch(/UNLOGGED tables for caches, LISTEN\/NOTIFY for pub\/sub/);
+    // Named Postgres stores stay as they are; kv adds nothing beyond them.
+    const named = parseManifest({ ...valid(), data: { stores: { postgres: ["main"], kv: ["cache"] } } });
+    expect(named.ok && named.manifest.data.stores).toEqual({ postgres: ["main"] });
+    // A bad kv flag is still an error.
+    expect(parseManifest({ ...valid(), data: { stores: { kv: "yes" } } }).ok).toBe(false);
   });
 
   it("accepts data.path AND data.stores together (path = ephemeral scratch)", () => {

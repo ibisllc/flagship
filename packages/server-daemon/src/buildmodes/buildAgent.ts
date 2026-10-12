@@ -30,6 +30,7 @@ import type { ChatMessage, ChatRequest, ChatResponse, ToolSpec } from "@flagship
 import type { BuildJournal, BuildMode } from "./buildJournal.js";
 import type { BuildToolHost } from "./buildToolHost.js";
 import { BUILD_TOOL_SPECS } from "./buildToolHost.js";
+import type { EnvironmentFailure } from "./environmentFailure.js";
 
 /**
  * The model call the agent makes each turn. Provider-agnostic: the caller
@@ -59,10 +60,15 @@ export interface BuildAgentResult {
   validated: boolean;
   /** How many model turns ran. */
   turns: number;
-  /** Why the loop ended: the model finished, stopped, or hit the turn cap. */
-  stopReason: "finished" | "model-stopped" | "turn-cap" | "error";
+  /**
+   * Why the loop ended: the model finished, stopped, hit the turn cap, or the
+   * box itself failed (`environment`), which no change to the app can fix.
+   */
+  stopReason: "finished" | "model-stopped" | "turn-cap" | "error" | "environment";
   /** Value-free: a human note when the loop ended without finishing. */
   note?: string;
+  /** The box's own failure that ended the loop (stopReason "environment"). */
+  environment?: EnvironmentFailure;
 }
 
 export interface BuildAgentOptions {
@@ -104,7 +110,7 @@ How to work:
 Rules you must respect (the harness enforces them; breaking them fails the build):
 - Do NOT write authentication, login forms, passwords, cookies, or JWTs. Read X-Flagship-User / X-Flagship-Role from request headers.
 - Listen on the injected PORT env var (process.env.PORT / $PORT), which equals runtime.port. Bind 0.0.0.0:$PORT. No hardcoded port, no second port.
-- Do NOT persist to the container filesystem (wiped each deploy). Use FLAGSHIP_PG_URL / FLAGSHIP_S3_* / FLAGSHIP_REDIS_URL when the app needs storage. A static or in-memory app needs no data stores — omit data.stores.
+- Do NOT persist to the container filesystem (wiped each deploy). Store data in Postgres (FLAGSHIP_PG_URL) and files in FLAGSHIP_FILES_DIR (data.stores.files: true), with file metadata in Postgres and files served through the app's own routes. S3 and Redis are NOT available: move an app's S3, Redis or SQLite use onto these, as the contract's "Storing things" section says (cache = UNLOGGED table, pub/sub = LISTEN/NOTIFY, queue = SKIP LOCKED, search = tsvector or pg_trgm, embeddings = vector, schedules = an in-app timer). A static or in-memory app needs no data stores — omit data.stores.
 - Do NOT define env vars starting with FLAGSHIP_ (reserved). If the app genuinely needs an owner secret, call request_env_var (value-free — you never see the value) and read it from the process environment at runtime.
 - Do NOT hardcode the username, hostname, or any flagship.services URL.
 
@@ -233,8 +239,15 @@ export async function runBuildAgent(args: {
 
     // Dispatch each call through the SHARED tool host and collect results.
     const results: { toolUseId: string; name: string; content: string; isError?: boolean }[] = [];
+    let environment: EnvironmentFailure | undefined;
     for (const tu of toolUses) {
       const r = await args.tools.call(tu.name, tu.input ?? {});
+      if (r.environment) {
+        // The box is broken, not the app: the model never sees it, so it
+        // can't "fix" (rewrite, delete) the owner's files around it.
+        environment = r.environment;
+        break;
+      }
       results.push({
         toolUseId: tu.id,
         name: tu.name,
@@ -255,6 +268,25 @@ export async function runBuildAgent(args: {
         finished = true;
         break;
       }
+    }
+
+    if (environment) {
+      await args.journal.append(args.buildId, {
+        mode,
+        kind: "error",
+        actor: "system",
+        summary: `stopped: ${environment.ownerReason}`,
+      });
+      return {
+        finished,
+        staged,
+        manifestPresent: false,
+        validated,
+        turns,
+        stopReason: "environment",
+        note: environment.ownerReason,
+        environment,
+      };
     }
 
     // A successful finish is the terminal success — the box takes over.

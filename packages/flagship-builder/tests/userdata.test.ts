@@ -12,6 +12,8 @@
  */
 import { describe, it, expect } from "vitest";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   signAuthCode,
   signInstallBlob,
@@ -330,13 +332,15 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     expect(b).toContain("systemctl enable docker.service containerd.service");
   });
 
-  it("brings up the data layer as a gated, daemon-independent first-boot oneshot", () => {
+  it("brings up the data layer as a retried, daemon-independent oneshot on every boot", () => {
     const b = bootstrap();
     expect(b).toContain("cat > /etc/systemd/system/flagship-data-services.service");
     expect(b).toContain("ExecStart=/opt/flagship/installer/data-services/init.sh");
     expect(b).toContain("After=docker.service network-online.target");
-    // Gated on the very file init.sh writes — re-running boots skip it once set up.
-    expect(b).toContain("ConditionPathExists=!/var/flagship/data-services.env");
+    // No once-only gate: init.sh writes the env file before anything can
+    // fail, so gating on it left a failed first run dead for good (home3).
+    expect(b).not.toContain("ConditionPathExists=!/var/flagship/data-services.env");
+    expect(b).toContain("Restart=on-failure");
     expect(b).toContain("Type=oneshot");
     // Enabled alongside the other first-boot units…
     expect(b).toContain("flagship-data-services.service");
@@ -344,6 +348,18 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     // the box reaching its green padlock.
     expect(b).not.toMatch(/flagship-data-services\.service[\s\S]*Before=flagship-daemon/);
     expect(b).not.toMatch(/Before=flagship-daemon[\s\S]*flagship-data-services/);
+  });
+
+  it("writes the same data-services unit the daemon installs over older ones", () => {
+    const unit = readFileSync(
+      fileURLToPath(new URL("../../../installer/data-services/flagship-data-services.service", import.meta.url)),
+      "utf8",
+    );
+    const b = bootstrap();
+    const start = b.indexOf("cat > /etc/systemd/system/flagship-data-services.service <<'UNIT'\n");
+    expect(start).toBeGreaterThan(-1);
+    const body = b.slice(b.indexOf("\n", start) + 1, b.indexOf("\nUNIT\n", start) + 1);
+    expect(body).toBe(unit);
   });
 
   it("reports canonical phases ONLY to the order-status channel (one channel)", () => {
@@ -1266,7 +1282,11 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // skip apt/clone/build only when the image's ref marker matches the signed
       // recipe, and reuses the factory-built unseal helper; normal ISO/bare-metal
       // execution remains the default branch.
-      "1f3fd73e55e5eb69c69961c9f60691662e73f186ede271b069261d8894cbb790",
+      // Re-pinned 2026-10-12: the data-services unit runs init.sh on every boot
+      // and retries on failure (no once-only env-file gate); its Description
+      // and comments name Postgres, Forgejo and Chromium (MinIO and Redis
+      // are gone).
+      "86cf2f4f8e28104007d4636241703330e1329e01cafa4beb88ff7f079f3a10cd",
     );
   });
 
@@ -1294,7 +1314,8 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // wired premount persists flagship-unlock.log (see the wired pin above).
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
-      "1dcd0346e5e3f7e3ee3cf9aac0f028068e077e39818347ee40760913bdbd607a",
+      // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
+      "b3f7d20a625c4921bcd68a8466279b98a26f6a0e869dacb1b319537733361e19",
     );
   });
 

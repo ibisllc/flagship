@@ -14,7 +14,13 @@ import { IdentityInjector } from "./identityInjector.js";
 import { LlmHarness } from "./llmHarness.js";
 import { AppRunner } from "./serviceRunner.js";
 import { PhoneStateStore, PHONE_STATE_MAX_BYTES } from "./phoneStateStore.js";
-import { DataProvisioner, credentialsToEnv, type AppDataCredentials } from "./dataLayer/index.js";
+import {
+  DataProvisioner,
+  credentialsToEnv,
+  filesVolumeOf,
+  wantsAnyStore,
+  type AppDataCredentials,
+} from "./dataLayer/index.js";
 import { buildLlmAppContext } from "./llmServiceContext.js";
 import { ForgejoAppAdmin } from "./forgejoServiceAdmin.js";
 import { BackupLoop } from "./backupLoop.js";
@@ -268,8 +274,7 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     // declared stores but no provisioner is configured, refuse early.
     let creds: AppDataCredentials | undefined;
     const stores = m.data.stores ?? {};
-    const wantsAnyStore = !!(stores.postgres || stores.objects || stores.kv);
-    if (wantsAnyStore) {
+    if (wantsAnyStore(stores)) {
       if (!ctx.dataProvisioner) {
         return reply.status(503).send({ error: "data provisioner not configured" });
       }
@@ -293,19 +298,19 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       FLAGSHIP_APP_ID: serviceId,
     };
     try {
+      const filesVolume = filesVolumeOf(creds);
       await ctx.appRunner.deploy({
         serviceId,
         image: m.runtime.image,
         env,
         port: m.runtime.port,
+        ...(filesVolume ? { filesVolume } : {}),
       });
     } catch (e) {
       // Roll back the data resources so a failed deploy doesn't leak
       // a half-provisioned tenant.
       if (creds && ctx.dataProvisioner) {
-        await ctx.dataProvisioner
-          .deprovisionApp({ creator: ctx.userId, slug: serviceId, stores })
-          .catch(() => {});
+        await ctx.dataProvisioner.dropCredentials(creds).catch(() => {});
       }
       return reply.status(500).send({ error: "deploy failed", message: errMsg(e) });
     }
@@ -337,15 +342,9 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       return reply.status(500).send({ error: "stop failed", message: errMsg(e) });
     }
     if (entry.data && ctx.dataProvisioner) {
-      await ctx.dataProvisioner
-        .deprovisionApp({
-          creator: ctx.userId,
-          slug: serviceId,
-          stores: entry.manifest.data.stores ?? {},
-        })
-        .catch(() => {
-          // best-effort: data containers may already be gone (system stopping)
-        });
+      await ctx.dataProvisioner.dropCredentials(entry.data).catch(() => {
+        // best-effort: data containers may already be gone (system stopping)
+      });
     }
     ctx.deployedApps.delete(serviceId);
     return { ok: true, serviceId };
@@ -369,12 +368,14 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       FLAGSHIP_APP_ID: req.params.serviceId,
     };
     if (entry.peersToken) restartEnv.FLAGSHIP_PEERS_TOKEN = entry.peersToken;
+    const filesVolume = filesVolumeOf(entry.data);
     try {
       await ctx.appRunner.restart({
         serviceId: req.params.serviceId,
         image: entry.manifest.runtime.image,
         env: restartEnv,
         port: entry.manifest.runtime.port,
+        ...(filesVolume ? { filesVolume } : {}),
       });
     } catch (e) {
       return reply.status(500).send({ error: "restart failed", message: errMsg(e) });
@@ -482,8 +483,8 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
 
   app.get<{
     Params: { serviceId: string };
-    Querystring: { sessionToken?: string; prefix?: string; max?: string; instance?: string };
-  }>("/data/objects/:serviceId/list", async (req, reply) => {
+    Querystring: { sessionToken?: string };
+  }>("/data/files/:serviceId", async (req, reply) => {
     if (!ctx.deployedApps || !ctx.dataProvisioner) {
       return reply.status(503).send({ error: "data subsystem missing" });
     }
@@ -492,34 +493,9 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     }
     const entry = ctx.deployedApps.get(req.params.serviceId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
-    const inst = resolveInstance(entry.data?.objects, req.query.instance);
-    if (!inst) return reply.status(404).send({ error: "app does not use this objects instance" });
-    const max = clamp(Number(req.query.max ?? 200), 1, 5000);
-    const objects = await ctx.dataProvisioner.listObjects(
-      inst.bucket,
-      typeof req.query.prefix === "string" ? req.query.prefix : "",
-      max,
-    );
-    return { bucket: inst.bucket, objects, max };
-  });
-
-  app.get<{
-    Params: { serviceId: string };
-    Querystring: { sessionToken?: string; max?: string; instance?: string };
-  }>("/data/kv/:serviceId/keys", async (req, reply) => {
-    if (!ctx.deployedApps || !ctx.dataProvisioner) {
-      return reply.status(503).send({ error: "data subsystem missing" });
-    }
-    if (!ctx.resolveSession(req.query.sessionToken)) {
-      return reply.status(401).send({ error: "session not authenticated" });
-    }
-    const entry = ctx.deployedApps.get(req.params.serviceId);
-    if (!entry) return reply.status(404).send({ error: "app not found" });
-    const inst = resolveInstance(entry.data?.kv, req.query.instance);
-    if (!inst) return reply.status(404).send({ error: "app does not use this kv instance" });
-    const max = clamp(Number(req.query.max ?? 200), 1, 5000);
-    const keys = await ctx.dataProvisioner.listKvKeys(inst.prefix, max);
-    return { prefix: inst.prefix, keys, max };
+    const volume = filesVolumeOf(entry.data);
+    if (!volume) return reply.status(404).send({ error: "app has no files folder" });
+    return { dir: "/data", bytes: await ctx.dataProvisioner.filesBytes(volume) };
   });
 
   // ---- Phone-state backup (opaque SWK-encrypted blob) -------------------

@@ -7,9 +7,8 @@ import { IdentityInjector } from "../src/identityInjector.js";
 import { buildDaemonHttp, type DaemonContext, type DeployedApp } from "../src/httpApi.js";
 import {
   DataProvisioner,
-  InMemoryMinioAdmin,
+  InMemoryFilesAdmin,
   InMemoryPostgresAdmin,
-  InMemoryRedisAdmin,
 } from "../src/dataLayer/index.js";
 import { buildLlmAppContext } from "../src/llmServiceContext.js";
 
@@ -69,13 +68,13 @@ describe("buildLlmAppContext", () => {
     expect(augmented.messages).toHaveLength(2);
     expect(augmented.messages[0].role).toBe("system");
     expect(augmented.messages[0].content).toContain("Flagship app context");
-    expect(augmented.messages[0].content).toContain("`_<creator>_<slug>`");
+    expect(augmented.messages[0].content).toContain("## Storing things");
     expect(augmented.messages[1]).toEqual(req.messages[0]);
     // Original request unchanged (immutability)
     expect(req.messages).toHaveLength(1);
   });
 
-  it("explicitly documents the host-independent data-identity convention so vibe-coded apps stay portable", async () => {
+  it("tells the model how to store things on Postgres and the files folder, and that names are opaque", async () => {
     const deployed = new Map<string, { manifest: AppManifest }>();
     deployed.set("habit-tracker", { manifest: manifest() });
     const ctx = await buildLlmAppContext({
@@ -83,10 +82,12 @@ describe("buildLlmAppContext", () => {
       deployedApps: deployed,
       revealCredentials: false,
     });
-    expect(ctx.markdown).toContain("Data identity (host-independent)");
-    expect(ctx.markdown).toContain("`_<creator>_<slug>`");
-    expect(ctx.markdown).toContain("`<creator>:<slug>:`");
-    expect(ctx.markdown).toContain("`<creator>-<slug>`");
+    expect(ctx.markdown).toContain("## Storing things");
+    expect(ctx.markdown).toContain("FLAGSHIP_FILES_DIR");
+    expect(ctx.markdown).toContain("SKIP LOCKED");
+    expect(ctx.markdown).toContain("LISTEN/NOTIFY");
+    expect(ctx.markdown).toContain("Database and role names are opaque");
+    expect(ctx.markdown).not.toMatch(/MinIO|FLAGSHIP_S3_|FLAGSHIP_REDIS_/);
     // The hard rules now flag transferability concerns explicitly.
     expect(ctx.markdown).toContain("break on transfer between users");
     expect(ctx.markdown).toContain("`migrations/NNNN_*.sql|.ts`");
@@ -95,8 +96,8 @@ describe("buildLlmAppContext", () => {
   it("hides credential URLs by default and reveals them only when reveal=true", async () => {
     const provisioner = new DataProvisioner({
       postgres: new InMemoryPostgresAdmin(),
-      objects: new InMemoryMinioAdmin(),
-      kv: new InMemoryRedisAdmin(),
+      files: new InMemoryFilesAdmin(),
+      nameKey: "n".repeat(40),
       generateSecret: () => "supersecret",
     });
     const creds = await provisioner.provisionApp({
@@ -127,11 +128,30 @@ describe("buildLlmAppContext", () => {
     expect(revealed.markdown).toContain("supersecret");
   });
 
+  it("lists FLAGSHIP_FILES_DIR for an app with a files folder", async () => {
+    const provisioner = new DataProvisioner({
+      postgres: new InMemoryPostgresAdmin(),
+      files: new InMemoryFilesAdmin(),
+      nameKey: "n".repeat(40),
+      generateSecret: () => "x",
+    });
+    const creds = await provisioner.provisionApp({ creator: "harry", slug: "pics", stores: { files: true } });
+    const m = manifest({ data: { stores: { files: true } } });
+    const ctx = await buildLlmAppContext({
+      manifest: m,
+      credentials: creds,
+      deployedApps: new Map([["habit-tracker", { manifest: m }]]),
+      dataProvisioner: provisioner,
+      revealCredentials: false,
+    });
+    expect(ctx.envVars.map((v) => v.name)).toContain("FLAGSHIP_FILES_DIR");
+  });
+
   it("surfaces multi-store Postgres env vars + the FLAGSHIP_PG_STORES list", async () => {
     const provisioner = new DataProvisioner({
       postgres: new InMemoryPostgresAdmin(),
-      objects: new InMemoryMinioAdmin(),
-      kv: new InMemoryRedisAdmin(),
+      files: new InMemoryFilesAdmin(),
+      nameKey: "n".repeat(40),
       generateSecret: () => "x",
     });
     const creds = await provisioner.provisionApp({

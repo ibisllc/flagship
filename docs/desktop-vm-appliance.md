@@ -113,7 +113,7 @@ cross-platform desktop app is new surface.
   recipe/owner-IRK/unlock — even **different owners on different phones** work
   cryptographically (each VM phones its own owner).
 - **Make the cost legible + cap it:** each VM + the full data stack
-  (postgres/minio/redis/forgejo/chromium) is several GB RAM; show per-server resource
+  (postgres/forgejo/chromium) is several GB RAM; show per-server resource
   use and cap total based on host specs so a modest box isn't oversubscribed.
 - **Scope = self / people-who-trust-you.** The host (whoever has root on the machine)
   can read any *unlocked* guest VM, so this is host-your-own / family hosting, **not** a

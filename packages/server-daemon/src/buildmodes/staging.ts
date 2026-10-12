@@ -22,12 +22,25 @@ import {
   type ContainerLimits,
   type StartCheck,
 } from "../serviceRunner.js";
-import { credentialsToEnv, type AppDataCredentials, type DataProvisioner } from "../dataLayer/provisioner.js";
+import {
+  credentialsToEnv,
+  filesVolumeOf,
+  wantsAnyStore,
+  type AppDataCredentials,
+  type DataProvisioner,
+} from "../dataLayer/provisioner.js";
 import { datasetToSql, generateSynthetic } from "../dataLayer/synth/index.js";
 import { pickPgUrlForApp } from "../runMigration.js";
 import { migrationFiles } from "../llm/serviceName.js";
 import { readCarriedBinaries } from "../llm/serviceSource.js";
 import { buildAppImage } from "./deployArtifact.js";
+import {
+  classifyEnvironmentFailure,
+  classifyProvisioningError,
+  environmentFailure,
+  looksLikeDataConnectionError,
+  type EnvironmentFailure,
+} from "./environmentFailure.js";
 
 /** The docker network staging copies join. The egress gateway locks it down. */
 export const STAGING_NETWORK = "flagship-staging";
@@ -66,7 +79,13 @@ export interface StageArgs {
   envNames?: string[];
 }
 
-export type StageResult = { ok: true; image: string } | { ok: false; reason: string };
+/**
+ * `environment` is set when the box, not the app, is at fault (its data layer,
+ * fence, docker, a registry, its disk): no AI may be asked to fix that.
+ */
+export type StageResult =
+  | { ok: true; image: string }
+  | { ok: false; reason: string; environment?: EnvironmentFailure };
 
 /** The image a build last staged successfully, and the files it was built from. */
 export interface StagedCopy {
@@ -116,6 +135,9 @@ export interface StagingRunnerDeps {
    * fenced (tests).
    */
   fenced?: () => boolean;
+  /** Wait before the one retry of a registry outage. Default 15 s. */
+  registryRetryMs?: number;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export const UNFENCED_REASON =
@@ -180,7 +202,15 @@ export class StagingRunner implements StagingHost {
   }
 
   stage(a: StageArgs): Promise<StageResult> {
-    return this.serial(a.buildId, () => this.stageNow(a));
+    return this.serial(a.buildId, async () => {
+      let r = withEnvironment(await this.stageNow(a));
+      // A registry hiccup gets one more try before it counts.
+      if (!r.ok && r.environment?.kind === "registry") {
+        await (this.deps.sleep ?? ((ms) => new Promise((res) => setTimeout(res, ms))))(this.deps.registryRetryMs ?? 15_000);
+        r = withEnvironment(await this.stageNow(a));
+      }
+      return r;
+    });
   }
 
   teardown(buildId: string): Promise<void> {
@@ -200,7 +230,9 @@ export class StagingRunner implements StagingHost {
   private async stageNow(a: StageArgs): Promise<StageResult> {
     const { buildId, files } = a;
     if (!BUILD_ID_RE.test(buildId)) return { ok: false, reason: "invalid build id" };
-    if (this.deps.fenced && !this.deps.fenced()) return { ok: false, reason: UNFENCED_REASON };
+    if (this.deps.fenced && !this.deps.fenced()) {
+      return { ok: false, reason: UNFENCED_REASON, environment: environmentFailure("fence") };
+    }
     this.stagedCopies.delete(buildId);
     const manifestJson = files["flagship.app.json"];
     if (!manifestJson) return { ok: false, reason: "nothing to deploy: write flagship.app.json first" };
@@ -253,25 +285,32 @@ export class StagingRunner implements StagingHost {
     };
     this.running.set(buildId, run);
 
-    const fail = async (reason: string): Promise<StageResult> => {
+    const fail = async (reason: string, environment?: EnvironmentFailure): Promise<StageResult> => {
       await this.teardownNow(buildId);
-      return { ok: false, reason };
+      return { ok: false, reason, ...(environment ? { environment } : {}) };
     };
 
     // A fresh dev dataspace, never the app's real stores.
     const stores = manifest.data.stores ?? {};
     let data: AppDataCredentials | null = null;
-    if (stores.postgres || stores.objects || stores.kv) {
-      if (!this.deps.dataProvisioner) return fail("the app declares data stores, but this server has no data layer");
+    if (wantsAnyStore(stores)) {
+      if (!this.deps.dataProvisioner) {
+        return fail("the app declares data stores, but this server has no data layer", environmentFailure("data-layer"));
+      }
       run.stores = stores;
       try {
+        // A copy a crashed daemon left half-made would refuse the names; the
+        // dev names never match a prod store, so dropping them is safe.
+        await this.deps.dataProvisioner
+          .teardownDevDataspace({ creator: STAGING_CREATOR, slug: run.devSlug, stores })
+          .catch(() => {});
         data = await this.deps.dataProvisioner.provisionDevDataspace({
           creator: STAGING_CREATOR,
           slug: run.devSlug,
           stores,
         });
       } catch (e) {
-        return fail(`data provisioning failed: ${(e as Error).message}`);
+        return fail(`data provisioning failed: ${(e as Error).message}`, classifyProvisioningError(e));
       }
     }
 
@@ -284,7 +323,9 @@ export class StagingRunner implements StagingHost {
           try {
             await this.deps.runSql({ pgUrl, sql: m.sql });
           } catch (e) {
-            return fail(`migration ${m.filename} failed: ${(e as Error).message}`);
+            const msg = (e as Error).message;
+            const env = looksLikeDataConnectionError(msg) ? environmentFailure("data-layer") : undefined;
+            return fail(`migration ${m.filename} failed: ${msg}`, env);
           }
         }
         // Sample rows from the schema the migrations made. Best-effort: an
@@ -320,7 +361,16 @@ export class StagingRunner implements StagingHost {
       TZ: "UTC",
       LANG: "C.UTF-8",
     };
-    const spec: AppSpec = { serviceId: `stg-${buildId}`, image, env, port: run.port, containerPort };
+    // Its own dev files volume (never the live one), removed at teardown.
+    const filesVolume = filesVolumeOf(data);
+    const spec: AppSpec = {
+      serviceId: `stg-${buildId}`,
+      image,
+      env,
+      port: run.port,
+      containerPort,
+      ...(filesVolume ? { filesVolume } : {}),
+    };
     try {
       await this.runner.deploy(spec);
     } catch (e) {
@@ -329,7 +379,18 @@ export class StagingRunner implements StagingHost {
     if (this.deps.startCheck) {
       const r = await this.deps.startCheck(spec);
       // The copy stays up so its logs can be read; the next deploy replaces it.
-      if (!r.ok) return { ok: false, reason: r.reason };
+      if (!r.ok) {
+        // An app that can't reach its stores is the app's problem only if
+        // the stores are up.
+        if (data && looksLikeDataConnectionError(r.reason)) {
+          const down = await this.deps.dataProvisioner?.checkReady().then(
+            () => null,
+            (e: unknown) => classifyProvisioningError(e),
+          );
+          if (down) return fail(r.reason, down);
+        }
+        return { ok: false, reason: r.reason };
+      }
     }
     this.stagedCopies.set(buildId, { image, filesDigest: filesDigest(files), slug: a.slug });
     return { ok: true, image };
@@ -395,6 +456,13 @@ export class StagingRunner implements StagingHost {
     }
     return sendLocal(run.port, { method, path, headers, body, timeoutMs: this.deps.checkTimeoutMs ?? 10_000 });
   }
+}
+
+/** Tag a failure the box caused that the stage didn't tag itself (docker, disk, registry). */
+function withEnvironment(r: StageResult): StageResult {
+  if (r.ok || r.environment) return r;
+  const environment = classifyEnvironmentFailure(r.reason);
+  return environment ? { ...r, environment } : r;
 }
 
 function looksJson(s: string): boolean {

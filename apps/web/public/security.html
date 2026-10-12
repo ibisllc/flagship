@@ -126,7 +126,7 @@
                     <li><code>webapp.flagshipserver.com</code> — the webapp PWA: WebAuthn / IRK signing / lease deposit / recovery upload paths.</li>
                     <li><code>remote.flagshipserver.com</code> — the browser-remote surface: the phone-approval ceremony and the keyless session it issues.</li>
                     <li><code>*.flagship.services</code> — the SNI passthrough plane on Fly, the tunnel hub, and the tunnel transport from each Flagship server.</li>
-                    <li>The Flagship daemon as shipped by Flagship Studio on the Debian-based boot image. Includes ACME, the local TLS server, the data layer (Postgres / MinIO / Redis / Forgejo / Chromium under <code>/var/flagship/data/</code>).</li>
+                    <li>The Flagship daemon as shipped by Flagship Studio on the Debian-based boot image. Includes ACME, the local TLS server, the data layer (Postgres / Forgejo / Chromium under <code>/var/flagship/data/</code>, and each app's files volume).</li>
                     <li>The boot image and Flagship Studio, the image-builder.</li>
                     <li>The canonical-bytes layer in <code>@flagship/protocol</code> — sign/verify routines, key derivations, encryption.</li>
                     <li>iOS and Android apps once shipped to TestFlight / Play Console.</li>
@@ -399,7 +399,7 @@
           <select id="component" name="component">
             <option>Protocol / crypto</option>
             <option>Server daemon</option>
-            <option>Data layer (Postgres / MinIO / Redis provisioning)</option>
+            <option>Data layer (Postgres / files provisioning)</option>
             <option>Boot image / image-builder</option>
             <option>iOS app</option>
             <option>Android app</option>

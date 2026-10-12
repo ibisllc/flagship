@@ -128,7 +128,7 @@ export type PhoneOrder =
        * Modes:
        *   - includeUserData: false → manifest + source + Dockerfile
        *     only. Sharable archive (no user data).
-       *   - includeUserData: true → adds dumped Postgres/MinIO/Redis
+       *   - includeUserData: true → adds dumped Postgres/files
        *     namespaces. Personal restore archive only.
        *
        * `password` is an optional UTF-8 passphrase. Daemon derives an

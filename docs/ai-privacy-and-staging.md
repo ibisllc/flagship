@@ -54,6 +54,14 @@ One step for the owner ("Use AI to adapt and deploy"); two phases on the box.
   requests a path from the staging copy over loopback with neutral headers and
   returns status, content type and the first few KB), `get_logs` (staging
   container only), `finish` (the AI says it works). All results are redacted.
+- The box's own failures never go to the AI (`buildmodes/environmentFailure.ts`):
+  a data layer that is down or still starting, the egress fence down, dockerd
+  gone, a registry outage (retried once first) or a full disk fails the deploy
+  at once with a reason the owner can act on. A running loop (git adapt, the
+  chat's Deploy) stops before the model sees it; an IDE is told it's the
+  server's problem and to stop, and the build shows the owner's reason. An app
+  that can't reach its stores counts as the server's only while the stores are
+  down.
 
 **Going live (the box's phase, after the AI is gone).**
 1. The build is **sealed**: the AI key for it is forgotten, an MCP key is
@@ -78,8 +86,8 @@ path's Deploy runs the same staged loop with the chat's files.
   `validate` rejects `ADD <url>` and `FROM`/`--from` outside the public
   registries (Docker Hub, ghcr.io, quay.io, mcr.microsoft.com, public.ecr.aws,
   gcr.io), because dockerd fetches those from the host network.
-- **Staging** (`flagship-staging`): no internet at all; only its dev data
-  stores on the host gateway.
+- **Staging** (`flagship-staging`): no internet at all; only its dev
+  Postgres on the host gateway, and its own dev files volume.
 - **Live apps** (`flagship-apps`): no internet by default. What an app may
   reach is its owner-signed access list (§3a, stored sealed in
   `app-access.sealed`); `network.egress` hosts only become requests the owner
@@ -100,7 +108,7 @@ path's Deploy runs the same staged loop with the chat's files.
   bridge → the gateway's ports 15443/15080/15053), `FLAGSHIP-EGRESS-FWD`
   (from DOCKER-USER: reject anything forwarded from a bridge) and
   `FLAGSHIP-EGRESS-IN` (INPUT: a bridge may reach only the gateway ports, and
-  apps/staging the data ports 5432/6379/9000), plus `FLAGSHIP-EGRESS6` in
+  apps/staging the data port 5432), plus `FLAGSHIP-EGRESS6` in
   ip6tables. Written atomically with `iptables-restore --noflush` at every boot;
   they survive a daemon or dockerd restart, so while the gateway is down the
   bridges have no internet (fail closed).
@@ -112,9 +120,12 @@ path's Deploy runs the same staged loop with the chat's files.
   is internal (no DNS at all) and each registry host is pinned to the build
   gateway with `--add-host`. AppRunner and `docker build` get these arguments
   automatically once the gateway enforces (`egress/sandboxNetworking.ts`).
-- **Data stores** bind 127.0.0.1 only, so the gateway forwards 5432/6379/9000
-  from the apps and staging gateway IPs to them, and `host.flagship.internal`
-  points at the bridge gateway instead of `host-gateway`.
+- **Data stores**: Postgres binds 127.0.0.1 only, so the gateway forwards 5432
+  from the apps and staging gateway IPs to it, and `host.flagship.internal`
+  points at the bridge gateway instead of `host-gateway`. An app's files
+  folder is a Docker named volume mounted at `/data` (no network). Every
+  database name is opaque and each app role may connect only to its own
+  database, so code in one app learns nothing about the owner's other apps.
 - **Approvals** live in `<dataDir>/data/app-egress.sealed` (SWK), each with its
   signature; the box re-verifies them at boot and drops any that no longer
   verify. What opens is approved ∩ declared. A revoke also closes open
@@ -202,6 +213,25 @@ the box's access requests (and whatever else they check). The phone reads
 the details from the box over the paired session, so neither Flagship nor
 Apple or Google learns what the push was about, which app, or which host. An open app also gets an `access-request` event on the
 screens socket.
+
+**Suggested lists (drafts).** The AI says which hosts the app needs in the
+manifest: `network.egress` entries are a host string or `{host, why}` (a short
+reason, at most 120 characters). When the app goes live (and after an AI edit
+that adds hosts), the box makes a **draft**: the current signed list with an
+`allow <host>   # <why>` line on top for each suggested host the list doesn't
+already allow. A draft opens nothing; nothing is drafted when nothing is new;
+these hosts no longer become separate per-host requests. The owner reviews it on
+the app's page (and through the usual generic alert), may edit it in the same
+editor, and approves it with Face ID, which signs and sends it like any other
+list; or dismisses it. A newer draft replaces an unanswered one.
+- `GET /api/screens/services/:id/access` also returns
+  `draft: {list, listSha256, hosts:[{host, why?}], createdAt} | null`.
+- Approving is the normal `POST …/access` with the (possibly edited) text; the
+  box drops the draft when a list is applied.
+- `POST /api/screens/services/:id/access/draft/dismiss` discards it (no
+  signature; it changes nothing the app can reach).
+- `GET /api/screens/access-requests` also lists drafts as
+  `{serviceId, appName, kind:"draft", hosts}` so the alert can offer Review.
 
 **Turning push off.** The apps have one switch, Settings → "Push
 notifications", on by default and stored on the device. It covers every push,

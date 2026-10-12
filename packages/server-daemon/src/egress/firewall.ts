@@ -32,7 +32,7 @@ export interface FirewallPorts {
 export interface FirewallPlan {
   bridges: readonly FirewallBridge[];
   ports: FirewallPorts;
-  /** Host data-service ports apps and staging may reach (postgres, redis, minio). */
+  /** Host data-service ports apps and staging may reach (Postgres). */
   dataPorts: readonly number[];
 }
 

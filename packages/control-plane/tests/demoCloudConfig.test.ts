@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { buildCloudConfigUserData } from "../src/demoCloudConfig.js";
 
 const DEMO_IRK_PRIV = "11".repeat(32);
@@ -215,6 +217,12 @@ describe("buildCloudConfigUserData", () => {
     expect(bootstrap).toContain("docker.io docker-compose");
     expect(bootstrap).not.toContain("docker.io docker-cli"); // docker-cli aborts apt on Debian
     expect(bootstrap).toContain("flagship-data-services.service");
+    // The same retried unit the installer ships (no once-only env-file gate).
+    const unit = readFileSync(
+      fileURLToPath(new URL("../../../installer/data-services/flagship-data-services.service", import.meta.url)),
+      "utf8",
+    );
+    expect(bootstrap).toContain(`<<'DSUNIT'\n${unit}DSUNIT\n`);
     expect(bootstrap).toContain("flagship-first-boot-register.service");
     expect(bootstrap).toContain("/api/server/register");
     expect(bootstrap).toContain("/sealed-luks-key");

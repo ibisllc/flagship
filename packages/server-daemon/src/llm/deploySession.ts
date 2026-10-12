@@ -305,6 +305,12 @@ export function buildStagedChatDeploy(deps: StagedChatDeployDeps) {
     let sealed = false;
     opts.onPhase?.("staging");
     const first = await stage();
+    if (!first.ok && first.environment) {
+      // The box is broken, not the app: no AI turn, and the owner is told what to do.
+      await note("error", first.environment.ownerReason);
+      await deps.staging.teardown(id).catch(() => {});
+      return { ok: false, reason: first.environment.ownerReason };
+    }
     if (!first.ok) {
       if (!deps.agentRunner || !deps.hasCredential?.(id)) {
         await deps.staging.teardown(id).catch(() => {});
@@ -322,7 +328,7 @@ export function buildStagedChatDeploy(deps: StagedChatDeployDeps) {
         envNames: async () => envNames,
         deploy: async () => {
           const r = await stage();
-          return r.ok ? { ok: true } : { ok: false, reason: r.reason };
+          return r.ok ? { ok: true } : { ok: false, reason: r.reason, ...(r.environment ? { environment: r.environment } : {}) };
         },
         checkApp: async (req) => {
           const r = await deps.staging.checkApp(id, req);
@@ -348,6 +354,11 @@ export function buildStagedChatDeploy(deps: StagedChatDeployDeps) {
         initialMessage: chatFixMessage(redact(first.reason), ws.list()),
         ...(deps.agentMaxTurns != null ? { options: { maxTurns: deps.agentMaxTurns } } : {}),
       });
+      if (result.stopReason === "environment" && result.environment) {
+        sealed = true;
+        await deps.staging.teardown(id).catch(() => {});
+        return { ok: false, reason: result.environment.ownerReason };
+      }
       if (!(result.finished || matches())) {
         sealed = true;
         await deps.staging.teardown(id).catch(() => {});

@@ -1,28 +1,31 @@
 # Flagship unified data-layer compose.
 #
-# Brought up at first boot by `installer/data-services/init.sh` — that
-# script generates random root credentials into /var/flagship/data-services.env
+# Brought up on every boot by `installer/data-services/init.sh` (unit
+# flagship-data-services.service) — that script generates random root credentials into /var/flagship/data-services.env
 # (mode 0600) before this compose file ever sees them.
 #
 # Architectural rules:
-#   - All three data services bind to **127.0.0.1 only**. Never publicly
-#     exposed. The only client is the daemon process running on the host;
-#     per-app credentials are minted by `DataProvisioner` and never reach
-#     the public network.
+#   - Postgres binds to **127.0.0.1 only**. Never publicly exposed. Its
+#     clients are the daemon (admin) and app containers, which reach it
+#     through the egress gateway's 5432 forward with the per-app role
+#     `DataProvisioner` mints; those credentials never reach the public network.
 #   - Persistent volumes live under /var/flagship/data/<service>/ so they
-#     sit inside the LUKS-encrypted root.
-#   - Adminer (a small web-based PG viewer) runs on 127.0.0.1:8081. The
-#     daemon's reverse proxy is responsible for gating access to it
-#     behind phone-paired sessions; it is NEVER directly exposed to the
-#     public network.
+#     sit inside the LUKS-encrypted root. Apps' files are per-app Docker
+#     named volumes (`flagship-files-*`), not part of this file.
+#   - Postgres is the only store apps get: no object store, no key-value
+#     store, no admin web UIs.
 #
-# Bring up:    docker compose -f /opt/flagship/data-services/docker-compose.yml --env-file /var/flagship/data-services.env up -d
+# Bring up:    docker compose -f /opt/flagship/installer/data-services/docker-compose.yml --env-file /var/flagship/data-services.env up -d
 # Stop:        docker compose ... down
 # Healthcheck: docker compose ... ps        # all healthy = data layer ready
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector's Postgres 18 build (Debian trixie): Postgres plus `vector`
+    # next to the contrib modules every app database gets. Pinned by tag AND
+    # digest (amd64 + arm64); volumeDump.ts's FILES_HELPER_IMAGE is the same
+    # image (a test pins them together).
+    image: pgvector/pgvector:0.8.7-pg18-trixie@sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0
     container_name: flagship-postgres
     restart: unless-stopped
     environment:
@@ -30,86 +33,16 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
       POSTGRES_DB: postgres
     volumes:
-      - /var/flagship/data/postgres:/var/lib/postgresql/data
+      # The 18+ images keep PGDATA at /var/lib/postgresql/18/docker, so the
+      # mount is the parent directory (a major upgrade can sit beside it).
+      - /var/flagship/data/postgres:/var/lib/postgresql
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER} -h 127.0.0.1"]
       interval: 5s
       timeout: 3s
       retries: 30
-
-  minio:
-    image: minio/minio:latest
-    container_name: flagship-minio
-    restart: unless-stopped
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    volumes:
-      - /var/flagship/data/minio:/data
-    command: server /data --address ":9000" --console-address ":9001"
-    ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/live || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-
-  redis:
-    image: redis:7.2-alpine
-    container_name: flagship-redis
-    restart: unless-stopped
-    environment:
-      REDIS_ADMIN_PASSWORD: ${REDIS_ADMIN_PASSWORD}
-    volumes:
-      - /var/flagship/data/redis:/data
-    # `requirepass` enables the default-user password we use for admin ops;
-    # per-app ACL users are added by the daemon at provisioning time via
-    # `ACL SETUSER ... on >password ~prefix:* +@all`.
-    command:
-      [
-        "redis-server",
-        "--requirepass", "${REDIS_ADMIN_PASSWORD}",
-        "--appendonly", "yes",
-      ]
-    ports:
-      - "127.0.0.1:6379:6379"
-    healthcheck:
-      test:
-        ["CMD-SHELL", "redis-cli -a $${REDIS_ADMIN_PASSWORD} --no-auth-warning ping | grep -q PONG"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-
-  adminer:
-    image: adminer:latest
-    container_name: flagship-adminer
-    restart: unless-stopped
-    environment:
-      ADMINER_DEFAULT_SERVER: postgres
-    ports:
-      - "127.0.0.1:8081:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  # redis-commander: web UI for the kv store. Bound to 127.0.0.1:8082
-  # only; the daemon's /.flagship/admin/kv proxy gates access behind
-  # phone-paired sessions.
-  redis-commander:
-    image: ghcr.io/joeferner/redis-commander:latest
-    container_name: flagship-redis-commander
-    restart: unless-stopped
-    environment:
-      REDIS_HOSTS: "local:redis:6379:0:${REDIS_ADMIN_PASSWORD}"
-    ports:
-      - "127.0.0.1:8082:8081"
-    depends_on:
-      redis:
-        condition: service_healthy
 
   # Chromium: pod-resident browser used by the app-platform's browser
   # API (apps drive web automation against the user's logged-in

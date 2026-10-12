@@ -15,7 +15,7 @@
  * The phone's paired-session token gates the fetch endpoint so the
  * archive bytes never travel through the .com control plane.
  *
- * Data-layer dump (Postgres / MinIO / Redis) is sketched as an
+ * Data-layer dump (Postgres / the app's files folder) is sketched as an
  * optional `dataExporter` callback — the v1 path ships source-only
  * and skips data when the exporter is null.
  */
@@ -57,8 +57,8 @@ export interface AppSourceResolver {
 export interface AppDataExporter {
   /**
    * Write a tarball-friendly tree of the app's data-layer dumps under
-   * `outDir`. Production: pg_dump filtered by `<creator>_<slug>`,
-   * MinIO bucket export, Redis key dump. Tests inject a stub.
+   * `outDir`. Production: pg_dump of the app's own databases (named in
+   * its credentials) and a tar of its files volume. Tests inject a stub.
    * Errors abort the backup.
    */
   (args: {

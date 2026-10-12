@@ -7,6 +7,7 @@ import {
   type ServersSelfDelete,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
+import { isFilesVolume } from "./dataLayer/naming.js";
 
 const execFileP = promisify(execFile);
 
@@ -266,14 +267,58 @@ export async function claimAndRunSelfDelete(
   return { wiped: true };
 }
 
+/** The two docker calls `removeFilesVolumes` needs (argv only, no shell). */
+export interface WipeDockerRunner {
+  run(cmd: string, args: string[]): Promise<void>;
+  capture(cmd: string, args: string[]): Promise<string>;
+}
+
+/**
+ * Remove every app's files volume (`flagship-files-*`, prod and dev), and
+ * first every container still using one, since a volume in use can't be
+ * removed. `docker volume prune` would miss them: on Docker 23+ it removes
+ * only anonymous volumes. Best-effort per volume; returns the ones left.
+ */
+export async function removeFilesVolumes(
+  docker: WipeDockerRunner,
+  log: (m: string) => void = (m) => console.log(m),
+): Promise<string[]> {
+  const left: string[] = [];
+  let names: string[];
+  try {
+    names = (await docker.capture("docker", ["volume", "ls", "-q"]))
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((n) => isFilesVolume(n));
+  } catch (e) {
+    log(`[self-delete] couldn't list the files volumes: ${(e as Error).message}`);
+    return left;
+  }
+  for (const volume of names) {
+    try {
+      const users = (await docker.capture("docker", ["ps", "-aq", "--filter", `volume=${volume}`]))
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+      if (users.length > 0) await docker.run("docker", ["rm", "-f", ...users]);
+      await docker.run("docker", ["volume", "rm", "-f", volume]);
+    } catch (e) {
+      left.push(volume);
+      log(`[self-delete] files volume ${volume} not removed (continuing): ${(e as Error).message}`);
+    }
+  }
+  return left;
+}
+
 /**
  * The production content wipe: stop the data-services stack and tear it down
- * WITH its volumes (`docker compose down -v` removes the postgres/minio/redis/
- * forgejo data that IS the box's content), then drop the per-app data dir. Each
- * step is independent + best-effort via execFile (argv, no shell) — a missing
- * docker / already-stopped unit is not an error. The encrypted root volume +
- * the LUKS re-seal/reburn are out of scope here (deferred to transfer-a-box);
- * this wipes the live content, which is what the §5 order asks for.
+ * (`docker compose down -v`), remove every app's files volume, then drop the
+ * data dir, which holds the Postgres and Forgejo bind mounts that ARE the
+ * box's content plus the per-app state. Each step is independent +
+ * best-effort via execFile (argv, no shell) — a missing docker /
+ * already-stopped unit is not an error. The encrypted root volume + the LUKS
+ * re-seal/reburn are out of scope here (deferred to transfer-a-box); this
+ * wipes the live content, which is what the §5 order asks for.
  */
 export async function realWipeContent(
   composePath = "/opt/flagship/installer/data-services/docker-compose.yml",
@@ -288,7 +333,13 @@ export async function realWipeContent(
   };
   await run("systemctl", ["stop", "flagship-data-services"]);
   await run("docker", ["compose", "-f", composePath, "down", "-v", "--remove-orphans"]);
-  // Best-effort prune of any dangling app volumes the compose teardown missed.
+  await removeFilesVolumes({
+    run: async (cmd, args) => {
+      await execFileP(cmd, args, { timeout: 120_000 });
+    },
+    capture: async (cmd, args) => (await execFileP(cmd, args, { timeout: 120_000 })).stdout,
+  });
+  // Best-effort prune of any dangling anonymous volumes the teardown left.
   await run("docker", ["volume", "prune", "-f"]);
   // Remove the daemon's per-app data tree (sealed creds, build workspaces, …).
   await run("rm", ["-rf", `${dataDir}/data`]);

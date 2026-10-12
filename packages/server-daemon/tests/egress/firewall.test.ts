@@ -15,7 +15,7 @@ const PLAN: FirewallPlan = {
     { kind: "apps", bridge: "fs-apps" },
   ],
   ports: { tls: 15443, http: 15080, dns: 15053 },
-  dataPorts: [5432, 6379, 9000],
+  dataPorts: [5432],
 };
 
 class Rec implements CommandRunner {
@@ -49,8 +49,8 @@ describe("firewall rules", () => {
 
   it("lets apps and staging, not builds, reach the data-service ports", () => {
     const { v4 } = renderFirewall(PLAN);
-    expect(v4).toContain("-A FLAGSHIP-EGRESS-IN -i fs-apps -p tcp -m multiport --dports 5432,6379,9000 -j ACCEPT");
-    expect(v4).toContain("-A FLAGSHIP-EGRESS-IN -i fs-staging -p tcp -m multiport --dports 5432,6379,9000 -j ACCEPT");
+    expect(v4).toContain("-A FLAGSHIP-EGRESS-IN -i fs-apps -p tcp -m multiport --dports 5432 -j ACCEPT");
+    expect(v4).toContain("-A FLAGSHIP-EGRESS-IN -i fs-staging -p tcp -m multiport --dports 5432 -j ACCEPT");
     expect(v4).not.toContain("-i fs-build -p tcp -m multiport --dports 5432");
   });
 

@@ -25,7 +25,7 @@ import { GitImporter } from "../../src/buildmodes/gitImport.js";
 import { buildScreensHttp } from "../../src/screens/screensHttp.js";
 import { ServicePlatform } from "../../src/servicePlatform.js";
 import { AppRunner, type CommandRunner } from "../../src/serviceRunner.js";
-import { DataProvisioner, InMemoryMinioAdmin, InMemoryPostgresAdmin, InMemoryRedisAdmin } from "../../src/dataLayer/index.js";
+import { DataProvisioner, InMemoryFilesAdmin, InMemoryPostgresAdmin } from "../../src/dataLayer/index.js";
 import { InMemoryInstalledServicesStore } from "../../src/installedServicesStore.js";
 import type { HttpRequest } from "../../src/runtime.js";
 
@@ -156,7 +156,7 @@ function platformWorld() {
     hostIdentityPub: irk.publicKey,
     swk: swkOps(crypto.getRandomValues(new Uint8Array(32))),
     appRunner: new AppRunner(cmd),
-    dataProvisioner: new DataProvisioner({ postgres: new InMemoryPostgresAdmin(), objects: new InMemoryMinioAdmin(), kv: new InMemoryRedisAdmin() }),
+    dataProvisioner: new DataProvisioner({ postgres: new InMemoryPostgresAdmin(), files: new InMemoryFilesAdmin(), nameKey: "n".repeat(40) }),
     registry: new InMemoryInstalledServicesStore(),
     runSql: async ({ sql: s }) => {
       if (s.includes("BROKEN")) throw new Error("syntax error at or near BROKEN");

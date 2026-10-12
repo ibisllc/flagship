@@ -1,7 +1,7 @@
 /**
  * Production fetch implementations built on Node's global fetch, hardened
- * against SSRF onto the box's loopback data plane (Postgres/Redis/MinIO/
- * Forgejo + the daemon's own API) and the cloud metadata endpoint.
+ * against SSRF onto the box's loopback data plane (Postgres/Forgejo +
+ * the daemon's own API) and the cloud metadata endpoint.
  *
  * Two shapes are exported because the provider abstraction has two:
  *   - `defaultFetch`          → `FetchLike`          (non-streaming `chat`)

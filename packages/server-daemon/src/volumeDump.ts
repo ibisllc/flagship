@@ -1,33 +1,37 @@
 import { spawn } from "node:child_process";
 import { createWriteStream, createReadStream } from "node:fs";
-import { copyFile, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { isProdFilesVolume } from "./dataLayer/naming.js";
+import { assertNoHostPathInDockerArgs, filesMountArgs } from "./serviceRunner.js";
 
 /**
- * Volume-aware backup: CONSISTENT logical dumps of the data-layer stores that
- * live as docker bind mounts under `<dataDir>/data/{postgres,minio,redis,forgejo}`
- * (installer/data-services/docker-compose.yml).
+ * Volume-aware backup: CONSISTENT dumps of the data the box keeps for apps:
+ * the Postgres and Forgejo bind mounts under `<dataDir>/data/{postgres,forgejo}`
+ * (installer/data-services/docker-compose.yml) and each app's files folder
+ * (a Docker named volume, `flagship-files-<creator>-<slug>`).
  *
  * The peer-backup walker (`dataDirWalker.ts`) is rooted at `<dataDir>/data` and
- * would otherwise DESCEND into those live bind mounts and ship a TORN copy —
- * worse than a clean miss: PGDATA mid-write is inconsistent, minio's
- * `.minio.sys` is dotfile-excluded, forgejo packfiles exceed the whole-file cap,
- * the redis AOF is mid-append. So the walker is told to EXCLUDE the raw mounts
- * and we instead write consistent LOGICAL dumps under a reserved subtree
- * (`_dumps/`) that the walker traverses normally. The dumps then ride the
- * existing transport unchanged (encrypt → shard → peers → SWK-sealed manifest);
- * `reloadDataVolumes` is the symmetric restore that loads them back into a fresh
- * box's stack before it takes traffic.
+ * would otherwise DESCEND into the live bind mounts and ship a TORN copy —
+ * worse than a clean miss: PGDATA mid-write is inconsistent and forgejo
+ * packfiles exceed the whole-file cap. The files volumes live outside that
+ * tree, so the walker never sees them at all. So the walker EXCLUDES the raw
+ * mounts and we write consistent dumps under a reserved subtree (`_dumps/`)
+ * that the walker traverses normally. The dumps then ride the existing
+ * transport unchanged (encrypt → shard → peers → SWK-sealed manifest);
+ * `reloadDataVolumes` is the symmetric restore that loads them back into a
+ * fresh box before it takes traffic.
  *
  * Consistency argument, per store:
  *   - postgres — `pg_dumpall` runs each database dump inside a serialized
  *     snapshot, so the logical dump is self-consistent with CONCURRENT writers.
  *     No freeze needed.
- *   - redis — `BGSAVE` forks a point-in-time child; the resulting `dump.rdb` is
- *     a consistent snapshot taken while the server keeps serving. No freeze.
- *   - minio — `mc mirror` of live buckets is eventually-consistent: objects
- *     added mid-mirror may be missed, but every object it copies is whole. A
- *     freeze (final-flush) closes that window.
+ *   - files — the app's container is PAUSED (cgroup freezer) for the length
+ *     of the archive, so no write lands half-way through it, then unpaused.
+ *     The archive is made by a throwaway container (the data layer's own
+ *     image, `tar`) with no network, every capability dropped but the one
+ *     that reads any file, a read-only root, and only that volume mounted,
+ *     read-only. Restore is the reverse into a FRESH volume.
  *   - forgejo — SQLite `.backup` uses the online-backup API (consistent under
  *     concurrent writes); a checkpoint/quiesce reduces WAL churn but is not
  *     required for correctness. The repo tar is append-mostly git data.
@@ -46,7 +50,7 @@ import { dirname, join } from "node:path";
 export interface VolumeDumpRunner {
   /** Run a command (argv only, no shell). Reject on non-zero exit. */
   run(cmd: string, args: string[]): Promise<void>;
-  /** Run + capture stdout (e.g. `mc ls`). Reject on non-zero exit. */
+  /** Run + capture stdout (e.g. `docker volume ls`). Reject on non-zero exit. */
   capture(cmd: string, args: string[]): Promise<{ stdout: string }>;
   /**
    * Stream a command's stdout into `outPath` (e.g. `pg_dumpall`, `tar -cf -`).
@@ -169,8 +173,13 @@ function armTimeout(
 /** The subtree name (under `<dataDir>/data`) the consistent dumps are written to. */
 export const DUMPS_SUBTREE = "_dumps";
 
-/** Raw bind-mount directory names the walker must SKIP (dumped separately). */
-export const RAW_DATA_MOUNTS = ["postgres", "minio", "redis", "forgejo", "chromium"] as const;
+/**
+ * Raw bind-mount directory names the walker must SKIP (dumped separately).
+ * `minio` and `redis` are what an older box's removed stores left behind
+ * (init.sh removes them only when empty); nothing restores them, so they
+ * never ride either.
+ */
+export const RAW_DATA_MOUNTS = ["postgres", "forgejo", "chromium", "minio", "redis"] as const;
 
 /** True for a raw mount dir OR anything beneath it — feed to walkDataDir.exclude. */
 export function isRawDataMount(relPath: string): boolean {
@@ -182,29 +191,35 @@ export function isDumpSubtree(relPath: string): boolean {
   return relPath === DUMPS_SUBTREE || relPath.startsWith(`${DUMPS_SUBTREE}/`);
 }
 
+/**
+ * The image the files archives run in: the data layer's Postgres image
+ * (installer/data-services/docker-compose.yml; a test pins them together),
+ * which is already on every box and carries GNU tar.
+ */
+export const FILES_HELPER_IMAGE =
+  "pgvector/pgvector:0.8.7-pg18-trixie@sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0";
+
 export interface DataServicesCreds {
   postgresUser: string;
   postgresPassword: string;
-  minioRootUser: string;
-  minioRootPassword: string;
-  redisPassword: string;
 }
 
 export interface VolumeDumpConfig {
   /** `<dataDir>/data` — the walker root. Dumps land under `<dataRoot>/_dumps`. */
   dataRoot: string;
   runner: VolumeDumpRunner;
-  creds: DataServicesCreds;
+  /** The data-services admin credentials; absent ⇒ only the files folders are dumped. */
+  creds?: DataServicesCreds | null;
   /** Container names (default = docker-compose.yml). */
-  containers?: Partial<Record<"postgres" | "minio" | "redis" | "forgejo", string>>;
-  /** `mc` binary + isolated config dir (mirrors RealMinioAdmin). */
-  mc?: { binary?: string; alias?: string; configDir?: string; endpointUrl?: string };
-  /** Restrict to a subset of stores (default: all four). */
+  containers?: Partial<Record<"postgres" | "forgejo", string>>;
+  /** Image the files archives run in. Default FILES_HELPER_IMAGE. */
+  helperImage?: string;
+  /** Restrict to a subset of stores (default: all three, files only without creds). */
   only?: ReadonlyArray<StoreName>;
   onLog?: (m: string) => void;
 }
 
-export type StoreName = "postgres" | "minio" | "redis" | "forgejo";
+export type StoreName = "postgres" | "files" | "forgejo";
 export type StoreStatus = "ok" | "error";
 
 export interface VolumeDumpReport {
@@ -216,10 +231,16 @@ export interface VolumeDumpReport {
 
 const DEFAULT_CONTAINERS = {
   postgres: "flagship-postgres",
-  minio: "flagship-minio",
-  redis: "flagship-redis",
   forgejo: "flagship-forgejo",
 } as const;
+
+const ALL_STORES: ReadonlyArray<StoreName> = ["postgres", "files", "forgejo"];
+
+function storesFor(cfg: VolumeDumpConfig): ReadonlyArray<StoreName> {
+  const only = cfg.only ?? ALL_STORES;
+  // Postgres and Forgejo need the admin credentials; the files folders don't.
+  return cfg.creds ? only : only.filter((s) => s === "files");
+}
 
 // Inside-container paths (from the compose volume mounts).
 const FORGEJO_DB_IN = "/var/lib/gitea/data/forgejo.db";
@@ -227,7 +248,6 @@ const FORGEJO_DB_BACKUP_IN = "/var/lib/gitea/data/_flagship_backup.db";
 const FORGEJO_REPOS_PARENT_IN = "/var/lib/gitea/data";
 const FORGEJO_REPOS_DIR = "gitea-repositories";
 // Host-side paths (bind mounts), relative to `dataRoot`.
-const REDIS_RDB_HOST_REL = "redis/dump.rdb";
 const FORGEJO_DB_BACKUP_HOST_REL = "forgejo/data/_flagship_backup.db";
 
 // ──────────────────────────────────────────────────────────────────────
@@ -235,7 +255,7 @@ const FORGEJO_DB_BACKUP_HOST_REL = "forgejo/data/_flagship_backup.db";
 // ──────────────────────────────────────────────────────────────────────
 
 /**
- * Write consistent logical dumps of every data store under `<dataRoot>/_dumps`.
+ * Write consistent dumps of every data store under `<dataRoot>/_dumps`.
  * Best-effort PER STORE: one store's failure is recorded + logged but does not
  * abort the others (each store is independent, like `realWipeContent`'s steps).
  * A failed store leaves NO partial dump (tmp+rename / cleanup), so the backup
@@ -243,9 +263,9 @@ const FORGEJO_DB_BACKUP_HOST_REL = "forgejo/data/_flagship_backup.db";
  */
 export async function dumpDataVolumes(cfg: VolumeDumpConfig): Promise<VolumeDumpReport> {
   const log = cfg.onLog ?? (() => {});
-  const only = cfg.only ?? (["postgres", "minio", "redis", "forgejo"] as const);
+  const only = storesFor(cfg);
   const report: VolumeDumpReport = {
-    stores: { postgres: "skipped", minio: "skipped", redis: "skipped", forgejo: "skipped" },
+    stores: { postgres: "skipped", files: "skipped", forgejo: "skipped" },
     errors: [],
     ok: true,
   };
@@ -267,8 +287,7 @@ export async function dumpDataVolumes(cfg: VolumeDumpConfig): Promise<VolumeDump
   };
 
   await runStore("postgres", () => dumpPostgres(cfg, join(outBase, "postgres", "all.dump")));
-  await runStore("redis", () => dumpRedis(cfg, join(outBase, "redis", "dump.rdb")));
-  await runStore("minio", () => dumpMinio(cfg, join(outBase, "minio")));
+  await runStore("files", () => dumpFiles(cfg, join(outBase, "files")));
   await runStore("forgejo", () => dumpForgejo(cfg, join(outBase, "forgejo")));
 
   return report;
@@ -279,20 +298,20 @@ function containerName(cfg: VolumeDumpConfig, key: keyof typeof DEFAULT_CONTAINE
 }
 
 async function dumpPostgres(cfg: VolumeDumpConfig, outPath: string): Promise<void> {
-  // `pg_dumpall` = cluster-wide (all roles + all databases). Each per-DB dump
-  // runs in a serialized snapshot ⇒ consistent under concurrent writes. Password
-  // passed via `-e PGPASSWORD` (loopback-only box; mirrors RealMinioAdmin's
-  // argv-passed root secret).
+  // `pg_dumpall` = cluster-wide (all roles + all databases, their grants
+  // included). Each per-DB dump runs in a serialized snapshot ⇒ consistent
+  // under concurrent writes. Password passed via `-e PGPASSWORD` (loopback-only
+  // box).
   await cfg.runner.runToFile(
     "docker",
     [
       "exec",
       "-e",
-      `PGPASSWORD=${cfg.creds.postgresPassword}`,
+      `PGPASSWORD=${cfg.creds!.postgresPassword}`,
       containerName(cfg, "postgres"),
       "pg_dumpall",
       "-U",
-      cfg.creds.postgresUser,
+      cfg.creds!.postgresUser,
       "-h",
       "127.0.0.1",
       "--clean",
@@ -302,39 +321,86 @@ async function dumpPostgres(cfg: VolumeDumpConfig, outPath: string): Promise<voi
   );
 }
 
-async function dumpRedis(cfg: VolumeDumpConfig, outPath: string): Promise<void> {
-  const c = containerName(cfg, "redis");
-  const auth = ["-a", cfg.creds.redisPassword, "--no-auth-warning"];
-  // Snapshot: capture the pre-BGSAVE LASTSAVE, trigger BGSAVE, poll until
-  // LASTSAVE advances (fork completed) — then the on-disk dump.rdb is a
-  // consistent point-in-time image. Bounded so a stuck fork can't hang forever.
-  const lastSave = async (): Promise<string> =>
-    (await cfg.runner.capture("docker", ["exec", c, "redis-cli", ...auth, "LASTSAVE"])).stdout.trim();
-  const before = await lastSave();
-  await cfg.runner.run("docker", ["exec", c, "redis-cli", ...auth, "BGSAVE"]);
-  const deadline = Date.now() + 120_000;
-  for (;;) {
-    if ((await lastSave()) !== before) break;
-    if (Date.now() > deadline) throw new Error("BGSAVE did not complete within 120s");
-    await delay(500);
-  }
-  // The rdb is written to the redis bind mount on the host — copy it out.
-  await copyHostFile(join(cfg.dataRoot, REDIS_RDB_HOST_REL), outPath);
+/** The running containers that mount a volume (the app it belongs to). */
+async function runningUsersOf(cfg: VolumeDumpConfig, volume: string): Promise<string[]> {
+  const { stdout } = await cfg.runner.capture("docker", ["ps", "-q", "--filter", `volume=${volume}`]);
+  return stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
 }
 
-async function dumpMinio(cfg: VolumeDumpConfig, outDir: string): Promise<void> {
-  const mcBin = cfg.mc?.binary ?? "mc";
-  const alias = cfg.mc?.alias ?? "flagship";
-  const endpoint = cfg.mc?.endpointUrl ?? "http://127.0.0.1:9000";
+/** The prod files volumes on this box (dev ones, a staging copy's, are never backed up). */
+async function listProdFilesVolumes(cfg: VolumeDumpConfig): Promise<string[]> {
+  const { stdout } = await cfg.runner.capture("docker", ["volume", "ls", "-q"]);
+  return stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((n) => isProdFilesVolume(n))
+    .sort();
+}
+
+/** `docker run` for a throwaway tar container over one files volume. */
+function filesTarArgs(cfg: VolumeDumpConfig, volume: string, mode: "dump" | "restore"): string[] {
+  const caps =
+    mode === "dump"
+      ? ["--cap-add", "DAC_READ_SEARCH"]
+      : ["--cap-add", "CHOWN", "--cap-add", "DAC_OVERRIDE", "--cap-add", "FOWNER", "--cap-add", "FSETID"];
+  const args = [
+    "run",
+    ...(mode === "restore" ? ["-i"] : []),
+    "--rm",
+    "--network",
+    "none",
+    "--cap-drop",
+    "ALL",
+    ...caps,
+    "--security-opt",
+    "no-new-privileges",
+    "--read-only",
+    "--user",
+    "0:0",
+    ...filesMountArgs(volume, { readonly: mode === "dump" }),
+    "--entrypoint",
+    "tar",
+    cfg.helperImage ?? FILES_HELPER_IMAGE,
+    ...(mode === "dump"
+      ? ["--numeric-owner", "-cf", "-", "-C", "/data", "."]
+      : ["--numeric-owner", "-xpf", "-", "-C", "/data"]),
+  ];
+  // Same tripwire as every app container: a named volume, never a host path.
+  assertNoHostPathInDockerArgs(args);
+  return args;
+}
+
+async function dumpFiles(cfg: VolumeDumpConfig, outDir: string): Promise<void> {
   await mkdir(outDir, { recursive: true, mode: 0o700 });
-  const mc = (args: string[]) =>
-    cfg.runner.run(mcBin, cfg.mc?.configDir ? ["--config-dir", cfg.mc.configDir, ...args] : args);
-  // Idempotent alias registration (mirrors RealMinioAdmin.ensureAlias).
-  await mc(["alias", "set", alias, endpoint, cfg.creds.minioRootUser, cfg.creds.minioRootPassword]);
-  // Mirror EVERY bucket's objects into `_dumps/minio/<bucket>/…`. `--overwrite`
-  // keeps re-dumps idempotent; `--remove` prunes objects deleted since the last
-  // dump so the mirror tracks the live store.
-  await mc(["mirror", "--overwrite", "--remove", `${alias}/`, outDir]);
+  const volumes = await listProdFilesVolumes(cfg);
+  const failures: string[] = [];
+  for (const volume of volumes) {
+    // Freeze the app while its folder is archived (whatever its container
+    // is called); an app that isn't running has nothing to freeze.
+    const paused: string[] = [];
+    try {
+      for (const c of await runningUsersOf(cfg, volume)) {
+        await cfg.runner.run("docker", ["pause", c]);
+        paused.push(c);
+      }
+      await cfg.runner.runToFile("docker", filesTarArgs(cfg, volume, "dump"), join(outDir, `${volume}.tar`));
+    } catch (e) {
+      failures.push(`${volume}: ${(e as Error).message}`);
+    } finally {
+      for (const c of paused) await cfg.runner.run("docker", ["unpause", c]).catch(() => {});
+    }
+  }
+  // An uninstalled app's archive goes with it.
+  const keep = new Set(volumes.map((v) => `${v}.tar`));
+  for (const f of await readdir(outDir).catch(() => [] as string[])) {
+    if (f.endsWith(".tar") && !keep.has(f)) {
+      await rm(join(outDir, f), { force: true });
+    }
+  }
+  if (failures.length > 0) throw new Error(`files folders not archived: ${failures.join("; ")}`);
 }
 
 async function dumpForgejo(cfg: VolumeDumpConfig, outDir: string): Promise<void> {
@@ -370,8 +436,8 @@ async function dumpForgejo(cfg: VolumeDumpConfig, outDir: string): Promise<void>
 
 export interface VolumeReloadConfig extends VolumeDumpConfig {
   /**
-   * Compose file + env used to stop/start a single service (redis is
-   * stop→drop-rdb→start). Defaults mirror installer/data-services.
+   * Compose file + env used to stop/start a single service (forgejo is
+   * stop→restore→start). Defaults mirror installer/data-services.
    */
   compose?: { file?: string; envFile?: string };
 }
@@ -386,18 +452,17 @@ const DEFAULT_COMPOSE_FILE = "/opt/flagship/installer/data-services/docker-compo
 const DEFAULT_COMPOSE_ENV = "/var/flagship/data-services.env";
 
 /**
- * Load the consistent dumps produced by `dumpDataVolumes` back into a FRESH
- * box's already-initdb'd data stack, before it takes traffic. Symmetric to the
- * dump: each store's dump under `<dataRoot>/_dumps` is applied with the inverse
- * command. Idempotent (re-applying a logical dump converges) + best-effort per
+ * Load the dumps produced by `dumpDataVolumes` back into a FRESH box, before
+ * it takes traffic. Symmetric to the dump: each store's dump under
+ * `<dataRoot>/_dumps` is applied with the inverse command. Best-effort per
  * store; a MISSING dump for a store is "absent" (not an error — that store just
  * had nothing backed up). Wired into the migration take-over path.
  */
 export async function reloadDataVolumes(cfg: VolumeReloadConfig): Promise<VolumeReloadReport> {
   const log = cfg.onLog ?? (() => {});
-  const only = cfg.only ?? (["postgres", "minio", "redis", "forgejo"] as const);
+  const only = storesFor(cfg);
   const report: VolumeReloadReport = {
-    stores: { postgres: "absent", minio: "absent", redis: "absent", forgejo: "absent" },
+    stores: { postgres: "absent", files: "absent", forgejo: "absent" },
     errors: [],
     ok: true,
   };
@@ -425,10 +490,7 @@ export async function reloadDataVolumes(cfg: VolumeReloadConfig): Promise<Volume
   await runStore("postgres", join(base, "postgres", "all.dump"), () =>
     reloadPostgres(cfg, join(base, "postgres", "all.dump")),
   );
-  await runStore("minio", join(base, "minio"), () => reloadMinio(cfg, join(base, "minio")));
-  await runStore("redis", join(base, "redis", "dump.rdb"), () =>
-    reloadRedis(cfg, join(base, "redis", "dump.rdb")),
-  );
+  await runStore("files", join(base, "files"), () => reloadFiles(cfg, join(base, "files")));
   await runStore("forgejo", join(base, "forgejo", "forgejo.db"), () =>
     reloadForgejo(cfg, join(base, "forgejo")),
   );
@@ -445,11 +507,11 @@ async function reloadPostgres(cfg: VolumeReloadConfig, dumpPath: string): Promis
       "exec",
       "-i",
       "-e",
-      `PGPASSWORD=${cfg.creds.postgresPassword}`,
+      `PGPASSWORD=${cfg.creds!.postgresPassword}`,
       containerName(cfg, "postgres"),
       "psql",
       "-U",
-      cfg.creds.postgresUser,
+      cfg.creds!.postgresUser,
       "-h",
       "127.0.0.1",
       "-d",
@@ -459,28 +521,36 @@ async function reloadPostgres(cfg: VolumeReloadConfig, dumpPath: string): Promis
   );
 }
 
-async function reloadMinio(cfg: VolumeReloadConfig, inDir: string): Promise<void> {
-  const mcBin = cfg.mc?.binary ?? "mc";
-  const alias = cfg.mc?.alias ?? "flagship";
-  const endpoint = cfg.mc?.endpointUrl ?? "http://127.0.0.1:9000";
-  const mc = (args: string[]) =>
-    cfg.runner.run(mcBin, cfg.mc?.configDir ? ["--config-dir", cfg.mc.configDir, ...args] : args);
-  await mc(["alias", "set", alias, endpoint, cfg.creds.minioRootUser, cfg.creds.minioRootPassword]);
-  // Reverse mirror: local dump tree → live minio. `--overwrite` makes it
-  // idempotent; buckets are auto-created by mc mirror.
-  await mc(["mirror", "--overwrite", inDir, `${alias}/`]);
-}
-
-async function reloadRedis(cfg: VolumeReloadConfig, rdbPath: string): Promise<void> {
-  // Redis loads dump.rdb only at startup ⇒ stop → drop the rdb into the bind
-  // mount → start. Compose stop/start is used so the container keeps its config.
-  const file = cfg.compose?.file ?? DEFAULT_COMPOSE_FILE;
-  const envFile = cfg.compose?.envFile ?? DEFAULT_COMPOSE_ENV;
-  const compose = (args: string[]) =>
-    cfg.runner.run("docker", ["compose", "-f", file, "--env-file", envFile, ...args]);
-  await compose(["stop", "redis"]);
-  await copyHostFile(rdbPath, join(cfg.dataRoot, REDIS_RDB_HOST_REL));
-  await compose(["start", "redis"]);
+/**
+ * Each `<volume>.tar` goes into a FRESH volume of that name: an existing one
+ * no container uses is removed first (an app's folder is replaced, never
+ * merged); one a container still uses is left alone and reported.
+ */
+async function reloadFiles(cfg: VolumeReloadConfig, inDir: string): Promise<void> {
+  const failures: string[] = [];
+  const tars = (await readdir(inDir)).filter((f) => f.endsWith(".tar")).sort();
+  for (const f of tars) {
+    const volume = f.slice(0, -4);
+    if (!isProdFilesVolume(volume)) continue;
+    try {
+      const users = (await cfg.runner.capture("docker", ["ps", "-aq", "--filter", `volume=${volume}`])).stdout.trim();
+      if (users) throw new Error("a container still uses it");
+      await cfg.runner.run("docker", ["volume", "rm", "-f", volume]);
+      await cfg.runner.run("docker", [
+        "volume",
+        "create",
+        "--label",
+        "flagship.files=prod",
+        "--label",
+        `flagship.app=${volume.slice("flagship-files-".length)}`,
+        volume,
+      ]);
+      await cfg.runner.runFromFile("docker", filesTarArgs(cfg, volume, "restore"), join(inDir, f));
+    } catch (e) {
+      failures.push(`${volume}: ${(e as Error).message}`);
+    }
+  }
+  if (failures.length > 0) throw new Error(`files folders not restored: ${failures.join("; ")}`);
 }
 
 async function reloadForgejo(cfg: VolumeReloadConfig, inDir: string): Promise<void> {
@@ -528,29 +598,9 @@ export async function loadDataServicesCreds(envFile: string): Promise<DataServic
     if (i < 0) continue;
     env[t.slice(0, i).trim()] = t.slice(i + 1).trim();
   }
-  const {
-    POSTGRES_ADMIN_USER,
-    POSTGRES_ADMIN_PASSWORD,
-    MINIO_ROOT_USER,
-    MINIO_ROOT_PASSWORD,
-    REDIS_ADMIN_PASSWORD,
-  } = env;
-  if (
-    !POSTGRES_ADMIN_USER ||
-    !POSTGRES_ADMIN_PASSWORD ||
-    !MINIO_ROOT_USER ||
-    !MINIO_ROOT_PASSWORD ||
-    !REDIS_ADMIN_PASSWORD
-  ) {
-    return null;
-  }
-  return {
-    postgresUser: POSTGRES_ADMIN_USER,
-    postgresPassword: POSTGRES_ADMIN_PASSWORD,
-    minioRootUser: MINIO_ROOT_USER,
-    minioRootPassword: MINIO_ROOT_PASSWORD,
-    redisPassword: REDIS_ADMIN_PASSWORD,
-  };
+  const { POSTGRES_ADMIN_USER, POSTGRES_ADMIN_PASSWORD } = env;
+  if (!POSTGRES_ADMIN_USER || !POSTGRES_ADMIN_PASSWORD) return null;
+  return { postgresUser: POSTGRES_ADMIN_USER, postgresPassword: POSTGRES_ADMIN_PASSWORD };
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -571,8 +621,4 @@ async function exists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
 }

@@ -30,10 +30,13 @@ import type { BuildWorkspace } from "./buildWorkspace.js";
 import { renderContractMarkdown } from "./contract.js";
 import { checkDockerfile } from "./dockerfilePolicy.js";
 import { noRedaction, type ModelRedactor } from "../llm/modelPrivacy.js";
+import { environmentFailureForAgent, type EnvironmentFailure } from "./environmentFailure.js";
 
 export interface BuildToolDeployResult {
   ok: boolean;
   reason?: string;
+  /** The box, not the app, failed: the agent is told to stop, and loops end. */
+  environment?: EnvironmentFailure;
 }
 
 export interface BuildToolCheckResult {
@@ -90,6 +93,8 @@ export interface BuildToolResult {
   /** Value-free journal summary (defaults to the tool name). */
   journalSummary?: string;
   journalDetail?: string;
+  /** Set when the call hit a failure of the box itself; the box's own loops stop on it. */
+  environment?: EnvironmentFailure;
 }
 
 /** Names of the tools the surface exposes, in the order they appear. */
@@ -294,7 +299,13 @@ export class BuildToolHost {
         const dockerfileProblems = policy && !policy.ok ? policy.problems : [];
         const problems = [...(dockerfile == null ? ["missing Dockerfile"] : []), ...dockerfileProblems];
         return {
-          text: JSON.stringify({ ok: problems.length === 0, manifestName: result.manifest.name, problems }),
+          text: JSON.stringify({
+            ok: problems.length === 0,
+            manifestName: result.manifest.name,
+            problems,
+            // An older objects/kv store: accepted, but S3 and Redis aren't available.
+            ...(result.notes ? { notes: result.notes } : {}),
+          }),
           journalSummary:
             dockerfileProblems.length > 0
               ? `validate: ${dockerfileProblems.length} Dockerfile problem(s)`
@@ -339,6 +350,12 @@ export class BuildToolHost {
         if (!this.ctx.workspace.manifestJson())
           return toolErr("nothing to deploy: write flagship.app.json first", "deploy: no manifest");
         const d = await this.ctx.deploy();
+        if (!d.ok && d.environment) {
+          return {
+            ...toolErr(environmentFailureForAgent(d.environment), `staging failed: the server's ${d.environment.kind} is down`),
+            environment: d.environment,
+          };
+        }
         if (!d.ok) return toolErr(d.reason ?? "deploy failed", `staging failed: ${firstLine(d.reason ?? "")}`);
         return { text: JSON.stringify({ ok: true }), journalSummary: "staged a test copy" };
       }

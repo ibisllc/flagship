@@ -37,8 +37,8 @@ import { startProxyServer, startTcpForwarder, type ProxyServerHandle } from "./p
 import { setSandboxNetworking } from "./sandboxNetworking.js";
 
 export const DEFAULT_EGRESS_PORTS: FirewallPorts = { tls: 15443, http: 15080, dns: 15053 };
-/** Host data services an app or staging copy may reach (postgres, redis, minio). */
-export const DEFAULT_DATA_PORTS = [5432, 6379, 9000];
+/** Host data services an app or staging copy may reach (Postgres). */
+export const DEFAULT_DATA_PORTS = [5432];
 
 export interface EgressGatewayOptions {
   cmd: CommandRunner;

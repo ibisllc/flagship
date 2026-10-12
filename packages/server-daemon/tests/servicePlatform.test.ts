@@ -15,9 +15,9 @@ import {
 import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 import {
   DataProvisioner,
-  InMemoryMinioAdmin,
+  InMemoryFilesAdmin,
   InMemoryPostgresAdmin,
-  InMemoryRedisAdmin,
+  pgDatabase,
 } from "../src/dataLayer/index.js";
 import { InMemoryAppAuthTokens } from "../src/serviceAuthToken.js";
 import { DomainGate } from "../src/browser/domainGate.js";
@@ -57,8 +57,8 @@ function fakeRunner(): { runner: AppRunner; cmd: CommandRunner; calls: string[] 
 function makeProvisioner(): DataProvisioner {
   return new DataProvisioner({
     postgres: new InMemoryPostgresAdmin(),
-    objects: new InMemoryMinioAdmin(),
-    kv: new InMemoryRedisAdmin(),
+    files: new InMemoryFilesAdmin(),
+    nameKey: "n".repeat(40),
   });
 }
 
@@ -176,7 +176,8 @@ describe("ServicePlatform.install", () => {
     if (!r.ok) throw new Error(r.reason);
     expect(r.app.urlLabel).toBe("game1--alice");
     // Data stays under (creator=alice, slug=game1) regardless of host
-    expect(calls.some((c) => c.includes("_alice_game1"))).toBe(true);
+    const aliceDb = pgDatabase({ creator: "alice", slug: "game1" }, "n".repeat(40));
+    expect(calls.some((c) => c.includes(`FLAGSHIP_PG_DATABASE=${aliceDb}`))).toBe(true);
   });
 
   it("rejects invalid signature (must be host's IRK)", async () => {

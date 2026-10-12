@@ -14,7 +14,6 @@ import { InMemoryAlertInbox } from "./alertInbox.js";
 import {
   buildAlertInboxHandlers,
 } from "./alertInboxHttp.js";
-import { buildAdminProxyHandler } from "./adminProxy.js";
 import { startDaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
 import { makeRelayTrustExceptionResolver } from "./relayTrustExceptions.js";
 import { sendPushRelay, sendRelayTrustAlert } from "./relaySos.js";
@@ -239,14 +238,14 @@ import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import { providerRelay } from "./tunnel/relayFetch.js";
 
 /**
- * Volume-aware backup pre-step: write CONSISTENT logical dumps of the data-layer
- * stores (postgres/minio/redis/forgejo — docker bind mounts under
- * `<dataRoot>/{postgres,minio,…}`) into the reserved `_dumps/` subtree BEFORE the
- * walker runs, so the walker ships those consistent dumps instead of descending
- * into the live mounts and shipping torn PGDATA / mid-write AOF / oversize
- * packfiles. Best-effort: no data-services env ⇒ no dumps (a box without a data
- * layer is unaffected). Returns the walk options that skip the raw mounts and
- * raise the whole-file cap for the (legitimately large) dumps.
+ * Volume-aware backup pre-step: write CONSISTENT dumps of the data the box
+ * keeps for apps (Postgres and Forgejo, bind mounts under
+ * `<dataRoot>/{postgres,forgejo}`, and each app's files volume) into the
+ * reserved `_dumps/` subtree BEFORE the walker runs, so the walker ships those
+ * dumps instead of descending into the live mounts and shipping torn PGDATA or
+ * oversize packfiles. Best-effort: without the data-services creds only the
+ * files volumes are dumped. Returns the walk options that skip the raw mounts
+ * and raise the whole-file cap for the (legitimately large) dumps.
  */
 async function dumpVolumesBeforeWalk(
   dataRoot: string,
@@ -254,21 +253,18 @@ async function dumpVolumesBeforeWalk(
 ): Promise<{ exclude: (rel: string) => boolean; raiseCapFor: (rel: string) => boolean }> {
   const envFile = process.env.FLAGSHIP_DATA_SERVICES_ENV ?? "/var/flagship/data-services.env";
   const creds = await loadDataServicesCreds(envFile);
-  if (creds) {
-    try {
-      const report = await dumpDataVolumes({ dataRoot, runner: realVolumeDumpRunner, creds, onLog });
-      if (!report.ok) {
-        onLog(
-          `[volume-dump] ${report.errors.length} store(s) failed to dump; they are omitted (not torn) this pass`,
-        );
-      }
-    } catch (e) {
-      // A wholesale failure (e.g. docker missing) must not stop the file walk —
-      // non-store data under <dataRoot> still gets backed up.
-      onLog(`[volume-dump] dump pass failed (continuing with file walk): ${(e as Error).message}`);
+  if (!creds) onLog(`[volume-dump] no data-services creds at ${envFile}; dumping files folders only`);
+  try {
+    const report = await dumpDataVolumes({ dataRoot, runner: realVolumeDumpRunner, creds, onLog });
+    if (!report.ok) {
+      onLog(
+        `[volume-dump] ${report.errors.length} store(s) failed to dump; they are omitted (not torn) this pass`,
+      );
     }
-  } else {
-    onLog(`[volume-dump] no data-services creds at ${envFile}; skipping store dumps`);
+  } catch (e) {
+    // A wholesale failure (e.g. docker missing) must not stop the file walk —
+    // non-store data under <dataRoot> still gets backed up.
+    onLog(`[volume-dump] dump pass failed (continuing with file walk): ${(e as Error).message}`);
   }
   // The raw mounts are excluded whether or not the dump succeeded — a clean miss
   // beats a torn copy, and any store that DID dump rides via `_dumps/`.
@@ -1346,31 +1342,29 @@ async function main(): Promise<void> {
       },
       onTakeOver: async ({ serverDomain }) => {
         // Symmetric restore step: the shard restore above landed `_dumps/**`
-        // onto disk, but those are LOGICAL dumps — reload them INTO this fresh
-        // box's already-initdb'd data stack (pg_restore / mc mirror / redis
-        // rdb swap / forgejo sqlite+repos) before it takes traffic. Idempotent +
-        // best-effort per store; a store with no dump is simply skipped. No data
-        // layer (no creds) ⇒ nothing to reload.
+        // onto disk, but those are DUMPS — reload them INTO this fresh box's
+        // data stack (psql < pg_dumpall / files tars into fresh volumes /
+        // forgejo sqlite+repos) before it takes traffic. Idempotent +
+        // best-effort per store; a store with no dump is simply skipped.
+        // Without the data-services creds only the files folders reload.
         const dataRoot = `${dataDir}/data`;
         const envFile =
           process.env.FLAGSHIP_DATA_SERVICES_ENV ?? "/var/flagship/data-services.env";
         const creds = await loadDataServicesCreds(envFile);
-        if (creds) {
-          try {
-            const rep = await reloadDataVolumes({
-              dataRoot,
-              runner: realVolumeDumpRunner,
-              creds,
-              onLog: (m) => console.log(`[migration] ${m}`),
-            });
-            if (!rep.ok) {
-              console.log(
-                `[migration] volume reload had ${rep.errors.length} store failure(s); re-homing anyway`,
-              );
-            }
-          } catch (e) {
-            console.log(`[migration] volume reload failed (continuing): ${(e as Error).message}`);
+        try {
+          const rep = await reloadDataVolumes({
+            dataRoot,
+            runner: realVolumeDumpRunner,
+            creds,
+            onLog: (m) => console.log(`[migration] ${m}`),
+          });
+          if (!rep.ok) {
+            console.log(
+              `[migration] volume reload had ${rep.errors.length} store failure(s); re-homing anyway`,
+            );
           }
+        } catch (e) {
+          console.log(`[migration] volume reload failed (continuing): ${(e as Error).message}`);
         }
         // Re-home to the migrated name via the SAME marker+boot path
         // transfer-a-box uses (owner unchanged ⇒ same IRK): next boot
@@ -1801,7 +1795,6 @@ function wirePreRuntimeHandlers(deps: {
     inbox: deps.alertInbox,
     gate: deps.pairedSessions,
   });
-  const adminProxyHandle = buildAdminProxyHandler({ gate: deps.pairedSessions });
   const identityRotateHandle = buildIdentityRotateHandlers({
     gate: deps.pairedSessions,
     pendingPath: defaultPendingIdentityPath(deps.dataDir),
@@ -1810,7 +1803,6 @@ function wirePreRuntimeHandlers(deps: {
   const additionalHandlers: Array<(req: HttpRequest) => Promise<HttpResponse | null>> = [];
   if (deps.browserBundle) additionalHandlers.push(deps.browserBundle.apiHandle);
   additionalHandlers.push(alertInboxHandle);
-  additionalHandlers.push(adminProxyHandle);
   additionalHandlers.push(identityRotateHandle);
   return additionalHandlers;
 }
@@ -2566,6 +2558,7 @@ async function wireRuntimeSurfaces(deps: {
     })(),
     startedAt: Date.now(),
     servicePlatform: runtime.servicePlatform,
+    filesBytes: runtime.dataProvisioner ? (v: string) => runtime.dataProvisioner!.filesBytes(v) : null,
     pairedSessions,
     ...(adapterIndex
       ? {
@@ -2922,9 +2915,8 @@ async function wireOwnerHandlers(deps: {
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       markerStore: decommissionMarkerStore(`${dataDir}/decommissioned`),
       // Final-flush (the migration/replacement FINAL DELTA): DUMP the data
-      // stores (consistent logical dumps, services still LIVE — pg_dumpall /
-      // BGSAVE / mc mirror / sqlite .backup can't run against a stopped
-      // container), THEN quiesce the data services (write-freeze — now a REAL
+      // stores (consistent dumps, services still LIVE — pg_dumpall / sqlite
+      // .backup can't run against a stopped container), THEN quiesce the data services (write-freeze — now a REAL
       // stop, see quiesceDataServices), THEN walk the real data tree skipping
       // the raw mounts (only the `_dumps/**` ride). The dumps captured the
       // consistent state before the freeze; the freeze is the clean final point

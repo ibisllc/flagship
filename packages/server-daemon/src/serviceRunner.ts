@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { checkBuildContextDockerfile } from "./buildmodes/dockerfilePolicy.js";
 import { networkCreateArgs } from "./egress/networks.js";
 import { notifyContainersChanged, sandboxBuildArgs, sandboxRunArgs } from "./egress/sandboxNetworking.js";
+import { FILES_MOUNT, isFilesVolume } from "./dataLayer/naming.js";
 
 export interface AppSpec {
   serviceId: string;
@@ -18,7 +19,20 @@ export interface AppSpec {
    * platform also injects so contract apps bind this port.
    */
   containerPort?: number;
+  /**
+   * The app's files folder: a Docker NAMED volume (never a host path),
+   * mounted read-write at `/data` while the rest of the root stays read-only.
+   */
+  filesVolume?: string;
 }
+
+/** The one mount an app container may have: its own files volume at `/data`. */
+export function filesMountArgs(volume: string, opts: { readonly?: boolean } = {}): string[] {
+  if (!isFilesVolume(volume)) throw new Error(`not a files volume name ${JSON.stringify(volume)}`);
+  return ["--mount", `type=volume,src=${volume},dst=${FILES_MOUNT}${opts.readonly ? ",readonly" : ""}`];
+}
+
+const FILES_MOUNT_RE = /^type=volume,src=([^,]+),dst=\/data(,readonly)?$/;
 
 export interface CommandRunnerOpts {
   /**
@@ -67,11 +81,24 @@ export function assertNoHostPathInDockerArgs(args: readonly string[]): void {
     if (lower.includes("docker.sock")) {
       throw new Error(`refusing docker invocation: arg references the docker socket (${a})`);
     }
-    // Host-path bind mounts. `--volume`/`-v`/`--mount` on the app-build/run
-    // surface is never legitimate (data stores reach containers over the
-    // host-gateway alias, not a mount).
-    if (a === "-v" || a === "--volume" || a === "--mount" || lower.startsWith("--mount=")) {
+    // Mounts. The only one allowed is an app's own files volume, in exactly
+    // the form `filesMountArgs` writes (a named volume, never a bind, at
+    // /data); `-v`/`--volume` can't say "named volume only", so they are
+    // refused outright. Data stores reach containers over the host-gateway
+    // alias, not a mount.
+    if (a === "--mount") {
+      const m = FILES_MOUNT_RE.exec(args[i + 1] ?? "");
+      if (args[0] !== "run" || !m || !isFilesVolume(m[1]!)) {
+        throw new Error(`refusing docker invocation: only an app's files volume may be mounted (${args[i + 1] ?? a})`);
+      }
+      i++;
+      continue;
+    }
+    if (a === "-v" || a === "--volume" || lower.startsWith("--mount=") || lower.startsWith("--volume=") || lower.startsWith("-v=")) {
       throw new Error(`refusing docker invocation: host-path mount arg is not allowed (${a})`);
+    }
+    if (a === "--volumes-from" || lower.startsWith("--volumes-from=")) {
+      throw new Error(`refusing docker invocation: --volumes-from is not allowed (${a})`);
     }
   }
 }
@@ -79,7 +106,7 @@ export function assertNoHostPathInDockerArgs(args: readonly string[]): void {
 /**
  * Sandbox posture applied to every marketplace-app container. The defaults
  * are the strongest setting that still lets an app reach its provisioned
- * data store (Postgres/Redis/MinIO live on the host loopback; see
+ * data store (Postgres lives on the host loopback; see
  * `dataLayer/provisioner.ts`), so they are deliberately conservative:
  *
  *  - `--cap-drop=ALL` then re-add only `capAdd` (empty by default). A web
@@ -90,7 +117,8 @@ export function assertNoHostPathInDockerArgs(args: readonly string[]): void {
  *  - `--memory` / `--cpus` / `--pids-limit` cap blast radius (fork bombs,
  *    OOM-the-host, CPU starvation of siblings).
  *  - `--read-only` root filesystem with a writable `/tmp` tmpfs, so a
- *    compromised app can't tamper with its own image on disk.
+ *    compromised app can't tamper with its own image on disk. An app with
+ *    `data.stores.files` also gets its own named volume at `/data`.
  *
  * Network posture: app containers run on a dedicated user-defined bridge
  * (`network`, default `flagship-apps`), NOT host networking and NOT the
@@ -107,8 +135,8 @@ export function assertNoHostPathInDockerArgs(args: readonly string[]): void {
  * The app still reaches its provisioned data store: the data-layer URLs
  * are minted pointing at the host-gateway alias (`dataHostAlias`, default
  * `host.flagship.internal`), wired into every container via
- * `--add-host <alias>:host-gateway`. So Postgres/Redis/MinIO (which bind
- * the host) stay reachable while the daemon's own API does not.
+ * `--add-host <alias>:host-gateway`. So Postgres (which binds the host)
+ * stays reachable while the daemon's own API does not.
  *
  * Every field is overridable so an operator can loosen a limit for a
  * heavyweight app, but the secure values ship by default.
@@ -479,6 +507,7 @@ export class AppRunner {
       ...this.hardeningArgs(),
       ...this.envArgs(spec.env),
       ...this.portArgs(spec.port, spec.containerPort),
+      ...(spec.filesVolume ? filesMountArgs(spec.filesVolume) : []),
       spec.image,
     ];
     // Regression insurance: a runtime container must never bind-mount a host

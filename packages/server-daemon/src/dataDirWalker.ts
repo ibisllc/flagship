@@ -127,7 +127,7 @@ export async function walkDataDir(
 
 /**
  * The v1 FREEZE quiesce (docs/server-migration.md phase 5, "concurrent-writes
- * at freeze"): stop the data-services stack (postgres/minio/redis/forgejo —
+ * at freeze"): stop the data-services stack (postgres/forgejo/chromium —
  * the writers) so the final full flush walks a WRITE-FROZEN tree. The chosen
  * v1 mechanism is stop-services-then-full-flush — no delta shipping, no
  * fs-level snapshot; the box is being retired immediately after, so services
@@ -141,10 +141,10 @@ export async function walkDataDir(
  * teardown) — reliable regardless of the unit's ExecStop. The `systemctl stop`
  * is kept first (harmless; also correct now that late-command adds ExecStop).
  *
- * With the volume-aware logical dumps taken BEFORE this runs, postgres/redis
- * are already captured consistently and don't NEED the freeze; it mainly gives
- * minio a stable window and provides a clean final point for any non-store
- * files under data/. Best-effort throughout (a missing systemctl / already-
+ * With the volume-aware dumps taken BEFORE this runs, Postgres, Forgejo and
+ * the apps' files folders are already captured consistently and don't NEED
+ * the freeze; it provides a clean final point for any non-store files under
+ * data/. Best-effort throughout (a missing systemctl / already-
  * stopped stack — dev runs — is not an error); the runner is injectable.
  */
 export async function quiesceDataServices(

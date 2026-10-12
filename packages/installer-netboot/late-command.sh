@@ -177,13 +177,13 @@ SERVER_IDENTITY_PRIV_HEX="$(tr -d '\n' < /var/flagship/identity/identity.priv.he
 # ── 5. Systemd units ────────────────────────────────────────────
 echo "[flagship] writing systemd units"
 
-# 5a. flagship-data-services — the unified data layer (postgres + minio
-# + redis + adminer) under docker compose. The init.sh script under
+# 5a. flagship-data-services — the unified data layer (postgres, plus
+# forgejo + chromium) under docker compose. The init.sh script under
 # installer/data-services/ is idempotent: secret generation only
 # happens once; subsequent boots just `docker compose up -d`.
 cat > /etc/systemd/system/flagship-data-services.service <<'UNIT'
 [Unit]
-Description=Flagship unified data layer (postgres + minio + redis + adminer)
+Description=Flagship unified data layer (postgres/forgejo/chromium)
 After=network-online.target docker.service
 Wants=network-online.target
 Requires=docker.service
@@ -194,7 +194,7 @@ RemainAfterExit=yes
 ExecStart=/opt/flagship/installer/data-services/init.sh
 # ExecStop makes `systemctl stop flagship-data-services` ACTUALLY stop the
 # compose containers. Without it (Type=oneshot + RemainAfterExit) the unit only
-# marks itself inactive while postgres/minio/redis/forgejo keep running — so a
+# marks itself inactive while postgres/forgejo keep running — so a
 # migration/decommission "freeze" walked live, torn data. `stop` (not `down`)
 # preserves the data volumes; this is a write-freeze, not a wipe.
 ExecStop=/usr/bin/docker compose -f /opt/flagship/installer/data-services/docker-compose.yml --env-file /var/flagship/data-services.env stop

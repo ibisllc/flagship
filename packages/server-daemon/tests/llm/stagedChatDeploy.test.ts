@@ -17,6 +17,7 @@ import { InMemoryBuildJournal } from "../../src/buildmodes/buildJournal.js";
 import { buildModelRedactor } from "../../src/llm/modelPrivacy.js";
 import type { HttpRequest } from "../../src/runtime.js";
 import { FakeStaging } from "../helpers/fakeStaging.js";
+import { environmentFailure } from "../../src/buildmodes/environmentFailure.js";
 
 const SERVER = "home.alice.flagship.services";
 const MANIFEST = JSON.stringify({
@@ -169,5 +170,44 @@ describe("a chat's Deploy", () => {
     const sync = await handle(call(`/api/llm/sessions/${sid2}/deploy`));
     expect(sync!.status).toBe(200);
     expect(JSON.parse(String(sync!.body))).toEqual({ ok: true, serviceId: "alice--habits", url: `https://habits.${SERVER}` });
+  });
+});
+
+describe("a chat's Deploy when the server itself is broken", () => {
+  const DOWN = {
+    ok: false as const,
+    reason: "data provisioning failed: connect ECONNREFUSED 127.0.0.1:5432",
+    environment: environmentFailure("data-layer"),
+  };
+
+  it("fails at once with the owner's reason and never starts the AI", async () => {
+    const s = setup([{ content: "", model: "m", toolUses: [tu("1", "delete_file", { path: "migrations/0001.sql" })] }]);
+    s.staging.results = [DOWN];
+    const session = fill(new VibeCodeSession({ username: "alice", serverFqdn: SERVER }), { ...FILES, "migrations/0001.sql": "CREATE TABLE t (id int);" });
+    const id = session.meta.sessionId;
+    await s.credentials.put(id, { provider: "openai", apiKey: "sk-test-key-123456789" });
+    const r = await s.deploy(session);
+    expect(r).toEqual({ ok: false, reason: environmentFailure("data-layer").ownerReason });
+    expect(s.requests).toHaveLength(0);
+    expect(s.installs).toHaveLength(0);
+    expect(session.files()["migrations/0001.sql"]).toMatch(/^CREATE TABLE t/);
+  });
+
+  it("stops the fixing loop the moment the server breaks, before the AI sees it or changes another file", async () => {
+    const s = setup([
+      { content: "", model: "m", toolUses: [tu("1", "write_file", { path: "server.js", content: "listen(process.env.PORT)" }), tu("2", "deploy")] },
+      { content: "", model: "m", toolUses: [tu("3", "delete_file", { path: "migrations/0001.sql" })] },
+    ]);
+    s.staging.results = [{ ok: false, reason: "the app didn't start: it stopped (exit code 1)." }, DOWN];
+    const session = fill(new VibeCodeSession({ username: "alice", serverFqdn: SERVER }), { ...FILES, "migrations/0001.sql": "CREATE TABLE t (id int);" });
+    const id = session.meta.sessionId;
+    await s.credentials.put(id, { provider: "openai", apiKey: "sk-test-key-123456789" });
+    const r = await s.deploy(session);
+    expect(r).toEqual({ ok: false, reason: environmentFailure("data-layer").ownerReason });
+    // One model turn: the deploy's failure never went back to it.
+    expect(s.requests).toHaveLength(1);
+    expect(s.installs).toHaveLength(0);
+    expect(session.files()["migrations/0001.sql"]).toMatch(/^CREATE TABLE t/);
+    expect(s.staging.teardowns).toContain(id);
   });
 });

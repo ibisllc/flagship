@@ -106,7 +106,8 @@ describe("walkDataDir", () => {
   // ── volume-aware backup: raw data mounts excluded, `_dumps/**` ride ──
   it("excludes the raw data-store bind mounts, ships only the `_dumps/` subtree", async () => {
     const root = tree();
-    // Live bind mounts the walker would otherwise descend into + tear.
+    // Live bind mounts the walker would otherwise descend into + tear, and an
+    // older box's leftover minio/redis directories.
     mkdirSync(join(root, "postgres/base/1"), { recursive: true });
     mkdirSync(join(root, "minio/.minio.sys/buckets"), { recursive: true });
     mkdirSync(join(root, "redis"), { recursive: true });
@@ -120,12 +121,10 @@ describe("walkDataDir", () => {
     writeFileSync(join(root, "chromium/profile/Cookies"), "cookie");
     // The consistent logical dumps written by dumpDataVolumes.
     mkdirSync(join(root, "_dumps/postgres"), { recursive: true });
-    mkdirSync(join(root, "_dumps/minio/bucket"), { recursive: true });
-    mkdirSync(join(root, "_dumps/redis"), { recursive: true });
+    mkdirSync(join(root, "_dumps/files"), { recursive: true });
     mkdirSync(join(root, "_dumps/forgejo"), { recursive: true });
     writeFileSync(join(root, "_dumps/postgres/all.dump"), "SQL");
-    writeFileSync(join(root, "_dumps/minio/bucket/obj"), "obj");
-    writeFileSync(join(root, "_dumps/redis/dump.rdb"), "snap-rdb");
+    writeFileSync(join(root, "_dumps/files/flagship-files-harry-notes.tar"), "tar");
     writeFileSync(join(root, "_dumps/forgejo/forgejo.db"), "snap-sqlite");
     // A non-store data file still rides normally.
     writeFileSync(join(root, "app-state.json"), "state");
@@ -135,15 +134,15 @@ describe("walkDataDir", () => {
       raiseCapFor: isDumpSubtree,
     });
     expect(files.map((f) => f.path)).toEqual([
+      "_dumps/files/flagship-files-harry-notes.tar",
       "_dumps/forgejo/forgejo.db",
-      "_dumps/minio/bucket/obj",
       "_dumps/postgres/all.dump",
-      "_dumps/redis/dump.rdb",
       "app-state.json",
     ]);
     // Not one byte of a live mount rode.
     expect(files.some((f) => f.path.startsWith("postgres/"))).toBe(false);
     expect(files.some((f) => f.path.startsWith("minio/"))).toBe(false);
+    expect(files.some((f) => f.path.startsWith("redis/"))).toBe(false);
     expect(files.some((f) => f.path.startsWith("chromium/"))).toBe(false);
   });
 

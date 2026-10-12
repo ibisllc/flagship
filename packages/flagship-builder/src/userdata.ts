@@ -652,7 +652,7 @@ GIT_REF="${args.ref}"
 # recipe into empty values and mis-sealed the LUKS key. NodeSource refreshes apt.
 #
 # docker.io/docker-cli/docker-compose: the daemon runs every marketplace app as
-# a hardened container and brings up the data-layer (postgres/minio/redis/...)
+# a hardened container and brings up the data-layer (postgres/forgejo/...)
 # via compose, so docker is REQUIRED — without it the daemon's ensureNetwork
 # (\`docker network create\`) used to crash the process at startup. docker-cli is
 # listed explicitly because --no-install-recommends drops it (it's only a
@@ -946,28 +946,34 @@ SERVER_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX
 ENV
 chmod 600 /etc/flagship-bootstrap.env
 
-# Data-layer first-boot bring-up. The daemon hands every marketplace app a
-# provisioned Postgres/MinIO/Redis via the compose stack in the clone; init.sh
-# generates the secrets file (/var/flagship/data-services.env — the exact path
-# the daemon reads) and \`docker compose up -d\`s the stack. Run as a gated
-# oneshot AFTER docker is up. Deliberately NOT ordered before flagship-daemon:
-# pulling five images can take minutes and must never delay the box reaching
-# its green padlock — the daemon degrades gracefully ("data layer disabled")
-# until the env file appears and picks it up on its next restart. Best-effort:
-# init.sh's own exit status never gates anything (the containers are already
-# \`up -d\` by the time its healthcheck wait could time out).
+# Data-layer bring-up. The daemon hands every app a provisioned Postgres
+# database via the compose stack in the clone (files are per-app docker
+# volumes); init.sh generates the secrets file (/var/flagship/data-services.env
+# — the exact path the daemon reads), brings up Postgres and waits for it, then
+# starts the optional services. It is idempotent and runs on EVERY boot, and a
+# failed run is retried (Restart=on-failure, bounded by the start limit), so a
+# box that once failed (no network, a registry outage) still gets its data
+# layer. Deliberately NOT ordered before flagship-daemon: pulling the images can
+# take minutes and must never delay the box reaching its green padlock; the
+# daemon picks the stack up once it is healthy. Keep this unit identical to
+# installer/data-services/flagship-data-services.service (the daemon installs
+# that file over an older unit at boot; a test pins the two together).
 cat > /etc/systemd/system/flagship-data-services.service <<'UNIT'
 [Unit]
-Description=Flagship data-layer (postgres/minio/redis/forgejo/chromium)
+Description=Flagship data-layer (postgres/forgejo/chromium)
 After=docker.service network-online.target
 Wants=docker.service network-online.target
-ConditionPathExists=!/var/flagship/data-services.env
+StartLimitIntervalSec=2h
+StartLimitBurst=40
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/opt/flagship/installer/data-services
 ExecStart=/opt/flagship/installer/data-services/init.sh
+TimeoutStartSec=20min
+Restart=on-failure
+RestartSec=60s
 
 [Install]
 WantedBy=multi-user.target

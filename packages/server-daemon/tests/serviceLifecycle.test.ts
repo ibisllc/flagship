@@ -7,10 +7,13 @@ import { IdentityInjector } from "../src/identityInjector.js";
 import { buildDaemonHttp, type DaemonContext, type DeployedApp } from "../src/httpApi.js";
 import {
   DataProvisioner,
-  InMemoryMinioAdmin,
+  InMemoryFilesAdmin,
   InMemoryPostgresAdmin,
-  InMemoryRedisAdmin,
+  pgDatabase,
 } from "../src/dataLayer/index.js";
+
+const NAME_KEY = "n".repeat(40);
+const HABIT_DB = pgDatabase({ creator: "harry", slug: "habit-tracker" }, NAME_KEY);
 
 const umk = { seed: new Uint8Array(32).fill(11) };
 const ownerIrk = deriveIRK(umk);
@@ -54,8 +57,7 @@ function makeCtx(extra: {
   const deployedApps = new Map<string, DeployedApp>();
   for (const d of extra.preDeployed ?? []) deployedApps.set(d.manifest.name, d);
   const pg = new InMemoryPostgresAdmin();
-  const objects = new InMemoryMinioAdmin();
-  const kv = new InMemoryRedisAdmin();
+  const files = new InMemoryFilesAdmin();
   const ctx: DaemonContext = {
     serverId: "srv-1",
     userId: "harry",
@@ -67,13 +69,13 @@ function makeCtx(extra: {
     dataProvisioner: extra.withDataProvisioner
       ? new DataProvisioner({
           postgres: pg,
-          objects,
-          kv,
+          files,
+          nameKey: NAME_KEY,
           generateSecret: () => "test-secret",
         })
       : undefined,
   };
-  return { ctx, deployedApps, pg, objects, kv };
+  return { ctx, deployedApps, pg, files };
 }
 
 describe("daemon HTTP — POST /apps (deploy)", () => {
@@ -235,11 +237,11 @@ describe("daemon HTTP — POST /apps with data.stores", () => {
       },
     });
     expect(r.statusCode).toBe(200);
-    expect(pg.databases.has("_harry_habit_tracker")).toBe(true);
+    expect(pg.databases.has(HABIT_DB)).toBe(true);
     const runArgs = rec.calls.find((c) => c.args[0] === "run")!;
     const envFlags = runArgs.args.filter((_, i) => runArgs.args[i - 1] === "-e");
     expect(envFlags.find((e) => e.startsWith("FLAGSHIP_PG_URL="))).toBeDefined();
-    expect(envFlags.find((e) => e.startsWith("FLAGSHIP_PG_DATABASE=_harry_habit_tracker"))).toBeDefined();
+    expect(envFlags.find((e) => e === `FLAGSHIP_PG_DATABASE=${HABIT_DB}`)).toBeDefined();
   });
 
   it("rolls back data resources when the deploy fails", async () => {
@@ -248,20 +250,37 @@ describe("daemon HTTP — POST /apps with data.stores", () => {
         throw new Error("docker daemon down");
       },
     };
-    const { ctx, pg, kv } = makeCtx({ runner: flaky, withDataProvisioner: true });
+    const { ctx, pg, files } = makeCtx({ runner: flaky, withDataProvisioner: true });
     const app = buildDaemonHttp(ctx);
     const r = await app.inject({
       method: "POST",
       url: "/apps",
       payload: {
         sessionToken: "phone-token",
-        manifest: manifest({ data: { stores: { postgres: true, kv: true } } }),
+        manifest: manifest({ data: { stores: { postgres: true, files: true } } }),
       },
     });
     expect(r.statusCode).toBe(500);
     // No tenant left behind.
     expect(pg.databases.size).toBe(0);
-    expect(kv.users.size).toBe(0);
+    expect(files.volumes.size).toBe(0);
+  });
+
+  it("mounts the app's files volume at /data and sets FLAGSHIP_FILES_DIR", async () => {
+    const rec = new RecordingRunner();
+    const { ctx, files } = makeCtx({ runner: rec, withDataProvisioner: true });
+    const app = buildDaemonHttp(ctx);
+    const r = await app.inject({
+      method: "POST",
+      url: "/apps",
+      payload: { sessionToken: "phone-token", manifest: manifest({ data: { stores: { files: true } } }) },
+    });
+    expect(r.statusCode).toBe(200);
+    expect(files.volumes.has("flagship-files-harry-habit-tracker")).toBe(true);
+    const runArgs = rec.calls.find((c) => c.args[0] === "run")!.args;
+    const i = runArgs.indexOf("--mount");
+    expect(runArgs[i + 1]).toBe("type=volume,src=flagship-files-harry-habit-tracker,dst=/data");
+    expect(runArgs).toContain("FLAGSHIP_FILES_DIR=/data");
   });
 
   it("503s when manifest declares stores but no data provisioner is configured", async () => {
@@ -278,16 +297,16 @@ describe("daemon HTTP — POST /apps with data.stores", () => {
     expect(r.statusCode).toBe(503);
   });
 
-  it("DELETE drops the per-app database / bucket / Redis user", async () => {
+  it("DELETE drops the per-app database and files volume", async () => {
     const rec = new RecordingRunner();
-    const { ctx, pg, objects, kv } = makeCtx({ runner: rec, withDataProvisioner: true });
+    const { ctx, pg, files } = makeCtx({ runner: rec, withDataProvisioner: true });
     const app = buildDaemonHttp(ctx);
     await app.inject({
       method: "POST",
       url: "/apps",
       payload: {
         sessionToken: "phone-token",
-        manifest: manifest({ data: { stores: { postgres: true, objects: true, kv: true } } }),
+        manifest: manifest({ data: { stores: { postgres: true, files: true } } }),
       },
     });
     expect(pg.databases.size).toBe(1);
@@ -298,8 +317,7 @@ describe("daemon HTTP — POST /apps with data.stores", () => {
     });
     expect(r.statusCode).toBe(200);
     expect(pg.databases.size).toBe(0);
-    expect(objects.buckets.size).toBe(0);
-    expect(kv.users.size).toBe(0);
+    expect(files.volumes.size).toBe(0);
   });
 });
 

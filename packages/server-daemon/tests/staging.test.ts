@@ -14,11 +14,15 @@ import { ed } from "@flagship/protocol";
 import { UNFENCED_REASON, StagingRunner, STAGING_NETWORK } from "../src/buildmodes/staging.js";
 import {
   DataProvisioner,
-  InMemoryMinioAdmin,
+  InMemoryFilesAdmin,
   InMemoryPostgresAdmin,
-  InMemoryRedisAdmin,
+  pgDatabase,
 } from "../src/dataLayer/index.js";
 import type { AppSpec, CommandRunner } from "../src/serviceRunner.js";
+import { environmentFailure } from "../src/buildmodes/environmentFailure.js";
+import { DataLayerUnavailableError } from "../src/dataLayer/stack.js";
+
+const devDb = (buildId: string) => pgDatabase({ creator: "owner", slug: `stg-${buildId}`, space: "dev" }, "n".repeat(40));
 
 const MANIFEST = JSON.stringify({
   schema_version: 1,
@@ -79,8 +83,8 @@ function setup(over: { startOk?: boolean; logs?: string; port?: number } = {}) {
   const postgres = new InMemoryPostgresAdmin();
   const provisioner = new DataProvisioner({
     postgres,
-    objects: new InMemoryMinioAdmin(),
-    kv: new InMemoryRedisAdmin(),
+    files: new InMemoryFilesAdmin(),
+    nameKey: "n".repeat(40),
     endpoints: { postgresHost: "host.flagship.internal" },
   });
   const sql: Array<{ pgUrl: string; sql: string }> = [];
@@ -146,9 +150,9 @@ describe("StagingRunner", () => {
     });
     expect(env.FLAGSHIP_SNEAKY).toBeUndefined();
     expect(env.FLAGSHIP_APP_TOKEN).toBeUndefined();
-    expect(env.FLAGSHIP_PG_DATABASE).toBe("__dev_owner_stg_b1");
+    expect(env.FLAGSHIP_PG_DATABASE).toBe(devDb("b1"));
     expect(env.FLAGSHIP_PG_URL).toContain("@host.flagship.internal:");
-    expect([...postgres.databases.keys()]).toEqual(["__dev_owner_stg_b1"]);
+    expect([...postgres.databases.keys()]).toEqual([devDb("b1")]);
 
     // Migrations then synthetic rows, as the dev store's own role.
     expect(sql[0]).toEqual({ pgUrl: env.FLAGSHIP_PG_URL, sql: MIGRATION });
@@ -208,6 +212,34 @@ describe("StagingRunner", () => {
     expect(runner.staged("b3")).toBeNull();
   });
 
+  it("an app with files gets its own DEV files volume at /data, removed with the copy", async () => {
+    const { cmd, calls } = recordingCmd();
+    const files = new InMemoryFilesAdmin();
+    const runner = new StagingRunner({
+      cmd,
+      workingDir: mkdtempSync(join(tmpdir(), "staging-")),
+      dataProvisioner: new DataProvisioner({ files }),
+      runSql: async () => {},
+      startCheck: async () => ({ ok: true }),
+      pickPort: () => 51237,
+      now: () => 1700000000000,
+    });
+    const manifest = { ...JSON.parse(MANIFEST), data: { stores: { files: true } } };
+    const { "migrations/0001_init.sql": _migration, ...noMigrations } = FILES;
+    void _migration;
+    const r = await runner.stage({ buildId: "f1", files: { ...noMigrations, "flagship.app.json": JSON.stringify(manifest) }, slug: "notes" });
+    expect(r.ok ? "ok" : (r as { reason?: string }).reason).toBe("ok");
+    const volume = "flagship-files-dev--owner-stg-f1";
+    expect([...files.volumes.keys()]).toEqual([volume]);
+    expect(files.volumes.get(volume)!.labels["flagship.files"]).toBe("dev");
+    const run = runArgs(calls);
+    expect(run[run.indexOf("--mount") + 1]).toBe(`type=volume,src=${volume},dst=/data`);
+    expect(run).toContain("FLAGSHIP_FILES_DIR=/data");
+    expect(run).toContain("--read-only");
+    await runner.teardown("f1");
+    expect(files.volumes.size).toBe(0);
+  });
+
   it("a copy that won't start is not staged, but its output stays readable to fix it", async () => {
     const { runner } = setup({ startOk: false, logs: "Error: Cannot find module 'express'" });
     const r = await runner.stage({ buildId: "b4", files: FILES, slug: "notes" });
@@ -222,6 +254,7 @@ describe("StagingRunner", () => {
     expect(await runner.stage({ buildId: "b5", files: FILES, slug: "notes" })).toEqual({
       ok: false,
       reason: "the app declares data stores, but this server has no data layer",
+      environment: environmentFailure("data-layer"),
     });
     const bad = await runner.stage({ buildId: "b6", files: { "flagship.app.json": "{}" }, slug: "notes" });
     expect(bad.ok).toBe(false);
@@ -230,7 +263,139 @@ describe("StagingRunner", () => {
   it("never builds or runs AI code while the network fence is down", async () => {
     const { cmd, calls } = recordingCmd();
     const runner = new StagingRunner({ cmd, workingDir: mkdtempSync(join(tmpdir(), "staging-")), fenced: () => false });
-    expect(await runner.stage({ buildId: "b7", files: FILES, slug: "notes" })).toEqual({ ok: false, reason: UNFENCED_REASON });
+    expect(await runner.stage({ buildId: "b7", files: FILES, slug: "notes" })).toEqual({
+      ok: false,
+      reason: UNFENCED_REASON,
+      environment: environmentFailure("fence"),
+    });
     expect(calls.some((c) => c.includes("build") || c.includes("run"))).toBe(false);
+  });
+});
+
+/** A docker whose `build` fails with `msg()`. */
+function buildFails(msg: () => string): CommandRunner {
+  const fail = (args: string[]) => {
+    if (args[0] === "build") throw new Error(msg());
+  };
+  return {
+    run: async (_c, args) => fail(args),
+    capture: async (_c, args) => {
+      fail(args);
+      return { stdout: "", stderr: "" };
+    },
+  };
+}
+
+describe("StagingRunner: the box's own failures are never the app's", () => {
+  function rig(over: { ready?: () => Promise<void>; startReason?: string; cmd?: CommandRunner } = {}) {
+    const { cmd, calls } = recordingCmd();
+    const provisioner = new DataProvisioner({
+      postgres: new InMemoryPostgresAdmin(),
+      files: new InMemoryFilesAdmin(),
+      nameKey: "n".repeat(40),
+      ...(over.ready ? { ready: over.ready } : {}),
+    });
+    const runner = new StagingRunner({
+      cmd: over.cmd ?? cmd,
+      workingDir: mkdtempSync(join(tmpdir(), "staging-")),
+      dataProvisioner: provisioner,
+      runSql: async () => {},
+      startCheck: async () => (over.startReason ? { ok: false, reason: over.startReason } : { ok: true }),
+      pickPort: () => 51235,
+      now: () => 1700000000000,
+      sleep: async () => {},
+    });
+    return { runner, calls };
+  }
+
+  it("a dev dataspace a crashed daemon left behind doesn't block the next copy", async () => {
+    const postgres = new InMemoryPostgresAdmin();
+    await postgres.createRoleAndDb({ db: devDb("e0"), role: devDb("e0"), password: "x" });
+    const runner = new StagingRunner({
+      cmd: recordingCmd().cmd,
+      workingDir: mkdtempSync(join(tmpdir(), "staging-")),
+      dataProvisioner: new DataProvisioner({ postgres, nameKey: "n".repeat(40) }),
+      runSql: async () => {},
+      pickPort: () => 51236,
+      now: () => 1700000000000,
+    });
+    const r = await runner.stage({ buildId: "e0", files: FILES, slug: "notes" });
+    expect(r.ok).toBe(true);
+    expect(postgres.databases.has(devDb("e0"))).toBe(true);
+  });
+
+  it("a data layer that is down fails at once as an environment failure, with nothing started", async () => {
+    const { runner, calls } = rig({
+      ready: async () => {
+        throw new DataLayerUnavailableError("down", "postgres missing");
+      },
+    });
+    const r = await runner.stage({ buildId: "e1", files: FILES, slug: "notes" });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toMatch(/^data provisioning failed: the data layer/);
+    expect(r.environment).toEqual(environmentFailure("data-layer"));
+    expect(r.environment!.ownerReason).toMatch(/database isn't running/);
+    expect(calls.some((c) => c[1] === "run")).toBe(false);
+  });
+
+  it("a stack still starting says so", async () => {
+    const { runner } = rig({
+      ready: async () => {
+        throw new DataLayerUnavailableError("starting");
+      },
+    });
+    const r = await runner.stage({ buildId: "e2", files: FILES, slug: "notes" });
+    expect(!r.ok && r.environment?.ownerReason).toMatch(/still starting/);
+  });
+
+  it("an app that can't reach its database is the app's problem only while the stores are up", async () => {
+    let down = false;
+    const { runner } = rig({
+      ready: async () => {
+        if (down) throw new DataLayerUnavailableError("down", "postgres exited");
+      },
+      startReason: "the app didn't start: Error: connect ECONNREFUSED 172.30.2.1:5432",
+    });
+    const up = await runner.stage({ buildId: "e3", files: FILES, slug: "notes" });
+    expect(!up.ok && up.environment).toBeUndefined();
+    down = true;
+    // The stage's own provisioning now refuses first; either way it's the box's.
+    const r = await runner.stage({ buildId: "e3", files: FILES, slug: "notes" });
+    expect(!r.ok && r.environment?.kind).toBe("data-layer");
+  });
+
+  it("a docker daemon that's gone, or a full disk, is the box's", async () => {
+    const failing = (msg: string) => buildFails(() => msg);
+    const docker = await rig({
+      cmd: failing("docker exited with code 1: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"),
+    }).runner.stage({ buildId: "e4", files: FILES, slug: "notes" });
+    expect(!docker.ok && docker.environment?.kind).toBe("docker");
+    const disk = await rig({ cmd: failing("docker exited with code 1: write /var/lib/docker/tmp/x: no space left on device") }).runner.stage({
+      buildId: "e5",
+      files: FILES,
+      slug: "notes",
+    });
+    expect(!disk.ok && disk.environment?.kind).toBe("disk");
+  });
+
+  it("a registry outage is retried once, then reported as the box's", async () => {
+    let builds = 0;
+    const cmd = buildFails(() => {
+      builds++;
+      return 'docker exited with code 1: Step 1/2 : FROM node:20-alpine\nGet "https://registry-1.docker.io/v2/": net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)';
+    });
+    const r = await rig({ cmd }).runner.stage({ buildId: "e6", files: FILES, slug: "notes" });
+    expect(builds).toBe(2);
+    expect(!r.ok && r.environment?.kind).toBe("registry");
+  });
+
+  it("the app's own build failure stays the app's", async () => {
+    const cmd = buildFails(
+      () => "docker exited with code 1: npm ERR! missing script: build\nThe command '/bin/sh -c npm run build' returned a non-zero code: 1",
+    );
+    const r = await rig({ cmd }).runner.stage({ buildId: "e7", files: FILES, slug: "notes" });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.environment).toBeUndefined();
   });
 });

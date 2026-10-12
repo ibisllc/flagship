@@ -7,26 +7,28 @@
  *
  * What it does:
  *   1. Reads `/var/flagship/data-services.env` (or
- *      $FLAGSHIP_DATA_SERVICES_ENV) for admin credentials.
+ *      $FLAGSHIP_DATA_SERVICES_ENV) for admin credentials and DATA_NAME_KEY.
  *   2. Provisions a temporary `(creator, slug) = (smoke, datalayer)`
- *      tenant via `DataProvisioner` against the real Postgres + Redis
- *      + MinIO running in the compose.
- *   3. Verifies the per-app role can connect, writes/reads a tiny
- *      payload to each store, then deprovisions.
+ *      tenant via `DataProvisioner` against the real Postgres in the
+ *      compose and a real files volume.
+ *   3. Verifies the per-app role can connect, uses every extension, writes
+ *      and reads a row, checks the files volume exists, then deprovisions.
  *
  * Outputs a one-line OK / FAIL per store. Does not leave residue.
  */
 
+import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { promisify } from "node:util";
 import { Client as PgClient } from "pg";
-import { Redis } from "ioredis";
-import { Client as MinioClient } from "minio";
 import {
+  APP_PG_EXTENSIONS,
   DataProvisioner,
-  RealMinioAdmin,
+  RealFilesAdmin,
   RealPostgresAdmin,
-  RealRedisAdmin,
 } from "../packages/server-daemon/src/dataLayer/index.js";
+
+const execFileP = promisify(execFile);
 
 const ENV_PATH =
   process.env.FLAGSHIP_DATA_SERVICES_ENV ?? "/var/flagship/data-services.env";
@@ -52,14 +54,7 @@ async function main(): Promise<void> {
     console.error(`[smoke] make sure installer/data-services/init.sh has run`);
     process.exit(1);
   }
-  const required = [
-    "POSTGRES_ADMIN_USER",
-    "POSTGRES_ADMIN_PASSWORD",
-    "MINIO_ROOT_USER",
-    "MINIO_ROOT_PASSWORD",
-    "REDIS_ADMIN_PASSWORD",
-  ];
-  for (const k of required) {
+  for (const k of ["POSTGRES_ADMIN_USER", "POSTGRES_ADMIN_PASSWORD", "DATA_NAME_KEY"]) {
     if (!env[k]) {
       console.error(`[smoke] env file missing ${k}`);
       process.exit(1);
@@ -70,87 +65,55 @@ async function main(): Promise<void> {
     postgres: new RealPostgresAdmin({
       adminUrl: `postgresql://${env.POSTGRES_ADMIN_USER}:${encodeURIComponent(env.POSTGRES_ADMIN_PASSWORD!)}@127.0.0.1:5432/postgres`,
     }),
-    kv: new RealRedisAdmin({
-      adminUrl: `redis://default:${encodeURIComponent(env.REDIS_ADMIN_PASSWORD!)}@127.0.0.1:6379/0`,
+    files: new RealFilesAdmin({
+      run: async (cmd, args) => {
+        await execFileP(cmd, args);
+      },
+      capture: async (cmd, args) => {
+        const { stdout, stderr } = await execFileP(cmd, args);
+        return { stdout, stderr };
+      },
     }),
-    objects: new RealMinioAdmin({
-      endPoint: "127.0.0.1",
-      port: 9000,
-      rootUser: env.MINIO_ROOT_USER!,
-      rootPassword: env.MINIO_ROOT_PASSWORD!,
-    }),
+    nameKey: env.DATA_NAME_KEY!,
   });
 
   const tenant = { creator: "smoke", slug: "datalayer" };
-  console.log(`[smoke] provisioning tenant ${tenant.creator}_${tenant.slug}`);
+  const stores = { postgres: true, files: true } as const;
+  console.log(`[smoke] provisioning tenant ${tenant.creator}-${tenant.slug}`);
 
-  const creds = await provisioner.provisionApp({
-    creator: tenant.creator,
-    slug: tenant.slug,
-    stores: { postgres: true, objects: true, kv: true },
-  });
+  const creds = await provisioner.provisionApp({ ...tenant, stores });
 
   let pgOk = false;
-  let kvOk = false;
-  let s3Ok = false;
+  let filesOk = false;
   try {
-    // Postgres roundtrip
     const pgInst = creds.postgres!.default!;
     const pg = new PgClient({ connectionString: pgInst.url });
     await pg.connect();
     try {
-      await pg.query("CREATE TABLE smoke (k TEXT PRIMARY KEY, v TEXT)");
-      await pg.query("INSERT INTO smoke VALUES ('hello', 'world')");
+      const ext = await pg.query<{ extname: string }>("SELECT extname FROM pg_extension");
+      const have = new Set(ext.rows.map((r) => r.extname));
+      const missing = APP_PG_EXTENSIONS.filter((e) => !have.has(e));
+      if (missing.length > 0) console.log(`[smoke] missing extensions: ${missing.join(", ")}`);
+      await pg.query("CREATE TABLE smoke (k TEXT PRIMARY KEY, v TEXT, e vector(3))");
+      await pg.query("INSERT INTO smoke VALUES ('hello', 'world', '[1,2,3]')");
       const r = await pg.query<{ v: string }>("SELECT v FROM smoke WHERE k = $1", ["hello"]);
-      if (r.rows[0]?.v === "world") pgOk = true;
+      if (r.rows[0]?.v === "world" && missing.length === 0) pgOk = true;
     } finally {
       await pg.end();
     }
 
-    // Redis roundtrip
-    const kvInst = creds.kv!.default!;
-    const redis = new Redis(kvInst.url, { maxRetriesPerRequest: 1 });
-    try {
-      await redis.set(`${kvInst.prefix}smoke`, "hello");
-      const got = await redis.get(`${kvInst.prefix}smoke`);
-      if (got === "hello") kvOk = true;
-    } finally {
-      redis.disconnect();
-    }
-
-    // MinIO roundtrip
-    const s3Inst = creds.objects!.default!;
-    const url = new URL(s3Inst.endpoint);
-    const minio = new MinioClient({
-      endPoint: url.hostname,
-      port: parseInt(url.port || "9000", 10),
-      useSSL: url.protocol === "https:",
-      accessKey: s3Inst.accessKey,
-      secretKey: s3Inst.secretKey,
-    });
-    await minio.putObject(s3Inst.bucket, "smoke.txt", Buffer.from("hello world"));
-    const stream = await minio.getObject(s3Inst.bucket, "smoke.txt");
-    const chunks: Buffer[] = [];
-    await new Promise<void>((resolve, reject) => {
-      stream.on("data", (c: Buffer) => chunks.push(c));
-      stream.on("end", () => resolve());
-      stream.on("error", reject);
-    });
-    if (Buffer.concat(chunks).toString("utf8") === "hello world") s3Ok = true;
+    const volume = creds.files!.volume;
+    const { stdout } = await execFileP("docker", ["volume", "inspect", "-f", "{{.Name}}", volume]);
+    filesOk = stdout.trim() === volume;
   } finally {
     console.log(`[smoke] deprovisioning`);
-    await provisioner.deprovisionApp({
-      creator: tenant.creator,
-      slug: tenant.slug,
-      stores: { postgres: true, objects: true, kv: true },
-    });
+    await provisioner.dropCredentials(creds);
   }
 
   console.log(`[smoke] postgres: ${pgOk ? "OK" : "FAIL"}`);
-  console.log(`[smoke] redis:    ${kvOk ? "OK" : "FAIL"}`);
-  console.log(`[smoke] minio:    ${s3Ok ? "OK" : "FAIL"}`);
-  if (!pgOk || !kvOk || !s3Ok) process.exit(2);
-  console.log(`[smoke] ✅ data-layer integration green`);
+  console.log(`[smoke] files:    ${filesOk ? "OK" : "FAIL"}`);
+  if (!pgOk || !filesOk) process.exit(2);
+  console.log(`[smoke] data-layer integration green`);
 }
 
 main().catch((e) => {

@@ -14,9 +14,11 @@ import { ensureContainerLinksUnmanaged } from "./containerLinks.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import {
   DataProvisioner,
-  RealMinioAdmin,
+  DataStack,
+  RealFilesAdmin,
   RealPostgresAdmin,
-  RealRedisAdmin,
+  type DataProvisionerOptions,
+  type FilesAdmin,
 } from "./dataLayer/index.js";
 import {
   LetsEncryptIssuer,
@@ -214,7 +216,7 @@ export interface DaemonRuntimeOptions {
    * Optional pre-handlers tried before the default handler. Each
    * returns null to fall through. The first non-null response wins.
    * Use this to overlay extra surfaces (the browser feature's
-   * `/api/browser/*`, the admin-UI proxy's `/.flagship/admin/*`)
+   * `/api/browser/*`, the alert inbox)
    * without losing the built-in `/api/orders-from-user` + `/api/services`
    * routes.
    */
@@ -1166,10 +1168,18 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     // builds still reach the internet (the behaviour before the gateway).
     await ensureUnfencedNetworks(realCommandRunner, (m) => console.warn(m));
   }
+  // The data layer's compose stack: brought up in the background when it's
+  // down (an older box's unit never retried), never blocking HTTPS. The
+  // provisioner asks it before every provision (dataLayer/stack.ts).
+  const dataEnvFile = opts.servicePlatform?.dataServicesEnvFile;
+  const dataStack = dataEnvFile ? new DataStack({ cmd: realCommandRunner, envFile: dataEnvFile }) : null;
   const dataProvisioner = await maybeBuildDataProvisioner(
-    opts.servicePlatform?.dataServicesEnvFile,
+    dataEnvFile,
     appRunner.dataHostAlias,
+    dataStack,
+    new RealFilesAdmin(realCommandRunner),
   );
+  dataStack?.start();
 
   const apOpts = opts.servicePlatform;
   let aliasReconciler: AliasReconciler | null = null;
@@ -1451,26 +1461,45 @@ export async function revokeCurrentCert(deps: {
 }
 
 async function maybeBuildDataProvisioner(
-  envFile?: string,
-  appDataHost?: string,
+  envFile: string | undefined,
+  appDataHost: string | undefined,
+  stack: DataStack | null,
+  files: FilesAdmin,
 ): Promise<DataProvisioner | null> {
   if (!envFile) return null;
+  const ready = stack ? { ready: () => stack.ready() } : {};
+  const admins = await loadDataAdmins(envFile, appDataHost, true);
+  if (admins) return new DataProvisioner({ ...admins, files, ...ready });
+  if (!stack?.applies()) return null;
+  // A box whose secrets don't exist yet (first boot races init.sh): files
+  // folders work at once; Postgres calls fail fast with the stack's reason
+  // until it's healthy, then Postgres is attached. No restart needed.
+  const provisioner = new DataProvisioner({ files, ...ready });
+  stack.onHealthy(async () => {
+    const late = await loadDataAdmins(envFile, appDataHost, false);
+    if (late) provisioner.attach(late);
+  });
+  console.warn(`[runtime] data layer not set up yet; it is attached once the data-services stack is healthy`);
+  return provisioner;
+}
+
+async function loadDataAdmins(
+  envFile: string,
+  appDataHost: string | undefined,
+  quietOnMissing: boolean,
+): Promise<Pick<DataProvisionerOptions, "postgres" | "endpoints" | "nameKey"> | null> {
   let env: Record<string, string>;
   try {
     env = parseEnvFile(await readFile(envFile, "utf8"));
   } catch (e) {
-    console.warn(
-      `[runtime] data-services env file ${envFile} unreadable; data layer disabled: ${(e as Error).message}`,
-    );
+    if (quietOnMissing) {
+      console.warn(`[runtime] data-services env file ${envFile} unreadable: ${(e as Error).message}`);
+    }
     return null;
   }
-  const required = [
-    "POSTGRES_ADMIN_USER",
-    "POSTGRES_ADMIN_PASSWORD",
-    "MINIO_ROOT_USER",
-    "MINIO_ROOT_PASSWORD",
-    "REDIS_ADMIN_PASSWORD",
-  ];
+  // DATA_NAME_KEY keys the opaque database and role names (init.sh adds it
+  // to an older env file on its next run).
+  const required = ["POSTGRES_ADMIN_USER", "POSTGRES_ADMIN_PASSWORD", "DATA_NAME_KEY"];
   for (const k of required) {
     if (!env[k]) {
       console.warn(`[runtime] data-services env missing ${k}; data layer disabled`);
@@ -1483,24 +1512,13 @@ async function maybeBuildDataProvisioner(
   // on the dedicated app bridge, so its `127.0.0.1` is its own namespace —
   // it must reach the host data services via the host-gateway alias.
   const pgUrl = `postgresql://${env.POSTGRES_ADMIN_USER}:${encodeURIComponent(env.POSTGRES_ADMIN_PASSWORD!)}@127.0.0.1:5432/postgres`;
-  const redisUrl = `redis://default:${encodeURIComponent(env.REDIS_ADMIN_PASSWORD!)}@127.0.0.1:6379/0`;
   const appHost = appDataHost ?? "127.0.0.1";
-  console.log(`[runtime] data layer wired (postgres + redis + minio admins ready); app data host = ${appHost}`);
-  return new DataProvisioner({
+  console.log(`[runtime] data layer wired (postgres admin ready); app data host = ${appHost}`);
+  return {
     postgres: new RealPostgresAdmin({ adminUrl: pgUrl }),
-    kv: new RealRedisAdmin({ adminUrl: redisUrl }),
-    objects: new RealMinioAdmin({
-      endPoint: "127.0.0.1",
-      port: 9000,
-      rootUser: env.MINIO_ROOT_USER!,
-      rootPassword: env.MINIO_ROOT_PASSWORD!,
-    }),
-    endpoints: {
-      postgresHost: appHost,
-      redisHost: appHost,
-      s3Endpoint: `http://${appHost}:9000`,
-    },
-  });
+    nameKey: env.DATA_NAME_KEY!,
+    endpoints: { postgresHost: appHost },
+  };
 }
 
 /**

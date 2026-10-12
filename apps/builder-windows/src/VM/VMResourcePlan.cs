@@ -5,7 +5,7 @@ namespace Flagship.Builder.VM;
 /// <summary>
 /// Pure resource-cap math for hosted VMs (docs/desktop-vm-appliance.md
 /// "Multi-server hosting"): each VM + the full data stack
-/// (postgres/minio/redis/forgejo/chromium) is several GB of RAM, so the plan
+/// (postgres/forgejo/chromium) is several GB of RAM, so the plan
 /// keeps the cost legible and caps the total by host specs — a modest box must
 /// never be oversubscribed by the default path.
 /// Mirrors apps/builder-mac FlagshipBuilderCore/VM/VMResourcePlan.swift; pinned
