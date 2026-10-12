@@ -429,6 +429,13 @@ export class InMemoryServerStorage implements ServerStorage {
     r.revocationReason = reason;
     return true;
   }
+  async unrevoke(serverDomain: string) {
+    const r = this.byDomain.get(serverDomain);
+    if (!r?.revokedAt) return false;
+    delete r.revokedAt;
+    delete r.revocationReason;
+    return true;
+  }
 }
 
 export class InMemoryRoutingStorage implements RoutingStorage {

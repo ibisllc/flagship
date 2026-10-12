@@ -4,7 +4,9 @@ import {
   ed,
   signClaimUsername,
   signDeviceCapabilityGrant,
+  signReleaseServerName,
   signRevocation,
+  signServerUnrevocation,
   verifyRevocation,
   type DeviceCapabilityGrant,
   type DeviceScope,
@@ -13,7 +15,7 @@ import {
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 import { handleMintDeviceGrant } from "../src/deviceCapabilityGrants.js";
-import { handleRevokeServer } from "../src/serverRevocation.js";
+import { handleRevokeServer, handleUnrevokeServer } from "../src/serverRevocation.js";
 import { handleUsernameClaim } from "../src/usernameClaim.js";
 
 const harryUmk = { seed: new Uint8Array(32).fill(11) };
@@ -724,5 +726,82 @@ describe("POST /api/server-registry/revoke — device-authorized path (signerPub
     const r = await handleRevokeServer(depsWithGrants(storage), body);
     expect(r.status).toBe(403);
     expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeUndefined();
+  });
+});
+
+describe("POST /api/server-registry/unrevoke (owner-signed undo)", () => {
+  function unrevokeBody(irk = harryIrk, issuedAt = Date.now(), sign = signServerUnrevocation) {
+    const claim = { username: USERNAME, serverDomain: DOMAIN, issuedAt };
+    return { request: claim, signature: bytesToHex(sign(claim, irk)) };
+  }
+  function makeFakeUpsert() {
+    const calls: Array<[string, string]> = [];
+    return {
+      calls,
+      async upsert(r: { name: string; type: string; content: string }) {
+        calls.push([r.name, r.type]);
+        return { id: "x", ...r };
+      },
+    };
+  }
+  async function revoked(reason: "lost" | "stolen" | "decommissioned" = "stolen") {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    await handleRevokeServer(deps(storage), revokeBody(harryIrk, { reason }).body);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeDefined();
+    return storage;
+  }
+
+  it("restores a revoked server, re-publishes its DNS and logs it", async () => {
+    const storage = await revoked();
+    const dns = makeFakeUpsert();
+    const r = await handleUnrevokeServer(
+      { ...deps(storage), dns: { client: dns, servicesIpv4: "1.2.3.4", servicesIpv6: "::1" } },
+      unrevokeBody(),
+    );
+    expect(r.status).toBe(200);
+    const rec = await storage.servers.get(DOMAIN);
+    expect(rec?.revokedAt).toBeUndefined();
+    expect(rec?.identityPubKeyHex).toBe("11".repeat(32));
+    expect(dns.calls).toEqual([
+      [DOMAIN, "A"],
+      [DOMAIN, "AAAA"],
+      [`*.${DOMAIN}`, "A"],
+      [`*.${DOMAIN}`, "AAAA"],
+    ]);
+    const events = await storage.auditEvents.list(USERNAME, 0, 10);
+    expect(events.map((e) => e.eventKind)).toContain("server-unrevoked");
+  });
+
+  it("is a noop on a server that isn't revoked", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const r = await handleUnrevokeServer(deps(storage), unrevokeBody());
+    expect(r.status).toBe(200);
+    expect((r.body as { alreadyActive?: boolean }).alreadyActive).toBe(true);
+  });
+
+  it("refuses to bring back a server whose name was released", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    await storage.servers.revoke(DOMAIN, "released-by-owner", Date.now());
+    const r = await handleUnrevokeServer(deps(storage), unrevokeBody());
+    expect(r.status).toBe(409);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeDefined();
+  });
+
+  it("rejects another account's key, a stale order, and a revoke or release signature", async () => {
+    const storage = await revoked();
+    expect((await handleUnrevokeServer(deps(storage), unrevokeBody(malloryIrk))).status).toBe(403);
+    expect((await handleUnrevokeServer(deps(storage), unrevokeBody(harryIrk, Date.now() - 10 * 60_000))).status).toBe(403);
+    const issuedAt = Date.now();
+    const revokeSig = signRevocation(
+      { userId: USERNAME, revokedServerId: DOMAIN, reason: "stolen", issuedAt },
+      harryIrk,
+    );
+    const asRevoke = { request: { username: USERNAME, serverDomain: DOMAIN, issuedAt }, signature: bytesToHex(revokeSig) };
+    expect((await handleUnrevokeServer(deps(storage), asRevoke)).status).toBe(403);
+    expect((await handleUnrevokeServer(deps(storage), unrevokeBody(harryIrk, issuedAt, signReleaseServerName))).status).toBe(403);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeDefined();
   });
 });

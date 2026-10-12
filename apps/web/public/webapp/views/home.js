@@ -30,6 +30,12 @@ import {
 } from "../lib/profilesStore.js";
 import { controlApex } from "../lib/apex.js";
 import { isServerDecommissioned } from "../lib/serverReplacement.js";
+import {
+  isListableRevocation,
+  isRecentlyDeleted,
+  openDeleteServerDialog,
+} from "../lib/deleteServer.js";
+import { humanError } from "../lib/humanError.js";
 import { depositSwkIfNeeded } from "../lib/swkDeposit.js";
 import { depositCgkIfNeeded } from "../lib/cgkDeposit.js";
 import { depositPairingIfNeeded } from "../lib/pairingDeposit.js";
@@ -210,7 +216,7 @@ export const COMING_ONLINE_GRACE_MS = 20 * 60 * 1000;
  * @param {{ hasLiveUnlockRequest?: boolean, now?: number }} [opts]
  */
 export function classifyServer(server, pod, opts = {}) {
-  if (server.revoked) return { kind: "revoked", label: `Revoked: ${server.revoked.reason}` };
+  if (server.revoked) return { kind: "revoked", label: "Revoked" };
   const now = opts.now ?? Date.now();
 
   // Fix A — honor the new /pods `liveness` field when present.
@@ -239,12 +245,17 @@ export function classifyServer(server, pod, opts = {}) {
   }
 
   if (liveness === "never") {
-    // Box registered but never sent a heartbeat. Check approval / grace states
-    // first — they override "never" (same logic as the no-lastReported path).
+    // Box registered but never sent a heartbeat. Approval and the grace window
+    // decide it, exactly like the no-lastReported path below; without the
+    // grace check a box that died during install read "coming up" forever.
     if (opts.hasLiveUnlockRequest || (pod?.pendingRequests?.length ?? 0) > 0) {
       return { kind: "waiting-for-approval", label: "Waiting for approval" };
     }
-    return { kind: "never-seen", label: "Still coming up" };
+    const registeredAt = pod?.registeredAt;
+    if (registeredAt != null && now - registeredAt <= COMING_ONLINE_GRACE_MS) {
+      return { kind: "coming-online", label: "Coming online…" };
+    }
+    return { kind: "never-seen", label: "Never came online" };
   }
 
   if (!pod || pod.lastReported == null) {
@@ -428,12 +439,10 @@ export function renderServerCard(server, pod, opts = {}) {
   if (leads.length) {
     subtitle += ` · leads ${leads.length === 1 ? leads[0] : `${leads.length} services`}`;
   }
-  // A box that registered during install but whose daemon never checked in
-  // (`never-seen`) is a dead install — offer the decommission / free-the-name
-  // delete via the RELEASE flow (NOT the lost/stolen revoke). A live server is
-  // never deletable from here. `data-fqdn` is read by the delegated handler.
+  // A box that registered but never came online is a dead install: put Delete
+  // on the card itself. Every other server deletes from its own page.
   const deadDelete = c.kind === "never-seen"
-    ? `<div class="row mt-2"><button class="secondary danger full-width js-delete-dead-server" data-fqdn="${escapeHtml(server.serverId)}">Delete server (free name)</button></div>`
+    ? `<div class="row mt-2"><button class="secondary danger full-width js-delete-server" data-fqdn="${escapeHtml(server.serverId)}">Delete server</button></div>`
     : "";
   // L3 — a box waiting for the owner to approve its boot/unlock is ACTIONABLE:
   // iOS/Android approve straight from the card, so the webapp card gets an
@@ -890,7 +899,15 @@ function wireHomeListControls(list) {
       $("home-search")?.focus();
     });
   }
-  // "Delete server (free name)" — same release flow as before.
+  list.querySelectorAll(".js-delete-server").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const fqdn = btn.getAttribute("data-fqdn") || "";
+      const entry = homeServerEntries.find((x) => x.fields.fqdn.toLowerCase() === fqdn.toLowerCase());
+      void deleteRegisteredServer(fqdn, entry?.identityPubKey);
+    });
+  });
+  // A pending order (never registered) keeps the plain free-the-name release.
   list.querySelectorAll(".js-delete-dead-server").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1042,8 +1059,8 @@ export async function renderHome() {
     // the list so the phone never re-surfaces or re-approves the zombie instance
     // (the replacement re-registers under the same FQDN with a fresh STK; until
     // it does the old FQDN simply doesn't appear).
-    body.servers = (body.servers ?? []).filter(
-      (s) => !isServerDecommissioned(s.serverId),
+    body.servers = reconcileRevokedServers(body.servers, podStatusByDomain).filter(
+      (s) => !isServerDecommissioned(s.serverId) && !isRecentlyDeleted(s.serverId),
     );
     // Registered server always supersedes a pending order with the same
     // fqdn (identity unified on the normalized fqdn).
@@ -1087,7 +1104,7 @@ export async function renderHome() {
       // Secret-free recipe: a registered box now has a directory identity to
       // seal the SWK to. No-ops unless a deposit is owed (idempotent via
       // swkDeposit.js); best-effort + non-blocking so it never delays a render.
-      if (pod?.identityPubKey) {
+      if (pod?.identityPubKey && !s.revoked) {
         depositSwkIfNeeded({
           serverDomain: String(s.serverId),
           identityPubKeyHex: String(pod.identityPubKey),
@@ -1114,6 +1131,8 @@ export async function renderHome() {
         bucket,
         fields: { name: String(s.serverId ?? ""), fqdn: String(s.serverId ?? "") },
         cardClass: "server-card",
+        // undefined (no pod row) lets the delete flow look the box key up itself.
+        identityPubKey: pod ? (pod.identityPubKey ?? null) : undefined,
       });
       if (bucket === "pending") {
         deployPods.push({
@@ -1208,11 +1227,69 @@ async function fetchAwaitingApprovalSet() {
 }
 
 /**
- * Decommission a registered-but-dead (never-came-online) or pending server
- * from the home list. Frees the name via the owner-IRK-signed
- * `ReleaseServerName` release — the SAME path the pending-server cancel uses
- * and distinct from the lost/stolen revoke (this is for a box that never
- * checked in, with no live state to brick). On success the list is re-rendered
+ * The registered servers to list, reconciled with `.com`'s `/pods` revocation
+ * state (authoritative over the session's list). A server revoked as lost,
+ * stolen or decommissioned stays listed as "Revoked" so it can be un-revoked or
+ * deleted; one revoked for any other reason (released, transferred, deleted
+ * account, the box's own self-delete) is gone and is hidden. An older Worker
+ * without `revocationReason` falls back to the session list's reason.
+ *
+ * @param {Array<{serverId:string, revoked?: {reason:string, at:number}|null}>} servers
+ * @param {Map<string, object>} podsByDomain  lower-cased fqdn → /pods entry
+ */
+export function reconcileRevokedServers(servers, podsByDomain) {
+  const out = [];
+  for (const s of servers ?? []) {
+    const pod = podsByDomain?.get(String(s.serverId ?? "").toLowerCase());
+    if (pod && "revokedAt" in pod) {
+      if (pod.revokedAt == null) {
+        out.push(s.revoked ? { ...s, revoked: null } : s);
+        continue;
+      }
+      const reason = pod.revocationReason !== undefined
+        ? pod.revocationReason
+        : (s.revoked?.reason ?? null);
+      if (isListableRevocation(reason)) {
+        out.push({ ...s, revoked: { reason, at: pod.revokedAt } });
+      }
+      continue;
+    }
+    if (s.revoked && !isListableRevocation(s.revoked.reason)) continue;
+    out.push(s);
+  }
+  return out;
+}
+
+/** Delete a registered server from its home card (typed-name gate, then the
+ *  erase-and-release flow in lib/deleteServer.js). */
+async function deleteRegisteredServer(serverDomain, identityPubKey) {
+  if (!serverDomain) return;
+  const session = getSession();
+  if (!session.username || !session.umk) {
+    toast("Unlock the webapp first", "warn");
+    return;
+  }
+  await openDeleteServerDialog(
+    { serverDomain, username: session.username, identityPubKey },
+    {
+      session,
+      // One sensitive signer for the whole flow (order + release).
+      signer: sensitiveSigner(),
+      irkPubHex: session.irk ? bytesToHex(session.irk.publicKey) : "",
+      toast,
+      humanError,
+      onDeleted: () => {
+        void liveSync.refresh?.().catch(() => {});
+        void renderHome();
+      },
+    },
+  );
+}
+
+/**
+ * Cancel a pending (never registered) server from the home list. Frees the
+ * name via the owner-IRK-signed `ReleaseServerName` release — there is no box
+ * key to send an erase order to yet. On success the list is re-rendered
  * so the card disappears; on failure the name stays reserved (we never strand
  * it half-deleted) and a toast surfaces the error.
  *
@@ -1371,7 +1448,8 @@ let homeLiveSyncUnsub = null;
 let homeLiveSyncLastSig = null;
 
 /** A stable signature for a LiveSync snapshot — the bits that change a card's
- *  classification (liveness, cert, the pendingRequests digest, pending phases). */
+ *  classification (liveness, cert, revocation, the pendingRequests digest,
+ *  pending phases). */
 function liveSyncSnapshotSignature(snap) {
   const pods = (snap?.pods ?? [])
     .map((p) => {
@@ -1383,6 +1461,7 @@ function liveSyncSnapshotSignature(snap) {
         p.serverDomain,
         p.lastReported ?? "",
         p.currentCert?.sha256 ?? "",
+        p.revokedAt ?? "",
         reqs,
       ].join("|");
     })

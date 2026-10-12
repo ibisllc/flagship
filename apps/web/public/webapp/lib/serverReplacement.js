@@ -236,18 +236,22 @@ export function preflightGate({ disposition, backupEnrolled }) {
  * Build the ServerDecommission order from the chosen disposition. `finalBackup` is
  * true whenever the disposition isn't `keep` OR a backup is enrolled (so an
  * enrolled box always gets a final flush). `backupEpoch` is a fresh monotonic
- * epoch (Date.now) when we're flushing, else 0.
+ * epoch (Date.now) when we're flushing, else 0. An explicit boolean
+ * `finalBackup` overrides that (Delete server wipes with no final flush).
  */
 export function buildDecommissionOrder({
   serverDomain,
   retiredStkPubHex,
   disposition,
   backupEnrolled,
+  finalBackup: explicitFinalBackup,
   now,
   getRandomValues,
 }) {
   const issuedAt = (now || Date.now)();
-  const finalBackup = disposition !== "keep" || !!backupEnrolled;
+  const finalBackup = typeof explicitFinalBackup === "boolean"
+    ? explicitFinalBackup
+    : disposition !== "keep" || !!backupEnrolled;
   return {
     podCanonical: serverDomain,
     retiredStkPubHex,
@@ -269,6 +273,7 @@ export function buildDecommissionOrder({
  * @param {string} args.retiredStkPubHex the incumbent box's CURRENT STK pubkey hex
  * @param {"keep"|"wipe-after-handoff"|"wipe-now"} args.disposition
  * @param {boolean} args.backupEnrolled
+ * @param {boolean} [args.finalBackup]   force the final-flush flag (see buildDecommissionOrder)
  * @param {Uint8Array} args.umk          session UMK (for IRK signing)
  * @param {string} args.irkPubHex        the owner's IRK pubkey, hex
  * @param {(umk: Uint8Array, bytes: Uint8Array) => Promise<Uint8Array>} args.signWithIrk
@@ -280,6 +285,7 @@ export async function depositDecommission(args, deps = {}) {
     retiredStkPubHex,
     disposition,
     backupEnrolled,
+    finalBackup,
     umk,
     irkPubHex,
     signWithIrk,
@@ -304,6 +310,7 @@ export async function depositDecommission(args, deps = {}) {
     retiredStkPubHex: String(retiredStkPubHex).toLowerCase(),
     disposition,
     backupEnrolled,
+    finalBackup,
     now: deps.now,
     getRandomValues: deps.getRandomValues,
   });

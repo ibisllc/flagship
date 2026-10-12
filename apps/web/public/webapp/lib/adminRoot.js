@@ -58,6 +58,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/server-migration/v1", //       migrate to new hardware (order)
   "flagship/server-migration-control/v1", // migration confirm-ready / abort
   "flagship/release-server-name/v1", //    release server name
+  "flagship/server-unrevoke/v1", //        un-revoke a lost/stolen server
   "flagship/service-invite/create/v1", //  service collaborator invite (D-2)
   "flagship/service-invite/revoke/v1", //  service collaborator revoke (D-2)
 ]);

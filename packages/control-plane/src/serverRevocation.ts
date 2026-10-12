@@ -35,16 +35,20 @@
 
 import {
   verifyRevocation,
+  verifyServerUnrevocation,
   type RevocationReason,
   type ServerRevocation,
+  type ServerUnrevocation,
 } from "@flagship/protocol";
 import type {
   AuditEventStorage,
   AutoUnlockLeaseStorage,
   BoxSealedLeaseStorage,
+  DeviceCapabilityGrantStorage,
   ServerStorage,
   UsernameStorage,
 } from "@flagship/storage";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { recordAuditEvent } from "./auditEvents.js";
 import type { DnsDeleteClient } from "./cloudflareDns.js";
 import {
@@ -52,7 +56,9 @@ import {
   type DeviceCapabilityGrantsDeps,
 } from "./deviceCapabilityGrants.js";
 import { HEX64, hexToBytes } from "./hex.js";
+import type { DnsUpsertClient } from "./serverRegister.js";
 import {
+  conflict,
   forbidden,
   malformed,
   notFound,
@@ -368,4 +374,127 @@ export async function handleRevokeServer(
     boxSealedLeasesRevoked,
     dnsRecordsDeleted,
   });
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// POST /api/server-registry/unrevoke — owner-signed undo of a revocation
+// ──────────────────────────────────────────────────────────────────────
+
+/** Only an owner's lost/stolen/decommissioned revoke can be undone. A name
+ *  release, a transfer, an account deletion or a box's own self-revoke ends
+ *  that box's record for good. */
+const UNREVOKABLE_REASONS: ReadonlySet<string> = VALID_REASONS;
+
+export interface ServerUnrevocationDeps {
+  usernames: UsernameStorage;
+  servers: ServerStorage;
+  auditEvents: AuditEventStorage;
+  /** Slice D — device-grant store for the master-admin authority gate. */
+  grants?: DeviceCapabilityGrantStorage;
+  /**
+   * Optional. Re-publishes the per-box A/AAAA records the revoke deleted, so
+   * the box's names resolve again. Best-effort: a DNS failure never undoes the
+   * un-revoke.
+   */
+  dns?: { client: DnsUpsertClient; servicesIpv4: string; servicesIpv6?: string };
+  maxAgeMs?: number;
+  now?: () => number;
+}
+
+interface UnrevokeBody {
+  request?: { username?: string; serverDomain?: string; issuedAt?: number };
+  signature?: string;
+}
+
+/**
+ * Undo a revocation so the same box (same identity key) can connect and unlock
+ * again. Signed like the other sensitive orders (admin root when pinned, else
+ * the owner IRK). The boot-unlock leases the revoke tore down are not
+ * restored: an auto-unlock box asks the phone once on its next boot, and the
+ * phone's approval re-deposits its lease.
+ */
+export async function handleUnrevokeServer(
+  deps: ServerUnrevocationDeps,
+  body: UnrevokeBody | undefined,
+): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? (() => Date.now()))();
+  const maxAgeMs = deps.maxAgeMs ?? 5 * 60_000;
+
+  const r = body?.request;
+  if (
+    !r ||
+    typeof r.username !== "string" ||
+    typeof r.serverDomain !== "string" ||
+    typeof r.issuedAt !== "number" ||
+    typeof body?.signature !== "string" ||
+    !/^[0-9a-fA-F]{128}$/.test(body.signature)
+  ) {
+    return malformed("malformed body");
+  }
+  if (Math.abs(now - r.issuedAt) > maxAgeMs) return forbidden("stale request");
+
+  const userRec = await deps.usernames.get(r.username);
+  if (!userRec) return notFound("unknown user");
+  const target = await deps.servers.get(r.serverDomain);
+  if (!target) return notFound("unknown server");
+  if (target.username !== r.username) return forbidden("server is not owned by signer");
+
+  const claim: ServerUnrevocation = {
+    username: r.username,
+    serverDomain: r.serverDomain,
+    issuedAt: r.issuedAt,
+  };
+  const sig = hexToBytes(body.signature);
+  const authz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: r.username,
+      userRec,
+      verifyWith: (pub) => verifyServerUnrevocation(claim, sig, hexToBytes(pub)),
+    },
+  );
+  if (!authz.ok) return forbidden("invalid signature");
+
+  // Idempotent: un-revoking a live server is a 200 noop.
+  if (!target.revokedAt) return ok({ ok: true, alreadyActive: true });
+  if (!UNREVOKABLE_REASONS.has(target.revocationReason ?? "")) {
+    return conflict("this server was deleted, transferred or retired and can't be restored");
+  }
+
+  if (!(await deps.servers.unrevoke(r.serverDomain))) {
+    return { status: 500, body: { error: "unrevoke failed (server vanished?)" } };
+  }
+
+  let dnsRepublished = 0;
+  if (deps.dns) {
+    for (const name of [target.serverDomain, `*.${target.serverDomain}`]) {
+      try {
+        await deps.dns.client.upsert({ name, type: "A", content: deps.dns.servicesIpv4 });
+        dnsRepublished++;
+        if (deps.dns.servicesIpv6) {
+          await deps.dns.client.upsert({ name, type: "AAAA", content: deps.dns.servicesIpv6 });
+          dnsRepublished++;
+        }
+      } catch {
+        // swallow — the server IS un-revoked; DNS re-publishes on next register.
+      }
+    }
+  }
+
+  try {
+    await recordAuditEvent(
+      { auditEvents: deps.auditEvents },
+      {
+        username: r.username,
+        eventKind: "server-unrevoked",
+        detail: `Un-revoked ${r.serverDomain}`,
+        devicePrefix: r.serverDomain.slice(0, 8),
+        postedAt: now,
+      },
+    );
+  } catch {
+    // swallow.
+  }
+
+  return ok({ ok: true, unrevokedAt: now, dnsRepublished });
 }

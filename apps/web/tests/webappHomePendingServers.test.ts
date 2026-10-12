@@ -207,7 +207,7 @@ describe("webapp renderPendingCard", () => {
   });
 });
 
-describe("webapp dead-registered server delete (free the name)", () => {
+describe("webapp dead-registered server delete", () => {
   // A registered box whose daemon never checked in.
   const deadServer = { serverId: "dead.demo.flagship.services" };
 
@@ -216,11 +216,12 @@ describe("webapp dead-registered server delete (free the name)", () => {
     expect(classifyServer(deadServer, { lastReported: null }).kind).toBe("never-seen");
   });
 
-  it("renders the delete (free name) action for a never-seen server", () => {
+  it("renders the Delete server action for a never-seen server", () => {
     const html = renderServerCard(deadServer, { lastReported: null });
-    expect(html).toContain("js-delete-dead-server");
+    expect(html).toContain("js-delete-server");
+    expect(html).not.toContain("js-delete-dead-server");
     expect(html).toContain('data-fqdn="dead.demo.flagship.services"');
-    expect(html).toContain("Delete server (free name)");
+    expect(html).toContain("Delete server");
   });
 
   it("does NOT render the delete action for a live server", () => {
@@ -231,7 +232,7 @@ describe("webapp dead-registered server delete (free the name)", () => {
       { lastReported: Date.now() },
     );
     expect(classifyServer({ serverId: "live.demo.flagship.services" }, { lastReported: Date.now() }).kind).toBe("online");
-    expect(html).not.toContain("js-delete-dead-server");
+    expect(html).not.toContain("js-delete-server");
   });
 });
 
@@ -246,7 +247,7 @@ describe("webapp classifyServer — three states of a registered-but-not-online 
     const c = classifyServer(server, pod, { hasLiveUnlockRequest: true, now });
     expect(c.kind).toBe("waiting-for-approval");
     const html = renderServerCard(server, pod, { hasLiveUnlockRequest: true, now });
-    expect(html).not.toContain("js-delete-dead-server");
+    expect(html).not.toContain("js-delete-server");
     // L3 — the waiting card is actionable: an "Approve unlock" affordance that
     // deep-links into boot-approval, mirroring iOS/Android approving from the
     // card (not a dead-end status pill).
@@ -267,7 +268,7 @@ describe("webapp classifyServer — three states of a registered-but-not-online 
     const c = classifyServer(server, pod, { hasLiveUnlockRequest: false, now });
     expect(c.kind).toBe("waiting-for-approval");
     const html = renderServerCard(server, pod, { hasLiveUnlockRequest: false, now });
-    expect(html).not.toContain("js-delete-dead-server"); // decommission suppressed
+    expect(html).not.toContain("js-delete-server"); // decommission suppressed
     expect(html).toContain("js-approve-unlock"); // actionable entry → boot-approval (handles entitlement)
   });
 
@@ -276,7 +277,7 @@ describe("webapp classifyServer — three states of a registered-but-not-online 
     const c = classifyServer(server, pod, { hasLiveUnlockRequest: false, now });
     expect(c.kind).toBe("coming-online");
     const html = renderServerCard(server, pod, { hasLiveUnlockRequest: false, now });
-    expect(html).not.toContain("js-delete-dead-server");
+    expect(html).not.toContain("js-delete-server");
     // Not waiting on the owner → no approve affordance.
     expect(html).not.toContain("js-approve-unlock");
   });
@@ -286,7 +287,7 @@ describe("webapp classifyServer — three states of a registered-but-not-online 
     const c = classifyServer(server, pod, { hasLiveUnlockRequest: false, now });
     expect(c.kind).toBe("never-seen");
     const html = renderServerCard(server, pod, { hasLiveUnlockRequest: false, now });
-    expect(html).toContain("js-delete-dead-server");
+    expect(html).toContain("js-delete-server");
     expect(html).not.toContain("js-approve-unlock");
   });
 });

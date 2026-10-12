@@ -642,6 +642,15 @@ export class D1ServerStorage implements ServerStorage {
       .run();
     return Boolean(r.meta.changes && r.meta.changes > 0);
   }
+  async unrevoke(serverDomain: string) {
+    const r = await this.db
+      .prepare(
+        "UPDATE servers SET revoked_at = NULL, revocation_reason = NULL WHERE server_domain = ? AND revoked_at IS NOT NULL",
+      )
+      .bind(serverDomain)
+      .run();
+    return Boolean(r.meta.changes && r.meta.changes > 0);
+  }
 }
 
 interface RoutingRow {

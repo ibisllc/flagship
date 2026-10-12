@@ -12,8 +12,16 @@ import {
 import {
   countdownConfirm,
   revokeServer,
+  unrevokeServer,
   REVOCATION_REASONS,
 } from "../lib/revokeServer.js";
+import {
+  findPod,
+  isListableRevocation,
+  openDeleteServerDialog,
+  serverLabelOf,
+} from "../lib/deleteServer.js";
+import { controlApex } from "../lib/apex.js";
 import {
   sendPowerOff,
   setDeadManPolicy,
@@ -111,12 +119,125 @@ function shortCommit(sha) {
   return typeof sha === "string" && /^[0-9a-f]{40}$/.test(sha) ? sha.slice(0, 8) : "—";
 }
 
+/** The host of the active pod base URL, when the page was opened without an
+ *  explicit server. */
+function activePodFqdn() {
+  try {
+    const base = getPodBaseUrl();
+    return base ? new URL(base).hostname.toLowerCase() : "";
+  } catch {
+    return "";
+  }
+}
+
+/** This server's `/pods` entry: the LiveSync snapshot when it has one, else a
+ *  one-shot read. Null when `.com` can't be reached or doesn't list it. */
+async function lookupPod(username, fqdn) {
+  if (!fqdn) return null;
+  const snapPods = liveSync.get?.()?.pods;
+  const fromSnap = findPod(snapPods, fqdn);
+  if (fromSnap) return fromSnap;
+  if (!username) return null;
+  try {
+    const r = await fetch(`${controlApex()}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" });
+    if (!r.ok) return null;
+    const body = await r.json().catch(() => ({}));
+    return findPod(body.pods, fqdn);
+  } catch {
+    return null;
+  }
+}
+
+/** Revoked as lost / stolen / decommissioned, i.e. the state Un-revoke undoes.
+ *  An older Worker sends no `revocationReason`; `.com` refuses (409) if it
+ *  isn't restorable after all. */
+export function isRestorableRevokedPod(pod) {
+  if (pod?.revokedAt == null) return false;
+  return pod.revocationReason === undefined || isListableRevocation(pod.revocationReason);
+}
+
+/**
+ * The Danger zone card. None of its actions need the box, so it renders on the
+ * offline / failed-to-load page too.
+ *
+ * @param {{ serverFqdn: string, username: string, revoked: boolean }} o
+ */
+export function renderDangerZoneCard({ serverFqdn, username, revoked }) {
+  const label = serverLabelOf(serverFqdn);
+  const revokeBlock = revoked
+    ? `
+        <p class="note">
+          Revoked: this server can't connect or unlock until you un-revoke it.
+          Its name stays reserved.
+        </p>
+        <button id="unrevoke-server-btn" class="full-width mt-2">Un-revoke server</button>`
+    : `
+        <p class="note">
+          Locks this server out right away: it can't connect or unlock until you
+          un-revoke it. Its name stays reserved. Use this if the box is lost or
+          stolen.
+        </p>
+        <button id="revoke-server-btn" class="danger full-width mt-2">Revoke server (reversible)</button>`;
+  return `
+      <h2 class="mt-4">Danger zone</h2>
+      <div class="card" id="danger-zone-card" data-server-fqdn="${escapeHtml(serverFqdn)}" data-username="${escapeHtml(username)}">
+        ${revokeBlock}
+        <p class="note mt-3">
+          Deletes <strong>${escapeHtml(label)}</strong> for good. If the box is
+          online it erases its data and powers off; if it's offline it can never
+          come back online. The name becomes free to reuse.
+        </p>
+        <button id="delete-server-btn" class="danger full-width mt-2">Delete server</button>
+      </div>`;
+}
+
+/** The page when the box's own screen didn't load (offline, never came online,
+ *  revoked, or no paired session): what we know from `.com`, plus the actions
+ *  that don't need the box. */
+export function renderUnreachableDetail({ serverFqdn, username, revoked, message }) {
+  const status = revoked
+    ? "This server is revoked. It can't connect or unlock until you un-revoke it."
+    : `Couldn't reach this server${message ? ` (${message})` : ""}. You can still revoke or delete it below.`;
+  return `
+      <div class="card">
+        <div class="row"><span class="label">FQDN</span><span class="value">${escapeHtml(serverFqdn)}</span></div>
+        <p class="${revoked ? "note" : "err-text"} mt-2" data-detail-unreachable>${escapeHtml(status)}</p>
+      </div>
+      ${renderDangerZoneCard({ serverFqdn, username, revoked })}`;
+}
+
 export async function renderServerDetail() {
   const root = $("server-detail-content");
   root.innerHTML = skeletonCards(2);
   startHealthWatch(detailFqdn);
+  const session = getSession();
+  const knownFqdn = detailFqdn || activePodFqdn();
+  const podPromise = lookupPod(session?.username, knownFqdn);
+  let body;
   try {
-    const body = await screensFetch("/api/screens/server-detail");
+    body = await screensFetch("/api/screens/server-detail");
+  } catch (e) {
+    if (!knownFqdn) {
+      root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(humanError(e))}</p></div>`;
+      return;
+    }
+    const pod = await podPromise;
+    const username = session?.username || "";
+    const revoked = isRestorableRevokedPod(pod);
+    root.innerHTML = renderUnreachableDetail({
+      serverFqdn: knownFqdn,
+      username,
+      revoked,
+      message: e instanceof ScreensError ? e.message : humanError(e),
+    });
+    wireDangerZone(knownFqdn, username, { revoked, pod });
+    return;
+  }
+  const lookedUp = await podPromise;
+  try {
+    // The box answering may not be the one the lookup was for (no explicit
+    // server: the active pod); only trust a matching row.
+    const detailPod = findPod(lookedUp ? [lookedUp] : [], body?.serverFqdn);
     if (!detailFqdn && body?.serverFqdn) startHealthWatch(body.serverFqdn);
     root.innerHTML = `
       <div class="card">
@@ -326,15 +447,11 @@ export async function renderServerDetail() {
         <button id="migrate-start-btn" class="full-width mt-2">Migrate to new hardware</button>
       </div>
 
-      <h2 class="mt-4">Danger zone</h2>
-      <div class="card" id="danger-zone-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}" data-username="${escapeHtml(body.username)}">
-        <p class="note">
-          Revoke this server when the box is lost, stolen, or being
-          decommissioned. The box will refuse to boot on the next reboot —
-          this cannot be undone.
-        </p>
-        <button id="revoke-server-btn" class="danger full-width mt-2">Revoke this server</button>
-      </div>
+      ${renderDangerZoneCard({
+        serverFqdn: body.serverFqdn,
+        username: body.username,
+        revoked: isRestorableRevokedPod(detailPod),
+      })}
     `;
     wireAutoUnlock(body.serverFqdn);
     wireFrontPage(body);
@@ -346,7 +463,10 @@ export async function renderServerDetail() {
     wireReplace(body);
     wireUpdate(body);
     wireMigrate(body);
-    wireDangerZone(body.serverFqdn, body.username);
+    wireDangerZone(body.serverFqdn, body.username, {
+      revoked: isRestorableRevokedPod(detailPod),
+      pod: detailPod,
+    });
     startMetricsPolling(body.serverFqdn);
   } catch (e) {
     if (e instanceof ScreensError) {
@@ -1793,15 +1913,85 @@ async function openMigrateDialog(body) {
   });
 }
 
-function wireDangerZone(serverFqdn, username) {
+function wireDangerZone(serverFqdn, username, { pod = null } = {}) {
   $("revoke-server-btn")?.addEventListener("click", () => {
-    openRevokeDialog(serverFqdn, username).catch((e) => {
-      if (e?.code !== "cancelled") {
-        console.error("server revoke failed", e);
-        toast(humanError(e), "err");
-      }
-    });
+    openRevokeDialog(serverFqdn, username)
+      .then(() => refreshAfterRevocationChange())
+      .catch((e) => {
+        if (e?.code !== "cancelled") {
+          console.error("server revoke failed", e);
+          toast(humanError(e), "err");
+        }
+      });
   });
+  $("unrevoke-server-btn")?.addEventListener("click", () => {
+    void runUnrevoke(serverFqdn, username);
+  });
+  $("delete-server-btn")?.addEventListener("click", () => {
+    const session = getSession();
+    if (!session.umk) {
+      toast("Unlock the webapp first", "err");
+      return;
+    }
+    void openDeleteServerDialog(
+      {
+        serverDomain: serverFqdn,
+        username: session.username || username,
+        // undefined (no /pods row) lets the delete flow look the box key up.
+        identityPubKey: pod ? (pod.identityPubKey ?? null) : undefined,
+      },
+      {
+        session,
+        // One sensitive signer for the whole flow (order + release).
+        signer: sensitiveSigner(),
+        irkPubHex: session.irk ? bytesToHex(session.irk.publicKey) : "",
+        toast,
+        humanError,
+        onDeleted: async () => {
+          void liveSync.refresh?.().catch(() => {});
+          const { enterHome } = await import("./home.js");
+          await enterHome();
+        },
+      },
+    );
+  });
+}
+
+/** Re-read `.com`'s view and repaint, so the Danger zone flips between Revoke
+ *  and Un-revoke. */
+async function refreshAfterRevocationChange() {
+  await liveSync.refresh?.().catch(() => {});
+  if ($("view-server-detail")?.classList.contains("hidden")) return;
+  await renderServerDetail().catch((e) => console.error(e));
+}
+
+async function runUnrevoke(serverFqdn, username) {
+  const session = getSession();
+  if (!session.umk) {
+    toast("Unlock the webapp first", "err");
+    return;
+  }
+  const btn = $("unrevoke-server-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Restoring…"; }
+  try {
+    const out = await unrevokeServer({
+      username: session.username || username,
+      serverDomain: serverFqdn,
+      umk: session.umk,
+      signWithIrk: sensitiveSigner(),
+    });
+    toast(
+      out.body?.alreadyActive
+        ? "This server isn't revoked."
+        : "Server restored. If it unlocks on its own, approve its unlock once from your phone.",
+      "ok",
+    );
+    await refreshAfterRevocationChange();
+  } catch (e) {
+    console.error("server un-revoke failed", e);
+    toast(humanError(e), "err");
+    if (btn) { btn.disabled = false; btn.textContent = "Un-revoke server"; }
+  }
 }
 
 async function openRevokeDialog(serverFqdn, username) {
@@ -1813,13 +2003,13 @@ async function openRevokeDialog(serverFqdn, username) {
 
   const dlg = document.createElement("dialog");
   dlg.className = "modal-card";
-  dlg.setAttribute("aria-label", "Revoke this server");
+  dlg.setAttribute("aria-label", "Revoke server");
   dlg.innerHTML = `
-    <h3 class="modal-title">Revoke this server?</h3>
+    <h3 class="modal-title">Revoke ${escapeHtml(serverFqdn)}?</h3>
     <p class="modal-message">
-      Bricks the box on next boot — this cannot be undone.
-      ${escapeHtml(serverFqdn)} will refuse to start, even with the
-      correct passphrase. Other servers on your account stay running.
+      Locks this server out right away: it can't connect or unlock until you
+      un-revoke it. Its name stays reserved. Use this if the box is lost or
+      stolen. Other servers on your account stay running.
     </p>
     <fieldset class="mt-3">
       <legend class="caption">Reason</legend>
@@ -1896,7 +2086,7 @@ async function openRevokeDialog(serverFqdn, username) {
           );
           const result = await showCompanionPendingSheet(revokeOut);
           if (result.outcome === "approved") {
-            toast("Server revoked. It will refuse to boot next time.", "ok");
+            toast("Server revoked. It can't connect or unlock until you un-revoke it.", "ok");
             resolve();
           } else {
             const { text, kind } = outcomeToastCopy(result.outcome);
@@ -1905,7 +2095,7 @@ async function openRevokeDialog(serverFqdn, username) {
           }
           return;
         }
-        toast("Server revoked. It will refuse to boot next time.", "ok");
+        toast("Server revoked. It can't connect or unlock until you un-revoke it.", "ok");
         document.removeEventListener("keydown", onEscape);
         dlg.removeEventListener("close", onCancel);
         cleanup();

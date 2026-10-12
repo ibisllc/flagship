@@ -18,6 +18,7 @@ const TAG_INSTALL_BLOB = "flagship/install-blob/v1";
 const TAG_SERVER_REGISTER = "flagship/server-register/v1";
 const TAG_AUTH_CODE_REVOKE = "flagship/auth-code-revoke/v1";
 const TAG_RELEASE_SERVER_NAME = "flagship/release-server-name/v1";
+const TAG_SERVER_UNREVOKE = "flagship/server-unrevoke/v1";
 
 export interface AuthCode {
   version: 1;
@@ -67,6 +68,19 @@ export interface AuthCodeRevocation {
  * registered IRK, so only the account owner can release their own name.
  */
 export interface ReleaseServerName {
+  username: string;
+  serverDomain: string;
+  issuedAt: number;
+}
+
+/**
+ * Owner-signed "un-revoke this server". Undoes a lost/stolen/decommissioned
+ * {@link ServerRevocation} for the SAME box (same identity key), so revoking
+ * is reversible. Deliberately its own tag rather than a revocation with a
+ * "restore" reason: a signature that kills a box must never be reusable to
+ * revive one. Signed by the sensitive-order key (admin root, else the IRK).
+ */
+export interface ServerUnrevocation {
   username: string;
   serverDomain: string;
   issuedAt: number;
@@ -245,6 +259,18 @@ function canonicalReleaseServerName(r: ReleaseServerName): Bytes {
   );
 }
 
+function canonicalServerUnrevocation(r: ServerUnrevocation): Bytes {
+  legacyFieldGuard("username", r.username);
+  legacyFieldGuard("serverDomain", r.serverDomain);
+  return new TextEncoder().encode(
+    [TAG_SERVER_UNREVOKE, r.username, r.serverDomain, r.issuedAt].join("|"),
+  );
+}
+
+export function serverUnrevocationCanonicalBytes(r: ServerUnrevocation): Bytes {
+  return canonicalServerUnrevocation(r);
+}
+
 export function signAuthCode(c: AuthCode, irk: Keypair): Bytes {
   return ed.sign(canonicalAuthCode(c), irk.privateKey);
 }
@@ -312,6 +338,22 @@ export function verifyReleaseServerName(
 ): boolean {
   try {
     return ed.verify(sig, canonicalReleaseServerName(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signServerUnrevocation(r: ServerUnrevocation, key: Keypair): Bytes {
+  return ed.sign(canonicalServerUnrevocation(r), key.privateKey);
+}
+
+export function verifyServerUnrevocation(
+  r: ServerUnrevocation,
+  sig: Bytes,
+  pub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalServerUnrevocation(r), pub);
   } catch {
     return false;
   }

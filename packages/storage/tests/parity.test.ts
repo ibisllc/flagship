@@ -500,6 +500,21 @@ describe("D1 ↔ InMemory parity", () => {
       // agreeing behavior; the doc is the thing to reconcile.
       expect(r.d1.all).toEqual(["a.alice", "b.alice"]);
     });
+
+    it("unrevoke clears only a revoked record", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.servers.put({ serverDomain: "a.alice", username: "alice", identityPubKeyHex: "1", registeredAt: 1 });
+        const notRevoked = await s.servers.unrevoke("a.alice");
+        await s.servers.revoke("a.alice", "stolen", 9);
+        const restored = await s.servers.unrevoke("a.alice");
+        const again = await s.servers.unrevoke("a.alice");
+        const missing = await s.servers.unrevoke("nope.alice");
+        const rec = await s.servers.get("a.alice");
+        return { notRevoked, restored, again, missing, revokedAt: rec?.revokedAt ?? null, reason: rec?.revocationReason ?? null };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ notRevoked: false, restored: true, again: false, missing: false, revokedAt: null, reason: null });
+    });
   });
 
   // ────────────────────────────────────────────────────────────────────

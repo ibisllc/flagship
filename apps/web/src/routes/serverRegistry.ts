@@ -241,5 +241,12 @@ export function adaptServerRegistryToStorage(
         : "lost";
       return reg.revoke(serverDomain, norm, at);
     },
+    async unrevoke(serverDomain) {
+      const r = reg.get(serverDomain);
+      if (!r?.revokedAt) return false;
+      const { revokedAt: _at, revocationReason: _reason, ...rest } = r;
+      reg.put(rest);
+      return true;
+    },
   };
 }

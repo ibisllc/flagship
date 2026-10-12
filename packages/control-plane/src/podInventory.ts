@@ -173,6 +173,9 @@ export interface OnlinePodEntry {
   identityPubKey: string;
   registeredAt: number;
   revokedAt: number | null;
+  /** Why it was revoked. Clients list a revoked server (with Un-revoke) only
+   *  for lost / stolen / decommissioned; any other reason means it's gone. */
+  revocationReason: string | null;
   routingTarget: string | null;
   lastReported: number | null;
   /** Server-side liveness classification from the daemon-status heartbeat
@@ -377,6 +380,7 @@ export async function buildPodInventory(
         identityPubKey: s.identityPubKeyHex,
         registeredAt: s.registeredAt,
         revokedAt: s.revokedAt ?? null,
+        revocationReason: s.revokedAt ? (s.revocationReason ?? null) : null,
         routingTarget: routing?.currentTargetHex ?? null,
         lastReported,
         // Computed server-side from daemon-status heartbeat cadence (~5 min).

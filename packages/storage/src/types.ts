@@ -346,6 +346,8 @@ export interface ServerStorage {
    */
   listAll(): Promise<ServerRecord[]>;
   revoke(serverDomain: string, reason: string, at: number): Promise<boolean>;
+  /** Clear a revocation. False when the record is missing or not revoked. */
+  unrevoke(serverDomain: string): Promise<boolean>;
 }
 
 export interface InstallEvent {
@@ -470,6 +472,9 @@ export type AuditEventKind =
   // decommissioned}. Cascades through every active boot-unlock lease
   // on the server so the box bricks on the next reboot.
   | "server-revoked"
+  // POST /api/server-registry/unrevoke — the owner undid a lost/stolen/
+  // decommissioned revoke; the same box may connect and unlock again.
+  | "server-unrevoked"
   // Account deletion / username reclaim
   // (docs/account-deletion-and-name-reclaim.md). `account-deleted` logs
   // the owner-IRK last-device self-delete (the username row is hard-

@@ -123,6 +123,7 @@ import {
   handleServerLookup,
   handleServerRegister,
   handleRevokeServer,
+  handleUnrevokeServer,
   handleServerReleaseName,
   handleAccountDeletionBundle,
   handleAdminUsernameReclaim,
@@ -484,6 +485,7 @@ const ROUTE_RE = {
   // decommissioned). Cascades through the boot-unlock leases so the
   // box bricks on its next reboot.
   SERVER_REGISTRY_REVOKE: /^\/api\/server-registry\/revoke$/,
+  SERVER_REGISTRY_UNREVOKE: /^\/api\/server-registry\/unrevoke$/,
   PUBKEY_CERT: /^\/api\/users\/([^/]+)\/pubkey-cert$/,
   CA_CERT: /^\/api\/ca\/cert$/,
   MAINTAINER_BLESSING: /^\/api\/maintainer-blessing$/,
@@ -1079,6 +1081,39 @@ export async function tryControlPlane(
             usernames: storage.usernames,
           },
           ...(revokeDns ? { dns: revokeDns } : {}),
+        },
+        await readJson(request),
+      ),
+    );
+  }
+
+  if (method === "POST" && ROUTE_RE.SERVER_REGISTRY_UNREVOKE.test(path)) {
+    // Owner-signed undo of a lost/stolen/decommissioned revoke. Re-publishes
+    // the per-box DNS the revoke deleted (same client choice as register).
+    const dnsClient = env.DNS_BROKER_URL
+      ? new BrokerDnsClient({ brokerUrl: env.DNS_BROKER_URL })
+      : env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+        ? new CloudflareDnsClient({
+            apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+            zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+          })
+        : null;
+    return finish(
+      await handleUnrevokeServer(
+        {
+          usernames: storage.usernames,
+          servers: storage.servers,
+          auditEvents: storage.auditEvents,
+          grants: storage.deviceCapabilityGrants,
+          ...(dnsClient && env.SERVICES_PASSTHROUGH_IPV4
+            ? {
+                dns: {
+                  client: dnsClient,
+                  servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
+                  ...(env.SERVICES_PASSTHROUGH_IPV6 ? { servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6 } : {}),
+                },
+              }
+            : {}),
         },
         await readJson(request),
       ),

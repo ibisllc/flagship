@@ -1,24 +1,19 @@
 // P13 — per-server kill-switch helper.
 //
 // User-initiated server revocation. Unlike `releaseServer.js` (which
-// frees the NAME so it can be re-claimed), this declares the server
-// itself dead and turns the box into a brick on its next boot. Used
-// when a phone/box is lost, stolen, or being decommissioned.
+// frees the NAME so it can be re-claimed), this locks the server itself
+// out: it can't connect or unlock until the owner un-revokes it, and its
+// name stays reserved. Used when a box is lost, stolen, or being
+// decommissioned.
 //
 // IRK-signed envelope, same trust level as releasing a name — only the
 // account owner can produce a signature that verifies against the
 // registered IRK.
 //
 // Mirror of packages/protocol/src/auth.ts `ServerRevocation` /
-// `signRevocation`. The iOS/Android composers mirror the same
-// canonical-bytes shape natively.
-//
-// NOTE (endpoint gap, 2026-05-25): the matching `.com` Worker route
-// for IRK-signed user-initiated server revocation is not yet wired.
-// The apps/web Fastify server registers a precedent endpoint at
-// /api/server-registry/revoke; this client targets the same path on
-// flagshipserver.com so the wire shape is ready the moment the
-// orchestrator promotes the handler into apps/com.
+// `signRevocation`, and of `ServerUnrevocation` (installBlob.ts) for the
+// undo. The iOS/Android composers mirror the same canonical-bytes shapes
+// natively.
 
 import { CompanionWriteError, requireOwnerProfile } from "./companionGuard.js";
 import { submitWriteRequest } from "./companionWriteRelay.js";
@@ -27,7 +22,12 @@ import { controlApex } from "./apex.js";
 /** Canonical-bytes tag — MUST match @flagship/protocol TAG_REVOKE. */
 export const TAG_REVOKE = "flagship/revoke/v1";
 
-/** The fixed reason vocabulary. Must match @flagship/protocol RevocationReason. */
+/** Canonical-bytes tag — MUST match @flagship/protocol TAG_SERVER_UNREVOKE. */
+export const TAG_SERVER_UNREVOKE = "flagship/server-unrevoke/v1";
+
+/** The fixed reason vocabulary. Must match @flagship/protocol RevocationReason.
+ *  These are also the only reasons `.com` will un-revoke: any other reason on a
+ *  revoked record means the server was deleted, transferred or retired. */
 export const REVOCATION_REASONS = ["lost", "stolen", "decommissioned"];
 
 const ORIGIN = controlApex();
@@ -129,6 +129,68 @@ export async function revokeServer(args, deps = {}) {
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     throw makeError(`revoke failed (${resp.status}): ${text}`, String(resp.status));
+  }
+  return { ok: true, body: await resp.json().catch(() => ({})) };
+}
+
+/**
+ * Build the canonical bytes the sensitive-order key signs. MUST match
+ * packages/protocol/src/installBlob.ts `serverUnrevocationCanonicalBytes`:
+ *   "flagship/server-unrevoke/v1|<username>|<serverDomain>|<issuedAt>"
+ */
+export function canonicalUnrevokeBytes({ username, serverDomain, issuedAt }) {
+  return canonical([TAG_SERVER_UNREVOKE, username, serverDomain, issuedAt]);
+}
+
+/**
+ * Sign + POST the un-revoke. Resolves `{ ok, body }` on a 2xx (body is
+ * `{ ok, unrevokedAt, dnsRepublished }` or `{ ok, alreadyActive: true }`);
+ * throws with `.code` set to the HTTP status (or "network") otherwise.
+ * Not relayable for a companion profile: the owner app has to do it.
+ *
+ * @param {object} args
+ * @param {string} args.username
+ * @param {string} args.serverDomain   `<server>.<user>.flagship.services`
+ * @param {Uint8Array} args.umk
+ * @param {(umk: Uint8Array, bytes: Uint8Array) => Promise<Uint8Array>} args.signWithIrk
+ *        the sensitive-order signer (admin root when pinned, else the IRK)
+ * @param {{ fetch?: typeof fetch, bytesToHex?: (b: Uint8Array) => string, origin?: string, now?: () => number, requireOwnerProfile?: () => void }} [deps]
+ */
+export async function unrevokeServer(args, deps = {}) {
+  const { username, serverDomain, umk, signWithIrk } = args;
+  if (!username || !serverDomain) {
+    throw makeError("username and serverDomain required", "400");
+  }
+  (deps.requireOwnerProfile ?? requireOwnerProfile)();
+  if (!umk || typeof signWithIrk !== "function") {
+    throw makeError("unlock the webapp first", "400");
+  }
+  const issuedAt = (deps.now || Date.now)();
+  const f = deps.fetch || fetch;
+  const toHex = deps.bytesToHex || defaultBytesToHex;
+  const origin = deps.origin || ORIGIN;
+
+  const sig = await signWithIrk(umk, canonicalUnrevokeBytes({ username, serverDomain, issuedAt }));
+
+  let resp;
+  try {
+    resp = await f(`${origin}/api/server-registry/unrevoke`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        request: { username, serverDomain, issuedAt },
+        signature: toHex(sig),
+      }),
+    });
+  } catch (e) {
+    throw makeError(`network: ${e?.message ?? e}`, "network");
+  }
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}));
+    const msg = resp.status === 409
+      ? "This server was deleted or handed over and can't be restored."
+      : (body && body.error) || `un-revoke failed (${resp.status})`;
+    throw makeError(msg, String(resp.status));
   }
   return { ok: true, body: await resp.json().catch(() => ({})) };
 }

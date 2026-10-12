@@ -24,6 +24,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   classifyServer,
+  COMING_ONLINE_GRACE_MS,
   renderServerCard,
 } from "../public/webapp/views/home.js";
 import {
@@ -96,11 +97,35 @@ describe("Fix A — classifyServer reads the liveness field", () => {
     expect(c.label).toContain("unknown");
   });
 
-  it('liveness:"never" → never-seen with "still coming up" copy', () => {
-    const pod = { liveness: "never" };
-    const c = classifyServer(BASE_SERVER, pod);
+  it('liveness:"never" inside the grace window → coming-online', () => {
+    const now = 1_700_000_000_000;
+    const pod = { liveness: "never", registeredAt: now - 5 * 60_000 };
+    const c = classifyServer(BASE_SERVER, pod, { now });
+    expect(c.kind).toBe("coming-online");
+    expect(c.label).toBe("Coming online…");
+  });
+
+  it('liveness:"never" past the grace window → never-seen (dead), not "coming up" forever', () => {
+    const now = 1_700_000_000_000;
+    const pod = { liveness: "never", registeredAt: now - COMING_ONLINE_GRACE_MS - 1 };
+    const c = classifyServer(BASE_SERVER, pod, { now });
     expect(c.kind).toBe("never-seen");
-    expect(c.label).toBe("Still coming up");
+    expect(c.label).toBe("Never came online");
+    // Exactly at the edge it is still coming online (same rule as the legacy path).
+    const edge = classifyServer(BASE_SERVER, { liveness: "never", registeredAt: now - COMING_ONLINE_GRACE_MS }, { now });
+    expect(edge.kind).toBe("coming-online");
+  });
+
+  it('liveness:"never" past the grace window with a live request still waits for approval', () => {
+    const now = 1_700_000_000_000;
+    const pod = { liveness: "never", registeredAt: now - 3 * COMING_ONLINE_GRACE_MS };
+    expect(classifyServer(BASE_SERVER, pod, { now, hasLiveUnlockRequest: true }).kind)
+      .toBe("waiting-for-approval");
+  });
+
+  it('liveness:"never" with no registeredAt → never-seen', () => {
+    const c = classifyServer(BASE_SERVER, { liveness: "never" });
+    expect(c.kind).toBe("never-seen");
   });
 
   it('liveness:"never" + live unlock request → waiting-for-approval (approval wins)', () => {
@@ -160,11 +185,19 @@ describe("Fix A — classifyServer reads the liveness field", () => {
     expect(html).not.toContain("Connecting");
   });
 
-  it("renderServerCard with liveness:never shows still-coming-up copy, no Connecting", () => {
-    const pod = { liveness: "never" };
+  it("renderServerCard with liveness:never past grace shows never-came-online + Delete", () => {
+    const pod = { liveness: "never", registeredAt: Date.now() - 2 * COMING_ONLINE_GRACE_MS };
     const html = renderServerCard(BASE_SERVER, pod);
-    expect(html).toContain("Still coming up");
+    expect(html).toContain("Never came online");
+    expect(html).toContain("js-delete-server");
     expect(html).not.toContain("Connecting");
+  });
+
+  it("renderServerCard with liveness:never inside grace shows coming-online, no Delete", () => {
+    const pod = { liveness: "never", registeredAt: Date.now() };
+    const html = renderServerCard(BASE_SERVER, pod);
+    expect(html).toContain("Coming online");
+    expect(html).not.toContain("js-delete-server");
   });
 });
 

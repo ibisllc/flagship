@@ -74,7 +74,10 @@
 //  v43: "Share the adaptation" on a git import, a crashed shared adaptation
 //       hands over to the AI, "Report a problem with this adaptation";
 //       precaches lib/adapterReport.js.
-const SHELL_VERSION = "v43";
+//  v44: Delete server for every server (typed-name gate, erase order + name
+//       release), reversible Revoke + Un-revoke, revoked servers stay listed,
+//       and the server page keeps its Danger zone when the box is offline.
+const SHELL_VERSION = "v44";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
