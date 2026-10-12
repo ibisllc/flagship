@@ -1,0 +1,15 @@
+{
+  "about": "flagship/app-copy/v1 (docs/app-placement.md). Canonical: tag|sourceServer|targetServer|serviceId|issuedAt. Key: the protocol IRK derived from the UMK seed.",
+  "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+  "pub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+  "cases": [
+    {
+      "sourceServer": "home3.harry.flagship.services",
+      "targetServer": "leticia.harry.flagship.services",
+      "serviceId": "harry--notes",
+      "issuedAt": 1700000000000,
+      "canonical": "flagship/app-copy/v1|home3.harry.flagship.services|leticia.harry.flagship.services|harry--notes|1700000000000",
+      "signature": "d8758faa0275524127ad3466d908bd179ccfe85cd1ad26da61c3868962e00455a64eae9e755cd23ead0f45f192737b38c85c8aa39c7e9bd4b78a42fb5b9fde0b"
+    }
+  ]
+}
