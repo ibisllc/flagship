@@ -228,6 +228,21 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   there's no live endpoint to assign per-member roles; app roles can count the
   box's databases via pg_database (names are opaque); v1 invite links (no `a=`)
   need re-inviting; boxes without `ownerAidPub` can't recognise their owner.
+- **Where an app runs (2026-10-12, box `73211505`, apps through `a79b4de9`).**
+  `docs/app-placement.md`. Make leader never moved the box new apps were
+  created on, and the app page's runs-on boxes came from the leader (its Save
+  sent a `service-policy/v1` order nothing consumes). Now: the leader is also
+  current and survives relaunch on the phones; every creation flow picks a
+  server (fixed when started from a server page); a server's page lists its
+  apps with "Create app here"; runs-on asks each box; ticking signs
+  `flagship/app-copy/v1` and the target pulls a snapshot from the source
+  (access list arrives as a draft, API keys stay); unticking is the signed
+  uninstall. Android's uninstall was dead (unsigned orders/send) and now
+  signs. Needs the `73211505` endorsement on both boxes and a `.com` deploy
+  (webapp shell v56). Not run on a real box: the docker save/load and
+  pg_dump/restore in `appCopy/ops.ts`; a digest-pinned image may load
+  untagged; no bundle size cap; a source restart mid-copy fails the copy.
+  `orders/send` still has other users, so it stays.
 - **Docker containers unreachable on VM appliances (fixed in `e81df698`).**
   The appliance's `Type=ether` networkd rule pulled every container's veth off
   its bridge: every app 502'd with "read ECONNRESET" after a 3 s ARP timeout
