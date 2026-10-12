@@ -122,6 +122,12 @@ public protocol ScreensClient: Sendable {
     /// `GET /api/screens/events` (WebSocket): one value per
     /// `{"type":"access-request"}` frame. Finishes when the socket closes.
     func accessRequestEvents() -> AsyncStream<Void>
+    /// `GET /api/screens/settings/access-alerts`. An older box answers 404.
+    func accessAlertsSetting() async throws -> AccessAlertsSetting
+    /// `POST /api/screens/settings/access-alerts {enabled}` (owner session;
+    /// no signature: it can only quiet the box).
+    @discardableResult
+    func setAccessAlerts(enabled: Bool) async throws -> AccessAlertsSetting
 
     // P9 — peer-backup management.
     func peerBackupStatus() async throws -> PeerBackupStatusResponse
@@ -353,6 +359,12 @@ public extension ScreensClient {
     }
     func accessRequestEvents() -> AsyncStream<Void> {
         AsyncStream { $0.finish() }
+    }
+    func accessAlertsSetting() async throws -> AccessAlertsSetting {
+        throw ScreensClientError.notImplemented("access alerts setting")
+    }
+    func setAccessAlerts(enabled: Bool) async throws -> AccessAlertsSetting {
+        throw ScreensClientError.notImplemented("access alerts setting")
     }
     func buildDiscard(buildId: String) async throws {
         throw ScreensClientError.notImplemented("discard")

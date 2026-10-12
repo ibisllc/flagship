@@ -229,6 +229,14 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func accessRequests() async throws -> AppAccessRequestsResponse {
         try await request("/api/screens/access-requests")
     }
+    public func accessAlertsSetting() async throws -> AccessAlertsSetting {
+        try await request("/api/screens/settings/access-alerts")
+    }
+    @discardableResult
+    public func setAccessAlerts(enabled: Bool) async throws -> AccessAlertsSetting {
+        let body = try JSONSerialization.data(withJSONObject: ["enabled": enabled])
+        return try await request("/api/screens/settings/access-alerts", method: "POST", body: body)
+    }
     public func accessRequestEvents() -> AsyncStream<Void> {
         AsyncStream { continuation in
             let task = Task { [self] in

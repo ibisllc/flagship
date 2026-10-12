@@ -905,7 +905,7 @@ public struct SettingsScreen: View {
                     appIconOption(name: "AppIcon-Legacy", label: "Legacy", c: c)
                 }
                 FSSettingsGroup(rows: [
-                    FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "App lock, app-level gating", action: onOpenPrivacy),
+                    FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "App lock, push notifications", action: onOpenPrivacy),
                     FSSettingsRow(icon: "info.circle.fill", title: "About Flagship", subtitle: "Version, license, source", action: onOpenAbout),
                 ])
             }

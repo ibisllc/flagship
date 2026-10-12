@@ -637,6 +637,22 @@ struct PrivacyScreen: View {
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
 
+                Divider().padding(.vertical, FS.space.s2)
+
+                Toggle(isOn: Binding(
+                    get: { privacy.pushNotificationsEnabled },
+                    set: { privacy.pushNotificationsEnabled = $0 },
+                )) {
+                    Text(PushPreferenceCopy.title)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(c.text)
+                }
+                .tint(c.primary)
+                .accessibilityIdentifier("privacy-push-notifications-toggle")
+                Text(PushPreferenceCopy.detail)
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
+
                 Spacer()
             }
             .padding(FS.space.s6)

@@ -25,6 +25,7 @@ public final class PrivacySettings {
     private let requireBiometricKey = "flagship.privacy.requireBiometric"
     private let requirePassphraseKey = "flagship.privacy.requirePassphrase"
     private let themeModeKey = "flagship.appearance.themeMode"
+    private let pushNotificationsKey = "flagship.privacy.pushNotifications"
 
     /// True if a Face ID / Touch ID evaluation is required each time the
     /// app cold-launches or returns from background. Defaults to TRUE —
@@ -53,6 +54,15 @@ public final class PrivacySettings {
         didSet { defaults.set(themeMode.rawValue, forKey: themeModeKey) }
     }
 
+    /// Whether anything from Flagship is pushed to this device. Default ON.
+    /// Off, the device drops its push registration on `.com` and tells every
+    /// box it manages to send no access-request alert, so Apple and Google
+    /// never see when a server needs the owner (an unlock push could time a
+    /// reboot). Unlocks and requests then wait until the app is opened.
+    public var pushNotificationsEnabled: Bool {
+        didSet { defaults.set(pushNotificationsEnabled, forKey: pushNotificationsKey) }
+    }
+
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         // Unset → default ON. Once the user makes an explicit choice we
@@ -64,6 +74,7 @@ public final class PrivacySettings {
         }
         // Unset → default OFF (opt-in to the slower, stricter mode).
         self.requirePassphraseAtLaunch = defaults.bool(forKey: requirePassphraseKey)
+        self.pushNotificationsEnabled = defaults.object(forKey: pushNotificationsKey) as? Bool ?? true
         // Unset → default `auto` (follow the system appearance).
         self.themeMode = ThemeMode(rawValue: defaults.string(forKey: themeModeKey) ?? "") ?? .auto
     }

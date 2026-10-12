@@ -111,6 +111,30 @@ final class PushRegistrarTests: XCTestCase {
         XCTAssertNil(registrar.lastRegisteredTokenId)
     }
 
+    func test_switchedOff_ignoresTokens_thenRegistersTheNextOneWhenOn() async {
+        let state = pairedState()
+        let mock = MockFlagshipServerClient()
+        mock.simulatedLatency = 0
+        var on = false
+        let registrar = PushRegistrar(appState: state, client: mock, isEnabled: { on })
+        await registrar.handle(deviceToken: Data(repeating: 0x44, count: 32))
+        XCTAssertEqual(mock.registeredPushTokens.count, 0)
+        XCTAssertFalse(registrar.isRegistered)
+
+        // On again: APNs hands over a fresh token, which registers.
+        on = true
+        let fresh = Data(repeating: 0x55, count: 32)
+        await registrar.handle(deviceToken: fresh)
+        XCTAssertEqual(mock.registeredPushTokens.values.first?.providerToken, HexUtil.encode(fresh))
+        XCTAssertTrue(registrar.isRegistered)
+
+        on = false
+        let dropped = await registrar.unregister()
+        XCTAssertTrue(dropped)
+        XCTAssertEqual(mock.registeredPushTokens.count, 0)
+        XCTAssertFalse(registrar.isRegistered)
+    }
+
     func test_revoke_isNoOpWhenNothingRegistered() async {
         let state = pairedState()
         let mock = MockFlagshipServerClient()

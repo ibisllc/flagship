@@ -295,6 +295,31 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         accessEventContinuations.forEach { $0.yield(()) }
     }
 
+    /// The box's push-alert setting; nil answers 404 like an older box.
+    public var mockAccessAlertsEnabled: Bool? = true
+    public private(set) var accessAlertsSettingCalls = 0
+    public private(set) var setAccessAlertsCalls: [Bool] = []
+
+    public func accessAlertsSetting() async throws -> AccessAlertsSetting {
+        try await tick()
+        accessAlertsSettingCalls += 1
+        guard let enabled = mockAccessAlertsEnabled else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+        }
+        return AccessAlertsSetting(enabled: enabled)
+    }
+
+    @discardableResult
+    public func setAccessAlerts(enabled: Bool) async throws -> AccessAlertsSetting {
+        try await tick()
+        setAccessAlertsCalls.append(enabled)
+        guard mockAccessAlertsEnabled != nil else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+        }
+        mockAccessAlertsEnabled = enabled
+        return AccessAlertsSetting(enabled: enabled, ok: true)
+    }
+
     public func accessRequests() async throws -> AppAccessRequestsResponse {
         try await tick()
         accessRequestsCalls += 1

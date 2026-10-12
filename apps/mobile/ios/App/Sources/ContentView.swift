@@ -27,8 +27,12 @@ struct ContentView: View {
     /// spans every tab (home / install checklist / server-detail).
     @State private var liveSync: LiveSyncCoordinator?
     /// "<App> wants to reach <host>" sheets, asked of every managed box on
-    /// foreground, on the `app-access` push and on each box's events socket.
+    /// foreground, on a `generic` push and on each box's events socket.
     @State private var accessAlerts: AppAccessAlertCenter?
+    /// Settings → Privacy → "Push notifications": the registration on `.com`
+    /// and every box's access-alert setting follow it.
+    @State private var pushPrefs: PushPreferenceSync?
+    @Environment(PrivacySettings.self) private var privacy
     @Environment(\.screensClient) private var screensClient
 
     var body: some View {
@@ -45,7 +49,7 @@ struct ContentView: View {
             Toaster()
         }
         .sheet(item: Binding(
-            get: { app.isPaired && app.isUnlocked ? accessAlerts?.current : nil },
+            get: { app.isPaired && app.isUnlocked && privacy.pushNotificationsEnabled ? accessAlerts?.current : nil },
             set: { _ in /* dismissal is reported by the sheet's onDisappear */ }
         )) { item in
             if let accessAlerts {
@@ -85,6 +89,11 @@ struct ContentView: View {
             // deposit refresh used to trigger.
             if !unlocked { Keystore.clearSessionKeyCache() }
             syncAccessAlerts()
+        }
+        .onChange(of: privacy.pushNotificationsEnabled) { _, _ in
+            syncAccessAlerts()
+            let prefs = pushPrefs
+            Task { await prefs?.changed() }
         }
         .onChange(of: scenePhase) { _, _ in
             // Foreground-only: pause the live-update canal when the app leaves
@@ -195,52 +204,86 @@ struct ContentView: View {
         if shouldRun { liveSync?.start() } else { liveSync?.stop() }
     }
 
+    /// Every box this device manages, each with a client over its own paired
+    /// session (the mock client alone in demo mode).
+    @MainActor
+    private func managedBoxes() -> @MainActor () async -> [AppAccessAlertCenter.Box] {
+        let app = self.app
+        let store = self.sessionStore
+        let dev = self.dev
+        let mock = self.screensClient
+        let pinned = BoxPinnedURLSession.make(pinFor: { CertPinRegistry.shared.pinFor(host: $0) })
+        return {
+            guard dev.useLiveClient else {
+                guard let domain = await mock.boxDomain() ?? app.sessionPod?.fqdn else { return [] }
+                return [AppAccessAlertCenter.Box(serverDomain: domain, client: mock)]
+            }
+            var out: [AppAccessAlertCenter.Box] = []
+            for pod in app.pods where pod.status != .pending && !pod.fqdn.isEmpty {
+                guard let token = await store.sessionToken(forPodId: PodInfo.podId(forFqdn: pod.fqdn)),
+                      !token.isEmpty else { continue }
+                let client = LiveScreensClient(
+                    urlSession: pinned,
+                    store: PodScopedSessionStore(baseUrl: CompanionTicketURL.podBaseUrl(forFqdn: pod.fqdn),
+                                                 token: token))
+                out.append(AppAccessAlertCenter.Box(serverDomain: pod.fqdn, client: client))
+            }
+            return out
+        }
+    }
+
     /// Build the access-alert center once; while the app is in front, paired,
     /// unlocked and holding the owner key (a restricted profile can't sign),
     /// ask every managed box for waiting requests and listen on its events
-    /// socket; otherwise stop listening.
+    /// socket; otherwise stop listening. With push notifications off it shows
+    /// no sheet. Also brings each box's access-alert setting and the `.com`
+    /// push registration in line with the switch.
     @MainActor
     private func syncAccessAlerts() {
+        let privacy = self.privacy
         if accessAlerts == nil {
             let app = self.app
-            let store = self.sessionStore
-            let dev = self.dev
-            let mock = self.screensClient
-            let pinned = BoxPinnedURLSession.make(pinFor: { CertPinRegistry.shared.pinFor(host: $0) })
             let center = AppAccessAlertCenter(
-                boxes: {
-                    guard dev.useLiveClient else {
-                        guard let domain = await mock.boxDomain() ?? app.sessionPod?.fqdn else { return [] }
-                        return [AppAccessAlertCenter.Box(serverDomain: domain, client: mock)]
-                    }
-                    var out: [AppAccessAlertCenter.Box] = []
-                    for pod in app.pods where pod.status != .pending && !pod.fqdn.isEmpty {
-                        guard let token = await store.sessionToken(forPodId: PodInfo.podId(forFqdn: pod.fqdn)),
-                              !token.isEmpty else { continue }
-                        let client = LiveScreensClient(
-                            urlSession: pinned,
-                            store: PodScopedSessionStore(baseUrl: CompanionTicketURL.podBaseUrl(forFqdn: pod.fqdn),
-                                                         token: token))
-                        out.append(AppAccessAlertCenter.Box(serverDomain: pod.fqdn, client: client))
-                    }
-                    return out
-                },
+                boxes: managedBoxes(),
                 isActive: { [weak app] in
                     guard let app else { return false }
                     return app.isPaired && app.isUnlocked && !app.isRestrictedDevice
-                }
+                },
+                alertsEnabled: { privacy.pushNotificationsEnabled }
             )
             center.observeEvents()
             accessAlerts = center
         }
+        if pushPrefs == nil {
+            let registrar: @MainActor () -> PushRegistrar? = {
+                (UIApplication.shared.delegate as? AppDelegate)?.pushRegistrar
+            }
+            pushPrefs = PushPreferenceSync(
+                boxes: managedBoxes(),
+                isEnabled: { privacy.pushNotificationsEnabled },
+                registration: .init(
+                    registerAPNs: { await Self.requestPushToken(privacy) },
+                    unregisterAPNs: { UIApplication.shared.unregisterForRemoteNotifications() },
+                    unregisterServer: { _ = await registrar()?.unregister() },
+                    isRegistered: {
+                        registrar()?.isRegistered == true || UIApplication.shared.isRegisteredForRemoteNotifications
+                    }
+                )
+            )
+        }
         guard let center = accessAlerts else { return }
-        if app.isPaired && app.isUnlocked && !app.isRestrictedDevice && scenePhase == .active {
+        let inFront = app.isPaired && app.isUnlocked && scenePhase == .active
+        if inFront, let prefs = pushPrefs {
+            Task { await prefs.resync() }
+        }
+        if inFront && !app.isRestrictedDevice && privacy.pushNotificationsEnabled {
             Task {
                 await center.refresh()
                 await center.startListening()
             }
         } else {
             center.stopListening()
+            if !privacy.pushNotificationsEnabled { Task { await center.refresh() } }
         }
     }
 
@@ -313,7 +356,15 @@ struct ContentView: View {
     }
 
     private func registerPush() async {
-        guard let delegate = UIApplication.shared.delegate as? AppDelegate,
+        await Self.requestPushToken(privacy)
+    }
+
+    /// Ask iOS for a push token (its arrival registers it with `.com`), unless
+    /// the owner switched push notifications off.
+    @MainActor
+    private static func requestPushToken(_ privacy: PrivacySettings) async {
+        guard privacy.pushNotificationsEnabled,
+              let delegate = UIApplication.shared.delegate as? AppDelegate,
               let push = delegate.push else { return }
         if await push.requestAuthorization() {
             await MainActor.run {

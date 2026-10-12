@@ -478,7 +478,9 @@ struct FlagshipApp: App {
                     // surfaces fan out to the paired watch.
                     WatchSecurityAlertsPublisher.shared.activate()
                     let push = PushNotifications(linker: linker)
-                    let registrar = PushRegistrar(appState: appState, client: activeServerClient)
+                    let privacy = self.privacy
+                    let registrar = PushRegistrar(appState: appState, client: activeServerClient,
+                                                  isEnabled: { privacy.pushNotificationsEnabled })
                     push.onDeviceTokenChange = { token in
                         Task { @MainActor in await registrar.handle(deviceToken: token) }
                     }

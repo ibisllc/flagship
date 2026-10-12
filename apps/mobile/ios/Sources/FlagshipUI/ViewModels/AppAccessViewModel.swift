@@ -12,7 +12,6 @@ public typealias AppAccessSigner = @MainActor (_ reason: String) async throws ->
 public enum AppAccessCopy {
     public static let sectionTitle = "INTERNET ACCESS"
     public static let viewList = "View access list"
-    public static let pushBody = "One of your apps wants to reach the internet"
     public static let editorTitle = "Access list"
     public static let editorHelp = "One rule per line: allow or deny, then a host, *.host or all. The first rule that matches decides; anything no rule matches is blocked."
 

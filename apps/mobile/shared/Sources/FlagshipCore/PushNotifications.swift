@@ -98,8 +98,9 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
         // user is very likely watching the provisioning screen). Route it
         // without also enqueuing a deep link — they're already in-app.
         let info = notification.request.content.userInfo
-        // An app wants to reach a host: the app is open, so the in-app sheet
-        // (fetched from the box) asks instead of a banner.
+        // A `generic` push (`app-access` from an older box): the app is open,
+        // so it fetches what's waiting from the box and asks in-app instead
+        // of a banner.
         if AppAccessEvents.isPush(info, categoryIdentifier: notification.request.content.categoryIdentifier) {
             Task { @MainActor in AppAccessEvents.post() }
             completionHandler([.list])
@@ -121,8 +122,8 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
         let userInfo = response.notification.request.content.userInfo
         let category = response.notification.request.content.categoryIdentifier
         Task { @MainActor in
-            // `app-access` carries nothing about the app or host: opening
-            // the app is the whole action; the sheet fetches the details.
+            // `generic` / `app-access` carry nothing about the app or host:
+            // opening the app is the whole action; it fetches the details.
             if AppAccessEvents.isPush(userInfo, categoryIdentifier: category) {
                 AppAccessEvents.post()
                 completionHandler()

@@ -394,6 +394,18 @@ public struct AppAccessRequestsResponse: Codable, Equatable, Sendable {
     public init(requests: [AppAccessRequest]) { self.requests = requests }
 }
 
+/// `GET|POST /api/screens/settings/access-alerts`: whether the box pushes an
+/// alert for a new access request. The phone's push switch writes it; the POST
+/// answer also carries `ok`.
+public struct AccessAlertsSetting: Codable, Equatable, Sendable {
+    public let enabled: Bool
+    public let ok: Bool?
+    public init(enabled: Bool, ok: Bool? = nil) {
+        self.enabled = enabled
+        self.ok = ok
+    }
+}
+
 /// The box's 400 for a list that doesn't parse: `{error, errors:[{line, message}]}`.
 public struct AppAccessRefusal: Codable, Equatable, Sendable {
     public let error: String?
@@ -406,13 +418,17 @@ public struct AppAccessRefusal: Codable, Equatable, Sendable {
 
 // MARK: - "A request is waiting" signal
 
-/// Raised when a box says an app was denied a host no rule covered (the
-/// `app-access` push, an `access-request` frame on a screens socket, or the
-/// phone alert outbox). Carries nothing about the app or host: the phone
-/// fetches those from the box.
+/// Raised when a box says an app was denied a host no rule covered (a
+/// `generic` push, or `app-access` from an older box; an `access-request`
+/// frame on a screens socket; or the phone alert outbox). Carries nothing
+/// about the app or host: the phone fetches those from the box.
 public enum AppAccessEvents {
     public static let requested = Notification.Name("flagship.app-access.requested")
+    /// What boxes before the push switch sent.
     public static let pushCategory = "app-access"
+    /// What a box sends now: Apple and Google see only that Flagship pinged.
+    public static let genericPushCategory = "generic"
+    private static let pushCategories: Set<String> = [pushCategory, genericPushCategory]
     public static let socketEvent = "access-request"
 
     public static func post() {
@@ -426,13 +442,11 @@ public enum AppAccessEvents {
     }
 
     /// A push payload's category (`aps.category`, or a top-level
-    /// `category` / `kind`) is `app-access`.
+    /// `category` / `kind`) is `generic` or `app-access`.
     public static func isPush(_ userInfo: [AnyHashable: Any], categoryIdentifier: String? = nil) -> Bool {
-        if categoryIdentifier == pushCategory { return true }
-        if (userInfo["category"] as? String) == pushCategory || (userInfo["kind"] as? String) == pushCategory {
-            return true
-        }
-        if let aps = userInfo["aps"] as? [String: Any], (aps["category"] as? String) == pushCategory { return true }
+        func matches(_ value: Any?) -> Bool { (value as? String).map(pushCategories.contains) ?? false }
+        if matches(categoryIdentifier) || matches(userInfo["category"]) || matches(userInfo["kind"]) { return true }
+        if let aps = userInfo["aps"] as? [String: Any], matches(aps["category"]) { return true }
         return false
     }
 }

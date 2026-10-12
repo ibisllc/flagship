@@ -51,10 +51,26 @@ public final class PushRegistrar: PushRegistrarHandle {
     /// registration succeed?" without observing the keychain directly.
     public private(set) var lastRegisteredTokenId: String?
     public private(set) var lastError: Error?
+    /// The owner's push switch (Settings → Privacy). Off: tokens from APNs
+    /// are ignored and nothing is registered.
+    private let isEnabled: @MainActor () -> Bool
 
-    public init(appState: AppState, client: any FlagshipServerClient) {
+    public init(appState: AppState, client: any FlagshipServerClient,
+                isEnabled: @escaping @MainActor () -> Bool = { true }) {
         self.appState = appState
         self.client = client
+        self.isEnabled = isEnabled
+    }
+
+    /// Whether `.com` may still hold a registration for this device.
+    public var isRegistered: Bool { Keystore.pushTokenId() != nil }
+
+    /// Push switched off: drop this device's registration on `.com`. Unlike
+    /// `revoke()` the token id is kept when `.com` can't be reached, so the
+    /// next start tries again instead of leaving a live registration behind.
+    @discardableResult
+    public func unregister() async -> Bool {
+        await revokeRegistration(forgetOnFailure: false)
     }
 
     /// Drop the last-registered push token on .com and wipe the
@@ -65,7 +81,11 @@ public final class PushRegistrar: PushRegistrarHandle {
     /// revoke). Tolerates the no-token case + any transport error
     /// (sign-out shouldn't fail because the device was offline).
     public func revoke() async {
-        guard let tokenId = Keystore.pushTokenId() else { return }
+        _ = await revokeRegistration(forgetOnFailure: true)
+    }
+
+    private func revokeRegistration(forgetOnFailure: Bool) async -> Bool {
+        guard let tokenId = Keystore.pushTokenId() else { return true }
         do {
             // Revoke is now IRK-signed (SEC): .com verifies the envelope
             // against the token owner's registered IRK before deleting the
@@ -85,9 +105,11 @@ public final class PushRegistrar: PushRegistrarHandle {
             // non-fatal — the daemon can garbage-collect stale tokens on
             // its own schedule.
             self.lastError = error
+            if !forgetOnFailure { return false }
         }
         try? Keystore.setPushTokenId(nil)
         self.lastRegisteredTokenId = nil
+        return true
     }
 
     public func handle(deviceToken: Data?) async {
@@ -97,6 +119,7 @@ public final class PushRegistrar: PushRegistrarHandle {
             // permission flip shouldn't drop us off the relay.
             return
         }
+        guard isEnabled() else { return }
         guard let username = appState.currentUser, !username.isEmpty else {
             // Pre-pairing — silently skip; ContentView re-fires once
             // the user finishes onboarding.
@@ -137,6 +160,8 @@ public final class PushRegistrar: PushRegistrarHandle {
             try? Keystore.setPushTokenId(resp.tokenId)
             self.lastRegisteredTokenId = resp.tokenId
             self.lastError = nil
+            // Switched off while this was in flight: take it back.
+            if !isEnabled() { await unregister() }
         } catch {
             self.lastError = error
         }

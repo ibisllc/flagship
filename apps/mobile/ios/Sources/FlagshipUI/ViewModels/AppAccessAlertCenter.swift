@@ -4,12 +4,13 @@ import FlagshipAPI
 import FlagshipCore
 
 /// App-wide "<App> wants to reach <host>" alerts (docs/ai-privacy-and-staging.md
-/// §3a). The `app-access` push and the box's `access-request` event say only
-/// that something is waiting; this asks every box the phone manages
+/// §3a). A `generic` push (`app-access` from an older box) and the box's
+/// `access-request` event say only that something is waiting; this asks every box the phone manages
 /// (`GET /api/screens/access-requests`, over each box's paired session) and
 /// shows one sheet per request: Allow / Deny (sign the edited list) or Not now
 /// (keeps the request on the box; this device doesn't ask about it again for
-/// 24 hours).
+/// 24 hours). With push notifications switched off it shows no sheet at all;
+/// requests still wait on each app's page.
 @Observable
 @MainActor
 public final class AppAccessAlertCenter {
@@ -46,6 +47,7 @@ public final class AppAccessAlertCenter {
 
     private let boxes: @MainActor () async -> [Box]
     private let isActive: @MainActor () -> Bool
+    private let alertsEnabled: @MainActor () -> Bool
     private let signer: AppAccessSigner
     private var clients: [String: any ScreensClient] = [:]
     /// Not now (or swiped away while asking): request id → until when this
@@ -60,6 +62,7 @@ public final class AppAccessAlertCenter {
 
     public init(boxes: @escaping @MainActor () async -> [Box],
                 isActive: @escaping @MainActor () -> Bool = { true },
+                alertsEnabled: @escaping @MainActor () -> Bool = { true },
                 signer: AppAccessSigner? = nil,
                 defaults: UserDefaults = .standard,
                 now: @escaping () -> Date = Date.init) {
@@ -67,6 +70,7 @@ public final class AppAccessAlertCenter {
         self.defaults = defaults
         self.now = now
         self.isActive = isActive
+        self.alertsEnabled = alertsEnabled
         self.signer = signer ?? AppAccessOrder.defaultSigner
     }
 
@@ -86,6 +90,7 @@ public final class AppAccessAlertCenter {
     /// refresh on every `access-request` frame (a closed socket is reopened
     /// after a pause). The foreground refresh covers a box without one.
     public func startListening(retryAfter: Duration = .seconds(30)) async {
+        guard alertsEnabled() else { return stopListening() }
         let current = await boxes()
         let domains = Set(current.map(\.serverDomain))
         for (domain, task) in listeners where !domains.contains(domain) {
@@ -111,7 +116,15 @@ public final class AppAccessAlertCenter {
     }
 
     /// Ask every managed box for waiting requests and queue the new ones.
+    /// Alerts switched off: drop the queue (an answer in flight finishes).
     public func refresh() async {
+        guard alertsEnabled() else {
+            if case .working = stage { return }
+            queue = []
+            stage = .ask
+            editor = nil
+            return
+        }
         guard isActive(), !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
@@ -121,6 +134,7 @@ public final class AppAccessAlertCenter {
             guard let r = try? await box.client.accessRequests() else { continue }
             found += r.requests.map { Item(serverDomain: box.serverDomain, request: $0) }
         }
+        guard alertsEnabled() else { return }
         let known = Set(queue.map(\.id))
         let waiting = Set(found.map(\.id))
         // Requests answered elsewhere drop out, except the one on screen.

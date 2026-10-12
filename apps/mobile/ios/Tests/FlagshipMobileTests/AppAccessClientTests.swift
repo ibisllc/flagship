@@ -56,7 +56,6 @@ final class AppAccessClientTests: XCTestCase {
         XCTAssertEqual(AppAccessCopy.source("app", attempts: 0), "Asked at install")
         XCTAssertEqual(AppAccessCopy.source("attempt", attempts: 1), "Tried to connect")
         XCTAssertEqual(AppAccessCopy.source("attempt", attempts: 4), "Tried to connect 4 times")
-        XCTAssertEqual(AppAccessCopy.pushBody, "One of your apps wants to reach the internet")
         XCTAssertEqual(AppAccessCopy.ruleCount(1), "1 rule")
         XCTAssertEqual(AppAccessCopy.lineError(AppAccessLineError(line: 3, message: "one host per line")),
                        "Line 3: one host per line")
@@ -66,6 +65,11 @@ final class AppAccessClientTests: XCTestCase {
         XCTAssertTrue(AppAccessEvents.isPush([:], categoryIdentifier: "app-access"))
         XCTAssertTrue(AppAccessEvents.isPush(["aps": ["category": "app-access"]]))
         XCTAssertTrue(AppAccessEvents.isPush(["category": "app-access"]))
+        // What a box sends now; `app-access` stays for older boxes.
+        XCTAssertTrue(AppAccessEvents.isPush([:], categoryIdentifier: "generic"))
+        XCTAssertTrue(AppAccessEvents.isPush(["aps": ["category": "generic"]]))
+        XCTAssertTrue(AppAccessEvents.isPush(["kind": "generic"]))
+        XCTAssertFalse(AppAccessEvents.isPush(["aps": ["category": "unlock-request"]]))
         XCTAssertFalse(AppAccessEvents.isPush(["kind": "secret-request"], categoryIdentifier: "secret-request"))
         XCTAssertTrue(AppAccessEvents.isRequestFrame(Data(#"{"type":"access-request","serviceId":"a--b"}"#.utf8)))
         XCTAssertFalse(AppAccessEvents.isRequestFrame(Data(#"{"kind":"token","text":"x"}"#.utf8)))
