@@ -346,8 +346,32 @@ export async function runDockerBuild(
     const err = e as Error & { stdout?: string; stderr?: string };
     if (err.stdout) process.stdout.write(err.stdout);
     if (err.stderr) process.stderr.write(err.stderr);
+    const why = dockerBuildFailure(err.stdout ?? "", err.stderr ?? "");
+    if (why) err.message = why;
     throw err;
   }
+}
+
+const LEGACY_BUILDER_NOTICE =
+  /DEPRECATED: The legacy builder is deprecated[^\n]*\n(?:[ \t]+\S[^\n]*\n)*/;
+
+/**
+ * Why a `docker build` failed, from its output. The legacy builder prints
+ * each step's output (npm's own error, say) on stdout, and only its
+ * deprecation notice and "The command ... returned a non-zero code" on
+ * stderr, so stderr alone never says what went wrong. Keep the failing
+ * step's last lines, which the owner and the AI both need to fix it.
+ */
+export function dockerBuildFailure(stdout: string, stderr: string): string | null {
+  const tail = (s: string, n: number) =>
+    s.split("\n").map((l) => l.trimEnd()).filter((l) => l && !/^ ---> /.test(l)).slice(-n);
+  const err = stderr.replace(LEGACY_BUILDER_NOTICE, "").trim();
+  const lastStep = stdout.lastIndexOf("\nStep ");
+  const stepOut = lastStep >= 0 ? stdout.slice(lastStep + 1) : stdout;
+  const lines = [...tail(stepOut, 20), ...tail(err, 6)];
+  if (lines.length === 0) return null;
+  const text = lines.join("\n");
+  return text.length > 2000 ? `…${text.slice(-2000)}` : text;
 }
 
 export class AppRunner {

@@ -153,8 +153,9 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
     try {
       await runDockerBuild(deps.cmd, image, appDir);
     } catch (e) {
-      await note(buildId, mode, "error", `docker build failed`);
-      return { ok: false, reason: `docker build failed: ${(e as Error).message}` };
+      const reason = `docker build failed: ${(e as Error).message}`;
+      await note(buildId, mode, "error", reason);
+      return { ok: false, reason };
     }
 
     // 4. Patch the manifest's runtime.image to our local tag.

@@ -7,6 +7,7 @@ import {
   dockerBuildArgs,
   realCommandRunner,
   runDockerBuild,
+  dockerBuildFailure,
   type CommandRunner,
   type CommandRunnerOpts,
 } from "../src/serviceRunner.js";
@@ -73,6 +74,46 @@ describe("runDockerBuild", () => {
       },
     };
     await expect(runDockerBuild(cmd, "img:1", "/ctx")).rejects.toThrow(/COPY failed/);
+  });
+  it("reports the failing step's output, which the legacy builder puts on stdout", async () => {
+    const stdout = [
+      "Sending build context to Docker daemon  9.216kB",
+      "Step 1/6 : FROM node:20-alpine",
+      " ---> 1c2b3d4e5f60",
+      "Step 3/6 : COPY package.json ./",
+      " ---> 2c2b3d4e5f60",
+      "Step 4/6 : RUN npm install --omit=dev",
+      " ---> Running in 3c2b3d4e5f60",
+      "npm error code ETARGET",
+      "npm error notarget No matching version found for left-pad@^9.0.0.",
+      "npm error A complete log of this run can be found in: /root/.npm/_logs/x.log",
+      "",
+    ].join("\n");
+    const stderr = [
+      "DEPRECATED: The legacy builder is deprecated and will be removed in a future release.",
+      "            Install the buildx component to build images with BuildKit:",
+      "            https://docs.docker.com/go/buildx/",
+      "",
+      "The command '/bin/sh -c npm install --omit=dev' returned a non-zero code: 1",
+      "",
+    ].join("\n");
+    const why = dockerBuildFailure(stdout, stderr)!;
+    expect(why).toBe(
+      [
+        "Step 4/6 : RUN npm install --omit=dev",
+        "npm error code ETARGET",
+        "npm error notarget No matching version found for left-pad@^9.0.0.",
+        "npm error A complete log of this run can be found in: /root/.npm/_logs/x.log",
+        "The command '/bin/sh -c npm install --omit=dev' returned a non-zero code: 1",
+      ].join("\n"),
+    );
+    const cmd: CommandRunner = {
+      run: async () => {},
+      capture: async () => {
+        throw Object.assign(new Error("docker exited with code 1: DEPRECATED"), { stdout, stderr });
+      },
+    };
+    await expect(runDockerBuild(cmd, "img:1", "/ctx")).rejects.toThrow(/No matching version found for left-pad/);
   });
   it("falls back to run when the runner has no capture, still hardened", async () => {
     const calls: { args: string[]; opts?: CommandRunnerOpts }[] = [];
