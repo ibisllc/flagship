@@ -240,6 +240,28 @@ export function releaseCatalogPath(refresh = false) {
 }
 
 /**
+ * The releases a box can move to. A box lists and verifies them itself; one
+ * from before that answers 404, and then flagshipserver.com lists the endorsed
+ * releases for its commit instead. That only decides what is offered: the box
+ * still checks the endorsement before it applies an order.
+ *
+ * @param {{ fetchBox: (path: string) => Promise<object>, currentCommit: string,
+ *           refresh?: boolean, fetch?: typeof fetch, comBase?: string }} args
+ */
+export async function loadReleaseCatalog({ fetchBox, currentCommit, refresh = false, fetch: f = fetch, comBase }) {
+  try {
+    return await fetchBox(releaseCatalogPath(refresh));
+  } catch (e) {
+    if (e?.status !== 404 || !COMMIT_SHA_RE.test(String(currentCommit))) throw e;
+  }
+  const q = `current=${encodeURIComponent(currentCommit)}${refresh ? "&refresh=1" : ""}`;
+  const resp = await f(`${comBase || controlApex()}/api/releases?${q}`);
+  const out = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw err((out && out.error) || `HTTP ${resp.status}`, resp.status);
+  return out;
+}
+
+/**
  * The update dialog's view of the box's release list: the latest newer
  * release, the other newer ones, the older ones (Advanced only) and the tag of
  * the running release. Entries without a full commit are dropped, since an

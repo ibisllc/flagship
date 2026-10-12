@@ -379,8 +379,8 @@ describe("/webapp PWA static surface", () => {
     // v41 names a git import and follows the AI adapt in the background.
     // v42 offers "Get flagship.app.json" on an adapted or installed git import.
     // v43 shares adaptations by default and reports a broken one.
-    // v45 moves the git import share switch onto the not-ready card.
-    expect(r.body).toContain('SHELL_VERSION = "v45"');
+    // v46 lists releases from flagshipserver.com for boxes that can't.
+    expect(r.body).toContain('SHELL_VERSION = "v46"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

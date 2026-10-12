@@ -50,7 +50,7 @@ import {
   depositUpdateOrder,
   describeLastUpdate,
   groupReleases,
-  releaseCatalogPath,
+  loadReleaseCatalog,
   COMMIT_SHA_RE,
   DOWNGRADE_WARNING,
 } from "../lib/serverUpdate.js";
@@ -1410,8 +1410,7 @@ function wireUpdate(body) {
       }
     });
   });
-  // An older daemon 404s the release list; the card then stays as it was.
-  screensFetch(releaseCatalogPath())
+  loadReleaseCatalog({ fetchBox: (p) => screensFetch(p), currentCommit: body.currentCommit })
     .then((catalog) => {
       const { latest } = groupReleases(catalog);
       if (!latest) return;
@@ -1555,7 +1554,7 @@ async function openUpdateDialog(body) {
     const recheck = q("[data-update-recheck]");
     if (recheck) recheck.disabled = true;
     try {
-      catalog = await screensFetch(releaseCatalogPath(refresh));
+      catalog = await loadReleaseCatalog({ fetchBox: (p) => screensFetch(p), currentCommit, refresh });
       renderCatalog();
     } catch (e) {
       if (!catalog) {

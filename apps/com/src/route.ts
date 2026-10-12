@@ -23,6 +23,7 @@
  *  11. Anything else — static assets.
  */
 
+import { RELEASES_PATH, handleReleases } from "./releaseCatalog.js";
 import { tryControlPlane, tryBootHost } from "./controlPlaneRoutes.js";
 import {
   handleAdapterIndex,
@@ -229,6 +230,8 @@ export interface RouteEnv {
    * the pre-launch gate armed (only the /wip_ preview cookie sees the site).
    */
   SITE_PUBLIC?: string;
+  /** Raises GitHub's rate limit for the release list (any token reads a public repo). */
+  ADAPTERS_GITHUB_TOKEN?: string;
   /** Optional base-ISO override for /api/build/iso-info. */
   BASE_ISO_URL?: string;
   BASE_ISO_VERSION?: string;
@@ -598,6 +601,14 @@ async function routeImpl(
 
   if (url.pathname === HEALTH_PATH) {
     return jsonHealth();
+  }
+
+  if (url.pathname === RELEASES_PATH && request.method === "GET") {
+    return handleReleases(url, {
+      fetch: (input, init) => fetch(input, init),
+      ...(env.ADAPTERS_GITHUB_TOKEN ? { token: env.ADAPTERS_GITHUB_TOKEN } : {}),
+      ...(typeof caches !== "undefined" ? { cache: caches.default } : {}),
+    });
   }
 
   if (url.pathname === SERVICES_ENDPOINTS_PATH) {

@@ -252,6 +252,27 @@ describe("release list — what the update dialog offers", () => {
     expect(releaseCatalogPath(true)).toBe("/api/screens/updates?refresh=1");
   });
 
+  it("asks flagshipserver.com for a box too old to list its own releases", async () => {
+    const { loadReleaseCatalog } = await loadServerUpdate();
+    const boxSays = (status: number) => async () => {
+      throw Object.assign(new Error("box"), { status });
+    };
+    const asked: string[] = [];
+    const fetch = (async (u: string) => {
+      asked.push(u);
+      return new Response(JSON.stringify(catalog), { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+    const got = await loadReleaseCatalog({ fetchBox: boxSays(404), currentCommit: CUR, fetch, comBase: "https://c" });
+    expect(got.latest.commit).toBe(NEWEST);
+    expect(asked).toEqual([`https://c/api/releases?current=${CUR}`]);
+    await loadReleaseCatalog({ fetchBox: boxSays(404), currentCommit: CUR, refresh: true, fetch, comBase: "https://c" });
+    expect(asked[1]).toBe(`https://c/api/releases?current=${CUR}&refresh=1`);
+    // A box that can list but failed keeps its own error; its own list wins.
+    await expect(loadReleaseCatalog({ fetchBox: boxSays(502), currentCommit: CUR, fetch })).rejects.toThrow("box");
+    expect(await loadReleaseCatalog({ fetchBox: async () => ({ mine: true }), currentCommit: CUR, fetch })).toEqual({ mine: true });
+    expect(asked).toHaveLength(2);
+  });
+
   it("splits latest, other newer and older releases", async () => {
     const { groupReleases } = await loadServerUpdate();
     const g = groupReleases(catalog);

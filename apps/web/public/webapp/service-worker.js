@@ -77,7 +77,7 @@
 //  v44: Delete server for every server (typed-name gate, erase order + name
 //       release), reversible Revoke + Un-revoke, revoked servers stay listed,
 //       and the server page keeps its Danger zone when the box is offline.
-const SHELL_VERSION = "v45";
+const SHELL_VERSION = "v46";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
