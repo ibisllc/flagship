@@ -423,6 +423,34 @@ describe("§4 Runs on, from every server's own apps list", () => {
 });
 
 describe("§3 a server's apps", () => {
+  it("each app row shows that server's state; unknown shows none; a copy arriving stays greyed", async () => {
+    const p = await loadPlacement();
+    const rows = p.serverAppRows([
+      { serviceId: "alice--notes", slug: "notes", status: "running" },
+      { serviceId: "alice--blog", slug: "blog", status: "stopped" },
+      { serviceId: "alice--wiki", slug: "wiki", status: "running", activity: { kind: "deploying" } },
+      { serviceId: "alice--todo", slug: "todo", status: "unknown", activity: { kind: "editing" } },
+      { serviceId: "alice--old", slug: "old", status: "unknown" },
+      { serviceId: "alice--photos", slug: "photos", status: "stopped", copying: { state: "copying", progress: 0.5 } },
+    ]);
+    expect(rows.map((r: { state: string }) => r.state)).toEqual(["running", "stopped", "deploying", "editing", "unknown", "copying"]);
+    const html = p.serverAppsHtml(rows);
+    const row = (id: string) => {
+      const at = html.indexOf(`data-open-app="${id}"`);
+      expect(at).toBeGreaterThan(-1);
+      return html.slice(at, html.indexOf("</button>", at));
+    };
+    expect(row("alice--notes")).toContain(">Running</span>");
+    expect(row("alice--blog")).toContain(">Stopped</span>");
+    expect(row("alice--wiki")).toContain(">Deploying</span>");
+    expect(row("alice--todo")).toContain(">Editing</span>");
+    expect(row("alice--old")).not.toContain("data-app-state");
+    expect(html).not.toContain(">unknown<");
+    expect(html).toContain('data-copying-app="alice--photos"');
+    expect(html).toContain("Copying… 50%");
+    expect(html).not.toContain('data-app-state="copying"');
+  });
+
   it("lists the apps, and a copy under way greyed with its progress", async () => {
     const p = await loadPlacement();
     const rows = p.serverAppRows(
@@ -501,7 +529,7 @@ describe("§3 a server's apps", () => {
     expect(page).toContain('enterServiceDetail(btn.getAttribute("data-open-app"), { server: fqdn, from: "server" })');
     const sw = await asset("/webapp/service-worker.js");
     expect(sw).toContain('"/lib/appPlacement.js"');
-    expect(sw).toContain('SHELL_VERSION = "v57"');
+    expect(sw).toContain('SHELL_VERSION = "v58"');
   });
 });
 
@@ -574,5 +602,117 @@ describe("build sessions from every server", () => {
     const source = await asset("/webapp/views/build-source.js");
     expect(source).toContain("sessionServers(await loadAccountPods(");
     expect(await asset("/webapp/views/build-git.js")).toContain("enterBuildJournal(buildId, { server: client().fqdn })");
+  });
+});
+
+describe("§6 an app's status pill", () => {
+  const label = async (states: string[]) => (await loadPlacement()).combineAppStatus(states).label;
+
+  it("one server's state: activity first, then the container's status; unknown shows nothing", async () => {
+    const p = await loadPlacement();
+    expect(p.appServerState({ status: "running" })).toBe("running");
+    expect(p.appServerState({ status: "starting" })).toBe("starting");
+    expect(p.appServerState({ status: "stopped" })).toBe("stopped");
+    expect(p.appServerState({ status: "unknown" })).toBe("unknown");
+    expect(p.appServerState({})).toBe("unknown");
+    expect(p.appServerState({ status: "weird" })).toBe("unknown");
+    expect(p.appServerState({ status: "running", activity: { kind: "deploying" } })).toBe("deploying");
+    expect(p.appServerState({ status: "running", activity: { kind: "editing" } })).toBe("editing");
+    expect(p.appServerState({ status: "stopped", activity: { kind: "copying" } })).toBe("copying");
+    expect(p.appServerState({ status: "unknown", copying: { state: "installing", progress: 0.2 } })).toBe("copying");
+    expect(p.appServerState({ status: "running", activity: { kind: "nope" } })).toBe("running");
+    expect(["running", "starting", "stopped", "deploying", "copying", "editing"].map(p.appStateLabel)).toEqual([
+      "Running",
+      "Starting",
+      "Stopped",
+      "Deploying",
+      "Copying",
+      "Editing",
+    ]);
+    expect(p.appStateLabel("unknown")).toBe("");
+    expect(p.appStatePillHtml("unknown")).toBe("");
+    expect(p.appStatePillHtml("running")).toContain(">Running</span>");
+  });
+
+  it("deploying or copying anywhere → Deploying, before anything else", async () => {
+    expect(await label(["running", "deploying", "editing"])).toBe("Deploying");
+    expect(await label(["stopped", "copying"])).toBe("Deploying");
+  });
+
+  it("else editing anywhere → Editing", async () => {
+    expect(await label(["running", "editing", "stopped"])).toBe("Editing");
+  });
+
+  it("else On 1 server / On N servers, counting running and starting", async () => {
+    expect(await label(["running"])).toBe("On 1 server");
+    expect(await label(["starting"])).toBe("On 1 server");
+    expect(await label(["running", "starting", "running"])).toBe("On 3 servers");
+    expect(await label(["running", "stopped"])).toBe("On 1 server");
+  });
+
+  it("else every server that answered says stopped → Stopped; an unreachable one doesn't count", async () => {
+    expect(await label(["stopped"])).toBe("Stopped");
+    expect(await label(["stopped", "stopped", "unreachable"])).toBe("Stopped");
+  });
+
+  it("an older box's unknown is on that server but not running, and never reads as Stopped", async () => {
+    expect(await label(["running", "unknown"])).toBe("On 1 server");
+    expect(await label(["unknown"])).toBe("On 1 server");
+    expect(await label(["unknown", "unknown"])).toBe("On 2 servers");
+    expect(await label(["stopped", "unknown"])).toBe("On 1 server");
+  });
+
+  it("no server answered → Can't reach", async () => {
+    expect(await label([])).toBe("Can't reach");
+    expect(await label(["unreachable", "unreachable"])).toBe("Can't reach");
+    const p = await loadPlacement();
+    expect(p.combineAppStatus(undefined).kind).toBe("unreachable");
+  });
+
+  it("the services list has one row per app, opening on the leader's copy, else the first server listing it", async () => {
+    const p = await loadPlacement();
+    const rows = p.mergeAppsAcrossServers(
+      [
+        { fqdn: HOME, apps: [{ ...NOTES, status: "stopped", version: "1" }, { serviceId: "alice--blog", status: "unknown" }] },
+        { fqdn: OFFICE, apps: [{ ...NOTES, status: "running", version: "2" }] },
+        { fqdn: GARAGE, apps: null },
+        { fqdn: ATTIC, apps: [{ serviceId: "alice--blog", status: "unknown" }, { serviceId: "alice--wiki", status: "running", copying: { state: "copying" } }] },
+        { fqdn: "cellar.alice.flagship.services", apps: [{ serviceId: "alice--wiki", status: "running" }] },
+      ],
+      OFFICE,
+    );
+    const by = Object.fromEntries(rows.map((r: { serviceId: string }) => [r.serviceId, r]));
+    expect(rows).toHaveLength(3);
+    expect(by[NOTES.serviceId]).toMatchObject({ listedBy: OFFICE, version: "2", servers: [HOME, OFFICE], appStatus: { kind: "on", label: "On 1 server" } });
+    expect(by["alice--blog"]).toMatchObject({ listedBy: HOME, servers: [HOME, ATTIC], appStatus: { label: "On 2 servers" } });
+    // A copy still arriving isn't opened when a settled one exists.
+    expect(by["alice--wiki"]).toMatchObject({ listedBy: "cellar.alice.flagship.services", appStatus: { kind: "deploying", label: "Deploying" } });
+    expect(p.mergeAppsAcrossServers([{ fqdn: HOME, apps: [NOTES] }])[0]).toMatchObject({ listedBy: HOME, appStatus: { label: "On 1 server" } });
+  });
+
+  it("Runs on rows carry each server's state, and the views show the pills", async () => {
+    const p = await loadPlacement();
+    const { clientFor } = fakeBoxes({
+      [HOME]: appsList({ ...NOTES, status: "running" }),
+      [OFFICE]: appsList({ ...NOTES, status: "stopped", activity: { kind: "editing" } }),
+      [GARAGE]: appsList({ ...NOTES, status: "unknown" }),
+      [ATTIC]: appsList({ ...NOTES, status: "stopped", activity: { kind: "copying" } }),
+    });
+    const pods = [pod(HOME), pod(OFFICE), pod(GARAGE), pod(ATTIC)];
+    const rows = await p.fetchRunsOn({ serviceId: NOTES.serviceId, pods, current: HOME, clientFor, hasSession: () => true });
+    const by = Object.fromEntries(rows.map((r: { fqdn: string }) => [r.fqdn, r]));
+    expect(by[HOME]).toMatchObject({ state: "has", appState: "running" });
+    expect(by[OFFICE]).toMatchObject({ state: "has", appState: "editing" });
+    expect(by[GARAGE]).toMatchObject({ state: "has", appState: "unknown" });
+    expect(by[ATTIC]).toMatchObject({ state: "copying" });
+    const html = p.runsOnHtml(p.runsOnModel(rows));
+    expect(html).toContain(">Running</span>");
+    expect(html).toContain(">Editing</span>");
+    expect(html).not.toContain('data-app-state="unknown"');
+    const list = await asset("/webapp/views/services-list.js");
+    expect(list).toContain("mergeAppsAcrossServers(lists, leaderOf(pods))");
+    expect(list).toContain("appStatusPillHtml(s.appStatus ?? combineAppStatus([appServerState(s)]))");
+    const detail = await asset("/webapp/views/service-detail.js");
+    expect(detail).toContain("appStatePillHtml(appServerState(s))");
   });
 });

@@ -109,7 +109,11 @@
 //       "Create app here", and the app page's Runs on ticks copy the app to a
 //       server (signed) and unticks remove it; precaches lib/appPlacement.js.
 //  v57: a server's page is titled with its name, not "Server".
-const SHELL_VERSION = "v57";
+//  v58: an app's status pill (docs/app-placement.md §6): the services list
+//       shows each app once with one pill for every server it's on
+//       (Deploying / Editing / On N servers / Stopped / Can't reach), and
+//       the app page and its Runs on rows show each server's state.
+const SHELL_VERSION = "v58";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

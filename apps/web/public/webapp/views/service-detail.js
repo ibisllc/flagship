@@ -8,6 +8,8 @@ import { screensFetch, ScreensError, getPodBaseUrl, currentPodFqdn, makeCurrentP
 import { inlineConfirm } from "../lib/modal.js";
 import {
   REMOVE_CONFIRM_TITLE,
+  appServerState,
+  appStatePillHtml,
   changeRunsOn,
   fetchRunsOn,
   loadAccountPods,
@@ -165,7 +167,7 @@ export async function renderServiceDetail(serviceId) {
       : null;
     root.innerHTML = `
       <div class="card">
-        <div class="card-title">${escapeHtml(s.slug)}</div>
+        <div class="card-title">${escapeHtml(s.slug)}${appStatePillHtml(appServerState(s))}</div>
         <div class="muted-sm text-xs mt-1">${
           s.version ? `ver: ${escapeHtml(s.version)}&nbsp;&nbsp;·&nbsp;&nbsp;` : ""
         }id: ${escapeHtml(s.serviceId)}</div>

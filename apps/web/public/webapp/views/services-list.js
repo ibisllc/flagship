@@ -18,6 +18,7 @@ import { packageIcon, flagIcon } from "../lib/icons.js";
 import { controlApex } from "../lib/apex.js";
 import { buildPodSwitcherModel } from "../lib/podSwitcher.js";
 import { fetchPodInventory } from "./home.js";
+import { appServerState, appStatusPillHtml, combineAppStatus, leaderOf, mergeAppsAcrossServers } from "../lib/appPlacement.js";
 
 const COM_BASE = controlApex();
 
@@ -160,7 +161,8 @@ function urlRowHtml(service, links) {
 }
 
 /** Render one app as a clean list-row-style card: a teal package glyph, the
- *  slug + version pill, the summary, the running/stopped status pill, the
+ *  slug + version pill, the summary, the status pill combining every server
+ *  it's on (docs/app-placement.md §6), the
  *  voi.ci/canonical URL slot, and an Open button. Preserves every existing
  *  data hook (data-service-id, data-url-slot, data-action=open). */
 function appCardHtml(s) {
@@ -172,7 +174,7 @@ function appCardHtml(s) {
           <div class="weight-600">${escapeHtml(s.slug)} <span class="pill">${escapeHtml(s.version || "")}</span></div>
           <div class="muted-sm truncate">${escapeHtml(s.summary || "")}</div>
           <div class="row mt-1" style="gap:6px; flex-wrap:wrap;">
-            <span class="pill ${s.status === "running" ? "ok" : ""}">${escapeHtml(s.status || "")}</span>
+            ${appStatusPillHtml(s.appStatus ?? combineAppStatus([appServerState(s)]))}
             ${hasPendingInternetRequest(s, hasPendingEgress) ? `<span class="pill warn" data-egress-pending>${escapeHtml(ACCESS_PENDING_BADGE)}</span>` : ""}
             ${hasAccessDraft(s) ? `<span class="pill warn" data-access-draft>${escapeHtml(ACCESS_DRAFT_BADGE)}</span>` : ""}
           </div>
@@ -270,15 +272,14 @@ export async function renderServicesList() {
   }
   try {
     // "All servers" (no active-pod scope, getPodBaseUrl() === "") aggregates
-    // each online pod's apps list; a specific pod scopes to it. We dedupe the
-    // aggregate on serviceId so a service listed by more than one pod (a
-    // leader-routed tier-2 service) doesn't appear twice.
+    // each online pod's apps list into one row per app, its pill combining
+    // every server it's on; a specific pod scopes to it.
     let apps;
     if (!getPodBaseUrl() && podSwitcherPods.length) {
       apps = await fetchAppsAcrossPods(podSwitcherPods);
     } else {
       const body = await screensFetch("/api/screens/apps-list");
-      apps = body.apps ?? [];
+      apps = mergeAppsAcrossServers([{ fqdn: "", apps: body.apps ?? [] }]);
     }
     if (!apps.length) {
       appEntries = [];
@@ -296,9 +297,10 @@ export async function renderServicesList() {
   }
 }
 
-/** Fan out the apps-list across every online pod and merge, deduped on
- *  serviceId. Per-pod failures are tolerated (a single offline/erroring pod
- *  shouldn't blank the whole list). */
+/** Fan out the apps-list across every online pod and merge into one row per
+ *  serviceId, opening on the leader's copy when it has one. Per-pod failures
+ *  are tolerated (a single offline/erroring pod shouldn't blank the whole
+ *  list). */
 async function fetchAppsAcrossPods(pods) {
   const fqdns = [...new Set(
     pods
@@ -311,19 +313,11 @@ async function fetchAppsAcrossPods(pods) {
     fqdns.map((fqdn) =>
       boxClient(fqdn)
         .fetch("/api/screens/apps-list")
-        .then((b) => (b?.apps ?? []).map((a) => ({ ...a, listedBy: fqdn })))
-        .catch(() => []),
+        .then((b) => ({ fqdn, apps: Array.isArray(b?.apps) ? b.apps : [] }))
+        .catch(() => ({ fqdn, apps: null })),
     ),
   );
-  const seen = new Set();
-  const merged = [];
-  for (const app of lists.flat()) {
-    const id = String(app?.serviceId ?? "");
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    merged.push(app);
-  }
-  return merged;
+  return mergeAppsAcrossServers(lists, leaderOf(pods));
 }
 
 function bindServicesListHandlers() {

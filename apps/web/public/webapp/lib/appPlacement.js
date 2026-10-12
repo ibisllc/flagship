@@ -13,6 +13,8 @@
 //
 //      with the sensitive-order key; removing a copy is the existing signed
 //      uninstall (`flagship/uninstall-service/v1`) to that box.
+//   §6 an app's status pill: each server's state for the app, and the
+//      services list's one pill combining every server the app is on
 //
 // Must pass packages/protocol/test-vectors/app-copy/vectors.json.
 
@@ -380,7 +382,8 @@ export async function fetchRunsOn({ serviceId, pods, current = currentPodFqdn(),
         const app = apps.find((a) => a?.serviceId === serviceId);
         const copying = readCopying(app?.copying);
         if (copying) return { ...row, state: "copying", copying };
-        return { ...row, state: app ? "has" : "missing" };
+        if (app?.activity?.kind === "copying") return { ...row, state: "copying", copying: { state: "copying", progress: null } };
+        return app ? { ...row, state: "has", appState: appServerState(app) } : { ...row, state: "missing" };
       } catch {
         return row;
       }
@@ -412,7 +415,7 @@ export function runsOnHtml(model, { companion = false, error = "" } = {}) {
     .map((r) =>
       `<label class="inline-check runs-on-row${r.state === "unknown" ? " is-unknown" : ""}" data-runs-on-fqdn="${escapeHtml(r.fqdn)}">
         <input type="checkbox" data-runs-on-toggle="${escapeHtml(r.fqdn)}"${r.checked ? " checked" : ""}${r.disabled ? " disabled" : ""} />
-        <span><strong>${escapeHtml(r.name)}</strong>${r.state === "unknown" ? ' <span class="pill">unknown</span>' : ""}
+        <span><strong>${escapeHtml(r.name)}</strong>${r.state === "unknown" ? ' <span class="pill">unknown</span>' : ""}${r.state === "has" ? appStatePillHtml(r.appState) : ""}
         ${r.note ? `<span class="faint-sm runs-on-note">${escapeHtml(r.note)}</span>` : ""}</span>
       </label>`)
     .join("");
@@ -495,6 +498,7 @@ export function serverAppRows(apps, copies = []) {
       name: a.slug || id,
       url: typeof a.url === "string" ? a.url : "",
       status: typeof a.status === "string" ? a.status : "",
+      state: appServerState(a),
       copying: readCopying(a.copying),
     });
   }
@@ -502,7 +506,7 @@ export function serverAppRows(apps, copies = []) {
     const copying = readCopying(c);
     if (!copying || seen.has(c.serviceId)) continue;
     seen.add(c.serviceId);
-    rows.push({ serviceId: c.serviceId, name: c.appName || c.serviceId, url: "", status: "", copying });
+    rows.push({ serviceId: c.serviceId, name: c.appName || c.serviceId, url: "", status: "", state: "copying", copying });
   }
   return rows;
 }
@@ -526,7 +530,7 @@ export function serverAppsHtml(rows, { error = "", loading = false, canCreate = 
                 : `<button type="button" class="fs-listrow server-app-row" data-open-app="${escapeHtml(r.serviceId)}">
                     <span class="weight-600">${escapeHtml(r.name)}</span>
                     ${r.url ? `<span class="muted-sm mono text-xs truncate">${escapeHtml(r.url.replace(/^https?:\/\//, ""))}</span>` : ""}
-                    ${r.status ? `<span class="pill${r.status === "running" ? " ok" : ""}">${escapeHtml(r.status)}</span>` : ""}
+                    ${appStatePillHtml(r.state)}
                   </button>`)
             .join("");
   return `
@@ -586,4 +590,112 @@ export function watchWhileCopying({ load, onRows, active, intervalMs = 3000, doc
   };
   timer = setTimer(tick, intervalMs);
   return stop;
+}
+
+// ---------------------------------------------------------------------------
+// §6 An app's status pill
+// ---------------------------------------------------------------------------
+
+export const APP_STATE_LABELS = {
+  running: "Running",
+  starting: "Starting",
+  stopped: "Stopped",
+  deploying: "Deploying",
+  copying: "Copying",
+  editing: "Editing",
+};
+export const PILL_DEPLOYING = "Deploying";
+export const PILL_EDITING = "Editing";
+export const PILL_STOPPED = "Stopped";
+export const PILL_UNREACHABLE = "Can't reach";
+export const UNREACHABLE = "unreachable";
+
+const ACTIVITY_KINDS = new Set(["deploying", "copying", "editing"]);
+const RUN_STATES = new Set(["running", "starting", "stopped"]);
+
+/** One server's state for an app, from its apps-list row or app-detail app:
+ *  what's working on it (`activity`, or a copy still arriving), else its
+ *  `status`. An older box sends only "unknown". */
+export function appServerState(app) {
+  const kind = app?.activity?.kind;
+  if (ACTIVITY_KINDS.has(kind)) return kind;
+  if (readCopying(app?.copying)) return "copying";
+  return RUN_STATES.has(app?.status) ? app.status : "unknown";
+}
+
+/** "Running", "Deploying"…; "" for unknown. */
+export function appStateLabel(state) {
+  return APP_STATE_LABELS[state] ?? "";
+}
+
+function pillTone(state) {
+  if (state === "running" || state === "on") return " ok";
+  if (state === "deploying" || state === "copying" || state === "editing" || state === "starting") return " accent";
+  return "";
+}
+
+/** One server's state as a pill ("" when unknown). */
+export function appStatePillHtml(state) {
+  const label = appStateLabel(state);
+  return label ? ` <span class="pill${pillTone(state)}" data-app-state="${escapeHtml(state)}">${escapeHtml(label)}</span>` : "";
+}
+
+/**
+ * The services list's pill for an app, from each server it's on: `states`
+ * holds one `appServerState` per server that lists the app, or UNREACHABLE
+ * for a server that couldn't be asked. Resolves to `{kind, label, count}`:
+ *   any deploying/copying → Deploying; else any editing → Editing; else
+ *   N running/starting → On N servers; else every answer stopped → Stopped;
+ *   else nobody answered → Can't reach.
+ * "unknown" (an older box) is on that server but not running; when no server
+ * runs it and some say unknown, those are counted as "On N servers", never
+ * read as stopped.
+ */
+export function combineAppStatus(states) {
+  const list = (Array.isArray(states) ? states : []).filter((s) => s !== UNREACHABLE && s != null);
+  if (list.some((s) => s === "deploying" || s === "copying")) return { kind: "deploying", label: PILL_DEPLOYING, count: 0 };
+  if (list.includes("editing")) return { kind: "editing", label: PILL_EDITING, count: 0 };
+  const running = list.filter((s) => s === "running" || s === "starting").length;
+  const unknown = list.filter((s) => !RUN_STATES.has(s)).length;
+  const count = running || unknown;
+  if (count) return { kind: "on", label: count === 1 ? "On 1 server" : `On ${count} servers`, count };
+  if (list.length) return { kind: "stopped", label: PILL_STOPPED, count: 0 };
+  return { kind: "unreachable", label: PILL_UNREACHABLE, count: 0 };
+}
+
+export function appStatusPillHtml(status) {
+  return `<span class="pill${pillTone(status.kind)}" data-app-status="${escapeHtml(status.kind)}">${escapeHtml(status.label)}</span>`;
+}
+
+/**
+ * The services list's rows: one per app (the same serviceId on every server),
+ * from each server's apps list `{fqdn, apps}` (`apps: null` when the server
+ * couldn't be asked). Each row opens on the leader's copy when it has a
+ * settled one, else on the first server that lists it; it carries that copy's
+ * fields, `listedBy` (that server), `servers` (every server listing it) and
+ * the combined `appStatus`.
+ */
+export function mergeAppsAcrossServers(lists, leader = "") {
+  const want = String(leader ?? "").toLowerCase();
+  const byId = new Map();
+  for (const { fqdn, apps } of Array.isArray(lists) ? lists : []) {
+    for (const app of Array.isArray(apps) ? apps : []) {
+      const id = typeof app?.serviceId === "string" ? app.serviceId : "";
+      if (!id) continue;
+      const entry = byId.get(id) ?? byId.set(id, { copies: [] }).get(id);
+      if (entry.copies.some((c) => c.fqdn === fqdn)) continue;
+      entry.copies.push({ fqdn, app, state: appServerState(app) });
+    }
+  }
+  return [...byId.values()].map(({ copies }) => {
+    const settled = copies.filter((c) => !readCopying(c.app?.copying));
+    const pick =
+      settled.find((c) => c.fqdn === want) ?? settled[0] ?? copies.find((c) => c.fqdn === want) ?? copies[0];
+    return {
+      ...pick.app,
+      listedBy: pick.fqdn,
+      servers: copies.map((c) => c.fqdn),
+      appStatus: combineAppStatus(copies.map((c) => c.state)),
+    };
+  });
 }
