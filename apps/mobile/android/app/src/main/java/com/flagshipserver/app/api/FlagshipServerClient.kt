@@ -39,12 +39,17 @@ interface FlagshipServerClient {
      *  TICKET, this un-pins the name itself (routing record + active
      *  auth-codes + server record). Mirrors webapp `releaseServerName`. */
     suspend fun releaseServerName(req: ReleaseServerNameRequest)
-    /** P13 — per-server kill-switch. IRK-signed `ServerRevocation`
-     *  envelope POSTed to /api/server-registry/revoke. The server
-     *  refuses to boot on its next reboot — irreversible. Reason ∈
+    /** P13 — per-server kill-switch. Sensitive-order-key-signed
+     *  `ServerRevocation` envelope POSTed to /api/server-registry/revoke.
+     *  The box can't connect or unlock until [unrevokeServer]. Reason ∈
      *  {"lost","stolen","decommissioned"}. Mirrors the webapp
      *  `revokeServer` + the iOS `revokeServer` shape. */
     suspend fun revokeServer(req: ServerRevocationRequest)
+    /** POST /api/server-registry/unrevoke — undo a lost / stolen /
+     *  decommissioned revoke. 403 bad signature / stale / not owner, 404
+     *  unknown, 409 the server was deleted or transferred. */
+    suspend fun unrevokeServer(req: UnrevokeServerRequest): UnrevokeServerResponse =
+        error("server un-revoke unavailable")
     suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse
     /** Sign-up handle suggestion. POST /api/username/suggest with a throwaway
      *  `deviceKey` (the per-device regenerate throttle, NOT the account IRK). A
@@ -1002,9 +1007,9 @@ data class ReleaseServerNameRequest(
     )
 }
 
-/** P13 — POST /api/server-registry/revoke. IRK-signed envelope that
- *  declares a server DEAD (kill switch). The box will refuse to boot
- *  on its next reboot — irreversible. Mirrors the canonical-bytes tag
+/** P13 — POST /api/server-registry/revoke. Signed envelope that locks a
+ *  server out (kill switch) until the owner un-revokes it. Mirrors the
+ *  canonical-bytes tag
  *  `flagship/revoke/v1` (`tag|userId|revokedServerId|reason|issuedAt`)
  *  + the @flagship/protocol `ServerRevocation` shape. */
 @Serializable
@@ -1021,6 +1026,30 @@ data class ServerRevocationRequest(
         val issuedAt: Long,
     )
 }
+
+/** POST /api/server-registry/unrevoke. Canonical bytes:
+ *  `flagship/server-unrevoke/v1|<username>|<serverDomain>|<issuedAt>`
+ *  (core.ServerUnrevocation), signed by the sensitive-order key. */
+@Serializable
+data class UnrevokeServerRequest(
+    val request: Inner,
+    val signature: String,
+) {
+    @Serializable
+    data class Inner(
+        val username: String,
+        val serverDomain: String,
+        val issuedAt: Long,
+    )
+}
+
+@Serializable
+data class UnrevokeServerResponse(
+    val ok: Boolean = false,
+    val unrevokedAt: Long? = null,
+    val dnsRepublished: Int? = null,
+    val alreadyActive: Boolean = false,
+)
 
 @Serializable
 data class RckRegisterRequest(
@@ -1399,6 +1428,8 @@ class MockFlagshipServerClient(
     private val _revokedAuthCodes = mutableSetOf<String>()
     private val _releasedServerNames = mutableListOf<ReleaseServerNameRequest>()
     private val _revokedServers = mutableListOf<ServerRevocationRequest>()
+    private val _activeRevocations = mutableMapOf<String, String>()   // fqdn → reason
+    private val _unrevokedServers = mutableListOf<UnrevokeServerRequest>()
     private val _registeredRcks = mutableMapOf<String, String>()         // subdomain → rckPubKey
     private val _registeredPushTokens = mutableMapOf<String, PushTokenRegisterRequest.Inner>()
     private var nextPushTokenId = 1
@@ -1416,6 +1447,7 @@ class MockFlagshipServerClient(
     val revokedAuthCodes: Set<String> get() = _revokedAuthCodes
     val releasedServerNames: List<ReleaseServerNameRequest> get() = _releasedServerNames
     val revokedServers: List<ServerRevocationRequest> get() = _revokedServers
+    val unrevokedServers: List<UnrevokeServerRequest> get() = _unrevokedServers
     val registeredRcks: Map<String, String> get() = _registeredRcks
     val registeredPushTokens: Map<String, PushTokenRegisterRequest.Inner> get() = _registeredPushTokens
 
@@ -1481,6 +1513,20 @@ class MockFlagshipServerClient(
     override suspend fun revokeServer(req: ServerRevocationRequest) {
         tick()
         _revokedServers += req
+        _activeRevocations[req.request.revokedServerId.lowercase()] = req.request.reason
+    }
+
+    /** Mirrors the Worker's handleUnrevokeServer: a live server is a 200
+     *  noop, a released (deleted) one can't be restored. */
+    override suspend fun unrevokeServer(req: UnrevokeServerRequest): UnrevokeServerResponse {
+        tick()
+        val domain = req.request.serverDomain.lowercase()
+        if (_releasedServerNames.any { it.request.serverDomain.lowercase() == domain }) {
+            throw HttpException(409, """{"error":"this server was deleted, transferred or retired and can't be restored"}""")
+        }
+        _activeRevocations.remove(domain) ?: return UnrevokeServerResponse(ok = true, alreadyActive = true)
+        _unrevokedServers += req
+        return UnrevokeServerResponse(ok = true, unrevokedAt = nowMs(), dnsRepublished = 0)
     }
 
     /** Mock suggestion — a fresh random `<adjective>-<noun>` each call, fixed
@@ -2321,6 +2367,13 @@ class LiveFlagshipServerClient(
             serializer = ServerRevocationRequest.serializer(),
         )
     }
+
+    override suspend fun unrevokeServer(req: UnrevokeServerRequest): UnrevokeServerResponse =
+        transport.postJsonForResponse(
+            "$base/api/server-registry/unrevoke", req,
+            serializer = UnrevokeServerRequest.serializer(),
+            responseSerializer = UnrevokeServerResponse.serializer(),
+        )
 
     override suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse =
         transport.postJsonForResponse(

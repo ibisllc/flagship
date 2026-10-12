@@ -35,6 +35,7 @@ import com.flagshipserver.app.core.PendingSwkDepositStore
 import com.flagshipserver.app.core.PendingPairingDepositStore
 import com.flagshipserver.app.core.SwkDepositCoordinator
 import com.flagshipserver.app.core.decommissionServer
+import com.flagshipserver.app.core.deleteServer
 import com.flagshipserver.app.core.LocalServerTransferClient
 import com.flagshipserver.app.core.RecoveryBannerStore
 import com.flagshipserver.app.ui.screens.DemoInstallProgressScreen
@@ -266,12 +267,15 @@ fun HomeTab() {
                 onAddServer = { nav.navigate("create-server") },
                 onSetLeader = { app.setLeader(it.podId) },
                 onDeleteServer = { pod ->
-                    // Decommission a pending or registered-but-dead server via
-                    // the shared release flow (frees the name). The IRK
-                    // biometric fires when signing; the confirm dialog lives in
-                    // the PodCard. On success removePod updates the list; on
-                    // failure the pod is kept so the name never strands.
-                    scope.launch { decommissionServer(pod, app, server, toasts) }
+                    // The row's DeleteServerDialog already confirmed. On failure
+                    // the pod is kept so the name never strands.
+                    scope.launch {
+                        if (pod.status == com.flagshipserver.app.core.PodInfo.Status.PENDING) {
+                            decommissionServer(pod, app, server, toasts)
+                        } else {
+                            deleteServer(pod, app, server, mailbox, toasts)
+                        }
+                    }
                 },
                 onRefresh = {
                     scope.launch {

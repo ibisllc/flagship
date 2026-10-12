@@ -116,6 +116,8 @@ import com.flagshipserver.app.viewmodels.ReplaceServerViewModel
 import com.flagshipserver.app.viewmodels.RevokeServerViewModel
 import com.flagshipserver.app.viewmodels.ServerMetricsViewModel
 import com.flagshipserver.app.viewmodels.SetPreferredServerViewModel
+import com.flagshipserver.app.viewmodels.UnrevokeServerPhase
+import com.flagshipserver.app.viewmodels.UnrevokeServerViewModel
 import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
@@ -143,6 +145,8 @@ fun ServerDetailScreen(
     val metricsVm = remember(podId) { ServerMetricsViewModel(podId = podId, client = client) }
     val detail by detailVm.state.collectAsState()
     val metrics by metricsVm.state.collectAsState()
+    val allPods by LocalAppState.current.pods.collectAsState()
+    val pod = allPods.firstOrNull { it.podId == podId }
 
     LaunchedEffect(podId) {
         // Retry until the box answers its BFF — an online box whose daemon
@@ -175,6 +179,11 @@ fun ServerDetailScreen(
         )
 
         Spacer(Modifier.height(FS.space.s6))
+
+        if (pod != null && pod.isRevoked) {
+            RevokedServerCard(pod = pod)
+            Spacer(Modifier.height(FS.space.s6))
+        }
 
         // Boot-unlock approval — hoisted ABOVE the load-state branch so a box
         // waiting for the owner to release its disk key is always actionable
@@ -243,8 +252,13 @@ fun ServerDetailScreen(
             TransferCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             MigrateCard(serverDomain = d.value.serverFqdn)
+        }
+
+        // Outside the loaded branch: none of these need the box, so an offline,
+        // never-online or revoked server can still be revoked or deleted.
+        if (pod != null) {
             Spacer(Modifier.height(FS.space.s6))
-            DangerZoneCard(serverDomain = d.value.serverFqdn)
+            DangerZoneCard(pod = pod, onDeleted = onBack)
         }
 
         Spacer(Modifier.height(FS.space.s12))
@@ -1258,8 +1272,8 @@ private fun DeadManCard(serverDomain: String) {
 // decommission.md). Owner-only — the decommission order is IRK-signed behind the
 // biometric inside ReplaceServerViewModel. Opens ReplaceServerScreen (backup
 // pre-flight gate → disposition picker → mint + deposit) in a full-screen dialog.
-// A graceful retire distinct from Revoke (which bricks); this hands the FQDN to a
-// replacement. Mirror of iOS ReplaceServerCard.
+// A graceful retire distinct from Revoke (which locks the box out until
+// un-revoked); this hands the FQDN to a replacement. Mirror of iOS ReplaceServerCard.
 @Composable
 private fun ReplaceServerCard(serverDomain: String, onReplaced: () -> Unit) {
     val app = LocalAppState.current
@@ -1750,18 +1764,22 @@ private fun MigrateCard(serverDomain: String) {
     }
 }
 
-// P13 — per-server danger zone. Exposes a single "Revoke this server"
-// button that opens a ModalBottomSheet with a reason picker + a
-// hold-to-confirm primary. The signing+POST lives in
-// RevokeServerViewModel. Mirror of iOS DangerZoneCard.
+// Per-server danger zone: the reversible Revoke (hidden once revoked; the
+// revoked card offers Un-revoke) and Delete. Rendered whatever the box's state,
+// since neither needs the box to answer. Revoke keeps the hold-to-confirm sheet
+// (RevokeServerViewModel); Delete is gated on typing the server's name.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DangerZoneCard(serverDomain: String) {
+private fun DangerZoneCard(pod: com.flagshipserver.app.core.PodInfo, onDeleted: () -> Unit) {
     val app = LocalAppState.current
     val server = LocalFlagshipServerClient.current
+    val mailbox = LocalSecretMailboxClient.current
     val toasts = LocalToastCenter.current
+    val scope = rememberCoroutineScope()
     val username by app.currentUser.collectAsState()
     var showSheet by remember { mutableStateOf(false) }
+    var confirmingDelete by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     Text(
@@ -1772,18 +1790,55 @@ private fun DangerZoneCard(serverDomain: String) {
     Spacer(Modifier.height(FS.space.s2))
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            if (!pod.isRevoked) {
+                Text(
+                    REVOKE_EXPLAINER,
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                )
+                FSDangerButton(
+                    label = "Revoke server (reversible)",
+                    onClick = { showSheet = true },
+                    block = true,
+                    enabled = !deleting,
+                    modifier = Modifier.semantics { contentDescription = "sd-revoke-server" },
+                )
+                Spacer(Modifier.height(FS.space.s2))
+            }
             Text(
-                "Revoke this server when the box is lost, stolen, or being decommissioned. The box will refuse to boot — this cannot be undone.",
+                "Deletes ${pod.name} for good. If the box is online it erases its data and powers off; " +
+                    "if it's offline it can never come back online. The name becomes free to reuse.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
             )
             FSDangerButton(
-                label = "Revoke this server",
-                onClick = { showSheet = true },
+                label = if (deleting) "Deleting…" else "Delete server",
+                onClick = { confirmingDelete = true },
                 block = true,
-                modifier = Modifier.semantics { contentDescription = "sd-revoke-server" },
+                enabled = !deleting,
+                modifier = Modifier.semantics { contentDescription = "sd-delete-server" },
             )
         }
+    }
+
+    if (confirmingDelete) {
+        DeleteServerDialog(
+            pod = pod,
+            onConfirm = {
+                confirmingDelete = false
+                deleting = true
+                scope.launch {
+                    try {
+                        com.flagshipserver.app.core.deleteServer(
+                            pod, app, server, mailbox, toasts, onDeleted = onDeleted,
+                        )
+                    } finally {
+                        deleting = false
+                    }
+                }
+            },
+            onDismiss = { confirmingDelete = false },
+        )
     }
 
     if (showSheet) {
@@ -1792,11 +1847,12 @@ private fun DangerZoneCard(serverDomain: String) {
             sheetState = sheetState,
         ) {
             RevokeServerSheetBody(
-                serverDomain = serverDomain,
+                serverDomain = pod.fqdn,
                 username = { username },
                 server = server,
-                onCompleted = {
-                    toasts.success("Server revoked. It will refuse to boot next time.")
+                onCompleted = { reason ->
+                    app.setPodRevocation(pod.podId, System.currentTimeMillis(), reason.wire)
+                    toasts.success("Server revoked. It can't connect or unlock until you un-revoke it.")
                     showSheet = false
                 },
                 onFailed = { msg ->
@@ -1808,12 +1864,74 @@ private fun DangerZoneCard(serverDomain: String) {
     }
 }
 
+private const val REVOKE_EXPLAINER =
+    "Locks this server out right away: it can't connect or unlock until you un-revoke it. " +
+        "Its name stays reserved. Use this if the box is lost or stolen."
+
+// Shown at the top of a revoked server's page. Un-revoking signs with the
+// sensitive-order key (UnrevokeServerViewModel) and needs nothing from the box.
+@Composable
+private fun RevokedServerCard(pod: com.flagshipserver.app.core.PodInfo) {
+    val app = LocalAppState.current
+    val server = LocalFlagshipServerClient.current
+    val toasts = LocalToastCenter.current
+    val scope = rememberCoroutineScope()
+    val vm = remember(pod.fqdn) {
+        UnrevokeServerViewModel(server = server, serverDomain = pod.fqdn, username = { app.currentUser.value })
+    }
+    val phase by vm.phase.collectAsState()
+    val busy = phase is UnrevokeServerPhase.Signing || phase is UnrevokeServerPhase.Posting
+    val reason = pod.revocationReason?.let { RevokeServerReason.fromWire(it)?.label?.lowercase() }
+    val whenRevoked = pod.revokedAt?.let { FlagshipDateFormat.format(it) }
+
+    FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("sd-revoked-card")) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+            ) {
+                FSPill("Revoked", kind = FSPillKind.Offline)
+                listOfNotNull(reason?.let { "Marked $it" }, whenRevoked).takeIf { it.isNotEmpty() }?.let {
+                    Text(
+                        it.joinToString(" · "),
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp),
+                    )
+                }
+            }
+            Text(
+                "${pod.name} can't connect or unlock until you un-revoke it. Its name stays reserved.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            )
+            (phase as? UnrevokeServerPhase.Failed)?.let { f ->
+                Text(f.message, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+            }
+            FSPrimaryButton(
+                label = if (busy) "Restoring…" else "Un-revoke server",
+                onClick = {
+                    scope.launch {
+                        vm.run()
+                        if (vm.phase.value is UnrevokeServerPhase.Completed) {
+                            app.setPodRevocation(pod.podId, null, null)
+                            toasts.success(UnrevokeServerViewModel.SUCCESS_MESSAGE)
+                        }
+                    }
+                },
+                enabled = !busy,
+                block = true,
+                modifier = Modifier.semantics { contentDescription = "sd-unrevoke-server" },
+            )
+        }
+    }
+}
+
 @Composable
 private fun RevokeServerSheetBody(
     serverDomain: String,
     username: () -> String?,
     server: com.flagshipserver.app.api.FlagshipServerClient,
-    onCompleted: () -> Unit,
+    onCompleted: (RevokeServerReason) -> Unit,
     onFailed: (String) -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -1839,7 +1957,7 @@ private fun RevokeServerSheetBody(
             style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
         )
         Text(
-            "Bricks the box on next boot — this cannot be undone. $serverDomain will refuse to start. Other servers on your account stay running.",
+            "$REVOKE_EXPLAINER Other servers on your account stay running.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
         )
@@ -1904,9 +2022,10 @@ private fun RevokeServerSheetBody(
                             holding = false
                             if (fired) {
                                 scope.launch {
-                                    vm.run(reason)
+                                    val chosen = reason
+                                    vm.run(chosen)
                                     when (val p = vm.phase.value) {
-                                        is RevokeServerPhase.Completed -> onCompleted()
+                                        is RevokeServerPhase.Completed -> onCompleted(chosen)
                                         is RevokeServerPhase.Failed -> onFailed(p.message)
                                         else -> {}
                                     }

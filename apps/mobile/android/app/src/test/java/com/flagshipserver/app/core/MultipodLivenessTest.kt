@@ -66,20 +66,62 @@ class MultipodLivenessTest {
         )
     }
 
-    @Test fun liveness_never_mapsToUnknownAndComingOnline() {
+    @Test fun liveness_never_withinGrace_isComingOnline() {
         val app = signedInApp()
         app.upsertRegisteredPod(
             fqdn = "home.harry.flagship.services", name = "Home",
-            cameOnline = false, registeredAt = now - 60 * 60 * 1000, // old reg
+            cameOnline = false, registeredAt = now - 5 * 60 * 1000,
             liveness = PodInfo.Liveness.NEVER,
         )
         val pod = app.pods.value.first()
         assertEquals(PodInfo.Status.UNKNOWN, pod.status)
-        // never + no request => still coming up (NOT dead), regardless of reg age.
         assertEquals(
             PodInfo.LivenessState.COMING_ONLINE,
             pod.livenessState(hasLiveUnlockRequest = false, now = now),
         )
+    }
+
+    @Test fun liveness_never_pastGrace_isDead() {
+        val app = signedInApp()
+        app.upsertRegisteredPod(
+            fqdn = "home.harry.flagship.services", name = "Home",
+            cameOnline = false, registeredAt = now - PodInfo.COMING_ONLINE_GRACE_MS - 1,
+            liveness = PodInfo.Liveness.NEVER,
+        )
+        val pod = app.pods.value.first()
+        assertEquals(PodInfo.LivenessState.DEAD, pod.livenessState(hasLiveUnlockRequest = false, now = now))
+        // A live unlock request still means the box is trying to come up.
+        assertEquals(
+            PodInfo.LivenessState.WAITING_FOR_APPROVAL,
+            pod.livenessState(hasLiveUnlockRequest = true, now = now),
+        )
+    }
+
+    @Test fun liveness_never_unknownRegistration_isDead() {
+        val pod = PodInfo(
+            podId = "pod-x", name = "X", fqdn = "x.harry.flagship.services",
+            status = PodInfo.Status.UNKNOWN, liveness = PodInfo.Liveness.NEVER,
+        )
+        assertEquals(PodInfo.LivenessState.DEAD, pod.livenessState(hasLiveUnlockRequest = false, now = now))
+    }
+
+    @Test fun revoked_winsOverLiveness_andIsNotSessionEligible() {
+        val app = signedInApp()
+        app.upsertRegisteredPod(
+            fqdn = "home.harry.flagship.services", name = "Home",
+            liveness = PodInfo.Liveness.LIVE, revokedAt = now, revocationReason = "lost",
+        )
+        val pod = app.pods.value.first()
+        assertEquals(PodInfo.Status.OFFLINE, pod.status)
+        assertEquals(PodInfo.LivenessState.REVOKED, pod.livenessState(hasLiveUnlockRequest = true, now = now))
+        assertNull(app.sessionPod)
+
+        // Un-revoke clears it in place without waiting for the next reconcile.
+        app.setPodRevocation(pod.podId, revokedAt = null, reason = "lost")
+        val restored = app.pods.value.first()
+        assertNull(restored.revokedAt)
+        assertNull(restored.revocationReason)
+        assertEquals(PodInfo.LivenessState.ONLINE, restored.livenessState(hasLiveUnlockRequest = false, now = now))
     }
 
     @Test fun liveness_absent_fallsBackToRegistrationDerivedOnline() {

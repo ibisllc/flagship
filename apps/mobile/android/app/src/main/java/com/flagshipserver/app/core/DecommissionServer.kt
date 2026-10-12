@@ -8,9 +8,10 @@ import com.flagshipserver.app.core.ReleaseServerName as ReleaseServerNameBytes
 import com.flagshipserver.app.keystore.Keystore
 
 /**
- * Decommission a pending OR registered-but-dead (never-came-online) server:
- * release the reserved name (un-pin the routing record so the name frees up),
- * belt-and-braces revoke the install auth-code, then drop the pod locally.
+ * Cancel a still-pending (never registered) server: release the reserved name
+ * (un-pin the routing record so the name frees up), belt-and-braces revoke the
+ * install auth-code, then drop the pod locally. A registered server goes
+ * through [deleteServer] instead.
  *
  * Mirror of iOS `cancelPendingServer` (HomeTab.swift) + the webapp
  * `deleteDeadServer` — the SAME owner-IRK-signed `ReleaseServerName` →

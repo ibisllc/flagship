@@ -23,6 +23,7 @@ object PodStatusStyle {
 
     fun label(liveness: PodInfo.LivenessState, status: PodInfo.Status): String =
         when (liveness) {
+            PodInfo.LivenessState.REVOKED -> "Revoked"
             PodInfo.LivenessState.DEAD -> "Never came online"
             // HONEST LIVENESS (Fix A) — a previously-live box that's gone stale.
             PodInfo.LivenessState.OFFLINE -> "Offline"
@@ -40,6 +41,7 @@ object PodStatusStyle {
     fun pillKind(liveness: PodInfo.LivenessState, status: PodInfo.Status): FSPillKind =
         if (status == PodInfo.Status.PENDING) FSPillKind.Pending else
         when (liveness) {
+            PodInfo.LivenessState.REVOKED -> FSPillKind.Offline
             PodInfo.LivenessState.DEAD -> FSPillKind.Offline
             PodInfo.LivenessState.OFFLINE -> FSPillKind.Offline
             PodInfo.LivenessState.WAITING_FOR_APPROVAL -> FSPillKind.Provisioning
@@ -59,7 +61,7 @@ object PodStatusStyle {
  * `HomeStatusFilter`.
  *
  * Bucketing: Pending = waiting-for-approval + coming-online (and a still-pending
- * online box); Offline = dead + offline; Online = strictly live.
+ * online box); Offline = dead + offline + revoked; Online = strictly live.
  */
 enum class HomeStatusFilter {
     ALL, ONLINE, PENDING, OFFLINE;
@@ -82,11 +84,13 @@ enum class HomeStatusFilter {
                 PodInfo.LivenessState.COMING_ONLINE -> true
                 PodInfo.LivenessState.ONLINE ->
                     status == PodInfo.Status.PENDING || status == PodInfo.Status.UNKNOWN
-                PodInfo.LivenessState.DEAD, PodInfo.LivenessState.OFFLINE -> false
+                PodInfo.LivenessState.DEAD, PodInfo.LivenessState.OFFLINE,
+                PodInfo.LivenessState.REVOKED -> false
             }
             OFFLINE -> when (liveness) {
                 // DEAD (never came online) + OFFLINE (was live, now stale) both bucket here.
-                PodInfo.LivenessState.DEAD, PodInfo.LivenessState.OFFLINE -> true
+                PodInfo.LivenessState.DEAD, PodInfo.LivenessState.OFFLINE,
+                PodInfo.LivenessState.REVOKED -> true
                 PodInfo.LivenessState.ONLINE -> status == PodInfo.Status.OFFLINE
                 else -> false
             }

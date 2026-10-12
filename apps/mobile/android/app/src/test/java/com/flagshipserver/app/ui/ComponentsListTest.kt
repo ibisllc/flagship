@@ -62,6 +62,7 @@ class ComponentsListTest {
         assertEquals("Online", PodStatusStyle.label(L.ONLINE, S.ONLINE))
         assertEquals("Offline", PodStatusStyle.label(L.ONLINE, S.OFFLINE))
         assertEquals("Checking", PodStatusStyle.label(L.ONLINE, S.UNKNOWN))
+        assertEquals("Revoked", PodStatusStyle.label(L.REVOKED, S.OFFLINE))
     }
 
     @Test
@@ -73,6 +74,7 @@ class ComponentsListTest {
         assertEquals(FSPillKind.Online, PodStatusStyle.pillKind(L.ONLINE, S.ONLINE))
         assertEquals(FSPillKind.Offline, PodStatusStyle.pillKind(L.ONLINE, S.OFFLINE))
         assertEquals(FSPillKind.Idle, PodStatusStyle.pillKind(L.ONLINE, S.UNKNOWN))
+        assertEquals(FSPillKind.Offline, PodStatusStyle.pillKind(L.REVOKED, S.OFFLINE))
     }
 
     // ── HomeStatusFilter buckets ───────────────────────────────
@@ -110,6 +112,8 @@ class ComponentsListTest {
         assertTrue(HomeStatusFilter.OFFLINE.matches(L.DEAD, S.OFFLINE))
         assertTrue(HomeStatusFilter.OFFLINE.matches(L.DEAD, S.ONLINE))
         assertTrue(HomeStatusFilter.OFFLINE.matches(L.ONLINE, S.OFFLINE))
+        assertTrue(HomeStatusFilter.OFFLINE.matches(L.REVOKED, S.OFFLINE))
+        assertFalse(HomeStatusFilter.PENDING.matches(L.REVOKED, S.OFFLINE))
         // live / provisioning are not offline
         assertFalse(HomeStatusFilter.OFFLINE.matches(L.ONLINE, S.ONLINE))
         assertFalse(HomeStatusFilter.OFFLINE.matches(L.WAITING_FOR_APPROVAL, S.UNKNOWN))

@@ -23,11 +23,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.VpnKey
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -83,8 +81,8 @@ fun HomeScreen(
     onAddServer: () -> Unit,
     onSetLeader: (PodInfo) -> Unit,
     onRefresh: () -> Unit,
-    /** Decommission a pending or registered-but-dead (never-came-online)
-     *  server via the release/free-the-name flow. No-op default. */
+    /** Delete a server after [DeleteServerDialog] confirms: a pending order
+     *  is cancelled, a registered server deleted. No-op default. */
     onDeleteServer: (PodInfo) -> Unit = {},
     /** When true, renders the C9 recovery-setup nudge card above the
      *  server list. Source-of-truth is AppState.shouldShowRecoveryNudgeNow();
@@ -420,17 +418,13 @@ fun ServerRow(
     onSetLeader: () -> Unit,
     onDelete: () -> Unit = {},
 ) {
-    // A pending order, or a GENUINELY dead box (registered, no live unlock
-    // request, no check-in, past the grace window), is deletable straight from
-    // the list via the release flow. A live, checked-in server — OR one that's
-    // waiting for approval / still coming online — is NOT.
-    val deletable = pod.status == PodInfo.Status.PENDING || liveness == PodInfo.LivenessState.DEAD
-    val canMakeLeader = !isLeader && pod.status == PodInfo.Status.ONLINE && pod.cameOnline
+    val canMakeLeader = !isLeader && pod.status == PodInfo.Status.ONLINE && pod.cameOnline && !pod.isRevoked
 
     var menuOpen by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf(false) }
 
     val pillTag: String? = when (liveness) {
+        PodInfo.LivenessState.REVOKED -> "pod-card-revoked"
         PodInfo.LivenessState.DEAD -> "pod-card-never-online"
         PodInfo.LivenessState.OFFLINE -> "pod-card-offline"
         PodInfo.LivenessState.WAITING_FOR_APPROVAL -> "pod-card-waiting-approval"
@@ -486,13 +480,13 @@ fun ServerRow(
                 text = { Text("Open") },
                 onClick = { menuOpen = false; onTap() },
             )
-            if (deletable) {
-                DropdownMenuItem(
-                    text = { Text("Delete server (free name)") },
-                    modifier = Modifier.testTag("pod-card-delete"),
-                    onClick = { menuOpen = false; confirming = true },
-                )
-            }
+            DropdownMenuItem(
+                text = {
+                    Text(if (pod.status == PodInfo.Status.PENDING) "Delete server (free name)" else "Delete server")
+                },
+                modifier = Modifier.testTag("pod-card-delete"),
+                onClick = { menuOpen = false; confirming = true },
+            )
         }
 
         // "Your server is being installed" — a thin determinate bar on a demo
@@ -512,21 +506,10 @@ fun ServerRow(
     }
 
     if (confirming) {
-        AlertDialog(
-            onDismissRequest = { confirming = false },
-            title = { Text("Delete ${pod.name}?") },
-            text = {
-                Text(
-                    "This frees the name for reuse and the box can no longer come online. " +
-                        if (pod.status == PodInfo.Status.PENDING) "This install hasn't completed." else "This server never checked in.",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { confirming = false; onDelete() }) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirming = false }) { Text("Cancel") }
-            },
+        DeleteServerDialog(
+            pod = pod,
+            onConfirm = { confirming = false; onDelete() },
+            onDismiss = { confirming = false },
         )
     }
 }
@@ -540,16 +523,14 @@ fun PodCard(
     isLeader: Boolean,
     onTap: () -> Unit,
     onSetLeader: () -> Unit,
-    /** Decommission a pending OR registered-but-dead (never-came-online)
-     *  server via the release/free-the-name flow. No-op default keeps the
-     *  card previewable + leaves a live server's card unchanged. */
+    /** Delete the server once [DeleteServerDialog] confirms. No-op default
+     *  keeps the card previewable. */
     onDelete: () -> Unit = {},
     /** Derived per-server liveness. Defaults to deriving from the pod alone
      *  (no live unlock request known) so existing callers / previews keep
      *  their behaviour; the Home list supplies the account-level signal. */
     liveness: PodInfo.LivenessState = pod.livenessState(hasLiveUnlockRequest = false),
 ) {
-    val deletable = pod.status == PodInfo.Status.PENDING || liveness == PodInfo.LivenessState.DEAD
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.fillMaxWidth().padding(end = FS.space.s4)) {
@@ -595,36 +576,23 @@ fun PodCard(
             }
             FSGhostButton(label = "Open", onClick = onTap)
         }
-        if (!isLeader && pod.status == PodInfo.Status.ONLINE && pod.cameOnline) {
+        if (!isLeader && pod.status == PodInfo.Status.ONLINE && pod.cameOnline && !pod.isRevoked) {
             Spacer(Modifier.height(FS.space.s2))
             FSGhostButton(label = "Make leader", onClick = onSetLeader)
         }
-        if (deletable) {
-            var confirming by remember { mutableStateOf(false) }
-            Spacer(Modifier.height(FS.space.s2))
-            FSGhostButton(
-                label = "Delete server (free name)",
-                onClick = { confirming = true },
-                modifier = Modifier.testTag("pod-card-delete"),
+        var confirming by remember { mutableStateOf(false) }
+        Spacer(Modifier.height(FS.space.s2))
+        FSGhostButton(
+            label = if (pod.status == PodInfo.Status.PENDING) "Delete server (free name)" else "Delete server",
+            onClick = { confirming = true },
+            modifier = Modifier.testTag("pod-card-delete"),
+        )
+        if (confirming) {
+            DeleteServerDialog(
+                pod = pod,
+                onConfirm = { confirming = false; onDelete() },
+                onDismiss = { confirming = false },
             )
-            if (confirming) {
-                AlertDialog(
-                    onDismissRequest = { confirming = false },
-                    title = { Text("Delete ${pod.name}?") },
-                    text = {
-                        Text(
-                            "This frees the name for reuse and the box can no longer come online. " +
-                                if (pod.status == PodInfo.Status.PENDING) "This install hasn't completed." else "This server never checked in.",
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { confirming = false; onDelete() }) { Text("Delete") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { confirming = false }) { Text("Cancel") }
-                    },
-                )
-            }
         }
     }
 }

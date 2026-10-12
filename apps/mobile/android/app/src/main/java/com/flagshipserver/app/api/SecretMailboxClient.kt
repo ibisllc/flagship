@@ -517,6 +517,9 @@ data class PodDirectoryEntry(
     val serverDomain: String,
     val identityPubKey: String,   // hex (32 bytes) — the STK
     val revokedAt: Long? = null,
+    /** Why it was revoked; null while live or from a pre-field Worker. Only
+     *  lost / stolen / decommissioned keep a revoked server on the list. */
+    val revocationReason: String? = null,
     /** Wall-clock ms of the box's last daemon-status check-in, or null if the
      *  daemon has NEVER reported. A registered server with `lastReported ==
      *  null` AND no cert is a "registered but never came online" box. The

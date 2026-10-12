@@ -50,6 +50,8 @@ class AuditLogViewModelTest {
         assertEquals("Renamed app URL", auditEventLabel("app-renamed"))
         assertEquals("Created server", auditEventLabel("server-created"))
         assertEquals("Server came online", auditEventLabel("server-online"))
+        assertEquals("Revoked server", auditEventLabel("server-revoked"))
+        assertEquals("Restored server", auditEventLabel("server-unrevoked"))
         // Unknown kinds are humanized, never shown raw or blank.
         assertEquals("Custom future kind", auditEventLabel("custom-future-kind"))
     }

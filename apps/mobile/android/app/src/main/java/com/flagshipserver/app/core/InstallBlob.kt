@@ -142,11 +142,11 @@ object ReleaseServerName {
             .joinToString("|").toByteArray()
 }
 
-/** P13 — per-server kill-switch envelope. Signed by the account IRK
- *  to declare a server DEAD on its next boot. Unlike ReleaseServerName
- *  (which frees the name so it can be re-claimed), this is the "brick
- *  the box" path used when a phone/box is lost, stolen, or being
- *  decommissioned. The protocol-level tag matches
+/** P13 — per-server kill-switch envelope. Signed by the sensitive-order
+ *  key to lock a server out: it can't connect or unlock until the owner
+ *  un-revokes it ([ServerUnrevocation]). Unlike ReleaseServerName (which
+ *  frees the name so it can be re-claimed), the name stays reserved. Used
+ *  when a box is lost, stolen, or being decommissioned. The protocol-level tag matches
  *  packages/protocol/src/auth.ts `TAG_REVOKE`
  *  (`tag|userId|revokedServerId|reason|issuedAt`) + the iOS
  *  `ServerRevocationClaim.canonicalBytes` + the webapp
@@ -169,6 +169,18 @@ object ServerRevocationClaim {
         reason,
         issuedAt.toString(),
     ).joinToString("|").toByteArray()
+}
+
+/** Undo a lost / stolen / decommissioned revocation of the same box. Its own
+ *  tag (not a revocation with a "restore" reason) so a signature that locks
+ *  a box out can never be replayed to revive one. Signed by the
+ *  sensitive-order key. Matches @flagship/protocol installBlob.ts
+ *  `TAG_SERVER_UNREVOKE` (`tag|username|serverDomain|issuedAt`). */
+object ServerUnrevocation {
+    const val CANONICAL_TAG = "flagship/server-unrevoke/v1"
+    fun canonicalBytes(username: String, serverDomain: String, issuedAt: Long): ByteArray =
+        listOf(CANONICAL_TAG, username, serverDomain, issuedAt.toString())
+            .joinToString("|").toByteArray()
 }
 
 /** V3 — Service URL-stem rename envelope. Signed by the user's CURRENT

@@ -462,6 +462,8 @@ class AppState(
         identityPubKeyHex: String = "",
         leadsServices: List<String> = emptyList(),
         health: com.flagshipserver.app.api.BoxHealthWire? = null,
+        revokedAt: Long? = null,
+        revocationReason: String? = null,
     ): String {
         // HONEST LIVENESS (Fix A) — derive the pod's status from the
         // server-authoritative `liveness` field instead of trusting that a
@@ -471,7 +473,7 @@ class AppState(
         // session or be picked as a live leader). When `.com` didn't send the
         // field (a pre-field Worker), fall back to the legacy
         // registration-is-online behavior so existing tests stay green.
-        val derivedStatus: PodInfo.Status = when (liveness) {
+        val derivedStatus: PodInfo.Status = if (revokedAt != null) PodInfo.Status.OFFLINE else when (liveness) {
             PodInfo.Liveness.LIVE -> PodInfo.Status.ONLINE
             PodInfo.Liveness.UNREACHABLE -> PodInfo.Status.OFFLINE
             PodInfo.Liveness.NEVER -> PodInfo.Status.UNKNOWN
@@ -488,7 +490,8 @@ class AppState(
             // came online, or is now waiting for an approval is re-flowed below.
             if (old.status == derivedStatus && old.cameOnline && !awaitingUnlock &&
                 old.liveness == liveness && old.lastSeenMsAgo == lastSeenMsAgo &&
-                old.leadsServices == leadsServices && old.health == health
+                old.leadsServices == leadsServices && old.health == health &&
+                old.revokedAt == revokedAt && old.revocationReason == revocationReason
             ) {
                 return old.podId
             }
@@ -509,6 +512,8 @@ class AppState(
                     identityPubKeyHex = identityPubKeyHex.ifEmpty { old.identityPubKeyHex },
                     leadsServices = leadsServices,
                     health = health,
+                    revokedAt = revokedAt,
+                    revocationReason = revocationReason,
                 )
             }
             return old.podId
@@ -530,6 +535,8 @@ class AppState(
                 identityPubKeyHex = identityPubKeyHex,
                 leadsServices = leadsServices,
                 health = health,
+                revokedAt = revokedAt,
+                revocationReason = revocationReason,
             ),
         )
         return id
@@ -622,6 +629,21 @@ class AppState(
     fun setCurrentPod(podId: String) {
         if (_pods.value.none { it.podId == podId }) return
         _currentPodId.value = podId
+    }
+
+    /** Reflect a revoke (non-null [revokedAt]) or an un-revoke (null) right
+     *  away, ahead of the next `/pods` reconcile. A revoked box is never
+     *  session-eligible; an un-revoked one reads UNKNOWN until its next
+     *  heartbeat. */
+    fun setPodRevocation(podId: String, revokedAt: Long?, reason: String?) {
+        _pods.value = _pods.value.map { pod ->
+            if (pod.podId != podId) pod
+            else pod.copy(
+                revokedAt = revokedAt,
+                revocationReason = if (revokedAt != null) reason else null,
+                status = if (revokedAt != null) PodInfo.Status.OFFLINE else PodInfo.Status.UNKNOWN,
+            )
+        }
     }
 
     fun removePod(podId: String) {
@@ -725,8 +747,19 @@ data class PodInfo(
     /** Latest box health report from `/pods` (`health`); null when the box
      *  doesn't send one yet. Rendered by the detail page's health card. */
     val health: com.flagshipserver.app.api.BoxHealthWire? = null,
+    /** Set while the owner has revoked this box (`/pods` `revokedAt`). Only a
+     *  restorable revocation ([isListedRevocation]) is ever kept on the list;
+     *  null on a live box. */
+    val revokedAt: Long? = null,
+    val revocationReason: String? = null,
 ) {
     enum class Status { ONLINE, OFFLINE, UNKNOWN, PENDING }
+
+    val isRevoked: Boolean get() = revokedAt != null
+
+    /** The `<server>` label of `<server>.<user>.flagship.services`, which the
+     *  delete confirmation asks the owner to type. */
+    val serverLabel: String get() = fqdn.substringBefore('.').ifEmpty { name }
 
     /** Server-authoritative reachability, mirroring `.com`'s `/pods` `liveness`
      *  field. Mirror of iOS PodInfo.Liveness. */
@@ -759,6 +792,10 @@ data class PodInfo(
          *  offline; the UI shows "offline — last seen <…>", NOT the decommission
          *  path. Reachable again on the next live heartbeat. Mirror of iOS. */
         OFFLINE,
+
+        /** The owner revoked this box (lost / stolen / decommissioned). It can't
+         *  connect or unlock until it is un-revoked. Wins over every other state. */
+        REVOKED,
     }
 
     /** Classify this pod. When the server-authoritative [liveness] field is
@@ -768,8 +805,10 @@ data class PodInfo(
      *   - `UNREACHABLE` → OFFLINE (a real heartbeat existed but went stale); a
      *                     live unlock/entitlement request overrides to
      *                     WAITING_FOR_APPROVAL (the box is actively trying to come up).
-     *   - `NEVER`       → a live request wins (WAITING_FOR_APPROVAL); else still
-     *                     COMING_ONLINE (awaiting first heartbeat, NOT dead).
+     *   - `NEVER`       → a live request wins (WAITING_FOR_APPROVAL); else
+     *                     COMING_ONLINE inside the [COMING_ONLINE_GRACE_MS]
+     *                     window after `registeredAt`, DEAD past it.
+     *  A revoked pod is REVOKED regardless of the rest.
      *  When [liveness] is absent (pre-field Worker / pending / demo), the legacy
      *  registration-derived path holds: ONLINE short-circuits on [cameOnline]; a
      *  live unlock request wins; a recent registration is COMING_ONLINE and an
@@ -779,6 +818,7 @@ data class PodInfo(
         hasLiveUnlockRequest: Boolean,
         now: Long = System.currentTimeMillis(),
     ): LivenessState {
+        if (isRevoked) return LivenessState.REVOKED
         liveness?.let {
             return when (it) {
                 Liveness.LIVE -> LivenessState.ONLINE
@@ -787,12 +827,16 @@ data class PodInfo(
                     else LivenessState.OFFLINE
                 Liveness.NEVER ->
                     if (hasLiveUnlockRequest) LivenessState.WAITING_FOR_APPROVAL
-                    else LivenessState.COMING_ONLINE
+                    else comingOnlineOrDead(now)
             }
         }
         if (status == Status.ONLINE && cameOnline) return LivenessState.ONLINE
         if (hasLiveUnlockRequest) return LivenessState.WAITING_FOR_APPROVAL
         if (status == Status.PENDING) return LivenessState.COMING_ONLINE
+        return comingOnlineOrDead(now)
+    }
+
+    private fun comingOnlineOrDead(now: Long): LivenessState {
         val age = now - registeredAt
         if (registeredAt > 0 && age <= COMING_ONLINE_GRACE_MS) return LivenessState.COMING_ONLINE
         return LivenessState.DEAD
@@ -833,6 +877,14 @@ data class PodInfo(
          *  online box reads "Coming online…" rather than "Never came online".
          *  20 minutes. Mirror of iOS PodInfo.comingOnlineGraceMs. */
         const val COMING_ONLINE_GRACE_MS: Long = 20L * 60L * 1000L
+
+        /** Revocation reasons the owner can undo (`.com`'s un-revoke accepts
+         *  exactly these). Any other reason means the server was deleted,
+         *  transferred or retired, so it is not listed. */
+        val RESTORABLE_REVOCATION_REASONS: Set<String> = setOf("lost", "stolen", "decommissioned")
+
+        fun isListedRevocation(reason: String?): Boolean =
+            reason != null && reason in RESTORABLE_REVOCATION_REASONS
     }
 }
 

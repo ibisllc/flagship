@@ -338,4 +338,71 @@ class PendingServerReconcilerTest {
         assertEquals(1, resp.pending.size)
         assertEquals("", resp.pending.single().orderRef)
     }
+
+    // A restorable revocation stays on the list (so it can be un-revoked or
+    // deleted); any other reason, or none, means the server is gone.
+    @Test fun revokedLostServer_isListedAsRevoked() = runTest {
+        val app = signedInApp()
+        val registeredHooks = mutableListOf<String>()
+        val mailbox = MockSecretMailboxClient().apply {
+            directory = listOf(
+                registered("lost.harry.flagship.services").copy(revokedAt = 5L, revocationReason = "lost"),
+                registered("stolen.harry.flagship.services").copy(revokedAt = 5L, revocationReason = "stolen"),
+                registered("retired.harry.flagship.services").copy(revokedAt = 5L, revocationReason = "decommissioned"),
+                registered("moved.harry.flagship.services").copy(revokedAt = 5L, revocationReason = "transferred"),
+                registered("old.harry.flagship.services").copy(revokedAt = 5L),
+            )
+        }
+        PendingServerReconciler(app, mailbox, onRegistered = { fqdn, _ -> registeredHooks += fqdn }).reconcile()
+
+        val fqdns = app.pods.value.map { it.fqdn }.toSet()
+        assertEquals(
+            setOf("lost.harry.flagship.services", "stolen.harry.flagship.services", "retired.harry.flagship.services"),
+            fqdns,
+        )
+        val lost = app.pods.value.first { it.fqdn == "lost.harry.flagship.services" }
+        assertEquals(5L, lost.revokedAt)
+        assertEquals("lost", lost.revocationReason)
+        assertEquals(PodInfo.LivenessState.REVOKED, lost.livenessState(hasLiveUnlockRequest = false))
+        assertTrue(registeredHooks.isEmpty())
+    }
+
+    @Test fun unrevokedServer_clearsRevocationOnNextReconcile() = runTest {
+        val app = signedInApp()
+        val mailbox = MockSecretMailboxClient().apply {
+            directory = listOf(registered("home.harry.flagship.services").copy(revokedAt = 5L, revocationReason = "stolen"))
+        }
+        val reconciler = PendingServerReconciler(app, mailbox)
+        reconciler.reconcile()
+        assertTrue(app.pods.value.single().isRevoked)
+
+        mailbox.directory = listOf(registered("home.harry.flagship.services").copy(liveness = "live"))
+        reconciler.reconcile()
+        val pod = app.pods.value.single()
+        assertFalse(pod.isRevoked)
+        assertNull(pod.revocationReason)
+        assertEquals(PodInfo.Status.ONLINE, pod.status)
+    }
+
+    @Test fun localServerDeletedElsewhere_isDropped() = runTest {
+        val app = signedInApp()
+        app.upsertRegisteredPod(fqdn = "home.harry.flagship.services", name = "Home")
+        val mailbox = MockSecretMailboxClient().apply {
+            directory = listOf(registered("home.harry.flagship.services").copy(revokedAt = 5L, revocationReason = "transferred"))
+        }
+        PendingServerReconciler(app, mailbox).reconcile()
+        assertTrue(app.pods.value.isEmpty())
+    }
+
+    @Test fun revocationReason_decodesFromWorkerJson_andToleratesAbsence() {
+        val resp = json.decodeFromString(
+            PodsDirectoryResponse.serializer(),
+            """{"username":"harry","pods":[
+                {"serverDomain":"a.harry.flagship.services","identityPubKey":"00","revokedAt":9,"revocationReason":"lost"},
+                {"serverDomain":"b.harry.flagship.services","identityPubKey":"00"}
+            ]}""",
+        )
+        assertEquals("lost", resp.pods[0].revocationReason)
+        assertNull(resp.pods[1].revocationReason)
+    }
 }

@@ -83,8 +83,33 @@ class PendingServerReconciler(
         // heartbeat/cert side-channel. A registered fqdn matching a pending pod
         // flips it online in place (identity unified on the fqdn); a new fqdn
         // is added fresh. Registered SUPERSEDES pending.
-        val registeredEntries = directory.pods
-            .filter { it.revokedAt == null && it.serverDomain.isNotEmpty() }
+        // A server the owner revoked (lost / stolen / decommissioned) stays
+        // listed so it can be un-revoked or deleted; any other revocation means
+        // it was deleted or transferred, so a local copy is dropped instead.
+        val liveDirectoryFqdns = directory.pods
+            .filter { it.revokedAt == null }
+            .map { it.serverDomain.lowercase() }
+            .toSet()
+        val goneFqdns = directory.pods
+            .filter {
+                it.revokedAt != null && !PodInfo.isListedRevocation(it.revocationReason) &&
+                    it.serverDomain.lowercase() !in liveDirectoryFqdns
+            }
+            .map { it.serverDomain.lowercase() }
+            .toSet()
+        for (pod in app.pods.value) {
+            if (pod.status != PodInfo.Status.PENDING && pod.fqdn.lowercase() in goneFqdns) {
+                app.removePod(pod.podId)
+            }
+        }
+        val registeredEntries = directory.pods.filter { entry ->
+            entry.serverDomain.isNotEmpty() && (
+                entry.revokedAt == null || (
+                    PodInfo.isListedRevocation(entry.revocationReason) &&
+                        entry.serverDomain.lowercase() !in liveDirectoryFqdns
+                    )
+                )
+        }
         for (entry in registeredEntries) {
             val fqdn = entry.serverDomain
             val pendingName = app.pods.value.firstOrNull {
@@ -116,11 +141,13 @@ class PendingServerReconciler(
                 // (additive; empty when absent).
                 leadsServices = entry.leadsServices,
                 health = entry.health,
+                revokedAt = entry.revokedAt,
+                revocationReason = entry.revocationReason,
             )
             // Secret-free recipe: a registered box now has a directory identity
             // to seal the SWK to. The handler no-ops unless a deposit is owed for
             // this fqdn (idempotent via PendingSwkDepositStore).
-            if (entry.identityPubKey.isNotEmpty()) {
+            if (entry.revokedAt == null && entry.identityPubKey.isNotEmpty()) {
                 onRegistered(fqdn, entry.identityPubKey)
             }
         }
