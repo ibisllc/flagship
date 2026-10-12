@@ -337,6 +337,12 @@ private struct AppRow: View {
             detail: shortUrlText
         ) {
             HStack(spacing: FS.space.s2) {
+                if app.egress?.hasPending == true {
+                    Image(systemName: "network.badge.shield.half.filled")
+                        .foregroundColor(c.warning)
+                        .accessibilityLabel("Wants to reach the internet")
+                        .accessibilityIdentifier("app-row-egress-pending")
+                }
                 FSPill(running ? "Running" : "Stopped", kind: running ? .online : .idle)
                 Image(systemName: "chevron.right").foregroundColor(c.textMuted)
             }
@@ -404,7 +410,8 @@ struct ServiceDetailContainer: View {
                     onOpenBrowserTabs: { path.append(.browserTabs(serviceId: serviceId)) },
                     onOpenCollaborators: { path.append(.inviteManage(serviceId: serviceId)) },
                     onOpenAccess: { path.append(.serviceAccess(serviceId: serviceId)) },
-                    onEdit: { path.append(.editService(serviceId: serviceId)) }
+                    onEdit: { path.append(.editService(serviceId: serviceId)) },
+                    canApproveEgress: !app.isRestrictedDevice
                 )
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)

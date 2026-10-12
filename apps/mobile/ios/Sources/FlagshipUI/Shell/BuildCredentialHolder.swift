@@ -35,7 +35,8 @@ struct VibeCodeCredentialSelection: Equatable {
             credential: LlmProviderCredential(
                 provider: "openai",
                 apiKey: credential.apiKey,
-                baseUrl: credential.baseUrl ?? "https://openrouter.ai/api"
+                baseUrl: credential.baseUrl ?? "https://openrouter.ai/api",
+                relay: credential.relay
             ),
             model: "openrouter/auto"
         )

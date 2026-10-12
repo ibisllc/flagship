@@ -1,11 +1,13 @@
 import Foundation
 import Observation
+import Flagship
 import FlagshipAPI
 
 /// Backs the git build mode. One option: paste a repo URL → "Check repo"
 /// runs the box's Flagship-fitness check → the verdict card offers either
-/// "Install it" (fit) or "Use AI to prepare repo for Flagship" (not fit →
-/// adapt, with a 503 fall-back to from-scratch).
+/// "Install it" (fit) or "Use AI to adapt and deploy" (not fit → the AI
+/// adapts and tests a private copy, then the box puts it live; a 503 falls
+/// back to from-scratch).
 ///
 /// Mirrors the canonical webapp `views/build-git.js`.
 @MainActor
@@ -20,7 +22,8 @@ public final class BuildGitViewModel {
         /// A non-fit repo was AI-adapted and is ready to install.
         case adapted(fileCount: Int)
         /// `progress`: the AI's latest step, from the build's journal.
-        case adapting(progress: String?)
+        /// `stage`: the box's `adapt.phase` ("staging" | "going-live").
+        case adapting(progress: String?, stage: String? = nil)
         case deploying
         /// Installed — carries the live URL.
         case installed(url: String)
@@ -47,12 +50,43 @@ public final class BuildGitViewModel {
     public private(set) var shouldFallBackToScratch = false
     /// The build id the box assigned once "Check repo" succeeded.
     public private(set) var buildId: String?
+    /// The box handed this build to go live, so no AI may run on it again:
+    /// the not-ready card offers "Check again" (a new build) instead.
+    public private(set) var sealed = false
+    /// The key the last adapt ran with, for "Turn the relay off for this key".
+    public private(set) var adaptCredential: LlmProviderCredential?
 
     private var lastVerdict: BuildGitResponse?
     private let client: any ScreensClient
+    private let keys: SavedKeyStore
 
-    public init(client: any ScreensClient) {
+    public init(client: any ScreensClient, keys: SavedKeyStore = SavedKeyStore()) {
         self.client = client
+        self.keys = keys
+    }
+
+    /// The progress line for a running adapt.
+    public static func adaptingText(stage: String?) -> String {
+        switch stage {
+        case "staging": return "The AI is adapting and testing the app on a private copy with sample data…"
+        case "going-live": return "Installing the tested app…"
+        default: return "The AI is adapting the repo…"
+        }
+    }
+
+    /// The last adapt failed because its key asks for the Flagship relay and
+    /// the relay wasn't there.
+    public var relayFailed: Bool {
+        adaptCredential != nil && RelayFailure.matches(errorMessage)
+    }
+
+    /// Turn the relay off for the key the adapt used; the owner then retries.
+    public func turnRelayOffForAdaptKey() {
+        guard let cred = adaptCredential else { return }
+        if let entry = keys.entry(for: cred) { try? keys.setRelay(id: entry.id, relay: false) }
+        adaptCredential = LlmProviderCredential(provider: cred.provider, apiKey: cred.apiKey,
+                                                baseUrl: cred.baseUrl, relay: false)
+        errorMessage = AiKeyRelayCopy.turnedOff
     }
 
     public var canCheck: Bool {
@@ -86,6 +120,7 @@ public final class BuildGitViewModel {
         conflict = nil
         assignedName = nil
         buildId = nil
+        sealed = false
         share = true
         phase = .checking
         do {
@@ -120,8 +155,9 @@ public final class BuildGitViewModel {
     /// `credential` is the BYOK key chosen at the AI-key step; it's delivered
     /// to the box over its own pinned pipe and never logged.
     public func adapt(credential: LlmProviderCredential? = nil) async {
-        guard let buildId else { return }
+        guard let buildId, !sealed else { return }
         errorMessage = nil
+        if let credential { adaptCredential = credential }
         phase = .adapting(progress: nil)
         do {
             let r = try await client.buildAdaptStart(
@@ -131,10 +167,14 @@ public final class BuildGitViewModel {
             if r.started == true {
                 try await followAdapt(buildId: buildId)
             } else {
-                finishAdapt(fileCount: r.fileCount ?? 0, deployedUrl: r.deployed == true ? r.deployedUrl : nil)
+                finishAdapt(fileCount: r.fileCount ?? 0, deployedUrl: r.deployed == true ? r.deployedUrl : nil,
+                            reason: r.reason)
             }
         } catch let ScreensClientError.http(status, _) where status == 503 {
             shouldFallBackToScratch = true
+        } catch let error as ScreensClientError where Self.closedToAI(error) {
+            sealed = true
+            failAdapt(ScreensClientError.boxReason(error) ?? Self.closedText)
         } catch let ScreensClientError.http(status, _) where status == 409 {
             // The box started the AI itself (a shared adaptation crashed and
             // it had a key): follow that run.
@@ -158,7 +198,9 @@ public final class BuildGitViewModel {
             try await Task.sleep(for: pollInterval)
             let status: BuildAdaptStatus?
             do {
-                status = try await client.buildState(buildId: buildId).state.adapt
+                let state = try await client.buildState(buildId: buildId).state
+                status = state.adapt
+                if state.sealed == true { sealed = true }
                 misses = 0
             } catch {
                 // A dropped poll (Wi-Fi blip, box restarting) isn't the end.
@@ -169,23 +211,48 @@ public final class BuildGitViewModel {
             switch status?.status {
             case "done":
                 finishAdapt(fileCount: status?.fileCount ?? 0,
-                            deployedUrl: status?.deployed == true ? status?.deployedUrl : nil)
+                            deployedUrl: status?.deployed == true ? status?.deployedUrl : nil,
+                            reason: status?.reason)
                 return
             case "failed":
                 failAdapt(status?.reason ?? "The AI couldn't adapt this repo.")
                 return
             default:
-                if let last = try? await client.buildJournal(buildId: buildId).entries.last {
-                    phase = .adapting(progress: last.summary)
+                let stage = status?.phase
+                let last = try? await client.buildJournal(buildId: buildId).entries.last
+                if case .adapting(let progress, _) = phase {
+                    phase = .adapting(progress: last?.summary ?? progress, stage: stage)
+                } else {
+                    phase = .adapting(progress: last?.summary, stage: stage)
                 }
             }
         }
         failAdapt("The AI is taking unusually long. Check Build sessions later to see how it went.")
     }
 
-    private func finishAdapt(fileCount: Int, deployedUrl: String?) {
-        // The AI may have deployed it itself: then it's already live.
-        if let url = deployedUrl { phase = .installed(url: url) } else { phase = .adapted(fileCount: fileCount) }
+    private func finishAdapt(fileCount: Int, deployedUrl: String?, reason: String? = nil) {
+        // The box put the tested app live.
+        if let url = deployedUrl { phase = .installed(url: url); return }
+        // It finished but the app didn't go live: say why, and offer another run.
+        if let reason, !reason.isEmpty {
+            failAdapt(Self.notLiveText(reason))
+            return
+        }
+        // An older box (or no tested copy): the files are ready to install.
+        phase = .adapted(fileCount: fileCount)
+    }
+
+    static let closedText = "This build is closed to the AI. Check the repo again to start a new build."
+
+    static func notLiveText(_ reason: String) -> String {
+        "The app didn't go live: \(reason)"
+    }
+
+    /// The box's 409 for a build that was handed over to go live.
+    static func closedToAI(_ error: ScreensClientError) -> Bool {
+        guard case let .http(status, _) = error, status == 409,
+              let reason = ScreensClientError.boxReason(error) else { return false }
+        return reason.hasPrefix("This build is closed to the AI")
     }
 
     private func failAdapt(_ message: String) {
@@ -258,6 +325,8 @@ public final class BuildGitViewModel {
         errorMessage = nil
         shouldFallBackToScratch = false
         buildId = nil
+        sealed = false
+        adaptCredential = nil
         lastVerdict = nil
     }
 }

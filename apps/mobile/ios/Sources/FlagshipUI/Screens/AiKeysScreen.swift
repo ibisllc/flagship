@@ -21,7 +21,7 @@ public struct AiKeysScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Spacer().frame(height: FS.space.s4)
-                    Text("AI keys power app builds but stay on this phone. Your server calls the provider directly; Flagship never sees them.")
+                    Text("AI keys power app builds but stay on this phone. Your server sends them only to the provider; Flagship never sees them.")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -52,6 +52,10 @@ public struct AiKeysScreen: View {
                                     .buttonStyle(.plain)
                                     .accessibilityIdentifier("ai-key-delete")
                                 }
+                                AiKeyRelayRowToggle(
+                                    relay: Binding(get: { e.relay }, set: { vm.setRelay(id: e.id, on: $0) }),
+                                    identifier: "ai-key-relay"
+                                )
                                 if e.id != vm.activeId {
                                     Button(action: { vm.setActive(id: e.id) }) {
                                         Text("Make default").font(FS.font.bodySm()).foregroundColor(c.primary)
@@ -69,6 +73,7 @@ public struct AiKeysScreen: View {
                                 apiKey: $vm.formApiKey,
                                 baseUrl: $vm.formBaseUrl,
                                 label: $vm.formLabel,
+                                relay: $vm.formRelay,
                                 providers: vm.providers
                             ),
                             showSaveToggle: false,

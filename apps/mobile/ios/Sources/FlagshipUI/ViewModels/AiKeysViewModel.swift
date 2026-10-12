@@ -21,6 +21,8 @@ public final class AiKeysViewModel {
     public var formApiKey: String = ""
     public var formBaseUrl: String = ""
     public var formLabel: String = ""
+    /// "Send through the Flagship relay": on by default for every new key.
+    public var formRelay = true
     public private(set) var errorMessage: String?
 
     public let providers = ["anthropic", "openai", "google", "openrouter", "ollama", "flagship"]
@@ -56,7 +58,8 @@ public final class AiKeysViewModel {
                 provider: formProvider,
                 label: label.isEmpty ? formProvider : label,
                 apiKey: key,
-                baseUrl: base.isEmpty ? nil : base
+                baseUrl: base.isEmpty ? nil : base,
+                relay: formRelay
             )
         } catch {
             errorMessage = error.localizedDescription
@@ -78,11 +81,18 @@ public final class AiKeysViewModel {
         reload()
     }
 
+    /// Turn the Flagship relay on or off for a saved key.
+    public func setRelay(id: String, on: Bool) {
+        try? store.setRelay(id: id, relay: on)
+        reload()
+    }
+
     public func resetForm() {
         formProvider = "anthropic"
         formApiKey = ""
         formBaseUrl = ""
         formLabel = ""
+        formRelay = true
         errorMessage = nil
     }
 }

@@ -37,6 +37,10 @@ public struct ServiceDetailScreen: View {
     var onOpenAccess: () -> Void = {}
     /// "Edit this service", shown when the box says it can be edited here.
     var onEdit: () -> Void = {}
+    /// Allow / Stop access on the internet card. False on a restricted
+    /// (companion) profile: the box refuses its signature anyway.
+    var canApproveEgress: Bool = true
+    @State private var confirmStopEgress = false
 
     public init(
         vm: ServiceDetailViewModel,
@@ -48,7 +52,8 @@ public struct ServiceDetailScreen: View {
         onOpenBrowserTabs: @escaping () -> Void = {},
         onOpenCollaborators: @escaping () -> Void = {},
         onOpenAccess: @escaping () -> Void = {},
-        onEdit: @escaping () -> Void = {}
+        onEdit: @escaping () -> Void = {},
+        canApproveEgress: Bool = true
     ) {
         self.vm = vm
         self.username = username
@@ -60,6 +65,7 @@ public struct ServiceDetailScreen: View {
         self.onOpenCollaborators = onOpenCollaborators
         self.onOpenAccess = onOpenAccess
         self.onEdit = onEdit
+        self.canApproveEgress = canApproveEgress
     }
 
     public var body: some View {
@@ -73,6 +79,7 @@ public struct ServiceDetailScreen: View {
                     ErrorCard(message: msg)
                 case .loaded(let d):
                     header(d: d.app, c: c)
+                    egressCard(c: c)
                     if d.editable == true { editRow(c: c) }
                     if let from = d.adaptedFrom { adapterReportRow(repo: from.repo, c: c) }
                     whereItRuns(d: d, c: c)
@@ -600,6 +607,78 @@ public struct ServiceDetailScreen: View {
         .accessibilityIdentifier("service-detail-report-adapter")
         .sheet(isPresented: $showAdapterReport) {
             AdapterReportSheet(serviceId: vm.serviceId)
+        }
+    }
+
+    /// The app's internet access: declared hosts waiting for approval, and
+    /// the ones it may reach now. Nothing when the box doesn't report it.
+    @ViewBuilder
+    private func egressCard(c: FSColors) -> some View {
+        if let card = ServiceDetailViewModel.egressCard(vm.egress, canChange: canApproveEgress) {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                if !card.pending.isEmpty {
+                    FSCard {
+                        VStack(alignment: .leading, spacing: FS.space.s2) {
+                            HStack(spacing: FS.space.s2) {
+                                Image(systemName: "network").foregroundColor(c.warning)
+                                Text(ServiceDetailViewModel.egressTitle).font(FS.font.h4()).foregroundColor(c.text)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            hostList(card.pending, c: c)
+                            Text(ServiceDetailViewModel.egressNote)
+                                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if card.canChange {
+                                FSPrimaryButton(vm.isChangingEgress ? "Allowing…" : "Allow",
+                                                enabled: !vm.isChangingEgress, block: true) {
+                                    Task { await vm.allowEgress() }
+                                }
+                                .accessibilityIdentifier("service-detail-egress-allow")
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("service-detail-egress-pending")
+                }
+                if !card.approved.isEmpty {
+                    section("INTERNET ACCESS", c: c) {
+                        FSCard {
+                            VStack(alignment: .leading, spacing: FS.space.s2) {
+                                Text("This app may reach:").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                                hostList(card.approved, c: c)
+                                if card.canChange {
+                                    FSSecondaryButton(vm.isChangingEgress ? "Stopping…" : "Stop access", block: true) {
+                                        confirmStopEgress = true
+                                    }
+                                    .disabled(vm.isChangingEgress)
+                                    .accessibilityIdentifier("service-detail-egress-stop")
+                                }
+                            }
+                        }
+                    }
+                }
+                if case .failed(let msg) = vm.egressPhase {
+                    Text(msg).font(FS.font.bodySm()).foregroundColor(c.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("service-detail-egress-error")
+                }
+            }
+            .confirmationDialog("Stop this app's internet access?", isPresented: $confirmStopEgress,
+                                titleVisibility: .visible) {
+                Button("Stop access", role: .destructive) { Task { await vm.stopEgress() } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The app won't be able to reach any of these hosts until you allow them again.")
+            }
+        }
+    }
+
+    private func hostList(_ hosts: [String], c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(hosts, id: \.self) { h in
+                Text(h).font(FS.font.mono()).foregroundColor(c.text)
+                    .lineLimit(1).truncationMode(.middle)
+                    .textSelection(.enabled)
+            }
         }
     }
 

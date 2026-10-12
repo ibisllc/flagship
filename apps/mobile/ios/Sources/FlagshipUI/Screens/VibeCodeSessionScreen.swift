@@ -1,6 +1,7 @@
 import SwiftUI
 import FlagshipAPI
 import FlagshipCore
+import Flagship
 
 /// One vibe-code session, shaped like a terminal: a box that fills the screen
 /// holds the whole transcript (the owner's prompt, the AI's output as it
@@ -26,6 +27,11 @@ public struct VibeCodeSessionScreen: View {
     @State private var submitting = false
     @State private var deploying = false
     @State private var deployStartedAt: Date?
+    /// Where a staged deploy is: "staging" | "fixing" | "going-live".
+    @State private var deployPhase: String?
+    /// The relay was turned off for the session's key after a relay failure:
+    /// the next reply carries the key again so the box uses the new setting.
+    @State private var relayTurnedOff = false
     @State private var deployedUrl: String?
     @State private var leftOpen = false
     @State private var shownLines: [VibeTranscript.Line] = []
@@ -56,9 +62,16 @@ public struct VibeCodeSessionScreen: View {
         self.savedCredential = savedCredential
     }
 
-    /// A key for the reply when the box lacks one, else nil.
+    /// A key for the reply when the box lacks one (or its relay setting just
+    /// changed), else nil.
     private var replyCredential: LlmProviderCredential? {
-        state?.needsCredential == true ? savedCredential() : nil
+        state?.needsCredential == true || relayTurnedOff ? savedCredential() : nil
+    }
+
+    /// The failure on show is the Flagship relay being unavailable.
+    private var relayFailureShown: Bool {
+        guard !relayTurnedOff else { return false }
+        return RelayFailure.matches(errorMessage ?? state?.failureReason ?? stream.errorMessage)
     }
 
     private var sessionId: String { stream.sessionId }
@@ -285,7 +298,7 @@ public struct VibeCodeSessionScreen: View {
                 let mins = deployStartedAt.map { Int(context.date.timeIntervalSince($0)) / 60 } ?? 0
                 HStack(spacing: FS.space.s2) {
                     ProgressView()
-                    Text("Building and starting your app… \(mins > 0 ? "\(mins) min, " : "")this can take a few minutes")
+                    Text("\(VibeCodeDeployRun.phaseText(deployPhase ?? state?.deployPhase)) \(mins > 0 ? "\(mins) min, " : "")this can take a few minutes")
                         .font(FS.font.mono()).foregroundColor(c.textMuted)
                     Spacer(minLength: 0)
                 }
@@ -307,6 +320,7 @@ public struct VibeCodeSessionScreen: View {
                     .font(FS.font.mono()).foregroundColor(c.danger)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
+                relayAction(c: c)
                 if status == "failed", state?.appId != nil {
                     FSPrimaryButton("Try deploying again", enabled: true, block: true) {
                         Task { await deploy() }
@@ -322,6 +336,27 @@ public struct VibeCodeSessionScreen: View {
                 Spacer(minLength: 0)
             }
         }
+    }
+
+    /// "Turn the relay off for this key" under a relay failure.
+    @ViewBuilder
+    private func relayAction(c: FSColors) -> some View {
+        if relayFailureShown {
+            FSSecondaryButton(AiKeyRelayCopy.turnOff, block: true) { turnRelayOff() }
+                .accessibilityIdentifier("vibecode-relay-off")
+        } else if relayTurnedOff {
+            Text(AiKeyRelayCopy.turnedOff).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+        }
+    }
+
+    private func turnRelayOff() {
+        let store = SavedKeyStore()
+        if let cred = savedCredential(), let entry = store.entry(for: cred) {
+            try? store.setRelay(id: entry.id, relay: false)
+        } else if let active = store.active() {
+            try? store.setRelay(id: active.id, relay: false)
+        }
+        relayTurnedOff = true
     }
 
     // MARK: - Actions
@@ -361,24 +396,35 @@ public struct VibeCodeSessionScreen: View {
         }
     }
 
-    /// The box replies only when the build and install are done. If the
-    /// connection drops first, the box keeps going, so keep watching the
-    /// session status (polled above) instead of reporting a failure.
+    /// The box tests the app on a private copy, then installs it; a current
+    /// box answers at once and this follows the session, an older one answers
+    /// when it's done. If the connection drops, the box keeps going, so keep
+    /// watching the session status (polled above) instead of reporting a failure.
     private func deploy() async {
         guard !deploying else { return }
         deploying = true
         deployStartedAt = Date()
+        deployPhase = nil
         errorMessage = nil
         do {
-            let r = try await client.vibeCodeDeploy(sessionId: sessionId)
-            if r.ok {
-                deployedUrl = r.url
-                leftOpen = r.inviteOnly == false
-            } else { errorMessage = "Deploy was rejected by the box." }
+            let outcome = try await VibeCodeDeployRun.run(client: client, sessionId: sessionId) { phase in
+                deployPhase = phase
+            }
+            switch outcome {
+            case .deployed(let url, let inviteOnly):
+                if !url.isEmpty { deployedUrl = url }
+                leftOpen = inviteOnly == false
+            case .failed(let reason):
+                errorMessage = reason
+            case .unknown:
+                break
+            }
             deploying = false
+            deployPhase = nil
             await reload()
         } catch ScreensClientError.http(let code, let message) where code != 0 {
             deploying = false
+            deployPhase = nil
             errorMessage = Self.boxError(message) ?? ScreensClientError.plainLanguage(forStatus: code)
             await reload()
         } catch {

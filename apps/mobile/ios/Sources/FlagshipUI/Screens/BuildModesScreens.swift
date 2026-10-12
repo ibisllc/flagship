@@ -354,7 +354,7 @@ public struct BuildGitScreen: View {
         r.reason.hasPrefix("no flagship.app.json") ? notAdaptedText : r.reason
     }
     static let notAdaptedText = "This repo is not yet adapted for Flagship."
-    static let adaptButton = "Use AI to prepare repo for Flagship"
+    static let adaptButton = "Use AI to adapt and deploy"
     static let shareToggle = "Anonymously share your adaptation"
     static let shareNote = "Others can then install this repo without AI. Nothing about you or your server is included."
     static let checkAgain = "Check again"
@@ -402,27 +402,43 @@ public struct BuildGitScreen: View {
                     if let err = vm.errorMessage {
                         Text(err).font(FS.font.bodySm()).foregroundColor(c.danger)
                             .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
                             .accessibilityIdentifier("build-git-adapt-error")
                     }
-                    FSPrimaryButton(Self.adaptButton, block: true) { onBuildWithAI() }
-                        .accessibilityIdentifier("build-git-adapt")
-                    VStack(alignment: .leading, spacing: FS.space.s1) {
-                        Toggle(Self.shareToggle, isOn: $vm.share)
-                            .font(FS.font.body())
-                            .tint(c.primary)
-                            .accessibilityIdentifier("build-git-share")
-                        Text(Self.shareNote)
-                            .font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                            .fixedSize(horizontal: false, vertical: true)
+                    if vm.relayFailed {
+                        FSSecondaryButton(AiKeyRelayCopy.turnOff, block: true) { vm.turnRelayOffForAdaptKey() }
+                            .accessibilityIdentifier("build-git-relay-off")
+                    }
+                    if vm.sealed {
+                        // This build went to the box to go live; a new AI run
+                        // needs a new build.
+                        FSPrimaryButton(Self.checkAgain, enabled: vm.canCheck && !nameRefused, block: true) {
+                            Task { await vm.checkRepo() }
+                        }
+                        .accessibilityIdentifier("build-git-check-again-sealed")
+                    } else {
+                        FSPrimaryButton(Self.adaptButton, block: true) { onBuildWithAI() }
+                            .accessibilityIdentifier("build-git-adapt")
+                        VStack(alignment: .leading, spacing: FS.space.s1) {
+                            Toggle(Self.shareToggle, isOn: $vm.share)
+                                .font(FS.font.body())
+                                .tint(c.primary)
+                                .accessibilityIdentifier("build-git-share")
+                            Text(Self.shareNote)
+                                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                     journalLink(c: c)
                 }
             }
-        case .adapting(let progress):
+        case .adapting(let progress, let stage):
             FSCard {
                 HStack(spacing: FS.space.s2) {
                     ProgressView()
-                    Text("The AI is adapting the repo…").font(FS.font.body()).foregroundColor(c.textMuted)
+                    Text(BuildGitViewModel.adaptingText(stage: stage)).font(FS.font.body()).foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("build-git-adapting")
                 }
                 if let progress, !progress.isEmpty {
                     Text(progress).font(FS.font.bodySm()).foregroundColor(c.textMuted)

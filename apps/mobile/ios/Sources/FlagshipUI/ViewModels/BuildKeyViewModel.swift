@@ -27,6 +27,8 @@ public final class BuildKeyViewModel {
     public var formApiKey: String = ""
     public var formBaseUrl: String = ""
     public var formLabel: String = ""
+    /// "Send through the Flagship relay": on by default for every new key.
+    public var formRelay = true
     /// "Save on this device" — when on, the new key is persisted to the
     /// SavedKeyStore (so it shows in Settings + recall next time); when off
     /// it's used in-memory only for this one build.
@@ -73,7 +75,8 @@ public final class BuildKeyViewModel {
                 provider: formProvider,
                 label: label.isEmpty ? formProvider : label,
                 apiKey: key,
-                baseUrl: base.isEmpty ? nil : base
+                baseUrl: base.isEmpty ? nil : base,
+                relay: formRelay
             )
             try? store.setActive(id: added.id)
         } catch {
@@ -126,7 +129,8 @@ public final class BuildKeyViewModel {
                     provider: formProvider,
                     label: label.isEmpty ? formProvider : label,
                     apiKey: key,
-                    baseUrl: base.isEmpty ? nil : base
+                    baseUrl: base.isEmpty ? nil : base,
+                    relay: formRelay
                 )
                 reload()
             } catch {
@@ -137,8 +141,15 @@ public final class BuildKeyViewModel {
         return LlmProviderCredential(
             provider: formProvider,
             apiKey: key,
-            baseUrl: base.isEmpty ? nil : base
+            baseUrl: base.isEmpty ? nil : base,
+            relay: formRelay
         )
+    }
+
+    /// Turn the Flagship relay on or off for a saved key.
+    public func setRelay(_ e: SavedKeyStore.Entry, on: Bool) {
+        try? store.setRelay(id: e.id, relay: on)
+        reload()
     }
 
     public func resetForm() {
@@ -146,6 +157,7 @@ public final class BuildKeyViewModel {
         formApiKey = ""
         formBaseUrl = ""
         formLabel = ""
+        formRelay = true
         saveOnDevice = true
         errorMessage = nil
     }

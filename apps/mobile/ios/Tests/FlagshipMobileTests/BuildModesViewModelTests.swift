@@ -256,7 +256,7 @@ final class BuildModesViewModelTests: XCTestCase {
     }
 
     func test_notReadyCard_copy() {
-        XCTAssertEqual(BuildGitScreen.adaptButton, "Use AI to prepare repo for Flagship")
+        XCTAssertEqual(BuildGitScreen.adaptButton, "Use AI to adapt and deploy")
         XCTAssertEqual(BuildGitScreen.shareToggle, "Anonymously share your adaptation")
         XCTAssertEqual(BuildGitScreen.shareNote, "Others can then install this repo without AI. Nothing about you or your server is included.")
         XCTAssertEqual(BuildGitScreen.checkAgain, "Check again")

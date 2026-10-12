@@ -29,18 +29,34 @@ public struct SavedKeyStore {
         public let label: String
         public let apiKey: String
         public let baseUrl: String?
-        public init(id: String, provider: String, label: String, apiKey: String, baseUrl: String? = nil) {
+        /// Send this key's calls through the Flagship relay, so the provider
+        /// sees Flagship's address instead of the owner's. On by default, and
+        /// for keys saved before the setting existed.
+        public var relay: Bool
+        public init(id: String, provider: String, label: String, apiKey: String, baseUrl: String? = nil,
+                    relay: Bool = true) {
             self.id = id
             self.provider = provider
             self.label = label
             self.apiKey = apiKey
             self.baseUrl = baseUrl
+            self.relay = relay
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(String.self, forKey: .id)
+            provider = try c.decode(String.self, forKey: .provider)
+            label = try c.decode(String.self, forKey: .label)
+            apiKey = try c.decode(String.self, forKey: .apiKey)
+            baseUrl = try c.decodeIfPresent(String.self, forKey: .baseUrl)
+            relay = try c.decodeIfPresent(Bool.self, forKey: .relay) ?? true
         }
 
         /// In-memory credential for a build request — the raw key, never
-        /// persisted anywhere new by handing it over.
+        /// persisted anywhere new by handing it over. `relay` is always sent.
         public var credential: LlmProviderCredential {
-            LlmProviderCredential(provider: provider, apiKey: apiKey, baseUrl: baseUrl)
+            LlmProviderCredential(provider: provider, apiKey: apiKey, baseUrl: baseUrl, relay: relay)
         }
     }
 
@@ -112,7 +128,8 @@ public struct SavedKeyStore {
     /// Add a new key. Returns the created entry. The first entry added
     /// becomes active. A blank provider/label/key is rejected.
     @discardableResult
-    public func add(provider: String, label: String, apiKey: String, baseUrl: String? = nil) throws -> Entry {
+    public func add(provider: String, label: String, apiKey: String, baseUrl: String? = nil,
+                    relay: Bool = true) throws -> Entry {
         let p = provider.trimmingCharacters(in: .whitespacesAndNewlines)
         let k = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let l = label.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -123,7 +140,8 @@ public struct SavedKeyStore {
             provider: p,
             label: l.isEmpty ? p : l,
             apiKey: k,
-            baseUrl: (b?.isEmpty == false) ? b : nil
+            baseUrl: (b?.isEmpty == false) ? b : nil,
+            relay: relay
         )
         var s = load()
         s.entries.append(entry)
@@ -139,6 +157,20 @@ public struct SavedKeyStore {
         s.entries.removeAll { $0.id == id }
         if s.activeId == id { s.activeId = s.entries.first?.id }
         try save(s)
+    }
+
+    /// Turn the Flagship relay on or off for one saved key.
+    public func setRelay(id: String, relay: Bool) throws {
+        var s = load()
+        guard let i = s.entries.firstIndex(where: { $0.id == id }) else { return }
+        s.entries[i].relay = relay
+        try save(s)
+    }
+
+    /// The saved key a credential was made from (matched on the key itself,
+    /// which an OpenRouter rewrite keeps).
+    public func entry(for credential: LlmProviderCredential) -> Entry? {
+        list().first { $0.apiKey == credential.apiKey }
     }
 
     /// Make `id` the active (pre-selected) entry.

@@ -93,6 +93,13 @@ public protocol ScreensClient: Sendable {
     /// never auto-deploys). Returns `{ok, serviceId, url}` (same shape as the
     /// build-modes deploy).
     func vibeCodeDeploy(sessionId: String) async throws -> BuildDeployResponse
+    /// `POST /api/llm/sessions/<id>/deploy {background:true}`: a current box
+    /// answers `{ok, started}` at once (follow `vibeCodeStatus`); an older one
+    /// ignores `background` and answers when the app is live.
+    func vibeCodeDeployStart(sessionId: String) async throws -> VibeCodeDeployReply
+    /// `POST /api/screens/services/<id>/egress`: apply the owner's signed
+    /// internet grant for a live app (`hosts: []` revokes).
+    func serviceEgressSet(serviceId: String, _ req: AppEgressSetRequest) async throws -> AppEgressSetResponse
 
     // P9 — peer-backup management.
     func peerBackupStatus() async throws -> PeerBackupStatusResponse
@@ -297,6 +304,14 @@ public extension ScreensClient {
     }
     func buildState(buildId: String) async throws -> BuildStateResponse {
         throw ScreensClientError.notImplemented("build state")
+    }
+    /// Default: the waiting deploy, reported as finished.
+    func vibeCodeDeployStart(sessionId: String) async throws -> VibeCodeDeployReply {
+        let r = try await vibeCodeDeploy(sessionId: sessionId)
+        return VibeCodeDeployReply(ok: r.ok, serviceId: r.serviceId, url: r.url, inviteOnly: r.inviteOnly)
+    }
+    func serviceEgressSet(serviceId: String, _ req: AppEgressSetRequest) async throws -> AppEgressSetResponse {
+        throw ScreensClientError.notImplemented("app internet access")
     }
     func buildDiscard(buildId: String) async throws {
         throw ScreensClientError.notImplemented("discard")

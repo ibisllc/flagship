@@ -52,6 +52,7 @@ public struct BuildKeyScreen: View {
                                 apiKey: $vm.formApiKey,
                                 baseUrl: $vm.formBaseUrl,
                                 label: $vm.formLabel,
+                                relay: $vm.formRelay,
                                 providers: vm.providers
                             ),
                             showSaveToggle: false,
@@ -149,6 +150,10 @@ public struct BuildKeyScreen: View {
                         FSPrimaryButton("Use this") { onChosen(vm.credential(for: e)) }
                             .accessibilityIdentifier(e.id == vm.active?.id ? "build-key-confirm-active" : "build-key-use-saved")
                     }
+                    AiKeyRelayRowToggle(
+                        relay: Binding(get: { e.relay }, set: { vm.setRelay(e, on: $0) }),
+                        identifier: "build-key-relay"
+                    )
                 }
             }
             if let err = deleteError {
@@ -165,19 +170,52 @@ public struct AiKeyFormBinding {
     @Binding public var apiKey: String
     @Binding public var baseUrl: String
     @Binding public var label: String
+    @Binding public var relay: Bool
     public let providers: [String]
     public init(
         provider: Binding<String>,
         apiKey: Binding<String>,
         baseUrl: Binding<String>,
         label: Binding<String>,
+        relay: Binding<Bool>,
         providers: [String]
     ) {
         self._provider = provider
         self._apiKey = apiKey
         self._baseUrl = baseUrl
         self._label = label
+        self._relay = relay
         self.providers = providers
+    }
+}
+
+/// The words for the per-key Flagship relay setting, shared by the add form
+/// and the key lists.
+public enum AiKeyRelayCopy {
+    public static let toggle = "Send through the Flagship relay"
+    public static let note = "Better for your anonymity: the AI provider sees Flagship's address, not yours."
+    public static let on = "Through the Flagship relay"
+    public static let off = "Direct"
+    public static let turnOff = "Turn the relay off for this key"
+    public static let turnedOff = "The relay is off for this key. Try again."
+    public static func caption(_ relay: Bool) -> String { relay ? on : off }
+}
+
+/// The relay switch on a saved key's row, captioned with where its calls go.
+struct AiKeyRelayRowToggle: View {
+    @Environment(\.colorScheme) private var scheme
+    @Binding var relay: Bool
+    let identifier: String
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        Toggle(isOn: $relay) {
+            Text(AiKeyRelayCopy.caption(relay)).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+        }
+        .tint(c.primary)
+        .accessibilityLabel(AiKeyRelayCopy.toggle)
+        .accessibilityValue(AiKeyRelayCopy.caption(relay))
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -216,6 +254,16 @@ struct AiKeyForm: View {
                     placeholder: "https://…", keyboard: .URL)
             FSField(value: vm.$label, label: "Label (optional)",
                     placeholder: "e.g. Personal")
+            Toggle(isOn: vm.$relay) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(AiKeyRelayCopy.toggle).font(FS.font.body()).foregroundColor(c.text)
+                    Text(AiKeyRelayCopy.note)
+                        .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(c.primary)
+            .accessibilityIdentifier("ai-key-relay-toggle")
             if showSaveToggle {
                 Toggle(isOn: $saveOnDevice) {
                     VStack(alignment: .leading, spacing: 2) {

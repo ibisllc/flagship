@@ -105,7 +105,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 url: "https://plants.\(fqdn)/",
                 status: "running",
                 version: "0.0.3",
-                installedAt: now - 60_000 * 30
+                installedAt: now - 60_000 * 30,
+                egress: mockEgress["bright-maple--plants"]
             ),
             AppSummary(
                 serviceId: "bright-maple--wiki",
@@ -116,7 +117,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 url: "https://wiki.\(fqdn)/",
                 status: "running",
                 version: "1.4.0",
-                installedAt: now - 60_000 * 60 * 26
+                installedAt: now - 60_000 * 60 * 26,
+                egress: mockEgress["bright-maple--wiki"]
             ),
             AppSummary(
                 serviceId: "trent--scratchpad",
@@ -130,6 +132,35 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 installedAt: now - 60_000 * 60 * 24 * 12
             )
         ])
+    }
+
+    // MARK: - App internet access
+
+    /// Per-service `{declared, approved}`; a missing entry is an older box.
+    public var mockEgress: [String: AppEgress] = [
+        "bright-maple--plants": AppEgress(declared: ["api.open-meteo.com"], approved: []),
+        "bright-maple--wiki": AppEgress(declared: ["api.github.com"], approved: ["api.github.com"]),
+    ]
+    public private(set) var serviceEgressSetCalls: [(serviceId: String, req: AppEgressSetRequest)] = []
+    /// Thrown by `serviceEgressSet` (after recording the call).
+    public var serviceEgressSetError: Error?
+
+    public func serviceEgressSet(serviceId: String, _ req: AppEgressSetRequest) async throws -> AppEgressSetResponse {
+        try await tick()
+        serviceEgressSetCalls.append((serviceId, req))
+        if let e = serviceEgressSetError { throw e }
+        guard let current = mockEgress[serviceId] else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
+        }
+        let undeclared = req.grant.hosts.filter { !current.declared.contains($0) }
+        if !undeclared.isEmpty {
+            throw ScreensClientError.http(
+                status: 422,
+                message: #"{"error":"not declared in the app's network.egress: \#(undeclared.joined(separator: ", "))"}"#)
+        }
+        let next = AppEgress(declared: current.declared, approved: req.grant.hosts)
+        mockEgress[serviceId] = next
+        return AppEgressSetResponse(ok: true, egress: next)
     }
 
     // MARK: - P1.3 app-detail
@@ -182,6 +213,19 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     public func vibeCodeStatus(sessionId: String) async throws -> VibeCodeStatusResponse {
         try await tick()
+        vibeCodeStatusCalls += 1
+        if !vibeCodeStatusScript.isEmpty { return vibeCodeStatusScript.removeFirst() }
+        if let polls = stagedDeployPolls[sessionId] {
+            stagedDeployPolls[sessionId] = polls + 1
+            let phases = ["staging", "fixing", "going-live"]
+            if polls < phases.count {
+                return VibeCodeStatusResponse(status: "deploying", transcript: [], files: [:], deployedUrl: nil,
+                                              errorReason: nil, deployPhase: phases[polls])
+            }
+            return VibeCodeStatusResponse(status: "deployed", transcript: [], files: [:],
+                                          deployedUrl: "https://habits.\(podContext).bright-maple.flagship.services/",
+                                          errorReason: nil)
+        }
         return VibeCodeStatusResponse(
             status: "streaming",
             transcript: [
@@ -495,6 +539,26 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             serviceId: "bright-maple-habits",
             url: "https://habits.\(podContext).bright-maple.flagship.services/"
         )
+    }
+
+    /// Answered by `vibeCodeStatus` in order before anything else.
+    public var vibeCodeStatusScript: [VibeCodeStatusResponse] = []
+    public private(set) var vibeCodeStatusCalls = 0
+    /// Overrides what a staged deploy start answers (e.g. an older box's
+    /// finished result).
+    public var vibeCodeDeployStartFixture: VibeCodeDeployReply?
+    public var vibeCodeDeployStartError: Error?
+    public private(set) var vibeCodeDeployStartCalls: [String] = []
+    /// Sessions deploying in the background → how many times they were polled.
+    private var stagedDeployPolls: [String: Int] = [:]
+
+    public func vibeCodeDeployStart(sessionId: String) async throws -> VibeCodeDeployReply {
+        try await tick()
+        vibeCodeDeployStartCalls.append(sessionId)
+        if let e = vibeCodeDeployStartError { throw e }
+        if let f = vibeCodeDeployStartFixture { return f }
+        stagedDeployPolls[sessionId] = 0
+        return VibeCodeDeployReply(ok: true, started: true)
     }
 
     // MARK: - P9 peer-backup
@@ -873,10 +937,17 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func buildState(buildId: String) async throws -> BuildStateResponse {
         try await tick()
         let adapt = buildAdaptStartCalls.contains { $0.buildId == buildId }
-            ? (buildAdaptStatusFixture ?? BuildAdaptStatus(status: "done", fileCount: 16, deployed: false))
+            ? (buildAdaptStatusScript.isEmpty
+                ? (buildAdaptStatusFixture ?? BuildAdaptStatus(status: "done", fileCount: 16, deployed: false))
+                : buildAdaptStatusScript.removeFirst())
             : nil
-        return BuildStateResponse(state: .init(buildId: buildId, mode: "git", adapt: adapt))
+        return BuildStateResponse(state: .init(buildId: buildId, mode: "git", adapt: adapt, sealed: buildSealedFixture))
     }
+
+    /// Answered by `buildState` in order, before `buildAdaptStatusFixture`.
+    public var buildAdaptStatusScript: [BuildAdaptStatus] = []
+    /// What `buildState` reports as `sealed`.
+    public var buildSealedFixture: Bool?
 
     public private(set) var adapterReports: [(serviceId: String, detail: String)] = []
     public func adapterReport(serviceId: String, detail: String) async throws {

@@ -194,6 +194,15 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         return try await request("/api/llm/sessions/\(sessionId)/deploy", method: "POST", body: Data("{}".utf8),
                                  timeout: 15 * 60)
     }
+    public func vibeCodeDeployStart(sessionId: String) async throws -> VibeCodeDeployReply {
+        // An older box ignores `background` and answers once the app is live.
+        try await request("/api/llm/sessions/\(sessionId)/deploy", method: "POST",
+                          body: Data(#"{"background":true}"#.utf8), timeout: 15 * 60)
+    }
+    public func serviceEgressSet(serviceId: String, _ req: AppEgressSetRequest) async throws -> AppEgressSetResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/services/\(esc(serviceId))/egress", method: "POST", body: body)
+    }
 
     public func peerBackupStatus() async throws -> PeerBackupStatusResponse {
         try await request("/api/screens/peer-backup/status")

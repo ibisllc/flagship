@@ -51,6 +51,128 @@ public final class ServiceDetailViewModel {
         }
     }
 
+    // MARK: Internet access (egress)
+
+    public enum EgressPhase: Equatable, Sendable {
+        case idle
+        case signing
+        case posting
+        case failed(String)
+    }
+
+    public private(set) var egressPhase: EgressPhase = .idle
+    /// The box's answer to the last grant, which wins over the loaded detail.
+    private var egressOverride: AppEgress?
+
+    /// `{declared, approved}`, or nil when the box doesn't report it (older
+    /// box): then the page shows nothing about it.
+    public var egress: AppEgress? { egressOverride ?? detail.value?.app.egress }
+
+    public var isChangingEgress: Bool {
+        switch egressPhase {
+        case .signing, .posting: return true
+        default: return false
+        }
+    }
+
+    /// What the page shows about the app's internet access.
+    public struct EgressCard: Equatable, Sendable {
+        /// Declared hosts still waiting for the owner's approval.
+        public let pending: [String]
+        /// Hosts the app may reach now.
+        public let approved: [String]
+        /// Allow / Stop access buttons (hidden on a restricted profile, which
+        /// the box refuses anyway).
+        public let canChange: Bool
+    }
+
+    /// Nil: nothing to show (no egress reported, or nothing declared or open).
+    public static func egressCard(_ egress: AppEgress?, canChange: Bool) -> EgressCard? {
+        guard let egress else { return nil }
+        let pending = egress.pending
+        guard !pending.isEmpty || !egress.approved.isEmpty else { return nil }
+        return EgressCard(pending: pending, approved: egress.approved, canChange: canChange)
+    }
+
+    public static let egressTitle = "This app wants to reach the internet"
+    public static let egressNote = "Until you allow them, the app can't reach any of these. Only allow hosts you expect this app to need."
+
+    /// Allow every host the app declares.
+    @discardableResult
+    public func allowEgress() async -> Bool {
+        guard let egress else { return false }
+        return await sendEgress(hosts: egress.declared, reason: "Allow internet access for \(displaySlug)")
+    }
+
+    /// Close the app's internet access (signs an empty host list).
+    @discardableResult
+    public func stopEgress() async -> Bool {
+        await sendEgress(hosts: [], reason: "Stop internet access for \(displaySlug)")
+    }
+
+    private var displaySlug: String { detail.value?.app.slug ?? serviceId }
+
+    private func sendEgress(hosts: [String], reason: String) async -> Bool {
+        guard let domain = serverDomain, !domain.isEmpty else {
+            egressPhase = .failed("No server to send this to.")
+            return false
+        }
+        egressPhase = .signing
+        let key: Curve25519.Signing.PrivateKey
+        do {
+            key = try await egressSigner(reason)
+        } catch {
+            egressPhase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            return false
+        }
+        let grant = AppEgressGrant(serverDomain: domain, serviceId: serviceId, hosts: hosts,
+                                   issuedAt: Int64(Date().timeIntervalSince1970 * 1000))
+        let signature: Data
+        do {
+            signature = try key.signature(for: grant.canonicalBytes())
+        } catch {
+            egressPhase = .failed("Couldn't sign the request: \(error.localizedDescription)")
+            return false
+        }
+        egressPhase = .posting
+        do {
+            let r = try await client.serviceEgressSet(
+                serviceId: serviceId,
+                AppEgressSetRequest(grant: grant, signature: HexUtil.encode(signature)))
+            egressOverride = r.egress ?? AppEgress(declared: egress?.declared ?? [], approved: grant.hosts)
+            egressPhase = .idle
+            return true
+        } catch {
+            egressPhase = .failed(Self.egressError(error))
+            return false
+        }
+    }
+
+    /// The box's refusal in plain words.
+    static func egressError(_ error: Error) -> String {
+        guard case let ScreensClientError.http(status, _) = error else {
+            return ScreensClientError.userFacing(error)
+        }
+        let reason = ScreensClientError.boxReason(error)
+        switch status {
+        case 403:
+            if reason == "grant is for a different server" {
+                return "This approval was for a different server. Open the app from the server it runs on and try again."
+            }
+            if reason == "stale grant" {
+                return "Your phone's clock is too far off from the server's. Check the date and time, then try again."
+            }
+            return "The server didn't accept your signature. Only the account owner's phone can allow this."
+        case 404: return "This app isn't installed on the server any more."
+        case 409: return "A newer change is already applied. Reload the page and try again."
+        case 422: return reason.map { "The app doesn't declare that host (\($0))." }
+            ?? "The app doesn't declare that host."
+        case 400: return reason.map { "The server refused the request: \($0)." }
+            ?? ScreensClientError.plainLanguage(forStatus: status)
+        default: return ScreensClientError.plainLanguage(forStatus: status)
+        }
+    }
+
     /// Pods the service should run on (server-set). Edited locally; reset
     /// by `cancelEdits()` and persisted by `save()`.
     public var runOnPodIds: Set<String> = []
@@ -90,6 +212,9 @@ public final class ServiceDetailViewModel {
     /// Derives the owner IRK behind the biometric prompt. Injected so tests
     /// can supply a deterministic key; production uses `Keystore.deriveIRK`.
     private let irkSigner: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
+    /// The sensitive-order key (admin root when held, else the owner IRK),
+    /// behind Face ID; the same key Delete/Revoke sign with.
+    private let egressSigner: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
 
     public init(
         serviceId: String,
@@ -100,7 +225,8 @@ public final class ServiceDetailViewModel {
         username: @escaping () -> String? = { nil },
         uninstallClient: (any ServiceUninstallClient)? = nil,
         serverDomain: String? = nil,
-        irkSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil
+        irkSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        egressSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil
     ) {
         self.serviceId = serviceId
         self.client = client
@@ -111,6 +237,7 @@ public final class ServiceDetailViewModel {
         self.uninstallClient = uninstallClient ?? MockServiceUninstallClient()
         self.serverDomain = serverDomain
         self.irkSigner = irkSigner ?? { reason in try await Keystore.deriveIRK(reason: reason) }
+        self.egressSigner = egressSigner ?? { reason in try await Keystore.sensitiveOrderSigningKey(reason: reason) }
     }
 
     public var availablePods: [PodInfo] { allPods }
@@ -124,6 +251,7 @@ public final class ServiceDetailViewModel {
             async let u = client.urlControllerOwned()
             let (di, uo) = try await (d, u)
             detail = .loaded(di)
+            egressOverride = nil
             ownedUrls = .loaded(uo.urls.filter { $0.fqdn.contains(serviceId) })
             // Seed local edits from server state — currently we default
             // to running on the leader-only since the API doesn't yet

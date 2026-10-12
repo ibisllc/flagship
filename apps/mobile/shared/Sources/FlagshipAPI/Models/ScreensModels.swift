@@ -19,6 +19,9 @@ public struct AppSummary: Codable, Equatable, Sendable {
     public let status: String   // "running" | "stopped" | "unknown"
     public let version: String?
     public let installedAt: Int64
+    /// Internet hosts the app declares and the ones the owner allowed. Absent
+    /// on boxes without the egress gateway (show nothing then).
+    public var egress: AppEgress? = nil
 }
 
 public struct RecentInstallEvent: Codable, Equatable, Sendable {
@@ -204,10 +207,27 @@ public struct LlmProviderCredential: Codable, Equatable, Sendable {
     public let apiKey: String
     /// Optional override base URL for an OpenAI-compatible / proxy endpoint.
     public let baseUrl: String?
-    public init(provider: String, apiKey: String, baseUrl: String? = nil) {
+    /// Send this key's calls through the Flagship relay (the provider sees
+    /// Flagship's address, not the box's). Absent ⇒ ON on the box; the app
+    /// always sends it for a saved key.
+    public let relay: Bool?
+    public init(provider: String, apiKey: String, baseUrl: String? = nil, relay: Bool? = nil) {
         self.provider = provider
         self.apiKey = apiKey
         self.baseUrl = baseUrl
+        self.relay = relay
+    }
+}
+
+/// A box refused an AI call because the key asked for the Flagship relay and
+/// the relay wasn't there (it never falls back to a direct call). MIRRORS the
+/// messages in packages/server-daemon/src/tunnel/outboundStream.ts.
+public enum RelayFailure {
+    public static func matches(_ text: String?) -> Bool {
+        guard let t = text?.lowercased() else { return false }
+        if t.contains("relay-unavailable") { return true }
+        guard t.contains("the flagship relay") else { return false }
+        return t.contains("isn't reachable") || t.contains("didn't connect to")
     }
 }
 
@@ -310,6 +330,8 @@ public struct VibeCodeStatusResponse: Codable {
     public let files: [String: String]
     public let deployedUrl: String?
     public let errorReason: String?
+    /// While "deploying": "staging" | "fixing" | "going-live". Older boxes omit it.
+    public var deployPhase: String? = nil
 
     public struct TranscriptEntry: Codable, Equatable {
         public let role: String  // "user" | "assistant"
@@ -1042,6 +1064,8 @@ public struct VibeCodeSessionPublicState: Codable, Equatable, Sendable {
     /// The AI is waiting but the box has no key for this session: the reply
     /// must carry one.
     public let needsCredential: Bool?
+    /// While "deploying": "staging" | "fixing" | "going-live". Older boxes omit it.
+    public let deployPhase: String?
     public init(
         id: String,
         appId: String?,
@@ -1049,11 +1073,13 @@ public struct VibeCodeSessionPublicState: Codable, Equatable, Sendable {
         messages: [VibeCodeSessionMessage],
         pendingRequest: VibeCodePendingRequest?,
         failureReason: String? = nil,
-        needsCredential: Bool? = nil
+        needsCredential: Bool? = nil,
+        deployPhase: String? = nil
     ) {
         self.id = id; self.appId = appId; self.status = status
         self.messages = messages; self.pendingRequest = pendingRequest
         self.failureReason = failureReason; self.needsCredential = needsCredential
+        self.deployPhase = deployPhase
     }
 }
 

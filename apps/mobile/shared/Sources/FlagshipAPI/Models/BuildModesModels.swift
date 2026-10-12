@@ -80,9 +80,26 @@ public struct BuildAdaptReply: Codable, Equatable, Sendable {
     public let fileCount: Int?
     public let deployed: Bool?
     public let deployedUrl: String?
-    public init(ok: Bool? = true, started: Bool? = nil, fileCount: Int? = nil, deployed: Bool? = nil, deployedUrl: String? = nil) {
+    /// Done but not deployed: why the app didn't go live.
+    public let reason: String?
+    public init(ok: Bool? = true, started: Bool? = nil, fileCount: Int? = nil, deployed: Bool? = nil, deployedUrl: String? = nil,
+                reason: String? = nil) {
         self.ok = ok; self.started = started; self.fileCount = fileCount
-        self.deployed = deployed; self.deployedUrl = deployedUrl
+        self.deployed = deployed; self.deployedUrl = deployedUrl; self.reason = reason
+    }
+}
+
+/// `POST /api/llm/sessions/:id/deploy {background:true}`: `{ok, started}` from
+/// a current box (follow the session's `status` / `deployPhase`), or the
+/// finished `{ok, serviceId, url, inviteOnly?}` from an older one.
+public struct VibeCodeDeployReply: Codable, Equatable, Sendable {
+    public let ok: Bool?
+    public let started: Bool?
+    public let serviceId: String?
+    public let url: String?
+    public let inviteOnly: Bool?
+    public init(ok: Bool? = true, started: Bool? = nil, serviceId: String? = nil, url: String? = nil, inviteOnly: Bool? = nil) {
+        self.ok = ok; self.started = started; self.serviceId = serviceId; self.url = url; self.inviteOnly = inviteOnly
     }
 }
 
@@ -92,10 +109,15 @@ public struct BuildAdaptStatus: Codable, Equatable, Sendable {
     public let fileCount: Int?
     public let deployed: Bool?
     public let deployedUrl: String?
+    /// Why it failed, or (done, not deployed) why the app didn't go live.
     public let reason: String?
-    public init(status: String, fileCount: Int? = nil, deployed: Bool? = nil, deployedUrl: String? = nil, reason: String? = nil) {
+    /// While running: "staging" (the AI testing its private copy) or
+    /// "going-live" (the box installing the tested app). Older boxes omit it.
+    public let phase: String?
+    public init(status: String, fileCount: Int? = nil, deployed: Bool? = nil, deployedUrl: String? = nil, reason: String? = nil,
+                phase: String? = nil) {
         self.status = status; self.fileCount = fileCount; self.deployed = deployed
-        self.deployedUrl = deployedUrl; self.reason = reason
+        self.deployedUrl = deployedUrl; self.reason = reason; self.phase = phase
     }
 }
 
@@ -107,9 +129,13 @@ public struct BuildStateResponse: Codable, Equatable, Sendable {
         public let name: String?
         public let deployedUrl: String?
         public let adapt: BuildAdaptStatus?
-        public init(buildId: String, mode: String, name: String? = nil, deployedUrl: String? = nil, adapt: BuildAdaptStatus? = nil) {
+        /// The build was handed to the box to go live: no AI may work on it
+        /// again (a new build is needed to change the app).
+        public let sealed: Bool?
+        public init(buildId: String, mode: String, name: String? = nil, deployedUrl: String? = nil, adapt: BuildAdaptStatus? = nil,
+                    sealed: Bool? = nil) {
             self.buildId = buildId; self.mode = mode; self.name = name
-            self.deployedUrl = deployedUrl; self.adapt = adapt
+            self.deployedUrl = deployedUrl; self.adapt = adapt; self.sealed = sealed
         }
     }
     public let state: State
