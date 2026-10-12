@@ -2,17 +2,21 @@
 //
 // The box records a request when its egress gateway denies an app a host no
 // rule matched, and for the hosts a manifest declares at install. The Web Push
-// it sends is generic (category `app-access`); the details come from the box
-// over the paired session: GET /api/screens/access-requests, on load, on focus,
-// after a notification click and on the screens socket's `access-request`
-// event. Each request gets a sheet with Allow / Deny / Not now; an answer edits
-// the list with withRule, signs it and sends it, then confirms with Close and
-// View access list. Companion sessions never get the sheet (read-only).
+// it sends is generic (category `generic`, `app-access` from older boxes); the
+// details come from the box over the paired session: GET
+// /api/screens/access-requests, on load, on focus, after a notification click
+// and on the screens socket's `access-request` event. Each request gets a sheet
+// with Allow / Deny / Not now; an answer edits the list with withRule, signs it
+// and sends it, then confirms with Close and View access list. Companion
+// sessions never get the sheet (read-only), and nobody does with the Push
+// notifications switch off (lib/pushSetting.js): the requests still wait on
+// each app's page.
 
 import { getPodBaseUrl, getSessionToken, screensFetch } from "./api.js";
 import { getSession } from "./state.js";
 import { sensitiveSigner } from "./adminRoot.js";
 import { isCompanionProfile } from "./companionGuard.js";
+import { pushNotificationsEnabled } from "./pushSetting.js";
 import { toast } from "./toast.js";
 import { humanError } from "./humanError.js";
 import { escapeHtml } from "./util.js";
@@ -321,7 +325,13 @@ export async function answerWithSession(req, action) {
 export function startAccessAlerts({ isUnlocked }) {
   const isActive = () => {
     try {
-      return isUnlocked() && !isCompanionProfile() && !!getPodBaseUrl() && !!getSession()?.umk;
+      return (
+        isUnlocked() &&
+        pushNotificationsEnabled() &&
+        !isCompanionProfile() &&
+        !!getPodBaseUrl() &&
+        !!getSession()?.umk
+      );
     } catch {
       return false;
     }

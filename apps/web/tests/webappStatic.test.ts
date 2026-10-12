@@ -382,20 +382,22 @@ describe("/webapp PWA static surface", () => {
     // v46 lists releases from flagshipserver.com for boxes that can't.
     // v47 stages AI deploys, asks for app internet access, adds the AI relay switch.
     // v48 replaces the internet approval with app access lists and their alerts.
-    expect(r.body).toContain('SHELL_VERSION = "v48"');
+    // v49 adds the Push notifications switch.
+    expect(r.body).toContain('SHELL_VERSION = "v49"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");
   });
 
-  it("/webapp/views/settings.js wires the browser-notifications toggle", async () => {
+  it("/webapp/views/settings.js wires the Push notifications switch", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/views/settings.js" });
     expect(r.statusCode).toBe(200);
     expect(r.body).toContain("subscribeToWebPush");
     expect(r.body).toContain("unsubscribeFromWebPush");
+    expect(r.body).toContain("applyPushSetting");
+    expect(r.body).toContain("push-switch");
     expect(r.body).toContain("push-enable");
-    expect(r.body).toContain("push-disable");
   });
 
   it("/webapp/lib/icons.js bundles the Lucide subset + home-grid wiring (#45)", async () => {

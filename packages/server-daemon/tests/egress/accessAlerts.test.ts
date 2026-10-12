@@ -114,7 +114,7 @@ describe("alerts", () => {
     expect(pushes).toHaveLength(ALERTS_PER_HOUR + 1);
   });
 
-  it("the push is an STK-signed app-access relay that names no app or host", async () => {
+  function relayRig(alertsEnabled: () => boolean) {
     const priv = new Uint8Array(32).fill(5);
     const kp: Keypair = { privateKey: priv, publicKey: ed.getPublicKey(priv) };
     const signer = { boxPublicKey: () => kp.publicKey, signAsBox: (m: Uint8Array) => ed.sign(m, priv) } as unknown as BoxSigner;
@@ -124,24 +124,42 @@ describe("alerts", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof fetch;
     const store = new AppAccessStore(null, null);
+    const events: AccessRequestEvent[] = [];
+    // The same sinks the daemon wires (index.ts): category generic, gated by the switch.
     const rec = buildAccessRequestRecorder({
       store,
       appName: () => "weather",
       sinks: () => ({
-        push: () => sendPushRelay({ category: "app-access", targetUsername: "harry", signer, controlPlaneBaseUrl: "https://flagshipserver.com", fetchImpl }),
+        emit: (e) => events.push(e),
+        alertsEnabled,
+        push: () => sendPushRelay({ category: "generic", targetUsername: "harry", signer, controlPlaneBaseUrl: "https://flagshipserver.com", fetchImpl }),
       }),
     });
+    return { kp, sent, store, events, rec };
+  }
+
+  it("the push is an STK-signed generic relay that names no app or host", async () => {
+    const { kp, sent, rec } = relayRig(() => true);
     rec.onUnmatched("harry-weather", "secret-tracker.example.com");
     await new Promise((r) => setTimeout(r, 10));
     expect(sent).toHaveLength(1);
     expect(sent[0]!.url).toBe("https://flagshipserver.com/api/push/relay");
     const body = JSON.parse(sent[0]!.raw);
-    expect(body.request.category).toBe("app-access");
+    expect(body.request.category).toBe("generic");
     expect(body.request.targetUsername).toBe("harry");
-    for (const leak of ["secret-tracker", "example.com", "weather", "harry-weather"]) expect(sent[0]!.raw).not.toContain(leak);
+    for (const leak of ["secret-tracker", "example.com", "weather", "harry-weather", "app-access"]) expect(sent[0]!.raw).not.toContain(leak);
     expect(body.request.sealedPayloadHex).toBe("00".repeat(32));
     const sig = Uint8Array.from(Buffer.from(body.signature, "hex"));
     expect(verifyPushRelayRequest(body.request, sig, kp.publicKey)).toBe(true);
+  });
+
+  it("with alerts off the box never calls the relay, but still records and emits", async () => {
+    const { sent, store, events, rec } = relayRig(() => false);
+    for (let i = 0; i < 3; i++) rec.onUnmatched("harry-weather", `h${i}.example.com`);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(sent).toHaveLength(0);
+    expect(store.pending("harry-weather")).toHaveLength(3);
+    expect(events).toHaveLength(3);
   });
 });
 

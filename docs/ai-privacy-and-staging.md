@@ -196,11 +196,42 @@ matched** (an explicit `deny` is the owner's answer and stays quiet), the box
 records a request `{host, attempts, firstSeen, lastSeen}`. Hosts in the
 manifest's `network.egress` become requests at install (source "app"). The box
 pushes at most one alert per app and host per day and five per hour, through
-`/api/push/relay`, category `app-access`. The OS-visible text is generic ("One
-of your apps wants to reach the internet"). The phone fetches the details from
-the box over the paired session, so neither Flagship nor Apple or Google learns
-which app or host. An open app also gets an `access-request` event on the
+`/api/push/relay` (category `generic`, see below), whose OS-visible text says
+only "Open Flagship to see what's new." On any `generic` push the apps fetch
+the box's access requests (and whatever else they check). The phone reads
+the details from the box over the paired session, so neither Flagship nor
+Apple or Google learns what the push was about, which app, or which host. An open app also gets an `access-request` event on the
 screens socket.
+
+**Turning push off.** The apps have one switch, Settings → "Push
+notifications", on by default and stored on the device. It covers every push,
+not only these alerts: even an opaque unlock push tells Apple or Google when a
+server rebooted. Its text: "When this is off, nothing from Flagship is pushed
+to this device, so Apple and Google never see when your servers need you.
+You'll have to open Flagship to approve unlocks and see requests." Off does
+two things:
+
+1. The device revokes its push registration with flagshipserver.com (the
+   signed `DELETE /api/push/:tokenId` every app already uses; the webapp also
+   drops its Web Push subscription) and doesn't register again while the
+   switch is off. With no token on file, `.com` has nowhere to push.
+2. The device writes `{enabled:false}` to every box it manages
+   (`GET`/`POST /api/screens/settings/access-alerts` `{enabled}`, owner
+   session only, a companion gets 403, no signature because it can only
+   reduce what leaves the box), and writes it again on start and on each
+   return to the foreground wherever a box disagrees (a box without the
+   setting answers 404 and is skipped). A box with alerts off never calls
+   `/api/push/relay` for an access request, so nothing about it leaves the
+   box, whichever devices are still registered. The setting lives in
+   `<dataDir>/data/access-alerts.json`.
+
+Requests are still recorded, the screens socket still sends `access-request`,
+and requests still wait on each app's page, but the device shows no sheet. On
+registers the device again and writes `{enabled:true}`. That's the point:
+turning notifications off in the OS only hides them on the phone after
+they've travelled. Pushes that are sent use the `generic` category (older
+boxes sent `app-access`, which stays valid): Apple and Google see that
+Flagship pinged the phone, not what about.
 
 **Answering.** The alert shows "<App> wants to reach <host>" with **Allow**,
 **Deny** and **Not now**. Allow or Deny edits the list with `withRule`: drop

@@ -26,6 +26,7 @@ import type { AppEnvStore } from "../serviceEnvStore.js";
 import type { BuildCredentialStore } from "../llm/buildCredentialStore.js";
 import { parseRelayFlag, type LlmCredential } from "../llmHarness.js";
 import { isAppAccessPath } from "../egress/approvals.js";
+import { ACCESS_ALERTS_PATH, buildAccessAlertSettingHttp, type AccessAlertSetting } from "../egress/accessAlertSetting.js";
 import {
   summarizeAttachment,
   validateAttachments,
@@ -165,6 +166,12 @@ export interface ScreensHttpDeps {
     view: (serviceId: string, declared: readonly string[]) => { declared: string[]; approved: string[] };
     access?: (serviceId: string) => { rules: number; pending: number };
   } | null;
+  /**
+   * The owner's "Internet request alerts" switch
+   * (`/api/screens/settings/access-alerts`, egress/accessAlertSetting.ts).
+   * Absent on a box without it: the path 404s and the apps skip it.
+   */
+  accessAlerts?: Pick<AccessAlertSetting, "enabled" | "set"> | null;
   /**
    * Services built from a published repo adapter, and a way to report one
    * to flagshipserver.com (anonymously: the adapter, and the owner's note).
@@ -475,6 +482,14 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (method !== "GET" && isWriteScopedPath(path)) {
       const denied = denyCompanionWrite(deps.pairedSessions ?? null, req);
       if (denied) return denied;
+    }
+
+    if (deps.accessAlerts && path === ACCESS_ALERTS_PATH) {
+      const r = await buildAccessAlertSettingHttp({
+        setting: deps.accessAlerts,
+        denyCompanion: (r) => denyCompanionWrite(deps.pairedSessions ?? null, r),
+      })(path, method, req);
+      if (r) return r;
     }
 
     if (deps.appEgress && isAppAccessPath(path)) {

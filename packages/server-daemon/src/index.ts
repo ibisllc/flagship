@@ -105,6 +105,7 @@ import { buildRunMigration } from "./runMigration.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
 import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
 import { ScreensEventBus } from "./screens/screensEvents.js";
+import { AccessAlertSetting } from "./egress/accessAlertSetting.js";
 import { readServiceSource } from "./llm/serviceSource.js";
 import type { EditableService } from "./buildmodes/buildOrchestrator.js";
 import { VibeCodeSessionRegistry, fileVibeCodeSessionStore, type VibeCodeSession } from "./llm/vibeCodeSession.js";
@@ -2512,16 +2513,22 @@ async function wireRuntimeSurfaces(deps: {
 
   // Access requests (docs/ai-privacy-and-staging.md §3a): a new one reaches
   // an open owner app on the screens socket, and wakes the phone through
-  // .com's push relay with nothing about which app or host.
+  // .com's push relay with nothing about which app or host, unless the owner
+  // turned alerts off (then nothing leaves the box).
   const screensEvents = new ScreensEventBus();
+  const accessAlertSetting = await AccessAlertSetting.load(
+    join(dataDir, "data", "access-alerts.json"),
+    (m) => console.warn(m),
+  );
   const accessPushCfg = cfg;
   runtime.egress.setAccessAlerts({
     emit: (e) => screensEvents.publish(e),
+    alertsEnabled: () => accessAlertSetting.enabled(),
     ...(accessPushCfg
       ? {
           push: () =>
             sendPushRelay({
-              category: "app-access",
+              category: "generic",
               targetUsername: accessPushCfg.userId,
               signer: custodian,
               controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
@@ -2535,6 +2542,7 @@ async function wireRuntimeSurfaces(deps: {
   const screensHandle = buildScreensHttp({
     gate: pairedSessions,
     appEgress: runtime.egress.appEgress,
+    accessAlerts: accessAlertSetting,
     serverFqdn: env.serverFqdn,
     username,
     daemonVersion: process.env.FLAGSHIP_DAEMON_VERSION ?? "0.0.0",

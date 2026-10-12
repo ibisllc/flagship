@@ -86,7 +86,11 @@
 //       "Internet access" section, the access-list editor, the "<App> wants
 //       to reach <host>" sheet, and the generic app-access push; precaches
 //       lib/appAccess.js, lib/accessAlerts.js + views/app-access.js.
-const SHELL_VERSION = "v48";
+//  v49: one "Push notifications" switch: off drops this browser's push
+//       registration and tells every box to send no alerts, and no access
+//       sheet shows; a generic push's click checks access requests too;
+//       precaches lib/pushSetting.js.
+const SHELL_VERSION = "v49";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -147,6 +151,7 @@ const OPTIONAL_SHELL = [
   "/lib/aiRelay.js",
   "/lib/appAccess.js",
   "/lib/accessAlerts.js",
+  "/lib/pushSetting.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
@@ -463,7 +468,9 @@ self.addEventListener("notificationclick", (event) => {
       const same = all.find((c) => new URL(c.url).origin === self.location.origin);
       if (same) {
         await same.focus();
-        if (data && data.kind === "app-access") {
+        // Boxes send access alerts as `generic` pushes (older ones as
+        // app-access), so any of them checks the box's access requests.
+        if (data && (data.kind === "app-access" || (data.kind === "generic" && !deepLink))) {
           // The open webapp fetches the requests and shows the sheet.
           try {
             same.postMessage({ type: "ACCESS_REQUESTS" });

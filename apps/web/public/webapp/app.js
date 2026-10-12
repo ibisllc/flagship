@@ -79,6 +79,8 @@ import { initServicesListView, enterServicesList } from "./views/services-list.j
 import { initServiceDetailView } from "./views/service-detail.js";
 import { initAppAccessView } from "./views/app-access.js";
 import { startAccessAlerts } from "./lib/accessAlerts.js";
+import { canSyncPushSetting, startPushSettingSync } from "./lib/pushSetting.js";
+import { unsubscribeFromWebPush } from "./lib/push.js";
 import { initInviteIssueView } from "./views/invite-issue.js";
 import { initInviteManageView } from "./views/invite-manage.js";
 import { initServiceAccessView } from "./views/service-access.js";
@@ -317,7 +319,7 @@ function wireSettingsTabEntries() {
   wire("settings-tab-push", async () => {
     show("view-settings");
     await renderProviders();
-    document.querySelector("#push-enable")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.querySelector("#push-switch")?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
   wire("settings-tab-recovery", enterRecovery);
   // "Back up account key" reuses the Recovery screen's `.flagshipkey`
@@ -647,8 +649,16 @@ async function boot() {
   // "<App> wants to reach <host>" (docs/ai-privacy-and-staging.md §3a): fetch
   // the box's pending access requests on load, focus, a notification click and
   // the screens socket's access-request event, and ask about each in a sheet.
-  // Never over the lock, never on a companion.
+  // Never over the lock, never on a companion, never with Push notifications off.
   startAccessAlerts({ isUnlocked: sliversUnlocked });
+
+  // The Push notifications switch (same doc, "Turning alerts off"): on load
+  // and on every return to the foreground, tell each box whether to send
+  // alerts, and with the switch off drop any push registration left over.
+  startPushSettingSync({
+    isActive: () => canSyncPushSetting(sliversUnlocked),
+    unsubscribe: unsubscribeFromWebPush,
+  });
 
   // ── Maintainer-trust enforcement (docs/maintainer-trust-enforcement.md) ──
   // The persistent ALARMING-RED top sliver: one non-dismissible line per

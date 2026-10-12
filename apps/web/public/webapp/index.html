@@ -1140,14 +1140,16 @@
           </p>
         </div>
 
-        <h2 class="mt-5">Browser notifications</h2>
+        <h2 class="mt-5">Notifications</h2>
         <div class="card">
-          <p class="note">
-            Get a notification when one of your servers is asking to boot. Web Push uses your browser's native push channel — flagshipserver.com sends the wakeup, the notification body is generic ("a server is asking to boot"), and the webapp shows you which one.
+          <label class="inline-check">
+            <input type="checkbox" id="push-switch" role="switch" checked /> <span class="weight-600">Push notifications</span>
+          </label>
+          <p class="note mt-1" id="push-switch-note">
+            When this is off, nothing from Flagship is pushed to this device, so Apple and Google never see when your servers need you. You'll have to open Flagship to approve unlocks and see requests.
           </p>
-          <div class="row"><span class="label">Status</span><span class="pill" id="push-status">checking…</span></div>
-          <button id="push-enable" class="full-width mt-2">Enable browser notifications</button>
-          <button class="secondary full-width mt-2" id="push-disable" style="display: none;">Disable</button>
+          <div class="row mt-2"><span class="label">This browser</span><span class="pill" id="push-status">checking…</span></div>
+          <button id="push-enable" class="full-width mt-2" style="display: none;">Allow browser notifications</button>
         </div>
 
         <h2 class="mt-5">Session</h2>

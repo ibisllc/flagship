@@ -5,6 +5,7 @@ import {
   unsubscribeFromWebPush,
   webPushSupported,
 } from "../lib/push.js";
+import { applyPushSetting, pushNotificationsEnabled } from "../lib/pushSetting.js";
 import { $, registerView, show } from "../lib/router.js";
 import { getSession, ensureUsername, lockSession } from "../lib/state.js";
 import { escapeHtml, sha256Bytes } from "../lib/util.js";
@@ -392,12 +393,13 @@ async function handleSaveProvider() {
 async function refreshPushStatus() {
   const pill = $("push-status");
   const enableBtn = $("push-enable");
-  const disableBtn = $("push-disable");
-  if (!pill || !enableBtn || !disableBtn) return;
+  const sw = $("push-switch");
+  if (!pill || !enableBtn) return;
+  const on = pushNotificationsEnabled();
+  if (sw) sw.checked = on;
   if (!webPushSupported()) {
-    pill.textContent = "unsupported";
-    enableBtn.disabled = true;
-    disableBtn.style.display = "none";
+    pill.textContent = on ? "unsupported" : "off";
+    enableBtn.style.display = "none";
     return;
   }
   const perm = notificationPermission();
@@ -409,10 +411,43 @@ async function refreshPushStatus() {
   } catch {
     active = false;
   }
-  pill.textContent = active ? "on" : perm === "denied" ? "blocked" : "off";
-  enableBtn.style.display = active ? "none" : "";
-  disableBtn.style.display = active ? "" : "none";
-  enableBtn.disabled = perm === "denied";
+  pill.textContent = !on ? "off" : active ? "on" : perm === "denied" ? "blocked" : "not allowed yet";
+  // On, but this browser isn't subscribed (never allowed, or allowed before
+  // the switch existed): offer the permission prompt, which needs a tap.
+  enableBtn.style.display = on && !active && perm !== "denied" ? "" : "none";
+}
+
+/** The switch: off revokes this browser's push registration and tells every
+ *  box to stop sending alerts; on registers again and tells them to send. */
+async function runPushSwitch() {
+  const sw = $("push-switch");
+  if (!sw) return;
+  const enabled = sw.checked;
+  sw.disabled = true;
+  try {
+    if (enabled) await ensureUsername();
+    const r = await applyPushSetting(enabled, {
+      subscribe: subscribeToWebPush,
+      unsubscribe: unsubscribeFromWebPush,
+    });
+    if (r.pushError) {
+      toast(
+        enabled
+          ? `Your servers will send alerts again, but this browser couldn't turn on notifications: ${r.pushError.message ?? r.pushError}`
+          : `This browser couldn't drop its notifications: ${r.pushError.message ?? r.pushError}`,
+        "err",
+      );
+    } else if (r.failed.length > 0) {
+      toast(`Saved. ${r.failed.length} server(s) couldn't be reached and will be updated next time.`, "ok");
+    } else {
+      toast(enabled ? "Push notifications on" : "Push notifications off", "ok");
+    }
+  } catch (e) {
+    toast(humanError(e), "err");
+  } finally {
+    sw.disabled = false;
+    void refreshPushStatus();
+  }
 }
 
 async function runEnablePush() {
@@ -430,27 +465,7 @@ async function runEnablePush() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "Enable browser notifications";
-    }
-    void refreshPushStatus();
-  }
-}
-
-async function runDisablePush() {
-  const btn = $("push-disable");
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "Disabling…";
-  }
-  try {
-    await unsubscribeFromWebPush();
-    toast("Notifications disabled", "ok");
-  } catch (e) {
-    toast(`Disable failed: ${e.message ?? e}`, "err");
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = "Disable";
+      btn.textContent = "Allow browser notifications";
     }
     void refreshPushStatus();
   }
@@ -598,8 +613,8 @@ export function initSettingsView() {
     }
     handleReset();
   });
+  $("push-switch")?.addEventListener("change", () => void runPushSwitch());
   $("push-enable")?.addEventListener("click", runEnablePush);
-  $("push-disable")?.addEventListener("click", runDisablePush);
   // Refresh once on init; repeated renders are kicked from the
   // chip-settings click handler in home.js (it dispatches into
   // renderProviders, which we extend below).

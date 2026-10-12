@@ -5,10 +5,13 @@
  * (`{type:"access-request", serviceId}` for a NEW request), and wakes the
  * owner's phone with a push that says nothing about which app or host.
  *
- * The push rides `.com/api/push/relay` (category `app-access`, an opaque
- * marker body); the phone fetches the details from the box over its paired
- * session. At most one push per app and host per day and five per hour per
- * box (AppAccessStore.takeAlert). An explicit `deny` never gets here.
+ * The push rides `.com/api/push/relay` (category `generic`, an opaque marker
+ * body, so Apple and Google only see that Flagship pinged the phone); the
+ * phone fetches the details from the box over its paired session. At most one
+ * push per app and host per day and five per hour per box
+ * (AppAccessStore.takeAlert). With the owner's alerts switch off
+ * (accessAlertSetting.ts) no push is sent at all. An explicit `deny` never
+ * gets here.
  */
 import type { AccessRequest, AppAccessStore } from "./accessStore.js";
 
@@ -21,6 +24,8 @@ export interface AccessRequestEvent {
 export interface AccessAlertSinks {
   /** Wake the owner's phone. Carries nothing about the app or host. */
   push?: () => Promise<unknown> | void;
+  /** The owner's alerts switch; false means never push (requests and socket events still happen). */
+  alertsEnabled?: () => boolean;
   /** The screens-socket `access-request` event. */
   emit?: (e: AccessRequestEvent) => void;
 }
@@ -50,10 +55,12 @@ export function buildAccessRequestRecorder(opts: AccessRequestRecorderOptions) {
       if (appName === null) return;
       const rec = opts.store.recordAttempt(serviceId, host);
       if (!rec) return;
-      const alert = opts.store.takeAlert(serviceId, rec.request.host);
+      const sinks = opts.sinks();
+      const alertsOn = sinks.alertsEnabled?.() !== false;
+      const alert = alertsOn && opts.store.takeAlert(serviceId, rec.request.host);
       if (rec.created) emit({ type: "access-request", serviceId });
       if (alert) {
-        const push = opts.sinks().push;
+        const push = sinks.push;
         if (push) {
           void Promise.resolve()
             .then(push)
