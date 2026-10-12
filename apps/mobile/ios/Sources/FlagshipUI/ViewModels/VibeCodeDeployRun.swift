@@ -29,12 +29,15 @@ enum VibeCodeDeployRun {
     static func run(
         client: any ScreensClient,
         sessionId: String,
+        credential: LlmProviderCredential? = nil,
         pollInterval: Duration = .seconds(2),
         pollLimit: Duration = .seconds(30 * 60),
         onPhase: @MainActor (String?) -> Void = { _ in }
     ) async throws -> Outcome {
         do {
-            let r = try await client.vibeCodeDeployStart(sessionId: sessionId)
+            // The chat's key as it is now (incl. its relay setting), so a
+            // retry after "Turn the relay off for this key" uses the new one.
+            let r = try await client.vibeCodeDeployStart(sessionId: sessionId, credential: credential)
             if r.started != true {
                 if r.ok != false, let url = r.url { return .deployed(url: url, inviteOnly: r.inviteOnly) }
                 return .failed("Deploy was rejected by the box.")

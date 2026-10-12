@@ -97,11 +97,12 @@ public final class ServiceDetailViewModel {
     public static let egressTitle = "This app wants to reach the internet"
     public static let egressNote = "Until you allow them, the app can't reach any of these. Only allow hosts you expect this app to need."
 
-    /// Allow every host the app declares.
+    /// Allow one declared host (older boxes without access lists): the
+    /// grant is what's open now plus this host.
     @discardableResult
-    public func allowEgress() async -> Bool {
+    public func allowEgress(host: String) async -> Bool {
         guard let egress else { return false }
-        return await sendEgress(hosts: egress.declared, reason: "Allow internet access for \(displaySlug)")
+        return await sendEgress(hosts: egress.approved + [host], reason: "Allow \(displaySlug) to reach \(host)")
     }
 
     /// Close the app's internet access (signs an empty host list).
@@ -113,7 +114,9 @@ public final class ServiceDetailViewModel {
     private var displaySlug: String { detail.value?.app.slug ?? serviceId }
 
     private func sendEgress(hosts: [String], reason: String) async -> Bool {
-        guard let domain = serverDomain, !domain.isEmpty else {
+        // The box the grant goes to must find its own name in it.
+        let boxDomain = await client.boxDomain()
+        guard let domain = boxDomain ?? egressServerDomain, !domain.isEmpty else {
             egressPhase = .failed("No server to send this to.")
             return false
         }
@@ -173,6 +176,28 @@ public final class ServiceDetailViewModel {
         }
     }
 
+    // MARK: Internet access (access list, §3a)
+
+    /// The app's access list section, once the box reports `access` for it.
+    /// Nil on an older box: then the v1 egress card shows instead.
+    public private(set) var access: AppAccessController?
+
+    /// The v1 card only when the box sends `egress` but no `access`.
+    public var showsLegacyEgress: Bool { access == nil && detail.value?.app.access == nil && egress != nil }
+
+    private func syncAccess(_ app: FlagshipAPI.AppSummary) async {
+        guard app.access != nil else { access = nil; return }
+        let name = app.slug.capitalized
+        if access == nil {
+            access = AppAccessController(serviceId: serviceId, appName: name, client: client,
+                                         serverDomain: egressServerDomain, canChange: accessCanChange,
+                                         signer: egressSigner)
+        } else {
+            access?.setAppName(name)
+        }
+        await access?.load()
+    }
+
     /// Pods the service should run on (server-set). Edited locally; reset
     /// by `cancelEdits()` and persisted by `save()`.
     public var runOnPodIds: Set<String> = []
@@ -215,6 +240,12 @@ public final class ServiceDetailViewModel {
     /// The sensitive-order key (admin root when held, else the owner IRK),
     /// behind Face ID; the same key Delete/Revoke sign with.
     private let egressSigner: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
+    /// Answers and Save on the access list (false on a restricted profile).
+    private let accessCanChange: Bool
+    /// Fallback `serverDomain` for the internet grant / access list when the
+    /// client can't say which box it talks to: the session pod, never the
+    /// leader (the box checks the grant names itself).
+    private let egressServerDomain: String?
 
     public init(
         serviceId: String,
@@ -226,8 +257,12 @@ public final class ServiceDetailViewModel {
         uninstallClient: (any ServiceUninstallClient)? = nil,
         serverDomain: String? = nil,
         irkSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
-        egressSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil
+        egressSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        egressServerDomain: String? = nil,
+        accessCanChange: Bool = true
     ) {
+        self.accessCanChange = accessCanChange
+        self.egressServerDomain = egressServerDomain ?? serverDomain
         self.serviceId = serviceId
         self.client = client
         self.allPods = allPods
@@ -253,6 +288,7 @@ public final class ServiceDetailViewModel {
             detail = .loaded(di)
             egressOverride = nil
             ownedUrls = .loaded(uo.urls.filter { $0.fqdn.contains(serviceId) })
+            await syncAccess(di.app)
             // Seed local edits from server state — currently we default
             // to running on the leader-only since the API doesn't yet
             // return a multi-pod policy. When the daemon contract

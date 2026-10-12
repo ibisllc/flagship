@@ -111,23 +111,27 @@ final class AiPrivacyClientTests: XCTestCase {
                        "Until you allow them, the app can't reach any of these. Only allow hosts you expect this app to need.")
     }
 
+    /// The v1 card: a box that sends `egress` but no access lists.
     private func detailVM(_ client: MockScreensClient, key: Curve25519.Signing.PrivateKey,
                           serviceId: String = "bright-maple--plants") -> ServiceDetailViewModel {
-        ServiceDetailViewModel(
+        client.mockAccess = [:]
+        return ServiceDetailViewModel(
             serviceId: serviceId, client: client, allPods: [], globalLeaderPodId: nil,
             serverDomain: "home.bright-maple.flagship.services",
             egressSigner: { _ in key }
         )
     }
 
-    func test_allowEgress_signsTheDeclaredHostsWithTheSensitiveKey() async throws {
+    func test_allowEgress_signsOneHostWithTheSensitiveKey() async throws {
         let client = makeClient()
         let key = Curve25519.Signing.PrivateKey()
         let vm = detailVM(client, key: key)
         await vm.load()
         XCTAssertEqual(vm.egress?.pending, ["api.open-meteo.com"])
+        XCTAssertTrue(vm.showsLegacyEgress)
+        XCTAssertNil(vm.access)
 
-        let ok = await vm.allowEgress()
+        let ok = await vm.allowEgress(host: "api.open-meteo.com")
         XCTAssertTrue(ok)
         let call = try XCTUnwrap(client.serviceEgressSetCalls.last)
         XCTAssertEqual(call.serviceId, "bright-maple--plants")
@@ -160,7 +164,7 @@ final class AiPrivacyClientTests: XCTestCase {
         client.serviceEgressSetError = ScreensClientError.http(status: 403, message: #"{"error":"stale grant"}"#)
         let vm = detailVM(client, key: Curve25519.Signing.PrivateKey())
         await vm.load()
-        let ok = await vm.allowEgress()
+        let ok = await vm.allowEgress(host: "api.open-meteo.com")
         XCTAssertFalse(ok)
         guard case .failed(let msg) = vm.egressPhase else { return XCTFail("expected failed") }
         XCTAssertTrue(msg.contains("clock"))

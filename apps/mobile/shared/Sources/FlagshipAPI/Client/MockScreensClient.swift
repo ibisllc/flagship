@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// In-memory fixture data for the dev cycle. Every method returns
 /// deterministic, plausible data so the entire UI can be exercised
@@ -106,7 +107,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 status: "running",
                 version: "0.0.3",
                 installedAt: now - 60_000 * 30,
-                egress: mockEgress["bright-maple--plants"]
+                egress: mockEgress["bright-maple--plants"],
+                access: mockAccessSummary("bright-maple--plants")
             ),
             AppSummary(
                 serviceId: "bright-maple--wiki",
@@ -118,7 +120,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 status: "running",
                 version: "1.4.0",
                 installedAt: now - 60_000 * 60 * 26,
-                egress: mockEgress["bright-maple--wiki"]
+                egress: mockEgress["bright-maple--wiki"],
+                access: mockAccessSummary("bright-maple--wiki")
             ),
             AppSummary(
                 serviceId: "trent--scratchpad",
@@ -161,6 +164,147 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let next = AppEgress(declared: current.declared, approved: req.grant.hosts)
         mockEgress[serviceId] = next
         return AppEgressSetResponse(ok: true, egress: next)
+    }
+
+    // MARK: - App access lists (§3a)
+
+    /// Per-service list + pending hosts; a missing entry is a box without
+    /// access lists (the page then falls back to `mockEgress`).
+    public var mockAccess: [String: AppAccessState] = [
+        "bright-maple--plants": AppAccessState(
+            list: AppAccessList.defaultList,
+            pending: [
+                AppAccessPendingHost(host: "api.open-meteo.com", source: "app", attempts: 0,
+                                     firstSeen: 1_760_000_000_000, lastSeen: 1_760_000_000_000),
+                AppAccessPendingHost(host: "tile.openstreetmap.org", source: "attempt", attempts: 3,
+                                     firstSeen: 1_760_000_100_000, lastSeen: 1_760_000_400_000),
+            ]),
+        "bright-maple--wiki": AppAccessState(
+            list: "allow api.github.com\n" + AppAccessList.defaultList),
+    ]
+    /// Overrides the box FQDN this mock reports (default
+    /// `<podContext>.bright-maple.flagship.services`).
+    public var mockBoxDomain: String?
+    /// When set, `serviceAccessSet` refuses a signature this key didn't make.
+    public var mockAccessVerifyKey: Data?
+    public private(set) var serviceAccessSetCalls: [(serviceId: String, req: AppAccessSetRequest)] = []
+    public private(set) var serviceAccessDismissCalls: [(serviceId: String, host: String)] = []
+    public private(set) var accessRequestsCalls = 0
+    /// Thrown by `serviceAccessSet` (after recording the call), once.
+    public var serviceAccessSetError: Error?
+    private var mockAccessIssuedAt: [String: Int64] = [:]
+
+    private let mockAppNames = ["bright-maple--plants": "Plants", "bright-maple--wiki": "Wiki",
+                                "trent--scratchpad": "Scratchpad"]
+
+    func mockAccessSummary(_ serviceId: String) -> AppAccessSummary? {
+        mockAccess[serviceId].map { AppAccessSummary(rules: $0.ruleCount, pending: $0.pending.count) }
+    }
+
+    public func boxDomain() async -> String? {
+        mockBoxDomain ?? "\(podContext).bright-maple.flagship.services"
+    }
+
+    public func serviceAccess(serviceId: String) async throws -> AppAccessState {
+        try await tick()
+        guard let a = mockAccess[serviceId] else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
+        }
+        return AppAccessState(list: a.list, listSha256: AppAccessList.sha256Hex(a.list), pending: a.pending)
+    }
+
+    /// Checks what the box checks (hash, normalized, parses, own server,
+    /// newer), applies the list and drops the requests it now answers.
+    public func serviceAccessSet(serviceId: String, _ req: AppAccessSetRequest) async throws -> AppAccessSetResponse {
+        try await tick()
+        serviceAccessSetCalls.append((serviceId, req))
+        if let e = serviceAccessSetError { serviceAccessSetError = nil; throw e }
+        guard let current = mockAccess[serviceId] else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
+        }
+        func refuse(_ status: Int, _ reason: String) -> ScreensClientError {
+            .http(status: status, message: #"{"error":"\#(reason)"}"#)
+        }
+        guard req.grant.serviceId == serviceId else { throw refuse(400, "grant is for a different service") }
+        guard AppAccessList.isNormalized(req.list) else {
+            throw ScreensClientError.http(status: 400, message: #"{"error":"the list is not normalized","errors":[]}"#)
+        }
+        let parsed = AppAccessList.parse(req.list)
+        if !parsed.isValid {
+            let errors = parsed.errors.map { #"{"line":\#($0.line),"message":"\#($0.message.replacingOccurrences(of: "\"", with: "\\\""))"}"# }
+            throw ScreensClientError.http(status: 400,
+                                          message: #"{"error":"the list has errors","errors":[\#(errors.joined(separator: ","))]}"#)
+        }
+        guard req.grant.listSha256 == AppAccessList.sha256Hex(req.list) else {
+            throw refuse(403, "the list is not the one that was signed")
+        }
+        guard req.grant.serverDomain == (await boxDomain()) else { throw refuse(403, "grant is for a different server") }
+        if let key = mockAccessVerifyKey {
+            guard let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: key),
+                  let sig = Self.hexBytes(req.signature),
+                  pub.isValidSignature(sig, for: req.grant.canonicalBytes()) else {
+                throw refuse(403, "bad signature")
+            }
+        }
+        if let last = mockAccessIssuedAt[serviceId], req.grant.issuedAt <= last {
+            throw refuse(409, "not newer than the applied list")
+        }
+        mockAccessIssuedAt[serviceId] = req.grant.issuedAt
+        let next = AppAccessState(
+            list: req.list, listSha256: req.grant.listSha256,
+            pending: current.pending.filter { AppAccessList.decide(req.list, host: $0.host).rule == nil })
+        mockAccess[serviceId] = next
+        return AppAccessSetResponse(ok: true, access: next)
+    }
+
+    private static func hexBytes(_ hex: String) -> Data? {
+        let chars = Array(hex.utf8)
+        guard chars.count % 2 == 0 else { return nil }
+        var out = Data(capacity: chars.count / 2)
+        var i = 0
+        while i < chars.count {
+            guard let b = UInt8(String(decoding: chars[i..<i + 2], as: UTF8.self), radix: 16) else { return nil }
+            out.append(b)
+            i += 2
+        }
+        return out
+    }
+
+    @discardableResult
+    public func serviceAccessDismiss(serviceId: String, host: String) async throws -> AppAccessState? {
+        try await tick()
+        serviceAccessDismissCalls.append((serviceId, host))
+        guard let current = mockAccess[serviceId] else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
+        }
+        let next = AppAccessState(list: current.list, listSha256: current.listSha256,
+                                  pending: current.pending.filter { $0.host != host })
+        mockAccess[serviceId] = next
+        return next
+    }
+
+    private var accessEventContinuations: [AsyncStream<Void>.Continuation] = []
+
+    /// Stays open; `emitAccessRequestEvent()` sends a frame.
+    public func accessRequestEvents() -> AsyncStream<Void> {
+        AsyncStream { accessEventContinuations.append($0) }
+    }
+
+    /// What the box sends when it records a new request.
+    public func emitAccessRequestEvent() {
+        accessEventContinuations.forEach { $0.yield(()) }
+    }
+
+    public func accessRequests() async throws -> AppAccessRequestsResponse {
+        try await tick()
+        accessRequestsCalls += 1
+        let requests = mockAccess.keys.sorted().flatMap { id in
+            (mockAccess[id]?.pending ?? []).map {
+                AppAccessRequest(serviceId: id, appName: mockAppNames[id] ?? id, host: $0.host, source: $0.source,
+                                 attempts: $0.attempts, firstSeen: $0.firstSeen, lastSeen: $0.lastSeen)
+            }
+        }
+        return AppAccessRequestsResponse(requests: requests)
     }
 
     // MARK: - P1.3 app-detail
@@ -553,8 +697,16 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     private var stagedDeployPolls: [String: Int] = [:]
 
     public func vibeCodeDeployStart(sessionId: String) async throws -> VibeCodeDeployReply {
+        try await vibeCodeDeployStart(sessionId: sessionId, credential: nil)
+    }
+
+    /// The `credential` each deploy start carried, in order.
+    public private(set) var vibeCodeDeployStartCredentials: [LlmProviderCredential?] = []
+
+    public func vibeCodeDeployStart(sessionId: String, credential: LlmProviderCredential?) async throws -> VibeCodeDeployReply {
         try await tick()
         vibeCodeDeployStartCalls.append(sessionId)
+        vibeCodeDeployStartCredentials.append(credential)
         if let e = vibeCodeDeployStartError { throw e }
         if let f = vibeCodeDeployStartFixture { return f }
         stagedDeployPolls[sessionId] = 0

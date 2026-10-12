@@ -89,6 +89,18 @@ public struct BuildAdaptReply: Codable, Equatable, Sendable {
     }
 }
 
+/// `POST /api/llm/sessions/:id/deploy` body. `credential` is the chat's key as
+/// it is now (incl. its relay setting), so a retry after "Turn the relay off
+/// for this key" runs with the new setting; omitted when there is none.
+public struct VibeCodeDeployRequest: Codable, Equatable, Sendable {
+    public let background: Bool
+    public let credential: LlmProviderCredential?
+    public init(background: Bool = true, credential: LlmProviderCredential? = nil) {
+        self.background = background
+        self.credential = credential
+    }
+}
+
 /// `POST /api/llm/sessions/:id/deploy {background:true}`: `{ok, started}` from
 /// a current box (follow the session's `status` / `deployPhase`), or the
 /// finished `{ok, serviceId, url, inviteOnly?}` from an older one.

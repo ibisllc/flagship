@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import FlagshipAPI
 
 /// Wrapper over UNUserNotificationCenter for the operations the iOS app
 /// cares about:
@@ -97,6 +98,13 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
         // user is very likely watching the provisioning screen). Route it
         // without also enqueuing a deep link — they're already in-app.
         let info = notification.request.content.userInfo
+        // An app wants to reach a host: the app is open, so the in-app sheet
+        // (fetched from the box) asks instead of a banner.
+        if AppAccessEvents.isPush(info, categoryIdentifier: notification.request.content.categoryIdentifier) {
+            Task { @MainActor in AppAccessEvents.post() }
+            completionHandler([.list])
+            return
+        }
         Task { @MainActor in
             if let event = ProvisionPhaseBridge.parse(info) {
                 ProvisionPhaseBridge.shared.onPhase?(event)
@@ -111,7 +119,15 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
+        let category = response.notification.request.content.categoryIdentifier
         Task { @MainActor in
+            // `app-access` carries nothing about the app or host: opening
+            // the app is the whole action; the sheet fetches the details.
+            if AppAccessEvents.isPush(userInfo, categoryIdentifier: category) {
+                AppAccessEvents.post()
+                completionHandler()
+                return
+            }
             self.handleNotificationPayload(userInfo)
             completionHandler()
         }

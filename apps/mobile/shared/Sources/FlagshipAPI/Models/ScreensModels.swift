@@ -22,6 +22,9 @@ public struct AppSummary: Codable, Equatable, Sendable {
     /// Internet hosts the app declares and the ones the owner allowed. Absent
     /// on boxes without the egress gateway (show nothing then).
     public var egress: AppEgress? = nil
+    /// `{rules, pending}` of the app's access list (§3a). When present it
+    /// replaces `egress` on the app page; absent on older boxes.
+    public var access: AppAccessSummary? = nil
 }
 
 public struct RecentInstallEvent: Codable, Equatable, Sendable {

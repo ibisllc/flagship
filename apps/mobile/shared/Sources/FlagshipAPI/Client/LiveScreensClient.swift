@@ -195,13 +195,69 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
                                  timeout: 15 * 60)
     }
     public func vibeCodeDeployStart(sessionId: String) async throws -> VibeCodeDeployReply {
+        try await vibeCodeDeployStart(sessionId: sessionId, credential: nil)
+    }
+    public func vibeCodeDeployStart(sessionId: String, credential: LlmProviderCredential?) async throws -> VibeCodeDeployReply {
         // An older box ignores `background` and answers once the app is live.
-        try await request("/api/llm/sessions/\(sessionId)/deploy", method: "POST",
-                          body: Data(#"{"background":true}"#.utf8), timeout: 15 * 60)
+        let body = try JSONEncoder().encode(VibeCodeDeployRequest(background: true, credential: credential))
+        return try await request("/api/llm/sessions/\(sessionId)/deploy", method: "POST",
+                                 body: body, timeout: 15 * 60)
     }
     public func serviceEgressSet(serviceId: String, _ req: AppEgressSetRequest) async throws -> AppEgressSetResponse {
         let body = try JSONEncoder().encode(req)
         return try await request("/api/screens/services/\(esc(serviceId))/egress", method: "POST", body: body)
+    }
+
+    public func boxDomain() async -> String? {
+        guard let base = await store.podBaseUrl else { return nil }
+        return URL(string: base)?.host?.lowercased()
+    }
+    public func serviceAccess(serviceId: String) async throws -> AppAccessState {
+        try await request("/api/screens/services/\(esc(serviceId))/access")
+    }
+    public func serviceAccessSet(serviceId: String, _ req: AppAccessSetRequest) async throws -> AppAccessSetResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/services/\(esc(serviceId))/access", method: "POST", body: body)
+    }
+    @discardableResult
+    public func serviceAccessDismiss(serviceId: String, host: String) async throws -> AppAccessState? {
+        let body = try JSONSerialization.data(withJSONObject: ["host": host])
+        let r: AppAccessSetResponse = try await request("/api/screens/services/\(esc(serviceId))/access/dismiss",
+                                                        method: "POST", body: body)
+        return r.access
+    }
+    public func accessRequests() async throws -> AppAccessRequestsResponse {
+        try await request("/api/screens/access-requests")
+    }
+    public func accessRequestEvents() -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            let task = Task { [self] in
+                guard let base = await store.podBaseUrl,
+                      let token = await store.sessionToken,
+                      var comps = URLComponents(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/screens/events")
+                else { continuation.finish(); return }
+                comps.scheme = comps.scheme?.hasSuffix("s") == true ? "wss" : "ws"
+                comps.queryItems = [URLQueryItem(name: "sessionToken", value: token)]
+                guard let url = comps.url else { continuation.finish(); return }
+                var req = URLRequest(url: url)
+                req.setValue(token, forHTTPHeaderField: "x-flagship-session")
+                let ws = urlSession.webSocketTask(with: req)
+                ws.resume()
+                while !Task.isCancelled {
+                    guard let msg = try? await ws.receive() else { break }
+                    let data: Data
+                    switch msg {
+                    case .data(let d): data = d
+                    case .string(let str): data = Data(str.utf8)
+                    @unknown default: continue
+                    }
+                    if AppAccessEvents.isRequestFrame(data) { continuation.yield(()) }
+                }
+                ws.cancel(with: .normalClosure, reason: nil)
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
     }
 
     public func peerBackupStatus() async throws -> PeerBackupStatusResponse {
@@ -270,6 +326,10 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
                         case .data(let d): data = d
                         case .string(let s): data = Data(s.utf8)
                         @unknown default: continue
+                        }
+                        if AppAccessEvents.isRequestFrame(data) {
+                            AppAccessEvents.post()
+                            continue
                         }
                         if let frame = try? JSONDecoder().decode(VibeCodeFrame.self, from: data) {
                             continuation.yield(frame)

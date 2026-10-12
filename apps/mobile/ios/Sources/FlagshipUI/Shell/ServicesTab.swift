@@ -337,7 +337,7 @@ private struct AppRow: View {
             detail: shortUrlText
         ) {
             HStack(spacing: FS.space.s2) {
-                if app.egress?.hasPending == true {
+                if app.access?.hasPending ?? (app.egress?.hasPending == true) {
                     Image(systemName: "network.badge.shield.half.filled")
                         .foregroundColor(c.warning)
                         .accessibilityLabel("Wants to reach the internet")
@@ -389,10 +389,18 @@ struct ServiceDetailContainer: View {
     @State private var confirmRemove = false
 
     /// The box this service runs on — the daemon there pins the owner IRK as
-    /// `serverId`, so the signed uninstall must target it (same resolution as
-    /// the env editor / vibe-code containers).
+    /// `serverId`, so the signed uninstall must name the box the screens
+    /// client is talking to, not the leader (they differ on multi-server
+    /// accounts). Same resolution as the env editor / vibe-code containers.
     private var serverDomain: String {
-        app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown"
+        app.sessionPod?.fqdn ?? app.currentPod?.fqdn ?? app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown"
+    }
+
+    /// The box the screens client is talking to (the live session pod): a
+    /// signed internet grant / access list must name it, not the leader.
+    /// The view model asks the client first; this is the fallback.
+    private var sessionServerDomain: String? {
+        app.sessionPod?.fqdn ?? app.currentPod?.fqdn
     }
 
     var body: some View {
@@ -461,7 +469,9 @@ struct ServiceDetailContainer: View {
                     server: server,
                     username: { [app] in app.currentUser },
                     uninstallClient: uninstallClient,
-                    serverDomain: serverDomain
+                    serverDomain: serverDomain,
+                    egressServerDomain: sessionServerDomain,
+                    accessCanChange: !app.isRestrictedDevice
                 )
             }
             await vm?.load()
@@ -512,7 +522,7 @@ struct VibeCodeSessionContainer: View {
             if let stream {
                 VibeCodeSessionScreen(
                     stream: stream,
-                    serverFqdn: app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown",
+                    serverFqdn: app.sessionPod?.fqdn ?? app.currentPod?.fqdn ?? app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown",
                     client: client,
                     signEnvelope: signer,
                     savedCredential: {
@@ -551,7 +561,7 @@ struct ServiceEnvContainer: View {
     var body: some View {
         ServiceEnvScreen(
             appId: appId,
-            serverFqdn: app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown",
+            serverFqdn: app.sessionPod?.fqdn ?? app.currentPod?.fqdn ?? app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown",
             creator: creator,
             slug: slug,
             client: client,
@@ -924,7 +934,7 @@ struct ServiceAccessContainer: View {
     @Environment(AppState.self) private var app
 
     private var serverDomain: String {
-        app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown"
+        app.sessionPod?.fqdn ?? app.currentPod?.fqdn ?? app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown"
     }
 
     private var serviceLabel: String {

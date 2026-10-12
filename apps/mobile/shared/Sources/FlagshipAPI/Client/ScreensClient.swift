@@ -97,9 +97,31 @@ public protocol ScreensClient: Sendable {
     /// answers `{ok, started}` at once (follow `vibeCodeStatus`); an older one
     /// ignores `background` and answers when the app is live.
     func vibeCodeDeployStart(sessionId: String) async throws -> VibeCodeDeployReply
+    /// The same, carrying the chat's current key (`credential`, with its relay
+    /// setting) so the box's fix-up AI uses what the owner has now.
+    func vibeCodeDeployStart(sessionId: String, credential: LlmProviderCredential?) async throws -> VibeCodeDeployReply
     /// `POST /api/screens/services/<id>/egress`: apply the owner's signed
     /// internet grant for a live app (`hosts: []` revokes).
     func serviceEgressSet(serviceId: String, _ req: AppEgressSetRequest) async throws -> AppEgressSetResponse
+
+    // App access lists (docs/ai-privacy-and-staging.md §3a).
+    /// The box these calls go to (its server FQDN): what a signed order for
+    /// it must name as `serverDomain`. Nil when not known.
+    func boxDomain() async -> String?
+    /// `GET /api/screens/services/<id>/access`.
+    func serviceAccess(serviceId: String) async throws -> AppAccessState
+    /// `POST /api/screens/services/<id>/access`: the owner's signed list.
+    func serviceAccessSet(serviceId: String, _ req: AppAccessSetRequest) async throws -> AppAccessSetResponse
+    /// `POST /api/screens/services/<id>/access/dismiss {host}`: forget a
+    /// request without changing the list. Returns the box's `access` (nil
+    /// when it sends none).
+    @discardableResult
+    func serviceAccessDismiss(serviceId: String, host: String) async throws -> AppAccessState?
+    /// `GET /api/screens/access-requests`: every app's waiting hosts.
+    func accessRequests() async throws -> AppAccessRequestsResponse
+    /// `GET /api/screens/events` (WebSocket): one value per
+    /// `{"type":"access-request"}` frame. Finishes when the socket closes.
+    func accessRequestEvents() -> AsyncStream<Void>
 
     // P9 — peer-backup management.
     func peerBackupStatus() async throws -> PeerBackupStatusResponse
@@ -312,6 +334,25 @@ public extension ScreensClient {
     }
     func serviceEgressSet(serviceId: String, _ req: AppEgressSetRequest) async throws -> AppEgressSetResponse {
         throw ScreensClientError.notImplemented("app internet access")
+    }
+    func vibeCodeDeployStart(sessionId: String, credential: LlmProviderCredential?) async throws -> VibeCodeDeployReply {
+        try await vibeCodeDeployStart(sessionId: sessionId)
+    }
+    func boxDomain() async -> String? { nil }
+    func serviceAccess(serviceId: String) async throws -> AppAccessState {
+        throw ScreensClientError.notImplemented("app access list")
+    }
+    func serviceAccessSet(serviceId: String, _ req: AppAccessSetRequest) async throws -> AppAccessSetResponse {
+        throw ScreensClientError.notImplemented("app access list")
+    }
+    func serviceAccessDismiss(serviceId: String, host: String) async throws -> AppAccessState? {
+        throw ScreensClientError.notImplemented("app access list")
+    }
+    func accessRequests() async throws -> AppAccessRequestsResponse {
+        throw ScreensClientError.notImplemented("app access requests")
+    }
+    func accessRequestEvents() -> AsyncStream<Void> {
+        AsyncStream { $0.finish() }
     }
     func buildDiscard(buildId: String) async throws {
         throw ScreensClientError.notImplemented("discard")

@@ -26,6 +26,10 @@ struct ContentView: View {
     /// via `scenePhase` + paired+unlocked, started/stopped at the shell so it
     /// spans every tab (home / install checklist / server-detail).
     @State private var liveSync: LiveSyncCoordinator?
+    /// "<App> wants to reach <host>" sheets, asked of every managed box on
+    /// foreground, on the `app-access` push and on each box's events socket.
+    @State private var accessAlerts: AppAccessAlertCenter?
+    @Environment(\.screensClient) private var screensClient
 
     var body: some View {
         ZStack {
@@ -39,6 +43,15 @@ struct ContentView: View {
                 Color.clear
             }
             Toaster()
+        }
+        .sheet(item: Binding(
+            get: { app.isPaired && app.isUnlocked ? accessAlerts?.current : nil },
+            set: { _ in /* dismissal is reported by the sheet's onDisappear */ }
+        )) { item in
+            if let accessAlerts {
+                AppAccessAlertSheet(center: accessAlerts)
+                    .onDisappear { accessAlerts.dismissed(id: item.id) }
+            }
         }
         .fullScreenCover(isPresented: Binding(
             get: { !app.isPaired },
@@ -60,6 +73,7 @@ struct ContentView: View {
             syncLiveSync()
             operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
             syncPodSession()
+            syncAccessAlerts()
         }
         .onChange(of: app.isUnlocked) { _, unlocked in
             // Trust-the-session model: the unwrapped UMK lives in memory only
@@ -70,12 +84,14 @@ struct ContentView: View {
             // stops the "random Face ID on the Home screen" the periodic
             // deposit refresh used to trigger.
             if !unlocked { Keystore.clearSessionKeyCache() }
+            syncAccessAlerts()
         }
         .onChange(of: scenePhase) { _, _ in
             // Foreground-only: pause the live-update canal when the app leaves
             // .active (background/inactive), resume on return. The coordinator's
             // own isActive gate also folds in paired+unlocked.
             syncLiveSync()
+            syncAccessAlerts()
         }
         .onChange(of: app.pods) { _, _ in
             PodStatusPublisher(app: app).publish()
@@ -97,6 +113,7 @@ struct ContentView: View {
             syncPendingWatchers()
             syncAiChatPoller()
             syncLiveSync()
+            syncAccessAlerts()
             operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
             // Cold-launch restore: point the screens client at the
             // already-selected online server before the first load.
@@ -176,6 +193,55 @@ struct ContentView: View {
         }
         let shouldRun = app.isPaired && scenePhase == .active
         if shouldRun { liveSync?.start() } else { liveSync?.stop() }
+    }
+
+    /// Build the access-alert center once; while the app is in front, paired,
+    /// unlocked and holding the owner key (a restricted profile can't sign),
+    /// ask every managed box for waiting requests and listen on its events
+    /// socket; otherwise stop listening.
+    @MainActor
+    private func syncAccessAlerts() {
+        if accessAlerts == nil {
+            let app = self.app
+            let store = self.sessionStore
+            let dev = self.dev
+            let mock = self.screensClient
+            let pinned = BoxPinnedURLSession.make(pinFor: { CertPinRegistry.shared.pinFor(host: $0) })
+            let center = AppAccessAlertCenter(
+                boxes: {
+                    guard dev.useLiveClient else {
+                        guard let domain = await mock.boxDomain() ?? app.sessionPod?.fqdn else { return [] }
+                        return [AppAccessAlertCenter.Box(serverDomain: domain, client: mock)]
+                    }
+                    var out: [AppAccessAlertCenter.Box] = []
+                    for pod in app.pods where pod.status != .pending && !pod.fqdn.isEmpty {
+                        guard let token = await store.sessionToken(forPodId: PodInfo.podId(forFqdn: pod.fqdn)),
+                              !token.isEmpty else { continue }
+                        let client = LiveScreensClient(
+                            urlSession: pinned,
+                            store: PodScopedSessionStore(baseUrl: CompanionTicketURL.podBaseUrl(forFqdn: pod.fqdn),
+                                                         token: token))
+                        out.append(AppAccessAlertCenter.Box(serverDomain: pod.fqdn, client: client))
+                    }
+                    return out
+                },
+                isActive: { [weak app] in
+                    guard let app else { return false }
+                    return app.isPaired && app.isUnlocked && !app.isRestrictedDevice
+                }
+            )
+            center.observeEvents()
+            accessAlerts = center
+        }
+        guard let center = accessAlerts else { return }
+        if app.isPaired && app.isUnlocked && !app.isRestrictedDevice && scenePhase == .active {
+            Task {
+                await center.refresh()
+                await center.startListening()
+            }
+        } else {
+            center.stopListening()
+        }
     }
 
     /// Lazily wire the registry on first use, then re-sync on every

@@ -79,7 +79,11 @@ public struct ServiceDetailScreen: View {
                     ErrorCard(message: msg)
                 case .loaded(let d):
                     header(d: d.app, c: c)
-                    egressCard(c: c)
+                    if let access = vm.access {
+                        InternetAccessSection(controller: access)
+                    } else if vm.showsLegacyEgress {
+                        egressCard(c: c)
+                    }
                     if d.editable == true { editRow(c: c) }
                     if let from = d.adaptedFrom { adapterReportRow(repo: from.repo, c: c) }
                     whereItRuns(d: d, c: c)
@@ -624,16 +628,22 @@ public struct ServiceDetailScreen: View {
                                 Text(ServiceDetailViewModel.egressTitle).font(FS.font.h4()).foregroundColor(c.text)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
-                            hostList(card.pending, c: c)
                             Text(ServiceDetailViewModel.egressNote)
                                 .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                                 .fixedSize(horizontal: false, vertical: true)
-                            if card.canChange {
-                                FSPrimaryButton(vm.isChangingEgress ? "Allowing…" : "Allow",
-                                                enabled: !vm.isChangingEgress, block: true) {
-                                    Task { await vm.allowEgress() }
+                            ForEach(card.pending, id: \.self) { host in
+                                HStack(spacing: FS.space.s2) {
+                                    Text(host).font(FS.font.mono()).foregroundColor(c.text)
+                                        .lineLimit(1).truncationMode(.middle)
+                                        .textSelection(.enabled)
+                                    Spacer(minLength: FS.space.s2)
+                                    if card.canChange {
+                                        FSPrimaryButton("Allow", enabled: !vm.isChangingEgress) {
+                                            Task { await vm.allowEgress(host: host) }
+                                        }
+                                        .accessibilityIdentifier("service-detail-egress-allow")
+                                    }
                                 }
-                                .accessibilityIdentifier("service-detail-egress-allow")
                             }
                         }
                     }

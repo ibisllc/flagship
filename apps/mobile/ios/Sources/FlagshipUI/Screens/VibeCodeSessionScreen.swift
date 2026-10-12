@@ -407,7 +407,8 @@ public struct VibeCodeSessionScreen: View {
         deployPhase = nil
         errorMessage = nil
         do {
-            let outcome = try await VibeCodeDeployRun.run(client: client, sessionId: sessionId) { phase in
+            let outcome = try await VibeCodeDeployRun.run(client: client, sessionId: sessionId,
+                                                          credential: savedCredential()) { phase in
                 deployPhase = phase
             }
             switch outcome {

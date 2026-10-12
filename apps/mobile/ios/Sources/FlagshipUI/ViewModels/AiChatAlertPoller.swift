@@ -97,6 +97,11 @@ public final class AiChatAlertPoller {
         var handled = 0
         for env in resp.events {
             if env.id > maxId { maxId = env.id }
+            if case .other(let kind) = env.alert,
+               kind == AppAccessEvents.socketEvent || kind == AppAccessEvents.pushCategory {
+                AppAccessEvents.post()
+                continue
+            }
             guard let (sessionId, request, toolUseId) = env.alert.aiChat, !sessionId.isEmpty else {
                 continue
             }
