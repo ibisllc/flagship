@@ -278,6 +278,14 @@ fun FSField(
 
 enum class FSPillKind { Online, Renewing, Offline, Provisioning, Pending, Idle }
 
+/** An app status pill's tone (docs/app-placement.md §6) as a pill kind. */
+fun com.flagshipserver.app.core.AppStatus.Tone.pillKind(): FSPillKind = when (this) {
+    com.flagshipserver.app.core.AppStatus.Tone.Online -> FSPillKind.Online
+    com.flagshipserver.app.core.AppStatus.Tone.Accent -> FSPillKind.Provisioning
+    com.flagshipserver.app.core.AppStatus.Tone.Idle -> FSPillKind.Idle
+    com.flagshipserver.app.core.AppStatus.Tone.Warning -> FSPillKind.Pending
+}
+
 @Composable
 fun FSPill(label: String, kind: FSPillKind, modifier: Modifier = Modifier) {
     val (fg, bg) = when (kind) {

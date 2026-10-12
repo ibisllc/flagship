@@ -39,8 +39,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.AppLinksResponse
-import com.flagshipserver.app.api.AppSummary as ApiAppSummary
+import com.flagshipserver.app.core.AppStatus
 import com.flagshipserver.app.core.LocalAppState
+import com.flagshipserver.app.core.LocalPodClients
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.ui.components.FSCard
@@ -50,6 +51,7 @@ import com.flagshipserver.app.ui.components.FSListLeading
 import com.flagshipserver.app.ui.components.FSListRow
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
+import com.flagshipserver.app.ui.components.pillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSearchField
 import com.flagshipserver.app.ui.components.PodSwitcher
@@ -68,8 +70,9 @@ import com.flagshipserver.app.viewmodels.LoadingState
  * "Apps" title, an [FSSearchField] over the list, an All / Yours / Shared
  * [FSChipRow] (shown only when shared apps exist), and one [FSListRow] per
  * app (status-tinted icon, name, summary-or-"by <creator>" subtitle,
- * monospaced short URL, Running/Stopped pill + chevron). The per-row
- * copy-URL affordance moved to the detail screen.
+ * monospaced short URL, the status pill combining every server the app is
+ * on (docs/app-placement.md §6) + chevron). The per-row copy-URL affordance
+ * moved to the detail screen.
  */
 
 /** Presentation-only creator filter (mirrors iOS AppsOwnerFilter). */
@@ -80,16 +83,21 @@ fun ServicesListScreen(nav: NavController) {
     val screens = LocalScreensClient.current
     val server = LocalFlagshipServerClient.current
     val appState = LocalAppState.current
-    val vm = remember {
+    val podClients = LocalPodClients.current
+    val vm = remember(podClients, screens) {
         ServicesListViewModel(
             client = screens,
             server = server,
             username = { appState.currentUser.value },
+            pods = { appState.pods.value },
+            // Each server over its own session, as Runs on does; the current
+            // server falls back to the screen's own client.
+            clientFor = { pod -> podClients.screens(pod) ?: screens.takeIf { pod.podId == appState.currentPod?.podId } },
+            preferredPodId = { appState.currentPod?.podId },
         )
     }
     val state by vm.state.collectAsState()
     val linksByServiceId by vm.linksByServiceId.collectAsState()
-    LaunchedEffect(Unit) { vm.load() }
 
     // Presentation-only narrowing — never mutates the loaded apps.
     var query by remember { mutableStateOf("") }
@@ -100,17 +108,18 @@ fun ServicesListScreen(nav: NavController) {
     val me = (appState.currentUser.collectAsState().value ?: "").lowercase()
     val pods by appState.pods.collectAsState()
     val leaderPodId by appState.leaderPodId.collectAsState()
+    LaunchedEffect(vm, pods.map { it.podId to it.status }) { vm.refresh() }
     // A pod the user no longer owns can't stay selected (it would hide every
     // app); treat a stale selection as "All servers". Derived (not a state
     // write) so it's safe to compute during composition.
     val effectiveServerFilter = serverFilter?.takeIf { id -> pods.any { it.podId == id } }
     val filterPodName = pods.firstOrNull { it.podId == effectiveServerFilter }?.name
 
-    // Merge the daemon apps-list with the per-service /links fan-out
-    // exactly as iOS AppsTab.AppRow does: slug.capitalized name,
+    // Merge the servers' apps lists with the per-service /links fan-out
+    // as iOS AppsTab.AppRow does: slug.capitalized name, the combined
     // status pill, confirmed-custom-domain → short-link swap.
     val allApps: List<AppSummary> = when (val s = state) {
-        is LoadingState.Loaded -> s.value.map { toRow(it, linksByServiceId[it.serviceId]) }
+        is LoadingState.Loaded -> s.value.map { toRow(it, linksByServiceId[it.app.serviceId]) }
         else -> emptyList()
     }
 
@@ -132,10 +141,13 @@ fun ServicesListScreen(nav: NavController) {
                 OwnerFilter.SHARED -> me.isNotEmpty() && app.creator.lowercase() != me
             }
         }
-        // V8 — server filter: when a pod is selected, keep only the apps whose
-        // canonical URL carries that pod's name as a subdomain (mirrors iOS).
+        // V8 — server filter: when a pod is selected, keep the apps that
+        // server lists; without per-server answers, the apps whose canonical
+        // URL carries that pod's name as a subdomain (mirrors iOS).
         .filter { app ->
-            filterPodName == null || PodSwitcherModel.matchesPod(app.canonicalUrl, filterPodName)
+            filterPodName == null ||
+                (if (app.podIds.isNotEmpty()) effectiveServerFilter in app.podIds
+                else PodSwitcherModel.matchesPod(app.canonicalUrl, filterPodName))
         }
 
     val subtitle = when (val st = state) {
@@ -239,7 +251,7 @@ fun ServicesListScreen(nav: NavController) {
 
 @Composable
 private fun AppRow(app: AppSummary, me: String, onClick: () -> Unit) {
-    val running = app.running
+    val running = app.pill.tone == AppStatus.Tone.Online
     val isShared = me.isNotEmpty() && app.creator.lowercase() != me
     FSListRow(
         leading = FSListLeading.Icon(
@@ -259,8 +271,9 @@ private fun AppRow(app: AppSummary, me: String, onClick: () -> Unit) {
             )
         }
         FSPill(
-            label = if (running) "Running" else "Stopped",
-            kind = if (running) FSPillKind.Online else FSPillKind.Idle,
+            label = app.pill.label,
+            kind = app.pill.tone.pillKind(),
+            modifier = Modifier.testTag("services-row-status"),
         )
         Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
     }
@@ -320,32 +333,33 @@ private fun stripScheme(s: String): String =
  *  `slug.capitalized` name, status→pill, links.canonicalUrl ?? the
  *  daemon URL, and the confirmed-custom-domain short-link swap (the
  *  swap itself lives in AppRow, gated on customDomainConfirmed). */
-private fun toRow(api: ApiAppSummary, links: AppLinksResponse?): AppSummary =
-    AppSummary(
+private fun toRow(listed: ServicesListViewModel.Listed, links: AppLinksResponse?): AppSummary {
+    val api = listed.app
+    return AppSummary(
         serviceId = api.serviceId,
         name = api.slug.replaceFirstChar { it.uppercase() },
         creator = api.creator,
-        running = api.status == "running",
-        runningPodCount = if (api.status == "running") 1 else 0,
-        siblingsEnabled = false,
+        pill = listed.pill,
+        podIds = listed.podIds,
         summary = api.summary,
         version = api.version,
         shortUrl = links?.shortUrl,
         canonicalUrl = links?.canonicalUrl ?: api.url,
         customDomain = links?.customDomain,
         customDomainConfirmed = links?.customDomainConfirmed,
-        egressPending = AppAccessViewModel.showsBadge(api),
+        egressPending = listed.egressPending,
     )
+}
 
 data class AppSummary(
     val serviceId: String,
     val name: String,
     /** Authoring username — drives the "by <creator>" subtitle + Yours/Shared filter. */
     val creator: String = "",
-    /** Whether the app's daemon status is "running" (status-tinted icon + pill). */
-    val running: Boolean = false,
-    val runningPodCount: Int,
-    val siblingsEnabled: Boolean,
+    /** The pill over every server the app is on (status-tinted icon too). */
+    val pill: AppStatus.Pill,
+    /** The servers that list it (empty when only the current server was asked). */
+    val podIds: List<String> = emptyList(),
     /** Optional one-liner description shown under the name. */
     val summary: String? = null,
     /** Optional version hint, used as a subtitle fallback. */

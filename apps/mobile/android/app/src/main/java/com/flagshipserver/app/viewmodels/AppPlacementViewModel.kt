@@ -16,15 +16,13 @@ import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.api.boxError
 import com.flagshipserver.app.api.userFacing
 import com.flagshipserver.app.core.AppCopy
-import com.flagshipserver.app.core.CreationPlacement
+import com.flagshipserver.app.core.AppStatus
+import com.flagshipserver.app.core.PodApps
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.core.UninstallServiceOrder
 import com.flagshipserver.app.keystore.Keystore
 import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,28 +79,25 @@ class AppPlacementViewModel(
     suspend fun load() {
         _loading.value = true
         try {
-            val servers = CreationPlacement.options(pods()) { true }.map { it.pod }
-            _rows.value = coroutineScope {
-                servers.map { pod -> async { Row(pod, presenceOn(pod)) } }.awaitAll()
-            }
+            _rows.value = PodApps.askAll(PodApps.servers(pods()), clientFor)
+                .map { (pod, answer) -> Row(pod, presence(answer)) }
         } finally {
             _loading.value = false
         }
     }
 
-    private suspend fun presenceOn(pod: PodInfo): Presence {
-        val client = clientFor(pod) ?: return Presence.Unknown(NO_SESSION)
-        return try {
-            val app = client.appsList().apps.firstOrNull { it.serviceId == serviceId }
+    private suspend fun presenceOn(pod: PodInfo): Presence = presence(PodApps.ask(pod, clientFor))
+
+    private fun presence(answer: PodApps.Answer): Presence = when (answer) {
+        PodApps.Answer.NoSession -> Presence.Unknown(NO_SESSION)
+        PodApps.Answer.Unreachable -> Presence.Unknown(UNREACHABLE)
+        is PodApps.Answer.Listed -> {
+            val app = answer.apps.firstOrNull { it.serviceId == serviceId }
             when {
                 app == null -> Presence.Absent
                 app.copying != null -> Presence.Copying(app.copying.progress)
                 else -> Presence.Has(app)
             }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Throwable) {
-            Presence.Unknown(UNREACHABLE)
         }
     }
 
@@ -306,6 +301,10 @@ class AppPlacementViewModel(
             val pct = if (p <= 1.0) (p * 100).roundToInt() else p.roundToInt().coerceAtMost(100)
             return "Copying… $pct%"
         }
+
+        /** That server's state of the app (§6); a copy underway shows its
+         *  progress in the note instead, and "unknown" shows nothing. */
+        fun rowPill(row: Row): AppStatus.Pill? = (row.presence as? Presence.Has)?.let { AppStatus.pill(it.app) }
 
         fun rowNote(vm: AppPlacementViewModel, row: Row): String? = when (val p = row.presence) {
             is Presence.Copying -> progressText(p.progress)

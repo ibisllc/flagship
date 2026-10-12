@@ -64,6 +64,7 @@ import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
+import com.flagshipserver.app.ui.components.pillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FSLayout
@@ -781,10 +782,15 @@ private fun Header(app: AppSummary) {
             style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
             modifier = Modifier.weight(1f),
         )
-        FSPill(
-            label = if (app.status == "running") "Running" else "Stopped",
-            kind = if (app.status == "running") FSPillKind.Online else FSPillKind.Idle,
-        )
+        // This server's state of the app (docs/app-placement.md §6); an older
+        // box's "unknown" shows no pill.
+        com.flagshipserver.app.core.AppStatus.pill(app)?.let { pill ->
+            FSPill(
+                label = pill.label,
+                kind = pill.tone.pillKind(),
+                modifier = Modifier.semantics { testTag = "app-status-pill" },
+            )
+        }
     }
     Text(
         text = "by ${app.creator}",
@@ -852,6 +858,15 @@ private fun RunsOnSection(
                         com.flagshipserver.app.viewmodels.AppPlacementViewModel.rowNote(vm, row)?.let {
                             Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
                         }
+                    }
+                    // That server's state of the app (docs/app-placement.md §6).
+                    com.flagshipserver.app.viewmodels.AppPlacementViewModel.rowPill(row)?.let { pill ->
+                        Spacer(Modifier.padding(start = FS.space.s2))
+                        FSPill(
+                            label = pill.label,
+                            kind = pill.tone.pillKind(),
+                            modifier = Modifier.semantics { testTag = "runs-on-status-${row.pod.podId}" },
+                        )
                     }
                 }
             }

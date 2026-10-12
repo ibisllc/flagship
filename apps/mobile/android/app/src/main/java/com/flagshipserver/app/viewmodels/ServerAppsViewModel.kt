@@ -9,6 +9,7 @@ import com.flagshipserver.app.api.AppCopyRecord
 import com.flagshipserver.app.api.AppSummary
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.userFacing
+import com.flagshipserver.app.core.AppStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +20,8 @@ class ServerAppsViewModel(private val client: ScreensClient) {
         val serviceId: String,
         val name: String,
         val address: String,
-        /** "Running", "Stopped", "Copying… 40%" or a failed copy's reason. */
+        /** That server's state ("Running", "Deploying", … §6), "Copying… 40%"
+         *  or a failed copy's reason. */
         val status: String,
         val copying: Boolean = false,
         val failed: Boolean = false,
@@ -80,9 +82,7 @@ class ServerAppsViewModel(private val client: ScreensClient) {
                     address = app.url.removePrefix("https://").removePrefix("http://").trimEnd('/'),
                     status = when {
                         copying != null -> AppPlacementViewModel.progressText(copying.progress)
-                        app.status == "running" -> "Running"
-                        app.status == "stopped" -> "Stopped"
-                        else -> "Status unknown"
+                        else -> AppStatus.pill(app)?.label ?: "Status unknown"
                     },
                     copying = copying != null,
                 )

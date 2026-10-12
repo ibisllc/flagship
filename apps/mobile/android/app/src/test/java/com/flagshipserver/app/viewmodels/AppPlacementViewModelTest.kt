@@ -71,6 +71,21 @@ class AppPlacementViewModelTest {
 
     private fun AppPlacementViewModel.presence(id: String) = rows.value.first { it.pod.podId == id }.presence
 
+    @Test fun eachRowShowsThatServersState() = runTest {
+        val m = vm(
+            mapOf(
+                "home" to Box(listOf(app())),
+                "office" to Box(listOf(app().copy(status = "unknown"))),
+                "cabin" to Box(listOf(app().copy(activity = com.flagshipserver.app.api.AppActivity("editing")))),
+            ),
+        )
+        m.load()
+        fun pill(id: String) = AppPlacementViewModel.rowPill(m.rows.value.first { it.pod.podId == id })
+        assertEquals("Running", pill("home")?.label)
+        assertEquals(null, pill("office"))
+        assertEquals("Editing", pill("cabin")?.label)
+    }
+
     @Test fun ticksExactlyTheServersThatHaveTheApp() = runTest {
         val m = vm(mapOf("home" to Box(listOf(app())), "office" to Box(emptyList()), "cabin" to Box(null)))
         m.load()

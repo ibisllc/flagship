@@ -22,7 +22,9 @@ data class AppSummary(
     val urlLabel: String,
     val summary: String? = null,
     val url: String,
-    val status: String,            // "running" | "stopped" | "unknown"
+    /** "running" | "starting" | "stopped" | "unknown" (docs/app-placement.md §6);
+     *  older boxes always send "unknown". */
+    val status: String,
     val version: String? = null,
     val installedAt: Long,
     /** Internet hosts the manifest declares and the ones the owner approved.
@@ -34,7 +36,14 @@ data class AppSummary(
     /** Set while a copy of this app is arriving on this box
      *  (docs/app-placement.md §5); absent once it is installed. */
     val copying: AppCopying? = null,
+    /** Something working on the app on this box (§6). Absent when idle, and
+     *  on boxes from before app activity. */
+    val activity: AppActivity? = null,
 )
+
+/** `activity: {kind}`: "deploying" | "copying" | "editing". */
+@Serializable
+data class AppActivity(val kind: String)
 
 /** `copying: {state, progress}` on an app summary while a copy arrives. */
 @Serializable

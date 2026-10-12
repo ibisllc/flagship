@@ -5,12 +5,17 @@ package com.flagshipserver.app.core
 
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.flagshipserver.app.api.AppSummary
 import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.InMemorySessionStore
 import com.flagshipserver.app.api.LiveBuildClient
 import com.flagshipserver.app.api.LiveScreensClient
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SessionStoring
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import okhttp3.OkHttpClient
 
 /** Clients bound to one server's own base URL and session token. */
@@ -143,4 +148,36 @@ object CreationPlacement {
     /** Show the picker: not pinned, and more than one server to choose from. */
     fun showsPicker(scope: PodScope?, options: List<Option>): Boolean =
         scope != null && !scope.pinned && scope.choose != null && options.size > 1
+}
+
+/** Each server's own apps list, asked over that server's session (Runs on, §4;
+ *  the services list's pill, §6). */
+object PodApps {
+    sealed interface Answer {
+        data class Listed(val apps: List<AppSummary>) : Answer
+        /** This phone has no session on that server. */
+        data object NoSession : Answer
+        /** The server didn't answer. */
+        data object Unreachable : Answer
+    }
+
+    /** The account's servers that could have apps. */
+    fun servers(pods: List<PodInfo>): List<PodInfo> = CreationPlacement.options(pods) { true }.map { it.pod }
+
+    suspend fun ask(pod: PodInfo, clientFor: (PodInfo) -> ScreensClient?): Answer {
+        val client = clientFor(pod) ?: return Answer.NoSession
+        return try {
+            Answer.Listed(client.appsList().apps)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            Answer.Unreachable
+        }
+    }
+
+    /** Every server in [servers], in parallel, in order. */
+    suspend fun askAll(servers: List<PodInfo>, clientFor: (PodInfo) -> ScreensClient?): List<Pair<PodInfo, Answer>> =
+        coroutineScope {
+            servers.map { pod -> async { pod to ask(pod, clientFor) } }.awaitAll()
+        }
 }
