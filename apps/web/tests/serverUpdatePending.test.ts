@@ -365,8 +365,12 @@ const card = () => ({
 });
 
 // Signing awaits real crypto, so let the event loop turn until it settles.
-async function settle(done: () => boolean) {
-  for (let i = 0; i < 200 && !done(); i++) await new Promise((r) => setImmediate(r));
+// Bounded by real time, not turns: signing runs off the event loop and a slow
+// CI runner outlasts any fixed number of turns. setImmediate and performance
+// are left unfaked by the fake timers below.
+async function settle(done: () => boolean, ms = 5000) {
+  const until = performance.now() + ms;
+  while (!done() && performance.now() < until) await new Promise((r) => setImmediate(r));
 }
 
 async function unlockSession() {
