@@ -16,6 +16,7 @@ import {
   ensureDockerNetwork,
   realCommandRunner,
 } from "./serviceRunner.js";
+import { ensureContainerLinksUnmanaged } from "./containerLinks.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import {
   DataProvisioner,
@@ -1133,6 +1134,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // wired only if the data-services env file is supplied + readable;
   // ServicePlatform is wired only when host IRK + SWK are supplied.
   const appRunner = new AppRunner();
+  await ensureContainerLinksUnmanaged(realCommandRunner, { log: (m) => console.warn(m) });
   await appRunner.ensureNetwork().catch((e) => {
     console.warn(`[runtime] could not ensure app bridge network: ${(e as Error).message}`);
   });

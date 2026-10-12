@@ -225,6 +225,15 @@ chroot "$TARGET_ROOT" update-grub
 factory_stage "bootloader installed"
 
 mkdir -p "$TARGET_ROOT/etc/systemd/network"
+# Docker's veths are Type=ether too; left to networkd they get pulled off
+# their bridge and the box can't reach its own containers. Sorts first.
+cat > "$TARGET_ROOT/etc/systemd/network/10-flagship-containers.network" <<'NETWORK'
+[Match]
+Kind=veth bridge
+
+[Link]
+Unmanaged=yes
+NETWORK
 cat > "$TARGET_ROOT/etc/systemd/network/20-flagship-wired.network" <<'NETWORK'
 [Match]
 Type=ether
