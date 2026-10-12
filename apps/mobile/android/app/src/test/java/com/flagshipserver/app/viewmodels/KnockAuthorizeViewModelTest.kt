@@ -122,15 +122,29 @@ class KnockAuthorizeViewModelTest {
         assertEquals(1, reloads)
     }
 
-    @Test fun inviteRecordNamingOurOwnAid_isOurBox_signsWithGlobalAid() = runTest {
+    @Test fun inviteRecordNamingOurOwnAid_isIgnored_refusesWhenNotInPods() = runTest {
+        // The record's owner AID came from the invite's author: naming our own
+        // AID must not make the box ours (a hostile owner could harvest it).
         val owners = InMemoryInviteOwnerBook().apply { remember(serverId, HexUtil.encode(aidPub)) }
         val t = KnockTransport(status = 200, respBody = okBody)
-        val vm = makeVM(t, ownServers = emptyList(), owners = owners)
+        val vm = makeVM(t, ownServers = emptyList(), owners = owners, reload = { listOf("other.alice.flagship.services") })
+        vm.authorize()
+        assertEquals(KnockAuthorizeViewModel.NOT_YOURS, (vm.phase.value as KnockAuthorizePhase.Failed).message)
+        assertEquals(1, reloads)
+        assertNull(t.lastUrl)
+        assertTrue(signerCalls.isEmpty())
+        assertTrue(persisted.isEmpty())
+    }
+
+    @Test fun inviteRecordNamingOurOwnAid_isIgnored_ownWhenPodsListIt() = runTest {
+        val owners = InMemoryInviteOwnerBook().apply { remember(serverId, HexUtil.encode(aidPub)) }
+        val t = KnockTransport(status = 200, respBody = okBody)
+        val vm = makeVM(t, ownServers = emptyList(), owners = owners, reload = { listOf(serverId) })
         vm.authorize()
         assertTrue(vm.phase.value is KnockAuthorizePhase.Done)
+        assertEquals(1, reloads)
         assertSignedBy(t, aidPub)
         assertEquals(listOf("global"), signerCalls)
-        assertEquals(0, reloads)
     }
 
     @Test fun coldStart_podsNotLoaded_reloadsOnceAndFindsOwnBox() = runTest {

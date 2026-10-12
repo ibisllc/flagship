@@ -8,10 +8,10 @@
 // (docs/app-apis.md §5). Invites put the friend's PER-AUTHOR contact AID on that
 // list, so the identity depends on the box: one of our own servers gets the
 // global AID; a box we were invited to (its owner AID was remembered at redeem,
-// InviteOwnerBook) gets deriveContactAccountId(UMK, ownerAID), unless that owner
-// AID is our own (then it's our box: global AID). A box that is neither in the
-// loaded pods nor remembered triggers one fresh pods load (a cold start from a
-// deep link may not have loaded them yet); still unknown, nothing is signed or
+// InviteOwnerBook) gets deriveContactAccountId(UMK, ownerAID). A record naming
+// our own AID is ignored: the invite's author wrote it. A box that is neither in
+// the loaded pods nor remembered triggers one fresh pods load (a cold start from
+// a deep link may not have loaded them yet); still unknown, nothing is signed or
 // sent, so a stranger's box never learns an AID of ours. On success the box
 // returns the phone-held secretId (never to the browser).
 
@@ -89,27 +89,29 @@ class KnockAuthorizeViewModel(
         _phase.value = KnockAuthorizePhase.Authorizing
         val host = InviteOwnerBook.normHost(serverId)
         fun List<String>.hasBox() = any { InviteOwnerBook.normHost(it) == host }
-        var isOwnServer = ownServers().hasBox()
-        val ownerHex = if (isOwnServer) null else owners.ownerFor(serverId)
-        if (!isOwnServer && ownerHex == null) {
-            isOwnServer = runCatching { reloadOwnServers() }.getOrDefault(emptyList()).hasBox()
-            if (!isOwnServer) {
-                _phase.value = KnockAuthorizePhase.Failed(NOT_YOURS)
-                return
-            }
-        }
         try {
             val reason = title.removeSuffix("?")
-            val globalPubHex = if (ownerHex == null) null else aidPubHex(reason).lowercase()
             val key: Ed25519Sign
             val aidPub: ByteArray
-            if (ownerHex == null || ownerHex == globalPubHex) {
-                key = aidSigner(reason)
-                aidPub = HexUtil.decode(globalPubHex ?: aidPubHex(reason))!!
-            } else {
+            // A record's owner AID is whatever the invite link's author wrote, so
+            // it can only ever pick the contact AID: a record naming our own
+            // global AID is ignored (a hostile owner could plant it to harvest
+            // that AID). "Own box" comes only from our pods directory.
+            val ownerHex = if (ownServers().hasBox()) null else owners.ownerFor(serverId)
+                ?.takeIf { it != aidPubHex(reason).lowercase() }
+            if (ownerHex != null) {
                 val ownerAid = HexUtil.decode(ownerHex)!!
                 key = contactAidSigner(ownerAid, reason)
                 aidPub = HexUtil.decode(contactAidPubHex(ownerAid, reason))!!
+            } else {
+                val isOwnServer = ownServers().hasBox() ||
+                    runCatching { reloadOwnServers() }.getOrDefault(emptyList()).hasBox()
+                if (!isOwnServer) {
+                    _phase.value = KnockAuthorizePhase.Failed(NOT_YOURS)
+                    return
+                }
+                key = aidSigner(reason)
+                aidPub = HexUtil.decode(aidPubHex(reason))!!
             }
             val issuedAt = now()
             val sig = ServiceInvite.signKnockAuthorization(serverId, serviceRef, pageId, aidPub, issuedAt, key)
