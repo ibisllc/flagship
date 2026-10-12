@@ -530,6 +530,18 @@ export class BuildOrchestrator {
     return st != null && st.deployedUrl == null;
   }
 
+  /**
+   * Installed services an open build is changing: not yet live, and its
+   * AI/IDE access not yet sealed (the app's "Editing" pill).
+   */
+  editingServiceIds(): string[] {
+    const out: string[] = [];
+    for (const st of this.states.values()) {
+      if (st.editsServiceId && st.deployedUrl == null && !this.sealedBuilds.has(st.buildId)) out.push(st.editsServiceId);
+    }
+    return out;
+  }
+
   /** Forget a build: its files, its IDE key and the name it held. */
   async discard(buildId: string): Promise<boolean> {
     const st = this.states.get(buildId);

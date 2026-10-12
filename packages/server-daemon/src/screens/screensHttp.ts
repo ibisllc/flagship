@@ -121,6 +121,8 @@ import type { UpdateOutcomeRecord } from "../updateOutcome.js";
 import { isAppDbPath } from "../dataLayer/ownerDb.js";
 import { isAppCopyPath } from "../appCopy/target.js";
 import type { ReleaseCatalogSource } from "../updateReleases.js";
+import type { AppStatusSource } from "../appStatus.js";
+import type { ServiceActivityKind } from "../serviceActivity.js";
 
 const J = { "content-type": "application/json" } as const;
 
@@ -194,6 +196,17 @@ export interface ScreensHttpDeps {
     handle: (path: string, method: string, req: HttpRequest, ctx: { companion: boolean }) => Promise<HttpResponse | null>;
     inProgress: (hostUsername: string) => AppSummary[];
   } | null;
+  /**
+   * Every app's container state in one Docker call (appStatus.ts). Unset ⇒
+   * every app is `unknown`.
+   */
+  appStatus?: AppStatusSource | null;
+  /**
+   * What works on each installed app right now (serviceActivity.ts):
+   * deploying or editing. Rows of copies still arriving (`appCopy`) say
+   * `copying` themselves. Unset ⇒ installed apps carry no `activity`.
+   */
+  appActivity?: ((serviceIds: readonly string[]) => Map<string, ServiceActivityKind>) | null;
   /**
    * Services built from a published repo adapter, and a way to report one
    * to flagshipserver.com (anonymously: the adapter, and the owner's note).
@@ -671,12 +684,14 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
 
     // ---- P1.2 GET /api/screens/apps-list
     if (path === "/api/screens/apps-list" && method === "GET") {
-      const apps = deps.servicePlatform
-        ? deps.servicePlatform.list().map((a) => toSummary(a, deps.serverFqdn, deps.appEgress))
-        : [];
+      const installed = deps.servicePlatform?.list() ?? [];
+      const live = await liveStates(installed.map((a) => a.serviceId), deps);
+      const apps = installed.map((a) => toSummary(a, deps.serverFqdn, deps.appEgress, live));
       if (deps.appCopy) {
         const have = new Set(apps.map((a) => a.serviceId));
-        for (const row of deps.appCopy.inProgress(deps.username)) if (!have.has(row.serviceId)) apps.push(row);
+        for (const row of deps.appCopy.inProgress(deps.username)) {
+          if (!have.has(row.serviceId)) apps.push({ ...row, activity: { kind: "copying" } });
+        }
       }
       const body: AppsListResponse = { apps };
       return jok(body);
@@ -1540,11 +1555,34 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
   };
 }
 
+interface LiveStates {
+  status: Map<string, AppSummary["status"]>;
+  activity: Map<string, ServiceActivityKind>;
+}
+
+/** Container state (one Docker call for all of them) and activity for these apps. */
+async function liveStates(serviceIds: string[], deps: ScreensHttpDeps): Promise<LiveStates> {
+  const status = deps.appStatus
+    ? await deps.appStatus.statuses(serviceIds).catch(() => new Map<string, AppSummary["status"]>())
+    : new Map<string, AppSummary["status"]>();
+  let activity = new Map<string, ServiceActivityKind>();
+  if (deps.appActivity) {
+    try {
+      activity = deps.appActivity(serviceIds);
+    } catch {
+      // the pill degrades to no activity
+    }
+  }
+  return { status, activity };
+}
+
 function toSummary(
   app: InstalledService,
   serverFqdn: string,
   egress?: ScreensHttpDeps["appEgress"],
+  live?: LiveStates,
 ): AppSummary {
+  const activity = live?.activity.get(app.serviceId);
   return {
     ...(egress ? { egress: egress.view(app.serviceId, app.manifest.network?.egress ?? []) } : {}),
     ...(egress?.access ? { access: egress.access(app.serviceId) } : {}),
@@ -1554,7 +1592,8 @@ function toSummary(
     urlLabel: app.urlLabel,
     summary: typeof app.manifest.description === "string" ? app.manifest.description : undefined,
     url: `https://${app.urlLabel}.${serverFqdn}`,
-    status: "unknown",
+    status: live?.status.get(app.serviceId) ?? "unknown",
+    ...(activity ? { activity: { kind: activity } } : {}),
     version: app.manifest.version,
     installedAt: app.installedAt,
   };
@@ -1567,7 +1606,7 @@ async function appDetail(app: InstalledService, deps: ScreensHttpDeps): Promise<
     tabId,
   }));
   return {
-    app: toSummary(app, deps.serverFqdn, deps.appEgress),
+    app: toSummary(app, deps.serverFqdn, deps.appEgress, await liveStates([app.serviceId], deps)),
     manifest: app.manifest as unknown as Record<string, unknown>,
     dataLayerInstances,
     members,

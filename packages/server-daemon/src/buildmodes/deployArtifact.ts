@@ -29,6 +29,7 @@ import type { ForgejoAppAdmin } from "../forgejoServiceAdmin.js";
 import type { BuildJournal, BuildMode } from "./buildJournal.js";
 import { migrationFiles, resolveDeployTarget, type NameHolders } from "../llm/serviceName.js";
 import { writeSourceTree } from "../llm/serviceSource.js";
+import { whileDeploying, type DeployingTracker } from "../serviceActivity.js";
 
 export interface DeployArtifactDeps {
   servicePlatform: ServicePlatform;
@@ -43,6 +44,8 @@ export interface DeployArtifactDeps {
   now?: () => number;
   /** Open AI-chat sessions, so a deploy never takes a name one holds. */
   registry?: NameHolders;
+  /** Marks the service an edit replaces as deploying while it builds and goes live. */
+  activity?: DeployingTracker | null;
 }
 
 export interface DeployArtifactArgs {
@@ -246,9 +249,13 @@ export function buildArtifactPipeline(deps: DeployArtifactDeps) {
     return { ok: true, serviceId, url, image };
   }
 
+  // A new service has no row to mark until it's installed; an edit's does.
+  const tracked = (args: DeployArtifactArgs, prebuilt: string | null) =>
+    whileDeploying(deps.activity, args.editsServiceId, () => run(args, prebuilt));
+
   return {
-    deploy: (args: DeployArtifactArgs): Promise<DeployResult> => run(args, null),
-    install: (args: InstallArtifactArgs): Promise<DeployResult> => run(args, args.image),
+    deploy: (args: DeployArtifactArgs): Promise<DeployResult> => tracked(args, null),
+    install: (args: InstallArtifactArgs): Promise<DeployResult> => tracked(args, args.image),
   };
 }
 

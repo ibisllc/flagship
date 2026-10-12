@@ -31,8 +31,19 @@ export interface AppSummary {
   summary?: string;
   /** Default URL the app lives at: `https://<urlLabel>.<serverFqdn>`. */
   url: string;
-  /** Currently-known status (best-effort; see daemon AppRunner). */
-  status: "running" | "stopped" | "unknown";
+  /**
+   * The app's container, read once per request for every app
+   * (docs/app-placement.md §6): `starting` while Docker restarts it or its
+   * health check hasn't passed yet; `unknown` only when Docker can't be asked.
+   */
+  status: "running" | "starting" | "stopped" | "unknown";
+  /**
+   * Present while something works on the app on this server: a new version
+   * going live (`deploying`), a copy arriving (`copying`, alongside the
+   * `copying` progress below), or an AI chat or IDE build open on it
+   * (`editing`). Deploying wins over copying, copying over editing.
+   */
+  activity?: { kind: "deploying" | "copying" | "editing" };
   /** Manifest version, e.g. "0.1.0". */
   version?: string;
   /** Unix-ms; when the app was installed on this pod. */

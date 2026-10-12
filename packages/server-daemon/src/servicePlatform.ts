@@ -45,6 +45,7 @@ import {
   type AppDataCredentials,
 } from "./dataLayer/index.js";
 import type { AppAuthTokens } from "./serviceAuthToken.js";
+import { whileDeploying, type DeployingTracker } from "./serviceActivity.js";
 import type { DomainGate } from "./browser/domainGate.js";
 import type { TabRegistry } from "./browser/tabRegistry.js";
 import type { AppPullState, AppPullStateStore, UpdatePolicy } from "./updateClient.js";
@@ -73,6 +74,33 @@ export interface InstalledService {
 export interface AppMigrationFile {
   filename: string;
   sql: string;
+}
+
+export interface ServiceInstallArgs {
+  request: InstallServiceRequest;
+  signature: Bytes;
+  verify: (req: InstallServiceRequest, sig: Bytes, irkPub: Bytes) => boolean;
+  /** For tests + future port allocators. Default picks a random 49152–65535. */
+  pickPort?: () => number;
+  /** The version's `migrations/*.sql`, run once each before it starts. */
+  migrations?: AppMigrationFile[];
+  /**
+   * A copy from another server (appCopy/): runs on the freshly made stores
+   * before anything else touches them (restoring the copied data); a throw
+   * fails the install and drops those stores.
+   */
+  prepareData?: (data: AppDataCredentials | null) => Promise<void>;
+  /** Migrations the copied data already ran. */
+  appliedMigrations?: string[];
+  /** The copied app's members. */
+  membership?: AppMembershipSnapshot;
+}
+
+export interface ServiceRedeployArgs {
+  request: InstallServiceRequest;
+  signature: Bytes;
+  verify: (req: InstallServiceRequest, sig: Bytes, irkPub: Bytes) => boolean;
+  migrations?: AppMigrationFile[];
 }
 
 export interface ServicePlatformDeps {
@@ -177,6 +205,8 @@ export interface ServicePlatformDeps {
    * Unset ⇒ migrations are not run (tests that don't exercise them).
    */
   runSql?: ((a: { pgUrl: string; sql: string }) => Promise<void>) | null;
+  /** Marks a service as deploying while an install or redeploy of it runs (its status pill). */
+  activity?: DeployingTracker | null;
   /** Reject mutations whose `issuedAt` is more than this old (ms). Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -275,25 +305,12 @@ export class ServicePlatform {
    * Install an app per a phone-signed request. The signature is verified
    * against the **host's** IRK pubkey (the daemon's `deps.host.irkPub`).
    */
-  async install(args: {
-    request: InstallServiceRequest;
-    signature: Bytes;
-    verify: (req: InstallServiceRequest, sig: Bytes, irkPub: Bytes) => boolean;
-    /** For tests + future port allocators. Default picks a random 49152–65535. */
-    pickPort?: () => number;
-    /** The version's `migrations/*.sql`, run once each before it starts. */
-    migrations?: AppMigrationFile[];
-    /**
-     * A copy from another server (appCopy/): runs on the freshly made stores
-     * before anything else touches them (restoring the copied data); a throw
-     * fails the install and drops those stores.
-     */
-    prepareData?: (data: AppDataCredentials | null) => Promise<void>;
-    /** Migrations the copied data already ran. */
-    appliedMigrations?: string[];
-    /** The copied app's members. */
-    membership?: AppMembershipSnapshot;
-  }): Promise<InstallResult> {
+  install(args: ServiceInstallArgs): Promise<InstallResult> {
+    const id = ServicePlatform.serviceId(args.request.creator, args.request.slug);
+    return whileDeploying(this.deps.activity, id, () => this.installNow(args));
+  }
+
+  private async installNow(args: ServiceInstallArgs): Promise<InstallResult> {
     const { request: r, signature, verify } = args;
 
     if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
@@ -537,12 +554,12 @@ export class ServicePlatform {
     }
   }
 
-  async redeploy(args: {
-    request: InstallServiceRequest;
-    signature: Bytes;
-    verify: (req: InstallServiceRequest, sig: Bytes, irkPub: Bytes) => boolean;
-    migrations?: AppMigrationFile[];
-  }): Promise<RedeployResult> {
+  redeploy(args: ServiceRedeployArgs): Promise<RedeployResult> {
+    const id = ServicePlatform.serviceId(args.request.creator, args.request.slug);
+    return whileDeploying(this.deps.activity, id, () => this.redeployNow(args));
+  }
+
+  private async redeployNow(args: ServiceRedeployArgs): Promise<RedeployResult> {
     const { request: r, signature, verify } = args;
     if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
       return { ok: false, reason: "stale request" };

@@ -280,6 +280,7 @@ describe("the owner's order on the target (POST /api/screens/services/copy)", ()
         status: "unknown",
         installedAt: expect.any(Number),
         copying: { state: "copying", progress: 0.02 },
+        activity: { kind: "copying" },
       },
     ]);
     const copying = await call(w, "GET", COPIES_PATH);

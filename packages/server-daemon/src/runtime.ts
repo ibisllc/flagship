@@ -19,6 +19,7 @@ import {
 } from "./appApiKeys.js";
 import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
 import { AppRunner, buildStartCheck, realCommandRunner } from "./serviceRunner.js";
+import { ServiceActivity } from "./serviceActivity.js";
 import { ensureContainerLinksUnmanaged } from "./containerLinks.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import {
@@ -476,6 +477,8 @@ export interface DaemonRuntime {
    * ServicePlatform is wired or no envStore is configured.
    */
   envStore: AppEnvStore | null;
+  /** Services with a new version going live (their status pill), shared by every deploy path. */
+  serviceActivity: ServiceActivity;
   /**
    * Append a handler to the live HTTP-handler chain. Handlers are
    * tried in registration order; the first non-null response wins.
@@ -1211,6 +1214,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // wired only if the data-services env file is supplied + readable;
   // ServicePlatform is wired only when host IRK + SWK are supplied.
   const appRunner = new AppRunner();
+  const serviceActivity = new ServiceActivity();
   await ensureContainerLinksUnmanaged(realCommandRunner, { log: (m) => console.warn(m) });
   // The sandbox bridges (build, staging, apps) and the egress gateway that
   // fences them (egress/, docs/ai-privacy-and-staging.md §3). Before any
@@ -1335,6 +1339,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
             : null,
       onLog: (m) => console.warn(m),
       runSql: dataProvisioner ? runAppSql : null,
+      activity: serviceActivity,
     });
     void servicePlatformRef.current.restore().then(({ restored, failed }) => {
       if (restored.length > 0 || failed.length > 0) {
@@ -1499,6 +1504,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     siblingRouter,
     appBackup,
     envStore,
+    serviceActivity,
     addHandler(h) {
       extras.push(h);
     },

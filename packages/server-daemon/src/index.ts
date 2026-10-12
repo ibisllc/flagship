@@ -103,6 +103,8 @@ import {
 } from "./postRecovery/fileJournalStore.js";
 import { buildRunMigration } from "./runMigration.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
+import { buildAppStatusReader } from "./appStatus.js";
+import { buildActivityResolver } from "./serviceActivity.js";
 import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
 import { ScreensEventBus } from "./screens/screensEvents.js";
 import { AccessAlertSetting } from "./egress/accessAlertSetting.js";
@@ -2058,6 +2060,8 @@ async function wireRuntimeSurfaces(deps: {
   // Names are held by open AI chats and by git imports not yet deployed;
   // every name check reads both. The build orchestrator is made further down.
   const buildNameHoldersRef: { current: NameHolders | null } = { current: null };
+  // The services open IDE / git builds are changing (their "Editing" pill).
+  const buildEditingRef: { current: (() => string[]) | null } = { current: null };
   const nameHolders = combineNameHolders(vibeRegistry, {
     holderOf: (name, exceptId) => buildNameHoldersRef.current?.holderOf(name, exceptId),
   });
@@ -2194,6 +2198,7 @@ async function wireRuntimeSurfaces(deps: {
         cmd: (await import("./serviceRunner.js")).realCommandRunner,
         forgejoAdmin,
         registry: nameHolders,
+        activity: runtime.serviceActivity,
         restrictToInvited: async (serviceId) => {
           const accessStore = deps.serviceAccessRef.current;
           if (!accessStore?.knowsOwner()) {
@@ -2308,6 +2313,7 @@ async function wireRuntimeSurfaces(deps: {
       forgejoAdmin,
       journal: buildJournal,
       registry: nameHolders,
+      activity: runtime.serviceActivity,
     });
     const buildOrchestrator = new BuildOrchestrator({
       modelRedactor,
@@ -2396,6 +2402,7 @@ async function wireRuntimeSurfaces(deps: {
       },
     });
     buildNameHoldersRef.current = buildOrchestrator;
+    buildEditingRef.current = () => buildOrchestrator.editingServiceIds();
     runtime.addHandler(
       buildBuildModesHttpHandlers({
         orchestrator: buildOrchestrator,
@@ -2603,6 +2610,17 @@ async function wireRuntimeSurfaces(deps: {
     gate: pairedSessions,
     appEgress: runtime.egress.appEgress,
     appCopy: appCopyTarget,
+    // The status pill (docs/app-placement.md §6): one `docker ps` for every
+    // app, and what's deploying or being edited here.
+    appStatus: buildAppStatusReader({
+      cmd: serviceRunnerMod.realCommandRunner,
+      containerName: (id) => `flagship-${id}`,
+    }),
+    appActivity: buildActivityResolver({
+      tracker: runtime.serviceActivity,
+      chats: () => vibeRegistry.list(),
+      builds: () => buildEditingRef.current?.() ?? [],
+    }),
     appDb:
       cfg && runtime.servicePlatform && runtime.dataProvisioner
         ? {

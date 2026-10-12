@@ -39,6 +39,7 @@ import type { ForgejoAppAdmin } from "../forgejoServiceAdmin.js";
 import type { VibeCodeSession, VibeCodeSessionRegistry } from "./vibeCodeSession.js";
 import { migrationFiles, resolveDeployTarget, type NameHolders } from "./serviceName.js";
 import { writeSourceTree } from "./serviceSource.js";
+import { whileDeploying, type DeployingTracker } from "../serviceActivity.js";
 import { noRedaction, type ModelRedactor } from "./modelPrivacy.js";
 import type { BuildJournal } from "../buildmodes/buildJournal.js";
 import { BuildWorkspace } from "../buildmodes/buildWorkspace.js";
@@ -84,6 +85,8 @@ export interface DeploySessionDeps {
    * through), in which case the service stays open and the owner is told.
    */
   restrictToInvited?: (serviceId: string) => Promise<boolean>;
+  /** Marks the service an edit replaces as deploying while it builds and goes live. */
+  activity?: DeployingTracker | null;
 }
 
 export type DeployResult =
@@ -102,7 +105,11 @@ export interface DeploySessionOverride {
 export function buildDeploySession(deps: DeploySessionDeps) {
   const now = deps.now ?? (() => Date.now());
 
-  return async function deploy(session: VibeCodeSession, override: DeploySessionOverride = {}): Promise<DeployResult> {
+  return function deploy(session: VibeCodeSession, override: DeploySessionOverride = {}): Promise<DeployResult> {
+    return whileDeploying(deps.activity, session.meta.editsServiceId, () => deployNow(session, override));
+  };
+
+  async function deployNow(session: VibeCodeSession, override: DeploySessionOverride): Promise<DeployResult> {
     const files = override.files ?? session.files();
     const manifestJson = files["flagship.app.json"];
     if (!manifestJson) {
@@ -234,7 +241,7 @@ export function buildDeploySession(deps: DeploySessionDeps) {
       inviteOnly = await deps.restrictToInvited(serviceId).catch(() => false);
     }
     return { ok: true, serviceId, url, image, ...(inviteOnly !== undefined ? { inviteOnly } : {}) };
-  };
+  }
 }
 
 /** Where a staged chat deploy is: on its private copy, the AI fixing it there, or going live. */
