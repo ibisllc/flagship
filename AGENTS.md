@@ -204,17 +204,27 @@ went `7ac1b50a` → `9873b83e` from the phone's Update button (~20 s down).
 Remaining: the same from the webapp and Android.
 
 **home2 bricked by its `1584bfe8` update (2026-10-11).** Studio's Restart menu
-force-stopped the VM 7 s into the apply (Studio's own log at 22:44:12 UTC), and
-the box only wrote its rollback marker after checkout + rebuild, so it came back
-half updated with nothing to undo it: active but never tunnelled again. Fixed in
-the working tree, not yet released: the marker is written as `applying` before
-the tree changes; a bash ExecStartPre guard (`updateGuard.ts`, needs no
-node_modules) rolls back an interrupted apply or a release that never reaches
-the gate; consuming an update order retires the older ones it superseded (an
-unconsumed one was still in home2's lane); Studio's Stop/Restart/Quit power the
-guest off gracefully before forcing. Boxes on `9873b83e` get the guard only
-after their first update to a release that has it, so don't stop a box while
-it updates. home2 has no debug grant and needs recreating.
+force-stopped the VM at 22:44:12 UTC, 2 s after the update finished its rebuild.
+Forensics on a disk clone (unlocked with the box's own lease): checkout, `npm ci`
+and `tsc` had all completed, but none of it was flushed, so the box came back
+with 196 tree files (including `server-daemon/src/index.ts`), 6,971 node_modules
+files and the update marker all 0 bytes, and the daemon crash-looped every 5 s
+(npm logs) with nothing able to roll it back. Fixed on `main`, not yet released:
+markers and outcomes are fsynced (`durableFile.ts`); the rebuild ends in `sync`;
+the marker is written as `applying` before the tree changes; a bash
+ExecStartPre guard (`updateGuard.ts`, needs no node_modules) rolls back an
+interrupted apply, a release that never reaches the gate, or an unreadable
+marker (to the last verified commit in `update-outcome.json`), dropping the
+git index first so 0-byte files get rewritten; consuming an update order retires
+the older ones it superseded; Studio's Stop/Restart/Quit power the guest off
+gracefully before forcing. Boxes on `9873b83e` get the guard only after their
+first update to a release that has it, so don't stop a box while it updates.
+home2 needs recreating. **Separate, unexplained:** home2's guest kernel oopsed
+in ext4 three times (13:08, 13:59, 23:29 UTC, uptimes 11–46 min) with the
+faulting code reading as zeros, i.e. guest memory corruption; suspect the VZ
+host side (Studio attaches a memory balloon) and check home3's
+`/var/lib/systemd/pstore` before trusting hosted VMs. Box journals are volatile
+(`/run/log/journal`), so a crash loop leaves no daemon log on disk.
 
 ### Desktop Studio
 

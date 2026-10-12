@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { writeFileDurable } from "./durableFile.js";
 import type { UpdateConsumeOutcome } from "./updateConsumer.js";
 
 /**
@@ -85,7 +85,7 @@ export function parseUpdateOutcome(raw: unknown): UpdateOutcomeRecord | null {
 export function fileUpdateOutcomeStore(path: string): UpdateOutcomeStore {
   return {
     async write(record) {
-      await writeFile(path, JSON.stringify(record), { mode: 0o600 });
+      await writeFileDurable(path, JSON.stringify(record));
     },
     readSync() {
       try {

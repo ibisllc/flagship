@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { writeFileDurable } from "./durableFile.js";
 
 /**
  * The update guard: a shell script systemd runs before every daemon start
@@ -51,13 +52,29 @@ outcome='${args.dataDir}/update-outcome.json'
 log() { echo "[update-guard] $*"; }
 
 [ -f "$marker" ] || { rm -f "$starts_file"; exit 0; }
+sha='^[0-9a-f]{40}$'
 prev=$(jq -r '.previousCommit // empty' "$marker" 2>/dev/null)
 target=$(jq -r '.targetCommit // empty' "$marker" 2>/dev/null)
 stage=$(jq -r '.stage // "staged"' "$marker" 2>/dev/null)
 attempts=$(jq -r '.bootAttempts // 0' "$marker" 2>/dev/null)
-if ! [[ "$prev" =~ ^[0-9a-f]{40}$ && "$target" =~ ^[0-9a-f]{40}$ && "$attempts" =~ ^[0-9]+$ ]]; then
-  log "unreadable marker; leaving it to the daemon"
-  exit 0
+if ! [[ "$prev" =~ $sha && "$target" =~ $sha && "$attempts" =~ ^[0-9]+$ ]]; then
+  # A marker that exists but can't be read was cut short by a power loss
+  # mid-update (older daemons didn't fsync it). Fall back to the last commit
+  # this box verified healthy.
+  case "$(jq -r '.outcome // empty' "$outcome" 2>/dev/null)" in
+    applied) prev=$(jq -r '.targetCommit // empty' "$outcome" 2>/dev/null) ;;
+    rolled-back) prev=$(jq -r '.previousCommit // empty' "$outcome" 2>/dev/null) ;;
+    *) prev= ;;
+  esac
+  if ! [[ "$prev" =~ $sha ]]; then
+    log "unreadable marker and no known-good commit; leaving it to the daemon"
+    exit 0
+  fi
+  target=$(git -C "$repo" rev-parse HEAD 2>/dev/null)
+  [[ "$target" =~ $sha ]] || target=$prev
+  stage=applying
+  attempts=0
+  log "unreadable marker; treating the update as interrupted"
 fi
 # Counted per target, so a count left by an earlier update never carries over.
 read -r counted starts < "$starts_file" 2>/dev/null
@@ -74,12 +91,15 @@ else
 fi
 
 # Nothing else touches the checkout before the daemon starts, so a lock left
-# by a git killed mid-checkout is stale.
-rm -f "$repo/.git/index.lock"
-if ! git -C "$repo" checkout -f -q "$prev"; then
-  log "checkout of $prev failed; leaving it to the daemon"
+# by a git killed mid-checkout is stale. A power cut can also leave 0-byte
+# files the index still calls clean: dropping the index makes reset rewrite
+# every tracked file (same as restoreCheckout in updateConsumer.ts).
+rm -f "$repo/.git/index.lock" "$repo/.git/index"
+if ! git -C "$repo" reset -q --hard "$prev"; then
+  log "reset to $prev failed; leaving it to the daemon"
   exit 0
 fi
+git -C "$repo" clean -fdq -- packages
 cd "$repo" || exit 0
 scope=(--include-workspace-root --workspace=packages/server-daemon)
 if ! npm ci --no-audit --no-fund "\${scope[@]}"; then
@@ -87,9 +107,12 @@ if ! npm ci --no-audit --no-fund "\${scope[@]}"; then
   npm install --no-audit --no-fund "\${scope[@]}" || { log "npm install failed; will retry next start"; exit 0; }
 fi
 npx tsc -b packages/server-daemon || { log "rebuild failed; will retry next start"; exit 0; }
+# Flush the restored tree before the marker that would retry it goes away.
+sync
 rm -f "$marker" "$starts_file"
 printf '{"outcome":"rolled-back","at":%s,"previousCommit":"%s","targetCommit":"%s","bootAttempts":%s}' \\
   "$(( $(date +%s) * 1000 ))" "$prev" "$target" "$attempts" > "$outcome.tmp" && mv "$outcome.tmp" "$outcome"
+sync
 log "rolled back to $prev"
 exit 0
 `;
@@ -125,7 +148,7 @@ export async function installUpdateGuard(opts: UpdateGuardInstallOptions): Promi
     opts.write ??
     (async (p, c, mode) => {
       await mkdir(dirname(p), { recursive: true });
-      await writeFile(p, c, { mode });
+      await writeFileDurable(p, c, mode);
     });
   const files: Array<[string, string, number]> = [
     [UPDATE_GUARD_SCRIPT_PATH, buildUpdateGuardScript(opts), 0o700],

@@ -306,6 +306,7 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
       ["git", "-C", "/opt/flagship", "checkout", TARGET],
       ["npm", "ci", "--no-audit", "--no-fund", "--include-workspace-root", "--workspace=packages/server-daemon"],
       ["npx", "tsc", "-b", "packages/server-daemon"],
+      ["sync"],
     ]);
     expect(nonces.marked).toEqual([NONCE]);
     expect(pending.current).toEqual({
@@ -416,9 +417,11 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
     const { opts, pending, exits } = baseOpts({ runner });
     const out = await runUpdateConsumer(opts);
     expect(out).toEqual({ applied: false, reason: "apply-failed" });
-    expect(calls(runnerSpy, "checkout").map((c) => c[c.length - 1])).toEqual([
-      TARGET,
-      CURRENT,
+    expect(calls(runnerSpy, "checkout").map((c) => c[c.length - 1])).toEqual([TARGET]);
+    // The revert rebuilds the index from scratch so a torn checkout can't survive.
+    expect(calls(runnerSpy, "reset")).toEqual([["git", "-C", "/opt/flagship", "reset", "-q", "--hard", CURRENT]]);
+    expect(calls(runnerSpy, "rm")).toEqual([
+      ["rm", "-f", "/opt/flagship/.git/index.lock", "/opt/flagship/.git/index"],
     ]);
     expect(pending.current).toBeNull();
     expect(exits.count).toBe(0);
@@ -468,6 +471,7 @@ describe("rebuildWorkspace — installs and compiles only the daemon's closure",
     expect(calls).toEqual([
       { argv: ["npm", "ci", "--no-audit", "--no-fund", ...SCOPE], cwd: "/opt/flagship" },
       { argv: ["npx", "tsc", "-b", "packages/server-daemon"], cwd: "/opt/flagship" },
+      { argv: ["sync"] },
     ]);
   });
 
@@ -479,6 +483,7 @@ describe("rebuildWorkspace — installs and compiles only the daemon's closure",
       ["npm", "ci", "--no-audit", "--no-fund", ...SCOPE],
       ["npm", "install", "--no-audit", "--no-fund", ...SCOPE],
       ["npx", "tsc", "-b", "packages/server-daemon"],
+      ["sync"],
     ]);
     expect(logs.join("\n")).toContain("falling back to npm install");
   });

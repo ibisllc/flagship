@@ -1,5 +1,6 @@
 import {
   rebuildWorkspace,
+  restoreCheckout,
   type PendingVerifyStore,
   type UpdateCommandRunner,
 } from "./updateConsumer.js";
@@ -105,7 +106,7 @@ export async function runUpdateBootGate(
             `ROLLING BACK to ${marker.previousCommit}`,
     );
     try {
-      await opts.runner("git", ["-C", opts.repoPath, "checkout", "-f", marker.previousCommit]);
+      await restoreCheckout(opts.runner, opts.repoPath, marker.previousCommit);
       await rebuildWorkspace(opts.runner, opts.repoPath, log);
     } catch (e) {
       // Keep the marker: the next boot retries the rollback rather than

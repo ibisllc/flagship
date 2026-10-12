@@ -6,7 +6,7 @@
  *   - no marker → nothing happens;
  *   - marker + healthy boot → COMMIT: marker cleared, update-applied reported;
  *   - marker + unhealthy boot → attempt persisted + restart requested;
- *   - bootAttempts exceeds N → ROLLBACK: checkout previousCommit + rebuild +
+ *   - bootAttempts exceeds N → ROLLBACK: reset to previousCommit + rebuild +
  *     marker cleared + update-rolled-back reported + restart;
  *   - rollback failure keeps the marker (retries next boot);
  *   - the health-signal latch (both signals → true; timeout → false).
@@ -128,7 +128,7 @@ describe("runUpdateBootGate", () => {
     expect(reports).toEqual([]);
   });
 
-  it("ROLLS BACK once the boot budget is spent: checkout prev + rebuild + clear + report + restart", async () => {
+  it("ROLLS BACK once the boot budget is spent: reset to prev + rebuild + clear + report + restart", async () => {
     const marker = { previousCommit: PREV, targetCommit: TARGET, bootAttempts: 3 };
     let healthProbes = 0;
     const { opts, pending, runner, restarts, reports } = baseOpts(marker, {
@@ -141,9 +141,12 @@ describe("runUpdateBootGate", () => {
     const out = await runUpdateBootGate(opts);
     expect(out).toEqual({ action: "rolled-back", previousCommit: PREV, targetCommit: TARGET });
     expect(runner.calls).toEqual([
-      ["git", "-C", "/opt/flagship", "checkout", "-f", PREV],
+      ["rm", "-f", "/opt/flagship/.git/index.lock", "/opt/flagship/.git/index"],
+      ["git", "-C", "/opt/flagship", "reset", "-q", "--hard", PREV],
+      ["git", "-C", "/opt/flagship", "clean", "-fdq", "--", "packages"],
       ["npm", "ci", "--no-audit", "--no-fund", "--include-workspace-root", "--workspace=packages/server-daemon"],
       ["npx", "tsc", "-b", "packages/server-daemon"],
+      ["sync"],
     ]);
     expect(pending.current).toBeNull();
     expect(reports).toEqual([
@@ -168,7 +171,7 @@ describe("runUpdateBootGate", () => {
     });
     const out = await runUpdateBootGate(opts);
     expect(out).toEqual({ action: "rolled-back", previousCommit: PREV, targetCommit: TARGET });
-    expect(runner.calls[0]).toEqual(["git", "-C", "/opt/flagship", "checkout", "-f", PREV]);
+    expect(runner.calls[1]).toEqual(["git", "-C", "/opt/flagship", "reset", "-q", "--hard", PREV]);
     expect(pending.current).toBeNull();
     expect(reports.map((r) => r.event)).toEqual(["update-rolled-back"]);
     expect(restarts.count).toBe(1);
@@ -178,7 +181,7 @@ describe("runUpdateBootGate", () => {
   it("keeps the marker and restarts when the rollback itself fails (retries next boot)", async () => {
     const marker = { previousCommit: PREV, targetCommit: TARGET, bootAttempts: 3 };
     const { opts, pending, restarts, reports } = baseOpts(marker, {
-      runner: makeRunner({ calls: [], failOn: "checkout" }),
+      runner: makeRunner({ calls: [], failOn: "reset" }),
     });
     const out = await runUpdateBootGate(opts);
     expect(out).toEqual({ action: "retry-restart", bootAttempts: 3 });

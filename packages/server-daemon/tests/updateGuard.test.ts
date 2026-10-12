@@ -130,6 +130,37 @@ describe("update guard script", () => {
     expect(existsSync(join(data, "update-pending.json"))).toBe(true);
   });
 
+  it.skipIf(!hasJq)("rolls a 0-byte marker back to the last verified commit, rewriting truncated files", () => {
+    // home2: power cut 2 s after the update; the marker, the checkout and
+    // node_modules all came back as 0-byte files.
+    writeFileSync(join(data, "update-pending.json"), "");
+    writeFileSync(
+      join(data, "update-outcome.json"),
+      JSON.stringify({ outcome: "applied", at: 1, previousCommit: "0".repeat(40), targetCommit: prev, bootAttempts: 1 }),
+    );
+    writeFileSync(join(repo, "f.txt"), "");
+    mkdirSync(join(repo, "packages"));
+    writeFileSync(join(repo, "packages", "only-in-target.ts"), "");
+    run();
+    expect(git("rev-parse", "HEAD")).toBe(prev);
+    expect(readFileSync(join(repo, "f.txt"), "utf8")).toBe("old\n");
+    expect(existsSync(join(repo, "packages", "only-in-target.ts"))).toBe(false);
+    expect(calls()).toContain("npx tsc -b packages/server-daemon");
+    expect(existsSync(join(data, "update-pending.json"))).toBe(false);
+    expect(JSON.parse(readFileSync(join(data, "update-outcome.json"), "utf8"))).toMatchObject({
+      outcome: "rolled-back",
+      previousCommit: prev,
+      targetCommit: target,
+    });
+  });
+
+  it.skipIf(!hasJq)("leaves a 0-byte marker alone when there's no known-good commit", () => {
+    writeFileSync(join(data, "update-pending.json"), "");
+    run();
+    expect(git("rev-parse", "HEAD")).toBe(target);
+    expect(calls()).toBe("");
+  });
+
   it.skipIf(!hasJq)("ignores a marker it can't trust", () => {
     writeMarker({ previousCommit: "$(reboot)", targetCommit: target, bootAttempts: 0, stage: "applying" });
     run();

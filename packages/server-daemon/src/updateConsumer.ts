@@ -1,5 +1,6 @@
 import { execFile, execFileSync } from "node:child_process";
-import { readFile, writeFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { removeDurable, writeFileDurable } from "./durableFile.js";
 import { promisify } from "node:util";
 import {
   verifyUpdateOrder,
@@ -93,6 +94,25 @@ export const realUpdateCommandRunner: UpdateCommandRunner = async (cmd, args, op
 const BOX_WORKSPACE = "packages/server-daemon";
 const BOX_NPM_SCOPE = ["--include-workspace-root", `--workspace=${BOX_WORKSPACE}`];
 
+/**
+ * Put the checkout back on `commit` even after a power cut mangled it: a
+ * killed git can leave a stale index.lock, an index that no longer matches the
+ * files, and 0-byte files the index still believes are clean. Dropping the
+ * index makes `reset --hard` rewrite every tracked file, and cleaning
+ * `packages/` removes files only the abandoned commit had (a truncated one
+ * there would break the rebuild). Ignored output (node_modules, dist) is left
+ * for the rebuild.
+ */
+export async function restoreCheckout(
+  runner: UpdateCommandRunner,
+  repoPath: string,
+  commit: string,
+): Promise<void> {
+  await runner("rm", ["-f", `${repoPath}/.git/index.lock`, `${repoPath}/.git/index`]);
+  await runner("git", ["-C", repoPath, "reset", "-q", "--hard", commit]);
+  await runner("git", ["-C", repoPath, "clean", "-fdq", "--", "packages"]);
+}
+
 /** `npm ci` (falling back to `npm install`) + `npx tsc -b` of the daemon. */
 export async function rebuildWorkspace(
   runner: UpdateCommandRunner,
@@ -106,6 +126,10 @@ export async function rebuildWorkspace(
     await runner("npm", ["install", "--no-audit", "--no-fund", ...BOX_NPM_SCOPE], { cwd: repoPath });
   }
   await runner("npx", ["tsc", "-b", BOX_WORKSPACE], { cwd: repoPath });
+  // The checkout, node_modules and build output are all still in the page
+  // cache; flush them before a marker claims the tree is ready (home2 lost
+  // power 2 s after its rebuild and came back with thousands of 0-byte files).
+  await runner("sync", []);
 }
 
 /**
@@ -174,11 +198,7 @@ export function fileUsedNonceStore(path: string): UsedNonceStore {
     async mark(nonce) {
       const nonces = await load();
       nonces.push(nonce.toLowerCase());
-      await writeFile(
-        path,
-        JSON.stringify({ nonces: nonces.slice(-MAX_STORED_NONCES) }),
-        { mode: 0o600 },
-      );
+      await writeFileDurable(path, JSON.stringify({ nonces: nonces.slice(-MAX_STORED_NONCES) }));
     },
   };
 }
@@ -227,10 +247,10 @@ export function filePendingVerifyStore(path: string): PendingVerifyStore {
       }
     },
     async write(marker) {
-      await writeFile(path, JSON.stringify(marker), { mode: 0o600 });
+      await writeFileDurable(path, JSON.stringify(marker));
     },
     async clear() {
-      await rm(path, { force: true });
+      await removeDurable(path);
     },
   };
 }
@@ -556,7 +576,7 @@ export async function runUpdateConsumer(
   const revert = async (why: string) => {
     log(`[self-update] ${why}; reverting checkout`);
     try {
-      await opts.runner("git", ["-C", opts.repoPath, "checkout", "-f", currentCommit]);
+      await restoreCheckout(opts.runner, opts.repoPath, currentCommit);
       await rebuildWorkspace(opts.runner, opts.repoPath, log);
       await opts.pendingStore.clear();
     } catch (revertErr) {
