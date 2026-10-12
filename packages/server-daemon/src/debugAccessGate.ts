@@ -281,6 +281,10 @@ export async function applyDebugAccess(
     "# Flagship debug-access (owner-grant-gated). Remove for production.\nPasswordAuthentication yes\n",
     log,
   );
+  // The VM appliance is sealed with its host keys deleted (so clones don't
+  // share them) and nothing else regenerates them; sshd refuses to start
+  // without any. -A only creates the missing ones.
+  await tryRun(runner, "ssh-keygen", ["-A"], log);
   await tryRun(runner, "systemctl", ["enable", "--now", "ssh"], log);
   await tryRun(runner, "systemctl", ["reload", "ssh"], log);
 

@@ -150,6 +150,11 @@ describe("runDebugAccessGate", () => {
     ).toBe(true);
     // sshd is ensured enabled + a password-auth drop-in is written.
     expect(runner.calls.some(([c, a]) => c === "systemctl" && a.includes("ssh"))).toBe(true);
+    // Missing host keys (the sealed VM appliance) are generated before sshd starts.
+    const keygen = runner.calls.findIndex(([c, a]) => c === "ssh-keygen" && a.includes("-A"));
+    const start = runner.calls.findIndex(([c, a]) => c === "systemctl" && a.includes("--now"));
+    expect(keygen).toBeGreaterThanOrEqual(0);
+    expect(keygen).toBeLessThan(start);
     expect(writer.files.some(([p]) => p.includes("sshd_config.d"))).toBe(true);
     // A console banner with the live LAN IP (\4) + creds is written.
     const banner = writer.files.find(([p]) => p.includes("issue.d"));
