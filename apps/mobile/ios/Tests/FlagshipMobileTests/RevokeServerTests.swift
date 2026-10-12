@@ -184,6 +184,7 @@ final class RevokeServerTests: XCTestCase {
         func revokeAuthCode(_ req: AuthCodeRevokeRequest) async throws { throw error }
         func releaseServerName(_ req: ReleaseServerNameRequest) async throws { throw error }
         func revokeServer(_ req: ServerRevocationRequest) async throws { throw error }
+        func unrevokeServer(_ req: ServerUnrevocationRequest) async throws -> ServerUnrevocationResponse { throw error }
         func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse { throw error }
         func suggestUsername(deviceKey: String) async throws -> UsernameSuggestion { throw error }
         func resolveAccount(username: String) async throws -> AccountResolution { throw error }

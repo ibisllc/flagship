@@ -58,9 +58,9 @@ public struct HomeScreen: View {
     var onSetLeader: (PodInfo) -> Void = { _ in }
     /// Cancel/delete a pending (in-flight) server straight from the list.
     var onCancelServer: (PodInfo) -> Void = { _ in }
-    /// Decommission a registered-but-dead server (one that never came online)
-    /// straight from the list — frees the name via the same release flow.
-    var onDeleteDeadServer: (PodInfo) -> Void = { _ in }
+    /// Delete a registered server straight from the list (opens the
+    /// typed-name confirmation sheet).
+    var onDeleteServer: (PodInfo) -> Void = { _ in }
     var onVibeCode: () -> Void = {}
     var onRefresh: () async -> Void = {}
     var onSetUpRecovery: () -> Void = {}
@@ -91,7 +91,7 @@ public struct HomeScreen: View {
         awaitingEntitlement: Set<String> = [],
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
         onCancelServer: @escaping (PodInfo) -> Void = { _ in },
-        onDeleteDeadServer: @escaping (PodInfo) -> Void = { _ in },
+        onDeleteServer: @escaping (PodInfo) -> Void = { _ in },
         onAddServer: @escaping () -> Void = {},
         onSetLeader: @escaping (PodInfo) -> Void = { _ in },
         onVibeCode: @escaping () -> Void = {},
@@ -117,7 +117,7 @@ public struct HomeScreen: View {
         self.onAddServer = onAddServer
         self.onSetLeader = onSetLeader
         self.onCancelServer = onCancelServer
-        self.onDeleteDeadServer = onDeleteDeadServer
+        self.onDeleteServer = onDeleteServer
         self.onVibeCode = onVibeCode
         self.onRefresh = onRefresh
         self.onSetUpRecovery = onSetUpRecovery
@@ -476,7 +476,7 @@ public struct HomeScreen: View {
         .contextMenu {
             // Leader = the daemon the screens point at; only a
             // server that came online can be one.
-            if pod.status != .pending && pod.cameOnline && pod.podId != leaderPodId {
+            if pod.status != .pending && pod.cameOnline && !pod.isRevoked && pod.podId != leaderPodId {
                 Button {
                     onSetLeader(pod)
                 } label: {
@@ -500,16 +500,13 @@ public struct HomeScreen: View {
                 } label: {
                     Label("Cancel server", systemImage: "xmark.circle")
                 }
-            } else if liveness == .dead {
-                // GENUINELY dead: registered, no live unlock
-                // request, no check-in, and past the grace
-                // window. Decommission via the release flow
-                // (frees the name) — NOT offered for a box that's
-                // waiting for approval or still coming online.
+            } else if !pod.fqdn.isEmpty {
+                // Any registered server, live or not: the sheet asks for its
+                // name before anything is signed.
                 Button(role: .destructive) {
-                    onDeleteDeadServer(pod)
+                    onDeleteServer(pod)
                 } label: {
-                    Label("Delete server (free name)", systemImage: "trash")
+                    Label("Delete server…", systemImage: "trash")
                 }
             }
         }
@@ -693,6 +690,7 @@ public struct PodCard: View {
 public enum PodStatusStyle {
     public static func label(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> String {
         switch liveness {
+        case .revoked:            return "Revoked"
         case .dead:               return "Never came online"
         case .offline:            return "Offline"
         case .waitingForApproval: return "Waiting for approval"
@@ -711,6 +709,7 @@ public enum PodStatusStyle {
     public static func pillKind(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> FSPillKind {
         if status == .pending { return .pending }
         switch liveness {
+        case .revoked:            return .offline
         case .dead:               return .offline
         case .offline:            return .offline
         case .waitingForApproval: return .provisioning
@@ -738,6 +737,7 @@ public enum PodStatusStyle {
 
     static func pillAccessibilityId(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> String {
         switch liveness {
+        case .revoked:            return "pod-card-revoked"
         case .dead:               return "pod-card-never-online"
         case .offline:            return "pod-card-offline"
         case .waitingForApproval: return "pod-card-waiting-approval"
@@ -777,7 +777,7 @@ public enum HomeStatusFilter: CaseIterable, Hashable {
             default: return false
             }
         case .offline:
-            if liveness == .dead || liveness == .offline { return true }
+            if liveness == .dead || liveness == .offline || liveness == .revoked { return true }
             return liveness == .online && pod.status == .offline
         }
     }

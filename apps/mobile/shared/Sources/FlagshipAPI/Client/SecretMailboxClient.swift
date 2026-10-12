@@ -441,6 +441,10 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     public let serverDomain: String
     public let identityPubKey: String   // hex (32 bytes) — the STK
     public let revokedAt: Int64?
+    /// Why it was revoked (`lost` / `stolen` / `decommissioned` for an owner
+    /// revoke the owner can undo; anything else means the box is gone). nil
+    /// on a live box and on a Worker that predates the field.
+    public let revocationReason: String?
     /// Wall-clock ms of the box's last daemon-status check-in, or nil if the
     /// daemon has NEVER reported. A registered server with `lastReported ==
     /// nil` AND no cert is a "registered but never came online" box — the
@@ -503,6 +507,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         serverDomain: String,
         identityPubKey: String,
         revokedAt: Int64? = nil,
+        revocationReason: String? = nil,
         lastReported: Int64? = nil,
         registeredAt: Int64? = nil,
         hasCert: Bool = false,
@@ -516,6 +521,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     ) {
         self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
         self.revokedAt = revokedAt; self.lastReported = lastReported
+        self.revocationReason = revocationReason
         self.registeredAt = registeredAt; self.hasCert = hasCert
         self.signedStatus = signedStatus
         self.trustStatus = trustStatus
@@ -531,6 +537,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.serverDomain = try c.decode(String.self, forKey: .serverDomain)
         self.identityPubKey = try c.decode(String.self, forKey: .identityPubKey)
         self.revokedAt = try c.decodeIfPresent(Int64.self, forKey: .revokedAt)
+        self.revocationReason = (try? c.decodeIfPresent(String.self, forKey: .revocationReason)) ?? nil
         self.lastReported = try c.decodeIfPresent(Int64.self, forKey: .lastReported)
         self.registeredAt = try c.decodeIfPresent(Int64.self, forKey: .registeredAt)
         self.liveness = try c.decodeIfPresent(String.self, forKey: .liveness)
@@ -554,6 +561,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         try c.encode(serverDomain, forKey: .serverDomain)
         try c.encode(identityPubKey, forKey: .identityPubKey)
         try c.encodeIfPresent(revokedAt, forKey: .revokedAt)
+        try c.encodeIfPresent(revocationReason, forKey: .revocationReason)
         try c.encodeIfPresent(lastReported, forKey: .lastReported)
         try c.encodeIfPresent(registeredAt, forKey: .registeredAt)
         if hasCert { try c.encode(CurrentCert(sha256: nil), forKey: .currentCert) }
@@ -570,9 +578,19 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// reported daemon status OR holds a cert has come online at least once.
     public var cameOnline: Bool { lastReported != nil || hasCert }
 
+    /// Revocation reasons the owner can undo. A server revoked for one of these
+    /// stays in the list as "Revoked"; any other reason (or none) means it was
+    /// deleted, transferred or retired, and it stays hidden.
+    public static let restorableRevocationReasons: Set<String> = ["lost", "stolen", "decommissioned"]
+
+    /// True for an owner revoke (lost / stolen / decommissioned) the list shows.
+    public var isRestorableRevoke: Bool {
+        revokedAt != nil && Self.restorableRevocationReasons.contains(revocationReason ?? "")
+    }
+
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices, health
+        case serverDomain, identityPubKey, revokedAt, revocationReason, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices, health
     }
 }
 

@@ -185,7 +185,8 @@ public enum WatchProtocol {
             case "app-renamed":         return "Renamed app URL"
             case "server-created":      return "Created server"
             case "server-online":       return "Server came online"
-            case "server-revoked":      return "Removed server"
+            case "server-revoked":      return "Revoked server"
+            case "server-unrevoked":    return "Restored server"
             case "demo-vps-provisioned": return "Demo server provisioned"
             case "totp-enrolled":       return "Turned on authenticator codes"
             case "totp-disabled":       return "Turned off authenticator codes"
@@ -209,6 +210,8 @@ public enum WatchProtocol {
             case "app-renamed":         return "link.circle"
             case "server-created", "demo-vps-provisioned": return "server.rack"
             case "server-online":       return "checkmark.seal.fill"
+            case "server-revoked":      return "xmark.circle"
+            case "server-unrevoked":    return "arrow.uturn.backward.circle"
             default:                    return "shield.lefthalf.filled"
             }
         }

@@ -134,19 +134,19 @@ final class GymTotalDetailTests: XCTestCase {
         gymShot(app, "server-detail-frontpage")
     }
 
-    /// D1 + D5-F3: a dead box (registered, never online) surfaces its DECOMMISSION
-    /// card on server-detail — the "free the name" affordance that's offered ONLY
-    /// for a genuinely-dead box. Asserts the card is present; never fires it
-    /// (Tier-1, no backend, and the guardrail keeps deletes off real entities).
-    func test_serverDetailDeadServerDecommissionCard() throws {
+    /// D1 + D5-F3: a dead box (registered, never online) still offers Delete on
+    /// server-detail even though its BFF never answers. Asserts the button is
+    /// present; never fires it (Tier-1, no backend, and the guardrail keeps
+    /// deletes off real entities).
+    func test_serverDetailDeadServerDeleteButton() throws {
         let app = launch(tab: "home", extra: ["-smoke-dead"])
         openPodDetail(app, named: "Attic")
-        let decom = app.buttons["sd-decommission-dead-server"]
+        let delete = app.buttons["sd-delete-server"]
         XCTAssertTrue(
-            revealBySwipe(app, decom),
-            "A dead box's server-detail should offer the decommission (free-the-name) card."
+            revealBySwipe(app, delete),
+            "A dead box's server-detail should offer Delete."
         )
-        gymShot(app, "server-detail-decommission")
+        gymShot(app, "server-detail-delete")
     }
 
     // ═══════════════════ D1 — the full create-server step flow ═══════════════
@@ -472,11 +472,11 @@ final class GymTotalDetailTests: XCTestCase {
             bootUnlockSurfaced,
             "A box awaiting unlock should open its detail and surface its boot-unlock / power controls."
         )
-        // A waiting box is NOT dead, so the decommission (free-the-name) card
-        // must be ABSENT — that affordance is reserved for genuinely-dead boxes.
+        // A waiting box is NOT dead, so the "never came online" framing must be
+        // ABSENT — that is reserved for genuinely-dead boxes.
         XCTAssertFalse(
-            app.buttons["sd-decommission-dead-server"].exists,
-            "A waiting box must NOT offer the dead-box decommission card."
+            app.otherElements["server-detail-never-online"].exists,
+            "A waiting box must NOT read as never came online."
         )
         gymShot(app, "server-detail-awaiting")
     }

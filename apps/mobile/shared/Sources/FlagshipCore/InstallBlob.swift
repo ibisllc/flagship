@@ -208,6 +208,18 @@ public enum ReleaseServerName {
     }
 }
 
+/// Undo of a lost/stolen/decommissioned `ServerRevocationClaim` for the same
+/// box. Its own tag (not a revocation with a "restore" reason) so a signature
+/// that kills a box can never be replayed to revive one. Signed by the
+/// sensitive-order key, like `ReleaseServerName`. Matches
+/// packages/protocol/src/installBlob.ts `canonicalServerUnrevocation`.
+public enum ServerUnrevocation {
+    public static let canonicalTag = "flagship/server-unrevoke/v1"
+    public static func canonicalBytes(username: String, serverDomain: String, issuedAt: Int64) -> Data {
+        Data([canonicalTag, username, serverDomain, String(issuedAt)].joined(separator: "|").utf8)
+    }
+}
+
 /// #43 — list the account's OUTSTANDING install orders. Signed by the
 /// account IRK; the cloud verifies it against the registered irkPubHex
 /// before returning the in-flight orders, the authority the phone

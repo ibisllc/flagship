@@ -12,14 +12,14 @@ public struct ServerDetailScreen: View {
     let state: LoadingState<ServerDetailResponse>
     let metrics: LoadingState<ServerMetricsResponse>
     /// True for a registered box whose daemon never checked in (the install
-    /// reserved + registered, but it never came online). Surfaces the
-    /// decommission/free-the-name card and a "Never came online" framing in
-    /// place of the transient "Connecting…" state, since this box will never
-    /// connect. Distinct from the lost/stolen Revoke danger zone.
+    /// reserved + registered, but it never came online). Shows a "Never came
+    /// online" framing in place of the transient "Connecting…" state, since
+    /// this box will never connect.
     let deadServer: Bool
-    /// Display name for the decommission card / its toast. Falls back to the FQDN.
+    /// Display name for the delete confirmation / its toast. Falls back to the
+    /// FQDN's server label.
     let serverName: String?
-    /// FQDN to sign the release for, sourced from the pod (the failed-load path
+    /// FQDN to sign the danger-zone orders for, sourced from the pod (the failed-load path
     /// has no `ServerDetailResponse.serverFqdn`). The loaded path prefers the
     /// response's own FQDN.
     let deadServerFqdn: String?
@@ -58,13 +58,19 @@ public struct ServerDetailScreen: View {
     /// The box's latest signed health report from `/pods`, nil before the box
     /// runs the reporter.
     let health: BoxHealth?
+    /// The owner revoked this box (lost / stolen / decommissioned). It can't
+    /// connect, so its BFF never answers; the page offers Un-revoke instead.
+    let revoked: Bool
+    /// The box's registered STK from `/pods`, which binds the erase order the
+    /// delete flow sends. Empty when unknown.
+    let identityPubKeyHex: String
     var onOpenSessions: () -> Void = {}
     var onOpenTier: () -> Void = {}
     var onRefresh: () async -> Void = {}
     /// Run once per tap from the "Pair this server" button. NEVER fired
     /// automatically on appearance — a biometric must be user-initiated.
     var onPair: () -> Void = {}
-    /// Fired after the decommission/free-the-name card succeeds, so the
+    /// Fired after a delete (or a replace) succeeds, so the
     /// container can pop the nav stack (this page now points at a server
     /// that no longer exists).
     var onDeleted: () -> Void = {}
@@ -84,6 +90,8 @@ public struct ServerDetailScreen: View {
         pairing: Bool = false,
         verifiedCertStatus: DaemonStatusReport? = nil,
         health: BoxHealth? = nil,
+        revoked: Bool = false,
+        identityPubKeyHex: String = "",
         onOpenSessions: @escaping () -> Void = {},
         onOpenTier: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
@@ -104,6 +112,8 @@ public struct ServerDetailScreen: View {
         self.pairing = pairing
         self.verifiedCertStatus = verifiedCertStatus
         self.health = health
+        self.revoked = revoked
+        self.identityPubKeyHex = identityPubKeyHex
         self.onOpenSessions = onOpenSessions
         self.onOpenTier = onOpenTier
         self.onRefresh = onRefresh
@@ -161,19 +171,21 @@ public struct ServerDetailScreen: View {
                     // HONEST LIVENESS (Fix B) — an unreachable/coming-up box won't
                     // answer its BFF, so show its honest state straight away rather
                     // than a skeleton that resolves into "Connecting…".
-                    if offline || comingUp {
+                    if revoked {
+                        revokedPlaceholder(c: c)
+                    } else if offline || comingUp {
                         livenessPlaceholder(c: c)
                     } else {
                         ServerCardSkeleton()
                     }
                 case .failed:
-                    if deadServer {
+                    if revoked {
+                        revokedPlaceholder(c: c)
+                    } else if deadServer {
                         // This box registered during install but never came
-                        // online; its daemon BFF will never answer. Show the
-                        // dead-server explanation + the decommission card
+                        // online; its daemon BFF will never answer. Explain that
                         // instead of the transient "Connecting…" placeholder.
                         neverCameOnline(c: c)
-                        DecommissionDeadServerCard(serverDomain: deadServerFqdn ?? "", displayName: serverName, onDeleted: onDeleted)
                     } else if offline || comingUp {
                         // The box is server-authoritatively unreachable (`offline`)
                         // or hasn't sent its first heartbeat (`comingUp`). Honest
@@ -209,17 +221,22 @@ public struct ServerDetailScreen: View {
                     DeadManCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn)
                     JournalCard(serverDomain: d.serverFqdn)
                     timeline(d: d, c: c)
-                    if deadServer {
-                        // Registered but never came online: offer the
-                        // decommission/free-the-name action with its FQDN
-                        // (the release path) ALONGSIDE the lost/stolen Revoke.
-                        DecommissionDeadServerCard(serverDomain: d.serverFqdn.isEmpty ? (deadServerFqdn ?? "") : d.serverFqdn, displayName: serverName, onDeleted: onDeleted)
-                    }
                     MigrateServerCard(serverDomain: d.serverFqdn)
                     ReplaceServerCard(serverDomain: d.serverFqdn, onReplaced: onDeleted)
                     UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate)
                     TransferCard(serverDomain: d.serverFqdn)
-                    DangerZoneCard(serverDomain: d.serverFqdn)
+                }
+                // Outside the state switch: none of these need the box, so an
+                // offline, never-online or revoked server can still be revoked,
+                // un-revoked or deleted.
+                if let fqdn = approvalFqdn, !fqdn.isEmpty {
+                    DangerZoneCard(
+                        serverDomain: fqdn,
+                        displayName: serverName,
+                        identityPubKeyHex: identityPubKeyHex,
+                        revoked: revoked,
+                        onDeleted: onDeleted
+                    )
                 }
                 Spacer().frame(height: FS.space.s12)
             }
@@ -308,7 +325,7 @@ public struct ServerDetailScreen: View {
                         Text("This server never came online")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundColor(c.text)
-                        Text("The install reserved this name and registered the box, but its software never checked in. If the install failed, you can decommission it below — that frees the name so you can try again.")
+                        Text("The install reserved this name and registered the box, but its software never checked in. If the install failed, you can delete it below — that frees the name so you can try again.")
                             .font(FS.font.bodySm())
                             .foregroundColor(c.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -317,6 +334,29 @@ public struct ServerDetailScreen: View {
             }
         }
         .accessibilityIdentifier("server-detail-never-online")
+    }
+
+    /// A revoked box is locked out on purpose; it isn't connecting or offline.
+    private func revokedPlaceholder(c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                HStack(alignment: .top, spacing: FS.space.s3) {
+                    Image(systemName: "xmark.shield.fill")
+                        .imageScale(.large)
+                        .foregroundColor(c.danger)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("This server is revoked")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(c.text)
+                        Text("It can't connect or unlock until you un-revoke it. Its name stays reserved. Un-revoke it below if you got the box back, or delete it to free the name.")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("server-detail-revoked")
     }
 
     /// HONEST LIVENESS (Fix B) — the honest copy for an `offline` (was live,
@@ -824,80 +864,6 @@ private actor ApprovalKeyCache {
     }
 }
 
-/// Decommission a registered-but-dead server (one that never came online).
-/// Frees the name via the owner-IRK-signed `ReleaseServerName` release flow —
-/// the SAME path the pending-cancel uses — so a failed install can be cleaned
-/// up + the name reused. Distinct from `DangerZoneCard`'s lost/stolen Revoke:
-/// this is for a box that never checked in (no risk of bricking a live box),
-/// frees the name for reuse, and uses the shared `cancelPendingServer` helper
-/// which keeps the pod on a release failure (so the name never strands
-/// half-deleted) and removes it on success.
-struct DecommissionDeadServerCard: View {
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.flagshipServerClient) private var server
-    @Environment(AppState.self) private var app
-    @Environment(ToastCenter.self) private var toasts
-
-    let serverDomain: String
-    let displayName: String?
-    /// Pop back to Home after a successful delete — the pod is gone, so this
-    /// page now points at a server that no longer exists.
-    var onDeleted: () -> Void = {}
-
-    @State private var confirming = false
-    @State private var working = false
-
-    var body: some View {
-        let c = FSColors.scheme(scheme)
-        VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("DECOMMISSION")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
-                .foregroundColor(c.textMuted)
-            FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("This server never came online. Delete it to free the name for reuse — the box can no longer come online afterward.")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
-                    FSDangerButton(working ? "Deleting…" : "Delete this server (free the name)", block: true) {
-                        confirming = true
-                    }
-                    .disabled(working)
-                    .accessibilityIdentifier("sd-decommission-dead-server")
-                }
-            }
-        }
-        .alert("Delete \(displayName ?? "this server")?", isPresented: $confirming) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) { Task { await fire() } }
-        } message: {
-            Text("This frees the name for reuse and the box can no longer come online. This server never checked in.")
-        }
-    }
-
-    @MainActor
-    private func fire() async {
-        guard !working else { return }
-        working = true
-        defer { working = false }
-        // Build a pod shaped for the shared release helper. The fqdn is what
-        // the release signs over; the podId is fqdn-derived so a success removal
-        // hits the same pod AppState holds.
-        let pod = PodInfo(
-            podId: PodInfo.podId(forFqdn: serverDomain),
-            name: displayName ?? PendingServerReconciler.serverNameFromFqdn(serverDomain),
-            fqdn: serverDomain,
-            status: .online,
-            cameOnline: false
-        )
-        // On success the helper releases the name + removes the pod, so pop
-        // back to Home. On failure it keeps the pod + shows a toast, so we
-        // stay on this page for a retry.
-        let ok = await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts)
-        if ok { onDeleted() }
-    }
-}
-
 /// Transfer-a-box entry on server-detail (docs/account-deletion-and-name-reclaim.md §4).
 /// Owner-only — the offer is IRK-signed behind the biometric inside
 /// `TransferGiverViewModel`, so only the box's owner can complete it. Opens the
@@ -1347,10 +1313,10 @@ struct UpdateServerSheet: View {
     }
 }
 
-/// P13 — per-server danger zone. Exposes a single "Revoke this server"
-/// button that opens a sheet with a reason picker + a hold-to-confirm
-/// primary. Pure presentation; the signing+POST live in
-/// `RevokeServerViewModel`.
+/// Per-server danger zone: Revoke (reversible) or Un-revoke, and Delete. None
+/// of these needs the box to answer, so the page shows this card in every
+/// state. The signing + POSTs live in `RevokeServerViewModel`,
+/// `UnrevokeServerViewModel` and `DeleteServerViewModel`.
 struct DangerZoneCard: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.flagshipServerClient) private var server
@@ -1358,11 +1324,30 @@ struct DangerZoneCard: View {
     @Environment(ToastCenter.self) private var toasts
 
     let serverDomain: String
+    let displayName: String?
+    let identityPubKeyHex: String
+    let revoked: Bool
+    /// Pop back to Home after a delete: this page now points at nothing.
+    var onDeleted: () -> Void = {}
 
-    @State private var showSheet = false
+    @State private var showRevoke = false
+    @State private var showDelete = false
+    @State private var unrevokeVm: UnrevokeServerViewModel?
+
+    private var name: String {
+        displayName.flatMap { $0.isEmpty ? nil : $0 } ?? DeleteServerViewModel.serverLabel(forFqdn: serverDomain)
+    }
+
+    private var unrevoking: Bool {
+        if case .working = unrevokeVm?.phase { return true }
+        return false
+    }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
+        let toastCenter = toasts
+        let appState = app
+        let fqdn = serverDomain
         VStack(alignment: .leading, spacing: FS.space.s3) {
             Text("DANGER ZONE")
                 .font(.system(size: 12, weight: .semibold))
@@ -1370,32 +1355,89 @@ struct DangerZoneCard: View {
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("Revoke this server when the box is lost, stolen, or being decommissioned. The box will refuse to boot — this cannot be undone.")
+                    if revoked {
+                        Text("This server is revoked: it can't connect or unlock. Un-revoke it to let the same box back in.")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.textMuted)
+                        FSPrimaryButton(unrevoking ? "Restoring…" : "Un-revoke server", block: true) {
+                            Task { await unrevoke(toasts: toastCenter, app: appState) }
+                        }
+                        .disabled(unrevoking)
+                        .accessibilityIdentifier("sd-unrevoke-server")
+                    } else {
+                        Text("Locks this server out right away: it can't connect or unlock until you un-revoke it. Its name stays reserved. Use this if the box is lost or stolen.")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.textMuted)
+                        FSDangerButton("Revoke server (reversible)", block: true) {
+                            showRevoke = true
+                        }
+                        .accessibilityIdentifier("sd-revoke-server")
+                    }
+                    Divider().padding(.vertical, FS.space.s2)
+                    Text("Deletes \(name) for good. If the box is online it erases its data and powers off; if it's offline it can never come back online. The name becomes free to reuse.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
-                    FSDangerButton("Revoke this server", block: true) {
-                        showSheet = true
+                    FSDangerButton("Delete server", block: true) {
+                        showDelete = true
                     }
-                    .accessibilityIdentifier("sd-revoke-server")
+                    .accessibilityIdentifier("sd-delete-server")
                 }
             }
         }
-        .sheet(isPresented: $showSheet) {
+        .sheet(isPresented: $showRevoke) {
             RevokeServerSheet(
-                serverDomain: serverDomain,
-                username: { app.currentUser },
+                serverDomain: fqdn,
+                username: { appState.currentUser },
                 server: server,
-                onCompleted: { toasts.success("Server revoked. It will refuse to boot next time.") },
-                onFailed: { msg in toasts.error("Revoke failed: \(msg)") }
+                onCompleted: { reason in
+                    appState.setPodRevoked(
+                        fqdn: fqdn,
+                        revokedAt: Int64(Date().timeIntervalSince1970 * 1000),
+                        reason: reason.rawValue
+                    )
+                    toastCenter.success("Server revoked. It can't connect or unlock until you un-revoke it.")
+                },
+                onFailed: { msg in toastCenter.error("Revoke failed: \(msg)") }
             )
+        }
+        .sheet(isPresented: $showDelete) {
+            DeleteServerSheet(
+                serverDomain: fqdn,
+                displayName: name,
+                identityPubKeyHex: identityPubKeyHex,
+                onCompleted: { message in
+                    toastCenter.success(message)
+                    onDeleted()
+                }
+            )
+        }
+    }
+
+    @MainActor
+    private func unrevoke(toasts: ToastCenter, app: AppState) async {
+        guard !unrevoking else { return }
+        let vm = UnrevokeServerViewModel(
+            server: server,
+            serverDomain: serverDomain,
+            username: { app.currentUser }
+        )
+        unrevokeVm = vm
+        await vm.run()
+        switch vm.phase {
+        case .completed:
+            app.setPodRevoked(fqdn: serverDomain, revokedAt: nil, reason: nil)
+            toasts.success(UnrevokeServerViewModel.completedMessage)
+        case .failed(let msg):
+            toasts.error(msg)
+        default:
+            break
         }
     }
 }
 
-/// Sheet body for P13. Reason picker + hold-to-confirm primary
-/// (1.5s long-press, per docs/revocation-ui.md). The visible button
-/// label tracks press progress so the user gets a clear "Hold to
-/// confirm" affordance.
+/// Revoke sheet: reason picker + hold-to-confirm primary (1.5s long-press,
+/// per docs/revocation-ui.md). The visible button label tracks press
+/// progress so the user gets a clear "Hold to confirm" affordance.
 struct RevokeServerSheet: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
@@ -1403,7 +1445,7 @@ struct RevokeServerSheet: View {
     let serverDomain: String
     let username: () -> String?
     let server: any FlagshipServerClient
-    let onCompleted: () -> Void
+    let onCompleted: (RevokeServerViewModel.Reason) -> Void
     let onFailed: (String) -> Void
 
     @State private var reason: RevokeServerViewModel.Reason = .stolen
@@ -1420,7 +1462,7 @@ struct RevokeServerSheet: View {
                 Text("Revoke this server?")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(c.text)
-                Text("Bricks the box on next boot — this cannot be undone. \(serverDomain) will refuse to start. Other servers on your account stay running.")
+                Text("Locks \(serverDomain) out right away: it can't connect or unlock until you un-revoke it. Its name stays reserved. Use this if the box is lost or stolen. Other servers on your account keep running.")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
 
@@ -1445,7 +1487,7 @@ struct RevokeServerSheet: View {
                 }
 
                 // Primary: a long-press button. Tap-and-hold for 1.5s
-                // to confirm. A short tap does nothing destructive.
+                // to confirm. A short tap does nothing.
                 Button(action: {}) {
                     Text(buttonLabel)
                         .font(.system(size: 16, weight: .semibold))
@@ -1499,15 +1541,101 @@ struct RevokeServerSheet: View {
             username: username
         )
         vm = m
-        await m.run(reason: reason)
+        let picked = reason
+        await m.run(reason: picked)
         switch m.phase {
         case .completed:
-            onCompleted()
+            onCompleted(picked)
             dismiss()
         case .failed(let msg):
             onFailed(msg)
         default:
             break
+        }
+    }
+}
+
+/// Delete confirmation: the owner types the server's name to arm the button,
+/// then one biometric covers the erase order and the name release.
+struct DeleteServerSheet: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.flagshipServerClient) private var server
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(AppState.self) private var app
+
+    let serverDomain: String
+    let displayName: String
+    let identityPubKeyHex: String
+    /// Fired once after a successful delete with the toast copy.
+    let onCompleted: (String) -> Void
+
+    @State private var typed = ""
+    @State private var vm: DeleteServerViewModel?
+
+    private var label: String { DeleteServerViewModel.serverLabel(forFqdn: serverDomain) }
+    private var armed: Bool { DeleteServerViewModel.confirmationMatches(typed, serverLabel: label) }
+    private var working: Bool {
+        if case .working = vm?.phase { return true }
+        return false
+    }
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        NavigationStack {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                Text("Delete \(displayName)?")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(c.text)
+                Text("Deletes \(displayName) for good. If the box is online it erases its data and powers off; if it's offline it can never come back online. The name becomes free to reuse.")
+                    .font(FS.font.body())
+                    .foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                FSField(value: $typed, label: "Type \(label) to confirm", placeholder: label)
+                    .accessibilityIdentifier("delete-server-name-field")
+                Spacer()
+                if let vm, case .failed(let msg) = vm.phase {
+                    Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
+                }
+                FSDangerButton(working ? "Deleting…" : "Delete server", muted: !armed, block: true, large: true) {
+                    Task { await fire() }
+                }
+                .disabled(!armed || working)
+                .accessibilityIdentifier("delete-server-confirm")
+                FSGhostButton("Cancel", block: true) { dismiss() }
+                    .disabled(working)
+                    .padding(.bottom, FS.space.s2)
+            }
+            .padding(FS.space.s4)
+        }
+        .interactiveDismissDisabled(working)
+    }
+
+    @MainActor
+    private func fire() async {
+        guard armed, !working else { return }
+        let appState = app
+        let podId = PodInfo.podId(forFqdn: serverDomain)
+        let m = vm ?? DeleteServerViewModel(
+            server: server,
+            mailbox: mailbox,
+            serverFqdn: serverDomain,
+            identityPubKeyHex: identityPubKeyHex,
+            username: { appState.currentUser },
+            onDeleted: {
+                if let user = appState.currentUser {
+                    PendingServerStore().remove(username: user, podId: podId)
+                }
+                appState.removePod(podId)
+            }
+        )
+        vm = m
+        let done = onCompleted
+        let name = displayName
+        await m.run(typedName: typed)
+        if case .completed(let erase) = m.phase {
+            dismiss()
+            done(DeleteServerViewModel.completionMessage(name: name, eraseRequested: erase))
         }
     }
 }

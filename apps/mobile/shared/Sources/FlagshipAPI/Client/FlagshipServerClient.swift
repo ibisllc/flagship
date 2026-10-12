@@ -39,6 +39,11 @@ public protocol FlagshipServerClient: Sendable {
     /// brick). Reason ∈ {"lost", "stolen", "decommissioned"}. Mirrors
     /// the webapp `revokeServer` + the Android `revokeServer` shape.
     func revokeServer(_ req: ServerRevocationRequest) async throws
+    /// Undo a lost/stolen/decommissioned revoke: POST
+    /// `/api/server-registry/unrevoke` with a sensitive-order-key-signed
+    /// `ServerUnrevocation`. A 409 means the server was deleted, transferred
+    /// or retired and can't be restored.
+    func unrevokeServer(_ req: ServerUnrevocationRequest) async throws -> ServerUnrevocationResponse
     func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse
     /// Sign-up handle suggestion. POST /api/username/suggest with a throwaway
     /// `deviceKey` (the per-device regenerate throttle, NOT the account IRK). A
@@ -1567,6 +1572,38 @@ public struct ServerRevocationRequest: Codable, Equatable, Sendable {
     }
 }
 
+/// POST /api/server-registry/unrevoke. Canonical bytes
+/// `flagship/server-unrevoke/v1|username|serverDomain|issuedAt`
+/// (FlagshipCore.ServerUnrevocation).
+public struct ServerUnrevocationRequest: Codable, Equatable, Sendable {
+    public struct Inner: Codable, Equatable, Sendable {
+        public let username: String
+        public let serverDomain: String
+        public let issuedAt: Int64
+        public init(username: String, serverDomain: String, issuedAt: Int64) {
+            self.username = username; self.serverDomain = serverDomain; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String         // hex, sensitive-order key
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
+    }
+}
+
+/// `{ok, unrevokedAt, dnsRepublished}` on a restore, `{ok, alreadyActive}`
+/// when the server wasn't revoked.
+public struct ServerUnrevocationResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let unrevokedAt: Int64?
+    public let dnsRepublished: Int?
+    public let alreadyActive: Bool?
+    public init(ok: Bool = true, unrevokedAt: Int64? = nil, dnsRepublished: Int? = nil, alreadyActive: Bool? = nil) {
+        self.ok = ok; self.unrevokedAt = unrevokedAt
+        self.dnsRepublished = dnsRepublished; self.alreadyActive = alreadyActive
+    }
+}
+
 // MARK: - Wire types
 
 /// POST /api/username/claim — idempotent. The Worker checks the IRK
@@ -2312,6 +2349,13 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public private(set) var revokedAuthCodes: Set<String> = []        // serial set
     public private(set) var releasedServerNames: [ReleaseServerNameRequest] = [] // recorded releases
     public private(set) var revokedServers: [ServerRevocationRequest] = [] // recorded P13 kill-switch calls
+    public private(set) var unrevokedServers: [ServerUnrevocationRequest] = [] // recorded un-revoke calls
+    /// Domains whose recorded revoke hasn't been undone yet. A domain listed
+    /// here with a non-owner reason (`nonRestorableRevokes`) 409s like the Worker.
+    private var revokedDomains: Set<String> = []
+    public var nonRestorableRevokes: Set<String> = []
+    /// When set, `unrevokeServer` throws this instead of recording.
+    public var unrevokeError: Error? = nil
     public private(set) var selfDeleteBundles: [AccountSelfDeleteBundleRequest] = [] // recorded deletion-ceremony bundles
     public private(set) var adminRootRotations: [AdminRootRotationRequest] = [] // Slice D — recorded rotation proofs
     /// When set, `selfDeleteAccount` throws this instead of recording — lets a
@@ -2384,6 +2428,25 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func revokeServer(_ req: ServerRevocationRequest) async throws {
         try await tick()
         revokedServers.append(req)
+        revokedDomains.insert(req.request.revokedServerId.lowercased())
+    }
+
+    public func unrevokeServer(_ req: ServerUnrevocationRequest) async throws -> ServerUnrevocationResponse {
+        try await tick()
+        if let unrevokeError { throw unrevokeError }
+        let domain = req.request.serverDomain.lowercased()
+        if nonRestorableRevokes.contains(domain) {
+            throw ScreensClientError.http(status: 409, message: "this server was deleted, transferred or retired and can't be restored")
+        }
+        unrevokedServers.append(req)
+        guard revokedDomains.remove(domain) != nil else {
+            return ServerUnrevocationResponse(ok: true, alreadyActive: true)
+        }
+        return ServerUnrevocationResponse(
+            ok: true,
+            unrevokedAt: Int64(Date().timeIntervalSince1970 * 1000),
+            dnsRepublished: 2
+        )
     }
 
     /// Mock suggestion — a fresh random `<adjective>-<noun>` each call, fixed
@@ -3445,6 +3508,11 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // wire shape is ready once the Worker handler lands.
         let body = try JSONEncoder().encode(req)
         try await postJson("/api/server-registry/revoke", body: body)
+    }
+
+    public func unrevokeServer(_ req: ServerUnrevocationRequest) async throws -> ServerUnrevocationResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await postJsonReturning("/api/server-registry/unrevoke", body: body)
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {

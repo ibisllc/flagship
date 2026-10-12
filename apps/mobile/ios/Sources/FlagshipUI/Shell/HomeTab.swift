@@ -31,10 +31,10 @@ public struct HomeTab: View {
     /// store is observed so toggling `dismissed` from "Not now"
     /// re-renders Home and the banner disappears immediately.
     @State private var recoveryBannerStore = RecoveryBannerStore()
-    /// The dead-registered pod awaiting a delete confirmation (set by the
-    /// Home list's "Delete server (free name)" context action). Non-nil ⇒
-    /// the destructive confirm dialog is shown.
-    @State private var pendingDeleteDeadPod: PodInfo?
+    /// The registered pod awaiting a delete confirmation (set by the Home
+    /// list's "Delete server" context action). Non-nil ⇒ the typed-name
+    /// delete sheet is shown.
+    @State private var pendingDeletePod: PodInfo?
 
     public init() {}
 
@@ -109,10 +109,10 @@ public struct HomeTab: View {
                     onCancelServer: { pod in
                         Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }
                     },
-                    onDeleteDeadServer: { pod in
-                        // Confirm before decommissioning a registered-but-dead box.
-                        // The IRK biometric fires when signing the release.
-                        pendingDeleteDeadPod = pod
+                    onDeleteServer: { pod in
+                        // The sheet's typed-name gate comes first; the biometric
+                        // fires only once the owner confirms.
+                        pendingDeletePod = pod
                     },
                     onAddServer: { path.append(.provisionServer) },
                     onSetLeader: { pod in app.setLeader(pod.podId) },
@@ -211,21 +211,14 @@ public struct HomeTab: View {
                 Task { await refreshRecoveryStatus() }
             }
         }
-        .alert(
-            "Delete \(pendingDeleteDeadPod?.name ?? "server")?",
-            isPresented: Binding(
-                get: { pendingDeleteDeadPod != nil },
-                set: { if !$0 { pendingDeleteDeadPod = nil } }
-            ),
-            presenting: pendingDeleteDeadPod
-        ) { pod in
-            Button("Delete", role: .destructive) {
-                pendingDeleteDeadPod = nil
-                Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }
-            }
-            Button("Cancel", role: .cancel) { pendingDeleteDeadPod = nil }
-        } message: { _ in
-            Text("This frees the name for reuse and the box can no longer come online. This server never checked in.")
+        .sheet(item: $pendingDeletePod) { pod in
+            let toastCenter = toasts
+            DeleteServerSheet(
+                serverDomain: pod.fqdn,
+                displayName: pod.name,
+                identityPubKeyHex: pod.identityPubKeyHex,
+                onCompleted: { message in toastCenter.success(message) }
+            )
         }
     }
 
@@ -721,6 +714,10 @@ struct ServerDetailContainer: View {
     @State private var demoPairing = false
 
     private var pod: PodInfo? { app.pods.first(where: { $0.podId == podId }) }
+    /// The last pod seen for this page. A delete removes the pod before the
+    /// page pops, and the danger zone must not vanish mid-flow.
+    @State private var lastPod: PodInfo?
+    private var shownPod: PodInfo? { pod ?? lastPod }
 
     /// FQDN to pair against — the current pod's. The session store's base URL
     /// is already pointed here by `PodSessionSync`; the pairing order's
@@ -745,14 +742,14 @@ struct ServerDetailContainer: View {
                 ServerDetailScreen(
                     state: detailVm.detail,
                     metrics: metricsVm.state,
-                    // The decommission/free-the-name card surfaces ONLY for a
-                    // GENUINELY dead box (registered, no live unlock request, no
-                    // check-in, past the grace window) — never for one that's
-                    // waiting for approval or still coming online. Defaults to a
-                    // live server when the pod is momentarily absent from AppState.
+                    // "Never came online" framing ONLY for a GENUINELY dead box
+                    // (registered, no live unlock request, no check-in, past the
+                    // grace window) — never for one that's waiting for approval
+                    // or still coming online. Defaults to a live server when the
+                    // pod is momentarily absent from AppState.
                     deadServer: pod.map { app.liveness(for: $0) == .dead } ?? false,
-                    serverName: pod?.name,
-                    deadServerFqdn: pod?.fqdn,
+                    serverName: shownPod?.name,
+                    deadServerFqdn: shownPod?.fqdn,
                     // Use the LIVE awaiting-unlock signal (per-pod flag OR the
                     // 5s watcher set), not the per-pod flag alone — otherwise a
                     // box that starts waiting AFTER the last /pods reconcile shows
@@ -778,6 +775,8 @@ struct ServerDetailContainer: View {
                         CertPinRegistry.shared.verifiedReport(for: $0.fqdn)
                     },
                     health: pod.flatMap { app.podHealth[$0.fqdn.lowercased()] },
+                    revoked: pod?.isRevoked ?? false,
+                    identityPubKeyHex: shownPod?.identityPubKeyHex ?? "",
                     onRefresh: {
                         await refreshDirectoryAndRepairAppKey(allowAuthentication: true)
                         async let a: Void = detailVm.load()
@@ -793,6 +792,7 @@ struct ServerDetailContainer: View {
         }
         .navigationTitle("Server")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: pod, initial: true) { _, p in if let p { lastPod = p } }
         // `.task` cancels the closure automatically on view removal —
         // which catches the case where `.onDisappear` doesn't fire
         // reliably during navigation churn on iPad. Keyed on liveness: the
@@ -832,6 +832,7 @@ struct ServerDetailContainer: View {
             // park and let the honest placeholder + pull-to-refresh drive.
             let livenessState = pod.map { app.liveness(for: $0) }
             let wontAnswer = livenessState == .offline
+                || livenessState == .revoked
                 || (livenessState == .comingOnline && pod?.status != .pending)
             var delay: UInt64 = 2_000_000_000
             var failures = 0

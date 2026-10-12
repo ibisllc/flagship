@@ -114,10 +114,22 @@ public struct PendingServerReconciler {
         // A registered fqdn matching a pending pod flips it in place (identity
         // unified on the fqdn); a new fqdn is added fresh.
         let registeredEntries = directory.pods.filter { $0.revokedAt == nil }
+        let listedEntries = Self.listedEntries(directory.pods)
+        let listedFqdns = Set(listedEntries.map { $0.serverDomain.lowercased() })
         var health: [String: BoxHealth] = [:]
         for entry in registeredEntries { if let h = entry.health { health[entry.serverDomain.lowercased()] = h } }
         if app.podHealth != health { app.podHealth = health }
-        for entry in registeredEntries where !entry.serverDomain.isEmpty {
+        // A server revoked for any reason the owner can't undo was deleted,
+        // transferred or retired: drop it if an earlier pass listed it.
+        for entry in directory.pods where entry.revokedAt != nil {
+            let fqdn = entry.serverDomain.lowercased()
+            guard !listedFqdns.contains(fqdn) else { continue }
+            for pod in app.pods where pod.fqdn.lowercased() == fqdn && pod.status != .pending {
+                app.removePod(pod.podId)
+            }
+        }
+        for entry in listedEntries where !entry.serverDomain.isEmpty {
+            let revoked = entry.revokedAt != nil
             let fqdn = entry.serverDomain
             let pendingName = app.pods.first(where: {
                 $0.fqdn.lowercased() == fqdn.lowercased() && $0.status == .pending
@@ -135,17 +147,19 @@ public struct PendingServerReconciler {
                 // boolean was dropped from /pods): this per-pod flag is the
                 // "from the last full reconcile" unlock signal, OR'd at read-time
                 // with the live watcher inbox in `AppState.isAwaitingUnlock`.
-                awaitingUnlock: entry.pendingRequests.contains { $0.type == SecretPurpose.unlockKey.rawValue },
+                awaitingUnlock: !revoked && entry.pendingRequests.contains { $0.type == SecretPurpose.unlockKey.rawValue },
                 liveness: PodInfo.Liveness(rawValue: entry.liveness ?? ""),
                 lastSeenMsAgo: entry.lastSeenMsAgo,
                 lastReported: entry.lastReported,
                 identityPubKeyHex: entry.identityPubKey,
-                leadsServices: entry.leadsServices
+                leadsServices: entry.leadsServices,
+                revokedAt: entry.revokedAt,
+                revocationReason: entry.revocationReason
             )
             // Secret-free recipe: a registered box now has a directory identity
             // to seal the SWK to. The handler no-ops unless a deposit is owed
             // for this fqdn (idempotent via PendingSwkDepositStore).
-            if !entry.identityPubKey.isEmpty {
+            if !revoked && !entry.identityPubKey.isEmpty {
                 await onRegistered(fqdn, entry.identityPubKey)
             }
         }
@@ -235,6 +249,25 @@ public struct PendingServerReconciler {
                 authCodeSerial: "",
                 createdAt: Double(order.createdAt) / 1000.0
             ))
+        }
+    }
+
+    /// The directory entries the server list shows, in directory order: every
+    /// live registration, plus a server revoked as lost / stolen /
+    /// decommissioned (so its owner can un-revoke or delete it) when no live
+    /// registration shares its name. Of several revoked rows for one name the
+    /// latest revoke wins.
+    nonisolated static func listedEntries(_ pods: [PodDirectoryEntry]) -> [PodDirectoryEntry] {
+        let activeFqdns = Set(pods.filter { $0.revokedAt == nil }.map { $0.serverDomain.lowercased() })
+        var revokedByFqdn: [String: PodDirectoryEntry] = [:]
+        for entry in pods where entry.isRestorableRevoke {
+            let fqdn = entry.serverDomain.lowercased()
+            if activeFqdns.contains(fqdn) { continue }
+            if let prev = revokedByFqdn[fqdn], (prev.revokedAt ?? 0) >= (entry.revokedAt ?? 0) { continue }
+            revokedByFqdn[fqdn] = entry
+        }
+        return pods.filter { entry in
+            entry.revokedAt == nil || revokedByFqdn[entry.serverDomain.lowercased()] == entry
         }
     }
 

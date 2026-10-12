@@ -546,7 +546,9 @@ public final class AppState {
         lastSeenMsAgo: Int64? = nil,
         lastReported: Int64? = nil,
         identityPubKeyHex: String = "",
-        leadsServices: [String] = []
+        leadsServices: [String] = [],
+        revokedAt: Int64? = nil,
+        revocationReason: String? = nil
     ) -> String {
         // HONEST LIVENESS (Fix A) — derive the pod's status from the
         // server-authoritative `liveness` field instead of trusting that a
@@ -558,6 +560,7 @@ public final class AppState {
         // legacy registration-is-online behavior.
         let derivedStatus: PodInfo.Status
         switch liveness {
+        case _ where revokedAt != nil: derivedStatus = .offline
         case .live:        derivedStatus = .online
         case .unreachable: derivedStatus = .offline
         case .never:       derivedStatus = .unknown
@@ -572,7 +575,8 @@ public final class AppState {
             // came online, or is now waiting for an approval is re-flowed below.
             if old.status == derivedStatus && old.cameOnline && !awaitingUnlock
                 && old.liveness == liveness && old.lastSeenMsAgo == lastSeenMsAgo
-                && old.leadsServices == leadsServices {
+                && old.leadsServices == leadsServices
+                && old.revokedAt == revokedAt && old.revocationReason == revocationReason {
                 return old.podId
             }
             pods[idx] = PodInfo(
@@ -591,7 +595,9 @@ public final class AppState {
                 lastReported: lastReported ?? old.lastReported,
                 // Keep a known STK; never downgrade to empty on a sparse update.
                 identityPubKeyHex: identityPubKeyHex.isEmpty ? old.identityPubKeyHex : identityPubKeyHex,
-                leadsServices: leadsServices
+                leadsServices: leadsServices,
+                revokedAt: revokedAt,
+                revocationReason: revocationReason
             )
             return old.podId
         }
@@ -609,9 +615,39 @@ public final class AppState {
             lastSeenMsAgo: lastSeenMsAgo,
             lastReported: lastReported,
             identityPubKeyHex: identityPubKeyHex,
-            leadsServices: leadsServices
+            leadsServices: leadsServices,
+            revokedAt: revokedAt,
+            revocationReason: revocationReason
         ))
         return id
+    }
+
+    /// Reflect a revoke / un-revoke this device just made, before the next
+    /// `/pods` reconcile confirms it. Un-revoking leaves the box offline until
+    /// it heartbeats again.
+    public func setPodRevoked(fqdn: String, revokedAt: Int64?, reason: String?) {
+        let target = fqdn.lowercased()
+        guard let idx = pods.firstIndex(where: { $0.fqdn.lowercased() == target }) else { return }
+        let old = pods[idx]
+        pods[idx] = PodInfo(
+            podId: old.podId,
+            name: old.name,
+            description: old.description,
+            fqdn: old.fqdn,
+            status: revokedAt != nil ? .offline : old.status,
+            pendingAuthCodeSerial: old.pendingAuthCodeSerial,
+            demoServer: old.demoServer,
+            cameOnline: old.cameOnline,
+            registeredAt: old.registeredAt,
+            awaitingUnlock: old.awaitingUnlock,
+            liveness: revokedAt != nil ? old.liveness : (old.cameOnline ? .unreachable : .never),
+            lastSeenMsAgo: old.lastSeenMsAgo,
+            lastReported: old.lastReported,
+            identityPubKeyHex: old.identityPubKeyHex,
+            leadsServices: old.leadsServices,
+            revokedAt: revokedAt,
+            revocationReason: revokedAt != nil ? reason : nil
+        )
     }
 
     public func setLeader(_ podId: String) {
@@ -657,7 +693,9 @@ public final class AppState {
                 lastSeenMsAgo: old.lastSeenMsAgo,
                 lastReported: old.lastReported,
                 identityPubKeyHex: old.identityPubKeyHex,
-                leadsServices: slugs
+                leadsServices: slugs,
+                revokedAt: old.revokedAt,
+                revocationReason: old.revocationReason
             )
         }
     }
@@ -831,6 +869,15 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
     /// leads nothing. Surfaced as a small "lead" indicator on the server card.
     public let leadsServices: [String]
 
+    /// When the owner revoked this box (lost / stolen / decommissioned), from
+    /// `/pods`. A revoked box can't connect or unlock until it's un-revoked.
+    /// The reconciler only surfaces revokes the owner can undo, so a pod with
+    /// this set is always restorable.
+    public let revokedAt: Int64?
+    public let revocationReason: String?
+
+    public var isRevoked: Bool { revokedAt != nil }
+
     /// Server-authoritative reachability, mirroring `.com`'s `/pods` `liveness`.
     public enum Liveness: String, Sendable, Hashable {
         case live, unreachable, never
@@ -851,7 +898,9 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         lastSeenMsAgo: Int64? = nil,
         lastReported: Int64? = nil,
         identityPubKeyHex: String = "",
-        leadsServices: [String] = []
+        leadsServices: [String] = [],
+        revokedAt: Int64? = nil,
+        revocationReason: String? = nil
     ) {
         self.podId = podId
         self.name = name
@@ -868,6 +917,8 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         self.lastReported = lastReported
         self.identityPubKeyHex = identityPubKeyHex
         self.leadsServices = leadsServices
+        self.revokedAt = revokedAt
+        self.revocationReason = revocationReason
     }
 
     /// Derived per-server liveness — the single classifier the list, the
@@ -893,6 +944,9 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         /// offline; the UI shows "offline — last seen <…>", NOT the decommission
         /// path. Reachable again on the next live heartbeat.
         case offline
+        /// The owner revoked this box (lost / stolen / decommissioned). It can't
+        /// connect or unlock until it's un-revoked. Wins over every other signal.
+        case revoked
     }
 
     /// Classify a registered/pending pod. When the server-authoritative
@@ -900,8 +954,9 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
     /// infers "online" from mere registration:
     ///   - `.live`        → `.online`.
     ///   - `.unreachable` → `.offline` (a real heartbeat existed but went stale).
-    ///   - `.never`       → a live request wins (waitingForApproval); else still
-    ///                      `.comingOnline` (awaiting first heartbeat, NOT dead).
+    ///   - `.never`       → a live request wins (waitingForApproval); else
+    ///                      `.comingOnline` inside the grace window after
+    ///                      `registeredAt`, `.dead` past it.
     /// When `liveness` is absent (pre-field Worker / pending / demo), the legacy
     /// registration-derived path holds: `online` short-circuits on `cameOnline`;
     /// a live unlock request wins; a recent registration is `comingOnline`, an
@@ -910,6 +965,8 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         hasLiveUnlockRequest: Bool,
         now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
     ) -> LivenessState {
+        if isRevoked { return .revoked }
+        let pastGrace = registeredAt > 0 && now - registeredAt > PodInfo.comingOnlineGraceMs
         if let liveness {
             switch liveness {
             case .live: return .online
@@ -921,7 +978,7 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
                 return .offline
             case .never:
                 if hasLiveUnlockRequest { return .waitingForApproval }
-                return .comingOnline
+                return pastGrace ? .dead : .comingOnline
             }
         }
         if status == .online && cameOnline { return .online }

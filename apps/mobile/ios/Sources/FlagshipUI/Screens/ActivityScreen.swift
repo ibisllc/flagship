@@ -224,6 +224,8 @@ public struct ActivityScreen: View {
         case "app-renamed":         return c.primary
         case "server-online":       return c.success
         case "server-created":      return c.primary
+        case "server-revoked":      return c.danger
+        case "server-unrevoked":    return c.success
         default:                    return c.textMuted
         }
     }

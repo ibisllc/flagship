@@ -8,8 +8,9 @@ import FlagshipCore
 /// P13 — per-server kill-switch orchestrator.
 ///
 /// IRK-signs a `ServerRevocation` envelope (one of {lost, stolen,
-/// decommissioned}) and POSTs it to .com. On success the box is dead:
-/// it will refuse to boot on its next reboot. The trust gate is the
+/// decommissioned}) and POSTs it to .com. On success the box is locked
+/// out right away: it can't connect or unlock until the owner un-revokes
+/// it (`UnrevokeServerViewModel`); its name stays reserved. The trust gate is the
 /// IRK signature alone — same level as releasing a name — combined
 /// with the hold-to-confirm gesture on the sheet (see ServerDetailScreen).
 @Observable
