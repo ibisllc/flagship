@@ -159,6 +159,14 @@ public protocol ScreensClient: Sendable {
     /// `flagship/app-db-write/v1` order, read-write.
     func serviceDbQuery(serviceId: String, store: String, _ req: AppDbQueryRequest) async throws -> AppDbQueryResult
 
+    // Copying an app between the owner's servers (docs/app-placement.md §5).
+    /// `POST /api/screens/services/copy` to the TARGET box: the owner's signed
+    /// `flagship/app-copy/v1` order. 202 `{copyId}`; an older box answers 404.
+    func serviceCopy(_ req: AppCopyRequest) async throws -> AppCopyStartResponse
+    /// `GET /api/screens/services/copies`: copies onto this box and how far
+    /// each has got.
+    func serviceCopies() async throws -> AppCopiesResponse
+
     // P9 — peer-backup management.
     func peerBackupStatus() async throws -> PeerBackupStatusResponse
     func peerBackupToggle(participate: Bool) async throws -> PeerBackupStatusResponse
@@ -423,6 +431,12 @@ public extension ScreensClient {
     }
     func buildDiscard(buildId: String) async throws {
         throw ScreensClientError.notImplemented("discard")
+    }
+    func serviceCopy(_ req: AppCopyRequest) async throws -> AppCopyStartResponse {
+        throw ScreensClientError.notImplemented("app copy")
+    }
+    func serviceCopies() async throws -> AppCopiesResponse {
+        throw ScreensClientError.notImplemented("app copy")
     }
     func buildAdapterFile(buildId: String) async throws -> String {
         throw ScreensClientError.notImplemented("flagship.app.json")

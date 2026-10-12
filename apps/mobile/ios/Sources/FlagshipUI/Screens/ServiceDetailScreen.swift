@@ -4,9 +4,9 @@ import FlagshipCore
 
 /// Per-app management surface. Sections:
 ///   1. Header — slug, creator, status, version
-///   2. WHERE IT RUNS — per-pod toggle; "Lead" radio designates the pod
-///      that holds the canonical short domain. Defaults to the global
-///      leader pod (set in Home / Settings).
+///   2. RUNS ON — each of the account's servers, ticked where the app is
+///      (from that server's own apps list). Tick copies the app there;
+///      untick removes it (docs/app-placement.md §4).
 ///   3. WEB DOMAINS — canonical FQDN + per-pod aliases + user-defined
 ///      custom URLs; each shows where it currently resolves. User can
 ///      claim, release, or add new ones.
@@ -20,12 +20,10 @@ public struct ServiceDetailScreen: View {
     @Bindable var vm: ServiceDetailViewModel
     let username: String?
     let pods: [PodInfo]
-    let globalLeaderPodId: String?
     /// V2 — drives the Replace App sheet.
     @State private var showReplaceSheet = false
     @State private var showAdapterReport = false
     @State private var replaceDraft = ""
-    var onSave: () -> Void = {}
     var onRemove: () -> Void = {}
     /// P8 — when the daemon reports open browser-tabs for this app the
     /// detail screen shows a section that calls this to push the tabs
@@ -50,8 +48,6 @@ public struct ServiceDetailScreen: View {
         vm: ServiceDetailViewModel,
         username: String?,
         pods: [PodInfo],
-        globalLeaderPodId: String?,
-        onSave: @escaping () -> Void = {},
         onRemove: @escaping () -> Void = {},
         onOpenBrowserTabs: @escaping () -> Void = {},
         onOpenCollaborators: @escaping () -> Void = {},
@@ -63,8 +59,6 @@ public struct ServiceDetailScreen: View {
         self.vm = vm
         self.username = username
         self.pods = pods
-        self.globalLeaderPodId = globalLeaderPodId
-        self.onSave = onSave
         self.onRemove = onRemove
         self.onOpenBrowserTabs = onOpenBrowserTabs
         self.onOpenCollaborators = onOpenCollaborators
@@ -92,7 +86,7 @@ public struct ServiceDetailScreen: View {
                     }
                     if d.editable == true { editRow(c: c) }
                     if let from = d.adaptedFrom { adapterReportRow(repo: from.repo, c: c) }
-                    whereItRuns(d: d, c: c)
+                    if let runsOn = vm.runsOn { RunsOnSection(controller: runsOn) }
                     webDomains(d: d, c: c)
                     browserTabsRow(d: d, c: c)
                     collaboratorsRow(c: c)
@@ -102,7 +96,7 @@ public struct ServiceDetailScreen: View {
                     }
                     if vm.showsDatabase, let db = vm.database { databaseRow(db, c: c) }
                     logsAndBackup(d: d, c: c)
-                    saveAndRemove(c: c)
+                    removeButton(c: c)
                 }
                 Spacer().frame(height: FS.space.s12)
             }
@@ -157,83 +151,6 @@ public struct ServiceDetailScreen: View {
                 }
             }
         }
-    }
-
-    private func whereItRuns(d: AppDetailResponse, c: FSColors) -> some View {
-        section("WHERE IT RUNS", c: c) {
-            FSCard {
-                VStack(spacing: FS.space.s3) {
-                    ForEach(pods) { pod in
-                        podRow(pod: pod, c: c)
-                        if pod != pods.last {
-                            Divider().background(c.border)
-                        }
-                    }
-                }
-            }
-            Text(leadHint(c: c))
-                .font(FS.font.caption())
-                .foregroundColor(c.textMuted)
-                .padding(.horizontal, 4)
-        }
-    }
-
-    private func podRow(pod: PodInfo, c: FSColors) -> some View {
-        let isOn = vm.runOnPodIds.contains(pod.podId)
-        let isLead = vm.effectiveLeadPodId == pod.podId
-        let isGlobalLeader = globalLeaderPodId == pod.podId
-        return HStack(spacing: FS.space.s3) {
-            Button {
-                vm.togglePod(pod.podId)
-            } label: {
-                Image(systemName: isOn ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 20))
-                    .foregroundColor(isOn ? c.primary : c.textMuted)
-            }
-            .buttonStyle(.plain)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: FS.space.s2) {
-                    Text(pod.name).font(.system(size: 16, weight: .semibold)).foregroundColor(c.text)
-                    if isGlobalLeader { LeaderBadge() }
-                }
-                if let desc = pod.description, !desc.isEmpty {
-                    Text(desc).font(FS.font.caption()).foregroundColor(c.textMuted)
-                        .lineLimit(1).truncationMode(.tail)
-                }
-            }
-            Spacer()
-            if isOn {
-                // Check-circle + house: the circle reads as the
-                // selectable radio (filled when chosen); the house
-                // says what it selects (this pod leads). The word
-                // "Lead" used to sit here but collided with the
-                // "Leader" badge a few px to the left.
-                Button {
-                    vm.setLead(pod.podId)
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: isLead ? "largecircle.fill.circle" : "circle")
-                            .foregroundColor(isLead ? c.primary : c.textMuted)
-                        Image(systemName: "house.fill")
-                            .font(.system(size: 15))
-                            .foregroundColor(isLead ? c.primary : c.textMuted)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isLead ? "Lead pod" : "Make lead pod")
-            }
-        }
-    }
-
-    private func leadHint(c: FSColors) -> String {
-        if let podId = vm.leadPodId, let pod = pods.first(where: { $0.podId == podId }) {
-            return "Canonical short domain points to \(pod.name)."
-        }
-        if let podId = globalLeaderPodId, let pod = pods.first(where: { $0.podId == podId }) {
-            return "Following the account leader (\(pod.name))."
-        }
-        return "Pick which pod owns the canonical short domain."
     }
 
     private func webDomains(d: AppDetailResponse, c: FSColors) -> some View {
@@ -370,13 +287,10 @@ public struct ServiceDetailScreen: View {
 
     @ViewBuilder
     private func instancesGroup(c: FSColors, defaultLabel: String) -> some View {
-        // V6 — reactively reflect the user's current pod selection from
-        // WHERE IT RUNS. The server-returned `appLinks.instances` is
-        // .com's view of which pods are live; here we want the
-        // instances list the user is actively shaping. Display label
-        // is the renamed stem when available, the daemon default
-        // otherwise.
-        let selected = pods.filter { vm.runOnPodIds.contains($0.podId) }
+        // The servers that have the app (RUNS ON). Display label is the
+        // renamed stem when available, the daemon default otherwise.
+        let onIds = Set((vm.runsOn?.rows ?? []).filter { $0.presence == .installed }.map(\.pod.podId))
+        let selected = pods.filter { onIds.contains($0.podId) }
         if !selected.isEmpty {
             let stem = vm.appLinks.value?.displayLabel ?? defaultLabel
             VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -447,13 +361,6 @@ public struct ServiceDetailScreen: View {
         if s.hasPrefix("https://") { return String(s.dropFirst("https://".count)) }
         if s.hasPrefix("http://") { return String(s.dropFirst("http://".count)) }
         return s
-    }
-
-    private var leadDestinationLabel: String {
-        if let podId = vm.effectiveLeadPodId, let p = pods.first(where: { $0.podId == podId }) {
-            return p.name
-        }
-        return "Leader"
     }
 
     private func domainRow(
@@ -798,9 +705,8 @@ public struct ServiceDetailScreen: View {
         }
     }
 
-    private func saveAndRemove(c: FSColors) -> some View {
+    private func removeButton(c: FSColors) -> some View {
         VStack(spacing: FS.space.s3) {
-            FSPrimaryButton("Save changes", block: true, large: true, action: onSave)
             FSDangerButton(
                 vm.isRemoving ? "Removing…" : "Remove service",
                 block: true,

@@ -67,6 +67,7 @@ struct AppDbQueryContainer: View {
     let serviceId: String
     let store: String
     @Environment(\.screensClient) private var client
+    @Environment(\.screensServerFqdn) private var bound
     @Environment(AppState.self) private var app
     @State private var controller: AppDbQueryController?
 
@@ -84,7 +85,7 @@ struct AppDbQueryContainer: View {
             if controller == nil {
                 controller = AppDbQueryController(serviceId: serviceId, store: store, appName: appLabel(serviceId),
                                                   client: client,
-                                                  serverDomain: app.sessionPod?.fqdn ?? app.currentPod?.fqdn)
+                                                  serverDomain: bound ?? app.sessionPod?.fqdn ?? app.currentPod?.fqdn)
             }
         }
     }

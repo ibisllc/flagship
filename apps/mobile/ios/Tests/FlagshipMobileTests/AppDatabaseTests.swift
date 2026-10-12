@@ -78,7 +78,7 @@ final class AppDatabaseTests: XCTestCase {
 
     private func detail(_ client: MockScreensClient, restricted: Bool = false,
                         serviceId: String = "bright-maple--plants") -> ServiceDetailViewModel {
-        ServiceDetailViewModel(serviceId: serviceId, client: client, allPods: [], globalLeaderPodId: nil,
+        ServiceDetailViewModel(serviceId: serviceId, client: client, allPods: [],
                                serverDomain: "home.bright-maple.flagship.services",
                                egressSigner: { _ in Curve25519.Signing.PrivateKey() },
                                accessCanChange: !restricted)

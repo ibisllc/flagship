@@ -64,6 +64,13 @@ public struct ServerDetailScreen: View {
     /// The box's registered STK from `/pods`, which binds the erase order the
     /// delete flow sends. Empty when unknown.
     let identityPubKeyHex: String
+    /// The apps installed on this server (and any being copied in). Nil hides
+    /// the section.
+    let apps: ServerAppsController?
+    /// Open an app's page, bound to this server.
+    var onOpenApp: (String) -> Void = { _ in }
+    /// "Create app here": the creation flow pinned to this server.
+    var onCreateApp: () -> Void = {}
     var onOpenSessions: () -> Void = {}
     var onOpenTier: () -> Void = {}
     var onRefresh: () async -> Void = {}
@@ -95,6 +102,9 @@ public struct ServerDetailScreen: View {
         health: BoxHealth? = nil,
         revoked: Bool = false,
         identityPubKeyHex: String = "",
+        apps: ServerAppsController? = nil,
+        onOpenApp: @escaping (String) -> Void = { _ in },
+        onCreateApp: @escaping () -> Void = {},
         onOpenSessions: @escaping () -> Void = {},
         onOpenTier: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
@@ -118,6 +128,9 @@ public struct ServerDetailScreen: View {
         self.health = health
         self.revoked = revoked
         self.identityPubKeyHex = identityPubKeyHex
+        self.apps = apps
+        self.onOpenApp = onOpenApp
+        self.onCreateApp = onCreateApp
         self.onOpenSessions = onOpenSessions
         self.onOpenTier = onOpenTier
         self.onRefresh = onRefresh
@@ -216,6 +229,9 @@ public struct ServerDetailScreen: View {
                     }
                 case .loaded(let d):
                     overview(d: d, c: c)
+                    if let apps {
+                        ServerAppsSection(controller: apps, onOpenApp: onOpenApp, onCreate: onCreateApp)
+                    }
                     MetricsSection(state: metrics)
                     cert(d: d, c: c)
                     deviceRow(d: d, c: c)

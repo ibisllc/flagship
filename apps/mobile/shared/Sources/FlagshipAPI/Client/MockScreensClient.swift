@@ -89,8 +89,15 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     // MARK: - P1.2 apps-list
 
+    /// Replaces the fixture apps list (tests: what this box has).
+    public var appsListFixture: AppsListResponse?
+    /// Thrown by `appsList` (an unreachable box), every call while set.
+    public var appsListError: Error?
+
     public func appsList() async throws -> AppsListResponse {
         try await tick()
+        if let appsListError { throw appsListError }
+        if let appsListFixture { return appsListFixture }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         // url mirrors the live daemon's tier-1 form
         // `https://<urlLabel>.<serverFqdn>` (screensHttp builds it off the
@@ -135,6 +142,55 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 installedAt: now - 60_000 * 60 * 24 * 12
             )
         ])
+    }
+
+    // MARK: - App copies (docs/app-placement.md §5)
+
+    /// When set, `serviceCopy` refuses a signature this key didn't make.
+    public var mockCopyVerifyKey: Data?
+    public private(set) var serviceCopyCalls: [AppCopyRequest] = []
+    /// Thrown by `serviceCopy` (after recording the call), once.
+    public var serviceCopyError: Error?
+    /// What `serviceCopies` reports; a successful `serviceCopy` adds one.
+    public var mockCopies: [AppCopyEntry] = []
+    /// Thrown by `serviceCopies`, every call while set.
+    public var serviceCopiesError: Error?
+    public private(set) var serviceCopiesCalls = 0
+
+    public func serviceCopy(_ req: AppCopyRequest) async throws -> AppCopyStartResponse {
+        try await tick()
+        serviceCopyCalls.append(req)
+        if let e = serviceCopyError { serviceCopyError = nil; throw e }
+        if let key = mockCopyVerifyKey {
+            guard let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: key),
+                  let sig = Self.hexBytes(req.signature),
+                  pub.isValidSignature(sig, for: req.grant.canonicalBytes()) else {
+                throw ScreensClientError.http(status: 403, message: #"{"error":"invalid signature"}"#)
+            }
+        }
+        let me = await boxDomain()
+        guard req.grant.targetServer.lowercased() == me?.lowercased() else {
+            throw ScreensClientError.http(status: 403, message: #"{"error":"the order is for a different server"}"#)
+        }
+        let here = (try? await appsList().apps.map(\.serviceId)) ?? []
+        if here.contains(req.grant.serviceId)
+            || mockCopies.contains(where: { $0.serviceId == req.grant.serviceId && $0.isUnderway }) {
+            throw ScreensClientError.http(status: 409, message: #"{"error":"the app is already on this server"}"#)
+        }
+        let copyId = "cp-\(UUID().uuidString.prefix(8).lowercased())"
+        mockCopies.append(AppCopyEntry(
+            copyId: copyId, serviceId: req.grant.serviceId,
+            appName: mockAppNames[req.grant.serviceId] ?? req.grant.serviceId,
+            sourceServer: req.grant.sourceServer, state: "copying", progress: 0,
+            startedAt: Int64(Date().timeIntervalSince1970 * 1000)))
+        return AppCopyStartResponse(copyId: copyId)
+    }
+
+    public func serviceCopies() async throws -> AppCopiesResponse {
+        try await tick()
+        serviceCopiesCalls += 1
+        if let serviceCopiesError { throw serviceCopiesError }
+        return AppCopiesResponse(copies: mockCopies)
     }
 
     // MARK: - App internet access

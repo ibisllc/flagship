@@ -7,8 +7,8 @@ import FlagshipCore
 
 /// Combined view-model for ServiceDetailScreen. Owns the service detail
 /// response, the list of FQDNs the user owns (filtered to those that
-/// belong to this service), and the local edit buffer for pod placement +
-/// per-service lead pod. Save() ships the diff through `orders/send`.
+/// belong to this service), and the "Runs on" section (which servers have
+/// the app, from each server's own apps list: docs/app-placement.md §4).
 @Observable
 @MainActor
 public final class ServiceDetailViewModel {
@@ -245,12 +245,29 @@ public final class ServiceDetailViewModel {
         await database?.load()
     }
 
-    /// Pods the service should run on (server-set). Edited locally; reset
-    /// by `cancelEdits()` and persisted by `save()`.
-    public var runOnPodIds: Set<String> = []
-    /// Pod that gets the canonical short domain for this service. nil = use
-    /// the global leader.
-    public var leadPodId: String?
+    // MARK: Runs on (docs/app-placement.md §4)
+
+    /// Which of the account's servers have the app. Nil without a client
+    /// factory (previews) or a known server for this page.
+    public private(set) var runsOn: AppRunsOnController?
+
+    private func syncRunsOn(_ app: FlagshipAPI.AppSummary) async {
+        guard let clients, let page = serverDomain ?? egressServerDomain, !page.isEmpty else {
+            runsOn = nil
+            return
+        }
+        let name = app.slug.capitalized
+        if runsOn == nil {
+            runsOn = AppRunsOnController(
+                serviceId: serviceId, appName: name, pods: allPods, pageFqdn: page, clients: clients,
+                uninstallClient: uninstallClient, canChange: accessCanChange,
+                signer: egressSigner, irkSigner: irkSigner)
+        } else {
+            runsOn?.setAppName(name)
+        }
+        await runsOn?.load()
+    }
+
     /// Draft in the "Set custom domain" field.
     public var customDomainDraft: String = ""
     /// One-at-a-time alert that drives the set-custom-domain flow.
@@ -273,7 +290,8 @@ public final class ServiceDetailViewModel {
     private let server: (any FlagshipServerClient)?
     private let username: () -> String?
     private let allPods: [PodInfo]
-    private let globalLeaderPodId: String?
+    /// Clients bound to each of the account's servers, for "Runs on".
+    private let clients: PodScreensClientFactory?
     /// Box-direct client for `DELETE /api/services/:id`. Optional + defaulted
     /// to the in-process Mock so existing test/preview construction (and the
     /// WEB-DOMAINS-only call sites) keep compiling unchanged.
@@ -298,7 +316,7 @@ public final class ServiceDetailViewModel {
         serviceId: String,
         client: any ScreensClient,
         allPods: [PodInfo],
-        globalLeaderPodId: String?,
+        clients: PodScreensClientFactory? = nil,
         server: (any FlagshipServerClient)? = nil,
         username: @escaping () -> String? = { nil },
         uninstallClient: (any ServiceUninstallClient)? = nil,
@@ -313,7 +331,7 @@ public final class ServiceDetailViewModel {
         self.serviceId = serviceId
         self.client = client
         self.allPods = allPods
-        self.globalLeaderPodId = globalLeaderPodId
+        self.clients = clients
         self.server = server
         self.username = username
         self.uninstallClient = uninstallClient ?? MockServiceUninstallClient()
@@ -321,9 +339,6 @@ public final class ServiceDetailViewModel {
         self.irkSigner = irkSigner ?? { reason in try await Keystore.deriveIRK(reason: reason) }
         self.egressSigner = egressSigner ?? { reason in try await Keystore.sensitiveOrderSigningKey(reason: reason) }
     }
-
-    public var availablePods: [PodInfo] { allPods }
-    public var effectiveLeadPodId: String? { leadPodId ?? globalLeaderPodId }
 
     public func load() async {
         detail = .loading
@@ -339,35 +354,14 @@ public final class ServiceDetailViewModel {
             async let keysSync: Void = syncApiKeys(di.app)
             let hasPostgres = Self.hasPostgres(di)
             async let dbSync: Void = syncDatabase(hasPostgres: hasPostgres)
-            _ = await (accessSync, keysSync, dbSync)
-            // Seed local edits from server state — currently we default
-            // to running on the leader-only since the API doesn't yet
-            // return a multi-pod policy. When the daemon contract
-            // grows a `policy` block we'll seed from that instead.
-            if runOnPodIds.isEmpty, let lead = globalLeaderPodId {
-                runOnPodIds = [lead]
-            }
+            async let runsOnSync: Void = syncRunsOn(di.app)
+            _ = await (accessSync, keysSync, dbSync, runsOnSync)
         } catch {
             // UX-A/UX-B — plain language; a cert-pin mismatch reads as a
             // possible interception warning, not a generic network error.
             detail = .failed(ScreensClientError.userFacing(error))
             ownedUrls = .failed(ScreensClientError.userFacing(error))
         }
-    }
-
-    public func togglePod(_ podId: String) {
-        if runOnPodIds.contains(podId) { runOnPodIds.remove(podId) }
-        else { runOnPodIds.insert(podId) }
-        // If we deselected the lead, clear lead so the global leader
-        // takes back over.
-        if leadPodId == podId && !runOnPodIds.contains(podId) {
-            leadPodId = nil
-        }
-    }
-
-    public func setLead(_ podId: String) {
-        runOnPodIds.insert(podId)
-        leadPodId = podId
     }
 
     /// One-at-a-time alert for the set-custom-domain flow.
@@ -725,23 +719,6 @@ public final class ServiceDetailViewModel {
             removePhase = .failed("Couldn't reach the box. Check your connection and try again.")
             return false
         }
-    }
-
-    public func save() async throws {
-        // Ship the edits as an order envelope. The shape mirrors what
-        // packages/server-daemon expects for service-policy updates — a
-        // signed canonical-bytes wrapper. For now, mock client accepts
-        // any envelope and returns ok=true.
-        let payload: [String: Any] = [
-            "kind": "service-policy/v1",
-            "serviceId": serviceId,
-            "runOnPodIds": Array(runOnPodIds),
-            "leadPodId": leadPodId as Any,
-            "customDomain": customDomain as Any
-        ]
-        let json = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-        let envelope = json.base64EncodedString()
-        _ = try await client.ordersSend(.init(envelope: envelope, kind: "service-policy/v1"))
     }
 }
 

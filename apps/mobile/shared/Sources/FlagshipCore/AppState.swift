@@ -339,12 +339,33 @@ public final class AppState {
     /// the default. nil only when there are no pods.
     private var oldestPod: PodInfo? { pods.first }
 
+    /// The session-store pod ids (`PodInfo.podId(forFqdn:)`) this device holds
+    /// a paired-session token for. Nil until the shell has read the store:
+    /// then an online pod counts as reachable.
+    public var sessionPodIds: Set<String>? = nil
+
+    /// Online, and (when known) this device holds a session for it.
+    public func hasLiveSession(_ pod: PodInfo) -> Bool {
+        guard pod.status == .online, !pod.fqdn.isEmpty else { return false }
+        guard let ids = sessionPodIds else { return true }
+        return ids.contains(PodInfo.podId(forFqdn: pod.fqdn))
+    }
+
+    /// The box new apps go to and the screens client talks to by default
+    /// (docs/app-placement.md §1). The leader whenever it is online with a
+    /// session; another pod only while it was picked explicitly and is itself
+    /// online with a session (the Activity switcher).
     public var currentPod: PodInfo? {
-        if let id = currentPodId, let p = pods.first(where: { $0.podId == id }) { return p }
+        let leader = leaderPod
+        let liveLeader = leader.flatMap { hasLiveSession($0) ? $0 : nil }
+        if let id = currentPodId, let p = pods.first(where: { $0.podId == id }) {
+            if p.podId == leader?.podId || hasLiveSession(p) { return p }
+            return liveLeader ?? p
+        }
         // The leader is the UI default. If it resolves, use it; otherwise fall
         // back to the OLDEST pod (deterministic) — NOT `pods.first` "by accident"
         // and never the newest box.
-        return leaderPod ?? oldestPod
+        return leader ?? oldestPod
     }
 
     /// The GLOBAL anchor pod for Home/Services (the default box session). Unlike
@@ -357,7 +378,7 @@ public final class AppState {
     /// per-pod detail still targets its own box deterministically via the fqdn).
     public var sessionPod: PodInfo? {
         if let p = currentPod, p.status == .online { return p }
-        return pods.first(where: { $0.status == .online })
+        return pods.first(where: { hasLiveSession($0) }) ?? pods.first(where: { $0.status == .online })
     }
 
     public func completeOnboarding(
@@ -434,6 +455,7 @@ public final class AppState {
         self.pods = []
         self.leaderPodId = nil
         self.currentPodId = nil
+        self.sessionPodIds = nil
         self.isPaired = true
         // Per-profile keystore keying: point UMK/IRK derivation at this
         // profile's slot so deriveIRK / unwrapUMK target the active cloud.
@@ -650,9 +672,12 @@ public final class AppState {
         )
     }
 
+    /// Making a server leader also makes it the current server, so new apps
+    /// and the screens client follow it at once (docs/app-placement.md §1).
     public func setLeader(_ podId: String) {
         guard pods.contains(where: { $0.podId == podId }) else { return }
         leaderPodId = podId
+        currentPodId = podId
     }
 
     public func setCurrentPod(_ podId: String) {
@@ -717,6 +742,7 @@ public final class AppState {
         self.pods = []
         self.leaderPodId = nil
         self.currentPodId = nil
+        self.sessionPodIds = nil
         self.deviceCapability = nil
         self.activeProfileCloudName = nil
         // Welcome doesn't need the lock-screen gate (the user is

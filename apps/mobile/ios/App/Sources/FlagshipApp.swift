@@ -20,6 +20,7 @@ struct FlagshipApp: App {
     @State private var orphanedPersistedUsername: String?
     private let mockClient = MockScreensClient()
     private let liveClient: any ScreensClient
+    private let livePodClients: PodScreensClientFactory
     // The session store backing the live screens client. Owned here so
     // the shell can repoint `podBaseUrl` at the currently selected online
     // server (see PodSessionSync). The same instance is injected into the
@@ -54,6 +55,7 @@ struct FlagshipApp: App {
             urlSession: pinnedSession,
             store: store
         )
+        self.livePodClients = .live(urlSession: pinnedSession, store: store)
         // The lock/power-off + dead-man routes are signature-authed daemon
         // endpoints on the SAME box; share the box-pinned session so a rogue
         // `.com` cert can't intercept a power-off / affirmation either.
@@ -389,6 +391,12 @@ struct FlagshipApp: App {
     private var activeClient: any ScreensClient {
         dev.useLiveClient ? liveClient : mockClient
     }
+    /// Clients bound to one server each (docs/app-placement.md): over the box-
+    /// pinned session with that box's own token; the mock for every server in
+    /// demo mode.
+    private var activePodClients: PodScreensClientFactory {
+        dev.useLiveClient ? livePodClients : .shared(mockClient)
+    }
     private var activeServerClient: any FlagshipServerClient {
         dev.useLiveClient ? liveServerClient : mockServerClient
     }
@@ -435,6 +443,7 @@ struct FlagshipApp: App {
                 .environment(privacy)
                 .environment(\.screensClient, activeClient)
                 .environment(\.sessionStore, sessionStore)
+                .environment(\.podScreensClients, activePodClients)
                 .environment(\.flagshipServerClient, activeServerClient)
                 .environment(\.qrRelayClient, activeRelay)
                 .environment(\.pairingRelayClient, pairingRelay)

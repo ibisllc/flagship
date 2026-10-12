@@ -38,7 +38,7 @@ final class AppStateCurrentPodTests: XCTestCase {
         XCTAssertEqual(s.currentPodId, "a")
     }
 
-    func test_setLeader_doesNotChangeCurrent() {
+    func test_setLeader_alsoChangesCurrent() {
         let s = AppState(
             isPaired: true, currentUser: "u",
             pods: [
@@ -49,8 +49,8 @@ final class AppStateCurrentPodTests: XCTestCase {
         )
         s.setLeader("b")
         XCTAssertEqual(s.leaderPodId, "b")
-        XCTAssertEqual(s.currentPodId, "a",
-                       "Leader change is independent of which pod is the active screens-client target.")
+        XCTAssertEqual(s.currentPodId, "b",
+                       "The leader is the default target: making a server leader makes it current (docs/app-placement.md §1).")
     }
 
     func test_removePod_reassignsCurrent() {

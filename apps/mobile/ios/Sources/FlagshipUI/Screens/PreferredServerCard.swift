@@ -50,11 +50,11 @@ struct PreferredServerCard: View {
                             Label("This is your preferred server", systemImage: "star.fill")
                                 .font(FS.font.body())
                                 .foregroundColor(c.text)
-                            Text("New service routes default here when it's the highest-clout live server. You can pick a different one from another server's page.")
+                            Text("New apps are made here unless you pick another server when you create one. To change it, open another server and make that one preferred.")
                                 .font(FS.font.caption())
                                 .foregroundColor(c.textMuted)
                         } else {
-                            Text("Make this the default target for your cloud — votes for it across your boxes so the highest-clout live server leading a service prefers it.")
+                            Text("Make this the server new apps are made on. You can still pick another server each time you create an app.")
                                 .font(FS.font.caption())
                                 .foregroundColor(c.textMuted)
                             FSPrimaryButton(

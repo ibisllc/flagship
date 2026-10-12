@@ -18,6 +18,9 @@ import FlagshipCore
 /// the explanations the tiles leave out.
 public struct BuildSourceChooserScreen: View {
     @Environment(\.colorScheme) private var scheme
+    /// "Runs on: <server>" for the build; nil hides the row.
+    var target: CreationTarget? = nil
+    var onPickServer: (PodInfo) -> Void = { _ in }
     var activeSessions: Int = 0
     var onScratch: () -> Void = {}
     var onGit: () -> Void = {}
@@ -26,12 +29,16 @@ public struct BuildSourceChooserScreen: View {
     @State private var showHelp = false
 
     public init(
+        target: CreationTarget? = nil,
+        onPickServer: @escaping (PodInfo) -> Void = { _ in },
         activeSessions: Int = 0,
         onScratch: @escaping () -> Void = {},
         onGit: @escaping () -> Void = {},
         onMcp: @escaping () -> Void = {},
         onPastBuilds: @escaping () -> Void = {}
     ) {
+        self.target = target
+        self.onPickServer = onPickServer
         self.activeSessions = activeSessions
         self.onScratch = onScratch
         self.onGit = onGit
@@ -45,6 +52,8 @@ public struct BuildSourceChooserScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Spacer().frame(height: FS.space.s4)
+
+                    if let target { RunsOnPicker(target: target, onChange: onPickServer) }
 
                     Button(action: onPastBuilds) {
                         HStack(spacing: FS.space.s3) {
@@ -206,6 +215,7 @@ public struct BuildGitScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
     @Environment(\.screensClient) private var client
+    @Environment(\.screensServerFqdn) private var bound
     @Bindable var vm: BuildGitViewModel
     @State private var nameCheck: VibeCodeNameCheck?
     @State private var checkedSlug = ""
@@ -236,7 +246,7 @@ public struct BuildGitScreen: View {
 
     private var server: String {
         let user = app.currentUser ?? "you"
-        return app.sessionPod?.fqdn ?? app.leaderPod?.fqdn ?? "\(user).flagship.services"
+        return bound ?? app.sessionPod?.fqdn ?? app.leaderPod?.fqdn ?? "\(user).flagship.services"
     }
     private var currentCheck: VibeCodeNameCheck? { checkedSlug == vm.slug ? nameCheck : nil }
     private var nameRefused: Bool { currentCheck.map { !$0.ok } ?? false }
@@ -247,6 +257,8 @@ public struct BuildGitScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Spacer().frame(height: FS.space.s4)
+
+                    RunsOnLine()
 
                     FSField(value: $vm.gitUrl, label: "Repository URL",
                             placeholder: "https://github.com/you/app", keyboard: .URL)
@@ -552,6 +564,7 @@ public struct BuildMcpScreen: View {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Spacer().frame(height: FS.space.s6)
                     Text("Connect your IDE").font(FS.font.h2())
+                    if vm.editingName == nil { RunsOnLine() }
                     if let name = vm.editingName {
                         Text("Your editor's agent changes \(name) on your server, starting from its current code, using your own AI subscription. Deploying from the IDE replaces the running version; its address and data stay the same.")
                             .font(FS.font.body()).foregroundColor(c.textMuted)

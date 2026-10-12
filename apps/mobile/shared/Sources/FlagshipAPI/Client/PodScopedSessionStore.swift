@@ -8,7 +8,9 @@ public actor PodScopedSessionStore: SessionStoring {
     public let podBaseUrl: String?
     public let sessionToken: String?
 
-    public init(baseUrl: String, token: String) {
+    /// A nil token makes every call fail with `noSessionToken` (this device
+    /// isn't paired with that box), never borrowing another box's token.
+    public init(baseUrl: String, token: String?) {
         self.podBaseUrl = baseUrl
         self.sessionToken = token
     }

@@ -25,6 +25,11 @@ public struct AppSummary: Codable, Equatable, Sendable {
     /// `{rules, pending}` of the app's access list (§3a). When present it
     /// replaces `egress` on the app page; absent on older boxes.
     public var access: AppAccessSummary? = nil
+    /// Present while the box is still receiving this app from another of the
+    /// owner's servers (docs/app-placement.md §5).
+    public var copying: AppCopying? = nil
+    /// The app's name on a row for a copy still underway (no manifest yet).
+    public var name: String? = nil
 }
 
 public struct RecentInstallEvent: Codable, Equatable, Sendable {

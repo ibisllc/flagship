@@ -701,11 +701,15 @@ struct ServerDetailContainer: View {
     @Environment(\.lockPowerClient) private var lockPower
     @Environment(\.flagshipServerClient) private var server
     @Environment(\.sessionStore) private var sessionStore
+    @Environment(\.podScreensClients) private var podClients
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
+    @Environment(DeepLinker.self) private var linker
     @State private var detailVm: HomeViewModel?
     @State private var metricsVm: ServerMetricsViewModel?
+    /// This server's own apps, over a client bound to it.
+    @State private var serverApps: ServerAppsController?
     /// The directory still calls the box live (its heartbeat isn't stale yet)
     /// but it hasn't answered for ~30 s, e.g. a hosted VM that was just stopped.
     /// Shown as offline instead of an endless "Connecting…"; cleared on answer.
@@ -777,11 +781,21 @@ struct ServerDetailContainer: View {
                     health: pod.flatMap { app.podHealth[$0.fqdn.lowercased()] },
                     revoked: pod?.isRevoked ?? false,
                     identityPubKeyHex: shownPod?.identityPubKeyHex ?? "",
+                    apps: serverApps,
+                    onOpenApp: { serviceId in
+                        guard let fqdn = shownPod?.fqdn, !fqdn.isEmpty else { return }
+                        linker.pending = .appDetailOnServer(serviceId: serviceId, serverFqdn: fqdn)
+                    },
+                    onCreateApp: {
+                        guard let fqdn = shownPod?.fqdn, !fqdn.isEmpty else { return }
+                        linker.pending = .createAppOnServer(serverFqdn: fqdn)
+                    },
                     onRefresh: {
                         await refreshDirectoryAndRepairAppKey(allowAuthentication: true)
                         async let a: Void = detailVm.load()
                         async let b: Void = metricsVm.load()
                         _ = await (a, b)
+                        await serverApps?.load()
                     },
                     onRefreshDetail: { await detailVm.load() },
                     onPair: { Task { await pairThenReload(detailVm: detailVm) } },
@@ -816,6 +830,9 @@ struct ServerDetailContainer: View {
             }
             if metricsVm == nil {
                 metricsVm = ServerMetricsViewModel(podId: podId, client: client)
+            }
+            if serverApps == nil, let fqdn = pod?.fqdn, !fqdn.isEmpty, pod?.status != .pending {
+                serverApps = ServerAppsController(serverFqdn: fqdn, clients: podClients)
             }
             await refreshDirectoryAndRepairAppKey(allowAuthentication: false)
             metricsVm?.startPolling(every: 15)

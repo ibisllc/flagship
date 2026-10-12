@@ -39,7 +39,6 @@ final class ServiceRenameViewModelTests: XCTestCase {
             serviceId: "meta--scratchpad",
             client: MockScreensClient(),
             allPods: [],
-            globalLeaderPodId: nil,
             server: server,
             username: { "alice" },
         )
@@ -73,7 +72,6 @@ final class ServiceRenameViewModelTests: XCTestCase {
             serviceId: "meta--scratchpad",
             client: MockScreensClient(),
             allPods: [],
-            globalLeaderPodId: nil,
             server: server,
             username: { "alice" },
         )
@@ -93,7 +91,6 @@ final class ServiceRenameViewModelTests: XCTestCase {
             serviceId: "meta--scratchpad",
             client: MockScreensClient(),
             allPods: [],
-            globalLeaderPodId: nil,
             server: server,
             username: { "alice" },
         )
@@ -112,7 +109,6 @@ final class ServiceRenameViewModelTests: XCTestCase {
             serviceId: "meta--scratchpad",
             client: MockScreensClient(),
             allPods: [],
-            globalLeaderPodId: nil,
             server: server,
             username: { nil },
         )
@@ -127,7 +123,6 @@ final class ServiceRenameViewModelTests: XCTestCase {
             serviceId: "meta--scratchpad",
             client: MockScreensClient(),
             allPods: [],
-            globalLeaderPodId: nil,
             server: server,
             username: { "alice" },
         )

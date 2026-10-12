@@ -116,6 +116,8 @@ struct ContentView: View {
         }
         .onChange(of: app.leaderPodId) { _, _ in
             PodStatusPublisher(app: app).publish()
+            // The leader is the default server (docs/app-placement.md §1).
+            syncPodSession()
         }
         .task {
             PodStatusPublisher(app: app).publish()
@@ -155,9 +157,16 @@ struct ContentView: View {
         // Anchor on a LIVE pod (`sessionPod`), not `currentPod` — the latter
         // defaults to the leader = oldest pod, which may be a dead zombie that
         // would null the base URL and brick the box surface for every pod.
-        let pod = app.isPaired ? app.sessionPod : nil
+        let app = self.app
         let store = sessionStore
-        Task { await PodSessionSync.sync(currentPod: pod, store: store) }
+        Task { @MainActor in
+            // Which boxes this device holds a session for decides whether the
+            // leader can be the current server.
+            let ids = Set(await store.podTokenIds())
+            if app.sessionPodIds != ids { app.sessionPodIds = ids }
+            let pod = app.isPaired ? app.sessionPod : nil
+            await PodSessionSync.sync(currentPod: pod, store: store)
+        }
     }
 
     /// Lazily build + lifecycle the single live-update canal. Foreground-only:

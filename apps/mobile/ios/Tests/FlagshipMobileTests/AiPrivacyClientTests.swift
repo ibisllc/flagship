@@ -116,7 +116,7 @@ final class AiPrivacyClientTests: XCTestCase {
                           serviceId: String = "bright-maple--plants") -> ServiceDetailViewModel {
         client.mockAccess = [:]
         return ServiceDetailViewModel(
-            serviceId: serviceId, client: client, allPods: [], globalLeaderPodId: nil,
+            serviceId: serviceId, client: client, allPods: [],
             serverDomain: "home.bright-maple.flagship.services",
             egressSigner: { _ in key }
         )

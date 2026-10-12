@@ -233,7 +233,7 @@ final class AppAccessClientTests: XCTestCase {
     func test_detail_showsTheSectionWhenTheBoxSendsAccess_elseTheV1Card() async {
         let client = makeClient()
         let vm = ServiceDetailViewModel(serviceId: "bright-maple--plants", client: client, allPods: [],
-                                        globalLeaderPodId: nil, serverDomain: "home.bright-maple.flagship.services",
+                                        serverDomain: "home.bright-maple.flagship.services",
                                         egressSigner: { _ in Curve25519.Signing.PrivateKey() })
         await vm.load()
         XCTAssertNotNil(vm.access)
@@ -243,8 +243,7 @@ final class AppAccessClientTests: XCTestCase {
 
         let older = makeClient()
         older.mockAccess = [:]
-        let vm2 = ServiceDetailViewModel(serviceId: "bright-maple--plants", client: older, allPods: [],
-                                         globalLeaderPodId: nil)
+        let vm2 = ServiceDetailViewModel(serviceId: "bright-maple--plants", client: older, allPods: [])
         await vm2.load()
         XCTAssertNil(vm2.access)
         XCTAssertTrue(vm2.showsLegacyEgress)
@@ -258,7 +257,7 @@ final class AppAccessClientTests: XCTestCase {
         let client = makeClient(pod: "home2")
         client.mockAccess = [:]
         let vm = ServiceDetailViewModel(serviceId: "bright-maple--plants", client: client, allPods: [],
-                                        globalLeaderPodId: nil, serverDomain: "home.bright-maple.flagship.services",
+                                        serverDomain: "home.bright-maple.flagship.services",
                                         egressSigner: { _ in Curve25519.Signing.PrivateKey() })
         await vm.load()
         let r10 = await vm.allowEgress(host: "api.open-meteo.com")

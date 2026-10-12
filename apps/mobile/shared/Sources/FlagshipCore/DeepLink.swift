@@ -26,6 +26,12 @@ public enum DeepLink: Equatable, Sendable {
     /// Triggered in-app from the Home quick action. Internal-only —
     /// not parseable from a URL.
     case startVibeCode
+    /// An app's page talking to one particular server (a row on that server's
+    /// page). Internal-only.
+    case appDetailOnServer(serviceId: String, serverFqdn: String)
+    /// "Create app here" on a server's page: the creation flow, pinned to
+    /// that server (docs/app-placement.md §2). Internal-only.
+    case createAppOnServer(serverFqdn: String)
 
     /// Phase 3b — cross-device pairing join. Carries the relay session
     /// id + the admin's ephemeral X25519 public key (base64url) from a

@@ -15,8 +15,17 @@ public struct ServicesTab: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
+    @Environment(\.podScreensClients) private var podClients
 
     @State private var path: [AppsRoute] = []
+    /// The server every screen pushed on this stack talks to: the creation
+    /// flow's chosen server, or the server an app page was opened for. Nil:
+    /// the shell's current server. Cleared when the stack returns to the list.
+    @State private var stackServer: String?
+    /// A screens client bound to `stackServer` (its base URL + session).
+    @State private var stackClient: (any ScreensClient)?
+    /// "Runs on" for the creation flow on this stack (docs/app-placement.md §2).
+    @State private var creation: CreationTarget?
     @State private var vm: ServicesListViewModel?
     /// In-memory BYOK credential for the current build, set at the AI-key
     /// step and consumed by the downstream scratch/git containers. Never
@@ -31,7 +40,7 @@ public struct ServicesTab: View {
     public var body: some View {
         NavigationStack(path: $path) {
             content
-                .navigationDestination(for: AppsRoute.self) { route in destination(for: route) }
+                .navigationDestination(for: AppsRoute.self) { route in boundDestination(for: route) }
         }
         .onChange(of: linker.pending) { _, link in consume(link) }
         .task(id: linker.pending) { consume(linker.pending) }
@@ -40,8 +49,52 @@ public struct ServicesTab: View {
             // uninstall popped the detail) — refresh so a removed service
             // disappears without a manual pull-to-refresh.
             if !old.isEmpty && new.isEmpty {
+                stackServer = nil
+                stackClient = nil
+                creation = nil
                 Task { await vm?.load() }
+            } else if new.last == .buildSource, creation == nil {
+                startCreation(pinnedFqdn: nil, push: false)
             }
+        }
+        .onChange(of: app.pods) { _, pods in creation?.refresh(pods: pods, leaderPodId: app.leaderPodId) }
+    }
+
+    /// Bind every screen on this stack to `fqdn` (nil: the shell's server).
+    /// Until the bound client is ready the destinations show a spinner, so
+    /// nothing is ever sent to the previous box.
+    @MainActor
+    private func bind(_ fqdn: String?) {
+        let target = fqdn?.lowercased()
+        if target == stackServer, target == nil || stackClient != nil { return }
+        stackServer = target
+        stackClient = nil
+        guard let target else { return }
+        let clients = podClients
+        Task { @MainActor in
+            let bound = await clients.client(forFqdn: target)
+            if stackServer == target { stackClient = bound }
+        }
+    }
+
+    /// Open the creation flow: "Runs on" defaults to the leader, or is fixed
+    /// to `pinnedFqdn` when started from that server's page.
+    @MainActor
+    private func startCreation(pinnedFqdn: String?, push: Bool = true) {
+        let target = CreationTarget(pods: app.pods, leaderPodId: app.leaderPodId, pinnedFqdn: pinnedFqdn)
+        creation = target
+        bind(target.selectedFqdn)
+        if push { path = [.buildSource] }
+    }
+
+    @ViewBuilder
+    private func boundDestination(for route: AppsRoute) -> some View {
+        if stackServer != nil && stackClient == nil {
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            destination(for: route)
+                .environment(\.screensClient, stackClient ?? client)
+                .environment(\.screensServerFqdn, stackServer)
         }
     }
 
@@ -59,10 +112,16 @@ public struct ServicesTab: View {
             }
             _ = linker.consume()
         case .startVibeCode:
-            if path.last != .buildSource {
-                path.append(.buildSource)
-            }
             _ = linker.consume()
+            startCreation(pinnedFqdn: nil)
+        case .createAppOnServer(let fqdn):
+            _ = linker.consume()
+            startCreation(pinnedFqdn: fqdn)
+        case .appDetailOnServer(let id, let fqdn):
+            _ = linker.consume()
+            creation = nil
+            bind(fqdn)
+            path = [.appDetail(serviceId: id)]
         default:
             break
         }
@@ -135,7 +194,8 @@ public struct ServicesTab: View {
         case .appDetail(let id):
             ServiceDetailContainer(serviceId: id, path: $path)
         case .buildSource:
-            BuildSourceChooserContainer(path: $path)
+            BuildSourceChooserContainer(path: $path, target: creation,
+                                        onPickServer: { pod in bind(pod.fqdn) })
         case .buildGit:
             BuildGitContainer(path: $path, holder: buildCred)
         case .buildMcp:
@@ -253,7 +313,7 @@ public struct ServicesTab: View {
                         Text("Describe it in plain English. The AI writes it, your server runs it.")
                             .font(FS.font.body()).foregroundColor(c.textMuted)
                         FSPrimaryButton("Build a service", block: true) {
-                            path.append(.buildSource)
+                            startCreation(pinnedFqdn: nil)
                         }
                     }
                 }
@@ -270,7 +330,7 @@ public struct ServicesTab: View {
                         .buttonStyle(.plain)
                     }
                 }
-                Button(action: { path.append(.buildSource) }) {
+                Button(action: { startCreation(pinnedFqdn: nil) }) {
                     HStack(spacing: 8) {
                         Image(systemName: "sparkles").foregroundColor(c.primary)
                         Text("Build another service").font(.system(size: 15, weight: .semibold)).foregroundColor(c.primary)
@@ -395,6 +455,8 @@ struct ServiceDetailContainer: View {
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
     @Environment(\.serviceUninstallClient) private var uninstallClient
+    @Environment(\.podScreensClients) private var podClients
+    @Environment(\.screensServerFqdn) private var bound
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
@@ -406,15 +468,14 @@ struct ServiceDetailContainer: View {
     /// `serverId`, so the signed uninstall must name the box the screens
     /// client is talking to, not the leader (they differ on multi-server
     /// accounts). Same resolution as the env editor / vibe-code containers.
-    private var serverDomain: String {
-        app.sessionPod?.fqdn ?? app.currentPod?.fqdn ?? app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown"
-    }
+    private var serverDomain: String { app.screensFqdn(bound: bound) }
 
-    /// The box the screens client is talking to (the live session pod): a
-    /// signed internet grant / access list must name it, not the leader.
-    /// The view model asks the client first; this is the fallback.
+    /// The box the screens client is talking to (the stack's bound server, else
+    /// the live session pod): a signed internet grant / access list must name
+    /// it, not the leader. The view model asks the client first; this is the
+    /// fallback.
     private var sessionServerDomain: String? {
-        app.sessionPod?.fqdn ?? app.currentPod?.fqdn
+        bound ?? app.sessionPod?.fqdn ?? app.currentPod?.fqdn
     }
 
     var body: some View {
@@ -426,8 +487,6 @@ struct ServiceDetailContainer: View {
                     vm: vm,
                     username: app.currentUser,
                     pods: app.pods,
-                    globalLeaderPodId: app.leaderPodId,
-                    onSave: { Task { await save(vm: vm) } },
                     onRemove: { confirmRemove = true },
                     onOpenBrowserTabs: { path.append(.browserTabs(serviceId: serviceId)) },
                     onOpenCollaborators: { path.append(.inviteManage(serviceId: serviceId)) },
@@ -480,7 +539,7 @@ struct ServiceDetailContainer: View {
                     serviceId: serviceId,
                     client: client,
                     allPods: app.pods,
-                    globalLeaderPodId: app.leaderPodId,
+                    clients: podClients,
                     server: server,
                     username: { [app] in app.currentUser },
                     uninstallClient: uninstallClient,
@@ -492,14 +551,11 @@ struct ServiceDetailContainer: View {
             await vm?.load()
             await vm?.loadAppLinks()
         }
-    }
-
-    private func save(vm: ServiceDetailViewModel) async {
-        do {
-            try await vm.save()
-            toasts.success("Saved \(vm.serviceId).")
-        } catch {
-            toasts.error("Save failed. \(HumanError.humanize(error))")
+        .onChange(of: vm?.runsOn?.removedFromPage ?? false) { _, removed in
+            // Unticked the server this page talks to: the app is gone here.
+            guard removed, let vm else { return }
+            toasts.success("Removed \(vm.detail.value?.app.slug.capitalized ?? vm.serviceId) from \(serverDomain).")
+            path.removeAll()
         }
     }
 
@@ -530,6 +586,7 @@ struct VibeCodeSessionContainer: View {
     @Environment(ActiveOperationsCenter.self) private var operations
     @Environment(AppState.self) private var app
     @Environment(\.vibeCodeEnvelopeSigner) private var signer
+    @Environment(\.screensServerFqdn) private var bound
     @State private var stream: VibeCodeStreamViewModel?
 
     var body: some View {
@@ -537,7 +594,7 @@ struct VibeCodeSessionContainer: View {
             if let stream {
                 VibeCodeSessionScreen(
                     stream: stream,
-                    serverFqdn: app.sessionPod?.fqdn ?? app.currentPod?.fqdn ?? app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown",
+                    serverFqdn: app.screensFqdn(bound: bound),
                     client: client,
                     signEnvelope: signer,
                     savedCredential: {
@@ -556,7 +613,8 @@ struct VibeCodeSessionContainer: View {
                     sessionId: sessionId,
                     client: client,
                     operations: operations,
-                    serverLabel: app.currentPod?.name
+                    serverLabel: bound.flatMap { b in app.pods.first(where: { $0.fqdn.lowercased() == b })?.name }
+                        ?? app.currentPod?.name
                 )
             }
         }
@@ -572,11 +630,12 @@ struct ServiceEnvContainer: View {
     @Environment(\.screensClient) private var client
     @Environment(AppState.self) private var app
     @Environment(\.vibeCodeEnvelopeSigner) private var signer
+    @Environment(\.screensServerFqdn) private var bound
 
     var body: some View {
         ServiceEnvScreen(
             appId: appId,
-            serverFqdn: app.sessionPod?.fqdn ?? app.currentPod?.fqdn ?? app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown",
+            serverFqdn: app.screensFqdn(bound: bound),
             creator: creator,
             slug: slug,
             client: client,
@@ -624,6 +683,7 @@ struct VibeCodeDescribeContainer: View {
     @Environment(\.secretMailboxClient) private var mailbox
     @Environment(ToastCenter.self) private var toasts
     @Environment(AppState.self) private var app
+    @Environment(\.screensServerFqdn) private var bound
     var body: some View {
         VibeCodeDescribeScreen(onBuild: { prompt, name, visibility in
             do {
@@ -678,7 +738,7 @@ struct VibeCodeDescribeContainer: View {
               status == 503,
               message.lowercased().contains("vibe-code not configured"),
               let username = app.currentUser,
-              let pod = app.sessionPod,
+              let pod = bound.flatMap({ b in app.pods.first(where: { $0.fqdn.lowercased() == b }) }) ?? app.sessionPod,
               !pod.fqdn.isEmpty,
               !pod.identityPubKeyHex.isEmpty
         else { return .notApplicable }
@@ -703,18 +763,25 @@ struct VibeCodeDescribeContainer: View {
 // into the build modes. Scratch reuses the existing vibe flow.
 struct BuildSourceChooserContainer: View {
     @Binding var path: [AppsRoute]
+    /// "Runs on" for this creation flow; nil hides the row.
+    var target: CreationTarget? = nil
+    var onPickServer: (PodInfo) -> Void = { _ in }
     @Environment(\.screensClient) private var client
+    @Environment(\.screensServerFqdn) private var bound
     @State private var activeSessions = 0
     var body: some View {
         BuildSourceChooserScreen(
+            target: target,
+            onPickServer: onPickServer,
             activeSessions: activeSessions,
             onScratch: { path.append(.buildKey(purpose: .scratch)) },
             onGit: { path.append(.buildGit) },
             onMcp: { path.append(.buildMcp) },
             onPastBuilds: { path.append(.buildJournal(buildId: nil)) }
         )
-        // Re-counted each time the chooser shows (e.g. Back from a session).
-        .task(id: path.count) {
+        // Re-counted each time the chooser shows (e.g. Back from a session)
+        // and for each server picked.
+        .task(id: "\(path.count)|\(bound ?? "")") {
             let sessions = (try? await client.vibeCodeSessions().sessions) ?? []
             activeSessions = sessions.filter(\.isActive).count
         }
@@ -947,10 +1014,9 @@ struct InviteManageContainer: View {
 struct ServiceAccessContainer: View {
     let serviceId: String
     @Environment(AppState.self) private var app
+    @Environment(\.screensServerFqdn) private var bound
 
-    private var serverDomain: String {
-        app.sessionPod?.fqdn ?? app.currentPod?.fqdn ?? app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown"
-    }
+    private var serverDomain: String { app.screensFqdn(bound: bound) }
 
     private var serviceLabel: String {
         if let delim = serviceId.range(of: "--") {

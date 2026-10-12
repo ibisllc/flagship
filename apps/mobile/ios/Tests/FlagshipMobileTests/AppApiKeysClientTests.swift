@@ -218,7 +218,7 @@ final class AppApiKeysClientTests: XCTestCase {
     func test_detail_showsTheSection_unlessTheBox404s() async {
         let client = makeClient()
         let vm = ServiceDetailViewModel(serviceId: "bright-maple--plants", client: client, allPods: [],
-                                        globalLeaderPodId: nil, serverDomain: "home.bright-maple.flagship.services",
+                                        serverDomain: "home.bright-maple.flagship.services",
                                         egressSigner: { _ in Curve25519.Signing.PrivateKey() })
         await vm.load()
         XCTAssertTrue(vm.showsApiKeys)
@@ -228,7 +228,7 @@ final class AppApiKeysClientTests: XCTestCase {
         let older = makeClient()
         older.mockApiKeys = [:]
         let vm2 = ServiceDetailViewModel(serviceId: "bright-maple--plants", client: older, allPods: [],
-                                         globalLeaderPodId: nil, accessCanChange: false)
+                                         accessCanChange: false)
         await vm2.load()
         XCTAssertFalse(vm2.showsApiKeys)
         XCTAssertEqual(vm2.apiKeys?.canChange, false)

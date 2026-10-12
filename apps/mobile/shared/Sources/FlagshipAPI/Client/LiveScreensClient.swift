@@ -272,6 +272,13 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func serviceApiKeys(serviceId: String) async throws -> AppApiKeysResponse {
         try await request("/api/screens/services/\(esc(serviceId))/api-keys")
     }
+    public func serviceCopy(_ req: AppCopyRequest) async throws -> AppCopyStartResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/services/copy", method: "POST", body: body, timeout: 30)
+    }
+    public func serviceCopies() async throws -> AppCopiesResponse {
+        try await request("/api/screens/services/copies")
+    }
     public func serviceApiKeyCreate(serviceId: String, _ req: AppApiKeyCreateRequest) async throws -> AppApiKeyCreateResponse {
         let body = try JSONEncoder().encode(req)
         return try await request("/api/screens/services/\(esc(serviceId))/api-keys", method: "POST", body: body)

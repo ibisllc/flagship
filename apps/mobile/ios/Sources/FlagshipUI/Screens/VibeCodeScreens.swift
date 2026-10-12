@@ -102,6 +102,7 @@ public struct VibeCodeDescribeScreen: View {
 
     @Environment(AppState.self) private var app
     @Environment(\.screensClient) private var client
+    @Environment(\.screensServerFqdn) private var bound
     @State private var prompt: String = ""
     @State private var name: String = ""
     @State private var visibility: Visibility = .inviteOnly
@@ -135,11 +136,13 @@ public struct VibeCodeDescribeScreen: View {
 
     public var body: some View {
         let user = app.currentUser ?? "you"
-        let server = app.sessionPod?.fqdn ?? app.leaderPod?.fqdn ?? "\(user).flagship.services"
+        let server = bound ?? app.sessionPod?.fqdn ?? app.leaderPod?.fqdn ?? "\(user).flagship.services"
         return FSScreen {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s6) {
                     Spacer().frame(height: FS.space.s4)
+
+                    RunsOnLine()
 
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         FSField(
