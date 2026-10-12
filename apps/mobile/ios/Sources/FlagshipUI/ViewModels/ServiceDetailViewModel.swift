@@ -198,6 +198,27 @@ public final class ServiceDetailViewModel {
         await access?.load()
     }
 
+    // MARK: API keys (docs/app-apis.md §3)
+
+    /// The app's API keys section. Shown unless the box 404s the list.
+    public private(set) var apiKeys: AppApiKeysController?
+
+    public var showsApiKeys: Bool { apiKeys.map { !$0.isHidden } ?? false }
+
+    private func syncApiKeys(_ app: FlagshipAPI.AppSummary) async {
+        let name = app.slug.capitalized
+        if apiKeys == nil {
+            // Same rules as the access list: signed by the sensitive-order
+            // key, for the box the client talks to, read-only when restricted.
+            apiKeys = AppApiKeysController(serviceId: serviceId, appName: name, client: client,
+                                           serverDomain: egressServerDomain, canChange: accessCanChange,
+                                           signer: egressSigner)
+        } else {
+            apiKeys?.setAppName(name)
+        }
+        await apiKeys?.load()
+    }
+
     /// Pods the service should run on (server-set). Edited locally; reset
     /// by `cancelEdits()` and persisted by `save()`.
     public var runOnPodIds: Set<String> = []
@@ -288,7 +309,9 @@ public final class ServiceDetailViewModel {
             detail = .loaded(di)
             egressOverride = nil
             ownedUrls = .loaded(uo.urls.filter { $0.fqdn.contains(serviceId) })
-            await syncAccess(di.app)
+            async let accessSync: Void = syncAccess(di.app)
+            async let keysSync: Void = syncApiKeys(di.app)
+            _ = await (accessSync, keysSync)
             // Seed local edits from server state — currently we default
             // to running on the leader-only since the API doesn't yet
             // return a multi-pod policy. When the daemon contract

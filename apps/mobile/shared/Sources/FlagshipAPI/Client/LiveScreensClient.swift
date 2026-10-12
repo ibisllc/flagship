@@ -237,6 +237,21 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         let body = try JSONSerialization.data(withJSONObject: ["enabled": enabled])
         return try await request("/api/screens/settings/access-alerts", method: "POST", body: body)
     }
+    public func serviceApiKeys(serviceId: String) async throws -> AppApiKeysResponse {
+        try await request("/api/screens/services/\(esc(serviceId))/api-keys")
+    }
+    public func serviceApiKeyCreate(serviceId: String, _ req: AppApiKeyCreateRequest) async throws -> AppApiKeyCreateResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/services/\(esc(serviceId))/api-keys", method: "POST", body: body)
+    }
+    public func serviceApiKeyRevoke(serviceId: String, keyId: String) async throws {
+        do {
+            let _: EmptyResponse = try await request(
+                "/api/screens/services/\(esc(serviceId))/api-keys/\(esc(keyId))", method: "DELETE")
+        } catch ScreensClientError.decoding {
+            // A 2xx with no JSON body (e.g. 204) still revoked the key.
+        }
+    }
     public func accessRequestEvents() -> AsyncStream<Void> {
         AsyncStream { continuation in
             let task = Task { [self] in

@@ -214,6 +214,13 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                         fallbackServerDomain = { (appState.sessionPod ?: appState.leaderPod)?.fqdn },
                     )
                 }
+                // API keys (docs/app-apis.md §3); hidden on a box without them.
+                ApiKeysSection(
+                    serviceId = serviceId,
+                    appName = resp.app.slug.replaceFirstChar { it.uppercase() },
+                    restricted = appState.isRestrictedDevice(),
+                    fallbackServerDomain = { appState.sessionPod?.fqdn },
+                )
                 if (resp.editable == true) {
                     Spacer(Modifier.height(FS.space.s4))
                     EditRow(onClick = { nav.navigate("edit-service/$serviceId") })

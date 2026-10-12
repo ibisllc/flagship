@@ -384,7 +384,8 @@ describe("/webapp PWA static surface", () => {
     // v48 replaces the internet approval with app access lists and their alerts.
     // v49 adds the Push notifications switch.
     // v51 unseals unlock requests with a PKCS#8 X25519 key (raw private import throws).
-    expect(r.body).toContain('SHELL_VERSION = "v51"');
+    // v52 adds app API keys on the app's page.
+    expect(r.body).toContain('SHELL_VERSION = "v52"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

@@ -2099,3 +2099,11 @@ button[data-device-restricted] {
 .update-pending p { margin: 0; }
 .update-pending-spinner { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); border-top-color: var(--accent); animation: ops-bar-spin 0.7s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .update-pending-spinner { animation-duration: 1.4s; } }
+
+/* A live app's API keys (docs/app-apis.md §3). */
+.sd-api-key { padding-top: var(--space-2); border-top: 1px solid var(--border-soft); overflow-wrap: anywhere; }
+.sd-api-key-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.sd-api-key-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-api-key-revoke { width: auto; }
+.sd-api-key-secret { color: var(--ink); font-size: 13px; padding: var(--space-2); border: 1px solid var(--border); border-radius: 8px; background: var(--surface-sunken); word-break: break-all; user-select: all; }
+.sd-api-key-usage { word-break: break-all; }

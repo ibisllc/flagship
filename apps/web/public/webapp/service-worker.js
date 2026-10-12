@@ -93,7 +93,9 @@
 //  v50: a sent server update stays on the update card (and the update
 //       sheet) until the box reports its outcome, with Send again / Forget
 //       it once it's 30 minutes old.
-const SHELL_VERSION = "v51";
+//  v52: an app's page lists its API keys and creates (signed, shown once)
+//       and revokes them; precaches lib/appApiKeys.js.
+const SHELL_VERSION = "v52";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -156,6 +158,7 @@ const OPTIONAL_SHELL = [
   "/lib/appAccess.js",
   "/lib/accessAlerts.js",
   "/lib/pushSetting.js",
+  "/lib/appApiKeys.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",

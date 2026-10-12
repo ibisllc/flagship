@@ -229,6 +229,22 @@ class LiveScreensClient(
         request<Unit>("${servicePath(serviceId)}/access/dismiss", null, "POST", body)
     }
 
+    override suspend fun serviceApiKeys(serviceId: String): AppApiKeysResponse =
+        request("${servicePath(serviceId)}/api-keys", AppApiKeysResponse.serializer())
+
+    override suspend fun serviceApiKeyCreate(serviceId: String, req: AppApiKeyCreateRequest): AppApiKeyCreateResponse {
+        val body = json.encodeToString(AppApiKeyCreateRequest.serializer(), req).toByteArray()
+        return request("${servicePath(serviceId)}/api-keys", AppApiKeyCreateResponse.serializer(), "POST", body)
+    }
+
+    override suspend fun serviceApiKeyRevoke(serviceId: String, keyId: String) {
+        request<Unit>(
+            "${servicePath(serviceId)}/api-keys/${java.net.URLEncoder.encode(keyId, "UTF-8")}",
+            null,
+            "DELETE",
+        )
+    }
+
     override suspend fun accessRequests(): AccessRequestsResponse =
         request("/api/screens/access-requests", AccessRequestsResponse.serializer())
 

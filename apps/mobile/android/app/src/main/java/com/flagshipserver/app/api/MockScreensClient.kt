@@ -177,6 +177,69 @@ class MockScreensClient(
         accessFixture[serviceId] = current.copy(pending = current.pending.filter { it.host != host })
     }
 
+    /** Each app's API keys (docs/app-apis.md §3): plants has a read key, wiki
+     *  none. An app missing here is on a box from before API keys (404). */
+    val apiKeysFixture: MutableMap<String, MutableList<AppApiKeyInfo>> = mutableMapOf(
+        "bright-maple--plants" to mutableListOf(
+            AppApiKeyInfo(
+                keyId = "5d2c8e0f9a7b1346",
+                label = "Garden sensor",
+                scope = com.flagshipserver.app.core.AppApiKey.SCOPE_READ,
+                createdAt = now() - 60_000L * 60 * 24 * 9,
+                lastUsedAt = now() - 60_000L * 12,
+                expiresAt = 0,
+            ),
+        ),
+        "bright-maple--wiki" to mutableListOf(),
+    )
+    val apiKeyCreates: MutableList<Pair<String, AppApiKeyCreateRequest>> = mutableListOf()
+    val apiKeyRevokes: MutableList<Pair<String, String>> = mutableListOf()
+    /** Thrown by `serviceApiKeyCreate` / `serviceApiKeyRevoke` instead of applying. */
+    var apiKeysError: Throwable? = null
+
+    override suspend fun serviceApiKeys(serviceId: String): AppApiKeysResponse {
+        tick()
+        val keys = apiKeysFixture[serviceId] ?: throw ScreensError.Http(404, """{"error":"not found"}""")
+        return AppApiKeysResponse(keys.toList())
+    }
+
+    override suspend fun serviceApiKeyCreate(serviceId: String, req: AppApiKeyCreateRequest): AppApiKeyCreateResponse {
+        tick()
+        apiKeyCreates.add(serviceId to req)
+        apiKeysError?.let { throw it }
+        val keys = apiKeysFixture[serviceId] ?: throw ScreensError.Http(404, """{"error":"not found"}""")
+        val g = req.grant
+        if (g.serviceId != serviceId || !com.flagshipserver.app.core.AppApiKey.isValidKeyId(g.keyId) ||
+            g.scope !in setOf(com.flagshipserver.app.core.AppApiKey.SCOPE_READ, com.flagshipserver.app.core.AppApiKey.SCOPE_WRITE) ||
+            req.signature.length != 128
+        ) {
+            throw ScreensError.Http(400, """{"error":"malformed grant"}""")
+        }
+        if (g.serverDomain != boxFqdn()) throw ScreensError.Http(403, """{"error":"grant names another server"}""")
+        if (keys.any { it.keyId == g.keyId }) throw ScreensError.Http(409, """{"error":"key id exists"}""")
+        keys.add(
+            AppApiKeyInfo(
+                keyId = g.keyId,
+                label = req.label,
+                scope = g.scope,
+                createdAt = now(),
+                lastUsedAt = null,
+                expiresAt = g.expiresAt,
+            ),
+        )
+        val secret = java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) })
+        return AppApiKeyCreateResponse(ok = true, key = "fsk_${g.keyId}_$secret")
+    }
+
+    override suspend fun serviceApiKeyRevoke(serviceId: String, keyId: String) {
+        tick()
+        apiKeyRevokes.add(serviceId to keyId)
+        apiKeysError?.let { throw it }
+        val keys = apiKeysFixture[serviceId] ?: throw ScreensError.Http(404, """{"error":"not found"}""")
+        if (!keys.removeAll { it.keyId == keyId }) throw ScreensError.Http(404, """{"error":"no such key"}""")
+    }
+
     override suspend fun accessRequests(): AccessRequestsResponse {
         tick()
         return AccessRequestsResponse(

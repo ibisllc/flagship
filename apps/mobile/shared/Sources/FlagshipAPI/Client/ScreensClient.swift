@@ -129,6 +129,17 @@ public protocol ScreensClient: Sendable {
     @discardableResult
     func setAccessAlerts(enabled: Bool) async throws -> AccessAlertsSetting
 
+    // App API keys (docs/app-apis.md §3).
+    /// `GET /api/screens/services/<id>/api-keys`. A box without API keys
+    /// answers 404.
+    func serviceApiKeys(serviceId: String) async throws -> AppApiKeysResponse
+    /// `POST /api/screens/services/<id>/api-keys`: the owner's signed grant.
+    /// The answer carries the full key, once.
+    func serviceApiKeyCreate(serviceId: String, _ req: AppApiKeyCreateRequest) async throws -> AppApiKeyCreateResponse
+    /// `DELETE /api/screens/services/<id>/api-keys/<keyId>` (owner session, no
+    /// signature: it only removes access).
+    func serviceApiKeyRevoke(serviceId: String, keyId: String) async throws
+
     // P9 — peer-backup management.
     func peerBackupStatus() async throws -> PeerBackupStatusResponse
     func peerBackupToggle(participate: Bool) async throws -> PeerBackupStatusResponse
@@ -365,6 +376,15 @@ public extension ScreensClient {
     }
     func setAccessAlerts(enabled: Bool) async throws -> AccessAlertsSetting {
         throw ScreensClientError.notImplemented("access alerts setting")
+    }
+    func serviceApiKeys(serviceId: String) async throws -> AppApiKeysResponse {
+        throw ScreensClientError.notImplemented("app API keys")
+    }
+    func serviceApiKeyCreate(serviceId: String, _ req: AppApiKeyCreateRequest) async throws -> AppApiKeyCreateResponse {
+        throw ScreensClientError.notImplemented("app API keys")
+    }
+    func serviceApiKeyRevoke(serviceId: String, keyId: String) async throws {
+        throw ScreensClientError.notImplemented("app API keys")
     }
     func buildDiscard(buildId: String) async throws {
         throw ScreensClientError.notImplemented("discard")

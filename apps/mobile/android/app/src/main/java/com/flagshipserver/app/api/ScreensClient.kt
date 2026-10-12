@@ -133,6 +133,21 @@ interface ScreensClient {
     suspend fun serviceAccessDismiss(serviceId: String, host: String): Unit =
         throw ScreensError.NotImplemented("access list")
 
+    /** `GET /api/screens/services/:serviceId/api-keys` (docs/app-apis.md §3).
+     *  A box without API keys answers 404. */
+    suspend fun serviceApiKeys(serviceId: String): AppApiKeysResponse =
+        throw ScreensError.NotImplemented("API keys")
+
+    /** `POST /api/screens/services/:serviceId/api-keys`: the owner's signed
+     *  grant; the reply carries the full key, once. */
+    suspend fun serviceApiKeyCreate(serviceId: String, req: AppApiKeyCreateRequest): AppApiKeyCreateResponse =
+        throw ScreensError.NotImplemented("API keys")
+
+    /** `DELETE /api/screens/services/:serviceId/api-keys/:keyId` (unsigned:
+     *  it only removes access). */
+    suspend fun serviceApiKeyRevoke(serviceId: String, keyId: String): Unit =
+        throw ScreensError.NotImplemented("API keys")
+
     /** `GET /api/screens/access-requests`: every app's pending requests. */
     suspend fun accessRequests(): AccessRequestsResponse =
         throw ScreensError.NotImplemented("access requests")

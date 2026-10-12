@@ -283,6 +283,77 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return next
     }
 
+    // MARK: - App API keys (docs/app-apis.md §3)
+
+    /// Per-service keys; a missing entry is a box without API keys (404).
+    public var mockApiKeys: [String: [AppApiKey]] = [
+        "bright-maple--plants": [
+            AppApiKey(keyId: "3f9a0c2e7b1d4a68", label: "Garden sensor", scope: .write,
+                      createdAt: 1_760_000_000_000, lastUsedAt: 1_760_100_000_000, expiresAt: nil),
+            AppApiKey(keyId: "a1b2c3d4e5f60718", label: "Dashboard", scope: .read,
+                      createdAt: 1_760_000_500_000, lastUsedAt: nil, expiresAt: nil),
+        ],
+        "bright-maple--wiki": [],
+    ]
+    /// When set, `serviceApiKeyCreate` refuses a signature this key didn't make.
+    public var mockApiKeyVerifyKey: Data?
+    public private(set) var serviceApiKeyCreateCalls: [(serviceId: String, req: AppApiKeyCreateRequest)] = []
+    public private(set) var serviceApiKeyRevokeCalls: [(serviceId: String, keyId: String)] = []
+    /// Thrown by `serviceApiKeyCreate` (after recording the call), once.
+    public var serviceApiKeyCreateError: Error?
+
+    public func serviceApiKeys(serviceId: String) async throws -> AppApiKeysResponse {
+        try await tick()
+        guard let keys = mockApiKeys[serviceId] else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+        }
+        return AppApiKeysResponse(keys: keys)
+    }
+
+    /// Checks what the box checks (shape, own server, clock, signature, a
+    /// fresh keyId) and answers with a full key once.
+    public func serviceApiKeyCreate(serviceId: String, _ req: AppApiKeyCreateRequest) async throws -> AppApiKeyCreateResponse {
+        try await tick()
+        serviceApiKeyCreateCalls.append((serviceId, req))
+        if let e = serviceApiKeyCreateError { serviceApiKeyCreateError = nil; throw e }
+        func refuse(_ status: Int, _ reason: String) -> ScreensClientError {
+            .http(status: status, message: #"{"error":"\#(reason)"}"#)
+        }
+        guard var keys = mockApiKeys[serviceId] else { throw refuse(404, "not found") }
+        let g = req.grant
+        guard g.serviceId == serviceId, AppApiKeyId.isValid(g.keyId), g.expiresAt >= 0,
+              (1...64).contains(req.label.trimmingCharacters(in: .whitespacesAndNewlines).utf16.count) else {
+            throw refuse(400, "malformed grant")
+        }
+        guard g.serverDomain == (await boxDomain()) else { throw refuse(403, "grant is for a different server") }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        guard abs(g.issuedAt - now) <= 10 * 60 * 1000 else { throw refuse(403, "stale grant") }
+        if let key = mockApiKeyVerifyKey {
+            guard let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: key),
+                  let sig = Self.hexBytes(req.signature),
+                  pub.isValidSignature(sig, for: g.canonicalBytes()) else {
+                throw refuse(403, "bad signature")
+            }
+        }
+        guard !keys.contains(where: { $0.keyId == g.keyId }) else { throw refuse(409, "keyId exists") }
+        keys.insert(AppApiKey(keyId: g.keyId, label: req.label, scope: g.scope, createdAt: now,
+                              lastUsedAt: nil, expiresAt: g.expiresAt), at: 0)
+        mockApiKeys[serviceId] = keys
+        let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+        let secret = String((0..<43).map { _ in alphabet.randomElement()! })
+        return AppApiKeyCreateResponse(ok: true, key: "fsk_\(g.keyId)_\(secret)")
+    }
+
+    public func serviceApiKeyRevoke(serviceId: String, keyId: String) async throws {
+        try await tick()
+        serviceApiKeyRevokeCalls.append((serviceId, keyId))
+        guard var keys = mockApiKeys[serviceId], keys.contains(where: { $0.keyId == keyId }) else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+        }
+        keys.removeAll { $0.keyId == keyId }
+        mockApiKeys[serviceId] = keys
+    }
+
     private var accessEventContinuations: [AsyncStream<Void>.Continuation] = []
 
     /// Stays open; `emitAccessRequestEvent()` sends a frame.

@@ -10,7 +10,8 @@ import FlagshipCore
 ///   3. WEB DOMAINS — canonical FQDN + per-pod aliases + user-defined
 ///      custom URLs; each shows where it currently resolves. User can
 ///      claim, release, or add new ones.
-///   4. Logs preview + last backup + Remove.
+///   4. API keys (docs/app-apis.md §3), unless the box has none.
+///   5. Logs preview + last backup + Remove.
 ///
 /// Pure view: takes a `vm` (ServiceDetailViewModel) and a list of pods.
 public struct ServiceDetailScreen: View {
@@ -91,6 +92,9 @@ public struct ServiceDetailScreen: View {
                     browserTabsRow(d: d, c: c)
                     collaboratorsRow(c: c)
                     accessRow(c: c)
+                    if vm.showsApiKeys, let keys = vm.apiKeys {
+                        ApiKeysSection(controller: keys)
+                    }
                     logsAndBackup(d: d, c: c)
                     saveAndRemove(c: c)
                 }

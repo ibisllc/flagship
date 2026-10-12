@@ -1,0 +1,13 @@
+{
+  "about": "flagship/app-api-key/v1 (docs/app-apis.md). Signing key: the protocol IRK derived from the UMK seed (deriveIRK / deriveProtocolIrkSeed), not the seed itself. Canonical: tag|serverDomain|serviceId|keyId|scope|expiresAt|issuedAt; keyId 16 lowercase hex; scope read|write; expiresAt ms or 0 (never).",
+  "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+  "pub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+  "cases": [
+    { "serverDomain": "home.harry.flagship.services", "serviceId": "harry-weather", "keyId": "0123456789abcdef", "scope": "write", "expiresAt": 0, "issuedAt": 1700000000000,
+      "canonical": "flagship/app-api-key/v1|home.harry.flagship.services|harry-weather|0123456789abcdef|write|0|1700000000000",
+      "signature": "ebdea5fee1a81669de617bb16a67d4d7b581a800f43094e2f546758788d1e1f586d42f958284f56f6eb43e51bae8a8f236e0e7fea2c67788c9bbf4f323f36303" },
+    { "serverDomain": "home.harry.flagship.services", "serviceId": "harry-weather", "keyId": "0123456789abcdef", "scope": "read", "expiresAt": 1707776000000, "issuedAt": 1700000000000,
+      "canonical": "flagship/app-api-key/v1|home.harry.flagship.services|harry-weather|0123456789abcdef|read|1707776000000|1700000000000",
+      "signature": "8a4750eec0d437071d08d6563ed6bd17b4e50dd83e8a2b2ed9112a36bdb557b7bc752060764d20acc183fea481dad89d51b902e8de4cb70a4f1f5436ac612108" }
+  ]
+}

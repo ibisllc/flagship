@@ -140,6 +140,48 @@ data class AppAccessLineError(val line: Int, val message: String)
 @Serializable
 data class AppAccessDismissRequest(val host: String)
 
+// ---------- App API keys (docs/app-apis.md §3) --------------------------
+
+/** One key on `GET /api/screens/services/:id/api-keys`. The secret never
+ *  comes back after the create. */
+@Serializable
+data class AppApiKeyInfo(
+    val keyId: String,
+    val label: String = "",
+    /** "read" | "write". */
+    val scope: String = com.flagshipserver.app.core.AppApiKey.SCOPE_READ,
+    val createdAt: Long = 0,
+    val lastUsedAt: Long? = null,
+    /** ms, or 0 / absent for a key that never expires. */
+    val expiresAt: Long? = null,
+)
+
+@Serializable
+data class AppApiKeysResponse(val keys: List<AppApiKeyInfo> = emptyList())
+
+@Serializable
+data class AppApiKeyGrantBody(
+    val serverDomain: String,
+    val serviceId: String,
+    val keyId: String,
+    val scope: String,
+    val expiresAt: Long,
+    val issuedAt: Long,
+)
+
+/** `POST /api/screens/services/:id/api-keys`. */
+@Serializable
+data class AppApiKeyCreateRequest(
+    val grant: AppApiKeyGrantBody,
+    /** Ed25519 over the canonical bytes, 128 hex. */
+    val signature: String,
+    val label: String,
+)
+
+/** The full key (`fsk_<keyId>_<secret>`), returned once. */
+@Serializable
+data class AppApiKeyCreateResponse(val ok: Boolean = false, val key: String? = null)
+
 /** One pending request on `GET /api/screens/access-requests`. */
 @Serializable
 data class AccessRequest(

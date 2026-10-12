@@ -45,6 +45,29 @@ import {
   readAccessSummary,
   ruleCountText,
 } from "../lib/appAccess.js";
+import {
+  API_KEYS_COMPANION_NOTE,
+  API_KEYS_COPY,
+  API_KEYS_CREATE,
+  API_KEYS_DONE,
+  API_KEYS_EMPTY,
+  API_KEYS_NOTE,
+  API_KEYS_REVOKE,
+  API_KEYS_TITLE,
+  API_KEY_COPY_WARNING,
+  API_KEY_LABEL_MAX,
+  API_KEY_SCOPES,
+  DEFAULT_API_KEY_SCOPE,
+  apiKeyErrorMessage,
+  apiKeyUsageLine,
+  checkApiKeyLabel,
+  createApiKey,
+  fetchApiKeys,
+  isApiKeyExpired,
+  revokeApiKey,
+  scopeLabel,
+} from "../lib/appApiKeys.js";
+import { formatWhen } from "../lib/dateFormat.js";
 
 const COM_BASE = controlApex();
 
@@ -74,6 +97,34 @@ function hasBrowserBundle(body) {
   if ((body.browserTabs ?? []).length > 0) return true;
   const m = body.manifest;
   return !!(m && typeof m === "object" && (m.browser || m.browserBundle));
+}
+
+function formatStoreBytes(n) {
+  if (typeof n !== "number" || !Number.isFinite(n) || n < 0) return "size unknown";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = n;
+  let u = 0;
+  while (v >= 1000 && u < units.length - 1) {
+    v /= 1000;
+    u++;
+  }
+  return `${u === 0 ? v : v.toFixed(v < 10 ? 1 : 0)} ${units[u]}`;
+}
+
+/** One data-layer store: a Postgres database (by store name) or the app's files folder (with its size). */
+function renderStoreRow(i) {
+  const label = i.store === "postgres" ? "Postgres" : i.store === "files" ? "Files" : String(i.store ?? "");
+  const value =
+    i.store === "files"
+      ? formatStoreBytes(i.bytes)
+      : i.store === "postgres" && i.instanceName === "default"
+        ? "database"
+        : String(i.instanceName ?? "");
+  return `
+          <div class="card">
+            <div class="row"><span class="label">${escapeHtml(label)}</span><span class="value">${escapeHtml(value)}</span></div>
+          </div>
+        `;
 }
 
 export async function renderServiceDetail(serviceId) {
@@ -108,6 +159,7 @@ export async function renderServiceDetail(serviceId) {
       ${body.editable === true ? renderEditRow() : ""}
       ${typeof body.adaptedFrom?.repo === "string" ? renderReportRow(body.adaptedFrom.repo) : ""}
       <div id="sd-egress">${renderInternetSection(s)}</div>
+      <div id="sd-api-keys"></div>
 
       ${renderWebDomainsSection(s, currentServiceLinks)}
       <div id="sd-custom-domains">${renderCustomDomainsSection()}</div>
@@ -118,11 +170,7 @@ export async function renderServiceDetail(serviceId) {
       <h2 class="mt-4">Data layer</h2>
       ${(body.dataLayerInstances ?? []).length === 0
         ? '<div class="card placeholder">no stores</div>'
-        : (body.dataLayerInstances ?? []).map((i) => `
-          <div class="card">
-            <div class="row"><span class="label">${escapeHtml(i.store)}</span><span class="value">${escapeHtml(i.instanceName)}</span></div>
-          </div>
-        `).join("")
+        : (body.dataLayerInstances ?? []).map(renderStoreRow).join("")
       }
       <h2 class="mt-4">Members</h2>
       ${(body.members ?? []).length === 0
@@ -229,6 +277,7 @@ export async function renderServiceDetail(serviceId) {
     bindCustomDomainsHandlers();
     if (readAccessSummary(s)) void loadAccessSection(s);
     else bindEgressHandlers(s);
+    void loadApiKeysSection(s);
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
@@ -422,6 +471,201 @@ function bindEgressHandlers(app) {
   // Allow opens every host the app declares; Stop access signs an empty list.
   $("sd-egress-allow")?.addEventListener("click", (ev) => void send(app.egress?.declared ?? [], ev.currentTarget));
   $("sd-egress-stop")?.addEventListener("click", (ev) => void send([], ev.currentTarget));
+}
+
+// ---------------------------------------------------------------
+// API keys (docs/app-apis.md §3). Hidden when the box 404s the list.
+// ---------------------------------------------------------------
+
+function apiKeyRow(k, { companion, now }) {
+  const expired = isApiKeyExpired(k, now);
+  return `
+        <div class="sd-api-key mt-2" data-api-key="${escapeHtml(k.keyId)}">
+          <div class="sd-api-key-head">
+            <span class="weight-600 sd-api-key-label">${escapeHtml(k.label || k.keyId)}</span>
+            <span class="pill${k.scope === "write" ? " warn" : ""}">${escapeHtml(scopeLabel(k.scope))}</span>
+          </div>
+          <div class="muted-sm">Created ${escapeHtml(formatWhen(k.createdAt, now))} · ${
+            k.lastUsedAt ? `Last used ${escapeHtml(formatWhen(k.lastUsedAt, now))}` : "Never used"
+          }</div>
+          ${expired ? `<div class="muted-sm err-text">Expired ${escapeHtml(formatWhen(k.expiresAt, now))}</div>` : ""}
+          ${companion
+            ? ""
+            : `<button class="secondary sd-api-key-revoke mt-1" data-api-key-revoke="${escapeHtml(k.keyId)}">${escapeHtml(API_KEYS_REVOKE)}</button>`}
+        </div>`;
+}
+
+function apiKeyForm() {
+  const options = (list, selected) =>
+    list.map((o) => `<option value="${o.value}"${o.value === selected ? " selected" : ""}>${escapeHtml(o.label)}</option>`).join("");
+  return `
+        <div class="sd-api-key-form mt-2">
+          <label for="sd-api-key-label">Name</label>
+          <input id="sd-api-key-label" type="text" placeholder="Kitchen display" autocomplete="off" maxlength="${API_KEY_LABEL_MAX}" />
+          <label for="sd-api-key-scope">Access</label>
+          <select id="sd-api-key-scope">${options(API_KEY_SCOPES, DEFAULT_API_KEY_SCOPE)}</select>
+          <p class="err-text text-sm hidden" id="sd-api-key-error"></p>
+          <div class="row-2 mt-2">
+            <button class="secondary" id="sd-api-key-cancel">Cancel</button>
+            <button id="sd-api-key-go">${escapeHtml(API_KEYS_CREATE)}</button>
+          </div>
+        </div>`;
+}
+
+function apiKeyReveal(revealed) {
+  return `
+        <div class="sd-api-key-reveal mt-2">
+          <div class="weight-600">${escapeHtml(revealed.label)}</div>
+          <pre class="json-block mono sd-api-key-secret" id="sd-api-key-secret">${escapeHtml(revealed.key)}</pre>
+          <p class="note err-text">${escapeHtml(API_KEY_COPY_WARNING)}</p>
+          <p class="muted-sm">Send it with each request:</p>
+          <pre class="json-block mono sd-api-key-usage">${escapeHtml(apiKeyUsageLine("<key>"))}</pre>
+          <div class="row-2 mt-2">
+            <button id="sd-api-key-copy">${escapeHtml(API_KEYS_COPY)}</button>
+            <button class="secondary" id="sd-api-key-done">${escapeHtml(API_KEYS_DONE)}</button>
+          </div>
+        </div>`;
+}
+
+/**
+ * The "API keys" section. `keys` is the box's list (null hides the section:
+ * an older box without API keys); `form` shows the create form, `revealed`
+ * the just-created key, once.
+ */
+export function renderApiKeysSection({ keys, companion = isCompanionProfile(), form = false, revealed = null, error = "", now = Date.now() } = {}) {
+  if (!Array.isArray(keys)) return "";
+  const list = keys.length === 0
+    ? `<p class="muted-sm mt-2">${escapeHtml(API_KEYS_EMPTY)}</p>`
+    : keys.map((k) => apiKeyRow(k, { companion, now })).join("");
+  let action = "";
+  if (companion) action = `<p class="faint-sm mt-2">${escapeHtml(API_KEYS_COMPANION_NOTE)}</p>`;
+  else if (revealed) action = apiKeyReveal(revealed);
+  else if (form) action = apiKeyForm();
+  else action = `<button id="sd-api-key-new" class="secondary full-width mt-2">${escapeHtml(API_KEYS_CREATE)}</button>`;
+  return `
+      <h2 class="mt-4">${escapeHtml(API_KEYS_TITLE)}</h2>
+      <div class="card sd-api-keys">
+        <p class="note">${escapeHtml(API_KEYS_NOTE)}</p>
+        ${error ? `<p class="err-text text-sm mt-2">${escapeHtml(error)}</p>` : ""}
+        ${action}
+        <div id="sd-api-key-list">${list}</div>
+      </div>`;
+}
+
+let apiKeysState = null;
+
+async function loadApiKeysSection(app) {
+  let keys = null;
+  let error = "";
+  try {
+    keys = await fetchApiKeys(app.serviceId, (path, init) => screensFetch(path, init));
+  } catch (e) {
+    keys = [];
+    error = e instanceof ScreensError ? apiKeyErrorMessage(e) : humanError(e);
+  }
+  if (currentServiceId !== app.serviceId) return;
+  apiKeysState = { app, keys, form: false, revealed: null, error };
+  paintApiKeysSection();
+}
+
+function paintApiKeysSection() {
+  const slot = $("sd-api-keys");
+  if (!slot || !apiKeysState) return;
+  const st = apiKeysState;
+  slot.innerHTML = renderApiKeysSection(st);
+  const set = (patch) => {
+    apiKeysState = { ...apiKeysState, ...patch };
+    paintApiKeysSection();
+  };
+  $("sd-api-key-new")?.addEventListener("click", () => {
+    set({ form: true, error: "" });
+    $("sd-api-key-label")?.focus({ preventScroll: true });
+  });
+  $("sd-api-key-cancel")?.addEventListener("click", () => set({ form: false, error: "" }));
+  $("sd-api-key-go")?.addEventListener("click", (ev) => void createFromPage(ev.currentTarget));
+  $("sd-api-key-label")?.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") { ev.preventDefault(); $("sd-api-key-go")?.click(); }
+  });
+  $("sd-api-key-copy")?.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(st.revealed.key);
+      toast("Copied.");
+    } catch {
+      toast("Couldn't copy — select the key and copy it by hand.", "err");
+    }
+  });
+  $("sd-api-key-done")?.addEventListener("click", () => set({ revealed: null }));
+  slot.querySelectorAll("[data-api-key-revoke]").forEach((btn) => {
+    btn.addEventListener("click", () => void revokeFromPage(btn));
+  });
+}
+
+async function createFromPage(btn) {
+  const st = apiKeysState;
+  const errEl = $("sd-api-key-error");
+  const showError = (msg) => {
+    if (!errEl) return toast(msg, "err");
+    errEl.textContent = msg;
+    errEl.classList.remove("hidden");
+  };
+  const label = $("sd-api-key-label")?.value ?? "";
+  const checked = checkApiKeyLabel(label);
+  if (checked.error) return showError(checked.error);
+  const session = getSession();
+  if (!session.umk) return showError("Unlock the webapp first");
+  const scope = $("sd-api-key-scope")?.value ?? DEFAULT_API_KEY_SCOPE;
+  btn.disabled = true;
+  btn.textContent = "Creating…";
+  const fetchJson = (path, init) => screensFetch(path, init);
+  try {
+    const made = await createApiKey({
+      serverDomain: serverDomainOfPod(),
+      serviceId: st.app.serviceId,
+      label: checked.label,
+      scope,
+      umk: session.umk,
+      signWithIrk: sensitiveSigner(),
+      fetchJson,
+      bytesToHex,
+    });
+    let keys = await fetchApiKeys(st.app.serviceId, fetchJson).catch(() => null);
+    if (!Array.isArray(keys) || !keys.some((k) => k.keyId === made.keyId)) {
+      const mine = { keyId: made.keyId, label: made.label, scope: made.scope, createdAt: made.issuedAt, lastUsedAt: 0, expiresAt: 0 };
+      keys = [mine, ...(Array.isArray(keys) ? keys : st.keys).filter((k) => k.keyId !== made.keyId)];
+    }
+    if (currentServiceId !== st.app.serviceId) return;
+    apiKeysState = { ...apiKeysState, keys, form: false, revealed: { key: made.key, label: made.label }, error: "" };
+    paintApiKeysSection();
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = API_KEYS_CREATE;
+    showError(e instanceof ScreensError ? apiKeyErrorMessage(e) : humanError(e));
+  }
+}
+
+async function revokeFromPage(btn) {
+  const st = apiKeysState;
+  const keyId = btn.getAttribute("data-api-key-revoke");
+  const key = st.keys.find((k) => k.keyId === keyId);
+  const { inlineConfirm } = await import("../lib/modal.js");
+  const ok = await inlineConfirm({
+    title: `Revoke "${key?.label || keyId}"?`,
+    message: "Anything using this key stops working right away. This can't be undone.",
+    okLabel: API_KEYS_REVOKE,
+    danger: true,
+  });
+  if (!ok) return;
+  btn.disabled = true;
+  try {
+    await revokeApiKey({ serviceId: st.app.serviceId, keyId, fetchJson: (path, init) => screensFetch(path, init) });
+    if (currentServiceId !== st.app.serviceId) return;
+    apiKeysState = { ...apiKeysState, keys: apiKeysState.keys.filter((k) => k.keyId !== keyId), error: "" };
+    paintApiKeysSection();
+    toast("Key revoked", "ok");
+  } catch (e) {
+    btn.disabled = false;
+    toast(e instanceof ScreensError ? apiKeyErrorMessage(e) : humanError(e), "err");
+  }
 }
 
 /** Shown only when the box says the service can be edited here. */
