@@ -388,7 +388,7 @@ fun BuildGitScreen(nav: NavController) {
             if (event == Lifecycle.Event.ON_RESUME) {
                 PendingBuildCredential.take()?.let { cred ->
                     vm.adapt(
-                        credential = BuildCredential(cred.provider, cred.apiKey, cred.baseUrl),
+                        credential = BuildCredential.from(cred),
                     )
                 }
             }
@@ -489,11 +489,16 @@ fun BuildGitScreen(nav: NavController) {
         }
         when (val p = phase) {
             is BuildGitViewModel.GitPhase.Verdict -> VerdictCard(p, vm, nav, adaptError, recheckEnabled = !nameRefused) { checkRepo() }
-            is BuildGitViewModel.GitPhase.Adapting -> AdaptingCard(p.progress)
+            is BuildGitViewModel.GitPhase.Adapting -> AdaptingCard(p.progress, p.phase)
+            is BuildGitViewModel.GitPhase.NotLive -> NotLiveCard(p.reason, nav, vm, recheckEnabled = !nameRefused) { checkRepo() }
+            is BuildGitViewModel.GitPhase.Sealed -> SealedCard(p.message, nav, vm, recheckEnabled = !nameRefused) { checkRepo() }
             is BuildGitViewModel.GitPhase.Adapted -> AdaptedCard(p, vm, nav)
             is BuildGitViewModel.GitPhase.Deploying -> InfoCard("Installing…", "Building and deploying to your box.")
             is BuildGitViewModel.GitPhase.Deployed -> DeployedCard(p.url, vm)
-            is BuildGitViewModel.GitPhase.Failed -> ErrorCardSimple(p.message)
+            is BuildGitViewModel.GitPhase.Failed -> {
+                ErrorCardSimple(p.message)
+                RelayFailureAction(p.message)
+            }
             else -> {}
         }
     }
@@ -568,6 +573,7 @@ private fun VerdictCard(
             adaptError?.let {
                 Spacer(Modifier.height(FS.space.s3))
                 Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+                RelayFailureAction(it)
             }
             Spacer(Modifier.height(FS.space.s4))
             // The box's model rewrites the repo, so confirm an AI key first;
@@ -619,10 +625,77 @@ private fun VerdictHead(recheckEnabled: Boolean, onCheckAgain: () -> Unit, conte
     }
 }
 
+/** The AI's tested app didn't go live: the box's reason, a new AI run (on a
+ *  new build, since this one is closed to the AI), and "Check again". */
 @Composable
-private fun AdaptingCard(progress: String?) {
+private fun NotLiveCard(
+    reason: String,
+    nav: NavController,
+    vm: BuildGitViewModel,
+    recheckEnabled: Boolean,
+    onCheckAgain: () -> Unit,
+) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text("The AI is adapting the repo…", color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+        VerdictHead(recheckEnabled, onCheckAgain) {
+            Text(
+                BuildGitViewModel.NOT_LIVE_TITLE,
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+            )
+        }
+        Spacer(Modifier.height(FS.space.s2))
+        Text(
+            reason,
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            modifier = Modifier.testTag("build-git-not-live-reason"),
+        )
+        RelayFailureAction(reason)
+        Spacer(Modifier.height(FS.space.s4))
+        FSPrimaryButton(
+            BuildGitViewModel.RETRY_ADAPT,
+            onClick = { nav.navigate("build/git/key") },
+            block = true,
+            modifier = Modifier.testTag("build-git-retry-adapt"),
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        JournalLink(nav, vm.buildId)
+    }
+}
+
+/** The build is closed to the AI: no AI run here, only a new build. */
+@Composable
+private fun SealedCard(
+    message: String,
+    nav: NavController,
+    vm: BuildGitViewModel,
+    recheckEnabled: Boolean,
+    onCheckAgain: () -> Unit,
+) {
+    FSCard(padding = PaddingValues(FS.space.s5)) {
+        Text(message, color = FS.colors.text, style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp))
+        Spacer(Modifier.height(FS.space.s4))
+        FSPrimaryButton(
+            BuildGitViewModel.CHECK_AGAIN,
+            onClick = onCheckAgain,
+            enabled = recheckEnabled,
+            block = true,
+            modifier = Modifier.testTag("build-git-sealed-check-again"),
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        JournalLink(nav, vm.buildId)
+    }
+}
+
+@Composable
+private fun AdaptingCard(progress: String?, phase: String?) {
+    FSCard(padding = PaddingValues(FS.space.s5)) {
+        Text(
+            BuildGitViewModel.adaptingHeadline(phase),
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier.testTag("build-git-adapting"),
+        )
         if (!progress.isNullOrEmpty()) {
             Spacer(Modifier.height(FS.space.s1))
             Text(

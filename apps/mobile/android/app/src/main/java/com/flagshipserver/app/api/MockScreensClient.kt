@@ -92,14 +92,38 @@ class MockScreensClient(
         return AppsListResponse(
             apps = listOf(
                 AppSummary("bright-maple--plants", "bright-maple", "plants", "plants",
-                    "Houseplant watering tracker", "https://plants.$fqdn/", "running", "0.0.3", now() - 60_000 * 30),
+                    "Houseplant watering tracker", "https://plants.$fqdn/", "running", "0.0.3", now() - 60_000 * 30,
+                    egress = egressFixture["bright-maple--plants"]),
                 AppSummary("bright-maple--wiki", "bright-maple", "wiki", "wiki",
-                    "Personal notes + recipes", "https://wiki.$fqdn/", "running", "1.4.0", now() - 60_000 * 60 * 26),
+                    "Personal notes + recipes", "https://wiki.$fqdn/", "running", "1.4.0", now() - 60_000 * 60 * 26,
+                    egress = egressFixture["bright-maple--wiki"]),
                 AppSummary("trent--scratchpad", "trent", "scratchpad", "scratchpad--trent",
-                    "Markdown scratchpad", "https://scratchpad--trent.$fqdn/", "stopped", "0.7.1", now() - 60_000L * 60 * 24 * 12),
+                    "Markdown scratchpad", "https://scratchpad--trent.$fqdn/", "stopped", "0.7.1", now() - 60_000L * 60 * 24 * 12,
+                    egress = egressFixture["trent--scratchpad"]),
             )
         )
     }
+
+    /** Each app's internet hosts: plants wants a weather API, wiki needs none. */
+    val egressFixture: MutableMap<String, AppEgress> = mutableMapOf(
+        "bright-maple--plants" to AppEgress(declared = listOf("api.open-meteo.com")),
+        "bright-maple--wiki" to AppEgress(),
+    )
+    val egressCalls: MutableList<Pair<String, AppEgressRequest>> = mutableListOf()
+    /** Thrown by `serviceEgressSet` instead of applying. */
+    var egressError: Throwable? = null
+
+    override suspend fun serviceEgressSet(serviceId: String, req: AppEgressRequest): AppEgressResponse {
+        tick()
+        egressCalls.add(serviceId to req)
+        egressError?.let { throw it }
+        val current = egressFixture[serviceId] ?: throw ScreensError.Http(404, """{"error":"no such service"}""")
+        val next = current.copy(approved = req.grant.hosts.filter { it in current.declared })
+        egressFixture[serviceId] = next
+        return AppEgressResponse(ok = true, egress = next)
+    }
+
+    override suspend fun boxFqdn(): String = "$podContext.bright-maple.flagship.services"
 
     /** Services the box says can be edited from the phone (built there). */
     var editableServiceIds: Set<String> = setOf("bright-maple--plants")
@@ -152,8 +176,28 @@ class MockScreensClient(
         return VibeCodeStartResponse(sessionId = "vc-${UUID.randomUUID().toString().take(8).lowercase()}")
     }
 
+    /** Background deploys started on the mock: each poll walks one phase on. */
+    private val deployPolls = mutableMapOf<String, Int>()
+
+    override suspend fun vibeCodeDeployStart(sessionId: String): VibeCodeDeployReply {
+        tick()
+        deployPolls[sessionId] = 0
+        return VibeCodeDeployReply(ok = true, started = true)
+    }
+
     override suspend fun vibeCodeStatus(sessionId: String): VibeCodeStatusResponse {
         tick()
+        deployPolls[sessionId]?.let { n ->
+            deployPolls[sessionId] = n + 1
+            val stage = listOf("staging", "going-live").getOrNull(n)
+            return VibeCodeStatusResponse(
+                status = if (stage != null) "deploying" else "deployed",
+                deployPhase = stage,
+                transcript = emptyList(),
+                files = emptyMap(),
+                deployedUrl = if (stage == null) "https://habits.$podContext.bright-maple.flagship.services/" else null,
+            )
+        }
         return VibeCodeStatusResponse(
             status = "streaming",
             transcript = listOf(

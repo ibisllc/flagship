@@ -56,6 +56,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.AiCredential
 import com.flagshipserver.app.core.AiKeyStore
+import com.flagshipserver.app.core.AiRelay
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSField
@@ -66,8 +67,7 @@ import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.AiKeysViewModel
 
 private const val REASSURANCE =
-    "Your key stays on this device. Your box calls the provider directly — " +
-        "flagshipserver.com never sees it."
+    "Your key stays on this device and your own server. flagshipserver.com never sees it."
 
 /** Copy for the build-flow key step. Mirror of iOS BuildKeyScreen. */
 object AiKeyStep {
@@ -124,8 +124,8 @@ fun AiKeyStepScreen(
                 confirmLabel = "Add key",
                 showSaveToggle = false,
                 onCancel = if (keys.isNotEmpty()) ({ showForm = false }) else null,
-                onSubmit = { provider, apiKey, label, baseUrl, _ ->
-                    if (vm.addAndSelect(provider, apiKey, label, baseUrl)) showForm = false
+                onSubmit = { provider, apiKey, label, baseUrl, _, relay ->
+                    if (vm.addAndSelect(provider, apiKey, label, baseUrl, relay)) showForm = false
                 },
                 confirmTag = "build-key-add-save",
             )
@@ -236,6 +236,12 @@ private fun SavedKeyStepRow(row: SavedKeyRow, lastUsed: Boolean, onUse: () -> Un
                     style = TextStyle(fontSize = 13.sp),
                     maxLines = 1,
                 )
+                Text(
+                    AiRelay.caption(row.relay),
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 12.sp),
+                    modifier = Modifier.testTag("build-key-relay-caption"),
+                )
                 if (lastUsed) {
                     Text("Last used", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
                 }
@@ -254,8 +260,9 @@ private fun SavedKeyStepRow(row: SavedKeyRow, lastUsed: Boolean, onUse: () -> Un
 
 /**
  * The "provide a key" form — provider picker + optional baseUrl + masked key
- * field + optional label + a "Save on this device" toggle. `onSubmit` carries
- * (provider, apiKey, label, baseUrl?, save).
+ * field + optional label + a "Save on this device" toggle + the relay toggle
+ * (on by default). `onSubmit` carries (provider, apiKey, label, baseUrl?,
+ * save, relay).
  */
 @Composable
 fun AiKeyEntryForm(
@@ -263,13 +270,14 @@ fun AiKeyEntryForm(
     showSaveToggle: Boolean = true,
     onCancel: (() -> Unit)? = null,
     confirmTag: String = "build-key-use",
-    onSubmit: (provider: String, apiKey: String, label: String, baseUrl: String?, save: Boolean) -> Unit,
+    onSubmit: (provider: String, apiKey: String, label: String, baseUrl: String?, save: Boolean, relay: Boolean) -> Unit,
 ) {
     var provider by remember { mutableStateOf(AiKeyStore.SUPPORTED_PROVIDERS.first()) }
     var apiKey by remember { mutableStateOf("") }
     var label by remember { mutableStateOf("") }
     var baseUrl by remember { mutableStateOf("") }
     var save by remember { mutableStateOf(true) }
+    var relay by remember { mutableStateOf(true) }
 
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column {
@@ -336,10 +344,13 @@ fun AiKeyEntryForm(
                 }
             }
 
+            Spacer(Modifier.height(FS.space.s3))
+            RelayToggleRow(checked = relay, onCheckedChange = { relay = it }, tag = "ai-key-relay")
+
             Spacer(Modifier.height(FS.space.s4))
             FSPrimaryButton(
                 label = confirmLabel,
-                onClick = { onSubmit(provider, apiKey, label, baseUrl, save) },
+                onClick = { onSubmit(provider, apiKey, label, baseUrl, save, relay) },
                 enabled = apiKey.isNotBlank(),
                 block = true,
                 modifier = Modifier.testTag(confirmTag),
@@ -350,6 +361,53 @@ fun AiKeyEntryForm(
             }
         }
     }
+}
+
+@Composable
+private fun RelayToggleRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit, tag: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                AiRelay.TOGGLE_LABEL,
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+            )
+            Text(
+                AiRelay.TOGGLE_NOTE,
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.testTag(tag))
+    }
+}
+
+/**
+ * Under a failed AI call: when the box says the Flagship relay couldn't carry
+ * it, offer to turn the relay off for the key that was used. The message
+ * itself is shown by the caller, as the box wrote it.
+ */
+@Composable
+fun RelayFailureAction(message: String?) {
+    var keyId by remember(message) { mutableStateOf(AiRelay.keyToTurnOff(message)) }
+    var turnedOff by remember(message) { mutableStateOf(false) }
+    if (turnedOff) {
+        Spacer(Modifier.height(FS.space.s2))
+        Text(AiRelay.TURNED_OFF, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+        return
+    }
+    val id = keyId ?: return
+    Spacer(Modifier.height(FS.space.s2))
+    FSSecondaryButton(
+        AiRelay.TURN_OFF_ACTION,
+        onClick = {
+            AiKeyStore.setRelay(id, false)
+            keyId = null
+            turnedOff = true
+        },
+        block = true,
+        modifier = Modifier.testTag("ai-relay-turn-off"),
+    )
 }
 
 @Composable
@@ -424,6 +482,12 @@ fun AiKeysManagerScreen(nav: NavController, vm: AiKeysViewModel = viewModel()) {
                                     color = FS.colors.text,
                                     style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
                                 )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    AiRelay.caption(row.relay),
+                                    color = FS.colors.textMuted,
+                                    style = TextStyle(fontSize = 12.sp),
+                                )
                                 if (isActive) {
                                     Spacer(Modifier.height(2.dp))
                                     Text(
@@ -435,6 +499,12 @@ fun AiKeysManagerScreen(nav: NavController, vm: AiKeysViewModel = viewModel()) {
                             }
                             FSDangerButton(label = "Delete", onClick = { vm.delete(row.id) })
                         }
+                        Spacer(Modifier.height(FS.space.s3))
+                        RelayToggleRow(
+                            checked = row.relay,
+                            onCheckedChange = { vm.setRelay(row.id, it) },
+                            tag = "ai-key-relay-${row.id}",
+                        )
                         // "Make default" on every non-active row — mirrors iOS's
                         // AiKeysScreen + the webapp providers manager.
                         if (!isActive) {
@@ -454,8 +524,8 @@ fun AiKeysManagerScreen(nav: NavController, vm: AiKeysViewModel = viewModel()) {
         if (showForm) {
             AiKeyEntryForm(
                 confirmLabel = "Save key",
-                onSubmit = { provider, apiKey, label, baseUrl, _ ->
-                    if (vm.add(provider, apiKey, label, baseUrl)) showForm = false
+                onSubmit = { provider, apiKey, label, baseUrl, _, relay ->
+                    if (vm.add(provider, apiKey, label, baseUrl, relay)) showForm = false
                 },
             )
         } else {

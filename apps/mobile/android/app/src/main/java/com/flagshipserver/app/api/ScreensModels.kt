@@ -25,6 +25,42 @@ data class AppSummary(
     val status: String,            // "running" | "stopped" | "unknown"
     val version: String? = null,
     val installedAt: Long,
+    /** Internet hosts the manifest declares and the ones the owner approved.
+     *  Absent on boxes without the egress gateway. */
+    val egress: AppEgress? = null,
+)
+
+/** A live app's internet access: it may reach only [approved] hosts, each of
+ *  which it [declared] in its manifest. */
+@Serializable
+data class AppEgress(
+    val declared: List<String> = emptyList(),
+    val approved: List<String> = emptyList(),
+) {
+    /** Declared hosts still waiting for the owner's approval. */
+    val pending: List<String> get() = declared.filter { it !in approved }
+}
+
+/** The signed body of `POST /api/screens/services/:serviceId/egress`. */
+@Serializable
+data class AppEgressGrantBody(
+    val serverDomain: String,
+    val serviceId: String,
+    val hosts: List<String>,
+    val issuedAt: Long,
+)
+
+@Serializable
+data class AppEgressRequest(
+    val grant: AppEgressGrantBody,
+    /** Ed25519 over the canonical bytes, 128 hex. */
+    val signature: String,
+)
+
+@Serializable
+data class AppEgressResponse(
+    val ok: Boolean = false,
+    val egress: AppEgress? = null,
 )
 
 @Serializable
@@ -196,7 +232,15 @@ data class BuildCredential(
     val provider: String,
     val apiKey: String,
     val baseUrl: String? = null,
-)
+    /** Route the provider call through the Flagship relay. Sent explicitly on
+     *  every send; a box treats an absent value as on. */
+    val relay: Boolean? = null,
+) {
+    companion object {
+        fun from(c: com.flagshipserver.app.core.AiCredential): BuildCredential =
+            BuildCredential(c.provider, c.apiKey, c.baseUrl, relay = c.relay)
+    }
+}
 
 @Serializable
 data class VibeCodeStartRequest(
@@ -242,6 +286,8 @@ sealed class VibeCodeFrame {
 @Serializable
 data class VibeCodeStatusResponse(
     val status: String,
+    /** While "deploying": "staging" | "fixing" | "going-live". */
+    val deployPhase: String? = null,
     val transcript: List<TranscriptEntry>,
     val files: Map<String, String>,
     val deployedUrl: String? = null,
@@ -689,6 +735,22 @@ data class VibeCodeSessionPublicState(
     val status: String,
     val messages: List<VibeCodeSessionMessage>,
     val pendingRequest: VibeCodePendingRequest? = null,
+    /** While "deploying": "staging" | "fixing" | "going-live". */
+    val deployPhase: String? = null,
+    /** Why the session failed, when status is "failed". */
+    val failureReason: String? = null,
+)
+
+/** `POST /api/llm/sessions/:id/deploy {background:true}`: `started` from a
+ *  current box (202), or the finished result from an older one that ignores
+ *  `background`. */
+@Serializable
+data class VibeCodeDeployReply(
+    val ok: Boolean = false,
+    val started: Boolean? = null,
+    val serviceId: String? = null,
+    val url: String? = null,
+    val inviteOnly: Boolean? = null,
 )
 
 @Serializable

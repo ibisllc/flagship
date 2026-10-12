@@ -264,9 +264,7 @@ fun EditDescribeScreen(nav: NavController, serviceId: String) {
                 // after the call must run on the main thread.
                 scope.launch(Dispatchers.Main) {
                     try {
-                        val cred = PendingBuildCredential.peek()?.let {
-                            BuildCredential(it.provider, it.apiKey, it.baseUrl)
-                        }
+                        val cred = PendingBuildCredential.peek()?.let(BuildCredential::from)
                         val resp = screens.vibeCodeStart(
                             VibeCodeStartRequest(prompt = prompt, credential = cred, editServiceId = serviceId),
                         )

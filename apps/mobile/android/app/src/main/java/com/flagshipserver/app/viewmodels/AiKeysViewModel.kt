@@ -8,13 +8,20 @@ package com.flagshipserver.app.viewmodels
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.core.AiCredential
 import com.flagshipserver.app.core.AiKeyStore
+import com.flagshipserver.app.core.AiRelay
 import com.flagshipserver.app.core.SavedAiKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** A saved key projected for the list — id + masked slug only. */
-data class SavedKeyRow(val id: String, val provider: String, val label: String, val maskedSlug: String)
+data class SavedKeyRow(
+    val id: String,
+    val provider: String,
+    val label: String,
+    val maskedSlug: String,
+    val relay: Boolean = true,
+)
 
 /**
  * Process-scoped hand-off for a confirmed build credential. The AI-key step
@@ -23,7 +30,11 @@ data class SavedKeyRow(val id: String, val provider: String, val label: String, 
  */
 object PendingBuildCredential {
     @Volatile private var value: AiCredential? = null
-    fun set(c: AiCredential?) { value = c }
+    fun set(c: AiCredential?) {
+        value = c
+        // The key a relay failure is about, for "Turn the relay off for this key".
+        if (c != null) AiRelay.lastUsedKeyId = c.keyId
+    }
     fun take(): AiCredential? {
         val v = value
         value = null
@@ -72,32 +83,33 @@ class AiKeysViewModel : ViewModel() {
         label: String,
         baseUrl: String?,
         save: Boolean,
+        relay: Boolean = true,
     ): AiCredential? {
         val p = provider.trim()
         val k = apiKey.trim()
         if (p.isEmpty() || k.isEmpty()) return null
         val url = baseUrl?.trim()?.ifBlank { null }
         return if (save) {
-            val saved = AiKeyStore.add(p, k, label, url)
+            val saved = AiKeyStore.add(p, k, label, url, relay)
             refresh()
-            AiCredential(saved.provider, saved.apiKey, saved.baseUrl)
+            AiCredential(saved.provider, saved.apiKey, saved.baseUrl, relay = saved.relay, keyId = saved.id)
         } else {
-            AiCredential(p, k, url)
+            AiCredential(p, k, url, relay = relay)
         }
     }
 
-    fun add(provider: String, apiKey: String, label: String, baseUrl: String?): Boolean {
+    fun add(provider: String, apiKey: String, label: String, baseUrl: String?, relay: Boolean = true): Boolean {
         if (provider.isBlank() || apiKey.isBlank()) return false
-        AiKeyStore.add(provider.trim(), apiKey.trim(), label, baseUrl?.trim()?.ifBlank { null })
+        AiKeyStore.add(provider.trim(), apiKey.trim(), label, baseUrl?.trim()?.ifBlank { null }, relay)
         refresh()
         return true
     }
 
     /** Save a key from the AI Key step's form and make it the last-used one.
      *  Choosing a key is a separate step, so adding never moves the build on. */
-    fun addAndSelect(provider: String, apiKey: String, label: String, baseUrl: String?): Boolean {
+    fun addAndSelect(provider: String, apiKey: String, label: String, baseUrl: String?, relay: Boolean = true): Boolean {
         if (provider.isBlank() || apiKey.isBlank()) return false
-        val added = AiKeyStore.add(provider.trim(), apiKey.trim(), label, baseUrl?.trim()?.ifBlank { null })
+        val added = AiKeyStore.add(provider.trim(), apiKey.trim(), label, baseUrl?.trim()?.ifBlank { null }, relay)
         AiKeyStore.setActive(added.id)
         refresh()
         return true
@@ -116,6 +128,12 @@ class AiKeysViewModel : ViewModel() {
         refresh()
     }
 
+    /** Send this saved key's calls through the Flagship relay, or directly. */
+    fun setRelay(id: String, on: Boolean) {
+        AiKeyStore.setRelay(id, on)
+        refresh()
+    }
+
     companion object {
         /** The saved keys, the last-used one first. */
         fun ordered(rows: List<SavedKeyRow>, activeId: String?): List<SavedKeyRow> {
@@ -125,5 +143,5 @@ class AiKeysViewModel : ViewModel() {
     }
 
     private fun SavedAiKey.toRow() =
-        SavedKeyRow(id = id, provider = provider, label = label, maskedSlug = AiKeyStore.maskedSlug(this))
+        SavedKeyRow(id = id, provider = provider, label = label, maskedSlug = AiKeyStore.maskedSlug(this), relay = relay)
 }

@@ -86,7 +86,10 @@ data class BuildAdaptReply(
     val deployedUrl: String? = null,
 )
 
-/** How a background adapt is going. `status`: "running" | "done" | "failed". */
+/** How a background adapt is going. `status`: "running" | "done" | "failed".
+ *  While running, `phase` is "staging" (the AI adapting and testing a private
+ *  copy) or "going-live" (the box installing the tested app); older boxes
+ *  send none. Done with `deployed: false`, `reason` says why it isn't live. */
 @Serializable
 data class BuildAdaptStatus(
     val status: String,
@@ -94,6 +97,7 @@ data class BuildAdaptStatus(
     val deployed: Boolean? = null,
     val deployedUrl: String? = null,
     val reason: String? = null,
+    val phase: String? = null,
 )
 
 /** `GET /api/build/sessions/:id` → `{state, files}`. */
@@ -114,6 +118,9 @@ data class BuildState(
     val name: String? = null,
     val deployedUrl: String? = null,
     val adapt: BuildAdaptStatus? = null,
+    /** The build's AI access has ended for good (it was handed to the box to
+     *  go live): the box refuses another AI run on it. */
+    val sealed: Boolean? = null,
 )
 
 // ---------- mcp mode ---------------------------------------------------

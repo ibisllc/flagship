@@ -89,12 +89,19 @@ class BuildGitViewModel(
         data object Checking : GitPhase
         /** Verdict in. `fit` true ⇒ deterministic install offer. */
         data class Verdict(val fit: Boolean, val reason: String, val fileCount: Int) : GitPhase
-        /** `progress`: the AI's latest step, from the build's journal. */
-        data class Adapting(val progress: String? = null) : GitPhase
+        /** `progress`: the AI's latest step, from the build's journal.
+         *  `phase`: the box's "staging" | "going-live" (absent on older boxes). */
+        data class Adapting(val progress: String? = null, val phase: String? = null) : GitPhase
         /** Adapt succeeded; ready to deploy. */
         data class Adapted(val fileCount: Int) : GitPhase
         data object Deploying : GitPhase
         data class Deployed(val url: String) : GitPhase
+        /** The AI finished, but its tested app didn't go live: [reason] says
+         *  why. A retry starts a new adapt on a new build. */
+        data class NotLive(val reason: String) : GitPhase
+        /** The build is closed to the AI (it was handed to the box to go
+         *  live). Only a new build ("Check again") can use the AI. */
+        data class Sealed(val message: String) : GitPhase
         /** The box has no model wired — caller should route to scratch. */
         data object AdaptUnavailable : GitPhase
         data class Failed(val message: String) : GitPhase
@@ -127,6 +134,12 @@ class BuildGitViewModel(
 
     private var lastVerdict: GitPhase.Verdict? = null
 
+    /** The last "Check repo", replayed when a retry needs a new build. */
+    private var lastRequest: BuildGitRequest? = null
+
+    /** The current build refuses the AI from now on: an adapt starts a new one. */
+    private var buildSealed = false
+
     fun dismissConflict() { _conflict.value = null }
 
     fun setShare(on: Boolean) { _share.value = on }
@@ -139,15 +152,16 @@ class BuildGitViewModel(
         _exportError.value = null
         _share.value = true
         buildId = null
+        buildSealed = false
         _phase.value = GitPhase.Checking
         try {
-            val r = client.gitImport(
-                BuildGitRequest(
-                    gitUrl = gitUrl.trim(),
-                    ref = ref.trim().ifEmpty { null },
-                    name = wanted.ifEmpty { null },
-                ),
+            val req = BuildGitRequest(
+                gitUrl = gitUrl.trim(),
+                ref = ref.trim().ifEmpty { null },
+                name = wanted.ifEmpty { null },
             )
+            lastRequest = req
+            val r = client.gitImport(req)
             buildId = r.buildId
             _assignedName.value = r.name ?: wanted.ifEmpty { null }
             val v = GitPhase.Verdict(fit = r.fit, reason = r.reason, fileCount = r.fileCount)
@@ -170,9 +184,10 @@ class BuildGitViewModel(
         instructions: String? = null,
         credential: com.flagshipserver.app.api.BuildCredential? = null,
     ): Job = scope.launch {
-        val id = buildId ?: return@launch
+        var id = buildId ?: return@launch
         _adaptError.value = null
         _phase.value = GitPhase.Adapting()
+        if (buildSealed) id = reimport() ?: return@launch
         try {
             val r = client.adaptStart(
                 id,
@@ -184,11 +199,14 @@ class BuildGitViewModel(
             if (r.started == true) {
                 followAdaptWithLimit(id)
             } else {
-                finishAdapt(r.fileCount ?: 0, r.deployedUrl.takeIf { r.deployed == true })
+                finishAdapt(r.fileCount ?: 0, r.deployed, r.deployedUrl, reason = null)
             }
         } catch (t: Throwable) {
             if (t is ScreensError.Http && t.status == 503) {
                 _phase.value = GitPhase.AdaptUnavailable
+            } else if (t is ScreensError.Http && t.status == 409 && closedToAi(t)) {
+                buildSealed = true
+                _phase.value = GitPhase.Sealed(t.boxError() ?: SEALED_TEXT)
             } else if (t is ScreensError.Http && t.status == 409) {
                 // The box started the AI itself (a shared adaptation crashed
                 // and it had a key): follow that run.
@@ -214,33 +232,80 @@ class BuildGitViewModel(
      *  poll (Wi-Fi blip, box restarting) isn't the end; five in a row are. */
     private suspend fun followAdapt(id: String) {
         var misses = 0
+        var progress: String? = null
         while (true) {
             delay(pollIntervalMs)
-            val status = try {
-                client.state(id).state.adapt.also { misses = 0 }
+            val state = try {
+                client.state(id).state.also { misses = 0 }
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException || ++misses >= 5) throw t
                 continue
             }
+            val status = state.adapt
             when (status?.status) {
                 "done" -> {
-                    finishAdapt(status.fileCount ?: 0, status.deployedUrl.takeIf { status.deployed == true })
+                    if (state.sealed == true) buildSealed = true
+                    finishAdapt(status.fileCount ?: 0, status.deployed, status.deployedUrl, status.reason)
                     return
                 }
                 "failed" -> {
+                    if (state.sealed == true) buildSealed = true
                     failAdapt(status.reason ?: "The AI couldn't adapt this repo.")
                     return
                 }
-                else -> runCatching { client.journal(id).entries.lastOrNull() }.getOrNull()?.let {
-                    _phase.value = GitPhase.Adapting(progress = it.summary)
+                else -> {
+                    runCatching { client.journal(id).entries.lastOrNull() }.getOrNull()?.let { progress = it.summary }
+                    _phase.value = GitPhase.Adapting(progress = progress, phase = status?.phase)
                 }
             }
         }
     }
 
-    private fun finishAdapt(fileCount: Int, deployedUrl: String?) {
-        // The AI may have deployed it itself: then it's already live.
-        _phase.value = if (deployedUrl != null) GitPhase.Deployed(deployedUrl) else GitPhase.Adapted(fileCount)
+    private fun finishAdapt(fileCount: Int, deployed: Boolean?, deployedUrl: String?, reason: String?) {
+        _phase.value = when {
+            // The box put the AI's tested app live.
+            deployed == true && deployedUrl != null -> GitPhase.Deployed(deployedUrl)
+            // The tested app didn't go live; the build is closed to the AI now.
+            deployed == false && !reason.isNullOrBlank() -> {
+                buildSealed = true
+                GitPhase.NotLive(reason)
+            }
+            // An older box: the AI only rewrote the repo, the owner installs it.
+            else -> GitPhase.Adapted(fileCount)
+        }
+    }
+
+    /** A new build from the last check, for an adapt the current build
+     *  refuses. Returns its id, or null when it can't (or needs no AI). */
+    private suspend fun reimport(): String? {
+        val req = lastRequest ?: run {
+            failAdapt(SEALED_TEXT)
+            return null
+        }
+        return try {
+            val r = client.gitImport(req)
+            buildId = r.buildId
+            buildSealed = false
+            _assignedName.value = r.name ?: req.name
+            val v = GitPhase.Verdict(fit = r.fit, reason = r.reason, fileCount = r.fileCount)
+            lastVerdict = v
+            if (r.fit) {
+                _phase.value = v
+                null
+            } else {
+                r.buildId
+            }
+        } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
+            val taken = VibeCodeNameCheck.conflict(t)
+            if (taken != null) {
+                _conflict.value = taken
+                _phase.value = lastVerdict ?: GitPhase.Idle
+            } else {
+                failAdapt(t.boxError() ?: friendly(t))
+            }
+            null
+        }
     }
 
     private fun failAdapt(message: String) {
@@ -321,6 +386,8 @@ class BuildGitViewModel(
         buildId?.let { operations?.removeBuild(it) }
         buildId = null
         lastVerdict = null
+        lastRequest = null
+        buildSealed = false
         _adapterFile.value = null
         _exportError.value = null
         _conflict.value = null
@@ -333,14 +400,33 @@ class BuildGitViewModel(
     companion object {
         const val ADAPTER_FILE_NAME = "flagship.app.json"
         const val NOT_READY_MISSING = "This repo is not yet adapted for Flagship."
-        const val ADAPT_BUTTON = "Use AI to prepare repo for Flagship"
+        const val ADAPT_BUTTON = "Use AI to adapt and deploy"
+        const val ADAPTING_DEFAULT = "The AI is adapting the repo…"
+        const val ADAPTING_STAGING = "The AI is adapting and testing the app on a private copy with sample data…"
+        const val ADAPTING_GOING_LIVE = "Installing the tested app…"
+        const val NOT_LIVE_TITLE = "The app didn't go live"
+        const val RETRY_ADAPT = "Try again with AI"
+        const val SEALED_TEXT = "This build is closed to the AI. Check the repo again to start a new build."
         const val SHARE_LABEL = "Anonymously share your adaptation"
         const val SHARE_NOTE = "Others can then install this repo without AI. Nothing about you or your server is included."
         const val CHECK_AGAIN = "Check again"
 
-        /** A verdict card takes the "Check repo" button's place; it carries
-         *  its own "Check again". */
-        fun showsCheckRepo(phase: GitPhase): Boolean = phase !is GitPhase.Verdict
+        /** A verdict card (and the not-live and closed cards) takes the
+         *  "Check repo" button's place; each carries its own "Check again". */
+        fun showsCheckRepo(phase: GitPhase): Boolean =
+            phase !is GitPhase.Verdict && phase !is GitPhase.NotLive && phase !is GitPhase.Sealed
+
+        /** The adapting card's headline for the box's `adapt.phase`. */
+        fun adaptingHeadline(phase: String?): String = when (phase) {
+            "staging" -> ADAPTING_STAGING
+            "going-live" -> ADAPTING_GOING_LIVE
+            else -> ADAPTING_DEFAULT
+        }
+
+        /** The box's 409 for a build it has closed to the AI. */
+        fun closedToAi(t: Throwable): Boolean =
+            t is ScreensError.Http && t.status == 409 &&
+                (t.boxError() ?: t.body).contains("closed to the AI", ignoreCase = true)
 
         /** A deploy refusal that says the repo now needs the owner's AI. */
         fun needsAdapt(t: Throwable): Boolean {

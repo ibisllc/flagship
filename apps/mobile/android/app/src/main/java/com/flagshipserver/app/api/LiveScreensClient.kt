@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -199,6 +200,26 @@ class LiveScreensClient(
             readTimeoutSeconds = 15 * 60,
         )
     }
+
+    override suspend fun vibeCodeDeployStart(sessionId: String): VibeCodeDeployReply =
+        // A current box answers 202 at once; an older one ignores `background`
+        // and answers when the install is done, hence the long read timeout.
+        request(
+            "/api/llm/sessions/$sessionId/deploy", VibeCodeDeployReply.serializer(), "POST",
+            "{\"background\":true}".toByteArray(),
+            readTimeoutSeconds = 15 * 60,
+        )
+
+    override suspend fun serviceEgressSet(serviceId: String, req: AppEgressRequest): AppEgressResponse {
+        val body = json.encodeToString(AppEgressRequest.serializer(), req).toByteArray()
+        return request(
+            "/api/screens/services/${java.net.URLEncoder.encode(serviceId, "UTF-8")}/egress",
+            AppEgressResponse.serializer(), "POST", body,
+        )
+    }
+
+    override suspend fun boxFqdn(): String? =
+        store.podBaseUrl.first()?.toHttpUrlOrNull()?.host
 
     override suspend fun vibeCodeSessions(): VibeCodeSessionsResponse =
         request("/api/llm/sessions", VibeCodeSessionsResponse.serializer())

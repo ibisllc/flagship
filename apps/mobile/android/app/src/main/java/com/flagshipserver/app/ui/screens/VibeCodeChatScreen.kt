@@ -48,6 +48,7 @@ import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.viewmodels.VibeCodeDeployViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -65,12 +66,13 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
     var envValueDraft by remember { mutableStateOf("") }
     var submitting by remember { mutableStateOf(false) }
     // Deploy state. `ready-to-deploy` (the model finished emitting files + no
-    // tool pending) surfaces the Deploy button; on success the deployed URL
-    // renders. The scratch deploy has no other trigger (the WS stream is a pure
-    // relay), so this button IS how a chat-built service ships. Mirror of iOS.
-    var deploying by remember { mutableStateOf(false) }
-    var deployedUrl by remember { mutableStateOf<String?>(null) }
-    var leftOpen by remember { mutableStateOf(false) }
+    // tool pending) surfaces the Deploy button. The box stages the app on a
+    // private copy first, then installs the tested image; the deploy VM
+    // follows those phases. The scratch deploy has no other trigger (the WS
+    // stream is a pure relay), so this button IS how a chat-built service
+    // ships. Mirror of iOS.
+    val deployVm = remember(sessionId) { VibeCodeDeployViewModel(sessionId, client, scope = scope) }
+    val deployPhase by deployVm.phase.collectAsState()
 
     val pods = appState.pods.collectAsState().value
     val leaderId = appState.leaderPodId.collectAsState().value
@@ -84,6 +86,10 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
         } catch (t: Throwable) {
             errorMessage = t.userFacing()
         }
+    }
+
+    LaunchedEffect(deployPhase) {
+        if (deployPhase is VibeCodeDeployViewModel.Phase.Deployed || deployPhase is VibeCodeDeployViewModel.Phase.Failed) reload()
     }
 
     LaunchedEffect(sessionId) {
@@ -315,10 +321,21 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
 
         // Deploy affordance + result. Shown once the model has finished emitting
         // the app (`ready-to-deploy`) — the only point a scratch session can be
-        // shipped, since the WS stream never auto-deploys. After a successful
-        // deploy the canonical URL renders. Mirror of iOS deploySection.
-        val deployed = deployedUrl
-        if (deployed != null || s.status == "deployed") {
+        // shipped, since the WS stream never auto-deploys. While the box stages
+        // and installs it, the card says which step it's on; then the canonical
+        // URL renders, or the reason it didn't go live. Mirror of iOS deploySection.
+        val dp = deployPhase
+        val deployed = dp as? VibeCodeDeployViewModel.Phase.Deployed
+        val deployingStage: String? = when {
+            dp is VibeCodeDeployViewModel.Phase.Deploying -> dp.stage ?: s.deployPhase
+            dp is VibeCodeDeployViewModel.Phase.Idle && s.status == "deploying" -> s.deployPhase
+            else -> null
+        }
+        val isDeploying = dp is VibeCodeDeployViewModel.Phase.Deploying ||
+            (dp is VibeCodeDeployViewModel.Phase.Idle && s.status == "deploying")
+        val failedReason = (dp as? VibeCodeDeployViewModel.Phase.Failed)?.reason
+            ?: s.failureReason?.takeIf { s.status == "failed" }
+        if (deployed != null || (dp !is VibeCodeDeployViewModel.Phase.Failed && s.status == "deployed")) {
             FSCard {
                 Column {
                     Text(
@@ -326,15 +343,15 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                         color = FS.colors.success,
                         style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
                     )
-                    if (deployed != null) {
+                    if (deployed != null && deployed.url.isNotEmpty()) {
                         Spacer(Modifier.height(FS.space.s1))
                         Text(
-                            deployed,
+                            deployed.url,
                             color = FS.colors.text,
                             style = TextStyle(fontSize = 13.sp),
                             modifier = Modifier.semantics { testTag = "vibecode-deployed-url" },
                         )
-                        if (leftOpen) {
+                        if (deployed.leftOpen) {
                             Spacer(Modifier.height(FS.space.s2))
                             Text(
                                 LEFT_OPEN_WARNING,
@@ -346,47 +363,57 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                 }
             }
             Spacer(Modifier.height(FS.space.s3))
-        } else if (s.status == "ready-to-deploy" || s.status == "deploying") {
+        } else if (isDeploying) {
             FSCard {
                 Column {
                     Text(
-                        "Ready to deploy",
+                        "Deploying",
                         color = FS.colors.text,
                         style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
                     )
                     Spacer(Modifier.height(FS.space.s1))
                     Text(
-                        "The AI finished writing your service. Deploy it to your box.",
+                        VibeCodeDeployViewModel.stageText(deployingStage),
                         color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 13.sp),
-                    )
-                    Spacer(Modifier.height(FS.space.s3))
-                    FSPrimaryButton(
-                        label = if (deploying || s.status == "deploying") "Deploying…" else "Deploy",
-                        enabled = !deploying && s.status == "ready-to-deploy",
-                        modifier = Modifier.semantics { testTag = "vibecode-deploy-btn" },
-                        onClick = {
-                            scope.launch(Dispatchers.Main) {
-                                deploying = true
-                                try {
-                                    val r = client.vibeCodeDeploy(sessionId)
-                                    if (r.ok) {
-                                        deployedUrl = r.url
-                                        leftOpen = r.inviteOnly == false
-                                    } else {
-                                        errorMessage = "Deploy was rejected by the box."
-                                    }
-                                    reload()
-                                } catch (t: Throwable) {
-                                    errorMessage = t.userFacing()
-                                } finally {
-                                    deploying = false
-                                }
-                            }
-                        },
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                        modifier = Modifier.semantics { testTag = "vibecode-deploy-stage" },
                     )
                 }
             }
+            // Reopened mid-deploy: follow it so the result shows here.
+            LaunchedEffect(sessionId, dp is VibeCodeDeployViewModel.Phase.Idle) {
+                if (dp is VibeCodeDeployViewModel.Phase.Idle) deployVm.resume(s.deployPhase)
+            }
+            Spacer(Modifier.height(FS.space.s3))
+        } else if (s.status == "ready-to-deploy" || dp is VibeCodeDeployViewModel.Phase.Failed) {
+            FSCard {
+                Column {
+                    Text(
+                        if (failedReason != null) "The app didn't go live" else "Ready to deploy",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    Spacer(Modifier.height(FS.space.s1))
+                    Text(
+                        failedReason ?: "The AI finished writing your service. Deploy it to your box.",
+                        color = if (failedReason != null) FS.colors.danger else FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                        modifier = Modifier.semantics { testTag = "vibecode-deploy-detail" },
+                    )
+                    if (failedReason != null) RelayFailureAction(failedReason)
+                    Spacer(Modifier.height(FS.space.s3))
+                    FSPrimaryButton(
+                        label = if (failedReason != null) "Try again" else "Deploy",
+                        modifier = Modifier.semantics { testTag = "vibecode-deploy-btn" },
+                        onClick = { deployVm.deploy() },
+                    )
+                }
+            }
+            Spacer(Modifier.height(FS.space.s3))
+        } else if (failedReason != null) {
+            // The session itself stopped (e.g. an AI call the relay couldn't carry).
+            ErrorCard(message = failedReason)
+            RelayFailureAction(failedReason)
             Spacer(Modifier.height(FS.space.s3))
         }
 

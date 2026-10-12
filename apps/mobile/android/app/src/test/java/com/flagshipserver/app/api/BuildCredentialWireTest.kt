@@ -115,4 +115,37 @@ class BuildCredentialWireTest {
         assertFalse(ok.needsCredential)
         assertTrue(ok.sessionId.startsWith("vc-"))
     }
+
+    // The relay choice travels explicitly on every send, through the same Json
+    // the Live clients use (explicitNulls = false).
+    private val live = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
+
+    @Test
+    fun credentialCarriesTheRelayChoice() {
+        val on = BuildCredential.from(com.flagshipserver.app.core.AiCredential("anthropic", "sk-ant", null, relay = true))
+        val off = BuildCredential.from(com.flagshipserver.app.core.AiCredential("openai", "sk-oa", "https://x", relay = false))
+        assertTrue(live.encodeToString(BuildCredential.serializer(), on).contains("\"relay\":true"))
+        val offWire = live.encodeToString(BuildCredential.serializer(), off)
+        assertTrue(offWire, offWire.contains("\"relay\":false"))
+        assertTrue(offWire.contains("\"baseUrl\":\"https://x\""))
+    }
+
+    @Test
+    fun everySendCarriesRelay() {
+        val cred = BuildCredential.from(com.flagshipserver.app.core.AiCredential("anthropic", "sk-ant", null, relay = false))
+        val start = live.encodeToString(VibeCodeStartRequest.serializer(), VibeCodeStartRequest(prompt = "p", credential = cred))
+        val edit = live.encodeToString(
+            VibeCodeStartRequest.serializer(),
+            VibeCodeStartRequest(prompt = "p", credential = cred, editServiceId = "me--app"),
+        )
+        val reply = live.encodeToString(VibeCodeReplyRequest.serializer(), VibeCodeReplyRequest(text = "t", credential = cred))
+        val adapt = live.encodeToString(
+            BuildAdaptRequest.serializer(),
+            BuildAdaptRequest(credential = cred, background = true),
+        )
+        for (body in listOf(start, edit, reply, adapt)) {
+            assertTrue(body, body.contains("\"credential\":{"))
+            assertTrue(body, body.contains("\"relay\":false"))
+        }
+    }
 }

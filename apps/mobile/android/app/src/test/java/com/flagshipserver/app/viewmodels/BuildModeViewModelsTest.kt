@@ -19,6 +19,7 @@ import com.flagshipserver.app.api.BuildJournalResponse
 import com.flagshipserver.app.api.BuildMcpRequest
 import com.flagshipserver.app.api.BuildMcpResponse
 import com.flagshipserver.app.api.BuildSessionsResponse
+import com.flagshipserver.app.api.BuildState
 import com.flagshipserver.app.api.BuildStateResponse
 import com.flagshipserver.app.api.MockBuildClient
 import com.flagshipserver.app.api.ScreensError
@@ -333,7 +334,7 @@ class BuildModeViewModelsTest {
     }
 
     @Test fun git_notReadyCardCopy() {
-        assertEquals("Use AI to prepare repo for Flagship", BuildGitViewModel.ADAPT_BUTTON)
+        assertEquals("Use AI to adapt and deploy", BuildGitViewModel.ADAPT_BUTTON)
         assertEquals("Anonymously share your adaptation", BuildGitViewModel.SHARE_LABEL)
         assertEquals(
             "Others can then install this repo without AI. Nothing about you or your server is included.",
@@ -376,6 +377,102 @@ class BuildModeViewModelsTest {
         vm.adapt().join()
         assertEquals(BuildGitViewModel.GitPhase.Adapted(fileCount = 16), vm.phase.value)
         assertNull(vm.adaptError.value)
+    }
+
+    @Test fun git_adaptPhasesMapToTheirText() {
+        assertEquals(
+            "The AI is adapting and testing the app on a private copy with sample data…",
+            BuildGitViewModel.adaptingHeadline("staging"),
+        )
+        assertEquals("Installing the tested app…", BuildGitViewModel.adaptingHeadline("going-live"))
+        assertEquals("The AI is adapting the repo…", BuildGitViewModel.adaptingHeadline(null))
+        assertEquals("The AI is adapting the repo…", BuildGitViewModel.adaptingHeadline("something-new"))
+    }
+
+    @Test fun git_adaptShowsTheBoxsPhaseWhileItRuns() = runTest {
+        val mock = MockBuildClient(simulatedLatencyMs = 0).apply { gitFitFixture = false }
+        val seen = mutableListOf<BuildGitViewModel.GitPhase>()
+        lateinit var vm: BuildGitViewModel
+        var polls = 0
+        val box = object : BuildClient by mock {
+            override suspend fun state(buildId: String): BuildStateResponse {
+                seen += vm.phase.value
+                polls++
+                val adapt = when (polls) {
+                    1 -> BuildAdaptStatus(status = "running", phase = "staging")
+                    2 -> BuildAdaptStatus(status = "running", phase = "going-live")
+                    else -> BuildAdaptStatus(
+                        status = "done", fileCount = 5, deployed = true, deployedUrl = "https://app.home.me.flagship.services",
+                    )
+                }
+                return BuildStateResponse(state = BuildState(buildId = buildId, mode = "git", adapt = adapt, sealed = polls >= 3))
+            }
+        }
+        vm = BuildGitViewModel(box, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/app", "").join()
+        vm.adapt().join()
+        assertEquals(listOf(null, "staging", "going-live"), seen.map { (it as BuildGitViewModel.GitPhase.Adapting).phase })
+        assertEquals(BuildGitViewModel.GitPhase.Deployed("https://app.home.me.flagship.services"), vm.phase.value)
+    }
+
+    @Test fun git_aTestedAppThatDidntGoLive_showsWhy_andARetryStartsANewBuild() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply {
+            gitFitFixture = false
+            adaptStatusFixture = BuildAdaptStatus(
+                status = "done", fileCount = 6, deployed = false, reason = "The app didn't start: port 8080 never answered.",
+            )
+        }
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/app", "dev", "myapp").join()
+        val first = vm.buildId
+        vm.adapt().join()
+        assertEquals(BuildGitViewModel.GitPhase.NotLive("The app didn't start: port 8080 never answered."), vm.phase.value)
+        assertFalse(BuildGitViewModel.showsCheckRepo(vm.phase.value))
+
+        // Retry: the sealed build can't take the AI again, so a new one is made.
+        client.adaptStatusFixture = BuildAdaptStatus(
+            status = "done", fileCount = 6, deployed = true, deployedUrl = "https://myapp.home.me.flagship.services",
+        )
+        vm.adapt().join()
+        assertEquals(2, client.gitImportCalls.size)
+        assertEquals(client.gitImportCalls[0], client.gitImportCalls[1])
+        assertTrue(vm.buildId != first)
+        assertEquals(vm.buildId, client.adaptStartCalls.last().first)
+        assertEquals(BuildGitViewModel.GitPhase.Deployed("https://myapp.home.me.flagship.services"), vm.phase.value)
+    }
+
+    @Test fun git_aBuildClosedToTheAI_offersOnlyCheckAgain() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply {
+            gitFitFixture = false
+            adaptStartError = ScreensError.Http(
+                409,
+                """{"error":"This build is closed to the AI: it was handed to the box to go live. Start a new build to change the app."}""",
+            )
+        }
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/app", "").join()
+        vm.adapt().join()
+        val p = vm.phase.value
+        assertTrue("expected Sealed, got $p", p is BuildGitViewModel.GitPhase.Sealed)
+        assertTrue((p as BuildGitViewModel.GitPhase.Sealed).message.startsWith("This build is closed to the AI"))
+        assertFalse(BuildGitViewModel.showsCheckRepo(p))
+        // No poll: the box isn't running anything for it.
+        assertNull(vm.adaptError.value)
+
+        client.adaptStartError = null
+        vm.checkRepo("https://github.com/me/app", "").join()
+        assertTrue(vm.phase.value is BuildGitViewModel.GitPhase.Verdict)
+    }
+
+    @Test fun git_aDoneAdaptWithoutAReason_isTheOlderInstallStep() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply {
+            gitFitFixture = false
+            adaptStatusFixture = BuildAdaptStatus(status = "done", fileCount = 4, deployed = false)
+        }
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/app", "").join()
+        vm.adapt().join()
+        assertEquals(BuildGitViewModel.GitPhase.Adapted(fileCount = 4), vm.phase.value)
     }
 
     @Test fun git_notReadyCard_saysItPlainly() {

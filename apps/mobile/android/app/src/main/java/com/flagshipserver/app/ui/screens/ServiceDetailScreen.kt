@@ -68,6 +68,8 @@ import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FSLayout
 import com.flagshipserver.app.viewmodels.AdapterReport
 import com.flagshipserver.app.viewmodels.AdapterReportViewModel
+import com.flagshipserver.app.viewmodels.AppEgressViewModel
+import com.flagshipserver.app.viewmodels.EgressCardState
 import com.flagshipserver.app.viewmodels.CustomDomainCooldownStore
 import com.flagshipserver.app.viewmodels.CustomDomainPrompt
 import com.flagshipserver.app.viewmodels.LoadingState
@@ -192,6 +194,12 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
             is LoadingState.Loaded -> {
                 val resp = d.value
                 Header(app = resp.app)
+                EgressSection(
+                    serviceId = serviceId,
+                    egress = resp.app.egress,
+                    restricted = appState.isRestrictedDevice(),
+                    fallbackServerDomain = { (appState.sessionPod ?: appState.leaderPod)?.fqdn },
+                )
                 if (resp.editable == true) {
                     Spacer(Modifier.height(FS.space.s4))
                     EditRow(onClick = { nav.navigate("edit-service/$serviceId") })
@@ -472,6 +480,114 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
 
 /** "Report a problem with this adaptation", for a service built from a
  *  shared adaptation. */
+/**
+ * The app's internet access. Shown only when the box reports `egress` (it has
+ * the egress gateway) and the app declares hosts: a pending card asking the
+ * owner to allow them, and the hosts it can reach now with "Stop access".
+ * Both sign with the sensitive-order key; a restricted profile only sees them.
+ */
+@Composable
+private fun EgressSection(
+    serviceId: String,
+    egress: com.flagshipserver.app.api.AppEgress?,
+    restricted: Boolean,
+    fallbackServerDomain: () -> String?,
+) {
+    val client = LocalScreensClient.current
+    val toasts = LocalToastCenter.current
+    val scope = rememberCoroutineScope()
+    val vm = remember(serviceId) {
+        AppEgressViewModel(serviceId, client, egress, fallbackServerDomain = fallbackServerDomain)
+    }
+    LaunchedEffect(egress) { vm.update(egress) }
+    val current by vm.egress.collectAsState()
+    val busy by vm.busy.collectAsState()
+    val error by vm.error.collectAsState()
+    val card = EgressCardState.from(current, restricted) ?: return
+
+    if (card.showsPending) {
+        Spacer(Modifier.height(FS.space.s4))
+        FSCard(
+            padding = PaddingValues(FS.space.s4),
+            modifier = Modifier.fillMaxWidth().semantics { testTag = "service-detail-egress-pending" },
+        ) {
+            Column {
+                Text(
+                    AppEgressViewModel.PENDING_TITLE,
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                )
+                Spacer(Modifier.height(FS.space.s2))
+                card.pending.forEach { host ->
+                    Text(host, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+                }
+                Spacer(Modifier.height(FS.space.s2))
+                Text(
+                    AppEgressViewModel.PENDING_NOTE,
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                )
+                if (card.canSign) {
+                    Spacer(Modifier.height(FS.space.s3))
+                    FSPrimaryButton(
+                        label = if (busy) "Allowing…" else AppEgressViewModel.ALLOW,
+                        enabled = !busy,
+                        block = true,
+                        modifier = Modifier.semantics { testTag = "service-detail-egress-allow" },
+                        onClick = {
+                            scope.launch {
+                                if (vm.allow()) toasts.success("The app can reach these hosts now.")
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+    if (card.showsApproved) {
+        Spacer(Modifier.height(FS.space.s4))
+        FSCard(
+            padding = PaddingValues(FS.space.s4),
+            modifier = Modifier.fillMaxWidth().semantics { testTag = "service-detail-egress-approved" },
+        ) {
+            Column {
+                Text(
+                    AppEgressViewModel.APPROVED_TITLE,
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                )
+                Spacer(Modifier.height(FS.space.s1))
+                Text(
+                    AppEgressViewModel.APPROVED_NOTE,
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                )
+                Spacer(Modifier.height(FS.space.s2))
+                card.approved.forEach { host ->
+                    Text(host, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+                }
+                if (card.canSign) {
+                    Spacer(Modifier.height(FS.space.s3))
+                    FSDangerButton(
+                        label = if (busy) "Stopping…" else AppEgressViewModel.STOP,
+                        enabled = !busy,
+                        modifier = Modifier.semantics { testTag = "service-detail-egress-stop" },
+                        onClick = {
+                            scope.launch {
+                                if (vm.stopAccess()) toasts.success("The app can't reach the internet now.")
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+    error?.let {
+        Spacer(Modifier.height(FS.space.s2))
+        Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+    }
+}
+
 @Composable
 private fun AdapterReportRow(repo: String, onClick: () -> Unit) {
     FSCard(

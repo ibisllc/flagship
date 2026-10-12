@@ -33,17 +33,25 @@ data class SavedAiKey(
     val label: String,
     val apiKey: String,
     val baseUrl: String? = null,
+    /** Send this key's calls through the Flagship relay, so the provider sees
+     *  Flagship's address instead of the box's. On for new keys and for keys
+     *  saved before the setting existed. */
+    val relay: Boolean = true,
 )
 
 /**
  * The transient credential handed to a build. Matches the daemon BYOK wire
- * contract: `{ provider, apiKey, baseUrl? }`. Held in memory only — never
- * persisted unless the user explicitly saved the underlying entry.
+ * contract: `{ provider, apiKey, baseUrl?, relay }`. Held in memory only —
+ * never persisted unless the user explicitly saved the underlying entry.
+ * [keyId] is the saved entry it came from (null for an unsaved key), so a
+ * relay failure can offer to turn the relay off for that key.
  */
 data class AiCredential(
     val provider: String,
     val apiKey: String,
     val baseUrl: String? = null,
+    val relay: Boolean = true,
+    val keyId: String? = null,
 )
 
 object AiKeyStore {
@@ -101,7 +109,7 @@ object AiKeyStore {
      * Persist a new entry and return it. `provider`/`apiKey`/`label` are
      * required; `baseUrl` is optional. The first saved key becomes active.
      */
-    fun add(provider: String, apiKey: String, label: String, baseUrl: String? = null): SavedAiKey {
+    fun add(provider: String, apiKey: String, label: String, baseUrl: String? = null, relay: Boolean = true): SavedAiKey {
         require(provider.isNotBlank()) { "provider required" }
         require(apiKey.isNotBlank()) { "apiKey required" }
         val entry = SavedAiKey(
@@ -110,6 +118,7 @@ object AiKeyStore {
             label = label.trim().ifBlank { provider.trim() },
             apiKey = apiKey.trim(),
             baseUrl = baseUrl?.trim()?.ifBlank { null },
+            relay = relay,
         )
         val next = list() + entry
         persist(next)
@@ -154,9 +163,16 @@ object AiKeyStore {
         }
     }
 
+    /** Turn the Flagship relay on or off for a saved entry. No-op for an unknown id. */
+    fun setRelay(id: String, on: Boolean) {
+        val all = list()
+        if (all.none { it.id == id }) return
+        persist(all.map { if (it.id == id) it.copy(relay = on) else it })
+    }
+
     /** The full credential for a saved entry, for handing to a build. */
     fun credentialFor(id: String): AiCredential? =
-        get(id)?.let { AiCredential(it.provider, it.apiKey, it.baseUrl) }
+        get(id)?.let { AiCredential(it.provider, it.apiKey, it.baseUrl, relay = it.relay, keyId = it.id) }
 
     private fun persist(entries: List<SavedAiKey>) {
         val raw = json.encodeToString(ListSerializer(SavedAiKey.serializer()), entries)
@@ -181,5 +197,44 @@ object AiKeyStore {
         val prefix = k.take(3)
         val last4 = k.takeLast(4)
         return "$prefix…$last4"
+    }
+}
+
+/**
+ * A call the box didn't send because the key asks for the Flagship relay and
+ * the relay couldn't carry it. The box's message is shown as-is, with an
+ * action that turns the relay off for that key.
+ */
+object AiRelay {
+    const val TOGGLE_LABEL = "Send through the Flagship relay"
+    const val TOGGLE_NOTE = "Better for your anonymity: the AI provider sees Flagship's address, not yours."
+    const val CAPTION_ON = "Through the Flagship relay"
+    const val CAPTION_OFF = "Direct"
+    const val TURN_OFF_ACTION = "Turn the relay off for this key"
+    const val TURNED_OFF = "The relay is off for this key. Try again."
+
+    private val MARKERS = listOf(
+        "the flagship relay isn't reachable",
+        "the flagship relay didn't connect to",
+        "the flagship relay only carries",
+        "relay-unavailable",
+    )
+
+    fun caption(on: Boolean): String = if (on) CAPTION_ON else CAPTION_OFF
+
+    fun isRelayFailure(message: String?): Boolean {
+        val m = message?.lowercase()?.replace('’', '\'') ?: return false
+        return MARKERS.any { m.contains(it) }
+    }
+
+    /** The saved key whose relay a failure is about: the one last handed to a
+     *  build. Null when that key wasn't saved (nothing to switch). */
+    @Volatile var lastUsedKeyId: String? = null
+
+    /** The key to offer the action for, when [message] is a relay failure. */
+    fun keyToTurnOff(message: String?): String? {
+        if (!isRelayFailure(message)) return null
+        val id = lastUsedKeyId ?: return null
+        return runCatching { AiKeyStore.get(id) }.getOrNull()?.takeIf { it.relay }?.id
     }
 }

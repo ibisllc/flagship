@@ -419,9 +419,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                             if (latest.kind != "invalid") conflict = latest
                             return@launch
                         }
-                        val cred = PendingBuildCredential.peek()?.let {
-                            BuildCredential(it.provider, it.apiKey, it.baseUrl)
-                        }
+                        val cred = PendingBuildCredential.peek()?.let(BuildCredential::from)
                         val resp = screens.vibeCodeStart(
                             VibeCodeStartRequest(
                                 prompt = prompt, credential = cred,
@@ -685,6 +683,7 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
                     item {
                         Spacer(Modifier.height(FS.space.s2))
                         ErrorCard(message = msg)
+                        RelayFailureAction(msg)
                     }
                 }
             }

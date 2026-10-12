@@ -85,6 +85,14 @@ interface ScreensClient {
      *  build-modes deploy). Mirror of iOS ScreensClient.vibeCodeDeploy. */
     suspend fun vibeCodeDeploy(sessionId: String): BuildDeployResponse
 
+    /** `POST /api/llm/sessions/<id>/deploy {background:true}`: start the
+     *  staged deploy and follow it on [vibeCodeStatus]. An older box ignores
+     *  `background` and answers when it's live. Default: the waiting call. */
+    suspend fun vibeCodeDeployStart(sessionId: String): VibeCodeDeployReply {
+        val r = vibeCodeDeploy(sessionId)
+        return VibeCodeDeployReply(ok = r.ok, serviceId = r.serviceId, url = r.url, inviteOnly = r.inviteOnly)
+    }
+
     /** The daemon's live vibe-code sessions (legacy `GET /api/llm/sessions`,
      *  same paired-session auth as [vibeCodeDeploy]). */
     suspend fun vibeCodeSessions(): VibeCodeSessionsResponse = VibeCodeSessionsResponse()
@@ -102,6 +110,14 @@ interface ScreensClient {
      *  store the adaptation this service was built from has a problem. */
     suspend fun adapterReport(serviceId: String, detail: String): Unit =
         throw ScreensError.NotImplemented("report")
+
+    /** `POST /api/screens/services/:serviceId/egress`: apply the owner's signed
+     *  internet approval for a live app (`hosts: []` revokes). */
+    suspend fun serviceEgressSet(serviceId: String, req: AppEgressRequest): AppEgressResponse =
+        throw ScreensError.NotImplemented("internet approval")
+
+    /** The FQDN of the box this client talks to, which a signed grant names. */
+    suspend fun boxFqdn(): String? = null
 
     // P9 — peer-backup management.
     suspend fun peerBackupStatus(): PeerBackupStatusResponse
