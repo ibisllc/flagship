@@ -2086,3 +2086,11 @@ button[data-device-restricted] {
 .bk-save-row input { width: auto; margin: 0; }
 .vc-address { color: var(--ink-muted); }
 .vc-address-name { color: var(--accent); font-weight: 600; }
+
+/* A live app's access list (docs/ai-privacy-and-staging.md §3a). */
+.sd-access-req { padding-top: var(--space-2); border-top: 1px solid var(--border-soft); overflow-wrap: anywhere; }
+.sd-access-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.sd-access-actions > button { flex: 1; width: auto; }
+.access-editor { width: 100%; min-height: 220px; white-space: pre; overflow-wrap: normal; overflow-x: auto; }
+.access-errors { margin: var(--space-2) 0 0; padding-left: 18px; }
+.access-sheet-later { text-align: center; }

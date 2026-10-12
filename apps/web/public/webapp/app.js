@@ -77,6 +77,8 @@ import { initPodPairView, enterPodPair } from "./views/pod-pair.js";
 import { initServerDetailView, enterServerDetail } from "./views/server-detail.js";
 import { initServicesListView, enterServicesList } from "./views/services-list.js";
 import { initServiceDetailView } from "./views/service-detail.js";
+import { initAppAccessView } from "./views/app-access.js";
+import { startAccessAlerts } from "./lib/accessAlerts.js";
 import { initInviteIssueView } from "./views/invite-issue.js";
 import { initInviteManageView } from "./views/invite-manage.js";
 import { initServiceAccessView } from "./views/service-access.js";
@@ -155,6 +157,7 @@ const SUB_VIEW_TABS = {
   "view-invite-issue": "apps",
   "view-invite-manage": "apps",
   "view-service-access": "apps",
+  "view-app-access": "apps",
   "view-vibe-code": "apps",
   "view-vibecode-chat": "apps",
   "view-build-source": "apps",
@@ -523,6 +526,7 @@ async function boot() {
   initInviteIssueView();
   initInviteManageView();
   initServiceAccessView();
+  initAppAccessView();
   initInviteRedeemView();
   initPairedSessionsView();
   initSecuredSessionsView();
@@ -639,6 +643,12 @@ async function boot() {
     active: () => sliversUnlocked() && !!getPodBaseUrlSafe(),
     notify: makeAiChatNotifier({ show: showAiChatNotification }),
   });
+
+  // "<App> wants to reach <host>" (docs/ai-privacy-and-staging.md §3a): fetch
+  // the box's pending access requests on load, focus, a notification click and
+  // the screens socket's access-request event, and ask about each in a sheet.
+  // Never over the lock, never on a companion.
+  startAccessAlerts({ isUnlocked: sliversUnlocked });
 
   // ── Maintainer-trust enforcement (docs/maintainer-trust-enforcement.md) ──
   // The persistent ALARMING-RED top sliver: one non-dismissible line per

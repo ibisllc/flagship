@@ -28,6 +28,23 @@ import {
   egressErrorMessage,
   sendEgressGrant,
 } from "../lib/appEgress.js";
+import {
+  ACCESS_ALLOW,
+  ACCESS_COMPANION_NOTE,
+  ACCESS_DENY,
+  ACCESS_IGNORE,
+  ACCESS_TITLE,
+  ACCESS_VIEW_LIST,
+  accessAnsweredText,
+  accessErrorMessage,
+  accessRequestNote,
+  answerAccessRequest,
+  dismissAccessRequest,
+  fetchServiceAccess,
+  parseAccessList,
+  readAccessSummary,
+  ruleCountText,
+} from "../lib/appAccess.js";
 
 const COM_BASE = controlApex();
 
@@ -68,6 +85,7 @@ export async function renderServiceDetail(serviceId) {
       `/api/screens/app-detail/${encodeURIComponent(serviceId)}`,
     );
     const s = body.app;
+    if (s && !s.access && body.access && typeof body.access === "object") s.access = body.access;
     // V3 — fetch the per-service URL identity from .com in parallel with
     // the daemon's detail. Tolerated as null if .com is unreachable;
     // the WEB DOMAINS section falls back to the daemon-provided
@@ -89,7 +107,7 @@ export async function renderServiceDetail(serviceId) {
       </div>
       ${body.editable === true ? renderEditRow() : ""}
       ${typeof body.adaptedFrom?.repo === "string" ? renderReportRow(body.adaptedFrom.repo) : ""}
-      <div id="sd-egress">${renderEgressSection(s)}</div>
+      <div id="sd-egress">${renderInternetSection(s)}</div>
 
       ${renderWebDomainsSection(s, currentServiceLinks)}
       <div id="sd-custom-domains">${renderCustomDomainsSection()}</div>
@@ -209,7 +227,8 @@ export async function renderServiceDetail(serviceId) {
     });
     bindWebDomainsHandlers(s);
     bindCustomDomainsHandlers();
-    bindEgressHandlers(s);
+    if (readAccessSummary(s)) void loadAccessSection(s);
+    else bindEgressHandlers(s);
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
@@ -228,8 +247,116 @@ function hostList(hosts) {
   return `<ul class="sd-egress-hosts">${hosts.map((h) => `<li class="mono text-sm">${escapeHtml(h)}</li>`).join("")}</ul>`;
 }
 
-/** The internet-access cards for `app` (its `egress`), or "" when there is
- *  nothing to show. */
+/**
+ * The app's internet access: the "Internet access" section when the box sends
+ * `access` (§3a), else the v1 egress card an older box still needs.
+ */
+export function renderInternetSection(app, opts = {}) {
+  const summary = readAccessSummary(app);
+  if (summary) return renderAccessSection(app, { summary, ...opts });
+  return renderEgressSection(app, opts);
+}
+
+/**
+ * The "Internet access" section: the rule count, the pending requests (Allow /
+ * Deny / Ignore each; read-only on a companion) and View access list. `state`
+ * is the box's GET .../access answer once it has arrived.
+ */
+export function renderAccessSection(app, { summary = readAccessSummary(app), state = null, companion = isCompanionProfile() } = {}) {
+  const rules = state ? parseAccessList(state.list).rules.length : summary?.rules ?? 0;
+  let pendingHtml = "";
+  if (state) {
+    pendingHtml = state.pending
+      .map((r) => `
+        <div class="sd-access-req mt-2" data-access-host="${escapeHtml(r.host)}">
+          <div class="weight-600">Wants to reach <span class="mono">${escapeHtml(r.host)}</span></div>
+          <div class="muted-sm">${escapeHtml(accessRequestNote(r))}</div>
+          ${companion
+            ? ""
+            : `<div class="sd-access-actions mt-1">
+                <button data-access-act="allow" data-host="${escapeHtml(r.host)}">${escapeHtml(ACCESS_ALLOW)}</button>
+                <button class="secondary" data-access-act="deny" data-host="${escapeHtml(r.host)}">${escapeHtml(ACCESS_DENY)}</button>
+                <button class="secondary" data-access-act="ignore" data-host="${escapeHtml(r.host)}">${escapeHtml(ACCESS_IGNORE)}</button>
+              </div>`}
+        </div>`)
+      .join("");
+    if (companion && state.pending.length > 0) {
+      pendingHtml += `<p class="faint-sm mt-2">${escapeHtml(ACCESS_COMPANION_NOTE)}</p>`;
+    }
+  } else if (summary?.pending > 0) {
+    pendingHtml = `<p class="muted-sm mt-2">${summary.pending === 1 ? "1 request" : `${summary.pending} requests`} waiting…</p>`;
+  }
+  return `
+      <h2 class="mt-4">${escapeHtml(ACCESS_TITLE)}</h2>
+      <div class="card sd-access">
+        <div class="row"><span class="label">Access list</span><span class="value" id="sd-access-count">${escapeHtml(ruleCountText(rules))}</span></div>
+        <div id="sd-access-pending">${pendingHtml}</div>
+        <button id="sd-access-view" class="secondary full-width mt-2">${escapeHtml(ACCESS_VIEW_LIST)}</button>
+      </div>`;
+}
+
+async function loadAccessSection(app) {
+  const fetchJson = (path, init) => screensFetch(path, init);
+  let state = null;
+  try {
+    state = await fetchServiceAccess(app.serviceId, fetchJson);
+  } catch {
+    state = null;
+  }
+  if (currentServiceId !== app.serviceId) return;
+  paintAccessSection(app, state);
+}
+
+function paintAccessSection(app, state) {
+  const slot = $("sd-egress");
+  if (!slot) return;
+  slot.innerHTML = renderAccessSection(app, { state });
+  $("sd-access-view")?.addEventListener("click", async () => {
+    const { enterAppAccess } = await import("./app-access.js");
+    await enterAppAccess(app.serviceId, app.slug);
+  });
+  if (!state) return;
+  slot.querySelectorAll("[data-access-act]").forEach((btn) => {
+    btn.addEventListener("click", () => void answerFromPage(app, state, btn));
+  });
+}
+
+async function answerFromPage(app, state, btn) {
+  const act = btn.getAttribute("data-access-act");
+  const host = btn.getAttribute("data-host");
+  const session = getSession();
+  if (act !== "ignore" && !session.umk) return toast("Unlock the webapp first", "err");
+  const row = btn.closest(".sd-access-req");
+  row?.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+  const fetchJson = (path, init) => screensFetch(path, init);
+  try {
+    if (act === "ignore") {
+      await dismissAccessRequest({ serviceId: app.serviceId, host, fetchJson });
+      paintAccessSection(app, { ...state, pending: state.pending.filter((r) => r.host !== host) });
+      return;
+    }
+    const next = await answerAccessRequest({
+      serverDomain: serverDomainOfPod(),
+      serviceId: app.serviceId,
+      host,
+      action: act,
+      current: state,
+      umk: session.umk,
+      signWithIrk: sensitiveSigner(),
+      fetchJson,
+      bytesToHex,
+    });
+    const pending = (next.pending.length > 0 ? next.pending : state.pending).filter((r) => r.host !== host);
+    paintAccessSection(app, { ...next, pending });
+    toast(accessAnsweredText(app.slug, host, act), "ok");
+  } catch (e) {
+    toast(e?.status || e?.name === "AccessListError" ? accessErrorMessage(e) : humanError(e), "err");
+    row?.querySelectorAll("button").forEach((b) => { b.disabled = false; });
+  }
+}
+
+/** The v1 internet-access cards for `app` (its `egress`), or "" when there
+ *  is nothing to show. Only for a box that doesn't send `access`. */
 export function renderEgressSection(app, { companion = isCompanionProfile() } = {}) {
   const st = egressCardState(app, { companion });
   if (!st) return "";

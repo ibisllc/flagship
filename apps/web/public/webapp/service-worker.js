@@ -82,7 +82,11 @@
 //       for internet access on its page (signed Allow / Stop access), and
 //       each AI key has a Flagship relay switch; precaches lib/appEgress.js,
 //       lib/chatDeploy.js + lib/aiRelay.js.
-const SHELL_VERSION = "v47";
+//  v48: app access lists replace the all-or-nothing internet approval: the
+//       "Internet access" section, the access-list editor, the "<App> wants
+//       to reach <host>" sheet, and the generic app-access push; precaches
+//       lib/appAccess.js, lib/accessAlerts.js + views/app-access.js.
+const SHELL_VERSION = "v48";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -141,6 +145,8 @@ const OPTIONAL_SHELL = [
   "/lib/appEgress.js",
   "/lib/chatDeploy.js",
   "/lib/aiRelay.js",
+  "/lib/appAccess.js",
+  "/lib/accessAlerts.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
@@ -151,6 +157,7 @@ const OPTIONAL_SHELL = [
   "/views/server-detail.js",
   "/views/services-list.js",
   "/views/service-detail.js",
+  "/views/app-access.js",
   "/views/paired-sessions.js",
   "/views/vibe-code.js",
   "/views/vibecode-chat.js",
@@ -394,6 +401,28 @@ self.addEventListener("push", (event) => {
     return;
   }
 
+  // App access request (docs/ai-privacy-and-staging.md §3a). The text is
+  // generic on purpose: which app and which host come from the box over the
+  // paired session once the webapp is open, never through the push.
+  const isAppAccess =
+    data &&
+    (data.category === "app-access" ||
+      data.kind === "app-access" ||
+      (data.meta && data.meta.kind === "app-access"));
+  if (isAppAccess) {
+    event.waitUntil(
+      self.registration.showNotification("Flagship", {
+        body: "One of your apps wants to reach the internet",
+        tag: "flagship-app-access",
+        renotify: true,
+        requireInteraction: false,
+        icon: "/icon.svg",
+        data: { kind: "app-access" },
+      }),
+    );
+    return;
+  }
+
   // Generic fallback for any other (or empty) payload.
   const body = (data && typeof data.body === "string")
     ? data.body
@@ -434,6 +463,15 @@ self.addEventListener("notificationclick", (event) => {
       const same = all.find((c) => new URL(c.url).origin === self.location.origin);
       if (same) {
         await same.focus();
+        if (data && data.kind === "app-access") {
+          // The open webapp fetches the requests and shows the sheet.
+          try {
+            same.postMessage({ type: "ACCESS_REQUESTS" });
+          } catch (_e) {
+            /* the page also checks on focus */
+          }
+          return;
+        }
         if (deepLink) {
           try {
             same.postMessage({ type: "DEEP_LINK", target: deepLink });

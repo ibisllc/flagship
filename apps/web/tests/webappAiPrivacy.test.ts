@@ -167,12 +167,14 @@ describe("app internet approval — what the app page and list show", () => {
 
   it("the app page and list wire the card and the badge", async () => {
     const detail = await asset("/webapp/views/service-detail.js");
-    expect(detail).toContain("renderEgressSection(s)");
+    // The v1 card stays only for a box that sends `egress` without `access`.
+    expect(detail).toContain("renderInternetSection(s)");
+    expect(detail).toContain("renderEgressSection(app, opts)");
     expect(detail).toContain("sd-egress-allow");
     expect(detail).toContain("sd-egress-stop");
     expect(detail).toContain("sensitiveSigner()");
     const list = await asset("/webapp/views/services-list.js");
-    expect(list).toContain("hasPendingEgress(s)");
+    expect(list).toContain("hasPendingInternetRequest(s, hasPendingEgress)");
     const { EGRESS_TITLE, EGRESS_NOTE, EGRESS_STOP } = await loadEgress();
     expect(EGRESS_TITLE).toBe("This app wants to reach the internet");
     expect(EGRESS_NOTE).toBe(
