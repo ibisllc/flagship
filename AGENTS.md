@@ -178,7 +178,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 ### Built, waiting on deploys or rebuilds
 
-- **`.com` Worker:** current with `main` as of 2026-10-12 (webapp shell **v45**).
+- **`.com` Worker:** current with `main` as of 2026-10-12 (webapp shell **v46**).
   Always `npx tsc -b` first and apply pending D1 migrations before deploying.
 - **Delete / reversible Revoke / Un-revoke (2026-10-12):** live on `.com` +
   webapp (shell v44); iOS dev build installed on the owner's iPhone; Android
@@ -208,6 +208,12 @@ own (drilled on `drill-1010`). Boxes now record the verdict in
 `lastUpdate`. **iOS on a real account validated 2026-10-11:** `home2.plucky-avocet`
 went `7ac1b50a` → `9873b83e` from the phone's Update button (~20 s down).
 Remaining: the same from the webapp and Android.
+A box updates straight to any endorsed release (the gate checks the target's
+own endorsement and lineage, not the release it runs). Boxes from before
+`a73f0a41` (every one built from the 2026-10-10 appliances) can't list their
+releases and answer 404; all three apps then ask `GET /api/releases?current=`
+on `.com` (`apps/com/src/releaseCatalog.ts`, placed from the endorsements'
+lineage), which only decides what's offered.
 
 **home2 bricked by its `1584bfe8` update (2026-10-11).** Studio's Restart menu
 force-stopped the VM at 22:44:12 UTC, 2 s after the update finished its rebuild.
