@@ -92,6 +92,8 @@ import com.flagshipserver.app.ui.shell.RootShell
 import com.flagshipserver.app.ui.shell.WindowWidthSizeClass
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FlagshipTheme
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -105,6 +107,9 @@ class MainActivity : FragmentActivity() {
      *  launched with `flagship.smokeTab`. Null in production / a normal launch
      *  ⇒ RootShell defaults to Home. */
     private var smokeInitialTab: com.flagshipserver.app.core.RootDestination? = null
+
+    /** The activity is visible; internet-access requests are fetched only then. */
+    private val foreground = MutableStateFlow(false)
 
     /** Phone-sized screens portrait-only, tablet-sized left to the system.
      *  Re-run on every configuration change so a foldable picks up the right
@@ -338,6 +343,54 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
+            // Internet-access alerts (§3a). Live only, like the AI-chat poller:
+            // the mock has no real box. Every box the phone manages is asked
+            // over its own paired session, on foreground, on an `app-access`
+            // push that lands while open, and on a slow foreground poll.
+            val liveNow by androidx.compose.runtime.rememberUpdatedState(useLive)
+            val accessCenter = remember {
+                val clients = HashMap<String, ScreensClient>()
+                com.flagshipserver.app.core.AccessRequestCenter(
+                    boxes = {
+                        if (!liveNow) emptyList() else appState.pods.value.mapNotNull { pod ->
+                            if (pod.fqdn.isEmpty() || pod.demoServer != null) return@mapNotNull null
+                            val token = sessionStore.sessionToken(forPodId = pod.podId) ?: return@mapNotNull null
+                            val client = synchronized(clients) {
+                                clients.getOrPut("${pod.fqdn}|$token") {
+                                    val store = com.flagshipserver.app.api.InMemorySessionStore().apply {
+                                        setPodBaseUrl("https://${pod.fqdn}")
+                                        setSessionToken(token)
+                                    }
+                                    LiveScreensClient(client = okHttp, store = store)
+                                }
+                            }
+                            com.flagshipserver.app.core.AccessBox(pod.podId, pod.fqdn, client)
+                        }
+                    },
+                    isActiveGate = {
+                        foreground.value && appState.isPaired.value && appState.isUnlocked.value &&
+                            !appState.isRestrictedDevice()
+                    },
+                )
+            }
+            val accessScope = androidx.compose.runtime.rememberCoroutineScope()
+            androidx.compose.runtime.DisposableEffect(accessCenter) {
+                com.flagshipserver.app.core.AccessRequestBridge.onAccessRequest = {
+                    accessScope.launch { accessCenter.refresh() }
+                }
+                onDispose { com.flagshipserver.app.core.AccessRequestBridge.onAccessRequest = null }
+            }
+            val isForeground by foreground.collectAsState()
+            val accessPaired by appState.isPaired.collectAsState()
+            val accessUnlocked by appState.isUnlocked.collectAsState()
+            LaunchedEffect(useLive, isForeground, accessPaired, accessUnlocked) {
+                if (useLive && isForeground && accessPaired && accessUnlocked) {
+                    accessCenter.start(this)
+                } else {
+                    accessCenter.stop()
+                }
+            }
+
             // MULTI-POD (Fix B) — PodSessionSync. When the current/leader pod
             // changes, point the single active base-URL + token slots at THAT
             // pod's per-pod token (deterministic base URL `https://<fqdn>`).
@@ -432,6 +485,8 @@ class MainActivity : FragmentActivity() {
                     LocalActiveOperationsCenter provides operations,
                     LocalTrustCenter provides trustCenter,
                     LocalDeepLinker provides deepLinker,
+                    com.flagshipserver.app.core.LocalAccessRequestCenter provides
+                        (if (useLive) accessCenter else null),
                     LocalDeveloperSettings provides devSettings,
                     LocalPrivacySettings provides privacy,
                     // Real IRK signer for SetServiceEnv envelopes (was the
@@ -472,8 +527,14 @@ class MainActivity : FragmentActivity() {
      *  onStop fires only when the activity is genuinely backgrounded.
      *  Tradeoff: locking on onPause is "more secure" but disruptive;
      *  locking on onStop matches the iOS .background semantics. */
+    override fun onStart() {
+        super.onStart()
+        foreground.value = true
+    }
+
     override fun onStop() {
         super.onStop()
+        foreground.value = false
         if (::appState.isInitialized) {
             appState.relockForBackground()
         }
@@ -613,6 +674,16 @@ private fun AppRoot(
         // latch ALONE (not also requireGate) is what lets an explicit
         // Lock work even when auto-lock is off — the latch starts `true`
         // when the preference is off, so nothing else flips it spuriously.
+        // Internet-access requests (§3a): one dialog per request, never over
+        // the lock screen. "View access list" opens the app's list on its box.
+        val accessCenter = com.flagshipserver.app.core.LocalAccessRequestCenter.current
+        val deepLinker = LocalDeepLinker.current
+        if (isPaired && isUnlocked && accessCenter != null) {
+            com.flagshipserver.app.ui.screens.AccessRequestDialogHost(accessCenter) { alert ->
+                alert.box.podId?.let { if (it != app.currentPodId.value) app.setCurrentPod(it) }
+                deepLinker.enqueue(DeepLink.AccessList(alert.request.serviceId))
+            }
+        }
         if (isPaired && !isUnlocked) {
             com.flagshipserver.app.ui.shell.BiometricLockScreen()
         }

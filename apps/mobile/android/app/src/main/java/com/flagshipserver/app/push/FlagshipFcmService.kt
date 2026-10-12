@@ -59,6 +59,17 @@ class FlagshipFcmService : FirebaseMessagingService() {
             }
         }
 
+        // Internet-access request (§3a): the push names no app or host. The
+        // phone asks its boxes over the paired session; a tap just opens the
+        // app, whose foreground fetch shows the request.
+        val accessRequest = data["category"] == APP_ACCESS_CATEGORY
+        if (accessRequest) {
+            com.flagshipserver.app.core.AccessRequestBridge.onAccessRequest?.invoke()
+            data["title"] = "Flagship"
+            data["body"] = APP_ACCESS_TEXT
+            data.remove("deepLink")
+        }
+
         val title = data["title"] ?: message.notification?.title
             ?: (secretEvent?.let { "Finish setting up ${it.serverFqdn}" }) ?: "Flagship"
         val body = data["body"] ?: message.notification?.body
@@ -89,6 +100,8 @@ class FlagshipFcmService : FirebaseMessagingService() {
 
     companion object {
         private const val CHANNEL_ID = "flagship.alerts"
+        const val APP_ACCESS_CATEGORY = "app-access"
+        const val APP_ACCESS_TEXT = "One of your apps wants to reach the internet"
         private const val NOTIF_ID_BASE = 1000
 
         fun ensureChannel(context: Context) {

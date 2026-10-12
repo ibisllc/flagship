@@ -28,6 +28,16 @@ data class AppSummary(
     /** Internet hosts the manifest declares and the ones the owner approved.
      *  Absent on boxes without the egress gateway. */
     val egress: AppEgress? = null,
+    /** The app's access list at a glance (§3a). Absent on boxes from before
+     *  access lists; those may still send [egress]. */
+    val access: AppAccessSummary? = null,
+)
+
+/** `access: {rules, pending}` on an app summary. */
+@Serializable
+data class AppAccessSummary(
+    val rules: Int = 0,
+    val pending: Int = 0,
 )
 
 /** A live app's internet access: it may reach only [approved] hosts, each of
@@ -62,6 +72,96 @@ data class AppEgressResponse(
     val ok: Boolean = false,
     val egress: AppEgress? = null,
 )
+
+/** A host an app was denied because no rule matched (`attempt`), or one its
+ *  manifest declares (`app`, recorded at install). */
+@Serializable
+data class AppAccessPending(
+    val host: String,
+    val source: String = SOURCE_ATTEMPT,
+    val attempts: Int = 0,
+    val firstSeen: Long = 0,
+    val lastSeen: Long = 0,
+) {
+    companion object {
+        const val SOURCE_ATTEMPT = "attempt"
+        const val SOURCE_APP = "app"
+    }
+}
+
+/** `GET /api/screens/services/:id/access`. */
+@Serializable
+data class AppAccessState(
+    val list: String = com.flagshipserver.app.core.AppAccessList.DEFAULT_LIST,
+    val listSha256: String? = null,
+    val pending: List<AppAccessPending> = emptyList(),
+)
+
+@Serializable
+data class AppAccessGrantBody(
+    val serverDomain: String,
+    val serviceId: String,
+    val listSha256: String,
+    val issuedAt: Long,
+)
+
+/** `POST /api/screens/services/:id/access`. */
+@Serializable
+data class AppAccessSetRequest(
+    val list: String,
+    val grant: AppAccessGrantBody,
+    /** Ed25519 over the canonical bytes, 128 hex. */
+    val signature: String,
+)
+
+@Serializable
+data class AppAccessSetResponse(
+    val ok: Boolean = false,
+    /** The applied state; read leniently because only the GET shape is useful. */
+    val access: JsonElement? = null,
+) {
+    fun state(json: kotlinx.serialization.json.Json): AppAccessState? {
+        val obj = access as? JsonObject ?: return null
+        if (!obj.containsKey("list")) return null
+        return runCatching { json.decodeFromJsonElement(AppAccessState.serializer(), obj) }.getOrNull()
+    }
+}
+
+/** The body of a refused access-list order: per-line errors on a 400. */
+@Serializable
+data class AppAccessRefusal(
+    val error: String? = null,
+    val errors: List<AppAccessLineError> = emptyList(),
+)
+
+@Serializable
+data class AppAccessLineError(val line: Int, val message: String)
+
+@Serializable
+data class AppAccessDismissRequest(val host: String)
+
+/** One pending request on `GET /api/screens/access-requests`. */
+@Serializable
+data class AccessRequest(
+    val serviceId: String,
+    val appName: String? = null,
+    val host: String,
+    val source: String = AppAccessPending.SOURCE_ATTEMPT,
+    val attempts: Int = 0,
+    val firstSeen: Long = 0,
+    val lastSeen: Long = 0,
+)
+
+@Serializable
+data class AccessRequestsResponse(val requests: List<AccessRequest> = emptyList())
+
+/** A frame on the screens event socket. */
+@Serializable
+data class ScreensEvent(val type: String, val serviceId: String? = null) {
+    companion object {
+        const val ACCESS_REQUEST = "access-request"
+    }
+}
 
 @Serializable
 data class RecentInstallEvent(

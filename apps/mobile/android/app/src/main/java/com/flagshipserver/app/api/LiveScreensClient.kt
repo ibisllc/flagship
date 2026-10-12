@@ -201,14 +201,36 @@ class LiveScreensClient(
         )
     }
 
-    override suspend fun vibeCodeDeployStart(sessionId: String): VibeCodeDeployReply =
+    override suspend fun vibeCodeDeployStart(sessionId: String, credential: BuildCredential?): VibeCodeDeployReply =
         // A current box answers 202 at once; an older one ignores `background`
         // and answers when the install is done, hence the long read timeout.
         request(
             "/api/llm/sessions/$sessionId/deploy", VibeCodeDeployReply.serializer(), "POST",
-            "{\"background\":true}".toByteArray(),
+            json.encodeToString(VibeCodeDeployBody.serializer(), VibeCodeDeployBody(true, credential)).toByteArray(),
             readTimeoutSeconds = 15 * 60,
         )
+
+    @kotlinx.serialization.Serializable
+    private data class VibeCodeDeployBody(val background: Boolean, val credential: BuildCredential? = null)
+
+    private fun servicePath(serviceId: String): String =
+        "/api/screens/services/${java.net.URLEncoder.encode(serviceId, "UTF-8")}"
+
+    override suspend fun serviceAccess(serviceId: String): AppAccessState =
+        request("${servicePath(serviceId)}/access", AppAccessState.serializer())
+
+    override suspend fun serviceAccessSet(serviceId: String, req: AppAccessSetRequest): AppAccessSetResponse {
+        val body = json.encodeToString(AppAccessSetRequest.serializer(), req).toByteArray()
+        return request("${servicePath(serviceId)}/access", AppAccessSetResponse.serializer(), "POST", body)
+    }
+
+    override suspend fun serviceAccessDismiss(serviceId: String, host: String) {
+        val body = json.encodeToString(AppAccessDismissRequest.serializer(), AppAccessDismissRequest(host)).toByteArray()
+        request<Unit>("${servicePath(serviceId)}/access/dismiss", null, "POST", body)
+    }
+
+    override suspend fun accessRequests(): AccessRequestsResponse =
+        request("/api/screens/access-requests", AccessRequestsResponse.serializer())
 
     override suspend fun serviceEgressSet(serviceId: String, req: AppEgressRequest): AppEgressResponse {
         val body = json.encodeToString(AppEgressRequest.serializer(), req).toByteArray()
@@ -385,6 +407,31 @@ class LiveScreensClient(
             ws?.close(1000, null)
             close()
         }
+    }
+
+    /** The box's event socket. The token rides the query (the box's contract)
+     *  and the header (what the paired-session gate reads first). */
+    override fun screensEvents(): Flow<ScreensEvent> = channelFlow {
+        val base = base()
+        val token = token()
+        val wsUrl = base
+            .replaceFirst("https://", "wss://")
+            .replaceFirst("http://", "ws://") +
+            "/api/screens/events?sessionToken=" + java.net.URLEncoder.encode(token, "UTF-8")
+        val req = Request.Builder()
+            .url(wsUrl)
+            .header("x-flagship-session", token)
+            .build()
+        val ws = client.newWebSocket(req, object : WebSocketListener() {
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                val event = try { json.decodeFromString(ScreensEvent.serializer(), text) }
+                    catch (_: Throwable) { return }
+                trySend(event)
+            }
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { close() }
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: okhttp3.Response?) { close() }
+        })
+        awaitClose { ws.close(1000, null) }
     }
 
     override fun browserTabStream(tabId: String): BrowserStream =

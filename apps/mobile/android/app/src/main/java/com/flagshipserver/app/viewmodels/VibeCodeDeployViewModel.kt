@@ -6,10 +6,13 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.api.BuildCredential
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.api.boxError
 import com.flagshipserver.app.api.userFacing
+import com.flagshipserver.app.core.AiKeyStore
+import com.flagshipserver.app.core.AiRelay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +31,9 @@ class VibeCodeDeployViewModel(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val pollIntervalMs: Long = 1_500,
     private val pollLimitMs: Long = 45 * 60 * 1_000L,
+    /** The owner's current AI key, sent with every deploy so a retry after
+     *  turning the relay off takes effect. Null: the box keeps the one it has. */
+    private val credential: () -> BuildCredential? = { currentCredential() },
 ) {
     sealed interface Phase {
         data object Idle : Phase
@@ -46,7 +52,7 @@ class VibeCodeDeployViewModel(
         if (_phase.value is Phase.Deploying) return@launch
         _phase.value = Phase.Deploying()
         try {
-            val r = client.vibeCodeDeployStart(sessionId)
+            val r = client.vibeCodeDeployStart(sessionId, credential())
             when {
                 r.started == true -> follow()
                 r.ok && r.url != null -> _phase.value = Phase.Deployed(r.url, leftOpen = r.inviteOnly == false)
@@ -130,6 +136,12 @@ class VibeCodeDeployViewModel(
             "fixing" -> FIXING
             "going-live" -> GOING_LIVE
             else -> DEPLOYING
+        }
+
+        /** The saved key this chat's build was handed, as it is now. */
+        fun currentCredential(): BuildCredential? {
+            val id = AiRelay.lastUsedKeyId ?: return null
+            return runCatching { AiKeyStore.credentialFor(id) }.getOrNull()?.let(BuildCredential::from)
         }
 
         fun alreadyDeploying(t: ScreensError.Http): Boolean =

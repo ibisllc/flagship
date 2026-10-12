@@ -194,12 +194,26 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
             is LoadingState.Loaded -> {
                 val resp = d.value
                 Header(app = resp.app)
-                EgressSection(
-                    serviceId = serviceId,
-                    egress = resp.app.egress,
-                    restricted = appState.isRestrictedDevice(),
-                    fallbackServerDomain = { (appState.sessionPod ?: appState.leaderPod)?.fqdn },
-                )
+                // Access lists (§3a); a box from before them may still send
+                // the v1 egress approval.
+                val access = resp.app.access
+                if (access != null) {
+                    InternetAccessSection(
+                        nav = nav,
+                        serviceId = serviceId,
+                        appName = resp.app.slug.replaceFirstChar { it.uppercase() },
+                        summary = access,
+                        restricted = appState.isRestrictedDevice(),
+                        fallbackServerDomain = { (appState.sessionPod ?: appState.leaderPod)?.fqdn },
+                    )
+                } else {
+                    EgressSection(
+                        serviceId = serviceId,
+                        egress = resp.app.egress,
+                        restricted = appState.isRestrictedDevice(),
+                        fallbackServerDomain = { (appState.sessionPod ?: appState.leaderPod)?.fqdn },
+                    )
+                }
                 if (resp.editable == true) {
                     Spacer(Modifier.height(FS.space.s4))
                     EditRow(onClick = { nav.navigate("edit-service/$serviceId") })
@@ -481,7 +495,8 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
 /** "Report a problem with this adaptation", for a service built from a
  *  shared adaptation. */
 /**
- * The app's internet access. Shown only when the box reports `egress` (it has
+ * The v1 internet approval, for a box that sends `egress` but no `access`
+ * (from before access lists). Shown only when the box reports `egress` (it has
  * the egress gateway) and the app declares hosts: a pending card asking the
  * owner to allow them, and the hosts it can reach now with "Stop access".
  * Both sign with the sensitive-order key; a restricted profile only sees them.

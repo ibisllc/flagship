@@ -93,13 +93,13 @@ class MockScreensClient(
             apps = listOf(
                 AppSummary("bright-maple--plants", "bright-maple", "plants", "plants",
                     "Houseplant watering tracker", "https://plants.$fqdn/", "running", "0.0.3", now() - 60_000 * 30,
-                    egress = egressFixture["bright-maple--plants"]),
+                    egress = egressFixture["bright-maple--plants"], access = accessSummary("bright-maple--plants")),
                 AppSummary("bright-maple--wiki", "bright-maple", "wiki", "wiki",
                     "Personal notes + recipes", "https://wiki.$fqdn/", "running", "1.4.0", now() - 60_000 * 60 * 26,
-                    egress = egressFixture["bright-maple--wiki"]),
+                    egress = egressFixture["bright-maple--wiki"], access = accessSummary("bright-maple--wiki")),
                 AppSummary("trent--scratchpad", "trent", "scratchpad", "scratchpad--trent",
                     "Markdown scratchpad", "https://scratchpad--trent.$fqdn/", "stopped", "0.7.1", now() - 60_000L * 60 * 24 * 12,
-                    egress = egressFixture["trent--scratchpad"]),
+                    egress = egressFixture["trent--scratchpad"], access = accessSummary("trent--scratchpad")),
             )
         )
     }
@@ -121,6 +121,71 @@ class MockScreensClient(
         val next = current.copy(approved = req.grant.hosts.filter { it in current.declared })
         egressFixture[serviceId] = next
         return AppEgressResponse(ok = true, egress = next)
+    }
+
+    /** Each app's access list (§3a): plants was denied a weather API, wiki
+     *  allows one host. An app missing here is on a box from before access
+     *  lists (its summary carries no `access`). */
+    val accessFixture: MutableMap<String, AppAccessState> = mutableMapOf(
+        "bright-maple--plants" to AppAccessState(
+            list = com.flagshipserver.app.core.AppAccessList.DEFAULT_LIST,
+            listSha256 = com.flagshipserver.app.core.AppAccessList.sha256Hex(com.flagshipserver.app.core.AppAccessList.DEFAULT_LIST),
+            pending = listOf(
+                AppAccessPending("api.open-meteo.com", AppAccessPending.SOURCE_APP, 0, now() - 60_000L * 30, now() - 60_000L * 30),
+            ),
+        ),
+        "bright-maple--wiki" to AppAccessState(
+            list = "allow en.wikipedia.org\n",
+            listSha256 = com.flagshipserver.app.core.AppAccessList.sha256Hex("allow en.wikipedia.org\n"),
+        ),
+    )
+    val accessCalls: MutableList<Pair<String, AppAccessSetRequest>> = mutableListOf()
+    val accessDismissals: MutableList<Pair<String, String>> = mutableListOf()
+    /** Thrown by `serviceAccessSet` instead of applying. */
+    var accessError: Throwable? = null
+
+    private fun accessSummary(serviceId: String): AppAccessSummary? = accessFixture[serviceId]?.let {
+        AppAccessSummary(com.flagshipserver.app.core.AppAccessList.parse(it.list).rules.size, it.pending.size)
+    }
+
+    override suspend fun serviceAccess(serviceId: String): AppAccessState {
+        tick()
+        return accessFixture[serviceId] ?: throw ScreensError.Http(404, """{"error":"no such service"}""")
+    }
+
+    override suspend fun serviceAccessSet(serviceId: String, req: AppAccessSetRequest): AppAccessSetResponse {
+        tick()
+        accessCalls.add(serviceId to req)
+        accessError?.let { throw it }
+        val current = accessFixture[serviceId] ?: throw ScreensError.Http(404, """{"error":"no such service"}""")
+        val parsed = com.flagshipserver.app.core.AppAccessList.parse(req.list)
+        if (!parsed.ok) {
+            val errors = parsed.errors.joinToString(",") { """{"line":${it.line},"message":${JsonPrimitive(it.message)}}""" }
+            throw ScreensError.Http(400, """{"error":"the list has errors","errors":[$errors]}""")
+        }
+        // A request is answered once a rule names its host.
+        val named = parsed.rules.map { it.target }.toSet()
+        val next = AppAccessState(req.list, req.grant.listSha256, current.pending.filter { it.host !in named })
+        accessFixture[serviceId] = next
+        return AppAccessSetResponse(ok = true, access = kotlinx.serialization.json.Json.encodeToJsonElement(AppAccessState.serializer(), next))
+    }
+
+    override suspend fun serviceAccessDismiss(serviceId: String, host: String) {
+        tick()
+        accessDismissals.add(serviceId to host)
+        val current = accessFixture[serviceId] ?: throw ScreensError.Http(404, """{"error":"no such service"}""")
+        accessFixture[serviceId] = current.copy(pending = current.pending.filter { it.host != host })
+    }
+
+    override suspend fun accessRequests(): AccessRequestsResponse {
+        tick()
+        return AccessRequestsResponse(
+            accessFixture.flatMap { (id, state) ->
+                state.pending.map { p ->
+                    AccessRequest(id, id.substringAfter("--").replaceFirstChar { it.uppercase() }, p.host, p.source, p.attempts, p.firstSeen, p.lastSeen)
+                }
+            },
+        )
     }
 
     override suspend fun boxFqdn(): String = "$podContext.bright-maple.flagship.services"
@@ -179,8 +244,12 @@ class MockScreensClient(
     /** Background deploys started on the mock: each poll walks one phase on. */
     private val deployPolls = mutableMapOf<String, Int>()
 
-    override suspend fun vibeCodeDeployStart(sessionId: String): VibeCodeDeployReply {
+    /** The credential each deploy carried, in order. */
+    val deployCredentials: MutableList<BuildCredential?> = mutableListOf()
+
+    override suspend fun vibeCodeDeployStart(sessionId: String, credential: BuildCredential?): VibeCodeDeployReply {
         tick()
+        deployCredentials.add(credential)
         deployPolls[sessionId] = 0
         return VibeCodeDeployReply(ok = true, started = true)
     }

@@ -88,7 +88,9 @@ interface ScreensClient {
     /** `POST /api/llm/sessions/<id>/deploy {background:true}`: start the
      *  staged deploy and follow it on [vibeCodeStatus]. An older box ignores
      *  `background` and answers when it's live. Default: the waiting call. */
-    suspend fun vibeCodeDeployStart(sessionId: String): VibeCodeDeployReply {
+    /** [credential]: the owner's current AI key (relay setting included), so a
+     *  retry after turning the relay off uses the new setting. */
+    suspend fun vibeCodeDeployStart(sessionId: String, credential: BuildCredential? = null): VibeCodeDeployReply {
         val r = vibeCodeDeploy(sessionId)
         return VibeCodeDeployReply(ok = r.ok, serviceId = r.serviceId, url = r.url, inviteOnly = r.inviteOnly)
     }
@@ -115,6 +117,30 @@ interface ScreensClient {
      *  internet approval for a live app (`hosts: []` revokes). */
     suspend fun serviceEgressSet(serviceId: String, req: AppEgressRequest): AppEgressResponse =
         throw ScreensError.NotImplemented("internet approval")
+
+    /** `GET /api/screens/services/:serviceId/access`: the app's access list
+     *  and the hosts waiting for an answer (§3a). */
+    suspend fun serviceAccess(serviceId: String): AppAccessState =
+        throw ScreensError.NotImplemented("access list")
+
+    /** `POST /api/screens/services/:serviceId/access`: apply the owner's
+     *  signed list. */
+    suspend fun serviceAccessSet(serviceId: String, req: AppAccessSetRequest): AppAccessSetResponse =
+        throw ScreensError.NotImplemented("access list")
+
+    /** `POST /api/screens/services/:serviceId/access/dismiss`: forget a
+     *  pending request without changing the list (unsigned). */
+    suspend fun serviceAccessDismiss(serviceId: String, host: String): Unit =
+        throw ScreensError.NotImplemented("access list")
+
+    /** `GET /api/screens/access-requests`: every app's pending requests. */
+    suspend fun accessRequests(): AccessRequestsResponse =
+        throw ScreensError.NotImplemented("access requests")
+
+    /** `GET /api/screens/events` (WebSocket): the box's live events, e.g.
+     *  `{"type":"access-request","serviceId":…}`. Ends when the socket closes;
+     *  a box without the socket ends it at once. */
+    fun screensEvents(): Flow<ScreensEvent> = kotlinx.coroutines.flow.emptyFlow()
 
     /** The FQDN of the box this client talks to, which a signed grant names. */
     suspend fun boxFqdn(): String? = null

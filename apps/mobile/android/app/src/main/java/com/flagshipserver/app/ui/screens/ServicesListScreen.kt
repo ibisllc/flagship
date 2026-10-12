@@ -1,7 +1,6 @@
 package com.flagshipserver.app.ui.screens
 
-import com.flagshipserver.app.viewmodels.AppEgressViewModel
-import com.flagshipserver.app.viewmodels.EgressCardState
+import com.flagshipserver.app.viewmodels.AppAccessViewModel
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -254,7 +253,7 @@ private fun AppRow(app: AppSummary, me: String, onClick: () -> Unit) {
     ) {
         if (app.egressPending) {
             FSPill(
-                label = AppEgressViewModel.BADGE,
+                label = AppAccessViewModel.BADGE,
                 kind = FSPillKind.Pending,
                 modifier = Modifier.testTag("services-row-egress-badge"),
             )
@@ -335,7 +334,7 @@ private fun toRow(api: ApiAppSummary, links: AppLinksResponse?): AppSummary =
         canonicalUrl = links?.canonicalUrl ?: api.url,
         customDomain = links?.customDomain,
         customDomainConfirmed = links?.customDomainConfirmed,
-        egressPending = EgressCardState.showsBadge(api.egress),
+        egressPending = AppAccessViewModel.showsBadge(api),
     )
 
 data class AppSummary(
@@ -361,6 +360,7 @@ data class AppSummary(
      *  Populated by the same /links fan-out as shortUrl. */
     val customDomain: String? = null,
     val customDomainConfirmed: Boolean? = null,
-    /** The app declares internet hosts the owner hasn't allowed yet. */
+    /** A host is waiting for the owner's answer (or, on an older box, the
+     *  app declares hosts the owner hasn't allowed yet). */
     val egressPending: Boolean = false,
 )

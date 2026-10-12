@@ -20,6 +20,9 @@ sealed interface DeepLink {
     data object SecretRequests : DeepLink
     data class ServerDetail(val podId: String) : DeepLink
     data class AppDetail(val appId: String) : DeepLink
+    /** An app's access list editor, from an internet-access alert's "View
+     *  access list". Internal-only — not parsed from a URI. */
+    data class AccessList(val serviceId: String) : DeepLink
     data object CreateServer : DeepLink
     /** Open the recovery-setup flow on the Settings tab. Triggered
      *  in-app from the Home nudge (C9). Internal-only — not parsed

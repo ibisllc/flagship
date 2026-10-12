@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.api.BuildCredential
 import com.flagshipserver.app.api.MockScreensClient
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
@@ -31,7 +32,7 @@ class VibeCodeDeployViewModelTest {
         val mock = MockScreensClient(simulatedLatencyMs = 0)
         var i = 0
         return object : ScreensClient by mock {
-            override suspend fun vibeCodeDeployStart(sessionId: String): VibeCodeDeployReply {
+            override suspend fun vibeCodeDeployStart(sessionId: String, credential: BuildCredential?): VibeCodeDeployReply {
                 startError?.let { throw it }
                 return VibeCodeDeployReply(ok = true, started = true)
             }
@@ -78,7 +79,7 @@ class VibeCodeDeployViewModelTest {
         val mock = MockScreensClient(simulatedLatencyMs = 0)
         var polled = false
         val oldBox = object : ScreensClient by mock {
-            override suspend fun vibeCodeDeployStart(sessionId: String) =
+            override suspend fun vibeCodeDeployStart(sessionId: String, credential: BuildCredential?) =
                 VibeCodeDeployReply(ok = true, serviceId = "me--habits", url = "https://habits.home.me.flagship.services", inviteOnly = false)
             override suspend fun vibeCodeStatus(sessionId: String): VibeCodeStatusResponse {
                 polled = true
@@ -97,8 +98,8 @@ class VibeCodeDeployViewModelTest {
     @Test fun theDefaultClientCall_isTheWaitingDeploy() = runTest {
         val mock = MockScreensClient(simulatedLatencyMs = 0)
         val waiting = object : ScreensClient by mock {
-            override suspend fun vibeCodeDeployStart(sessionId: String): VibeCodeDeployReply =
-                super<ScreensClient>.vibeCodeDeployStart(sessionId)
+            override suspend fun vibeCodeDeployStart(sessionId: String, credential: BuildCredential?): VibeCodeDeployReply =
+                super<ScreensClient>.vibeCodeDeployStart(sessionId, credential)
         }
         val reply = waiting.vibeCodeDeployStart("s1")
         assertEquals(null, reply.started)

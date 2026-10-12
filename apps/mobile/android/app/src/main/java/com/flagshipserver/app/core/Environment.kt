@@ -64,6 +64,10 @@ val LocalToastCenter = staticCompositionLocalOf<ToastCenter> { ToastCenter() }
 
 val LocalDeepLinker = staticCompositionLocalOf<DeepLinker> { DeepLinker() }
 
+/** Internet-access alerts across every box the phone manages (§3a). Null in
+ *  previews, tests and mock mode: no dialogs. */
+val LocalAccessRequestCenter = staticCompositionLocalOf<AccessRequestCenter?> { null }
+
 /** App-wide "active operations" registry feeding the global teal sliver
  *  (the WhatsApp-style active-call bar). Production MainActivity installs
  *  one instance; previews + tests get the default empty center. */

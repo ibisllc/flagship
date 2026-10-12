@@ -13,7 +13,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalDeepLinker
+import com.flagshipserver.app.ui.screens.AccessListScreen
 import com.flagshipserver.app.ui.screens.ServiceDetailScreen
+import com.flagshipserver.app.ui.screens.accessListRoute
 import com.flagshipserver.app.ui.screens.ServiceEnvScreen
 import com.flagshipserver.app.ui.screens.ServicesListScreen
 import com.flagshipserver.app.ui.screens.AiKeyStepScreen
@@ -47,6 +49,11 @@ fun ServicesTab() {
             is DeepLink.AppDetail -> {
                 deepLinker.consume()
                 nav.navigate("app-detail/${link.appId}")
+            }
+            is DeepLink.AccessList -> {
+                deepLinker.consume()
+                nav.navigate("app-detail/${link.serviceId}")
+                nav.navigate(accessListRoute(link.serviceId))
             }
             // W10 — the `vibecode-needs-you` push deep-links here so the AI's
             // mid-build question (talkToUser / requestEnvVar) opens the chat.
@@ -92,6 +99,10 @@ fun ServicesTab() {
     }
     NavHost(navController = nav, startDestination = "apps-list") {
         composable("apps-list") { ServicesListScreen(nav) }
+        composable("service-access-list/{serviceId}") { entry ->
+            val id = entry.arguments?.getString("serviceId") ?: return@composable
+            AccessListScreen(nav, serviceId = id)
+        }
         composable("app-detail/{appId}") { entry ->
             val id = entry.arguments?.getString("appId") ?: return@composable
             ServiceDetailScreen(nav, serviceId = id)
