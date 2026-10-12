@@ -2,7 +2,8 @@
  * The Flagship build TOOL SURFACE — one authoritative implementation of the
  * limited, contract-bounded functions a build agent drives:
  *   get_contract · list_files · read_file · write_file · delete_file ·
- *   validate · request_env_var · get_journal · deploy · get_logs
+ *   validate · request_env_var · get_journal · deploy · check_app ·
+ *   get_logs · finish
  *
  * BOTH callers route through here, so the surface can never drift between
  * them:
@@ -16,18 +17,31 @@
  * `recordEnvRequest`, `deploy`, `logs`). It is transport-agnostic and
  * journals every call value-free (names/sizes/validation problems only —
  * never file contents, never a secret value).
+ *
+ * `deploy`, `check_app` and `get_logs` only ever reach the build's private
+ * staging copy (`staging.ts`), never a live service; `finish` hands the
+ * build to the box, which seals it (`sealed` then refuses every tool) before
+ * it goes live. See docs/ai-privacy-and-staging.md §2.
  */
 
 import { parseManifest } from "@flagship/protocol";
 import type { BuildJournal, BuildMode } from "./buildJournal.js";
 import type { BuildWorkspace } from "./buildWorkspace.js";
 import { renderContractMarkdown } from "./contract.js";
+import { checkDockerfile } from "./dockerfilePolicy.js";
 import { noRedaction, type ModelRedactor } from "../llm/modelPrivacy.js";
 
 export interface BuildToolDeployResult {
   ok: boolean;
-  serviceId?: string;
-  url?: string;
+  reason?: string;
+}
+
+export interface BuildToolCheckResult {
+  ok: boolean;
+  status?: number;
+  contentType?: string;
+  body?: string;
+  truncated?: boolean;
   reason?: string;
 }
 
@@ -44,10 +58,16 @@ export interface BuildToolHostContext {
    * set-app-env path — NEVER through a build tool. Optional.
    */
   recordEnvRequest?: (req: { name: string; why?: string; secret?: boolean }) => Promise<void>;
-  /** Build + install the current workspace. Absent ⇒ the deploy tool 503s. */
+  /** Build the workspace and run it as the private staging copy. Absent ⇒ the deploy tool refuses. */
   deploy?: () => Promise<BuildToolDeployResult>;
-  /** Recent logs for a deployed build. Absent ⇒ get_logs returns a hint. */
-  logs?: () => Promise<string>;
+  /** Request a path from the staging copy (never a live service). */
+  checkApp?: (req: { path: string; method?: string; body?: string }) => Promise<BuildToolCheckResult>;
+  /** The staging copy's recent output; null when nothing is running. */
+  logs?: () => Promise<string | null>;
+  /** The AI says the app works. The box decides; a refusal comes back as the reason. */
+  finish?: () => Promise<{ ok: boolean; reason?: string }>;
+  /** True once the build is sealed: every tool refuses from then on. */
+  sealed?: () => boolean;
   /**
    * Which build mode owns the journal entries this host writes. `mcp` for
    * the external-IDE path, `git` for the box's own agentic adapt loop.
@@ -70,10 +90,6 @@ export interface BuildToolResult {
   /** Value-free journal summary (defaults to the tool name). */
   journalSummary?: string;
   journalDetail?: string;
-  /** Set by `deploy` on success; for the box, never shown to the model. */
-  serviceId?: string;
-  /** Set by `deploy` on success; for the box, never shown to the model. */
-  deployedUrl?: string;
 }
 
 /** Names of the tools the surface exposes, in the order they appear. */
@@ -87,7 +103,9 @@ export const BUILD_TOOL_NAMES = [
   "request_env_var",
   "get_journal",
   "deploy",
+  "check_app",
   "get_logs",
+  "finish",
 ] as const;
 
 export type BuildToolName = (typeof BUILD_TOOL_NAMES)[number];
@@ -162,12 +180,33 @@ export const BUILD_TOOL_SPECS: BuildToolSpec[] = [
   },
   {
     name: "deploy",
-    description: "Build the container from the workspace and install it on the box. Returns whether it worked.",
+    description:
+      "Build the container from the workspace and start it as a PRIVATE TEST COPY on the box, with sample data and no internet. Returns whether it built and started (and why not). It does not make the app public.",
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "check_app",
+    description:
+      "Send one HTTP request to the test copy (after deploy) as a signed-in owner and see the status, content type and the first 4 KB of the answer.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Path to request, starting with /, e.g. \"/\" or \"/api/items\"." },
+        method: { type: "string", description: "HTTP method (default GET)." },
+        body: { type: "string", description: "Request body for POST/PUT/PATCH (JSON is sent as application/json)." },
+      },
+      required: ["path"],
+    },
+  },
+  {
     name: "get_logs",
-    description: "Read recent logs from the deployed app (after deploy).",
+    description: "Read the recent output of the test copy (after deploy).",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "finish",
+    description:
+      "Say the app works. Only after a successful deploy of the current files. The box then puts it live; your session ends and you can't use any tool on this build again.",
     inputSchema: { type: "object", properties: {} },
   },
 ];
@@ -186,15 +225,16 @@ export class BuildToolHost {
    * failure — it returns `{isError:true}` so the agent can recover.
    */
   async call(name: string, args: Record<string, unknown>): Promise<BuildToolResult> {
-    const raw = await this.dispatch(name, args);
+    const raw = this.ctx.sealed?.()
+      ? toolErr("this build is closed: the app was handed to the box, and its tools no longer answer", `refused ${name}: sealed`)
+      : await this.dispatch(name, args);
     const r = REPO_CONTENT_TOOLS.has(name) ? raw : { ...raw, text: (this.ctx.redact ?? noRedaction)(raw.text) };
     await this.ctx.journal.append(this.ctx.buildId, {
       mode: this.ctx.mode ?? "mcp",
       kind: "mcp-call",
-      actor: this.ctx.mode === "git" ? "ai" : "ide",
+      actor: (this.ctx.mode ?? "mcp") === "mcp" ? "ide" : "ai",
       summary: r.journalSummary ?? name,
       ...(r.journalDetail != null ? { detail: r.journalDetail } : {}),
-      ...(r.serviceId != null ? { serviceId: r.serviceId } : {}),
     });
     return r;
   }
@@ -249,11 +289,18 @@ export class BuildToolHost {
             journalSummary: `validate: ${result.errors.length} problem(s)`,
           };
         }
-        const hasDockerfile = this.ctx.workspace.has("Dockerfile");
-        const problems = hasDockerfile ? [] : ["missing Dockerfile"];
+        const dockerfile = this.ctx.workspace.read("Dockerfile");
+        const policy = dockerfile == null ? null : checkDockerfile(dockerfile);
+        const dockerfileProblems = policy && !policy.ok ? policy.problems : [];
+        const problems = [...(dockerfile == null ? ["missing Dockerfile"] : []), ...dockerfileProblems];
         return {
           text: JSON.stringify({ ok: problems.length === 0, manifestName: result.manifest.name, problems }),
-          journalSummary: problems.length ? `validate: ${problems.join(", ")}` : "validate: ok",
+          journalSummary:
+            dockerfileProblems.length > 0
+              ? `validate: ${dockerfileProblems.length} Dockerfile problem(s)`
+              : problems.length
+                ? `validate: ${problems.join(", ")}`
+                : "validate: ok",
         };
       }
 
@@ -292,20 +339,45 @@ export class BuildToolHost {
         if (!this.ctx.workspace.manifestJson())
           return toolErr("nothing to deploy: write flagship.app.json first", "deploy: no manifest");
         const d = await this.ctx.deploy();
-        if (!d.ok) return toolErr(d.reason ?? "deploy failed", `deploy failed: ${d.reason ?? ""}`);
-        // The model is told it worked, never where it lives.
+        if (!d.ok) return toolErr(d.reason ?? "deploy failed", `staging failed: ${firstLine(d.reason ?? "")}`);
+        return { text: JSON.stringify({ ok: true }), journalSummary: "staged a test copy" };
+      }
+
+      case "check_app": {
+        if (!this.ctx.checkApp) return toolErr("check_app is not available for this session", "check_app unavailable");
+        const path = str(args.path);
+        if (!path) return toolErr("path required", "check_app: no path");
+        const r = await this.ctx.checkApp({
+          path,
+          ...(typeof args.method === "string" ? { method: args.method } : {}),
+          ...(typeof args.body === "string" ? { body: args.body } : {}),
+        });
+        if (!r.ok) return toolErr(r.reason ?? "request failed", `check_app ${path}: no answer`);
         return {
-          text: JSON.stringify({ ok: true }),
-          journalSummary: `deployed → ${d.url ?? ""}`,
-          ...(d.serviceId != null ? { serviceId: d.serviceId } : {}),
-          ...(d.url != null ? { deployedUrl: d.url } : {}),
+          text: JSON.stringify({
+            status: r.status,
+            contentType: r.contentType,
+            body: r.body,
+            ...(r.truncated ? { truncated: true } : {}),
+          }),
+          journalSummary: `check_app ${path} → ${r.status}`,
         };
       }
 
       case "get_logs": {
-        if (!this.ctx.logs) return { text: "logs are available after the app is deployed", journalSummary: "get_logs (none)" };
-        const text = await this.ctx.logs();
-        return { text, journalSummary: "read logs" };
+        const text = this.ctx.logs ? await this.ctx.logs() : null;
+        if (text == null) return { text: "nothing is running yet: call deploy first", journalSummary: "get_logs (none)" };
+        return { text: text || "(no output yet)", journalSummary: "read staging logs" };
+      }
+
+      case "finish": {
+        if (!this.ctx.finish) return toolErr("finish is not available for this session", "finish unavailable");
+        const f = await this.ctx.finish();
+        if (!f.ok) return toolErr(f.reason ?? "not finished", "finish refused");
+        return {
+          text: JSON.stringify({ ok: true, note: "Thanks. The box takes it from here; this session is over." }),
+          journalSummary: "the AI finished",
+        };
       }
 
       default:
@@ -316,6 +388,11 @@ export class BuildToolHost {
 
 function toolErr(message: string, journalSummary: string): BuildToolResult {
   return { text: JSON.stringify({ ok: false, error: message }), isError: true, journalSummary };
+}
+
+function firstLine(s: string): string {
+  const line = s.split("\n")[0] ?? "";
+  return line.length > 160 ? `${line.slice(0, 157)}…` : line;
 }
 
 function str(v: unknown): string {

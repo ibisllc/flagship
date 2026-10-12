@@ -13,6 +13,7 @@ import { FileBuildCredentialStore, InMemoryBuildCredentialStore } from "../src/l
 import type { CommandRunner } from "../src/serviceRunner.js";
 import type { HttpRequest } from "../src/runtime.js";
 import type { DeployResult } from "../src/buildmodes/deployArtifact.js";
+import { FakeStaging } from "./helpers/fakeStaging.js";
 
 const FQDN = "home.harry.flagship.services";
 const VALID_MANIFEST = JSON.stringify({
@@ -42,24 +43,28 @@ function fixtureClone(files: Record<string, string>) {
 function makeOrchestrator(over: Partial<Parameters<typeof BuildOrchestrator.prototype.constructor>[0]> = {}) {
   const journal = new InMemoryBuildJournal();
   const mcpKeys = new InMemoryMcpKeyStore();
-  const deployed: Array<{ buildId: string; files: Record<string, string> }> = [];
+  const deployed: Array<{ buildId: string; files: Record<string, string>; image?: string }> = [];
+  const staging = new FakeStaging();
   const gitImporter = new GitImporter({
     cmd: noopCmd,
     workingDir: mkdtempSync(join(tmpdir(), "bm-git-")),
     journal,
     cloneInto: fixtureClone({ "flagship.app.json": VALID_MANIFEST, Dockerfile: "FROM node:20-alpine" }),
   });
+  const record = async ({ files, buildId, image }: { files: Record<string, string>; buildId: string; image?: string }): Promise<DeployResult> => {
+    deployed.push({ buildId, files, ...(image ? { image } : {}) });
+    const name = JSON.parse(files["flagship.app.json"]!).name as string;
+    return { ok: true, serviceId: `harry-${name}`, url: `https://${name}.${FQDN}`, image: image ?? "img" };
+  };
   const o = new BuildOrchestrator({
     journal,
     gitImporter,
     mcpKeys,
     serverFqdn: FQDN,
     mcpBaseUrl: `https://${FQDN}`,
-    deployArtifact: async ({ files, buildId }): Promise<DeployResult> => {
-      deployed.push({ buildId, files });
-      const name = JSON.parse(files["flagship.app.json"]!).name as string;
-      return { ok: true, serviceId: `harry-${name}`, url: `https://${name}.${FQDN}`, image: "img" };
-    },
+    staging,
+    deployArtifact: record,
+    installArtifact: record,
     rand: (() => {
       let n = 0;
       return () => `build${++n}`;
@@ -67,7 +72,7 @@ function makeOrchestrator(over: Partial<Parameters<typeof BuildOrchestrator.prot
     now: () => 1,
     ...over,
   });
-  return { o, journal, mcpKeys, deployed };
+  return { o, journal, mcpKeys, deployed, staging };
 }
 
 describe("BuildOrchestrator — git mode", () => {
@@ -116,6 +121,7 @@ function makeNotFitOrchestrator(over: Partial<Parameters<typeof BuildOrchestrato
     mcpKeys,
     serverFqdn: FQDN,
     mcpBaseUrl: `https://${FQDN}`,
+    staging: new FakeStaging(),
     deployArtifact: async (): Promise<DeployResult> => ({ ok: true, serviceId: "x", url: "https://x", image: "img" }),
     rand: (() => {
       let n = 0;
@@ -262,16 +268,21 @@ describe("BuildOrchestrator — AGENTIC adapt", () => {
       }),
       () => ({ toolUses: [tu("d1", "validate")] }),
       () => ({ toolUses: [tu("e1", "deploy")] }),
+      () => ({ toolUses: [tu("f1", "finish")] }),
     ]);
 
+    const staging = new FakeStaging();
+    const live = async ({ files }: { files: Record<string, string> }): Promise<DeployResult> => {
+      deployed.push({ files });
+      const name = JSON.parse(files["flagship.app.json"]!).name as string;
+      return { ok: true, serviceId: `harry-${name}`, url: `https://${name}.${FQDN}`, image: "img" };
+    };
     const { o, journal } = makeNotFitOrchestrator({
       agentRunner: agent.runner,
       adaptCredentialAvailable: () => true,
-      deployArtifact: async ({ files }): Promise<DeployResult> => {
-        deployed.push({ files });
-        const name = JSON.parse(files["flagship.app.json"]!).name as string;
-        return { ok: true, serviceId: `harry-${name}`, url: `https://${name}.${FQDN}`, image: "img" };
-      },
+      staging,
+      deployArtifact: live,
+      installArtifact: live,
     });
 
     const created = await o.createGit({ gitUrl: "https://github.com/a/legacy" });
@@ -283,10 +294,11 @@ describe("BuildOrchestrator — AGENTIC adapt", () => {
       expect(r.deployed).toBe(true);
       expect(r.deployedUrl).toContain("shopping");
       expect(r.serviceId).toBe("harry-shopping");
-      expect(r.turns).toBe(5);
+      expect(r.turns).toBe(6);
     }
 
-    // The AI itself deployed (called the deploy tool) — one install ran.
+    // The AI's deploy staged a copy; the box put it live after finish — one install ran.
+    expect(staging.stages).toHaveLength(1);
     expect(deployed).toHaveLength(1);
     expect(JSON.parse(deployed[0]!.files["flagship.app.json"]!).name).toBe("shopping");
 
@@ -304,12 +316,13 @@ describe("BuildOrchestrator — AGENTIC adapt", () => {
     const toolTurn = turn2Messages.find((m) => m.role === "tool");
     expect(JSON.stringify(toolTurn!.toolResults)).toContain("Flagship app contract");
 
-    // The journal records the agentic steps + the AI's deploy tool call,
-    // value-free. (The tool host journals each call as an "mcp-call"; the
-    // deploy call's summary is "deployed → <url>".)
+    // The journal records the agentic steps + the AI's tool calls,
+    // value-free, and the seal before it went live.
     const entries = await journal.read(created.buildId);
     expect(entries.some((e) => e.kind === "adapt-step" && /agentic adapt/.test(e.summary))).toBe(true);
-    expect(entries.some((e) => e.kind === "mcp-call" && e.actor === "ai" && /^deployed →/.test(e.summary))).toBe(true);
+    expect(entries.some((e) => e.kind === "mcp-call" && e.actor === "ai" && e.summary === "staged a test copy")).toBe(true);
+    expect(entries.some((e) => e.kind === "mcp-call" && e.actor === "ai" && e.summary === "the AI finished")).toBe(true);
+    expect(entries.some((e) => e.kind === "sealed")).toBe(true);
     expect(entries.some((e) => e.kind === "mcp-call" && /^wrote flagship\.app\.json/.test(e.summary))).toBe(true);
     expect(entries.every((e) => !(e.detail ?? "").includes("byok"))).toBe(true);
   });
@@ -336,6 +349,7 @@ describe("BuildOrchestrator — AGENTIC adapt", () => {
       () => ({ toolUses: [tu("f1", "write_file", { path: "flagship.app.json", content: VALID_MANIFEST })] }),
       () => ({ toolUses: [tu("v2", "validate")] }),
       () => ({ toolUses: [tu("d1", "deploy")] }),
+      () => ({ toolUses: [tu("f1", "finish")] }),
     ]);
     const { o } = makeNotFitOrchestrator({
       agentRunner: agent.runner,
@@ -426,19 +440,32 @@ describe("BuildOrchestrator — mcp mode", () => {
     expect(bad.authed).toBe(false);
   });
 
-  it("an MCP agent can write files and deploy end-to-end", async () => {
-    const { o, deployed } = makeOrchestrator();
-    const { connection } = await o.createMcp();
+  it("an MCP agent can write files, stage, test and finish; the box then puts it live", async () => {
+    const { o, deployed, staging, mcpKeys } = makeOrchestrator();
+    const { buildId, connection } = await o.createMcp();
     const call = (name: string, args: Record<string, unknown> = {}) =>
       o.handleMcpRpc(connection.key, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } });
     await call("write_file", { path: "flagship.app.json", content: VALID_MANIFEST });
     await call("write_file", { path: "Dockerfile", content: "FROM node:20-alpine" });
     const d = await call("deploy");
     const text = (d.response!.result as any).content[0].text;
-    // The agent learns it worked, never where the app lives.
+    // The agent learns it worked, never where the app lives; nothing is live yet.
     expect(JSON.parse(text)).toEqual({ ok: true });
     expect(text).not.toContain("shopping.");
-    expect(deployed.length).toBe(1);
+    expect(deployed.length).toBe(0);
+    expect(staging.stages).toHaveLength(1);
+    const c = await call("check_app", { path: "/" });
+    expect(JSON.parse((c.response!.result as any).content[0].text)).toMatchObject({ status: 200 });
+    const f = await call("finish");
+    expect(JSON.parse((f.response!.result as any).content[0].text).ok).toBe(true);
+    // Sealed before anything went live: the key is revoked at once.
+    expect(await mcpKeys.get(buildId)).toBeNull();
+    expect((await call("get_logs")).authed).toBe(false);
+    for (let i = 0; i < 5 && deployed.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(deployed).toHaveLength(1);
+    expect(deployed[0]!.image).toBe(staging.lastImage(buildId));
+    expect(o.state(buildId)!.adapt).toMatchObject({ status: "done", deployed: true, deployedUrl: `https://shopping.${FQDN}` });
+    expect(o.state(buildId)!.sealed).toBe(true);
   });
 
   it("re-displays and rotates the mcp key", async () => {

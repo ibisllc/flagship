@@ -187,20 +187,61 @@ describe("McpBuildServer — deploy", () => {
   });
 
   it("refuses to deploy with no manifest", async () => {
-    const { server } = makeServer({ deploy: async () => ({ ok: true, url: "u", serviceId: "s" }) });
+    const { server } = makeServer({ deploy: async () => ({ ok: true }) });
     const d = await callTool(server, "deploy");
     expect(d.isError).toBe(true);
   });
 
-  it("deploys and journals the serviceId", async () => {
-    const { server, journal } = makeServer({
-      deploy: async () => ({ ok: true, url: "https://notes.home.harry.flagship.services", serviceId: "harry-notes" }),
-    });
+  it("deploys to staging and says only that it worked", async () => {
+    const { server, journal } = makeServer({ deploy: async () => ({ ok: true }) });
     await callTool(server, "write_file", { path: "flagship.app.json", content: VALID_MANIFEST });
     const d = await callTool(server, "deploy");
     expect(JSON.parse(d.text)).toEqual({ ok: true });
-    expect(d.text).not.toContain("harry");
     const entries = await journal.read("b1");
-    expect(entries.some((e) => e.serviceId === "harry-notes")).toBe(true);
+    expect(entries.some((e) => e.summary === "staged a test copy")).toBe(true);
+    expect(entries.every((e) => e.serviceId == null)).toBe(true);
+  });
+});
+
+describe("McpBuildServer — testing the staging copy, finishing, sealed", () => {
+  it("check_app and get_logs reach the staging hooks, redacted; finish then seals everything", async () => {
+    let sealed = false;
+    const asked: unknown[] = [];
+    const { server, workspace } = makeServer({
+      redact: (t) => t.replaceAll("home.harry.flagship.services", "app.example"),
+      deploy: async () => ({ ok: true }),
+      checkApp: async (req) => {
+        asked.push(req);
+        return { ok: true, status: 200, contentType: "text/html", body: "<a href=https://home.harry.flagship.services>x</a>" };
+      },
+      logs: async () => "listening for home.harry.flagship.services",
+      finish: async () => {
+        sealed = true;
+        return { ok: true };
+      },
+      sealed: () => sealed,
+    });
+    const tools = (((await server.handle(rpc(1, "tools/list")))!.result) as { tools: Array<{ name: string }> }).tools.map((t) => t.name);
+    expect(tools).toEqual(expect.arrayContaining(["deploy", "check_app", "get_logs", "finish"]));
+    const c = await callTool(server, "check_app", { path: "/items", method: "POST", body: "{}" });
+    expect(asked).toEqual([{ path: "/items", method: "POST", body: "{}" }]);
+    expect(JSON.parse(c.text)).toMatchObject({ status: 200, contentType: "text/html" });
+    expect(c.text).not.toContain("harry");
+    expect((await callTool(server, "get_logs")).text).toBe("listening for app.example");
+    expect(JSON.parse((await callTool(server, "finish")).text).ok).toBe(true);
+
+    workspace.write("flagship.app.json", VALID_MANIFEST);
+    for (const name of ["deploy", "check_app", "get_logs", "read_file", "write_file", "get_journal", "finish"]) {
+      const r = await callTool(server, name, { path: "/", content: "x" });
+      expect(r.isError).toBe(true);
+      expect(r.text).toContain("closed");
+    }
+    const res = await server.handle(rpc(2, "resources/read", { uri: "flagship://journal" }));
+    expect(res!.error).toBeTruthy();
+  });
+
+  it("get_logs before any deploy says so instead of reading anything", async () => {
+    const { server } = makeServer({ logs: async () => null });
+    expect((await callTool(server, "get_logs")).text).toMatch(/call deploy first/);
   });
 });

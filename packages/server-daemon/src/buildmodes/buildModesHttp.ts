@@ -19,9 +19,9 @@
 
 import type { PairedSessionGate } from "../alertInboxHttp.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
-import type { BuildOrchestrator } from "./buildOrchestrator.js";
+import { CLOSED_TO_AI, type BuildOrchestrator } from "./buildOrchestrator.js";
 import type { BuildCredentialStore } from "../llm/buildCredentialStore.js";
-import type { LlmCredential } from "../llmHarness.js";
+import { parseRelayFlag, type LlmCredential } from "../llmHarness.js";
 
 export interface BuildModesHttpDeps {
   orchestrator: BuildOrchestrator;
@@ -174,6 +174,8 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
       // (e.g. a path-traversal id) must never reach `credentials.put`. A
       // server-minted build always has state; anything else 404s here.
       if (!o.state(buildId)) return jerr(404, "build not found");
+      // A sealed build never takes an AI (or its key) again.
+      if (o.isSealed(buildId)) return jerr(409, CLOSED_TO_AI);
       const body = parseJson(req.body) as
         | { instructions?: string; credential?: unknown; background?: boolean; share?: boolean }
         | null;
@@ -202,11 +204,12 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
       }
       const r = await o.adaptGit(buildId, adaptOpts);
       if (!r.ok) {
-        return jerr(r.reason === "AI adapt not configured" ? 503 : 502, r.reason);
+        return jerr(r.reason === "AI adapt not configured" ? 503 : r.reason === CLOSED_TO_AI ? 409 : 502, r.reason);
       }
-      // The agentic path may have already deployed the app (the AI called
-      // the deploy tool itself); surface that so the client can skip the
-      // separate .../deploy step and link straight to the live URL.
+      // The agentic path may have already put the app live (the AI tested
+      // its staging copy and finished, then the box installed it); surface
+      // that so the client can skip the separate .../deploy step and link
+      // straight to the live URL. `reason`: why a finished build isn't live.
       return jok({
         ok: true,
         fileCount: r.fileCount,
@@ -214,6 +217,7 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
         ...(r.deployedUrl != null ? { deployedUrl: r.deployedUrl } : {}),
         ...(r.serviceId != null ? { serviceId: r.serviceId } : {}),
         ...(r.turns != null ? { turns: r.turns } : {}),
+        ...(r.reason != null ? { reason: r.reason } : {}),
       });
     }
 
@@ -318,9 +322,12 @@ function parseCredential(raw: unknown): LlmCredential | null | "invalid" {
   if (typeof o.apiKey !== "string" || o.apiKey.length === 0) return "invalid";
   if (o.baseUrl !== undefined && typeof o.baseUrl !== "string") return "invalid";
   if (o.source !== undefined && o.source !== "byok" && o.source !== "promo") return "invalid";
+  const relay = parseRelayFlag(o.relay);
+  if (relay === "invalid") return "invalid";
   const out: LlmCredential = { provider: o.provider, apiKey: o.apiKey };
   if (typeof o.baseUrl === "string" && o.baseUrl.length > 0) out.baseUrl = o.baseUrl;
   if (o.source === "byok" || o.source === "promo") out.source = o.source;
+  if (relay !== undefined) out.relay = relay;
   return out;
 }
 

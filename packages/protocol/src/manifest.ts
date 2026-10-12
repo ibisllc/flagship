@@ -129,6 +129,26 @@ export function isSingletonStore(flag: StoreFlag | undefined): boolean {
 export interface AppNetwork {
   /** DNS label under <user>.flagship.services. e.g. "habits" → habits.harry.flagship.services */
   subdomain: string;
+  /**
+   * Internet hosts the live app asks to reach (`api.example.com`, or
+   * `*.example.com` for any subdomain of it but not example.com itself).
+   * A live app has no internet at all by default: these open only after the
+   * owner signs an `app-egress` grant for them, and only on TLS 443 / HTTP 80.
+   */
+  egress?: string[];
+}
+
+/** Most hosts one app may declare in `network.egress`. */
+export const EGRESS_HOSTS_MAX = 32;
+
+/**
+ * A valid `network.egress` / `app-egress` grant host: a lowercase multi-label
+ * DNS name, or `*.` + one, and never an IPv4 literal (an owner approves names).
+ */
+export function isEgressHost(h: string): boolean {
+  if (h.length > 253) return false;
+  if (!LITERAL_HOST_RE.test(h) && !WILDCARD_HOST_RE.test(h)) return false;
+  return !/^[0-9.]+$/.test(h.replace(/^\*\./, ""));
 }
 
 export interface AppAccess {
@@ -419,7 +439,8 @@ function parseNetwork(v: unknown, e: (m: string) => void): AppNetwork | undefine
   // subdomain is OPTIONAL — it's a cosmetic hint; the daemon derives the url label
   // from the service slug, not from here. Absent ⇒ no subdomain (no error). Present
   // ⇒ it must be a valid DNS label.
-  if (n.subdomain === undefined) return undefined;
+  const egress = parseEgress(n.egress, e);
+  if (n.subdomain === undefined) return egress ? ({ egress } as AppNetwork) : undefined;
   if (typeof n.subdomain !== "string" || n.subdomain.length === 0) {
     e("network.subdomain must be a non-empty string");
     return undefined;
@@ -428,7 +449,34 @@ function parseNetwork(v: unknown, e: (m: string) => void): AppNetwork | undefine
     e("network.subdomain must be a DNS label");
     return undefined;
   }
-  return { subdomain: n.subdomain };
+  return egress ? { subdomain: n.subdomain, egress } : { subdomain: n.subdomain };
+}
+
+function parseEgress(v: unknown, e: (m: string) => void): string[] | undefined {
+  if (v === undefined) return undefined;
+  if (!Array.isArray(v)) {
+    e("network.egress must be an array of host strings");
+    return undefined;
+  }
+  if (v.length > EGRESS_HOSTS_MAX) {
+    e(`network.egress may list at most ${EGRESS_HOSTS_MAX} hosts`);
+    return undefined;
+  }
+  const out: string[] = [];
+  for (const h of v) {
+    if (typeof h !== "string" || !isEgressHost(h)) {
+      e(
+        `network.egress entry ${JSON.stringify(h)} must be a lowercase host like "api.example.com" or "*.example.com" (no scheme, port, path, IP address or trailing dot)`,
+      );
+      continue;
+    }
+    if (out.includes(h)) {
+      e(`network.egress has duplicate entry ${JSON.stringify(h)}`);
+      continue;
+    }
+    out.push(h);
+  }
+  return out;
 }
 
 function parseAccess(v: unknown, e: (m: string) => void): AppAccess | undefined {

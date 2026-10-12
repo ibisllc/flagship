@@ -3,11 +3,14 @@
  * working Flagship app by DRIVING THE TOOL SURFACE, multi-turn, exactly the
  * way an external IDE agent would over MCP:
  *
- *     read_file → reason → write_file → validate → (fix) → deploy
+ *     read_file → write_file → validate → deploy (staging) → check_app /
+ *     get_logs → (fix, deploy again) → finish
  *
  * This is the realization of the product bar: "let the AI do the job" — the
  * model reads the repo + the platform contract and calls the provided
- * functions until the app validates and deploys. It is NOT a one-shot
+ * functions until the app works on its private staging copy and the model
+ * calls finish. It never sees the app live: the box seals the build and puts
+ * it live after the loop (docs/ai-privacy-and-staging.md). It is NOT a one-shot
  * text-to-files transform; it is a tool-calling conversation the model
  * controls.
  *
@@ -24,7 +27,7 @@
  */
 
 import type { ChatMessage, ChatRequest, ChatResponse, ToolSpec } from "@flagship/llm-providers";
-import type { BuildJournal } from "./buildJournal.js";
+import type { BuildJournal, BuildMode } from "./buildJournal.js";
 import type { BuildToolHost } from "./buildToolHost.js";
 import { BUILD_TOOL_SPECS } from "./buildToolHost.js";
 
@@ -46,19 +49,19 @@ export type ChatRunner = (req: ChatRequest) => Promise<ChatResponse>;
 export type AgentRunner = (buildId: string, req: ChatRequest) => Promise<ChatResponse>;
 
 export interface BuildAgentResult {
-  /** A deploy tool call succeeded → the app is live. */
-  deployed: boolean;
-  deployedUrl?: string;
-  serviceId?: string;
+  /** The model called finish and the box accepted it. */
+  finished: boolean;
+  /** A deploy (to staging) succeeded at least once. */
+  staged: boolean;
   /** The workspace ended with a top-level flagship.app.json. */
   manifestPresent: boolean;
   /** The last `validate` tool call reported ok (manifest + Dockerfile). */
   validated: boolean;
   /** How many model turns ran. */
   turns: number;
-  /** Why the loop ended: the model stopped, deployed, or hit the turn cap. */
-  stopReason: "deployed" | "model-stopped" | "turn-cap" | "error";
-  /** Value-free: a human note when the loop ended without deploying. */
+  /** Why the loop ended: the model finished, stopped, or hit the turn cap. */
+  stopReason: "finished" | "model-stopped" | "turn-cap" | "error";
+  /** Value-free: a human note when the loop ended without finishing. */
   note?: string;
 }
 
@@ -85,15 +88,18 @@ const DEFAULTS = {
  * System prompt for the AGENTIC adapt loop. Unlike the scratch
  * `SYSTEM_PROMPT_V1` (which locks a one-shot emit format), this prompt tells
  * the model it has TOOLS and must drive them: read the contract, inspect the
- * repo, write files, validate, then deploy. Kept small.
+ * repo, write files, validate, deploy a test copy, test it, then finish.
+ * Kept small.
  */
-export const BUILD_AGENT_SYSTEM_PROMPT = `You are Flagship's app-adapter agent. You have been given an existing code repository and a set of TOOLS. Your job is to shape that repository into a working Flagship app — a containerised service the Flagship daemon will build, run, and front with TLS on the user's own box — by CALLING THE TOOLS. You are not writing a single answer; you are doing the work step by step with the tools until the app validates and deploys.
+export const BUILD_AGENT_SYSTEM_PROMPT = `You are Flagship's app-adapter agent. You have been given an existing code repository and a set of TOOLS. Your job is to shape that repository into a working Flagship app — a containerised service the Flagship daemon will build, run, and front with TLS on the user's own box — by CALLING THE TOOLS. You are not writing a single answer; you are doing the work step by step with the tools until a test copy of the app works and you call finish.
 
 How to work:
 1. Call get_contract FIRST to learn the platform's hard rules, the flagship.app.json manifest schema, and the FLAGSHIP_* env vars the daemon injects. The repository's files are ALREADY in your build workspace — call list_files and read_file to inspect what you were given.
 2. Change as little as you can. The author keeps developing this repo for ordinary servers; your changes should sit beside their code, not rewrite it, so they can keep building the app the way they do now and a later re-import only has to revisit flagship.app.json. Prefer ADDING files (flagship.app.json, a Dockerfile) over editing theirs. Edit an existing file only where a rule below forces it, keep each such edit as small as possible (read config from environment variables rather than restructuring code), and never reformat, rename, move, or "improve" code that already works. Decide the smallest set of changes that make this repo a valid Flagship app: add a correct flagship.app.json, add or fix the Dockerfile (its final stage must EXPOSE the manifest runtime.port and start the app), make the app LISTEN ON the port the daemon injects as the PORT environment variable — read process.env.PORT (or the $PORT equivalent for the app's language) and bind 0.0.0.0:$PORT; this value equals your manifest runtime.port, so do NOT hardcode a port number — remove the app's own authentication (the daemon injects identity headers), and rewrite any persistence to the FLAGSHIP_* data-layer env vars. Keep the app's actual behaviour — adapt it, don't rewrite it from scratch.
 3. write_file each change. Then call validate. If validate reports problems, fix them and validate again. Do NOT deploy until validate returns ok.
-4. When validate is ok, call deploy. deploy builds the container and installs the app; it returns the live URL. After a successful deploy you are DONE — stop.
+4. When validate is ok, call deploy. deploy builds the container and starts a PRIVATE TEST COPY of the app on the box, with sample data and no internet; nobody else can reach it. It tells you whether the app built and started, and why not.
+5. Test the copy: call check_app with a path (start with "/", then the app's main pages or API routes) to see what it answers, and get_logs to read its output. If it doesn't build, doesn't start, or answers with errors, fix the files, validate, and deploy again.
+6. When the test copy works, call finish. The box then puts the app live by itself; you won't see it again, and your tools stop working. finish only works after a successful deploy of the files as they are now, so deploy again after any change.
 
 Rules you must respect (the harness enforces them; breaking them fails the build):
 - Do NOT write authentication, login forms, passwords, cookies, or JWTs. Read X-Flagship-User / X-Flagship-Role from request headers.
@@ -102,7 +108,7 @@ Rules you must respect (the harness enforces them; breaking them fails the build
 - Do NOT define env vars starting with FLAGSHIP_ (reserved). If the app genuinely needs an owner secret, call request_env_var (value-free — you never see the value) and read it from the process environment at runtime.
 - Do NOT hardcode the username, hostname, or any flagship.services URL.
 
-Be decisive. Prefer the simplest manifest that works (often no data stores, a single public route). Call deploy as soon as validate passes.`;
+Be decisive. Prefer the simplest manifest that works (often no data stores, a single public route). Deploy as soon as validate passes, test it, and call finish once it works.`;
 
 /**
  * Render the initial user message: a short instruction plus the repo file
@@ -127,15 +133,16 @@ function initialUserMessage(repoFiles: string[], extra?: string, binaryFiles: st
     `Files present (${repoFiles.length}):\n${listing(repoFiles)}\n\n` +
     binaries +
     `Start by calling get_contract, then inspect the files you need with read_file. ` +
-    `When you have written a valid flagship.app.json + Dockerfile and validate passes, call deploy.`;
+    `When you have written a valid flagship.app.json + Dockerfile and validate passes, call deploy, ` +
+    `test the copy with check_app and get_logs, fix what's wrong, and call finish when it works.`;
   const steer = (extra ?? "").trim();
   return steer.length > 0 ? `${base}\n\nExtra instructions from the owner: ${steer}` : base;
 }
 
 function toolSpecs(): ToolSpec[] {
-  // The agent exposes the same surface as MCP, minus get_journal/get_logs
-  // (the model doesn't need its own journal to build, and logs only exist
-  // post-deploy). Keeping the set tight reduces token cost + mis-calls.
+  // The agent exposes the same surface as MCP, minus get_journal (the model
+  // doesn't need its own journal to build). Keeping the set tight reduces
+  // token cost + mis-calls.
   const drop = new Set(["get_journal"]);
   return BUILD_TOOL_SPECS.filter((t) => !drop.has(t.name)).map((t) => ({
     name: t.name,
@@ -145,7 +152,7 @@ function toolSpecs(): ToolSpec[] {
 }
 
 /**
- * Run the agentic adapt loop. Returns when the model deploys, stops calling
+ * Run the agentic adapt loop. Returns when the model finishes, stops calling
  * tools, errors, or hits the turn cap. Never throws — a provider failure
  * mid-loop is captured as `stopReason: "error"`.
  */
@@ -159,17 +166,24 @@ export async function runBuildAgent(args: {
   binaryFiles?: string[];
   instructions?: string;
   options?: BuildAgentOptions;
+  /** The first user message, in place of the repo-adapt one. */
+  initialMessage?: string;
+  /** Journal mode for the loop's own entries (default "git"). */
+  mode?: BuildMode;
 }): Promise<BuildAgentResult> {
   const opts = { ...DEFAULTS, ...(args.options ?? {}) };
+  const mode: BuildMode = args.mode ?? "git";
   const specs = toolSpecs();
   const messages: ChatMessage[] = [
     { role: "system", content: BUILD_AGENT_SYSTEM_PROMPT },
-    { role: "user", content: initialUserMessage(args.repoFiles, args.instructions, args.binaryFiles) },
+    {
+      role: "user",
+      content: args.initialMessage ?? initialUserMessage(args.repoFiles, args.instructions, args.binaryFiles),
+    },
   ];
 
-  let deployed = false;
-  let deployedUrl: string | undefined;
-  let serviceId: string | undefined;
+  let finished = false;
+  let staged = false;
   let validated = false;
   let turns = 0;
 
@@ -186,8 +200,8 @@ export async function runBuildAgent(args: {
       resp = await args.runner(req);
     } catch (e) {
       const note = `adapt model call failed: ${(e as Error).message}`;
-      await args.journal.append(args.buildId, { mode: "git", kind: "error", actor: "ai", summary: note });
-      return { deployed, manifestPresent: false, validated, turns, stopReason: "error", note };
+      await args.journal.append(args.buildId, { mode, kind: "error", actor: "ai", summary: note });
+      return { finished, staged, manifestPresent: false, validated, turns, stopReason: "error", note };
     }
 
     const toolUses = (resp.toolUses ?? []).slice(0, opts.maxToolCallsPerTurn);
@@ -197,15 +211,14 @@ export async function runBuildAgent(args: {
     // inspects the workspace for a manifest.)
     if (toolUses.length === 0) {
       await args.journal.append(args.buildId, {
-        mode: "git",
+        mode,
         kind: "adapt-step",
         actor: "ai",
         summary: "model returned no tool calls — stopping",
       });
       return {
-        deployed,
-        ...(deployedUrl != null ? { deployedUrl } : {}),
-        ...(serviceId != null ? { serviceId } : {}),
+        finished,
+        staged,
         manifestPresent: false,
         validated,
         turns,
@@ -235,40 +248,33 @@ export async function runBuildAgent(args: {
           /* leave validated as-is */
         }
       }
-      if (tu.name === "deploy" && !r.isError) {
-        deployed = true;
-        deployedUrl = r.deployedUrl;
-        serviceId = r.serviceId;
+      if (tu.name === "deploy" && !r.isError) staged = true;
+      if (tu.name === "finish" && !r.isError) {
+        // The build is sealed now; anything after finish in this turn
+        // would be refused anyway.
+        finished = true;
+        break;
       }
+    }
+
+    // A successful finish is the terminal success — the box takes over.
+    if (finished) {
+      return { finished: true, staged, manifestPresent: true, validated, turns, stopReason: "finished" };
     }
 
     // Feed the results back as a tool turn.
     messages.push({ role: "tool", content: "", toolResults: results });
-
-    // A successful deploy is the terminal success — stop.
-    if (deployed) {
-      return {
-        deployed: true,
-        ...(deployedUrl != null ? { deployedUrl } : {}),
-        ...(serviceId != null ? { serviceId } : {}),
-        manifestPresent: true,
-        validated,
-        turns,
-        stopReason: "deployed",
-      };
-    }
   }
 
   await args.journal.append(args.buildId, {
-    mode: "git",
+    mode,
     kind: "adapt-step",
     actor: "ai",
-    summary: `hit the ${opts.maxTurns}-turn cap without deploying`,
+    summary: `hit the ${opts.maxTurns}-turn cap without finishing`,
   });
   return {
-    deployed,
-    ...(deployedUrl != null ? { deployedUrl } : {}),
-    ...(serviceId != null ? { serviceId } : {}),
+    finished,
+    staged,
     manifestPresent: false,
     validated,
     turns,

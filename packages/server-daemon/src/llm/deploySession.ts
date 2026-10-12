@@ -18,6 +18,13 @@
  *      host — creator === username).
  *   6. Call ServicePlatform.install.
  *   7. Return the canonical URL the app will live at.
+ *
+ * `buildStagedChatDeploy` wraps it for the owner's Deploy: the chat's files
+ * first run as a private staging copy (docs/ai-privacy-and-staging.md §2);
+ * when that copy won't build or start and the session has an AI key, the
+ * same staged agent loop the git and IDE builds use lets the AI fix it there.
+ * Then the session is sealed (its AI key forgotten) and the tested image
+ * goes live through `deploy` with no rebuild.
  */
 
 import { join } from "node:path";
@@ -32,6 +39,12 @@ import type { ForgejoAppAdmin } from "../forgejoServiceAdmin.js";
 import type { VibeCodeSession, VibeCodeSessionRegistry } from "./vibeCodeSession.js";
 import { migrationFiles, resolveDeployTarget, type NameHolders } from "./serviceName.js";
 import { writeSourceTree } from "./serviceSource.js";
+import { noRedaction, type ModelRedactor } from "./modelPrivacy.js";
+import type { BuildJournal } from "../buildmodes/buildJournal.js";
+import { BuildWorkspace } from "../buildmodes/buildWorkspace.js";
+import { BuildToolHost } from "../buildmodes/buildToolHost.js";
+import { runBuildAgent, type AgentRunner } from "../buildmodes/buildAgent.js";
+import { filesDigest, type StagingHost } from "../buildmodes/staging.js";
 
 export interface DeploySessionDeps {
   servicePlatform: ServicePlatform;
@@ -77,11 +90,20 @@ export type DeployResult =
   | { ok: true; serviceId: string; url: string; image: string; inviteOnly?: boolean }
   | { ok: false; reason: string };
 
+/**
+ * What to install instead of the session's own files: the files a staged
+ * run ended with, and the image already built (and tested) from them.
+ */
+export interface DeploySessionOverride {
+  files?: Record<string, string>;
+  image?: string;
+}
+
 export function buildDeploySession(deps: DeploySessionDeps) {
   const now = deps.now ?? (() => Date.now());
 
-  return async function deploy(session: VibeCodeSession): Promise<DeployResult> {
-    const files = session.files();
+  return async function deploy(session: VibeCodeSession, override: DeploySessionOverride = {}): Promise<DeployResult> {
+    const files = override.files ?? session.files();
     const manifestJson = files["flagship.app.json"];
     if (!manifestJson) {
       return { ok: false, reason: "session has no flagship.app.json" };
@@ -152,14 +174,16 @@ export function buildDeploySession(deps: DeploySessionDeps) {
       }
     }
 
-    // 3. Build the image. Tag includes a per-deploy revision so
-    // re-deploys produce a fresh tag (avoids stale cached images on
-    // restart).
-    const image = `flagship-vibe-${serviceId}:${revision}`.toLowerCase();
-    try {
-      await runDockerBuild(deps.cmd, image, appDir);
-    } catch (e) {
-      return { ok: false, reason: `docker build failed: ${(e as Error).message}` };
+    // 3. Build the image, unless staging already built and tested it. Tag
+    // includes a per-deploy revision so re-deploys produce a fresh tag
+    // (avoids stale cached images on restart).
+    const image = override.image ?? `flagship-vibe-${serviceId}:${revision}`.toLowerCase();
+    if (!override.image) {
+      try {
+        await runDockerBuild(deps.cmd, image, appDir);
+      } catch (e) {
+        return { ok: false, reason: `docker build failed: ${(e as Error).message}` };
+      }
     }
 
     // 4. Update the manifest's runtime.image to our local tag. The
@@ -212,3 +236,144 @@ export function buildDeploySession(deps: DeploySessionDeps) {
     return { ok: true, serviceId, url, image, ...(inviteOnly !== undefined ? { inviteOnly } : {}) };
   };
 }
+
+/** Where a staged chat deploy is: on its private copy, the AI fixing it there, or going live. */
+export type ChatDeployPhase = "staging" | "fixing" | "going-live";
+
+export interface StagedChatDeployDeps {
+  /** The install that goes live (`buildDeploySession`). */
+  deploy: (session: VibeCodeSession, override: DeploySessionOverride) => Promise<DeployResult>;
+  staging: StagingHost;
+  journal?: BuildJournal | null;
+  /** The session's AI (its key opened just-in-time, keyed by session id). Unset ⇒ no AI fixes. */
+  agentRunner?: AgentRunner;
+  hasCredential?: (sessionId: string) => boolean;
+  /** Sealing: forget the session's AI key before it goes live. */
+  forgetCredential?: (sessionId: string) => Promise<void>;
+  redact?: ModelRedactor;
+  /** Owner env var NAMES for a service (the copy gets placeholders). */
+  envNames?: (serviceId: string) => Promise<string[]>;
+  hostUsername: string;
+  agentMaxTurns?: number;
+}
+
+function chatFixMessage(reason: string, files: string[]): string {
+  const shown = files.slice(0, 400).map((p) => `  - ${p}`).join("\n") || "  (none)";
+  return (
+    `This app was written in a chat with its owner and is now in your build workspace. ` +
+    `The box tried to run a private test copy of it, and it failed:\n\n${reason}\n\n` +
+    `Fix the smallest thing that makes it build and start, without changing what the app does. ` +
+    `Files present (${files.length}):\n${shown}\n\n` +
+    `Read the files you need with read_file (get_contract has the platform rules), write_file the fix, ` +
+    `validate, deploy, test it with check_app and get_logs, and call finish when it works.`
+  );
+}
+
+/**
+ * The owner's Deploy for an AI chat: stage, let the session's AI fix a copy
+ * that won't build or start, seal, then put the tested image live.
+ */
+export function buildStagedChatDeploy(deps: StagedChatDeployDeps) {
+  const redact = deps.redact ?? noRedaction;
+  return async function deploy(
+    session: VibeCodeSession,
+    opts: { onPhase?: (phase: ChatDeployPhase) => void } = {},
+  ): Promise<DeployResult> {
+    const id = session.meta.sessionId;
+    const ws = new BuildWorkspace(session.files());
+    const manifestJson = ws.manifestJson();
+    if (!manifestJson) return { ok: false, reason: "session has no flagship.app.json" };
+    let slug = session.meta.name ?? "";
+    if (!slug) {
+      try {
+        const m = JSON.parse(manifestJson) as { name?: unknown };
+        if (typeof m.name === "string") slug = m.name;
+      } catch {
+        return { ok: false, reason: "manifest is not valid JSON" };
+      }
+    }
+    slug = (slug || "app").toLowerCase();
+    const serviceId = session.meta.editsServiceId ?? `${deps.hostUsername}--${slug}`;
+    const envNames = deps.envNames ? await deps.envNames(serviceId).catch(() => []) : [];
+    const edits = session.meta.editsServiceId;
+    const stage = () =>
+      deps.staging.stage({ buildId: id, files: ws.snapshot(), slug, envNames, ...(edits ? { carryBinariesFrom: edits } : {}) });
+    const matches = () => deps.staging.staged(id)?.filesDigest === filesDigest(ws.snapshot());
+    const note = (kind: "build-phase" | "sealed" | "error", summary: string) =>
+      deps.journal?.append(id, { mode: "scratch", kind, actor: "system", summary }).catch(() => {});
+
+    let sealed = false;
+    opts.onPhase?.("staging");
+    const first = await stage();
+    if (!first.ok) {
+      if (!deps.agentRunner || !deps.hasCredential?.(id)) {
+        await deps.staging.teardown(id).catch(() => {});
+        return { ok: false, reason: first.reason };
+      }
+      opts.onPhase?.("fixing");
+      await note("build-phase", "the test copy didn't start; the AI is fixing it");
+      const tools = new BuildToolHost({
+        buildId: id,
+        workspace: ws,
+        journal: deps.journal ?? noJournal,
+        serverFqdn: session.meta.serverFqdn,
+        mode: "scratch",
+        redact,
+        envNames: async () => envNames,
+        deploy: async () => {
+          const r = await stage();
+          return r.ok ? { ok: true } : { ok: false, reason: r.reason };
+        },
+        checkApp: async (req) => {
+          const r = await deps.staging.checkApp(id, req);
+          return r.ok ? { ok: true, status: r.status, contentType: r.contentType, body: r.body, truncated: r.truncated } : r;
+        },
+        logs: () => deps.staging.logs(id),
+        finish: async () => {
+          if (!deps.staging.staged(id)) return { ok: false, reason: "deploy first: finish only works after a successful deploy" };
+          if (!matches()) return { ok: false, reason: "the files changed since the last deploy: deploy again, test it, then finish" };
+          sealed = true;
+          return { ok: true };
+        },
+        sealed: () => sealed,
+      });
+      const agentRunner = deps.agentRunner;
+      const result = await runBuildAgent({
+        buildId: id,
+        runner: (req) => agentRunner(id, req),
+        tools,
+        journal: deps.journal ?? noJournal,
+        repoFiles: ws.list(),
+        mode: "scratch",
+        initialMessage: chatFixMessage(redact(first.reason), ws.list()),
+        ...(deps.agentMaxTurns != null ? { options: { maxTurns: deps.agentMaxTurns } } : {}),
+      });
+      if (!(result.finished || matches())) {
+        sealed = true;
+        await deps.staging.teardown(id).catch(() => {});
+        return { ok: false, reason: `the app didn't start, and the AI couldn't fix it: ${first.reason}` };
+      }
+    }
+
+    // Seal before anything goes live: the session's AI key is forgotten,
+    // and the copy and its sample data go away.
+    sealed = true;
+    await deps.forgetCredential?.(id).catch(() => {});
+    await note("sealed", "the AI's work is done; the box is putting it live");
+    opts.onPhase?.("going-live");
+    const copy = matches() ? deps.staging.staged(id) : null;
+    await deps.staging.teardown(id).catch(() => {});
+    const files = ws.snapshot();
+    if (filesDigest(files) !== filesDigest(session.files())) session.adoptFiles(files);
+    const live = await deps.deploy(session, { files, ...(copy ? { image: copy.image } : {}) });
+    if (live.ok) deps.staging.forget(id);
+    return live;
+  };
+}
+
+const noJournal: BuildJournal = {
+  append: async (buildId, e) => ({ ...e, seq: 0, ts: 0, buildId }),
+  read: async () => [],
+  list: async () => [],
+  forget: async () => {},
+};

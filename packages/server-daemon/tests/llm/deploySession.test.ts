@@ -144,6 +144,54 @@ describe("buildDeploySession", () => {
     }
   });
 
+  it("going live with a staged image installs that exact tag and never rebuilds (chat and build modes)", async () => {
+    const wd = await tmpWorkdir();
+    try {
+      const { cmd, calls } = recordingCmd();
+      const irk = makeKey();
+      const platform = new ServicePlatform({
+        host: { username: HOST, irkPub: irk.publicKey },
+        swk: fakeSwk(),
+        appRunner: new AppRunner(cmd),
+        dataProvisioner: null,
+        appAuthTokens: null,
+        domainGate: null,
+        tabRegistry: null,
+        pullStateStore: null,
+        cloneService: null,
+      });
+      const deploy = buildDeploySession({ servicePlatform: platform, signer: boxSigner(irk), hostUsername: HOST, workingDir: wd.dir, cmd });
+      const files = { "flagship.app.json": MANIFEST, Dockerfile: "FROM busybox\n", "src/main.js": "fixed;\n" };
+      const r = await deploy(makeSession({ ...files, "src/main.js": "broken;\n" }), { files, image: "flagship-stg-0123456789abcdef:1" });
+      if (!r.ok) throw new Error(r.reason);
+      expect(r.image).toBe("flagship-stg-0123456789abcdef:1");
+      expect(calls.some((c) => c.startsWith("docker build "))).toBe(false);
+      expect(calls.some((c) => c.startsWith("docker run ") && c.endsWith(" flagship-stg-0123456789abcdef:1"))).toBe(true);
+      expect(platform.byServiceId("alice--habits")!.manifest.runtime.image).toBe("flagship-stg-0123456789abcdef:1");
+      expect(await readFile(join(wd.dir, "alice--habits", "src", "main.js"), "utf8")).toBe("fixed;\n");
+
+      // The build-modes pipeline: `install` takes the tested tag, `deploy` builds.
+      const { buildArtifactPipeline } = await import("../../src/buildmodes/deployArtifact.js");
+      const pipeline = buildArtifactPipeline({ servicePlatform: platform, signer: boxSigner(irk), hostUsername: HOST, workingDir: wd.dir, cmd });
+      calls.length = 0;
+      const live = await pipeline.install({
+        files: { ...files, "flagship.app.json": MANIFEST.replace(/habits/g, "notes") },
+        serverFqdn: SERVER,
+        buildId: "0123456789abcdef",
+        image: "flagship-stg-0123456789abcdef:2",
+      });
+      if (!live.ok) throw new Error(live.reason);
+      expect(calls.some((c) => c.startsWith("docker build "))).toBe(false);
+      expect(platform.byServiceId("alice--notes")!.manifest.runtime.image).toBe("flagship-stg-0123456789abcdef:2");
+      const edit = await pipeline.install({ files, serverFqdn: SERVER, buildId: "0123456789abcdef", editsServiceId: "alice--notes", image: "flagship-stg-0123456789abcdef:3" });
+      if (!edit.ok) throw new Error(edit.reason);
+      expect(platform.byServiceId("alice--notes")!.manifest.runtime.image).toBe("flagship-stg-0123456789abcdef:3");
+      expect(calls.some((c) => c.startsWith("docker build "))).toBe(false);
+    } finally {
+      await wd.cleanup();
+    }
+  });
+
   it("rejects a session with no flagship.app.json", async () => {
     const wd = await tmpWorkdir();
     try {

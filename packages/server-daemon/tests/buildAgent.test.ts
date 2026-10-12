@@ -2,7 +2,7 @@
  * The agentic build loop in isolation — `runBuildAgent` driving a real
  * `BuildToolHost` over a real `BuildWorkspace`, with a scripted fake model.
  * Proves the loop: dispatches tool calls, feeds results back (multi-turn),
- * stops on deploy / no-tool-calls / turn-cap, and records value-free journal
+ * stops on finish / no-tool-calls / turn-cap, and records value-free journal
  * entries.
  */
 
@@ -45,6 +45,8 @@ function scripted(script: Array<{ text?: string; toolUses?: ToolUseBlock[] }>) {
 }
 
 function makeHost(buildId: string, workspace: BuildWorkspace, journal: InMemoryBuildJournal, deployed: () => void) {
+  let staged = false;
+  let sealed = false;
   return new BuildToolHost({
     buildId,
     workspace,
@@ -54,13 +56,20 @@ function makeHost(buildId: string, workspace: BuildWorkspace, journal: InMemoryB
     envNames: async () => [],
     deploy: async () => {
       deployed();
-      return { ok: true, serviceId: "harry-notes", url: "https://notes.home.harry.flagship.services" };
+      staged = true;
+      return { ok: true };
     },
+    finish: async () => {
+      if (!staged) return { ok: false, reason: "deploy first" };
+      sealed = true;
+      return { ok: true };
+    },
+    sealed: () => sealed,
   });
 }
 
 describe("runBuildAgent", () => {
-  it("passes the tool specs + agent system prompt and drives to deploy", async () => {
+  it("passes the tool specs + agent system prompt and drives deploy → finish", async () => {
     const ws = new BuildWorkspace({ "package.json": "{}", "index.js": "x" });
     const journal = new InMemoryBuildJournal();
     let deployCount = 0;
@@ -69,7 +78,11 @@ describe("runBuildAgent", () => {
       { toolUses: [tu("a1", "get_contract")] },
       { toolUses: [tu("b1", "write_file", { path: "flagship.app.json", content: VALID_MANIFEST }), tu("b2", "write_file", { path: "Dockerfile", content: "FROM node:20-alpine" })] },
       { toolUses: [tu("c1", "validate")] },
+      { toolUses: [tu("e0", "finish")] },
       { toolUses: [tu("d1", "deploy")] },
+      { toolUses: [tu("e1", "check_app", { path: "/" }), tu("e2", "get_logs")] },
+      { toolUses: [tu("f1", "finish"), tu("f2", "write_file", { path: "late.txt", content: "x" })] },
+      { text: "never asked" },
     ]);
 
     const r = await runBuildAgent({
@@ -80,17 +93,27 @@ describe("runBuildAgent", () => {
       repoFiles: ws.list(),
     });
 
-    expect(r.deployed).toBe(true);
-    expect(r.stopReason).toBe("deployed");
+    // A deploy alone no longer ends the loop: finish does, and only once
+    // the copy is staged (the early finish was refused and fed back).
+    expect(r.finished).toBe(true);
+    expect(r.staged).toBe(true);
+    expect(r.stopReason).toBe("finished");
     expect(r.validated).toBe(true);
+    expect(r.turns).toBe(7);
     expect(deployCount).toBe(1);
+    expect(model.seen()).toHaveLength(7);
+    // Nothing after finish in the same turn ran.
+    expect(ws.read("late.txt")).toBeNull();
 
     // The request carried the agent system prompt + the tool specs.
     const first = model.seen()[0]!;
     expect(first.messages[0]!.content).toBe(BUILD_AGENT_SYSTEM_PROMPT);
     expect((first.tools ?? []).map((t) => t.name)).toEqual(
-      expect.arrayContaining(["get_contract", "read_file", "write_file", "validate", "deploy", "request_env_var"]),
+      expect.arrayContaining(["get_contract", "read_file", "write_file", "validate", "deploy", "check_app", "get_logs", "finish", "request_env_var"]),
     );
+    expect(first.messages[0]!.content).toMatch(/check_app[\s\S]*finish/);
+    const refusedEarly = model.seen()[4]!.messages.find((m) => m.role === "tool" && m.toolResults?.[0]?.toolUseId === "e0");
+    expect(refusedEarly!.toolResults![0]!.isError).toBe(true);
     // get_journal is intentionally NOT exposed to the model.
     expect((first.tools ?? []).map((t) => t.name)).not.toContain("get_journal");
   });
@@ -124,7 +147,7 @@ describe("runBuildAgent", () => {
     };
     const r = await runBuildAgent({ buildId: "b3", runner, tools: host, journal, repoFiles: [] });
     expect(r.stopReason).toBe("error");
-    expect(r.deployed).toBe(false);
+    expect(r.finished).toBe(false);
     const entries = await journal.read("b3");
     expect(entries.some((e) => e.kind === "error" && /provider 401/.test(e.summary))).toBe(true);
   });

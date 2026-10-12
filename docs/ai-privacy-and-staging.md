@@ -88,13 +88,80 @@ path's Deploy runs the same staged loop with the chat's files.
   filtering DNS) plus firewall rules that drop everything else from the app
   bridges.
 
+### How the box enforces it (`packages/server-daemon/src/egress/`)
+
+- **Bridges** have fixed interface names: `fs-build` (created `--internal`: no
+  route out, no DNS forwarding), `fs-staging`, `fs-apps`. A network left from
+  before (a `br-<id>` bridge, or a build bridge that isn't internal) is
+  recreated at boot after its containers are disconnected; the daemon recreates
+  every app container on boot anyway.
+- **Firewall**: chains `FLAGSHIP-EGRESS-NAT` (nat PREROUTING: 443/80/53 from a
+  bridge → the gateway's ports 15443/15080/15053), `FLAGSHIP-EGRESS-FWD`
+  (from DOCKER-USER: reject anything forwarded from a bridge) and
+  `FLAGSHIP-EGRESS-IN` (INPUT: a bridge may reach only the gateway ports, and
+  apps/staging the data ports 5432/6379/9000), plus `FLAGSHIP-EGRESS6` in
+  ip6tables. Written atomically with `iptables-restore --noflush` at every boot;
+  they survive a daemon or dockerd restart, so while the gateway is down the
+  bridges have no internet (fail closed).
+- **DNS**: docker's embedded resolver forwards from the HOST namespace when the
+  host's resolver is on loopback (systemd-resolved's 127.0.0.53), which would
+  skip any filter. So every app and staging container is started with
+  `--dns <its bridge gateway>`, which makes docker forward from the container's
+  own namespace into the redirect. Builds can't take `--dns`; the build bridge
+  is internal (no DNS at all) and each registry host is pinned to the build
+  gateway with `--add-host`. AppRunner and `docker build` get these arguments
+  automatically once the gateway enforces (`egress/sandboxNetworking.ts`).
+- **Data stores** bind 127.0.0.1 only, so the gateway forwards 5432/6379/9000
+  from the apps and staging gateway IPs to them, and `host.flagship.internal`
+  points at the bridge gateway instead of `host-gateway`.
+- **Approvals** live in `<dataDir>/data/app-egress.sealed` (SWK), each with its
+  signature; the box re-verifies them at boot and drops any that no longer
+  verify. What opens is approved ∩ declared. A revoke also closes open
+  connections. Uninstalling an app forgets its approval.
+- **Operator switches**: `FLAGSHIP_EGRESS=off` in the daemon environment
+  removes the rules, makes the build bridge routable again and runs unfenced
+  (the old behaviour). If the gateway can't
+  start (no docker within 60 s, no iptables), the daemon logs
+  `[egress] NOT ENFORCED` and keeps the old behaviour rather than breaking
+  installed apps. Blocked attempts are logged as `[egress] blocked <who> → <host>`.
+- **Existing apps lose the internet** on the first boot with this code, unless
+  their manifest declares `network.egress` and the owner approves it.
+- **Limits**: HTTPS 443 and HTTP 80 only (no other ports, no QUIC); the
+  bridges are IPv4-only; a name is reached by name, never by the IP the app
+  dialled, and only when it resolves to a public address. Builds need the
+  legacy builder: with buildx/BuildKit installed `docker build --network
+  flagship-build` is refused by docker itself.
+
+### Clients (iOS, Android, webapp)
+
+The app page shows `egress.declared` and `egress.approved` (on
+`/api/screens/apps-list` entries and `/api/screens/app-detail/:id`.app) and
+asks the owner to allow the declared hosts. Allowing signs, with the
+sensitive-order key, the canonical bytes
+
+    flagship/app-egress/v1|<serverDomain>|<serviceId>|<hosts sorted, comma-joined>|<issuedAt ms>
+
+and POSTs `{ grant: { serverDomain, serviceId, hosts, issuedAt }, signature: <hex> }`
+to `/api/screens/services/<serviceId>/egress`. Hosts must be a subset of
+`declared`; `hosts: []` revokes. The box answers 200 `{ ok, egress }`, 403
+(bad signature, other server, `issuedAt` more than 10 min off), 400 (malformed,
+other service), 409 (not newer than the applied grant) or 422 (undeclared
+host). Golden vector: `packages/protocol/tests/appEgress.test.ts`.
+
 ## 4. AI provider relay
 
 Calls to a provider leave the box through the Flagship hub
 (`flagship.services`) over the box's existing tunnel: TLS runs end to end
 between the box and the provider, so Flagship sees only the destination host,
 timing and size, and the provider sees Flagship's address instead of the
-owner's. It is a per-key setting, **on by default**, shown when the owner adds
+owner's. The hub has to know the host to connect, but it logs nothing per
+call: only totals across every box every 15 minutes (streams per destination,
+bytes, refusals by reason), never a box or the size of one call. Known AI
+providers are counted by name and every other host only as "other" (a rare
+host would identify its user even in a total); a growing "other" count is the
+signal that the relay is used for something besides AI. It relays to
+any public host on 443 (custom provider URLs), never to private or Fly-internal
+addresses. It is a per-key setting, **on by default**, shown when the owner adds
 a key ("Better for your anonymity: the provider sees Flagship's address, not
 yours") and in the key list. If a key asks for the relay and it is unavailable
 the call fails rather than going direct. Local endpoints (a LAN Ollama) are

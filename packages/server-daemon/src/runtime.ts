@@ -9,13 +9,7 @@ import { ServicePlatform, buildServiceHttpHandlers } from "./servicePlatform.js"
 import { AliasReconciler } from "./aliasReconciler.js";
 import { handleAppRequest } from "./serviceProxy.js";
 import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
-import {
-  AppRunner,
-  DEFAULT_DOCKER_BUILD_LIMITS,
-  buildStartCheck,
-  ensureDockerNetwork,
-  realCommandRunner,
-} from "./serviceRunner.js";
+import { AppRunner, buildStartCheck, realCommandRunner } from "./serviceRunner.js";
 import { ensureContainerLinksUnmanaged } from "./containerLinks.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import {
@@ -47,6 +41,8 @@ import { buildOrdersHandler, type OrderExecutor } from "./orders.js";
 import { corsPreflight, withCors } from "./cors.js";
 import { acceptSiblingUpgrade } from "./sibling/wsServer.js";
 import type { UpdateServer } from "./updateServer.js";
+import { bootEgress, type EgressRuntime } from "./egress/boot.js";
+import { ensureUnfencedNetworks } from "./egress/networks.js";
 
 export interface DaemonRuntimeOptions {
   /** Server FQDN, e.g. "home.alice.flagship.services". */
@@ -393,6 +389,14 @@ export interface DaemonRuntime {
    * diagnostics + the lock/SOS UI. Under OBSERVE (default) it never locks.
    */
   relayLockdown: RelayLockdownController;
+  /** The egress gateway: its status, and the app-approval screens handler. */
+  egress: EgressRuntime;
+  /**
+   * Box-initiated outbound streams over the tunnel (the AI provider relay,
+   * docs/ai-privacy-and-staging.md §4). Available only while the live hub
+   * connection advertised `outbound-v1`.
+   */
+  outboundRelay: import("./tunnel/relayFetch.js").OutboundConnector;
   /**
    * In-pod live-siblings router. Receives FRAME_DOMAIN_GRANTED events
    * from the tunnel hub and inbound sibling-app-message frames from
@@ -1135,14 +1139,33 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // ServicePlatform is wired only when host IRK + SWK are supplied.
   const appRunner = new AppRunner();
   await ensureContainerLinksUnmanaged(realCommandRunner, { log: (m) => console.warn(m) });
-  await appRunner.ensureNetwork().catch((e) => {
-    console.warn(`[runtime] could not ensure app bridge network: ${(e as Error).message}`);
+  // The sandbox bridges (build, staging, apps) and the egress gateway that
+  // fences them (egress/, docs/ai-privacy-and-staging.md §3). Before any
+  // container starts, so every app, staging copy and build gets its args.
+  const egress = await bootEgress({
+    cmd: realCommandRunner,
+    ...(opts.dataDir ? { dataDir: opts.dataDir } : {}),
+    ...(opts.servicePlatform?.swk ? { swk: opts.servicePlatform.swk } : {}),
+    serverDomain: opts.serverFqdn,
+    ...(opts.servicePlatform?.hostUsername && opts.servicePlatform.hostIrkPub
+      ? {
+          owner: {
+            username: opts.servicePlatform.hostUsername,
+            irkPub: opts.servicePlatform.hostIrkPub,
+            ...(opts.servicePlatform.hostAdminRootPub ? { adminRootPub: opts.servicePlatform.hostAdminRootPub } : {}),
+          },
+        }
+      : {}),
+    declared: (id) => {
+      const app = servicePlatformRef.current?.byServiceId(id);
+      return app ? (app.manifest.network?.egress ?? []) : null;
+    },
   });
-  // Dedicated, non-default bridge for the sandboxed `docker build` (see
-  // DockerBuildLimits). Best-effort; a build simply fails clearly if absent.
-  await ensureDockerNetwork(realCommandRunner, DEFAULT_DOCKER_BUILD_LIMITS.network).catch((e) => {
-    console.warn(`[runtime] could not ensure build bridge network: ${(e as Error).message}`);
-  });
+  if (!egress.status().enforced) {
+    // Unfenced: the bridges exist with their fixed names, none internal, so
+    // builds still reach the internet (the behaviour before the gateway).
+    await ensureUnfencedNetworks(realCommandRunner, (m) => console.warn(m));
+  }
   const dataProvisioner = await maybeBuildDataProvisioner(
     opts.servicePlatform?.dataServicesEnvFile,
     appRunner.dataHostAlias,
@@ -1187,7 +1210,10 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       pullStateStore: apOpts.pullStateStore ?? null,
       cloneService: apOpts.cloneService ?? null,
       envStore,
-      onServiceRemoved: apOpts.onServiceRemoved ?? null,
+      onServiceRemoved: async (slug: string) => {
+        await egress.pruneUninstalled();
+        await apOpts.onServiceRemoved?.(slug);
+      },
       registry:
         apOpts.registry !== undefined
           ? apOpts.registry
@@ -1351,6 +1377,11 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     servicePlatform: servicePlatformRef.current,
     urlController,
     relayLockdown,
+    egress,
+    outboundRelay: {
+      outboundAvailable: () => tunnel.outboundAvailable(),
+      openOutbound: (host, port) => tunnel.openOutbound(host, port),
+    },
     siblingRouter,
     appBackup,
     envStore,
@@ -1476,7 +1507,7 @@ async function maybeBuildDataProvisioner(
  * the container-side alias of the data host; this runs on the host, which
  * reaches Postgres over loopback.
  */
-async function runAppSql(a: { pgUrl: string; sql: string }): Promise<void> {
+export async function runAppSql(a: { pgUrl: string; sql: string }): Promise<void> {
   const url = new URL(a.pgUrl);
   url.hostname = "127.0.0.1";
   const { Client } = await import("pg");

@@ -10,18 +10,29 @@
  *   - for mcp: a per-build McpBuildServer + a sealed auth key
  *
  * and routes deploy for every mode through the one artifact deployer.
+ *
+ * An AI build (the box's own AI, or an IDE over MCP) has two phases
+ * (docs/ai-privacy-and-staging.md §2). Staging: the AI's `deploy` runs a
+ * private copy (`StagingHost`) that it tests with `check_app` / `get_logs`.
+ * Going live: on `finish` (or when the loop ends on a staged copy of the
+ * current files) the box SEALS the build — forgets its AI key, revokes its
+ * IDE key, and every tool on it refuses from then on — removes the staging
+ * copy, then installs or redeploys the live service with the image it
+ * tested. The AI is never told how that went. A build no AI touched (a
+ * Flagship-ready repo the owner installs) still installs directly.
  */
 
 import { randomBytes } from "node:crypto";
 import type { ModelRedactor } from "../llm/modelPrivacy.js";
 import { BuildWorkspace } from "./buildWorkspace.js";
 import { GitImporter, buildAdaptPrompt } from "./gitImport.js";
-import { McpBuildServer, type JsonRpcResponse, type McpDeployResult } from "./mcpServer.js";
-import { BuildToolHost } from "./buildToolHost.js";
+import { McpBuildServer, type JsonRpcResponse } from "./mcpServer.js";
+import { BuildToolHost, type BuildToolCheckResult, type BuildToolDeployResult } from "./buildToolHost.js";
 import { runBuildAgent, type AgentRunner, type BuildAgentResult } from "./buildAgent.js";
 import type { McpKeyStore } from "./mcpKeyStore.js";
 import type { BuildJournal, BuildJournalEntry, BuildJournalSummary, BuildMode } from "./buildJournal.js";
 import type { DeployResult } from "./deployArtifact.js";
+import { filesDigest, type StagingHost } from "./staging.js";
 import { VibeCodeStreamParser } from "../llm/vibeCodeSession.js";
 import { SYSTEM_PROMPT_V1 } from "../llm/systemPrompt.js";
 import {
@@ -46,6 +57,18 @@ import { indexableRepo, licensePathOf, type AdapterIndex, type StoreReason } fro
 
 /** How many times the AI may fix an adaptation the store refused. */
 const MAX_FIX_ROUNDS = 2;
+
+export const CLOSED_TO_AI =
+  "This build is closed to the AI: it was handed to the box to go live. Start a new build to change the app.";
+
+function manifestName(files: Record<string, string>): string | null {
+  try {
+    const m = JSON.parse(files["flagship.app.json"] ?? "") as { name?: unknown };
+    return typeof m.name === "string" && m.name ? m.name : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The model call the AI "adapt" pass makes. Provider-agnostic by design:
@@ -87,9 +110,17 @@ export interface BuildState {
   editsServiceId?: string;
   /** The name it deploys under (git imports); held until it deploys. */
   name?: string;
-  /** The AI adapt pass, when one was started in the background. */
+  /**
+   * The AI adapt pass (git), or the box putting an IDE build live after
+   * its `finish` (mcp), when it runs in the background.
+   */
   adapt?: AdaptStatus;
+  /** The build's AI/IDE access has ended for good; every tool refuses. */
+  sealed?: boolean;
 }
+
+/** What a running AI build is doing: the AI testing its copy, or the box putting it live. */
+export type BuildPhase = "staging" | "going-live";
 
 /** What a git build remembers to share its adapter once it deploys. */
 interface GitSource {
@@ -111,18 +142,29 @@ interface GitSource {
   share: boolean;
   /** The published adapter this build installs (origin "index"). */
   indexFile?: string;
-  /** Fix rounds run after the store refused it, and one waiting to run. */
+  /** Fix rounds the AI ran after the store refused the adaptation. */
   rounds: number;
-  pendingFix?: StoreReason[];
+  /** The published adapter the store kept for this build, once shared. */
+  sharedFile?: string;
 }
 
 export type AdaptStatus =
-  | { status: "running"; startedAt: number }
-  | { status: "done"; fileCount: number; deployed: boolean; deployedUrl?: string; serviceId?: string; turns?: number }
+  | { status: "running"; startedAt: number; phase?: BuildPhase }
+  | {
+      status: "done";
+      fileCount: number;
+      /** The app is live (installed or updated). */
+      deployed: boolean;
+      deployedUrl?: string;
+      serviceId?: string;
+      turns?: number;
+      /** Why it isn't live, when the AI's tested copy failed to go live. */
+      reason?: string;
+    }
   | { status: "failed"; reason: string; notConfigured?: boolean };
 
 export type AdaptResult =
-  | { ok: true; fileCount: number; deployed?: boolean; deployedUrl?: string; serviceId?: string; turns?: number }
+  | { ok: true; fileCount: number; deployed?: boolean; deployedUrl?: string; serviceId?: string; turns?: number; reason?: string }
   | { ok: false; reason: string };
 
 export type CreateGitResult =
@@ -156,6 +198,21 @@ export interface BuildOrchestratorDeps {
   mcpKeys: McpKeyStore;
   /** Build + install a files map. Returns the live URL. */
   deployArtifact: (a: { files: Record<string, string>; serverFqdn: string; buildId: string; mode: BuildMode; editsServiceId?: string; name?: string; binaries?: Record<string, Buffer> }) => Promise<DeployResult>;
+  /**
+   * Install a files map with an image already built for it: an AI build's
+   * tested staging image, so going live never rebuilds. Unset ⇒ going live
+   * rebuilds through `deployArtifact`.
+   */
+  installArtifact?: (a: { files: Record<string, string>; serverFqdn: string; buildId: string; mode: BuildMode; editsServiceId?: string; name?: string; binaries?: Record<string, Buffer>; image: string }) => Promise<DeployResult>;
+  /**
+   * The private staging copy an AI or IDE build deploys to. Unset ⇒ their
+   * deploy tool is unavailable (nothing an AI builds goes straight live).
+   */
+  staging?: StagingHost;
+  /** Forget a build's AI credential: part of sealing it. */
+  forgetCredential?: (buildId: string) => Promise<void>;
+  /** The env var NAMES the owner set for a service (staging gets placeholders). */
+  ownerEnvNames?: (serviceId: string) => Promise<string[]>;
   /**
    * What a git import's name is checked against: installed apps and every
    * open build's name (this orchestrator's included). Unset ⇒ git imports
@@ -282,8 +339,12 @@ export class BuildOrchestrator {
   private readonly binaries = new Map<string, Record<string, Buffer>>();
   /** Published adapters that failed to install here; never offered again. */
   private readonly failedHere = new Set<string>();
-  /** Builds whose AI is running; a fix round waits for it. */
-  private readonly agentBusy = new Set<string>();
+  /** Builds an AI (or IDE) has worked on: they go live through staging. */
+  private readonly aiTouched = new Set<string>();
+  /** Builds whose AI access ended for good. */
+  private readonly sealedBuilds = new Set<string>();
+  /** Go-lives in progress, so a second request joins the first. */
+  private readonly goingLive = new Map<string, Promise<DeployResult>>();
   private readonly now: () => number;
   private readonly rand: () => string;
 
@@ -467,7 +528,10 @@ export class BuildOrchestrator {
   async discard(buildId: string): Promise<boolean> {
     const st = this.states.get(buildId);
     if (!st) return false;
-    if (st.adapt?.status === "running") return false;
+    if (st.adapt?.status === "running" || this.goingLive.has(buildId)) return false;
+    await this.deps.staging?.teardown(buildId).catch(() => {});
+    this.deps.staging?.forget(buildId);
+    this.aiTouched.delete(buildId);
     this.states.delete(buildId);
     this.workspaces.delete(buildId);
     this.mcpServers.delete(buildId);
@@ -499,8 +563,9 @@ export class BuildOrchestrator {
     const st = this.states.get(buildId);
     if (!st || st.mode !== "git") return { ok: false, status: 404, reason: "not a git build" };
     if (st.adapt?.status === "running") return { ok: false, status: 409, reason: "the AI is already adapting this repo" };
+    if (this.sealedBuilds.has(buildId)) return { ok: false, status: 409, reason: CLOSED_TO_AI };
     if (!this.adaptConfigured(buildId)) return { ok: false, status: 503, reason: "AI adapt not configured" };
-    st.adapt = { status: "running", startedAt: this.now() };
+    st.adapt = { status: "running", startedAt: this.now(), phase: "staging" };
     void this.adaptGit(buildId, opts)
       .catch((e: unknown): AdaptResult => ({ ok: false, reason: (e as Error).message }))
       .then((r) => {
@@ -514,6 +579,7 @@ export class BuildOrchestrator {
               ...(r.deployedUrl != null ? { deployedUrl: r.deployedUrl } : {}),
               ...(r.serviceId != null ? { serviceId: r.serviceId } : {}),
               ...(r.turns != null ? { turns: r.turns } : {}),
+              ...(r.reason != null ? { reason: r.reason } : {}),
             }
           : { status: "failed", reason: r.reason };
       });
@@ -540,12 +606,10 @@ export class BuildOrchestrator {
    * a build with no loaded workspace, no `adaptRunner` configured, or a
    * model output that produced no manifest.
    */
-  async adaptGit(
-    buildId: string,
-    opts: { instructions?: string; storeFeedback?: StoreReason[] } = {},
-  ): Promise<AdaptResult> {
+  async adaptGit(buildId: string, opts: { instructions?: string } = {}): Promise<AdaptResult> {
     const st = this.states.get(buildId);
     if (!st || st.mode !== "git") return { ok: false, reason: "not a git build" };
+    if (this.sealedBuilds.has(buildId)) return { ok: false, reason: CLOSED_TO_AI };
     const notes: string[] = [];
     const source = this.gitSources.get(buildId);
     if (source && opts.instructions?.trim()) source.steered = true;
@@ -555,14 +619,6 @@ export class BuildOrchestrator {
         `The repo's flagship.app.json carries an adapter (its "adapter" section) written for an older commit; ` +
           `its edits no longer fit ${stale.join(", ")}. It shows how this repo was adapted before: redo the same ` +
           `changes against the current files, and write flagship.app.json WITHOUT the "adapter" section.`,
-      );
-    }
-    if (opts.storeFeedback?.length) {
-      notes.push(
-        `This app is already adapted, installed and running. Flagship's public store of adaptations, which ` +
-          `shares this adaptation with others, refused it for these reasons:\n` +
-          opts.storeFeedback.map((r) => `- ${r.message}`).join("\n") +
-          `\nFix only these, with the smallest change that keeps the app working, validate, and deploy again.`,
       );
     }
     if (st.name) notes.push(`The app's name is "${st.name}": use exactly that as "name" in flagship.app.json.`);
@@ -592,6 +648,7 @@ export class BuildOrchestrator {
     // Reachable only when agentRunner is absent; the early guard proved
     // adaptRunner is set in that case.
     const adaptRunner = this.deps.adaptRunner!;
+    this.aiTouched.add(buildId);
     await this.deps.journal.append(buildId, {
       mode: "git",
       kind: "adapt-step",
@@ -660,12 +717,10 @@ export class BuildOrchestrator {
 
   /**
    * The agentic adapt loop: the box's AI drives the SHARED build tool
-   * surface (read_file / write_file / validate / deploy / request_env_var)
-   * over the build's workspace, multi-turn, until the app deploys (or it
-   * stops / hits the turn cap). `deploy` is wired straight to the
-   * orchestrator's own deploy primitive, so the same install path every
-   * mode uses runs from inside the loop. Returns the merged result; never
-   * throws.
+   * surface over the build's workspace, multi-turn, deploying to its private
+   * staging copy and testing it until it calls finish (or stops / hits the
+   * turn cap). Then the box seals the build and puts the tested image live.
+   * Returns the merged result; never throws.
    */
   private async adaptGitAgentic(
     buildId: string,
@@ -673,6 +728,7 @@ export class BuildOrchestrator {
     opts: { instructions?: string },
   ): Promise<AdaptResult> {
     const repoFiles = ws.list();
+    this.aiTouched.add(buildId);
     await this.deps.journal.append(buildId, {
       mode: "git",
       kind: "adapt-step",
@@ -680,9 +736,6 @@ export class BuildOrchestrator {
       summary: `agentic adapt over ${repoFiles.length} repo file(s)`,
     });
 
-    // The tool host the model drives — the SAME surface MCP exposes, but
-    // here in-process. `deploy` funnels through the orchestrator's own
-    // deploy (Forgejo push → docker build → signed install).
     const tools = new BuildToolHost({
       buildId,
       workspace: ws,
@@ -699,17 +752,11 @@ export class BuildOrchestrator {
           requestedAt: this.now(),
           requestedBy: "ai",
         }),
-      deploy: async () => {
-        const r = await this.deploy(buildId);
-        return r.ok
-          ? { ok: true, serviceId: r.serviceId, url: r.url }
-          : { ok: false, reason: r.reason };
-      },
+      ...this.stagingTools(buildId, { liveBy: "caller" }),
     });
 
     const agentRunner = this.deps.agentRunner!;
     let result: BuildAgentResult;
-    this.agentBusy.add(buildId);
     try {
       result = await runBuildAgent({
         buildId,
@@ -725,45 +772,277 @@ export class BuildOrchestrator {
       // runBuildAgent never throws, but defend the boundary anyway.
       const reason = `agentic adapt failed: ${(e as Error).message}`;
       await this.deps.journal.append(buildId, { mode: "git", kind: "error", actor: "ai", summary: reason });
+      await this.deps.staging?.teardown(buildId).catch(() => {});
       return { ok: false, reason };
-    } finally {
-      this.agentBusy.delete(buildId);
-      // A refusal that arrived while the AI was working (its own deploy
-      // shared the adaptation) is fixed now that it's done.
-      this.runPendingFix(buildId);
     }
 
     const st = this.states.get(buildId);
     if (st) st.gitFit = true;
 
-    // The model never produced a manifest and never deployed → surface a
-    // clear failure (the HTTP layer maps it to a 502).
-    const hasManifest = ws.manifestJson() != null;
-    if (!result.deployed && !hasManifest) {
-      const reason =
-        result.stopReason === "error"
-          ? result.note ?? "adapt model call failed"
-          : "the AI could not produce a valid Flagship app (no flagship.app.json was written)";
-      return { ok: false, reason };
+    // Finished, or stopped with a tested copy of exactly these files: the
+    // box puts it live. Otherwise nothing goes live and the copy goes away.
+    const live = result.finished || this.stagedMatches(buildId);
+    if (!live) {
+      await this.deps.staging?.teardown(buildId).catch(() => {});
+      const hasManifest = ws.manifestJson() != null;
+      if (!hasManifest) {
+        const reason =
+          result.stopReason === "error"
+            ? result.note ?? "adapt model call failed"
+            : "the AI could not produce a valid Flagship app (no flagship.app.json was written)";
+        return { ok: false, reason };
+      }
+      await this.deps.journal.append(buildId, {
+        mode: "git",
+        kind: "adapt-step",
+        actor: "ai",
+        summary: `agentic adapt wrote a manifest in ${result.turns} turn(s) (no tested copy to put live)`,
+      });
+      return { ok: true, fileCount: ws.count(), deployed: false, turns: result.turns };
     }
 
     await this.deps.journal.append(buildId, {
       mode: "git",
       kind: "adapt-step",
       actor: "ai",
-      summary: result.deployed
-        ? `agentic adapt deployed in ${result.turns} turn(s)`
-        : `agentic adapt wrote a manifest in ${result.turns} turn(s) (not deployed)`,
+      summary: `agentic adapt ${result.finished ? "finished" : "stopped on a tested copy"} in ${result.turns} turn(s)`,
     });
-
+    const r = await this.goLive(buildId);
     return {
       ok: true,
       fileCount: ws.count(),
-      deployed: result.deployed,
-      ...(result.deployedUrl != null ? { deployedUrl: result.deployedUrl } : {}),
-      ...(result.serviceId != null ? { serviceId: result.serviceId } : {}),
+      deployed: r.ok,
+      ...(r.ok ? { deployedUrl: r.url, serviceId: r.serviceId } : { reason: r.reason }),
       turns: result.turns,
     };
+  }
+
+  // ----- staging, sealing, going live -----------------------------------
+
+  /** Whether the build's AI/IDE access has ended for good. */
+  isSealed(buildId: string): boolean {
+    return this.sealedBuilds.has(buildId);
+  }
+
+  /**
+   * The staging half of the tool surface, bound to one build: deploy to its
+   * private copy, check it, read its logs, finish. `liveBy` says who puts it
+   * live after finish: the loop that called the AI ("caller"), or the box
+   * in the background (an IDE, which has no loop on the box).
+   */
+  private stagingTools(
+    buildId: string,
+    opts: { liveBy: "caller" | "background" },
+  ): {
+    deploy: () => Promise<BuildToolDeployResult>;
+    checkApp: (req: { path: string; method?: string; body?: string }) => Promise<BuildToolCheckResult>;
+    logs: () => Promise<string | null>;
+    finish: () => Promise<{ ok: boolean; reason?: string }>;
+    sealed: () => boolean;
+  } {
+    return {
+      deploy: () => this.stage(buildId),
+      checkApp: async (req) => {
+        if (!this.deps.staging) return { ok: false, reason: "check_app is not available on this server" };
+        const r = await this.deps.staging.checkApp(buildId, req);
+        return r.ok
+          ? { ok: true, status: r.status, contentType: r.contentType, body: r.body, truncated: r.truncated }
+          : { ok: false, reason: r.reason };
+      },
+      logs: async () => (this.deps.staging ? this.deps.staging.logs(buildId) : null),
+      finish: async () => {
+        const f = await this.finishFromAgent(buildId);
+        if (f.ok && opts.liveBy === "background") this.startGoLive(buildId);
+        return f;
+      },
+      sealed: () => this.sealedBuilds.has(buildId),
+    };
+  }
+
+  /** Build the workspace and run it as the build's private staging copy. */
+  private async stage(buildId: string): Promise<BuildToolDeployResult> {
+    const staging = this.deps.staging;
+    if (!staging) return { ok: false, reason: "deploy is not available on this server" };
+    if (this.sealedBuilds.has(buildId)) return { ok: false, reason: CLOSED_TO_AI };
+    const st = this.states.get(buildId);
+    const ws = this.workspaces.get(buildId);
+    if (!st || !ws) return { ok: false, reason: "unknown build" };
+    this.aiTouched.add(buildId);
+    const files = ws.snapshot();
+    const slug = (st.name ?? manifestName(files) ?? "app").toLowerCase();
+    const r = await staging.stage({
+      buildId,
+      files,
+      ...(this.binaries.has(buildId) ? { binaries: this.binaries.get(buildId)! } : {}),
+      ...(st.editsServiceId ? { carryBinariesFrom: st.editsServiceId } : {}),
+      slug,
+      envNames: await this.stagingEnvNames(buildId, st, slug),
+    });
+    return r.ok ? { ok: true } : { ok: false, reason: r.reason };
+  }
+
+  /** The owner env var names the copy gets placeholders for: set ones and requested ones. */
+  private async stagingEnvNames(buildId: string, st: BuildState, slug: string): Promise<string[]> {
+    const names = new Set<string>((this.envRequests.get(buildId) ?? []).map((r) => r.name));
+    for (const n of (await this.deps.envNames?.().catch(() => [])) ?? []) names.add(n);
+    const host = this.deps.names?.().hostUsername;
+    const serviceId = st.editsServiceId ?? (host ? `${host}--${slug}` : null);
+    if (serviceId && this.deps.ownerEnvNames) {
+      for (const n of await this.deps.ownerEnvNames(serviceId).catch(() => [])) names.add(n);
+    }
+    return [...names].sort();
+  }
+
+  /** Whether the build's last good staging copy was built from its current files. */
+  private stagedMatches(buildId: string): boolean {
+    const copy = this.deps.staging?.staged(buildId);
+    const ws = this.workspaces.get(buildId);
+    return !!copy && !!ws && copy.filesDigest === filesDigest(ws.snapshot());
+  }
+
+  /**
+   * The AI (or IDE) says the app works. Accepted only for a tested copy of
+   * the current files; a git build's adaptation is offered to the public
+   * store first, and a fixable refusal goes back to the AI to fix while it
+   * is still on staging. Accepting seals the build.
+   */
+  private async finishFromAgent(buildId: string): Promise<{ ok: boolean; reason?: string }> {
+    if (this.sealedBuilds.has(buildId)) return { ok: false, reason: CLOSED_TO_AI };
+    const ws = this.workspaces.get(buildId);
+    if (!ws) return { ok: false, reason: "unknown build" };
+    if (!this.deps.staging?.staged(buildId)) {
+      return { ok: false, reason: "deploy first: finish only works after a successful deploy" };
+    }
+    if (!this.stagedMatches(buildId)) {
+      return { ok: false, reason: "the files changed since the last deploy: deploy again, test it, then finish" };
+    }
+    const src = this.gitSources.get(buildId);
+    if (src && !src.shared && this.shareable(src)) {
+      const refused = await this.shareAdapter(buildId, src, ws.snapshot());
+      if (refused && src.rounds < MAX_FIX_ROUNDS && this.adaptConfigured(buildId)) {
+        src.rounds++;
+        return {
+          ok: false,
+          reason:
+            `Flagship's public store of adaptations, which shares this adaptation with others, refused it for these reasons:\n` +
+            refused.map((r) => `- ${r.message}`).join("\n") +
+            `\nFix only these, with the smallest change that keeps the app working, validate, deploy again, test it, and call finish.`,
+        };
+      }
+      src.shared = true;
+    }
+    await this.seal(buildId);
+    return { ok: true };
+  }
+
+  /**
+   * End the build's AI access for good, BEFORE anything goes live: forget
+   * its AI key, revoke its IDE key, and make every tool on it refuse. The
+   * journal records it, so an IDE build stays closed across a restart.
+   */
+  async seal(buildId: string): Promise<void> {
+    if (this.sealedBuilds.has(buildId)) return;
+    this.sealedBuilds.add(buildId);
+    const st = this.states.get(buildId);
+    if (st) st.sealed = true;
+    await this.deps.forgetCredential?.(buildId).catch(() => {});
+    if (st?.mode === "mcp" || this.mcpServers.has(buildId)) await this.deps.mcpKeys.revoke(buildId).catch(() => {});
+    this.mcpServers.delete(buildId);
+    await this.deps.journal.append(buildId, {
+      mode: st?.mode ?? "mcp",
+      kind: "sealed",
+      actor: "system",
+      summary: "the AI's work is done; the box is putting it live",
+    });
+  }
+
+  /** Put an IDE build live in the background; its progress lands on `state.adapt`. */
+  private startGoLive(buildId: string): void {
+    const st = this.states.get(buildId);
+    if (!st) return;
+    st.adapt = { status: "running", startedAt: this.now(), phase: "going-live" };
+    void this.goLive(buildId)
+      .catch((e: unknown): DeployResult => ({ ok: false, reason: (e as Error).message }))
+      .then((r) => {
+        const cur = this.states.get(buildId);
+        if (!cur) return;
+        const fileCount = this.workspaces.get(buildId)?.count() ?? 0;
+        cur.adapt = r.ok
+          ? { status: "done", fileCount, deployed: true, deployedUrl: r.url, serviceId: r.serviceId }
+          : { status: "done", fileCount, deployed: false, reason: r.reason };
+      });
+  }
+
+  /**
+   * The box's phase: seal the build (idempotent), remove the staging copy
+   * and its dev data, then install (create) or redeploy (edit) the live
+   * service with the image the AI tested, real stores, real env and its
+   * migrations. Nothing here reaches the AI.
+   */
+  private goLive(buildId: string): Promise<DeployResult> {
+    const running = this.goingLive.get(buildId);
+    if (running) return running;
+    const p = this.goLiveNow(buildId).finally(() => this.goingLive.delete(buildId));
+    this.goingLive.set(buildId, p);
+    return p;
+  }
+
+  private async goLiveNow(buildId: string): Promise<DeployResult> {
+    const st = this.states.get(buildId);
+    if (!st) return { ok: false, reason: "unknown build" };
+    const ws = this.workspaces.get(buildId);
+    if (!ws) return { ok: false, reason: "no workspace for build" };
+    await this.seal(buildId);
+    if (st.adapt?.status === "running") st.adapt.phase = "going-live";
+    const copy = this.stagedMatches(buildId) ? this.deps.staging?.staged(buildId) ?? null : null;
+    await this.deps.staging?.teardown(buildId).catch(() => {});
+    const args = {
+      files: ws.snapshot(),
+      serverFqdn: st.serverFqdn,
+      buildId,
+      mode: st.mode,
+      ...(st.editsServiceId ? { editsServiceId: st.editsServiceId } : {}),
+      ...(st.name ? { name: st.name } : {}),
+      ...(this.binaries.has(buildId) ? { binaries: this.binaries.get(buildId)! } : {}),
+    };
+    const r =
+      copy && this.deps.installArtifact
+        ? await this.deps.installArtifact({ ...args, image: copy.image })
+        : await this.deps.deployArtifact(args);
+    if (r.ok) {
+      this.deps.staging?.forget(buildId);
+      this.wentLive(buildId, st, r);
+    }
+    return r;
+  }
+
+  /** Record a build that went live, and share its adaptation if it wasn't yet. */
+  private wentLive(buildId: string, st: BuildState, r: Extract<DeployResult, { ok: true }>): void {
+    st.serviceId = r.serviceId;
+    st.deployedUrl = r.url;
+    // Deploying again (the owner) replaces it in place.
+    st.editsServiceId ??= r.serviceId;
+    const src = this.gitSources.get(buildId);
+    if (!src) return;
+    const origin =
+      src.origin === "index" && src.indexFile && src.repo
+        ? { repo: src.repo, file: src.indexFile }
+        : src.sharedFile && src.repo
+          ? { repo: src.repo, file: src.sharedFile }
+          : null;
+    void this.deps.recordAdapterOrigin?.(r.serviceId, origin).catch(() => {});
+    if (!src.shared) {
+      src.shared = true;
+      const ws = this.workspaces.get(buildId);
+      // Live already: a refusal is only journalled, never sent back to an AI.
+      if (ws && this.shareable(src)) {
+        void this.shareAdapter(buildId, src, ws.snapshot())
+          .then(() => {
+            if (src.sharedFile && src.repo) return this.deps.recordAdapterOrigin?.(r.serviceId, { repo: src.repo, file: src.sharedFile });
+          })
+          .catch(() => {});
+      }
+    }
   }
 
   // ----- mcp mode --------------------------------------------------------
@@ -789,6 +1068,7 @@ export class BuildOrchestrator {
     });
     const ws = new BuildWorkspace(edit?.files);
     this.workspaces.set(buildId, ws);
+    this.aiTouched.add(buildId);
     this.mcpServers.set(buildId, this.makeMcpServer(buildId, ws));
     await this.deps.journal.append(buildId, {
       mode: "mcp",
@@ -813,7 +1093,7 @@ export class BuildOrchestrator {
   /** Rotate the mcp auth key (revokes the prior one). */
   async rotateMcpKey(buildId: string, label?: string): Promise<McpConnectionInfo | null> {
     const st = this.states.get(buildId);
-    if (!st || st.mode !== "mcp") return null;
+    if (!st || st.mode !== "mcp" || this.sealedBuilds.has(buildId)) return null;
     const rec = await this.deps.mcpKeys.mint(buildId, label);
     return this.connectionInfo(buildId, rec.key);
   }
@@ -825,9 +1105,17 @@ export class BuildOrchestrator {
    */
   async handleMcpRpc(presentedKey: string, message: unknown): Promise<{ authed: boolean; response: JsonRpcResponse | null }> {
     const buildId = await this.deps.mcpKeys.resolve(presentedKey);
-    if (!buildId) return { authed: false, response: null };
+    if (!buildId || this.sealedBuilds.has(buildId)) return { authed: false, response: null };
     let server = this.mcpServers.get(buildId);
     if (!server) {
+      // A build sealed before a restart stays closed: its key was revoked,
+      // and the journal remembers.
+      const entries = await this.deps.journal.read(buildId).catch(() => []);
+      if (entries.some((e) => e.kind === "sealed")) {
+        this.sealedBuilds.add(buildId);
+        await this.deps.mcpKeys.revoke(buildId).catch(() => {});
+        return { authed: false, response: null };
+      }
       // Rehydrate after a restart: recreate the server over a fresh/empty
       // workspace if the build state is gone (best-effort).
       const ws = this.workspaces.get(buildId) ?? new BuildWorkspace();
@@ -841,12 +1129,21 @@ export class BuildOrchestrator {
 
   // ----- deploy (all modes) ---------------------------------------------
 
-  /** Deploy the build's workspace. The orchestrator owns git + mcp workspaces. */
+  /**
+   * The owner's Deploy / "Install it". A build an AI or IDE worked on goes
+   * live through `goLive` (sealed first, the tested image when there is
+   * one). A build no AI touched installs directly.
+   */
   async deploy(buildId: string): Promise<DeployResult> {
     const st = this.states.get(buildId);
     if (!st) return { ok: false, reason: "unknown build" };
     const ws = this.workspaces.get(buildId);
     if (!ws) return { ok: false, reason: "no workspace for build" };
+    // While the box itself is putting it live, the owner's Deploy joins that.
+    if (st.adapt?.status === "running" && st.adapt.phase !== "going-live") {
+      return { ok: false, reason: "the AI is still working on this build" };
+    }
+    if (this.aiTouched.has(buildId) || st.mode === "mcp") return this.goLive(buildId);
     const r = await this.deps.deployArtifact({
       files: ws.snapshot(),
       serverFqdn: st.serverFqdn,
@@ -858,20 +1155,7 @@ export class BuildOrchestrator {
     });
     const src = this.gitSources.get(buildId);
     if (!r.ok) return src ? this.installFailed(buildId, st, src, r.reason) : r;
-    st.serviceId = r.serviceId;
-    st.deployedUrl = r.url;
-    // Deploying again (the owner, or a fix round) replaces it in place.
-    st.editsServiceId ??= r.serviceId;
-    if (src) {
-      // Built from a published adapter: that one. Otherwise sharing may name
-      // one below; until then the service has none.
-      const origin = src.origin === "index" && src.indexFile && src.repo ? { repo: src.repo, file: src.indexFile } : null;
-      void this.deps.recordAdapterOrigin?.(r.serviceId, origin).catch(() => {});
-      if (!src.shared) {
-        src.shared = true;
-        void this.shareAdapter(buildId, src, ws.snapshot(), r.serviceId).catch(() => {});
-      }
-    }
+    this.wentLive(buildId, st, r);
     return r;
   }
 
@@ -923,18 +1207,24 @@ export class BuildOrchestrator {
     return null;
   }
 
+  /** Whether this build's adaptation may go to the public store at all. */
+  private shareable(src: GitSource): boolean {
+    return !!this.deps.adapterIndex && !!src.repo && src.share && !src.steered && src.origin !== "repo" && src.origin !== "as-is";
+  }
+
   /**
    * Share what made this repo run, so the next person importing it needs no
-   * AI: only for public repos on the big hosts, only once it has deployed,
-   * never the repo's own adapter (that's the author's), with the owner's
-   * choices (the name) taken out and nothing that says who sent it.
+   * AI: only for public repos on the big hosts, never the repo's own adapter
+   * (that's the author's), with the owner's choices (the name) taken out and
+   * nothing that says who sent it. Returns the store's fixable reasons when
+   * it refused, else null.
    */
-  private async shareAdapter(buildId: string, src: GitSource, built: Record<string, string>, serviceId: string): Promise<void> {
+  private async shareAdapter(buildId: string, src: GitSource, built: Record<string, string>): Promise<StoreReason[] | null> {
     const index = this.deps.adapterIndex;
-    if (!index || !src.repo || !src.share || src.steered || src.origin === "repo" || src.origin === "as-is") return;
+    if (!index || !src.repo || !this.shareable(src)) return null;
     const licensePath = licensePathOf(src.original);
     const file = licensePath ? adapterFileFor(src, built) : null;
-    if (!file || !src.commit || !licensePath) return;
+    if (!file || !src.commit || !licensePath) return null;
     const v = await index.submit({ repo: src.repo, base: src.commit, licensePath, file });
     const note = (summary: string, detail?: string) =>
       this.deps.journal.append(buildId, {
@@ -946,32 +1236,18 @@ export class BuildOrchestrator {
       });
     if (!v) {
       await note("couldn't reach Flagship's store of adaptations; not shared");
-      return;
+      return null;
     }
     if (v.status !== "refused") {
       await note(v.status === "kept" ? "shared the adaptation with Flagship's public store" : "the public store already had this adaptation");
-      if (v.file) await this.deps.recordAdapterOrigin?.(serviceId, { repo: src.repo, file: v.file });
-      return;
+      if (v.file) src.sharedFile = v.file;
+      return null;
     }
     const reasons = v.reasons ?? [];
     await note("the public store refused the adaptation", reasons.map((r) => r.message).join("; "));
-    if (!reasons.length || reasons.some((r) => !r.fixable)) return;
-    if (src.rounds >= MAX_FIX_ROUNDS || !this.adaptConfigured(buildId)) return;
-    src.pendingFix = reasons;
-    this.runPendingFix(buildId);
+    if (!reasons.length || reasons.some((r) => !r.fixable)) return null;
+    return reasons;
   }
-
-  /** Let the AI fix what the store refused, once nothing else is running. */
-  private runPendingFix(buildId: string): void {
-    const src = this.gitSources.get(buildId);
-    if (!src?.pendingFix || this.agentBusy.has(buildId)) return;
-    const reasons = src.pendingFix;
-    delete src.pendingFix;
-    src.rounds++;
-    src.shared = false;
-    void this.adaptGit(buildId, { storeFeedback: reasons }).catch(() => {});
-  }
-
 
   /**
    * The flagship.app.json that makes this repo run the way this build does,
@@ -1005,12 +1281,7 @@ export class BuildOrchestrator {
           requestedAt: this.now(),
           requestedBy: "ide",
         }),
-      deploy: async (): Promise<McpDeployResult> => {
-        const r = await this.deploy(buildId);
-        return r.ok
-          ? { ok: true, serviceId: r.serviceId, url: r.url }
-          : { ok: false, reason: r.reason };
-      },
+      ...this.stagingTools(buildId, { liveBy: "background" }),
     });
   }
 

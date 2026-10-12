@@ -10,6 +10,11 @@
  * same — write the tree, push to per-app Forgejo (harness-only), docker
  * build, sign + install via ServicePlatform — but it takes a plain files
  * map so git and mcp builds reuse it verbatim.
+ *
+ * Split in two for AI builds (docs/ai-privacy-and-staging.md §2):
+ * `buildAppImage` makes the image (staging.ts builds the AI's test copy
+ * with it), and `buildArtifactPipeline(...).install` puts a build live with
+ * an image built earlier, so what goes live is exactly what was tested.
  */
 
 import { join } from "node:path";
@@ -64,7 +69,45 @@ export type DeployResult =
       needsAdapt?: true;
     };
 
-export function buildArtifactDeployer(deps: DeployArtifactDeps) {
+
+/** Install a build with an image already built (and tested) for it. */
+export interface InstallArtifactArgs extends DeployArtifactArgs {
+  image: string;
+}
+
+/**
+ * Write a build's files into `contextDir` and `docker build` them as
+ * `image`. The one place a build's image is made, for a direct install and
+ * for an AI build's staging copy alike.
+ */
+export async function buildAppImage(
+  cmd: CommandRunner,
+  a: { contextDir: string; files: Record<string, string>; binaries?: Record<string, Buffer>; keepBinaries?: boolean; image: string },
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  try {
+    const w = await writeSourceTree(a.contextDir, a.files, {
+      ...(a.binaries ? { binaries: a.binaries } : {}),
+      ...(a.keepBinaries ? { keepBinaries: true } : {}),
+    });
+    if (!w.ok) return { ok: false, reason: `unsafe path in artifact files: ${w.unsafePath}` };
+  } catch (e) {
+    return { ok: false, reason: `failed to write source tree: ${(e as Error).message}` };
+  }
+  try {
+    await runDockerBuild(cmd, a.image, a.contextDir);
+  } catch (e) {
+    return { ok: false, reason: `docker build failed: ${(e as Error).message}` };
+  }
+  return { ok: true };
+}
+
+/**
+ * The two halves of putting a build on the box: `deploy` builds the image
+ * from the files and installs it (a build no AI touched), `install` installs
+ * an image built earlier (an AI build's tested staging image, so what goes
+ * live is exactly what was tested, with no rebuild).
+ */
+export function buildArtifactPipeline(deps: DeployArtifactDeps) {
   const now = deps.now ?? (() => Date.now());
 
   async function note(
@@ -84,7 +127,7 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
     });
   }
 
-  return async function deploy(args: DeployArtifactArgs): Promise<DeployResult> {
+  async function run(args: DeployArtifactArgs, prebuilt: string | null): Promise<DeployResult> {
     const { files, serverFqdn, buildId } = args;
     const mode: BuildMode = args.mode ?? "scratch";
     const manifestJson = files["flagship.app.json"];
@@ -118,23 +161,11 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
     manifest = { ...manifest, name: slug };
     const serviceId = `${creator}--${slug}`; // docs/service-addressing-double-dash.md
     const appDir = join(deps.workingDir, serviceId);
-
-    await note(buildId, mode, "build-started", `building ${slug}`);
-
-    // 1. Write the source tree (reproducible: blow away any prior tree).
-    try {
-      const w = await writeSourceTree(appDir, files, {
-        ...(args.binaries ? { binaries: args.binaries } : {}),
-        keepBinaries: target.edit,
-      });
-      if (!w.ok) return { ok: false, reason: `unsafe path in artifact files: ${w.unsafePath}` };
-    } catch (e) {
-      return { ok: false, reason: `failed to write source tree: ${(e as Error).message}` };
-    }
-
     const revision = String(now());
 
-    // 2. Harness-only Forgejo push (browse/review/revert via the existing
+    await note(buildId, mode, "build-started", prebuilt ? `installing ${slug}` : `building ${slug}`);
+
+    // Harness-only Forgejo push (browse/review/revert via the existing
     // /apps/:serviceId/git/* surface). EXTERNAL actors never push here —
     // they go through chat / git-import / mcp, and the harness materializes.
     if (deps.forgejoAdmin) {
@@ -147,24 +178,42 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
       }
     }
 
-    // 3. docker build.
-    const image = `flagship-vibe-${serviceId}:${revision}`.toLowerCase();
-    await note(buildId, mode, "build-phase", "docker build");
-    try {
-      await runDockerBuild(deps.cmd, image, appDir);
-    } catch (e) {
-      const reason = `docker build failed: ${(e as Error).message}`;
-      await note(buildId, mode, "error", reason);
-      return { ok: false, reason };
+    // The service's working tree (what an edit later starts from), and the
+    // image: built from it now, or the one already built and tested.
+    let image: string;
+    if (prebuilt) {
+      image = prebuilt;
+      try {
+        const w = await writeSourceTree(appDir, files, {
+          ...(args.binaries ? { binaries: args.binaries } : {}),
+          keepBinaries: target.edit,
+        });
+        if (!w.ok) return { ok: false, reason: `unsafe path in artifact files: ${w.unsafePath}` };
+      } catch (e) {
+        return { ok: false, reason: `failed to write source tree: ${(e as Error).message}` };
+      }
+      await note(buildId, mode, "build-phase", "installing the tested image");
+    } else {
+      image = `flagship-vibe-${serviceId}:${revision}`.toLowerCase();
+      await note(buildId, mode, "build-phase", "docker build");
+      const built = await buildAppImage(deps.cmd, {
+        contextDir: appDir,
+        files,
+        ...(args.binaries ? { binaries: args.binaries } : {}),
+        keepBinaries: target.edit,
+        image,
+      });
+      if (!built.ok) {
+        if (/^docker build failed/.test(built.reason)) await note(buildId, mode, "error", built.reason);
+        return { ok: false, reason: built.reason };
+      }
     }
 
-    // 4. Patch the manifest's runtime.image to our local tag.
+    // Patch the manifest's runtime.image to our local tag, then sign + install.
     const patchedManifestJson = JSON.stringify({
       ...manifest,
       runtime: { ...((manifest as { runtime?: object }).runtime ?? {}), image },
     });
-
-    // 5. Sign + install.
     const request: InstallServiceRequest = {
       serverId: serverFqdn,
       creator,
@@ -195,5 +244,15 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
     const url = `https://${urlLabel}.${serverFqdn}`;
     await note(buildId, mode, "deployed", `live at ${url}`, serviceId);
     return { ok: true, serviceId, url, image };
+  }
+
+  return {
+    deploy: (args: DeployArtifactArgs): Promise<DeployResult> => run(args, null),
+    install: (args: InstallArtifactArgs): Promise<DeployResult> => run(args, args.image),
   };
+}
+
+/** Build + install a files map (a build no AI touched). */
+export function buildArtifactDeployer(deps: DeployArtifactDeps) {
+  return buildArtifactPipeline(deps).deploy;
 }

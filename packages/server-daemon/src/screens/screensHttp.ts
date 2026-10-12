@@ -24,7 +24,7 @@ import type {
 } from "../llm/vibeCodeSession.js";
 import type { AppEnvStore } from "../serviceEnvStore.js";
 import type { BuildCredentialStore } from "../llm/buildCredentialStore.js";
-import type { LlmCredential } from "../llmHarness.js";
+import { parseRelayFlag, type LlmCredential } from "../llmHarness.js";
 import {
   summarizeAttachment,
   validateAttachments,
@@ -153,6 +153,15 @@ export interface LineageResolverLike {
 
 export interface ScreensHttpDeps {
   gate: PairedSessionGate;
+  /**
+   * Live apps' internet approvals (egress/approvals.ts): the signed
+   * GET/POST /api/screens/services/:serviceId/egress endpoint, and the
+   * `{declared, approved}` view the apps list and detail carry.
+   */
+  appEgress?: {
+    handle: (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null>;
+    view: (serviceId: string, declared: readonly string[]) => { declared: string[]; approved: string[] };
+  } | null;
   /**
    * Services built from a published repo adapter, and a way to report one
    * to flagshipserver.com (anonymously: the adapter, and the owner's note).
@@ -465,6 +474,11 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (denied) return denied;
     }
 
+    if (deps.appEgress && /^\/api\/screens\/services\/[^/]+\/egress$/.test(path)) {
+      const r = await deps.appEgress.handle(path, method, req);
+      if (r) return r;
+    }
+
     // ---- P14 /api/screens/companion/* ----
     //
     // Owner-gated companion-dock administration. Mint a ticket the QR
@@ -598,7 +612,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     // ---- P1.2 GET /api/screens/apps-list
     if (path === "/api/screens/apps-list" && method === "GET") {
       const apps = deps.servicePlatform
-        ? deps.servicePlatform.list().map((a) => toSummary(a, deps.serverFqdn))
+        ? deps.servicePlatform.list().map((a) => toSummary(a, deps.serverFqdn, deps.appEgress))
         : [];
       const body: AppsListResponse = { apps };
       return jok(body);
@@ -856,6 +870,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (!session) return jerr(404, "session not found");
       const out: VibeCodeStatusResponse = {
         status: session.meta.status,
+        ...(session.meta.deployPhase ? { deployPhase: session.meta.deployPhase } : {}),
         transcript: [...session.conversation()],
         files: session.files(),
         deployedUrl: session.meta.url,
@@ -1461,8 +1476,13 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
   };
 }
 
-function toSummary(app: InstalledService, serverFqdn: string): AppSummary {
+function toSummary(
+  app: InstalledService,
+  serverFqdn: string,
+  egress?: ScreensHttpDeps["appEgress"],
+): AppSummary {
   return {
+    ...(egress ? { egress: egress.view(app.serviceId, app.manifest.network?.egress ?? []) } : {}),
     serviceId: app.serviceId,
     creator: app.creator,
     slug: app.slug,
@@ -1482,7 +1502,7 @@ function appDetail(app: InstalledService, deps: ScreensHttpDeps): AppDetailRespo
     tabId,
   }));
   return {
-    app: toSummary(app, deps.serverFqdn),
+    app: toSummary(app, deps.serverFqdn, deps.appEgress),
     manifest: app.manifest as unknown as Record<string, unknown>,
     dataLayerInstances,
     members,
@@ -1579,9 +1599,12 @@ function parseCredential(raw: unknown): LlmCredential | null | "invalid" {
   if (typeof o.apiKey !== "string" || o.apiKey.length === 0) return "invalid";
   if (o.baseUrl !== undefined && typeof o.baseUrl !== "string") return "invalid";
   if (o.source !== undefined && o.source !== "byok" && o.source !== "promo") return "invalid";
+  const relay = parseRelayFlag(o.relay);
+  if (relay === "invalid") return "invalid";
   const out: LlmCredential = { provider: o.provider, apiKey: o.apiKey };
   if (typeof o.baseUrl === "string" && o.baseUrl.length > 0) out.baseUrl = o.baseUrl;
   if (o.source === "byok" || o.source === "promo") out.source = o.source;
+  if (relay !== undefined) out.relay = relay;
   return out;
 }
 
@@ -1617,6 +1640,8 @@ function isWriteScopedPath(path: string): boolean {
   if (path === "/api/screens/peer-backup/toggle") return true;
   // env-var set + unset
   if (/^\/api\/screens\/services\/[^/]+\/env\/(set|unset)$/.test(path)) return true;
+  // app internet approval (signed; companions can't relay it)
+  if (/^\/api\/screens\/services\/[^/]+\/egress$/.test(path)) return true;
   // lineage-resolve POST
   if (path === "/api/screens/lineage-resolve") return true;
   // app-backup start
@@ -1688,6 +1713,7 @@ function toVibeCodePublicState(
     id: session.meta.sessionId,
     appId,
     status: session.meta.status,
+    ...(session.meta.deployPhase ? { deployPhase: session.meta.deployPhase } : {}),
     messages: session.messages(),
   };
   if (pending) {

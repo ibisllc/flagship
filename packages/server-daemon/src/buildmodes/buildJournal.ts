@@ -53,7 +53,9 @@ export type BuildJournalKind =
   | "build-phase"
   | "deployed"
   | "error"
-  | "cancelled";
+  | "cancelled"
+  /** The build's AI or IDE access ended for good (before it went live). */
+  | "sealed";
 
 /** A persisted journal line. `seq` is 1-based + monotonic per build. */
 export interface BuildJournalEntry {

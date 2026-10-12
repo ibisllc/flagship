@@ -24,9 +24,15 @@
  *       frees its name.
  *     → { ok: true }
  *
- *   POST /api/llm/sessions/<id>/deploy
- *     → triggers ServicePlatform.install with the session's emitted files;
- *       returns { ok: true, serviceId, url } once deployed.
+ *   POST /api/llm/sessions/<id>/deploy   body: { background?: boolean }
+ *     → stages the session's files as a private test copy (the session's AI
+ *       may fix a copy that won't start), seals the session, then installs
+ *       the tested image; returns { ok: true, serviceId, url } once live.
+ *       `background: true` answers 202 { ok: true, started: true } at once;
+ *       follow it on GET .../<id> (`meta.status` "deploying" with
+ *       `meta.deployPhase` "staging" | "fixing" | "going-live", then
+ *       "deployed" with `meta.url`, or "failed" with `meta.failureReason`)
+ *       or the screens WS (`build-start`, then `deploy` or `error`).
  *
  * Real WebSocket streaming lives in a sibling module (`vibeCodeWs.ts`,
  * future) — this HTTP surface is the orchestration + replay layer.
@@ -54,7 +60,10 @@ export interface VibeCodeHttpDeps {
    * wires this to ServicePlatform.install with the session's manifest +
    * files; tests inject a stub.
    */
-  deploySession?: (session: VibeCodeSession) => Promise<{ ok: true; serviceId: string; url: string; inviteOnly?: boolean } | { ok: false; reason: string }>;
+  deploySession?: (
+    session: VibeCodeSession,
+    opts?: { onPhase?: (phase: "staging" | "fixing" | "going-live") => void },
+  ) => Promise<{ ok: true; serviceId: string; url: string; inviteOnly?: boolean } | { ok: false; reason: string }>;
   /**
    * Re-invoke the model after a `user-reply` / `tool-ack` so a chat-guided
    * build continues (the reply alone only flips the session back to
@@ -273,12 +282,25 @@ export function buildVibeCodeHttpHandlers(deps: VibeCodeHttpDeps) {
       if (session.meta.status === "awaiting-tool-response") {
         return jerr(409, "cannot deploy while awaiting a tool response");
       }
-      const r = await deps.deploySession(session);
-      if (!r.ok) {
-        session.fail(r.reason, true);
-        return jerr(502, r.reason);
+      if (session.meta.status === "deploying") return jerr(409, "already deploying");
+      const body = parseJson(req.body) as { background?: boolean } | null;
+      session.markDeploying("staging");
+      const run = deps.deploySession(session, { onPhase: (phase) => session.markDeploying(phase) }).then(
+        (r) => {
+          if (r.ok) session.markDeployed({ serviceId: r.serviceId, url: r.url });
+          else session.fail(r.reason, true);
+          return r;
+        },
+        (e: Error) => {
+          session.fail(e.message ?? "deploy failed", true);
+          return { ok: false as const, reason: e.message ?? "deploy failed" };
+        },
+      );
+      if (body?.background === true) {
+        return { status: 202, headers: J, body: JSON.stringify({ ok: true, started: true }) };
       }
-      session.markDeployed({ serviceId: r.serviceId, url: r.url });
+      const r = await run;
+      if (!r.ok) return jerr(502, r.reason);
       return jok({
         ok: true,
         serviceId: r.serviceId,

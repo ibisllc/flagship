@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { checkBuildContextDockerfile } from "./buildmodes/dockerfilePolicy.js";
+import { networkCreateArgs } from "./egress/networks.js";
+import { notifyContainersChanged, sandboxBuildArgs, sandboxRunArgs } from "./egress/sandboxNetworking.js";
 
 export interface AppSpec {
   serviceId: string;
@@ -284,7 +287,7 @@ const CPU_PERIOD = 100_000;
  */
 export async function ensureDockerNetwork(cmd: CommandRunner, network: string): Promise<void> {
   try {
-    await cmd.run("docker", ["network", "create", network]);
+    await cmd.run("docker", networkCreateArgs(network));
   } catch {
     // already exists — fine
   }
@@ -301,6 +304,7 @@ export function dockerBuildArgs(
     "build",
     "--network",
     limits.network,
+    ...sandboxBuildArgs(limits.network),
     "--memory",
     limits.memory,
     "--cpu-period",
@@ -335,6 +339,8 @@ export async function runDockerBuild(
   contextDir: string,
   limits: DockerBuildLimits = DEFAULT_DOCKER_BUILD_LIMITS,
 ): Promise<void> {
+  const policy = await checkBuildContextDockerfile(contextDir);
+  if (policy && !policy.ok) throw new Error(`the Dockerfile is not allowed on this box:\n${policy.problems.join("\n")}`);
   const args = dockerBuildArgs(image, contextDir, limits);
   const runOpts: CommandRunnerOpts = { timeoutMs: limits.timeoutMs };
   if (!cmd.capture) return cmd.run("docker", args, runOpts);
@@ -478,13 +484,22 @@ export class AppRunner {
     // Regression insurance: a runtime container must never bind-mount a host
     // path or the docker socket either (/var/flagship stays off every mount).
     assertNoHostPathInDockerArgs(args);
-    await this.cmd.run("docker", args);
+    await notifyContainersChanged();
+    try {
+      await this.cmd.run("docker", args);
+    } finally {
+      await notifyContainersChanged();
+    }
     return args;
   }
 
   async stop(serviceId: string): Promise<void> {
-    await this.cmd.run("docker", ["stop", this.containerName(serviceId)]);
-    await this.cmd.run("docker", ["rm", this.containerName(serviceId)]);
+    try {
+      await this.cmd.run("docker", ["stop", this.containerName(serviceId)]);
+      await this.cmd.run("docker", ["rm", this.containerName(serviceId)]);
+    } finally {
+      await notifyContainersChanged();
+    }
   }
 
   /**
@@ -532,7 +547,7 @@ export class AppRunner {
    */
   async ensureNetwork(): Promise<void> {
     try {
-      await this.cmd.run("docker", ["network", "create", this.limits.network]);
+      await this.cmd.run("docker", networkCreateArgs(this.limits.network));
     } catch {
       // already exists — fine
     }
@@ -551,8 +566,10 @@ export class AppRunner {
       "--security-opt=no-new-privileges",
       "--network",
       this.limits.network,
-      "--add-host",
-      `${this.limits.dataHostAlias}:host-gateway`,
+      ...(sandboxRunArgs(this.limits.network, this.limits.dataHostAlias) ?? [
+        "--add-host",
+        `${this.limits.dataHostAlias}:host-gateway`,
+      ]),
       "--memory",
       this.limits.memory,
       "--cpus",

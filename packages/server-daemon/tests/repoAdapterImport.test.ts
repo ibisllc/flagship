@@ -11,6 +11,7 @@ import { InMemoryBuildJournal } from "../src/buildmodes/buildJournal.js";
 import { InMemoryMcpKeyStore } from "../src/buildmodes/mcpKeyStore.js";
 import { httpAdapterIndex, indexableRepo, licensePathOf, type AdapterIndex } from "../src/buildmodes/adapterIndex.js";
 import type { DeployResult } from "../src/buildmodes/deployArtifact.js";
+import { FakeStaging } from "./helpers/fakeStaging.js";
 
 const FQDN = "home.harry.flagship.services";
 const COMMIT = "c".repeat(40);
@@ -77,12 +78,15 @@ function setup(opts: { clone?: Record<string, string>; index?: AdapterIndex; age
     serverFqdn: FQDN,
     names: () => ({ registry: { holderOf: (n, e) => o.holderOf(n, e) }, hostUsername: "harry", installed: null }),
     ...(opts.index ? { adapterIndex: opts.index } : {}),
-    deployArtifact: async (a): Promise<DeployResult> => {
-      deployed.push({ files: a.files, ...(a.name ? { name: a.name } : {}) });
-      return { ok: true, serviceId: `harry--${a.name}`, url: `https://${a.name}.${FQDN}`, image: "i" };
-    },
+    staging: new FakeStaging(),
+    deployArtifact: live,
+    installArtifact: live,
     ...(opts.agent ? { agentRunner: async (_id: string, req: ChatRequest) => opts.agent!(req) } : {}),
   });
+  async function live(a: { files: Record<string, string>; name?: string }): Promise<DeployResult> {
+    deployed.push({ files: a.files, ...(a.name ? { name: a.name } : {}) });
+    return { ok: true, serviceId: `harry--${a.name}`, url: `https://${a.name}.${FQDN}`, image: "i" };
+  }
   return { o, deployed, journal };
 }
 
@@ -425,16 +429,26 @@ describe("the store's answer, and fixing what it refused", () => {
     return r.buildId;
   }
 
-  it("asks the AI to fix a fixable refusal, redeploys in place and sends it again", async () => {
-    const prompts: string[] = [];
-    let turns = deployingTurns();
+  it("hands a fixable refusal back to the AI while it is still on staging, then goes live once", async () => {
+    const finishReplies: string[] = [];
+    const turns: ChatResponse[] = [
+      ...deployingTurns(),
+      { content: "", model: "m", toolUses: [{ id: "f1", name: "finish", input: {} }] },
+      { content: "", model: "m", toolUses: [{ id: "d2", name: "deploy", input: {} }] },
+      { content: "", model: "m", toolUses: [{ id: "f2", name: "finish", input: {} }] },
+    ];
     const { index, submitted } = scripted([
       { status: "refused", file: "a".repeat(64), reasons: [{ code: "adds-secret", message: "it adds what looks like a Stripe secret key", fixable: true }] },
       { status: "kept", file: "b".repeat(64) },
     ]);
     const origins: Array<[string, unknown]> = [];
     const journal = new InMemoryBuildJournal();
-    const deployed: Array<{ editsServiceId?: string }> = [];
+    const deployed: Array<{ editsServiceId?: string; image?: string }> = [];
+    const staging = new FakeStaging();
+    const live = async (a: { editsServiceId?: string; image?: string }): Promise<DeployResult> => {
+      deployed.push({ ...(a.editsServiceId ? { editsServiceId: a.editsServiceId } : {}), ...(a.image ? { image: a.image } : {}) });
+      return { ok: true, serviceId: "harry--hello", url: `https://hello.${FQDN}`, image: "i" };
+    };
     const o: BuildOrchestrator = new BuildOrchestrator({
       journal,
       gitImporter: new GitImporter({
@@ -446,50 +460,47 @@ describe("the store's answer, and fixing what it refused", () => {
       mcpKeys: new InMemoryMcpKeyStore(),
       serverFqdn: FQDN,
       adapterIndex: index,
+      staging,
       recordAdapterOrigin: async (id, origin) => {
         origins.push([id, origin]);
       },
-      deployArtifact: async (a): Promise<DeployResult> => {
-        deployed.push({ ...(a.editsServiceId ? { editsServiceId: a.editsServiceId } : {}) });
-        return { ok: true, serviceId: "harry--hello", url: `https://hello.${FQDN}`, image: "i" };
-      },
+      deployArtifact: live,
+      installArtifact: live,
       agentRunner: async (_id, req) => {
-        if (req.messages.length === 2) {
-          prompts.push(String(req.messages[1]!.content));
-          if (turns.length === 0) turns = deployingTurns();
-        }
+        const last = req.messages.at(-1);
+        for (const t of last?.toolResults ?? []) if (t.name === "finish") finishReplies.push(t.content);
         return turns.shift() ?? { content: "done", model: "m" };
       },
     });
     const id = await adaptAndSettle(o);
     expect(submitted).toHaveLength(2);
-    expect(prompts).toHaveLength(2);
-    expect(prompts[1]).toMatch(/refused it for these reasons:\n- it adds what looks like a Stripe secret key/);
-    expect(prompts[1]).not.toMatch(/Extra instructions from the owner: .*Acme/);
-    expect(deployed).toEqual([{}, { editsServiceId: "harry--hello" }]);
+    expect(JSON.parse(finishReplies[0]!).error).toMatch(/refused it for these reasons:\n- it adds what looks like a Stripe secret key/);
+    // Never attached to a live service: one install, after the second finish, with the tested image.
+    expect(deployed).toEqual([{ image: staging.lastImage(id) }]);
+    expect(staging.stages).toHaveLength(2);
     expect(origins.at(-1)).toEqual(["harry--hello", { repo: REPO, file: "b".repeat(64) }]);
     expect((await journal.read(id)).map((e) => e.summary)).toContain("shared the adaptation with Flagship's public store");
   });
 
   it("stops after two fix rounds, and never tries to fix what can't be fixed", async () => {
     const refusal = { status: "refused" as const, reasons: [{ code: "review", message: "other concern", fixable: true }] };
-    let turns = deployingTurns();
+    const finishing = () => [
+      { content: "", model: "m", toolUses: [{ id: "d", name: "deploy", input: {} }] },
+      { content: "", model: "m", toolUses: [{ id: "f", name: "finish", input: {} }] },
+    ] as ChatResponse[];
+    let turns = [...deployingTurns(), ...finishing().slice(1), ...finishing(), ...finishing()];
     const { index, submitted } = scripted([refusal, refusal, refusal, refusal]);
-    const { o } = setup({
-      index,
-      agent: (req) => {
-        if (req.messages.length === 2 && turns.length === 0) turns = deployingTurns();
-        return turns.shift() ?? { content: "done", model: "m" };
-      },
-    });
+    const { o, deployed } = setup({ index, agent: () => turns.shift() ?? { content: "done", model: "m" } });
     await adaptAndSettle(o);
     expect(submitted).toHaveLength(3);
+    expect(deployed).toHaveLength(1);
 
-    turns = deployingTurns();
+    turns = [...deployingTurns(), ...finishing().slice(1)];
     const hard = scripted([{ status: "refused", reasons: [{ code: "no-license", message: "no license", fixable: false }] }]);
-    const { o: o2 } = setup({ index: hard.index, agent: () => turns.shift() ?? { content: "done", model: "m" } });
+    const { o: o2, deployed: d2 } = setup({ index: hard.index, agent: () => turns.shift() ?? { content: "done", model: "m" } });
     await adaptAndSettle(o2);
     expect(hard.submitted).toHaveLength(1);
+    expect(d2).toHaveLength(1);
   });
 
   it("shares nothing when the owner switched sharing off", async () => {

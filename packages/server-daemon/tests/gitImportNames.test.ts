@@ -18,6 +18,7 @@ import {
   type ServiceNameDeps,
 } from "../src/llm/serviceName.js";
 import type { DeployResult } from "../src/buildmodes/deployArtifact.js";
+import { FakeStaging } from "./helpers/fakeStaging.js";
 import type { HttpRequest } from "../src/runtime.js";
 import type { ChatResponse } from "@flagship/llm-providers";
 
@@ -214,6 +215,7 @@ describe("git import over HTTP", () => {
           { id: "3", name: "deploy", input: {} },
         ],
       },
+      { content: "", model: "m", toolUses: [{ id: "4", name: "finish", input: {} }] },
     ];
     let seenInstructions = "";
     const o = new BuildOrchestrator({
@@ -226,7 +228,9 @@ describe("git import over HTTP", () => {
       mcpKeys: new InMemoryMcpKeyStore(),
       serverFqdn: FQDN,
       names: () => ({ registry: { holderOf: (n, e) => o.holderOf(n, e) }, hostUsername: "harry", installed: null }),
+      staging: new FakeStaging(),
       deployArtifact: async (a): Promise<DeployResult> => ({ ok: true, serviceId: `harry--${a.name}`, url: `https://${a.name}.${FQDN}`, image: "i" }),
+      forgetCredential: (id) => credentials.forget(id),
       agentRunner: async (_id, req) => {
         seenInstructions = String(req.messages[1]?.content ?? "");
         await gateTurn;
@@ -242,7 +246,7 @@ describe("git import over HTTP", () => {
     const id = created.json.buildId as string;
     const started = await call(handle, "POST", `/api/build/sessions/${id}/adapt`, { background: true });
     expect(started.status).toBe(202);
-    expect((await call(handle, "GET", `/api/build/sessions/${id}`)).json.state.adapt.status).toBe("running");
+    expect((await call(handle, "GET", `/api/build/sessions/${id}`)).json.state.adapt).toMatchObject({ status: "running", phase: "staging" });
     expect((await call(handle, "POST", `/api/build/sessions/${id}/adapt`, { background: true })).status).toBe(409);
     expect((await call(handle, "POST", `/api/build/sessions/${id}/discard`, {})).status).toBe(409);
     release();
@@ -253,7 +257,13 @@ describe("git import over HTTP", () => {
     }
     const done = (await call(handle, "GET", `/api/build/sessions/${id}`)).json.state;
     expect(done.adapt).toMatchObject({ status: "done", deployed: true, deployedUrl: `https://helloworld.${FQDN}` });
+    expect(done.sealed).toBe(true);
+    expect(credentials.has(id)).toBe(false);
     expect(seenInstructions).toMatch(/The app's name is "helloworld"/);
+    // A live build never takes an AI again.
+    const again = await call(handle, "POST", `/api/build/sessions/${id}/adapt`, { credential: { provider: "openai", apiKey: "sk-test" } });
+    expect(again.status).toBe(409);
+    expect(credentials.has(id)).toBe(false);
   });
 
   it("a background adapt with no AI key is a 503 at once", async () => {

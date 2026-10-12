@@ -108,7 +108,7 @@ import { readServiceSource } from "./llm/serviceSource.js";
 import type { EditableService } from "./buildmodes/buildOrchestrator.js";
 import { VibeCodeSessionRegistry, fileVibeCodeSessionStore, type VibeCodeSession } from "./llm/vibeCodeSession.js";
 import { buildVibeCodeHttpHandlers } from "./llm/vibeCodeHttp.js";
-import { buildDeploySession } from "./llm/deploySession.js";
+import { buildDeploySession, buildStagedChatDeploy } from "./llm/deploySession.js";
 import { LlmHarness } from "./llmHarness.js";
 import { FileBuildCredentialStore } from "./llm/buildCredentialStore.js";
 import {
@@ -123,12 +123,15 @@ import { GitImporter } from "./buildmodes/gitImport.js";
 import { httpAdapterIndex } from "./buildmodes/adapterIndex.js";
 import { FileAdapterOrigins } from "./buildmodes/adapterOrigins.js";
 import { combineNameHolders, type NameHolders } from "./llm/serviceName.js";
-import { buildArtifactDeployer } from "./buildmodes/deployArtifact.js";
+import { buildArtifactPipeline } from "./buildmodes/deployArtifact.js";
+import { StagingRunner } from "./buildmodes/staging.js";
+import type { AgentRunner } from "./buildmodes/buildAgent.js";
 import { BuildOrchestrator } from "./buildmodes/buildOrchestrator.js";
 import { buildBuildModesHttpHandlers } from "./buildmodes/buildModesHttp.js";
 import { ForgejoAppAdmin } from "./forgejoServiceAdmin.js";
 import type { ServicePlatform } from "./servicePlatform.js";
 import {
+  runAppSql,
   startDaemonRuntime,
   type DaemonRuntime,
   type HttpRequest,
@@ -231,6 +234,7 @@ import { installUpdateGuard } from "./updateGuard.js";
 import { daemonRestarts as restarts } from "./restartCoordinator.js";
 import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
+import { providerRelay } from "./tunnel/relayFetch.js";
 
 /**
  * Volume-aware backup pre-step: write CONSISTENT logical dumps of the data-layer
@@ -2132,8 +2136,11 @@ async function wireRuntimeSurfaces(deps: {
   // safe even on a platform-less box (no SWK provisioned) — the ops only throw
   // if actually invoked, and the build surfaces that would invoke them are
   // themselves gated on an SWK-backed ServicePlatform.
+  // Relay-on keys (the default) reach providers through the Flagship hub
+  // over the tunnel, TLS end to end: the provider sees Flagship's address.
   const llmHarness = new LlmHarness({
     swk: custodian.asSwkOps(),
+    relay: providerRelay({ connector: runtime.outboundRelay }),
   });
   const llmCredentials = new FileBuildCredentialStore(
     join(dataDir, "llm-credentials"),
@@ -2143,8 +2150,39 @@ async function wireRuntimeSurfaces(deps: {
   vibeRegistry.sweep();
   setInterval(() => vibeRegistry.sweep(), 60 * 60_000).unref();
   const defaultLlmModels = defaultModelsFromEnv(process.env);
+  // What any AI (the box's own, or an IDE) may read back: nothing that
+  // names the owner, the box or its other apps.
+  const modelRedactor = buildModelRedactor(() => ({
+    username,
+    serverFqdn: env.serverFqdn,
+    extra: (runtime.servicePlatform?.list() ?? []).map((a) => a.serviceId),
+  }));
+  // The tool-calling model call an AI build's staged loop drives, with the
+  // build's (or chat session's) transient BYOK key opened just-in-time.
+  const buildAgentRunner: AgentRunner = async (buildId, req) => {
+    const credential = await llmCredentials.get(buildId);
+    if (!credential) throw new Error("AI adapt not configured");
+    return llmHarness.chatWithCredential(credential, {
+      ...req,
+      model: modelForProvider(credential.provider, req.model && req.model.length > 0 ? req.model : undefined, defaultLlmModels),
+    });
+  };
+  // The private copy every AI build deploys to and tests before it goes
+  // live (docs/ai-privacy-and-staging.md §2). Never routed from the internet.
+  const serviceRunnerMod = await import("./serviceRunner.js");
+  const stagingRunner = new StagingRunner({
+    cmd: serviceRunnerMod.realCommandRunner,
+    workingDir: vibeAppDir,
+    dataProvisioner: runtime.dataProvisioner,
+    runSql: runtime.dataProvisioner ? runAppSql : null,
+    startCheck: serviceRunnerMod.buildStartCheck(serviceRunnerMod.realCommandRunner),
+    fenced: () => runtime.egress.status().enforced,
+  });
+  void stagingRunner.sweep();
+  const ownerEnvNames = async (serviceId: string): Promise<string[]> =>
+    runtime.envStore ? runtime.envStore.names(serviceId).catch(() => []) : [];
 
-  const deploySession = runtime.servicePlatform
+  const directDeploySession = runtime.servicePlatform
     ? buildDeploySession({
         servicePlatform: runtime.servicePlatform,
         signer: custodian,
@@ -2162,6 +2200,21 @@ async function wireRuntimeSurfaces(deps: {
           await accessStore.setMode(serviceId, "restricted");
           return true;
         },
+      })
+    : undefined;
+  // The owner's Deploy of an AI chat: staged first (the session's AI may fix
+  // a copy that won't start), sealed, then the tested image goes live.
+  const deploySession = directDeploySession
+    ? buildStagedChatDeploy({
+        deploy: directDeploySession,
+        staging: stagingRunner,
+        journal: buildJournal,
+        agentRunner: buildAgentRunner,
+        hasCredential: (id) => llmCredentials.has(id),
+        forgetCredential: (id) => llmCredentials.forget(id),
+        redact: modelRedactor,
+        envNames: ownerEnvNames,
+        hostUsername: username,
       })
     : undefined;
   const vibeCodeHandle = buildVibeCodeHttpHandlers({
@@ -2232,7 +2285,7 @@ async function wireRuntimeSurfaces(deps: {
       workingDir: join(dataDir, "data", "git-imports"),
       journal: buildJournal,
     });
-    const artifactDeployer = buildArtifactDeployer({
+    const artifacts = buildArtifactPipeline({
       servicePlatform: runtime.servicePlatform,
       signer: custodian,
       hostUsername: username,
@@ -2243,16 +2296,18 @@ async function wireRuntimeSurfaces(deps: {
       registry: nameHolders,
     });
     const buildOrchestrator = new BuildOrchestrator({
-      modelRedactor: buildModelRedactor(() => ({
-        username,
-        serverFqdn: env.serverFqdn,
-        extra: (runtime.servicePlatform?.list() ?? []).map((a) => a.serviceId),
-      })),
+      modelRedactor,
       journal: buildJournal,
       gitImporter,
       mcpKeys,
       editableService,
-      deployArtifact: artifactDeployer,
+      deployArtifact: artifacts.deploy,
+      // AI builds deploy to a private staging copy, and go live with the
+      // image they tested once sealed (their AI key forgotten).
+      installArtifact: artifacts.install,
+      staging: stagingRunner,
+      forgetCredential: (buildId) => llmCredentials.forget(buildId),
+      ownerEnvNames,
       names: () => ({ registry: nameHolders, hostUsername: username, installed: runtime.servicePlatform ?? null }),
       ...(adapterIndex ? { adapterIndex } : {}),
       recordAdapterOrigin: (serviceId, origin) => adapterOrigins.set(serviceId, origin),
@@ -2295,18 +2350,7 @@ async function wireRuntimeSurfaces(deps: {
       // ollama degrades to the legacy single-shot pass it can't tool-drive).
       // flagshipserver.com is never in this path. `adaptCredentialAvailable`
       // above already gates the genuine no-credential case to the clean 503.
-      agentRunner: async (buildId, req) => {
-        const credential = await llmCredentials.get(buildId);
-        if (!credential) throw new Error("AI adapt not configured");
-        return llmHarness.chatWithCredential(credential, {
-          ...req,
-          model: modelForProvider(
-            credential.provider,
-            req.model && req.model.length > 0 ? req.model : undefined,
-            defaultLlmModels,
-          ),
-        });
-      },
+      agentRunner: buildAgentRunner,
       // The genuine no-credential case: a build for which the owner
       // never delivered a BYOK key degrades to the same clean 503 as
       // the provider-not-wired case.
@@ -2456,6 +2500,7 @@ async function wireRuntimeSurfaces(deps: {
 
   const screensHandle = buildScreensHttp({
     gate: pairedSessions,
+    appEgress: runtime.egress.appEgress,
     serverFqdn: env.serverFqdn,
     username,
     daemonVersion: process.env.FLAGSHIP_DAEMON_VERSION ?? "0.0.0",
@@ -3473,6 +3518,9 @@ export type {
   TunnelWebSocketLike,
   WebSocketFactory,
 } from "./tunnel/tunnelClient.js";
+export { providerRelay } from "./tunnel/relayFetch.js";
+export type { OutboundConnector, ProviderRelay, RelayFetchOptions } from "./tunnel/relayFetch.js";
+export { RelayError, RELAY_UNAVAILABLE_MESSAGE } from "./tunnel/outboundStream.js";
 export {
   RelayTrustVerifier,
 } from "./relayTrustVerifier.js";

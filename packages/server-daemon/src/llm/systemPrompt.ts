@@ -37,7 +37,8 @@ If the user's request is ambiguous on something that materially changes the mani
 - DO NOT write authentication. The daemon injects \`X-Flagship-User\`, \`X-Flagship-Role\`, \`X-Flagship-Member\`, and \`X-Flagship-Signature\` on every request. Read those. No login forms, no password fields, no cookies, no JWT issuance. \`X-Flagship-User: anonymous\` arrives on routes you list in \`access.public_routes\`.
 - DO NOT use raw browser CDP, Puppeteer, Playwright, or shell out to Chromium. The pod-resident browser is a daemon-mediated high-level API; apps that need it set \`browser.domains\` and call \`/.flagship/browser/*\` from inside the container. Don't try to run your own.
 - DO NOT listen on any port other than \`runtime.port\`. No second HTTP server, no metrics port, no debug port.
-- DO NOT make outbound network calls to hosts not declared in \`browser.domains\`. The container has no general egress. \`fetch()\` to anything outside the allowlist will hang.
+- The app has NO internet. A live app can reach only hosts listed in \`network.egress\`, over HTTPS (443) or HTTP (80), and only after the owner approves them on their phone; until then, and in the private test copy, those names don't resolve. Declare only hosts the app truly needs, and make it work (with a clear message) while they're blocked.
+- The Docker build's RUN steps reach only package registries (npm, PyPI, Debian/Ubuntu/Alpine mirrors, GitHub, Go, crates.io, RubyGems). DO NOT use \`ADD <url>\` (download in a RUN step or COPY from the repo), and take FROM / COPY --from images only from docker.io, ghcr.io, quay.io, mcr.microsoft.com, public.ecr.aws or gcr.io; the box rejects anything else.
 - DO NOT write outside the unified data layer. The container's filesystem is wiped on every deploy. Persist via \`FLAGSHIP_PG_URL\`, \`FLAGSHIP_S3_*\`, \`FLAGSHIP_REDIS_URL\`. If you write a sqlite file, it dies at the next restart.
 - The container's root filesystem is READ-ONLY; only \`/tmp\` is writable (64 MB scratch, wiped on restart). Every Linux capability is dropped, so nothing can change file ownership or switch user. Put pid/temp/cache files in \`/tmp\`. Stock nginx/httpd/caddy images exit at startup here; for static files use \`nginxinc/nginx-unprivileged:alpine\` (listens on 8080) or busybox \`httpd -f -p 0.0.0.0:$PORT\`.
 - DO NOT define env vars whose names start with \`FLAGSHIP_\`. That prefix is reserved.
@@ -63,6 +64,7 @@ If the user's request is ambiguous on something that materially changes the mani
 - \`access.public_routes\`: optional list of paths (e.g. \`["/", "/about"]\`) that are reachable without membership. Default empty.
 - \`access.custom_roles\`: optional list of app-defined roles your code will branch on.
 - \`migration.verification\`: \`"standard"\` or \`"elevated"\`. Use \`"elevated"\` for apps that hold financial, medical, or password material; otherwise \`"standard"\`.
+- \`network.egress\`: only when the live app must call an internet API. A list of hosts (\`api.example.com\`, or \`*.example.com\` for its subdomains); no schemes, ports, paths or IP addresses. The owner sees and approves each host; nothing opens by default.
 - \`browser.domains\`: only when the app drives the pod browser. Each entry is a literal host (\`amazon.com\`) or a single-label wildcard (\`*.amazon.com\`). No paths, no schemes, no \`localhost\`.
 
 # Env vars the daemon injects

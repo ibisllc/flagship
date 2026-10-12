@@ -6,8 +6,10 @@
  * user's own server using the IDE's own model subscription. No model and
  * no model key live on the box for this mode: the box exposes only a
  * limited, contract-bounded function surface (write files, validate,
- * request an owner secret value-free, deploy) and the IDE's agent drives
- * it. The auth key the user pastes into the IDE binds the connection to
+ * request an owner secret value-free, deploy a private staging copy, test
+ * it, finish) and the IDE's agent drives it. Once it finishes, the box
+ * seals the build (its key is revoked, every tool refuses) and puts the
+ * app live by itself. The auth key the user pastes into the IDE binds the connection to
  * this one build session (see `mcpKeyStore`).
  *
  * This module is the pure JSON-RPC 2.0 dispatcher (transport-agnostic).
@@ -25,6 +27,7 @@ import { renderContractMarkdown, BUILD_CONTRACT_VERSION } from "./contract.js";
 import {
   BuildToolHost,
   BUILD_TOOL_SPECS,
+  type BuildToolCheckResult,
   type BuildToolDeployResult,
 } from "./buildToolHost.js";
 
@@ -47,10 +50,16 @@ export interface McpBuildContext {
    * still reports current state.
    */
   recordEnvRequest?: (req: { name: string; why?: string; secret?: boolean }) => Promise<void>;
-  /** Build + install the current workspace. Absent ⇒ deploy tool 503s. */
+  /** Build the workspace and run it as the private staging copy. Absent ⇒ deploy refuses. */
   deploy?: () => Promise<McpDeployResult>;
-  /** Recent logs for a deployed build. Absent ⇒ get_logs returns a hint. */
-  logs?: () => Promise<string>;
+  /** Request a path from the staging copy. */
+  checkApp?: (req: { path: string; method?: string; body?: string }) => Promise<BuildToolCheckResult>;
+  /** The staging copy's recent output; null when nothing is running. */
+  logs?: () => Promise<string | null>;
+  /** The IDE says the app works; the box seals the build and puts it live. */
+  finish?: () => Promise<{ ok: boolean; reason?: string }>;
+  /** True once sealed: tools and resources refuse. */
+  sealed?: () => boolean;
   /** Server software version string for serverInfo. */
   version?: string;
   /** Strips the owner's identity from box-written texts the IDE reads. */
@@ -94,7 +103,10 @@ export class McpBuildServer {
       mode: "mcp",
       ...(ctx.recordEnvRequest ? { recordEnvRequest: ctx.recordEnvRequest } : {}),
       ...(ctx.deploy ? { deploy: ctx.deploy } : {}),
+      ...(ctx.checkApp ? { checkApp: ctx.checkApp } : {}),
       ...(ctx.logs ? { logs: ctx.logs } : {}),
+      ...(ctx.finish ? { finish: ctx.finish } : {}),
+      ...(ctx.sealed ? { sealed: ctx.sealed } : {}),
       ...(ctx.redact ? { redact: ctx.redact } : {}),
     });
   }
@@ -143,13 +155,15 @@ export class McpBuildServer {
       capabilities: { tools: {}, resources: {} },
       serverInfo: { name: SERVER_NAME, version: this.ctx.version ?? "0.1.0" },
       instructions:
-        `This server builds ONE Flagship service (build id ${this.ctx.buildId}) on ${this.ctx.serverFqdn}. ` +
-        `Call get_contract first, then write_file the app, validate, and deploy.`,
+        `This server builds ONE Flagship service (build id ${this.ctx.buildId}). ` +
+        `Call get_contract first, then write_file the app, validate, deploy a private test copy, ` +
+        `test it with check_app and get_logs, and call finish when it works.`,
     };
   }
 
   private async readResource(params: unknown): Promise<unknown> {
     const uri = isObject(params) && typeof params.uri === "string" ? params.uri : "";
+    if (this.ctx.sealed?.()) throw new Error("this build is closed");
     if (uri === "flagship://contract") {
       return { contents: [{ uri, mimeType: "text/markdown", text: renderContractMarkdown() }] };
     }

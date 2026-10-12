@@ -37,6 +37,12 @@ export interface AppSummary {
   version?: string;
   /** Unix-ms; when the app was installed on this pod. */
   installedAt: number;
+  /**
+   * Internet hosts the manifest declares (`network.egress`) and the ones the
+   * owner's newest signed grant opened (always a subset of declared). Absent
+   * on boxes without the egress gateway.
+   */
+  egress?: { declared: string[]; approved: string[] };
 }
 
 export interface RecentInstallEvent {
@@ -175,6 +181,12 @@ export interface LlmProviderCredential {
   apiKey: string;
   /** Optional override base URL for an OpenAI-compatible / proxy endpoint. */
   baseUrl?: string;
+  /**
+   * Send this key's calls through the Flagship relay (the provider sees
+   * Flagship's address, not the box's). Absent ⇒ ON. Local endpoints are
+   * always direct.
+   */
+  relay?: boolean;
 }
 
 export type VibeCodeAttachment =
@@ -233,6 +245,8 @@ export interface VibeCodeStatusResponse {
     | "deployed"
     | "failed"
     | "cancelled";
+  /** While "deploying": "staging" | "fixing" (the AI fixing its test copy) | "going-live". */
+  deployPhase?: "staging" | "fixing" | "going-live";
   transcript: Array<{ role: "user" | "assistant"; content: string }>;
   files: Record<string, string>;
   deployedUrl?: string;
@@ -627,6 +641,8 @@ export interface VibeCodeSessionPublicState {
     | "deployed"
     | "failed"
     | "cancelled";
+  /** While "deploying": "staging" | "fixing" (the AI fixing its test copy) | "going-live". */
+  deployPhase?: "staging" | "fixing" | "going-live";
   messages: VibeCodeSessionMessage[];
   /** The tool the AI is waiting on, when status === "awaiting-tool-response". */
   pendingRequest?: VibeCodePendingRequest;

@@ -96,6 +96,14 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   list. Platform versions in the `swift-tools-version:5.9` manifests use the
   string form (`.iOS("18.0")`); `.v18` needs tools 6.0, which also flips on
   Swift 6 strict concurrency.
+- **An AI never learns who or where the owner is** (owner rule, 2026-10-12;
+  `docs/ai-privacy-and-staging.md`). Nothing a model (the box's own AI or an
+  IDE agent) reads may name the account, the server, the owner's other apps,
+  their address, time zone, locale or habits: keep it out of prompts, and
+  pass every box-written text a model reads back (tool results, errors,
+  logs) through `buildModelRedactor` (`server-daemon/src/llm/modelPrivacy.ts`).
+  An AI only ever works on a private staging copy with sample data, and a
+  live service is never attached to an AI session again.
 - **Unlaunched features live entirely on their own branch; `main` ships clean.**
   Every not-yet-launched feature — site literature, app code (iOS/Android/
   webapp), backend logic, AND tests — lives ONLY on its feature branch, so
@@ -175,6 +183,18 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   uploaded to R2 `flagship-iso/` with their manifests in
   `apps/web/public/downloads/`. They include the one-approval restart fix and
   per-provider AI model defaults. The July hand-built arm64 image is retired.
+
+- **AI privacy, staging and egress (2026-10-12).** The rule above is the
+  convention; the build is in progress. Done: identity removed from the chat
+  prompt, tool results/errors/logs redacted, `deploy` no longer tells the model
+  the live URL, sanitized journal (`610f31a0`); deploys fail when the app never
+  answers, and the AI is told the container's limits (`ce47d61b`). In
+  progress: staging copy + go-live + sealing (AI create, AI edit, chat
+  Deploy); the egress gateway (build sandbox → registries only, staging → no
+  internet, live apps → owner-approved `network.egress` hosts via a signed
+  `flagship/app-egress/v1` grant); the AI-provider relay through the hub
+  (per-key, on by default). Then the three apps (labels, progress, egress
+  approval, the per-key relay toggle).
 
 ### Built, waiting on deploys or rebuilds
 

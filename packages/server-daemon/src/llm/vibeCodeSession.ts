@@ -165,6 +165,12 @@ export interface VibeCodeSessionMeta {
    * new one: deploying replaces that service in place.
    */
   editsServiceId?: string;
+  /**
+   * While `status` is "deploying": the app's private test copy is starting
+   * ("staging"), the AI is fixing a copy that wouldn't start ("fixing"), or
+   * the box is putting it live ("going-live").
+   */
+  deployPhase?: "staging" | "fixing" | "going-live";
 }
 
 const FILE_BOUNDARY = /^===\s+(.+?)\s+===\s*$/;
@@ -656,6 +662,7 @@ export class VibeCodeSession extends EventEmitter {
     if (s.meta.status === "streaming" || s.meta.status === "deploying") {
       s.meta.status = "failed";
       s.meta.failureReason = INTERRUPTED_REASON;
+      delete s.meta.deployPhase;
     }
     return s;
   }
@@ -678,12 +685,32 @@ export class VibeCodeSession extends EventEmitter {
       return;
     }
     this.meta.status = "deployed";
+    delete this.meta.deployPhase;
     this.meta.serviceId = args.serviceId;
     this.meta.url = args.url;
     this.emit("event", { kind: "deployed", serviceId: args.serviceId, url: args.url } as VibeCodeEvent);
   }
 
+  /** The owner's Deploy is under way; `phase` says where (see `deployPhase`). */
+  markDeploying(phase: "staging" | "fixing" | "going-live"): void {
+    this.meta.status = "deploying";
+    this.meta.deployPhase = phase;
+    this.emit("event", {
+      kind: "phase",
+      phase: phase === "going-live" ? "deploy" : "build",
+      detail: phase,
+    } as VibeCodeEvent);
+    this.emit("persist");
+  }
+
+  /** Take on the files a staged deploy ended with (the AI fixed them on staging). */
+  adoptFiles(files: Record<string, string>): void {
+    this.parser.seed(files);
+    this.emit("persist");
+  }
+
   fail(message: string, recoverable = false): void {
+    delete this.meta.deployPhase;
     this.meta.status = "failed";
     this.meta.failureReason = message;
     this.emit("event", { kind: "error", message, recoverable } as VibeCodeEvent);

@@ -345,7 +345,15 @@ describe("AppRunner", () => {
       const rec = new RecordingRunner();
       const runner = new AppRunner(rec);
       await runner.ensureNetwork();
-      expect(rec.calls[0]!.args).toEqual(["network", "create", "flagship-apps"]);
+      expect(rec.calls[0]!.args).toEqual([
+        "network",
+        "create",
+        "--driver",
+        "bridge",
+        "-o",
+        "com.docker.network.bridge.name=fs-apps",
+        "flagship-apps",
+      ]);
 
       const throwing: CommandRunner = {
         async run() {
