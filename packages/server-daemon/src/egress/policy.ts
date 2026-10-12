@@ -3,11 +3,12 @@
  * address. Three docker bridges feed the box's egress gateway:
  *   build   (`flagship-build`)   → package registries only (BUILD_REGISTRY_HOSTS)
  *   staging (`flagship-staging`) → nothing
- *   apps    (`flagship-apps`)    → per app, only the hosts its owner approved
+ *   apps    (`flagship-apps`)    → per app, what the owner-signed access list allows
  * Anything else (an unknown source, a container the box doesn't know) gets
- * nothing. Pure: the gateway feeds it subnets, the container map and grants.
+ * nothing. Pure: the gateway feeds it subnets, the container map and lists.
  */
 import { isIP } from "node:net";
+import { decideAccess, type AccessRule } from "@flagship/protocol";
 
 export type EgressNetworkKind = "build" | "staging" | "apps";
 
@@ -165,8 +166,8 @@ export interface EgressPolicyState {
   subnets: Partial<Record<EgressNetworkKind, Ipv4Subnet[]>>;
   /** Container IP on flagship-apps → serviceId. */
   appByIp: ReadonlyMap<string, string>;
-  /** Effective hosts per serviceId (approved ∩ declared). */
-  approvedHosts: (serviceId: string) => readonly string[];
+  /** The owner-signed access rules of a live service ([] = everything denied). */
+  accessRules: (serviceId: string) => readonly AccessRule[];
 }
 
 export function classifySource(state: EgressPolicyState, ip: string): EgressSource {
@@ -183,7 +184,13 @@ export function classifySource(state: EgressPolicyState, ip: string): EgressSour
 
 export type EgressDecision =
   | { allow: true; who: string }
-  | { allow: false; who: string; why: string };
+  | {
+      allow: false;
+      who: string;
+      why: string;
+      /** Set when a live app was denied because no rule in its list matched (not an explicit deny). */
+      unmatched?: { serviceId: string; host: string };
+    };
 
 export function decide(state: EgressPolicyState, srcIp: string, rawHost: string): EgressDecision {
   const src = classifySource(state, srcIp);
@@ -199,17 +206,17 @@ export function decide(state: EgressPolicyState, srcIp: string, rawHost: string)
       return { allow: false, who, why: "staging has no internet" };
     case "apps": {
       if (!src.serviceId) return { allow: false, who, why: "unknown app container" };
-      return hostAllowed(state.approvedHosts(src.serviceId), host)
-        ? { allow: true, who }
-        : { allow: false, who, why: "the owner has not approved this host" };
+      const d = decideAccess(state.accessRules(src.serviceId), host);
+      if (d.result === "allow") return { allow: true, who };
+      if (d.rule !== null) return { allow: false, who, why: "the app's access list denies this host" };
+      return {
+        allow: false,
+        who,
+        why: "no rule in the app's access list allows this host",
+        unmatched: { serviceId: src.serviceId, host },
+      };
     }
     default:
       return { allow: false, who, why: "not a Flagship container" };
   }
-}
-
-/** Approved hosts that the current manifest still declares (exact entries). */
-export function effectiveHosts(declared: readonly string[], approved: readonly string[]): string[] {
-  const d = new Set(declared);
-  return approved.filter((h) => d.has(h));
 }

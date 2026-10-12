@@ -5,36 +5,49 @@
  * builds the screens-API handler. FLAGSHIP_EGRESS=off turns it all off and
  * removes the firewall rules (the old, unfenced behaviour).
  */
-import type { AdminGrantView, AppEgressGrant } from "@flagship/protocol";
+import type { AdminGrantView } from "@flagship/protocol";
 import type { CommandRunner } from "../serviceRunner.js";
 import type { SwkOps } from "../keyCustodian.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
-import { AppEgressStore, authorizeEgressGrant, buildAppEgressHttp, egressView, type EgressView } from "./approvals.js";
+import { buildAccessRequestRecorder, type AccessAlertSinks } from "./accessAlerts.js";
+import { AppAccessStore } from "./accessStore.js";
+import {
+  accessAuthorizer,
+  accessSummary,
+  buildAppAccessHttp,
+  egressView,
+  type AccessSummary,
+  type EgressView,
+} from "./approvals.js";
 import { EgressGateway, disableEgress, type EgressStatus } from "./gateway.js";
-import { effectiveHosts } from "./policy.js";
 import { setContainersChangedHook } from "./sandboxNetworking.js";
 
 export interface EgressRuntime {
   status(): EgressStatus;
-  /** For the screens API: the signed endpoint and the list/detail view. */
+  /** For the screens API: the signed endpoints and the views the apps list and detail carry. */
   appEgress: {
     handle: (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null>;
     view: (serviceId: string, declared: readonly string[]) => EgressView;
+    access: (serviceId: string) => AccessSummary;
   } | null;
-  /** Drop approvals of services that are no longer installed. */
+  /** Drop the lists and requests of services that are no longer installed. */
   pruneUninstalled(): Promise<void>;
+  /** A service was installed or updated: its declared hosts become requests. */
+  noteInstalled(serviceId: string, declared: readonly string[]): Promise<void>;
+  /** Where access-request alerts go (push + screens socket); set once the daemon has them. */
+  setAccessAlerts(sinks: AccessAlertSinks): void;
 }
 
 export interface BootEgressOptions {
   cmd: CommandRunner;
-  /** `<dataDir>/data/app-egress.sealed` holds the approvals. */
+  /** `<dataDir>/data/app-access.sealed` holds the lists (migrated from `app-egress.sealed`). */
   dataDir?: string;
   swk?: Pick<SwkOps, "sealWithSwk" | "openWithSwk">;
   serverDomain: string;
-  /** Present when the box knows its owner (else no approvals can verify). */
+  /** Present when the box knows its owner (else no list can verify). */
   owner?: { username: string; irkPub: Uint8Array; adminRootPub?: Uint8Array; activeGrants?: readonly AdminGrantView[] };
-  /** Declared egress hosts of an installed service, null when not installed. */
-  declared: (serviceId: string) => string[] | null;
+  /** An installed service's name and declared `network.egress` hosts; null when not installed. */
+  app: (serviceId: string) => { name: string; declared: string[] } | null;
   env?: NodeJS.ProcessEnv;
   log?: (m: string) => void;
   /** How long to wait for dockerd. Default 60 s. */
@@ -61,27 +74,46 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
   const env = opts.env ?? process.env;
   if ((env.FLAGSHIP_EGRESS ?? "").toLowerCase() === "off") {
     await disableEgress(opts.cmd, log).catch(() => {});
-    return { status: () => ({ enforced: false, reason: "FLAGSHIP_EGRESS=off" }), appEgress: null, pruneUninstalled: async () => {} };
+    return {
+      status: () => ({ enforced: false, reason: "FLAGSHIP_EGRESS=off" }),
+      appEgress: null,
+      pruneUninstalled: async () => {},
+      noteInstalled: async () => {},
+      setAccessAlerts: () => {},
+    };
   }
 
-  const store = new AppEgressStore(
-    opts.dataDir && opts.swk ? `${opts.dataDir}/data/app-egress.sealed` : null,
-    opts.swk ?? null,
-  );
+  const persist = opts.dataDir && opts.swk;
+  const store = new AppAccessStore(persist ? `${opts.dataDir}/data/app-access.sealed` : null, opts.swk ?? null, {
+    legacyPath: persist ? `${opts.dataDir}/data/app-egress.sealed` : null,
+  });
   const owner = opts.owner;
-  if (owner) {
-    const authority = { ownerIrkPub: owner.irkPub, adminRootPub: owner.adminRootPub, username: owner.username, activeGrants: owner.activeGrants };
+  const authority = owner
+    ? { ownerIrkPub: owner.irkPub, username: owner.username, ...(owner.adminRootPub ? { adminRootPub: owner.adminRootPub } : {}), ...(owner.activeGrants ? { activeGrants: owner.activeGrants } : {}) }
+    : null;
+  if (authority) {
     try {
-      const dropped = await store.load((g: AppEgressGrant, sig: Uint8Array) => authorizeEgressGrant(authority, g, sig));
-      if (dropped > 0) log(`[egress] dropped ${dropped} app approval(s) that no longer verify`);
+      const { dropped, migrated } = await store.load(accessAuthorizer(authority), opts.serverDomain);
+      if (migrated > 0) log(`[egress] moved ${migrated} app approval(s) to access lists`);
+      if (dropped > 0) log(`[egress] dropped ${dropped} app access list(s) that no longer verify`);
     } catch (e) {
-      log(`[egress] could not read app approvals (${(e as Error).message}); every app starts with no internet`);
+      log(`[egress] could not read app access lists (${(e as Error).message}); every app starts with no internet`);
     }
   }
-  const approvedHosts = (serviceId: string): string[] =>
-    effectiveHosts(opts.declared(serviceId) ?? [], store.approvedHosts(serviceId));
 
-  const gateway = new EgressGateway({ cmd: opts.cmd, approvedHosts, log });
+  let sinks: AccessAlertSinks = {};
+  const recorder = buildAccessRequestRecorder({
+    store,
+    appName: (id) => opts.app(id)?.name ?? null,
+    sinks: () => sinks,
+    log,
+  });
+  const gateway = new EgressGateway({
+    cmd: opts.cmd,
+    accessRules: (id) => (opts.app(id) ? store.rules(id) : []),
+    onUnmatched: (id, host) => recorder.onUnmatched(id, host),
+    log,
+  });
   if (await waitForDocker(opts.cmd, opts.dockerWaitMs ?? 60_000)) {
     await gateway.start();
   } else {
@@ -93,22 +125,21 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
     t.unref?.();
   }
 
-  const appEgress = owner
+  const appEgress = authority
     ? {
-        handle: buildAppEgressHttp({
+        handle: buildAppAccessHttp({
+          ...authority,
           serverDomain: opts.serverDomain,
-          username: owner.username,
-          ownerIrkPub: owner.irkPub,
-          ...(owner.adminRootPub ? { adminRootPub: owner.adminRootPub } : {}),
-          ...(owner.activeGrants ? { activeGrants: owner.activeGrants } : {}),
           store,
-          declared: opts.declared,
+          app: opts.app,
           onChange: (id) => {
             const cut = gateway.recheck();
-            log(`[egress] ${id} may now reach: ${approvedHosts(id).join(", ") || "nothing"}${cut ? ` (closed ${cut} connection(s))` : ""}`);
+            const rules = store.rules(id);
+            log(`[egress] ${id} access list now has ${rules.length} rule(s)${cut ? ` (closed ${cut} connection(s))` : ""}`);
           },
         }),
         view: (serviceId: string, declared: readonly string[]) => egressView(store, serviceId, declared),
+        access: (serviceId: string) => accessSummary(store, serviceId),
       }
     : null;
 
@@ -117,8 +148,15 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
     appEgress,
     pruneUninstalled: async () => {
       for (const id of store.serviceIds()) {
-        if (opts.declared(id) === null) await store.forget(id).catch(() => {});
+        if (opts.app(id) === null) await store.forget(id).catch(() => {});
       }
+      gateway.recheck();
+    },
+    noteInstalled: async (serviceId, declared) => {
+      await recorder.onDeclared(serviceId, declared).catch(() => {});
+    },
+    setAccessAlerts: (s) => {
+      sinks = s;
     },
   };
 }

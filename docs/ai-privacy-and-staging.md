@@ -80,11 +80,12 @@ path's Deploy runs the same staged loop with the chat's files.
   gcr.io), because dockerd fetches those from the host network.
 - **Staging** (`flagship-staging`): no internet at all; only its dev data
   stores on the host gateway.
-- **Live apps** (`flagship-apps`): no internet by default. An app reaches only
-  the hosts its manifest declares in `network.egress`, and only after the
-  owner approves them with a signed grant (`flagship/app-egress/v1`, sensitive
-  order key; consent is the signature the box verifies, never a boolean).
-  Enforced by the box's egress gateway (TLS SNI and HTTP Host allowlists, a
+- **Live apps** (`flagship-apps`): no internet by default. What an app may
+  reach is its owner-signed access list (§3a, stored sealed in
+  `app-access.sealed`); `network.egress` hosts only become requests the owner
+  answers. The older `flagship/app-egress/v1` grant is still accepted and
+  becomes `allow` lines. Consent is the signature the box verifies, never a
+  boolean. Enforced by the box's egress gateway (TLS SNI and HTTP Host allowlists, a
   filtering DNS) plus firewall rules that drop everything else from the app
   bridges.
 
@@ -147,6 +148,90 @@ to `/api/screens/services/<serviceId>/egress`. Hosts must be a subset of
 (bad signature, other server, `issuedAt` more than 10 min off), 400 (malformed,
 other service), 409 (not newer than the applied grant) or 422 (undeclared
 host). Golden vector: `packages/protocol/tests/appEgress.test.ts`.
+
+## 3a. App access lists (which hosts a live app may reach)
+
+Supersedes the all-or-nothing `network.egress` approval for live apps (the v1
+`flagship/app-egress/v1` grant is still accepted and becomes `allow` lines).
+
+**The file.** One rule per line, the allow/deny convention of nginx and
+Apache, checked top to bottom: the first rule that matches decides, and a host
+no rule matches is denied.
+
+```
+# weather app
+allow api.open-meteo.com
+allow *.tile.openstreetmap.org   # any subdomain, not the bare domain
+deny  ads.example.com
+allow all                        # or: deny all (the same as the default)
+```
+
+- `allow` / `deny` (any case), then one target: `all`, a host, or `*.` + a
+  host. Hosts are lowercased. No schemes, paths, ports, IP addresses,
+  `localhost`, or `*` anywhere but the start. `#` starts a comment.
+- At most 200 rules. Errors name the line and say how to fix it.
+- The text is normalized before it is hashed or signed: `\r\n` and `\r` become
+  `\n`, trailing spaces go, trailing blank lines go, and a non-empty list ends
+  in one `\n`.
+- An app starts with this list (`defaultList` in the vectors), which denies
+  everything and shows how to open it up; Allow and Deny add rules above it,
+  so these lines stay last:
+  ```
+  # Uncomment the following line to allow all hosts
+  #allow all
+  ```
+- `packages/protocol/test-vectors/app-access/vectors.json` is the reference.
+  Every platform's normalizer, parser (exact error texts), matcher, editor
+  (`withRule`) and signer must pass it.
+
+**Authority.** The box enforces only a list the owner signed:
+`flagship/app-access/v1|<serverDomain>|<serviceId>|<sha256 hex of the normalized list>|<issuedAt ms>`,
+signed by the sensitive-order key (admin root when held, else the owner IRK),
+sent with the list text. The box checks the signature, the hash, that the text
+is already normalized and parses cleanly, that `serverDomain` is its own, and
+that `issuedAt` is within 10 minutes and newer than the list it holds.
+
+**Alerts.** When the egress gateway denies an app a host because **no rule
+matched** (an explicit `deny` is the owner's answer and stays quiet), the box
+records a request `{host, attempts, firstSeen, lastSeen}`. Hosts in the
+manifest's `network.egress` become requests at install (source "app"). The box
+pushes at most one alert per app and host per day and five per hour, through
+`/api/push/relay`, category `app-access`. The OS-visible text is generic ("One
+of your apps wants to reach the internet"). The phone fetches the details from
+the box over the paired session, so neither Flagship nor Apple or Google learns
+which app or host. An open app also gets an `access-request` event on the
+screens socket.
+
+**Answering.** The alert shows "<App> wants to reach <host>" with **Allow**,
+**Deny** and **Not now**. Allow or Deny edits the list with `withRule`: drop
+any rule for exactly that host, then put the new one on top so it decides.
+Then Face ID, sign, send, and confirm: "<App> can now reach <host>" (or "won't
+reach") with **Close** and **View access list**. Not now keeps the request and hides it for 24 hours on that device;
+Ignore (on the service page) dismisses it without changing the list.
+
+**The service page.** An "Internet access" section shows the rule count, the
+pending requests (Allow / Deny each), and View access list. The list opens in
+an editor that parses as you type and shows each error by line. Save stays off
+while there are errors, then asks for Face ID and sends the signed order.
+
+**Box API** (paired session; companion sessions are read-only):
+- `GET /api/screens/services/:id/access` returns
+  `{list, listSha256, pending:[{host, source:"attempt"|"app", attempts, firstSeen, lastSeen}]}`.
+- `POST /api/screens/services/:id/access` takes
+  `{list, grant:{serverDomain, serviceId, listSha256, issuedAt}, signature}`.
+  It returns 200 `{ok, access}`, 400 `{error, errors:[{line, message}]}`, 403,
+  404 or 409.
+- `POST /api/screens/services/:id/access/dismiss` takes `{host}`. It needs no
+  signature, because it changes nothing the app can reach.
+- `GET /api/screens/events?sessionToken=<paired session token>` (WebSocket):
+  the box sends `{"type":"access-request","serviceId":"…"}` when a new
+  request is recorded; the apps then fetch the requests. Companion sessions
+  may listen.
+- `GET /api/screens/access-requests` returns `{requests:[{serviceId, appName, host, source, attempts, firstSeen, lastSeen}]}`.
+- App summaries carry `access: {rules, pending}`.
+
+**Not involved:** Studio (no app UI, and it never holds the owner key), the
+hub (unchanged). `.com` learns the `app-access` push category only.
 
 ## 4. AI provider relay
 

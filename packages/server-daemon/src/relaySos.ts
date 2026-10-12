@@ -23,7 +23,7 @@
  * Best-effort + never throws: a `.com` outage just means the wake didn't fire.
  */
 
-import { canonicalPushRelayRequest, type PushRelayRequest } from "@flagship/protocol";
+import { canonicalPushRelayRequest, type PushRelayCategory, type PushRelayRequest } from "@flagship/protocol";
 import type { BoxSigner } from "./keyCustodian.js";
 
 function bytesToHex(b: Uint8Array): string {
@@ -58,16 +58,30 @@ const MARKER_PAYLOAD_HEX = "00".repeat(32);
  * POST one STK-signed `flagship/push-relay/v1` trust alert. Returns whether
  * `.com` accepted it (best-effort; never throws).
  */
-export async function sendRelayTrustAlert(
-  opts: SendRelayTrustAlertOptions,
-): Promise<boolean> {
+export function sendRelayTrustAlert(opts: SendRelayTrustAlertOptions): Promise<boolean> {
+  return sendPushRelay({ ...opts, category: "cert-alert", logTag: "[relay-trust] SOS push relay" });
+}
+
+export interface SendPushRelayOptions extends SendRelayTrustAlertOptions {
+  category: PushRelayCategory;
+  /** Prefix of the log lines. */
+  logTag?: string;
+}
+
+/**
+ * POST one STK-signed push relay of any category. Only the category and the
+ * (sealed or marker) payload leave the box; `.com` fans it out to the
+ * owner's push tokens. Best-effort; never throws.
+ */
+export async function sendPushRelay(opts: SendPushRelayOptions): Promise<boolean> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const now = opts.now ?? (() => Date.now());
   const log = opts.log ?? (() => {});
+  const tag = opts.logTag ?? `[push-relay] ${opts.category}`;
 
   const request: PushRelayRequest = {
     targetUsername: opts.targetUsername,
-    category: "cert-alert",
+    category: opts.category,
     sealedPayloadHex: opts.sealedPayloadHex ?? MARKER_PAYLOAD_HEX,
     issuedAt: now(),
   };
@@ -91,13 +105,13 @@ export async function sendRelayTrustAlert(
       }),
     });
     if (!res.ok) {
-      log(`[relay-trust] SOS push relay ${res.status}`);
+      log(`${tag} ${res.status}`);
       return false;
     }
-    log("[relay-trust] SOS push relay accepted (category=cert-alert)");
+    log(`${tag} accepted (category=${request.category})`);
     return true;
   } catch (e) {
-    log(`[relay-trust] SOS push relay failed: ${e instanceof Error ? e.message : String(e)}`);
+    log(`${tag} failed: ${e instanceof Error ? e.message : String(e)}`);
     return false;
   }
 }

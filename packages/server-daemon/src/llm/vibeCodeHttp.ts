@@ -24,7 +24,10 @@
  *       frees its name.
  *     → { ok: true }
  *
- *   POST /api/llm/sessions/<id>/deploy   body: { background?: boolean }
+ *   POST /api/llm/sessions/<id>/deploy   body: { background?: boolean, credential? }
+ *     → `credential` (optional, the BYOK shape incl. `relay`) replaces the
+ *       session's stored AI key before the staged loop runs, so a retry uses
+ *       the owner's current setting (e.g. the relay turned off).
  *     → stages the session's files as a private test copy (the session's AI
  *       may fix a copy that won't start), seals the session, then installs
  *       the tested image; returns { ok: true, serviceId, url } once live.
@@ -41,6 +44,7 @@
 import type { PairedSessionGate } from "../alertInboxHttp.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { AppEnvStore } from "../serviceEnvStore.js";
+import { parseCredentialField, type BuildCredentialStore } from "./buildCredentialStore.js";
 import {
   looksLikePastedSecret,
   type EnvVarAckPayload,
@@ -103,6 +107,10 @@ export interface VibeCodeHttpDeps {
     text: string;
     attachmentSummaries: string[];
   }) => void;
+  /** Where a deploy's refreshed AI key is sealed (keyed by session id, like the start path). */
+  credentials?: Pick<BuildCredentialStore, "put"> | null;
+  /** Value-free journal hook: a deploy replaced the session's AI key (provider name and relay setting only). */
+  onCredentialReplaced?: (args: { sessionId: string; provider: string; relay: boolean }) => void;
 }
 
 const J = { "content-type": "application/json" } as const;
@@ -283,7 +291,18 @@ export function buildVibeCodeHttpHandlers(deps: VibeCodeHttpDeps) {
         return jerr(409, "cannot deploy while awaiting a tool response");
       }
       if (session.meta.status === "deploying") return jerr(409, "already deploying");
-      const body = parseJson(req.body) as { background?: boolean } | null;
+      const body = parseJson(req.body) as { background?: boolean; credential?: unknown } | null;
+      const cred = parseCredentialField(body?.credential);
+      if (cred === "invalid") return jerr(400, "malformed credential");
+      if (cred) {
+        if (!deps.credentials) return jerr(503, "this server can't store an AI key");
+        try {
+          await deps.credentials.put(session.meta.sessionId, cred);
+        } catch {
+          return jerr(500, "failed to store credential");
+        }
+        deps.onCredentialReplaced?.({ sessionId: session.meta.sessionId, provider: cred.provider, relay: cred.relay !== false });
+      }
       session.markDeploying("staging");
       const run = deps.deploySession(session, { onPhase: (phase) => session.markDeploying(phase) }).then(
         (r) => {

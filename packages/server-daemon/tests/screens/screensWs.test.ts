@@ -7,6 +7,7 @@ import { VibeCodeSessionRegistry } from "../../src/llm/vibeCodeSession.js";
 import { BrowserManager } from "../../src/browser/browserManager.js";
 import { TabRegistry } from "../../src/browser/tabRegistry.js";
 import { FakeCdpServer } from "../browser/fakeCdpServer.js";
+import { ScreensEventBus } from "../../src/screens/screensEvents.js";
 import type { HttpRequest, HttpResponse, UpgradeRequest } from "../../src/runtime.js";
 
 // ---------- extractPairedSessionToken ----------
@@ -382,5 +383,41 @@ describe("screensWs — browser-tabs/:tabId/stream (P1.11)", () => {
     await browser.stop();
     tabRegistry.stop();
     await cdp.stop();
+  });
+});
+
+describe("screensWs — /api/screens/events", () => {
+  const statusOf = (ws: WebSocket) =>
+    new Promise<number>((resolve) => {
+      ws.once("unexpected-response", (_req, res) => {
+        resolve(res.statusCode ?? -1);
+        res.resume();
+      });
+      ws.once("error", () => resolve(-2));
+    });
+
+  it("401 without a paired session, 503 without a bus", async () => {
+    const gate = new FakeGate(new Set(["good-tok"]));
+    const a = await startTcpServer(buildScreensUpgradeHandler({ gate, events: new ScreensEventBus() }));
+    expect(await statusOf(connect(a.port, "/api/screens/events?sessionToken=bad"))).toBe(401);
+    const b = await startTcpServer(buildScreensUpgradeHandler({ gate }));
+    expect(await statusOf(connect(b.port, "/api/screens/events?sessionToken=good-tok"))).toBe(503);
+  });
+
+  it("sends each access-request event as one JSON frame and unsubscribes on close", async () => {
+    const bus = new ScreensEventBus();
+    const server = await startTcpServer(buildScreensUpgradeHandler({ gate: new FakeGate(new Set(["good-tok"])), events: bus }));
+    const ws = connect(server.port, "/api/screens/events?sessionToken=good-tok");
+    await new Promise<void>((resolve, reject) => {
+      ws.once("open", resolve);
+      ws.once("error", reject);
+    });
+    const frame = new Promise<unknown>((resolve) => ws.once("message", (d) => resolve(JSON.parse(String(d)))));
+    bus.publish({ type: "access-request", serviceId: "alice-weather" });
+    expect(await frame).toEqual({ type: "access-request", serviceId: "alice-weather" });
+    expect(bus.subscriberCount).toBe(1);
+    ws.close();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(bus.subscriberCount).toBe(0);
   });
 });

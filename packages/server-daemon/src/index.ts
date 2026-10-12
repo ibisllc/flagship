@@ -17,7 +17,7 @@ import {
 import { buildAdminProxyHandler } from "./adminProxy.js";
 import { startDaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
 import { makeRelayTrustExceptionResolver } from "./relayTrustExceptions.js";
-import { sendRelayTrustAlert } from "./relaySos.js";
+import { sendPushRelay, sendRelayTrustAlert } from "./relaySos.js";
 import type { RelayLockdownController } from "./relayLockdown.js";
 import { BackupLoop } from "./backupLoop.js";
 import { RepairScheduler } from "./peerBackup/repairScheduler.js";
@@ -104,6 +104,7 @@ import {
 import { buildRunMigration } from "./runMigration.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
 import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
+import { ScreensEventBus } from "./screens/screensEvents.js";
 import { readServiceSource } from "./llm/serviceSource.js";
 import type { EditableService } from "./buildmodes/buildOrchestrator.js";
 import { VibeCodeSessionRegistry, fileVibeCodeSessionStore, type VibeCodeSession } from "./llm/vibeCodeSession.js";
@@ -2224,6 +2225,17 @@ async function wireRuntimeSurfaces(deps: {
     serverFqdn: env.serverFqdn,
     deploySession,
     recordScratchTurn,
+    credentials: llmCredentials,
+    onCredentialReplaced: ({ sessionId, provider, relay }) => {
+      void buildJournal
+        .append(sessionId, {
+          mode: "scratch",
+          kind: "build-phase",
+          actor: "owner",
+          summary: `the deploy uses a new AI key (${provider}, relay ${relay ? "on" : "off"})`,
+        })
+        .catch(() => {});
+    },
     // Resume-after-reply is wired below where the streaming thunks are built
     // (the screens BFF reply path carries it); see `vibeCode.resumeStreaming`.
     // The legacy /api/llm/sessions surface is not the phone's path.
@@ -2498,6 +2510,28 @@ async function wireRuntimeSurfaces(deps: {
     ? buildVibeCodeResumeStreaming(vibeStreamArgs)
     : undefined;
 
+  // Access requests (docs/ai-privacy-and-staging.md §3a): a new one reaches
+  // an open owner app on the screens socket, and wakes the phone through
+  // .com's push relay with nothing about which app or host.
+  const screensEvents = new ScreensEventBus();
+  const accessPushCfg = cfg;
+  runtime.egress.setAccessAlerts({
+    emit: (e) => screensEvents.publish(e),
+    ...(accessPushCfg
+      ? {
+          push: () =>
+            sendPushRelay({
+              category: "app-access",
+              targetUsername: accessPushCfg.userId,
+              signer: custodian,
+              controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+              logTag: "[egress] access alert push",
+              log: (l) => console.log(l),
+            }),
+        }
+      : {}),
+  });
+
   const screensHandle = buildScreensHttp({
     gate: pairedSessions,
     appEgress: runtime.egress.appEgress,
@@ -2613,6 +2647,7 @@ async function wireRuntimeSurfaces(deps: {
       vibeCodeRegistry: deploySession ? vibeRegistry : null,
       browser: browserBundle?.browser ?? null,
       tabRegistry: browserBundle?.tabRegistry ?? null,
+      events: screensEvents,
     }),
   );
   console.log(`[daemon] /api/screens/* + /api/llm/sessions handlers mounted`);

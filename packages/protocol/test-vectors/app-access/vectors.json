@@ -1,0 +1,358 @@
+{
+  "about": "Flagship access list (docs/ai-privacy-and-staging.md §3a). Every platform's parser, matcher, editor and signer must pass every case here. In decide cases, \"rule\" is the 1-based position among the parsed rules (comments and blank lines don't count), null when the default deny applied. A new app's list is defaultList.",
+  "defaultList": "# Uncomment the following line to allow all hosts\n#allow all\n",
+  "normalize": [
+    {
+      "in": "allow a.com\r\ndeny all\r\n",
+      "out": "allow a.com\ndeny all\n"
+    },
+    {
+      "in": "allow a.com   \n\n\ndeny all",
+      "out": "allow a.com\n\n\ndeny all\n"
+    },
+    {
+      "in": "allow a.com\n\n\n",
+      "out": "allow a.com\n"
+    },
+    {
+      "in": "",
+      "out": ""
+    },
+    {
+      "in": "\n\n",
+      "out": ""
+    },
+    {
+      "in": "allow a.com\t \ndeny all",
+      "out": "allow a.com\ndeny all\n"
+    }
+  ],
+  "parse": [
+    {
+      "list": "# weather app\nallow api.open-meteo.com\nallow *.tile.openstreetmap.org  # map tiles\ndeny all\n",
+      "rules": [
+        {
+          "line": 2,
+          "action": "allow",
+          "target": "api.open-meteo.com"
+        },
+        {
+          "line": 3,
+          "action": "allow",
+          "target": "*.tile.openstreetmap.org"
+        },
+        {
+          "line": 4,
+          "action": "deny",
+          "target": "all"
+        }
+      ]
+    },
+    {
+      "list": "ALLOW Example.COM\nDeny ALL\n",
+      "rules": [
+        {
+          "line": 1,
+          "action": "allow",
+          "target": "example.com"
+        },
+        {
+          "line": 2,
+          "action": "deny",
+          "target": "all"
+        }
+      ]
+    },
+    {
+      "list": "permit example.com\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "start the line with \"allow\" or \"deny\""
+        }
+      ]
+    },
+    {
+      "list": "allow\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "say what to allow or deny, e.g. \"allow example.com\""
+        }
+      ]
+    },
+    {
+      "list": "allow a.com b.com\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "one host per line"
+        }
+      ]
+    },
+    {
+      "list": "allow https://a.com\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "write the host only, without http:// or https://"
+        }
+      ]
+    },
+    {
+      "list": "allow a.com/path\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "write the host only, without a path"
+        }
+      ]
+    },
+    {
+      "list": "allow a.com:443\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "write the host only, without a port"
+        }
+      ]
+    },
+    {
+      "list": "allow 93.184.215.14\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "IP addresses can't be allowed or denied; use a host name"
+        }
+      ]
+    },
+    {
+      "list": "allow *\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "write \"all\" instead of \"*\""
+        }
+      ]
+    },
+    {
+      "list": "allow api.*.com\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "a * may only start a host, as in *.example.com"
+        }
+      ]
+    },
+    {
+      "list": "allow localhost\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "\"localhost\" is not a public host name"
+        }
+      ]
+    },
+    {
+      "list": "allow -bad.com\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "\"-bad.com\" is not a valid host name"
+        }
+      ]
+    },
+    {
+      "list": "allow good.com\ndeny\nallow x..com\n",
+      "errors": [
+        {
+          "line": 2,
+          "message": "say what to allow or deny, e.g. \"allow example.com\""
+        },
+        {
+          "line": 3,
+          "message": "\"x..com\" is not a valid host name"
+        }
+      ]
+    },
+    {
+      "list": "# Uncomment the following line to allow all hosts\n#allow all\n",
+      "rules": []
+    },
+    {
+      "list": "allow h1.example.com\nallow h2.example.com\nallow h3.example.com\nallow h4.example.com\nallow h5.example.com\nallow h6.example.com\nallow h7.example.com\nallow h8.example.com\nallow h9.example.com\nallow h10.example.com\nallow h11.example.com\nallow h12.example.com\nallow h13.example.com\nallow h14.example.com\nallow h15.example.com\nallow h16.example.com\nallow h17.example.com\nallow h18.example.com\nallow h19.example.com\nallow h20.example.com\nallow h21.example.com\nallow h22.example.com\nallow h23.example.com\nallow h24.example.com\nallow h25.example.com\nallow h26.example.com\nallow h27.example.com\nallow h28.example.com\nallow h29.example.com\nallow h30.example.com\nallow h31.example.com\nallow h32.example.com\nallow h33.example.com\nallow h34.example.com\nallow h35.example.com\nallow h36.example.com\nallow h37.example.com\nallow h38.example.com\nallow h39.example.com\nallow h40.example.com\nallow h41.example.com\nallow h42.example.com\nallow h43.example.com\nallow h44.example.com\nallow h45.example.com\nallow h46.example.com\nallow h47.example.com\nallow h48.example.com\nallow h49.example.com\nallow h50.example.com\nallow h51.example.com\nallow h52.example.com\nallow h53.example.com\nallow h54.example.com\nallow h55.example.com\nallow h56.example.com\nallow h57.example.com\nallow h58.example.com\nallow h59.example.com\nallow h60.example.com\nallow h61.example.com\nallow h62.example.com\nallow h63.example.com\nallow h64.example.com\nallow h65.example.com\nallow h66.example.com\nallow h67.example.com\nallow h68.example.com\nallow h69.example.com\nallow h70.example.com\nallow h71.example.com\nallow h72.example.com\nallow h73.example.com\nallow h74.example.com\nallow h75.example.com\nallow h76.example.com\nallow h77.example.com\nallow h78.example.com\nallow h79.example.com\nallow h80.example.com\nallow h81.example.com\nallow h82.example.com\nallow h83.example.com\nallow h84.example.com\nallow h85.example.com\nallow h86.example.com\nallow h87.example.com\nallow h88.example.com\nallow h89.example.com\nallow h90.example.com\nallow h91.example.com\nallow h92.example.com\nallow h93.example.com\nallow h94.example.com\nallow h95.example.com\nallow h96.example.com\nallow h97.example.com\nallow h98.example.com\nallow h99.example.com\nallow h100.example.com\nallow h101.example.com\nallow h102.example.com\nallow h103.example.com\nallow h104.example.com\nallow h105.example.com\nallow h106.example.com\nallow h107.example.com\nallow h108.example.com\nallow h109.example.com\nallow h110.example.com\nallow h111.example.com\nallow h112.example.com\nallow h113.example.com\nallow h114.example.com\nallow h115.example.com\nallow h116.example.com\nallow h117.example.com\nallow h118.example.com\nallow h119.example.com\nallow h120.example.com\nallow h121.example.com\nallow h122.example.com\nallow h123.example.com\nallow h124.example.com\nallow h125.example.com\nallow h126.example.com\nallow h127.example.com\nallow h128.example.com\nallow h129.example.com\nallow h130.example.com\nallow h131.example.com\nallow h132.example.com\nallow h133.example.com\nallow h134.example.com\nallow h135.example.com\nallow h136.example.com\nallow h137.example.com\nallow h138.example.com\nallow h139.example.com\nallow h140.example.com\nallow h141.example.com\nallow h142.example.com\nallow h143.example.com\nallow h144.example.com\nallow h145.example.com\nallow h146.example.com\nallow h147.example.com\nallow h148.example.com\nallow h149.example.com\nallow h150.example.com\nallow h151.example.com\nallow h152.example.com\nallow h153.example.com\nallow h154.example.com\nallow h155.example.com\nallow h156.example.com\nallow h157.example.com\nallow h158.example.com\nallow h159.example.com\nallow h160.example.com\nallow h161.example.com\nallow h162.example.com\nallow h163.example.com\nallow h164.example.com\nallow h165.example.com\nallow h166.example.com\nallow h167.example.com\nallow h168.example.com\nallow h169.example.com\nallow h170.example.com\nallow h171.example.com\nallow h172.example.com\nallow h173.example.com\nallow h174.example.com\nallow h175.example.com\nallow h176.example.com\nallow h177.example.com\nallow h178.example.com\nallow h179.example.com\nallow h180.example.com\nallow h181.example.com\nallow h182.example.com\nallow h183.example.com\nallow h184.example.com\nallow h185.example.com\nallow h186.example.com\nallow h187.example.com\nallow h188.example.com\nallow h189.example.com\nallow h190.example.com\nallow h191.example.com\nallow h192.example.com\nallow h193.example.com\nallow h194.example.com\nallow h195.example.com\nallow h196.example.com\nallow h197.example.com\nallow h198.example.com\nallow h199.example.com\nallow h200.example.com\nallow h201.example.com\n",
+      "errors": [
+        {
+          "line": 201,
+          "message": "an access list can have at most 200 rules"
+        }
+      ]
+    },
+    {
+      "list": "allow 2001:db8::1\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "IP addresses can't be allowed or denied; use a host name"
+        }
+      ]
+    },
+    {
+      "list": "allow [2001:db8::1]\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "IP addresses can't be allowed or denied; use a host name"
+        }
+      ]
+    },
+    {
+      "list": "allow *.localhost\n",
+      "errors": [
+        {
+          "line": 1,
+          "message": "\"localhost\" is not a public host name"
+        }
+      ]
+    },
+    {
+      "list": "allow example.com.\n",
+      "rules": [
+        {
+          "line": 1,
+          "action": "allow",
+          "target": "example.com"
+        }
+      ]
+    },
+    {
+      "list": "allow\texample.com\n",
+      "rules": [
+        {
+          "line": 1,
+          "action": "allow",
+          "target": "example.com"
+        }
+      ]
+    }
+  ],
+  "decide": [
+    {
+      "list": "allow *.google.com\ndeny all\n",
+      "host": "mail.google.com",
+      "result": "allow",
+      "rule": 1
+    },
+    {
+      "list": "allow *.google.com\ndeny all\n",
+      "host": "google.com",
+      "result": "deny",
+      "rule": 2
+    },
+    {
+      "list": "deny dell.com\nallow all\n",
+      "host": "dell.com",
+      "result": "deny",
+      "rule": 1
+    },
+    {
+      "list": "deny dell.com\nallow all\n",
+      "host": "www.dell.com",
+      "result": "allow",
+      "rule": 2
+    },
+    {
+      "list": "allow yahoo.com\n",
+      "host": "yahoo.com",
+      "result": "allow",
+      "rule": 1
+    },
+    {
+      "list": "allow yahoo.com\n",
+      "host": "news.yahoo.com",
+      "result": "deny",
+      "rule": null
+    },
+    {
+      "list": "",
+      "host": "anything.example",
+      "result": "deny",
+      "rule": null
+    },
+    {
+      "list": "allow API.Example.com\n",
+      "host": "api.example.com.",
+      "result": "allow",
+      "rule": 1
+    },
+    {
+      "list": "allow *.example.com\n",
+      "host": "evil-example.com",
+      "result": "deny",
+      "rule": null
+    },
+    {
+      "list": "# Uncomment the following line to allow all hosts\n#allow all\n",
+      "host": "api.github.com",
+      "result": "deny",
+      "rule": null
+    },
+    {
+      "list": "# Uncomment the following line to allow all hosts\nallow all\n",
+      "host": "api.github.com",
+      "result": "allow",
+      "rule": 1
+    }
+  ],
+  "withRule": [
+    {
+      "list": "allow a.com\ndeny all\n",
+      "action": "allow",
+      "host": "b.com",
+      "out": "allow b.com\nallow a.com\ndeny all\n"
+    },
+    {
+      "list": "# mine\nallow b.com\ndeny all\n",
+      "action": "deny",
+      "host": "b.com",
+      "out": "deny b.com\n# mine\ndeny all\n"
+    },
+    {
+      "list": "",
+      "action": "allow",
+      "host": "API.Open-Meteo.com",
+      "out": "allow api.open-meteo.com\n"
+    },
+    {
+      "list": "# Uncomment the following line to allow all hosts\n#allow all\n",
+      "action": "allow",
+      "host": "api.github.com",
+      "out": "allow api.github.com\n# Uncomment the following line to allow all hosts\n#allow all\n"
+    }
+  ],
+  "sign": {
+    "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+    "note": "the signing key is the protocol IRK derived from this UMK seed (deriveIRK / deriveProtocolIrkSeed), not the seed itself",
+    "pub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+    "cases": [
+      {
+        "serverDomain": "home.harry.flagship.services",
+        "serviceId": "harry-weather",
+        "issuedAt": 1700000000000,
+        "list": "# weather app\nallow api.open-meteo.com\nallow *.tile.openstreetmap.org\ndeny all\n",
+        "listSha256": "c029bd0ea031c93199bfb57ee3d35625abeeeaf3cbb7ba184059de86bf7ddb1d",
+        "canonical": "flagship/app-access/v1|home.harry.flagship.services|harry-weather|c029bd0ea031c93199bfb57ee3d35625abeeeaf3cbb7ba184059de86bf7ddb1d|1700000000000",
+        "signature": "cd28b805f7eeb58152144563510ceed6630ff33449248fbe65707e7d28ee18009d4c4851506058748903502a81499001cecf490b084b090659458b1823d0b604"
+      },
+      {
+        "serverDomain": "home.harry.flagship.services",
+        "serviceId": "harry-weather",
+        "issuedAt": 1700000000000,
+        "list": "",
+        "listSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "canonical": "flagship/app-access/v1|home.harry.flagship.services|harry-weather|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855|1700000000000",
+        "signature": "62c682d31da446e5f1c510939982f99a69da55deab727b7cfd266197a7a499ed31710bff0356c0333634bd2697c29ebb5616a5e74c3316f91e3c32dd12107000"
+      }
+    ]
+  }
+}

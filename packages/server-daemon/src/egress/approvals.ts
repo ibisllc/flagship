@@ -1,135 +1,74 @@
 /**
- * Owner-signed internet approvals for live apps (`flagship/app-egress/v1`).
+ * The screens API for live apps' internet access (docs/ai-privacy-and-staging.md §3a).
  *
- * The box keeps the newest verified grant per service, sealed under the SWK,
- * WITH its signature, and re-verifies every grant when it loads them at boot:
- * a grant whose signature no longer verifies under the box's current
- * sensitive-order authority is dropped. What opens is approved ∩ declared:
- * a host the current manifest no longer lists closes again by itself.
+ *   GET  /api/screens/services/:id/access          → { list, listSha256, pending }
+ *   POST /api/screens/services/:id/access            { list, grant, signature }
+ *        grant = { serverDomain, serviceId, listSha256, issuedAt } (`flagship/app-access/v1`)
+ *        → 200 { ok, access } | 400 { error, errors:[{line, message}] } | 403 | 404 | 409
+ *   POST /api/screens/services/:id/access/dismiss    { host }  (no signature: changes nothing the app reaches)
+ *   GET  /api/screens/access-requests              → { requests:[{serviceId, appName, host, ...}] }
  *
- *   GET  /api/screens/services/:serviceId/egress → { declared, approved }
- *   POST /api/screens/services/:serviceId/egress   { grant, signature }
- *        grant = { serverDomain, serviceId, hosts, issuedAt }; hosts [] revokes.
+ * v1, for older apps (`flagship/app-egress/v1`; the hosts become `allow` lines):
+ *   GET  /api/screens/services/:id/egress          → { declared, approved }
+ *   POST /api/screens/services/:id/egress            { grant, signature }; hosts [] revokes
+ *
+ * Every change to what an app may reach is authorized by an owner signature
+ * under the box's sensitive-order authority; the paired session only carries it.
  */
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import {
+  accessListFromEgressHosts,
+  accessListSha256,
+  normalizeAccessList,
+  parseAccessList,
+  parseAppAccessGrant,
   parseAppEgressGrant,
   sortEgressHosts,
+  verifyAppAccessGrant,
   verifyAppEgressGrant,
+  type AccessListError,
   type AdminGrantView,
+  type AppAccessGrant,
   type AppEgressGrant,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "../adminAuthorityLocal.js";
-import type { SwkOps } from "../keyCustodian.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
-import { effectiveHosts } from "./policy.js";
-
-export interface StoredEgressGrant {
-  grant: AppEgressGrant;
-  /** Hex Ed25519 signature over the grant's canonical bytes. */
-  signature: string;
-}
+import { coveringRule, hexToBytes, type AccessAuthorizer, type AccessRequest, type AppAccessStore } from "./accessStore.js";
 
 export interface EgressView {
   declared: string[];
   approved: string[];
 }
 
-type Swk = Pick<SwkOps, "sealWithSwk" | "openWithSwk">;
-
-export class AppEgressStore {
-  private grants = new Map<string, StoredEgressGrant>();
-  private chain: Promise<void> = Promise.resolve();
-
-  /** `path` null ⇒ memory only (tests). */
-  constructor(
-    private readonly path: string | null,
-    private readonly swk: Swk | null,
-  ) {}
-
-  /** Load and keep only grants that still verify. Returns how many were dropped. */
-  async load(isAuthorized: (g: AppEgressGrant, sig: Uint8Array) => boolean): Promise<number> {
-    if (!this.path || !this.swk) return 0;
-    let hex: string;
-    try {
-      hex = (await readFile(this.path, "utf8")).trim();
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return 0;
-      throw e;
-    }
-    const buf = Buffer.from(hex, "hex");
-    if (buf.length < 12) throw new Error("app-egress file is truncated");
-    const plain = this.swk.openWithSwk({ nonce: buf.subarray(0, 12), ciphertext: buf.subarray(12) });
-    const parsed = JSON.parse(Buffer.from(plain).toString("utf8")) as { v?: number; grants?: unknown };
-    let dropped = 0;
-    this.grants.clear();
-    for (const raw of Array.isArray(parsed.grants) ? parsed.grants : []) {
-      const r = raw as { grant?: unknown; signature?: unknown };
-      const g = parseAppEgressGrant(r.grant);
-      const sig = typeof r.signature === "string" ? hexToBytes(r.signature) : null;
-      if (!g || !sig || !isAuthorized(g, sig)) {
-        dropped++;
-        continue;
-      }
-      this.grants.set(g.serviceId, { grant: g, signature: r.signature as string });
-    }
-    return dropped;
-  }
-
-  get(serviceId: string): StoredEgressGrant | null {
-    return this.grants.get(serviceId) ?? null;
-  }
-
-  serviceIds(): string[] {
-    return [...this.grants.keys()];
-  }
-
-  approvedHosts(serviceId: string): string[] {
-    return this.grants.get(serviceId)?.grant.hosts ?? [];
-  }
-
-  async put(rec: StoredEgressGrant): Promise<void> {
-    this.grants.set(rec.grant.serviceId, rec);
-    await this.save();
-  }
-
-  /** Drop a service's grant (uninstall). Idempotent. */
-  async forget(serviceId: string): Promise<void> {
-    if (!this.grants.delete(serviceId)) return;
-    await this.save();
-  }
-
-  private save(): Promise<void> {
-    const path = this.path;
-    const swk = this.swk;
-    if (!path || !swk) return Promise.resolve();
-    const snapshot = [...this.grants.values()];
-    const next = this.chain.then(async () => {
-      const blob = swk.sealWithSwk(new TextEncoder().encode(JSON.stringify({ v: 1, grants: snapshot })));
-      const hex = Buffer.concat([Buffer.from(blob.nonce), Buffer.from(blob.ciphertext)]).toString("hex");
-      await mkdir(dirname(path), { recursive: true });
-      const tmp = `${path}.tmp`;
-      await writeFile(tmp, hex, { mode: 0o600 });
-      await rename(tmp, path);
-    });
-    this.chain = next.catch(() => {});
-    return next;
-  }
+export interface AccessView {
+  list: string;
+  listSha256: string;
+  pending: AccessRequest[];
 }
 
-export interface AppEgressHttpOptions {
-  /** The box FQDN every grant must name. */
-  serverDomain: string;
-  /** The account (for the delegated admin-grant check). */
+export interface AccessSummary {
+  rules: number;
+  pending: number;
+}
+
+export interface AccessRequestEntry extends AccessRequest {
+  serviceId: string;
+  appName: string;
+}
+
+export interface SensitiveAuthority {
   username: string;
   ownerIrkPub: Uint8Array;
   adminRootPub?: Uint8Array;
   activeGrants?: readonly AdminGrantView[];
-  store: AppEgressStore;
-  /** The installed service's declared hosts, or null when it isn't installed. */
-  declared: (serviceId: string) => string[] | null;
-  /** Called after a grant is stored, so the gateway applies it now. */
+}
+
+export interface AppAccessHttpOptions extends SensitiveAuthority {
+  /** The box FQDN every grant must name. */
+  serverDomain: string;
+  store: AppAccessStore;
+  /** An installed service's name and declared `network.egress` hosts; null when not installed. */
+  app: (serviceId: string) => { name: string; declared: string[] } | null;
+  /** Called after a list is applied, so the gateway closes what it no longer allows. */
   onChange?: (serviceId: string) => void;
   now?: () => number;
   /** How far `issuedAt` may be from the box clock. Default 10 min. */
@@ -137,59 +76,102 @@ export interface AppEgressHttpOptions {
 }
 
 const J = { "content-type": "application/json" } as const;
-const PATH_RE = /^\/api\/screens\/services\/([^/]+)\/egress$/;
+const ACCESS_RE = /^\/api\/screens\/services\/([^/]+)\/access$/;
+const DISMISS_RE = /^\/api\/screens\/services\/([^/]+)\/access\/dismiss$/;
+const EGRESS_RE = /^\/api\/screens\/services\/([^/]+)\/egress$/;
+export const ACCESS_REQUESTS_PATH = "/api/screens/access-requests";
 
-export function isAppEgressPath(path: string): boolean {
-  return PATH_RE.test(path);
+export function isAppAccessPath(path: string): boolean {
+  return path === ACCESS_REQUESTS_PATH || ACCESS_RE.test(path) || DISMISS_RE.test(path) || EGRESS_RE.test(path);
 }
 
-/** Verify a grant under the box's sensitive-order authority. */
-export function authorizeEgressGrant(
-  opts: Pick<AppEgressHttpOptions, "ownerIrkPub" | "adminRootPub" | "username" | "activeGrants">,
-  grant: AppEgressGrant,
-  signature: Uint8Array,
-): boolean {
-  return authorizeSensitiveOrder({
-    order: grant,
-    signature,
-    verify: verifyAppEgressGrant,
-    ownerIrkPub: opts.ownerIrkPub,
-    ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
-    username: opts.username,
-    ...(opts.activeGrants ? { activeGrants: opts.activeGrants } : {}),
-  });
+/** Both kinds of owner signature, checked under the box's sensitive-order authority. */
+export function accessAuthorizer(a: SensitiveAuthority): AccessAuthorizer {
+  const base = {
+    ownerIrkPub: a.ownerIrkPub,
+    ...(a.adminRootPub ? { adminRootPub: a.adminRootPub } : {}),
+    username: a.username,
+    ...(a.activeGrants ? { activeGrants: a.activeGrants } : {}),
+  };
+  return {
+    v2: (grant: AppAccessGrant, signature: Uint8Array) =>
+      authorizeSensitiveOrder({ ...base, order: grant, signature, verify: verifyAppAccessGrant }),
+    v1: (grant: AppEgressGrant, signature: Uint8Array) =>
+      authorizeSensitiveOrder({ ...base, order: grant, signature, verify: verifyAppEgressGrant }),
+  };
 }
 
-export function egressView(store: AppEgressStore, serviceId: string, declared: readonly string[]): EgressView {
-  return { declared: [...declared], approved: effectiveHosts(declared, store.approvedHosts(serviceId)) };
+export function accessView(store: AppAccessStore, serviceId: string): AccessView {
+  const list = store.list(serviceId);
+  return { list, listSha256: accessListSha256(list), pending: store.pending(serviceId) };
+}
+
+export function accessSummary(store: AppAccessStore, serviceId: string): AccessSummary {
+  return { rules: store.rules(serviceId).length, pending: store.pending(serviceId).length };
+}
+
+/** The v1 view: the declared entries the list opens as a whole. */
+export function egressView(store: AppAccessStore, serviceId: string, declared: readonly string[]): EgressView {
+  const rules = store.rules(serviceId);
+  return { declared: [...declared], approved: declared.filter((d) => coveringRule(rules, d)?.action === "allow") };
+}
+
+export function accessRequests(store: AppAccessStore, app: AppAccessHttpOptions["app"]): AccessRequestEntry[] {
+  const out: AccessRequestEntry[] = [];
+  for (const serviceId of store.pendingServiceIds()) {
+    const a = app(serviceId);
+    if (!a) continue;
+    for (const r of store.pending(serviceId)) out.push({ serviceId, appName: a.name, ...r });
+  }
+  return out.sort((x, y) => y.lastSeen - x.lastSeen);
 }
 
 /**
  * The screens-API handler. Runs behind the paired-session gate and the
- * companion write guard (screensHttp); the session only carries the request,
- * the signature is what authorizes it.
+ * companion write guard (screensHttp).
  */
-export function buildAppEgressHttp(opts: AppEgressHttpOptions) {
+export function buildAppAccessHttp(opts: AppAccessHttpOptions) {
   const now = opts.now ?? (() => Date.now());
   const maxSkew = opts.maxSkewMs ?? 10 * 60_000;
-  const err = (status: number, error: string): HttpResponse => ({ status, headers: J, body: JSON.stringify({ error }) });
+  const auth = accessAuthorizer(opts);
+  const json = (status: number, body: unknown): HttpResponse => ({ status, headers: J, body: JSON.stringify(body) });
+  const err = (status: number, error: string): HttpResponse => json(status, { error });
+  const bad = (error: string, errors: AccessListError[] = []): HttpResponse => json(400, { error, errors });
 
-  return async function handle(path: string, method: string, req: HttpRequest): Promise<HttpResponse | null> {
-    const m = PATH_RE.exec(path);
-    if (!m) return null;
-    let serviceId: string;
+  async function postAccess(serviceId: string, req: HttpRequest): Promise<HttpResponse> {
+    let body: { list?: unknown; grant?: unknown; signature?: unknown };
     try {
-      serviceId = decodeURIComponent(m[1]!);
+      body = JSON.parse(req.body.toString("utf8")) as typeof body;
     } catch {
-      return err(400, "bad service id");
+      return bad("invalid json");
     }
-    const declared = opts.declared(serviceId);
-    if (declared === null) return err(404, "no such service");
-    if (method === "GET") {
-      return { status: 200, headers: J, body: JSON.stringify(egressView(opts.store, serviceId, declared)) };
+    if (typeof body?.list !== "string") return bad("list required");
+    const grant = parseAppAccessGrant(body.grant);
+    if (!grant) return bad("malformed grant");
+    if (typeof body.signature !== "string") return bad("signature required");
+    const sig = hexToBytes(body.signature);
+    if (!sig || sig.length !== 64) return bad("invalid signature hex");
+    if (grant.serviceId !== serviceId) return bad("grant is for a different service");
+    const list = body.list;
+    if (normalizeAccessList(list) !== list) {
+      return bad("send the list normalized (\\n line ends, no trailing spaces or blank lines, one final \\n)");
     }
-    if (method !== "POST") return err(405, "method not allowed");
+    const parsed = parseAccessList(list);
+    if (parsed.errors.length > 0) {
+      return bad(`the access list has ${parsed.errors.length} error${parsed.errors.length === 1 ? "" : "s"}`, parsed.errors);
+    }
+    if (accessListSha256(list) !== grant.listSha256) return err(403, "the list is not the one that was signed");
+    if (grant.serverDomain !== opts.serverDomain) return err(403, "grant is for a different server");
+    if (Math.abs(now() - grant.issuedAt) > maxSkew) return err(403, "stale grant");
+    if (!auth.v2(grant, sig)) return err(403, "invalid signature");
+    const held = opts.store.heldIssuedAt(serviceId);
+    if (held !== null && grant.issuedAt <= held) return err(409, "a newer access list is already applied");
+    await opts.store.putSigned(serviceId, list, { v: 2, grant, signature: body.signature.toLowerCase() });
+    opts.onChange?.(serviceId);
+    return json(200, { ok: true, access: accessView(opts.store, serviceId) });
+  }
 
+  async function postEgress(serviceId: string, declared: readonly string[], req: HttpRequest): Promise<HttpResponse> {
     let body: { grant?: unknown; signature?: unknown };
     try {
       body = JSON.parse(req.body.toString("utf8")) as typeof body;
@@ -204,29 +186,57 @@ export function buildAppEgressHttp(opts: AppEgressHttpOptions) {
     if (grant.serviceId !== serviceId) return err(400, "grant is for a different service");
     if (grant.serverDomain !== opts.serverDomain) return err(403, "grant is for a different server");
     if (Math.abs(now() - grant.issuedAt) > maxSkew) return err(403, "stale grant");
-    if (!authorizeEgressGrant(opts, grant, sig)) return err(403, "invalid signature");
-    const prev = opts.store.get(serviceId);
-    if (prev && grant.issuedAt <= prev.grant.issuedAt) return err(409, "a newer grant is already applied");
+    if (!auth.v1(grant, sig)) return err(403, "invalid signature");
+    const held = opts.store.heldIssuedAt(serviceId);
+    if (held !== null && grant.issuedAt <= held) return err(409, "a newer grant is already applied");
     const undeclared = grant.hosts.filter((h) => !declared.includes(h));
     if (undeclared.length > 0) {
       return err(422, `not declared in the app's network.egress: ${undeclared.join(", ")}`);
     }
-    await opts.store.put({
-      grant: { ...grant, hosts: sortEgressHosts(grant.hosts) },
+    const g = { ...grant, hosts: sortEgressHosts(grant.hosts) };
+    await opts.store.putSigned(serviceId, accessListFromEgressHosts(g.hosts), {
+      v: 1,
+      grant: g,
       signature: body.signature.toLowerCase(),
     });
     opts.onChange?.(serviceId);
-    return {
-      status: 200,
-      headers: J,
-      body: JSON.stringify({ ok: true, egress: egressView(opts.store, serviceId, declared) }),
-    };
-  };
-}
+    return json(200, { ok: true, egress: egressView(opts.store, serviceId, declared) });
+  }
 
-function hexToBytes(hex: string): Uint8Array | null {
-  if (!/^[0-9a-fA-F]*$/.test(hex) || hex.length % 2 !== 0) return null;
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return out;
+  return async function handle(path: string, method: string, req: HttpRequest): Promise<HttpResponse | null> {
+    if (path === ACCESS_REQUESTS_PATH) {
+      if (method !== "GET") return err(405, "method not allowed");
+      return json(200, { requests: accessRequests(opts.store, opts.app) });
+    }
+    const m = ACCESS_RE.exec(path) ?? DISMISS_RE.exec(path) ?? EGRESS_RE.exec(path);
+    if (!m) return null;
+    let serviceId: string;
+    try {
+      serviceId = decodeURIComponent(m[1]!);
+    } catch {
+      return err(400, "bad service id");
+    }
+    const app = opts.app(serviceId);
+    if (!app) return err(404, "no such service");
+
+    if (ACCESS_RE.test(path)) {
+      if (method === "GET") return json(200, accessView(opts.store, serviceId));
+      if (method === "POST") return postAccess(serviceId, req);
+      return err(405, "method not allowed");
+    }
+    if (DISMISS_RE.test(path)) {
+      if (method !== "POST") return err(405, "method not allowed");
+      let body: { host?: unknown };
+      try {
+        body = JSON.parse(req.body.toString("utf8")) as typeof body;
+      } catch {
+        return bad("invalid json");
+      }
+      if (typeof body?.host !== "string" || !(await opts.store.dismiss(serviceId, body.host))) return bad("host required");
+      return json(200, { ok: true, access: accessView(opts.store, serviceId) });
+    }
+    if (method === "GET") return json(200, egressView(opts.store, serviceId, app.declared));
+    if (method === "POST") return postEgress(serviceId, app.declared, req);
+    return err(405, "method not allowed");
+  };
 }

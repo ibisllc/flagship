@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { accessListFromEgressHosts, parseAccessList } from "@flagship/protocol";
 import {
   BUILD_REGISTRY_HOSTS,
   classifySource,
   decide,
-  effectiveHosts,
   hostMatches,
   isPublicAddress,
   normalizeHost,
@@ -11,7 +11,8 @@ import {
   type EgressPolicyState,
 } from "../../src/egress/policy.js";
 
-const state = (approved: Record<string, string[]> = {}): EgressPolicyState => ({
+/** Per app: hosts (become `allow` lines) or a list's text. */
+const state = (lists: Record<string, string[] | string> = {}): EgressPolicyState => ({
   subnets: {
     build: [parseCidr("172.20.0.0/16")!],
     staging: [parseCidr("172.21.0.0/16")!],
@@ -21,7 +22,10 @@ const state = (approved: Record<string, string[]> = {}): EgressPolicyState => ({
     ["172.22.0.2", "harry-weather"],
     ["172.22.0.3", "harry-notes"],
   ]),
-  approvedHosts: (id) => approved[id] ?? [],
+  accessRules: (id) => {
+    const l = lists[id];
+    return parseAccessList(l === undefined ? "" : typeof l === "string" ? l : accessListFromEgressHosts(l)).rules;
+  },
 });
 
 describe("egress policy", () => {
@@ -78,9 +82,24 @@ describe("egress policy", () => {
     expect(hostMatches("*.example.com", "badexample.com")).toBe(false);
   });
 
-  it("only approved hosts the manifest still declares open", () => {
-    expect(effectiveHosts(["a.example.com", "b.example.com"], ["b.example.com", "c.example.com"])).toEqual(["b.example.com"]);
-    expect(effectiveHosts([], ["a.example.com"])).toEqual([]);
+  it("an app's list decides top to bottom; only a host no rule matched is a request", () => {
+    const s = state({ "harry-weather": "deny ads.example.com\nallow *.example.com\n# c\n#allow all\n" });
+    expect(decide(s, "172.22.0.2", "api.example.com")).toEqual({ allow: true, who: "app harry-weather" });
+    expect(decide(s, "172.22.0.2", "ads.example.com")).toEqual({
+      allow: false,
+      who: "app harry-weather",
+      why: "the app's access list denies this host",
+    });
+    expect(decide(s, "172.22.0.2", "API.GitHub.com.")).toEqual({
+      allow: false,
+      who: "app harry-weather",
+      why: "no rule in the app's access list allows this host",
+      unmatched: { serviceId: "harry-weather", host: "api.github.com" },
+    });
+    const all = state({ "harry-weather": "deny dell.com\nallow all\n" });
+    expect(decide(all, "172.22.0.2", "anything.example").allow).toBe(true);
+    expect(decide(all, "172.22.0.2", "dell.com")).not.toHaveProperty("unmatched");
+    expect(decide(state({ "harry-weather": "deny all\n" }), "172.22.0.2", "a.com")).not.toHaveProperty("unmatched");
   });
 
   it("never connects to loopback, private, link-local or multicast addresses", () => {

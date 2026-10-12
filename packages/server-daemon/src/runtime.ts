@@ -1156,9 +1156,9 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
           },
         }
       : {}),
-    declared: (id) => {
+    app: (id) => {
       const app = servicePlatformRef.current?.byServiceId(id);
-      return app ? (app.manifest.network?.egress ?? []) : null;
+      return app ? { name: app.manifest.name, declared: app.manifest.network?.egress ?? [] } : null;
     },
   });
   if (!egress.status().enforced) {
@@ -1210,6 +1210,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       pullStateStore: apOpts.pullStateStore ?? null,
       cloneService: apOpts.cloneService ?? null,
       envStore,
+      onServiceInstalled: (app) => egress.noteInstalled(app.serviceId, app.manifest.network?.egress ?? []),
       onServiceRemoved: async (slug: string) => {
         await egress.pruneUninstalled();
         await apOpts.onServiceRemoved?.(slug);

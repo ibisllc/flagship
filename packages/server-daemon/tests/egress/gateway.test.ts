@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { accessListFromEgressHosts, parseAccessList } from "@flagship/protocol";
 import { EgressGateway } from "../../src/egress/gateway.js";
 import { sandboxGateway, setSandboxNetworking } from "../../src/egress/sandboxNetworking.js";
 import type { CommandRunner } from "../../src/serviceRunner.js";
@@ -34,13 +35,15 @@ function fakeDocker(apps: () => Record<string, string>): CommandRunner & { calls
 
 afterEach(() => setSandboxNetworking(null));
 
+const rulesOf = (approved: Record<string, string[]>) => (id: string) => parseAccessList(accessListFromEgressHosts(approved[id] ?? [])).rules;
+
 describe("EgressGateway", () => {
   it("enforces, publishes the gateway IPs, and learns new app containers on a miss", async () => {
     let apps: Record<string, string> = { "172.22.0.2": "flagship-harry-weather" };
     const approved: Record<string, string[]> = { "harry-weather": ["api.github.com"], "harry-notes": ["api.github.com"] };
     const cmd = fakeDocker(() => apps);
     let t = 10_000;
-    const gw = new EgressGateway({ cmd, approvedHosts: (id) => approved[id] ?? [], rulesDir: mkdtempSync(join(tmpdir(), "gw-")), log: () => {}, now: () => t });
+    const gw = new EgressGateway({ cmd, accessRules: rulesOf(approved), rulesDir: mkdtempSync(join(tmpdir(), "gw-")), log: () => {}, now: () => t });
     expect((await gw.start()).enforced).toBe(true);
     try {
       expect(cmd.calls.some((c) => c.startsWith("iptables-restore -w --noflush"))).toBe(true);
@@ -64,7 +67,7 @@ describe("EgressGateway", () => {
   it("recheck cuts connections an approval no longer covers; an IP handed to another app loses the old app's access", async () => {
     let apps: Record<string, string> = { "172.22.0.2": "flagship-harry-weather" };
     const approved: Record<string, string[]> = { "harry-weather": ["api.github.com"] };
-    const gw = new EgressGateway({ cmd: fakeDocker(() => apps), approvedHosts: (id) => approved[id] ?? [], rulesDir: mkdtempSync(join(tmpdir(), "gw-")), log: () => {} });
+    const gw = new EgressGateway({ cmd: fakeDocker(() => apps), accessRules: rulesOf(approved), rulesDir: mkdtempSync(join(tmpdir(), "gw-")), log: () => {} });
     await gw.start();
     try {
       const closed: string[] = [];
@@ -86,6 +89,36 @@ describe("EgressGateway", () => {
     }
   });
 
+  it("tells the caller about a default deny, never an explicit one", async () => {
+    const apps: Record<string, string> = { "172.22.0.2": "flagship-harry-weather" };
+    const lists: Record<string, string> = { "harry-weather": "deny ads.example.com\nallow api.github.com\n" };
+    const seen: string[] = [];
+    const gw = new EgressGateway({
+      cmd: fakeDocker(() => apps),
+      accessRules: (id) => parseAccessList(lists[id] ?? "").rules,
+      onUnmatched: (id, host) => seen.push(`${id} ${host}`),
+      rulesDir: mkdtempSync(join(tmpdir(), "gw-")),
+      log: () => {},
+    });
+    await gw.start();
+    try {
+      const deps = (gw as unknown as { proxyDeps(): { onDenied: (s: string, h: string | null, k: string) => void } }).proxyDeps();
+      expect(await gw.allowSync("172.22.0.2", "api.github.com")).toBe(true);
+      expect(await gw.allowSync("172.22.0.2", "ads.example.com")).toBe(false);
+      deps.onDenied("172.22.0.2", "ads.example.com", "dns");
+      expect(seen).toEqual([]);
+      deps.onDenied("172.22.0.2", "Weather.Example.ORG.", "tls");
+      deps.onDenied("172.22.0.2", null, "tls");
+      deps.onDenied("172.24.0.5", "example.org", "dns");
+      expect(seen).toEqual(["harry-weather weather.example.org"]);
+      lists["harry-weather"] = "allow all\n";
+      deps.onDenied("172.22.0.2", "weather.example.org", "dns");
+      expect(seen).toHaveLength(1);
+    } finally {
+      await gw.stop();
+    }
+  });
+
   it("reports not enforced when docker networks can't be made, and touches nothing", async () => {
     const cmd: CommandRunner = {
       async run() {
@@ -95,7 +128,7 @@ describe("EgressGateway", () => {
         throw new Error("Cannot connect to the Docker daemon");
       },
     };
-    const gw = new EgressGateway({ cmd, approvedHosts: () => [], log: () => {} });
+    const gw = new EgressGateway({ cmd, accessRules: () => [], log: () => {} });
     const s = await gw.start();
     expect(s.enforced).toBe(false);
     expect(s.reason).toMatch(/could not be created/);

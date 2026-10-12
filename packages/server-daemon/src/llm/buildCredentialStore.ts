@@ -83,6 +83,16 @@ function validate(obj: unknown): LlmCredential | null {
   return out;
 }
 
+/**
+ * Validate an optional BYOK credential off a request body (the same shape
+ * every endpoint takes, incl. `relay`): absent → null; well-formed → the
+ * credential; present-but-malformed → `"invalid"`. Never logged.
+ */
+export function parseCredentialField(raw: unknown): LlmCredential | null | "invalid" {
+  if (raw === undefined || raw === null) return null;
+  return validate(raw) ?? "invalid";
+}
+
 /** In-memory implementation. Loses state across restarts; for tests. */
 export class InMemoryBuildCredentialStore implements BuildCredentialStore {
   private byId = new Map<string, LlmCredential>();

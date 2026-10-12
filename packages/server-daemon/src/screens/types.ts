@@ -38,11 +38,17 @@ export interface AppSummary {
   /** Unix-ms; when the app was installed on this pod. */
   installedAt: number;
   /**
-   * Internet hosts the manifest declares (`network.egress`) and the ones the
-   * owner's newest signed grant opened (always a subset of declared). Absent
-   * on boxes without the egress gateway.
+   * For older apps: the internet hosts the manifest declares
+   * (`network.egress`) and the ones the app's access list opens (a subset of
+   * declared). Absent on boxes without the egress gateway.
    */
   egress?: { declared: string[]; approved: string[] };
+  /**
+   * The app's access list (docs/ai-privacy-and-staging.md §3a): how many
+   * rules it has and how many requests wait for the owner. Details on
+   * GET /api/screens/services/:id/access.
+   */
+  access?: { rules: number; pending: number };
 }
 
 export interface RecentInstallEvent {

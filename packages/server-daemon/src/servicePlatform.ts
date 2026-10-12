@@ -157,6 +157,12 @@ export interface ServicePlatformDeps {
    */
   onServiceRemoved?: ((slug: string) => void | Promise<void>) | null;
   /**
+   * After a successful install or update (with the app as now installed).
+   * The egress gateway turns the manifest's `network.egress` hosts into
+   * access requests for the owner. Best-effort, awaited, never fails the install.
+   */
+  onServiceInstalled?: ((app: InstalledService) => void | Promise<void>) | null;
+  /**
    * Where the installed-service list is kept across daemon restarts. Saved on
    * every install, uninstall, alias and membership change; read once at boot
    * by `restore()`. Null keeps it in memory only (tests).
@@ -397,6 +403,7 @@ export class ServicePlatform {
     this.apps.set(serviceId, installed);
     this.byUrlLabel.set(urlLabel.toLowerCase(), installed);
     this.persist();
+    await this.notifyInstalled(installed);
 
     // Browser feature: register the domain grant if the manifest
     // declares one AND the daemon has the gate wired in. Without a
@@ -501,6 +508,14 @@ export class ServicePlatform {
    * edit's). Same host authority as install. If the new container won't
    * start, the previous one is brought back and the service is unchanged.
    */
+  private async notifyInstalled(app: InstalledService): Promise<void> {
+    try {
+      await this.deps.onServiceInstalled?.(app);
+    } catch {
+      // advisory: the install itself already succeeded
+    }
+  }
+
   async redeploy(args: {
     request: InstallServiceRequest;
     signature: Bytes;
@@ -605,6 +620,7 @@ export class ServicePlatform {
       else if (old.manifest.browser?.domains) this.deps.domainGate.revoke(serviceId);
     }
     this.persist();
+    await this.notifyInstalled(updated);
     return { ok: true, app: updated, addedStores: addedNames };
   }
 

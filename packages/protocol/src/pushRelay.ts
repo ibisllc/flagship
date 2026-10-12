@@ -39,6 +39,9 @@ export const PUSH_RELAY_CATEGORIES = [
   "device-added",
   "re-pair-alert",
   "cert-alert",
+  // An app was denied a host no rule in its access list matched. The body is
+  // a marker: the phone fetches which app and host from the box.
+  "app-access",
   "generic",
 ] as const;
 

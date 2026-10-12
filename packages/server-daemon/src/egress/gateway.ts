@@ -16,6 +16,7 @@
  * rules.
  */
 import { getServers } from "node:dns";
+import type { AccessRule } from "@flagship/protocol";
 import type { CommandRunner } from "../serviceRunner.js";
 import { systemDnsUpstream, startDnsServer, type DnsServerHandle } from "./dnsFilter.js";
 import { installFirewall, removeFirewall, type FirewallPorts } from "./firewall.js";
@@ -41,8 +42,14 @@ export const DEFAULT_DATA_PORTS = [5432, 6379, 9000];
 
 export interface EgressGatewayOptions {
   cmd: CommandRunner;
-  /** Effective approved hosts for a live service (approved ∩ declared). */
-  approvedHosts: (serviceId: string) => readonly string[];
+  /** The owner-signed access rules of a live service ([] = everything denied). */
+  accessRules: (serviceId: string) => readonly AccessRule[];
+  /**
+   * A live app was denied a host because no rule in its list matched (an
+   * explicit `deny` never calls this). Called on every such denial; the
+   * caller dedupes and rate-limits.
+   */
+  onUnmatched?: (serviceId: string, host: string) => void;
   ports?: FirewallPorts;
   dataPorts?: number[];
   log?: (m: string) => void;
@@ -185,8 +192,8 @@ export class EgressGateway {
   }
 
   /**
-   * Re-judge every open proxied connection (after an approval changes) and
-   * cut the ones no longer allowed, so a revoke also ends keep-alive streams.
+   * Re-judge every open proxied connection (after an access list changes) and
+   * cut the ones no longer allowed, so a removed rule also ends keep-alive streams.
    */
   recheck(): number {
     let cut = 0;
@@ -216,7 +223,7 @@ export class EgressGateway {
 
   /** The policy view, for tests and diagnostics. */
   policyState(): EgressPolicyState {
-    return { subnets: this.subnets, appByIp: this.appByIp, approvedHosts: this.opts.approvedHosts };
+    return { subnets: this.subnets, appByIp: this.appByIp, accessRules: this.opts.accessRules };
   }
 
   private fromBridge(kind: EgressNetworkKind, src: string): boolean {
@@ -245,7 +252,15 @@ export class EgressGateway {
   }
 
   private denied(src: string, host: string | null, via: string): void {
-    const who = decide(this.policyState(), src, host ?? "-").who;
+    const d = decide(this.policyState(), src, host ?? "-");
+    const who = d.who;
+    if (!d.allow && d.unmatched) {
+      try {
+        this.opts.onUnmatched?.(d.unmatched.serviceId, d.unmatched.host);
+      } catch {
+        // recording a request must never break the denial itself
+      }
+    }
     const key = `${who}|${host}`;
     const t = this.now();
     if ((this.deniedAt.get(key) ?? 0) > t - 60_000) return;

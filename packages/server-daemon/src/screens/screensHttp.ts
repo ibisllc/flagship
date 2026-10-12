@@ -25,6 +25,7 @@ import type {
 import type { AppEnvStore } from "../serviceEnvStore.js";
 import type { BuildCredentialStore } from "../llm/buildCredentialStore.js";
 import { parseRelayFlag, type LlmCredential } from "../llmHarness.js";
+import { isAppAccessPath } from "../egress/approvals.js";
 import {
   summarizeAttachment,
   validateAttachments,
@@ -154,13 +155,15 @@ export interface LineageResolverLike {
 export interface ScreensHttpDeps {
   gate: PairedSessionGate;
   /**
-   * Live apps' internet approvals (egress/approvals.ts): the signed
-   * GET/POST /api/screens/services/:serviceId/egress endpoint, and the
-   * `{declared, approved}` view the apps list and detail carry.
+   * Live apps' internet access (egress/approvals.ts): the signed access-list
+   * endpoints (`/services/:id/access`, `.../access/dismiss`,
+   * `/access-requests`, and the v1 `/services/:id/egress`), and the views
+   * the apps list and detail carry (`egress` for older apps, `access`).
    */
   appEgress?: {
     handle: (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null>;
     view: (serviceId: string, declared: readonly string[]) => { declared: string[]; approved: string[] };
+    access?: (serviceId: string) => { rules: number; pending: number };
   } | null;
   /**
    * Services built from a published repo adapter, and a way to report one
@@ -474,7 +477,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (denied) return denied;
     }
 
-    if (deps.appEgress && /^\/api\/screens\/services\/[^/]+\/egress$/.test(path)) {
+    if (deps.appEgress && isAppAccessPath(path)) {
       const r = await deps.appEgress.handle(path, method, req);
       if (r) return r;
     }
@@ -1483,6 +1486,7 @@ function toSummary(
 ): AppSummary {
   return {
     ...(egress ? { egress: egress.view(app.serviceId, app.manifest.network?.egress ?? []) } : {}),
+    ...(egress?.access ? { access: egress.access(app.serviceId) } : {}),
     serviceId: app.serviceId,
     creator: app.creator,
     slug: app.slug,
@@ -1642,6 +1646,8 @@ function isWriteScopedPath(path: string): boolean {
   if (/^\/api\/screens\/services\/[^/]+\/env\/(set|unset)$/.test(path)) return true;
   // app internet approval (signed; companions can't relay it)
   if (/^\/api\/screens\/services\/[^/]+\/egress$/.test(path)) return true;
+  // app access list (signed) and dismissing a request
+  if (/^\/api\/screens\/services\/[^/]+\/access(\/dismiss)?$/.test(path)) return true;
   // lineage-resolve POST
   if (path === "/api/screens/lineage-resolve") return true;
   // app-backup start

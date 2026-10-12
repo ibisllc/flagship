@@ -35,3 +35,4 @@ export { ed } from "./edSync.js";
 export { resolveMsgSigner, type MsgSigner } from "./canonicalBase.js";
 export * from "./repoAdapter.js";
 export * from "./appEgress.js";
+export * from "./appAccess.js";

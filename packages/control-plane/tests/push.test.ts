@@ -184,3 +184,22 @@ describe("account-scoped push registration", () => {
     expect((await storage.pushTokens.listByUser("alice")).filter((row) => row.deviceId === joinedDeviceId)).toHaveLength(1);
   });
 });
+
+describe("handlePushRelay app-access", () => {
+  it("relays a box-signed app-access alert and still refuses unknown categories", async () => {
+    const { signPushRelayRequest } = await import("@flagship/protocol");
+    const { handlePushRelay } = await import("../src/push.js");
+    const stk = keypair(9);
+    const now = 1_800_000_000_000;
+    const deps = {
+      pushTokens: { listByUser: async () => [] },
+      servers: { listForUser: async () => [{ serverDomain: "home.alice.flagship.services", username: "alice", identityPubKeyHex: hex(stk.publicKey), registeredAt: 1 }] },
+      now: () => now,
+    } as never;
+    const request = { targetUsername: "alice", category: "app-access" as const, sealedPayloadHex: "00".repeat(32), issuedAt: now };
+    const ok = await handlePushRelay(deps, { request, signature: hex(signPushRelayRequest(request, stk)) });
+    expect(ok.status).toBe(200);
+    const bad = await handlePushRelay(deps, { request: { ...request, category: "app-access-x" }, signature: "00".repeat(64) });
+    expect(bad.status).toBe(400);
+  });
+});

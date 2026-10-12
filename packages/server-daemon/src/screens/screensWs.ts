@@ -4,6 +4,7 @@
  * Currently implemented:
  *   - GET /api/screens/vibe-code/<id>/stream         (P1.6)
  *   - GET /api/screens/browser-tabs/<tabId>/stream   (P1.11)
+ *   - GET /api/screens/events                        (box-wide events, screensEvents.ts)
  *
  * Auth: paired-session token is supplied via the `?sessionToken=...`
  * query string. Browsers can't set custom headers on `new WebSocket()`,
@@ -27,6 +28,7 @@ import type {
 } from "../llm/vibeCodeSession.js";
 import type { HttpRequest, UpgradeRequest } from "../runtime.js";
 import type { VibeCodeFrame } from "./types.js";
+import type { ScreensEventBus } from "./screensEvents.js";
 
 const wss = new WebSocketServer({ noServer: true });
 
@@ -35,6 +37,7 @@ export interface ScreensWsDeps {
   vibeCodeRegistry?: VibeCodeSessionRegistry | null;
   browser?: BrowserManager | null;
   tabRegistry?: TabRegistry | null;
+  events?: ScreensEventBus | null;
 }
 
 const VIBE_CODE_STREAM_RE = /^\/api\/screens\/vibe-code\/([^/]+)\/stream$/;
@@ -53,6 +56,10 @@ export function buildScreensUpgradeHandler(
     const vcMatch = VIBE_CODE_STREAM_RE.exec(justPath);
     if (vcMatch) {
       return acceptVibeCodeStream(args, deps, vcMatch[1]!, query);
+    }
+
+    if (justPath === "/api/screens/events") {
+      return acceptEventsStream(args, deps);
     }
 
     const tabMatch = BROWSER_TAB_STREAM_RE.exec(justPath);
@@ -193,6 +200,33 @@ function bridgeVibeCodeSession(ws: WsSocket, session: VibeCodeSession): void {
   ws.on("error", () => {
     session.off("event", onEvent);
   });
+}
+
+function acceptEventsStream(args: UpgradeRequest, deps: ScreensWsDeps): boolean {
+  const denied = deps.gate.check({ method: args.method, path: args.path, headers: args.headers, body: Buffer.alloc(0) });
+  if (denied) {
+    rejectUpgrade(args.socket, denied.status, "unauthorized");
+    return true;
+  }
+  if (!deps.events) {
+    rejectUpgrade(args.socket, 503, "events not configured");
+    return true;
+  }
+  const bus = deps.events;
+  const fakeReq = { headers: args.headers, method: args.method, url: args.path } as unknown as import("node:http").IncomingMessage;
+  wss.handleUpgrade(fakeReq, args.socket as unknown as Socket, args.headBuffer, (ws: WsSocket) => {
+    const off = bus.subscribe((e) => {
+      if (ws.readyState !== ws.OPEN) return;
+      try {
+        ws.send(JSON.stringify(e));
+      } catch {
+        // closed mid-send
+      }
+    });
+    ws.on("close", off);
+    ws.on("error", off);
+  });
+  return true;
 }
 
 function acceptBrowserTabStream(

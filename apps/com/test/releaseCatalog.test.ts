@@ -29,10 +29,19 @@ async function endorsements(): Promise<EndorsementSummary[]> {
   return loadEndorsements(githubStub().fetch);
 }
 
+/** The newest release: the one no other endorsement names as its previous. */
+async function tip(): Promise<string> {
+  const all = await endorsements();
+  const previous = new Set(all.map((e) => e.previousCommitHash));
+  const tips = all.filter((e) => !previous.has(e.commitHash));
+  expect(tips).toHaveLength(1);
+  return tips[0]!.commitHash;
+}
+
 describe("release catalog for boxes that can't list their own", () => {
   it("offers every later release to a box on an older one, newest first", async () => {
     const c = catalogFor(await endorsements(), full("9873b83e"), 1);
-    expect(c.latest?.commit).toBe(full("aca0b079"));
+    expect(c.latest?.commit).toBe(await tip());
     const byTag = Object.fromEntries(c.releases.map((r) => [r.commit.slice(0, 8), r.relation]));
     expect(byTag["9873b83e"]).toBe("current");
     expect(byTag["67cfd8da"]).toBe("newer");
@@ -45,7 +54,7 @@ describe("release catalog for boxes that can't list their own", () => {
     const between = (await endorsements()).flatMap((e) => e.intermediateCommits).find((x) => x.startsWith("7ac1b50a"));
     expect(between).toBeDefined();
     const c = catalogFor(await endorsements(), between!, 1);
-    expect(c.latest?.commit).toBe(full("aca0b079"));
+    expect(c.latest?.commit).toBe(await tip());
     expect(c.releases.some((r) => r.relation === "current")).toBe(false);
   });
 
@@ -66,7 +75,7 @@ describe("release catalog for boxes that can't list their own", () => {
     const r1 = await handleReleases(url(`?current=${full("67cfd8da")}`), { fetch: gh.fetch, cache, now: () => 5 });
     expect(r1.status).toBe(200);
     const body = (await r1.json()) as { latest: { commit: string }; checkedAt: number; currentCommit: string };
-    expect(body.latest.commit).toBe(full("aca0b079"));
+    expect(body.latest.commit).toBe(await tip());
     expect(body.checkedAt).toBe(5);
     const listed = gh.calls.filter((u) => u.includes("/contents/")).length;
     await handleReleases(url(`?current=${full("9873b83e")}`), { fetch: gh.fetch, cache });
