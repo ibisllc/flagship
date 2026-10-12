@@ -29,9 +29,9 @@ final class PodRevocationLivenessTests: XCTestCase {
         XCTAssertEqual(pod.livenessState(hasLiveUnlockRequest: true, now: registeredAt + grace * 10), .waitingForApproval)
     }
 
-    func testNeverWithUnknownRegistrationStaysComingOnline() {
+    func testNeverWithUnknownRegistrationIsDead() {
         let pod = neverPod(registeredAt: 0)
-        XCTAssertEqual(pod.livenessState(hasLiveUnlockRequest: false, now: registeredAt), .comingOnline)
+        XCTAssertEqual(pod.livenessState(hasLiveUnlockRequest: false, now: registeredAt), .dead)
     }
 
     // MARK: - Revoked

@@ -966,7 +966,8 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
     ) -> LivenessState {
         if isRevoked { return .revoked }
-        let pastGrace = registeredAt > 0 && now - registeredAt > PodInfo.comingOnlineGraceMs
+        // An unknown registration time reads as past grace, as on Android and the webapp.
+        let pastGrace = now - registeredAt > PodInfo.comingOnlineGraceMs
         if let liveness {
             switch liveness {
             case .live: return .online

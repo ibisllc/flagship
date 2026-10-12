@@ -47,12 +47,14 @@ final class MultipodLivenessTests: XCTestCase {
         let app = AppState(isPaired: true, currentUser: "harry")
         await runReconcile(app: app, entries: [
             PodDirectoryEntry(serverDomain: "new.harry.flagship.services",
-                              identityPubKey: "33", liveness: "never")
+                              identityPubKey: "33",
+                              registeredAt: Int64(Date().timeIntervalSince1970 * 1000),
+                              liveness: "never")
         ])
         let pod = app.pods.first { $0.fqdn == "new.harry.flagship.services" }
         XCTAssertEqual(pod?.status, .unknown, "never → unknown (not session-eligible, not offline)")
         XCTAssertEqual(app.liveness(for: pod!), .comingOnline,
-                       "a never-checked-in box is still coming up, NOT dead")
+                       "a just-registered, never-checked-in box is still coming up, NOT dead")
     }
 
     func test_liveness_unreachableWithApprovalReadsWaiting() {
