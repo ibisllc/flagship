@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPushForwarder } from "../src/pushBridge.js";
+import { apnsAlertFor, buildPushForwarder } from "../src/pushBridge.js";
 
 interface Captured {
   url: string;
@@ -74,6 +74,13 @@ describe("buildPushForwarder — APNs", () => {
     const body = JSON.parse(c.body);
     expect(body.aps.category).toBe("unlock-request");
     expect(body["flagship-sealed"]).toBe("deadbeef");
+    // iOS shows nothing for a closed app without aps.alert.
+    expect(body.aps.alert).toEqual({ title: "Flagship", body: "A server is asking you to unlock it." });
+  });
+
+  it("gives every category a fixed alert that names no server, app or host", () => {
+    expect(apnsAlertFor("app-access")).toEqual({ title: "Flagship", body: "One of your apps wants to reach the internet." });
+    expect(apnsAlertFor("some-future-category")).toEqual({ title: "Flagship", body: "Open Flagship to see what's new." });
   });
 
   it("counts a non-200 response as failed; returns ok=false when nothing sent", async () => {

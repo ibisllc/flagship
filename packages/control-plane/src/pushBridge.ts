@@ -241,6 +241,28 @@ export function wrapForwarderAsV12Fanout(
 
 const APNS_TOKEN_TTL_MS = 50 * 60_000; // refresh well under Apple's 60-min cap
 
+/**
+ * What iOS shows for a push. Without `aps.alert` iOS displays nothing while
+ * the app is closed, and the app has no notification extension to fill one
+ * in, so every category carries a fixed text. Fixed on purpose: it can name
+ * no server, app or host, because Apple and .com both see it; the phone reads
+ * the details from the box once it's open.
+ */
+const APNS_ALERTS: Record<string, { title: string; body: string }> = {
+  "unlock-request": { title: "Flagship", body: "A server is asking you to unlock it." },
+  "unlock-approve": { title: "Flagship", body: "A server is asking you to unlock it." },
+  "boot-approval": { title: "Flagship", body: "A server is asking you to unlock it." },
+  "device-added": { title: "Flagship", body: "A new device was added to your account." },
+  "re-pair-alert": { title: "Flagship", body: "A device needs to be paired again." },
+  "cert-alert": { title: "Flagship", body: "One of your servers needs your attention." },
+  "app-access": { title: "Flagship", body: "One of your apps wants to reach the internet." },
+};
+const APNS_ALERT_DEFAULT = { title: "Flagship", body: "Open Flagship to see what's new." };
+
+export function apnsAlertFor(category: string): { title: string; body: string } {
+  return APNS_ALERTS[category] ?? APNS_ALERT_DEFAULT;
+}
+
 async function sendApns(args: {
   cfg: NonNullable<PushBridgeConfig["apns"]>;
   providerToken: string;
@@ -267,6 +289,7 @@ async function sendApns(args: {
   // unconditionally on unlock-approve and let the device decide.
   const isCritical = args.category === "unlock-approve";
   const apsBody: Record<string, unknown> = {
+    alert: apnsAlertFor(args.category),
     "mutable-content": 1,
     category: args.category,
     "thread-id": args.category,
