@@ -34,6 +34,8 @@ import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import com.flagshipserver.app.core.LocalPrivacySettings
+import com.flagshipserver.app.core.LocalPushNotificationsSwitch
+import com.flagshipserver.app.core.PushNotificationsSwitch
 import com.flagshipserver.app.core.ThemeMode
 import com.flagshipserver.app.core.AppIconSwitcher
 import com.flagshipserver.app.core.AppIconVariant
@@ -48,6 +50,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -351,6 +354,11 @@ fun SettingsScreen(nav: NavController) {
                 ),
             ),
         )
+
+        Spacer(Modifier.height(FS.space.s4))
+
+        // NOTIFICATIONS: one switch for every push to this device (§3a).
+        PushNotificationsCard()
 
         Spacer(Modifier.height(FS.space.s4))
 
@@ -756,6 +764,42 @@ private fun ThemeSegment(
                     fontWeight = if (small) FontWeight.Bold else FontWeight.Medium,
                     letterSpacing = if (small) 1.5.sp else 0.sp,
                 ),
+            )
+        }
+    }
+}
+
+/** Settings → Push notifications: on by default; off drops this device's
+ *  push registration and tells every box to send no access-request push. */
+@Composable
+private fun PushNotificationsCard() {
+    val pushSwitch = LocalPushNotificationsSwitch.current ?: return
+    val on by pushSwitch.enabled.collectAsState()
+    Text(
+        "NOTIFICATIONS",
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    PushNotificationsSwitch.TITLE,
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                    modifier = Modifier.weight(1f).padding(end = FS.space.s4),
+                )
+                Switch(
+                    checked = on,
+                    onCheckedChange = { v -> pushSwitch.toggle(v) },
+                    modifier = Modifier.testTag("settings-push-notifications"),
+                )
+            }
+            Text(
+                PushNotificationsSwitch.SUBTEXT,
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
             )
         }
     }

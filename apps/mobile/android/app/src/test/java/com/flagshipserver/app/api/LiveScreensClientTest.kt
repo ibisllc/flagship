@@ -67,6 +67,20 @@ class LiveScreensClientTest {
         assertEquals("/api/screens/paired-sessions/abcdef", rec.path)
     }
 
+    @Test fun accessAlerts_getAndPostTheBoxSetting() = runTest {
+        server.enqueue(MockResponse().setBody("""{"enabled":true}"""))
+        server.enqueue(MockResponse().setBody("""{"ok":true,"enabled":false}"""))
+        assertEquals(true, client.accessAlerts().enabled)
+        assertEquals(false, client.accessAlertsSet(false).enabled)
+        val get = server.takeRequest()
+        assertEquals("GET", get.method)
+        assertEquals("/api/screens/settings/access-alerts", get.path)
+        val post = server.takeRequest()
+        assertEquals("POST", post.method)
+        assertEquals("/api/screens/settings/access-alerts", post.path)
+        assertEquals("""{"enabled":false}""", post.body.readUtf8())
+    }
+
     @Test fun http500_throwsScreensError() = runTest {
         server.enqueue(MockResponse().setResponseCode(500).setBody("boom"))
         try {

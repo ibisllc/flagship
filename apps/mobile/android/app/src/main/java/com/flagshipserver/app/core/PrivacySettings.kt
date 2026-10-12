@@ -1,7 +1,8 @@
 // C12 — Kotlin mirror of FlagshipCore/PrivacySettings.swift.
 //
 // Persisted user preferences governing how the app gates access to
-// its content. Today the only toggle is biometric-at-launch.
+// its content (biometric / passphrase at launch, theme) and whether
+// anything is pushed to this device at all.
 
 package com.flagshipserver.app.core
 
@@ -15,6 +16,7 @@ private const val PRIVACY_PREFS = "flagship.privacy"
 private const val KEY_REQUIRE_BIOMETRIC = "requireBiometricAtLaunch"
 private const val KEY_REQUIRE_PASSPHRASE = "requirePassphraseAtLaunch"
 private const val KEY_THEME_MODE = "themeMode"
+private const val KEY_PUSH_NOTIFICATIONS = "pushNotificationsEnabled"
 
 /** App appearance: follow the system, or force light / dark. */
 enum class ThemeMode { AUTO, LIGHT, DARK }
@@ -65,6 +67,19 @@ class PrivacySettings(private val prefs: SharedPreferences) {
     fun setThemeMode(value: ThemeMode) {
         prefs.edit().putString(KEY_THEME_MODE, value.name).apply()
         _themeMode.value = value
+    }
+
+    private val _pushNotificationsEnabled =
+        MutableStateFlow(prefs.getBoolean(KEY_PUSH_NOTIFICATIONS, true))
+
+    /** Settings → Push notifications. Default ON. Off means this device holds
+     *  no push registration with .com and every box it manages sends no
+     *  access-request push (see [PushNotificationsSwitch]). */
+    val pushNotificationsEnabled: StateFlow<Boolean> = _pushNotificationsEnabled.asStateFlow()
+
+    fun setPushNotificationsEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_PUSH_NOTIFICATIONS, value).apply()
+        _pushNotificationsEnabled.value = value
     }
 
     companion object {

@@ -188,6 +188,22 @@ class MockScreensClient(
         )
     }
 
+    /** The box's push setting for access requests, and every write to it. */
+    var accessAlertsEnabled: Boolean = true
+    val accessAlertsWrites: MutableList<Boolean> = mutableListOf()
+
+    override suspend fun accessAlerts(): AccessAlertsSetting {
+        tick()
+        return AccessAlertsSetting(accessAlertsEnabled)
+    }
+
+    override suspend fun accessAlertsSet(enabled: Boolean): AccessAlertsSetting {
+        tick()
+        accessAlertsWrites += enabled
+        accessAlertsEnabled = enabled
+        return AccessAlertsSetting(enabled, ok = true)
+    }
+
     override suspend fun boxFqdn(): String = "$podContext.bright-maple.flagship.services"
 
     /** Services the box says can be edited from the phone (built there). */

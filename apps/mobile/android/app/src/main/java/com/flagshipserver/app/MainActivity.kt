@@ -81,6 +81,7 @@ import com.flagshipserver.app.core.QrRelayClient
 import com.flagshipserver.app.core.ToastCenter
 import com.flagshipserver.app.keystore.BiometricAuthority
 import com.flagshipserver.app.keystore.Keystore
+import androidx.lifecycle.lifecycleScope
 import com.flagshipserver.app.push.FlagshipFcmService
 import com.flagshipserver.app.push.PushHolder
 import com.flagshipserver.app.push.PushRegistrar
@@ -268,7 +269,10 @@ class MainActivity : FragmentActivity() {
         // Push-token registration is inherently a real-backend operation
         // (registering an FCM token + X25519 push key against .com), so it
         // always uses the live client; without a session it no-ops.
-        val registrar = PushRegistrar(appState, liveFlagshipServer)
+        val registrar = PushRegistrar(
+            appState, liveFlagshipServer,
+            isEnabled = { privacy.pushNotificationsEnabled.value },
+        )
         PushHolder.registrar = registrar
 
         // Boot-secret RELAY: a `secret-request` push routes into the approval
@@ -345,32 +349,51 @@ class MainActivity : FragmentActivity() {
 
             // Internet-access alerts (§3a). Live only, like the AI-chat poller:
             // the mock has no real box. Every box the phone manages is asked
-            // over its own paired session, on foreground, on an `app-access`
+            // over its own paired session, on foreground, on a `generic`
             // push that lands while open, and on a slow foreground poll.
             val liveNow by androidx.compose.runtime.rememberUpdatedState(useLive)
-            val accessCenter = remember {
+            val accessBoxes: () -> List<com.flagshipserver.app.core.AccessBox> = remember {
                 val clients = HashMap<String, ScreensClient>()
-                com.flagshipserver.app.core.AccessRequestCenter(
-                    boxes = {
-                        if (!liveNow) emptyList() else appState.pods.value.mapNotNull { pod ->
-                            if (pod.fqdn.isEmpty() || pod.demoServer != null) return@mapNotNull null
-                            val token = sessionStore.sessionToken(forPodId = pod.podId) ?: return@mapNotNull null
-                            val client = synchronized(clients) {
-                                clients.getOrPut("${pod.fqdn}|$token") {
-                                    val store = com.flagshipserver.app.api.InMemorySessionStore().apply {
-                                        setPodBaseUrl("https://${pod.fqdn}")
-                                        setSessionToken(token)
-                                    }
-                                    LiveScreensClient(client = okHttp, store = store)
+                val resolve: () -> List<com.flagshipserver.app.core.AccessBox> = {
+                    if (!liveNow) emptyList() else appState.pods.value.mapNotNull { pod ->
+                        if (pod.fqdn.isEmpty() || pod.demoServer != null) return@mapNotNull null
+                        val token = sessionStore.sessionToken(forPodId = pod.podId) ?: return@mapNotNull null
+                        val client = synchronized(clients) {
+                            clients.getOrPut("${pod.fqdn}|$token") {
+                                val store = com.flagshipserver.app.api.InMemorySessionStore().apply {
+                                    setPodBaseUrl("https://${pod.fqdn}")
+                                    setSessionToken(token)
                                 }
+                                LiveScreensClient(client = okHttp, store = store)
                             }
-                            com.flagshipserver.app.core.AccessBox(pod.podId, pod.fqdn, client)
                         }
-                    },
+                        com.flagshipserver.app.core.AccessBox(pod.podId, pod.fqdn, client)
+                    }
+                }
+                resolve
+            }
+            val accessCenter = remember {
+                com.flagshipserver.app.core.AccessRequestCenter(
+                    boxes = accessBoxes,
                     isActiveGate = {
                         foreground.value && appState.isPaired.value && appState.isUnlocked.value &&
                             !appState.isRestrictedDevice()
                     },
+                    alertsEnabled = { privacy.pushNotificationsEnabled.value },
+                )
+            }
+            // Settings → Push notifications: one switch for this device's push
+            // registration with .com and every box's access-request pushes.
+            val pushSwitch = remember {
+                com.flagshipserver.app.core.PushNotificationsSwitch(
+                    enabled = privacy.pushNotificationsEnabled,
+                    persist = privacy::setPushNotificationsEnabled,
+                    boxes = accessBoxes,
+                    register = { registrar.registerCurrentToken() },
+                    revoke = { registrar.revoke(forgetOnFailure = false) },
+                    isRegistered = { !Keystore.pushTokenId().isNullOrEmpty() },
+                    dropProviderToken = { registrar.deleteProviderToken() },
+                    scope = this@MainActivity.lifecycleScope,
                 )
             }
             val accessScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -389,6 +412,11 @@ class MainActivity : FragmentActivity() {
                 } else {
                     accessCenter.stop()
                 }
+            }
+            val pushOn by privacy.pushNotificationsEnabled.collectAsState()
+            LaunchedEffect(pushOn) { accessCenter.refresh() }
+            LaunchedEffect(useLive, isForeground, accessPaired, accessUnlocked) {
+                if (isForeground && accessPaired && accessUnlocked) runCatching { pushSwitch.resync() }
             }
 
             // MULTI-POD (Fix B) — PodSessionSync. When the current/leader pod
@@ -489,6 +517,7 @@ class MainActivity : FragmentActivity() {
                         (if (useLive) accessCenter else null),
                     LocalDeveloperSettings provides devSettings,
                     LocalPrivacySettings provides privacy,
+                    com.flagshipserver.app.core.LocalPushNotificationsSwitch provides pushSwitch,
                     // Real IRK signer for SetServiceEnv envelopes (was the
                     // 128-zero placeholder, which the daemon always rejected).
                     LocalVibeCodeEnvelopeSigner provides { envelope ->

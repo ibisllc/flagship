@@ -68,6 +68,9 @@ val LocalDeepLinker = staticCompositionLocalOf<DeepLinker> { DeepLinker() }
  *  previews, tests and mock mode: no dialogs. */
 val LocalAccessRequestCenter = staticCompositionLocalOf<AccessRequestCenter?> { null }
 
+/** Settings → Push notifications. Null on previews. */
+val LocalPushNotificationsSwitch = staticCompositionLocalOf<PushNotificationsSwitch?> { null }
+
 /** App-wide "active operations" registry feeding the global teal sliver
  *  (the WhatsApp-style active-call bar). Production MainActivity installs
  *  one instance; previews + tests get the default empty center. */

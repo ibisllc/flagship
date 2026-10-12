@@ -1,10 +1,12 @@
 // Internet-access alerts (docs/ai-privacy-and-staging.md §3a). The box's push
-// (category `app-access`) carries no app or host; the phone asks every box it
+// (category `generic`, or `app-access` from an older box) carries no app or host; the phone asks every box it
 // manages over the paired session (GET /api/screens/access-requests) when it
 // comes to the foreground, on an `access-request` frame from a box's event
 // socket, when a push lands while it is open, and on a slow foreground poll. Each request becomes one "<App> wants to reach <host>"
 // dialog: Allow / Deny edit the list with withRule and send a signed order;
-// Not now keeps the request on the box and stops asking for a day.
+// Not now keeps the request on the box and stops asking for a day. With
+// Settings → Push notifications off, no dialogs are raised at all; the
+// requests still wait on each app's page.
 
 package com.flagshipserver.app.core
 
@@ -41,6 +43,8 @@ class AccessRequestCenter(
     private val boxes: () -> List<AccessBox>,
     /** Only fetch while this holds (paired, unlocked, owner device). */
     private val isActiveGate: () -> Boolean = { true },
+    /** Settings → Push notifications: off raises no dialogs. */
+    private val alertsEnabled: () -> Boolean = { true },
     private val signer: suspend (reason: String) -> Ed25519Sign = { r -> com.flagshipserver.app.keystore.Keystore.adminSigningKey(r) },
     private val now: () -> Long = { System.currentTimeMillis() },
     private val snoozeMs: Long = 24L * 3600 * 1000,
@@ -66,6 +70,14 @@ class AccessRequestCenter(
 
     /** Fetch from every box now (foreground, a push, a screens-socket event). */
     suspend fun refresh(): Int {
+        if (!alertsEnabled()) {
+            mutex.withLock {
+                queue.clear()
+                // An answer already being sent finishes; an unanswered ask goes.
+                if (_shown.value?.phase == Phase.Asking) _shown.value = null
+            }
+            return 0
+        }
         if (!isActiveGate()) return 0
         val found = ArrayList<AccessAlert>()
         for (box in boxes()) {
@@ -212,8 +224,8 @@ class AccessRequestCenter(
     }
 }
 
-/** Static hand-off so the FCM service can wake the center when an
- *  `app-access` push lands while the app is open. */
+/** Static hand-off so the FCM service can wake the center when a
+ *  `generic` (or older `app-access`) push lands while the app is open. */
 object AccessRequestBridge {
     @Volatile var onAccessRequest: (() -> Unit)? = null
 }

@@ -155,6 +155,11 @@ data class AccessRequest(
 @Serializable
 data class AccessRequestsResponse(val requests: List<AccessRequest> = emptyList())
 
+/** `GET`/`POST /api/screens/settings/access-alerts`: whether the box pushes
+ *  access requests at all (the POST answers with `ok` too). */
+@Serializable
+data class AccessAlertsSetting(val enabled: Boolean, val ok: Boolean? = null)
+
 /** A frame on the screens event socket. */
 @Serializable
 data class ScreensEvent(val type: String, val serviceId: String? = null) {

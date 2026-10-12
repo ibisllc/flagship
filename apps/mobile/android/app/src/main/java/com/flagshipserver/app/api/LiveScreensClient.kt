@@ -232,6 +232,17 @@ class LiveScreensClient(
     override suspend fun accessRequests(): AccessRequestsResponse =
         request("/api/screens/access-requests", AccessRequestsResponse.serializer())
 
+    override suspend fun accessAlerts(): AccessAlertsSetting =
+        request("/api/screens/settings/access-alerts", AccessAlertsSetting.serializer())
+
+    override suspend fun accessAlertsSet(enabled: Boolean): AccessAlertsSetting {
+        val body = json.encodeToString(AccessAlertsBody.serializer(), AccessAlertsBody(enabled)).toByteArray()
+        return request("/api/screens/settings/access-alerts", AccessAlertsSetting.serializer(), "POST", body)
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class AccessAlertsBody(val enabled: Boolean)
+
     override suspend fun serviceEgressSet(serviceId: String, req: AppEgressRequest): AppEgressResponse {
         val body = json.encodeToString(AppEgressRequest.serializer(), req).toByteArray()
         return request(

@@ -25,11 +25,21 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 class PushRegistrar(
     private val appState: AppState,
     private val client: FlagshipServerClient,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    /** Settings → Push notifications. Off: token rotations are ignored, so
+     *  .com never learns a token for this device. */
+    private val isEnabled: () -> Boolean = { true },
+    private val fetchToken: suspend () -> String? = {
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+    },
+    private val deleteToken: suspend () -> Unit = {
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().deleteToken().await()
+    },
 ) {
     private val _lastRegisteredTokenId = MutableStateFlow<String?>(Keystore.pushTokenId())
     val lastRegisteredTokenId: StateFlow<String?> = _lastRegisteredTokenId.asStateFlow()
@@ -41,10 +51,20 @@ class PushRegistrar(
      *  call happens on the IO dispatcher; failures are swallowed and
      *  reported via lastError so the OS callback never blocks. */
     fun onNewToken(fcmToken: String?): Job = scope.launch {
-        if (fcmToken.isNullOrEmpty()) return@launch  // OS revoked — leave the prior tokenId
+        if (!isEnabled()) return@launch
+        register(fcmToken)
+    }
+
+    /** Settings → Push notifications turned on: register this device's
+     *  current FCM token. False when nothing was registered. */
+    suspend fun registerCurrentToken(): Boolean =
+        register(runCatching { fetchToken() }.getOrNull())
+
+    private suspend fun register(fcmToken: String?): Boolean {
+        if (fcmToken.isNullOrEmpty()) return false  // OS revoked — leave the prior tokenId
         val username = appState.currentUser.value
-        if (username.isNullOrEmpty()) return@launch  // pre-pairing
-        try {
+        if (username.isNullOrEmpty()) return false  // pre-pairing
+        return try {
             val irk = Keystore.deriveIRK(reason = "Register push token with Flagship")
             val push = Keystore.loadOrCreatePushX25519()
             val pushPubHex = HexUtil.encode(push.publicKey)
@@ -76,16 +96,29 @@ class PushRegistrar(
             Keystore.setPushTokenId(resp.tokenId)
             _lastRegisteredTokenId.value = resp.tokenId
             _lastError.value = null
+            true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (t: Throwable) {
             _lastError.value = t
+            false
         }
     }
 
+    /** Settings → Push notifications turned off: delete this device's FCM
+     *  token with Google, so nothing can be delivered even while the .com
+     *  registration lingers. [registerCurrentToken] fetches a fresh one. */
+    suspend fun deleteProviderToken() {
+        deleteToken()
+    }
+
     /** Drop the last-registered push token on .com + wipe the persisted
-     *  tokenId. Tolerates network failure (sign-out shouldn't depend on
-     *  the device being online). */
-    suspend fun revoke() {
-        val tokenId = Keystore.pushTokenId() ?: return
+     *  tokenId. By default tolerates network failure (sign-out shouldn't
+     *  depend on the device being online); Settings → Push notifications
+     *  passes `forgetOnFailure = false` so a failed revoke keeps the tokenId
+     *  and is retried. True when no registration remains. */
+    suspend fun revoke(forgetOnFailure: Boolean = true): Boolean {
+        val tokenId = Keystore.pushTokenId() ?: return true
         try {
             // Revoke is now IRK-signed (SEC): .com verifies the envelope
             // against the token owner's registered IRK before deleting the
@@ -100,10 +133,14 @@ class PushRegistrar(
                     signature = signature,
                 ),
             )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (t: Throwable) {
             _lastError.value = t
+            if (!forgetOnFailure) return false
         }
         Keystore.setPushTokenId(null)
         _lastRegisteredTokenId.value = null
+        return true
     }
 }

@@ -23,7 +23,8 @@ class FlagshipFcmService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         // The app-scope PushRegistrar is wired up by MainActivity onto a
-        // static holder so we can reach it from this service context.
+        // static holder so we can reach it from this service context. It
+        // ignores the token while Settings → Push notifications is off.
         PushHolder.registrar?.onNewToken(token)
     }
 
@@ -59,16 +60,21 @@ class FlagshipFcmService : FirebaseMessagingService() {
             }
         }
 
-        // Internet-access request (§3a): the push names no app or host. The
-        // phone asks its boxes over the paired session; a tap just opens the
-        // app, whose foreground fetch shows the request.
-        val accessRequest = data["category"] == APP_ACCESS_CATEGORY
-        if (accessRequest) {
+        // A `generic` push (§3a; `app-access` from an older box) names no
+        // app or host: the phone asks its boxes over the paired session, and
+        // a tap just opens the app, whose foreground fetch shows the request.
+        val category = data["category"]
+        if (category == GENERIC_CATEGORY || category == APP_ACCESS_CATEGORY) {
             com.flagshipserver.app.core.AccessRequestBridge.onAccessRequest?.invoke()
             data["title"] = "Flagship"
-            data["body"] = APP_ACCESS_TEXT
+            data["body"] = if (category == GENERIC_CATEGORY) GENERIC_TEXT else APP_ACCESS_TEXT
             data.remove("deepLink")
         }
+
+        // Settings → Push notifications is off: the registration is (being)
+        // revoked, so a push that still arrives is not shown. An open app
+        // has already been woken above.
+        if (!com.flagshipserver.app.core.PrivacySettings.fromContext(this).pushNotificationsEnabled.value) return
 
         val title = data["title"] ?: message.notification?.title
             ?: (secretEvent?.let { "Finish setting up ${it.serverFqdn}" }) ?: "Flagship"
@@ -100,6 +106,8 @@ class FlagshipFcmService : FirebaseMessagingService() {
 
     companion object {
         private const val CHANNEL_ID = "flagship.alerts"
+        const val GENERIC_CATEGORY = "generic"
+        const val GENERIC_TEXT = "Open Flagship to see what's new."
         const val APP_ACCESS_CATEGORY = "app-access"
         const val APP_ACCESS_TEXT = "One of your apps wants to reach the internet"
         private const val NOTIF_ID_BASE = 1000

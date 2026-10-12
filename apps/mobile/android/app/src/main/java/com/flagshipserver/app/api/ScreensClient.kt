@@ -137,6 +137,16 @@ interface ScreensClient {
     suspend fun accessRequests(): AccessRequestsResponse =
         throw ScreensError.NotImplemented("access requests")
 
+    /** `GET /api/screens/settings/access-alerts`: whether this box pushes
+     *  access requests. An older box answers 404. */
+    suspend fun accessAlerts(): AccessAlertsSetting =
+        throw ScreensError.NotImplemented("access alerts")
+
+    /** `POST /api/screens/settings/access-alerts {enabled}` (unsigned: it can
+     *  only reduce what the box sends). */
+    suspend fun accessAlertsSet(enabled: Boolean): AccessAlertsSetting =
+        throw ScreensError.NotImplemented("access alerts")
+
     /** `GET /api/screens/events` (WebSocket): the box's live events, e.g.
      *  `{"type":"access-request","serviceId":…}`. Ends when the socket closes;
      *  a box without the socket ends it at once. */
