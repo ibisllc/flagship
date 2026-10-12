@@ -142,6 +142,8 @@ describe("service-access friend redeem view + deep-link", () => {
     // v2: redeem under the PER-AUTHOR contact AID (not the global AID).
     expect(r.body).toContain("deriveContactAccountIdFromSeed");
     expect(r.body).toContain("signWithContactAccountId");
+    // The owner AID from `a=` is kept per box so later knocks sign with the same contact AID.
+    expect(r.body).toContain("rememberInviteOwner({ serverId: boxHost(), ownerAidHex: pendingAuthorAidHex");
     // Manual-approve: the friend emits a contact-AID-signed acceptance reply (+ QR).
     expect(r.body).toContain("signAcceptServiceInvite");
     expect(r.body).toContain("buildAcceptReply");

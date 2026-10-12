@@ -31,6 +31,7 @@ import {
   signWithContactAccountId,
 } from "../keystore.js";
 import { redeemInvite, signAcceptServiceInvite, buildAcceptReply } from "../lib/serviceInvite.js";
+import { rememberInviteOwner } from "../lib/knockIdentity.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml } from "../lib/util.js";
@@ -182,6 +183,10 @@ async function onAccept() {
       umk: session.umk,
       signWithAccountId: ident.sign,
     });
+    // Knocks on this box must sign with the same contact AID the invite bound.
+    if (pendingAuthorAidHex) {
+      rememberInviteOwner({ serverId: boxHost(), ownerAidHex: pendingAuthorAidHex, serviceRef: r.serviceRef });
+    }
     if (r.pending) {
       await renderPendingAcceptance(r.serviceRef, ident.visitorAID, session.umk);
     } else {
@@ -198,6 +203,14 @@ async function onAccept() {
       btn.disabled = false;
       btn.textContent = "Accept & get access";
     }
+  }
+}
+
+function boxHost() {
+  try {
+    return boxOrigin ? new URL(boxOrigin).host : location.host;
+  } catch {
+    return "";
   }
 }
 
@@ -254,13 +267,7 @@ async function renderPendingAcceptance(serviceRef, contactAID, umk) {
   const sig = await signAcceptServiceInvite(accept, signWithContactAccountId);
   // Canonical deep-link reply carrying ONLY {accept, acceptSig} (the author's box
   // fetches the owner's create from .com). The box host is this /invite's origin.
-  const replyHost = (() => {
-    try {
-      return boxOrigin ? new URL(boxOrigin).host : location.host;
-    } catch {
-      return location.host;
-    }
-  })();
+  const replyHost = boxHost() || location.host;
   const reply = buildAcceptReply(
     replyHost,
     { inviteId: pendingInviteId, serviceRef, contactAID: bytesToHex(contactAID), acceptedAt },

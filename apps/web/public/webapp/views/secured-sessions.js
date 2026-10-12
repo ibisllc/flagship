@@ -38,7 +38,7 @@ export function renderSecuredSessions() {
   const root = $("secured-sessions-content");
   const sessions = listSecuredSessions();
   if (!sessions.length) {
-    root.innerHTML = '<div class="card placeholder">No secured sessions. Authorize a browser from a restricted site, then it shows up here.</div>';
+    root.innerHTML = '<div class="card placeholder">No secured sessions. Sign a browser in to a private app with Process URL, then it shows up here.</div>';
     return;
   }
   root.innerHTML = sessions

@@ -19,14 +19,19 @@ describe("web-experience gating — Process-URL authorize view", () => {
     // Parse the pasted flagship://access link, then authorize.
     expect(r.body).toContain("parseAccessDeepLink");
     expect(r.body).toContain("authorizeKnock");
-    // Identity comes from the in-page AID (gated behind the in-memory UMK).
-    expect(r.body).toContain("deriveAccountIdFromSeed");
-    expect(r.body).toContain("signWithAccountId");
+    // The signing identity (global or per-owner contact AID) comes from
+    // lib/knockIdentity.js, gated behind the in-memory UMK.
+    expect(r.body).toContain("authorizeKnockFor(pendingLink, session.umk, { ownServers })");
+    expect(r.body).toContain("ownServerHosts");
+    // A box that is neither ours nor invited is refused with a clear message.
+    expect(r.body).toContain("NOT_YOUR_SERVER");
+    expect(r.body).not.toContain("deriveAccountIdFromSeed");
     // On success the SecuredSession is persisted locally.
     expect(r.body).toContain("saveSecuredSession");
     // The "Process URL" affordance + confirm copy.
     expect(r.body).toContain("Process URL");
-    expect(r.body).toContain("Authorize this site?");
+    expect(r.body).toContain("Open ${app} on ${server}?");
+    expect(r.body).not.toMatch(/restricted site/i);
   });
 
   it("/views/secured-sessions.js registers + lists / refreshes / stops sessions", async () => {

@@ -99,7 +99,11 @@
 //       the "<App> suggests an access list" alert), and the owner's
 //       Database section (tables, rows, CSV export, Run SQL with signed
 //       writes); precaches lib/appDb.js + views/app-db.js.
-const SHELL_VERSION = "v53";
+//  v54: knocking on a box you were invited to signs with your contact id
+//       for its owner (remembered from the invite link), and Process URL
+//       reads "Open <app> on <server>" for any private app; a box that is
+//       neither yours nor invited is refused; precaches lib/knockIdentity.js.
+const SHELL_VERSION = "v54";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -164,6 +168,7 @@ const OPTIONAL_SHELL = [
   "/lib/pushSetting.js",
   "/lib/appApiKeys.js",
   "/lib/appDb.js",
+  "/lib/knockIdentity.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
