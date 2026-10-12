@@ -38,6 +38,7 @@ import {
 import { ed25519PubToX25519 } from "./edToMont.js";
 import { sensitiveSigner } from "./adminRoot.js";
 import { controlApex, bootOrigin } from "./apex.js";
+import { importX25519Private } from "./x25519.js";
 
 const COM_BASE = controlApex();
 const BOOT_BASE = bootOrigin();
@@ -121,7 +122,7 @@ async function openSealedWithEd25519Seed(blob, edSeed) {
   const nonce = blob.slice(32, 44);
   const ct = blob.slice(44);
   const myX = await edSeedToX25519Priv(edSeed);
-  const myKey = await crypto.subtle.importKey("raw", myX, "X25519", false, ["deriveBits"]);
+  const myKey = await importX25519Private(myX);
   const ephKey = await crypto.subtle.importKey("raw", ephPub, "X25519", false, []);
   const shared = await crypto.subtle.deriveBits({ name: "X25519", public: ephKey }, myKey, 256);
   const sym = await hkdfSeal(shared, ephPub);

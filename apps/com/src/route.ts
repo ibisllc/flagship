@@ -88,6 +88,10 @@ const WWW_HOST = "www.flagshipserver.com";
  *  failed dynamic import). Keep this list tight: only genuinely root-shared,
  *  webapp-imported assets belong here. */
 const WEBAPP_SHARED_ROOT_ASSETS: ReadonlySet<string> = new Set(["/qrEncoder.js"]);
+/** Whole folders shared the same way: the webapp's stylesheet loads the
+ *  site's fonts from /fonts/, which has no /webapp/ copy (it got the HTML
+ *  fallback, so the webapp never had its fonts). */
+const WEBAPP_SHARED_ROOT_PREFIXES: readonly string[] = ["/fonts/"];
 
 /** The webapp host for THIS env: `webapp.flagshipserver.com` in prod, or
  *  `webapp.<CONTROL_APEX>` under a test env (the gym serves the webapp at
@@ -1466,7 +1470,7 @@ async function serveWebapp(
   const rewrittenPath =
     url.pathname === "/"
       ? "/webapp/"
-      : WEBAPP_SHARED_ROOT_ASSETS.has(url.pathname)
+      : WEBAPP_SHARED_ROOT_ASSETS.has(url.pathname) || WEBAPP_SHARED_ROOT_PREFIXES.some((p) => url.pathname.startsWith(p))
         ? url.pathname
         : isWebappClientRoute(url.pathname)
           ? "/webapp/index.html"

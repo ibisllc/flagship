@@ -867,6 +867,12 @@ describe("webapp.flagshipserver.com — webapp origin (host rewrite)", () => {
     expect(await r.text()).toBe("asset:/qrEncoder.js");
   });
 
+  it("/fonts/* is served from the SITE ROOT on the webapp host, so the webapp gets real fonts", async () => {
+    const r = await route(new Request("https://webapp.flagshipserver.com/fonts/Geist-Variable.woff2"), makeEnv());
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/fonts/Geist-Variable.woff2");
+  });
+
   it("/api/* on web. host is NOT proxied — it's rewritten under /webapp/ (not exposed here)", async () => {
     // The webapp talks to the user's pod for /api/screens/*, never to
     // webapp.flagshipserver.com. Anything that lands on /api/* here is a

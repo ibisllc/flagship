@@ -12,6 +12,7 @@
 // in @flagship/protocol byte-for-byte. Never throws — returns null on any
 // defect (fail closed), matching the protocol's openAccountDirectoryKeyGrant.
 import { verifyWithEd25519Pub, hexToBytes } from "../keystore.js";
+import { importX25519Private } from "./x25519.js";
 
 const encoder = new TextEncoder();
 const FLAGSHIP_SEAL_TAG = "flagship.seal.v1";
@@ -55,25 +56,6 @@ async function edSeedToX25519Priv(edSeed) {
   x[31] &= 127;
   x[31] |= 64;
   return x;
-}
-
-// DER prefix for an X25519 PKCS#8 PrivateKeyInfo wrapping a 32-byte scalar.
-// Some WebCrypto runtimes (e.g. Node) reject a raw X25519 PRIVATE key import
-// but accept PKCS#8; browsers accept raw. We try raw first, then fall back.
-const X25519_PKCS8_PREFIX = Uint8Array.from([
-  0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6e,
-  0x04, 0x22, 0x04, 0x20,
-]);
-
-async function importX25519Private(scalar) {
-  try {
-    return await crypto.subtle.importKey("raw", scalar, "X25519", false, ["deriveBits"]);
-  } catch {
-    const pkcs8 = new Uint8Array(X25519_PKCS8_PREFIX.length + 32);
-    pkcs8.set(X25519_PKCS8_PREFIX, 0);
-    pkcs8.set(scalar, X25519_PKCS8_PREFIX.length);
-    return crypto.subtle.importKey("pkcs8", pkcs8, "X25519", false, ["deriveBits"]);
-  }
 }
 
 async function hkdfSeal(sharedBits, ephPub) {

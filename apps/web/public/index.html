@@ -72,6 +72,12 @@
     }
     body { min-height: 100dvh; }
     ::selection { background: var(--teal); color: var(--canvas); }
+    .skip-link {
+      position: absolute; top: -40px; left: 16px; z-index: 200;
+      background: var(--teal); color: var(--canvas); padding: 8px 14px;
+      font-family: var(--font-mono); font-size: 13px; border-bottom: 0;
+    }
+    .skip-link:focus { top: 16px; color: var(--canvas); }
 
     html {
       scroll-behavior: smooth;
@@ -844,6 +850,7 @@
   </style>
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <a class="skip" href="#main">Skip to content</a>
 

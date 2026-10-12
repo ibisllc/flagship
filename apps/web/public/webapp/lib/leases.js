@@ -17,6 +17,7 @@ import { bytesToHex, hexToBytes, hkdf32 } from "../keystore.js";
 import { getSession } from "./state.js";
 import { sensitiveSigner } from "./adminRoot.js";
 import { controlApex } from "./apex.js";
+import { importX25519Private } from "./x25519.js";
 
 // Webapp lives on webapp.flagshipserver.com; .com endpoints live on the
 // apex. Same Worker handles both via host-based routing.
@@ -254,13 +255,7 @@ export async function openSealedWithIrk(umkSeed, blob) {
 
   // 3. ECDH(myX25519Priv, ephPub) via WebCrypto X25519. Requires
   //    Chrome 130+ / Safari 17+ / Firefox 130+; older browsers throw.
-  const myKey = await crypto.subtle.importKey(
-    "raw",
-    x25519Priv,
-    "X25519",
-    false,
-    ["deriveBits"],
-  );
+  const myKey = await importX25519Private(x25519Priv);
   const ephPubKey = await crypto.subtle.importKey(
     "raw",
     ephPub,

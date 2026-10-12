@@ -93,7 +93,7 @@
 //  v50: a sent server update stays on the update card (and the update
 //       sheet) until the box reports its outcome, with Send again / Forget
 //       it once it's 30 minutes old.
-const SHELL_VERSION = "v50";
+const SHELL_VERSION = "v51";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -141,6 +141,7 @@ const OPTIONAL_SHELL = [
   "/lib/totp.js",
   "/lib/edToMont.js",
   "/lib/bootApproval.js",
+  "/lib/x25519.js",
   "/lib/companionReceiver.js",
   "/lib/companionGuard.js",
   "/lib/companionDockStart.js",

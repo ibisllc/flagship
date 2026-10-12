@@ -779,7 +779,6 @@ export function initCreateServerView() {
     activeDraftId = null;
     $("cs-server-name").value = "";
     $("cs-backup-policy").value = "phone-only";
-    $("cs-llm-pref").value = "";
     restoreDiskEncryption(null);
     setStatus("idle", "idle");
   });

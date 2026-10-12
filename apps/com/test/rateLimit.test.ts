@@ -139,8 +139,14 @@ describe("rateLimit — checkRateLimit", () => {
     const env: RateLimitEnv = { RATE_LIMITER: binding };
     await checkRateLimit(env, { endpoint: "username-claim", ip: "1.2.3.4" });
     await checkRateLimit(env, { endpoint: "auth-code-issue", ip: "1.2.3.4" });
-    expect(calls).toContain("username-claim|ip|1.2.3.4");
-    expect(calls).toContain("auth-code-issue|ip|1.2.3.4");
+    expect(calls).toContain("username-claim|ip|3600|1.2.3.4");
+    expect(calls).toContain("auth-code-issue|ip|3600|1.2.3.4");
+  });
+
+  it("gives two rules on the same axis their own counters", async () => {
+    const { binding, calls } = allowAll();
+    await checkRateLimit({ RATE_LIMITER: binding }, { endpoint: "username-suggest", ip: "1.2.3.4" });
+    expect(calls).toEqual(["username-suggest|ip|60|1.2.3.4", "username-suggest|ip|3600|1.2.3.4"]);
   });
 
   it("counts different IPs independently", async () => {
@@ -412,7 +418,7 @@ describe("rateLimit — wired into route()", () => {
   });
 
   it("rate-limits the recovery endpoint (GET, pre-auth path with usernameHash axis)", async () => {
-    const { binding, calls } = makeBinding((key) => !key.startsWith("recovery-by-username|usernameHash|"));
+    const { binding, calls } = makeBinding((key) => !key.startsWith("recovery-by-username|usernameHash|900|"));
     const env = makeEnv(binding);
     const r = await route(
       new Request("https://flagshipserver.com/api/recovery/by-username/abc", {
@@ -424,8 +430,8 @@ describe("rateLimit — wired into route()", () => {
     const body = JSON.parse(await r.text());
     expect(body.endpoint).toBe("recovery-by-username");
     expect(body.limit).toBe("usernameHash");
-    expect(calls.some((k) => k === "recovery-by-username|ip|1.2.3.4")).toBe(true);
-    expect(calls.some((k) => k === "recovery-by-username|usernameHash|abc")).toBe(true);
+    expect(calls.some((k) => k === "recovery-by-username|ip|3600|1.2.3.4")).toBe(true);
+    expect(calls.some((k) => k === "recovery-by-username|usernameHash|900|abc")).toBe(true);
   });
 
   describe("checkQrPipeUpgrade (P2)", () => {

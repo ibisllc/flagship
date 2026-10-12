@@ -327,7 +327,9 @@ export async function checkRateLimit(
   for (const axis of axes) {
     const id = identifierFor(input, axis.axis);
     if (id === null) continue; // axis not applicable (e.g., missing IRK for unsigned endpoint)
-    const key = `${input.endpoint}|${axis.axis}|${id}`;
+    // Two rules on the same axis (a per-minute and a per-hour cap) must not
+    // share a counter, or every request counts against both twice.
+    const key = `${input.endpoint}|${axis.axis}|${axis.windowSec}|${id}`;
     const outcome = await env.RATE_LIMITER.limit({ key });
     if (!outcome.success) {
       return {
