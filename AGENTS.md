@@ -180,6 +180,13 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 - **`.com` Worker:** current with `main` as of 2026-10-11 (webapp shell **v43**).
   Always `npx tsc -b` first and apply pending D1 migrations before deploying.
+- **Delete / reversible Revoke / Un-revoke (2026-10-12):** on `main` for `.com`,
+  webapp (shell v44), iOS and Android, not deployed or built. Deploy `.com` first:
+  the apps need `revocationReason` on `/pods` (Android drops a revoked pod whose
+  reason is missing) and `POST /api/server-registry/unrevoke`. Delete deposits a
+  `wipe-now` decommission order (best-effort) and then releases the name; an
+  un-revoked auto-unlock box needs one phone approval on its next boot. Not yet
+  tried on a device or in a browser.
 - **iOS / Android:** `main` has fixes not yet in a store build: the iOS
   known-bug fixes (retried account creation registered a second device; Wipe &
   restart kept the old key), Android's matching retry fix, the Android parity
