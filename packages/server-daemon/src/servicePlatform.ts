@@ -283,6 +283,16 @@ export class ServicePlatform {
     pickPort?: () => number;
     /** The version's `migrations/*.sql`, run once each before it starts. */
     migrations?: AppMigrationFile[];
+    /**
+     * A copy from another server (appCopy/): runs on the freshly made stores
+     * before anything else touches them (restoring the copied data); a throw
+     * fails the install and drops those stores.
+     */
+    prepareData?: (data: AppDataCredentials | null) => Promise<void>;
+    /** Migrations the copied data already ran. */
+    appliedMigrations?: string[];
+    /** The copied app's members. */
+    membership?: AppMembershipSnapshot;
   }): Promise<InstallResult> {
     const { request: r, signature, verify } = args;
 
@@ -364,7 +374,17 @@ export class ServicePlatform {
       apiToken,
       hostPort: port,
     });
-    const migrated = await this.migrate(serviceId, data, [], args.migrations);
+    let prepared: { ok: true } | { ok: false; reason: string } = { ok: true };
+    if (args.prepareData) {
+      try {
+        await args.prepareData(data);
+      } catch (e) {
+        prepared = { ok: false, reason: `restoring the copied data failed: ${(e as Error).message}` };
+      }
+    }
+    const migrated = prepared.ok
+      ? await this.migrate(serviceId, data, args.appliedMigrations ?? [], args.migrations)
+      : { ok: false as const, reason: prepared.reason, applied: [] };
     try {
       if (!migrated.ok) throw new Error(migrated.reason);
       await this.deps.appRunner.deploy(spec);
@@ -387,6 +407,7 @@ export class ServicePlatform {
 
     // 3. Build the per-app membership store (mutations gated by host's IRK).
     const membership = this.newMembership(serviceId);
+    if (args.membership) membership.restore(args.membership);
 
     const installed: InstalledService = {
       creator: r.creator,
@@ -752,6 +773,26 @@ export class ServicePlatform {
    * stays registered either way so the owner sees it and can remove it.
    */
   async restore(opts: { retries?: number; retryDelayMs?: number } = {}): Promise<{ restored: string[]; failed: string[] }> {
+    let loaded!: () => void;
+    this.registryLoaded = new Promise<void>((r) => (loaded = r));
+    try {
+      return await this.restoreSaved(opts, loaded);
+    } finally {
+      loaded();
+    }
+  }
+
+  private registryLoaded: Promise<void> = Promise.resolve();
+
+  /** Resolves once the services saved before a restart are back in the list (their containers may still be starting). */
+  whenRegistryLoaded(): Promise<void> {
+    return this.registryLoaded;
+  }
+
+  private async restoreSaved(
+    opts: { retries?: number; retryDelayMs?: number },
+    loaded: () => void,
+  ): Promise<{ restored: string[]; failed: string[] }> {
     const registry = this.deps.registry;
     if (!registry) return { restored: [], failed: [] };
     let saved: PersistedService[];
@@ -804,6 +845,7 @@ export class ServicePlatform {
         }),
       });
     }
+    loaded();
     const restored: string[] = [];
     let todo = pending;
     const retries = opts.retries ?? 5;

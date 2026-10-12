@@ -81,17 +81,25 @@ export function buildAccessRequestRecorder(opts: AccessRequestRecorderOptions) {
     async onDeclared(serviceId: string, suggestions: readonly EgressSuggestion[]): Promise<AccessDraft | null> {
       const appName = opts.appName(serviceId);
       if (appName === null || suggestions.length === 0) return null;
-      const draft = await opts.store.draftFromDeclared(serviceId, suggestions);
-      if (!draft) return null;
-      emit({ type: "access-request", serviceId });
-      const sinks = opts.sinks();
-      if (sinks.alertsEnabled?.() !== false && sinks.push && opts.store.takeAlert(serviceId, DRAFT_ALERT_KEY)) {
-        const push = sinks.push;
-        void Promise.resolve()
-          .then(push)
-          .catch((e: Error) => log(`[egress] access alert push failed: ${e.message}`));
-      }
-      return draft;
+      return alertDraft(serviceId, await opts.store.draftFromDeclared(serviceId, suggestions));
+    },
+    /** A copied app's list from its source server becomes a draft (AppAccessStore.draftFromCopy). */
+    async onCopied(serviceId: string, sourceList: string, suggestions: readonly EgressSuggestion[]): Promise<AccessDraft | null> {
+      if (opts.appName(serviceId) === null) return null;
+      return alertDraft(serviceId, await opts.store.draftFromCopy(serviceId, sourceList, suggestions));
     },
   };
+
+  function alertDraft(serviceId: string, draft: AccessDraft | null): AccessDraft | null {
+    if (!draft) return null;
+    emit({ type: "access-request", serviceId });
+    const sinks = opts.sinks();
+    if (sinks.alertsEnabled?.() !== false && sinks.push && opts.store.takeAlert(serviceId, DRAFT_ALERT_KEY)) {
+      const push = sinks.push;
+      void Promise.resolve()
+        .then(push)
+        .catch((e: Error) => log(`[egress] access alert push failed: ${e.message}`));
+    }
+    return draft;
+  }
 }

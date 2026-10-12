@@ -50,6 +50,14 @@ export interface AppSummary {
    * GET /api/screens/services/:id/access.
    */
   access?: { rules: number; pending: number; draft?: true };
+  /** The app's name, on a row for a copy still underway (no manifest here yet). */
+  name?: string;
+  /**
+   * Present while the app is being copied onto this server from another one
+   * (docs/app-placement.md §5): the row is shown greyed out with "Copying…".
+   * `progress` is 0..1 over the whole copy.
+   */
+  copying?: { state: "copying" | "installing"; progress: number };
 }
 
 export interface RecentInstallEvent {

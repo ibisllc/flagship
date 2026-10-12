@@ -352,6 +352,42 @@ export class AppAccessStore {
     return cloneDraft(draft);
   }
 
+  /**
+   * A copy of the app arrived from another server with its signed list there
+   * (appCopy/, docs/app-placement.md §5). A list is signed for one server, so
+   * here it becomes a draft for the owner to approve: the source's list, with
+   * an `allow` line on top for any host the manifest suggests that it leaves
+   * undecided. Replaces an unanswered draft. Null when the list isn't valid or
+   * opens nothing beyond this box's current list.
+   */
+  async draftFromCopy(serviceId: string, sourceList: string, suggestions: readonly EgressSuggestion[]): Promise<AccessDraft | null> {
+    const parsed = parseAccessList(sourceList);
+    if (parsed.errors.length > 0) return null;
+    const source = normalizeAccessList(sourceList);
+    if (source === this.list(serviceId)) return null;
+    const hosts: EgressSuggestion[] = [];
+    for (const s of suggestions) {
+      const c = checkAccessTarget(s.host);
+      if ("error" in c || c.target === "all" || hosts.some((h) => h.host === c.target)) continue;
+      const rule = coveringRule(parsed.rules, c.target);
+      if (rule && (rule.action === "allow" || rule.target !== "all")) continue;
+      hosts.push(s.why ? { host: c.target, why: s.why } : { host: c.target });
+    }
+    const top = hosts.map((h) => `allow ${h.host}${h.why ? `${DRAFT_WHY_SEP}${oneLine(h.why)}` : ""}`).join("\n");
+    const list = normalizeAccessList(top ? `${top}\n${source}` : source);
+    if (parseAccessList(list).errors.length > 0) return null;
+    for (const r of parsed.rules) {
+      if (r.action === "allow" && r.target !== "all" && !hosts.some((h) => h.host === r.target)) hosts.push({ host: r.target });
+    }
+    const a = this.app(serviceId);
+    const draft: AccessDraft = { list, listSha256: accessListSha256(list), hosts, createdAt: this.now() };
+    a.draft = draft;
+    for (const h of hosts) a.suggested.add(h.host);
+    for (const h of hosts) if (a.pending.get(h.host)?.source === "app") a.pending.delete(h.host);
+    await this.save();
+    return cloneDraft(draft);
+  }
+
   /** The app's unanswered draft, or null. */
   draft(serviceId: string): AccessDraft | null {
     const d = this.apps.get(serviceId)?.draft;

@@ -340,8 +340,16 @@ async function listProdFilesVolumes(cfg: VolumeDumpConfig): Promise<string[]> {
     .sort();
 }
 
-/** `docker run` for a throwaway tar container over one files volume. */
 function filesTarArgs(cfg: VolumeDumpConfig, volume: string, mode: "dump" | "restore"): string[] {
+  return filesArchiveDockerArgs(volume, mode, cfg.helperImage);
+}
+
+/**
+ * `docker run` for a throwaway tar container over one files volume: `dump`
+ * writes the folder to stdout read-only, `restore` unpacks stdin into it.
+ * Shared with an app copy (appCopy/ops.ts).
+ */
+export function filesArchiveDockerArgs(volume: string, mode: "dump" | "restore", helperImage?: string): string[] {
   const caps =
     mode === "dump"
       ? ["--cap-add", "DAC_READ_SEARCH"]
@@ -363,7 +371,7 @@ function filesTarArgs(cfg: VolumeDumpConfig, volume: string, mode: "dump" | "res
     ...filesMountArgs(volume, { readonly: mode === "dump" }),
     "--entrypoint",
     "tar",
-    cfg.helperImage ?? FILES_HELPER_IMAGE,
+    helperImage ?? FILES_HELPER_IMAGE,
     ...(mode === "dump"
       ? ["--numeric-owner", "-cf", "-", "-C", "/data", "."]
       : ["--numeric-owner", "-xpf", "-", "-C", "/data"]),

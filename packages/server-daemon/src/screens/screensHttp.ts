@@ -119,6 +119,7 @@ import {
 } from "../releaseStatusProvider.js";
 import type { UpdateOutcomeRecord } from "../updateOutcome.js";
 import { isAppDbPath } from "../dataLayer/ownerDb.js";
+import { isAppCopyPath } from "../appCopy/target.js";
 import type { ReleaseCatalogSource } from "../updateReleases.js";
 
 const J = { "content-type": "application/json" } as const;
@@ -184,6 +185,15 @@ export interface ScreensHttpDeps {
    * method). Never reachable through MCP or a build tool.
    */
   appDb?: { handle: (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null> } | null;
+  /**
+   * Copying an app onto this server from another (appCopy/target.ts,
+   * docs/app-placement.md §5): `POST /services/copy`, `GET /services/copies`
+   * (owner sessions only), and the rows the apps list shows while one runs.
+   */
+  appCopy?: {
+    handle: (path: string, method: string, req: HttpRequest, ctx: { companion: boolean }) => Promise<HttpResponse | null>;
+    inProgress: (hostUsername: string) => AppSummary[];
+  } | null;
   /**
    * Services built from a published repo adapter, and a way to report one
    * to flagshipserver.com (anonymously: the adapter, and the owner's note).
@@ -516,6 +526,12 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (r) return r;
     }
 
+    if (deps.appCopy && isAppCopyPath(path)) {
+      const companion = deps.pairedSessions?.isCompanionRequest?.(req) === true;
+      const r = await deps.appCopy.handle(path, method, req, { companion });
+      if (r) return r;
+    }
+
     // API keys an app accepts (docs/app-apis.md §3). Companions may list them only.
     if (deps.appApiKeys && isAppApiKeysPath(path)) {
       const companion = deps.pairedSessions?.isCompanionRequest?.(req) === true;
@@ -658,6 +674,10 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       const apps = deps.servicePlatform
         ? deps.servicePlatform.list().map((a) => toSummary(a, deps.serverFqdn, deps.appEgress))
         : [];
+      if (deps.appCopy) {
+        const have = new Set(apps.map((a) => a.serviceId));
+        for (const row of deps.appCopy.inProgress(deps.username)) if (!have.has(row.serviceId)) apps.push(row);
+      }
       const body: AppsListResponse = { apps };
       return jok(body);
     }
@@ -1693,6 +1713,8 @@ function isWriteScopedPath(path: string): boolean {
   if (path === "/api/screens/app-backup/start") return true;
   // orders/send
   if (path === "/api/screens/orders/send") return true;
+  // copying an app onto this server (signed)
+  if (path === "/api/screens/services/copy") return true;
   // url-controller claim
   if (path === "/api/screens/url-controller/claim") return true;
   // url-controller verify (POST, but it's a read-shaped network probe)

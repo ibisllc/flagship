@@ -166,6 +166,10 @@ import { claimEntitlementDeposit, fetchEntitlementViaRelay } from "./entitlement
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { appSqlRunner } from "./dataLayer/appSql.js";
 import { DbWriteLedger, buildOwnerDbHttp } from "./dataLayer/ownerDb.js";
+import { realAppCopyOps } from "./appCopy/ops.js";
+import { buildAppCopySource } from "./appCopy/source.js";
+import { AppCopyStore } from "./appCopy/store.js";
+import { buildAppCopyTarget } from "./appCopy/target.js";
 import {
   buildSelfDeletePoller,
   fileMarkerStore,
@@ -2536,9 +2540,69 @@ async function wireRuntimeSurfaces(deps: {
       : {}),
   });
 
+  // Copying an app between the account's servers (docs/app-placement.md §5):
+  // this box as source (the public export endpoint) and as target (the
+  // screens endpoints + the apps-list rows while a copy runs).
+  const appCopyTarget = await (async () => {
+    const platform = runtime.servicePlatform;
+    if (!cfg || !platform || !env.controlPlaneBaseUrl) return null;
+    const authority = {
+      ownerIrkPub: cfg.irkPublicKey,
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+      username: cfg.userId,
+    };
+    const ops = realAppCopyOps();
+    const envKey = custodian.hasCgk ? (info: Uint8Array) => custodian.deriveAppCopyEnvKey(info) : null;
+    const source = buildAppCopySource({
+      ...authority,
+      serverFqdn: env.serverFqdn,
+      app: (id) => runtime.servicePlatform?.byServiceId(id),
+      containerName: (id) => `flagship-${id}`,
+      ops,
+      resolveCallerKey: buildComStkResolver({ controlPlaneBaseUrl: env.controlPlaneBaseUrl }),
+      workDir: join(dataDir, "data", "app-copy-out"),
+      sourceDir: vibeAppDir,
+      envKey,
+      envStore: runtime.envStore,
+      access: { exportEntry: (id) => deps.serviceAccessRef.current?.exportEntry(id) ?? null },
+      accessList: (id) => runtime.egress.exportList(id),
+      ledger: new DbWriteLedger(join(dataDir, "data", "app-copy-exports.json"), undefined, 60 * 60_000),
+      log: (m) => console.log(m),
+    });
+    await source.init();
+    runtime.addHandler(source.handle);
+    const store = new AppCopyStore(join(dataDir, "data", "app-copies.json"));
+    const interrupted = await store.load();
+    const target = buildAppCopyTarget({
+      ...authority,
+      serverFqdn: env.serverFqdn,
+      platform,
+      dataProvisioner: runtime.dataProvisioner,
+      store,
+      ops,
+      signAsBox: (msg) => custodian.signAsBox(msg),
+      signInstall: (req) => custodian.signInstallService(req),
+      workDir: join(dataDir, "data", "app-copy-in"),
+      sourceDir: vibeAppDir,
+      envKey,
+      envStore: runtime.envStore,
+      access: {
+        importEntry: async (id, e) => {
+          await deps.serviceAccessRef.current?.importEntry(id, e);
+        },
+      },
+      egress: { noteCopied: (id, list, declared) => runtime.egress.noteCopied(id, list, declared) },
+      ledger: new DbWriteLedger(join(dataDir, "data", "app-copy-orders.json"), undefined, 60 * 60_000),
+      log: (m) => console.log(m),
+    });
+    void target.recover(interrupted).catch((e: Error) => console.warn(`[app-copy] recovery failed: ${e.message}`));
+    return target;
+  })();
+
   const screensHandle = buildScreensHttp({
     gate: pairedSessions,
     appEgress: runtime.egress.appEgress,
+    appCopy: appCopyTarget,
     appDb:
       cfg && runtime.servicePlatform && runtime.dataProvisioner
         ? {

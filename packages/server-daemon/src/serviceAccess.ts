@@ -195,6 +195,33 @@ export class ServiceAccessStore {
     return e;
   }
 
+  /** A service's mode and allow-list, to copy it to another server; null when it has none. */
+  exportEntry(serviceRef: string): { mode: ServiceAccessMode; allow: string[]; groups: Record<string, string[]> } | null {
+    const e = this.byService.get(serviceRef);
+    if (!e) return null;
+    return {
+      mode: e.mode,
+      allow: [...e.allow],
+      groups: Object.fromEntries(Object.entries(e.groups).map(([k, v]) => [k, [...v]])),
+    };
+  }
+
+  /** Take a copied service's mode and allow-list (appCopy/), replacing whatever this box had. */
+  async importEntry(
+    serviceRef: string,
+    e: { mode: ServiceAccessMode; allow: readonly string[]; groups: Readonly<Record<string, readonly string[]>> },
+  ): Promise<void> {
+    const hex = (a: string) => /^[0-9a-f]{64}$/.test(a);
+    const allow = [...new Set(e.allow.map((a) => a.toLowerCase()).filter(hex))].slice(0, ALLOW_LIST_CAP);
+    const groups: Record<string, string[]> = {};
+    for (const [id, aids] of Object.entries(e.groups)) {
+      const kept = aids.map((a) => a.toLowerCase()).filter((a) => allow.includes(a));
+      if (kept.length > 0) groups[id] = kept;
+    }
+    this.byService.set(serviceRef, { mode: e.mode === "restricted" ? "restricted" : "open", allow, groups });
+    await this.persist();
+  }
+
   async setMode(serviceRef: string, mode: ServiceAccessMode): Promise<void> {
     this.entry(serviceRef).mode = mode;
     await this.persist();

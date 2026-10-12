@@ -38,6 +38,13 @@ export interface EgressRuntime {
    * (no reason given).
    */
   noteInstalled(serviceId: string, declared: readonly (string | EgressSuggestion)[]): Promise<void>;
+  /**
+   * The owner-signed list this box enforces for an app, to send with a copy
+   * of it (appCopy/); null when the app runs on the default list.
+   */
+  exportList(serviceId: string): string | null;
+  /** A copied app arrived: its source server's list becomes a draft here. */
+  noteCopied(serviceId: string, sourceList: string, declared: readonly (string | EgressSuggestion)[]): Promise<void>;
   /** Where access-request alerts go (push + screens socket); set once the daemon has them. */
   setAccessAlerts(sinks: AccessAlertSinks): void;
 }
@@ -83,6 +90,8 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
       appEgress: null,
       pruneUninstalled: async () => {},
       noteInstalled: async () => {},
+      exportList: () => null,
+      noteCopied: async () => {},
       setAccessAlerts: () => {},
     };
   }
@@ -159,6 +168,11 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
     noteInstalled: async (serviceId, declared) => {
       const suggestions = declared.map((d) => (typeof d === "string" ? { host: d } : d));
       await recorder.onDeclared(serviceId, suggestions).catch(() => {});
+    },
+    exportList: (serviceId) => (store.held(serviceId) ? store.list(serviceId) : null),
+    noteCopied: async (serviceId, sourceList, declared) => {
+      const suggestions = declared.map((d) => (typeof d === "string" ? { host: d } : d));
+      await recorder.onCopied(serviceId, sourceList, suggestions).catch(() => {});
     },
     setAccessAlerts: (s) => {
       sinks = s;

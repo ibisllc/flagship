@@ -53,6 +53,7 @@ import {
   type SecretRequest,
   type InstallServiceRequest,
 } from "@flagship/protocol";
+import { hkdfSync } from "node:crypto";
 import { deriveTlsKey as protocolDeriveTlsKey } from "./acme.js";
 
 /**
@@ -107,6 +108,12 @@ export interface SwkOps {
 export interface GossipOps {
   sealGossip(pt: Bytes): Bytes;
   openGossip(blob: Bytes): Bytes;
+  /**
+   * A 32-byte key every box of the account derives alike: HKDF-SHA256 over
+   * the CGK with `info` (which must start `flagship/app-copy-env/v1|`). Seals
+   * an app's env on its way between two of the account's servers (appCopy/).
+   */
+  deriveAppCopyEnvKey(info: Bytes): Bytes;
 }
 
 export interface KeyCustodianInit {
@@ -201,6 +208,12 @@ export class KeyCustodian implements BoxSigner, SwkOps, GossipOps {
   }
   openGossip(blob: Bytes): Bytes {
     return protocolOpenGossip(blob, this.#cgkOrThrow());
+  }
+  deriveAppCopyEnvKey(info: Bytes): Bytes {
+    if (!new TextDecoder().decode(info).startsWith("flagship/app-copy-env/v1|")) {
+      throw new Error("KeyCustodian: app-copy env key info must be purpose-tagged");
+    }
+    return new Uint8Array(hkdfSync("sha256", this.#cgkOrThrow(), new Uint8Array(0), info, 32));
   }
 
   // ── Narrowing accessors (structural slices for the reference graph) ────

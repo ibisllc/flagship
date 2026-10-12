@@ -53,23 +53,49 @@ data), like any sibling.
   with the sensitive-order key (vectors: `packages/protocol/test-vectors/app-copy/vectors.json`)
   and sends it to the **target** box:
   `POST /api/screens/services/copy {grant:{sourceServer, targetServer, serviceId, issuedAt}, signature}`
-  → 202 `{copyId}`; 400 malformed, 403 bad signature / not this box / stale,
-  409 already there or already copying.
+  → 202 `{copyId}`; 400 malformed (also: source and target the same server),
+  403 bad signature / not this box / source not a server of this account /
+  stale (more than 10 minutes from the box clock), 409 already there, already
+  copying, or this signed order already used. Owner sessions only: a companion
+  gets 403 on both copy endpoints.
 - `GET /api/screens/services/copies` → `{copies:[{copyId, serviceId, appName,
   sourceServer, state:"copying"|"installing"|"done"|"failed", progress?, reason?,
-  startedAt}]}`; the target's apps list also carries the app with
-  `copying:{state, progress}` while underway.
-- The target fetches the bundle from the source box over HTTPS, presenting the
-  owner's grant and proving it is the named target box (its server key, checked
-  by the source against the account directory). The source verifies the grant
-  (owner/admin authority, freshness, its own name as source) and streams: the
-  manifest, the image (`docker save`), a consistent Postgres dump and files
-  archive (the same dump the backups use), the app's member allow-list, and its
-  owner env values only if both boxes can seal them under the account's shared
-  key (otherwise the names come as pending env requests).
+  startedAt, pendingEnv?}]}`, newest first. `progress` (0..1, over the whole
+  copy) is present only while underway; `pendingEnv` lists the env names whose
+  values couldn't come along (see below). A copy a daemon restart cut off is
+  `failed` with reason "interrupted: the server restarted during the copy".
+- While underway the target's apps list (`GET /api/screens/apps-list`) carries
+  the app as `{serviceId, creator, slug, name, urlLabel, url, status:"unknown",
+  installedAt, copying:{state:"copying"|"installing", progress}}`
+  (`installedAt` = when the copy started); once installed it is an ordinary row.
+- The target fetches the bundle from the source box over HTTPS:
+  `POST https://<sourceServer>/api/app-copy/export {from, grant, signature, part, offset, issuedAt, auth}`,
+  where `auth` is the target's identity-key signature over
+  `flagship/app-copy-fetch/v1|from|to|serviceId|grant.issuedAt|signature|part|offset|issuedAt`
+  (at most 5 minutes old). The source checks that key against `.com`'s server
+  directory (a revoked server has none), that the caller is the grant's target
+  and a server of the same account, and the grant (owner/admin authority, its
+  own name as source, at most 15 minutes old when the export opens, one export
+  per grant). `part:"meta"` answers 202 while the source makes the bundle, then
+  its description; the data parts (`image` from `docker save`, `db:<store>` a
+  `pg_dump` of each of the app's databases as the app's own role, `files` the
+  backups' archive of its files folder, the app paused meanwhile; `source` its
+  working tree when it was built there, so it stays editable) are read in
+  8 MiB chunks and checked against their SHA-256 on arrival; `part:"done"`
+  lets the source delete it. The description also carries the members (the
+  membership list and the service-access mode + allow-list), the source's
+  signed access list, and the owner env: its values only sealed under a key
+  both boxes derive from the account's shared gossip key (CGK), otherwise (or
+  when the target can't open them) the names alone, which the target reports
+  as `pendingEnv`.
 - The target installs it under the same service id, with fresh data stores
-  restored from the dump and archive, and starts it (start check).
+  restored from the dumps and archive before the container first starts, and
+  starts it (start check).
 - Access list and API keys are per server (they're signed for a server name):
   the target turns the source's access list into a **draft** for the owner to
   approve (docs/ai-privacy-and-staging.md §3a), and API keys are not copied.
-- A failure leaves nothing half-installed on the target and the source untouched.
+- A failure leaves nothing half-installed on the target and the source untouched:
+  the install drops the stores it made, and the copy removes the image it
+  loaded (one already on the box stays), the env it wrote and its downloads.
+  After a restart the target removes what an interrupted copy held, or marks it
+  done when its install had finished.
