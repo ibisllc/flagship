@@ -99,3 +99,29 @@ data), like any sibling.
   loaded (one already on the box stays), the env it wrote and its downloads.
   After a restart the target removes what an interrupted copy held, or marks it
   done when its install had finished.
+
+## 6. An app's status pill
+
+The box's apps list used to hard-code `status: "unknown"`, and the apps read
+anything but `running` as "Stopped", so every app looked stopped.
+
+**Box** (`GET /api/screens/apps-list`, and the `app` in app-detail):
+- `status`: `"running" | "starting" | "stopped" | "unknown"` from the app's
+  real container state, read once per request for all apps (one `docker ps`,
+  not one call per app). `unknown` only when Docker can't be asked.
+- `activity?`: `{kind: "deploying" | "copying" | "editing"}` when something is
+  working on the app on this box: `deploying` while an install, rebuild,
+  redeploy or AI "finish" is putting a new version live; `copying` while a copy
+  is arriving (the existing in-progress row); `editing` while an AI or IDE
+  session is open on it (its staging copy).
+
+**Services list pill**, combining every server the app is on:
+1. any server says `deploying` or `copying` → **Deploying**
+2. else any says `editing` → **Editing**
+3. else N servers say `running` (or `starting`) → **On 1 server** / **On N servers**
+4. else every server that answered says `stopped` → **Stopped**
+5. else (no server answered) → **Can't reach**
+
+The app's own page shows the same for the server it's opened on (Running,
+Starting, Stopped, Deploying, Copying, Editing), and each Runs-on row shows
+that server's state.
