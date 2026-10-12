@@ -184,21 +184,32 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   `apps/web/public/downloads/`. They include the one-approval restart fix and
   per-provider AI model defaults. The July hand-built arm64 image is retired.
 
-- **AI privacy, staging and egress (2026-10-12).** The rule above is the
-  convention; the build is in progress. Done: identity removed from the chat
-  prompt, tool results/errors/logs redacted, `deploy` no longer tells the model
-  the live URL, sanitized journal (`610f31a0`); deploys fail when the app never
-  answers, and the AI is told the container's limits (`ce47d61b`). In
-  progress: staging copy + go-live + sealing (AI create, AI edit, chat
-  Deploy); the egress gateway (build sandbox → registries only, staging → no
-  internet, live apps → owner-approved `network.egress` hosts via a signed
-  `flagship/app-egress/v1` grant); the AI-provider relay through the hub
-  (per-key, on by default). Then the three apps (labels, progress, egress
-  approval, the per-key relay toggle).
+- **AI privacy, staging and egress (2026-10-12): built, endorsed as
+  `37ba277d`; apps on `main`.** Follows the rule in Conventions. The AI works
+  on a fenced staging copy (neutral identity, placeholder secrets, sample
+  data), calls `finish`, and the box seals the build and installs the same
+  image live. The egress fence (`egress/`): builds reach registries only,
+  staging reaches nothing, and live apps reach only owner-approved
+  `network.egress` hosts (signed `flagship/app-egress/v1`). AI-provider calls go
+  through the hub relay (per key, on by default; the hub logs only 15-minute
+  totals, known AI hosts by name, all else as "other"). Hub deployed; webapp
+  shell v47 live; iOS and Android only on `main`. Behaviour changes on update:
+  existing live apps lose internet until their manifest declares hosts and the
+  owner approves; apps can reach their data stores for the first time (they
+  used to bind 127.0.0.1 only). Open: approvals are per service, not per image;
+  a build can still push repo code out through an allowed registry; the fence
+  fails open for live apps (never for AI staging or builds) if it can't start;
+  dev dataspaces orphaned by a restart mid-staging aren't swept.
+- **Docker containers unreachable on VM appliances (fixed in `e81df698`).**
+  The appliance's `Type=ether` networkd rule pulled every container's veth off
+  its bridge: every app 502'd with "read ECONNRESET" after a 3 s ARP timeout
+  and build RUN steps had no network. New appliances ship
+  `10-flagship-containers.network`; the daemon writes it on older boxes at
+  boot. Republish both appliances so new boxes start fixed.
 
 ### Built, waiting on deploys or rebuilds
 
-- **`.com` Worker:** current with `main` as of 2026-10-12 (webapp shell **v46**).
+- **`.com` Worker:** current with `main` as of 2026-10-12 (webapp shell **v47**).
   Always `npx tsc -b` first and apply pending D1 migrations before deploying.
 - **Delete / reversible Revoke / Un-revoke (2026-10-12):** live on `.com` +
   webapp (shell v44); iOS dev build installed on the owner's iPhone; Android
