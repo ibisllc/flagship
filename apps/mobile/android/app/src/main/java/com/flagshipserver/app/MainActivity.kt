@@ -710,7 +710,7 @@ private fun AppRoot(
         if (isPaired && isUnlocked && accessCenter != null) {
             com.flagshipserver.app.ui.screens.AccessRequestDialogHost(accessCenter) { alert ->
                 alert.box.podId?.let { if (it != app.currentPodId.value) app.setCurrentPod(it) }
-                deepLinker.enqueue(DeepLink.AccessList(alert.request.serviceId))
+                deepLinker.enqueue(DeepLink.AccessList(alert.request.serviceId, draft = alert.isDraft))
             }
         }
         if (isPaired && !isUnlocked) {

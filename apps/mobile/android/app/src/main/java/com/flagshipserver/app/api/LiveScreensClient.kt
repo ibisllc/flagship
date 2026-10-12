@@ -103,6 +103,23 @@ class LiveScreensClient(
         }
     }
 
+    /** A GET whose body is not JSON (a CSV download). */
+    private suspend fun requestBytes(path: String, readTimeoutSeconds: Long? = null): ByteArray {
+        val req = Request.Builder()
+            .url(base() + path)
+            .header("x-flagship-session", token())
+            .get()
+            .build()
+        val (status, bytes) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val c = readTimeoutSeconds?.let {
+                client.newBuilder().readTimeout(it, java.util.concurrent.TimeUnit.SECONDS).build()
+            } ?: client
+            c.newCall(req).execute().use { resp -> resp.code to (resp.body?.bytes() ?: ByteArray(0)) }
+        }
+        if (status !in 200..299) throw ScreensError.Http(status, String(bytes, Charsets.UTF_8))
+        return bytes
+    }
+
     override suspend fun serverDetail(): ServerDetailResponse =
         request("/api/screens/server-detail", ServerDetailResponse.serializer())
 
@@ -227,6 +244,30 @@ class LiveScreensClient(
     override suspend fun serviceAccessDismiss(serviceId: String, host: String) {
         val body = json.encodeToString(AppAccessDismissRequest.serializer(), AppAccessDismissRequest(host)).toByteArray()
         request<Unit>("${servicePath(serviceId)}/access/dismiss", null, "POST", body)
+    }
+
+    override suspend fun serviceAccessDraftDismiss(serviceId: String) {
+        request<Unit>("${servicePath(serviceId)}/access/draft/dismiss", null, "POST", "{}".toByteArray())
+    }
+
+    /** A path segment for a store or table name: percent-encoded, spaces as %20
+     *  (the box decodes with decodeURIComponent, which keeps a `+`). */
+    private fun segment(s: String): String = java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+
+    private fun dbPath(serviceId: String, store: String): String = "${servicePath(serviceId)}/db/${segment(store)}"
+
+    override suspend fun serviceDb(serviceId: String): AppDbOverview =
+        request("${servicePath(serviceId)}/db", AppDbOverview.serializer())
+
+    override suspend fun serviceDbTable(serviceId: String, store: String, table: String, offset: Int, limit: Int): AppDbRows =
+        request("${dbPath(serviceId, store)}/tables/${segment(table)}?offset=$offset&limit=$limit", AppDbRows.serializer())
+
+    override suspend fun serviceDbExportCsv(serviceId: String, store: String, table: String): ByteArray =
+        requestBytes("${dbPath(serviceId, store)}/tables/${segment(table)}/export.csv", readTimeoutSeconds = 120)
+
+    override suspend fun serviceDbQuery(serviceId: String, store: String, req: AppDbQueryRequest): AppDbQueryResult {
+        val body = json.encodeToString(AppDbQueryRequest.serializer(), req).toByteArray()
+        return request("${dbPath(serviceId, store)}/query", AppDbQueryResult.serializer(), "POST", body, readTimeoutSeconds = 30)
     }
 
     override suspend fun serviceApiKeys(serviceId: String): AppApiKeysResponse =

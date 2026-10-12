@@ -4,4 +4,6 @@
     <cache-path name="recipes" path="recipes/" />
     <!-- flagship.app.json shared from the git import screen. -->
     <cache-path name="adapters" path="adapters/" />
+    <!-- A table exported from an app's Database section (only the newest is kept). -->
+    <cache-path name="exports" path="exports/" />
 </paths>

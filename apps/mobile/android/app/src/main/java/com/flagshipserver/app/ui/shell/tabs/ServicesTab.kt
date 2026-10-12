@@ -14,6 +14,9 @@ import androidx.navigation.navArgument
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.screens.AccessListScreen
+import com.flagshipserver.app.ui.screens.AppDatabaseScreen
+import com.flagshipserver.app.ui.screens.AppDbQueryScreen
+import com.flagshipserver.app.ui.screens.AppDbTableScreen
 import com.flagshipserver.app.ui.screens.ServiceDetailScreen
 import com.flagshipserver.app.ui.screens.accessListRoute
 import com.flagshipserver.app.ui.screens.ServiceEnvScreen
@@ -53,7 +56,7 @@ fun ServicesTab() {
             is DeepLink.AccessList -> {
                 deepLinker.consume()
                 nav.navigate("app-detail/${link.serviceId}")
-                nav.navigate(accessListRoute(link.serviceId))
+                nav.navigate(accessListRoute(link.serviceId, draft = link.draft))
             }
             // W10 — the `vibecode-needs-you` push deep-links here so the AI's
             // mid-build question (talkToUser / requestEnvVar) opens the chat.
@@ -99,9 +102,44 @@ fun ServicesTab() {
     }
     NavHost(navController = nav, startDestination = "apps-list") {
         composable("apps-list") { ServicesListScreen(nav) }
-        composable("service-access-list/{serviceId}") { entry ->
+        composable(
+            route = "service-access-list/{serviceId}?draft={draft}",
+            arguments = listOf(
+                navArgument("serviceId") { type = NavType.StringType },
+                navArgument("draft") { type = NavType.BoolType; defaultValue = false },
+            ),
+        ) { entry ->
             val id = entry.arguments?.getString("serviceId") ?: return@composable
-            AccessListScreen(nav, serviceId = id)
+            AccessListScreen(nav, serviceId = id, fromDraft = entry.arguments?.getBoolean("draft") == true)
+        }
+        // The owner's Database section (docs/app-apis.md §6): the app's
+        // stores and tables, one table's rows, and Run SQL.
+        composable("app-db/{serviceId}") { entry ->
+            val id = entry.arguments?.getString("serviceId") ?: return@composable
+            AppDatabaseScreen(nav, serviceId = id)
+        }
+        composable(
+            route = "app-db/{serviceId}/table?store={store}&table={table}",
+            arguments = listOf(
+                navArgument("serviceId") { type = NavType.StringType },
+                navArgument("store") { type = NavType.StringType; defaultValue = "" },
+                navArgument("table") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
+            val id = entry.arguments?.getString("serviceId") ?: return@composable
+            val store = entry.arguments?.getString("store").orEmpty()
+            val table = entry.arguments?.getString("table").orEmpty()
+            AppDbTableScreen(nav, serviceId = id, store = store, table = table)
+        }
+        composable(
+            route = "app-db/{serviceId}/query?store={store}",
+            arguments = listOf(
+                navArgument("serviceId") { type = NavType.StringType },
+                navArgument("store") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
+            val id = entry.arguments?.getString("serviceId") ?: return@composable
+            AppDbQueryScreen(nav, serviceId = id, store = entry.arguments?.getString("store").orEmpty())
         }
         composable("app-detail/{appId}") { entry ->
             val id = entry.arguments?.getString("appId") ?: return@composable

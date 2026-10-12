@@ -1,6 +1,6 @@
 // A live app's internet access (docs/ai-privacy-and-staging.md §3a): the
-// service page's section, the access-list editor, and the request dialog the
-// alerts raise. Every change is a list signed with the sensitive-order key; a
+// service page's section (with a suggested list's card), the access-list
+// editor, and the request dialog the alerts raise. Every change is a list signed with the sensitive-order key; a
 // restricted device sees everything but changes nothing.
 
 package com.flagshipserver.app.ui.screens
@@ -23,6 +23,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -32,7 +33,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -58,7 +62,8 @@ import com.flagshipserver.app.viewmodels.AppAccessOrder
 import com.flagshipserver.app.viewmodels.AppAccessViewModel
 import kotlinx.coroutines.launch
 
-fun accessListRoute(serviceId: String) = "service-access-list/$serviceId"
+fun accessListRoute(serviceId: String, draft: Boolean = false) =
+    if (draft) "service-access-list/$serviceId?draft=true" else "service-access-list/$serviceId"
 
 private fun appVm(
     serviceId: String,
@@ -88,6 +93,18 @@ fun InternetAccessSection(
     val scope = rememberCoroutineScope()
     val vm = remember(serviceId, client) { appVm(serviceId, client, appName, fallbackServerDomain) }
     LaunchedEffect(vm, summary) { vm.load() }
+    // Back from the editor (a reviewed draft saved, a list changed): reload.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, vm) {
+        var first = true
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (first) first = false else scope.launch { vm.load() }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val state by vm.state.collectAsState()
     val busy by vm.busy.collectAsState()
     val error by vm.error.collectAsState()
@@ -112,6 +129,16 @@ fun InternetAccessSection(
                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
                 modifier = Modifier.testTag("service-detail-access-rules"),
             )
+            state?.draft?.let { d ->
+                Spacer(Modifier.height(FS.space.s3))
+                DraftCard(
+                    draft = d,
+                    canSign = !restricted,
+                    busy = busy,
+                    onReview = { nav.navigate(accessListRoute(serviceId, draft = true)) },
+                    onDismiss = { scope.launch { vm.dismissDraft() } },
+                )
+            }
             pending.forEach { p ->
                 Spacer(Modifier.height(FS.space.s3))
                 PendingRequestRow(
@@ -146,6 +173,57 @@ fun InternetAccessSection(
             error?.let {
                 Spacer(Modifier.height(FS.space.s2))
                 Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+            }
+        }
+    }
+}
+
+/** "This app suggests letting it reach these hosts": each host with its
+ *  reason, Review (the editor, prefilled) and Dismiss. */
+@Composable
+private fun DraftCard(
+    draft: com.flagshipserver.app.api.AppAccessDraft,
+    canSign: Boolean,
+    busy: Boolean,
+    onReview: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    FSCard(
+        padding = PaddingValues(FS.space.s3),
+        modifier = Modifier.fillMaxWidth().testTag("service-detail-access-draft"),
+    ) {
+        Column {
+            Text(
+                AppAccessViewModel.DRAFT_TITLE,
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+            )
+            draft.hosts.forEach { h ->
+                Spacer(Modifier.height(FS.space.s1))
+                Text(
+                    h.host,
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 14.sp, fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.testTag("service-detail-access-draft-host"),
+                )
+                h.why?.takeIf { it.isNotBlank() }?.let {
+                    Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp))
+                }
+            }
+            Spacer(Modifier.height(FS.space.s1))
+            Text(AppAccessViewModel.DRAFT_NOTE, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp))
+            if (canSign) {
+                Spacer(Modifier.height(FS.space.s2))
+                Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    FSPrimaryButton(
+                        AppAccessViewModel.REVIEW, onReview, enabled = !busy,
+                        modifier = Modifier.testTag("service-detail-access-draft-review"),
+                    )
+                    FSGhostButton(
+                        AppAccessViewModel.DISMISS, onDismiss, enabled = !busy,
+                        modifier = Modifier.testTag("service-detail-access-draft-dismiss"),
+                    )
+                }
             }
         }
     }
@@ -195,7 +273,7 @@ private fun PendingRequestRow(
 /** The access list editor: parses as you type, shows each error by line,
  *  and keeps Save off while there are errors. */
 @Composable
-fun AccessListScreen(nav: NavController, serviceId: String) {
+fun AccessListScreen(nav: NavController, serviceId: String, fromDraft: Boolean = false) {
     val appState = LocalAppState.current
     val client = LocalScreensClient.current
     val toasts = LocalToastCenter.current
@@ -218,8 +296,10 @@ fun AccessListScreen(nav: NavController, serviceId: String) {
     var draft by remember(vm) { mutableStateOf<String?>(null) }
     var savedDraft by remember(vm) { mutableStateOf<String?>(null) }
     LaunchedEffect(vm) { vm.load() }
+    // Review opens on the suggested list; with no draft left it's the list itself.
+    val reviewing = fromDraft && state?.draft != null
     LaunchedEffect(state) {
-        if (draft == null) state?.let { draft = it.list }
+        if (draft == null) state?.let { draft = if (fromDraft) it.draft?.list ?: it.list else it.list }
     }
 
     val text = draft ?: ""
@@ -260,6 +340,15 @@ fun AccessListScreen(nav: NavController, serviceId: String) {
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
             )
+            if (reviewing) {
+                Spacer(Modifier.height(FS.space.s2))
+                Text(
+                    AppAccessViewModel.DRAFT_EDITOR_NOTE,
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    modifier = Modifier.testTag("access-list-draft-note"),
+                )
+            }
             Spacer(Modifier.height(FS.space.s4))
             if (draft == null) {
                 Text(
@@ -302,7 +391,8 @@ fun AccessListScreen(nav: NavController, serviceId: String) {
                             val toSave = text
                             scope.launch {
                                 savedDraft = toSave
-                                if (vm.save(toSave)) {
+                                val ok = if (reviewing) vm.save(toSave, vm.approveDraftReason) else vm.save(toSave)
+                                if (ok) {
                                     draft = vm.state.value?.list ?: AppAccessList.normalize(toSave)
                                     toasts.success("Saved. $appName follows the new list now.")
                                 }
@@ -320,13 +410,48 @@ fun AccessListScreen(nav: NavController, serviceId: String) {
     }
 }
 
-/** One dialog per pending request, raised by [AccessRequestCenter]. */
+/** One dialog per pending request, raised by [AccessRequestCenter]. A draft's
+ *  Review and a confirmation's View access list both open the app's editor
+ *  ([AccessAlert.isDraft] says which list it starts from). */
 @Composable
 fun AccessRequestDialogHost(center: AccessRequestCenter, onViewList: (AccessAlert) -> Unit) {
     val shown by center.shown.collectAsState()
     val scope = rememberCoroutineScope()
     val s = shown ?: return
     val alert = s.alert
+    if (alert.isDraft) {
+        AlertDialog(
+            onDismissRequest = { scope.launch { center.notNow() } },
+            title = { Text(alert.asks) },
+            text = {
+                Column {
+                    alert.request.hosts.forEach { h ->
+                        Text(AppAccessViewModel.suggestionText(h), style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+                    }
+                    Spacer(Modifier.height(FS.space.s2))
+                    Text(
+                        "On ${alert.box.fqdn}. ${AppAccessViewModel.DRAFT_NOTE}",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { scope.launch { center.review()?.let(onViewList) } },
+                    modifier = Modifier.testTag("access-alert-review"),
+                ) { Text(AppAccessViewModel.REVIEW) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { scope.launch { center.notNow() } },
+                    modifier = Modifier.testTag("access-alert-not-now"),
+                ) { Text(AppAccessViewModel.NOT_NOW) }
+            },
+            modifier = Modifier.testTag("access-alert-draft"),
+        )
+        return
+    }
     when (val phase = s.phase) {
         is AccessRequestCenter.Phase.Done -> AlertDialog(
             onDismissRequest = { scope.launch { center.close() } },

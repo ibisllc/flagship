@@ -169,6 +169,28 @@ class AppAccessViewModel(
         }
     }
 
+    /** Dismiss the suggested list (unsigned: a draft opens nothing). */
+    suspend fun dismissDraft(): Boolean {
+        if (_busy.value) return false
+        _busy.value = true
+        _error.value = null
+        return try {
+            client.serviceAccessDraftDismiss(serviceId)
+            _state.value = _state.value?.copy(draft = null)
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            _error.value = t.boxError() ?: t.userFacing()
+            false
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    /** The signing prompt when the editor saves a reviewed draft. */
+    val approveDraftReason: String get() = "Approve the hosts $appName suggests"
+
     suspend fun save(list: String, reason: String = "Change which hosts $appName can reach"): Boolean {
         if (_busy.value) return false
         _busy.value = true
@@ -204,6 +226,17 @@ class AppAccessViewModel(
         const val NOT_NOW = "Not now"
         const val BADGE = "Wants internet"
         const val READ_ONLY_NOTE = "This device can see the list but not change it."
+        const val DRAFT_TITLE = "This app suggests letting it reach these hosts"
+        const val REVIEW = "Review"
+        const val DISMISS = "Dismiss"
+        const val DRAFT_NOTE = "Nothing opens until you review the list and save it."
+        const val DRAFT_EDITOR_NOTE = "This is the list the app suggests. Check it, change it if you like, then save to approve it."
+
+        fun draftAsksText(app: String) = "$app suggests an access list"
+
+        /** One line per suggested host: "host: why", or just the host. */
+        fun suggestionText(s: com.flagshipserver.app.api.AppAccessSuggestion): String =
+            s.why?.takeIf { it.isNotBlank() }?.let { "${s.host}: $it" } ?: s.host
         const val EDITOR_HELP =
             "One rule per line, checked from the top: the first rule that matches decides, and a host no rule matches is denied. " +
                 "Write allow or deny, then a host, *.example.com for its subdomains, or all. # starts a comment."
@@ -223,10 +256,11 @@ class AppAccessViewModel(
         fun allowedText(app: String, host: String) = "$app can now reach $host"
         fun deniedText(app: String, host: String) = "$app won't reach $host"
 
-        /** The app list badge: a host is waiting for an answer. A box from
-         *  before access lists falls back to the v1 egress approval. */
+        /** The app list badge: a host or a suggested list is waiting for an
+         *  answer. A box from before access lists falls back to the v1 egress
+         *  approval. */
         fun showsBadge(app: com.flagshipserver.app.api.AppSummary): Boolean =
-            app.access?.let { it.pending > 0 } ?: EgressCardState.showsBadge(app.egress)
+            app.access?.let { it.pending > 0 || it.draft } ?: EgressCardState.showsBadge(app.egress)
 
         /** Errors to show, by line: the box's after a refused save, else the live parse's. */
         fun lineErrors(draft: String, boxErrors: List<AppAccessLineError>): List<AppAccessLineError> {

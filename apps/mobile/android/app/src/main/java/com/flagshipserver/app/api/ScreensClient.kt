@@ -133,6 +133,29 @@ interface ScreensClient {
     suspend fun serviceAccessDismiss(serviceId: String, host: String): Unit =
         throw ScreensError.NotImplemented("access list")
 
+    /** `POST /api/screens/services/:serviceId/access/draft/dismiss`: discard
+     *  a suggested list (unsigned: a draft opens nothing). */
+    suspend fun serviceAccessDraftDismiss(serviceId: String): Unit =
+        throw ScreensError.NotImplemented("access list")
+
+    /** `GET /api/screens/services/:serviceId/db` (docs/app-apis.md §6): each
+     *  Postgres store's tables. Owner sessions only (a companion gets 403); a
+     *  box without the Database section answers 404. */
+    suspend fun serviceDb(serviceId: String): AppDbOverview =
+        throw ScreensError.NotImplemented("database")
+
+    /** `GET …/db/:store/tables/:table?offset&limit`: one page of rows. */
+    suspend fun serviceDbTable(serviceId: String, store: String, table: String, offset: Int, limit: Int): AppDbRows =
+        throw ScreensError.NotImplemented("database")
+
+    /** `GET …/db/:store/tables/:table/export.csv`: the whole table as CSV. */
+    suspend fun serviceDbExportCsv(serviceId: String, store: String, table: String): ByteArray =
+        throw ScreensError.NotImplemented("database")
+
+    /** `POST …/db/:store/query`: READ ONLY unless it carries a signed grant. */
+    suspend fun serviceDbQuery(serviceId: String, store: String, req: AppDbQueryRequest): AppDbQueryResult =
+        throw ScreensError.NotImplemented("database")
+
     /** `GET /api/screens/services/:serviceId/api-keys` (docs/app-apis.md §3).
      *  A box without API keys answers 404. */
     suspend fun serviceApiKeys(serviceId: String): AppApiKeysResponse =

@@ -131,9 +131,10 @@
             android:exported="false" />
 
         <!-- Share a minted recipe file from the create-server delivery chooser
-             (Save / share) and a git import's flagship.app.json. Authority
-             "<applicationId>.fileprovider"; paths in res/xml/file_paths.xml
-             (cache/recipes and cache/adapters only). -->
+             (Save / share), a git import's flagship.app.json and a table's
+             CSV export. Authority "<applicationId>.fileprovider"; paths in
+             res/xml/file_paths.xml (cache/recipes, cache/adapters and
+             cache/exports only). -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

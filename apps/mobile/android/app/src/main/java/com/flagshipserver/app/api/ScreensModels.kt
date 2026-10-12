@@ -33,11 +33,13 @@ data class AppSummary(
     val access: AppAccessSummary? = null,
 )
 
-/** `access: {rules, pending}` on an app summary. */
+/** `access: {rules, pending, draft?}` on an app summary. */
 @Serializable
 data class AppAccessSummary(
     val rules: Int = 0,
     val pending: Int = 0,
+    /** A suggested list waits for the owner's review. */
+    val draft: Boolean = false,
 )
 
 /** A live app's internet access: it may reach only [approved] hosts, each of
@@ -89,12 +91,28 @@ data class AppAccessPending(
     }
 }
 
+/** A host the app's manifest suggests, with its short reason. */
+@Serializable
+data class AppAccessSuggestion(val host: String, val why: String? = null)
+
+/** A suggested list (§3a "Suggested lists"): the signed list with an `allow`
+ *  line on top for each new host. It opens nothing until the owner signs it. */
+@Serializable
+data class AppAccessDraft(
+    val list: String,
+    val listSha256: String? = null,
+    val hosts: List<AppAccessSuggestion> = emptyList(),
+    val createdAt: Long = 0,
+)
+
 /** `GET /api/screens/services/:id/access`. */
 @Serializable
 data class AppAccessState(
     val list: String = com.flagshipserver.app.core.AppAccessList.DEFAULT_LIST,
     val listSha256: String? = null,
     val pending: List<AppAccessPending> = emptyList(),
+    /** Null when no draft waits, and on boxes from before drafts. */
+    val draft: AppAccessDraft? = null,
 )
 
 @Serializable
@@ -140,6 +158,76 @@ data class AppAccessLineError(val line: Int, val message: String)
 @Serializable
 data class AppAccessDismissRequest(val host: String)
 
+// ---------- The owner's Database section (docs/app-apis.md §6) ------------
+
+/** `GET /api/screens/services/:id/db`. */
+@Serializable
+data class AppDbOverview(val stores: List<AppDbStore> = emptyList())
+
+@Serializable
+data class AppDbStore(val store: String, val tables: List<AppDbTable> = emptyList())
+
+/** `name` is `table` in the public schema, else `schema.table`. `rows` is the
+ *  planner's estimate, null when unknown. */
+@Serializable
+data class AppDbTable(
+    val name: String,
+    val kind: String = "table",
+    val rows: Double? = null,
+    val bytes: Double = 0.0,
+)
+
+@Serializable
+data class AppDbColumn(val name: String, val type: String = "")
+
+/** `GET …/db/:store/tables/:table?offset&limit`. Values come as Postgres
+ *  prints them (strings), except booleans and small numbers. */
+@Serializable
+data class AppDbRows(
+    val columns: List<AppDbColumn> = emptyList(),
+    val rows: List<List<JsonElement>> = emptyList(),
+    val total: Long = 0,
+)
+
+@Serializable
+data class AppDbWriteGrantBody(
+    val serverDomain: String,
+    val serviceId: String,
+    val store: String,
+    val sqlSha256: String,
+    val issuedAt: Long,
+)
+
+/** `POST …/db/:store/query`: unsigned runs READ ONLY; a write carries the
+ *  owner's signed grant. Nulls are left out on the wire. */
+@Serializable
+data class AppDbQueryRequest(
+    val sql: String,
+    val grant: AppDbWriteGrantBody? = null,
+    /** Ed25519 over the canonical bytes, 128 hex. */
+    val signature: String? = null,
+)
+
+@Serializable
+data class AppDbQueryResult(
+    /** The first word of the statement's tag (`SELECT`, `UPDATE` …). */
+    val command: String = "",
+    val columns: List<AppDbColumn> = emptyList(),
+    val rows: List<List<JsonElement>> = emptyList(),
+    val rowCount: Long? = null,
+    /** More rows existed than came back. */
+    val truncated: Boolean = false,
+)
+
+/** A refused query: `{error, sqlState, position?, needsGrant?}`. */
+@Serializable
+data class AppDbRefusal(
+    val error: String? = null,
+    val sqlState: String? = null,
+    val position: Int? = null,
+    val needsGrant: Boolean = false,
+)
+
 // ---------- App API keys (docs/app-apis.md §3) --------------------------
 
 /** One key on `GET /api/screens/services/:id/api-keys`. The secret never
@@ -182,17 +270,30 @@ data class AppApiKeyCreateRequest(
 @Serializable
 data class AppApiKeyCreateResponse(val ok: Boolean = false, val key: String? = null)
 
-/** One pending request on `GET /api/screens/access-requests`. */
+/** One entry on `GET /api/screens/access-requests`: a host an app was
+ *  denied, or (`kind: "draft"`, listed first) a suggested list to review. */
 @Serializable
 data class AccessRequest(
     val serviceId: String,
     val appName: String? = null,
-    val host: String,
+    /** Empty on a draft. */
+    val host: String = "",
     val source: String = AppAccessPending.SOURCE_ATTEMPT,
     val attempts: Int = 0,
     val firstSeen: Long = 0,
     val lastSeen: Long = 0,
-)
+    /** `"draft"` for a suggested list; absent for a single-host request. */
+    val kind: String? = null,
+    /** A draft's suggested hosts. */
+    val hosts: List<AppAccessSuggestion> = emptyList(),
+    val createdAt: Long = 0,
+) {
+    val isDraft: Boolean get() = kind == KIND_DRAFT
+
+    companion object {
+        const val KIND_DRAFT = "draft"
+    }
+}
 
 @Serializable
 data class AccessRequestsResponse(val requests: List<AccessRequest> = emptyList())

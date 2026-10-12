@@ -4,7 +4,9 @@
 // comes to the foreground, on an `access-request` frame from a box's event
 // socket, when a push lands while it is open, and on a slow foreground poll. Each request becomes one "<App> wants to reach <host>"
 // dialog: Allow / Deny edit the list with withRule and send a signed order;
-// Not now keeps the request on the box and stops asking for a day. With
+// Not now keeps the request on the box and stops asking for a day. A
+// suggested list (a draft, listed first) becomes "<App> suggests an access
+// list" with Review (open that app's editor with the draft) / Not now. With
 // Settings → Push notifications off, no dialogs are raised at all; the
 // requests still wait on each app's page.
 
@@ -32,10 +34,17 @@ import kotlinx.coroutines.sync.withLock
 data class AccessBox(val podId: String?, val fqdn: String, val client: ScreensClient)
 
 data class AccessAlert(val box: AccessBox, val request: AccessRequest) {
-    val key: String get() = "${box.fqdn}|${request.serviceId}|${request.host}"
+    val isDraft: Boolean get() = request.isDraft
+    /** A newer draft (another createdAt) is a new alert. */
+    val key: String get() =
+        if (isDraft) "${box.fqdn}|${request.serviceId}|draft|${request.createdAt}"
+        else "${box.fqdn}|${request.serviceId}|${request.host}"
     val appName: String get() = request.appName?.takeIf { it.isNotBlank() } ?: request.serviceId
-    val asks: String get() = AppAccessViewModel.asksText(appName, request.host)
-    val detail: String get() = AppAccessViewModel.sourceText(request.source, request.attempts)
+    val asks: String get() =
+        if (isDraft) AppAccessViewModel.draftAsksText(appName) else AppAccessViewModel.asksText(appName, request.host)
+    val detail: String get() =
+        if (isDraft) request.hosts.joinToString("\n") { AppAccessViewModel.suggestionText(it) }
+        else AppAccessViewModel.sourceText(request.source, request.attempts)
 }
 
 class AccessRequestCenter(
@@ -162,6 +171,8 @@ class AccessRequestCenter(
     suspend fun answer(allow: Boolean) {
         val current = _shown.value ?: return
         if (current.phase is Phase.Sending || current.phase is Phase.Done) return
+        // A draft is answered in the editor (Review), never from the alert.
+        if (current.alert.isDraft) return
         val alert = current.alert
         _shown.value = Shown(alert, Phase.Sending(allow))
         val host = alert.request.host
@@ -201,6 +212,16 @@ class AccessRequestCenter(
             _shown.value?.let { snoozedUntil[it.alert.key] = now() + snoozeMs }
             showNextLocked()
         }
+    }
+
+    /** Review a draft: hand back the alert so its app's editor opens with the
+     *  draft. It isn't asked again today here; saving the list clears it on
+     *  the box, and the page keeps offering it until then. */
+    suspend fun review(): AccessAlert? = mutex.withLock {
+        val a = _shown.value?.alert?.takeIf { it.isDraft } ?: return@withLock null
+        snoozedUntil[a.key] = now() + snoozeMs
+        showNextLocked()
+        a
     }
 
     /** Close the confirmation (or a failure) and show the next request. */

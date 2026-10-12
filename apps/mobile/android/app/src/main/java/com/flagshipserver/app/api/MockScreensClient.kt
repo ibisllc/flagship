@@ -145,8 +145,11 @@ class MockScreensClient(
     var accessError: Throwable? = null
 
     private fun accessSummary(serviceId: String): AppAccessSummary? = accessFixture[serviceId]?.let {
-        AppAccessSummary(com.flagshipserver.app.core.AppAccessList.parse(it.list).rules.size, it.pending.size)
+        AppAccessSummary(com.flagshipserver.app.core.AppAccessList.parse(it.list).rules.size, it.pending.size, it.draft != null)
     }
+
+    /** Drafts discarded with `serviceAccessDraftDismiss`. */
+    val accessDraftDismissals: MutableList<String> = mutableListOf()
 
     override suspend fun serviceAccess(serviceId: String): AppAccessState {
         tick()
@@ -165,7 +168,8 @@ class MockScreensClient(
         }
         // A request is answered once a rule names its host.
         val named = parsed.rules.map { it.target }.toSet()
-        val next = AppAccessState(req.list, req.grant.listSha256, current.pending.filter { it.host !in named })
+        // Applying a list drops the draft.
+        val next = AppAccessState(req.list, req.grant.listSha256, current.pending.filter { it.host !in named }, draft = null)
         accessFixture[serviceId] = next
         return AppAccessSetResponse(ok = true, access = kotlinx.serialization.json.Json.encodeToJsonElement(AppAccessState.serializer(), next))
     }
@@ -175,6 +179,13 @@ class MockScreensClient(
         accessDismissals.add(serviceId to host)
         val current = accessFixture[serviceId] ?: throw ScreensError.Http(404, """{"error":"no such service"}""")
         accessFixture[serviceId] = current.copy(pending = current.pending.filter { it.host != host })
+    }
+
+    override suspend fun serviceAccessDraftDismiss(serviceId: String) {
+        tick()
+        accessDraftDismissals.add(serviceId)
+        val current = accessFixture[serviceId] ?: throw ScreensError.Http(404, """{"error":"no such service"}""")
+        accessFixture[serviceId] = current.copy(draft = null)
     }
 
     /** Each app's API keys (docs/app-apis.md §3): plants has a read key, wiki
@@ -242,10 +253,17 @@ class MockScreensClient(
 
     override suspend fun accessRequests(): AccessRequestsResponse {
         tick()
+        val name = { id: String -> id.substringAfter("--").replaceFirstChar { it.uppercase() } }
+        // Drafts first, as the box lists them.
+        val drafts = accessFixture.mapNotNull { (id, state) ->
+            state.draft?.let { d ->
+                AccessRequest(id, name(id), kind = AccessRequest.KIND_DRAFT, hosts = d.hosts, createdAt = d.createdAt)
+            }
+        }
         return AccessRequestsResponse(
-            accessFixture.flatMap { (id, state) ->
+            drafts + accessFixture.flatMap { (id, state) ->
                 state.pending.map { p ->
-                    AccessRequest(id, id.substringAfter("--").replaceFirstChar { it.uppercase() }, p.host, p.source, p.attempts, p.firstSeen, p.lastSeen)
+                    AccessRequest(id, name(id), p.host, p.source, p.attempts, p.firstSeen, p.lastSeen)
                 }
             },
         )
@@ -268,6 +286,114 @@ class MockScreensClient(
     }
 
     override suspend fun boxFqdn(): String = "$podContext.bright-maple.flagship.services"
+
+    // ---- The owner's Database section (docs/app-apis.md §6) ----
+
+    /** One table: its columns and every row (values as the box sends them). */
+    data class MockTable(val columns: List<AppDbColumn>, val rows: List<List<kotlinx.serialization.json.JsonElement>>, val kind: String = "table")
+
+    /** Each app's stores and their tables. An app missing here is on a box
+     *  without the Database section (404). */
+    val dbFixture: MutableMap<String, MutableMap<String, MutableMap<String, MockTable>>> = mutableMapOf(
+        "bright-maple--plants" to mutableMapOf(
+            "default" to mutableMapOf(
+                "plants" to MockTable(
+                    listOf(AppDbColumn("id", "integer"), AppDbColumn("name", "text"), AppDbColumn("watered", "boolean")),
+                    (1..230).map { i ->
+                        listOf(JsonPrimitive(i), JsonPrimitive("Plant $i"), JsonPrimitive(i % 3 == 0))
+                    },
+                ),
+                "waterings" to MockTable(
+                    listOf(AppDbColumn("id", "bigint"), AppDbColumn("plant_id", "integer"), AppDbColumn("at", "timestamp with time zone")),
+                    listOf(listOf(JsonPrimitive("1"), JsonPrimitive(3), JsonPrimitive("2026-10-11 08:00:00+00"))),
+                ),
+            ),
+        ),
+    )
+    val dbTableCalls: MutableList<Triple<String, String, Pair<Int, Int>>> = mutableListOf()
+    val dbQueries: MutableList<Pair<String, AppDbQueryRequest>> = mutableListOf()
+    /** Thrown by every database call instead of answering (e.g. a 403 for a companion). */
+    var dbError: Throwable? = null
+    /** Signed orders already run: a repeat gets 409. */
+    private val dbUsedOrders = HashSet<String>()
+
+    private fun dbStore(serviceId: String, store: String): MutableMap<String, MockTable> {
+        val stores = dbFixture[serviceId] ?: throw ScreensError.Http(404, """{"error":"not found"}""")
+        return stores[store] ?: throw ScreensError.Http(404, """{"error":"no such store"}""")
+    }
+
+    override suspend fun serviceDb(serviceId: String): AppDbOverview {
+        tick()
+        dbError?.let { throw it }
+        val stores = dbFixture[serviceId] ?: throw ScreensError.Http(404, """{"error":"not found"}""")
+        return AppDbOverview(
+            stores.map { (store, tables) ->
+                AppDbStore(
+                    store,
+                    tables.map { (name, t) ->
+                        AppDbTable(name, t.kind, if (t.kind == "view") null else t.rows.size.toDouble(), 8192.0 + t.rows.size * 64.0)
+                    },
+                )
+            },
+        )
+    }
+
+    override suspend fun serviceDbTable(serviceId: String, store: String, table: String, offset: Int, limit: Int): AppDbRows {
+        tick()
+        dbError?.let { throw it }
+        dbTableCalls.add(Triple(serviceId, table, offset to limit))
+        val t = dbStore(serviceId, store)[table] ?: throw ScreensError.Http(404, """{"error":"no such table"}""")
+        return AppDbRows(t.columns, t.rows.drop(offset).take(limit.coerceAtMost(1000)), t.rows.size.toLong())
+    }
+
+    override suspend fun serviceDbExportCsv(serviceId: String, store: String, table: String): ByteArray {
+        tick()
+        dbError?.let { throw it }
+        val t = dbStore(serviceId, store)[table] ?: throw ScreensError.Http(404, """{"error":"no such table"}""")
+        val cell = { e: kotlinx.serialization.json.JsonElement ->
+            val v = (e as? JsonPrimitive)?.content ?: e.toString()
+            if (v.any { it == ',' || it == '"' || it == '\n' }) "\"" + v.replace("\"", "\"\"") + "\"" else v
+        }
+        val lines = listOf(t.columns.joinToString(",") { it.name }) + t.rows.map { r -> r.joinToString(",") { cell(it) } }
+        return (lines.joinToString("\n") + "\n").toByteArray()
+    }
+
+    override suspend fun serviceDbQuery(serviceId: String, store: String, req: AppDbQueryRequest): AppDbQueryResult {
+        tick()
+        dbQueries.add(serviceId to req)
+        dbError?.let { throw it }
+        val tables = dbStore(serviceId, store)
+        val sql = req.sql.trim()
+        val verb = sql.split(Regex("\\s+"), 2).first().trimEnd(';').uppercase()
+        val reads = verb == "SELECT" || verb == "WITH" || verb == "SHOW" || verb == "EXPLAIN"
+        val g = req.grant
+        if (g != null || req.signature != null) {
+            if (g == null || req.signature?.length != 128) throw ScreensError.Http(400, """{"error":"malformed grant"}""")
+            if (g.serviceId != serviceId) throw ScreensError.Http(400, """{"error":"the order is for a different app"}""")
+            if (g.store != store) throw ScreensError.Http(400, """{"error":"the order is for a different store"}""")
+            if (g.serverDomain != boxFqdn()) throw ScreensError.Http(403, """{"error":"the order is for a different server"}""")
+            if (g.sqlSha256 != com.flagshipserver.app.core.AppDbWrite.sqlSha256(req.sql)) {
+                throw ScreensError.Http(403, """{"error":"the statement is not the one that was signed"}""")
+            }
+            if (!dbUsedOrders.add("$serviceId|$store|${g.sqlSha256}|${g.issuedAt}")) {
+                throw ScreensError.Http(409, """{"error":"this signed order was already used: sign it again"}""")
+            }
+        } else if (!reads) {
+            throw ScreensError.Http(
+                400,
+                """{"error":"cannot execute $verb in a read-only transaction","sqlState":"25006","needsGrant":true}""",
+            )
+        }
+        if (!reads) return AppDbQueryResult(command = verb, rowCount = 1)
+        val from = Regex("(?i)\\bfrom\\s+([A-Za-z_][A-Za-z0-9_.]*)").find(sql)?.groupValues?.get(1)
+        val t = from?.let { tables[it] }
+            ?: if (from == null) null else throw ScreensError.Http(
+                400, """{"error":"relation \"$from\" does not exist","sqlState":"42P01","position":15}""",
+            )
+        if (t == null) return AppDbQueryResult("SELECT", listOf(AppDbColumn("?column?", "integer")), listOf(listOf(JsonPrimitive(1))), 1)
+        val max = 1000
+        return AppDbQueryResult("SELECT", t.columns, t.rows.take(max), minOf(t.rows.size, max).toLong(), t.rows.size > max)
+    }
 
     /** Services the box says can be edited from the phone (built there). */
     var editableServiceIds: Set<String> = setOf("bright-maple--plants")

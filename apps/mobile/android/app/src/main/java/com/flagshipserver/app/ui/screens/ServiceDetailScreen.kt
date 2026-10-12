@@ -221,6 +221,14 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     restricted = appState.isRestrictedDevice(),
                     fallbackServerDomain = { appState.sessionPod?.fqdn },
                 )
+                // The owner's Database section (docs/app-apis.md §6): owner
+                // only, hidden on a box without it.
+                DatabaseEntrySection(
+                    nav = nav,
+                    serviceId = serviceId,
+                    detail = resp,
+                    restricted = appState.isRestrictedDevice(),
+                )
                 if (resp.editable == true) {
                     Spacer(Modifier.height(FS.space.s4))
                     EditRow(onClick = { nav.navigate("edit-service/$serviceId") })
