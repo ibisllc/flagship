@@ -61,10 +61,18 @@ forwarding the request to your container:
 
 | Header | Meaning |
 |---|---|
-| `X-Flagship-User` | The visitor's stable id (`anonymous` for public routes). |
-| `X-Flagship-Role` | One of `owner` / `admin` / `member` / `viewer` or your `custom_roles[]` value. |
+| `X-Flagship-App-Id` | Your service id. |
+| `X-Flagship-User` | The visitor's stable id: 32 hex chars for a signed-in member (per app: the same person has unrelated ids in two apps), `anonymous` for anyone else, `apikey:<keyId>` for an owner's API key. |
+| `X-Flagship-Role` | `owner` for the box owner (only them); for an invited person the role assigned to them or your `default_role` (`admin` if that is `owner`), or a `custom_roles[]` value; `anonymous`; `api` for an API key. |
+| `X-Flagship-Api-Scope` | API-key requests only: `read` (GET/HEAD/OPTIONS) or `write`. |
 | `X-Flagship-Timestamp` | ms since epoch — bind your reads + writes to this if you care about freshness. |
-| `X-Flagship-Signature` | hex Ed25519 signature over `flagship/inject/v1|<serviceId>|<user>|<role>|<timestamp>`. |
+| `X-Flagship-Signature` | hex Ed25519 signature over `flagship/inject/v1|<serviceId>|<user>|<role>|<timestamp>`, with `|<scope>` appended on API-key requests. |
+
+Members are the owner and the people the owner invited; they sign in to
+your app in a browser by approving its knock page with their phone, and every
+path outside `access.public_routes` reaches your container only for them
+(details: [app APIs §5](app-apis.md#5-sign-in)). Key per-user data on
+`X-Flagship-User`, gate admin features on `X-Flagship-Role`.
 
 Verifying the signature is optional but recommended in production. The
 daemon's pubkey is at `GET /.flagship/runtime-pubkey` (relative to

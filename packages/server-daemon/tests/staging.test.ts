@@ -11,7 +11,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ed } from "@flagship/protocol";
-import { UNFENCED_REASON, StagingRunner, STAGING_NETWORK } from "../src/buildmodes/staging.js";
+import {
+  NOT_STAGED_REASON,
+  STAGING_NETWORK,
+  STAGING_QUERY_MAX_ROWS,
+  StagingRunner,
+  UNFENCED_REASON,
+  stagingDataHooks,
+} from "../src/buildmodes/staging.js";
 import {
   DataProvisioner,
   InMemoryFilesAdmin,
@@ -397,5 +404,141 @@ describe("StagingRunner: the box's own failures are never the app's", () => {
     const r = await rig({ cmd }).runner.stage({ buildId: "e7", files: FILES, slug: "notes" });
     expect(r.ok).toBe(false);
     expect(!r.ok && r.environment).toBeUndefined();
+  });
+});
+
+describe("StagingRunner: the AI's data tools see only the tested copy's sample data", () => {
+  function dataRig(over: { startOk?: boolean; stores?: Record<string, unknown>; findOut?: string; headOut?: string } = {}) {
+    const calls: string[][] = [];
+    const cmd: CommandRunner = {
+      run: async (c, args) => void calls.push([c, ...args]),
+      capture: async (c, args) => {
+        calls.push([c, ...args]);
+        if (args.includes("find")) return { stdout: over.findOut ?? "d\t4096\tuploads\nf\t12\tuploads/a.txt\n", stderr: "" };
+        if (args.includes("head")) return { stdout: over.headOut ?? "hello sample", stderr: "" };
+        return { stdout: "", stderr: "" };
+      },
+    };
+    const queries: Array<Record<string, unknown>> = [];
+    const runner = new StagingRunner({
+      cmd,
+      workingDir: mkdtempSync(join(tmpdir(), "staging-")),
+      dataProvisioner: new DataProvisioner({
+        postgres: new InMemoryPostgresAdmin(),
+        files: new InMemoryFilesAdmin(),
+        nameKey: "n".repeat(40),
+        endpoints: { postgresHost: "host.flagship.internal" },
+      }),
+      runSql: async () => {},
+      startCheck: async () => (over.startOk === false ? { ok: false, reason: "crashed" } : { ok: true }),
+      pickPort: () => 51240,
+      now: () => 1700000000000,
+      sql: {
+        query: async (a) => {
+          queries.push({ ...a });
+          return { command: "SELECT", columns: [{ name: "title", type: "text" }], rows: [["x".repeat(400)]], rowCount: 1, truncated: true };
+        },
+        listTables: async (a) => {
+          queries.push({ op: "listTables", ...a });
+          return [{ name: "notes", kind: "table", rows: 12, bytes: 8192, columns: [{ name: "id", type: "integer", nullable: false }] }];
+        },
+        tableRows: async () => {
+          throw new Error("not for the AI");
+        },
+        exportCsv: async () => {
+          throw new Error("not for the AI");
+        },
+      },
+    });
+    const manifest = { ...JSON.parse(MANIFEST), data: { stores: over.stores ?? { postgres: true, files: true } } };
+    const files = { ...FILES, "flagship.app.json": JSON.stringify(manifest) };
+    return { runner, calls, queries, files };
+  }
+
+  it("refuses before any deploy, and answers on a copy whose app didn't start (to debug it)", async () => {
+    const { runner, files } = dataRig({ startOk: false });
+    expect(await runner.queryDb("d1", { sql: "SELECT 1" })).toEqual({ ok: false, reason: NOT_STAGED_REASON });
+    await runner.stage({ buildId: "d1", files, slug: "notes" });
+    expect((await runner.queryDb("d1", { sql: "SELECT 1" })).ok).toBe(true);
+    expect((await runner.listTables("d1", {})).ok).toBe(true);
+  });
+
+  it("query_db runs as the dev role on the dev database, capped at 200 rows, cells shortened", async () => {
+    const { runner, queries, files } = dataRig();
+    await runner.stage({ buildId: "d2", files, slug: "notes" });
+    const r = await runner.queryDb("d2", { sql: "SELECT title FROM notes" });
+    expect(r.ok).toBe(true);
+    const q = queries[0]!;
+    expect(String(q.pgUrl)).toContain(`/${devDb("d2")}`);
+    expect(String(q.pgUrl)).toContain(`${devDb("d2")}:`);
+    expect(q).toMatchObject({ readOnly: false, maxRows: STAGING_QUERY_MAX_ROWS, timeoutMs: 10_000 });
+    const body = JSON.parse((r as { text: string }).text);
+    expect(body.columns).toEqual(["title text"]);
+    expect(body.rows[0][0]).toHaveLength(301);
+    expect(body.truncated).toBe(true);
+    expect(await runner.queryDb("d2", { sql: "SELECT 1", store: "levels" })).toMatchObject({ ok: false, reason: expect.stringMatching(/no store named/) });
+    expect(await runner.queryDb("d2", { sql: " " })).toMatchObject({ ok: false });
+
+    const t = await runner.listTables("d2", {});
+    expect(JSON.parse((t as { text: string }).text)).toEqual({ tables: [{ name: "notes", rows: 12, columns: ["id integer not null"] }] });
+
+    // Once the copy is gone, nothing answers.
+    await runner.teardown("d2");
+    expect(await runner.queryDb("d2", { sql: "SELECT 1" })).toEqual({ ok: false, reason: NOT_STAGED_REASON });
+  });
+
+  it("an app with several stores must name one", async () => {
+    const { runner, files } = dataRig({ stores: { postgres: ["sprites", "levels"] } });
+    await runner.stage({ buildId: "d3", files, slug: "notes" });
+    expect(await runner.queryDb("d3", { sql: "SELECT 1" })).toMatchObject({ ok: false, reason: "say which store: sprites, levels" });
+    expect((await runner.queryDb("d3", { sql: "SELECT 1", store: "levels" })).ok).toBe(true);
+    expect(await runner.listDataFiles("d3", {})).toMatchObject({ ok: false, reason: expect.stringMatching(/no files folder/) });
+  });
+
+  it("list_data_files lists the DEV volume read-only from a container with no network", async () => {
+    const { runner, calls, files } = dataRig();
+    await runner.stage({ buildId: "d4", files, slug: "notes" });
+    const r = await runner.listDataFiles("d4", { path: "/data/uploads/" });
+    expect(JSON.parse((r as { text: string }).text)).toEqual({
+      root: "/data/uploads",
+      files: [{ path: "uploads/" }, { path: "uploads/a.txt", bytes: 12 }],
+    });
+    const run = calls.find((c) => c.includes("find"))!;
+    const flag = (n: string) => run[run.indexOf(n) + 1];
+    expect(flag("--network")).toBe("none");
+    expect(flag("--mount")).toBe("type=volume,src=flagship-files-dev--owner-stg-d4,dst=/data,readonly");
+    expect(run).toEqual(expect.arrayContaining(["--rm", "--read-only", "--cap-drop", "ALL", "no-new-privileges"]));
+    expect(run.slice(run.indexOf("find"))).toContain("/data/uploads");
+    for (const bad of ["../etc", "uploads/../../x", "-delete", "a\0b", "a;b"]) {
+      expect(await runner.listDataFiles("d4", { path: bad }), bad).toMatchObject({ ok: false });
+    }
+  });
+
+  it("read_data_file shows the start of a text file and never a binary one", async () => {
+    const text = dataRig({ headOut: "hello sample" });
+    await text.runner.stage({ buildId: "d5", files: text.files, slug: "notes" });
+    expect(JSON.parse(((await text.runner.readDataFile("d5", { path: "uploads/a.txt" })) as { text: string }).text)).toEqual({
+      path: "/data/uploads/a.txt",
+      content: "hello sample",
+    });
+    const run = text.calls.find((c) => c.includes("head"))!;
+    expect(run.slice(run.indexOf("head"))).toEqual(["head", expect.any(String), "-c", "16385", "/data/uploads/a.txt"]);
+    expect(await text.runner.readDataFile("d5", { path: "" })).toMatchObject({ ok: false });
+
+    const bin = dataRig({ headOut: "PNG\u0000\u0001" });
+    await bin.runner.stage({ buildId: "d6", files: bin.files, slug: "notes" });
+    expect(JSON.parse(((await bin.runner.readDataFile("d6", { path: "img.png" })) as { text: string }).text)).toMatchObject({ binary: true });
+  });
+
+  it("stagingDataHooks refuses once sealed and when staging has no data tools", async () => {
+    const { runner, files } = dataRig();
+    await runner.stage({ buildId: "d7", files, slug: "notes" });
+    let sealed = false;
+    const hooks = stagingDataHooks(runner, "d7", () => sealed);
+    expect((await hooks.queryDb({ sql: "SELECT 1" })).ok).toBe(true);
+    sealed = true;
+    expect(await hooks.queryDb({ sql: "SELECT 1" })).toMatchObject({ ok: false, reason: expect.stringMatching(/closed/) });
+    const none = stagingDataHooks({ ...runner, queryDb: undefined } as never, "d7");
+    expect(await none.queryDb({ sql: "SELECT 1" })).toMatchObject({ ok: false });
   });
 });

@@ -1,0 +1,17 @@
+{
+  "about": "flagship/app-db-write/v1 (docs/app-apis.md §6). Key: the protocol IRK derived from the UMK seed.",
+  "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+  "pub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+  "cases": [
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry-weather",
+      "store": "default",
+      "sql": "UPDATE items SET done = true WHERE id = 7;",
+      "sqlSha256": "6b4e48fdcad4bf16d948e13333cd8aa3cc188151d12aa6b3f7ac5c01ec1fb6f5",
+      "issuedAt": 1700000000000,
+      "canonical": "flagship/app-db-write/v1|home.harry.flagship.services|harry-weather|default|6b4e48fdcad4bf16d948e13333cd8aa3cc188151d12aa6b3f7ac5c01ec1fb6f5|1700000000000",
+      "signature": "8103a32f983a557c4c41165c13bff82592800be97b664e4c51abe2bdebba6435268e886ca010a6d00482f463f6f6382398863680d2cfe714c8af5ac954c37e03"
+    }
+  ]
+}

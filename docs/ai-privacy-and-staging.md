@@ -53,7 +53,11 @@ One step for the owner ("Use AI to adapt and deploy"); two phases on the box.
 - Tools: `deploy` (to staging, with the start check), `check_app` (the box
   requests a path from the staging copy over loopback with neutral headers and
   returns status, content type and the first few KB), `get_logs` (staging
-  container only), `finish` (the AI says it works). All results are redacted.
+  container only), the data tools once a deploy succeeded (`query_db`,
+  `list_tables`: the dev database as its dev role; `list_data_files`,
+  `read_data_file`: the dev `/data` volume through a throwaway container with
+  no network; docs/app-apis.md §6), `finish` (the AI says it works). All
+  results are redacted.
 - The box's own failures never go to the AI (`buildmodes/environmentFailure.ts`):
   a data layer that is down or still starting, the egress fence down, dockerd
   gone, a registry outage (retried once first) or a full disk fails the deploy
@@ -71,8 +75,9 @@ One step for the owner ("Use AI to adapt and deploy"); two phases on the box.
    **same image** it staged, real data stores, real env, and runs migrations
    itself. The AI is not told the outcome.
 4. If the manifest declares egress hosts (§3), the app still goes live, with
-   no internet; its page asks the owner to allow those hosts, and only their
-   signed approval opens them. Nothing waits, and nothing opens by default.
+   no internet; the box drafts a suggested access list from them (§3a
+   "Suggested lists"), its page asks the owner to review it, and only their
+   signed approval opens anything. Nothing waits, and nothing opens by default.
 
 A live service can never be attached to an AI session: edits always start a
 new build that stages a copy with empty or synthetic data. The chat ("vibe")
@@ -90,8 +95,8 @@ path's Deploy runs the same staged loop with the chat's files.
   Postgres on the host gateway, and its own dev files volume.
 - **Live apps** (`flagship-apps`): no internet by default. What an app may
   reach is its owner-signed access list (§3a, stored sealed in
-  `app-access.sealed`); `network.egress` hosts only become requests the owner
-  answers. The older `flagship/app-egress/v1` grant is still accepted and
+  `app-access.sealed`); `network.egress` hosts only become a suggested list
+  (a draft) the owner answers. The older `flagship/app-egress/v1` grant is still accepted and
   becomes `allow` lines. Consent is the signature the box verifies, never a
   boolean. Enforced by the box's egress gateway (TLS SNI and HTTP Host allowlists, a
   filtering DNS) plus firewall rules that drop everything else from the app
@@ -205,8 +210,9 @@ that `issuedAt` is within 10 minutes and newer than the list it holds.
 **Alerts.** When the egress gateway denies an app a host because **no rule
 matched** (an explicit `deny` is the owner's answer and stays quiet), the box
 records a request `{host, attempts, firstSeen, lastSeen}`. Hosts in the
-manifest's `network.egress` become requests at install (source "app"). The box
-pushes at most one alert per app and host per day and five per hour, through
+manifest's `network.egress` become a draft instead (below); requests with
+source "app" from older boxes stay until answered. The box
+pushes at most one alert per app and host (or draft) per day and five per hour, through
 `/api/push/relay` (category `generic`, see below), whose OS-visible text says
 only "Open Flagship to see what's new." On any `generic` push the apps fetch
 the box's access requests (and whatever else they check). The phone reads
@@ -220,7 +226,17 @@ reason, at most 120 characters). When the app goes live (and after an AI edit
 that adds hosts), the box makes a **draft**: the current signed list with an
 `allow <host>   # <why>` line on top for each suggested host the list doesn't
 already allow. A draft opens nothing; nothing is drafted when nothing is new;
-these hosts no longer become separate per-host requests. The owner reviews it on
+these hosts no longer become separate per-host requests.
+- "Already allow": the box leaves out a host the list allows, and one a rule
+  names to deny it (`deny <host>` or a `deny *.` rule covering it: the owner's
+  answer); a final `deny all` is not an answer about one host.
+- "New": a draft is made only when the manifest suggests a host the box hasn't
+  suggested for that app before (so a redeploy with the same hosts, or one
+  after a dismissed draft, drafts nothing); the draft then carries every
+  suggested host the list doesn't decide. The box remembers suggested hosts
+  until the app is uninstalled. Drafts are sealed with the lists.
+- A draft alerts like a request: the `access-request` socket event and the
+  generic push (one per app per day for drafts, the alerts switch respected). The owner reviews it on
 the app's page (and through the usual generic alert), may edit it in the same
 editor, and approves it with Face ID, which signs and sends it like any other
 list; or dismisses it. A newer draft replaces an unanswered one.
@@ -231,7 +247,9 @@ list; or dismisses it. A newer draft replaces an unanswered one.
 - `POST /api/screens/services/:id/access/draft/dismiss` discards it (no
   signature; it changes nothing the app can reach).
 - `GET /api/screens/access-requests` also lists drafts as
-  `{serviceId, appName, kind:"draft", hosts}` so the alert can offer Review.
+  `{serviceId, appName, kind:"draft", hosts, createdAt}` (drafts first) so the
+  alert can offer Review. App summaries' `access` gains `draft: true` while
+  one waits.
 
 **Turning push off.** The apps have one switch, Settings → "Push
 notifications", on by default and stored on the device. It covers every push,
@@ -277,7 +295,7 @@ while there are errors, then asks for Face ID and sends the signed order.
 
 **Box API** (paired session; companion sessions are read-only):
 - `GET /api/screens/services/:id/access` returns
-  `{list, listSha256, pending:[{host, source:"attempt"|"app", attempts, firstSeen, lastSeen}]}`.
+  `{list, listSha256, pending:[{host, source:"attempt"|"app", attempts, firstSeen, lastSeen}], draft}`.
 - `POST /api/screens/services/:id/access` takes
   `{list, grant:{serverDomain, serviceId, listSha256, issuedAt}, signature}`.
   It returns 200 `{ok, access}`, 400 `{error, errors:[{line, message}]}`, 403,

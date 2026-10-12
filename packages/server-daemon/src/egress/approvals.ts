@@ -1,12 +1,13 @@
 /**
  * The screens API for live apps' internet access (docs/ai-privacy-and-staging.md §3a).
  *
- *   GET  /api/screens/services/:id/access          → { list, listSha256, pending }
+ *   GET  /api/screens/services/:id/access          → { list, listSha256, pending, draft }
  *   POST /api/screens/services/:id/access            { list, grant, signature }
  *        grant = { serverDomain, serviceId, listSha256, issuedAt } (`flagship/app-access/v1`)
  *        → 200 { ok, access } | 400 { error, errors:[{line, message}] } | 403 | 404 | 409
  *   POST /api/screens/services/:id/access/dismiss    { host }  (no signature: changes nothing the app reaches)
- *   GET  /api/screens/access-requests              → { requests:[{serviceId, appName, host, ...}] }
+ *   POST /api/screens/services/:id/access/draft/dismiss   (no signature: a draft opens nothing)
+ *   GET  /api/screens/access-requests              → { requests:[{serviceId, appName, host, ...} | {serviceId, appName, kind:"draft", hosts}] }
  *
  * v1, for older apps (`flagship/app-egress/v1`; the hosts become `allow` lines):
  *   GET  /api/screens/services/:id/egress          → { declared, approved }
@@ -32,7 +33,14 @@ import {
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "../adminAuthorityLocal.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
-import { coveringRule, hexToBytes, type AccessAuthorizer, type AccessRequest, type AppAccessStore } from "./accessStore.js";
+import {
+  coveringRule,
+  hexToBytes,
+  type AccessAuthorizer,
+  type AccessDraft,
+  type AccessRequest,
+  type AppAccessStore,
+} from "./accessStore.js";
 
 export interface EgressView {
   declared: string[];
@@ -43,16 +51,29 @@ export interface AccessView {
   list: string;
   listSha256: string;
   pending: AccessRequest[];
+  /** A suggested list waiting for the owner's review, or null. */
+  draft: AccessDraft | null;
 }
 
 export interface AccessSummary {
   rules: number;
   pending: number;
+  /** Present (true) while a suggested list waits for review. */
+  draft?: true;
 }
 
 export interface AccessRequestEntry extends AccessRequest {
   serviceId: string;
   appName: string;
+}
+
+/** A draft in the requests list, so the alert can offer Review. */
+export interface AccessDraftEntry {
+  serviceId: string;
+  appName: string;
+  kind: "draft";
+  hosts: AccessDraft["hosts"];
+  createdAt: number;
 }
 
 export interface SensitiveAuthority {
@@ -78,11 +99,18 @@ export interface AppAccessHttpOptions extends SensitiveAuthority {
 const J = { "content-type": "application/json" } as const;
 const ACCESS_RE = /^\/api\/screens\/services\/([^/]+)\/access$/;
 const DISMISS_RE = /^\/api\/screens\/services\/([^/]+)\/access\/dismiss$/;
+const DRAFT_DISMISS_RE = /^\/api\/screens\/services\/([^/]+)\/access\/draft\/dismiss$/;
 const EGRESS_RE = /^\/api\/screens\/services\/([^/]+)\/egress$/;
 export const ACCESS_REQUESTS_PATH = "/api/screens/access-requests";
 
 export function isAppAccessPath(path: string): boolean {
-  return path === ACCESS_REQUESTS_PATH || ACCESS_RE.test(path) || DISMISS_RE.test(path) || EGRESS_RE.test(path);
+  return (
+    path === ACCESS_REQUESTS_PATH ||
+    ACCESS_RE.test(path) ||
+    DISMISS_RE.test(path) ||
+    DRAFT_DISMISS_RE.test(path) ||
+    EGRESS_RE.test(path)
+  );
 }
 
 /** Both kinds of owner signature, checked under the box's sensitive-order authority. */
@@ -103,11 +131,15 @@ export function accessAuthorizer(a: SensitiveAuthority): AccessAuthorizer {
 
 export function accessView(store: AppAccessStore, serviceId: string): AccessView {
   const list = store.list(serviceId);
-  return { list, listSha256: accessListSha256(list), pending: store.pending(serviceId) };
+  return { list, listSha256: accessListSha256(list), pending: store.pending(serviceId), draft: store.draft(serviceId) };
 }
 
 export function accessSummary(store: AppAccessStore, serviceId: string): AccessSummary {
-  return { rules: store.rules(serviceId).length, pending: store.pending(serviceId).length };
+  return {
+    rules: store.rules(serviceId).length,
+    pending: store.pending(serviceId).length,
+    ...(store.draft(serviceId) ? { draft: true as const } : {}),
+  };
 }
 
 /** The v1 view: the declared entries the list opens as a whole. */
@@ -116,14 +148,25 @@ export function egressView(store: AppAccessStore, serviceId: string, declared: r
   return { declared: [...declared], approved: declared.filter((d) => coveringRule(rules, d)?.action === "allow") };
 }
 
-export function accessRequests(store: AppAccessStore, app: AppAccessHttpOptions["app"]): AccessRequestEntry[] {
+/** Drafts first (newest first), then single-host requests (newest first). */
+export function accessRequests(
+  store: AppAccessStore,
+  app: AppAccessHttpOptions["app"],
+): Array<AccessDraftEntry | AccessRequestEntry> {
+  const drafts: AccessDraftEntry[] = [];
+  for (const serviceId of store.draftServiceIds()) {
+    const a = app(serviceId);
+    const d = store.draft(serviceId);
+    if (!a || !d) continue;
+    drafts.push({ serviceId, appName: a.name, kind: "draft", hosts: d.hosts, createdAt: d.createdAt });
+  }
   const out: AccessRequestEntry[] = [];
   for (const serviceId of store.pendingServiceIds()) {
     const a = app(serviceId);
     if (!a) continue;
     for (const r of store.pending(serviceId)) out.push({ serviceId, appName: a.name, ...r });
   }
-  return out.sort((x, y) => y.lastSeen - x.lastSeen);
+  return [...drafts.sort((x, y) => y.createdAt - x.createdAt), ...out.sort((x, y) => y.lastSeen - x.lastSeen)];
 }
 
 /**
@@ -208,7 +251,7 @@ export function buildAppAccessHttp(opts: AppAccessHttpOptions) {
       if (method !== "GET") return err(405, "method not allowed");
       return json(200, { requests: accessRequests(opts.store, opts.app) });
     }
-    const m = ACCESS_RE.exec(path) ?? DISMISS_RE.exec(path) ?? EGRESS_RE.exec(path);
+    const m = ACCESS_RE.exec(path) ?? DISMISS_RE.exec(path) ?? DRAFT_DISMISS_RE.exec(path) ?? EGRESS_RE.exec(path);
     if (!m) return null;
     let serviceId: string;
     try {
@@ -223,6 +266,11 @@ export function buildAppAccessHttp(opts: AppAccessHttpOptions) {
       if (method === "GET") return json(200, accessView(opts.store, serviceId));
       if (method === "POST") return postAccess(serviceId, req);
       return err(405, "method not allowed");
+    }
+    if (DRAFT_DISMISS_RE.test(path)) {
+      if (method !== "POST") return err(405, "method not allowed");
+      await opts.store.dismissDraft(serviceId);
+      return json(200, { ok: true, access: accessView(opts.store, serviceId) });
     }
     if (DISMISS_RE.test(path)) {
       if (method !== "POST") return err(405, "method not allowed");

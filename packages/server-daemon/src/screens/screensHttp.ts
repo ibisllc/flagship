@@ -26,6 +26,7 @@ import type { AppEnvStore } from "../serviceEnvStore.js";
 import type { BuildCredentialStore } from "../llm/buildCredentialStore.js";
 import { parseRelayFlag, type LlmCredential } from "../llmHarness.js";
 import { isAppAccessPath } from "../egress/approvals.js";
+import { isAppApiKeysPath, type AppApiKeysHttp } from "../appApiKeys.js";
 import { ACCESS_ALERTS_PATH, buildAccessAlertSettingHttp, type AccessAlertSetting } from "../egress/accessAlertSetting.js";
 import {
   summarizeAttachment,
@@ -117,6 +118,7 @@ import {
   type ReleaseStatusProvider,
 } from "../releaseStatusProvider.js";
 import type { UpdateOutcomeRecord } from "../updateOutcome.js";
+import { isAppDbPath } from "../dataLayer/ownerDb.js";
 import type { ReleaseCatalogSource } from "../updateReleases.js";
 
 const J = { "content-type": "application/json" } as const;
@@ -163,10 +165,12 @@ export interface ScreensHttpDeps {
    * `/access-requests`, and the v1 `/services/:id/egress`), and the views
    * the apps list and detail carry (`egress` for older apps, `access`).
    */
+  /** API keys apps accept from machine clients (`/services/:id/api-keys`, appApiKeys.ts). */
+  appApiKeys?: AppApiKeysHttp | null;
   appEgress?: {
     handle: (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null>;
     view: (serviceId: string, declared: readonly string[]) => { declared: string[]; approved: string[] };
-    access?: (serviceId: string) => { rules: number; pending: number };
+    access?: (serviceId: string) => { rules: number; pending: number; draft?: true };
   } | null;
   /**
    * The owner's "Internet request alerts" switch
@@ -174,6 +178,12 @@ export interface ScreensHttpDeps {
    * Absent on a box without it: the path 404s and the apps skip it.
    */
   accessAlerts?: Pick<AccessAlertSetting, "enabled" | "set"> | null;
+  /**
+   * The owner's Database section (`/services/:id/db…`, dataLayer/ownerDb.ts):
+   * an app's live data, owner sessions only (companions get 403 on every
+   * method). Never reachable through MCP or a build tool.
+   */
+  appDb?: { handle: (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null> } | null;
   /**
    * Services built from a published repo adapter, and a way to report one
    * to flagshipserver.com (anonymously: the adapter, and the owner's note).
@@ -496,6 +506,20 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
 
     if (deps.appEgress && isAppAccessPath(path)) {
       const r = await deps.appEgress.handle(path, method, req);
+      if (r) return r;
+    }
+
+    if (deps.appDb && isAppDbPath(path)) {
+      const denied = denyCompanionWrite(deps.pairedSessions ?? null, req);
+      if (denied) return denied;
+      const r = await deps.appDb.handle(path, method, req);
+      if (r) return r;
+    }
+
+    // API keys an app accepts (docs/app-apis.md §3). Companions may list them only.
+    if (deps.appApiKeys && isAppApiKeysPath(path)) {
+      const companion = deps.pairedSessions?.isCompanionRequest?.(req) === true;
+      const r = await deps.appApiKeys.handle(path, method, req, { companion });
       if (r) return r;
     }
 
@@ -1662,7 +1686,7 @@ function isWriteScopedPath(path: string): boolean {
   // app internet approval (signed; companions can't relay it)
   if (/^\/api\/screens\/services\/[^/]+\/egress$/.test(path)) return true;
   // app access list (signed) and dismissing a request
-  if (/^\/api\/screens\/services\/[^/]+\/access(\/dismiss)?$/.test(path)) return true;
+  if (/^\/api\/screens\/services\/[^/]+\/access(\/dismiss|\/draft\/dismiss)?$/.test(path)) return true;
   // lineage-resolve POST
   if (path === "/api/screens/lineage-resolve") return true;
   // app-backup start

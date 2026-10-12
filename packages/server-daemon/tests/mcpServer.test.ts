@@ -245,3 +245,66 @@ describe("McpBuildServer — testing the staging copy, finishing, sealed", () =>
     expect((await callTool(server, "get_logs")).text).toMatch(/call deploy first/);
   });
 });
+
+describe("McpBuildServer — the staging copy's data tools", () => {
+  it("lists them, routes them to the data hooks, redacts what comes back, and journals no SQL", async () => {
+    const seen: unknown[] = [];
+    let sealed = false;
+    const { server, journal } = makeServer({
+      redact: (t) => t.replaceAll("home.harry.flagship.services", "app.example"),
+      data: {
+        queryDb: async (req) => {
+          seen.push(["queryDb", req]);
+          return { ok: true, text: JSON.stringify({ rows: [["visit home.harry.flagship.services"]] }) };
+        },
+        listTables: async (req) => {
+          seen.push(["listTables", req]);
+          return { ok: true, text: '{"tables":[]}' };
+        },
+        listDataFiles: async (req) => {
+          seen.push(["listDataFiles", req]);
+          return { ok: false, reason: "the app has no files folder (data.stores.files)" };
+        },
+        readDataFile: async (req) => {
+          seen.push(["readDataFile", req]);
+          return { ok: true, text: '{"content":"x"}' };
+        },
+      },
+      sealed: () => sealed,
+    });
+    const tools = (((await server.handle(rpc(1, "tools/list")))!.result) as { tools: Array<{ name: string }> }).tools.map((t) => t.name);
+    expect(tools).toEqual(expect.arrayContaining(["query_db", "list_tables", "list_data_files", "read_data_file", "list_files"]));
+
+    const q = await callTool(server, "query_db", { sql: "SELECT secret_column FROM t", store: "default" });
+    expect(q.isError).toBe(false);
+    expect(q.text).toBe('{"rows":[["visit app.example"]]}');
+    expect((await callTool(server, "list_tables")).text).toBe('{"tables":[]}');
+    const f = await callTool(server, "list_data_files", { path: "uploads" });
+    expect(f.isError).toBe(true);
+    expect(JSON.parse(f.text).error).toMatch(/no files folder/);
+    expect((await callTool(server, "read_data_file", {})).isError).toBe(true);
+    expect((await callTool(server, "query_db", {})).isError).toBe(true);
+    expect(seen).toEqual([
+      ["queryDb", { sql: "SELECT secret_column FROM t", store: "default" }],
+      ["listTables", {}],
+      ["listDataFiles", { path: "uploads" }],
+    ]);
+    const entries = JSON.stringify(await journal.read("b1"));
+    expect(entries).not.toContain("secret_column");
+
+    sealed = true;
+    for (const name of ["query_db", "list_tables", "list_data_files", "read_data_file"]) {
+      const r = await callTool(server, name, { sql: "SELECT 1", path: "a" });
+      expect(r.isError, name).toBe(true);
+      expect(r.text).toContain("closed");
+    }
+    expect(seen).toHaveLength(3);
+  });
+
+  it("without data hooks the tools refuse", async () => {
+    const { server } = makeServer();
+    const r = await callTool(server, "query_db", { sql: "SELECT 1" });
+    expect(r.isError).toBe(true);
+    expect(r.text).toMatch(/not available/);
+  });
+});

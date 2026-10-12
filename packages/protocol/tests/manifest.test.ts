@@ -95,6 +95,29 @@ describe("parseManifest — happy path", () => {
     if (!r.ok) return;
     expect(r.manifest.access.public_routes).toEqual(["/", "/about"]);
   });
+
+  it("accepts prefix routes ending in /* (and /* for the whole app)", () => {
+    const m = valid();
+    m.access = { ...m.access, public_routes: ["/api/public/*", "/*", "/about"] } as typeof m.access & {
+      public_routes: string[];
+    };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.access.public_routes).toEqual(["/api/public/*", "/*", "/about"]);
+  });
+
+  it.each([["/api/*/x"], ["/api*"], ["/api/pub*"], ["*"], ["/a?b=1"], ["/a#b"], ["/a b"]])(
+    "rejects the public route %j",
+    (route) => {
+      const m = valid();
+      m.access = { ...m.access, public_routes: [route] } as typeof m.access & { public_routes: string[] };
+      const r = parseManifest(m);
+      expect(r.ok).toBe(false);
+      if (r.ok) return;
+      expect(r.errors.join(" ")).toMatch(/public_routes/);
+    },
+  );
 });
 
 describe("parseManifest — schema_version", () => {

@@ -11,9 +11,14 @@
  * push per app and host per day and five per hour per box
  * (AppAccessStore.takeAlert). With the owner's alerts switch off
  * (accessAlertSetting.ts) no push is sent at all. An explicit `deny` never
- * gets here.
+ * gets here. A suggested list (a draft made from the manifest's
+ * `network.egress`) alerts the same way.
  */
-import type { AccessRequest, AppAccessStore } from "./accessStore.js";
+import type { EgressSuggestion } from "@flagship/protocol";
+import type { AccessDraft, AppAccessStore } from "./accessStore.js";
+
+/** The alert-limit key a draft counts under (never a host name). */
+const DRAFT_ALERT_KEY = "(draft)";
 
 /** The screens-socket frame: which app has a new request; the app then fetches the details. */
 export interface AccessRequestEvent {
@@ -68,13 +73,25 @@ export function buildAccessRequestRecorder(opts: AccessRequestRecorderOptions) {
         }
       }
     },
-    /** At install (and when a new version declares more): the manifest's hosts become requests. */
-    async onDeclared(serviceId: string, hosts: readonly string[]): Promise<AccessRequest[]> {
+    /**
+     * At install and on each update: the manifest's suggested hosts become a
+     * draft list when one is new (AppAccessStore.draftFromDeclared). A draft
+     * alerts like a request does.
+     */
+    async onDeclared(serviceId: string, suggestions: readonly EgressSuggestion[]): Promise<AccessDraft | null> {
       const appName = opts.appName(serviceId);
-      if (appName === null || hosts.length === 0) return [];
-      const created = await opts.store.noteDeclared(serviceId, hosts);
-      if (created.length > 0) emit({ type: "access-request", serviceId });
-      return created;
+      if (appName === null || suggestions.length === 0) return null;
+      const draft = await opts.store.draftFromDeclared(serviceId, suggestions);
+      if (!draft) return null;
+      emit({ type: "access-request", serviceId });
+      const sinks = opts.sinks();
+      if (sinks.alertsEnabled?.() !== false && sinks.push && opts.store.takeAlert(serviceId, DRAFT_ALERT_KEY)) {
+        const push = sinks.push;
+        void Promise.resolve()
+          .then(push)
+          .catch((e: Error) => log(`[egress] access alert push failed: ${e.message}`));
+      }
+      return draft;
     },
   };
 }

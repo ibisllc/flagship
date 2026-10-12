@@ -5,7 +5,7 @@
  * builds the screens-API handler. FLAGSHIP_EGRESS=off turns it all off and
  * removes the firewall rules (the old, unfenced behaviour).
  */
-import type { AdminGrantView } from "@flagship/protocol";
+import type { AdminGrantView, EgressSuggestion } from "@flagship/protocol";
 import type { CommandRunner } from "../serviceRunner.js";
 import type { SwkOps } from "../keyCustodian.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
@@ -32,8 +32,12 @@ export interface EgressRuntime {
   } | null;
   /** Drop the lists and requests of services that are no longer installed. */
   pruneUninstalled(): Promise<void>;
-  /** A service was installed or updated: its declared hosts become requests. */
-  noteInstalled(serviceId: string, declared: readonly string[]): Promise<void>;
+  /**
+   * A service was installed or updated: hosts its manifest suggests that are
+   * new become a draft list for the owner. Plain host strings are accepted
+   * (no reason given).
+   */
+  noteInstalled(serviceId: string, declared: readonly (string | EgressSuggestion)[]): Promise<void>;
   /** Where access-request alerts go (push + screens socket); set once the daemon has them. */
   setAccessAlerts(sinks: AccessAlertSinks): void;
 }
@@ -153,7 +157,8 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
       gateway.recheck();
     },
     noteInstalled: async (serviceId, declared) => {
-      await recorder.onDeclared(serviceId, declared).catch(() => {});
+      const suggestions = declared.map((d) => (typeof d === "string" ? { host: d } : d));
+      await recorder.onDeclared(serviceId, suggestions).catch(() => {});
     },
     setAccessAlerts: (s) => {
       sinks = s;

@@ -115,6 +115,11 @@ export class ServiceAccessStore {
     return this.ownerAidHex !== null;
   }
 
+  /** Whether `aidHex` is the owner's stable AID (false when none is pinned). */
+  isOwner(aidHex: string): boolean {
+    return this.ownerAidHex !== null && aidHex.toLowerCase() === this.ownerAidHex;
+  }
+
   async load(): Promise<void> {
     let raw: PersistShape;
     try {
@@ -758,9 +763,10 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (Math.abs(now() - proof.issuedAt) > maxAgeMs) return bad(403, "stale request");
     if (!verifyServiceVisitProof(proof, sig, proof.visitorAID)) return bad(403, "invalid signature");
     const aidHex = bytesToHex(proof.visitorAID);
-    // A cookie is only useful for a RESTRICTED service whose allow-list holds
-    // this AID — issuing one otherwise would be a bearer token to nothing.
-    if (opts.store.mode(proof.serviceRef) !== "restricted" || !opts.store.isAllowed(proof.serviceRef, aidHex)) {
+    // A cookie is only issued to someone the service lets in (the owner, or an
+    // allow-listed AID): it passes a restricted gate and, on any service, names
+    // the member to the app (`appMemberSession.ts`).
+    if (!opts.store.isAllowed(proof.serviceRef, aidHex)) {
       return bad(401, "not allow-listed for this service");
     }
     // Pin the cookie to the requesting client (UA) so a lifted token doesn't
@@ -1300,11 +1306,20 @@ export function buildAccessEnforcementHandler(
    * always 403 (no behavior change).
    */
   maybeServeKnock?: (serviceRef: string, req: HttpRequest) => HttpResponse | null,
+  /**
+   * On the SNI-routed app path only: a request this returns true for skips
+   * the restricted-mode check, because the app proxy decides it instead. Used
+   * for the owner's API keys (docs/app-apis.md §3): the proxy lets a valid key
+   * through and answers any other `fsk_` key 401, so the container never sees
+   * an unchecked request.
+   */
+  proxyDecides?: (req: HttpRequest) => boolean,
 ): (req: HttpRequest, appServiceRef?: string | null) => Promise<HttpResponse | null> {
   return async (req: HttpRequest, appServiceRef?: string | null): Promise<HttpResponse | null> => {
     const serviceRef = resolveServiceRef(req, appServiceRef);
     if (!serviceRef) return null;
     if (access.store.mode(serviceRef) === "open") return null;
+    if (appServiceRef && proxyDecides?.(req)) return null;
     const decision = access.decide(serviceRef, req);
     if (decision.allow) return null;
     const knock = maybeServeKnock?.(serviceRef, req);
@@ -1389,7 +1404,7 @@ function parseVisitHeader(header: string): { proof: ServiceVisitProof; sig: Uint
  * Extract the `Flagship-App-Session` token from a Cookie header (RFC-loose,
  * same parsing shape as `serviceAccessGate.ts`). Returns null if absent.
  */
-function readSessionCookie(cookieHeader: string | undefined): string | null {
+export function readSessionCookie(cookieHeader: string | undefined): string | null {
   if (!cookieHeader) return null;
   for (const part of cookieHeader.split(";")) {
     const t = part.trim();

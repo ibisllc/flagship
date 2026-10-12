@@ -45,10 +45,11 @@ export interface AppSummary {
   egress?: { declared: string[]; approved: string[] };
   /**
    * The app's access list (docs/ai-privacy-and-staging.md §3a): how many
-   * rules it has and how many requests wait for the owner. Details on
+   * rules it has and how many requests wait for the owner (`draft` while a
+   * suggested list waits for review). Details on
    * GET /api/screens/services/:id/access.
    */
-  access?: { rules: number; pending: number };
+  access?: { rules: number; pending: number; draft?: true };
 }
 
 export interface RecentInstallEvent {

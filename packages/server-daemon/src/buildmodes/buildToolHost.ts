@@ -3,7 +3,8 @@
  * limited, contract-bounded functions a build agent drives:
  *   get_contract · list_files · read_file · write_file · delete_file ·
  *   validate · request_env_var · get_journal · deploy · check_app ·
- *   get_logs · finish
+ *   get_logs · query_db · list_tables · list_data_files · read_data_file ·
+ *   finish
  *
  * BOTH callers route through here, so the surface can never drift between
  * them:
@@ -18,8 +19,10 @@
  * journals every call value-free (names/sizes/validation problems only —
  * never file contents, never a secret value).
  *
- * `deploy`, `check_app` and `get_logs` only ever reach the build's private
- * staging copy (`staging.ts`), never a live service; `finish` hands the
+ * `deploy`, `check_app`, `get_logs` and the data tools (`query_db`,
+ * `list_tables`, `list_data_files`, `read_data_file`: the copy's sample
+ * data, after a successful deploy) only ever reach the build's private
+ * staging copy (`staging.ts`), never a live service or its data; `finish` hands the
  * build to the box, which seals it (`sealed` then refuses every tool) before
  * it goes live. See docs/ai-privacy-and-staging.md §2.
  */
@@ -48,6 +51,17 @@ export interface BuildToolCheckResult {
   reason?: string;
 }
 
+/** A data tool's answer: compact JSON for the model, or why not. */
+export type BuildToolDataResult = { ok: true; text: string } | { ok: false; reason: string };
+
+/** The staging copy's sample data, bound to one build (staging.ts `StagingDataTools`). */
+export interface BuildToolDataHooks {
+  queryDb(req: { sql: string; store?: string }): Promise<BuildToolDataResult>;
+  listTables(req: { store?: string }): Promise<BuildToolDataResult>;
+  listDataFiles(req: { path?: string }): Promise<BuildToolDataResult>;
+  readDataFile(req: { path: string }): Promise<BuildToolDataResult>;
+}
+
 export interface BuildToolHostContext {
   buildId: string;
   workspace: BuildWorkspace;
@@ -67,6 +81,8 @@ export interface BuildToolHostContext {
   checkApp?: (req: { path: string; method?: string; body?: string }) => Promise<BuildToolCheckResult>;
   /** The staging copy's recent output; null when nothing is running. */
   logs?: () => Promise<string | null>;
+  /** The staging copy's sample data (dev database, dev files volume). Absent ⇒ those tools refuse. */
+  data?: BuildToolDataHooks;
   /** The AI says the app works. The box decides; a refusal comes back as the reason. */
   finish?: () => Promise<{ ok: boolean; reason?: string }>;
   /** True once the build is sealed: every tool refuses from then on. */
@@ -110,6 +126,10 @@ export const BUILD_TOOL_NAMES = [
   "deploy",
   "check_app",
   "get_logs",
+  "query_db",
+  "list_tables",
+  "list_data_files",
+  "read_data_file",
   "finish",
 ] as const;
 
@@ -209,6 +229,46 @@ export const BUILD_TOOL_SPECS: BuildToolSpec[] = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "query_db",
+    description:
+      "Run SQL against the test copy's database (after a deploy, even one whose app failed to start). It holds only sample data, never the owner's. Returns at most 200 rows as JSON; statements time out after 10 s. Writes are allowed (they change only the test copy).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sql: { type: "string", description: "The SQL to run, e.g. \"SELECT * FROM items LIMIT 20\"." },
+        store: { type: "string", description: "Which Postgres store, for an app with several (data.stores.postgres names)." },
+      },
+      required: ["sql"],
+    },
+  },
+  {
+    name: "list_tables",
+    description:
+      "List the test copy's database tables with their columns, types and row counts (after a deploy, even one whose app failed to start).",
+    inputSchema: {
+      type: "object",
+      properties: { store: { type: "string", description: "Which Postgres store, for an app with several." } },
+    },
+  },
+  {
+    name: "list_data_files",
+    description:
+      "List what the test copy has written to its files folder (/data, FLAGSHIP_FILES_DIR) with sizes (after a deploy, even one whose app failed to start). Not the workspace: use list_files for that.",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string", description: "A folder under /data to list (default: all of /data)." } },
+    },
+  },
+  {
+    name: "read_data_file",
+    description: "Read the first 16 KB of one file the test copy wrote to /data (after a deploy, even one whose app failed to start).",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string", description: "The file's path under /data, e.g. \"uploads/a.txt\"." } },
+      required: ["path"],
+    },
+  },
+  {
     name: "finish",
     description:
       "Say the app works. Only after a successful deploy of the current files. The box then puts it live; your session ends and you can't use any tool on this build again.",
@@ -242,6 +302,18 @@ export class BuildToolHost {
       ...(r.journalDetail != null ? { detail: r.journalDetail } : {}),
     });
     return r;
+  }
+
+  /** One staging data tool. Journal summaries never carry the SQL or a path's contents. */
+  private async dataCall(
+    name: string,
+    run: (d: BuildToolDataHooks) => Promise<BuildToolDataResult>,
+    summary: string,
+  ): Promise<BuildToolResult> {
+    if (!this.ctx.data) return toolErr(`${name} is not available for this session`, `${name} unavailable`);
+    const r = await run(this.ctx.data);
+    if (!r.ok) return toolErr(r.reason, `${name}: refused`);
+    return { text: r.text, journalSummary: summary };
   }
 
   private async dispatch(name: string, args: Record<string, unknown>): Promise<BuildToolResult> {
@@ -387,6 +459,29 @@ export class BuildToolHost {
         return { text: text || "(no output yet)", journalSummary: "read staging logs" };
       }
 
+      case "query_db": {
+        const sql = str(args.sql);
+        if (!sql.trim()) return toolErr("sql required", "query_db: no sql");
+        const store = optStr(args.store);
+        return this.dataCall("query_db", (d) => d.queryDb({ sql, ...(store ? { store } : {}) }), "ran a query on the test copy");
+      }
+
+      case "list_tables": {
+        const store = optStr(args.store);
+        return this.dataCall("list_tables", (d) => d.listTables(store ? { store } : {}), "listed the test copy's tables");
+      }
+
+      case "list_data_files": {
+        const path = optStr(args.path);
+        return this.dataCall("list_data_files", (d) => d.listDataFiles(path ? { path } : {}), "listed the test copy's files");
+      }
+
+      case "read_data_file": {
+        const path = str(args.path);
+        if (!path) return toolErr("path required", "read_data_file: no path");
+        return this.dataCall("read_data_file", (d) => d.readDataFile({ path }), "read a test copy file");
+      }
+
       case "finish": {
         if (!this.ctx.finish) return toolErr("finish is not available for this session", "finish unavailable");
         const f = await this.ctx.finish();
@@ -401,6 +496,10 @@ export class BuildToolHost {
         return toolErr(`unknown tool: ${name}`, `unknown tool: ${name}`);
     }
   }
+}
+
+function optStr(v: unknown): string | undefined {
+  return typeof v === "string" && v.trim() !== "" ? v : undefined;
 }
 
 function toolErr(message: string, journalSummary: string): BuildToolResult {

@@ -58,28 +58,57 @@ describe("recording default-deny attempts", () => {
     expect(store.pending("harry-weather")).toHaveLength(1);
   });
 
-  it("caps each app's pending list, evicting the stalest attempt but never a declared host", async () => {
+  it("caps each app's pending list, evicting the stalest attempt", async () => {
     const { store, rec, clock } = rig();
-    await rec.onDeclared("harry-weather", ["api.open-meteo.com"]);
     for (let i = 0; i < PENDING_MAX_PER_APP + 5; i++) {
       clock.advance(10);
       rec.onUnmatched("harry-weather", `h${i}.example.com`);
     }
     const hosts = store.pending("harry-weather").map((r) => r.host);
     expect(hosts).toHaveLength(PENDING_MAX_PER_APP);
-    expect(hosts).toContain("api.open-meteo.com");
     expect(hosts).not.toContain("h0.example.com");
     expect(hosts).toContain(`h${PENDING_MAX_PER_APP + 4}.example.com`);
   });
 
-  it("manifest hosts become 'app' requests at install unless the list already decides them", async () => {
-    const { store, rec, events } = rig();
+  it("manifest hosts become one draft (not per-host requests), unless the list already decides them", async () => {
+    const { store, rec, events, pushes } = rig();
     await store.putSigned("harry-weather", "deny api.open-meteo.com\n", { v: 2, grant: { serverDomain: "b", serviceId: "harry-weather", listSha256: "0".repeat(64), issuedAt: 1 }, signature: "" });
-    const created = await rec.onDeclared("harry-weather", ["api.open-meteo.com", "*.tile.openstreetmap.org", "*.tile.openstreetmap.org"]);
-    expect(created.map((r) => [r.host, r.source, r.attempts])).toEqual([["*.tile.openstreetmap.org", "app", 0]]);
+    const draft = await rec.onDeclared("harry-weather", [
+      { host: "api.open-meteo.com" },
+      { host: "*.tile.openstreetmap.org", why: "map tiles" },
+      { host: "*.tile.openstreetmap.org" },
+    ]);
+    expect(draft!.hosts).toEqual([{ host: "*.tile.openstreetmap.org", why: "map tiles" }]);
+    expect(draft!.list).toBe("allow *.tile.openstreetmap.org   # map tiles\ndeny api.open-meteo.com\n");
+    expect(store.pending("harry-weather")).toEqual([]);
+    await flush();
     expect(events).toEqual([{ type: "access-request", serviceId: "harry-weather" }]);
-    expect(await rec.onDeclared("harry-weather", ["*.tile.openstreetmap.org"])).toEqual([]);
-    expect(await rec.onDeclared("harry-gone", ["a.example.com"])).toEqual([]);
+    expect(pushes).toHaveLength(1);
+    expect(await rec.onDeclared("harry-weather", [{ host: "*.tile.openstreetmap.org" }])).toBeNull();
+    expect(await rec.onDeclared("harry-gone", [{ host: "a.example.com" }])).toBeNull();
+    expect(events).toHaveLength(1);
+  });
+
+  it("a draft's push respects the alerts switch and the daily limit", async () => {
+    const { store } = rig();
+    const pushes: number[] = [];
+    const events: AccessRequestEvent[] = [];
+    let on = false;
+    const rec = buildAccessRequestRecorder({
+      store,
+      appName: () => "weather",
+      sinks: () => ({ push: () => void pushes.push(1), emit: (e) => events.push(e), alertsEnabled: () => on }),
+    });
+    await rec.onDeclared("harry-weather", [{ host: "a.example.com" }]);
+    await flush();
+    expect(pushes).toHaveLength(0);
+    expect(events).toHaveLength(1);
+    on = true;
+    await rec.onDeclared("harry-weather", [{ host: "b.example.com" }]);
+    await rec.onDeclared("harry-weather", [{ host: "c.example.com" }]);
+    await flush();
+    expect(pushes).toHaveLength(1);
+    expect(events).toHaveLength(3);
   });
 });
 
@@ -189,7 +218,7 @@ describe("bootEgress wiring", () => {
     },
   };
 
-  it("install records requests and emits, uninstall forgets, the summary counts", async () => {
+  it("install drafts a list and emits, uninstall forgets, the summary shows it", async () => {
     const installed = new Map([["harry-weather", { name: "weather", declared: ["api.open-meteo.com"] }]]);
     const owner = ed.getPublicKey(new Uint8Array(32).fill(42));
     const rt = await bootEgress({
@@ -203,9 +232,9 @@ describe("bootEgress wiring", () => {
     });
     const events: AccessRequestEvent[] = [];
     rt.setAccessAlerts({ emit: (e) => events.push(e) });
-    await rt.noteInstalled("harry-weather", ["api.open-meteo.com"]);
+    await rt.noteInstalled("harry-weather", ["api.open-meteo.com", { host: "cdn.example.com", why: "images" }]);
     expect(events).toEqual([{ type: "access-request", serviceId: "harry-weather" }]);
-    expect(rt.appEgress!.access("harry-weather")).toEqual({ rules: 0, pending: 1 });
+    expect(rt.appEgress!.access("harry-weather")).toEqual({ rules: 0, pending: 0, draft: true });
     installed.delete("harry-weather");
     await rt.pruneUninstalled();
     expect(rt.appEgress!.access("harry-weather")).toEqual({ rules: 0, pending: 0 });

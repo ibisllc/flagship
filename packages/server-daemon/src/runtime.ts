@@ -3,11 +3,20 @@ import { connect as netConnect, type Socket } from "node:net";
 import { createServer as createTlsServer, type Server as TlsServer, type TLSSocket } from "node:tls";
 import acme from "acme-client";
 import { readFile } from "node:fs/promises";
-import { ed, type Bytes, type Keypair } from "@flagship/protocol";
+import { ed, egressSuggestions, type Bytes, type Keypair } from "@flagship/protocol";
 import type { BoxSigner, SwkOps } from "./keyCustodian.js";
-import { ServicePlatform, buildServiceHttpHandlers } from "./servicePlatform.js";
+import { ServicePlatform, buildServiceHttpHandlers, type InstalledService } from "./servicePlatform.js";
 import { AliasReconciler } from "./aliasReconciler.js";
-import { handleAppRequest } from "./serviceProxy.js";
+import { prepareAppRequest, type SessionResolver } from "./serviceProxy.js";
+import { AppConnectionLimiter, handleAppConnection, type AppConnectionOptions } from "./appConnection.js";
+import {
+  AppApiKeyStore,
+  apiKeyAuthorizer,
+  apiKeyFromHeaders,
+  buildAppApiKeysHttp,
+  type ApiKeyAuthenticator,
+  type AppApiKeysHttp,
+} from "./appApiKeys.js";
 import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
 import { AppRunner, buildStartCheck, realCommandRunner } from "./serviceRunner.js";
 import { ensureContainerLinksUnmanaged } from "./containerLinks.js";
@@ -360,6 +369,51 @@ export type AppGate = (
   appServiceRef: string | null,
 ) => Promise<HttpResponse | null>;
 
+/** Member identity on the app path (docs/app-apis.md §5). */
+export interface AppIdentity {
+  resolveSession: SessionResolver;
+  /** For a denied browser navigation: the knock page, or null for the "is private" page. */
+  deniedPage?: (serviceRef: string, req: HttpRequest) => HttpResponse | null;
+}
+
+/**
+ * The connection options for one app's traffic: the app gates (keyed by the
+ * SNI-selected service), then the proxy's decision with the member session,
+ * API keys and identity headers. The live TLS handler and the tests share it.
+ */
+export function appConnectionOptions(
+  app: InstalledService,
+  deps: {
+    gates: ReadonlyArray<AppGate>;
+    injector: BoxSigner;
+    updateServer?: UpdateServer;
+    apiKeys: ApiKeyAuthenticator | null;
+    identity: AppIdentity | null;
+    limiter: AppConnectionLimiter;
+  },
+): AppConnectionOptions {
+  return {
+    serviceId: app.serviceId,
+    // Enforce on the SAME service the SNI selected, never the client Host.
+    gate: (req) => runAppGates(deps.gates, req, app.serviceId),
+    prepare: (req, info) =>
+      prepareAppRequest(
+        app,
+        req,
+        {
+          injector: deps.injector,
+          updateServer: deps.updateServer,
+          apiKeys: deps.apiKeys,
+          ...(deps.identity ? { resolveSession: deps.identity.resolveSession } : {}),
+          ...(deps.identity?.deniedPage ? { deniedPage: deps.identity.deniedPage } : {}),
+        },
+        info,
+      ),
+    upstream: { host: "127.0.0.1", port: app.containerPort },
+    limiter: deps.limiter,
+  };
+}
+
 export interface DaemonRuntime {
   /** Wait until the daemon is reachable end-to-end (cert installed). */
   ready(): Promise<void>;
@@ -393,6 +447,8 @@ export interface DaemonRuntime {
   relayLockdown: RelayLockdownController;
   /** The egress gateway: its status, and the app-approval screens handler. */
   egress: EgressRuntime;
+  /** API keys apps accept from machine clients: the screens handler (`/services/:id/api-keys`). */
+  appApiKeys: AppApiKeysHttp;
   /**
    * Box-initiated outbound streams over the tunnel (the AI provider relay,
    * docs/ai-privacy-and-staging.md §4). Available only while the live hub
@@ -443,6 +499,13 @@ export interface DaemonRuntime {
    * gating e2e).
    */
   addAppGate(h: AppGate): void;
+  /**
+   * Who a browser visitor of an app is (the member-session resolver), and the
+   * page a denied browser navigation gets (the knock page). index.ts sets
+   * this once the access + session stores exist; until then every app
+   * visitor is anonymous.
+   */
+  setAppIdentity(h: AppIdentity): void;
   /**
    * Append a WebSocket upgrade handler. Handlers are tried in
    * registration order until one returns true (accepted + detached
@@ -768,6 +831,14 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     return baseHandleHttp(req);
   };
 
+  // The owner's API keys for apps (docs/app-apis.md §3), loaded below once
+  // the SWK and owner are known; the app proxy reads them through this cell.
+  const appApiKeysRef: { current: AppApiKeyStore | null } = { current: null };
+  // Concurrent forwarded connections per app (streams, uploads, WebSockets).
+  const appConnLimiter = new AppConnectionLimiter();
+  // Member sessions on the app path (index.ts sets it; see setAppIdentity).
+  const appIdentityRef: { current: AppIdentity | null } = { current: null };
+
   // Local TLS server. The tunnel hub forwards inbound TCP from
   // `<serverFqdn>:443` to this socket; the TLS handshake terminates here.
   const tls = createTlsServer({
@@ -801,18 +872,18 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       ? servicePlatformRef.current.byLabel(leftmost)
       : undefined;
     if (app) {
-      handleHttpConnection(
+      // App traffic streams (SSE, downloads, uploads) and passes WebSocket
+      // upgrades through, decided like any request (docs/app-apis.md §1).
+      handleAppConnection(
         socket,
-        buildGatedAppHandler(
-          appGates,
-          (req) =>
-            handleAppRequest(app, req, {
-              injector: opts.custodian,
-              updateServer: opts.updateServer,
-            }),
-          // Enforce on the SAME service the SNI selected, never the client Host.
-          app.serviceId,
-        ),
+        appConnectionOptions(app, {
+          gates: appGates,
+          injector: opts.custodian,
+          updateServer: opts.updateServer,
+          apiKeys: appApiKeysRef.current,
+          identity: appIdentityRef.current,
+          limiter: appConnLimiter,
+        }),
       );
       return;
     }
@@ -1163,6 +1234,33 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       return app ? { name: app.manifest.name, declared: app.manifest.network?.egress ?? [] } : null;
     },
   });
+  const apiKeyAuthority =
+    opts.servicePlatform?.hostUsername && opts.servicePlatform.hostIrkPub
+      ? apiKeyAuthorizer({
+          username: opts.servicePlatform.hostUsername,
+          ownerIrkPub: opts.servicePlatform.hostIrkPub,
+          ...(opts.servicePlatform.hostAdminRootPub ? { adminRootPub: opts.servicePlatform.hostAdminRootPub } : {}),
+        })
+      : null;
+  const appApiKeyStore = new AppApiKeyStore(
+    opts.dataDir && opts.servicePlatform?.swk ? `${opts.dataDir}/data/app-api-keys.sealed` : null,
+    opts.servicePlatform?.swk ?? null,
+  );
+  if (apiKeyAuthority) {
+    try {
+      const { dropped } = await appApiKeyStore.load(apiKeyAuthority, opts.serverFqdn);
+      if (dropped > 0) console.warn(`[api-keys] dropped ${dropped} key(s) whose grant no longer verifies`);
+    } catch (e) {
+      console.warn(`[api-keys] could not read the API keys: ${(e as Error).message}`);
+    }
+  }
+  appApiKeysRef.current = appApiKeyStore;
+  const appApiKeys = buildAppApiKeysHttp({
+    serverDomain: opts.serverFqdn,
+    store: appApiKeyStore,
+    authorize: apiKeyAuthority,
+    installed: (id) => servicePlatformRef.current?.byServiceId(id) !== undefined,
+  });
   if (!egress.status().enforced) {
     // Unfenced: the bridges exist with their fixed names, none internal, so
     // builds still reach the internet (the behaviour before the gateway).
@@ -1220,9 +1318,13 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       pullStateStore: apOpts.pullStateStore ?? null,
       cloneService: apOpts.cloneService ?? null,
       envStore,
-      onServiceInstalled: (app) => egress.noteInstalled(app.serviceId, app.manifest.network?.egress ?? []),
+      onServiceInstalled: (app) => egress.noteInstalled(app.serviceId, egressSuggestions(app.manifest.network)),
       onServiceRemoved: async (slug: string) => {
         await egress.pruneUninstalled();
+        // Uninstalling an app drops its API keys.
+        await appApiKeyStore
+          .pruneTo((id) => servicePlatformRef.current?.byServiceId(id) !== undefined)
+          .catch((e) => console.warn(`[api-keys] could not drop an uninstalled app's keys: ${(e as Error).message}`));
         await apOpts.onServiceRemoved?.(slug);
       },
       registry:
@@ -1389,6 +1491,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     urlController,
     relayLockdown,
     egress,
+    appApiKeys,
     outboundRelay: {
       outboundAvailable: () => tunnel.outboundAvailable(),
       openOutbound: (host, port) => tunnel.openOutbound(host, port),
@@ -1401,6 +1504,9 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     },
     addAppGate(h) {
       appGates.push(h);
+    },
+    setAppIdentity(h) {
+      appIdentityRef.current = h;
     },
     addUpgradeHandler(h) {
       extraUpgrades.push(h);
@@ -1431,13 +1537,25 @@ export function buildGatedAppHandler(
    */
   appServiceRef: string | null = null,
 ): (req: HttpRequest) => Promise<HttpResponse> {
-  return async (req) => {
-    for (const g of gates) {
-      const r = await g(req, appServiceRef);
-      if (r) return r;
-    }
-    return proxyToApp(req);
-  };
+  return async (req) => (await runAppGates(gates, req, appServiceRef)) ?? proxyToApp(req);
+}
+
+/** The first app gate's response, or null when every gate lets the request through. */
+export async function runAppGates(
+  gates: ReadonlyArray<AppGate>,
+  req: HttpRequest,
+  appServiceRef: string | null,
+): Promise<HttpResponse | null> {
+  for (const g of gates) {
+    const r = await g(req, appServiceRef);
+    if (r) return r;
+  }
+  return null;
+}
+
+/** Whether a request carries an app API key (`fsk_…`) for the proxy to check. */
+export function carriesAppApiKey(req: HttpRequest): boolean {
+  return apiKeyFromHeaders(req.headers) !== null;
 }
 
 /**

@@ -79,6 +79,7 @@ import {
   ServiceSessionStore,
 } from "./serviceAccess.js";
 import { buildServiceAccessWeb } from "./serviceAccessWeb.js";
+import { buildAppSessionResolver } from "./appMemberSession.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
 import {
   buildIdentityRotateHandlers,
@@ -132,6 +133,7 @@ import { buildBuildModesHttpHandlers } from "./buildmodes/buildModesHttp.js";
 import { ForgejoAppAdmin } from "./forgejoServiceAdmin.js";
 import type { ServicePlatform } from "./servicePlatform.js";
 import {
+  carriesAppApiKey,
   runAppSql,
   startDaemonRuntime,
   type DaemonRuntime,
@@ -162,6 +164,8 @@ import {
 } from "./entitlementBundleStore.js";
 import { claimEntitlementDeposit, fetchEntitlementViaRelay } from "./entitlementRelay.js";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
+import { appSqlRunner } from "./dataLayer/appSql.js";
+import { DbWriteLedger, buildOwnerDbHttp } from "./dataLayer/ownerDb.js";
 import {
   buildSelfDeletePoller,
   fileMarkerStore,
@@ -2169,6 +2173,7 @@ async function wireRuntimeSurfaces(deps: {
     workingDir: vibeAppDir,
     dataProvisioner: runtime.dataProvisioner,
     runSql: runtime.dataProvisioner ? runAppSql : null,
+    sql: runtime.dataProvisioner ? appSqlRunner() : null,
     startCheck: serviceRunnerMod.buildStartCheck(serviceRunnerMod.realCommandRunner),
     fenced: () => runtime.egress.status().enforced,
   });
@@ -2534,6 +2539,25 @@ async function wireRuntimeSurfaces(deps: {
   const screensHandle = buildScreensHttp({
     gate: pairedSessions,
     appEgress: runtime.egress.appEgress,
+    appDb:
+      cfg && runtime.servicePlatform && runtime.dataProvisioner
+        ? {
+            handle: buildOwnerDbHttp({
+              serverDomain: env.serverFqdn,
+              ownerIrkPub: cfg.irkPublicKey,
+              ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+              username: cfg.userId,
+              app: (id) => {
+                const a = runtime.servicePlatform?.byServiceId(id);
+                return a ? { data: a.data } : null;
+              },
+              sql: appSqlRunner(),
+              ledger: new DbWriteLedger(join(dataDir, "data", "app-db-writes.json")),
+              log: (m) => console.log(m),
+            }),
+          }
+        : null,
+    appApiKeys: runtime.appApiKeys,
     accessAlerts: accessAlertSetting,
     serverFqdn: env.serverFqdn,
     username,
@@ -3100,6 +3124,8 @@ async function wireOwnerHandlers(deps: {
       return svc ? svc.serviceId : null;
     },
     accessWeb.maybeServeKnock,
+    // An owner's API key reaches a restricted app; the proxy checks it.
+    carriesAppApiKey,
   );
   runtime.addHandler(accessEnforcement);
   // The SNI-routed per-app proxy path does NOT run the daemon handler chain
@@ -3110,6 +3136,13 @@ async function wireOwnerHandlers(deps: {
   // same-origin on the SERVICE subdomain.
   runtime.addAppGate(accessWeb.handle);
   runtime.addAppGate(accessEnforcement);
+  // Member sessions on the app path (docs/app-apis.md §5): the session cookie
+  // the knock flow issued names the owner or an invited person to the app,
+  // and a denied browser navigation gets the knock page to sign in.
+  runtime.setAppIdentity({
+    resolveSession: buildAppSessionResolver({ sessions: sessionStore, access: accessStore }),
+    deniedPage: accessWeb.maybeServeKnock,
+  });
   process.once("SIGTERM", () => deadMan.stop());
   process.once("SIGINT", () => deadMan.stop());
   console.log(

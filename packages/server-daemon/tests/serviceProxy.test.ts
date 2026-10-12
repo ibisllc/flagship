@@ -94,28 +94,16 @@ describe("decideAccess — public_routes vs membership", () => {
     expect(decideAccess(app, fakeReq("/aboutMe"), null)).toBe("deny"); // exact match only
   });
 
-  it("paired-session for a member → allow even on non-public routes", async () => {
+  it("a member session reaches non-public routes", async () => {
     const { app, hostIrk } = await makeApp({ publicRoutes: [] });
-    // Add a member directly through the membership store so we don't have
-    // to drive the full invite flow in this test.
-    app.membership.members.internalAdd(hostIrk.publicKey, "owner");
     const session: SessionInfo = {
-      irkPub: hostIrk.publicKey,
+      memberPub: hostIrk.publicKey,
       stableId: app.membership.stableIdFor(hostIrk.publicKey),
       role: "owner",
     };
     expect(decideAccess(app, fakeReq("/private"), session)).toBe("allow");
-  });
-
-  it("paired-session for a non-member → deny", async () => {
-    const { app } = await makeApp({ publicRoutes: [] });
-    const stranger = makeKey();
-    const session: SessionInfo = {
-      irkPub: stranger.publicKey,
-      stableId: "stranger",
-      role: "viewer",
-    };
-    expect(decideAccess(app, fakeReq("/private"), session)).toBe("deny");
+    // Who counts as a member is the resolver's call (appMemberSession.test.ts).
+    expect(decideAccess(app, fakeReq("/private"), null)).toBe("deny");
   });
 });
 
@@ -294,5 +282,108 @@ describe("defaultForward — hop-by-hop header stripping", () => {
     } finally {
       srv.close();
     }
+  });
+});
+
+describe("public routes — exact paths and /* prefixes (docs/app-apis.md §2)", () => {
+  it("matches exact paths, ignoring the query", async () => {
+    const { matchesPublicRoute } = await import("../src/serviceProxy.js");
+    expect(matchesPublicRoute("/about", ["/about"])).toBe(true);
+    expect(matchesPublicRoute("/about?x=1", ["/about"])).toBe(true);
+    expect(matchesPublicRoute("/about/", ["/about"])).toBe(false);
+    expect(matchesPublicRoute("/aboutMe", ["/about"])).toBe(false);
+  });
+
+  it("a /* prefix is segment-aware", async () => {
+    const { matchesPublicRoute } = await import("../src/serviceProxy.js");
+    const routes = ["/api/public/*"];
+    expect(matchesPublicRoute("/api/public/", routes)).toBe(true);
+    expect(matchesPublicRoute("/api/public/x/y?z=1", routes)).toBe(true);
+    expect(matchesPublicRoute("/api/public", routes)).toBe(false);
+    expect(matchesPublicRoute("/api/publicity", routes)).toBe(false);
+    expect(matchesPublicRoute("/api/private/x", routes)).toBe(false);
+  });
+
+  it("a prefix never matches a path that could resolve outside it", async () => {
+    const { matchesPublicRoute } = await import("../src/serviceProxy.js");
+    const routes = ["/api/public/*"];
+    for (const p of [
+      "/api/public/../admin",
+      "/api/public/%2e%2e/admin",
+      "/api/public/%2E%2E/admin",
+      "/api/public/..;/admin",
+      "/api/public/.",
+      "/api/public/x%2f..%2fadmin",
+      "/api/public/x\\..\\admin",
+      "/api/public/%zz",
+    ]) {
+      expect(matchesPublicRoute(p, routes)).toBe(false);
+    }
+  });
+
+  it("/* makes the whole app public", async () => {
+    const { matchesPublicRoute } = await import("../src/serviceProxy.js");
+    expect(matchesPublicRoute("/", ["/*"])).toBe(true);
+    expect(matchesPublicRoute("/deep/../x", ["/*"])).toBe(true);
+  });
+
+  it("decideAccess uses prefixes and admits a checked API key anywhere", async () => {
+    const { app } = await makeApp({ publicRoutes: ["/api/public/*"] });
+    expect(decideAccess(app, fakeReq("/api/public/feed"), null)).toBe("allow");
+    expect(decideAccess(app, fakeReq("/api/publicity"), null)).toBe("deny");
+    expect(decideAccess(app, fakeReq("/admin"), null, { keyId: "00000000000000aa" })).toBe("allow");
+  });
+});
+
+describe("sibling-app guard (docs/app-apis.md §4)", () => {
+  const HOSTNAME = "game1.home.alice.flagship.services";
+  const req = (method: string, headers: Record<string, string>) => ({
+    method,
+    path: "/x",
+    headers: { host: HOSTNAME, ...headers },
+    body: Buffer.alloc(0),
+  });
+
+  it("only unsafe methods and upgrades from another origin are anonymous", async () => {
+    const { isCrossOriginUnsafe } = await import("../src/serviceProxy.js");
+    const other = "https://notes.home.alice.flagship.services";
+    expect(isCrossOriginUnsafe(req("GET", { origin: other }), false)).toBe(false);
+    expect(isCrossOriginUnsafe(req("POST", { origin: other }), false)).toBe(true);
+    expect(isCrossOriginUnsafe(req("DELETE", { origin: "null" }), false)).toBe(true);
+    expect(isCrossOriginUnsafe(req("GET", { origin: other }), true)).toBe(true);
+    expect(isCrossOriginUnsafe(req("POST", { origin: `https://${HOSTNAME}` }), false)).toBe(false);
+    expect(isCrossOriginUnsafe(req("POST", { origin: `https://${HOSTNAME}:443` }), false)).toBe(false);
+    expect(isCrossOriginUnsafe(req("POST", { origin: `http://${HOSTNAME}` }), false)).toBe(true);
+  });
+
+  it("falls back to Sec-Fetch-Site, then Referer; nothing at all counts as same-origin", async () => {
+    const { isCrossOriginUnsafe } = await import("../src/serviceProxy.js");
+    expect(isCrossOriginUnsafe(req("POST", { "sec-fetch-site": "same-site" }), false)).toBe(true);
+    expect(isCrossOriginUnsafe(req("POST", { "sec-fetch-site": "cross-site" }), false)).toBe(true);
+    expect(isCrossOriginUnsafe(req("POST", { "sec-fetch-site": "same-origin" }), false)).toBe(false);
+    expect(isCrossOriginUnsafe(req("POST", { "sec-fetch-site": "none" }), false)).toBe(false);
+    expect(isCrossOriginUnsafe(req("POST", { referer: "https://notes.home.alice.flagship.services/page" }), false)).toBe(true);
+    expect(isCrossOriginUnsafe(req("POST", { referer: `https://${HOSTNAME}/page` }), false)).toBe(false);
+    expect(isCrossOriginUnsafe(req("POST", {}), false)).toBe(false);
+  });
+
+  it("a cross-origin POST reaches the app, but without the member identity", async () => {
+    const { app } = await makeApp({ publicRoutes: ["/x"] });
+    const session: SessionInfo = { memberPub: new Uint8Array(32).fill(1), stableId: "member-1", role: "member" };
+    let seen: Record<string, string> = {};
+    const deps = {
+      injector: boxSigner(makeKey()),
+      resolveSession: () => session,
+      forward: async (_h: string, _p: number, r: { headers: Record<string, string> }) => {
+        seen = r.headers;
+        return { status: 200, body: "" };
+      },
+    };
+    const r = await handleAppRequest(app, req("POST", { origin: "https://notes.home.alice.flagship.services", cookie: "s=1" }), deps);
+    expect(r.status).toBe(200);
+    expect(seen["x-flagship-user"]).toBe("anonymous");
+    expect(seen["cookie"]).toBe("s=1");
+    await handleAppRequest(app, req("POST", { origin: `https://${HOSTNAME}` }), deps);
+    expect(seen["x-flagship-user"]).toBe("member-1");
   });
 });

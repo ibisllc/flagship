@@ -2,6 +2,7 @@ import { ed } from "@flagship/protocol";
 import type { AppMembership } from "./membership.js";
 import type { Bytes } from "@flagship/protocol";
 import type { BoxSigner } from "./keyCustodian.js";
+import { matchesPublicRoute } from "./serviceProxy.js";
 
 /**
  * Stamps signed identity headers on inbound HTTP requests after authenticating
@@ -109,11 +110,7 @@ export class IdentityInjector {
   }
 
   private isPublic(path: string): boolean {
-    for (const p of this.publicRoutes) {
-      if (path === p) return true;
-      if (p.endsWith("/*") && path.startsWith(p.slice(0, -1))) return true;
-    }
-    return false;
+    return matchesPublicRoute(path, this.publicRoutes);
   }
 
   private signMember(stableId: string, role: string): Decision {

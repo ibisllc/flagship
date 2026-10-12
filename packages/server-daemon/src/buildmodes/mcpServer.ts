@@ -28,6 +28,7 @@ import {
   BuildToolHost,
   BUILD_TOOL_SPECS,
   type BuildToolCheckResult,
+  type BuildToolDataHooks,
   type BuildToolDeployResult,
 } from "./buildToolHost.js";
 
@@ -56,6 +57,8 @@ export interface McpBuildContext {
   checkApp?: (req: { path: string; method?: string; body?: string }) => Promise<BuildToolCheckResult>;
   /** The staging copy's recent output; null when nothing is running. */
   logs?: () => Promise<string | null>;
+  /** The staging copy's sample data (query_db, list_tables, list_data_files, read_data_file). */
+  data?: BuildToolDataHooks;
   /** The IDE says the app works; the box seals the build and puts it live. */
   finish?: () => Promise<{ ok: boolean; reason?: string }>;
   /** True once sealed: tools and resources refuse. */
@@ -105,6 +108,7 @@ export class McpBuildServer {
       ...(ctx.deploy ? { deploy: ctx.deploy } : {}),
       ...(ctx.checkApp ? { checkApp: ctx.checkApp } : {}),
       ...(ctx.logs ? { logs: ctx.logs } : {}),
+      ...(ctx.data ? { data: ctx.data } : {}),
       ...(ctx.finish ? { finish: ctx.finish } : {}),
       ...(ctx.sealed ? { sealed: ctx.sealed } : {}),
       ...(ctx.redact ? { redact: ctx.redact } : {}),

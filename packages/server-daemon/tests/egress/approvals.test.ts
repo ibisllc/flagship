@@ -84,7 +84,10 @@ describe("GET/POST /api/screens/services/:id/access", () => {
   it("an app starts with the default list and no rules", async () => {
     const { handle, store } = setup();
     const r = await call(handle, "GET", A);
-    expect(r).toEqual({ status: 200, body: { list: DEFAULT_ACCESS_LIST, listSha256: accessListSha256(DEFAULT_ACCESS_LIST), pending: [] } });
+    expect(r).toEqual({
+      status: 200,
+      body: { list: DEFAULT_ACCESS_LIST, listSha256: accessListSha256(DEFAULT_ACCESS_LIST), pending: [], draft: null },
+    });
     expect(accessSummary(store, "harry-weather")).toEqual({ rules: 0, pending: 0 });
   });
 
@@ -92,7 +95,7 @@ describe("GET/POST /api/screens/services/:id/access", () => {
     const { handle, store, changes } = setup();
     const list = withRule(DEFAULT_ACCESS_LIST, "allow", "api.open-meteo.com");
     const r = await sendList(handle, list);
-    expect(r).toEqual({ status: 200, body: { ok: true, access: { list, listSha256: accessListSha256(list), pending: [] } } });
+    expect(r).toEqual({ status: 200, body: { ok: true, access: { list, listSha256: accessListSha256(list), pending: [], draft: null } } });
     expect(store.rules("harry-weather")).toEqual([{ line: 1, action: "allow", target: "api.open-meteo.com" }]);
     expect(changes).toEqual(["harry-weather"]);
     expect((await call(handle, "GET", A)).body.list).toBe(list);
@@ -171,19 +174,18 @@ describe("GET/POST /api/screens/services/:id/access", () => {
 
   it("an answer clears the requests it decides; dismiss clears one without a signature", async () => {
     const { handle, store } = setup();
-    await store.noteDeclared("harry-weather", APPS["harry-weather"]!.declared);
-    store.recordAttempt("harry-weather", "api.github.com");
+    for (const h of ["api.github.com", "api.open-meteo.com", "sync.example.com"]) store.recordAttempt("harry-weather", h);
     expect((await call(handle, "GET", A)).body.pending.map((p: { host: string }) => p.host).sort()).toEqual([
-      "*.tile.openstreetmap.org",
       "api.github.com",
       "api.open-meteo.com",
+      "sync.example.com",
     ]);
     const list = withRule(DEFAULT_ACCESS_LIST, "deny", "api.github.com");
     const r = await sendList(handle, list);
-    expect(r.body.access.pending.map((p: { host: string }) => p.host).sort()).toEqual(["*.tile.openstreetmap.org", "api.open-meteo.com"]);
+    expect(r.body.access.pending.map((p: { host: string }) => p.host).sort()).toEqual(["api.open-meteo.com", "sync.example.com"]);
     const d = await call(handle, "POST", `${A}/dismiss`, { host: "API.Open-Meteo.com" });
     expect(d.status).toBe(200);
-    expect(d.body.access.pending.map((p: { host: string }) => p.host)).toEqual(["*.tile.openstreetmap.org"]);
+    expect(d.body.access.pending.map((p: { host: string }) => p.host)).toEqual(["sync.example.com"]);
     expect(store.list("harry-weather")).toBe(list);
     expect((await call(handle, "POST", `${A}/dismiss`, {})).status).toBe(400);
     expect((await call(handle, "POST", "/api/screens/services/harry-gone/access/dismiss", { host: "a.com" })).status).toBe(404);
@@ -191,15 +193,100 @@ describe("GET/POST /api/screens/services/:id/access", () => {
 
   it("lists every app's requests with the app's name", async () => {
     const { handle, store } = setup();
-    await store.noteDeclared("harry-weather", ["api.open-meteo.com"]);
+    await store.draftFromDeclared("harry-weather", [{ host: "api.open-meteo.com", why: "forecasts" }]);
+    await store.draftFromDeclared("harry-gone", [{ host: "x.example.com" }]);
     store.recordAttempt("harry-notes", "sync.example.com");
     store.recordAttempt("harry-gone", "x.example.com");
     const r = await call(handle, "GET", "/api/screens/access-requests");
     expect(r.status).toBe(200);
     expect(r.body.requests).toEqual([
-      { serviceId: "harry-weather", appName: "weather", host: "api.open-meteo.com", source: "app", attempts: 0, firstSeen: NOW, lastSeen: NOW },
+      {
+        serviceId: "harry-weather",
+        appName: "weather",
+        kind: "draft",
+        hosts: [{ host: "api.open-meteo.com", why: "forecasts" }],
+        createdAt: NOW,
+      },
       { serviceId: "harry-notes", appName: "notes", host: "sync.example.com", source: "attempt", attempts: 1, firstSeen: NOW, lastSeen: NOW },
     ]);
+  });
+});
+
+// ---- suggested lists (drafts) ------------------------------------------------
+
+describe("drafts from the manifest's network.egress", () => {
+  const WEATHER = [
+    { host: "api.open-meteo.com", why: "weather forecasts" },
+    { host: "*.tile.openstreetmap.org" },
+  ];
+
+  it("puts an allow line per suggested host on top of the current list, with its reason", async () => {
+    const { store } = setup();
+    const d = await store.draftFromDeclared("harry-weather", WEATHER);
+    expect(d).not.toBeNull();
+    expect(d!.list).toBe(`allow api.open-meteo.com   # weather forecasts\nallow *.tile.openstreetmap.org\n${DEFAULT_ACCESS_LIST}`);
+    expect(d!.listSha256).toBe(accessListSha256(d!.list));
+    expect(d!.hosts).toEqual(WEATHER);
+    // A draft opens nothing and is not a per-host request.
+    expect(store.rules("harry-weather")).toEqual([]);
+    expect(store.pending("harry-weather")).toEqual([]);
+    expect(accessSummary(store, "harry-weather")).toEqual({ rules: 0, pending: 0, draft: true });
+  });
+
+  it("drafts nothing when nothing is new, and only hosts the list doesn't decide", async () => {
+    const { handle, store } = setup();
+    const signed = `${withRule(withRule(DEFAULT_ACCESS_LIST, "deny", "ads.example.com"), "allow", "api.open-meteo.com")}deny all\n`;
+    expect((await sendList(handle, signed)).status).toBe(200);
+    expect(await store.draftFromDeclared("harry-weather", [{ host: "api.open-meteo.com" }, { host: "ads.example.com" }])).toBeNull();
+    // `deny all` is not an answer about one host: still suggested.
+    const d = await store.draftFromDeclared("harry-weather", [{ host: "api.open-meteo.com" }, { host: "cdn.example.com", why: "images" }]);
+    expect(d!.hosts).toEqual([{ host: "cdn.example.com", why: "images" }]);
+    expect(d!.list).toBe(`allow cdn.example.com   # images\n${signed}`);
+    // The same hosts again (a redeploy that adds nothing): no new draft, the old one stays.
+    expect(await store.draftFromDeclared("harry-weather", [{ host: "cdn.example.com", why: "images" }])).toBeNull();
+    expect(store.draft("harry-weather")!.list).toBe(d!.list);
+  });
+
+  it("an edit that adds a host replaces the unanswered draft; a dismissed one stays quiet until then", async () => {
+    const { handle, store } = setup();
+    await store.draftFromDeclared("harry-weather", [WEATHER[0]!]);
+    const g = await call(handle, "GET", A);
+    expect(g.body.draft.hosts).toEqual([WEATHER[0]]);
+    const dis = await call(handle, "POST", `${A}/draft/dismiss`);
+    expect(dis.status).toBe(200);
+    expect(dis.body.access.draft).toBeNull();
+    expect(await store.draftFromDeclared("harry-weather", [WEATHER[0]!])).toBeNull();
+    const next = await store.draftFromDeclared("harry-weather", WEATHER);
+    expect(next!.hosts.map((h) => h.host)).toEqual(["api.open-meteo.com", "*.tile.openstreetmap.org"]);
+    expect((await call(handle, "GET", A)).body.draft.list).toBe(next!.list);
+    expect((await call(handle, "GET", `${A}/draft/dismiss`)).status).toBe(405);
+    expect((await call(handle, "POST", "/api/screens/services/harry-gone/access/draft/dismiss")).status).toBe(404);
+  });
+
+  it("approving it (possibly edited) applies the list and drops the draft", async () => {
+    const { handle, store } = setup();
+    const d = await store.draftFromDeclared("harry-weather", WEATHER);
+    const edited = d!.list.replace("allow *.tile.openstreetmap.org\n", "");
+    const r = await sendList(handle, edited);
+    expect(r.status).toBe(200);
+    expect(r.body.access.draft).toBeNull();
+    expect(store.rules("harry-weather").map((x) => x.target)).toEqual(["api.open-meteo.com"]);
+    expect((await call(handle, "GET", "/api/screens/access-requests")).body.requests).toEqual([]);
+  });
+
+  it("survives a restart, sealed", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "access-draft-"));
+    const path = join(dir, "app-access.sealed");
+    const a = setup({}, path);
+    await a.store.draftFromDeclared("harry-weather", WEATHER);
+    await a.store.flush();
+    expect(readFileSync(path, "utf8")).not.toContain("open-meteo");
+    const b = setup({}, path);
+    await b.store.load(accessAuthorizer({ username: "harry", ownerIrkPub: owner.publicKey }), BOX);
+    expect(b.store.draft("harry-weather")!.hosts).toEqual(WEATHER);
+    expect(await b.store.draftFromDeclared("harry-weather", WEATHER)).toBeNull();
+    await b.store.forget("harry-weather");
+    expect(b.store.draft("harry-weather")).toBeNull();
   });
 });
 
@@ -392,6 +479,7 @@ describe("through the screens API", () => {
     for (const [p, b] of [
       [A, { list: "", grant: g, signature: hex(signAppAccessGrant(g, owner)) }],
       [`${A}/dismiss`, { host: "a.com" }],
+      [`${A}/draft/dismiss`, {}],
       [P, { grant: grant(), signature: hex(signAppEgressGrant(grant(), owner)) }],
     ] as const) {
       const res = await http(r("POST", p, b));

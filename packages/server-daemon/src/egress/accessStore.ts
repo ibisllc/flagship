@@ -13,7 +13,10 @@
  *     default list. A v1 `app-egress.sealed` file is migrated on first load.
  *
  * Requests are box state, not owner decisions, so they carry no signature;
- * they're sealed too because the hosts an app tries are private.
+ * they're sealed too because the hosts an app tries are private. So are
+ * drafts ("Suggested lists"): the list with an `allow` line on top for each
+ * host the manifest's `network.egress` suggests that the list doesn't
+ * decide yet. A draft opens nothing until the owner signs it as a list.
  */
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -30,6 +33,7 @@ import {
   type AccessRule,
   type AppAccessGrant,
   type AppEgressGrant,
+  type EgressSuggestion,
 } from "@flagship/protocol";
 import type { SwkOps } from "../keyCustodian.js";
 
@@ -41,6 +45,14 @@ export interface AccessRequest {
   attempts: number;
   firstSeen: number;
   lastSeen: number;
+}
+
+/** A suggested list waiting for the owner (docs/ai-privacy-and-staging.md §3a "Suggested lists"). */
+export interface AccessDraft {
+  list: string;
+  listSha256: string;
+  hosts: EgressSuggestion[];
+  createdAt: number;
 }
 
 export type StoredAccessAuthority =
@@ -62,7 +74,13 @@ interface PerApp {
   pending: Map<string, AccessRequest>;
   /** host → until (ms): Ignore keeps a host quiet for a while. */
   dismissed: Map<string, number>;
+  draft: AccessDraft | null;
+  /** Hosts a draft has already suggested: only a host not in here triggers a new draft. */
+  suggested: Set<string>;
 }
+
+/** The spacing between a drafted rule and its reason, so the comment lines up. */
+const DRAFT_WHY_SEP = "   # ";
 
 type Swk = Pick<SwkOps, "sealWithSwk" | "openWithSwk">;
 
@@ -131,6 +149,8 @@ export class AppAccessStore {
       lists?: unknown;
       requests?: Record<string, unknown>;
       dismissed?: Record<string, Record<string, unknown>>;
+      drafts?: Record<string, unknown>;
+      suggested?: Record<string, unknown>;
       alerts?: { hosts?: Record<string, unknown>; recent?: unknown };
     };
     let dropped = 0;
@@ -163,6 +183,14 @@ export class AppAccessStore {
       for (const [h, until] of Object.entries(hosts ?? {})) {
         if (typeof until === "number") this.app(id).dismissed.set(h, until);
       }
+    }
+    for (const [id, d] of Object.entries(parsed.drafts ?? {})) {
+      const draft = parseDraft(d);
+      if (draft) this.app(id).draft = draft;
+    }
+    for (const [id, hosts] of Object.entries(parsed.suggested ?? {})) {
+      if (!Array.isArray(hosts)) continue;
+      for (const h of hosts) if (typeof h === "string") this.app(id).suggested.add(h);
     }
     for (const [k, t] of Object.entries(parsed.alerts?.hosts ?? {})) if (typeof t === "number") this.alertedAt.set(k, t);
     if (Array.isArray(parsed.alerts?.recent)) {
@@ -252,12 +280,13 @@ export class AppAccessStore {
     return this.entries.get(serviceId)?.auth.grant.issuedAt ?? null;
   }
 
-  /** Apply a verified list. Requests the list now answers go away. */
+  /** Apply a verified list. Requests the list now answers go away, and so does a draft. */
   async putSigned(serviceId: string, list: string, auth: StoredAccessAuthority): Promise<void> {
     const rules = parseAccessList(list).rules;
     this.entries.set(serviceId, { list, rules, auth });
     const a = this.apps.get(serviceId);
     if (a) {
+      a.draft = null;
       for (const host of [...a.pending.keys()]) if (coveringRule(rules, host)) a.pending.delete(host);
       for (const host of [...a.dismissed.keys()]) if (coveringRule(rules, host)) a.dismissed.delete(host);
     }
@@ -289,24 +318,57 @@ export class AppAccessStore {
     return { request: { ...request }, created: true };
   }
 
-  /** The hosts a manifest declares (`network.egress`) become requests, unless the list already decides them. */
-  async noteDeclared(serviceId: string, hosts: readonly string[]): Promise<AccessRequest[]> {
-    const t = this.now();
-    const a = this.app(serviceId);
+  /**
+   * The hosts a manifest suggests (`network.egress`, at install and on each
+   * update). When one the box hasn't suggested before is still undecided,
+   * it drafts the current list with an `allow <host>   # <why>` line on top
+   * for every undecided host, replacing an unanswered draft. Returns the new
+   * draft, or null when nothing is new.
+   *
+   * "Undecided": no rule allows it, and no rule names it to deny it (an
+   * explicit `deny <host>` is the owner's answer; a `deny all` is not).
+   */
+  async draftFromDeclared(serviceId: string, suggestions: readonly EgressSuggestion[]): Promise<AccessDraft | null> {
     const rules = this.rules(serviceId);
-    const created: AccessRequest[] = [];
-    for (const raw of hosts) {
-      const c = checkAccessTarget(raw);
-      if ("error" in c || c.target === "all") continue;
-      const host = c.target;
-      if (a.pending.has(host) || coveringRule(rules, host) || (a.dismissed.get(host) ?? 0) > t) continue;
-      if (!this.makeRoom(a)) break;
-      const r: AccessRequest = { host, source: "app", attempts: 0, firstSeen: t, lastSeen: t };
-      a.pending.set(host, r);
-      created.push({ ...r });
+    const a = this.app(serviceId);
+    const hosts: EgressSuggestion[] = [];
+    for (const s of suggestions) {
+      const c = checkAccessTarget(s.host);
+      if ("error" in c || c.target === "all" || hosts.some((h) => h.host === c.target)) continue;
+      const rule = coveringRule(rules, c.target);
+      if (rule && (rule.action === "allow" || rule.target !== "all")) continue;
+      hosts.push(s.why ? { host: c.target, why: s.why } : { host: c.target });
     }
-    if (created.length > 0) await this.save();
-    return created;
+    if (!hosts.some((h) => !a.suggested.has(h.host))) return null;
+    const current = this.list(serviceId);
+    const top = hosts.map((h) => `allow ${h.host}${h.why ? `${DRAFT_WHY_SEP}${oneLine(h.why)}` : ""}`).join("\n");
+    const list = normalizeAccessList(`${top}\n${current}`);
+    const draft: AccessDraft = { list, listSha256: accessListSha256(list), hosts, createdAt: this.now() };
+    a.draft = draft;
+    for (const h of hosts) a.suggested.add(h.host);
+    // Hosts the draft carries no longer wait as separate requests.
+    for (const h of hosts) if (a.pending.get(h.host)?.source === "app") a.pending.delete(h.host);
+    await this.save();
+    return cloneDraft(draft);
+  }
+
+  /** The app's unanswered draft, or null. */
+  draft(serviceId: string): AccessDraft | null {
+    const d = this.apps.get(serviceId)?.draft;
+    return d ? cloneDraft(d) : null;
+  }
+
+  /** Discard the draft (changes nothing the app can reach). False when there was none. */
+  async dismissDraft(serviceId: string): Promise<boolean> {
+    const a = this.apps.get(serviceId);
+    if (!a?.draft) return false;
+    a.draft = null;
+    await this.save();
+    return true;
+  }
+
+  draftServiceIds(): string[] {
+    return [...this.apps.entries()].filter(([, a]) => a.draft !== null).map(([id]) => id);
   }
 
   /** Ignore: forget the request and keep the host quiet for a week. */
@@ -374,7 +436,7 @@ export class AppAccessStore {
   private app(serviceId: string): PerApp {
     let a = this.apps.get(serviceId);
     if (!a) {
-      a = { pending: new Map(), dismissed: new Map() };
+      a = { pending: new Map(), dismissed: new Map(), draft: null, suggested: new Set() };
       this.apps.set(serviceId, a);
     }
     return a;
@@ -418,6 +480,8 @@ export class AppAccessStore {
       })),
       requests: Object.fromEntries([...this.apps.entries()].map(([id, a]) => [id, [...a.pending.values()]])),
       dismissed: Object.fromEntries([...this.apps.entries()].map(([id, a]) => [id, Object.fromEntries(a.dismissed)])),
+      drafts: Object.fromEntries([...this.apps.entries()].filter(([, a]) => a.draft).map(([id, a]) => [id, a.draft])),
+      suggested: Object.fromEntries([...this.apps.entries()].filter(([, a]) => a.suggested.size > 0).map(([id, a]) => [id, [...a.suggested]])),
       alerts: { hosts: Object.fromEntries(this.alertedAt), recent: this.recentAlerts },
     };
     const next = this.chain.then(async () => {
@@ -431,6 +495,26 @@ export class AppAccessStore {
     this.chain = next.catch(() => {});
     return next;
   }
+}
+
+function oneLine(s: string): string {
+  return s.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+}
+
+function cloneDraft(d: AccessDraft): AccessDraft {
+  return { ...d, hosts: d.hosts.map((h) => ({ ...h })) };
+}
+
+function parseDraft(v: unknown): AccessDraft | null {
+  if (typeof v !== "object" || v === null) return null;
+  const d = v as Record<string, unknown>;
+  if (typeof d.list !== "string" || typeof d.createdAt !== "number" || !Array.isArray(d.hosts)) return null;
+  const hosts: EgressSuggestion[] = [];
+  for (const h of d.hosts as Array<Record<string, unknown>>) {
+    if (typeof h?.host !== "string") return null;
+    hosts.push(typeof h.why === "string" ? { host: h.host, why: h.why } : { host: h.host });
+  }
+  return { list: d.list, listSha256: accessListSha256(d.list), hosts, createdAt: d.createdAt };
 }
 
 /** A denied name worth asking the owner about: a public host a list could allow. */

@@ -27,12 +27,17 @@ import type { ModelRedactor } from "../llm/modelPrivacy.js";
 import { BuildWorkspace } from "./buildWorkspace.js";
 import { GitImporter, buildAdaptPrompt } from "./gitImport.js";
 import { McpBuildServer, type JsonRpcResponse } from "./mcpServer.js";
-import { BuildToolHost, type BuildToolCheckResult, type BuildToolDeployResult } from "./buildToolHost.js";
+import {
+  BuildToolHost,
+  type BuildToolCheckResult,
+  type BuildToolDataHooks,
+  type BuildToolDeployResult,
+} from "./buildToolHost.js";
 import { runBuildAgent, type AgentRunner, type BuildAgentResult } from "./buildAgent.js";
 import type { McpKeyStore } from "./mcpKeyStore.js";
 import type { BuildJournal, BuildJournalEntry, BuildJournalSummary, BuildMode } from "./buildJournal.js";
 import type { DeployResult } from "./deployArtifact.js";
-import { filesDigest, type StagingHost } from "./staging.js";
+import { filesDigest, stagingDataHooks, type StagingHost } from "./staging.js";
 import { classifyEnvironmentFailure } from "./environmentFailure.js";
 import { VibeCodeStreamParser } from "../llm/vibeCodeSession.js";
 import { SYSTEM_PROMPT_V1 } from "../llm/systemPrompt.js";
@@ -845,6 +850,7 @@ export class BuildOrchestrator {
     deploy: () => Promise<BuildToolDeployResult>;
     checkApp: (req: { path: string; method?: string; body?: string }) => Promise<BuildToolCheckResult>;
     logs: () => Promise<string | null>;
+    data: BuildToolDataHooks;
     finish: () => Promise<{ ok: boolean; reason?: string }>;
     sealed: () => boolean;
   } {
@@ -858,6 +864,7 @@ export class BuildOrchestrator {
           : { ok: false, reason: r.reason };
       },
       logs: async () => (this.deps.staging ? this.deps.staging.logs(buildId) : null),
+      data: stagingDataHooks(this.deps.staging, buildId, () => this.sealedBuilds.has(buildId)),
       finish: async () => {
         const f = await this.finishFromAgent(buildId);
         if (f.ok && opts.liveBy === "background") this.startGoLive(buildId);

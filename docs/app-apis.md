@@ -74,6 +74,34 @@ own sign-in is unaffected.
 Default and recommended: **Flagship identity**. The app reads the injected
 headers; no login code, no passwords. The AI suggests this first.
 
+**Who the app sees (members).** Every path not in `public_routes` is for
+members only: the owner, and the people the owner let in (the service's
+allow-list, filled by invites, docs/service-access-gating.md). A browser can't
+sign, so a person signs in with their phone:
+
+1. They open a private page. A browser navigation (GET with `Accept:
+   text/html`) gets the knock page (QR, "Access site" deeplink, "Get link"),
+   on an open app as on a restricted one; an API call or asset gets the 403
+   "is private" page.
+2. Their phone signs the knock with their account id (AID) and posts it to
+   the box (`POST /api/service-access/knock/authorize`). The box accepts the
+   owner's AID (`ownerAidPub` in the box config) and allow-listed AIDs, and
+   refuses anyone else with 401.
+3. The page's poll picks up a `Flagship-App-Session` cookie (host-only, 12 h)
+   for that app, and reloads.
+
+On each request the box looks the cookie up (`appMemberSession.ts`): a live
+session for THIS app whose AID is still let in becomes the member; a cookie for
+another app, an expired, closed or unknown one, or one whose person was
+removed is anonymous. The app gets `X-Flagship-User` = a per-app stable id
+derived from the app secret and the AID (the same person has unrelated ids in
+two apps; it survives their device and key changes) and `X-Flagship-Role` =
+`owner` for the owner, otherwise the role the app's membership store holds for
+that AID, else the manifest's `default_role`. Only the box owner is ever
+`owner`: a default (or assigned) role of `owner` gives an invited person
+`admin`. A box with no owner AID pinned can't recognise its owner, so its
+private pages are reachable only with API keys.
+
 If the owner asks for their own sign-in, the AI may build it:
 - passwords: only slow salted hashes (pgcrypto `crypt()` with bcrypt, or the
   language's argon2/bcrypt/scrypt), never plaintext or reversible;
@@ -87,12 +115,58 @@ If the owner asks for their own sign-in, the AI may build it:
 
 ## 6. Looking inside an app's data
 
-- **AI and IDE agents (MCP), staging only:** tools `query_db` (SQL against the
-  staging copy's dev database, results capped and redacted like other tool
-  output), `list_tables` (schema), `list_files` (the staging `/data` folder).
-  Sample data only, per docs/ai-privacy-and-staging.md; there is no tool for the
-  live database.
-- **The owner, live data:** a Database section on each app's page (webapp first):
-  browse tables, run SQL, export a table as CSV, behind Face ID / the unlocked
-  owner session. Served by the box over the paired session, never reachable
-  through MCP or by any AI.
+- **AI and IDE agents (MCP), staging only:** after a successful deploy of the
+  test copy (refused before one, and once the build is sealed), tools
+  `query_db {sql, store?}` (SQL against the staging copy's dev database as its
+  dev role: 10 s statement timeout, at most 200 rows, cells cut at 300
+  characters, writes allowed since they change only sample data),
+  `list_tables {store?}` (tables and views with columns, types and row counts),
+  `list_data_files {path?}` (the staging `/data` folder: names and sizes, no
+  contents) and `read_data_file {path}` (the first 16 KB of one text file).
+  The files tools run a throwaway container (the data layer's image) with no
+  network, every capability dropped but reading, a read-only root and only the
+  dev volume mounted read-only. (`list_files` stays the build workspace's
+  listing.) Results are redacted like other tool output and journaled without
+  the SQL. Sample data only, per docs/ai-privacy-and-staging.md; there is no
+  tool for the live database or the live `/data` folder.
+- **The owner, live data:** a Database section on each app's page: browse
+  tables, run SQL, export a table as CSV. Served by the box over the owner's
+  paired session (companions get 403 on every method), never reachable through
+  MCP or by any AI. Everything runs as the app's own role (never the admin),
+  with a 15 s statement timeout and at most 1000 rows returned
+  (`packages/server-daemon/src/dataLayer/ownerDb.ts`).
+  - `GET /api/screens/services/:id/db` → `{stores:[{store, tables:[{name,
+    kind, rows, bytes}]}]}`. `name` is `table` in the public schema, else
+    `schema.table`; `kind` is `table` or `view`; `rows` is the planner
+    estimate, counted exactly for a never-analyzed table under 8 MB, and null
+    when unknown (views, large never-analyzed tables).
+  - `GET …/db/:store/tables/:table?offset=0&limit=100` → `{columns:[{name,
+    type}], rows:[[…]], total}`; `limit` at most 1000. Values come back as
+    Postgres prints them (strings), except booleans and small numbers; `bigint`
+    and `numeric` stay strings.
+  - `GET …/db/:store/tables/:table/export.csv` → the whole table as CSV
+    (`text/csv`, a download), read in batches; a table over 64 MB as CSV gets
+    413 (export it in parts with a query).
+  - `POST …/db/:store/query` `{sql}` → `{command, columns, rows, rowCount,
+    truncated}`, one statement, run in a READ ONLY transaction (the extended
+    protocol refuses a second statement, so `COMMIT; …` can't escape it; a row
+    query runs through a cursor that fetches at most 1001 rows). `command` is
+    the first word of the statement's tag. A Postgres error is 400
+    `{error, sqlState, position?}`; a write gets `needsGrant: true`
+    (SQLSTATE 25006), the cue to sign it. COPY is refused. 503 when the
+    database can't be reached; 404 for an unknown app, store or table.
+  - Writes (anything that changes data or schema) need a signed order:
+    `POST …/db/:store/query` `{sql, grant:{serverDomain, serviceId, store,
+    sqlSha256, issuedAt}, signature}`, canonical
+    `flagship/app-db-write/v1|serverDomain|serviceId|store|<sha256 hex of the
+    UTF-8 sql>|issuedAt`, sensitive-order key (admin root when held, else the
+    owner IRK). The box checks the store, service, server, the hash of the
+    exact `sql` it was sent, that `issuedAt` is within 10 minutes, and the
+    signature (`authorizeSensitiveOrder`), then runs the SQL (several
+    statements allowed) in one normal transaction. Each order works once: the
+    box remembers `serviceId|store|sqlSha256|issuedAt` past the freshness
+    window, on disk (`<dataDir>/data/app-db-writes.json`), and a repeat gets
+    409; signing the same statement again gives a new `issuedAt`. 400 for a
+    grant naming another app or store; 403 for another server, a different
+    statement, a stale order or a bad signature. Vectors:
+    `packages/protocol/test-vectors/app-db-write/vectors.json`.

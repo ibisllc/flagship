@@ -182,3 +182,26 @@ describe("per-app proxy path is fronted by the service-access gates", () => {
     expect(wasProxied()).toBe(0);
   });
 });
+
+describe("restricted mode and the owner's API keys (docs/app-apis.md §3)", () => {
+  it("an fsk_ bearer on the app path is left to the proxy; anything else is still gated", async () => {
+    const store = new ServiceAccessStore(join(mkdtempSync(join(tmpdir(), "age-")), "sa.json"));
+    await store.load();
+    await store.setMode(SERVICE, "restricted");
+    const { carriesAppApiKey } = await import("../src/runtime.js");
+    const enforcement = buildAccessEnforcementHandler(
+      { decide: (ref, r) => decideServiceAccess({ serverId: FQDN, store }, ref, r), store },
+      // The daemon's own chain resolves by Host; here every request names SERVICE.
+      (_r, ref) => ref ?? SERVICE,
+      undefined,
+      carriesAppApiKey,
+    );
+    const key = `fsk_00000000000000aa_${"A".repeat(43)}`;
+    const withKey = req({ headers: { host: `${LABEL}.${FQDN}`, authorization: `Bearer ${key}` } });
+    expect(await enforcement(withKey, SERVICE)).toBeNull();
+    // On the daemon's own chain (no SNI-selected app) the key changes nothing.
+    expect((await enforcement(withKey, null))?.status).toBe(403);
+    const ownToken = req({ headers: { host: `${LABEL}.${FQDN}`, authorization: "Bearer app-token" } });
+    expect((await enforcement(ownToken, SERVICE))?.status).toBe(403);
+  });
+});

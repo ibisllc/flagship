@@ -173,8 +173,33 @@ export interface AppNetwork {
    * `*.example.com` for any subdomain of it but not example.com itself).
    * A live app has no internet at all by default: these open only after the
    * owner signs an `app-egress` grant for them, and only on TLS 443 / HTTP 80.
+   * A manifest entry is a host string or `{host, why}`; the hosts land here.
    */
   egress?: string[];
+  /**
+   * The short reason (≤ `EGRESS_WHY_MAX` chars) a `{host, why}` entry gave,
+   * by host. Absent when no entry gave one. The box writes it as the comment
+   * on the host's line in the suggested access list it drafts for the owner.
+   */
+  egressWhy?: Record<string, string>;
+}
+
+/** Longest `why` a `network.egress` entry may carry. */
+export const EGRESS_WHY_MAX = 120;
+
+/** A suggested host and why the app needs it (from `network.egress`). */
+export interface EgressSuggestion {
+  host: string;
+  why?: string;
+}
+
+/** The manifest's `network.egress` hosts, each with its reason when it gave one. */
+export function egressSuggestions(network: AppNetwork | undefined): EgressSuggestion[] {
+  const why = network?.egressWhy ?? {};
+  return (network?.egress ?? []).map((host) => {
+    const w = Object.prototype.hasOwnProperty.call(why, host) ? why[host] : undefined;
+    return w ? { host, why: w } : { host };
+  });
 }
 
 /** Most hosts one app may declare in `network.egress`. */
@@ -200,7 +225,9 @@ export interface AppAccess {
   /**
    * Paths the app exposes to anonymous visitors (X-Flagship-User: anonymous).
    * Default: empty — all routes require membership. Adding entries explicitly
-   * opens them for public access (e.g. "/", "/about").
+   * opens them for public access (e.g. "/", "/about"). An entry ending in
+   * `/*` is a segment-aware prefix: "/api/public/*" opens `/api/public/` and
+   * everything under it (not `/api/publicity`); "/*" opens the whole app.
    */
   public_routes?: string[];
   /**
@@ -504,8 +531,10 @@ function parseNetwork(v: unknown, e: (m: string) => void): AppNetwork | undefine
   // subdomain is OPTIONAL — it's a cosmetic hint; the daemon derives the url label
   // from the service slug, not from here. Absent ⇒ no subdomain (no error). Present
   // ⇒ it must be a valid DNS label.
-  const egress = parseEgress(n.egress, e);
-  if (n.subdomain === undefined) return egress ? ({ egress } as AppNetwork) : undefined;
+  const parsed = parseEgress(n.egress, e);
+  const egress = parsed?.hosts;
+  const why = parsed && Object.keys(parsed.why).length > 0 ? { egressWhy: parsed.why } : {};
+  if (n.subdomain === undefined) return egress ? ({ egress, ...why } as AppNetwork) : undefined;
   if (typeof n.subdomain !== "string" || n.subdomain.length === 0) {
     e("network.subdomain must be a non-empty string");
     return undefined;
@@ -514,34 +543,61 @@ function parseNetwork(v: unknown, e: (m: string) => void): AppNetwork | undefine
     e("network.subdomain must be a DNS label");
     return undefined;
   }
-  return egress ? { subdomain: n.subdomain, egress } : { subdomain: n.subdomain };
+  return egress ? { subdomain: n.subdomain, egress, ...why } : { subdomain: n.subdomain };
 }
 
-function parseEgress(v: unknown, e: (m: string) => void): string[] | undefined {
+function parseEgress(
+  v: unknown,
+  e: (m: string) => void,
+): { hosts: string[]; why: Record<string, string> } | undefined {
   if (v === undefined) return undefined;
   if (!Array.isArray(v)) {
-    e("network.egress must be an array of host strings");
+    e("network.egress must be an array of host strings or {host, why} objects");
     return undefined;
   }
   if (v.length > EGRESS_HOSTS_MAX) {
     e(`network.egress may list at most ${EGRESS_HOSTS_MAX} hosts`);
     return undefined;
   }
-  const out: string[] = [];
-  for (const h of v) {
+  const hosts: string[] = [];
+  const why: Record<string, string> = {};
+  for (const entry of v) {
+    let h: unknown = entry;
+    let reason: string | undefined;
+    if (typeof entry === "object" && entry !== null && !Array.isArray(entry)) {
+      const o = entry as Record<string, unknown>;
+      h = o.host;
+      if (o.why !== undefined) {
+        if (typeof o.why !== "string") {
+          e(`network.egress entry for ${JSON.stringify(h)}: why must be a string`);
+          continue;
+        }
+        const w = o.why.trim();
+        if (w.length > EGRESS_WHY_MAX) {
+          e(`network.egress entry for ${JSON.stringify(h)}: why may be at most ${EGRESS_WHY_MAX} characters`);
+          continue;
+        }
+        if (/[\u0000-\u001f\u007f]/.test(w)) {
+          e(`network.egress entry for ${JSON.stringify(h)}: why must be one line of plain text`);
+          continue;
+        }
+        if (w.length > 0) reason = w;
+      }
+    }
     if (typeof h !== "string" || !isEgressHost(h)) {
       e(
         `network.egress entry ${JSON.stringify(h)} must be a lowercase host like "api.example.com" or "*.example.com" (no scheme, port, path, IP address or trailing dot)`,
       );
       continue;
     }
-    if (out.includes(h)) {
+    if (hosts.includes(h)) {
       e(`network.egress has duplicate entry ${JSON.stringify(h)}`);
       continue;
     }
-    out.push(h);
+    hosts.push(h);
+    if (reason !== undefined) why[h] = reason;
   }
-  return out;
+  return { hosts, why };
 }
 
 function parseAccess(v: unknown, e: (m: string) => void): AppAccess | undefined {
@@ -585,6 +641,12 @@ function parseAccess(v: unknown, e: (m: string) => void): AppAccess | undefined 
       for (const p of a.public_routes) {
         if (typeof p !== "string" || !p.startsWith("/")) {
           e(`access.public_routes entries must be absolute paths starting with "/" (got ${JSON.stringify(p)})`);
+        } else if (p.slice(0, p.endsWith("/*") ? -2 : undefined).includes("*")) {
+          e(
+            `access.public_routes entry ${JSON.stringify(p)}: a * may only end a prefix, as in "/api/public/*" (everything under /api/public/) or "/*" (the whole app)`,
+          );
+        } else if (/[?#\s]/.test(p)) {
+          e(`access.public_routes entry ${JSON.stringify(p)} must be a path only, without a query, fragment or spaces`);
         } else {
           publicRoutes.push(p);
         }

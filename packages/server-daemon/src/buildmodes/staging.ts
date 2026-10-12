@@ -5,8 +5,12 @@
  * loopback port only and never routed from the internet. Everything the app
  * can see is neutral: a made-up host and owner, UTC, placeholder values for
  * the owner's env vars, and a fresh dev dataspace seeded with synthetic rows.
- * The AI tests it through the box (`checkApp`, `logs`); going live later
- * installs the SAME image tag, so what goes live is what was tested.
+ * The AI tests it through the box (`checkApp`, `logs`), and after a
+ * deploy (even one whose app didn't start) may look at the copy's sample data (`queryDb`,
+ * `listTables`, `listDataFiles`, `readDataFile`: the dev database as its dev
+ * role, and the dev files volume through a throwaway container with no
+ * network). Nothing here can reach a live database or volume. Going live
+ * later installs the SAME image tag, so what goes live is what was tested.
  */
 
 import { createHash, randomBytes } from "node:crypto";
@@ -29,6 +33,10 @@ import {
   type AppDataCredentials,
   type DataProvisioner,
 } from "../dataLayer/provisioner.js";
+import { DEV_PG_PREFIX, isFilesVolume, isProdFilesVolume } from "../dataLayer/naming.js";
+import { AppSqlError, compactCell, type AppSqlRunner } from "../dataLayer/appSql.js";
+import { FILES_HELPER_IMAGE } from "../volumeDump.js";
+import type { BuildToolDataHooks } from "./buildToolHost.js";
 import { datasetToSql, generateSynthetic } from "../dataLayer/synth/index.js";
 import { pickPgUrlForApp } from "../runMigration.js";
 import { migrationFiles } from "../llm/serviceName.js";
@@ -104,8 +112,19 @@ export type CheckAppResult =
   | { ok: true; status: number; contentType: string; body: string; truncated: boolean }
   | { ok: false; reason: string };
 
+/** A data tool's answer: compact JSON text for the model, or why not. */
+export type StagingDataResult = { ok: true; text: string } | { ok: false; reason: string };
+
+/** The staging copy's sample data, for the AI's data tools (after a successful deploy). */
+export interface StagingDataTools {
+  queryDb(buildId: string, req: { sql: string; store?: string }): Promise<StagingDataResult>;
+  listTables(buildId: string, req: { store?: string }): Promise<StagingDataResult>;
+  listDataFiles(buildId: string, req: { path?: string }): Promise<StagingDataResult>;
+  readDataFile(buildId: string, req: { path: string }): Promise<StagingDataResult>;
+}
+
 /** What the orchestrator and the chat's deploy need of staging. */
-export interface StagingHost {
+export interface StagingHost extends Partial<StagingDataTools> {
   stage(a: StageArgs): Promise<StageResult>;
   checkApp(buildId: string, req: CheckAppRequest): Promise<CheckAppResult>;
   /** The copy's recent output, or null when nothing is running. */
@@ -138,7 +157,22 @@ export interface StagingRunnerDeps {
   /** Wait before the one retry of a registry outage. Default 15 s. */
   registryRetryMs?: number;
   sleep?: (ms: number) => Promise<void>;
+  /** SQL against the dev database as its dev role (`query_db`, `list_tables`). Absent ⇒ those tools refuse. */
+  sql?: AppSqlRunner | null;
+  /** Image the throwaway file-listing container runs. Default the data layer's image. */
+  filesHelperImage?: string;
 }
+
+/** `query_db` limits: sample data, so small. */
+export const STAGING_QUERY_MAX_ROWS = 200;
+export const STAGING_QUERY_TIMEOUT_MS = 10_000;
+const STAGING_CELL_CHARS = 300;
+const STAGING_SQL_MAX_CHARS = 64 * 1024;
+const DATA_FILES_MAX = 500;
+const DATA_FILES_DEPTH = 4;
+const DATA_FILE_READ_BYTES = 16 * 1024;
+const DATA_PATH_RE = /^[A-Za-z0-9._@+=, -]+(\/[A-Za-z0-9._@+=, -]+)*$/;
+export const NOT_STAGED_REASON = "there's no test copy yet: call deploy first, and these tools answer once its data is set up";
 
 export const UNFENCED_REASON =
   "this server can't wall off the test copy's network right now, so the AI's test copy wasn't started";
@@ -148,6 +182,8 @@ interface Running {
   port: number;
   slug: string;
   stores: AppDataStores | null;
+  /** The copy's dev credentials (never a live store). */
+  data: AppDataCredentials | null;
   devSlug: string;
   keyPriv: Uint8Array;
   keyPub: Uint8Array;
@@ -278,6 +314,7 @@ export class StagingRunner implements StagingHost {
       port: (this.deps.pickPort ?? randomPort)(),
       slug: a.slug,
       stores: null,
+      data: null,
       devSlug: `stg-${buildId}`,
       keyPriv,
       keyPub: ed.getPublicKey(keyPriv),
@@ -312,6 +349,7 @@ export class StagingRunner implements StagingHost {
       } catch (e) {
         return fail(`data provisioning failed: ${(e as Error).message}`, classifyProvisioningError(e));
       }
+      run.data = data;
     }
 
     const migrations = migrationFiles(files).sort((x, y) => x.filename.localeCompare(y.filename));
@@ -422,6 +460,195 @@ export class StagingRunner implements StagingHost {
     }
   }
 
+  /** The copy's dev data, only once a deploy of it succeeded. */
+  /**
+   * The copy the data tools look at: any that was set up, including one whose
+   * app failed to start, since its sample data is what the AI needs to debug
+   * that failure (it's never the live data, so nothing is at stake).
+   */
+  private tested(buildId: string): Running | null {
+    return this.running.get(buildId) ?? null;
+  }
+
+  /** The dev Postgres store a data tool means (the only one, or by name). */
+  private devStore(run: Running, store: string | undefined): { url: string } | { reason: string } {
+    const stores = run.data?.postgres ?? {};
+    const names = Object.keys(stores);
+    if (names.length === 0) return { reason: "the app has no database (data.stores.postgres)" };
+    const name = store ?? (names.length === 1 ? names[0]! : names.includes("default") ? "default" : null);
+    if (name === null) return { reason: `say which store: ${names.join(", ")}` };
+    const s = Object.prototype.hasOwnProperty.call(stores, name) ? stores[name] : undefined;
+    if (!s) return { reason: `no store named ${JSON.stringify(name)}; the app has ${names.join(", ")}` };
+    // Defence in depth: a staging copy's credentials are always the dev dataspace.
+    if (!s.database.startsWith(DEV_PG_PREFIX)) return { reason: "this store isn't the test copy's" };
+    return { url: s.url };
+  }
+
+  async queryDb(buildId: string, req: { sql: string; store?: string }): Promise<StagingDataResult> {
+    const run = this.tested(buildId);
+    if (!run) return { ok: false, reason: NOT_STAGED_REASON };
+    if (!this.deps.sql) return { ok: false, reason: "query_db is not available on this server" };
+    if (typeof req.sql !== "string" || req.sql.trim() === "") return { ok: false, reason: "sql required" };
+    if (req.sql.length > STAGING_SQL_MAX_CHARS) return { ok: false, reason: "the statement is too long" };
+    const store = this.devStore(run, req.store);
+    if ("reason" in store) return { ok: false, reason: store.reason };
+    try {
+      const r = await this.deps.sql.query({
+        pgUrl: store.url,
+        sql: req.sql,
+        readOnly: false,
+        multiStatement: true,
+        maxRows: STAGING_QUERY_MAX_ROWS,
+        timeoutMs: STAGING_QUERY_TIMEOUT_MS,
+      });
+      return {
+        ok: true,
+        text: JSON.stringify({
+          command: r.command,
+          columns: r.columns.map((c) => `${c.name} ${c.type}`),
+          rows: r.rows.map((row) => row.map((v) => compactCell(v, STAGING_CELL_CHARS))),
+          rowCount: r.rowCount,
+          ...(r.truncated ? { truncated: true, note: `only the first ${STAGING_QUERY_MAX_ROWS} rows` } : {}),
+        }),
+      };
+    } catch (e) {
+      return { ok: false, reason: e instanceof AppSqlError ? `the database said: ${e.message}` : `query failed: ${(e as Error).message}` };
+    }
+  }
+
+  async listTables(buildId: string, req: { store?: string }): Promise<StagingDataResult> {
+    const run = this.tested(buildId);
+    if (!run) return { ok: false, reason: NOT_STAGED_REASON };
+    if (!this.deps.sql) return { ok: false, reason: "list_tables is not available on this server" };
+    const store = this.devStore(run, req.store);
+    if ("reason" in store) return { ok: false, reason: store.reason };
+    try {
+      const tables = await this.deps.sql.listTables({ pgUrl: store.url, timeoutMs: STAGING_QUERY_TIMEOUT_MS });
+      return {
+        ok: true,
+        text: JSON.stringify({
+          tables: tables.map((t) => ({
+            name: t.name,
+            ...(t.kind === "view" ? { kind: "view" } : {}),
+            rows: t.rows,
+            columns: t.columns.map((c) => `${c.name} ${c.type}${c.nullable ? "" : " not null"}`),
+          })),
+        }),
+      };
+    } catch (e) {
+      return { ok: false, reason: `couldn't list the tables: ${(e as Error).message}` };
+    }
+  }
+
+  /** `docker run` over the copy's files volume, read-only, with no network. */
+  private filesArgs(volume: string, entrypoint: string, args: string[]): string[] {
+    return [
+      "run",
+      "--rm",
+      "--network",
+      "none",
+      "--cap-drop",
+      "ALL",
+      "--cap-add",
+      "DAC_READ_SEARCH",
+      "--security-opt",
+      "no-new-privileges",
+      "--read-only",
+      "--user",
+      "0:0",
+      "--memory",
+      "64m",
+      "--pids-limit",
+      "32",
+      "--mount",
+      `type=volume,src=${volume},dst=/data,readonly`,
+      "--entrypoint",
+      entrypoint,
+      this.deps.filesHelperImage ?? FILES_HELPER_IMAGE,
+      ...args,
+    ];
+  }
+
+  private filesVolume(run: Running): { volume: string } | { reason: string } {
+    const volume = run.data?.files?.volume;
+    if (!volume) return { reason: "the app has no files folder (data.stores.files)" };
+    // Defence in depth: only ever the dev dataspace's volume.
+    if (!isFilesVolume(volume) || isProdFilesVolume(volume)) return { reason: "this folder isn't the test copy's" };
+    return { volume };
+  }
+
+  async listDataFiles(buildId: string, req: { path?: string }): Promise<StagingDataResult> {
+    const run = this.tested(buildId);
+    if (!run) return { ok: false, reason: NOT_STAGED_REASON };
+    const capture = this.deps.cmd.capture;
+    if (!capture) return { ok: false, reason: "list_data_files is not available on this server" };
+    const v = this.filesVolume(run);
+    if ("reason" in v) return { ok: false, reason: v.reason };
+    const rel = dataPath(req.path ?? "");
+    if (rel === null) return { ok: false, reason: "path must be relative to /data, without .. or odd characters" };
+    const root = rel ? `/data/${rel}` : "/data";
+    try {
+      const { stdout } = await capture.call(
+        this.deps.cmd,
+        "docker",
+        this.filesArgs(v.volume, "find", [root, "-mindepth", "1", "-maxdepth", String(DATA_FILES_DEPTH), "-printf", "%y\t%s\t%P\n"]),
+        { timeoutMs: 30_000 },
+      );
+      const lines = stdout.split("\n").filter(Boolean);
+      const files = lines.slice(0, DATA_FILES_MAX).map((l) => {
+        const [type, size, ...rest] = l.split("\t");
+        const path = rest.join("\t");
+        return type === "d" ? { path: `${path}/` } : { path, bytes: Number(size) };
+      });
+      return {
+        ok: true,
+        text: JSON.stringify({
+          root: root,
+          files,
+          ...(lines.length > DATA_FILES_MAX ? { truncated: true } : {}),
+          ...(files.length === 0 ? { note: "empty" } : {}),
+        }),
+      };
+    } catch (e) {
+      const err = e as Error & { stderr?: string };
+      return /No such file or directory/.test(`${err.stderr ?? ""}${err.message}`)
+        ? { ok: false, reason: `no such folder: ${root}` }
+        : { ok: false, reason: "couldn't list the files folder" };
+    }
+  }
+
+  async readDataFile(buildId: string, req: { path: string }): Promise<StagingDataResult> {
+    const run = this.tested(buildId);
+    if (!run) return { ok: false, reason: NOT_STAGED_REASON };
+    const capture = this.deps.cmd.capture;
+    if (!capture) return { ok: false, reason: "read_data_file is not available on this server" };
+    const v = this.filesVolume(run);
+    if ("reason" in v) return { ok: false, reason: v.reason };
+    const rel = dataPath(typeof req.path === "string" ? req.path : "");
+    if (!rel) return { ok: false, reason: "path must name a file under /data, without .. or odd characters" };
+    try {
+      const { stdout } = await capture.call(
+        this.deps.cmd,
+        "docker",
+        this.filesArgs(v.volume, "head", ["-c", String(DATA_FILE_READ_BYTES + 1), `/data/${rel}`]),
+        { timeoutMs: 30_000 },
+      );
+      const truncated = Buffer.byteLength(stdout, "utf8") > DATA_FILE_READ_BYTES || stdout.length > DATA_FILE_READ_BYTES;
+      const binary = /[\u0000\uFFFD]/.test(stdout);
+      return {
+        ok: true,
+        text: binary
+          ? JSON.stringify({ path: `/data/${rel}`, binary: true, note: "not text; its contents aren't shown" })
+          : JSON.stringify({ path: `/data/${rel}`, content: stdout.slice(0, DATA_FILE_READ_BYTES), ...(truncated ? { truncated: true } : {}) }),
+      };
+    } catch (e) {
+      const err = e as Error & { stderr?: string };
+      return /No such file|Is a directory/.test(`${err.stderr ?? ""}${err.message}`)
+        ? { ok: false, reason: `no such file: /data/${rel}` }
+        : { ok: false, reason: "couldn't read the file" };
+    }
+  }
+
   async checkApp(buildId: string, req: CheckAppRequest): Promise<CheckAppResult> {
     const run = this.running.get(buildId);
     if (!run) return { ok: false, reason: "nothing is running yet: call deploy first" };
@@ -456,6 +683,41 @@ export class StagingRunner implements StagingHost {
     }
     return sendLocal(run.port, { method, path, headers, body, timeoutMs: this.deps.checkTimeoutMs ?? 10_000 });
   }
+}
+
+/**
+ * The data tools of one build for a BuildToolHost. Refuses once the build is
+ * sealed (the host refuses first; this is the second wall), and when the
+ * staging host has no data tools.
+ */
+export function stagingDataHooks(
+  staging: StagingHost | null | undefined,
+  buildId: string,
+  sealed: () => boolean = () => false,
+): BuildToolDataHooks {
+  const guard = async (
+    fn: ((buildId: string, req: never) => Promise<StagingDataResult>) | undefined,
+    req: unknown,
+  ): Promise<StagingDataResult> => {
+    if (sealed()) return { ok: false, reason: "this build is closed" };
+    if (!fn) return { ok: false, reason: "this tool is not available on this server" };
+    return fn.call(staging, buildId, req as never);
+  };
+  return {
+    queryDb: (req) => guard(staging?.queryDb, req),
+    listTables: (req) => guard(staging?.listTables, req),
+    listDataFiles: (req) => guard(staging?.listDataFiles, req),
+    readDataFile: (req) => guard(staging?.readDataFile, req),
+  };
+}
+
+/** A path under /data: "" for the root, else clean relative segments; null when unsafe. */
+function dataPath(raw: string): string | null {
+  const p = raw.trim().replace(/^\/?data(\/|$)/, "").replace(/^\/+/, "").replace(/\/+$/, "");
+  if (p === "") return "";
+  if (p.length > 512 || !DATA_PATH_RE.test(p)) return null;
+  if (p.split("/").some((seg) => seg === "." || seg === ".." || seg.startsWith("-"))) return null;
+  return p;
 }
 
 /** Tag a failure the box caused that the stage didn't tag itself (docker, disk, registry). */

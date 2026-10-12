@@ -294,9 +294,11 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
     if (knock.status !== "pending") return bad(409, "already authorized");
 
     const aidHex = bytesToHex(parsed.visitorAID);
-    // A session is only meaningful for a RESTRICTED service whose allow-list
-    // holds this AID — anything else would be a bearer token to nothing.
-    if (opts.store.mode(parsed.serviceRef) !== "restricted" || !opts.store.isAllowed(parsed.serviceRef, aidHex)) {
+    // Only someone the service lets in (the owner, or an allow-listed AID) gets
+    // a session. On a restricted service it passes the gate; on any service it
+    // names the member to the app (`appMemberSession.ts`), which is how the
+    // owner and invited people sign in to an app's private pages.
+    if (!opts.store.isAllowed(parsed.serviceRef, aidHex)) {
       return bad(401, "not allow-listed for this service");
     }
     const secretId = randHex(32);
@@ -342,7 +344,6 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
       !!sess &&
       !sess.closed &&
       sess.expiresAt > t &&
-      opts.store.mode(sess.serviceRef) === "restricted" &&
       opts.store.isAllowed(sess.serviceRef, sess.aid);
     return jsonResponse(200, { status: online ? "online" : "offline" });
   }

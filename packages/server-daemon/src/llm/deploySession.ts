@@ -44,7 +44,7 @@ import type { BuildJournal } from "../buildmodes/buildJournal.js";
 import { BuildWorkspace } from "../buildmodes/buildWorkspace.js";
 import { BuildToolHost } from "../buildmodes/buildToolHost.js";
 import { runBuildAgent, type AgentRunner } from "../buildmodes/buildAgent.js";
-import { filesDigest, type StagingHost } from "../buildmodes/staging.js";
+import { filesDigest, stagingDataHooks, type StagingHost } from "../buildmodes/staging.js";
 
 export interface DeploySessionDeps {
   servicePlatform: ServicePlatform;
@@ -335,6 +335,7 @@ export function buildStagedChatDeploy(deps: StagedChatDeployDeps) {
           return r.ok ? { ok: true, status: r.status, contentType: r.contentType, body: r.body, truncated: r.truncated } : r;
         },
         logs: () => deps.staging.logs(id),
+        data: stagingDataHooks(deps.staging, id, () => sealed),
         finish: async () => {
           if (!deps.staging.staged(id)) return { ok: false, reason: "deploy first: finish only works after a successful deploy" };
           if (!matches()) return { ok: false, reason: "the files changed since the last deploy: deploy again, test it, then finish" };
