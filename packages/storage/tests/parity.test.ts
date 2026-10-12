@@ -1136,6 +1136,18 @@ describe("D1 ↔ InMemory parity", () => {
       expiresAt,
     });
 
+    it("consuming the newest update order retires the ones it superseded", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.secretMailbox.putUpdateDeposit({ ...mk("aa".repeat(16), "older"), issuedAt: 1 });
+        await s.secretMailbox.putUpdateDeposit({ ...mk("bb".repeat(16), "newer"), issuedAt: 2 });
+        const first = await s.secretMailbox.consumeUpdateDeposit("home.alice.flagship.services", 10);
+        const second = await s.secretMailbox.consumeUpdateDeposit("home.alice.flagship.services", 11);
+        return { first: first?.sealedHex, secondDefined: second !== undefined };
+      });
+      expect(r.mem).toEqual({ first: "newer", secondDefined: false });
+      expect(r.d1).toEqual(r.mem);
+    });
+
     it("update deposit → consume-once → second consume undefined; dedup; lane isolation; expired never served", async () => {
       const r = await bothAdapters(async (s) => {
         const put = await s.secretMailbox.putUpdateDeposit(mk("aa".repeat(16), "updateblob"));

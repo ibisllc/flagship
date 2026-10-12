@@ -1818,6 +1818,17 @@ export class D1SecretMailboxStorage implements SecretMailboxStorage {
       .run();
     const meta = (w as { meta?: { changes?: number } }).meta;
     if (meta?.changes !== undefined && meta.changes === 0) return undefined;
+    if (purpose === "update") {
+      // An older order is one the owner superseded; left in the lane it would be
+      // served next and could apply after a rollback.
+      await this.db
+        .prepare(
+          `UPDATE secret_mailbox SET consumed_at = ?1
+           WHERE server_domain = ?2 AND purpose = 'update' AND consumed_at IS NULL AND posted_at <= ?3`,
+        )
+        .bind(now, serverDomain, r.posted_at)
+        .run();
+    }
     return {
       serverDomain: r.server_domain,
       username: r.username,

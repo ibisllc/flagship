@@ -312,6 +312,7 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
       previousCommit: CURRENT,
       targetCommit: TARGET,
       bootAttempts: 0,
+      stage: "staged",
     });
     expect(exits.count).toBe(1);
   });
@@ -386,20 +387,63 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
     expect(runner.calls).toEqual([]);
   });
 
-  it("reverts the checkout when the rebuild fails (no marker, no exit)", async () => {
-    const runnerSpy: RunnerSpy = { calls: [], failOn: "npm ci" };
-    // npm install also fails so the rebuild genuinely fails; the revert's own
-    // rebuild failing too must still leave us with no marker + no exit.
-    runnerSpy.failOn = "npm";
-    const { opts, pending, exits } = baseOpts({ runner: makeRunner(runnerSpy) });
+  it("marks the update applying before it touches the tree", async () => {
+    const seen: Array<PendingVerifyMarker | null> = [];
+    const { opts, pending } = baseOpts();
+    const inner = opts.runner;
+    opts.runner = async (cmd, args, o) => {
+      if (cmd === "git" && args.includes("checkout")) seen.push(pending.current && { ...pending.current });
+      return inner(cmd, args, o);
+    };
+    await runUpdateConsumer(opts);
+    expect(seen).toEqual([
+      { previousCommit: CURRENT, targetCommit: TARGET, bootAttempts: 0, stage: "applying" },
+    ]);
+  });
+
+  it("reverts the checkout when the rebuild fails, then clears the marker", async () => {
+    const runnerSpy: RunnerSpy = { calls: [] };
+    const spyRunner = makeRunner(runnerSpy);
+    let npmCalls = 0;
+    const runner: UpdateCommandRunner = async (cmd, args, o) => {
+      // The forward rebuild's npm ci + npm install fail; the revert's succeed.
+      if (cmd === "npm" && ++npmCalls <= 2) {
+        runnerSpy.calls.push([cmd, ...args]);
+        throw new Error("injected npm failure");
+      }
+      return spyRunner(cmd, args, o);
+    };
+    const { opts, pending, exits } = baseOpts({ runner });
     const out = await runUpdateConsumer(opts);
     expect(out).toEqual({ applied: false, reason: "apply-failed" });
-    // The revert checkout back to CURRENT ran after the failed rebuild.
     expect(calls(runnerSpy, "checkout").map((c) => c[c.length - 1])).toEqual([
       TARGET,
       CURRENT,
     ]);
     expect(pending.current).toBeNull();
+    expect(exits.count).toBe(0);
+  });
+
+  it("leaves the applying marker when the revert fails too, so the next start rolls back", async () => {
+    const runnerSpy: RunnerSpy = { calls: [], failOn: "npm" };
+    const { opts, pending, exits } = baseOpts({ runner: makeRunner(runnerSpy) });
+    const out = await runUpdateConsumer(opts);
+    expect(out).toEqual({ applied: false, reason: "apply-failed" });
+    expect(pending.current).toEqual({
+      previousCommit: CURRENT,
+      targetCommit: TARGET,
+      bootAttempts: 0,
+      stage: "applying",
+    });
+    expect(exits.count).toBe(0);
+  });
+
+  it("clears the marker when git refuses the checkout", async () => {
+    const runnerSpy: RunnerSpy = { calls: [], failOn: `checkout ${TARGET}` };
+    const { opts, pending, exits } = baseOpts({ runner: makeRunner(runnerSpy) });
+    expect(await runUpdateConsumer(opts)).toEqual({ applied: false, reason: "apply-failed" });
+    expect(pending.current).toBeNull();
+    expect(calls(runnerSpy, "npm")).toEqual([]);
     expect(exits.count).toBe(0);
   });
 });

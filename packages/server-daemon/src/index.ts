@@ -226,6 +226,7 @@ import {
 import { fileUpdateOutcomeStore } from "./updateOutcome.js";
 import { buildReleaseCatalog } from "./updateReleases.js";
 import { installHealthReporter } from "./healthReporter.js";
+import { installUpdateGuard } from "./updateGuard.js";
 import { daemonRestarts as restarts } from "./restartCoordinator.js";
 import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
@@ -626,6 +627,15 @@ async function main(): Promise<void> {
       }),
     onLog: (m) => console.log(m),
   }).catch(() => {});
+
+  // Rolls back an update the gate above can't: one interrupted mid-apply, or
+  // one whose code never gets far enough to run the gate (updateGuard.ts).
+  void installUpdateGuard({
+    repoPath: selfUpdateRepoPath,
+    dataDir,
+    run: (cmd, args) => realUpdateCommandRunner(cmd, args),
+    onLog: (m) => console.log(m),
+  }).catch((e) => console.log(`[self-update] update guard not installed: ${(e as Error).message}`));
 
   // ---- Box health reporter (healthReporter.ts) ----
   // A systemd timer, separate from this process, so the owner still gets

@@ -141,7 +141,7 @@ describe("runUpdateBootGate", () => {
     const out = await runUpdateBootGate(opts);
     expect(out).toEqual({ action: "rolled-back", previousCommit: PREV, targetCommit: TARGET });
     expect(runner.calls).toEqual([
-      ["git", "-C", "/opt/flagship", "checkout", PREV],
+      ["git", "-C", "/opt/flagship", "checkout", "-f", PREV],
       ["npm", "ci", "--no-audit", "--no-fund", "--include-workspace-root", "--workspace=packages/server-daemon"],
       ["npx", "tsc", "-b", "packages/server-daemon"],
     ]);
@@ -154,6 +154,24 @@ describe("runUpdateBootGate", () => {
     ]);
     expect(restarts.count).toBe(1);
     // Rollback never waits on health — the decision is already made.
+    expect(healthProbes).toBe(0);
+  });
+
+  it("rolls back at once when the apply was interrupted, without counting a boot", async () => {
+    const marker = { previousCommit: PREV, targetCommit: TARGET, bootAttempts: 0, stage: "applying" as const };
+    let healthProbes = 0;
+    const { opts, pending, runner, restarts, reports } = baseOpts(marker, {
+      awaitHealthy: async () => {
+        healthProbes++;
+        return true;
+      },
+    });
+    const out = await runUpdateBootGate(opts);
+    expect(out).toEqual({ action: "rolled-back", previousCommit: PREV, targetCommit: TARGET });
+    expect(runner.calls[0]).toEqual(["git", "-C", "/opt/flagship", "checkout", "-f", PREV]);
+    expect(pending.current).toBeNull();
+    expect(reports.map((r) => r.event)).toEqual(["update-rolled-back"]);
+    expect(restarts.count).toBe(1);
     expect(healthProbes).toBe(0);
   });
 

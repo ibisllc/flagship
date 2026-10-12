@@ -1236,6 +1236,15 @@ export class InMemorySecretMailboxStorage implements SecretMailboxStorage {
     for (const k of expired) this.rows.delete(k);
     if (!best || !bestKey || best.responseSealedHex === null) return undefined;
     best.consumedAt = now;
+    if (purpose === "update") {
+      // An older order is one the owner superseded; left in the lane it would be
+      // served next and could apply after a rollback.
+      for (const r of this.rows.values()) {
+        if (r.purpose === purpose && r.serverDomain === serverDomain && r.consumedAt === null) {
+          r.consumedAt = now;
+        }
+      }
+    }
     return {
       serverDomain: best.serverDomain,
       username: best.username,

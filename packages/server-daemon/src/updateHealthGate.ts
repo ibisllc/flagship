@@ -15,6 +15,7 @@ import {
  * gate runs first:
  *
  *   - no marker            → nothing staged, normal boot;
+ *   - marker `applying`    → the apply itself was interrupted: ROLL BACK now;
  *   - marker + attempts>N  → the new code failed N boots: ROLL BACK
  *                            (checkout previousCommit + rebuild + clear the
  *                            marker + restart) → `update-rolled-back`;
@@ -87,17 +88,24 @@ export async function runUpdateBootGate(
   if (!marker) return { action: "none" };
 
   const bootAttempts = marker.bootAttempts + 1;
+  // The apply never finished (the box died mid checkout or rebuild), so this
+  // tree is half built. The update guard normally rolls it back before the
+  // daemon starts; this covers a box without it.
+  const interrupted = marker.stage === "applying";
 
-  if (bootAttempts > maxAttempts) {
+  if (interrupted || bootAttempts > maxAttempts) {
     // The new code burned its boot budget without ever verifying healthy —
     // roll back. The used-nonce marker (updateConsumer) makes the failed
     // order unreplayable after the rollback.
     log(
-      `[self-update] ${marker.targetCommit} failed ${marker.bootAttempts} boot(s); ` +
-        `ROLLING BACK to ${marker.previousCommit}`,
+      interrupted
+        ? `[self-update] update to ${marker.targetCommit} was interrupted; ` +
+            `ROLLING BACK to ${marker.previousCommit}`
+        : `[self-update] ${marker.targetCommit} failed ${marker.bootAttempts} boot(s); ` +
+            `ROLLING BACK to ${marker.previousCommit}`,
     );
     try {
-      await opts.runner("git", ["-C", opts.repoPath, "checkout", marker.previousCommit]);
+      await opts.runner("git", ["-C", opts.repoPath, "checkout", "-f", marker.previousCommit]);
       await rebuildWorkspace(opts.runner, opts.repoPath, log);
     } catch (e) {
       // Keep the marker: the next boot retries the rollback rather than

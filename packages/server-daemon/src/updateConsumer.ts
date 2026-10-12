@@ -188,6 +188,12 @@ export interface PendingVerifyMarker {
   previousCommit: string;
   targetCommit: string;
   bootAttempts: number;
+  /**
+   * `applying` from just before the checkout until the rebuild finishes, so a
+   * box interrupted mid-apply knows to roll back. Absent (markers written by
+   * older code) means `staged`.
+   */
+  stage?: "applying" | "staged";
 }
 
 export interface PendingVerifyStore {
@@ -214,6 +220,7 @@ export function filePendingVerifyStore(path: string): PendingVerifyStore {
           previousCommit: p.previousCommit,
           targetCommit: p.targetCommit,
           bootAttempts: p.bootAttempts,
+          ...(p.stage === "applying" ? { stage: "applying" as const } : {}),
         };
       } catch {
         return null;
@@ -535,42 +542,47 @@ export async function runUpdateConsumer(
     `[self-update] applying admin-authorized, maintainer-endorsed update ` +
       `${currentCommit} → ${order.targetCommit}`,
   );
+  // The marker goes down BEFORE the tree changes: if the box dies anywhere in
+  // the checkout or rebuild, the next start finds `applying` and rolls back
+  // (updateGuard.ts before the daemon runs, the boot gate inside it). Without
+  // it an interrupted apply left half-built code and nothing to undo it.
+  const marker = { previousCommit: currentCommit, targetCommit: order.targetCommit, bootAttempts: 0 };
+  try {
+    await opts.pendingStore.write({ ...marker, stage: "applying" });
+  } catch (e) {
+    log(`[self-update] could not write pending-verify marker: ${(e as Error).message}; not applying`);
+    return { applied: false, reason: "apply-failed" };
+  }
+  const revert = async (why: string) => {
+    log(`[self-update] ${why}; reverting checkout`);
+    try {
+      await opts.runner("git", ["-C", opts.repoPath, "checkout", "-f", currentCommit]);
+      await rebuildWorkspace(opts.runner, opts.repoPath, log);
+      await opts.pendingStore.clear();
+    } catch (revertErr) {
+      // The `applying` marker stays, so the next start rolls back.
+      log(`[self-update] revert also failed: ${(revertErr as Error).message}`);
+    }
+  };
   try {
     await opts.runner("git", ["-C", opts.repoPath, "checkout", order.targetCommit]);
   } catch (e) {
+    // git refuses a checkout before touching the tree, so nothing to undo.
     log(`[self-update] checkout failed: ${(e as Error).message}`);
+    await opts.pendingStore.clear().catch(() => {});
     return { applied: false, reason: "apply-failed" };
   }
   try {
     await rebuildWorkspace(opts.runner, opts.repoPath, log);
   } catch (e) {
-    // Rebuild failed with the target checked out — best-effort revert so the
-    // running (old) daemon's tree matches its code again.
-    log(`[self-update] rebuild failed: ${(e as Error).message}; reverting checkout`);
-    try {
-      await opts.runner("git", ["-C", opts.repoPath, "checkout", currentCommit]);
-      await rebuildWorkspace(opts.runner, opts.repoPath, log);
-    } catch (revertErr) {
-      log(`[self-update] revert also failed: ${(revertErr as Error).message}`);
-    }
+    await revert(`rebuild failed: ${(e as Error).message}`);
     return { applied: false, reason: "apply-failed" };
   }
   try {
-    await opts.pendingStore.write({
-      previousCommit: currentCommit,
-      targetCommit: order.targetCommit,
-      bootAttempts: 0,
-    });
+    await opts.pendingStore.write({ ...marker, stage: "staged" });
   } catch (e) {
-    // Without the marker the health gate can't roll back — refuse to restart
-    // into unverifiable state; revert instead.
-    log(`[self-update] could not write pending-verify marker: ${(e as Error).message}; reverting`);
-    try {
-      await opts.runner("git", ["-C", opts.repoPath, "checkout", currentCommit]);
-      await rebuildWorkspace(opts.runner, opts.repoPath, log);
-    } catch (revertErr) {
-      log(`[self-update] revert also failed: ${(revertErr as Error).message}`);
-    }
+    // Restarting with the marker still `applying` would only roll back again.
+    await revert(`could not mark the update staged: ${(e as Error).message}`);
     return { applied: false, reason: "apply-failed" };
   }
 
