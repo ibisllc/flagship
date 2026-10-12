@@ -200,6 +200,16 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   a build can still push repo code out through an allowed registry; the fence
   fails open for live apps (never for AI staging or builds) if it can't start;
   dev dataspaces orphaned by a restart mid-staging aren't swept.
+- **App access lists (2026-10-12, `e408e136`..`c78151b4`).** A live app's
+  internet access is an owner-signed allow/deny list (`flagship/app-access/v1`,
+  docs §3a; vectors in `packages/protocol/test-vectors/app-access/`, which all
+  four ports pass). Hosts an app is denied by default become requests, with a
+  content-free `app-access` push and an `access-request` event on
+  `/api/screens/events`. All three apps answer per host and edit the list.
+  `.com` deployed (category + visible iOS alerts); boxes need the next
+  endorsed release after `37ba277d`. Fixed along the way: iOS pushes had no
+  `aps.alert`, so nothing showed while the app was closed (every category);
+  iOS signed orders named the leader box instead of the box serving the app.
 - **Docker containers unreachable on VM appliances (fixed in `e81df698`).**
   The appliance's `Type=ether` networkd rule pulled every container's veth off
   its bridge: every app 502'd with "read ECONNRESET" after a 3 s ARP timeout
