@@ -2,6 +2,7 @@ import { type SealedBlob } from "@flagship/protocol";
 import type { SwkOps } from "./keyCustodian.js";
 import {
   assertSafeProviderBaseUrl,
+  isInternalIpLiteral,
   defaultRegistry,
   defaultStreamingRegistry,
   guardedFetch,
@@ -18,6 +19,8 @@ import {
   type ProviderConfig,
   type StreamingFetchLike,
 } from "@flagship/llm-providers";
+import { RelayError, relayUnavailable } from "./tunnel/outboundStream.js";
+import type { ProviderRelay } from "./tunnel/relayFetch.js";
 
 export interface LlmHarnessOptions {
   swk: SwkOps;
@@ -41,6 +44,15 @@ export interface LlmHarnessOptions {
    * or supplies a `hostAllowlist`.
    */
   baseUrlGuard?: BaseUrlGuardOptions;
+  /**
+   * The Flagship relay (AI calls leave through the hub over the tunnel,
+   * docs/ai-privacy-and-staging.md §4). A credential with relay on (the
+   * default) uses it for every non-local endpoint; if it's absent or
+   * unavailable the call fails rather than going direct.
+   */
+  relay?: ProviderRelay;
+  /** Test seam: name → addresses, for the "is this baseUrl on the LAN" check. */
+  resolveHost?: (host: string) => Promise<string[]>;
 }
 
 /**
@@ -63,17 +75,121 @@ export interface LlmCredential {
    * owner's key keeps the strict default guard (no host allowlist).
    */
   source?: "byok" | "promo";
+  /**
+   * Send this key's calls through the Flagship relay so the provider sees
+   * Flagship's address, not the box's. Absent ⇒ ON. A local endpoint (a LAN
+   * Ollama) is always direct.
+   */
+  relay?: boolean;
+}
+
+/**
+ * Read the optional `relay` flag off a wire credential. `undefined` when
+ * absent (relay on), the boolean when well-formed, `"invalid"` otherwise.
+ */
+export function parseRelayFlag(raw: unknown): boolean | undefined | "invalid" {
+  if (raw === undefined || raw === null) return undefined;
+  return typeof raw === "boolean" ? raw : "invalid";
+}
+
+const LOCAL_SUFFIXES = [".localhost", ".local", ".lan", ".home.arpa", ".internal", ".localdomain"];
+
+/**
+ * Is `rawUrl` a local endpoint (on the box or the LAN) that must be called
+ * directly? Judged by spelling: an internal IP literal, `localhost`, a
+ * single-label name, or a LAN suffix. When `resolve` is given (only for the
+ * owner's own baseUrl host, never a provider's default host, so the box
+ * doesn't look up provider names locally), a name whose records include an
+ * internal address counts as local too.
+ */
+export async function isLocalEndpoint(
+  rawUrl: string,
+  resolve?: (host: string) => Promise<string[]>,
+): Promise<boolean> {
+  let host: string;
+  try {
+    host = new URL(rawUrl).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  } catch {
+    return false;
+  }
+  if (isInternalIpLiteral(host)) return true;
+  if (host === "localhost" || (!host.includes(".") && !host.includes(":"))) return true;
+  if (LOCAL_SUFFIXES.some((s) => host.endsWith(s))) return true;
+  if (!resolve) return false;
+  try {
+    return (await resolve(host)).some((a) => isInternalIpLiteral(a));
+  } catch {
+    return false;
+  }
+}
+
+const defaultResolveHost = async (host: string): Promise<string[]> => {
+  const dns = await import("node:dns");
+  return (await dns.promises.lookup(host, { all: true })).map((r) => r.address);
+};
+
+/**
+ * Wrap a direct fetch so a relay-on credential goes through the relay for
+ * every non-local URL, and fails closed when the relay can't carry it.
+ * Exported for tests; the harness builds one per call.
+ */
+export function routeProviderFetch<F extends FetchLike | StreamingFetchLike>(args: {
+  direct: F;
+  relayed: F | undefined;
+  relayAvailable: () => boolean;
+  wantsRelay: boolean;
+  baseUrl?: string;
+  guard?: BaseUrlGuardOptions;
+  resolveHost?: (host: string) => Promise<string[]>;
+  onRelayError?: (e: RelayError) => void;
+}): F {
+  const baseHost = (() => {
+    try {
+      return args.baseUrl ? new URL(args.baseUrl).hostname.toLowerCase() : null;
+    } catch {
+      return null;
+    }
+  })();
+  const routed = async (input: string, init?: Parameters<F>[1]) => {
+    if (!args.wantsRelay) return (args.direct as FetchLike)(input, init as Parameters<FetchLike>[1]);
+    let sameHost = false;
+    try {
+      sameHost = baseHost !== null && new URL(input).hostname.toLowerCase() === baseHost;
+    } catch {
+      /* the guard below rejects it */
+    }
+    if (await isLocalEndpoint(input, sameHost ? args.resolveHost : undefined)) {
+      return (args.direct as FetchLike)(input, init as Parameters<FetchLike>[1]);
+    }
+    // Same scheme / host-pin / literal-IP rules as the direct path; the hub
+    // enforces the resolved-address rules on its side.
+    assertSafeProviderBaseUrl(input, args.guard);
+    try {
+      if (!args.relayed || !args.relayAvailable()) throw relayUnavailable();
+      return await (args.relayed as FetchLike)(input, init as Parameters<FetchLike>[1]);
+    } catch (e) {
+      if (e instanceof RelayError) args.onRelayError?.(e);
+      throw e;
+    }
+  };
+  return routed as unknown as F;
 }
 
 /** Outcome of a `chatStream` call (no model text — that flows via onEvent). */
 export type ChatStreamOutcome =
   | { ok: true }
-  | { ok: false; reason: "unknown-provider" | "unsafe-base-url" | "no-streaming" | "provider-error"; message: string };
+  | {
+      ok: false;
+      reason: "unknown-provider" | "unsafe-base-url" | "no-streaming" | "provider-error" | "relay-unavailable";
+      message: string;
+    };
 
 interface SealedRequest {
   provider: string;
   apiKey: string;
   baseUrl?: string;
+  /** Absent ⇒ relay on, as for every credential. */
+  relay?: boolean;
   request: ChatRequest;
 }
 
@@ -104,9 +220,13 @@ export class LlmHarness {
   private readonly defaultStreamingFetch: StreamingFetchLike;
   private readonly swk: SwkOps;
   private readonly baseUrlGuard?: BaseUrlGuardOptions;
+  private readonly relay?: ProviderRelay;
+  private readonly resolveHost: (host: string) => Promise<string[]>;
 
   constructor(opts: LlmHarnessOptions) {
     this.swk = opts.swk;
+    this.relay = opts.relay;
+    this.resolveHost = opts.resolveHost ?? defaultResolveHost;
     this.registry = opts.registry ?? defaultRegistry;
     this.streamingRegistry = opts.streamingRegistry ?? defaultStreamingRegistry;
     this.baseUrlGuard = opts.baseUrlGuard;
@@ -124,18 +244,44 @@ export class LlmHarness {
 
   /** The blocking fetch for a credential — injected impl, else a guarded
    *  fetch bound to this credential's effective guard (promo host-pin). */
-  private fetchForCredential(credential: LlmCredential): FetchLike {
+  private fetchForCredential(
+    credential: Pick<LlmCredential, "source" | "baseUrl" | "relay">,
+    onRelayError?: (e: RelayError) => void,
+  ): FetchLike {
     if (this.injectedFetch) return this.injectedFetch;
-    if (credential.source === "promo") return guardedFetch({ guard: this.guardFor(credential) });
-    return this.defaultFetch;
+    const direct =
+      credential.source === "promo" ? guardedFetch({ guard: this.guardFor(credential) }) : this.defaultFetch;
+    return routeProviderFetch<FetchLike>({
+      direct,
+      relayed: this.relay?.fetch,
+      relayAvailable: () => this.relay?.available() ?? false,
+      wantsRelay: credential.relay !== false,
+      ...(credential.baseUrl ? { baseUrl: credential.baseUrl } : {}),
+      guard: this.guardFor(credential),
+      resolveHost: this.resolveHost,
+      ...(onRelayError ? { onRelayError } : {}),
+    });
   }
 
-  private streamingFetchForCredential(credential: LlmCredential): StreamingFetchLike {
+  private streamingFetchForCredential(
+    credential: LlmCredential,
+    onRelayError?: (e: RelayError) => void,
+  ): StreamingFetchLike {
     if (this.injectedStreamingFetch) return this.injectedStreamingFetch;
-    if (credential.source === "promo") {
-      return guardedStreamingFetch({ guard: this.guardFor(credential) });
-    }
-    return this.defaultStreamingFetch;
+    const direct =
+      credential.source === "promo"
+        ? guardedStreamingFetch({ guard: this.guardFor(credential) })
+        : this.defaultStreamingFetch;
+    return routeProviderFetch<StreamingFetchLike>({
+      direct,
+      relayed: this.relay?.streamingFetch,
+      relayAvailable: () => this.relay?.available() ?? false,
+      wantsRelay: credential.relay !== false,
+      ...(credential.baseUrl ? { baseUrl: credential.baseUrl } : {}),
+      guard: this.guardFor(credential),
+      resolveHost: this.resolveHost,
+      ...(onRelayError ? { onRelayError } : {}),
+    });
   }
 
   /**
@@ -153,7 +299,7 @@ export class LlmHarness {
    * https-only scheme rule, since allowPrivate/allowHttp stay off) still
    * runs. A BYOK credential keeps the harness default (no pin).
    */
-  private guardFor(credential: LlmCredential): BaseUrlGuardOptions | undefined {
+  private guardFor(credential: Pick<LlmCredential, "source" | "baseUrl">): BaseUrlGuardOptions | undefined {
     if (credential.source !== "promo") return this.baseUrlGuard;
     if (typeof credential.baseUrl !== "string" || credential.baseUrl.length === 0) {
       return this.baseUrlGuard;
@@ -215,6 +361,7 @@ export class LlmHarness {
       cfg.baseUrl = credential.baseUrl;
     }
     let sawError: { message: string } | null = null;
+    let relayFailed: RelayError | null = null;
     const provider = this.streamingRegistry.get(credential.provider);
     await provider.chatStream(
       request,
@@ -223,8 +370,13 @@ export class LlmHarness {
         if (e.kind === "error" && !sawError) sawError = { message: e.message };
         onEvent(e);
       },
-      this.streamingFetchForCredential(credential),
+      this.streamingFetchForCredential(credential, (e) => {
+        relayFailed ??= e;
+      }),
     );
+    if (relayFailed) {
+      return { ok: false, reason: "relay-unavailable", message: (relayFailed as RelayError).message };
+    }
     if (sawError) {
       return { ok: false, reason: "provider-error", message: (sawError as { message: string }).message };
     }
@@ -309,7 +461,10 @@ export class LlmHarness {
       const response = await this.registry.get(req.provider).chat(
         req.request,
         { apiKey: req.apiKey, baseUrl: req.baseUrl },
-        this.injectedFetch ?? this.defaultFetch,
+        this.fetchForCredential({
+          ...(typeof req.baseUrl === "string" && req.baseUrl.length > 0 ? { baseUrl: req.baseUrl } : {}),
+          ...(typeof req.relay === "boolean" ? { relay: req.relay } : {}),
+        }),
       );
       const sealedResp: SealedResponse = { ok: true, response };
       return this.swk.sealWithSwk(new TextEncoder().encode(JSON.stringify(sealedResp)));

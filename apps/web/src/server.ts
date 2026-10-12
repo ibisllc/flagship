@@ -70,6 +70,7 @@ import {
 import { startSniRouter, type RunningSniRouter } from "./tunnel/sniRouter.js";
 import { UsageMeter } from "./tunnel/usageMeter.js";
 import { startTunnelHub } from "./tunnel/tunnelHub.js";
+import { OutboundRelay } from "./tunnel/outboundRelay.js";
 import {
   HubBlessingProvider,
   loadOrCreateHubKeypair,
@@ -490,9 +491,15 @@ export async function start(opts: {
     console.log(`relay-blessing provider started hubKey=${keypair.publicKey.length === 32 ? "ok" : "bad"} host=${hubHost}`);
   }
 
+  // AI provider relay (docs/ai-privacy-and-staging.md §4): boxes reach public
+  // host:443 through this hub over their tunnel. FLAGSHIP_OUTBOUND_RELAY=off
+  // stops advertising it; boxes then refuse relay-on AI calls.
+  const outboundRelay =
+    process.env.FLAGSHIP_OUTBOUND_RELAY === "off" ? undefined : new OutboundRelay();
   const stopHub = startTunnelHub(app.server, registry, {
     surface,
     apex: servicesApex,
+    ...(outboundRelay ? { outboundRelay } : {}),
     authLookup: remoteAuthLookup,
     irkLookup,
     authorityLookup,

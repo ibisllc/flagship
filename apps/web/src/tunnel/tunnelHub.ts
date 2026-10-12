@@ -2,6 +2,7 @@ import type { IncomingMessage, Server as HttpServer } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
 import {
+  CAPABILITY_OUTBOUND_V1,
   decodeFrame,
   domainGrantedFrame,
   encodeFrame,
@@ -9,11 +10,17 @@ import {
   FRAME_CLOSE_REMOTE,
   FRAME_DATA,
   FRAME_HELLO,
+  FRAME_OUTBOUND_CREDIT,
+  FRAME_OUTBOUND_OPEN,
   FRAME_REQUEST_TRANSFER,
   helloAckFrame,
+  isOutboundStreamId,
+  OUTBOUND_STREAM_ID_BASE,
+  outboundResultFrame,
   type Frame,
   type HelloAckTrust,
 } from "@flagship/tunnel-protocol";
+import type { OutboundRelay, OutboundSession } from "./outboundRelay.js";
 import {
   serviceEntitlementCertId,
   serviceGrantActiveAt,
@@ -153,6 +160,12 @@ export interface TunnelHubOptions {
    * the prod literal so prod behavior is byte-identical.
    */
   apex?: string;
+  /**
+   * Box-initiated outbound streams (AI provider relay). When set, accepting
+   * HELLO_ACKs advertise `outbound-v1` and authenticated boxes may open
+   * public `host:443` connections through this hub. Omitted ⇒ not offered.
+   */
+  outboundRelay?: OutboundRelay;
   now?: () => number;
 }
 
@@ -205,8 +218,16 @@ function attachTunnel(
   opts: TunnelHubOptions,
 ): void {
   let registered: RegisteredTunnel | null = null;
+  let outbound: OutboundSession | null = null;
+  const capabilities = opts.outboundRelay ? [CAPABILITY_OUTBOUND_V1] : undefined;
   let lastHelloIssuedAt = 0;
+  // Hub-opened stream ids stay below the box's outbound space.
   let nextStream = 1;
+  const takeStreamId = (): number => {
+    const id = nextStream;
+    nextStream = nextStream >= OUTBOUND_STREAM_ID_BASE - 1 ? 1 : nextStream + 1;
+    return id;
+  };
   const streams = new Map<number, StreamCallbacks>();
   let buffered: Uint8Array = new Uint8Array(0);
   const now = opts.now ?? (() => Date.now());
@@ -290,6 +311,8 @@ function attachTunnel(
     }
     for (const cb of streams.values()) cb.onRemoteClose();
     streams.clear();
+    outbound?.close();
+    outbound = null;
   });
 
   ws.on("error", () => { /* close handler does cleanup */ });
@@ -341,12 +364,13 @@ function attachTunnel(
         send,
         attachStream: (id, cb) => streams.set(id, cb),
         detachStream: (id) => streams.delete(id),
-        nextStreamId: () => nextStream++,
+        nextStreamId: takeStreamId,
       };
       const reg = registry.register({ tunnel, canonicals });
       registered = tunnel;
+      outbound = opts.outboundRelay?.session(tunnel.podCanonical, send) ?? null;
       lastHelloIssuedAt = helloOk.issuedAt;
-      send(helloAckFrame(true, undefined, buildTrust(helloOk.nonce)));
+      send(helloAckFrame(true, undefined, buildTrust(helloOk.nonce), capabilities));
       // Broadcast a fresh snapshot to every affected set so all
       // currently-connected pods learn about the new arrival.
       for (const key of reg.affectedSets) broadcastSnapshot(registry, key);
@@ -403,7 +427,7 @@ function attachTunnel(
       const canonicals = built.canonicals;
       const reg = registry.register({ tunnel: registered, canonicals });
       lastHelloIssuedAt = helloOk.issuedAt;
-      send(helloAckFrame(true, undefined, buildTrust(helloOk.nonce)));
+      send(helloAckFrame(true, undefined, buildTrust(helloOk.nonce), capabilities));
       for (const key of reg.affectedSets) broadcastSnapshot(registry, key);
       if (canonicals.length === 0) armIdleClose();
       else cancelIdleClose();
@@ -424,6 +448,18 @@ function attachTunnel(
       });
       if (r.ok) {
         broadcastSnapshot(registry, r.affectedSet);
+      }
+      return;
+    }
+    if (
+      f.type === FRAME_OUTBOUND_OPEN ||
+      f.type === FRAME_OUTBOUND_CREDIT ||
+      ((f.type === FRAME_DATA || f.type === FRAME_CLOSE || f.type === FRAME_CLOSE_REMOTE) &&
+        isOutboundStreamId(f.streamId))
+    ) {
+      if (outbound) outbound.handleFrame(f);
+      else if (f.type === FRAME_OUTBOUND_OPEN) {
+        send(outboundResultFrame(f.streamId, { ok: false, reason: "disabled" }));
       }
       return;
     }

@@ -1,4 +1,5 @@
 import { connect as netConnect, type Socket } from "node:net";
+import type { Duplex } from "node:stream";
 import { WebSocket } from "ws";
 import type { EventEmitter } from "node:events";
 import {
@@ -13,10 +14,25 @@ import {
   FRAME_HELLO,
   FRAME_HELLO_ACK,
   FRAME_OPEN,
+  FRAME_OUTBOUND_CREDIT,
+  FRAME_OUTBOUND_RESULT,
+  CAPABILITY_OUTBOUND_V1,
+  isOutboundStreamId,
+  OUTBOUND_STREAM_ID_BASE,
+  OUTBOUND_STREAM_ID_MAX,
+  outboundOpenFrame,
   parseHelloAck,
+  parseOutboundCredit,
+  parseOutboundResult,
   requestTransferFrame,
   type Frame,
 } from "@flagship/tunnel-protocol";
+import {
+  OutboundStream,
+  RelayError,
+  relayRefused,
+  relayUnavailable,
+} from "./outboundStream.js";
 import {
   serviceEntitlementCertId,
   rootEntitlementCertId,
@@ -171,8 +187,22 @@ export interface TunnelClient {
    * before the hub was found untrusted don't keep flowing. Returns the count.
    */
   closeStreams(): number;
+  /**
+   * Whether this connection can carry box-initiated outbound streams: the
+   * hub accepted the HELLO and advertised `outbound-v1`. Never send an
+   * outbound open otherwise, because an older hub closes the tunnel on it.
+   */
+  outboundAvailable?(): boolean;
+  /**
+   * Ask the hub to connect to `host:port` and return the byte stream. Rejects
+   * with a `RelayError` (unavailable / refused / timeout / lost).
+   */
+  openOutbound?(host: string, port: number): Promise<Duplex>;
   close(): Promise<void>;
 }
+
+/** How long the hub gets to resolve + connect before an open gives up. */
+const OUTBOUND_OPEN_TIMEOUT_MS = 20_000;
 
 export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
   const factory = opts.wsFactory ?? defaultWebSocketFactory;
@@ -182,6 +212,14 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
   const clearIntervalFn = opts.clearIntervalImpl ?? clearInterval;
 
   const streams = new Map<number, Socket>();
+  const outbound = new Map<number, OutboundStream>();
+  const outboundOpening = new Map<
+    number,
+    { host: string; resolve: (s: OutboundStream) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
+  >();
+  let nextOutbound = OUTBOUND_STREAM_ID_BASE + 1;
+  let hubCapabilities: string[] = [];
+  let acked = false;
   let buffered: Uint8Array = new Uint8Array(0);
   let resolveReady!: () => void;
   let rejectReady!: (e: Error) => void;
@@ -335,6 +373,14 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
   ws.on("close", () => {
     for (const sock of streams.values()) sock.destroy();
     streams.clear();
+    acked = false;
+    for (const [id, o] of outboundOpening) {
+      clearTimeout(o.timer);
+      outboundOpening.delete(id);
+      o.reject(relayUnavailable());
+    }
+    for (const s of [...outbound.values()]) s.lost();
+    outbound.clear();
     fireOnClose();
   });
 
@@ -380,8 +426,15 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
           /* swallow — relay-trust observation must never break the tunnel */
         }
       }
-      if (body.ok) resolveReady();
-      else rejectReady(new Error(body.reason ?? "HELLO_ACK rejected"));
+      if (body.ok) {
+        acked = true;
+        hubCapabilities = body.capabilities ?? [];
+        resolveReady();
+      } else rejectReady(new Error(body.reason ?? "HELLO_ACK rejected"));
+      return;
+    }
+    if (isOutboundStreamId(f.streamId)) {
+      handleOutboundFrame(f);
       return;
     }
     if (f.type === FRAME_OPEN) {
@@ -423,9 +476,71 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     }
   }
 
+  function handleOutboundFrame(f: Frame): void {
+    if (f.type === FRAME_OUTBOUND_RESULT) {
+      const waiting = outboundOpening.get(f.streamId);
+      const result = parseOutboundResult(f.payload);
+      if (!waiting || !result) return;
+      clearTimeout(waiting.timer);
+      outboundOpening.delete(f.streamId);
+      if (!result.ok) {
+        outbound.get(f.streamId)?.abandon();
+        outbound.delete(f.streamId);
+        waiting.reject(relayRefused(waiting.host, result.reason ?? "connect-failed"));
+        return;
+      }
+      const s = outbound.get(f.streamId);
+      if (!s) return;
+      s.markOpen();
+      waiting.resolve(s);
+      return;
+    }
+    const s = outbound.get(f.streamId);
+    if (!s) return;
+    if (f.type === FRAME_DATA) s.receive(f.payload);
+    else if (f.type === FRAME_OUTBOUND_CREDIT) {
+      const n = parseOutboundCredit(f.payload);
+      if (n !== null) s.addCredit(n);
+    } else if (f.type === FRAME_CLOSE || f.type === FRAME_CLOSE_REMOTE) s.remoteClose();
+  }
+
+  function outboundAvailable(): boolean {
+    return acked && ws.readyState === factory.OPEN && hubCapabilities.includes(CAPABILITY_OUTBOUND_V1);
+  }
+
+  function takeOutboundId(): number {
+    for (let i = 0; i < 1024; i++) {
+      const id = nextOutbound;
+      nextOutbound = nextOutbound >= OUTBOUND_STREAM_ID_MAX ? OUTBOUND_STREAM_ID_BASE + 1 : nextOutbound + 1;
+      if (!outbound.has(id)) return id;
+    }
+    throw relayUnavailable();
+  }
+
+  function openOutbound(host: string, port: number): Promise<Duplex> {
+    if (!outboundAvailable()) return Promise.reject(relayUnavailable());
+    const id = takeOutboundId();
+    const stream = new OutboundStream(id, send, () => {
+      if (outbound.get(id) === stream) outbound.delete(id);
+    });
+    outbound.set(id, stream);
+    return new Promise<Duplex>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        outboundOpening.delete(id);
+        stream.destroy();
+        reject(new RelayError("timeout", `the Flagship relay took too long to reach ${host}, so the AI call wasn't sent`));
+      }, OUTBOUND_OPEN_TIMEOUT_MS);
+      (timer as { unref?: () => void }).unref?.();
+      outboundOpening.set(id, { host, resolve, reject, timer });
+      send(outboundOpenFrame(id, { host, port }));
+    });
+  }
+
   return {
     ready: () => ready,
     rehello: () => sendHello(),
+    outboundAvailable,
+    openOutbound,
     requestTransfer: (fqdn: string) => {
       send(requestTransferFrame({ fqdn: fqdn.toLowerCase() }));
     },
@@ -513,6 +628,10 @@ export interface SupervisedTunnelClient {
   requestTransfer(fqdn: string): void;
   /** Close the live client's application streams (if any); the WS stays up. */
   closeStreams(): number;
+  /** Whether the live connection can carry outbound streams (see TunnelClient). */
+  outboundAvailable(): boolean;
+  /** Open an outbound stream on the live connection; rejects `RelayError` when none. */
+  openOutbound(host: string, port: number): Promise<Duplex>;
   /** Stop supervising. Cancels any pending reconnect timer + closes the live WS. */
   close(): Promise<void>;
 }
@@ -713,6 +832,9 @@ export function superviseTunnelClient(
       live?.requestTransfer(fqdn);
     },
     closeStreams: () => live?.closeStreams() ?? 0,
+    outboundAvailable: () => live?.outboundAvailable?.() ?? false,
+    openOutbound: (host: string, port: number) =>
+      live?.openOutbound ? live.openOutbound(host, port) : Promise.reject(relayUnavailable()),
     close: async () => {
       stopped = true;
       if (pendingTimer !== null) {

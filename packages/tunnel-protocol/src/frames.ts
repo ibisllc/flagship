@@ -66,6 +66,13 @@ export const FRAME_PB_GET_END = 0x24;
 export const FRAME_PB_CHALLENGE = 0x30;
 export const FRAME_PB_RESPONSE = 0x31;
 
+// Box-initiated outbound streams (docs/ai-privacy-and-staging.md §4). See
+// outboundFrames.ts. A box sends these ONLY to a hub whose HELLO_ACK
+// advertised CAPABILITY_OUTBOUND_V1: an older hub rejects unknown types.
+export const FRAME_OUTBOUND_OPEN = 0x40;
+export const FRAME_OUTBOUND_RESULT = 0x41;
+export const FRAME_OUTBOUND_CREDIT = 0x42;
+
 export type FrameType =
   | typeof FRAME_HELLO
   | typeof FRAME_HELLO_ACK
@@ -82,7 +89,10 @@ export type FrameType =
   | typeof FRAME_PB_GET_DATA
   | typeof FRAME_PB_GET_END
   | typeof FRAME_PB_CHALLENGE
-  | typeof FRAME_PB_RESPONSE;
+  | typeof FRAME_PB_RESPONSE
+  | typeof FRAME_OUTBOUND_OPEN
+  | typeof FRAME_OUTBOUND_RESULT
+  | typeof FRAME_OUTBOUND_CREDIT;
 
 export interface Frame {
   streamId: number;
@@ -153,7 +163,10 @@ function isFrameType(t: number): t is FrameType {
     t === FRAME_PB_GET_DATA ||
     t === FRAME_PB_GET_END ||
     t === FRAME_PB_CHALLENGE ||
-    t === FRAME_PB_RESPONSE
+    t === FRAME_PB_RESPONSE ||
+    t === FRAME_OUTBOUND_OPEN ||
+    t === FRAME_OUTBOUND_RESULT ||
+    t === FRAME_OUTBOUND_CREDIT
   );
 }
 
@@ -215,19 +228,29 @@ export interface HelloAckTrust {
   hubSig?: string;
 }
 
+/**
+ * Hub features a box may use on this connection. A box must never send a
+ * frame type the hub hasn't advertised here, because an older hub closes
+ * the tunnel on an unknown type. Old boxes ignore the field.
+ */
+export const CAPABILITY_OUTBOUND_V1 = "outbound-v1";
+
 export function helloAckFrame(
   ok: boolean,
   reason?: string,
   trust?: HelloAckTrust,
+  capabilities?: readonly string[],
 ): Frame {
   const body: {
     ok: boolean;
     reason?: string;
     serviceBlessing?: unknown;
     hubSig?: string;
+    capabilities?: string[];
   } = { ok, reason };
   if (trust?.serviceBlessing !== undefined) body.serviceBlessing = trust.serviceBlessing;
   if (trust?.hubSig !== undefined) body.hubSig = trust.hubSig;
+  if (capabilities && capabilities.length > 0) body.capabilities = [...capabilities];
   return {
     streamId: 0,
     type: FRAME_HELLO_ACK,
@@ -242,6 +265,8 @@ export interface ParsedHelloAck {
   serviceBlessing?: unknown;
   /** Present only when the hub attached one (new hubs). */
   hubSig?: string;
+  /** Hub features usable on this connection. Absent from an old hub. */
+  capabilities?: string[];
 }
 
 /**
@@ -265,6 +290,9 @@ export function parseHelloAck(payload: Uint8Array): ParsedHelloAck | null {
     out.serviceBlessing = o.serviceBlessing;
   }
   if (typeof o.hubSig === "string") out.hubSig = o.hubSig;
+  if (Array.isArray(o.capabilities)) {
+    out.capabilities = o.capabilities.filter((c): c is string => typeof c === "string");
+  }
   return out;
 }
 

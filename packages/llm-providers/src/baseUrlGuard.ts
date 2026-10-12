@@ -278,6 +278,16 @@ export async function assertResolvedHostSafe(
   return h;
 }
 
+/**
+ * True when `addr` is an IP literal in a loopback / link-local / private /
+ * CGNAT / unique-local range: a LAN or on-box address, not the internet.
+ * A non-IP string is false.
+ */
+export function isInternalIpLiteral(addr: string): boolean {
+  const ip = parseIpLiteral(addr.toLowerCase());
+  return ip !== null && classifyIp(ip) !== "public";
+}
+
 type IpKind = "loopback" | "link-local" | "private" | "public";
 
 interface ParsedIp {
