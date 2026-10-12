@@ -244,6 +244,10 @@ public final class AppState {
     /// Platform shell hook for clearing persisted session-only state (notably
     /// the passwordless demo marker) on an explicit sign-out.
     public var onSignedOut: (() -> Void)?
+    /// Where the owner's leader choice is remembered per account across
+    /// launches. The iOS shell wires the UserDefaults store; nil (tests,
+    /// previews, the watch) remembers nothing.
+    @ObservationIgnored public var leaderMemory: (any LeaderMemory)?
 
     public init(
         isPaired: Bool = false,
@@ -394,6 +398,7 @@ public final class AppState {
         // so a later box can't seize the default.
         self.leaderPodId = pods.first?.podId
         self.currentPodId = pods.first?.podId
+        applyRememberedLeader()
         self.isPaired = true
         // W3 — record the cloud in the durable profile list and mark
         // it active. Idempotent: re-running onboarding for an already
@@ -498,6 +503,21 @@ public final class AppState {
         // another selectable pod — not the new default.
         if leaderPodId == nil { leaderPodId = pod.podId }
         if currentPodId == nil { currentPodId = pod.podId }
+        applyRememberedLeader()
+    }
+
+    /// Put back the leader the owner chose on this device for this account,
+    /// once that pod is known and not revoked. Until then (or when it's gone)
+    /// the oldest-pod fallback stands. The restored leader becomes current
+    /// unless another pod was picked explicitly this session.
+    private func applyRememberedLeader() {
+        guard let account = currentUser, let memory = leaderMemory,
+              let id = memory.leaderPodId(forAccount: account), id != leaderPodId,
+              let pod = pods.first(where: { $0.podId == id }), !pod.isRevoked
+        else { return }
+        let previous = leaderPodId
+        leaderPodId = id
+        if currentPodId == nil || currentPodId == previous { currentPodId = id }
     }
 
     /// Idempotent insert of a pending pod, keyed on the fqdn (the same
@@ -621,6 +641,7 @@ public final class AppState {
                 revokedAt: revokedAt,
                 revocationReason: revocationReason
             )
+            applyRememberedLeader()
             return old.podId
         }
         let id = PodInfo.podId(forFqdn: fqdn)
@@ -678,6 +699,7 @@ public final class AppState {
         guard pods.contains(where: { $0.podId == podId }) else { return }
         leaderPodId = podId
         currentPodId = podId
+        if let account = currentUser { leaderMemory?.setLeaderPodId(podId, forAccount: account) }
     }
 
     public func setCurrentPod(_ podId: String) {
@@ -727,6 +749,13 @@ public final class AppState {
 
     public func removePod(_ podId: String) {
         pods.removeAll { $0.podId == podId }
+        // A removed server was deleted, transferred or retired: forget it as
+        // the remembered leader so a new server reusing its name doesn't
+        // inherit the choice.
+        if let account = currentUser, let memory = leaderMemory,
+           memory.leaderPodId(forAccount: account) == podId {
+            memory.setLeaderPodId(nil, forAccount: account)
+        }
         // DETERMINISTIC RE-ANCHOR (Fix C) — when the removed pod WAS the leader,
         // the leader dangles. Re-anchor explicitly to the OLDEST remaining pod
         // (`oldestPod`, = `pods.first` since `.com` returns oldest-first) rather
@@ -737,6 +766,7 @@ public final class AppState {
     }
 
     public func signOut() {
+        if let account = currentUser { leaderMemory?.setLeaderPodId(nil, forAccount: account) }
         self.isPaired = false
         self.currentUser = nil
         self.pods = []

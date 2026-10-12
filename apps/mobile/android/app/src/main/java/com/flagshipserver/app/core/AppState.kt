@@ -66,6 +66,11 @@ class AppState(
     activeCloudName: String? = null,
 ) {
     var onSignedOut: (() -> Unit)? = null
+
+    /** Where the owner's leader choice is remembered per account across
+     *  launches. MainActivity wires the prefs store; null (tests, previews)
+     *  remembers nothing. */
+    var leaderMemory: LeaderMemory? = null
     private val _isPaired = MutableStateFlow(isPaired)
     val isPaired: StateFlow<Boolean> = _isPaired.asStateFlow()
 
@@ -364,6 +369,7 @@ class AppState(
         _pods.value = pods
         _leaderPodId.value = pods.firstOrNull()?.podId
         _currentPodId.value = pods.firstOrNull()?.podId
+        applyRememberedLeader()
         _isPaired.value = true
         // W3 — record the cloud in the durable profile list and mark
         // it active. Idempotent for re-onboarding the same cloud.
@@ -451,6 +457,22 @@ class AppState(
         // is, so the new box is just another selectable pod — not the new default.
         if (_leaderPodId.value == null) _leaderPodId.value = pod.podId
         if (_currentPodId.value == null) _currentPodId.value = pod.podId
+        applyRememberedLeader()
+    }
+
+    /** Put back the leader the owner chose on this device for this account,
+     *  once that pod is known and not revoked. Until then (or when it's gone)
+     *  the oldest-pod fallback stands. The restored leader becomes current
+     *  unless another pod was picked explicitly this session. */
+    private fun applyRememberedLeader() {
+        val account = _currentUser.value ?: return
+        val id = leaderMemory?.leaderPodId(account) ?: return
+        if (id == _leaderPodId.value) return
+        val pod = _pods.value.firstOrNull { it.podId == id } ?: return
+        if (pod.isRevoked) return
+        val previous = _leaderPodId.value
+        _leaderPodId.value = id
+        if (_currentPodId.value == null || _currentPodId.value == previous) _currentPodId.value = id
     }
 
     /** #56 — registration is AUTHORITATIVE for online. A server present in the
@@ -529,6 +551,7 @@ class AppState(
                     revocationReason = revocationReason,
                 )
             }
+            applyRememberedLeader()
             return old.podId
         }
         val id = PodInfo.podId(fqdn)
@@ -641,6 +664,7 @@ class AppState(
         if (_pods.value.none { it.podId == podId }) return
         _leaderPodId.value = podId
         _currentPodId.value = podId
+        _currentUser.value?.let { leaderMemory?.setLeaderPodId(it, podId) }
     }
 
     fun setCurrentPod(podId: String) {
@@ -665,6 +689,13 @@ class AppState(
 
     fun removePod(podId: String) {
         _pods.value = _pods.value.filter { it.podId != podId }
+        // A removed server was deleted, transferred or retired: forget it as the
+        // remembered leader so a new server reusing its name doesn't inherit it.
+        val account = _currentUser.value
+        val memory = leaderMemory
+        if (account != null && memory != null && memory.leaderPodId(account) == podId) {
+            memory.setLeaderPodId(account, null)
+        }
         // DETERMINISTIC RE-ANCHOR (Fix C) — when the removed pod WAS the leader,
         // the leader dangles. Re-anchor explicitly to the OLDEST remaining pod
         // (`oldestPod`, = `pods.first()` since `.com` returns oldest-first) rather
@@ -675,6 +706,7 @@ class AppState(
     }
 
     fun signOut() {
+        _currentUser.value?.let { leaderMemory?.setLeaderPodId(it, null) }
         _isPaired.value = false
         _currentUser.value = null
         _pods.value = emptyList()

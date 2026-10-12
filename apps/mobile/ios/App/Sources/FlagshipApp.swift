@@ -95,6 +95,11 @@ struct FlagshipApp: App {
         appState.onSignedOut = {
             Task { await store.setDemoSession(nil) }
         }
+        // Gym smoke runs start from fixtures every launch, so they don't
+        // carry a leader choice from an earlier run.
+        if !ProcessInfo.processInfo.arguments.contains("-smoke-mode") {
+            appState.leaderMemory = UserDefaultsLeaderMemory()
+        }
     }
 
     /// Smoke-test entry point: when launched with `-smoke-mode YES`
