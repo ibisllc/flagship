@@ -11,7 +11,8 @@ import FlagshipCore
 ///      custom URLs; each shows where it currently resolves. User can
 ///      claim, release, or add new ones.
 ///   4. API keys (docs/app-apis.md §3), unless the box has none.
-///   5. Logs preview + last backup + Remove.
+///   5. Database (docs/app-apis.md §6): owner only, for an app with Postgres.
+///   6. Logs preview + last backup + Remove.
 ///
 /// Pure view: takes a `vm` (ServiceDetailViewModel) and a list of pods.
 public struct ServiceDetailScreen: View {
@@ -36,6 +37,8 @@ public struct ServiceDetailScreen: View {
     /// #92 — push the per-service access-gating ("Who can open this")
     /// surface onto the nav stack.
     var onOpenAccess: () -> Void = {}
+    /// Push the owner's Database section (shown only when the VM says so).
+    var onOpenDatabase: () -> Void = {}
     /// "Edit this service", shown when the box says it can be edited here.
     var onEdit: () -> Void = {}
     /// Allow / Stop access on the internet card. False on a restricted
@@ -53,6 +56,7 @@ public struct ServiceDetailScreen: View {
         onOpenBrowserTabs: @escaping () -> Void = {},
         onOpenCollaborators: @escaping () -> Void = {},
         onOpenAccess: @escaping () -> Void = {},
+        onOpenDatabase: @escaping () -> Void = {},
         onEdit: @escaping () -> Void = {},
         canApproveEgress: Bool = true
     ) {
@@ -65,6 +69,7 @@ public struct ServiceDetailScreen: View {
         self.onOpenBrowserTabs = onOpenBrowserTabs
         self.onOpenCollaborators = onOpenCollaborators
         self.onOpenAccess = onOpenAccess
+        self.onOpenDatabase = onOpenDatabase
         self.onEdit = onEdit
         self.canApproveEgress = canApproveEgress
     }
@@ -95,6 +100,7 @@ public struct ServiceDetailScreen: View {
                     if vm.showsApiKeys, let keys = vm.apiKeys {
                         ApiKeysSection(controller: keys)
                     }
+                    if vm.showsDatabase, let db = vm.database { databaseRow(db, c: c) }
                     logsAndBackup(d: d, c: c)
                     saveAndRemove(c: c)
                 }
@@ -568,6 +574,28 @@ public struct ServiceDetailScreen: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("service-detail-open-browser-viewer")
             }
+        }
+    }
+
+    private func databaseRow(_ db: AppDatabaseController, c: FSColors) -> some View {
+        section(AppDbCopy.sectionTitle, c: c) {
+            Button(action: onOpenDatabase) {
+                FSCard {
+                    HStack(spacing: FS.space.s3) {
+                        Image(systemName: "cylinder.split.1x2").foregroundColor(c.primary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(AppDbCopy.rowTitle).foregroundColor(c.text)
+                            Text(db.state.value == nil ? AppDbCopy.rowSubtitle : AppDbCopy.tableCount(db.tableCount))
+                                .font(FS.font.caption())
+                                .foregroundColor(c.textMuted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("service-detail-open-database")
         }
     }
 

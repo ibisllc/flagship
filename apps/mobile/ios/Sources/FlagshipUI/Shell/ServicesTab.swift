@@ -175,6 +175,12 @@ public struct ServicesTab: View {
             InviteIssueContainer(serviceId: serviceId, path: $path)
         case .serviceAccess(let serviceId):
             ServiceAccessContainer(serviceId: serviceId)
+        case .appDatabase(let serviceId):
+            AppDatabaseContainer(serviceId: serviceId, path: $path)
+        case .appDatabaseTable(let serviceId, let store, let table):
+            AppDbTableContainer(serviceId: serviceId, store: store, table: table)
+        case .appDatabaseQuery(let serviceId, let store):
+            AppDbQueryContainer(serviceId: serviceId, store: store)
         }
     }
 
@@ -337,11 +343,19 @@ private struct AppRow: View {
             detail: shortUrlText
         ) {
             HStack(spacing: FS.space.s2) {
-                if app.access?.hasPending ?? (app.egress?.hasPending == true) {
+                switch AppAccessCopy.listBadge(access: app.access, egress: app.egress) {
+                case .draft?:
+                    Image(systemName: "list.bullet.clipboard")
+                        .foregroundColor(c.warning)
+                        .accessibilityLabel("Suggests an access list")
+                        .accessibilityIdentifier("app-row-access-draft")
+                case .pending?:
                     Image(systemName: "network.badge.shield.half.filled")
                         .foregroundColor(c.warning)
                         .accessibilityLabel("Wants to reach the internet")
                         .accessibilityIdentifier("app-row-egress-pending")
+                case nil:
+                    EmptyView()
                 }
                 FSPill(running ? "Running" : "Stopped", kind: running ? .online : .idle)
                 Image(systemName: "chevron.right").foregroundColor(c.textMuted)
@@ -418,6 +432,7 @@ struct ServiceDetailContainer: View {
                     onOpenBrowserTabs: { path.append(.browserTabs(serviceId: serviceId)) },
                     onOpenCollaborators: { path.append(.inviteManage(serviceId: serviceId)) },
                     onOpenAccess: { path.append(.serviceAccess(serviceId: serviceId)) },
+                    onOpenDatabase: { path.append(.appDatabase(serviceId: serviceId)) },
                     onEdit: { path.append(.editService(serviceId: serviceId)) },
                     canApproveEgress: !app.isRestrictedDevice
                 )

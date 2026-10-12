@@ -219,6 +219,32 @@ public final class ServiceDetailViewModel {
         await apiKeys?.load()
     }
 
+    // MARK: Database (docs/app-apis.md §6)
+
+    /// The app's Database entry. Owner only: nil on a restricted profile or
+    /// for an app without a Postgres store; hidden when the box refuses
+    /// (403) or doesn't have it (404, an older box).
+    public private(set) var database: AppDatabaseController?
+
+    public var showsDatabase: Bool {
+        guard let database, !database.isHidden else { return false }
+        switch database.state {
+        case .loaded, .failed: return true
+        case .idle, .loading: return false
+        }
+    }
+
+    /// The app holds at least one Postgres store.
+    static func hasPostgres(_ d: AppDetailResponse) -> Bool {
+        d.dataLayerInstances.contains { $0.store == "postgres" }
+    }
+
+    private func syncDatabase(hasPostgres: Bool) async {
+        guard accessCanChange, hasPostgres else { database = nil; return }
+        if database == nil { database = AppDatabaseController(serviceId: serviceId, client: client) }
+        await database?.load()
+    }
+
     /// Pods the service should run on (server-set). Edited locally; reset
     /// by `cancelEdits()` and persisted by `save()`.
     public var runOnPodIds: Set<String> = []
@@ -311,7 +337,9 @@ public final class ServiceDetailViewModel {
             ownedUrls = .loaded(uo.urls.filter { $0.fqdn.contains(serviceId) })
             async let accessSync: Void = syncAccess(di.app)
             async let keysSync: Void = syncApiKeys(di.app)
-            _ = await (accessSync, keysSync)
+            let hasPostgres = Self.hasPostgres(di)
+            async let dbSync: Void = syncDatabase(hasPostgres: hasPostgres)
+            _ = await (accessSync, keysSync, dbSync)
             // Seed local edits from server state — currently we default
             // to running on the leader-only since the API doesn't yet
             // return a multi-pod policy. When the daemon contract

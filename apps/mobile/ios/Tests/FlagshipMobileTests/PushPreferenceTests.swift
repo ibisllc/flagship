@@ -169,7 +169,7 @@ final class PushPreferenceTests: XCTestCase {
             boxes: { [home] }, alertsEnabled: { on }, signer: { _ in Curve25519.Signing.PrivateKey() },
             defaults: UserDefaults(suiteName: "access-\(UUID().uuidString)")!)
         await center.refresh()
-        XCTAssertEqual(center.current?.request.host, "api.open-meteo.com")
+        XCTAssertEqual(center.current?.request?.host, "api.open-meteo.com")
 
         on = false
         await center.refresh()
@@ -186,7 +186,7 @@ final class PushPreferenceTests: XCTestCase {
 
         on = true
         await center.refresh()
-        XCTAssertEqual(center.current?.request.host, "api.open-meteo.com")
+        XCTAssertEqual(center.current?.request?.host, "api.open-meteo.com")
     }
 
     func test_genericPushRefreshesTheRequests() async throws {
@@ -199,7 +199,7 @@ final class PushPreferenceTests: XCTestCase {
         XCTAssertTrue(AppAccessEvents.isPush(push))
         if AppAccessEvents.isPush(push) { AppAccessEvents.post() }
         for _ in 0..<100 where center.current == nil { try await Task.sleep(for: .milliseconds(10)) }
-        XCTAssertEqual(center.current?.request.host, "api.open-meteo.com")
+        XCTAssertEqual(center.current?.request?.host, "api.open-meteo.com")
     }
 
     func test_liveClient_talksToTheSettingsPath() async throws {

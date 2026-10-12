@@ -73,6 +73,12 @@ public enum AppsRoute: Hashable, Sendable {
     /// open ⇄ restricted toggle + the bearer-invite allow-list manager.
     /// Reached from the service-detail "Who can open this" row.
     case serviceAccess(serviceId: String)
+    /// The owner's Database section (docs/app-apis.md §6): each store's tables.
+    case appDatabase(serviceId: String)
+    /// One table's rows, paged, with Export CSV.
+    case appDatabaseTable(serviceId: String, store: String, table: String)
+    /// Run SQL on one store (writes confirmed with Face ID).
+    case appDatabaseQuery(serviceId: String, store: String)
 }
 
 /// What the AI-key step does once a credential is chosen. The credential

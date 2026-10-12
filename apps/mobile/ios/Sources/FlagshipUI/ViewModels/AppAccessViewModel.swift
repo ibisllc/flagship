@@ -25,6 +25,27 @@ public enum AppAccessCopy {
 
     public static func wantsToReach(app: String, host: String) -> String { "\(app) wants to reach \(host)" }
 
+    // Suggested lists (drafts).
+    public static let draftTitle = "This app suggests letting it reach these hosts"
+    public static let draftNote = "Nothing opens until you review the list and save it."
+    public static let review = "Review"
+    public static let dismissDraft = "Dismiss"
+    public static let draftEditorNote = "Suggested by the app. Change anything you like; nothing opens until you save."
+    public static let draftGone = "This suggestion was already answered."
+    public static func suggestsList(app: String) -> String { "\(app) suggests an access list" }
+
+    /// The marker on the app list: a suggested list waits, or hosts do.
+    public enum ListBadge: Equatable, Sendable {
+        case draft
+        case pending
+    }
+
+    public static func listBadge(access: AppAccessSummary?, egress: AppEgress?) -> ListBadge? {
+        if access?.draft == true { return .draft }
+        if access?.hasPending ?? (egress?.hasPending == true) { return .pending }
+        return nil
+    }
+
     /// Where the request came from: the gateway saw a connection, or the app
     /// declared the host at install.
     public static func source(_ source: String, attempts: Int) -> String {
@@ -160,6 +181,8 @@ public final class AppAccessController {
     public private(set) var state: LoadingState<AppAccessState> = .idle
     /// The host being answered or dismissed right now.
     public private(set) var busyHost: String?
+    /// The suggested list is being dismissed.
+    public private(set) var isDismissingDraft = false
     public private(set) var errorMessage: String?
     /// The last answer, for the confirmation line.
     public private(set) var lastAnswer: (host: String, action: AppAccessAction)?
@@ -182,6 +205,8 @@ public final class AppAccessController {
 
     public var access: AppAccessState? { state.value }
     public var pending: [AppAccessPendingHost] { access?.pending ?? [] }
+    /// The suggested list waiting for review, if any.
+    public var draft: AppAccessDraft? { access?.draft }
     public var ruleCount: Int { access?.ruleCount ?? 0 }
 
     public func setAppName(_ name: String) { appName = name }
@@ -206,7 +231,7 @@ public final class AppAccessController {
                 host: host, action: action, serviceId: serviceId, appName: appName,
                 currentList: access?.list, client: client,
                 fallbackServerDomain: fallbackServerDomain, signer: signer)
-            apply(next, answered: host)
+            apply(next, answered: host, dropDraft: true)
             lastAnswer = (host, action)
             return true
         } catch {
@@ -227,7 +252,7 @@ public final class AppAccessController {
                 apply(next, answered: host)
             } else if let a = access {
                 state = .loaded(AppAccessState(list: a.list, listSha256: a.listSha256,
-                                               pending: a.pending.filter { $0.host != host }))
+                                               pending: a.pending.filter { $0.host != host }, draft: a.draft))
             }
             return true
         } catch {
@@ -236,26 +261,61 @@ public final class AppAccessController {
         }
     }
 
+    /// Dismiss: discard the suggested list (unsigned: it opened nothing).
+    @discardableResult
+    public func dismissDraft() async -> Bool {
+        guard canChange, draft != nil, !isDismissingDraft else { return false }
+        isDismissingDraft = true
+        errorMessage = nil
+        defer { isDismissingDraft = false }
+        do {
+            let next = try await client.serviceAccessDraftDismiss(serviceId: serviceId)
+            if let next {
+                apply(next, answered: nil, dropDraft: true)
+            } else if let a = access {
+                state = .loaded(AppAccessState(list: a.list, listSha256: a.listSha256, pending: a.pending, draft: nil))
+            }
+            return true
+        } catch {
+            errorMessage = AppAccessCopy.message(for: error)
+            return false
+        }
+    }
+
+    /// Review: the editor prefilled with the suggested list. Saving signs and
+    /// sends it like any list, which clears the draft on the box.
+    public func makeDraftEditor() -> AppAccessEditorModel? {
+        guard let draft else { return nil }
+        return makeEditor(initialList: draft.list, note: AppAccessCopy.draftEditorNote)
+    }
+
     /// An editor on the current list; saving it updates this section.
     public func makeEditor() -> AppAccessEditorModel {
-        AppAccessEditorModel(appName: appName, initialList: access?.list ?? AppAccessList.defaultList,
+        makeEditor(initialList: access?.list ?? AppAccessList.defaultList, note: nil)
+    }
+
+    private func makeEditor(initialList: String, note: String?) -> AppAccessEditorModel {
+        AppAccessEditorModel(appName: appName, initialList: initialList, note: note,
                              canSave: canChange) { [weak self] list in
             guard let self else { throw AppAccessOrder.Failure(message: "This page was closed.") }
             let next = try await AppAccessOrder.send(
                 list: list, serviceId: self.serviceId, client: self.client,
                 fallbackServerDomain: self.fallbackServerDomain, signer: self.signer,
                 reason: "Change \(self.appName)'s access list")
-            self.apply(next, answered: nil)
+            self.apply(next, answered: nil, dropDraft: true)
             return next
         }
     }
 
-    private func apply(_ next: AppAccessState, answered host: String?) {
+    /// `dropDraft`: a signed list was just applied (or the draft dismissed),
+    /// so the draft is gone on the box whatever an older answer says.
+    private func apply(_ next: AppAccessState, answered host: String?, dropDraft: Bool = false) {
         // An answered host is no longer waiting, whatever an older box says.
         let pending = next.pending.filter { p in
             p.host != host && AppAccessList.decide(next.list, host: p.host).rule == nil
         }
-        state = .loaded(AppAccessState(list: next.list, listSha256: next.listSha256, pending: pending))
+        state = .loaded(AppAccessState(list: next.list, listSha256: next.listSha256, pending: pending,
+                                       draft: dropDraft ? nil : next.draft))
     }
 }
 
@@ -266,6 +326,8 @@ public final class AppAccessController {
 public final class AppAccessEditorModel: Identifiable {
     public nonisolated let id = UUID()
     public let appName: String
+    /// A line above the editor (e.g. that this is the app's suggestion).
+    public let note: String?
     public var text: String {
         didSet { if text != refusedText { serverErrors = [] } }
     }
@@ -278,9 +340,10 @@ public final class AppAccessEditorModel: Identifiable {
     private var refusedText: String?
     private let send: @MainActor (String) async throws -> AppAccessState
 
-    public init(appName: String, initialList: String, canSave: Bool = true,
+    public init(appName: String, initialList: String, note: String? = nil, canSave: Bool = true,
                 send: @escaping @MainActor (String) async throws -> AppAccessState) {
         self.appName = appName
+        self.note = note
         self.text = initialList
         self.original = initialList
         self.canSaveAtAll = canSave

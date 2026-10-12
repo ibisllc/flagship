@@ -9,8 +9,10 @@ import FlagshipCore
 /// (`GET /api/screens/access-requests`, over each box's paired session) and
 /// shows one sheet per request: Allow / Deny (sign the edited list) or Not now
 /// (keeps the request on the box; this device doesn't ask about it again for
-/// 24 hours). With push notifications switched off it shows no sheet at all;
-/// requests still wait on each app's page.
+/// 24 hours). A suggested list (draft) comes first: "<App> suggests an access
+/// list" with Review (the app's editor, prefilled with the draft; Save signs
+/// it) or Not now. With push notifications switched off it shows no sheet at
+/// all; requests still wait on each app's page.
 @Observable
 @MainActor
 public final class AppAccessAlertCenter {
@@ -25,15 +27,67 @@ public final class AppAccessAlertCenter {
     }
 
     public struct Item: Identifiable, Equatable {
+        public enum Entry: Equatable {
+            case host(AppAccessRequest)
+            case draft(AppAccessDraftEntry)
+        }
+
         public let serverDomain: String
-        public let request: AppAccessRequest
-        public var id: String { "\(serverDomain)|\(request.serviceId)|\(request.host)" }
+        public let entry: Entry
+
+        public init(serverDomain: String, entry: Entry) {
+            self.serverDomain = serverDomain
+            self.entry = entry
+        }
+
+        public init(serverDomain: String, request: AppAccessRequest) {
+            self.init(serverDomain: serverDomain, entry: .host(request))
+        }
+
+        /// A single waiting host, or nil for a suggested list.
+        public var request: AppAccessRequest? {
+            if case .host(let r) = entry { return r }
+            return nil
+        }
+
+        /// A suggested list, or nil for a single host.
+        public var draft: AppAccessDraftEntry? {
+            if case .draft(let d) = entry { return d }
+            return nil
+        }
+
+        public var serviceId: String {
+            switch entry {
+            case .host(let r): return r.serviceId
+            case .draft(let d): return d.serviceId
+            }
+        }
+
+        public var appName: String {
+            switch entry {
+            case .host(let r): return r.appName
+            case .draft(let d): return d.appName
+            }
+        }
+
+        /// A newer draft (another `createdAt`) is a new item, so Not now on
+        /// an older one doesn't silence it.
+        public var id: String {
+            switch entry {
+            case .host(let r): return "\(serverDomain)|\(r.serviceId)|\(r.host)"
+            case .draft(let d): return "\(serverDomain)|\(d.serviceId)|draft|\(d.createdAt)"
+            }
+        }
     }
 
     public enum Stage: Equatable {
         case ask
         case working(AppAccessAction)
         case done(AppAccessAction)
+        /// A reviewed draft was signed and sent.
+        case saved
+        /// Fetching the draft's list for Review.
+        case opening
         case failed(String)
     }
 
@@ -132,7 +186,9 @@ public final class AppAccessAlertCenter {
         for box in await boxes() {
             clients[box.serverDomain] = box.client
             guard let r = try? await box.client.accessRequests() else { continue }
-            found += r.requests.map { Item(serverDomain: box.serverDomain, request: $0) }
+            // Drafts first, as the box lists them.
+            found += r.drafts.map { Item(serverDomain: box.serverDomain, entry: .draft($0)) }
+            found += r.requests.map { Item(serverDomain: box.serverDomain, entry: .host($0)) }
         }
         guard alertsEnabled() else { return }
         let known = Set(queue.map(\.id))
@@ -163,13 +219,13 @@ public final class AppAccessAlertCenter {
     public func deny() async { await answer(.deny) }
 
     private func answer(_ action: AppAccessAction) async {
-        guard let item = current, let client = clients[item.serverDomain] else { return }
+        guard let item = current, let request = item.request, let client = clients[item.serverDomain] else { return }
         if case .working = stage { return }
         stage = .working(action)
         do {
             _ = try await AppAccessOrder.answer(
-                host: item.request.host, action: action, serviceId: item.request.serviceId,
-                appName: item.request.appName, currentList: nil, client: client,
+                host: request.host, action: action, serviceId: request.serviceId,
+                appName: request.appName, currentList: nil, client: client,
                 fallbackServerDomain: item.serverDomain, signer: signer)
             stage = .done(action)
         } catch {
@@ -194,14 +250,55 @@ public final class AppAccessAlertCenter {
     /// The current request's list, in the editor.
     public func viewAccessList() async {
         guard let item = current, let client = clients[item.serverDomain] else { return }
-        let list = (try? await client.serviceAccess(serviceId: item.request.serviceId).list) ?? AppAccessList.defaultList
+        let list = (try? await client.serviceAccess(serviceId: item.serviceId).list) ?? AppAccessList.defaultList
         let signer = self.signer
-        editor = AppAccessEditorModel(appName: item.request.appName, initialList: list) { text in
+        editor = AppAccessEditorModel(appName: item.appName, initialList: list) { text in
             try await AppAccessOrder.send(
-                list: text, serviceId: item.request.serviceId, client: client,
+                list: text, serviceId: item.serviceId, client: client,
                 fallbackServerDomain: item.serverDomain, signer: signer,
-                reason: "Change \(item.request.appName)'s access list")
+                reason: "Change \(item.appName)'s access list")
         }
+    }
+
+    /// Review a suggested list: that app's editor, prefilled with the draft.
+    /// Save signs and sends it (which clears the draft on the box).
+    public func reviewDraft() async {
+        guard let item = current, item.draft != nil, let client = clients[item.serverDomain] else { return }
+        if case .opening = stage { return }
+        stage = .opening
+        let draft: AppAccessDraft
+        do {
+            guard let d = try await client.serviceAccess(serviceId: item.serviceId).draft else {
+                stage = .failed(AppAccessCopy.draftGone)
+                return
+            }
+            draft = d
+        } catch {
+            stage = .failed(AppAccessCopy.message(for: error))
+            return
+        }
+        guard current?.id == item.id else { return }
+        stage = .ask
+        let signer = self.signer
+        editor = AppAccessEditorModel(appName: item.appName, initialList: draft.list,
+                                      note: AppAccessCopy.draftEditorNote) { [weak self] text in
+            let next = try await AppAccessOrder.send(
+                list: text, serviceId: item.serviceId, client: client,
+                fallbackServerDomain: item.serverDomain, signer: signer,
+                reason: "Change \(item.appName)'s access list")
+            if self?.current?.id == item.id { self?.stage = .saved }
+            return next
+        }
+    }
+
+    /// The editor closed. A draft's editor closed without saving goes back
+    /// to its question; anything else closes the alert.
+    public func editorClosed() {
+        if current?.draft != nil, case .ask = stage, editor?.saved != true {
+            editor = nil
+            return
+        }
+        close()
     }
 
     /// The sheet for `id` went away. Swiped down: Not now while asking, Close

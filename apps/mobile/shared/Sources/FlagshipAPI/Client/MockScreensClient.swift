@@ -197,8 +197,15 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     private let mockAppNames = ["bright-maple--plants": "Plants", "bright-maple--wiki": "Wiki",
                                 "trent--scratchpad": "Scratchpad"]
 
+    /// Suggested lists waiting for review, per service (§3a "Suggested
+    /// lists"). Applying any list or dismissing drops it.
+    public var mockAccessDrafts: [String: AppAccessDraft] = [:]
+    public private(set) var serviceAccessDraftDismissCalls: [String] = []
+
     func mockAccessSummary(_ serviceId: String) -> AppAccessSummary? {
-        mockAccess[serviceId].map { AppAccessSummary(rules: $0.ruleCount, pending: $0.pending.count) }
+        mockAccess[serviceId].map {
+            AppAccessSummary(rules: $0.ruleCount, pending: $0.pending.count, draft: mockAccessDrafts[serviceId] != nil)
+        }
     }
 
     public func boxDomain() async -> String? {
@@ -210,7 +217,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         guard let a = mockAccess[serviceId] else {
             throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
         }
-        return AppAccessState(list: a.list, listSha256: AppAccessList.sha256Hex(a.list), pending: a.pending)
+        return AppAccessState(list: a.list, listSha256: AppAccessList.sha256Hex(a.list), pending: a.pending,
+                              draft: mockAccessDrafts[serviceId])
     }
 
     /// Checks what the box checks (hash, normalized, parses, own server,
@@ -254,6 +262,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             list: req.list, listSha256: req.grant.listSha256,
             pending: current.pending.filter { AppAccessList.decide(req.list, host: $0.host).rule == nil })
         mockAccess[serviceId] = next
+        mockAccessDrafts[serviceId] = nil
         return AppAccessSetResponse(ok: true, access: next)
     }
 
@@ -280,7 +289,183 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let next = AppAccessState(list: current.list, listSha256: current.listSha256,
                                   pending: current.pending.filter { $0.host != host })
         mockAccess[serviceId] = next
-        return next
+        return AppAccessState(list: next.list, listSha256: next.listSha256, pending: next.pending,
+                              draft: mockAccessDrafts[serviceId])
+    }
+
+    @discardableResult
+    public func serviceAccessDraftDismiss(serviceId: String) async throws -> AppAccessState? {
+        try await tick()
+        serviceAccessDraftDismissCalls.append(serviceId)
+        guard let current = mockAccess[serviceId] else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
+        }
+        mockAccessDrafts[serviceId] = nil
+        return AppAccessState(list: current.list, listSha256: AppAccessList.sha256Hex(current.list),
+                              pending: current.pending)
+    }
+
+    // MARK: - The owner's Database section (docs/app-apis.md §6)
+
+    /// A mock table: its columns and every row.
+    public struct MockDbTable {
+        public var kind: String
+        public var columns: [AppDbColumn]
+        public var rows: [[AppDbValue]]
+        public init(kind: String = "table", columns: [AppDbColumn], rows: [[AppDbValue]]) {
+            self.kind = kind
+            self.columns = columns
+            self.rows = rows
+        }
+    }
+
+    /// serviceId → store → table name → table. A missing service is a box
+    /// without the Database section (404, like an older box).
+    public var mockDb: [String: [String: [String: MockDbTable]]] = [
+        "bright-maple--plants": ["default": MockScreensClient.mockPlantsTables()],
+    ]
+
+    static func mockPlantsTables() -> [String: MockDbTable] {
+        let rooms = ["Kitchen", "Hall", "Bedroom"]
+        var plantRows: [[AppDbValue]] = []
+        for i in 1...240 {
+            let room: AppDbValue = i % 7 == 0 ? .null : .string(rooms[i % 3])
+            plantRows.append([.int(Int64(i)), .string("Plant \(i)"), room, .bool(i % 2 == 0)])
+        }
+        let plants = MockDbTable(
+            columns: [AppDbColumn(name: "id", type: "int4"), AppDbColumn(name: "name", type: "text"),
+                      AppDbColumn(name: "room", type: "text"), AppDbColumn(name: "thirsty", type: "bool")],
+            rows: plantRows)
+        let wateringRows: [[AppDbValue]] = [
+            [.int(1), .string("2026-10-01 08:00:00+00")],
+            [.int(2), .string("2026-10-02 08:30:00+00")],
+        ]
+        let waterings = MockDbTable(
+            columns: [AppDbColumn(name: "plant_id", type: "int4"), AppDbColumn(name: "at", type: "timestamptz")],
+            rows: wateringRows)
+        return ["plants": plants, "waterings": waterings]
+    }
+    /// When set, a signed query is refused unless this key made the signature.
+    public var mockDbVerifyKey: Data?
+    public private(set) var serviceDbQueryCalls: [(serviceId: String, store: String, req: AppDbQueryRequest)] = []
+    public private(set) var serviceDbTableRowsCalls: [(table: String, offset: Int, limit: Int)] = []
+    public private(set) var serviceDbExportCalls: [String] = []
+    /// Status to answer every Database call with (e.g. 403 for a companion).
+    public var mockDbStatus: Int?
+    /// Signed orders already used (`serviceId|store|sqlSha256|issuedAt`).
+    private var mockDbUsedOrders: Set<String> = []
+    /// Orders to treat as already used, once each: the next signed query
+    /// answers 409 this many times.
+    public var mockDbForceReplays = 0
+
+    private func dbRefuse(_ status: Int, _ body: String) -> ScreensClientError {
+        .http(status: status, message: body)
+    }
+
+    private func dbStore(_ serviceId: String, _ store: String) throws -> [String: MockDbTable] {
+        if let status = mockDbStatus { throw dbRefuse(status, #"{"error":"refused"}"#) }
+        guard let stores = mockDb[serviceId] else { throw dbRefuse(404, #"{"error":"not found"}"#) }
+        guard let tables = stores[store] else { throw dbRefuse(404, #"{"error":"no such store"}"#) }
+        return tables
+    }
+
+    public func serviceDb(serviceId: String) async throws -> AppDbStoresResponse {
+        try await tick()
+        if let status = mockDbStatus { throw dbRefuse(status, #"{"error":"refused"}"#) }
+        guard let stores = mockDb[serviceId] else { throw dbRefuse(404, #"{"error":"not found"}"#) }
+        return AppDbStoresResponse(stores: stores.keys.sorted().map { store in
+            AppDbStore(store: store, tables: (stores[store] ?? [:]).sorted { $0.key < $1.key }.map { name, t in
+                AppDbTable(name: name, kind: t.kind, rows: t.kind == "view" ? nil : Int64(t.rows.count),
+                           bytes: Int64(8192 + t.rows.count * 64))
+            })
+        })
+    }
+
+    public func serviceDbTableRows(serviceId: String, store: String, table: String,
+                                   offset: Int, limit: Int) async throws -> AppDbTableRows {
+        try await tick()
+        serviceDbTableRowsCalls.append((table, offset, limit))
+        guard let t = try dbStore(serviceId, store)[table] else {
+            throw dbRefuse(404, #"{"error":"no such table"}"#)
+        }
+        let lo = min(max(0, offset), t.rows.count)
+        let hi = min(lo + min(limit, 1000), t.rows.count)
+        return AppDbTableRows(columns: t.columns, rows: Array(t.rows[lo..<hi]), total: Int64(t.rows.count))
+    }
+
+    public func serviceDbExportCsv(serviceId: String, store: String, table: String) async throws -> Data {
+        try await tick()
+        serviceDbExportCalls.append(table)
+        guard let t = try dbStore(serviceId, store)[table] else {
+            throw dbRefuse(404, #"{"error":"no such table"}"#)
+        }
+        func cell(_ v: AppDbValue) -> String {
+            if v.isNull { return "" }
+            let s = v.display
+            return s.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" })
+                ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s
+        }
+        let lines = [t.columns.map(\.name).joined(separator: ",")] + t.rows.map { $0.map(cell).joined(separator: ",") }
+        return Data((lines.joined(separator: "\n") + "\n").utf8)
+    }
+
+    /// Mirrors the box: an unsigned statement runs READ ONLY (a write gets
+    /// 400 `needsGrant`); a signed one is checked (store, app, server,
+    /// statement hash, freshness, signature) and works once (409 after).
+    public func serviceDbQuery(serviceId: String, store: String, _ req: AppDbQueryRequest) async throws -> AppDbQueryResult {
+        try await tick()
+        serviceDbQueryCalls.append((serviceId, store, req))
+        let tables = try dbStore(serviceId, store)
+        let sql = req.sql.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sql.isEmpty else { throw dbRefuse(400, #"{"error":"sql required"}"#) }
+        let verb = sql.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" || $0 == "(" })
+            .first.map { $0.uppercased() } ?? ""
+        let reads: Set<String> = ["SELECT", "WITH", "SHOW", "EXPLAIN", "TABLE", "VALUES"]
+        if let grant = req.grant {
+            guard let sigHex = req.signature, let sig = Self.hexBytes(sigHex), sig.count == 64 else {
+                throw dbRefuse(400, #"{"error":"invalid signature hex"}"#)
+            }
+            guard grant.serviceId == serviceId else { throw dbRefuse(400, #"{"error":"the order is for a different app"}"#) }
+            guard grant.store == store else { throw dbRefuse(400, #"{"error":"the order is for a different store"}"#) }
+            guard grant.serverDomain == (await boxDomain()) else {
+                throw dbRefuse(403, #"{"error":"the order is for a different server"}"#)
+            }
+            guard grant.sqlSha256 == AppDbWriteGrant.sqlSha256(req.sql) else {
+                throw dbRefuse(403, #"{"error":"the statement is not the one that was signed"}"#)
+            }
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            guard abs(now - grant.issuedAt) <= 10 * 60 * 1000 else {
+                throw dbRefuse(403, #"{"error":"the order is stale: sign it again"}"#)
+            }
+            if let key = mockDbVerifyKey {
+                guard let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: key),
+                      pub.isValidSignature(sig, for: grant.canonicalBytes()) else {
+                    throw dbRefuse(403, #"{"error":"invalid signature"}"#)
+                }
+            }
+            let order = "\(grant.serviceId)|\(grant.store)|\(grant.sqlSha256)|\(grant.issuedAt)"
+            if mockDbForceReplays > 0 || mockDbUsedOrders.contains(order) {
+                mockDbForceReplays = max(0, mockDbForceReplays - 1)
+                throw dbRefuse(409, #"{"error":"this signed order was already used: sign it again"}"#)
+            }
+            mockDbUsedOrders.insert(order)
+            return AppDbQueryResult(command: verb, rowCount: 1)
+        }
+        guard reads.contains(verb) else {
+            throw dbRefuse(400, #"{"error":"cannot execute \#(verb) in a read-only transaction","sqlState":"25006","needsGrant":true}"#)
+        }
+        if verb == "SELECT", let from = sql.range(of: "from ", options: .caseInsensitive) {
+            let name = sql[from.upperBound...].split(whereSeparator: { $0 == " " || $0 == ";" || $0 == "\n" })
+                .first.map(String.init) ?? ""
+            guard let t = tables[name] else {
+                throw dbRefuse(400, #"{"error":"relation \"\#(name)\" does not exist","sqlState":"42P01","position":15}"#)
+            }
+            let cap = 1000
+            return AppDbQueryResult(command: "SELECT", columns: t.columns, rows: Array(t.rows.prefix(cap)),
+                                    rowCount: Int64(min(t.rows.count, cap)), truncated: t.rows.count > cap)
+        }
+        return AppDbQueryResult(command: verb, columns: [AppDbColumn(name: "?column?", type: "int4")],
+                                rows: [[.int(1)]], rowCount: 1)
     }
 
     // MARK: - App API keys (docs/app-apis.md §3)
@@ -400,7 +585,11 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                                  attempts: $0.attempts, firstSeen: $0.firstSeen, lastSeen: $0.lastSeen)
             }
         }
-        return AppAccessRequestsResponse(requests: requests)
+        let drafts = mockAccessDrafts.keys.sorted().compactMap { id -> AppAccessDraftEntry? in
+            guard let d = mockAccessDrafts[id] else { return nil }
+            return AppAccessDraftEntry(serviceId: id, appName: mockAppNames[id] ?? id, hosts: d.hosts, createdAt: d.createdAt)
+        }.sorted { $0.createdAt > $1.createdAt }
+        return AppAccessRequestsResponse(requests: requests, drafts: drafts)
     }
 
     // MARK: - P1.3 app-detail

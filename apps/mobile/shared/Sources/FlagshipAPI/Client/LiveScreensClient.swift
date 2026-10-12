@@ -18,6 +18,17 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
 
     private func request<T: Decodable>(_ path: String, method: String = "GET", body: Data? = nil,
                                        timeout: TimeInterval? = nil) async throws -> T {
+        let data = try await requestData(path, method: method, body: body, timeout: timeout)
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw ScreensClientError.decoding(String(describing: error))
+        }
+    }
+
+    /// The raw 2xx body (non-2xx throws `.http` with the body text).
+    private func requestData(_ path: String, method: String = "GET", body: Data? = nil,
+                             timeout: TimeInterval? = nil) async throws -> Data {
         guard let base = await store.podBaseUrl else { throw ScreensClientError.notPaired }
         guard let token = await store.sessionToken else { throw ScreensClientError.noSessionToken }
         guard let url = URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + path) else {
@@ -55,11 +66,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
             let text = String(data: data, encoding: .utf8) ?? ""
             throw ScreensClientError.http(status: http.statusCode, message: text)
         }
-        do {
-            return try JSONDecoder().decode(T.self, from: data)
-        } catch {
-            throw ScreensClientError.decoding(String(describing: error))
-        }
+        return data
     }
 
     public func serverDetail() async throws -> ServerDetailResponse {
@@ -226,8 +233,33 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
                                                         method: "POST", body: body)
         return r.access
     }
+    @discardableResult
+    public func serviceAccessDraftDismiss(serviceId: String) async throws -> AppAccessState? {
+        let r: AppAccessSetResponse = try await request(
+            "/api/screens/services/\(esc(serviceId))/access/draft/dismiss", method: "POST", body: Data("{}".utf8))
+        return r.access
+    }
     public func accessRequests() async throws -> AppAccessRequestsResponse {
         try await request("/api/screens/access-requests")
+    }
+
+    private func dbPath(_ serviceId: String, _ rest: String = "") -> String {
+        "/api/screens/services/\(segment(serviceId))/db\(rest)"
+    }
+    public func serviceDb(serviceId: String) async throws -> AppDbStoresResponse {
+        try await request(dbPath(serviceId))
+    }
+    public func serviceDbTableRows(serviceId: String, store: String, table: String,
+                                   offset: Int, limit: Int) async throws -> AppDbTableRows {
+        try await request(dbPath(serviceId, "/\(segment(store))/tables/\(segment(table))?offset=\(max(0, offset))&limit=\(max(1, limit))"),
+                          timeout: 30)
+    }
+    public func serviceDbExportCsv(serviceId: String, store: String, table: String) async throws -> Data {
+        try await requestData(dbPath(serviceId, "/\(segment(store))/tables/\(segment(table))/export.csv"), timeout: 120)
+    }
+    public func serviceDbQuery(serviceId: String, store: String, _ req: AppDbQueryRequest) async throws -> AppDbQueryResult {
+        let body = try JSONEncoder().encode(req)
+        return try await request(dbPath(serviceId, "/\(segment(store))/query"), method: "POST", body: body, timeout: 30)
     }
     public func accessAlertsSetting() async throws -> AccessAlertsSetting {
         try await request("/api/screens/settings/access-alerts")
@@ -482,6 +514,17 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
 
     private func esc(_ s: String) -> String {
         s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? s
+    }
+
+    /// One path segment: everything but unreserved characters is escaped (a
+    /// table name may hold `/`, `?` or `#`).
+    private func segment(_ s: String) -> String {
+        Self.pathSegment(s)
+    }
+
+    static func pathSegment(_ s: String) -> String {
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        return s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s
     }
 
     // MARK: - P8 browser-tab framebuffer stream

@@ -117,7 +117,13 @@ public protocol ScreensClient: Sendable {
     /// when it sends none).
     @discardableResult
     func serviceAccessDismiss(serviceId: String, host: String) async throws -> AppAccessState?
-    /// `GET /api/screens/access-requests`: every app's waiting hosts.
+    /// `POST /api/screens/services/<id>/access/draft/dismiss`: discard the
+    /// suggested list (no signature: a draft opens nothing). Returns the
+    /// box's `access` (nil when it sends none).
+    @discardableResult
+    func serviceAccessDraftDismiss(serviceId: String) async throws -> AppAccessState?
+    /// `GET /api/screens/access-requests`: every app's suggested lists and
+    /// waiting hosts.
     func accessRequests() async throws -> AppAccessRequestsResponse
     /// `GET /api/screens/events` (WebSocket): one value per
     /// `{"type":"access-request"}` frame. Finishes when the socket closes.
@@ -139,6 +145,19 @@ public protocol ScreensClient: Sendable {
     /// `DELETE /api/screens/services/<id>/api-keys/<keyId>` (owner session, no
     /// signature: it only removes access).
     func serviceApiKeyRevoke(serviceId: String, keyId: String) async throws
+
+    // The owner's Database section (docs/app-apis.md §6). Owner sessions
+    // only: companions get 403; a box without it answers 404.
+    /// `GET /api/screens/services/<id>/db`: each Postgres store's tables.
+    func serviceDb(serviceId: String) async throws -> AppDbStoresResponse
+    /// `GET …/db/<store>/tables/<table>?offset&limit` (limit at most 1000).
+    func serviceDbTableRows(serviceId: String, store: String, table: String,
+                            offset: Int, limit: Int) async throws -> AppDbTableRows
+    /// `GET …/db/<store>/tables/<table>/export.csv`: the whole table as CSV.
+    func serviceDbExportCsv(serviceId: String, store: String, table: String) async throws -> Data
+    /// `POST …/db/<store>/query`: read-only unsigned; with a signed
+    /// `flagship/app-db-write/v1` order, read-write.
+    func serviceDbQuery(serviceId: String, store: String, _ req: AppDbQueryRequest) async throws -> AppDbQueryResult
 
     // P9 — peer-backup management.
     func peerBackupStatus() async throws -> PeerBackupStatusResponse
@@ -365,8 +384,24 @@ public extension ScreensClient {
     func serviceAccessDismiss(serviceId: String, host: String) async throws -> AppAccessState? {
         throw ScreensClientError.notImplemented("app access list")
     }
+    func serviceAccessDraftDismiss(serviceId: String) async throws -> AppAccessState? {
+        throw ScreensClientError.notImplemented("app access list")
+    }
     func accessRequests() async throws -> AppAccessRequestsResponse {
         throw ScreensClientError.notImplemented("app access requests")
+    }
+    func serviceDb(serviceId: String) async throws -> AppDbStoresResponse {
+        throw ScreensClientError.notImplemented("app database")
+    }
+    func serviceDbTableRows(serviceId: String, store: String, table: String,
+                            offset: Int, limit: Int) async throws -> AppDbTableRows {
+        throw ScreensClientError.notImplemented("app database")
+    }
+    func serviceDbExportCsv(serviceId: String, store: String, table: String) async throws -> Data {
+        throw ScreensClientError.notImplemented("app database")
+    }
+    func serviceDbQuery(serviceId: String, store: String, _ req: AppDbQueryRequest) async throws -> AppDbQueryResult {
+        throw ScreensClientError.notImplemented("app database")
     }
     func accessRequestEvents() -> AsyncStream<Void> {
         AsyncStream { $0.finish() }

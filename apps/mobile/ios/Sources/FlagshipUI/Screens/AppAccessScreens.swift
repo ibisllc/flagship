@@ -23,6 +23,7 @@ struct InternetAccessSection: View {
                         Text(msg).font(FS.font.bodySm()).foregroundColor(c.danger)
                             .fixedSize(horizontal: false, vertical: true)
                     case .loaded:
+                        if let draft = controller.draft { draftCard(draft, c: c) }
                         HStack(spacing: FS.space.s2) {
                             Image(systemName: "network").foregroundColor(controller.pending.isEmpty ? c.primary : c.warning)
                             Text(AppAccessCopy.ruleCount(controller.ruleCount))
@@ -52,6 +53,38 @@ struct InternetAccessSection: View {
         .sheet(item: $editor) { model in
             AppAccessListEditorScreen(model: model) { editor = nil }
         }
+    }
+
+    /// "This app suggests letting it reach these hosts": each host with its
+    /// reason, then Review (the editor, prefilled) and Dismiss.
+    private func draftCard(_ draft: AppAccessDraft, c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            HStack(alignment: .top, spacing: FS.space.s2) {
+                Image(systemName: "list.bullet.clipboard").foregroundColor(c.warning)
+                Text(AppAccessCopy.draftTitle)
+                    .font(FS.font.bodySm().weight(.semibold)).foregroundColor(c.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            DraftHostsList(hosts: draft.hosts)
+            Text(AppAccessCopy.draftNote)
+                .font(FS.font.caption()).foregroundColor(c.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            if controller.canChange {
+                HStack(spacing: FS.space.s2) {
+                    FSPrimaryButton(AppAccessCopy.review, enabled: !controller.isDismissingDraft) {
+                        editor = controller.makeDraftEditor()
+                    }
+                    .accessibilityIdentifier("service-detail-access-draft-review")
+                    FSGhostButton(controller.isDismissingDraft ? "…" : AppAccessCopy.dismissDraft) {
+                        Task { await controller.dismissDraft() }
+                    }
+                    .disabled(controller.isDismissingDraft)
+                    .accessibilityIdentifier("service-detail-access-draft-dismiss")
+                }
+            }
+            Divider()
+        }
+        .accessibilityIdentifier("service-detail-access-draft")
     }
 
     private func pendingRow(_ p: AppAccessPendingHost, c: FSColors) -> some View {
@@ -86,6 +119,30 @@ struct InternetAccessSection: View {
     }
 }
 
+/// The suggested hosts, each with the app's reason when it gave one.
+struct DraftHostsList: View {
+    @Environment(\.colorScheme) private var scheme
+    let hosts: [AppAccessDraftHost]
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            ForEach(hosts) { h in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(h.host).font(FS.font.mono()).foregroundColor(c.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let why = h.why {
+                        Text(why).font(FS.font.caption()).foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("access-draft-host")
+            }
+        }
+    }
+}
+
 /// The access list as text. Parses as you type; each error shows its line;
 /// Save (Face ID, then the signed order) stays off while there are errors.
 struct AppAccessListEditorScreen: View {
@@ -98,6 +155,12 @@ struct AppAccessListEditorScreen: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
+                    if let note = model.note {
+                        Text(note)
+                            .font(FS.font.bodySm().weight(.semibold)).foregroundColor(c.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("access-list-note")
+                    }
                     Text(AppAccessCopy.editorHelp)
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -169,18 +232,66 @@ public struct AppAccessAlertSheet: View {
         let c = FSColors.scheme(scheme)
         Group {
             if let editor = center.editor {
-                AppAccessListEditorScreen(model: editor) { center.close() }
+                AppAccessListEditorScreen(model: editor) { center.editorClosed() }
             } else if let item = center.current {
-                content(item, c: c)
+                if let draft = item.draft {
+                    draftContent(draft, item: item, c: c)
+                } else if let request = item.request {
+                    content(request, item: item, c: c)
+                }
             }
         }
         .presentationDetents(center.editor == nil ? [.medium, .large] : [.large])
-        .interactiveDismissDisabled({ if case .working = center.stage { return true }; return false }())
+        .interactiveDismissDisabled({
+            switch center.stage {
+            case .working, .opening: return true
+            default: return false
+            }
+        }())
     }
 
-    private func content(_ item: AppAccessAlertCenter.Item, c: FSColors) -> some View {
-        let r = item.request
-        return VStack(alignment: .leading, spacing: FS.space.s4) {
+    /// "<App> suggests an access list": the hosts with their reasons, then
+    /// Review (that app's editor with the draft) or Not now.
+    private func draftContent(_ d: AppAccessDraftEntry, item: AppAccessAlertCenter.Item, c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s4) {
+            Image(systemName: "list.bullet.clipboard").font(.system(size: 34)).foregroundColor(c.warning)
+            Text(AppAccessCopy.suggestsList(app: d.appName))
+                .font(FS.font.h3()).foregroundColor(c.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("access-alert-draft-title")
+            Text(item.serverDomain)
+                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            ScrollView {
+                DraftHostsList(hosts: d.hosts).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 220)
+            Text(AppAccessCopy.draftNote)
+                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            if case .failed(let msg) = center.stage {
+                Text(msg).font(FS.font.bodySm()).foregroundColor(c.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                FSPrimaryButton("Close", block: true) { center.close() }
+            } else {
+                let opening = center.stage == .opening
+                FSPrimaryButton(opening ? "Opening…" : AppAccessCopy.review, enabled: !opening, block: true) {
+                    Task { await center.reviewDraft() }
+                }
+                .accessibilityIdentifier("access-alert-draft-review")
+                FSGhostButton("Not now", block: true) { center.notNow() }
+                    .disabled(opening)
+                    .accessibilityIdentifier("access-alert-not-now")
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(FS.space.s6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(c.bg.ignoresSafeArea())
+    }
+
+    private func content(_ r: AppAccessRequest, item: AppAccessAlertCenter.Item, c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s4) {
             Image(systemName: "network.badge.shield.half.filled").font(.system(size: 34)).foregroundColor(c.warning)
             switch center.stage {
             case .done(let action):

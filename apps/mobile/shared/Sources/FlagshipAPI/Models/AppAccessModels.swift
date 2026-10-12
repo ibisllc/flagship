@@ -295,24 +295,76 @@ public struct AppAccessPendingHost: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// A host the app's manifest suggests, with its short reason (`why`, at most
+/// 120 characters) when it gave one.
+public struct AppAccessDraftHost: Codable, Equatable, Sendable, Identifiable {
+    public let host: String
+    public let why: String?
+    public var id: String { host }
+
+    public init(host: String, why: String? = nil) {
+        self.host = host
+        self.why = why
+    }
+
+    private enum CodingKeys: String, CodingKey { case host, why }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        host = try c.decode(String.self, forKey: .host)
+        let w = try c.decodeIfPresent(String.self, forKey: .why)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        why = (w?.isEmpty ?? true) ? nil : w
+    }
+}
+
+/// A suggested list waiting for the owner's review: the current list with an
+/// `allow <host>   # <why>` line on top for each new host. It opens nothing
+/// until the owner signs it (the normal `POST …/access`).
+public struct AppAccessDraft: Codable, Equatable, Sendable {
+    public let list: String
+    public let listSha256: String?
+    public let hosts: [AppAccessDraftHost]
+    public let createdAt: Int64
+
+    public init(list: String, listSha256: String? = nil, hosts: [AppAccessDraftHost], createdAt: Int64 = 0) {
+        self.list = list
+        self.listSha256 = listSha256
+        self.hosts = hosts
+        self.createdAt = createdAt
+    }
+
+    private enum CodingKeys: String, CodingKey { case list, listSha256, hosts, createdAt }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        list = try c.decode(String.self, forKey: .list)
+        listSha256 = try c.decodeIfPresent(String.self, forKey: .listSha256)
+        hosts = try c.decodeIfPresent([AppAccessDraftHost].self, forKey: .hosts) ?? []
+        createdAt = try c.decodeIfPresent(Int64.self, forKey: .createdAt) ?? 0
+    }
+}
+
 /// `GET /api/screens/services/:id/access` (and `access` in the POST answer).
 public struct AppAccessState: Codable, Equatable, Sendable {
     public let list: String
     public let listSha256: String?
     public let pending: [AppAccessPendingHost]
+    /// A suggested list waiting for review; nil when none (or an older box).
+    public let draft: AppAccessDraft?
 
-    public init(list: String, listSha256: String? = nil, pending: [AppAccessPendingHost] = []) {
+    public init(list: String, listSha256: String? = nil, pending: [AppAccessPendingHost] = [],
+                draft: AppAccessDraft? = nil) {
         self.list = list
         self.listSha256 = listSha256
         self.pending = pending
+        self.draft = draft
     }
 
-    private enum CodingKeys: String, CodingKey { case list, listSha256, pending }
+    private enum CodingKeys: String, CodingKey { case list, listSha256, pending, draft }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         list = try c.decodeIfPresent(String.self, forKey: .list) ?? ""
         listSha256 = try c.decodeIfPresent(String.self, forKey: .listSha256)
         pending = try c.decodeIfPresent([AppAccessPendingHost].self, forKey: .pending) ?? []
+        draft = try? c.decodeIfPresent(AppAccessDraft.self, forKey: .draft)
     }
 
     public var ruleCount: Int { AppAccessList.parse(list).rules.count }
@@ -332,17 +384,28 @@ public struct AppAccessSetResponse: Codable, Equatable, Sendable {
 public struct AppAccessSummary: Codable, Equatable, Sendable {
     public let rules: Int
     public let pending: Int
+    /// A suggested list waits for review (the box sends `draft: true`).
+    public let draft: Bool
 
-    public init(rules: Int, pending: Int) {
+    public init(rules: Int, pending: Int, draft: Bool = false) {
         self.rules = rules
         self.pending = pending
+        self.draft = draft
     }
 
-    private enum CodingKeys: String, CodingKey { case rules, pending }
+    private enum CodingKeys: String, CodingKey { case rules, pending, draft }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         rules = Self.count(c, .rules)
         pending = Self.count(c, .pending)
+        draft = (try? c.decodeIfPresent(Bool.self, forKey: .draft)) == true
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(rules, forKey: .rules)
+        try c.encode(pending, forKey: .pending)
+        if draft { try c.encode(true, forKey: .draft) }
     }
 
     /// A count, or the length of a list of them.
@@ -389,9 +452,96 @@ public struct AppAccessRequest: Codable, Equatable, Sendable {
     }
 }
 
+/// A suggested list in `GET /api/screens/access-requests`
+/// (`{kind:"draft", serviceId, appName, hosts, createdAt}`).
+public struct AppAccessDraftEntry: Codable, Equatable, Sendable {
+    public static let kind = "draft"
+    public let serviceId: String
+    public let appName: String
+    public let hosts: [AppAccessDraftHost]
+    public let createdAt: Int64
+
+    public init(serviceId: String, appName: String, hosts: [AppAccessDraftHost], createdAt: Int64 = 0) {
+        self.serviceId = serviceId
+        self.appName = appName
+        self.hosts = hosts
+        self.createdAt = createdAt
+    }
+
+    private enum CodingKeys: String, CodingKey { case kind, serviceId, appName, hosts, createdAt }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        guard try c.decodeIfPresent(String.self, forKey: .kind) == Self.kind else {
+            throw DecodingError.dataCorruptedError(forKey: .kind, in: c, debugDescription: "not a draft")
+        }
+        serviceId = try c.decode(String.self, forKey: .serviceId)
+        appName = try c.decodeIfPresent(String.self, forKey: .appName) ?? serviceId
+        hosts = try c.decodeIfPresent([AppAccessDraftHost].self, forKey: .hosts) ?? []
+        createdAt = try c.decodeIfPresent(Int64.self, forKey: .createdAt) ?? 0
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(Self.kind, forKey: .kind)
+        try c.encode(serviceId, forKey: .serviceId)
+        try c.encode(appName, forKey: .appName)
+        try c.encode(hosts, forKey: .hosts)
+        try c.encode(createdAt, forKey: .createdAt)
+    }
+}
+
+/// `GET /api/screens/access-requests`: suggested lists (drafts) and single
+/// waiting hosts, in one array on the wire (drafts first). An entry of a kind
+/// this build doesn't know is skipped rather than failing the whole list.
 public struct AppAccessRequestsResponse: Codable, Equatable, Sendable {
     public let requests: [AppAccessRequest]
-    public init(requests: [AppAccessRequest]) { self.requests = requests }
+    public let drafts: [AppAccessDraftEntry]
+    public init(requests: [AppAccessRequest], drafts: [AppAccessDraftEntry] = []) {
+        self.requests = requests
+        self.drafts = drafts
+    }
+
+    private enum Entry: Decodable {
+        case request(AppAccessRequest)
+        case draft(AppAccessDraftEntry)
+        case unknown
+
+        init(from decoder: Decoder) throws {
+            if let d = try? AppAccessDraftEntry(from: decoder) { self = .draft(d); return }
+            let kind = try? decoder.container(keyedBy: KindKey.self).decodeIfPresent(String.self, forKey: .kind)
+            if kind == nil || kind == "request", let r = try? AppAccessRequest(from: decoder) {
+                self = .request(r)
+                return
+            }
+            self = .unknown
+        }
+    }
+
+    private enum KindKey: String, CodingKey { case kind }
+    private enum CodingKeys: String, CodingKey { case requests }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let entries = try c.decodeIfPresent([Entry].self, forKey: .requests) ?? []
+        var requests: [AppAccessRequest] = []
+        var drafts: [AppAccessDraftEntry] = []
+        for e in entries {
+            switch e {
+            case .request(let r): requests.append(r)
+            case .draft(let d): drafts.append(d)
+            case .unknown: continue
+            }
+        }
+        self.requests = requests
+        self.drafts = drafts
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        var list = c.nestedUnkeyedContainer(forKey: .requests)
+        for d in drafts { try list.encode(d) }
+        for r in requests { try list.encode(r) }
+    }
 }
 
 /// `GET|POST /api/screens/settings/access-alerts`: whether the box pushes an

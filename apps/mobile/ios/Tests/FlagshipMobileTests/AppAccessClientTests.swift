@@ -282,21 +282,21 @@ final class AppAccessClientTests: XCTestCase {
         let box = AppAccessAlertCenter.Box(serverDomain: "home.bright-maple.flagship.services", client: home)
         let first = center([box], key: Curve25519.Signing.PrivateKey(), defaults: defaults, now: { clock })
         await first.refresh()
-        XCTAssertEqual(first.current?.request.host, "api.open-meteo.com")
+        XCTAssertEqual(first.current?.request?.host, "api.open-meteo.com")
         first.notNow()
-        XCTAssertEqual(first.current?.request.host, "tile.openstreetmap.org")
+        XCTAssertEqual(first.current?.request?.host, "tile.openstreetmap.org")
 
         // Another launch, an hour later: still quiet about it.
         clock += 3600
         let second = center([box], key: Curve25519.Signing.PrivateKey(), defaults: defaults, now: { clock })
         await second.refresh()
-        XCTAssertEqual(second.queue.map(\.request.host), ["tile.openstreetmap.org"])
+        XCTAssertEqual(second.queue.map(\.request?.host), ["tile.openstreetmap.org"])
 
         // A day later it asks again.
         clock += AppAccessAlertCenter.notNowInterval
         let third = center([box], key: Curve25519.Signing.PrivateKey(), defaults: defaults, now: { clock })
         await third.refresh()
-        XCTAssertEqual(third.queue.map(\.request.host), ["api.open-meteo.com", "tile.openstreetmap.org"])
+        XCTAssertEqual(third.queue.map(\.request?.host), ["api.open-meteo.com", "tile.openstreetmap.org"])
     }
 
     func test_alerts_collectFromEveryBox_andAnswerOnTheRightOne() async throws {
@@ -312,12 +312,12 @@ final class AppAccessClientTests: XCTestCase {
             .init(serverDomain: "home2.bright-maple.flagship.services", client: home2),
         ], key: key)
         await center.refresh()
-        XCTAssertEqual(center.queue.map(\.request.host), ["api.open-meteo.com", "tile.openstreetmap.org", "api.github.com"])
-        XCTAssertEqual(center.current?.request.appName, "Plants")
+        XCTAssertEqual(center.queue.map(\.request?.host), ["api.open-meteo.com", "tile.openstreetmap.org", "api.github.com"])
+        XCTAssertEqual(center.current?.request?.appName, "Plants")
 
         center.notNow()
         center.notNow()
-        XCTAssertEqual(center.current?.request.host, "api.github.com")
+        XCTAssertEqual(center.current?.request?.host, "api.github.com")
         await center.allow()
         XCTAssertEqual(center.stage, .done(.allow))
         let call = try XCTUnwrap(home2.serviceAccessSetCalls.last)
@@ -364,7 +364,7 @@ final class AppAccessClientTests: XCTestCase {
         XCTAssertEqual(center.current?.id, first)
         center.dismissed(id: first)
         XCTAssertNotEqual(center.current?.id, first)
-        XCTAssertEqual(center.current?.request.host, "tile.openstreetmap.org")
+        XCTAssertEqual(center.current?.request?.host, "tile.openstreetmap.org")
     }
 
     func test_alerts_inactiveAsksNothing() async {
@@ -383,7 +383,7 @@ final class AppAccessClientTests: XCTestCase {
         center.observeEvents()
         AppAccessEvents.post()
         for _ in 0..<100 where center.current == nil { try await Task.sleep(for: .milliseconds(10)) }
-        XCTAssertEqual(center.current?.request.host, "api.open-meteo.com")
+        XCTAssertEqual(center.current?.request?.host, "api.open-meteo.com")
 
         let other = makeClient()
         let listening = self.center([.init(serverDomain: "home.bright-maple.flagship.services", client: other)],
@@ -392,7 +392,7 @@ final class AppAccessClientTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(20))
         other.emitAccessRequestEvent()
         for _ in 0..<100 where listening.current == nil { try await Task.sleep(for: .milliseconds(10)) }
-        XCTAssertEqual(listening.current?.request.host, "api.open-meteo.com")
+        XCTAssertEqual(listening.current?.request?.host, "api.open-meteo.com")
         listening.stopListening()
     }
 
