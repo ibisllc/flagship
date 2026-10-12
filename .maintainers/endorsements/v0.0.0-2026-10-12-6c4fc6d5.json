@@ -1,0 +1,35 @@
+{
+  "kind": "ReleaseEndorsement",
+  "version": 1,
+  "releaseId": "5a0152ba-d113-4644-b946-17a9edf00b85",
+  "semverTag": "v0.0.0-2026-10-12-6c4fc6d5",
+  "commitHash": "6c4fc6d51d851c2b9cde7a957a1dfa39c9be752f",
+  "previousReleaseId": "b45bbe55-18c0-4d91-a2d6-62501db798ca",
+  "previousCommitHash": "37ba277d8dd0400ad1911f3b4978db1beca911aa",
+  "intermediateCommits": [
+    "08a2e9088b0f0b85a3cb69bef531840fad0913c4",
+    "42c7d26631aa5e758b2f1b0fd11b9d0350142656",
+    "f6577b7fc14260890e0673205aeb658be41ec19e",
+    "7444b859ce6ce732b5acb15702a31d1d01ea47fd",
+    "ef92ba41e265179d8d9633ccb39a1dc81f64a6ca",
+    "e408e1360a3dc7cc6ebf69135c9b702e117562cc",
+    "7feab5f8c3f4afff9adabc807df6f2e482cf6120",
+    "b687ef89c77f7f7eedac81a01235ffda0a8e4bbb",
+    "92bcc2fa6c26f47a2293c66081fcfd0d1b82065b",
+    "c78151b4d426157bf54298ac1d22084625d93dd8",
+    "b366c5827a1e9d7b9837a51dcb54f7b294a1035c",
+    "8f31007c91d57e8dfe541fa003df11539e012560",
+    "998be06d848d76eebebd0a15db6ee305366ee8d3",
+    "6c4fc6d51d851c2b9cde7a957a1dfa39c9be752f"
+  ],
+  "intermediateMerkleRoot": "9038511107e416cb156a97ba2d816d861f921ccffd1bae2f9f48955bc2e28c45",
+  "endorsedNotes": null,
+  "issuedAt": "2026-10-12T15:36:02.667Z",
+  "signedBy": "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+  "signatures": [
+    {
+      "pubkey": "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+      "sig": "6b40bff8fa3fa5642f86b42fd145240ccf882dd476216994cded3499f650d02e45fd17c605f9a4a644799bbb0a4a4ae078b2648d50a5c86e017899c4423f0805"
+    }
+  ]
+}
