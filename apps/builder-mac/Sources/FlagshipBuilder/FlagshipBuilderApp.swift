@@ -25,7 +25,24 @@ enum AppMain {
     }
 }
 
+/// Holds Quit until running servers have shut down, so quitting is never a
+/// power cut to them.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    @MainActor weak var vmManager: VMManager?
+
+    @MainActor
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let vmManager, vmManager.hasLiveServers else { return .terminateNow }
+        Task { @MainActor in
+            await vmManager.shutDownAll()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+}
+
 struct FlagshipBuilderApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     // Owned at the app level so the native menu bar can drive it (New Server,
     // appearance) — the window and the menu share one model.
     @StateObject private var model = WizardModel()
@@ -33,6 +50,7 @@ struct FlagshipBuilderApp: App {
     var body: some Scene {
         WindowGroup("Flagship Studio", id: "main") {
             WizardView(model: model)
+                .onAppear { appDelegate.vmManager = model.vmManager }
         }
         .windowResizability(.contentSize)
         .commands { BuilderCommands(model: model) }

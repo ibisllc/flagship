@@ -24,6 +24,8 @@ final class VMManager: ObservableObject {
 
     private var lifecycles: [String: VMLifecycle] = [:]
     private var hosts: [String: VZHost] = [:]
+    /// Guests powering off after Stop; a Start waits for them.
+    private var stopping: [String: Task<Void, Never>] = [:]
     /// The lifecycle's attach/detach effect, remembered for the next start.
     private var attachISO: [String: Bool] = [:]
     private var unlockPolls: [String: Task<Void, Never>] = [:]
@@ -134,6 +136,17 @@ final class VMManager: ObservableObject {
     func powerOn(named name: String) async { await apply(.powerOn, to: name) }
     func powerOff(named name: String) async { await apply(.powerOff, to: name) }
 
+    var hasLiveServers: Bool { servers.contains { $0.record.state.canPowerOff } }
+
+    /// Power every live server off gracefully, all at once. Used on quit: the
+    /// VMs die with the app, and dying is a power cut to the server.
+    func shutDownAll() async {
+        let names = servers.filter { $0.record.state.canPowerOff }.map(\.id)
+        await withTaskGroup(of: Void.self) { group in
+            for name in names { group.addTask { await self.powerOff(named: name) } }
+        }
+    }
+
     /// Feed one event through the pure state machine, persist the new state,
     /// and execute the effects it ordered.
     private func apply(_ event: VMEvent, to name: String) async {
@@ -210,8 +223,11 @@ final class VMManager: ObservableObject {
                 await startVM(config: config)
             case .stopVirtualMachine:
                 if let host = hosts[name] {
-                    try? await host.forceStop()
-                    hosts[name] = nil
+                    let shutdown = Task { await host.shutDown() }
+                    stopping[name] = shutdown
+                    await shutdown.value
+                    if stopping[name] == shutdown { stopping[name] = nil }
+                    if hosts[name] === host { hosts[name] = nil }
                 }
             }
         }
@@ -223,6 +239,9 @@ final class VMManager: ObservableObject {
 
     private func startVM(config: VMConfig) async {
         let name = config.name
+        // A Start pressed while the guest is still shutting down must not
+        // open the same disk in a second VM.
+        await stopping[name]?.value
         #if canImport(Virtualization)
         do {
             try VZHost.ensureMainDisk(config: config, layout: store.layout)

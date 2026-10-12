@@ -192,6 +192,21 @@ final class VZHost: NSObject {
         }
     }
 
+    /// Press the guest's power button and wait for it to power off, so systemd
+    /// stops the daemon and flushes the disk; pull the plug only after
+    /// `timeout`. A forced stop mid-update once left a server half updated.
+    func shutDown(timeout: TimeInterval = 60) async {
+        guard let vm = machine else { return }
+        if vm.state == .running, vm.canRequestStop, (try? vm.requestStop()) != nil {
+            let deadline = Date().addingTimeInterval(timeout)
+            while machine != nil, vm.state != .stopped, Date() < deadline {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+            if machine == nil || vm.state == .stopped { return }
+        }
+        try? await forceStop()
+    }
+
     func forceStop() async throws {
         guard let vm = machine, vm.canStop else { return }
         try await vm.stop()

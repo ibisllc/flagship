@@ -99,6 +99,8 @@ public struct ApplianceCache: Sendable {
     public let arch: IsoArch
     public let origin: URL
     public let cacheRoot: URL
+    /// Where burn ISOs live, pruned after an expansion; nil in tests.
+    let isoCacheRoot: URL?
     let fetch: @Sendable (URL) async throws -> (Data, Int)
     let download: @Sendable (URL, URL) async throws -> Int
     let freeBytes: @Sendable (URL) -> UInt64?
@@ -109,12 +111,32 @@ public struct ApplianceCache: Sendable {
                 cacheRoot: URL? = nil,
                 log: @escaping @Sendable (String) -> Void = { _ in }) throws {
         self.init(arch: arch, origin: origin,
-                  cacheRoot: try cacheRoot ?? IsoBaseCache.cacheDir(),
+                  cacheRoot: try cacheRoot ?? Self.defaultRoot(arch: arch),
+                  isoCacheRoot: try? IsoBaseCache.cacheDir(),
                   fetch: Self.liveFetch, download: Self.liveDownload,
                   freeBytes: Self.liveFreeBytes, log: log)
     }
 
-    init(arch: IsoArch, origin: URL, cacheRoot: URL,
+    /// ~/Library/Application Support/FlagshipBuilder/Appliances. Not Caches:
+    /// macOS empties Caches when the disk runs low, and this is an 8 GiB
+    /// download every new server needs. A base left in the old Caches location
+    /// is moved over rather than downloaded again.
+    public static func defaultRoot(arch: IsoArch) throws -> URL {
+        let fm = FileManager.default
+        guard let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            throw IsoBaseCache.CacheError.noCacheDir
+        }
+        let root = appSupport.appendingPathComponent("FlagshipBuilder/Appliances", isDirectory: true)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        let dest = root.appendingPathComponent("appliance-\(arch.rawValue)", isDirectory: true)
+        if !fm.fileExists(atPath: dest.path), let old = try? IsoBaseCache.cacheDir() {
+            let legacy = old.appendingPathComponent("appliance-\(arch.rawValue)", isDirectory: true)
+            if fm.fileExists(atPath: legacy.path) { try? fm.moveItem(at: legacy, to: dest) }
+        }
+        return root
+    }
+
+    init(arch: IsoArch, origin: URL, cacheRoot: URL, isoCacheRoot: URL? = nil,
          fetch: @escaping @Sendable (URL) async throws -> (Data, Int),
          download: @escaping @Sendable (URL, URL) async throws -> Int,
          freeBytes: @escaping @Sendable (URL) -> UInt64?,
@@ -122,6 +144,7 @@ public struct ApplianceCache: Sendable {
         self.arch = arch
         self.origin = origin
         self.cacheRoot = cacheRoot
+        self.isoCacheRoot = isoCacheRoot
         self.fetch = fetch
         self.download = download
         self.freeBytes = freeBytes
@@ -226,7 +249,7 @@ public struct ApplianceCache: Sendable {
         try JSONEncoder().encode(runtime).write(to: URL(fileURLWithPath: base.path + ".json"), options: .atomic)
         try? fm.removeItem(at: partsDir)
         prune(keeping: dir)
-        IsoBaseCache.pruneUnused(in: cacheRoot)
+        if let isoCacheRoot { IsoBaseCache.pruneUnused(in: isoCacheRoot) }
         log("appliance: expanded \(base.path) sha256=\(dist.rawSha256)")
         progress(.ready(fromCache: false))
         return base
