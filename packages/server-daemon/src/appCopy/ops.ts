@@ -110,6 +110,37 @@ async function execToFile(cmd: string, args: string[], outPath: string, env?: Re
   }
 }
 
+async function dockerAnswers(): Promise<boolean> {
+  try {
+    await exec("docker", ["info", "--format", "{{.ServerVersion}}"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function dockerState(): Promise<string> {
+  const active = await exec("systemctl", ["is-active", "docker.service"]).catch((e: Error) => e.message);
+  const log = await exec("journalctl", ["-u", "docker.service", "-n", "3", "--no-pager", "-o", "cat"]).catch(() => "");
+  return [`docker.service is ${active.trim().split("\n").pop() ?? "unknown"}`, log.trim()].filter(Boolean).join("; ");
+}
+
+/**
+ * A copy can arrive while dockerd is restarting or has stopped; wake it the
+ * way systemd would (socket + service) and wait, and say what state it was in
+ * when it never answers so the owner sees the box's problem, not ours.
+ */
+export async function ensureDocker(waitMs = 120_000): Promise<void> {
+  if (await dockerAnswers()) return;
+  await exec("systemctl", ["start", "docker.socket", "docker.service"]).catch(() => {});
+  const until = Date.now() + waitMs;
+  while (Date.now() < until) {
+    if (await dockerAnswers()) return;
+    await new Promise((r) => setTimeout(r, 2_000));
+  }
+  throw new Error(`Docker isn't running on this server (${await dockerState()})`);
+}
+
 function credsOf(store: PostgresStore): { role: string; password: string } {
   const u = new URL(store.url);
   return { role: decodeURIComponent(u.username) || store.role, password: decodeURIComponent(u.password) };
@@ -119,8 +150,12 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
   const pg = opts.postgresContainer ?? "flagship-postgres";
   const pgArgs = (role: string, db: string) => ["-h", "127.0.0.1", "-U", role, "-d", db];
   return {
-    saveImage: (image, outPath) => execToFile("docker", ["save", image], outPath),
+    saveImage: async (image, outPath) => {
+      await ensureDocker();
+      await execToFile("docker", ["save", image], outPath);
+    },
     loadImage: async (inPath) => {
+      await ensureDocker();
       await exec("docker", ["load", "-q"], { stdinFrom: inPath });
     },
     imageExists: async (image) => {
