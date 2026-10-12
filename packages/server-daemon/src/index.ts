@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { buildModelRedactor } from "./llm/modelPrivacy.js";
 import { X509Certificate } from "node:crypto";
 import {
   ed,
@@ -2242,6 +2243,11 @@ async function wireRuntimeSurfaces(deps: {
       registry: nameHolders,
     });
     const buildOrchestrator = new BuildOrchestrator({
+      modelRedactor: buildModelRedactor(() => ({
+        username,
+        serverFqdn: env.serverFqdn,
+        extra: (runtime.servicePlatform?.list() ?? []).map((a) => a.serviceId),
+      })),
       journal: buildJournal,
       gitImporter,
       mcpKeys,
@@ -2435,21 +2441,6 @@ async function wireRuntimeSurfaces(deps: {
         credentials: llmCredentials,
         resolveAppId: resolveSessionServiceId,
         appEnvStore: runtime.envStore,
-        context: {
-          username,
-          hostname: env.serverFqdn.split(".")[0] ?? "home",
-          tier: "free" as const,
-          availableProviders: llmHarness.listStreamingProviders(),
-        },
-        existingAppsSnapshot: () =>
-          (runtime.servicePlatform?.list() ?? []).map((a) => ({
-            name: a.slug,
-            description:
-              typeof a.manifest.description === "string"
-                ? a.manifest.description
-                : undefined,
-            stores: "",
-          })),
         defaultModels: defaultLlmModels,
       }
     : undefined;

@@ -198,7 +198,8 @@ describe("McpBuildServer — deploy", () => {
     });
     await callTool(server, "write_file", { path: "flagship.app.json", content: VALID_MANIFEST });
     const d = await callTool(server, "deploy");
-    expect(JSON.parse(d.text).url).toContain("notes");
+    expect(JSON.parse(d.text)).toEqual({ ok: true });
+    expect(d.text).not.toContain("harry");
     const entries = await journal.read("b1");
     expect(entries.some((e) => e.serviceId === "harry-notes")).toBe(true);
   });

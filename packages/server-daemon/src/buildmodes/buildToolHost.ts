@@ -22,6 +22,7 @@ import { parseManifest } from "@flagship/protocol";
 import type { BuildJournal, BuildMode } from "./buildJournal.js";
 import type { BuildWorkspace } from "./buildWorkspace.js";
 import { renderContractMarkdown } from "./contract.js";
+import { noRedaction, type ModelRedactor } from "../llm/modelPrivacy.js";
 
 export interface BuildToolDeployResult {
   ok: boolean;
@@ -52,7 +53,15 @@ export interface BuildToolHostContext {
    * the external-IDE path, `git` for the box's own agentic adapt loop.
    */
   mode?: BuildMode;
+  /**
+   * Strips the owner's identity (account, server, addresses) from every
+   * box-written text a model reads back. Absent ⇒ texts pass unchanged.
+   */
+  redact?: ModelRedactor;
 }
+
+/** Tools whose results are the repo's own bytes, never box-written text. */
+const REPO_CONTENT_TOOLS = new Set(["read_file", "list_files"]);
 
 /** The result of one tool call. `text` is what the model/IDE sees back. */
 export interface BuildToolResult {
@@ -61,8 +70,10 @@ export interface BuildToolResult {
   /** Value-free journal summary (defaults to the tool name). */
   journalSummary?: string;
   journalDetail?: string;
-  /** Set by `deploy` on success so the journal can carry the serviceId. */
+  /** Set by `deploy` on success; for the box, never shown to the model. */
   serviceId?: string;
+  /** Set by `deploy` on success; for the box, never shown to the model. */
+  deployedUrl?: string;
 }
 
 /** Names of the tools the surface exposes, in the order they appear. */
@@ -151,7 +162,7 @@ export const BUILD_TOOL_SPECS: BuildToolSpec[] = [
   },
   {
     name: "deploy",
-    description: "Build the container from the workspace and install it on the box. Returns the live URL.",
+    description: "Build the container from the workspace and install it on the box. Returns whether it worked.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -175,7 +186,8 @@ export class BuildToolHost {
    * failure — it returns `{isError:true}` so the agent can recover.
    */
   async call(name: string, args: Record<string, unknown>): Promise<BuildToolResult> {
-    const r = await this.dispatch(name, args);
+    const raw = await this.dispatch(name, args);
+    const r = REPO_CONTENT_TOOLS.has(name) ? raw : { ...raw, text: (this.ctx.redact ?? noRedaction)(raw.text) };
     await this.ctx.journal.append(this.ctx.buildId, {
       mode: this.ctx.mode ?? "mcp",
       kind: "mcp-call",
@@ -268,8 +280,11 @@ export class BuildToolHost {
       }
 
       case "get_journal": {
+        // What happened, in order, without when (clock times hint at the
+        // owner's day and time zone) or which service and URL it became.
         const entries = await this.ctx.journal.read(this.ctx.buildId);
-        return { text: JSON.stringify(entries), journalSummary: "read journal" };
+        const history = entries.map((e) => ({ kind: e.kind, actor: e.actor, summary: e.summary }));
+        return { text: JSON.stringify(history), journalSummary: "read journal" };
       }
 
       case "deploy": {
@@ -278,10 +293,12 @@ export class BuildToolHost {
           return toolErr("nothing to deploy: write flagship.app.json first", "deploy: no manifest");
         const d = await this.ctx.deploy();
         if (!d.ok) return toolErr(d.reason ?? "deploy failed", `deploy failed: ${d.reason ?? ""}`);
+        // The model is told it worked, never where it lives.
         return {
-          text: JSON.stringify({ ok: true, url: d.url, serviceId: d.serviceId }),
+          text: JSON.stringify({ ok: true }),
           journalSummary: `deployed → ${d.url ?? ""}`,
           ...(d.serviceId != null ? { serviceId: d.serviceId } : {}),
+          ...(d.url != null ? { deployedUrl: d.url } : {}),
         };
       }
 

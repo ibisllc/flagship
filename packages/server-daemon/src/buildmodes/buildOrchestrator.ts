@@ -13,6 +13,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import type { ModelRedactor } from "../llm/modelPrivacy.js";
 import { BuildWorkspace } from "./buildWorkspace.js";
 import { GitImporter, buildAdaptPrompt } from "./gitImport.js";
 import { McpBuildServer, type JsonRpcResponse, type McpDeployResult } from "./mcpServer.js";
@@ -177,6 +178,8 @@ export interface BuildOrchestratorDeps {
    */
   editableService?: (serviceId: string) => Promise<EditableService>;
   serverFqdn: string;
+  /** Strips the owner's identity from what the AI or IDE reads back. */
+  modelRedactor?: ModelRedactor;
   /** Owner-set env var NAMES (never values) for the mcp request_env_var tool. */
   envNames?: () => Promise<string[]>;
   /**
@@ -686,6 +689,7 @@ export class BuildOrchestrator {
       journal: this.deps.journal,
       serverFqdn: this.deps.serverFqdn,
       mode: "git",
+      ...(this.deps.modelRedactor ? { redact: this.deps.modelRedactor } : {}),
       envNames: this.deps.envNames ?? (async () => []),
       recordEnvRequest: async (req) =>
         this.recordEnvRequest(buildId, {
@@ -990,6 +994,7 @@ export class BuildOrchestrator {
       journal: this.deps.journal,
       serverFqdn: this.deps.serverFqdn,
       envNames: this.deps.envNames ?? (async () => []),
+      ...(this.deps.modelRedactor ? { redact: this.deps.modelRedactor } : {}),
       // The MCP tool is value-free; the orchestrator owns the pending list,
       // the notify-owner fan-out, and the wiring side-effect.
       recordEnvRequest: async (req) =>

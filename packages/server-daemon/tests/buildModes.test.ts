@@ -435,7 +435,9 @@ describe("BuildOrchestrator — mcp mode", () => {
     await call("write_file", { path: "Dockerfile", content: "FROM node:20-alpine" });
     const d = await call("deploy");
     const text = (d.response!.result as any).content[0].text;
-    expect(JSON.parse(text).url).toContain("shopping");
+    // The agent learns it worked, never where the app lives.
+    expect(JSON.parse(text)).toEqual({ ok: true });
+    expect(text).not.toContain("shopping.");
     expect(deployed.length).toBe(1);
   });
 

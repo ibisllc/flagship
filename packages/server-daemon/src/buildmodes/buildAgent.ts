@@ -236,16 +236,9 @@ export async function runBuildAgent(args: {
         }
       }
       if (tu.name === "deploy" && !r.isError) {
-        try {
-          const parsed = JSON.parse(r.text) as { ok?: boolean; url?: string; serviceId?: string };
-          if (parsed.ok) {
-            deployed = true;
-            deployedUrl = parsed.url;
-            serviceId = parsed.serviceId;
-          }
-        } catch {
-          /* a malformed deploy result is treated as not-deployed */
-        }
+        deployed = true;
+        deployedUrl = r.deployedUrl;
+        serviceId = r.serviceId;
       }
     }
 

@@ -195,29 +195,12 @@ That's the level of completeness expected: smallest manifest that fits, one sour
 - One response per turn. Don't apologize, don't preface, don't sign off.`;
 
 export interface UserContextInput {
-  /** Flagship username, e.g. "harry". */
-  username: string;
-  /** Server hostname under .flagship.services, e.g. "home". */
-  hostname: string;
-  /** Subscription tier — gates daily call counts and app caps. */
-  tier: "free" | "hobby" | "maker";
-  /**
-   * Provider names available right now (after BYOK / promo selection).
-   * The harness picks the model; this is for the LLM's awareness only.
-   */
-  availableProviders: string[];
   /**
    * One-paragraph human summary of the manifest schema. Optional —
    * defaults to a built-in summary when omitted. Pass a custom summary
    * when probing schema variations.
    */
   manifestSchemaSummary?: string;
-  /**
-   * Apps already deployed on this box. Used to (a) avoid name
-   * collisions, (b) suggest sister-app collaboration, (c) keep the
-   * model honest about what data stores are already in use.
-   */
-  existingApps: ExistingAppSummary[];
   /**
    * When true, the user has marked this app as "let instances talk to
    * each other" across multiple pods. The replication-patterns chapter
@@ -234,13 +217,6 @@ export interface UserContextInput {
    * this input and MUST NEVER reach the model. Empty / omitted ⇒ none.
    */
   appEnvNames?: string[];
-}
-
-export interface ExistingAppSummary {
-  name: string;
-  description?: string;
-  /** Comma-separated store hint, e.g. "postgres, objects". Empty string if none. */
-  stores: string;
 }
 
 const DEFAULT_MANIFEST_SUMMARY =
@@ -261,31 +237,13 @@ export function buildUserContext(input: UserContextInput): string {
 
   lines.push(SYSTEM_PROMPT_V1);
   lines.push("");
+  // Nothing here may identify the owner to the AI provider: no account or
+  // server name, no plan, no list of their other apps (a fingerprint), no
+  // clock or locale (docs/ai-privacy-and-staging.md). Name clashes are the
+  // box's to resolve, not the model's.
   lines.push("# Session context");
   lines.push("");
-  lines.push(`- User: \`${input.username}\``);
-  lines.push(`- Server: \`${input.hostname}.${input.username}.flagship.services\``);
-  lines.push(`- Tier: ${input.tier}`);
-  lines.push(`- LLM provider candidates: ${input.availableProviders.join(", ") || "none"}`);
   lines.push(`- Manifest schema: ${summary}`);
-  lines.push("");
-  lines.push("## Apps already on this box");
-  lines.push("");
-  if (input.existingApps.length === 0) {
-    lines.push("_(none — this is the user's first app)_");
-  } else {
-    for (const a of input.existingApps) {
-      const tail = a.stores ? ` [${a.stores}]` : "";
-      const desc = a.description ? ` — ${a.description}` : "";
-      lines.push(`- \`${a.name}\`${tail}${desc}`);
-    }
-    lines.push("");
-    lines.push(
-      "Don't reuse a name from this list. If the user's request is similar " +
-        "to one already installed, ask whether they want a second copy or " +
-        "want to extend the existing app — don't silently overwrite.",
-    );
-  }
   // Owner-set env vars — NAMES ONLY. The values are injected into the
   // deployed container by the daemon and MUST NEVER appear here. The
   // model is told the names so generated code can read them from the

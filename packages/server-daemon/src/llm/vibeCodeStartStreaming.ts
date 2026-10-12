@@ -36,7 +36,6 @@ import type { AppEnvStore } from "../serviceEnvStore.js";
 import type { VibeCodeSessionRegistry } from "./vibeCodeSession.js";
 import {
   buildUserContext,
-  type ExistingAppSummary,
   type UserContextInput,
 } from "./systemPrompt.js";
 import { TOOL_USE_PROMPT_SUPPLEMENT, VIBE_CODE_TOOLS } from "./vibeCodeTools.js";
@@ -111,9 +110,7 @@ export interface BuildVibeCodeStartStreamingArgs {
   /** Read-only env-var-name accessor. NEVER values. */
   appEnvStore: AppEnvStore;
   /** Static fields the BFF would otherwise have to thread per-call. */
-  context: Omit<UserContextInput, "appEnvNames" | "existingApps">;
-  /** Existing-apps snapshot at the moment startStreaming is called. */
-  existingAppsSnapshot: () => ExistingAppSummary[];
+  context?: Omit<UserContextInput, "appEnvNames">;
   /** Default model when the caller didn't specify one. */
   /** Per-provider fallback models (defaultModelsFromEnv). */
   defaultModels: Readonly<Record<string, string>>;
@@ -225,7 +222,6 @@ export function buildVibeCodeStartStreaming(
     const systemMessage =
       buildUserContext({
         ...args.context,
-        existingApps: args.existingAppsSnapshot(),
         appEnvNames,
       }) +
       ownerChoiceSupplement(s.preferredName, s.visibility) +
@@ -317,7 +313,6 @@ export function buildVibeCodeResumeStreaming(
     const systemMessage =
       buildUserContext({
         ...args.context,
-        existingApps: args.existingAppsSnapshot(),
         appEnvNames,
       }) +
       ownerChoiceSupplement(session.meta.editsServiceId ? undefined : session.meta.name, session.meta.visibility) +

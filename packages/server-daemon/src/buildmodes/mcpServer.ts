@@ -18,6 +18,7 @@
  * exactly as observable as scratch/git.
  */
 
+import type { ModelRedactor } from "../llm/modelPrivacy.js";
 import type { BuildJournal } from "./buildJournal.js";
 import type { BuildWorkspace } from "./buildWorkspace.js";
 import { renderContractMarkdown, BUILD_CONTRACT_VERSION } from "./contract.js";
@@ -52,6 +53,8 @@ export interface McpBuildContext {
   logs?: () => Promise<string>;
   /** Server software version string for serverInfo. */
   version?: string;
+  /** Strips the owner's identity from box-written texts the IDE reads. */
+  redact?: ModelRedactor;
 }
 
 interface JsonRpcRequest {
@@ -92,6 +95,7 @@ export class McpBuildServer {
       ...(ctx.recordEnvRequest ? { recordEnvRequest: ctx.recordEnvRequest } : {}),
       ...(ctx.deploy ? { deploy: ctx.deploy } : {}),
       ...(ctx.logs ? { logs: ctx.logs } : {}),
+      ...(ctx.redact ? { redact: ctx.redact } : {}),
     });
   }
 
@@ -150,8 +154,9 @@ export class McpBuildServer {
       return { contents: [{ uri, mimeType: "text/markdown", text: renderContractMarkdown() }] };
     }
     if (uri === "flagship://journal") {
-      const entries = await this.ctx.journal.read(this.ctx.buildId);
-      return { contents: [{ uri, mimeType: "application/json", text: JSON.stringify(entries, null, 2) }] };
+      // The same history get_journal gives: no clock times, ids or URLs.
+      const r = await this.tools.call("get_journal", {});
+      return { contents: [{ uri, mimeType: "application/json", text: r.text }] };
     }
     if (uri.startsWith("flagship://files/")) {
       const path = uri.slice("flagship://files/".length);
