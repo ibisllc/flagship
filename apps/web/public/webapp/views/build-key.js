@@ -16,7 +16,7 @@
 // Usage:
 //   enterBuildKey({
 //     contextLabel: "Start from scratch with AI",
-//     onChosen: ({ provider, apiKey, baseUrl }) => { … },
+//     onChosen: ({ provider, apiKey, baseUrl, relay }) => { … },
 //   });
 //
 // MIRRORS: iOS BuildKeyScreen, Android AiKeyStepScreen.
@@ -27,7 +27,16 @@ import { inlineConfirm } from "../lib/modal.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
-import { loadProviders, addProvider, removeProvider, setActive, PROMO_ID } from "../providers.js";
+import {
+  loadProviders,
+  addProvider,
+  removeProvider,
+  setActive,
+  setRelay,
+  credentialFor,
+  PROMO_ID,
+} from "../providers.js";
+import { relayCaption } from "../lib/aiRelay.js";
 
 registerView("view-build-key");
 
@@ -72,9 +81,7 @@ async function chooseEntry(e) {
       // the last-used marker is a convenience; the choice still stands
     }
   }
-  const credential = { provider: e.provider, apiKey: e.apiKey };
-  if (e.baseUrl) credential.baseUrl = e.baseUrl;
-  onChosenCb(credential);
+  onChosenCb(credentialFor(e));
 }
 
 async function confirmDelete(e) {
@@ -128,6 +135,7 @@ async function renderSaved() {
           <strong>${escapeHtml(e.label)}</strong>
           <span class="value text-sm">${slugFor(e)}</span>
           ${e.id === stored.activeId ? '<span class="note">Last used</span>' : ""}
+          ${relaySwitch(e)}
         </div>
         <button class="build-key-delete" data-delete-id="${escapeHtml(e.id)}" aria-label="Delete ${escapeHtml(e.label)}">🗑</button>
         <button class="build-key-use" data-use-id="${escapeHtml(e.id)}">Use this</button>
@@ -142,12 +150,37 @@ async function renderSaved() {
       if (entry) void chooseEntry(entry);
     });
   });
+  box.querySelectorAll("[data-relay-id]").forEach((input) => {
+    input.addEventListener("change", () => {
+      void changeRelay(input.getAttribute("data-relay-id"), input.checked);
+    });
+  });
   box.querySelectorAll("[data-delete-id]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const entry = byId(btn.getAttribute("data-delete-id"));
       if (entry) void confirmDelete(entry);
     });
   });
+}
+
+/** The row's relay switch, captioned with what the key does now. */
+export function relaySwitch(e) {
+  const on = e.relay !== false;
+  return `<label class="inline-check build-key-relay">
+            <input type="checkbox" role="switch" data-relay-id="${escapeHtml(e.id)}"${on ? " checked" : ""} />
+            <span class="note">${escapeHtml(relayCaption(on))}</span>
+          </label>`;
+}
+
+async function changeRelay(id, relay) {
+  const session = getSession();
+  if (!session.umk) return toast("Unlock first", "err");
+  try {
+    await setRelay(session.umk, id, relay);
+  } catch (err) {
+    toast(humanError(err), "err");
+  }
+  await renderSaved();
 }
 
 function showForm(visible) {
@@ -164,6 +197,7 @@ async function addFromForm() {
   const apiKey = $("bk-key").value.trim();
   const baseUrl = $("bk-base").value.trim();
   const label = $("bk-label").value.trim();
+  const relay = $("bk-relay") ? $("bk-relay").checked : true;
   if (!apiKey) return toast("Enter an API key.", "err");
   try {
     const added = await addProvider(session.umk, {
@@ -171,6 +205,7 @@ async function addFromForm() {
       label: label || provider,
       apiKey,
       baseUrl: baseUrl || undefined,
+      relay,
     });
     await setActive(session.umk, added.id);
   } catch (e) {
@@ -185,6 +220,7 @@ function clearForm() {
   $("bk-key").value = "";
   $("bk-base").value = "";
   $("bk-label").value = "";
+  if ($("bk-relay")) $("bk-relay").checked = true;
 }
 
 export function initBuildKeyView() {
@@ -203,7 +239,7 @@ export function initBuildKeyView() {
 }
 
 // Open the key step.
-//   onChosen — called with the in-memory { provider, apiKey, baseUrl? }
+//   onChosen — called with the in-memory { provider, apiKey, baseUrl?, relay }
 //   back     — view id for the back button (default: the chooser)
 // (contextLabel is still accepted from callers; the page no longer shows it.)
 export function enterBuildKey({ onChosen, back } = {}) {

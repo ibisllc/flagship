@@ -2043,6 +2043,11 @@ button[data-device-restricted] {
 .build-key-row-body .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .build-key-delete { width: auto; min-height: 0; padding: 6px; background: none; border: none; color: var(--err); cursor: pointer; }
 .build-key-row .build-key-use { width: auto; }
+.build-key-relay { margin-top: 2px; }
+
+/* A live app's internet hosts on its page. */
+.sd-egress-hosts { margin: var(--space-2) 0 0; padding-left: 18px; }
+.sd-egress-hosts li { overflow-wrap: anywhere; }
 
 /* Staged attachment chips */
 .vc-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }

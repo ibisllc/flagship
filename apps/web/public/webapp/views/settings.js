@@ -10,7 +10,8 @@ import { getSession, ensureUsername, lockSession } from "../lib/state.js";
 import { escapeHtml, sha256Bytes } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
-import { loadProviders, addProvider, removeProvider, setActive } from "../providers.js";
+import { loadProviders, addProvider, removeProvider, setActive, setRelay } from "../providers.js";
+import { relayCaption } from "../lib/aiRelay.js";
 import { renderActiveProviderChip, stopRenewals } from "./home.js";
 import { handleReset } from "./unlock.js";
 import { enterRecovery } from "./recovery.js";
@@ -129,6 +130,10 @@ export async function renderProviders() {
           <div class="weight-600">${escapeHtml(e.label)} ${promoBadge} <span class="pill">${escapeHtml(e.provider)}</span></div>
           <div class="value text-xs mt-1">${escapeHtml(maskKey(e.apiKey))}</div>
           ${e.defaultModel ? `<div class="faint-sm">default: ${escapeHtml(e.defaultModel)}</div>` : ""}
+          <label class="inline-check mt-1">
+            <input type="checkbox" role="switch" data-action="relay" data-id="${escapeHtml(e.id)}"${e.relay !== false ? " checked" : ""} />
+            <span class="faint-sm">${escapeHtml(relayCaption(e.relay !== false))}</span>
+          </label>
         </div>
         <div class="btn-row-sm">
           <button class="${isActive ? "" : "secondary"}" data-action="set-active" data-id="${escapeHtml(e.id)}">${isActive ? "active" : "use"}</button>
@@ -149,6 +154,16 @@ export async function renderProviders() {
       } catch (e) {
         toast(e.message, "err");
       }
+    });
+  });
+  list.querySelectorAll('[data-action="relay"]').forEach((input) => {
+    input.addEventListener("change", async () => {
+      try {
+        await setRelay(getSession().umk, input.getAttribute("data-id"), input.checked);
+      } catch (e) {
+        toast(e.message, "err");
+      }
+      await renderProviders();
     });
   });
   list.querySelectorAll('[data-action="remove"]').forEach((b) => {
@@ -322,6 +337,7 @@ async function completePromoIssuance() {
       baseUrl: key.baseUrl,
       defaultModel: key.model,
       source: "promo",
+      relay: true,
     });
     promoIssuanceCtx = null;
     $("promo-issuance-form")?.classList.add("hidden");
@@ -348,6 +364,7 @@ async function handleSaveProvider() {
   const apiKey = $("np-key").value;
   const baseUrl = $("np-base").value.trim();
   const defaultModel = $("np-model").value.trim();
+  const relay = $("np-relay") ? $("np-relay").checked : true;
   if (!label) return toast("Label required", "err");
   if (!apiKey) return toast("Api key required", "err");
   try {
@@ -357,6 +374,7 @@ async function handleSaveProvider() {
       apiKey,
       baseUrl: baseUrl || undefined,
       defaultModel: defaultModel || undefined,
+      relay,
     });
   } catch (e) {
     return toast(e.message, "err");
@@ -365,6 +383,7 @@ async function handleSaveProvider() {
   $("np-key").value = "";
   $("np-base").value = "";
   $("np-model").value = "";
+  if ($("np-relay")) $("np-relay").checked = true;
   $("add-provider-form").classList.add("hidden");
   await renderProviders();
   toast("Provider saved");

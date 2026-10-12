@@ -11,16 +11,20 @@ import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { checkName, nameWarning, slugify } from "../lib/vibeNames.js";
 import {
-  ADAPTING,
   ADAPTING_NOTE,
   ADAPT_BUTTON,
   CHECK_AGAIN,
+  CLOSED_NOTE,
+  NOT_LIVE,
+  NOT_LIVE_FALLBACK,
+  RETRY_ADAPT,
   EXPORT_BUTTON,
   EXPORT_NOTE,
   EXPORT_PREPARING,
   SHARE_LABEL,
   SHARE_NOTE,
   adaptRequestBody,
+  adaptingText,
   addressLabel,
   blankNameHint,
   checkRepoFailure,
@@ -34,6 +38,9 @@ import {
 import { enterVibeCode, showConflict } from "./vibe-code.js";
 import { enterBuildJournal } from "./build-journal.js";
 import { enterBuildKey } from "./build-key.js";
+import { getSession } from "../lib/state.js";
+import { turnRelayOffForCredential } from "../providers.js";
+import { RELAY_TURNED_OFF, TURN_RELAY_OFF, isRelayFailure } from "../lib/aiRelay.js";
 
 registerView("view-build-git");
 
@@ -53,6 +60,11 @@ let checking = false;
 let share = true;
 // A Flagship-ready or not-ready card is up; it takes Check repo's place.
 let verdictShown = false;
+// The box handed this build over to go live: no more AI runs on it.
+let closed = false;
+// The adapt's running phase and latest journal line, for the progress card.
+let adaptPhase = null;
+let adaptProgress = null;
 
 export function initBuildGitView() {
   $("build-git-check").addEventListener("click", checkRepo);
@@ -70,6 +82,7 @@ export function enterBuildGit() {
   checkedSlug = "";
   share = true;
   verdictShown = false;
+  closed = false;
   if (nameCheckTimer) clearTimeout(nameCheckTimer);
   nameCheckTimer = null;
   $("build-git-url").value = "";
@@ -164,6 +177,7 @@ async function checkRepo() {
   assignedName = null;
   share = true;
   verdictShown = false;
+  closed = false;
   $("build-git-verdict").classList.add("hidden");
   $("build-git-verdict").innerHTML = "";
   checking = true;
@@ -220,21 +234,33 @@ function renderVerdict(r, error = null) {
     $("build-git-deploy").addEventListener("click", deploy);
   } else {
     lastVerdict = r;
+    const relayAction = error && isRelayFailure(error) && adaptCredential
+      ? `<button id="build-git-relay-off" class="secondary full-width mt-2">${escapeHtml(TURN_RELAY_OFF)}</button>`
+      : "";
+    // A build handed over to go live takes no more AI: Check again starts a
+    // new one.
+    const aiControls = closed
+      ? `<p class="note mt-2">${escapeHtml(CLOSED_NOTE)}</p>
+        <button id="build-git-recheck-full" class="full-width mt-2">${escapeHtml(CHECK_AGAIN)}</button>`
+      : `<button id="build-git-adapt" class="full-width mt-2">${escapeHtml(ADAPT_BUTTON)}</button>
+        <label class="inline-check mt-3">
+          <input type="checkbox" id="build-git-share" role="switch"${share ? " checked" : ""} /> ${escapeHtml(SHARE_LABEL)}
+        </label>
+        <p class="faint-sm">${escapeHtml(SHARE_NOTE)}</p>`;
     box.innerHTML = `
       <div class="card">
         <div class="build-git-verdict-head"><p>${escapeHtml(notReadyText(r.reason))}</p>${checkAgainButton()}</div>
         ${error ? `<p class="err-text mt-2">${escapeHtml(error)}</p>` : ""}
-        <button id="build-git-adapt" class="full-width mt-2">${escapeHtml(ADAPT_BUTTON)}</button>
-        <label class="inline-check mt-3">
-          <input type="checkbox" id="build-git-share" role="switch"${share ? " checked" : ""} /> ${escapeHtml(SHARE_LABEL)}
-        </label>
-        <p class="faint-sm">${escapeHtml(SHARE_NOTE)}</p>
+        ${relayAction}
+        ${aiControls}
         ${journalLink()}
       </div>`;
-    $("build-git-share").addEventListener("change", (e) => { share = e.target.checked; });
+    $("build-git-relay-off")?.addEventListener("click", () => void relayOff(r, error));
+    $("build-git-recheck-full")?.addEventListener("click", checkRepo);
+    $("build-git-share")?.addEventListener("change", (e) => { share = e.target.checked; });
     // The adapt pass uses the box's model — confirm/provide the AI key first,
     // then run the adapt with that in-memory credential.
-    $("build-git-adapt").addEventListener("click", () =>
+    $("build-git-adapt")?.addEventListener("click", () =>
       enterBuildKey({
         contextLabel: "Building with AI",
         back: "view-build-git",
@@ -255,11 +281,25 @@ function leaveVerdict() {
   updateCheckButton();
 }
 
-function renderAdapting(progress) {
+// Turn the relay off for the key this adapt used, then offer the adapt again.
+async function relayOff(verdict, error) {
+  const session = getSession();
+  if (!session.umk) return toast("Unlock first", "err");
+  try {
+    if (!(await turnRelayOffForCredential(session.umk, adaptCredential))) return toast("That key isn't saved on this device.", "err");
+  } catch (e) {
+    return toast(e instanceof Error ? e.message : String(e), "err");
+  }
+  toast(RELAY_TURNED_OFF, "ok");
+  renderVerdict(verdict, null);
+}
+
+function renderAdapting() {
   leaveVerdict();
+  const progress = adaptProgress;
   $("build-git-verdict").innerHTML = `
     <div class="card">
-      <p class="build-git-adapting"><span class="build-git-spinner" aria-hidden="true"></span>${escapeHtml(ADAPTING)}</p>
+      <p class="build-git-adapting"><span class="build-git-spinner" aria-hidden="true"></span>${escapeHtml(adaptingText(adaptPhase))}</p>
       ${progress ? `<p class="note mt-2" id="build-git-progress">${escapeHtml(progress)}</p>` : ""}
       <p class="note mt-2">${escapeHtml(ADAPTING_NOTE)}</p>
     </div>`;
@@ -312,8 +352,30 @@ function wireAdapterExport() {
   });
 }
 
-function failAdapt(message) {
+// The AI's tested copy didn't go live. The build is closed to the AI now,
+// so trying again checks the repo afresh (a new build) and adapts that with
+// the same key.
+function renderNotLive(reason) {
+  leaveVerdict();
+  $("build-git-verdict").innerHTML = `
+    <div class="card">
+      <p><strong>${escapeHtml(NOT_LIVE)}</strong></p>
+      <p class="err-text mt-2">${escapeHtml(reason || NOT_LIVE_FALLBACK)}</p>
+      <button id="build-git-retry" class="full-width mt-2">${escapeHtml(RETRY_ADAPT)}</button>
+      ${journalLink()}
+    </div>`;
+  $("build-git-retry").addEventListener("click", () => void retryAdapt());
+  wireJournalLink();
+}
+
+async function retryAdapt() {
+  await checkRepo();
+  if (buildId && lastVerdict && lastVerdict.buildId === buildId && !closed && adaptCredential) await adapt();
+}
+
+function failAdapt(message, { sealed = false } = {}) {
   toast(message, "err");
+  if (sealed) closed = true;
   if (lastVerdict) renderVerdict(lastVerdict, message);
 }
 
@@ -324,8 +386,11 @@ function showAdaptOutcome(outcome) {
   } else if (outcome.phase === "adapted") {
     renderAdapted(outcome.fileCount);
     toast("Adapted — review and install", "ok");
+  } else if (outcome.phase === "not-live") {
+    closed = true;
+    renderNotLive(outcome.reason);
   } else {
-    failAdapt(outcome.reason);
+    failAdapt(outcome.reason, { sealed: outcome.sealed === true });
   }
 }
 
@@ -337,7 +402,9 @@ async function adapt() {
   if (!buildId) return;
   const id = buildId;
   const path = `/api/build/sessions/${encodeURIComponent(id)}`;
-  renderAdapting(null);
+  adaptPhase = null;
+  adaptProgress = null;
+  renderAdapting();
   try {
     const body = adaptRequestBody({ credential: adaptCredential, share });
     const outcome = await startAndFollowAdapt({
@@ -345,7 +412,16 @@ async function adapt() {
       follow: () => followAdapt({
         fetchState: () => screensFetch(path),
         fetchJournal: () => screensFetch(`${path}/journal`),
-        onProgress: (p) => { if (buildId === id) renderAdapting(p); },
+        onProgress: (p) => {
+          if (buildId !== id) return;
+          adaptProgress = p;
+          renderAdapting();
+        },
+        onPhase: (phase) => {
+          if (buildId !== id || phase === adaptPhase) return;
+          adaptPhase = phase;
+          renderAdapting();
+        },
       }),
     });
     if (buildId !== id) return;

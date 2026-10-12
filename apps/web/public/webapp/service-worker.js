@@ -77,7 +77,12 @@
 //  v44: Delete server for every server (typed-name gate, erase order + name
 //       release), reversible Revoke + Un-revoke, revoked servers stay listed,
 //       and the server page keeps its Danger zone when the box is offline.
-const SHELL_VERSION = "v46";
+//  v47: AI adapt is one step ("Use AI to adapt and deploy") with its staging
+//       phases, the chat's Deploy runs staged in the background, an app asks
+//       for internet access on its page (signed Allow / Stop access), and
+//       each AI key has a Flagship relay switch; precaches lib/appEgress.js,
+//       lib/chatDeploy.js + lib/aiRelay.js.
+const SHELL_VERSION = "v47";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -133,6 +138,9 @@ const OPTIONAL_SHELL = [
   "/lib/editService.js",
   "/lib/gitImport.js",
   "/lib/adapterReport.js",
+  "/lib/appEgress.js",
+  "/lib/chatDeploy.js",
+  "/lib/aiRelay.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",

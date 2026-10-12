@@ -674,6 +674,10 @@
           <input id="bk-key" type="password" placeholder="sk-…" autocomplete="off" />
           <label for="bk-label">Label <span class="faint-sm">(optional)</span></label>
           <input id="bk-label" type="text" placeholder="personal / work" autocomplete="off" />
+          <label class="inline-check mt-3">
+            <input type="checkbox" id="bk-relay" role="switch" checked /> Send through the Flagship relay
+          </label>
+          <p class="faint-sm">Better for your anonymity: the AI provider sees Flagship's address, not yours.</p>
           <div class="row-gap-3 mt-2">
             <button id="bk-add">Add key</button>
             <button class="secondary" id="bk-cancel">Cancel</button>
@@ -1113,6 +1117,10 @@
           <input id="np-base" type="text" placeholder="https://your-proxy.example" />
           <label for="np-model">Default model <span class="faint-sm">(optional)</span></label>
           <input id="np-model" type="text" placeholder="claude-sonnet-4-6 / gpt-4 / llama3" />
+          <label class="inline-check mt-3">
+            <input type="checkbox" id="np-relay" role="switch" checked /> Send through the Flagship relay
+          </label>
+          <p class="faint-sm">Better for your anonymity: the AI provider sees Flagship's address, not yours.</p>
           <div class="row-gap-3">
             <button id="np-save">Save</button>
             <button class="secondary" id="np-cancel">Cancel</button>

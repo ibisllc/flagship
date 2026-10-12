@@ -12,7 +12,10 @@
 //      with a talkToUser pending request), the composer sends the next
 //      turn to POST /api/screens/llm/sessions/<id>/reply { text, attachments }.
 //   4. When status becomes ready-to-deploy, surface Deploy →
-//      /api/llm/sessions/<id>/deploy.
+//      /api/llm/sessions/<id>/deploy {background:true}. The box tests the app
+//      on a private copy, then installs it; the session's deployPhase says
+//      which (lib/chatDeploy.js). After a deploy the session's AI key is gone,
+//      so a later turn meets the usual needsCredential prompt.
 //
 // Attachments are inlined as base64 (no upload endpoint). The client
 // mirrors the server caps so a violation is a friendly toast, not a 400.
@@ -38,6 +41,10 @@ import {
 } from "../lib/vibeNames.js";
 import { enterBuildKey } from "./build-key.js";
 import { enterBuildJournal } from "./build-journal.js";
+import { deployPhaseText, deployRequestBody, startAndFollowChatDeploy } from "../lib/chatDeploy.js";
+import { RELAY_TURNED_OFF, TURN_RELAY_OFF, isRelayFailure } from "../lib/aiRelay.js";
+import { turnRelayOffForCredential } from "../providers.js";
+import { getSession } from "../lib/state.js";
 
 registerView("view-vibe-code");
 
@@ -53,7 +60,7 @@ const TEXT_EXTENSIONS = /\.(txt|md|sql|json|csv)$/i;
 let activeSessionId = null;
 let pollTimer = null;
 // The in-memory BYOK credential the box should use to drive this build, set
-// from the AI-key step. { provider, apiKey, baseUrl? } — never persisted here
+// from the AI-key step. { provider, apiKey, baseUrl?, relay } — never persisted here
 // and never sent to flagshipserver.com (screensFetch goes to the box).
 let buildCredential = null;
 // Pending attachments staged in the composer for the NEXT turn.
@@ -72,6 +79,11 @@ let nameCheckTimer = null;
 let starting = false;
 // Set when a deploy the owner asked to be invite only came back open.
 let leftOpen = false;
+// The live URL a finished deploy answered with (the session state may not
+// carry it).
+let deployedUrl = null;
+// The relay was turned off for this build's key after a relay failure.
+let relayTurnedOff = false;
 // Where Back goes instead of the chooser: an edit session returns to the
 // service it changes.
 let backTo = null;
@@ -477,9 +489,11 @@ async function poll() {
       );
       state = {
         status: snap.status,
+        deployPhase: snap.deployPhase,
         messages: (snap.transcript || []).map((t) => ({ role: t.role, text: t.content })),
         files: snap.files,
         deployedUrl: snap.deployedUrl,
+        errorReason: snap.errorReason,
       };
     } catch (e) {
       $("vc-status").textContent = e instanceof ScreensError ? `error: ${e.message}` : "error";
@@ -499,12 +513,12 @@ async function poll() {
 export const LEFT_OPEN_WARNING =
   "This server couldn't make it invite only, so anyone with the link can open it. You can restrict it from the service's Access settings.";
 
-function statusLabel(status) {
+export function statusLabel(status, deployPhase) {
   switch (status) {
     case "streaming": return "Writing…";
     case "awaiting-tool-response": return "The AI has a question";
     case "ready-to-deploy": return "Ready to deploy";
-    case "deploying": return "Deploying…";
+    case "deploying": return deployPhaseText(deployPhase);
     case "deployed": return "Deployed";
     case "failed": return "Something went wrong";
     case "cancelled": return "Cancelled";
@@ -525,7 +539,7 @@ function attachmentMarkup(att) {
 }
 
 function render(state) {
-  $("vc-status").textContent = statusLabel(state.status);
+  $("vc-status").textContent = statusLabel(state.status, state.deployPhase);
 
   // Message list — user right, assistant left.
   const log = $("vc-messages");
@@ -594,48 +608,98 @@ function render(state) {
 
   // Result.
   const resultBox = $("vc-result");
-  if (state.deployedUrl) {
+  const url = state.deployedUrl || (state.status === "deployed" ? deployedUrl : null);
+  const failure = state.errorReason || state.failureReason || null;
+  if (url) {
     resultBox.innerHTML = `
       <div class="card">
         <div class="weight-600">Deployed ✓</div>
         <div class="value text-sm mt-1">
-          <a href="${escapeHtml(state.deployedUrl)}" target="_blank" rel="noopener">${escapeHtml(state.deployedUrl)}</a>
+          <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>
         </div>
         ${leftOpen ? `<p class="note vc-left-open mt-1">${escapeHtml(LEFT_OPEN_WARNING)}</p>` : ""}
       </div>`;
     resultBox.classList.remove("hidden");
-  } else if (state.errorReason) {
-    resultBox.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(state.errorReason)}</p></div>`;
+  } else if (failure) {
+    // A relay failure is shown as the box worded it, with the way out.
+    const relayAction = isRelayFailure(failure) && buildCredential && !relayTurnedOff
+      ? `<button id="vc-relay-off" class="secondary full-width mt-2">${escapeHtml(TURN_RELAY_OFF)}</button>`
+      : "";
+    resultBox.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(failure)}</p>${relayAction}</div>`;
     resultBox.classList.remove("hidden");
+    $("vc-relay-off")?.addEventListener("click", () => void relayOff());
   } else {
     resultBox.classList.add("hidden");
   }
 }
 
-async function triggerDeploy() {
-  if (!activeSessionId) return;
+// Turn the relay off for this build's key after the box couldn't reach it.
+async function relayOff() {
+  const session = getSession();
+  if (!session.umk) return toast("Unlock first", "err");
+  try {
+    if (!(await turnRelayOffForCredential(session.umk, buildCredential))) {
+      return toast("That key isn't saved on this device.", "err");
+    }
+  } catch (e) {
+    return toast(e instanceof Error ? e.message : String(e), "err");
+  }
+  relayTurnedOff = true;
+  $("vc-relay-off")?.remove();
+  toast(RELAY_TURNED_OFF, "ok");
+}
+
+async function postDeploy(sessionId) {
   const baseUrl = getPodBaseUrl();
   const tok = getSessionToken();
-  if (!baseUrl || !tok) return toast("Not paired", "err");
+  const r = await fetch(
+    `${baseUrl.replace(/\/+$/, "")}/api/llm/sessions/${encodeURIComponent(sessionId)}/deploy`,
+    {
+      method: "POST",
+      headers: { "x-flagship-session": tok, "content-type": "application/json" },
+      body: JSON.stringify(deployRequestBody()),
+    },
+  );
+  const text = await r.text().catch(() => "");
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = null;
+  }
+  if (!r.ok) {
+    const msg = typeof body?.error === "string" && body.error ? body.error : `deploy failed: ${r.status} ${text}`.trim();
+    throw new ScreensError(msg, r.status, body);
+  }
+  return body;
+}
+
+async function triggerDeploy() {
+  if (!activeSessionId) return;
+  const id = activeSessionId;
+  if (!getPodBaseUrl() || !getSessionToken()) return toast("Not paired", "err");
   const btn = $("vc-deploy-go");
   btn.disabled = true;
   btn.textContent = "deploying…";
+  schedulePoll();
   try {
-    const r = await fetch(
-      `${baseUrl.replace(/\/+$/, "")}/api/llm/sessions/${encodeURIComponent(activeSessionId)}/deploy`,
-      {
-        method: "POST",
-        headers: { "x-flagship-session": tok, "content-type": "application/json" },
+    const out = await startAndFollowChatDeploy({
+      start: () => postDeploy(id),
+      fetchSnapshot: () => screensFetch(`/api/screens/vibe-code/${encodeURIComponent(id)}`),
+      onPhase: (phase) => {
+        if (activeSessionId === id) $("vc-status").textContent = statusLabel("deploying", phase);
       },
-    );
-    if (!r.ok) {
-      const text = await r.text().catch(() => "");
-      throw new Error(`deploy failed: ${r.status} ${text}`.trim());
+    });
+    if (activeSessionId !== id) return;
+    if (out.ok) {
+      deployedUrl = out.url;
+      leftOpen = out.inviteOnly === false;
+      toast("Deployed");
+    } else {
+      toast(out.reason, "err");
     }
-    const body = await r.json().catch(() => null);
-    leftOpen = body?.inviteOnly === false;
-    toast("Deployed");
     schedulePoll();
+    await poll().catch(() => {});
   } catch (e) {
     toast(e.message, "err");
     btn.disabled = false;
@@ -654,6 +718,8 @@ function reset() {
   buildCredential = null;
   buildSubject = null;
   leftOpen = false;
+  deployedUrl = null;
+  relayTurnedOff = false;
   backTo = null;
   starting = false;
   nameCheck = null;

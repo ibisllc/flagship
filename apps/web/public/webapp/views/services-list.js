@@ -5,6 +5,7 @@
 // renders, then patches the URL slot in place — keeps the first
 // paint snappy while the network catches up.
 
+import { EGRESS_PENDING_BADGE, hasPendingEgress } from "../lib/appEgress.js";
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
 import { screensFetch, screensFetchFrom, ScreensError, getPodBaseUrl, setPodBaseUrl } from "../lib/api.js";
@@ -171,6 +172,7 @@ function appCardHtml(s) {
           <div class="muted-sm truncate">${escapeHtml(s.summary || "")}</div>
           <div class="row mt-1" style="gap:6px; flex-wrap:wrap;">
             <span class="pill ${s.status === "running" ? "ok" : ""}">${escapeHtml(s.status || "")}</span>
+            ${hasPendingEgress(s) ? `<span class="pill warn" data-egress-pending>${escapeHtml(EGRESS_PENDING_BADGE)}</span>` : ""}
           </div>
           <div data-url-slot="${escapeHtml(s.serviceId)}">${urlRowHtml(s, null)}</div>
         </div>

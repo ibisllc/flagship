@@ -7,8 +7,14 @@ import { slugify, conflictFromError } from "./vibeNames.js";
 import { ScreensError, boxReason, buildEntryError } from "./api.js";
 
 export const NOT_READY_MISSING = "This repo is not yet adapted for Flagship.";
-export const ADAPT_BUTTON = "Use AI to prepare repo for Flagship";
+export const ADAPT_BUTTON = "Use AI to adapt and deploy";
 export const ADAPTING = "The AI is adapting the repo…";
+export const ADAPTING_STAGING = "The AI is adapting and testing the app on a private copy with sample data…";
+export const ADAPTING_GOING_LIVE = "Installing the tested app…";
+export const NOT_LIVE = "The app didn't go live.";
+export const NOT_LIVE_FALLBACK = "The tested app couldn't be installed.";
+export const RETRY_ADAPT = "Try again";
+export const CLOSED_NOTE = "The AI's work on this build is done. Check the repo again to start a new build.";
 export const ADAPTING_NOTE = "This can take several minutes. You can leave this screen; Build sessions shows how it went.";
 export const ADAPT_TOO_LONG = "The AI is taking unusually long. Check Build sessions later to see how it went.";
 export const ADAPT_FAILED = "The AI couldn't adapt this repo.";
@@ -56,6 +62,21 @@ export function adaptRequestBody({ credential, share = true }) {
   return { ...(credential ? { credential } : {}), background: true, share: share !== false };
 }
 
+/** What the box is doing while an adapt runs: the AI testing on its private
+ *  copy ("staging"), or the box installing what it tested ("going-live").
+ *  An older box sends no phase. */
+export function adaptingText(phase) {
+  if (phase === "staging") return ADAPTING_STAGING;
+  if (phase === "going-live") return ADAPTING_GOING_LIVE;
+  return ADAPTING;
+}
+
+/** A build the box has handed over to go live never takes an AI again: its
+ *  `state.sealed`, or the 409 "This build is closed to the AI…". */
+export function closedToAi(e) {
+  return e instanceof ScreensError && e.status === 409 && /closed to the AI/i.test(boxReason(e) ?? e.message ?? "");
+}
+
 /** A failed Install: a shared adaptation that crashed here hands the repo to
  *  the owner's AI (`{needsAdapt, reason}`); anything else is an error. */
 export function deployFailure(e) {
@@ -67,7 +88,7 @@ export function deployFailure(e) {
 
 /** An adapt the box already started itself (409): follow it instead. */
 export function adaptAlreadyRunning(e) {
-  return e instanceof ScreensError && e.status === 409;
+  return e instanceof ScreensError && e.status === 409 && !closedToAi(e);
 }
 
 /**
@@ -82,6 +103,7 @@ export async function startAndFollowAdapt({ start, follow }) {
   try {
     r = await start();
   } catch (e) {
+    if (closedToAi(e)) return { phase: "failed", reason: boxReason(e) ?? e.message, sealed: true };
     if (adaptAlreadyRunning(e)) return follow();
     throw e;
   }
@@ -100,22 +122,26 @@ export function checkRepoFailure(e) {
   return { message: buildEntryError(e) };
 }
 
-/** What a finished adapt leaves: installed when the AI deployed it itself. */
-export function adaptFinished({ fileCount, deployed, deployedUrl }) {
-  return deployed === true && deployedUrl
-    ? { phase: "installed", url: deployedUrl }
-    : { phase: "adapted", fileCount: fileCount ?? 0 };
+/** What a finished adapt leaves: installed when the box put the tested app
+ *  live; not live (with the box's reason) when that failed; otherwise adapted
+ *  files to install (an older box, or no tested copy). */
+export function adaptFinished({ fileCount, deployed, deployedUrl, reason }) {
+  if (deployed === true && deployedUrl) return { phase: "installed", url: deployedUrl };
+  if (deployed === false && typeof reason === "string" && reason) return { phase: "not-live", reason };
+  return { phase: "adapted", fileCount: fileCount ?? 0 };
 }
 
 /**
  * Poll a background adapt until it finishes. Resolves to
- * `{phase:"installed"|"adapted"|"failed", …}`; throws once polls fail
- * `MAX_MISSES` times in a row.
+ * `{phase:"installed"|"adapted"|"not-live"|"failed", …}` (a failed one
+ * carries `sealed` when the build is closed to the AI); throws once polls
+ * fail `MAX_MISSES` times in a row. `onPhase` gets the box's running phase.
  */
 export async function followAdapt({
   fetchState,
   fetchJournal,
   onProgress = () => {},
+  onPhase = () => {},
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
   now = () => Date.now(),
   intervalMs = POLL_INTERVAL_MS,
@@ -126,8 +152,11 @@ export async function followAdapt({
   while (now() < deadline) {
     await sleep(intervalMs);
     let adapt;
+    let sealed = false;
     try {
-      adapt = (await fetchState())?.state?.adapt;
+      const state = (await fetchState())?.state;
+      adapt = state?.adapt;
+      sealed = state?.sealed === true;
       misses = 0;
     } catch (e) {
       // A dropped poll (Wi-Fi blip, box restarting) isn't the end.
@@ -136,7 +165,10 @@ export async function followAdapt({
       continue;
     }
     if (adapt?.status === "done") return adaptFinished(adapt);
-    if (adapt?.status === "failed") return { phase: "failed", reason: adapt.reason || ADAPT_FAILED };
+    if (adapt?.status === "failed") {
+      return { phase: "failed", reason: adapt.reason || ADAPT_FAILED, ...(sealed ? { sealed: true } : {}) };
+    }
+    if (adapt?.status === "running") onPhase(adapt.phase ?? null);
     try {
       const entries = (await fetchJournal())?.entries || [];
       const last = entries[entries.length - 1];

@@ -46,6 +46,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/order/power-off/v1", //        power off / restart
   "flagship/set-deadman-policy/v1", //     dead-man policy
   "flagship/deadman-affirm/v1", //         dead-man affirmation
+  "flagship/app-egress/v1", //             a live app's internet access
   // `.com`-side (authorizeSensitiveComOp)
   "flagship/server-update/v1", //          in-place server update (2-of-2)
   "flagship/account-self-delete/v1", //    account deletion

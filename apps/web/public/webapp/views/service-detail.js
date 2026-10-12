@@ -16,6 +16,18 @@ import { controlApex, dataApex } from "../lib/apex.js";
 import { pencilIcon } from "../lib/icons.js";
 import { EDIT_ROW_CAPTION, EDIT_ROW_TITLE } from "../lib/editService.js";
 import { openAdapterReport, renderReportRow } from "../lib/adapterReport.js";
+import { isCompanionProfile } from "../lib/companionGuard.js";
+import {
+  EGRESS_ALLOW,
+  EGRESS_APPROVED_TITLE,
+  EGRESS_COMPANION_NOTE,
+  EGRESS_NOTE,
+  EGRESS_STOP,
+  EGRESS_TITLE,
+  egressCardState,
+  egressErrorMessage,
+  sendEgressGrant,
+} from "../lib/appEgress.js";
 
 const COM_BASE = controlApex();
 
@@ -77,6 +89,7 @@ export async function renderServiceDetail(serviceId) {
       </div>
       ${body.editable === true ? renderEditRow() : ""}
       ${typeof body.adaptedFrom?.repo === "string" ? renderReportRow(body.adaptedFrom.repo) : ""}
+      <div id="sd-egress">${renderEgressSection(s)}</div>
 
       ${renderWebDomainsSection(s, currentServiceLinks)}
       <div id="sd-custom-domains">${renderCustomDomainsSection()}</div>
@@ -196,6 +209,7 @@ export async function renderServiceDetail(serviceId) {
     });
     bindWebDomainsHandlers(s);
     bindCustomDomainsHandlers();
+    bindEgressHandlers(s);
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
@@ -203,6 +217,84 @@ export async function renderServiceDetail(serviceId) {
       throw e;
     }
   }
+}
+
+// ---------------------------------------------------------------
+// Internet access: the hosts the app declares, allowed only by the owner's
+// signature (docs/ai-privacy-and-staging.md §3). Absent on older boxes.
+// ---------------------------------------------------------------
+
+function hostList(hosts) {
+  return `<ul class="sd-egress-hosts">${hosts.map((h) => `<li class="mono text-sm">${escapeHtml(h)}</li>`).join("")}</ul>`;
+}
+
+/** The internet-access cards for `app` (its `egress`), or "" when there is
+ *  nothing to show. */
+export function renderEgressSection(app, { companion = isCompanionProfile() } = {}) {
+  const st = egressCardState(app, { companion });
+  if (!st) return "";
+  let html = "";
+  if (st.pending.length > 0) {
+    html += `
+      <div class="card mt-2 sd-egress-pending">
+        <div class="weight-600">${escapeHtml(EGRESS_TITLE)}</div>
+        ${hostList(st.pending)}
+        <p class="note mt-2">${escapeHtml(EGRESS_NOTE)}</p>
+        ${st.canSign
+          ? `<button id="sd-egress-allow" class="full-width mt-2">${escapeHtml(EGRESS_ALLOW)}</button>`
+          : `<p class="faint-sm mt-2">${escapeHtml(EGRESS_COMPANION_NOTE)}</p>`}
+      </div>`;
+  }
+  if (st.approved.length > 0) {
+    html += `
+      <div class="card mt-2 sd-egress-approved">
+        <div class="weight-600">${escapeHtml(EGRESS_APPROVED_TITLE)}</div>
+        ${hostList(st.approved)}
+        ${st.canSign ? `<button id="sd-egress-stop" class="secondary full-width mt-2">${escapeHtml(EGRESS_STOP)}</button>` : ""}
+      </div>`;
+  }
+  return html;
+}
+
+function serverDomainOfPod() {
+  try {
+    return new URL(getPodBaseUrl() ?? "").hostname;
+  } catch {
+    return "";
+  }
+}
+
+function bindEgressHandlers(app) {
+  const send = async (hosts, btn) => {
+    const session = getSession();
+    if (!session.umk) return toast("Unlock the webapp first", "err");
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = hosts.length > 0 ? "Allowing…" : "Stopping…";
+    try {
+      const egress = await sendEgressGrant({
+        serverDomain: serverDomainOfPod(),
+        serviceId: app.serviceId,
+        hosts,
+        umk: session.umk,
+        signWithIrk: sensitiveSigner(),
+        fetchJson: (path, init) => screensFetch(path, init),
+        bytesToHex,
+      });
+      app.egress = egress;
+      const slot = $("sd-egress");
+      if (slot) slot.innerHTML = renderEgressSection(app);
+      bindEgressHandlers(app);
+      toast(hosts.length > 0 ? "Internet access allowed" : "Internet access stopped", "ok");
+    } catch (e) {
+      toast(e instanceof ScreensError ? egressErrorMessage(e) : humanError(e), "err");
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  };
+  // Allow opens every host the app declares; Stop access signs an empty list.
+  $("sd-egress-allow")?.addEventListener("click", (ev) => void send(app.egress?.declared ?? [], ev.currentTarget));
+  $("sd-egress-stop")?.addEventListener("click", (ev) => void send([], ev.currentTarget));
 }
 
 /** Shown only when the box says the service can be edited here. */
