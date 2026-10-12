@@ -242,7 +242,11 @@ fun VibeCodeDescribeScreen(nav: NavController) {
     val toasts = LocalToastCenter.current
     val appState = LocalAppState.current
     val username = appState.currentUser.value ?: "you"
-    val server = (appState.sessionPod ?: appState.leaderPod)?.fqdn ?: "$username.flagship.services"
+    // The chosen server (docs/app-placement.md §2): the address preview and
+    // the name check are that box's.
+    val podScope = com.flagshipserver.app.core.LocalPodScope.current
+    val server = podScope?.pod?.fqdn
+        ?: (appState.sessionPod ?: appState.leaderPod)?.fqdn ?: "$username.flagship.services"
     val scope = rememberCoroutineScope()
     var starting by remember { mutableStateOf(false) }
     val describeScroll = rememberScrollState()
@@ -256,7 +260,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
         return result
     }
 
-    LaunchedEffect(slug) {
+    LaunchedEffect(slug, screens) {
         if (slug.isEmpty()) return@LaunchedEffect
         kotlinx.coroutines.delay(350)
         runCheck(slug)
@@ -276,6 +280,9 @@ fun VibeCodeDescribeScreen(nav: NavController) {
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Spacer(Modifier.height(FS.space.s6))
+
+        com.flagshipserver.app.ui.components.RunsOnRow(locked = starting)
+        Spacer(Modifier.height(FS.space.s4))
 
         FSField(
             value = name,
@@ -420,6 +427,8 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                             return@launch
                         }
                         val cred = PendingBuildCredential.peek()?.let(BuildCredential::from)
+                        // Keep the server it starts on for the steps after this one.
+                        podScope?.let { it.choose?.invoke(it.pod.podId) }
                         val resp = screens.vibeCodeStart(
                             VibeCodeStartRequest(
                                 prompt = prompt, credential = cred,
@@ -544,7 +553,10 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
     val appState = LocalAppState.current
     // The build runs on the currently-selected box; its name fills the
     // sliver's "building … on <server>" clause (mirror iOS's currentPod).
-    val serverLabel = remember(appState) { (appState.currentPod ?: appState.leaderPod)?.name }
+    val podScope = com.flagshipserver.app.core.LocalPodScope.current
+    val serverLabel = remember(appState, podScope?.pod?.podId) {
+        podScope?.pod?.name ?: (appState.currentPod ?: appState.leaderPod)?.name
+    }
 
     val vm = remember(sessionId) {
         VibeCodeStreamViewModel(

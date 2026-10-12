@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -45,18 +46,25 @@ import com.flagshipserver.app.ui.screens.ServiceAccessScreen
 @Composable
 fun ServicesTab() {
     val nav = rememberNavController()
+    val placement = remember { PlacementNavState() }
     val deepLinker = LocalDeepLinker.current
     val pending by deepLinker.pending.collectAsState()
     LaunchedEffect(pending) {
         when (val link = pending) {
             is DeepLink.AppDetail -> {
                 deepLinker.consume()
-                nav.navigate("app-detail/${link.appId}")
+                nav.navigateOnPod("app-detail/${link.appId}", link.podId)
             }
             is DeepLink.AccessList -> {
                 deepLinker.consume()
-                nav.navigate("app-detail/${link.serviceId}")
+                nav.navigateOnPod("app-detail/${link.serviceId}", link.podId)
                 nav.navigate(accessListRoute(link.serviceId, draft = link.draft))
+            }
+            // "Create app here" on a server's page: the creation flow, pinned
+            // to that server (docs/app-placement.md §3).
+            is DeepLink.CreateApp -> {
+                deepLinker.consume()
+                nav.navigateOnPod(BUILD_CHOOSER_ROUTE, link.podId, pinned = true)
             }
             // W10 — the `vibecode-needs-you` push deep-links here so the AI's
             // mid-build question (talkToUser / requestEnvVar) opens the chat.
@@ -110,13 +118,17 @@ fun ServicesTab() {
             ),
         ) { entry ->
             val id = entry.arguments?.getString("serviceId") ?: return@composable
-            AccessListScreen(nav, serviceId = id, fromDraft = entry.arguments?.getBoolean("draft") == true)
+            PodScoped(nav, placement, entry, creation = false) {
+                AccessListScreen(nav, serviceId = id, fromDraft = entry.arguments?.getBoolean("draft") == true)
+            }
         }
         // The owner's Database section (docs/app-apis.md §6): the app's
         // stores and tables, one table's rows, and Run SQL.
         composable("app-db/{serviceId}") { entry ->
             val id = entry.arguments?.getString("serviceId") ?: return@composable
-            AppDatabaseScreen(nav, serviceId = id)
+            PodScoped(nav, placement, entry, creation = false) {
+                AppDatabaseScreen(nav, serviceId = id)
+            }
         }
         composable(
             route = "app-db/{serviceId}/table?store={store}&table={table}",
@@ -127,9 +139,11 @@ fun ServicesTab() {
             ),
         ) { entry ->
             val id = entry.arguments?.getString("serviceId") ?: return@composable
-            val store = entry.arguments?.getString("store").orEmpty()
-            val table = entry.arguments?.getString("table").orEmpty()
-            AppDbTableScreen(nav, serviceId = id, store = store, table = table)
+            PodScoped(nav, placement, entry, creation = false) {
+                val store = entry.arguments?.getString("store").orEmpty()
+                val table = entry.arguments?.getString("table").orEmpty()
+                AppDbTableScreen(nav, serviceId = id, store = store, table = table)
+            }
         }
         composable(
             route = "app-db/{serviceId}/query?store={store}",
@@ -139,11 +153,15 @@ fun ServicesTab() {
             ),
         ) { entry ->
             val id = entry.arguments?.getString("serviceId") ?: return@composable
-            AppDbQueryScreen(nav, serviceId = id, store = entry.arguments?.getString("store").orEmpty())
+            PodScoped(nav, placement, entry, creation = false) {
+                AppDbQueryScreen(nav, serviceId = id, store = entry.arguments?.getString("store").orEmpty())
+            }
         }
         composable("app-detail/{appId}") { entry ->
             val id = entry.arguments?.getString("appId") ?: return@composable
-            ServiceDetailScreen(nav, serviceId = id)
+            PodScoped(nav, placement, entry, creation = false) {
+                ServiceDetailScreen(nav, serviceId = id)
+            }
         }
         // W10 — per-app env-var KV editor, reachable from the detail screen's
         // "Configure environment" row. serviceId = "<creator>--<slug>"; split on
@@ -151,106 +169,136 @@ fun ServicesTab() {
         // docs/service-addressing-double-dash.md) for the ServiceEnvScreen args.
         composable("service-env/{serviceId}") { entry ->
             val id = entry.arguments?.getString("serviceId") ?: return@composable
-            val delimIdx = id.indexOf("--")
-            val creator = if (delimIdx > 0) id.substring(0, delimIdx) else ""
-            val slug = if (delimIdx > 0) id.substring(delimIdx + 2) else id
-            ServiceEnvScreen(nav, appId = id, creator = creator, slug = slug)
+            PodScoped(nav, placement, entry, creation = false) {
+                val delimIdx = id.indexOf("--")
+                val creator = if (delimIdx > 0) id.substring(0, delimIdx) else ""
+                val slug = if (delimIdx > 0) id.substring(delimIdx + 2) else id
+                ServiceEnvScreen(nav, appId = id, creator = creator, slug = slug)
+            }
         }
         // "Edit this service": the chooser, then either the AI-key step and
         // "What should change?" or the IDE screen building from its code.
         composable("edit-service/{serviceId}") { entry ->
             val id = entry.arguments?.getString("serviceId") ?: return@composable
-            EditServiceScreen(nav, serviceId = id)
+            PodScoped(nav, placement, entry, creation = false) {
+                EditServiceScreen(nav, serviceId = id)
+            }
         }
         composable("edit/key/{serviceId}") { entry ->
             val id = entry.arguments?.getString("serviceId") ?: return@composable
-            AiKeyStepScreen(
-                onConfirm = { cred ->
-                    PendingBuildCredential.set(cred)
-                    nav.navigate(EditService.describeRoute(id)) {
-                        popUpTo(EditService.keyRoute(id)) { inclusive = true }
-                    }
-                },
-                onBack = { nav.popBackStack() },
-            )
+            PodScoped(nav, placement, entry, creation = false) {
+                AiKeyStepScreen(
+                    onConfirm = { cred ->
+                        PendingBuildCredential.set(cred)
+                        nav.navigate(EditService.describeRoute(id)) {
+                            popUpTo(EditService.keyRoute(id)) { inclusive = true }
+                        }
+                    },
+                    onBack = { nav.popBackStack() },
+                )
+            }
         }
         composable("edit/describe/{serviceId}") { entry ->
             val id = entry.arguments?.getString("serviceId") ?: return@composable
-            EditDescribeScreen(nav, serviceId = id)
+            PodScoped(nav, placement, entry, creation = false) {
+                EditDescribeScreen(nav, serviceId = id)
+            }
         }
         composable("edit/mcp/{serviceId}") { entry ->
             val id = entry.arguments?.getString("serviceId") ?: return@composable
-            BuildMcpScreen(nav, editServiceId = id)
+            PodScoped(nav, placement, entry, creation = false) {
+                BuildMcpScreen(nav, editServiceId = id)
+            }
         }
-        composable(BUILD_CHOOSER_ROUTE) { BuildSourceChooserScreen(nav) }
-        composable("build/git") { BuildGitScreen(nav) }
+        composable(BUILD_CHOOSER_ROUTE) { entry -> PodScoped(nav, placement, entry, creation = true) { BuildSourceChooserScreen(nav) } }
+        composable("build/git") { entry -> PodScoped(nav, placement, entry, creation = true) { BuildGitScreen(nav) } }
         // AI-key step for the git-adapt path. On confirm it stows the chosen
         // credential and pops back to the git screen, whose onAppear takes it
         // off PendingBuildCredential and runs the adapt pass with it.
-        composable("build/git/key") {
-            AiKeyStepScreen(
-                onConfirm = { cred ->
-                    PendingBuildCredential.set(cred)
-                    nav.popBackStack()
-                },
-                onBack = { nav.popBackStack() },
-            )
+        composable("build/git/key") { entry ->
+            PodScoped(nav, placement, entry, creation = true) {
+                AiKeyStepScreen(
+                    onConfirm = { cred ->
+                        PendingBuildCredential.set(cred)
+                        nav.popBackStack()
+                    },
+                    onBack = { nav.popBackStack() },
+                )
+            }
         }
-        composable("build/mcp") { BuildMcpScreen(nav) }
-        composable("build/journal") { BuildJournalScreen(nav) }
+        composable("build/mcp") { entry -> PodScoped(nav, placement, entry, creation = true) { BuildMcpScreen(nav) } }
+        composable("build/journal") { entry -> PodScoped(nav, placement, entry, creation = false) { BuildJournalScreen(nav) } }
         composable("build/journal/{buildId}") { entry ->
             val bid = entry.arguments?.getString("buildId") ?: return@composable
-            BuildJournalScreen(nav, buildId = bid)
+            PodScoped(nav, placement, entry, creation = false) {
+                BuildJournalScreen(nav, buildId = bid)
+            }
         }
-        composable("vibe/provider") { VibeCodeProviderPickScreen(nav) }
+        composable("vibe/provider") { entry -> PodScoped(nav, placement, entry, creation = true) { VibeCodeProviderPickScreen(nav) } }
         // AI-key step for the from-scratch path. On confirm it stows the
         // in-memory credential and continues to the describe screen, which
         // hands it to the box's model when the build starts.
-        composable("vibe/key") {
-            AiKeyStepScreen(
-                onConfirm = { cred ->
-                    PendingBuildCredential.set(cred)
-                    nav.navigate("vibe/describe") {
-                        popUpTo("vibe/key") { inclusive = true }
-                    }
-                },
-                onBack = { nav.popBackStack() },
-            )
+        composable("vibe/key") { entry ->
+            PodScoped(nav, placement, entry, creation = true) {
+                AiKeyStepScreen(
+                    onConfirm = { cred ->
+                        PendingBuildCredential.set(cred)
+                        nav.navigate("vibe/describe") {
+                            popUpTo("vibe/key") { inclusive = true }
+                        }
+                    },
+                    onBack = { nav.popBackStack() },
+                )
+            }
         }
-        composable("vibe/describe") { VibeCodeDescribeScreen(nav) }
+        composable("vibe/describe") { entry -> PodScoped(nav, placement, entry, creation = true) { VibeCodeDescribeScreen(nav) } }
         composable("vibe/generating/{sessionId}") { entry ->
             val sid = entry.arguments?.getString("sessionId") ?: return@composable
-            VibeCodeGeneratingScreen(nav, sessionId = sid)
+            PodScoped(nav, placement, entry, creation = false) {
+                VibeCodeGeneratingScreen(nav, sessionId = sid)
+            }
         }
         // W10 — vibe-code chat surface (talkToUser / requestEnvVar replies).
         // Reached from the `vibecode-needs-you` push deep link, and from the
         // generating screen's Interrupt (a follow-up reply to the live build).
         composable("vibe-code-chat/{sessionId}") { entry ->
             val sid = entry.arguments?.getString("sessionId") ?: return@composable
-            VibeCodeChatScreen(nav, sessionId = sid)
+            PodScoped(nav, placement, entry, creation = false) {
+                VibeCodeChatScreen(nav, sessionId = sid)
+            }
         }
         composable("browser-tabs/{serviceId}") { entry ->
             val sid = entry.arguments?.getString("serviceId") ?: return@composable
-            BrowserTabsScreen(nav, serviceId = sid)
+            PodScoped(nav, placement, entry, creation = false) {
+                BrowserTabsScreen(nav, serviceId = sid)
+            }
         }
         composable("browser-viewer/{serviceId}/{tabId}") { entry ->
             val sid = entry.arguments?.getString("serviceId") ?: return@composable
             val tid = entry.arguments?.getString("tabId") ?: return@composable
-            BrowserViewerScreen(nav, serviceId = sid, tabId = tid)
+            PodScoped(nav, placement, entry, creation = false) {
+                BrowserViewerScreen(nav, serviceId = sid, tabId = tid)
+            }
         }
         composable("invite-manage/{serviceId}") { entry ->
             val sid = entry.arguments?.getString("serviceId") ?: return@composable
-            InviteManageScreen(nav, serviceId = sid)
+            PodScoped(nav, placement, entry, creation = false) {
+                InviteManageScreen(nav, serviceId = sid)
+            }
         }
         composable("invite-issue/{serviceId}") { entry ->
             val sid = entry.arguments?.getString("serviceId") ?: return@composable
-            InviteIssueScreen(nav, serviceId = sid)
+            PodScoped(nav, placement, entry, creation = false) {
+                InviteIssueScreen(nav, serviceId = sid)
+            }
         }
         // #92 — per-service access gating ("Who can open this"): open/restricted
         // toggle + the bearer-invite allow-list manager.
         composable("service-access/{serviceId}") { entry ->
             val sid = entry.arguments?.getString("serviceId") ?: return@composable
-            ServiceAccessScreen(nav, serviceId = sid)
+            PodScoped(nav, placement, entry, creation = false) {
+                ServiceAccessScreen(nav, serviceId = sid)
+            }
         }
         // #92 — friend redeem of a service-access invite (deep-link target). v2:
         // the optional `a` query carries the author AID so the friend redeems with

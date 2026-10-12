@@ -54,13 +54,49 @@ class AppStateTest {
         assertEquals("first", s.currentPodId.value)
     }
 
-    @Test fun setLeader_doesNotChangeCurrent() {
+    @Test fun setLeader_alsoMovesCurrent() {
+        // docs/app-placement.md §1: new apps follow the current server, so
+        // making a server leader makes it current too.
         val s = AppState(isPaired = true, currentUser = "u",
             pods = listOf(pod("a"), pod("b")),
             leaderPodId = "a", currentPodId = "a")
         s.setLeader("b")
         assertEquals("b", s.leaderPodId.value)
+        assertEquals("b", s.currentPodId.value)
+        assertEquals("b", s.currentPod?.podId)
+    }
+
+    @Test fun setLeader_unknownPodChangesNothing() {
+        val s = AppState(isPaired = true, currentUser = "u",
+            pods = listOf(pod("a")), leaderPodId = "a", currentPodId = "a")
+        s.setLeader("ghost")
+        assertEquals("a", s.leaderPodId.value)
         assertEquals("a", s.currentPodId.value)
+    }
+
+    private fun online(id: String) = pod(id).copy(status = PodInfo.Status.ONLINE)
+
+    @Test fun currentPod_prefersAnOnlineLeaderWithASession() {
+        val s = AppState(isPaired = true, currentUser = "u",
+            pods = listOf(online("a"), online("b")),
+            leaderPodId = "b", currentPodId = "a")
+        assertEquals("b", s.currentPod?.podId)
+    }
+
+    @Test fun currentPod_keepsTheSelectionWhenTheLeaderHasNoSession() {
+        val s = AppState(isPaired = true, currentUser = "u",
+            pods = listOf(online("a"), online("b")),
+            leaderPodId = "b", currentPodId = "a")
+        s.hasSession = { it != "b" }
+        assertEquals("a", s.currentPod?.podId)
+    }
+
+    @Test fun currentPod_keepsTheSelectionWhenTheLeaderIsOffline() {
+        val s = AppState(isPaired = true, currentUser = "u",
+            pods = listOf(online("a"), pod("b").copy(status = PodInfo.Status.OFFLINE)),
+            leaderPodId = "b", currentPodId = "a")
+        assertEquals("a", s.currentPod?.podId)
+        assertEquals("a", s.sessionPod?.podId)
     }
 
     @Test fun setCurrentPod_rejectsUnknown() {

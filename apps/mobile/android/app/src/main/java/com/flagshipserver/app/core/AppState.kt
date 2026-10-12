@@ -300,8 +300,21 @@ class AppState(
      *  Mirror of iOS AppState.oldestPod. */
     private val oldestPod: PodInfo? get() = _pods.value.firstOrNull()
 
+    /** Whether this device holds a session for a pod (by id). MainActivity
+     *  wires the per-pod token store; tests and previews assume yes. */
+    var hasSession: (String) -> Boolean = { true }
+
+    /** The box the screens client talks to (docs/app-placement.md §1): the
+     *  leader whenever it is online and this device has a session for it, else
+     *  the explicitly selected pod, else the leader, else the oldest pod. */
     val currentPod: PodInfo?
         get() {
+            val leader = leaderPod
+            if (leader != null && leader.status == PodInfo.Status.ONLINE && !leader.isRevoked &&
+                hasSession(leader.podId)
+            ) {
+                return leader
+            }
             val id = _currentPodId.value
             if (id != null) {
                 val p = _pods.value.firstOrNull { it.podId == id }
@@ -621,9 +634,13 @@ class AppState(
         if (changed) _pods.value = next
     }
 
+    /** Make [podId] the preferred server. It also becomes the current one, so
+     *  new apps (which go to the current server unless another is chosen)
+     *  land on it (docs/app-placement.md §1). */
     fun setLeader(podId: String) {
         if (_pods.value.none { it.podId == podId }) return
         _leaderPodId.value = podId
+        _currentPodId.value = podId
     }
 
     fun setCurrentPod(podId: String) {

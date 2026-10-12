@@ -76,7 +76,9 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
 
     val pods = appState.pods.collectAsState().value
     val leaderId = appState.leaderPodId.collectAsState().value
-    val serverFqdn = pods.firstOrNull { it.podId == leaderId }?.fqdn
+    val serverFqdn = com.flagshipserver.app.core.LocalPodScope.current?.pod?.fqdn
+        ?: appState.currentPod?.fqdn
+        ?: pods.firstOrNull { it.podId == leaderId }?.fqdn
         ?: pods.firstOrNull()?.fqdn
         ?: "unknown"
 

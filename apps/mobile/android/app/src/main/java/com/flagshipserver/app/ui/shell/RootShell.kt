@@ -73,6 +73,7 @@ fun RootShell(
             com.flagshipserver.app.core.DeepLink.SecretRequests -> RootDestination.ACTIVITY
             is com.flagshipserver.app.core.DeepLink.ServerDetail -> RootDestination.HOME
             is com.flagshipserver.app.core.DeepLink.AppDetail -> RootDestination.APPS
+            is com.flagshipserver.app.core.DeepLink.CreateApp -> RootDestination.APPS
             is com.flagshipserver.app.core.DeepLink.AccessList -> RootDestination.APPS
             is com.flagshipserver.app.core.DeepLink.VibeCodeChat -> RootDestination.APPS
             is com.flagshipserver.app.core.DeepLink.BuildJournal -> RootDestination.APPS

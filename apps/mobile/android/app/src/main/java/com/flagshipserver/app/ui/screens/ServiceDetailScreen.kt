@@ -25,7 +25,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,6 +45,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.repeatOnLifecycle
+import com.flagshipserver.app.api.boxError
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavController
@@ -85,12 +86,13 @@ import kotlinx.coroutines.launch
  * (loads app-detail off the box; no more sample data). Sections:
  *
  *   1. Header — slug, creator, status pill, version + immutable package id.
- *   2. WHERE IT RUNS — per-pod run toggle + a "Lead" radio designating the
- *      pod that holds the canonical short domain.
+ *   2. RUNS ON — every server ticked exactly where the app is (from each
+ *      server's own apps list); tick copies it there, untick removes that copy
+ *      (docs/app-placement.md §4).
  *   3. WEB DOMAINS — canonical FQDN + per-pod aliases + custom domain +
  *      Replace stem (RenameServiceViewModel, unchanged).
  *   4. Browser viewer (conditional), Collaborators, recent logs, last backup.
- *   5. Save (run-policy) + Uninstall, both real orders/send client calls.
+ *   5. Uninstall — the owner-signed uninstall of this server's copy.
  *
  * "Configure environment" is reachable from the toolbar overflow → the
  * service-env route (see ServicesTab).
@@ -106,20 +108,48 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
 
     val pods = appState.pods.collectAsState().value
     val leaderId = appState.leaderPodId.collectAsState().value
+    // The box this page works on: the server it was opened on, else the
+    // current one (docs/app-placement.md §4).
+    val pagePod = com.flagshipserver.app.core.LocalPodScope.current?.pod ?: appState.currentPod
+    val pagePodState = androidx.compose.runtime.rememberUpdatedState(pagePod)
+    val podClients = com.flagshipserver.app.core.LocalPodClients.current
 
     val detailVm: ServiceDetailViewModel = viewModel(
-        key = "service-detail-$serviceId",
+        key = "service-detail-$serviceId-${pagePod?.podId}",
         factory = viewModelFactory {
             initializer {
                 ServiceDetailViewModel(
                     serviceId = serviceId,
                     client = client,
-                    allPods = pods,
-                    globalLeaderPodId = leaderId,
+                    fallbackServerDomain = { pagePodState.value?.fqdn },
                 )
             }
         },
     )
+    // Runs on: every server's own apps list, over its own session.
+    val placementVm = remember(serviceId, podClients, client) {
+        com.flagshipserver.app.viewmodels.AppPlacementViewModel(
+            serviceId = serviceId,
+            appName = serviceId.substringAfter("--").replaceFirstChar { it.uppercase() },
+            pods = { appState.pods.value },
+            clientFor = { pod -> podClients.screens(pod) ?: client.takeIf { pod.podId == pagePodState.value?.podId } },
+            pagePodId = { pagePodState.value?.podId },
+        )
+    }
+    val placementRows by placementVm.rows.collectAsState()
+    val placementMessage by placementVm.message.collectAsState()
+    var confirmRemoveFrom by remember { mutableStateOf<com.flagshipserver.app.viewmodels.AppPlacementViewModel.Row?>(null) }
+    LaunchedEffect(placementVm, pods.map { it.podId to it.status }) { placementVm.load() }
+    // While a copy is underway and the page is visible, follow it.
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    LaunchedEffect(placementVm) {
+        lifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            while (true) {
+                delay(2_000)
+                if (placementVm.anyCopying) placementVm.refreshCopying()
+            }
+        }
+    }
     // Replace ceremony VM. Stored in the composition so the phase StateFlow
     // survives recompositions of the WEB DOMAINS section.
     val renameVm: RenameServiceViewModel = viewModel(
@@ -138,8 +168,6 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
 
     val detail by detailVm.detail.collectAsState()
     val certMismatch by detailVm.certMismatch.collectAsState()
-    val runOnPodIds by detailVm.runOnPodIds.collectAsState()
-    val leadPodId by detailVm.leadPodId.collectAsState()
     val phase by renameVm.phase.collectAsState()
     val appLinks by renameVm.links.collectAsState()
 
@@ -147,10 +175,9 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
     var replaceDraft by remember { mutableStateOf("") }
     var showUninstallDialog by remember { mutableStateOf(false) }
     var showAdapterReport by remember { mutableStateOf(false) }
-    var saving by remember { mutableStateOf(false) }
     var uninstalling by remember { mutableStateOf(false) }
 
-    LaunchedEffect(serviceId) {
+    LaunchedEffect(serviceId, detailVm) {
         detailVm.load()
         renameVm.loadLinks()
     }
@@ -204,14 +231,14 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                         appName = resp.app.slug.replaceFirstChar { it.uppercase() },
                         summary = access,
                         restricted = appState.isRestrictedDevice(),
-                        fallbackServerDomain = { (appState.sessionPod ?: appState.leaderPod)?.fqdn },
+                        fallbackServerDomain = { pagePodState.value?.fqdn ?: appState.sessionPod?.fqdn },
                     )
                 } else {
                     EgressSection(
                         serviceId = serviceId,
                         egress = resp.app.egress,
                         restricted = appState.isRestrictedDevice(),
-                        fallbackServerDomain = { (appState.sessionPod ?: appState.leaderPod)?.fqdn },
+                        fallbackServerDomain = { pagePodState.value?.fqdn ?: appState.sessionPod?.fqdn },
                     )
                 }
                 // API keys (docs/app-apis.md §3); hidden on a box without them.
@@ -219,7 +246,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     serviceId = serviceId,
                     appName = resp.app.slug.replaceFirstChar { it.uppercase() },
                     restricted = appState.isRestrictedDevice(),
-                    fallbackServerDomain = { appState.sessionPod?.fqdn },
+                    fallbackServerDomain = { pagePodState.value?.fqdn ?: appState.sessionPod?.fqdn },
                 )
                 // The owner's Database section (docs/app-apis.md §6): owner
                 // only, hidden on a box without it.
@@ -239,20 +266,22 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                 }
                 Spacer(Modifier.height(FS.space.s8))
 
-                // ── WHERE IT RUNS ──────────────────────────────────────
-                WhereItRunsSection(
-                    pods = pods,
-                    runOnPodIds = runOnPodIds,
-                    effectiveLeadPodId = leadPodId ?: leaderId,
-                    globalLeaderPodId = leaderId,
-                    onToggle = { detailVm.togglePod(it) },
-                    onSetLead = { detailVm.setLead(it) },
+                // ── RUNS ON (docs/app-placement.md §4) ─────────────────
+                RunsOnSection(
+                    vm = placementVm,
+                    rows = placementRows,
+                    leaderPodId = leaderId,
+                    message = placementMessage,
+                    restricted = appState.isRestrictedDevice(),
+                    onCopy = { row -> scope.launch { placementVm.copyTo(row.pod.podId) } },
+                    onRemove = { row -> confirmRemoveFrom = row },
+                    onDismissMessage = { placementVm.dismissMessage() },
                 )
 
                 Spacer(Modifier.height(FS.space.s6))
 
                 // ── WEB DOMAINS (Replace + custom-domain) ──────────────
-                val selectedPods = pods.filter { runOnPodIds.contains(it.podId) }
+                val selectedPods = placementRows.filter { it.presence is com.flagshipserver.app.viewmodels.AppPlacementViewModel.Presence.Has }.map { it.pod }
                 WebDomainsSection(
                     fallbackLabel = resp.app.urlLabel,
                     username = appState.currentUser.collectAsState().value,
@@ -413,32 +442,12 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     }
                 }
 
-                // ── Save + Uninstall ───────────────────────────────────
+                // ── Uninstall (this server's copy) ─────────────────────
                 Spacer(Modifier.height(FS.space.s8))
-                FSPrimaryButton(
-                    label = if (saving) "Saving…" else "Save changes",
-                    onClick = {
-                        scope.launch {
-                            saving = true
-                            try {
-                                detailVm.save()
-                                toasts.success("Saved ${detailVm.serviceId}.")
-                            } catch (t: Throwable) {
-                                toasts.error("Save failed. ${com.flagshipserver.app.core.NetworkErrorHumanizer.humanize(t)}")
-                            } finally {
-                                saving = false
-                            }
-                        }
-                    },
-                    enabled = !saving && !uninstalling,
-                    block = true,
-                    modifier = Modifier.semantics { testTag = "service-detail-save-btn" },
-                )
-                Spacer(Modifier.height(FS.space.s4))
                 FSDangerButton(
                     label = "Uninstall",
                     onClick = { showUninstallDialog = true },
-                    enabled = !saving && !uninstalling,
+                    enabled = !uninstalling,
                     block = true,
                     modifier = Modifier.semantics { testTag = "service-detail-uninstall-btn" },
                 )
@@ -468,14 +477,38 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
         AdapterReportDialog(serviceId = serviceId, onDismiss = { showAdapterReport = false })
     }
 
+    confirmRemoveFrom?.let { row ->
+        AlertDialog(
+            onDismissRequest = { confirmRemoveFrom = null },
+            title = { Text("Remove from ${row.pod.name}?") },
+            text = {
+                Text(
+                    "The copy on ${row.pod.name} and its data are deleted. The other copies keep running with their own data.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmRemoveFrom = null
+                        scope.launch { placementVm.removeFrom(row.pod.podId) }
+                    },
+                    modifier = Modifier.semantics { testTag = "runs-on-remove-confirm" },
+                ) { Text("Remove", color = FS.colors.danger) }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemoveFrom = null }) { Text("Cancel") } },
+        )
+    }
+
     if (showUninstallDialog) {
         AlertDialog(
             onDismissRequest = { if (!uninstalling) showUninstallDialog = false },
             title = { Text("Uninstall service?") },
             text = {
                 Text(
-                    "This removes the service from your server and frees its data layer. " +
-                        "Existing links stop working immediately. This can't be undone.",
+                    "This removes the service from ${pagePod?.name ?: "your server"} and frees its data there. " +
+                        "Links to that copy stop working immediately. This can't be undone.",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp),
                 )
@@ -491,8 +524,12 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                                 showUninstallDialog = false
                                 toasts.success("Uninstalled ${detailVm.serviceId}.")
                                 nav.popBackStack()
+                            } catch (t: kotlinx.coroutines.CancellationException) {
+                                throw t
+                            } catch (t: IllegalStateException) {
+                                toasts.error("Uninstall failed. ${t.message}")
                             } catch (t: Throwable) {
-                                toasts.error("Uninstall failed. ${com.flagshipserver.app.core.NetworkErrorHumanizer.humanize(t)}")
+                                toasts.error("Uninstall failed. ${t.boxError() ?: com.flagshipserver.app.core.NetworkErrorHumanizer.humanize(t)}")
                             } finally {
                                 uninstalling = false
                             }
@@ -771,70 +808,75 @@ private fun Header(app: AppSummary) {
     }
 }
 
+/** Runs on: each of the account's servers, ticked exactly where the app is
+ *  (docs/app-placement.md §4). Tick copies it there; untick removes that copy. */
 @Composable
-private fun WhereItRunsSection(
-    pods: List<PodInfo>,
-    runOnPodIds: Set<String>,
-    effectiveLeadPodId: String?,
-    globalLeaderPodId: String?,
-    onToggle: (String) -> Unit,
-    onSetLead: (String) -> Unit,
+private fun RunsOnSection(
+    vm: com.flagshipserver.app.viewmodels.AppPlacementViewModel,
+    rows: List<com.flagshipserver.app.viewmodels.AppPlacementViewModel.Row>,
+    leaderPodId: String?,
+    message: String?,
+    restricted: Boolean,
+    onCopy: (com.flagshipserver.app.viewmodels.AppPlacementViewModel.Row) -> Unit,
+    onRemove: (com.flagshipserver.app.viewmodels.AppPlacementViewModel.Row) -> Unit,
+    onDismissMessage: () -> Unit,
 ) {
-    SectionHeader("Where it runs")
+    SectionHeader("Runs on")
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            pods.forEach { pod ->
-                val isOn = runOnPodIds.contains(pod.podId)
-                val isLead = effectiveLeadPodId == pod.podId
-                val isGlobalLeader = globalLeaderPodId == pod.podId
+            if (rows.isEmpty()) {
+                Text("Checking your servers…", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+            }
+            rows.forEach { row ->
+                val unknown = row.presence is com.flagshipserver.app.viewmodels.AppPlacementViewModel.Presence.Unknown
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
-                        checked = isOn,
-                        onCheckedChange = { onToggle(pod.podId) },
-                        modifier = Modifier.semantics { testTag = "where-it-runs-toggle-${pod.podId}" },
+                        checked = row.ticked,
+                        enabled = !restricted && vm.canChange(row),
+                        onCheckedChange = { on -> if (on) onCopy(row) else onRemove(row) },
+                        modifier = Modifier.semantics { testTag = "runs-on-toggle-${row.pod.podId}" },
                     )
                     Spacer(Modifier.padding(start = FS.space.s2))
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(pod.name, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-                            if (isGlobalLeader) {
+                            Text(row.pod.name, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+                            if (row.pod.podId == leaderPodId) {
                                 Spacer(Modifier.padding(start = FS.space.s2))
-                                FSPill(label = "Leader", kind = FSPillKind.Idle)
+                                FSPill(label = "Preferred", kind = FSPillKind.Idle)
+                            }
+                            if (unknown) {
+                                Spacer(Modifier.padding(start = FS.space.s2))
+                                FSPill(label = "Unknown", kind = FSPillKind.Idle)
                             }
                         }
-                        pod.description?.takeIf { it.isNotEmpty() }?.let {
+                        com.flagshipserver.app.viewmodels.AppPlacementViewModel.rowNote(vm, row)?.let {
                             Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
                         }
-                    }
-                    if (isOn) {
-                        // The radio designates the pod that owns the canonical
-                        // short domain (mirrors iOS's circle + house "Lead").
-                        RadioButton(
-                            selected = isLead,
-                            onClick = { onSetLead(pod.podId) },
-                            modifier = Modifier.semantics { testTag = "where-it-runs-lead-${pod.podId}" },
-                        )
                     }
                 }
             }
         }
     }
+    if (message != null) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = FS.space.s2),
+        ) {
+            Text(
+                message,
+                color = FS.colors.danger,
+                style = TextStyle(fontSize = 13.sp),
+                modifier = Modifier.weight(1f).semantics { testTag = "runs-on-message" },
+            )
+            TextButton(onClick = onDismissMessage) { Text("OK") }
+        }
+    }
     Text(
-        text = leadHint(pods, effectiveLeadPodId, globalLeaderPodId),
+        text = "Tick a server to copy the app there with its data as it is now. Each copy then keeps its own data.",
         color = FS.colors.textMuted,
         style = TextStyle(fontSize = 12.sp),
         modifier = Modifier.padding(top = FS.space.s2, start = FS.space.s1),
     )
-}
-
-private fun leadHint(pods: List<PodInfo>, leadPodId: String?, globalLeaderPodId: String?): String {
-    pods.firstOrNull { it.podId == leadPodId }?.let {
-        return "Canonical short domain points to ${it.name}."
-    }
-    pods.firstOrNull { it.podId == globalLeaderPodId }?.let {
-        return "Following the account leader (${it.name})."
-    }
-    return "Pick which pod owns the canonical short domain."
 }
 
 private fun relativeTime(ms: Long): String {

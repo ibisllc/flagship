@@ -32,6 +32,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -149,15 +151,21 @@ fun ServerDetailScreen(
     serverFqdn: String? = null,
     health: com.flagshipserver.app.api.BoxHealthWire? = null,
 ) {
-    val client = LocalScreensClient.current
-    val detailVm = remember(podId) { HomeViewModel(client) }
-    val metricsVm = remember(podId) { ServerMetricsViewModel(podId = podId, client = client) }
-    val detail by detailVm.state.collectAsState()
-    val metrics by metricsVm.state.collectAsState()
     val allPods by LocalAppState.current.pods.collectAsState()
     val pod = allPods.firstOrNull { it.podId == podId }
+    // This server's own client (its base URL + session), so the page shows
+    // this box, not the current one. Without a session here it falls back to
+    // the current server's client, as before.
+    val podClients = com.flagshipserver.app.core.LocalPodClients.current
+    val globalClient = LocalScreensClient.current
+    val podClient = pod?.let { podClients.screens(it) }
+    val client = podClient ?: globalClient
+    val detailVm = remember(podId, client) { HomeViewModel(client) }
+    val metricsVm = remember(podId, client) { ServerMetricsViewModel(podId = podId, client = client) }
+    val detail by detailVm.state.collectAsState()
+    val metrics by metricsVm.state.collectAsState()
 
-    LaunchedEffect(podId) {
+    LaunchedEffect(podId, client) {
         // Retry until the box answers its BFF — an online box whose daemon
         // raced readiness no longer sticks on the skeleton until manual refresh.
         detailVm.loadUntilLoaded()
@@ -221,6 +229,12 @@ fun ServerDetailScreen(
             is LoadingState.Loaded -> ServerInfoCard(d.value)
             is LoadingState.Failed -> ErrorCard(d.message, onRetry = { detailVm.load() })
             else -> ServerCardSkeleton()
+        }
+
+        // This server's apps (docs/app-placement.md §3).
+        if (pod != null && !pod.isRevoked && podClient != null) {
+            Spacer(Modifier.height(FS.space.s6))
+            ServerAppsSection(podId = podId, client = podClient)
         }
 
         Spacer(Modifier.height(FS.space.s6))
@@ -551,6 +565,75 @@ private fun BootUnlockApprovalCard(
     }
 }
 
+/** A server's apps, each opening its page, plus "Create app here". An app
+ *  being copied here is greyed out with its progress; the list is polled
+ *  while a copy is underway and the page is visible. */
+@Composable
+private fun ServerAppsSection(podId: String, client: com.flagshipserver.app.api.ScreensClient) {
+    val deepLinker = com.flagshipserver.app.core.LocalDeepLinker.current
+    val vm = remember(podId, client) { com.flagshipserver.app.viewmodels.ServerAppsViewModel(client) }
+    val phase by vm.phase.collectAsState()
+    val retryScope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(vm) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            vm.load()
+            while (vm.underway) {
+                kotlinx.coroutines.delay(2_000)
+                vm.load()
+            }
+        }
+    }
+    Text(
+        com.flagshipserver.app.viewmodels.ServerAppsViewModel.TITLE,
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        when (val p = phase) {
+            is com.flagshipserver.app.viewmodels.ServerAppsViewModel.Phase.Loading -> ServerCardSkeleton()
+            is com.flagshipserver.app.viewmodels.ServerAppsViewModel.Phase.Failed ->
+                ErrorCard(p.message, onRetry = { retryScope.launch { vm.load() } })
+            is com.flagshipserver.app.viewmodels.ServerAppsViewModel.Phase.Loaded -> {
+                if (p.rows.isEmpty()) {
+                    Text(
+                        com.flagshipserver.app.viewmodels.ServerAppsViewModel.EMPTY,
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 14.sp),
+                    )
+                }
+                p.rows.forEach { row ->
+                    val greyed = !row.opens
+                    com.flagshipserver.app.ui.components.FSListRow(
+                        leading = com.flagshipserver.app.ui.components.FSListLeading.Icon(
+                            icon = androidx.compose.material.icons.Icons.Outlined.Apps,
+                            color = if (greyed) FS.colors.textMuted else FS.colors.primary,
+                        ),
+                        title = row.name,
+                        subtitle = row.status,
+                        detail = row.address.ifEmpty { null },
+                        onClick = if (row.opens) {
+                            { deepLinker.enqueue(com.flagshipserver.app.core.DeepLink.AppDetail(row.serviceId, podId)) }
+                        } else {
+                            null
+                        },
+                        modifier = Modifier
+                            .then(if (greyed) Modifier.alpha(0.55f) else Modifier)
+                            .testTag("server-app-${row.serviceId}"),
+                    )
+                }
+            }
+        }
+        FSSecondaryButton(
+            label = com.flagshipserver.app.viewmodels.ServerAppsViewModel.CREATE_HERE,
+            onClick = { deepLinker.enqueue(com.flagshipserver.app.core.DeepLink.CreateApp(podId)) },
+            block = true,
+            modifier = Modifier.testTag("server-create-app-here"),
+        )
+    }
+}
+
 @Composable
 private fun SectionLabel(text: String) {
     Text(
@@ -853,13 +936,13 @@ private fun PreferredServerCard(serverDomain: String) {
                     style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                 )
                 Text(
-                    "New service routes default here when it's the highest-clout live server. You can pick a different one from another server's page.",
+                    "New apps are created here unless you pick another server when you create them. To change this, set another server as preferred from its page.",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp),
                 )
             } else {
                 Text(
-                    "Make this the default target for your cloud — votes for it across your boxes so the highest-clout live server leading a service prefers it.",
+                    "Make this the server new apps are created on by default, and the one your other servers prefer to lead a service.",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp),
                 )

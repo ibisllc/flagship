@@ -31,6 +31,79 @@ data class AppSummary(
     /** The app's access list at a glance (§3a). Absent on boxes from before
      *  access lists; those may still send [egress]. */
     val access: AppAccessSummary? = null,
+    /** Set while a copy of this app is arriving on this box
+     *  (docs/app-placement.md §5); absent once it is installed. */
+    val copying: AppCopying? = null,
+)
+
+/** `copying: {state, progress}` on an app summary while a copy arrives. */
+@Serializable
+data class AppCopying(
+    /** "copying" | "installing" (a box may also report a final state briefly). */
+    val state: String,
+    /** How far along, 0..1 over the whole copy. */
+    val progress: Double? = null,
+)
+
+// ---------- Copying an app to another server (docs/app-placement.md §5) ----
+
+/** The owner's grant to copy [serviceId] from [sourceServer] to [targetServer]. */
+@Serializable
+data class AppCopyGrantBody(
+    val sourceServer: String,
+    val targetServer: String,
+    val serviceId: String,
+    val issuedAt: Long,
+)
+
+/** `POST /api/screens/services/copy`, sent to the TARGET box. */
+@Serializable
+data class AppCopyRequest(
+    val grant: AppCopyGrantBody,
+    /** Ed25519 over the canonical bytes, 128 hex. */
+    val signature: String,
+)
+
+/** 202 from the copy endpoint. */
+@Serializable
+data class AppCopyResponse(val copyId: String = "")
+
+/** One copy the box is receiving (or received). */
+@Serializable
+data class AppCopyRecord(
+    val copyId: String,
+    val serviceId: String,
+    val appName: String = "",
+    val sourceServer: String = "",
+    /** "copying" | "installing" | "done" | "failed". */
+    val state: String,
+    val progress: Double? = null,
+    val reason: String? = null,
+    val startedAt: Long = 0,
+    /** Env names whose values couldn't come along: the owner sets them on
+     *  this server. */
+    val pendingEnv: List<String> = emptyList(),
+) {
+    val underway: Boolean get() = state == "copying" || state == "installing"
+}
+
+/** `GET /api/screens/services/copies`. */
+@Serializable
+data class AppCopiesResponse(val copies: List<AppCopyRecord> = emptyList())
+
+/** The owner-signed uninstall (`DELETE /api/services/:serviceId`). */
+@Serializable
+data class UninstallServiceRequestBody(
+    val serverId: String,
+    val creator: String,
+    val slug: String,
+    val issuedAt: Long,
+)
+
+@Serializable
+data class UninstallServiceBody(
+    val request: UninstallServiceRequestBody,
+    val signature: String,
 )
 
 /** `access: {rules, pending, draft?}` on an app summary. */

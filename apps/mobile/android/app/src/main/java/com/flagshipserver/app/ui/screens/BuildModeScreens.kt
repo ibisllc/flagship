@@ -203,7 +203,7 @@ fun BuildSourceChooserScreen(nav: NavController) {
     var showHelp by remember { mutableStateOf(false) }
     // Composition restarts each time the chooser comes back on top (e.g.
     // Back from a session), so this re-counts then.
-    LaunchedEffect(Unit) {
+    LaunchedEffect(screens) {
         val sessions = runCatching { screens.vibeCodeSessions().sessions }.getOrDefault(emptyList())
         activeSessions = sessions.count { it.isActive }
     }
@@ -217,7 +217,14 @@ fun BuildSourceChooserScreen(nav: NavController) {
             }
         },
     ) {
-        ResumeRow(activeSessions) { nav.navigate("build/journal") }
+        com.flagshipserver.app.ui.components.RunsOnRow()
+        Spacer(Modifier.height(FS.space.s4))
+        val podScope = com.flagshipserver.app.core.LocalPodScope.current
+        ResumeRow(activeSessions) {
+            // The sessions listed are this server's.
+            podScope?.let { it.choose?.invoke(it.pod.podId) }
+            nav.navigate("build/journal")
+        }
         Spacer(Modifier.height(FS.space.s5))
         Text("New build", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
         Spacer(Modifier.height(FS.space.s2))
@@ -358,14 +365,26 @@ fun BuildGitScreen(nav: NavController) {
     // composition (the current/leader pod). The sliver's TAP target is the
     // build's own journal (the VM derives it from the buildId), not this
     // server — tapping should open the build, not the box.
-    val targetPod = remember(appState) { appState.currentPod ?: appState.leaderPod }
+    // The chosen server (docs/app-placement.md §2); the build client is bound
+    // to it. A new choice before the repo is checked starts a fresh model on
+    // that server.
+    val podScope = com.flagshipserver.app.core.LocalPodScope.current
+    val targetPod = podScope?.pod ?: appState.currentPod ?: appState.leaderPod
     val holder: BuildGitHolder = viewModel()
-    val vm = holder.vm ?: BuildGitViewModel(
-        client = client,
-        operations = operations,
-        serviceLabel = "your repo",
-        serverLabel = targetPod?.name,
-    ).also { holder.vm = it }
+    val current = holder.vm
+    val vm = if (current != null && (holder.podId == targetPod?.podId || current.phase.value !is BuildGitViewModel.GitPhase.Idle)) {
+        current
+    } else {
+        BuildGitViewModel(
+            client = client,
+            operations = operations,
+            serviceLabel = "your repo",
+            serverLabel = targetPod?.name,
+        ).also {
+            holder.vm = it
+            holder.podId = targetPod?.podId
+        }
+    }
     val phase by vm.phase.collectAsState()
 
     var url by rememberSaveable { mutableStateOf("") }
@@ -411,7 +430,8 @@ fun BuildGitScreen(nav: NavController) {
     }
     val screens = LocalScreensClient.current
     val username = appState.currentUser.value ?: "you"
-    val server = (appState.sessionPod ?: appState.leaderPod)?.fqdn ?: "$username.flagship.services"
+    val server = podScope?.pod?.fqdn
+        ?: (appState.sessionPod ?: appState.leaderPod)?.fqdn ?: "$username.flagship.services"
     // The latest answer from the box, and the slug it answered for: a check
     // only counts while the field still holds that slug.
     var check by remember { mutableStateOf<VibeCodeNameCheck?>(null) }
@@ -419,7 +439,7 @@ fun BuildGitScreen(nav: NavController) {
     val currentCheck = check.takeIf { checkedSlug == slug }
     val nameRefused = currentCheck?.ok == false
 
-    LaunchedEffect(slug) {
+    LaunchedEffect(slug, screens) {
         if (slug.isEmpty()) return@LaunchedEffect
         kotlinx.coroutines.delay(350)
         val result = runCatching { screens.vibeCodeNameCheck(slug) }.getOrDefault(VibeCodeNameCheck.Unknown)
@@ -432,6 +452,8 @@ fun BuildGitScreen(nav: NavController) {
         subtitle = null,
         onBack = { nav.popBackStack() },
     ) {
+        com.flagshipserver.app.ui.components.RunsOnRow(locked = phase !is BuildGitViewModel.GitPhase.Idle)
+        Spacer(Modifier.height(FS.space.s4))
         FieldLabel("Repository URL")
         MonoField(url, { url = it }, "https://github.com/you/app")
         Spacer(Modifier.height(FS.space.s4))
@@ -475,7 +497,15 @@ fun BuildGitScreen(nav: NavController) {
         }
         Spacer(Modifier.height(FS.space.s4))
 
-        val checkRepo = { if (url.isBlank()) toasts.error("Paste a repo URL first.") else vm.checkRepo(url, ref, name) }
+        val checkRepo = {
+            if (url.isBlank()) {
+                toasts.error("Paste a repo URL first.")
+            } else {
+                // Keep the server it builds on for the steps after this one.
+                podScope?.let { it.choose?.invoke(it.pod.podId) }
+                vm.checkRepo(url, ref, name)
+            }
+        }
         if (BuildGitViewModel.showsCheckRepo(phase)) {
             val checking = phase is BuildGitViewModel.GitPhase.Checking
             FSPrimaryButton(
@@ -535,6 +565,8 @@ fun BuildGitScreen(nav: NavController) {
  *  back without the checked build (or the share switch) to adapt. */
 internal class BuildGitHolder : ViewModel() {
     var vm: BuildGitViewModel? = null
+    /** The server [vm] builds on. */
+    var podId: String? = null
 }
 
 @Composable
@@ -795,7 +827,10 @@ fun BuildMcpScreen(nav: NavController, editServiceId: String? = null) {
     val client = LocalBuildClient.current
     val toasts = LocalToastCenter.current
     val ctx = LocalContext.current
-    val vm = remember(editServiceId) { BuildMcpViewModel(client, editServiceId = editServiceId) }
+    val podScope = com.flagshipserver.app.core.LocalPodScope.current
+    // Bound to the chosen server (docs/app-placement.md §2). The picker locks
+    // once a connection is being made, so the client can't change under it.
+    val vm = remember(editServiceId, client) { BuildMcpViewModel(client, editServiceId = editServiceId) }
     val phase by vm.phase.collectAsState()
     val connection by vm.connection.collectAsState()
     val envRequests by vm.envRequests.collectAsState()
@@ -809,10 +844,16 @@ fun BuildMcpScreen(nav: NavController, editServiceId: String? = null) {
     ) {
         val creating = phase is BuildMcpViewModel.McpPhase.Creating
         val conn = connection
+        com.flagshipserver.app.ui.components.RunsOnRow(locked = creating || conn != null)
+        Spacer(Modifier.height(FS.space.s4))
         if (conn == null) {
             FSPrimaryButton(
                 label = if (creating) "Creating…" else "Create a connection",
-                onClick = { vm.create() },
+                onClick = {
+                    // Keep the server it builds on for the steps after this one.
+                    podScope?.let { it.choose?.invoke(it.pod.podId) }
+                    vm.create()
+                },
                 enabled = !creating,
                 block = true,
                 modifier = Modifier.testTag("build-mcp-create"),

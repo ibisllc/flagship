@@ -19,11 +19,17 @@ sealed interface DeepLink {
      *  secret. (The legacy plaintext unlock-approval flow has been removed.) */
     data object SecretRequests : DeepLink
     data class ServerDetail(val podId: String) : DeepLink
-    data class AppDetail(val appId: String) : DeepLink
+    /** An app's page. [podId] (internal-only) opens it on that server,
+     *  e.g. from a server's list of apps; null is the current server. */
+    data class AppDetail(val appId: String, val podId: String? = null) : DeepLink
     /** An app's access list editor, from an internet-access alert's "View
      *  access list", or with its suggested list ([draft]) from a draft
-     *  alert's Review. Internal-only — not parsed from a URI. */
-    data class AccessList(val serviceId: String, val draft: Boolean = false) : DeepLink
+     *  alert's Review, on the box that raised it ([podId]). Internal-only —
+     *  not parsed from a URI. */
+    data class AccessList(val serviceId: String, val draft: Boolean = false, val podId: String? = null) : DeepLink
+    /** "Create app here" on a server's page: the creation flow pinned to
+     *  that server (docs/app-placement.md §3). Internal-only. */
+    data class CreateApp(val podId: String) : DeepLink
     data object CreateServer : DeepLink
     /** Open the recovery-setup flow on the Settings tab. Triggered
      *  in-app from the Home nudge (C9). Internal-only — not parsed

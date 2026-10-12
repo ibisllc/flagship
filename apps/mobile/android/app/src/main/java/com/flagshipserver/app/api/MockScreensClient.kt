@@ -287,6 +287,48 @@ class MockScreensClient(
 
     override suspend fun boxFqdn(): String = "$podContext.bright-maple.flagship.services"
 
+    // ---- Copies (docs/app-placement.md §5) ----
+
+    /** Every copy request this box received, in order. */
+    val copyRequests: MutableList<AppCopyRequest> = mutableListOf()
+    /** The copies this box reports. A test can seed or advance them. */
+    val copies: MutableList<AppCopyRecord> = mutableListOf()
+    /** Thrown by [serviceCopy] when set (e.g. a 409 or an older box's 404). */
+    var copyError: Throwable? = null
+    /** Every signed uninstall this box received. */
+    val uninstalls: MutableList<Pair<String, UninstallServiceBody>> = mutableListOf()
+    var uninstallError: Throwable? = null
+
+    override suspend fun serviceCopy(req: AppCopyRequest): AppCopyResponse {
+        tick()
+        copyError?.let { throw it }
+        copyRequests.add(req)
+        val id = "copy-${copyRequests.size}"
+        copies.add(
+            AppCopyRecord(
+                copyId = id,
+                serviceId = req.grant.serviceId,
+                appName = req.grant.serviceId.substringAfter("--"),
+                sourceServer = req.grant.sourceServer,
+                state = "copying",
+                progress = 0.0,
+                startedAt = now(),
+            ),
+        )
+        return AppCopyResponse(copyId = id)
+    }
+
+    override suspend fun serviceCopies(): AppCopiesResponse {
+        tick()
+        return AppCopiesResponse(copies.toList())
+    }
+
+    override suspend fun uninstallService(serviceId: String, body: UninstallServiceBody) {
+        tick()
+        uninstallError?.let { throw it }
+        uninstalls.add(serviceId to body)
+    }
+
     // ---- The owner's Database section (docs/app-apis.md §6) ----
 
     /** One table: its columns and every row (values as the box sends them). */

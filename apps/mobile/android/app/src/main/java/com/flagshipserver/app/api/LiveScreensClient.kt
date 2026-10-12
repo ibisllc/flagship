@@ -311,6 +311,19 @@ class LiveScreensClient(
     override suspend fun boxFqdn(): String? =
         store.podBaseUrl.first()?.toHttpUrlOrNull()?.host
 
+    override suspend fun serviceCopy(req: AppCopyRequest): AppCopyResponse {
+        val body = json.encodeToString(AppCopyRequest.serializer(), req).toByteArray()
+        return request("/api/screens/services/copy", AppCopyResponse.serializer(), "POST", body)
+    }
+
+    override suspend fun serviceCopies(): AppCopiesResponse =
+        request("/api/screens/services/copies", AppCopiesResponse.serializer())
+
+    override suspend fun uninstallService(serviceId: String, body: UninstallServiceBody) {
+        val bytes = json.encodeToString(UninstallServiceBody.serializer(), body).toByteArray()
+        request<Unit>("/api/services/${segment(serviceId)}", null, "DELETE", bytes)
+    }
+
     override suspend fun vibeCodeSessions(): VibeCodeSessionsResponse =
         request("/api/llm/sessions", VibeCodeSessionsResponse.serializer())
 

@@ -205,6 +205,11 @@ class MainActivity : FragmentActivity() {
         }
 
         val devSettings = DeveloperSettings.create(applicationContext)
+        // The leader becomes the current server only when this device can
+        // talk to it (docs/app-placement.md §1). Mock mode needs no session.
+        appState.hasSession = { podId ->
+            !devSettings.useLiveClient.value || sessionStore.sessionToken(forPodId = podId) != null
+        }
         // GYM: a smoke-mode launch is NO-BACKEND by contract — force the MOCK
         // client (in-memory only) so the shell renders from MockScreensClient
         // and the live maintainer-trust check never runs (it would clobber the
@@ -307,6 +312,16 @@ class MainActivity : FragmentActivity() {
             // pivots on the toggle alone — like relay/mailbox above.
             val effectiveFlagshipServer: FlagshipServerClient =
                 if (useLive) liveFlagshipServer else mockFlagshipServer
+            // Clients bound to one server's own base URL and session, for the
+            // screens that work on a server other than the current one
+            // (docs/app-placement.md).
+            val podClients: com.flagshipserver.app.core.PodClients = remember(useLive) {
+                if (useLive) {
+                    com.flagshipserver.app.core.LivePodClients(okHttp, sessionStore)
+                } else {
+                    com.flagshipserver.app.core.FixedPodClients(mockScreens, mockBuild)
+                }
+            }
 
             // Maintainer-trust check on launch (live only — the Mock control
             // server has no blessing to verify). Uses a NON-gated transport so
@@ -429,9 +444,12 @@ class MainActivity : FragmentActivity() {
             // null token → the BFF 401s → "pair this device", never borrowing
             // another pod's token. Mirror of iOS PodSessionSync.
             val currentPodId by appState.currentPodId.collectAsState()
+            val leaderPodId by appState.leaderPodId.collectAsState()
             val pods by appState.pods.collectAsState()
-            LaunchedEffect(currentPodId, pods) {
-                val pod = pods.firstOrNull { it.podId == currentPodId }
+            LaunchedEffect(currentPodId, leaderPodId, pods, useLive) {
+                // currentPod prefers an online leader this device has a
+                // session for (docs/app-placement.md §1).
+                val pod = appState.currentPod
                 if (pod != null && pod.fqdn.isNotEmpty()) {
                     sessionStore.migrateSingleTokenToPod(pod.podId)
                     sessionStore.activatePod(pod.podId, "https://${pod.fqdn}")
@@ -510,6 +528,7 @@ class MainActivity : FragmentActivity() {
                     LocalSecretMailboxClient provides effectiveMailbox,
                     LocalServerTransferClient provides effectiveTransfer,
                     LocalSessionStore provides sessionStore,
+                    com.flagshipserver.app.core.LocalPodClients provides podClients,
                     LocalToastCenter provides toasts,
                     LocalActiveOperationsCenter provides operations,
                     LocalTrustCenter provides trustCenter,
@@ -710,8 +729,9 @@ private fun AppRoot(
         val deepLinker = LocalDeepLinker.current
         if (isPaired && isUnlocked && accessCenter != null) {
             com.flagshipserver.app.ui.screens.AccessRequestDialogHost(accessCenter) { alert ->
-                alert.box.podId?.let { if (it != app.currentPodId.value) app.setCurrentPod(it) }
-                deepLinker.enqueue(DeepLink.AccessList(alert.request.serviceId, draft = alert.isDraft))
+                deepLinker.enqueue(
+                    DeepLink.AccessList(alert.request.serviceId, draft = alert.isDraft, podId = alert.box.podId),
+                )
             }
         }
         if (isPaired && !isUnlocked) {

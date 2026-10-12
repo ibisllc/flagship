@@ -193,6 +193,22 @@ interface ScreensClient {
     /** The FQDN of the box this client talks to, which a signed grant names. */
     suspend fun boxFqdn(): String? = null
 
+    /** `POST /api/screens/services/copy` (docs/app-placement.md §5), sent to
+     *  the TARGET box with the owner's signed grant: 202 `{copyId}`; 400
+     *  malformed, 403 bad signature / not this box / stale, 409 already there
+     *  or already copying. A box from before copies answers 404. */
+    suspend fun serviceCopy(req: AppCopyRequest): AppCopyResponse =
+        throw ScreensError.NotImplemented("copies")
+
+    /** `GET /api/screens/services/copies`: the copies this box is receiving. */
+    suspend fun serviceCopies(): AppCopiesResponse =
+        throw ScreensError.NotImplemented("copies")
+
+    /** `DELETE /api/services/:serviceId {request, signature}`: the owner-signed
+     *  uninstall, verified by the box against its owner IRK. */
+    suspend fun uninstallService(serviceId: String, body: UninstallServiceBody): Unit =
+        throw ScreensError.NotImplemented("uninstall")
+
     // P9 — peer-backup management.
     suspend fun peerBackupStatus(): PeerBackupStatusResponse
     suspend fun peerBackupToggle(participate: Boolean): PeerBackupStatusResponse
