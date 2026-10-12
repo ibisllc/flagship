@@ -1117,7 +1117,9 @@ struct UpdateServerCard: View {
             }
         }
         .task(id: currentCommit) {
-            latestTag = (try? await client.serverUpdates(refresh: false))?.latest?.tag
+            latestTag = (try? await ReleaseCatalogLoader.load(
+                screens: client, mailbox: mailbox, currentCommit: currentCommit, refresh: false
+            ))?.latest?.tag
         }
         .sheet(isPresented: $showSheet) {
             NavigationStack {
@@ -1128,7 +1130,8 @@ struct UpdateServerCard: View {
                         currentCommit: currentCommit,
                         mailbox: mailbox
                     ),
-                    serverFqdn: serverDomain
+                    serverFqdn: serverDomain,
+                    currentCommit: currentCommit
                 )
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -1148,9 +1151,11 @@ struct UpdateServerCard: View {
 struct UpdateServerSheet: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.screensClient) private var client
+    @Environment(\.secretMailboxClient) private var mailbox
 
     @State var vm: UpdateServerViewModel
     let serverFqdn: String
+    let currentCommit: String?
 
     @State private var target = ""
     @State private var catalog: ReleaseCatalogResponse?
@@ -1305,7 +1310,9 @@ struct UpdateServerSheet: View {
         loadingCatalog = true
         defer { loadingCatalog = false }
         do {
-            catalog = try await client.serverUpdates(refresh: refresh)
+            catalog = try await ReleaseCatalogLoader.load(
+                screens: client, mailbox: mailbox, currentCommit: currentCommit, refresh: refresh
+            )
             catalogError = nil
         } catch {
             if catalog == nil { catalogError = ScreensClientError.userFacing(error) }

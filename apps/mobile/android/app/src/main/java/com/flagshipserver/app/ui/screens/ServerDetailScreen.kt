@@ -61,6 +61,8 @@ import com.flagshipserver.app.api.LastUpdate
 import com.flagshipserver.app.api.ReleaseCatalogResponse
 import com.flagshipserver.app.api.ReleaseEntry
 import com.flagshipserver.app.api.ScreensError
+import com.flagshipserver.app.api.loadReleaseCatalog
+import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.api.userFacing
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.style.TextOverflow
@@ -1359,7 +1361,9 @@ private fun UpdateServerCard(serverDomain: String, currentCommit: String?, lastU
     val reported = shortCommit(currentCommit) != null
 
     LaunchedEffect(currentCommit) {
-        latestTag = runCatching { screens.serverUpdates(refresh = false).latest?.tag }.getOrNull()
+        latestTag = runCatching {
+            loadReleaseCatalog(screens, mailbox, currentCommit, refresh = false).latest?.tag
+        }.getOrNull()
     }
 
     Text(
@@ -1428,7 +1432,7 @@ private fun UpdateServerCard(serverDomain: String, currentCommit: String?, lastU
             onDismissRequest = { showSheet = false },
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
-            UpdateServerSheet(serverDomain = serverDomain, vm = vm, onDone = { showSheet = false })
+            UpdateServerSheet(serverDomain = serverDomain, currentCommit = currentCommit, vm = vm, onDone = { showSheet = false })
         }
     }
 }
@@ -1437,7 +1441,7 @@ private const val DOWNGRADE_WARNING =
     "Older releases don't have the fixes made since, and may not understand changes made to this server after them, such as a rotated admin key. In the worst case the server stops accepting updates and has to be reinstalled. Only go back if a newer release broke something."
 
 /** Plain copy for a failed release-list call; a bare status code never reaches the UI. */
-private fun releaseCheckProblem(t: Throwable): String = when ((t as? ScreensError.Http)?.status) {
+private fun releaseCheckProblem(t: Throwable): String = when ((t as? ScreensError.Http)?.status ?: (t as? HttpException)?.status) {
     null -> t.userFacing()
     401, 403 -> "You're not signed in for that. Try signing in again."
     404 -> "We couldn't find that. It may have moved or been removed."
@@ -1452,8 +1456,14 @@ private fun releaseCheckProblem(t: Throwable): String = when ((t as? ScreensErro
 // a confirmation. Whatever is picked, the signed order names one exact commit.
 // Mirror of iOS UpdateServerSheet.
 @Composable
-private fun UpdateServerSheet(serverDomain: String, vm: UpdateServerViewModel, onDone: () -> Unit) {
+private fun UpdateServerSheet(
+    serverDomain: String,
+    currentCommit: String?,
+    vm: UpdateServerViewModel,
+    onDone: () -> Unit,
+) {
     val screens = LocalScreensClient.current
+    val mailbox = LocalSecretMailboxClient.current
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
     val phase by vm.phase.collectAsState()
@@ -1468,7 +1478,7 @@ private fun UpdateServerSheet(serverDomain: String, vm: UpdateServerViewModel, o
     suspend fun loadCatalog(refresh: Boolean) {
         loadingCatalog = true
         try {
-            catalog = screens.serverUpdates(refresh)
+            catalog = loadReleaseCatalog(screens, mailbox, currentCommit, refresh)
             catalogError = null
         } catch (c: kotlinx.coroutines.CancellationException) {
             throw c

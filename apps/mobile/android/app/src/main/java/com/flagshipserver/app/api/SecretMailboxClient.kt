@@ -132,6 +132,12 @@ interface SecretMailboxClient {
      *  Allowed at every phase before take-over; 409 after (the point of no
      *  return). */
     suspend fun depositMigrationAbort(serverDomain: String, body: MigrationControlBody)
+
+    /** GET /api/releases?current=<commit>[&refresh=1] — public. The endorsed
+     *  releases placed relative to [currentCommit], in the box catalog's shape.
+     *  Only for a box too old to list its own ([loadReleaseCatalog]); the box
+     *  still checks the endorsement before it applies an order. */
+    suspend fun fetchReleases(currentCommit: String, refresh: Boolean): ReleaseCatalogResponse
 }
 
 /** The server-update deposit body. `auth`/`authSignature` are the SAME IRK
@@ -918,6 +924,14 @@ class LiveSecretMailboxClient(
             accept = setOf(200),
         )
     }
+
+    override suspend fun fetchReleases(currentCommit: String, refresh: Boolean): ReleaseCatalogResponse {
+        val encoded = java.net.URLEncoder.encode(currentCommit, "UTF-8")
+        return transport.getJson(
+            "$base/api/releases?current=$encoded" + if (refresh) "&refresh=1" else "",
+            responseSerializer = ReleaseCatalogResponse.serializer(),
+        )
+    }
 }
 
 // MARK: - Mock
@@ -1073,5 +1087,15 @@ class MockSecretMailboxClient : SecretMailboxClient {
     override suspend fun depositMigrationAbort(serverDomain: String, body: MigrationControlBody) {
         nextMigrationAbortError?.let { nextMigrationAbortError = null; throw it }
         migrationAborts.add(serverDomain to body)
+    }
+
+    /** Scripted [fetchReleases] result; null ⇒ up to date (no releases). */
+    var releaseCatalog: ReleaseCatalogResponse? = null
+    var nextReleasesError: Throwable? = null
+    val releaseFetches: MutableList<Pair<String, Boolean>> = mutableListOf()
+    override suspend fun fetchReleases(currentCommit: String, refresh: Boolean): ReleaseCatalogResponse {
+        releaseFetches.add(currentCommit to refresh)
+        nextReleasesError?.let { nextReleasesError = null; throw it }
+        return releaseCatalog ?: ReleaseCatalogResponse(checkedAt = System.currentTimeMillis(), currentCommit = currentCommit)
     }
 }

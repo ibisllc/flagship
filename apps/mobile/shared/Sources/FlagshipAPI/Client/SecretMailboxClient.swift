@@ -108,6 +108,18 @@ public protocol SecretMailboxClient: Sendable {
     /// deposit alone can never push code. Uses its own `UpdateDepositBody`
     /// (`{auth, authSignature, deposit, order, signature}`).
     func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws
+
+    /// GET /api/releases?current=<commit>[&refresh=1] — no auth. `.com`'s copy
+    /// of the endorsed-release list, in the box catalog's shape, for boxes too
+    /// old to serve `/api/screens/updates` themselves. Only a listing: the box
+    /// still verifies the endorsement before applying any order.
+    func fetchReleaseCatalog(currentCommit: String, refresh: Bool) async throws -> ReleaseCatalogResponse
+}
+
+public extension SecretMailboxClient {
+    func fetchReleaseCatalog(currentCommit: String, refresh: Bool) async throws -> ReleaseCatalogResponse {
+        throw ScreensClientError.notImplemented("release list")
+    }
 }
 
 /// The server-update deposit body. `auth`/`authSignature` are the SAME IRK
@@ -926,6 +938,26 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
     }
 
+    public func fetchReleaseCatalog(currentCommit: String, refresh: Bool) async throws -> ReleaseCatalogResponse {
+        let q = currentCommit.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? currentCommit
+        guard let url = URL(string: baseUrl.absoluteString + "/api/releases?current=\(q)" + (refresh ? "&refresh=1" : "")) else {
+            throw ScreensClientError.http(status: 0, message: "bad releases URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        do {
+            return try JSONDecoder().decode(ReleaseCatalogResponse.self, from: data)
+        } catch {
+            throw ScreensClientError.decoding(String(describing: error))
+        }
+    }
+
     public func depositDecommission(serverDomain: String, body: DecommissionDepositBody) async throws {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/decommission") else {
@@ -1121,6 +1153,19 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws {
         if let e = nextUpdateError { nextUpdateError = nil; throw e }
         updateDeposits.append((serverDomain, body))
+    }
+    /// What `fetchReleaseCatalog` returns; nil ⇒ an up-to-date catalog with no
+    /// releases listed.
+    public var releaseCatalog: ReleaseCatalogResponse?
+    /// When set, `fetchReleaseCatalog` throws it once.
+    public var nextReleaseCatalogError: Error?
+    public private(set) var releaseCatalogRequests: [(currentCommit: String, refresh: Bool)] = []
+    public func fetchReleaseCatalog(currentCommit: String, refresh: Bool) async throws -> ReleaseCatalogResponse {
+        releaseCatalogRequests.append((currentCommit, refresh))
+        if let e = nextReleaseCatalogError { nextReleaseCatalogError = nil; throw e }
+        return releaseCatalog ?? ReleaseCatalogResponse(
+            checkedAt: Int64(Date().timeIntervalSince1970 * 1000), currentCommit: currentCommit,
+            latest: nil, releases: [], stale: nil)
     }
     /// Optional error to throw on the next `depositDecommission`, then cleared.
     public var nextDecommissionError: Error?
