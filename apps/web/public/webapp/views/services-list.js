@@ -6,7 +6,7 @@
 // paint snappy while the network catches up.
 
 import { hasPendingEgress } from "../lib/appEgress.js";
-import { ACCESS_PENDING_BADGE, hasPendingInternetRequest } from "../lib/appAccess.js";
+import { ACCESS_DRAFT_BADGE, ACCESS_PENDING_BADGE, hasAccessDraft, hasPendingInternetRequest } from "../lib/appAccess.js";
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
 import { screensFetch, screensFetchFrom, ScreensError, getPodBaseUrl, setPodBaseUrl } from "../lib/api.js";
@@ -174,6 +174,7 @@ function appCardHtml(s) {
           <div class="row mt-1" style="gap:6px; flex-wrap:wrap;">
             <span class="pill ${s.status === "running" ? "ok" : ""}">${escapeHtml(s.status || "")}</span>
             ${hasPendingInternetRequest(s, hasPendingEgress) ? `<span class="pill warn" data-egress-pending>${escapeHtml(ACCESS_PENDING_BADGE)}</span>` : ""}
+            ${hasAccessDraft(s) ? `<span class="pill warn" data-access-draft>${escapeHtml(ACCESS_DRAFT_BADGE)}</span>` : ""}
           </div>
           <div data-url-slot="${escapeHtml(s.serviceId)}">${urlRowHtml(s, null)}</div>
         </div>

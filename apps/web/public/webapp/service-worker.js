@@ -95,7 +95,11 @@
 //       it once it's 30 minutes old.
 //  v52: an app's page lists its API keys and creates (signed, shown once)
 //       and revokes them; precaches lib/appApiKeys.js.
-const SHELL_VERSION = "v52";
+//  v53: suggested access lists (a card with Review / Dismiss, a badge, and
+//       the "<App> suggests an access list" alert), and the owner's
+//       Database section (tables, rows, CSV export, Run SQL with signed
+//       writes); precaches lib/appDb.js + views/app-db.js.
+const SHELL_VERSION = "v53";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -159,6 +163,7 @@ const OPTIONAL_SHELL = [
   "/lib/accessAlerts.js",
   "/lib/pushSetting.js",
   "/lib/appApiKeys.js",
+  "/lib/appDb.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
@@ -170,6 +175,7 @@ const OPTIONAL_SHELL = [
   "/views/services-list.js",
   "/views/service-detail.js",
   "/views/app-access.js",
+  "/views/app-db.js",
   "/views/paired-sessions.js",
   "/views/vibe-code.js",
   "/views/vibecode-chat.js",

@@ -385,7 +385,8 @@ describe("/webapp PWA static surface", () => {
     // v49 adds the Push notifications switch.
     // v51 unseals unlock requests with a PKCS#8 X25519 key (raw private import throws).
     // v52 adds app API keys on the app's page.
-    expect(r.body).toContain('SHELL_VERSION = "v52"');
+    // v53 adds suggested access lists and the owner's Database section.
+    expect(r.body).toContain('SHELL_VERSION = "v53"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

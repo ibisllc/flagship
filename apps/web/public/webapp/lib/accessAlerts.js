@@ -11,6 +11,10 @@
 // sessions never get the sheet (read-only), and nobody does with the Push
 // notifications switch off (lib/pushSetting.js): the requests still wait on
 // each app's page.
+//
+// A suggested list (a draft, `kind: "draft"`, listed first) gets its own sheet:
+// "<App> suggests an access list" with its hosts, Review (opens the app's
+// access-list editor with the draft) and Not now.
 
 import { getPodBaseUrl, getSessionToken, screensFetch } from "./api.js";
 import { getSession } from "./state.js";
@@ -24,14 +28,17 @@ import {
   ACCESS_ALLOW,
   ACCESS_CLOSE,
   ACCESS_DENY,
+  ACCESS_DRAFT_REVIEW,
   ACCESS_NOT_NOW,
   ACCESS_VIEW_LIST,
   accessAnsweredText,
+  accessDraftAlertTitle,
   accessErrorMessage,
   accessRequestNote,
   accessRequestTitle,
   answerAccessRequest,
   fetchAccessRequests,
+  isAccessDraft,
 } from "./appAccess.js";
 
 /** The screens socket the box sends `access-request` events on. */
@@ -45,13 +52,15 @@ export const ACCESS_RECHECK_MS = 15 * 1000;
 /** The page asks the service worker's notification click to post this. */
 export const ACCESS_SW_MESSAGE = "ACCESS_REQUESTS";
 
-export const accessRequestKey = (r) => `${r.serviceId}\n${r.host}`;
+export const accessRequestKey = (r) =>
+  isAccessDraft(r) ? `${r.serviceId}\ndraft\n${r.createdAt ?? ""}` : `${r.serviceId}\n${r.host}`;
 
 /**
  * Fetches the pending requests and hands each one, in order, to `handle`
- * (which resolves to "allow" | "deny" | "later" | "failed"). One pass at a
- * time; a forced check during a pass runs another pass after it. Answered,
- * put-off and failed requests are not shown again for `snoozeMs`.
+ * (which resolves to "allow" | "deny" | "later" | "review" | "failed"). One
+ * pass at a time; a forced check during a pass runs another pass after it.
+ * Answered, put-off and failed requests are not shown again for `snoozeMs`;
+ * a failure or a Review (the editor is now open) ends the pass.
  */
 export function createAccessAlertController({
   fetchRequests,
@@ -81,7 +90,7 @@ export function createAccessAlertController({
       if (until !== undefined && until > now()) continue;
       const outcome = await handle(r);
       snoozed.set(key, now() + snoozeMs);
-      if (outcome === "failed") return;
+      if (outcome === "failed" || outcome === "review") return;
     }
   }
 
@@ -109,8 +118,16 @@ export function createAccessAlertController({
 /**
  * One request, start to finish: the sheet, then (on Allow or Deny) the signed
  * list, then the confirmation. Resolves to the outcome for the controller.
+ * A draft gets `presentDraft` instead (Review / Not now); Review opens the
+ * editor with it (`openDraft`), where Save signs it as usual.
  */
-export async function handleAccessRequest(req, { present, answer, confirm, openList, notify }) {
+export async function handleAccessRequest(req, { present, answer, confirm, openList, notify, presentDraft, openDraft }) {
+  if (isAccessDraft(req)) {
+    if (!presentDraft || !openDraft) return "later";
+    if ((await presentDraft(req)) !== "review") return "later";
+    await openDraft(req);
+    return "review";
+  }
   const choice = await present(req);
   if (choice !== "allow" && choice !== "deny") return "later";
   try {
@@ -289,6 +306,32 @@ export function showAccessRequestSheet(req) {
   return sheetChoice(overlay, "later");
 }
 
+function draftHostsHtml(hosts) {
+  return `<ul class="sd-access-draft-hosts">${hosts
+    .map(
+      (h) =>
+        `<li><span class="mono text-sm">${escapeHtml(h.host)}</span>${
+          h.why ? `<div class="muted-sm">${escapeHtml(h.why)}</div>` : ""
+        }</li>`,
+    )
+    .join("")}</ul>`;
+}
+
+/** "<App> suggests an access list" with its hosts, Review / Not now.
+ *  Resolves to "review" | "later". */
+export function showAccessDraftSheet(draft) {
+  const overlay = openSheet(`
+    <h3 class="modal-title" data-access-draft-sheet>${escapeHtml(accessDraftAlertTitle(draft.appName))}</h3>
+    ${draftHostsHtml(draft.hosts ?? [])}
+    <p class="note">Nothing changes until you review the list and save it.</p>
+    <div class="row-2 mt-3">
+      <button class="secondary" data-choice="later">${escapeHtml(ACCESS_NOT_NOW)}</button>
+      <button data-choice="review">${escapeHtml(ACCESS_DRAFT_REVIEW)}</button>
+    </div>
+  `);
+  return sheetChoice(overlay, "later");
+}
+
 /** "<App> can now reach <host>" with Close and View access list. */
 export function showAccessAnsweredSheet(text) {
   const overlay = openSheet(`
@@ -347,6 +390,11 @@ export function startAccessAlerts({ isUnlocked }) {
         openList: async (r) => {
           const { enterAppAccess } = await import("../views/app-access.js");
           await enterAppAccess(r.serviceId, r.appName);
+        },
+        presentDraft: showAccessDraftSheet,
+        openDraft: async (r) => {
+          const { enterAppAccess } = await import("../views/app-access.js");
+          await enterAppAccess(r.serviceId, r.appName, { draft: true });
         },
         notify: (e) => toast(e?.status || e?.name === "AccessListError" ? accessErrorMessage(e) : humanError(e), "err"),
       }),

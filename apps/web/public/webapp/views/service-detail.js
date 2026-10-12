@@ -32,6 +32,10 @@ import {
   ACCESS_ALLOW,
   ACCESS_COMPANION_NOTE,
   ACCESS_DENY,
+  ACCESS_DRAFT_DISMISS,
+  ACCESS_DRAFT_REVIEW,
+  ACCESS_DRAFT_TITLE,
+  ACCESS_DRAFT_WAITING,
   ACCESS_IGNORE,
   ACCESS_TITLE,
   ACCESS_VIEW_LIST,
@@ -39,6 +43,7 @@ import {
   accessErrorMessage,
   accessRequestNote,
   answerAccessRequest,
+  dismissAccessDraft,
   dismissAccessRequest,
   fetchServiceAccess,
   parseAccessList,
@@ -68,6 +73,9 @@ import {
   scopeLabel,
 } from "../lib/appApiKeys.js";
 import { formatWhen } from "../lib/dateFormat.js";
+import { DB_NOTE, DB_OPEN, DB_TITLE, canUseDatabase, dbErrorMessage, fetchDbStores } from "../lib/appDb.js";
+import { getActiveProfile } from "../lib/profiles.js";
+import { isDeviceFullyScoped } from "../lib/usersCheck.js";
 
 const COM_BASE = controlApex();
 
@@ -160,6 +168,7 @@ export async function renderServiceDetail(serviceId) {
       ${typeof body.adaptedFrom?.repo === "string" ? renderReportRow(body.adaptedFrom.repo) : ""}
       <div id="sd-egress">${renderInternetSection(s)}</div>
       <div id="sd-api-keys"></div>
+      <div id="sd-database"></div>
 
       ${renderWebDomainsSection(s, currentServiceLinks)}
       <div id="sd-custom-domains">${renderCustomDomainsSection()}</div>
@@ -278,6 +287,7 @@ export async function renderServiceDetail(serviceId) {
     if (readAccessSummary(s)) void loadAccessSection(s);
     else bindEgressHandlers(s);
     void loadApiKeysSection(s);
+    void loadDatabaseEntry(s);
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
@@ -306,14 +316,44 @@ export function renderInternetSection(app, opts = {}) {
   return renderEgressSection(app, opts);
 }
 
+/** The suggested-list card: each host with its reason, Review / Dismiss
+ *  (a note instead on a companion). */
+export function renderAccessDraftCard(draft, { companion = isCompanionProfile() } = {}) {
+  if (!draft) return "";
+  const hosts = draft.hosts
+    .map(
+      (h) => `
+          <li><span class="mono text-sm">${escapeHtml(h.host)}</span>${h.why ? `<div class="muted-sm">${escapeHtml(h.why)}</div>` : ""}</li>`,
+    )
+    .join("");
+  return `
+        <div class="sd-access-draft mt-2" data-access-draft>
+          <div class="weight-600">${escapeHtml(ACCESS_DRAFT_TITLE)}</div>
+          <ul class="sd-access-draft-hosts">${hosts}</ul>
+          ${companion
+            ? `<p class="faint-sm mt-1">${escapeHtml(ACCESS_COMPANION_NOTE)}</p>`
+            : `<div class="sd-access-actions mt-1">
+                <button data-access-draft-act="review">${escapeHtml(ACCESS_DRAFT_REVIEW)}</button>
+                <button class="secondary" data-access-draft-act="dismiss">${escapeHtml(ACCESS_DRAFT_DISMISS)}</button>
+              </div>`}
+        </div>`;
+}
+
 /**
- * The "Internet access" section: the rule count, the pending requests (Allow /
- * Deny / Ignore each; read-only on a companion) and View access list. `state`
- * is the box's GET .../access answer once it has arrived.
+ * The "Internet access" section: the rule count, a suggested list (Review /
+ * Dismiss), the pending requests (Allow / Deny / Ignore each; read-only on a
+ * companion) and View access list. `state` is the box's GET .../access answer
+ * once it has arrived.
  */
 export function renderAccessSection(app, { summary = readAccessSummary(app), state = null, companion = isCompanionProfile() } = {}) {
   const rules = state ? parseAccessList(state.list).rules.length : summary?.rules ?? 0;
   let pendingHtml = "";
+  let draftHtml = "";
+  if (state) {
+    draftHtml = renderAccessDraftCard(state.draft, { companion });
+  } else if (summary?.draft) {
+    draftHtml = `<p class="muted-sm mt-2">${escapeHtml(ACCESS_DRAFT_WAITING)}</p>`;
+  }
   if (state) {
     pendingHtml = state.pending
       .map((r) => `
@@ -339,6 +379,7 @@ export function renderAccessSection(app, { summary = readAccessSummary(app), sta
       <h2 class="mt-4">${escapeHtml(ACCESS_TITLE)}</h2>
       <div class="card sd-access">
         <div class="row"><span class="label">Access list</span><span class="value" id="sd-access-count">${escapeHtml(ruleCountText(rules))}</span></div>
+        <div id="sd-access-draft">${draftHtml}</div>
         <div id="sd-access-pending">${pendingHtml}</div>
         <button id="sd-access-view" class="secondary full-width mt-2">${escapeHtml(ACCESS_VIEW_LIST)}</button>
       </div>`;
@@ -368,6 +409,27 @@ function paintAccessSection(app, state) {
   slot.querySelectorAll("[data-access-act]").forEach((btn) => {
     btn.addEventListener("click", () => void answerFromPage(app, state, btn));
   });
+  slot.querySelectorAll("[data-access-draft-act]").forEach((btn) => {
+    btn.addEventListener("click", () => void answerDraftFromPage(app, state, btn));
+  });
+}
+
+async function answerDraftFromPage(app, state, btn) {
+  if (btn.getAttribute("data-access-draft-act") === "review") {
+    const { enterAppAccess } = await import("./app-access.js");
+    await enterAppAccess(app.serviceId, app.slug, { draft: true });
+    return;
+  }
+  const card = btn.closest(".sd-access-draft");
+  card?.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+  try {
+    const next = await dismissAccessDraft({ serviceId: app.serviceId, fetchJson: (path, init) => screensFetch(path, init) });
+    if (currentServiceId !== app.serviceId) return;
+    paintAccessSection(app, next ?? { ...state, draft: null });
+  } catch (e) {
+    toast(e?.status ? accessErrorMessage(e) : humanError(e), "err");
+    card?.querySelectorAll("button").forEach((b) => { b.disabled = false; });
+  }
 }
 
 async function answerFromPage(app, state, btn) {
@@ -471,6 +533,61 @@ function bindEgressHandlers(app) {
   // Allow opens every host the app declares; Stop access signs an empty list.
   $("sd-egress-allow")?.addEventListener("click", (ev) => void send(app.egress?.declared ?? [], ev.currentTarget));
   $("sd-egress-stop")?.addEventListener("click", (ev) => void send([], ev.currentTarget));
+}
+
+// ---------------------------------------------------------------
+// Database (docs/app-apis.md §6): the app's live data, owner sessions only.
+// Hidden on a companion or restricted device, when the box 404s GET …/db (an
+// older box), and for an app with no Postgres stores.
+// ---------------------------------------------------------------
+
+function activeDeviceCapability() {
+  try {
+    return getActiveProfile()?.deviceCapability ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function databaseEntryVisible({ companion = isCompanionProfile(), deviceCapability = activeDeviceCapability() } = {}) {
+  return canUseDatabase({ companion, deviceCapability, isFullyScoped: isDeviceFullyScoped });
+}
+
+/** The "Database" entry: `stores` from GET …/db (null for an older box), or
+ *  `error` when the box couldn't list them. "" when there's nothing to open. */
+export function renderDatabaseEntry({ stores = null, error = "" } = {}) {
+  if (!error && (!stores || stores.length === 0)) return "";
+  const tables = (stores ?? []).reduce((n, s) => n + s.tables.length, 0);
+  const line = error
+    ? `<p class="err-text text-sm mt-1">${escapeHtml(error)}</p>`
+    : `<div class="muted-sm mt-1">${tables === 1 ? "1 table" : `${tables} tables`}</div>`;
+  return `
+      <h2 class="mt-4">${escapeHtml(DB_TITLE)}</h2>
+      <div class="card">
+        <p class="note">${escapeHtml(DB_NOTE)}</p>
+        ${line}
+        <button id="sd-db-open" class="full-width mt-2">${escapeHtml(DB_OPEN)}</button>
+      </div>`;
+}
+
+async function loadDatabaseEntry(app) {
+  if (!databaseEntryVisible()) return;
+  let stores = null;
+  let error = "";
+  try {
+    stores = await fetchDbStores(app.serviceId, (path, init) => screensFetch(path, init));
+  } catch (e) {
+    if (e?.status === 403) return;
+    error = e instanceof ScreensError ? dbErrorMessage(e) : humanError(e);
+  }
+  if (currentServiceId !== app.serviceId) return;
+  const slot = $("sd-database");
+  if (!slot) return;
+  slot.innerHTML = renderDatabaseEntry({ stores, error });
+  $("sd-db-open")?.addEventListener("click", async () => {
+    const { enterAppDb } = await import("./app-db.js");
+    await enterAppDb(app.serviceId, app.slug);
+  });
 }
 
 // ---------------------------------------------------------------

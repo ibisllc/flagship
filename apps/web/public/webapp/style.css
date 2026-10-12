@@ -2094,6 +2094,21 @@ button[data-device-restricted] {
 .access-editor { width: 100%; min-height: 220px; white-space: pre; overflow-wrap: normal; overflow-x: auto; }
 .access-errors { margin: var(--space-2) 0 0; padding-left: 18px; }
 .access-sheet-later { text-align: center; }
+.sd-access-draft { padding-top: var(--space-2); border-top: 1px solid var(--border-soft); overflow-wrap: anywhere; }
+.sd-access-draft-hosts { margin: var(--space-2) 0 0; padding-left: 18px; }
+.sd-access-draft-hosts li + li { margin-top: var(--space-1); }
+
+/* An app's live database (docs/app-apis.md §6). */
+.db-table-row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; margin-top: var(--space-2); text-align: left; }
+.db-table-name { overflow-wrap: anywhere; }
+.db-inline-btn { width: auto; }
+.db-grid-wrap { overflow-x: auto; margin-top: var(--space-2); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); }
+.db-grid { border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; min-width: 100%; }
+.db-grid th, .db-grid td { padding: 6px 10px; border-bottom: 1px solid var(--border-soft); text-align: left; vertical-align: top; white-space: nowrap; max-width: 32ch; overflow: hidden; text-overflow: ellipsis; }
+.db-grid th { position: sticky; top: 0; background: var(--surface-sunken); color: var(--ink); font-weight: 600; }
+.db-col-type { color: var(--ink-muted); font-weight: 400; }
+.db-grid td.db-null { color: var(--ink-muted); font-style: italic; }
+.db-sql-editor { width: 100%; min-height: 140px; font-family: var(--font-mono); white-space: pre; overflow-wrap: normal; overflow-x: auto; }
 
 .update-pending { display: flex; align-items: flex-start; gap: var(--space-2); }
 .update-pending p { margin: 0; }

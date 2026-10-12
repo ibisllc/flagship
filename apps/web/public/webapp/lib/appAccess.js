@@ -30,6 +30,13 @@ export const ACCESS_LIST_HELP =
   "One rule per line: allow or deny, then a host, *.example.com for its subdomains, or all. " +
   "The first rule that matches decides; a host no rule matches is blocked. # starts a comment.";
 export const ACCESS_PUSH_TEXT = "One of your apps wants to reach the internet";
+export const ACCESS_DRAFT_TITLE = "This app suggests letting it reach these hosts";
+export const ACCESS_DRAFT_REVIEW = "Review";
+export const ACCESS_DRAFT_DISMISS = "Dismiss";
+export const ACCESS_DRAFT_BADGE = "Access suggested";
+export const ACCESS_DRAFT_WAITING = "A suggested access list is waiting…";
+export const ACCESS_DRAFT_EDITOR_NOTE =
+  "This is the list the app suggests. Nothing changes until you save it; edit it first if you like.";
 
 const MSG = {
   verb: 'start the line with "allow" or "deny"',
@@ -218,7 +225,7 @@ export async function signAccessList({ serverDomain, serviceId, list, issuedAt, 
   return { list: text, grant, signature: bytesToHex(sig) };
 }
 
-/** `{list, listSha256, pending}` from a GET or POST answer, or null. */
+/** `{list, listSha256, pending, draft}` from a GET or POST answer, or null. */
 export function readAccessState(body) {
   const a = body && typeof body === "object" && body.access && typeof body.access === "object" ? body.access : body;
   if (!a || typeof a !== "object" || typeof a.list !== "string") return null;
@@ -226,7 +233,31 @@ export function readAccessState(body) {
     list: a.list,
     listSha256: typeof a.listSha256 === "string" ? a.listSha256 : "",
     pending: readRequests(a.pending),
+    draft: readAccessDraft(a.draft),
   };
+}
+
+function readDraftHosts(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((h) => (typeof h === "string" ? { host: h } : h))
+    .filter((h) => h && typeof h === "object" && typeof h.host === "string" && h.host)
+    .map((h) => (typeof h.why === "string" && h.why.trim() ? { host: h.host, why: h.why.trim() } : { host: h.host }));
+}
+
+/** A suggested list `{list, listSha256, hosts:[{host, why?}], createdAt}`, or null. */
+export function readAccessDraft(d) {
+  if (!d || typeof d !== "object" || typeof d.list !== "string") return null;
+  return {
+    list: d.list,
+    listSha256: typeof d.listSha256 === "string" ? d.listSha256 : "",
+    hosts: readDraftHosts(d.hosts),
+    createdAt: Number.isFinite(d.createdAt) ? d.createdAt : null,
+  };
+}
+
+export function isAccessDraft(r) {
+  return r?.kind === "draft";
 }
 
 function readRequests(arr) {
@@ -244,18 +275,37 @@ function readRequests(arr) {
     }));
 }
 
-/** The requests of GET /api/screens/access-requests (each with serviceId). */
+/** The requests of GET /api/screens/access-requests (each with serviceId):
+ *  drafts (`kind: "draft"`) first, then single-host requests. */
 export function readAccessRequests(body) {
-  return readRequests(body?.requests).filter((r) => typeof r.serviceId === "string" && r.serviceId);
+  const all = Array.isArray(body?.requests) ? body.requests : [];
+  const drafts = all
+    .filter((r) => isAccessDraft(r) && typeof r.serviceId === "string" && r.serviceId)
+    .map((r) => ({
+      kind: "draft",
+      serviceId: r.serviceId,
+      appName: typeof r.appName === "string" ? r.appName : "",
+      hosts: readDraftHosts(r.hosts),
+      createdAt: Number.isFinite(r.createdAt) ? r.createdAt : null,
+    }));
+  const requests = readRequests(all.filter((r) => !isAccessDraft(r))).filter(
+    (r) => typeof r.serviceId === "string" && r.serviceId,
+  );
+  return [...drafts, ...requests];
 }
 
 const count = (v) => (Array.isArray(v) ? v.length : Number.isFinite(v) && v >= 0 ? v : 0);
 
-/** An app summary's `access: {rules, pending}`, or null from an older box. */
+/** An app summary's `access: {rules, pending, draft}`, or null from an older box. */
 export function readAccessSummary(app) {
   const a = app?.access;
   if (!a || typeof a !== "object") return null;
-  return { rules: count(a.rules), pending: count(a.pending) };
+  return { rules: count(a.rules), pending: count(a.pending), draft: a.draft === true };
+}
+
+/** Whether the app list shows the "Access suggested" badge. */
+export function hasAccessDraft(app) {
+  return readAccessSummary(app)?.draft === true;
 }
 
 /** Whether the app list shows the "wants internet" badge. Falls back to the
@@ -280,6 +330,10 @@ export function accessRequestNote(req) {
   const n = req?.attempts ?? 0;
   if (n > 1) return `It tried to connect ${n} times.`;
   return "It tried to connect.";
+}
+
+export function accessDraftAlertTitle(appName) {
+  return `${appName || "An app"} suggests an access list`;
 }
 
 export function accessAnsweredText(appName, host, action) {
@@ -323,6 +377,13 @@ export async function dismissAccessRequest({ serviceId, host, fetchJson }, deps 
   await fetchJson(`${accessPath(serviceId)}/dismiss`, { method: "POST", body: JSON.stringify({ host }) });
 }
 
+/** Dismiss a suggested list: the box discards it; nothing the app can reach
+ *  changes, so there's no signature. Resolves to the box's new access state. */
+export async function dismissAccessDraft({ serviceId, fetchJson }, deps = {}) {
+  (deps.requireOwnerProfile ?? requireOwnerProfile)();
+  return readAccessState(await fetchJson(`${accessPath(serviceId)}/draft/dismiss`, { method: "POST" }));
+}
+
 /**
  * Sign `list` and send it. Resolves to the box's new access state.
  *
@@ -350,7 +411,7 @@ export async function sendAccessList(args, deps = {}) {
     ...(bytesToHex ? { bytesToHex } : {}),
   });
   const r = await fetchJson(accessPath(serviceId), { method: "POST", body: JSON.stringify(body) });
-  return readAccessState(r) ?? { list: body.list, listSha256: body.grant.listSha256, pending: [] };
+  return readAccessState(r) ?? { list: body.list, listSha256: body.grant.listSha256, pending: [], draft: null };
 }
 
 /**

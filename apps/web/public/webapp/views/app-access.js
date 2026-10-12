@@ -2,7 +2,9 @@
 // may reach, one allow/deny rule per line. The editor parses as you type and
 // shows each error by its line; Save stays off while there are errors (or
 // nothing changed), then signs the list with the sensitive-order key and sends
-// it. A companion session sees the list read-only.
+// it. A companion session sees the list read-only. Opened with `{draft: true}`
+// (Review on a suggested list), the editor starts from the box's draft; saving
+// it is the normal signed POST, which clears the draft on the box.
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
@@ -15,6 +17,7 @@ import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { podServerDomain } from "../lib/accessAlerts.js";
 import {
   ACCESS_COMPANION_NOTE,
+  ACCESS_DRAFT_EDITOR_NOTE,
   ACCESS_LIST_HELP,
   ACCESS_SAVE,
   accessEditorState,
@@ -44,8 +47,8 @@ function paintState(state) {
   if (save) save.disabled = !state.canSave;
 }
 
-export async function renderAppAccess(serviceId, appName) {
-  current = { serviceId, appName: appName || serviceId, list: "" };
+export async function renderAppAccess(serviceId, appName, { draft = false } = {}) {
+  current = { serviceId, appName: appName || serviceId, list: "", draft };
   const title = $("app-access-title");
   if (title) title.textContent = `${current.appName}: access list`;
   const root = $("app-access-content");
@@ -65,12 +68,15 @@ export async function renderAppAccess(serviceId, appName) {
     return;
   }
   current.list = access.list;
+  const fromDraft = draft && !!access.draft;
+  const text = fromDraft ? access.draft.list : access.list;
   root.innerHTML = `
     <div class="card">
+      ${fromDraft ? `<p class="note" data-access-draft-note>${escapeHtml(ACCESS_DRAFT_EDITOR_NOTE)}</p>` : ""}
       <p class="note">${escapeHtml(ACCESS_LIST_HELP)}</p>
       <textarea id="app-access-text" class="access-editor mt-2" rows="12" spellcheck="false" autocapitalize="off"
         autocomplete="off" aria-label="Access list"${companion ? " readonly" : ""}
-        placeholder="allow api.example.com">${escapeHtml(access.list)}</textarea>
+        placeholder="allow api.example.com">${escapeHtml(text)}</textarea>
       <div id="app-access-errors" aria-live="polite"></div>
       <p class="muted-sm mt-1" id="app-access-count"></p>
       ${companion
@@ -102,7 +108,9 @@ async function save(btn, textarea) {
     });
     if (current !== ctx) return;
     ctx.list = access.list;
+    ctx.draft = false;
     textarea.value = access.list;
+    document.querySelector("[data-access-draft-note]")?.remove();
     toast("Access list saved", "ok");
   } catch (e) {
     const boxErrors = e?.status === 400 && Array.isArray(e?.body?.errors) ? e.body.errors : null;
@@ -131,7 +139,7 @@ export function initAppAccessView() {
   });
   $("app-access-refresh")?.addEventListener("click", () => {
     if (current) {
-      renderAppAccess(current.serviceId, current.appName).catch((e) => {
+      renderAppAccess(current.serviceId, current.appName, { draft: current.draft }).catch((e) => {
         console.error(e);
         toast(humanError(e), "err");
       });
@@ -139,7 +147,7 @@ export function initAppAccessView() {
   });
 }
 
-export async function enterAppAccess(serviceId, appName) {
+export async function enterAppAccess(serviceId, appName, opts = {}) {
   show("view-app-access");
-  await renderAppAccess(serviceId, appName);
+  await renderAppAccess(serviceId, appName, opts);
 }

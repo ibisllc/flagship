@@ -49,6 +49,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/app-egress/v1", //             a live app's internet access (v1)
   "flagship/app-access/v1", //             a live app's access list
   "flagship/app-api-key/v1", //            a live app's API key
+  "flagship/app-db-write/v1", //           a write to a live app's database
   // `.com`-side (authorizeSensitiveComOp)
   "flagship/server-update/v1", //          in-place server update (2-of-2)
   "flagship/account-self-delete/v1", //    account deletion

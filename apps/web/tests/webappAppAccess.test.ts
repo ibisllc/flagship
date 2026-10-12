@@ -141,7 +141,7 @@ describe("access lists — the box calls", () => {
       },
       { ...owner, now: () => c.issuedAt },
     );
-    expect(out).toEqual({ list: c.list, listSha256: c.listSha256, pending: [] });
+    expect(out).toEqual({ list: c.list, listSha256: c.listSha256, pending: [], draft: null });
     const [path, init] = fetchJson.mock.calls[0] as unknown as [string, { method: string; body: string }];
     expect(path).toBe("/api/screens/services/harry-weather/access");
     expect(init.method).toBe("POST");
@@ -208,7 +208,7 @@ describe("access lists — the box calls", () => {
     }));
     expect(reqs).toHaveLength(1);
     expect(reqs[0]).toMatchObject({ serviceId: "harry-weather", appName: "Weather", source: "app" });
-    expect(readAccessSummary({ access: { rules: 3, pending: 1 } })).toEqual({ rules: 3, pending: 1 });
+    expect(readAccessSummary({ access: { rules: 3, pending: 1 } })).toEqual({ rules: 3, pending: 1, draft: false });
     expect(readAccessSummary({})).toBeNull();
     expect(hasPendingInternetRequest({ access: { rules: 0, pending: 0 } }, () => true)).toBe(false);
     expect(hasPendingInternetRequest({ access: { rules: 0, pending: [{ host: "a" }] } })).toBe(true);
@@ -338,6 +338,124 @@ describe("access alerts", () => {
     expect(timers).toHaveLength(0);
     sock.ensure();
     expect(sockets).toHaveLength(4);
+  });
+});
+
+describe("suggested lists (drafts)", () => {
+  const DRAFT = {
+    list: "allow api.open-meteo.com   # forecasts\n# Uncomment the following line to allow all hosts\n#allow all\n",
+    listSha256: "ab".repeat(32),
+    hosts: [{ host: "api.open-meteo.com", why: " forecasts <b> " }, "tile.openstreetmap.org", { why: "no host" }],
+    createdAt: 1_700_000_000_000,
+  };
+
+  it("reads a draft from GET …/access, its requests entry and the summary flag", async () => {
+    const { readAccessState, readAccessRequests, readAccessSummary, hasAccessDraft, isAccessDraft } = await loadAccess();
+    const st = readAccessState({ list: "", listSha256: "", pending: [], draft: DRAFT });
+    expect(st.draft).toEqual({
+      list: DRAFT.list,
+      listSha256: DRAFT.listSha256,
+      hosts: [{ host: "api.open-meteo.com", why: "forecasts <b>" }, { host: "tile.openstreetmap.org" }],
+      createdAt: DRAFT.createdAt,
+    });
+    expect(readAccessState({ list: "", draft: null }).draft).toBeNull();
+    expect(readAccessState({ list: "", draft: { hosts: [] } }).draft).toBeNull();
+    const reqs = readAccessRequests({
+      requests: [
+        { serviceId: "harry-weather", appName: "Weather", host: "x.com", source: "attempt", attempts: 1, lastSeen: 5 },
+        { serviceId: "harry-maps", appName: "Maps", kind: "draft", hosts: [{ host: "a.com", why: "tiles" }], createdAt: 9 },
+        { kind: "draft", hosts: [] },
+      ],
+    });
+    expect(reqs).toHaveLength(2);
+    expect(reqs[0]).toEqual({ kind: "draft", serviceId: "harry-maps", appName: "Maps", hosts: [{ host: "a.com", why: "tiles" }], createdAt: 9 });
+    expect(isAccessDraft(reqs[0])).toBe(true);
+    expect(isAccessDraft(reqs[1])).toBe(false);
+    expect(reqs[1]).toMatchObject({ serviceId: "harry-weather", host: "x.com" });
+    expect(readAccessSummary({ access: { rules: 1, pending: 0, draft: true } })).toEqual({ rules: 1, pending: 0, draft: true });
+    expect(hasAccessDraft({ access: { rules: 1, pending: 0, draft: true } })).toBe(true);
+    expect(hasAccessDraft({ access: { rules: 1, pending: 0 } })).toBe(false);
+    expect(hasAccessDraft({ egress: {} })).toBe(false);
+  });
+
+  it("Dismiss posts …/access/draft/dismiss with no signature, and not from a companion", async () => {
+    const { dismissAccessDraft } = await loadAccess();
+    const fetchJson = vi.fn(async () => ({ ok: true, access: { list: "", listSha256: "", pending: [], draft: null } }));
+    const out = await dismissAccessDraft({ serviceId: "harry weather", fetchJson }, owner);
+    expect(fetchJson).toHaveBeenCalledWith("/api/screens/services/harry%20weather/access/draft/dismiss", { method: "POST" });
+    expect(out.draft).toBeNull();
+    const refused = vi.fn();
+    await expect(
+      dismissAccessDraft({ serviceId: "x", fetchJson: refused }, { requireOwnerProfile: () => { throw new Error("A remote browser can't sign"); } }),
+    ).rejects.toThrow(/can't sign/);
+    expect(refused).not.toHaveBeenCalled();
+  });
+
+  it("the app's page shows the card with each host and reason, Review / Dismiss (a note on a companion)", async () => {
+    const { renderAccessSection } = await load("views/service-detail.js");
+    const { readAccessDraft } = await loadAccess();
+    const app = { serviceId: "harry-weather", slug: "weather", access: { rules: 0, pending: 0, draft: true } };
+    const state = { list: "", listSha256: "", pending: [], draft: readAccessDraft(DRAFT) };
+    const html: string = renderAccessSection(app, { state, companion: false });
+    expect(html).toContain("This app suggests letting it reach these hosts");
+    expect(html).toContain("api.open-meteo.com");
+    expect(html).toContain("forecasts &lt;b&gt;");
+    expect(html).toContain("tile.openstreetmap.org");
+    expect(html).toContain('data-access-draft-act="review"');
+    expect(html).toContain('data-access-draft-act="dismiss"');
+    const comp: string = renderAccessSection(app, { state, companion: true });
+    expect(comp).toContain("This app suggests letting it reach these hosts");
+    expect(comp).not.toContain("data-access-draft-act");
+    expect(comp).toContain("Change this from your owner app.");
+    // Before GET …/access answers, the summary flag says one waits.
+    expect(renderAccessSection(app, { companion: false })).toContain("A suggested access list is waiting");
+    const none: string = renderAccessSection({ ...app, access: { rules: 0, pending: 0 } }, { state: { ...state, draft: null }, companion: false });
+    expect(none).not.toContain("data-access-draft");
+  });
+
+  it("the alert: a draft gets Review / Not now; Review opens the editor with it and ends the pass", async () => {
+    const { handleAccessRequest, createAccessAlertController, accessRequestKey } = await loadAlerts();
+    const { accessDraftAlertTitle } = await loadAccess();
+    expect(accessDraftAlertTitle("Maps")).toBe("Maps suggests an access list");
+    const draft = { kind: "draft", serviceId: "harry-maps", appName: "Maps", hosts: [{ host: "a.com" }], createdAt: 9 };
+    const present = vi.fn();
+    const answer = vi.fn();
+    const openDraft = vi.fn(async () => {});
+    const deps = { present, answer, confirm: vi.fn(), openList: vi.fn(), notify: vi.fn(), openDraft };
+    expect(await handleAccessRequest(draft, { ...deps, presentDraft: async () => "review" })).toBe("review");
+    expect(openDraft).toHaveBeenCalledWith(draft);
+    openDraft.mockClear();
+    expect(await handleAccessRequest(draft, { ...deps, presentDraft: async () => "later" })).toBe("later");
+    expect(openDraft).not.toHaveBeenCalled();
+    expect(present).not.toHaveBeenCalled();
+    expect(answer).not.toHaveBeenCalled();
+    // A newer draft for the same app is a new alert.
+    expect(accessRequestKey(draft)).not.toBe(accessRequestKey({ ...draft, createdAt: 10 }));
+    expect(accessRequestKey(draft)).not.toBe(accessRequestKey({ serviceId: "harry-maps", host: "a.com" }));
+    const req = { serviceId: "harry-weather", appName: "Weather", host: "x.com", source: "attempt", attempts: 1 };
+    const handle = vi.fn(async (r: { kind?: string }) => (r.kind === "draft" ? "review" : "allow"));
+    const ctl = createAccessAlertController({ fetchRequests: async () => [draft, req], handle, isActive: () => true, minIntervalMs: 0 });
+    await ctl.check({ force: true });
+    expect(handle).toHaveBeenCalledTimes(1);
+    await ctl.check({ force: true });
+    expect(handle).toHaveBeenCalledTimes(2);
+    expect(handle.mock.calls[1]![0]).toBe(req);
+  });
+
+  it("the pages wire Review, Dismiss, the badge and the editor's draft mode", async () => {
+    const detail = await asset("/webapp/views/service-detail.js");
+    expect(detail).toContain("dismissAccessDraft({");
+    expect(detail).toContain("enterAppAccess(app.serviceId, app.slug, { draft: true })");
+    const view = await asset("/webapp/views/app-access.js");
+    expect(view).toContain("const fromDraft = draft && !!access.draft;");
+    expect(view).toContain("fromDraft ? access.draft.list : access.list");
+    expect(view).toContain("current.list = access.list;");
+    const alerts = await asset("/webapp/lib/accessAlerts.js");
+    expect(alerts).toContain("presentDraft: showAccessDraftSheet");
+    expect(alerts).toContain("enterAppAccess(r.serviceId, r.appName, { draft: true })");
+    const list = await asset("/webapp/views/services-list.js");
+    expect(list).toContain("hasAccessDraft(s)");
+    expect(list).toContain("ACCESS_DRAFT_BADGE");
   });
 });
 

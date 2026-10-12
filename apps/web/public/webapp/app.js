@@ -78,6 +78,7 @@ import { initServerDetailView, enterServerDetail } from "./views/server-detail.j
 import { initServicesListView, enterServicesList } from "./views/services-list.js";
 import { initServiceDetailView } from "./views/service-detail.js";
 import { initAppAccessView } from "./views/app-access.js";
+import { initAppDbView } from "./views/app-db.js";
 import { startAccessAlerts } from "./lib/accessAlerts.js";
 import { canSyncPushSetting, startPushSettingSync } from "./lib/pushSetting.js";
 import { unsubscribeFromWebPush } from "./lib/push.js";
@@ -160,6 +161,7 @@ const SUB_VIEW_TABS = {
   "view-invite-manage": "apps",
   "view-service-access": "apps",
   "view-app-access": "apps",
+  "view-app-db": "apps",
   "view-vibe-code": "apps",
   "view-vibecode-chat": "apps",
   "view-build-source": "apps",
@@ -529,6 +531,7 @@ async function boot() {
   initInviteManageView();
   initServiceAccessView();
   initAppAccessView();
+  initAppDbView();
   initInviteRedeemView();
   initPairedSessionsView();
   initSecuredSessionsView();
