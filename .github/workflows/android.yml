@@ -20,15 +20,15 @@ permissions:
 
 jobs:
   test-and-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
       run:
         working-directory: apps/mobile/android
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
@@ -36,7 +36,7 @@ jobs:
       - name: Install shared conformance package
         working-directory: ${{ github.workspace }}
         run: npm ci
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -44,7 +44,7 @@ jobs:
 
       # The action's default package list includes "tools", which current
       # cmdline-tools no longer ship, so sdkmanager exits 1 before any test.
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         with:
           packages: platform-tools
 

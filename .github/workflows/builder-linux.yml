@@ -38,7 +38,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install GTK4 + libadwaita + xvfb + pytest
         run: |

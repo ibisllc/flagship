@@ -24,9 +24,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
 
@@ -82,7 +82,7 @@ jobs:
           Compress-Archive -Path "$stage/*" -DestinationPath "$stage.zip"
           Get-Item "$stage.zip" | Format-List Name, Length
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: windows
           path: FlagshipStudio-Windows-x64-${{ inputs.version }}.zip
@@ -92,9 +92,9 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
@@ -126,7 +126,7 @@ jobs:
       - name: Rename
         run: mv apps/builder-linux/dist/FlagshipBuilder-x86_64.AppImage "FlagshipStudio-Linux-x86_64-${{ inputs.version }}.AppImage"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: linux
           path: FlagshipStudio-Linux-x86_64-${{ inputs.version }}.AppImage
@@ -135,11 +135,11 @@ jobs:
   release:
     if: ${{ inputs.publish }}
     needs: [windows, linux]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           merge-multiple: true
 

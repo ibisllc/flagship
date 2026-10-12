@@ -30,12 +30,12 @@ permissions:
 
 jobs:
   build:
-    runs-on: ${{ inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 180
     env:
       ARCH: ${{ inputs.arch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Pick the pinned source hash
         run: |
@@ -77,7 +77,7 @@ jobs:
             echo "FLAGSHIP_FACTORY_TIMEOUT_SCALE=20" >> "$GITHUB_ENV"
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
@@ -135,7 +135,7 @@ jobs:
           EOF
           ls -la "$out"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: vm-appliance-${{ inputs.arch }}
           path: ${{ runner.temp }}/out/
