@@ -3,7 +3,7 @@
  * to a freshly-minted test identity. Each test gets isolated state.
  */
 
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type BrowserContext, type Page } from "@playwright/test";
 import { newTestIdentity, type TestIdentity, bytesToHex } from "./identity.js";
 import { startPodSim, type PodSim } from "../pod-sim/server.js";
 
@@ -53,7 +53,10 @@ export async function bootstrapToHome(page: Page, passphrase: string): Promise<v
     if (!seed) throw new Error("bootstrapToHome: unlocked seed missing");
     const cloudName = "e2e-local";
     await keystore.persistSeedForProfile(seed, cloudName, localPassphrase);
-    profiles.addProfile({ cloudName, accountId: "e2e-local", deviceId: "browser", createdAt: Date.now() });
+    // A real account-scoped device id (32 hex, as generateDeviceId writes):
+    // signed envelopes such as the push-token register refuse anything else.
+    const deviceId = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+    profiles.addProfile({ cloudName, accountId: "e2e-local", deviceId, createdAt: Date.now() });
   }, passphrase);
 }
 /**
@@ -79,6 +82,29 @@ export async function syncWebappPubkey(page: Page, podSim: PodSim): Promise<stri
   });
   podSim.setTrustedIrkPub(hex);
   return hex;
+}
+
+/**
+ * The rig serves the webapp from wrangler dev on localhost and tells the
+ * Worker which host it means with x-flagship-effective-host. The `page`
+ * fixture stamps that header with page.route, which never sees requests the
+ * service worker makes itself — so a spec that allows the SW must call this,
+ * or the SW's install-time precache fetches the APEX's /style.css (404), the
+ * install rejects and navigator.serviceWorker.ready never settles. A context
+ * route also covers SW-originated requests (Chromium). No-op against a
+ * deployed webapp.
+ */
+export async function routeServiceWorkerToWebappHost(context: BrowserContext): Promise<void> {
+  const base = process.env.WEBAPP_BASE_URL ?? "http://localhost:8787";
+  if (!/\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(base)) return;
+  const origin = new URL(base).origin;
+  await context.route(
+    (url) => url.origin === origin,
+    (route, request) =>
+      route.continue({
+        headers: { ...request.headers(), "x-flagship-effective-host": "webapp.flagshipserver.com" },
+      }),
+  );
 }
 
 const E2E_VERBOSE = process.env.E2E_VERBOSE === "1";

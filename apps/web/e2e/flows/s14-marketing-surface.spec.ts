@@ -2,8 +2,8 @@
  * S14 — marketing-surface UI revamp.
  *
  * Verifies that the unified design system (tokens.css + components.css +
- * motion.js + the single teal accent) is wired into every
- * publicly-routable marketing page on flagshipserver.com.
+ * the single teal accent) is wired into every publicly-routable marketing
+ * page on flagshipserver.com.
  *
  * Spec-level focus is BRAND CONSISTENCY across pages, not pixel-perfect
  * layout. We assert the contract — same tokens, same fonts, same nav,
@@ -37,7 +37,6 @@ const APEX =
 const MARKETING_PAGES = [
   { path: "/", label: "landing" },
   { path: "/how-it-works.html", label: "how it works" },
-  { path: "/pricing.html", label: "pricing" },
   { path: "/faq.html", label: "faq" },
   { path: "/help.html", label: "help" },
   { path: "/privacy.html", label: "privacy" },
@@ -98,10 +97,11 @@ test.describe("S14 — unified design system on the marketing surface", () => {
     expect(body).not.toMatch(/#D38347/i);
     expect(body).not.toMatch(/--primary:\s+#3B5BFF/);
     expect(body).not.toMatch(/--accent:\s+#4ad295/i);
-    // Type system: Geist (UI/body), Instrument Serif (display), Geist Mono.
-    expect(body).toContain("Instrument Serif");
-    expect(body).toContain("Geist");
-    expect(body).toContain("Geist Mono");
+    // Type system: Geist for UI, body and display; Geist Mono for labels.
+    // The marketing surface no longer uses a display serif.
+    expect(body).toContain('font-family: "Geist"');
+    expect(body).toContain('font-family: "Geist Mono"');
+    expect(body).toMatch(/--font-display:\s+var\(--font-sans\)/);
   });
 
   test("/components.css ships the new primitive classes", async ({
@@ -110,7 +110,7 @@ test.describe("S14 — unified design system on the marketing surface", () => {
     const r = await request.get(`${APEX}/components.css`);
     expect(r.status()).toBe(200);
     const body = await r.text();
-    for (const cls of [".btn", ".card", ".pill", ".nav", ".footer", ".eyebrow", ".skip-link", ".grain", ".reveal", ".btn-arrow"]) {
+    for (const cls of [".btn", ".card", ".pill", ".nav", ".footer", ".eyebrow", ".skip-link"]) {
       expect(body, `${cls} should be defined`).toContain(cls);
     }
   });
@@ -142,16 +142,6 @@ test.describe("S14 — unified design system on the marketing surface", () => {
     expect(body).toContain("prefers-reduced-motion");
   });
 
-  test("/grain.svg renders as an SVG fractal-noise overlay", async ({
-    request,
-  }) => {
-    const r = await request.get(`${APEX}/grain.svg`);
-    expect(r.status()).toBe(200);
-    const ct = r.headers()["content-type"] ?? "";
-    expect(ct).toContain("svg");
-    const body = await r.text();
-    expect(body).toContain("feTurbulence");
-  });
 
   test("/favicon.svg and /apple-touch-icon.svg are the same rounded-square mark", async ({
     request,
@@ -215,35 +205,17 @@ test.describe("S14 — unified design system on the marketing surface", () => {
     await expect(page.locator("main h1").first()).toContainText(/hardware/i);
     await expect(page.locator("main h1").first()).toContainText(/green padlock/i);
 
-    // Brand mark + nav links + CTAs.
-    await expect(page.locator(".nav-brand")).toContainText("Flagship");
-    for (const label of [
-      "How it works",
-      "Apps",
-      "Pricing",
-      "Security",
-      "Docs",
-      "Status",
-    ]) {
-      await expect(page.getByRole("link", { name: label }).first()).toBeVisible();
+    // Brand mark + nav links + the primary CTA (the web app).
+    await expect(page.locator(".nav .wordmark")).toContainText("Flagship");
+    const primaryNav = page.getByRole("navigation", { name: "Primary" });
+    for (const label of ["How", "Trust", "FAQ", "Security", "Docs"]) {
+      await expect(primaryNav.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
-    await expect(page.getByRole("link", { name: /Get a build code/ }).first()).toBeVisible();
-
-    // Scroll-reveal markers + grain overlay are wired.
-    expect(await page.locator(".reveal").count()).toBeGreaterThan(8);
-    await expect(page.locator(".grain").first()).toHaveCount(1);
-    expect(await page.locator("[data-reveal-stagger]").count()).toBeGreaterThan(0);
+    const webappCta = page.getByRole("link", { name: /Use the Flagship web app/ });
+    await expect(webappCta).toBeVisible();
+    await expect(webappCta).toHaveAttribute("href", "https://webapp.flagshipserver.com/");
   });
 
-  test("/ scroll-reveals fire — .reveal elements receive the .is-in class", async ({
-    page,
-  }) => {
-    await page.goto("/");
-    // Pin to a single .reveal inside the hero — once motion.js boots and the
-    // IntersectionObserver fires, .is-in lands within a frame or two.
-    const firstReveal = page.locator(".reveal").first();
-    await expect(firstReveal).toHaveClass(/is-in/, { timeout: 4_000 });
-  });
 
   test("each marketing page shares the same accent + font tokens", async ({
     page,
@@ -314,54 +286,52 @@ test.describe("S14 — unified design system on the marketing surface", () => {
     await expect(page.locator("main h1")).toContainText(/sailed past the harbor/i);
     await expect(page.getByRole("link", { name: /Back to harbor/ })).toBeVisible();
     // 404 must share the same brand nav as every other page.
-    await expect(page.locator(".nav-brand")).toContainText("Flagship");
+    await expect(page.locator(".nav .nav-brand")).toContainText("Flagship");
     // Suggestions list links to real routes.
     const suggestionHrefs = await page
       .locator(".suggestions a")
       .evaluateAll((nodes) =>
         nodes.map((n) => (n as HTMLAnchorElement).getAttribute("href")),
       );
-    expect(suggestionHrefs).toContain("/security.html");
+    expect(suggestionHrefs).toContain("/security#model");
     expect(suggestionHrefs).toContain("/status/");
+    for (const href of suggestionHrefs) {
+      const r = await page.request.get(href!.split("#")[0]!);
+      expect(r.status(), `${href} returned ${r.status()}`).toBeLessThan(400);
+    }
   });
 
-  test("magnetic-hover CTAs exist on the landing page", async ({ page }) => {
-    await page.goto("/");
-    // motion.js binds data-magnetic on hover-capable pointers. The
-    // attribute alone is sufficient to assert the wiring; rendering
-    // the transform requires a mouse move which Playwright can fire
-    // but is flaky across Chromium versions. We check presence + that
-    // motion.js mutated nothing harmful when reduced-motion is off.
-    const magneticCount = await page.locator("[data-magnetic]").count();
-    expect(magneticCount).toBeGreaterThanOrEqual(2);
-  });
 
-  test("reduced-motion preference disables the reveal animation", async ({
+  test("reduced-motion preference stops the hero cursor blink", async ({
     browser,
   }) => {
-    const ctx = await browser.newContext({ reducedMotion: "reduce" });
-    const page = await ctx.newPage();
-    await page.goto("/");
-    // motion.js short-circuits: every .reveal lands with .is-in immediately
-    // and the `motion-reduced` class is set on <html>.
-    await expect(page.locator("html")).toHaveClass(/motion-reduced/);
-    const everyRevealIsIn = await page
-      .locator(".reveal")
-      .evaluateAll((nodes) => nodes.every((n) => n.classList.contains("is-in")));
-    expect(everyRevealIsIn).toBe(true);
-    await ctx.close();
+    // The landing's only decorative animation is the blinking accent bar
+    // in the hero headline; prefers-reduced-motion must switch it off.
+    const blinkName = async (reducedMotion: "reduce" | "no-preference") => {
+      const ctx = await browser.newContext({ reducedMotion });
+      const page = await ctx.newPage();
+      await page.goto(`${APEX}/`);
+      const name = await page
+        .locator(".hero h1 .accent-bar")
+        .evaluate((el) => getComputedStyle(el).animationName);
+      await ctx.close();
+      return name;
+    };
+    expect(await blinkName("no-preference")).toBe("blink");
+    expect(await blinkName("reduce")).toBe("none");
   });
 
   test("skip-to-content link appears on every marketing page", async ({
     page,
   }) => {
-    // The skip-link is part of the landing + 404 templates today. If we
-    // add it elsewhere we can extend the loop; but at minimum these two
-    // must carry it so keyboard navigation has a way out.
+    // The skip-link is part of the landing + 404 templates. If we add it
+    // elsewhere we can extend the loop; but at minimum these two must
+    // carry it so keyboard navigation has a way out.
     for (const path of ["/", "/404.html"]) {
       await page.goto(path);
       const skip = page.locator(".skip-link").first();
-      await expect(skip).toHaveAttribute("href", "#main");
+      await expect(skip, `${path} skip link`).toHaveAttribute("href", "#main");
+      await expect(page.locator("#main"), `${path} skip target`).toHaveCount(1);
     }
   });
 

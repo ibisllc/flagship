@@ -1,61 +1,82 @@
 /**
- * S8 — WebAuthn-PRF cloud recovery setup.
+ * S8 — cloud recovery setup (the webapp's half).
  *
- * Webapp settings → "Set up cloud recovery" → asks the browser to
- * create a passkey with the PRF extension → wraps the UMK with the
- * PRF output → POSTs the ciphertext to .com.
+ * Settings → Cloud recovery → "Set up cloud recovery". The passkey lives on a
+ * dedicated sub-origin (recovery.<apex>, lib/recovery.js): the webapp opens it
+ * in a popup, hands it the UMK seed over postMessage, and gets back the
+ * PRF-wrapped UMK + the passphrase hashes. The webapp then IRK-signs the upload
+ * envelope and POSTs it to .com /api/recovery.
  *
- * Playwright supports virtual authenticators in Chromium via CDP.
- * Full PRF support requires the authenticator to advertise the
- * extension; we set this up via the WebAuthn CDP domain. The .com
- * side is intercepted to assert the wire-side intent without
- * polluting D1.
+ * The sub-origin is replaced by a stub page (its WebAuthn PRF + Argon2id
+ * ceremony needs a real passkey and stays manual QA). What this asserts is the
+ * webapp's contract: it opens the recovery origin's enroll page, uploads the
+ * sub-origin's result verbatim, and the envelope's signature verifies under
+ * the IRK.
  */
 
-import { test, expect, bootstrapToHome } from "../fixtures/pod-sim.js";
+import { test, expect, bootstrapToHome, syncWebappPubkey } from "../fixtures/pod-sim.js";
+import { verifyUploadRecoveryRecord } from "@flagship/protocol";
+import { createHash } from "node:crypto";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
 
-test("S8 — set up cloud recovery + assert webauthn_recovery_records POST", async ({
+function hexToBytes(h: string): Uint8Array {
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+const CREDENTIAL_ID_HEX = "c0ffee".repeat(8);
+const WRAPPED_UMK_B64 = Buffer.from("wrapped-umk-ciphertext-from-the-sub-origin").toString("base64");
+const FETCH_TOKEN_HASH_HEX = "aa".repeat(32);
+const PRF_SALT_HASH_HEX = "bb".repeat(32);
+
+// Stand-in for recovery.<apex>/#enroll: answer the webapp's HELLO with ready,
+// then answer its enroll payload with a fixed enroll result.
+const STUB_SUB_ORIGIN = `<!doctype html><meta charset="utf-8"><title>recovery stub</title><script>
+  window.addEventListener("message", (ev) => {
+    const m = ev.data || {};
+    if (m.type === "flagship-recovery-hello") {
+      window.opener.postMessage({ type: "flagship-recovery-ready" }, ev.origin);
+    }
+    if (m.type === "flagship-recovery-enroll-payload") {
+      window.opener.postMessage({
+        type: "flagship-recovery-enroll-result",
+        credentialIdHex: ${JSON.stringify(CREDENTIAL_ID_HEX)},
+        wrappedUmkB64: ${JSON.stringify(WRAPPED_UMK_B64)},
+        fetchTokenHashHex: ${JSON.stringify(FETCH_TOKEN_HASH_HEX)},
+        prfSaltHashHex: ${JSON.stringify(PRF_SALT_HASH_HEX)},
+      }, ev.origin);
+    }
+  });
+</script>`;
+
+test("S8 — set up cloud recovery + assert the IRK-signed /api/recovery upload", async ({
   page,
   context,
   identity,
+  podSim,
 }) => {
-  // Bootstrap.
   await page.goto("/");
   await bootstrapToHome(page, PASSPHRASE);
-
-  // Pre-seed the username so the recovery setup doesn't prompt.
-  await page.evaluate((u) => {
-    ((globalThis as unknown) as { localStorage: { setItem(k: string, v: string): void } })
-      .localStorage.setItem("flagship.username", u);
+  const irkPubHex = await syncWebappPubkey(page, podSim);
+  // bootstrapToHome skips the account-claim wizard; give the session its handle.
+  await page.evaluate(async (username) => {
+    const state = (await import("/lib/state.js" as string)) as { getSession(): { username: string | null } };
+    state.getSession().username = username;
   }, identity.username);
 
-  // Add a virtual authenticator via CDP. Playwright exposes
-  // browserContext.addCookies / etc. but not WebAuthn directly —
-  // use the underlying CDPSession to issue WebAuthn.* commands.
-  // Wrap in try/catch: not all chromium versions in Playwright
-  // expose the WebAuthn domain.
-  let virtualAuthenticator = false;
-  try {
-    const cdp = await context.newCDPSession(page);
-    await cdp.send("WebAuthn.enable" as never);
-    await cdp.send("WebAuthn.addVirtualAuthenticator" as never, {
-      options: {
-        protocol: "ctap2",
-        transport: "internal",
-        hasResidentKey: true,
-        hasUserVerification: true,
-        isUserVerified: true,
-      },
-    } as never);
-    virtualAuthenticator = true;
-  } catch (_e) {
-    // CDP WebAuthn not available — skip the create() interaction
-    // and just assert the wire-side bits we can.
-  }
+  const recoveryOrigin = await page.evaluate(async () => {
+    const apex = (await import("/lib/apex.js" as string)) as { recoveryOrigin(): string };
+    return apex.recoveryOrigin();
+  });
+  expect(new URL(recoveryOrigin).hostname.startsWith("recovery.")).toBe(true);
+  const popupUrls: string[] = [];
+  await context.route(`${recoveryOrigin}/**`, (route) => {
+    popupUrls.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: "text/html", body: STUB_SUB_ORIGIN });
+  });
 
-  // Intercept the upload endpoint.
   let uploadBody: string | null = null;
   await page.route("**/api/recovery", async (route, request) => {
     if (request.method() === "POST") {
@@ -69,35 +90,47 @@ test("S8 — set up cloud recovery + assert webauthn_recovery_records POST", asy
     return route.continue();
   });
   await page.route("**/api/recovery/by-username/**", (route) =>
-    route.fulfill({
-      status: 404,
-      contentType: "application/json",
-      body: JSON.stringify({ error: "no recovery record" }),
-    }),
+    route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "no recovery record" }) }),
   );
 
-  // Open settings → recovery → click setup. The recovery view
-  // currently lives behind home → "Recovery" button (open-recovery)
-  // not settings; the cloud-recovery surface is on the recovery view.
-  await page.click("#open-recovery");
+  await page.click('[data-tab-target="settings"]');
+  await page.click("#settings-tab-recovery");
   await expect(page.locator("#view-recovery")).toBeVisible();
+  const popupPromise = page.waitForEvent("popup");
   await page.click("#recovery-cloud-setup");
+  const popup = await popupPromise;
 
-  // The PRF extension on virtual authenticators is hit-or-miss across
-  // Chromium versions. The test scopes to the wire intent: a toast
-  // appears (success or error). The full happy-path requires real
-  // hardware passkey + PRF; we assert that path elsewhere via manual
-  // QA. Headless Chromium under Playwright today (2026-05-11) does
-  // NOT advertise PRF on virtual authenticators, so we expect the
-  // create() to throw and an error toast to surface.
-  await expect(page.locator("#toast")).toBeVisible({ timeout: 10_000 });
-  // If by chance PRF was supported and the upload fired, verify the
-  // wire shape — otherwise the click+toast assertion is enough.
-  if (uploadBody) {
-    const parsed = JSON.parse(uploadBody);
-    expect(parsed.request.username).toBe(identity.username);
-    expect(parsed.request.credentialId).toMatch(/^[0-9a-f]+$/);
-    expect(parsed.request.wrappedUmk).toMatch(/^[A-Za-z0-9+/=_-]+$/);
-  }
-  void virtualAuthenticator; // silence unused
+  await expect.poll(() => uploadBody, { timeout: 10_000 }).not.toBeNull();
+  await expect(page.locator("#toast")).toContainText(`Cloud recovery on for ${identity.username}`);
+  expect(popup.url()).toBe(`${recoveryOrigin}/#enroll`);
+  expect(popupUrls.length).toBeGreaterThan(0);
+
+  const parsed = JSON.parse(uploadBody!) as {
+    request: {
+      username: string;
+      credentialId: string;
+      wrappedUmk: string;
+      issuedAt: number;
+      fetchTokenHash?: string;
+      prfSaltHash?: string;
+    };
+    signature: string;
+  };
+  expect(parsed.request.username).toBe(identity.username);
+  expect(parsed.request.credentialId).toBe(CREDENTIAL_ID_HEX);
+  expect(parsed.request.wrappedUmk).toBe(WRAPPED_UMK_B64);
+  expect(parsed.request.fetchTokenHash).toBe(FETCH_TOKEN_HASH_HEX);
+  expect(parsed.request.prfSaltHash).toBe(PRF_SALT_HASH_HEX);
+  const wrappedUmkHashHex = createHash("sha256").update(Buffer.from(WRAPPED_UMK_B64, "base64")).digest("hex");
+  const ok = verifyUploadRecoveryRecord(
+    {
+      username: parsed.request.username,
+      credentialIdHex: parsed.request.credentialId,
+      wrappedUmkHashHex,
+      issuedAt: parsed.request.issuedAt,
+    },
+    hexToBytes(parsed.signature),
+    hexToBytes(irkPubHex),
+  );
+  expect(ok).toBe(true);
 });

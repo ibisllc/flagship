@@ -20,6 +20,7 @@ interface E2EComputedStyle {
   readonly borderTopWidth: string;
   readonly letterSpacing: string;
   readonly textTransform: string;
+  readonly animationName: string;
 }
 
 declare function getComputedStyle(el: unknown): E2EComputedStyle;

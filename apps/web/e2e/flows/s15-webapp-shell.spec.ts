@@ -98,9 +98,17 @@ test.describe("S15 — webapp brand DNA", () => {
     expect((themeColor ?? "").toLowerCase()).toBe("#14120d");
     const appleIcon = await page.locator('link[rel="apple-touch-icon"]').getAttribute("href");
     expect(appleIcon).toBeTruthy();
-    // Webapp serves its own /icon.svg at the root (the host-rewrite on
-    // webapp.flagshipserver.com maps /icon.svg to apps/web/public/webapp/icon.svg).
-    expect(appleIcon).toMatch(/icon\.svg$/);
+    // iOS ignores SVG touch icons, so the webapp ships a 180×180 PNG of the
+    // same mark (the host-rewrite on webapp.flagshipserver.com maps it to
+    // apps/web/public/webapp/apple-touch-icon.png).
+    expect(appleIcon).toMatch(/apple-touch-icon\.png$/);
+    // Fetch from the page so the request carries the webapp host rewrite.
+    const icon = await page.evaluate(async (href) => {
+      const r = await fetch(href);
+      return { status: r.status, type: r.headers.get("content-type") ?? "" };
+    }, appleIcon!);
+    expect(icon.status).toBe(200);
+    expect(icon.type).toContain("image/png");
   });
 
   test("webapp /icon.svg is the unified rounded-square mark", async ({ request, page }) => {

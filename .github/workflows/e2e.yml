@@ -1,33 +1,23 @@
 name: e2e (Playwright + pod-sim)
 
-# Wires the existing webapp → .com → pod-sim end-to-end rig
-# (apps/web/e2e, 17 specs s00–s16) into CI — the "CI integration"
-# step called for in docs/e2e-test-plan.md §"CI integration". The rig
-# itself + the B-tsc fixes are already done + green locally; what was
-# missing was anything that RUNS it automatically.
-#
-# Faithful to the README's documented run procedure:
+# Runs the webapp → .com → pod-sim end-to-end rig (apps/web/e2e/flows)
+# the way its README documents:
 #   cd apps/com && npx wrangler dev &        # local miniflare on :8787
-#   (wait for Ready)
+#   (wait for it to answer)
 #   cd apps/web/e2e && npm test              # Playwright, chromium-only
 #
-# Honest caveats (stated like build-iso.yml's runner-pinning note):
-#   - Chromium-only by design (2026-05-11 product decision; the
-#     playwright config has a single `chromium` project). Firefox/
-#     WebKit are explicitly deferred.
-#   - `wrangler dev` runs in LOCAL miniflare mode (local D1, no remote
-#     secrets) — most specs stub apex /api/* via page.route with the
-#     service worker blocked; only S14 hits the apex surface directly,
-#     which local wrangler-dev serves.
-#   - First execution is on the GitHub runner (a CLI dev session can't
-#     run GitHub Actions, exactly like build-iso.yml/marketplace-scan).
-#     Triggered on pull_request + manual dispatch — deliberately NOT
-#     push:main until it has a proven green run on a real runner, so
-#     it can't add main-branch noise before it's trusted (the plan's
-#     "flaky scenarios quarantine" posture).
-#   - retries:1 in CI is set by the playwright config; a genuinely
-#     flaky spec should be quarantined per the plan, not blanket
-#     retried away.
+# Notes:
+#   - Chromium-only by design (the playwright config has a single
+#     `chromium` project).
+#   - `wrangler dev` runs in LOCAL miniflare mode: a fresh local D1 (the
+#     migrations are applied first, or every D1-backed route 500s with
+#     "no such table"), no remote secrets. Most specs stub `.com` with
+#     page.route; S11 wipe-restart and S14 hit the local Worker directly.
+#   - wrangler is not a repo dependency, so the version is pinned here
+#     (WRANGLER_VERSION) instead of floating with `npx wrangler`.
+#   - Triggered on pull_request + manual dispatch, not push:main.
+#   - retries:1 in CI comes from the playwright config; a genuinely flaky
+#     spec should be quarantined, not blanket-retried.
 
 on:
   pull_request:
@@ -43,6 +33,7 @@ jobs:
     env:
       WEBAPP_BASE_URL: http://localhost:8787
       APEX_BASE_URL: http://localhost:8787
+      WRANGLER_VERSION: "4.149.0"
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -62,25 +53,38 @@ jobs:
         working-directory: apps/web/e2e
         run: npx playwright install --with-deps chromium
 
+      - name: Apply D1 migrations to the local database
+        working-directory: apps/com
+        run: npx --yes "wrangler@${WRANGLER_VERSION}" d1 migrations apply flagship-state --local
+
       - name: Start the apex Worker (wrangler dev, local miniflare)
         working-directory: apps/com
         run: |
           set -euo pipefail
-          npx wrangler dev --port 8787 > "$GITHUB_WORKSPACE/wrangler-dev.log" 2>&1 &
+          nohup npx --yes "wrangler@${WRANGLER_VERSION}" dev --port 8787 \
+            > "$GITHUB_WORKSPACE/wrangler-dev.log" 2>&1 &
           echo $! > "$GITHUB_WORKSPACE/wrangler-dev.pid"
 
-      - name: Wait for :8787 to answer
+      - name: Wait for wrangler dev to serve the Worker
         run: |
           set -euo pipefail
-          for i in $(seq 1 60); do
-            if curl -fsS -o /dev/null "http://localhost:8787/api/health"; then
+          pid=$(cat "$GITHUB_WORKSPACE/wrangler-dev.pid")
+          for i in $(seq 1 180); do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "::error::wrangler dev exited before it was ready"
+              tail -80 "$GITHUB_WORKSPACE/wrangler-dev.log" || true
+              exit 1
+            fi
+            # Ready = the Worker itself answers (not just the port): the
+            # health route is JSON from src/, never the static-asset fallback.
+            if curl -fsS --max-time 5 "http://localhost:8787/api/health" 2>/dev/null | grep -q '"ok"'; then
               echo "apex up after ${i}s"
               exit 0
             fi
             sleep 1
           done
           echo "::error::wrangler dev never became ready on :8787"
-          tail -50 "$GITHUB_WORKSPACE/wrangler-dev.log" || true
+          tail -80 "$GITHUB_WORKSPACE/wrangler-dev.log" || true
           exit 1
 
       - name: Run the e2e suite (chromium)
@@ -94,6 +98,7 @@ jobs:
         run: |
           pid=$(cat "$GITHUB_WORKSPACE/wrangler-dev.pid" 2>/dev/null || echo "")
           [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+          pkill -f workerd 2>/dev/null || true
 
       - name: Upload Playwright report + traces (always)
         if: always()

@@ -72,12 +72,33 @@ interface SetupResult {
   initialCredentialId: string;
 }
 
+/**
+ * A request context that looks like its own client to the Worker's
+ * per-IP rate limiter. Local `wrangler dev` (miniflare) keeps a
+ * client-supplied CF-Connecting-IP, so each context gets a fresh
+ * TEST-NET-3 address and the suite's budget doesn't depend on what
+ * earlier specs (or a retry) spent. In production Cloudflare overwrites
+ * the header, so this is inert against live .com.
+ */
+async function newClientContext() {
+  const ip = `203.0.113.${1 + Math.floor(Math.random() * 254)}`;
+  return playwrightRequest.newContext({ extraHTTPHeaders: { "cf-connecting-ip": ip } });
+}
+
 async function seedAccount(apiRequest: ReturnType<typeof playwrightRequest.newContext>): Promise<SetupResult> {
   const ctx = await apiRequest;
-  const suffix = Math.floor(Math.random() * 1_000_000).toString(36).padStart(4, "0");
-  const username = `e2e-wipe-${Date.now().toString(36).slice(-5)}${suffix}`;
   const umkSeed = randomBytes(32);
   const oldIrk = deriveIRK({ seed: umkSeed });
+
+  // 0 — Only a name the server recently SUGGESTED is claimable
+  // (docs/username-suggestion-queue.md §3), so take one from the queue.
+  const suggestResp = await ctx.post(`${APEX}/api/username/suggest`, {
+    data: { deviceKey: `e2e-wipe-${bytesToHex(randomBytes(8))}` },
+    failOnStatusCode: false,
+  });
+  expect(suggestResp.status(), "username suggest").toBe(200);
+  const username = (await suggestResp.json()).name as string;
+  expect(typeof username).toBe("string");
 
   // 1 — Claim the username on .com with the OLD IRK as the registered
   // pubkey. This is the precondition for wipe-restart: the OLD IRK on
@@ -87,7 +108,7 @@ async function seedAccount(apiRequest: ReturnType<typeof playwrightRequest.newCo
     { username, irkPub: oldIrk.publicKey, issuedAt: issuedAtClaim },
     oldIrk,
   );
-  const claimResp = await ctx.post(`${APEX}/api/users/claim`, {
+  const claimResp = await ctx.post(`${APEX}/api/username/claim`, {
     data: {
       request: {
         username,
@@ -98,7 +119,7 @@ async function seedAccount(apiRequest: ReturnType<typeof playwrightRequest.newCo
     },
     failOnStatusCode: false,
   });
-  expect(claimResp.status(), "username claim").toBe(200);
+  expect(claimResp.status(), `username claim: ${await claimResp.text()}`).toBe(200);
 
   // 2 — Upload an initial recovery envelope so the wipe handler has
   // something to REPLACE (the handler does an upsert; an initial
@@ -135,7 +156,7 @@ async function seedAccount(apiRequest: ReturnType<typeof playwrightRequest.newCo
 
 test.describe("S11 — Wipe & restart Worker integration", () => {
   test("happy path: signed envelope rotates IRK + audit row appears", async () => {
-    const ctx = await playwrightRequest.newContext();
+    const ctx = await newClientContext();
     const seeded = await seedAccount(Promise.resolve(ctx));
     const { username, oldIrk } = seeded;
 
@@ -251,7 +272,7 @@ test.describe("S11 — Wipe & restart Worker integration", () => {
   });
 
   test("rejects when oldIrkPub doesn't match the registered IRK", async () => {
-    const ctx = await playwrightRequest.newContext();
+    const ctx = await newClientContext();
     const seeded = await seedAccount(Promise.resolve(ctx));
     const { username } = seeded;
 

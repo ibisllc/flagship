@@ -38,8 +38,11 @@ WEBAPP_BASE_URL=https://webapp.flagshipserver.com \
 APEX_BASE_URL=https://flagshipserver.com \
   npm test
 
-# Or against `wrangler dev` locally (faster, doesn't pollute prod D1):
-cd apps/com && npx wrangler dev &
+# Or against `wrangler dev` locally (faster, doesn't pollute prod D1).
+# A fresh local D1 needs the migrations first (CI does the same; see
+# .github/workflows/e2e.yml for the pinned wrangler version):
+cd apps/com && npx wrangler d1 migrations apply flagship-state --local
+npx wrangler dev &
 # (wait for "Ready on http://localhost:8787")
 cd ../web/e2e && npm test
 ```

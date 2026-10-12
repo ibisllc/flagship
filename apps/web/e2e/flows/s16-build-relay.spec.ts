@@ -7,6 +7,7 @@
  *   - opens the create-server view via its module entry hook
  *   - fills the form, saves the draft
  *   - asserts the rendered card carries the typed server name
+ *   - New resets the form; Resume restores every saved choice
  *
  * The crypto surface (canonical-bytes, deriveMatchCode parity with the
  * server-side Durable Object, sealForBrowserKey X25519 round-trip) is
@@ -34,16 +35,16 @@ test.describe("S16 — Compose draft (#24)", () => {
     page,
   }) => {
     // Capture page errors so silent JS crashes don't disguise themselves
-    // as 'view did not appear' Playwright timeouts.
-    page.on("pageerror", (e) => console.error("[page error]", e.message));
+    // as 'view did not appear' Playwright timeouts — and fail on them.
+    const pageErrors: string[] = [];
+    page.on("pageerror", (e) => pageErrors.push(e.message));
 
     await page.goto("/");
     await expect(page.locator("#view-bootstrap")).toBeVisible();
     await bootstrapToHome(page, PASSPHRASE);
 
-    // Drive the view directly via its module entry hook. The hash
-    // router only listens to button clicks (no popstate handler), so
-    // page.goto("/#create-server") wouldn't fire the transition.
+    // Drive the view directly via its module entry hook (Settings → Developer
+    // → "Create a server" and Home → "+ Add a server" both land here).
     await page.evaluate(async () => {
       const m = (await import("/views/create-server.js" as string)) as {
         enterCreateServer(): Promise<void>;
@@ -52,10 +53,11 @@ test.describe("S16 — Compose draft (#24)", () => {
     });
     await expect(page.locator("#view-create-server")).toBeVisible();
 
+    // Non-default choices, so the round-trip proves they persist.
     const serverName = `home-${Date.now().toString(36)}`;
     await page.fill("#cs-server-name", serverName);
-    await page.selectOption("#cs-backup-policy", "phone-only");
-    await page.fill("#cs-llm-pref", "anthropic:claude-opus-4-7");
+    await page.selectOption("#cs-backup-policy", "none");
+    await page.uncheck("#cs-encrypt-disk");
     await page.click("#cs-save-draft");
 
     // The drafts list re-renders with the new card. The race-safe
@@ -65,15 +67,17 @@ test.describe("S16 — Compose draft (#24)", () => {
       page.locator("#cs-drafts .pill", { hasText: /draft/i }),
     ).toBeVisible();
 
-    // Resume the draft — the form re-populates.
-    await page.click("#cs-new"); // clear the form first
+    // New resets the whole form to its defaults.
+    await page.click("#cs-new");
     await expect(page.locator("#cs-server-name")).toHaveValue("");
+    await expect(page.locator("#cs-backup-policy")).toHaveValue("phone-only");
+    await expect(page.locator("#cs-encrypt-disk")).toBeChecked();
+
+    // Resume the draft — the form re-populates.
     await page.click("#cs-drafts button[data-action='resume']");
     await expect(page.locator("#cs-server-name")).toHaveValue(serverName);
-    // textarea — Playwright's toContainText checks textContent, which
-    // is empty for inputs; use toHaveValue for the typed string.
-    await expect(page.locator("#cs-llm-pref")).toHaveValue(
-      /anthropic:claude-opus-4-7/,
-    );
+    await expect(page.locator("#cs-backup-policy")).toHaveValue("none");
+    await expect(page.locator("#cs-encrypt-disk")).not.toBeChecked();
+    expect(pageErrors).toEqual([]);
   });
 });

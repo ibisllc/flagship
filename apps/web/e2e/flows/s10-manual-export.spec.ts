@@ -16,8 +16,12 @@ test("S10 — export wrapped UMK downloads a JSON file", async ({ page }) => {
   await page.goto("/");
   await bootstrapToHome(page, PASSPHRASE);
 
-  await page.click("#open-recovery");
+  await page.click('[data-tab-target="settings"]');
+  await page.click("#settings-tab-recovery");
   await expect(page.locator("#view-recovery")).toBeVisible();
+  // The raw wrapped-UMK export now sits under "Advanced" (the .flagshipkey
+  // backup is the primary path).
+  await page.locator("#view-recovery details:has(#recovery-export) > summary").click();
 
   // Listen for the download fired by `a.click()` in exportWrapped().
   const downloadPromise = page.waitForEvent("download", { timeout: 5_000 });
