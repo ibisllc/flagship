@@ -146,7 +146,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > when done. History up to 2026-10-10 is frozen verbatim in
 > `docs/archive/status-log-through-2026-10-10.md`; read it for the why behind
 > anything below. Keep this section short: it loads into every agent session.
-> Last updated **2026-10-10**.
+> Last updated **2026-10-12**.
 
 ### Urgent
 
@@ -180,13 +180,12 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 - **`.com` Worker:** current with `main` as of 2026-10-11 (webapp shell **v43**).
   Always `npx tsc -b` first and apply pending D1 migrations before deploying.
-- **Delete / reversible Revoke / Un-revoke (2026-10-12):** on `main` for `.com`,
-  webapp (shell v44), iOS and Android, not deployed or built. Deploy `.com` first:
-  the apps need `revocationReason` on `/pods` (Android drops a revoked pod whose
-  reason is missing) and `POST /api/server-registry/unrevoke`. Delete deposits a
-  `wipe-now` decommission order (best-effort) and then releases the name; an
-  un-revoked auto-unlock box needs one phone approval on its next boot. Not yet
-  tried on a device or in a browser.
+- **Delete / reversible Revoke / Un-revoke (2026-10-12):** live on `.com` +
+  webapp (shell v44); iOS dev build installed on the owner's iPhone; Android
+  only as a CI/debug APK. Delete deposits a `wipe-now` decommission order
+  (best-effort) and then releases the name; an un-revoked auto-unlock box needs
+  one phone approval on its next boot. Not yet exercised end to end on a real
+  server (deleting home2 from the app is the first test).
 - **iOS / Android:** `main` has fixes not yet in a store build: the iOS
   known-bug fixes (retried account creation registered a second device; Wipe &
   restart kept the old key), Android's matching retry fix, the Android parity
@@ -216,7 +215,8 @@ Forensics on a disk clone (unlocked with the box's own lease): checkout, `npm ci
 and `tsc` had all completed, but none of it was flushed, so the box came back
 with 196 tree files (including `server-daemon/src/index.ts`), 6,971 node_modules
 files and the update marker all 0 bytes, and the daemon crash-looped every 5 s
-(npm logs) with nothing able to roll it back. Fixed on `main`, not yet released:
+(npm logs) with nothing able to roll it back. Fixed and endorsed as `67cfd8da`
+(2026-10-12):
 markers and outcomes are fsynced (`durableFile.ts`); the rebuild ends in `sync`;
 the marker is written as `applying` before the tree changes; a bash
 ExecStartPre guard (`updateGuard.ts`, needs no node_modules) rolls back an
@@ -224,19 +224,25 @@ interrupted apply, a release that never reaches the gate, or an unreadable
 marker (to the last verified commit in `update-outcome.json`), dropping the
 git index first so 0-byte files get rewritten; consuming an update order retires
 the older ones it superseded; Studio's Stop/Restart/Quit power the guest off
-gracefully before forcing. Boxes on `9873b83e` get the guard only after their
-first update to a release that has it, so don't stop a box while it updates.
-home2 needs recreating. **Separate, unexplained:** home2's guest kernel oopsed
+gracefully before forcing (Mac, Windows, Linux). A box gets the guard only after
+its first update to `67cfd8da` or later (that update still runs the old code),
+so don't stop a box while it updates. home2 needs deleting and recreating; its
+superseded update order (secret_mailbox rowid 13) is still unconsumed and
+should be marked consumed. **Separate, unexplained:** home2's guest kernel oopsed
 in ext4 three times (13:08, 13:59, 23:29 UTC, uptimes 11–46 min) with the
 faulting code reading as zeros, i.e. guest memory corruption; suspect the VZ
-host side (Studio attaches a memory balloon) and check home3's
-`/var/lib/systemd/pstore` before trusting hosted VMs. Box journals are volatile
+host side (Studio attaches a memory balloon); the 23:29 one landed 1 s after
+macOS began memory-pressure kills (16 GB Mac, two 4 GB VMs), the other two had
+no such signal. home3 (same image) had no pstore dumps after ~6 h. Box journals are volatile
 (`/run/log/journal`), so a crash loop leaves no daemon log on disk.
 
 ### Desktop Studio
 
-- **Mac:** notarized DMG at `/download/mac` (`scripts/release-studio.sh`).
-- **Windows + Linux:** `studio-v0.1.0` on GitHub Releases, built by the
+- **Mac:** notarized DMG at `/download/mac` (`scripts/release-studio.sh`;
+  republished 2026-10-12 with graceful VM stop + the appliance cache moved to
+  Application Support). `wrangler` is not a repo dependency: the script's final
+  `npm run deploy` needs a wrangler on PATH.
+- **Windows + Linux:** `studio-v0.1.1` on GitHub Releases, built by the
   on-demand `studio-release.yml` (pass `publish=true` to release). Windows is a
   zip with `xorriso` bundled in `tools\`, **unsigned** (no code-signing cert;
   v0.0.1 wasn't signed either). Linux is an x86-64 AppImage that needs Node.js
