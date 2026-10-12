@@ -388,7 +388,8 @@ describe("/webapp PWA static surface", () => {
     // v53 adds suggested access lists and the owner's Database section.
     // v54 signs knocks on invited boxes with the contact AID and words Process URL for any private app.
     // v56 picks each new app's server, lists a server's apps and copies apps between servers.
-    expect(r.body).toContain('SHELL_VERSION = "v56"');
+    // v57 titles a server's page with its name.
+    expect(r.body).toContain('SHELL_VERSION = "v57"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

@@ -147,6 +147,12 @@ public struct ServerDetailScreen: View {
         return deadServerFqdn
     }
 
+    private var title: String {
+        if let n = serverName, !n.isEmpty { return n }
+        if let f = approvalFqdn, !f.isEmpty { return DeleteServerViewModel.serverLabel(forFqdn: f) }
+        return "Server"
+    }
+
     private var isLoaded: Bool {
         if case .loaded = state { return true }
         return false
@@ -271,7 +277,7 @@ public struct ServerDetailScreen: View {
         }
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .background(c.bg.ignoresSafeArea())
-        .navigationTitle("Server")
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await onRefresh() }
     }

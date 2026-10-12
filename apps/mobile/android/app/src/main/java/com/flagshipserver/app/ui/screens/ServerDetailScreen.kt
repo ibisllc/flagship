@@ -190,7 +190,9 @@ fun ServerDetailScreen(
         FSGhostButton(label = "← Back", onClick = onBack)
         Spacer(Modifier.height(FS.space.s3))
         Text(
-            "Server detail",
+            pod?.name?.takeIf { it.isNotBlank() }
+                ?: serverFqdn?.substringBefore('.')?.takeIf { it.isNotBlank() }
+                ?: "Server",
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )

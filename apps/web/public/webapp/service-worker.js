@@ -108,7 +108,8 @@
 //       defaulting to the leader), a server's page lists its apps and
 //       "Create app here", and the app page's Runs on ticks copy the app to a
 //       server (signed) and unticks remove it; precaches lib/appPlacement.js.
-const SHELL_VERSION = "v56";
+//  v57: a server's page is titled with its name, not "Server".
+const SHELL_VERSION = "v57";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

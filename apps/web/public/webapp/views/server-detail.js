@@ -224,6 +224,8 @@ export async function renderServerDetail() {
   startHealthWatch(detailFqdn);
   const session = getSession();
   const knownFqdn = detailFqdn || activePodFqdn();
+  const titleEl = $("server-detail-title");
+  if (titleEl) titleEl.textContent = (knownFqdn || "").split(".")[0] || "Server";
   const podPromise = lookupPod(session?.username, knownFqdn);
   let body;
   try {

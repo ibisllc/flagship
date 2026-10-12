@@ -308,6 +308,6 @@ describe("API keys — the app's page", () => {
     expect(detail).toContain("revokeApiKey({");
     const sw = await asset("/webapp/service-worker.js");
     expect(sw).toContain('"/lib/appApiKeys.js"');
-    expect(sw).toContain('SHELL_VERSION = "v56"');
+    expect(sw).toContain('SHELL_VERSION = "v57"');
   });
 });

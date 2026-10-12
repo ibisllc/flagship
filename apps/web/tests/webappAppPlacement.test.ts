@@ -501,7 +501,7 @@ describe("§3 a server's apps", () => {
     expect(page).toContain('enterServiceDetail(btn.getAttribute("data-open-app"), { server: fqdn, from: "server" })');
     const sw = await asset("/webapp/service-worker.js");
     expect(sw).toContain('"/lib/appPlacement.js"');
-    expect(sw).toContain('SHELL_VERSION = "v56"');
+    expect(sw).toContain('SHELL_VERSION = "v57"');
   });
 });
 

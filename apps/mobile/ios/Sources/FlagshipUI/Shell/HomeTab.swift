@@ -805,7 +805,7 @@ struct ServerDetailContainer: View {
                 ProgressView()
             }
         }
-        .navigationTitle("Server")
+        .navigationTitle(shownPod.map { $0.name.isEmpty ? DeleteServerViewModel.serverLabel(forFqdn: $0.fqdn) : $0.name } ?? "Server")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: pod, initial: true) { _, p in if let p { lastPod = p } }
         // `.task` cancels the closure automatically on view removal —
