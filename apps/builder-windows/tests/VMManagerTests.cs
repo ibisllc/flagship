@@ -129,6 +129,70 @@ public sealed class VMManagerTests : IDisposable
         Assert.Contains("no qemu in tests", s.Record.State.Failure!.Reason);
     }
 
+    // ---- Graceful stop + quit ----
+
+    [Fact]
+    public void OnlyAStopOfABootedServerIsGraceful()
+    {
+        Assert.True(VMManager.StopsGracefully(VMStateKind.Stopped));
+        // A failed or cancelled install is redone from scratch: cut at once.
+        Assert.False(VMManager.StopsGracefully(VMStateKind.Failed));
+        Assert.Equal(60, VMManager.GracefulStopSeconds);
+    }
+
+    [Fact]
+    public void ServersAtRestAreNotLive()
+    {
+        Seed("a.h.flagship.services", VMState.Stopped);
+        Seed("b.h.flagship.services", VMState.Installed);
+        Seed("c.h.flagship.services", VMState.Created);
+        Assert.False(Manager().HasLiveServers);
+    }
+
+    [Fact]
+    public async Task ShutDownAllStopsBootedServersAndEndsInstalls()
+    {
+        Seed("a.h.flagship.services", VMState.Stopped);
+        Seed("b.h.flagship.services", VMState.Stopped);
+        Seed("c.h.flagship.services", VMState.Stopped);
+        Seed("d.h.flagship.services", VMState.Stopped);
+        var m = Manager();
+        // Launch normalization stops everything, so bring them "up" in memory.
+        m.Server("a.h.flagship.services")!.Record = m.Server("a.h.flagship.services")!.Record with { State = VMState.Running };
+        m.Server("b.h.flagship.services")!.Record = m.Server("b.h.flagship.services")!.Record with { State = VMState.AwaitingPhoneUnlock };
+        m.Server("d.h.flagship.services")!.Record = m.Server("d.h.flagship.services")!.Record with { State = VMState.Installing };
+        Assert.True(m.HasLiveServers);
+
+        await m.ShutDownAllAsync();
+
+        Assert.False(m.HasLiveServers);
+        Assert.Equal(VMStateKind.Stopped, _store.Load("a.h.flagship.services").State.Kind);
+        Assert.Equal(VMStateKind.Stopped, _store.Load("b.h.flagship.services").State.Kind);
+        Assert.Equal(VMStateKind.Stopped, _store.Load("c.h.flagship.services").State.Kind);
+        var install = _store.Load("d.h.flagship.services").State;
+        Assert.Equal(VMStateKind.Failed, install.Kind);
+        Assert.Equal(VMFailurePhase.Install, install.Failure!.Phase);
+        Assert.Equal(VMManager.QuitDuringInstallReason, install.Failure!.Reason);
+    }
+
+    [Fact]
+    public async Task NothingBootsOnceQuitting()
+    {
+        Seed("a.h.flagship.services", VMState.Stopped);
+        Seed("b.h.flagship.services", VMState.Stopped);
+        var m = Manager();
+        m.Server("b.h.flagship.services")!.Record = m.Server("b.h.flagship.services")!.Record with
+        {
+            State = VMState.Failed(VMFailurePhase.Install, "earlier"),
+        };
+        await m.ShutDownAllAsync();
+        // Without the quit these would reach the missing toolchain and fail.
+        await m.PowerOnAsync("a.h.flagship.services");
+        await m.BeginInstallAsync("b.h.flagship.services");
+        Assert.Equal(VMStateKind.Stopped, m.Server("a.h.flagship.services")!.Record.State.Kind);
+        Assert.Equal("earlier", m.Server("b.h.flagship.services")!.Record.State.Failure!.Reason);
+    }
+
     // ---- Display mapping ----
 
     [Fact]

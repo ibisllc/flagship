@@ -57,6 +57,8 @@
     <Compile Include="..\src\VM\QemuHost.cs" />
     <Compile Include="..\src\VM\SshLaunch.cs" />
     <Compile Include="..\src\VM\VMManager.cs" />
+    <Compile Include="..\src\VM\PendingStops.cs" />
+    <Compile Include="..\src\QuitGate.cs" />
     <Compile Include="DiskEnumeratorTests.cs" />
     <Compile Include="VerifyResultTests.cs" />
     <Compile Include="WizardStateMachineTests.cs" />
@@ -75,6 +77,8 @@
     <Compile Include="QemuLocatorTests.cs" />
     <Compile Include="WhpxProbeTests.cs" />
     <Compile Include="VMManagerTests.cs" />
+    <Compile Include="PendingStopsTests.cs" />
+    <Compile Include="QuitGateTests.cs" />
     <Compile Include="PairEventParserTests.cs" />
     <Compile Include="NativePairingCryptoTests.cs" />
     <Compile Include="NativeIsoRemasterTests.cs" />

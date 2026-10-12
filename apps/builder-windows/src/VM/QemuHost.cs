@@ -138,13 +138,15 @@ public sealed class QemuHost
     }
 
     /// <summary>
-    /// Ask the guest to power down cleanly (ACPI); after graceSeconds without
-    /// an exit, hard-stop. The OnGuestStopped event carries the final word.
+    /// Press the guest's power button (ACPI) so systemd stops the daemon and
+    /// flushes the disk; after graceSeconds without an exit, hard-stop. A
+    /// forced stop seconds after an update once left a server half updated.
     /// </summary>
-    public async Task StopAsync(int graceSeconds = 90, CancellationToken cancellation = default)
+    public async Task StopAsync(int graceSeconds = 60, CancellationToken cancellation = default)
     {
         var p = _process;
         if (p is null || p.HasExited) return;
+        var requested = false;
         try
         {
             await using var qmp = new QmpClient();
@@ -152,13 +154,14 @@ public sealed class QemuHost
             connectCts.CancelAfter(TimeSpan.FromSeconds(5));
             await qmp.ConnectAsync(QmpPort, connectCts.Token);
             await qmp.SystemPowerdownAsync(connectCts.Token);
+            requested = true;
         }
         catch
         {
-            // QMP unreachable — fall through to the hard stop below.
+            // QMP unreachable: nothing will press the button, so don't wait.
         }
-        var exited = await Task.Run(() => p.WaitForExit(graceSeconds * 1000), cancellation);
-        if (!exited) await ForceStopAsync();
+        if (requested && await Task.Run(() => p.WaitForExit(graceSeconds * 1000), cancellation)) return;
+        await ForceStopAsync();
     }
 
     public async Task ForceStopAsync()

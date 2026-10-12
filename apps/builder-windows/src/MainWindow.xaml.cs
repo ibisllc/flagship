@@ -30,6 +30,7 @@ public partial class MainWindow : Window
 {
     private readonly Wizard _wizard;
     private readonly TrayIcon _trayIcon;
+    private readonly QuitGate _quitGate;
 
     public MainWindow()
     {
@@ -37,6 +38,17 @@ public partial class MainWindow : Window
         DataContext = _wizard;
         InitializeComponent();
         _trayIcon = new TrayIcon(this, _wizard.Vm);
+        // Every exit path (window X, File > Exit, tray Quit, restart elevated)
+        // closes this window, and closing the last window ends the app. QEMU
+        // would outlive it, so the close waits for the servers to power off.
+        _quitGate = new QuitGate(
+            () => _wizard.Vm.HasLiveServers,
+            ShutDownServersAsync,
+            () => Dispatcher.BeginInvoke(new Action(Close)));
+        Closing += (_, e) =>
+        {
+            if (_quitGate.ShouldHoldClose()) e.Cancel = true;
+        };
         Closed += (_, _) => _trayIcon.Dispose();
         // Kick off the initial disk scan once the window is up. We
         // intentionally do this after the constructor finishes so the
@@ -103,6 +115,16 @@ public partial class MainWindow : Window
         }
     }
     private void MenuExit_Click(object sender, RoutedEventArgs e) => Close();
+
+    private async Task ShutDownServersAsync()
+    {
+        const string status = "Shutting down your servers…";
+        CloseConsole();
+        Title = $"Flagship Studio — {status}";
+        IsEnabled = false;
+        _trayIcon.SetStatus(status);
+        await _wizard.Vm.ShutDownAllAsync();
+    }
 
     private void MenuDocumentation_Click(object sender, RoutedEventArgs e)
         => OpenUrl("https://flagshipserver.com/docs");

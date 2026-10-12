@@ -161,6 +161,10 @@ public sealed class VMManager
     public QemuToolchain? Toolchain => _toolchain;
     private readonly Dictionary<string, VMLifecycle> _lifecycles = new();
     private readonly Dictionary<string, QemuHost> _hosts = new();
+    /// <summary>Guests powering off after a Stop; a Start waits for them.</summary>
+    private readonly PendingStops _stopping = new();
+    /// <summary>Set once the app starts quitting: nothing new may boot.</summary>
+    private bool _quitting;
     private readonly Dictionary<string, bool> _attachIso = new();
     private readonly Dictionary<string, CancellationTokenSource> _unlockPolls = new();
     private readonly Dictionary<string, CancellationTokenSource> _installPolls = new();
@@ -186,6 +190,14 @@ public sealed class VMManager
         _sync = SynchronizationContext.Current;
         LoadAndNormalize();
     }
+
+    /// <summary>How long Stop, Restart and Quit wait for the guest to power
+    /// off after pressing its power button before pulling the plug. A forced
+    /// stop seconds after an update rebuilt the server's code left it half
+    /// updated. Matches the Mac.</summary>
+    public const int GracefulStopSeconds = 60;
+
+    public const string QuitDuringInstallReason = "The app quit while the install was running.";
 
     public static VMManager CreateDefault()
     {
@@ -223,7 +235,7 @@ public sealed class VMManager
             {
                 VMStateKind.Installing => record with
                 {
-                    State = VMState.Failed(VMFailurePhase.Install, "The app quit while the install was running."),
+                    State = VMState.Failed(VMFailurePhase.Install, QuitDuringInstallReason),
                     StateChangedAt = _clock(),
                 },
                 VMStateKind.AwaitingPhoneUnlock or VMStateKind.Running =>
@@ -265,7 +277,12 @@ public sealed class VMManager
     /// Stops it first if live.</summary>
     public async Task DeleteServerAsync(string name)
     {
-        if (_hosts.TryGetValue(name, out var host)) { try { await host.ForceStopAsync(); } catch { } }
+        if (_hosts.TryGetValue(name, out var host))
+        {
+            host.OnGuestStopped = null;
+            try { await host.ForceStopAsync(); } catch { }
+        }
+        await _stopping.WaitAsync(name);
         _hosts.Remove(name);
         _lifecycles.Remove(name);
         if (_unlockPolls.Remove(name, out var cts)) cts.Cancel();
@@ -283,6 +300,44 @@ public sealed class VMManager
     public Task PowerOnAsync(string name) => ApplyAsync(VMEvent.PowerOn, name);
     public Task PowerOffAsync(string name) => ApplyAsync(VMEvent.PowerOff, name);
 
+    /// <summary>True while quitting would abandon a guest: one that is booted,
+    /// installing, or still powering off after a Stop. QEMU runs as separate
+    /// processes that outlive the app.</summary>
+    public bool HasLiveServers => _stopping.AnyInFlight
+        || Servers.Any(s => s.CanStop || s.CanCancelInstall);
+
+    /// <summary>
+    /// Used on quit. Powers every booted server off gracefully, all at once,
+    /// stops any install (it is retried later, as after any interrupted
+    /// install), and waits for stops already in flight. Nothing boots after
+    /// this starts.
+    /// </summary>
+    public async Task ShutDownAllAsync()
+    {
+        _quitting = true;
+        var booted = Servers.Where(s => s.CanStop).Select(s => s.Name).ToArray();
+        var installing = Servers.Where(s => s.CanCancelInstall).Select(s => s.Name).ToArray();
+        if (booted.Length + installing.Length > 0)
+            Log($"Shutting down {booted.Length + installing.Length} server(s) before quitting");
+        var work = booted.Select(PowerOffAsync)
+            .Concat(installing.Select(n => ApplyAsync(VMEvent.InstallFailed(QuitDuringInstallReason), n)))
+            .ToArray();
+        try
+        {
+            await Task.WhenAll(work);
+        }
+        finally
+        {
+            await _stopping.WaitAllAsync();
+        }
+    }
+
+    /// <summary>Whether a stop that leaves the lifecycle in this state presses
+    /// the guest's power button first. A booted server gets to stop its daemon
+    /// and flush its disk; an install that failed or was cancelled is redone
+    /// from scratch, so it is cut at once.</summary>
+    public static bool StopsGracefully(VMStateKind stateAfterStop) => stateAfterStop == VMStateKind.Stopped;
+
     /// <summary>
     /// Feed one event through the pure state machine, persist the new state,
     /// and execute the effects it ordered.
@@ -291,6 +346,11 @@ public sealed class VMManager
     {
         var server = Server(name);
         if (server is null) return;
+        if (_quitting && (ev.Kind is VMEventKind.StartInstall or VMEventKind.PowerOn))
+        {
+            Log($"VM {name}: not starting while the app quits");
+            return;
+        }
         var lc = _lifecycles.TryGetValue(name, out var existing)
             ? existing
             : new VMLifecycle(server.Record.Config.AwaitsPhoneUnlockAtBoot, server.Record.State, _clock);
@@ -315,6 +375,7 @@ public sealed class VMManager
             StateChangedAt = lc.StateChangedAt,
         };
         try { Store.Save(server.Record); } catch { }
+        CancelPollsLeftBehind(name);
         await RunEffectsAsync(effects, server.Record.Config);
         SyncUnlockPoll(server.Record.Config);
         SyncInstallPoll(server.Record.Config);
@@ -346,14 +407,46 @@ public sealed class VMManager
                     await StartVmAsync(config);
                     break;
                 case VMEffect.StopVirtualMachine:
-                    if (_hosts.Remove(name, out var host))
-                    {
-                        try { await host.ForceStopAsync(); } catch { }
-                    }
+                    if (_hosts.TryGetValue(name, out var host))
+                        await StopHostAsync(name, host, StopsGracefully(CurrentStateKind(name)));
                     break;
             }
         }
     }
+
+    /// <summary>
+    /// Stop one guest, tracked so a Start of the same server waits for it.
+    /// The host stays registered until its process is gone, so Delete can
+    /// still force it. The lifecycle already records the outcome, so the
+    /// exit this causes is not news: its callback is detached, which also
+    /// keeps a late exit from landing on a newer run of the same server.
+    /// </summary>
+    private async Task StopHostAsync(string name, QemuHost host, bool graceful)
+    {
+        host.OnGuestStopped = null;
+        if (graceful) Log($"VM {name}: shutting down (up to {GracefulStopSeconds}s before forcing)");
+        await _stopping.RunAsync(name, () => graceful
+            ? host.StopAsync(GracefulStopSeconds)
+            : host.ForceStopAsync());
+        if (_hosts.TryGetValue(name, out var live) && ReferenceEquals(live, host))
+            _hosts.Remove(name);
+        if (graceful) Log($"VM {name}: powered off");
+    }
+
+    /// <summary>A stop can take a minute; stop watching a guest that is no
+    /// longer sealed or installing right away rather than after it.</summary>
+    private void CancelPollsLeftBehind(string name)
+    {
+        var kind = CurrentStateKind(name);
+        if (kind != VMStateKind.AwaitingPhoneUnlock && _unlockPolls.Remove(name, out var unlock))
+            unlock.Cancel();
+        if (kind != VMStateKind.Installing && _installPolls.Remove(name, out var install))
+            install.Cancel();
+    }
+
+    /// <summary>States in which the lifecycle expects a QEMU process.</summary>
+    private static bool WantsGuest(VMStateKind kind)
+        => kind is VMStateKind.Installing or VMStateKind.AwaitingPhoneUnlock or VMStateKind.Running;
 
     private VMStateKind CurrentStateKind(string name)
         => Server(name)?.Record.State.Kind ?? VMStateKind.Created;
@@ -361,6 +454,14 @@ public sealed class VMManager
     private async Task StartVmAsync(VMConfig config)
     {
         var name = config.Name;
+        // A Start pressed while the guest is still shutting down must not
+        // open the same disk in a second QEMU.
+        if (_stopping.IsStopping(name))
+        {
+            Log($"VM {name}: waiting for the previous shutdown to finish");
+            await _stopping.WaitAsync(name);
+            if (_quitting || !WantsGuest(CurrentStateKind(name))) return;
+        }
         if (_toolchain is null)
         {
             var reason = ToolchainError ?? "QEMU is not installed.";
@@ -371,7 +472,7 @@ public sealed class VMManager
         try
         {
             var host = new QemuHost(_toolchain);
-            host.OnGuestStopped = (code, stderrTail) => OnUi(() => _ = GuestStoppedAsync(name, code, stderrTail));
+            host.OnGuestStopped = (code, stderrTail) => OnUi(() => _ = GuestStoppedAsync(name, host, code, stderrTail));
             _hosts[name] = host;
             await host.StartAsync(config, Store.Layout, _attachIso.TryGetValue(name, out var a) && a);
             Log($"VM {name}: started ({config.CpuCount} vCPU, {config.MemoryBytes / VMResourcePlan.GiB} GiB)");
@@ -405,8 +506,10 @@ public sealed class VMManager
     /// identical), so it goes through the duration-gated verdict — the
     /// hard-won Mac Phase-0 finding.
     /// </summary>
-    private async Task GuestStoppedAsync(string name, int exitCode, string stderrTail)
+    private async Task GuestStoppedAsync(string name, QemuHost host, int exitCode, string stderrTail)
     {
+        // A newer run of this server owns it now; this exit is old news.
+        if (_hosts.TryGetValue(name, out var live) && !ReferenceEquals(live, host)) return;
         _hosts.Remove(name);
         switch (CurrentStateKind(name))
         {

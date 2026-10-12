@@ -15,6 +15,7 @@ internal sealed class TrayIcon : IDisposable
     private readonly VMManager _vm;
     private readonly Forms.NotifyIcon _icon;
     private readonly Forms.ContextMenuStrip _menu = new();
+    private string? _status;
 
     public TrayIcon(MainWindow window, VMManager vm)
     {
@@ -53,6 +54,13 @@ internal sealed class TrayIcon : IDisposable
         _menu.Items.Clear();
         _menu.Items.Add(Item("Open Flagship Studio", OpenWindow));
         _menu.Items.Add(new Forms.ToolStripSeparator());
+
+        // While quitting, nothing may start a server the quit would abandon.
+        if (_status is not null)
+        {
+            _menu.Items.Add(new Forms.ToolStripMenuItem(_status) { Enabled = false });
+            return;
+        }
 
         foreach (var server in _vm.Servers.OrderBy(s => s.Fqdn, StringComparer.OrdinalIgnoreCase))
         {
@@ -124,6 +132,14 @@ internal sealed class TrayIcon : IDisposable
             _window.Topmost = false;
             _window.Focus();
         });
+    }
+
+    /// <summary>Show an app-wide status (e.g. quitting) in the tooltip and
+    /// in place of the server menu; null restores both.</summary>
+    public void SetStatus(string? status)
+    {
+        _status = status;
+        _icon.Text = status is null ? "Flagship Studio" : $"Flagship Studio: {status}";
     }
 
     public void Dispose()
