@@ -210,6 +210,24 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   endorsed release after `37ba277d`. Fixed along the way: iOS pushes had no
   `aps.alert`, so nothing showed while the app was closed (every category);
   iOS signed orders named the leader box instead of the box serving the app.
+- **Apps as API servers + member sign-in (2026-10-12, box `85d3e911`, apps
+  through `06fc4a7f`).** `docs/app-apis.md`. The app proxy streams and passes
+  WebSockets; `/*` public prefixes; Flagship-issued API keys (signed
+  `flagship/app-api-key/v1`, no expiry, read/write scope); a form/upgrade from
+  another app's origin arrives without the member; the AI may build its own
+  sign-in when the owner asks. Private apps were unreachable on live boxes (the
+  proxy never resolved the member session): now the knock cookie resolves the
+  owner/allow-listed AID with a per-app stable id and role. AI staging data
+  tools (`query_db`, `list_tables`, `list_data_files`, `read_data_file`); the
+  owner's live Database section (read-only; writes need a signed
+  `flagship/app-db-write/v1`); access-list drafts from the manifest's
+  `network.egress` `{host, why}`. Knock sign-in signs with the invite's contact
+  AID (own boxes: global AID; a record naming the user's own AID is ignored;
+  unknown boxes refused). Needs the `85d3e911` endorsement on boxes. Open: the
+  app-detail members list is stale (the IRK-keyed store no longer gates) and
+  there's no live endpoint to assign per-member roles; app roles can count the
+  box's databases via pg_database (names are opaque); v1 invite links (no `a=`)
+  need re-inviting; boxes without `ownerAidPub` can't recognise their owner.
 - **Docker containers unreachable on VM appliances (fixed in `e81df698`).**
   The appliance's `Type=ether` networkd rule pulled every container's veth off
   its bridge: every app 502'd with "read ECONNRESET" after a 3 s ARP timeout
