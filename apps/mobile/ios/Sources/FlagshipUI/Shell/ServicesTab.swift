@@ -172,10 +172,13 @@ public struct ServicesTab: View {
             if vm == nil {
                 vm = ServicesListViewModel(
                     client: client,
+                    clients: podClients,
+                    homeFqdn: { [app] in app.screensFqdn(bound: nil) },
                     server: server,
                     username: { [app] in app.currentUser }
                 )
             }
+            vm?.servers = app.pods
             // V7 — keep the dropdown in sync with whatever pods the
             // user currently owns; the source of truth lives on
             // AppState, the VM just needs a snapshot so its filter
@@ -185,6 +188,7 @@ public struct ServicesTab: View {
         }
         .onChange(of: app.pods) { _, newPods in
             vm?.availablePods = newPods.map { ($0.podId, $0.name) }
+            vm?.servers = newPods
         }
     }
 
@@ -242,6 +246,19 @@ public struct ServicesTab: View {
         case .appDatabaseQuery(let serviceId, let store):
             AppDbQueryContainer(serviceId: serviceId, store: store)
         }
+    }
+
+    /// An app's page, on the shell's server when it's there, else on a
+    /// server that has it.
+    @MainActor
+    private func open(_ serviceId: String, vm: ServicesListViewModel) {
+        guard let fqdn = vm.openFqdn(for: serviceId) else {
+            path.append(.appDetail(serviceId: serviceId))
+            return
+        }
+        creation = nil
+        bind(fqdn)
+        path = [.appDetail(serviceId: serviceId)]
     }
 
     /// The slug half of a `<creator>--<slug>` service id.
@@ -320,9 +337,10 @@ public struct ServicesTab: View {
             } else {
                 LazyVStack(spacing: FS.space.s3) {
                     ForEach(apps, id: \.serviceId) { appItem in
-                        Button(action: { path.append(.appDetail(serviceId: appItem.serviceId)) }) {
+                        Button(action: { open(appItem.serviceId, vm: vm) }) {
                             AppRow(
                                 app: appItem,
+                                pill: vm.pill(for: appItem.serviceId),
                                 links: vm.linksByServiceId[appItem.serviceId],
                                 currentUser: app.currentUser
                             )
@@ -379,6 +397,8 @@ enum AppsOwnerFilter: CaseIterable, Hashable {
 private struct AppRow: View {
     @Environment(\.colorScheme) private var scheme
     let app: FlagshipAPI.AppSummary
+    /// Every server the app is on, combined (docs/app-placement.md §6).
+    let pill: AppStatusPill
     /// V2 — per-app links (canonical + short + instances), loaded by
     /// the ServicesListViewModel after the daemon's apps-list returns.
     /// `nil` while still in flight — the row falls back to the
@@ -395,7 +415,7 @@ private struct AppRow: View {
 
     var body: some View {
         let c = FSColors.scheme(scheme)
-        let running = app.status == "running"
+        let running = pill.kind == .online
         return FSListRow(
             leading: .icon(running ? "app.dashed" : "app", color: running ? c.success : c.textMuted),
             title: app.slug.capitalized,
@@ -417,7 +437,8 @@ private struct AppRow: View {
                 case nil:
                     EmptyView()
                 }
-                FSPill(running ? "Running" : "Stopped", kind: running ? .online : .idle)
+                FSPill(pill.label, kind: pill.fsKind)
+                    .accessibilityIdentifier("app-row-status-\(app.serviceId)")
                 Image(systemName: "chevron.right").foregroundColor(c.textMuted)
             }
         }

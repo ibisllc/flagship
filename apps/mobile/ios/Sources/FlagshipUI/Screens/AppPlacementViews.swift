@@ -151,7 +151,7 @@ struct ServerAppsSection: View {
                     subtitle: row.address
                 ) {
                     HStack(spacing: FS.space.s2) {
-                        FSPill(row.running ? "Running" : "Stopped", kind: row.running ? .online : .idle)
+                        if let pill = row.state.pill { FSPill(pill.label, kind: pill.fsKind) }
                         Image(systemName: "chevron.right").foregroundColor(c.textMuted)
                     }
                 }
@@ -248,6 +248,10 @@ struct RunsOnSection: View {
                 }
             }
             Spacer()
+            if row.presence == .installed, let pill = row.state?.pill {
+                FSPill(pill.label, kind: pill.fsKind)
+                    .accessibilityIdentifier("runs-on-state-\(row.fqdn)")
+            }
         }
         .opacity(row.isCopying ? 0.6 : 1)
     }

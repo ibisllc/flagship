@@ -115,7 +115,7 @@ public struct ServiceDetailScreen: View {
                 HStack(spacing: FS.space.s2) {
                     Text(d.slug.capitalized).font(FS.font.h2()).foregroundColor(c.text)
                     Spacer()
-                    FSPill(d.status == "running" ? "Running" : "Stopped", kind: d.status == "running" ? .online : .idle)
+                    if let pill = AppServerState(d).pill { FSPill(pill.label, kind: pill.fsKind) }
                 }
                 Text("by \(d.creator)").foregroundColor(c.textMuted)
                 // V6 — version + package id sit on one line so the

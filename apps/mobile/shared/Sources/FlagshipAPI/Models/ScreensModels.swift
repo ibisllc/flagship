@@ -16,7 +16,9 @@ public struct AppSummary: Codable, Equatable, Sendable {
     public let urlLabel: String
     public let summary: String?
     public let url: String
-    public let status: String   // "running" | "stopped" | "unknown"
+    /// "running" | "starting" | "stopped" | "unknown". Older boxes always
+    /// send "unknown" (docs/app-placement.md §6).
+    public let status: String
     public let version: String?
     public let installedAt: Int64
     /// Internet hosts the app declares and the ones the owner allowed. Absent
@@ -30,6 +32,24 @@ public struct AppSummary: Codable, Equatable, Sendable {
     public var copying: AppCopying? = nil
     /// The app's name on a row for a copy still underway (no manifest yet).
     public var name: String? = nil
+    /// Something is working on the app on this box right now. Absent when
+    /// idle and on older boxes.
+    public var activity: AppActivity? = nil
+}
+
+/// What a box is doing to an app (docs/app-placement.md §6).
+public struct AppActivity: Codable, Equatable, Sendable {
+    /// "deploying" | "copying" | "editing"; a kind this build doesn't know is
+    /// kept as sent and ignored by the pill.
+    public let kind: String
+
+    public init(kind: String) { self.kind = kind }
+
+    private enum CodingKeys: String, CodingKey { case kind }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? ""
+    }
 }
 
 public struct RecentInstallEvent: Codable, Equatable, Sendable {

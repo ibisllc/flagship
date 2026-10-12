@@ -187,7 +187,9 @@ public final class ServerAppsController {
         public let name: String
         /// The app's address on this server (scheme stripped); nil while copying in.
         public let address: String?
-        public let running: Bool
+        /// What this server says about the app (docs/app-placement.md §6).
+        public let state: AppServerState
+        public var running: Bool { state.isLive }
         /// Set while the app is still being copied onto this server.
         public let copying: AppCopying?
         public var id: String { serviceId }
@@ -284,12 +286,12 @@ public final class ServerAppsController {
             let copying = fromCopies ?? fromList
             let name = copying != nil ? (a.name ?? a.slug.capitalized) : a.slug.capitalized
             return Row(serviceId: a.serviceId, name: name, address: Self.stripScheme(a.url),
-                       running: a.status == "running", copying: copying)
+                       state: copying != nil ? .copying : AppServerState(a), copying: copying)
         }
         let listed = Set(apps.map(\.serviceId))
         for entry in underway.values.sorted(by: { $0.startedAt < $1.startedAt }) where !listed.contains(entry.serviceId) {
             out.append(Row(serviceId: entry.serviceId, name: Self.displayName(entry), address: nil,
-                           running: false, copying: AppCopying(state: entry.state, progress: entry.progress)))
+                           state: .copying, copying: AppCopying(state: entry.state, progress: entry.progress)))
         }
         state = .loaded(out)
     }
@@ -333,6 +335,9 @@ public final class AppRunsOnController {
     public struct Row: Identifiable, Equatable, Sendable {
         public let pod: PodInfo
         public var presence: Presence
+        /// That server's state of the app (docs/app-placement.md §6); nil
+        /// unless it's installed there.
+        public var state: AppServerState? = nil
         public var id: String { pod.podId }
         public var fqdn: String { pod.fqdn.lowercased() }
         public var name: String { AppPlacementCopy.serverName(pod) }
@@ -397,33 +402,42 @@ public final class AppRunsOnController {
         var targets: [(String, any ScreensClient)] = []
         for row in rows { targets.append((row.fqdn, await client(row.fqdn))) }
         let serviceId = self.serviceId
-        let answers = await withTaskGroup(of: (String, Presence).self) { group in
+        let answers = await withTaskGroup(of: (String, Probe).self) { group in
             for (fqdn, c) in targets {
-                group.addTask { (fqdn, await Self.presence(of: serviceId, on: c)) }
+                group.addTask { (fqdn, await Self.probe(of: serviceId, on: c)) }
             }
-            var out: [String: Presence] = [:]
+            var out: [String: Probe] = [:]
             for await (fqdn, p) in group { out[fqdn] = p }
             return out
         }
         for i in rows.indices {
-            if let p = answers[rows[i].fqdn] { rows[i].presence = p }
+            if let p = answers[rows[i].fqdn] {
+                rows[i].presence = p.presence
+                rows[i].state = p.state
+            }
         }
     }
 
-    nonisolated static func presence(of serviceId: String, on client: any ScreensClient) async -> Presence {
+    /// One server's answer: whether it has the app, and its state there.
+    struct Probe: Sendable {
+        let presence: Presence
+        var state: AppServerState? = nil
+    }
+
+    nonisolated static func probe(of serviceId: String, on client: any ScreensClient) async -> Probe {
         do {
             let apps = try await client.appsList().apps
-            guard let app = apps.first(where: { $0.serviceId == serviceId }) else { return .absent }
+            guard let app = apps.first(where: { $0.serviceId == serviceId }) else { return Probe(presence: .absent) }
             if let cp = app.copying, ServerAppsController.isUnderway(cp.state) {
-                return .copying(state: cp.state, progress: cp.progress)
+                return Probe(presence: .copying(state: cp.state, progress: cp.progress))
             }
-            return .installed
+            return Probe(presence: .installed, state: AppServerState(app))
         } catch ScreensClientError.noSessionToken {
-            return .unknown(AppPlacementCopy.notPaired)
+            return Probe(presence: .unknown(AppPlacementCopy.notPaired))
         } catch ScreensClientError.notPaired {
-            return .unknown(AppPlacementCopy.notPaired)
+            return Probe(presence: .unknown(AppPlacementCopy.notPaired))
         } catch {
-            return .unknown(AppPlacementCopy.unknown)
+            return Probe(presence: .unknown(AppPlacementCopy.unknown))
         }
     }
 
@@ -522,16 +536,16 @@ public final class AppRunsOnController {
                     .filter { $0.serviceId == serviceId }
                     .max(by: { $0.startedAt < $1.startedAt })
             } catch {
-                set(row.fqdn, await Self.presence(of: serviceId, on: c))
+                set(row.fqdn, await Self.probe(of: serviceId, on: c))
                 continue
             }
             guard let entry else {
-                set(row.fqdn, await Self.presence(of: serviceId, on: c))
+                set(row.fqdn, await Self.probe(of: serviceId, on: c))
                 continue
             }
             switch entry.state {
             case "done":
-                set(row.fqdn, await Self.presence(of: serviceId, on: c))
+                set(row.fqdn, await Self.probe(of: serviceId, on: c))
                 if !entry.pendingEnv.isEmpty {
                     message = AppPlacementCopy.pendingEnv(appName, row.name, entry.pendingEnv)
                 }
@@ -560,8 +574,13 @@ public final class AppRunsOnController {
     }
 
     private func set(_ fqdn: String, _ presence: Presence) {
+        set(fqdn, Probe(presence: presence))
+    }
+
+    private func set(_ fqdn: String, _ probe: Probe) {
         guard let i = rows.firstIndex(where: { $0.fqdn == fqdn }) else { return }
-        rows[i].presence = presence
+        rows[i].presence = probe.presence
+        rows[i].state = probe.state
     }
 
     private func client(_ fqdn: String) async -> any ScreensClient {
