@@ -2094,3 +2094,8 @@ button[data-device-restricted] {
 .access-editor { width: 100%; min-height: 220px; white-space: pre; overflow-wrap: normal; overflow-x: auto; }
 .access-errors { margin: var(--space-2) 0 0; padding-left: 18px; }
 .access-sheet-later { text-align: center; }
+
+.update-pending { display: flex; align-items: flex-start; gap: var(--space-2); }
+.update-pending p { margin: 0; }
+.update-pending-spinner { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); border-top-color: var(--accent); animation: ops-bar-spin 0.7s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .update-pending-spinner { animation-duration: 1.4s; } }

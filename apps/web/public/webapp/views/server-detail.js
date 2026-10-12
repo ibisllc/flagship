@@ -47,12 +47,17 @@ import { signWithIrk, bytesToHex } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
 import { setPreferredServer, isPreferredServer } from "../lib/setLeader.js";
 import {
-  depositUpdateOrder,
+  clearPendingUpdate,
   describeLastUpdate,
   groupReleases,
   loadReleaseCatalog,
+  orderServerUpdate,
+  readPendingUpdate,
+  reconcilePendingUpdate,
+  renderPendingUpdate,
   COMMIT_SHA_RE,
   DOWNGRADE_WARNING,
+  PENDING_UPDATE_POLL_MS,
 } from "../lib/serverUpdate.js";
 import {
   createTransferOffer,
@@ -427,7 +432,8 @@ export async function renderServerDetail() {
           <span class="value" id="update-current-commit">${escapeHtml(shortCommit(body.currentCommit))}</span>
         </div>
         <p class="note small mt-2 hidden" id="update-available"></p>
-        ${describeLastUpdate(body.lastUpdate) ? `<p class="note small mt-2" id="update-last-outcome">${escapeHtml(describeLastUpdate(body.lastUpdate))}</p>` : ""}
+        <p class="note small mt-2${describeLastUpdate(body.lastUpdate) ? "" : " hidden"}" id="update-last-outcome">${escapeHtml(describeLastUpdate(body.lastUpdate) || "")}</p>
+        <div class="mt-2 hidden" id="update-pending"></div>
         <button id="update-server-btn" class="danger full-width mt-2"${body.currentCommit ? "" : " disabled"}>Update this server</button>
         <p class="note small${body.currentCommit ? " hidden" : ""}" id="update-hint">
           Waiting for this server to report its current version — it can't be
@@ -1401,28 +1407,121 @@ async function openReplaceDialog(body) {
 
 // ---- Update this server (dual-signed in-place update) ------------------
 
-function wireUpdate(body) {
-  $("update-server-btn")?.addEventListener("click", () => {
-    openUpdateDialog(body).catch((e) => {
+// The card's state. A sent order is remembered on this device until
+// server-detail shows its outcome; while one is pending the card shows it in
+// place of the button and re-reads server-detail every 15 s.
+let updateCard = null;
+
+function stopPendingUpdatePoll(card) {
+  if (card?.timer) { clearInterval(card.timer); card.timer = null; }
+}
+
+export function wireUpdate(body) {
+  stopPendingUpdatePoll(updateCard);
+  const card = { fqdn: body.serverFqdn, detail: body, latest: null, catalogFor: null, catalogLoaded: false, timer: null, polling: false };
+  updateCard = card;
+  $("update-server-btn")?.addEventListener("click", () => runUpdateDialog(card));
+  paintUpdateCard(card);
+}
+
+function runUpdateDialog(card, opts) {
+  openUpdateDialog(card.detail, opts)
+    .catch((e) => {
       if (e?.code !== "cancelled") {
         console.error("server update failed", e);
         toast(humanError(e), "err");
       }
+    })
+    .finally(() => paintUpdateCard(card));
+}
+
+function paintUpdateCard(card) {
+  if (updateCard !== card) return;
+  const pendingEl = $("update-pending");
+  if (!pendingEl) return;
+  const d = card.detail;
+  const pending = reconcilePendingUpdate(card.fqdn, d);
+  const running = $("update-current-commit");
+  if (running) running.textContent = shortCommit(d.currentCommit);
+  const lastEl = $("update-last-outcome");
+  if (lastEl) {
+    const last = describeLastUpdate(d.lastUpdate);
+    lastEl.textContent = last || "";
+    lastEl.classList.toggle("hidden", !last);
+  }
+  const btn = $("update-server-btn");
+  const hint = $("update-hint");
+  if (pending) {
+    pendingEl.innerHTML = renderPendingUpdate(pending, { formatWhen, escapeHtml });
+    pendingEl.classList.remove("hidden");
+    pendingEl.querySelector("[data-update-send-again]")?.addEventListener("click", () => {
+      runUpdateDialog(card, { sendAgain: true });
     });
-  });
-  loadReleaseCatalog({ fetchBox: (p) => screensFetch(p), currentCommit: body.currentCommit })
+    pendingEl.querySelector("[data-update-forget]")?.addEventListener("click", () => {
+      clearPendingUpdate(card.fqdn);
+      paintUpdateCard(card);
+    });
+    btn?.classList.add("hidden");
+    hint?.classList.add("hidden");
+    ensurePendingUpdatePoll(card);
+  } else {
+    pendingEl.innerHTML = "";
+    pendingEl.classList.add("hidden");
+    if (btn) {
+      btn.classList.remove("hidden");
+      btn.disabled = !d.currentCommit || btn.getAttribute("data-companion-unavailable") === "true";
+    }
+    hint?.classList.toggle("hidden", !!d.currentCommit);
+    stopPendingUpdatePoll(card);
+    refreshReleaseNote(card);
+  }
+  paintReleaseNote(card, !!pending);
+}
+
+function paintReleaseNote(card, pending) {
+  const note = $("update-available");
+  if (note) {
+    note.textContent = card.latest ? `New release available: ${card.latest.tag}` : "";
+    note.classList.toggle("hidden", pending || !card.latest);
+  }
+  const btn = $("update-server-btn");
+  if (btn) btn.textContent = card.latest ? "Update to latest" : "Update this server";
+}
+
+function refreshReleaseNote(card) {
+  const commit = card.detail.currentCommit;
+  if (card.catalogLoaded && card.catalogFor === commit) return;
+  card.catalogLoaded = true;
+  card.catalogFor = commit;
+  card.latest = null;
+  loadReleaseCatalog({ fetchBox: (p) => screensFetch(p), currentCommit: commit })
     .then((catalog) => {
-      const { latest } = groupReleases(catalog);
-      if (!latest) return;
-      const note = $("update-available");
-      if (note) {
-        note.textContent = `New release available: ${latest.tag}`;
-        note.classList.remove("hidden");
-      }
-      const btn = $("update-server-btn");
-      if (btn) btn.textContent = "Update to latest";
+      if (updateCard !== card || card.detail.currentCommit !== commit) return;
+      card.latest = groupReleases(catalog).latest;
+      paintReleaseNote(card, !!readPendingUpdate(card.fqdn));
     })
     .catch(() => {});
+}
+
+function ensurePendingUpdatePoll(card) {
+  if (card.timer) return;
+  card.timer = setInterval(async () => {
+    if (updateCard !== card || !$("update-pending") || $("view-server-detail")?.classList.contains("hidden")) {
+      stopPendingUpdatePoll(card);
+      return;
+    }
+    if (document.visibilityState === "hidden" || card.polling) return;
+    card.polling = true;
+    try {
+      const fresh = await screensFetch("/api/screens/server-detail");
+      if (String(fresh?.serverFqdn || "").toLowerCase() === String(card.fqdn).toLowerCase()) card.detail = fresh;
+    } catch {
+      // Offline or restarting: keep the last reading; the order stays pending.
+    } finally {
+      card.polling = false;
+    }
+    paintUpdateCard(card);
+  }, PENDING_UPDATE_POLL_MS);
 }
 
 // "Update this server": the box lists the releases it verified for itself.
@@ -1432,7 +1531,10 @@ function wireUpdate(body) {
 // signed for that one exact commit with the sensitive signer (admin master
 // root when present) and deposited on `.com`'s update lane. The box only
 // applies it if the commit is ALSO maintainer-endorsed.
-async function openUpdateDialog(body) {
+//
+// While an order this device sent is still pending the sheet opens on it
+// instead of the picker; `sendAgain` skips that (the stale order's Send again).
+export async function openUpdateDialog(body, { sendAgain = false } = {}) {
   const session = getSession();
   if (!session.umk || !session.irk) {
     toast("Unlock the webapp first", "err");
@@ -1454,7 +1556,7 @@ async function openUpdateDialog(body) {
       <span class="label">Running</span>
       <span class="value" data-update-running>${escapeHtml(shortCommit(currentCommit))}</span>
     </div>
-    <div data-update-choose>
+    <div class="hidden" data-update-choose>
       <div class="mt-3" data-update-latest>
         <p class="note small">Checking for new releases…</p>
       </div>
@@ -1471,11 +1573,7 @@ async function openUpdateDialog(body) {
       </details>
     </div>
     <p class="modal-error err-text hidden" data-update-error></p>
-    <div class="mt-3 hidden" data-update-result>
-      <p class="note">Update sent. The server picks it up within about five
-      minutes, checks the maintainers' signature, restarts into the new version,
-      and goes back by itself if that version doesn't start.</p>
-    </div>
+    <div class="mt-3 hidden" data-update-result></div>
     <div class="row-2 mt-3">
       <button class="secondary" data-update-cancel>Cancel</button>
     </div>
@@ -1500,6 +1598,7 @@ async function openUpdateDialog(body) {
   const from = currentCommit.toLowerCase();
 
   let catalog = null;
+  let catalogRequested = false;
   let working = false;
   let done = false;
 
@@ -1516,6 +1615,12 @@ async function openUpdateDialog(body) {
       <button class="secondary btn-xs" data-update-commit="${escapeHtml(r.commit)}" data-update-action="${action}">${escapeHtml(label)}</button>
     </div>
   `).join("");
+
+  const tagFor = (commit) => {
+    const g = groupReleases(catalog);
+    const all = [g.latest, ...g.otherNewer, ...g.older].filter(Boolean);
+    return all.find((r) => r.commit === commit)?.tag || undefined;
+  };
 
   const renderCatalog = () => {
     const g = groupReleases(catalog);
@@ -1565,6 +1670,30 @@ async function openUpdateDialog(body) {
     }
   };
 
+  const showChooser = () => {
+    resultEl.classList.add("hidden");
+    resultEl.innerHTML = "";
+    chooseEl.classList.remove("hidden");
+    cancelBtn.textContent = "Cancel";
+    if (!catalogRequested) {
+      catalogRequested = true;
+      loadCatalog(false);
+    }
+  };
+
+  // The post-send state: the order this device sent and is waiting on.
+  const showSent = (pending) => {
+    chooseEl.classList.add("hidden");
+    resultEl.innerHTML = renderPendingUpdate(pending, { formatWhen, escapeHtml });
+    resultEl.classList.remove("hidden");
+    cancelBtn.textContent = "Done";
+    resultEl.querySelector("[data-update-send-again]")?.addEventListener("click", showChooser);
+    resultEl.querySelector("[data-update-forget]")?.addEventListener("click", () => {
+      clearPendingUpdate(serverFqdn);
+      showChooser();
+    });
+  };
+
   const targetValue = () => targetEl.value.trim().toLowerCase();
   function refreshTarget() {
     const t = targetValue();
@@ -1583,8 +1712,9 @@ async function openUpdateDialog(body) {
     if (working || done) return;
     errEl.classList.add("hidden");
     setWorking(true);
+    let sent;
     try {
-      await depositUpdateOrder({
+      sent = await orderServerUpdate({
         serverDomain: serverFqdn,
         targetCommit,
         fromCommit: currentCommit,
@@ -1595,18 +1725,16 @@ async function openUpdateDialog(body) {
         // admin root (when present); the co-signed mailbox-auth stays the
         // IRK (tag-routed by the gated signer).
         signWithIrk: sensitiveSigner(),
-      });
-      done = true;
-      chooseEl.classList.add("hidden");
-      confirmEl.classList.add("hidden");
-      resultEl.classList.remove("hidden");
-      cancelBtn.textContent = "Done";
-      toast("Update ordered", "ok");
+      }, { targetTag: tagFor(targetCommit) });
     } catch (e) {
       errEl.textContent = humanError(e);
       errEl.classList.remove("hidden");
       setWorking(false);
+      return;
     }
+    done = true;
+    showSent(sent.pending);
+    toast("Update ordered", "ok");
   }
 
   return new Promise((resolve, reject) => {
@@ -1623,7 +1751,9 @@ async function openUpdateDialog(body) {
       if (goBtn.disabled || !COMMIT_SHA_RE.test(t) || t === from) return;
       order(t);
     });
-    loadCatalog(false);
+    const pending = sendAgain ? null : reconcilePendingUpdate(serverFqdn, body);
+    if (pending) showSent(pending);
+    else showChooser();
   });
 }
 

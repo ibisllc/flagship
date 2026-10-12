@@ -383,7 +383,8 @@ describe("/webapp PWA static surface", () => {
     // v47 stages AI deploys, asks for app internet access, adds the AI relay switch.
     // v48 replaces the internet approval with app access lists and their alerts.
     // v49 adds the Push notifications switch.
-    expect(r.body).toContain('SHELL_VERSION = "v49"');
+    // v50 keeps a sent server update on the card until the box reports it.
+    expect(r.body).toContain('SHELL_VERSION = "v50"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

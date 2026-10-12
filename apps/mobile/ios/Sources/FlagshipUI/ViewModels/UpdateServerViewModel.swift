@@ -35,6 +35,13 @@ public final class UpdateServerViewModel {
 
     public private(set) var phase: Phase = .idle
 
+    public var isWorking: Bool { phase == .signing || phase == .posting }
+
+    public var failureMessage: String? {
+        if case .failed(let msg) = phase { return msg }
+        return nil
+    }
+
     private let username: String
     private let serverFqdn: String
     /// The box-reported running commit (server-detail `currentCommit`).
@@ -47,6 +54,7 @@ public final class UpdateServerViewModel {
     /// reads the Keystore — NEVER a bare-IRK default when a root exists.
     private let adminRootKey: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey?
     private let now: () -> Int64
+    private let pendingStore: PendingUpdateStore
 
     public init(
         username: String,
@@ -55,8 +63,10 @@ public final class UpdateServerViewModel {
         mailbox: any SecretMailboxClient,
         signer: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         adminRootKey: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey?)? = nil,
-        now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
+        now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
+        pendingStore: PendingUpdateStore = PendingUpdateStore()
     ) {
+        self.pendingStore = pendingStore
         self.username = username
         self.serverFqdn = serverFqdn
         self.currentCommit = currentCommit?.lowercased()
@@ -105,9 +115,10 @@ public final class UpdateServerViewModel {
     }
 
     /// Mint + sign + deposit the update order: biometric → sign → deposit.
-    /// Returns true on success.
+    /// Returns true on success, and only then remembers the order as pending
+    /// for this server (so the page doesn't offer the button again).
     @discardableResult
-    public func update(targetCommit raw: String) async -> Bool {
+    public func update(targetCommit raw: String, targetTag: String? = nil) async -> Bool {
         guard let from = currentCommit, ServerUpdateFlow.isValidCommit(from) else {
             phase = .failed("This server hasn't reported its current version yet.")
             return false
@@ -124,6 +135,7 @@ public final class UpdateServerViewModel {
 
         phase = .signing
         let body: UpdateDepositBody
+        let issuedAt = now()
         do {
             let reason = "Update \(serverFqdn)"
             let irk = try await signer(reason)
@@ -135,7 +147,7 @@ public final class UpdateServerViewModel {
                 fromCommit: from,
                 irk: irk,
                 orderKey: orderKey,
-                issuedAt: now()
+                issuedAt: issuedAt
             )
         } catch {
             phase = .failed("Couldn't sign the update order: \(error.localizedDescription)")
@@ -152,7 +164,23 @@ public final class UpdateServerViewModel {
             phase = .failed("Couldn't reach the server directory. Check your connection and try again.")
             return false
         }
+        pendingStore.save(
+            PendingUpdateOrder(targetCommit: target, targetTag: targetTag, fromCommit: from, orderedAt: issuedAt),
+            serverFqdn: serverFqdn
+        )
         phase = .done
         return true
+    }
+
+    /// Send again: the same release, signed afresh against the box's current
+    /// commit. Replaces the pending order on success.
+    @discardableResult
+    public func resend(_ order: PendingUpdateOrder) async -> Bool {
+        await update(targetCommit: order.targetCommit, targetTag: order.targetTag)
+    }
+
+    /// Forget it: the box never reported, so stop waiting on it.
+    public func forgetPending() {
+        pendingStore.clear(serverFqdn: serverFqdn)
     }
 }

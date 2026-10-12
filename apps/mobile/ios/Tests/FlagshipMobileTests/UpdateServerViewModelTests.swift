@@ -18,20 +18,25 @@ final class UpdateServerViewModelTests: XCTestCase {
         try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 7, count: 32))
     }
 
+    private let store = PendingUpdateStore(defaults: UserDefaults(suiteName: "update-vm-\(UUID().uuidString)")!)
+
     private func vm(
         mailbox: MockSecretMailboxClient,
         currentCommit: String?,
         adminRoot root: Curve25519.Signing.PrivateKey? = nil,
-        onSign: (() -> Void)? = nil
+        onSign: (() -> Void)? = nil,
+        serverFqdn: String? = nil,
+        now: Int64 = 1700
     ) -> UpdateServerViewModel {
         UpdateServerViewModel(
             username: username,
-            serverFqdn: server,
+            serverFqdn: serverFqdn ?? server,
             currentCommit: currentCommit,
             mailbox: mailbox,
             signer: { _ in onSign?(); return self.irk() },
             adminRootKey: { _ in root },
-            now: { 1700 }
+            now: { now },
+            pendingStore: store
         )
     }
 
@@ -135,5 +140,59 @@ final class UpdateServerViewModelTests: XCTestCase {
         XCTAssertNotNil(m.targetProblem(current))
         XCTAssertNil(m.targetProblem(target))
         XCTAssertTrue(m.canOrder(" \(target) "))
+    }
+
+    // MARK: - Pending order
+
+    func testSuccessfulDepositRemembersPendingOrder() async {
+        let mb = MockSecretMailboxClient()
+        let m = vm(mailbox: mb, currentCommit: current)
+        XCTAssertNil(store.load(serverFqdn: server))
+        let ok = await m.update(targetCommit: target.uppercased(), targetTag: "v1.4.0")
+        XCTAssertTrue(ok)
+        XCTAssertEqual(
+            store.load(serverFqdn: server),
+            PendingUpdateOrder(targetCommit: target, targetTag: "v1.4.0", fromCommit: current, orderedAt: 1700)
+        )
+        XCTAssertEqual(store.load(serverFqdn: server.uppercased())?.targetCommit, target)
+    }
+
+    func testFailedDepositStoresNothing() async {
+        let mb = MockSecretMailboxClient()
+        mb.nextUpdateError = ScreensClientError.http(status: 403, message: "no")
+        let m = vm(mailbox: mb, currentCommit: current)
+        await m.update(targetCommit: target)
+        XCTAssertNil(store.load(serverFqdn: server))
+    }
+
+    func testRejectedTargetStoresNothing() async {
+        let m = vm(mailbox: MockSecretMailboxClient(), currentCommit: current)
+        await m.update(targetCommit: current)
+        XCTAssertNil(store.load(serverFqdn: server))
+    }
+
+    func testResendReplacesPendingOrderAndForgetClears() async {
+        let mb = MockSecretMailboxClient()
+        let old = PendingUpdateOrder(targetCommit: target, targetTag: "v1.4.0", fromCommit: current, orderedAt: 10)
+        store.save(old, serverFqdn: server)
+        let m = vm(mailbox: mb, currentCommit: current, now: 5_000_000)
+        let ok = await m.resend(old)
+        XCTAssertTrue(ok)
+        XCTAssertEqual(mb.updateDeposits.count, 1)
+        XCTAssertEqual(mb.updateDeposits[0].body.order.targetCommit, target)
+        XCTAssertEqual(store.load(serverFqdn: server)?.orderedAt, 5_000_000)
+        XCTAssertEqual(store.load(serverFqdn: server)?.targetTag, "v1.4.0")
+        m.forgetPending()
+        XCTAssertNil(store.load(serverFqdn: server))
+    }
+
+    func testPendingOrderIsPerServer() async {
+        let other = "work.alice.flagship.services"
+        let m = vm(mailbox: MockSecretMailboxClient(), currentCommit: current)
+        await m.update(targetCommit: target)
+        XCTAssertNotNil(store.load(serverFqdn: server))
+        XCTAssertNil(store.load(serverFqdn: other))
+        vm(mailbox: MockSecretMailboxClient(), currentCommit: current, serverFqdn: other).forgetPending()
+        XCTAssertNotNil(store.load(serverFqdn: server), "forgetting one server leaves the other's order")
     }
 }

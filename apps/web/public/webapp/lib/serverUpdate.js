@@ -279,3 +279,143 @@ export function groupReleases(catalog) {
     stale: catalog?.stale === true,
   };
 }
+
+// ---- The order this device sent and is waiting on ----------------------
+//
+// The box takes up to about five minutes to pick an order up, so a sent order
+// is remembered per server (this device only) until server-detail shows its
+// outcome. Without it, closing the sheet forgot the order and the page offered
+// the button again, inviting a duplicate that does nothing.
+
+export const PENDING_UPDATE_STALE_MS = 30 * 60_000;
+export const PENDING_UPDATE_POLL_MS = 15_000;
+const PENDING_UPDATE_KEY_PREFIX = "flagship.pendingUpdate.v1:";
+
+export function pendingUpdateKey(serverFqdn) {
+  return PENDING_UPDATE_KEY_PREFIX + String(serverFqdn).toLowerCase();
+}
+
+function defaultStorage() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function parsePendingUpdate(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  if (!COMMIT_SHA_RE.test(String(raw.targetCommit)) || !COMMIT_SHA_RE.test(String(raw.fromCommit))) return null;
+  if (typeof raw.orderedAt !== "number" || !Number.isFinite(raw.orderedAt)) return null;
+  const out = { targetCommit: raw.targetCommit, fromCommit: raw.fromCommit, orderedAt: raw.orderedAt };
+  if (typeof raw.targetTag === "string" && raw.targetTag) out.targetTag = raw.targetTag;
+  return out;
+}
+
+/** Remember a sent order. Returns false when storage is unavailable. */
+export function savePendingUpdate(serverFqdn, pending, storage = defaultStorage()) {
+  const entry = parsePendingUpdate(pending);
+  if (!entry || !storage) return false;
+  try {
+    storage.setItem(pendingUpdateKey(serverFqdn), JSON.stringify(entry));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Deposit the order and, once `.com` accepted it, remember it as this server's
+ * pending update. A failed deposit leaves nothing behind.
+ *
+ * @param {Parameters<typeof depositUpdateOrder>[0]} args
+ * @param {{ targetTag?: string, storage?: Storage | null, deps?: object }} [opts]
+ */
+export async function orderServerUpdate(args, { targetTag, storage = defaultStorage(), deps } = {}) {
+  const sent = await depositUpdateOrder(args, deps);
+  const pending = {
+    targetCommit: sent.order.targetCommit,
+    fromCommit: sent.order.fromCommit,
+    orderedAt: sent.order.issuedAt,
+    ...(targetTag ? { targetTag } : {}),
+  };
+  savePendingUpdate(args.serverDomain, pending, storage);
+  return { ...sent, pending };
+}
+
+export function readPendingUpdate(serverFqdn, storage = defaultStorage()) {
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(pendingUpdateKey(serverFqdn));
+    return raw ? parsePendingUpdate(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingUpdate(serverFqdn, storage = defaultStorage()) {
+  try {
+    storage?.removeItem(pendingUpdateKey(serverFqdn));
+  } catch {}
+}
+
+/**
+ * Whether server-detail shows the outcome of the pending order: the box runs
+ * the target, or it recorded a verdict for that target (applied / rolled back)
+ * since the order was sent. A refusal is recorded without a target (the box
+ * may refuse before decoding the order), so any refusal since then counts.
+ * A box too old to report `lastUpdate` settles on its current commit only.
+ */
+export function pendingUpdateSettled(pending, detail) {
+  if (!pending) return true;
+  if (detail?.currentCommit === pending.targetCommit) return true;
+  const last = detail?.lastUpdate;
+  if (!last || typeof last !== "object" || typeof last.at !== "number" || last.at < pending.orderedAt) {
+    return false;
+  }
+  if (last.targetCommit === pending.targetCommit) return true;
+  return last.outcome === "refused" && !last.targetCommit;
+}
+
+/** The stored order for this server if it is still unsettled; a settled one
+ *  is cleared. */
+export function reconcilePendingUpdate(serverFqdn, detail, storage = defaultStorage()) {
+  const pending = readPendingUpdate(serverFqdn, storage);
+  if (!pending) return null;
+  if (pendingUpdateSettled(pending, detail)) {
+    clearPendingUpdate(serverFqdn, storage);
+    return null;
+  }
+  return pending;
+}
+
+export function isPendingUpdateStale(pending, now = Date.now()) {
+  return !!pending && now - pending.orderedAt >= PENDING_UPDATE_STALE_MS;
+}
+
+/**
+ * The pending order's block for the update card and the update sheet.
+ *
+ * @param {{ targetCommit: string, targetTag?: string, orderedAt: number }} pending
+ * @param {{ now?: number, formatWhen: (ms: number, now: number) => string,
+ *           escapeHtml: (s: string) => string }} deps
+ */
+export function renderPendingUpdate(pending, { now = Date.now(), formatWhen, escapeHtml }) {
+  const name = pending.targetTag || String(pending.targetCommit).slice(0, 8);
+  const sent = `Update to ${name} sent ${formatWhen(pending.orderedAt, now)}.`;
+  if (isPendingUpdateStale(pending, now)) {
+    return `
+      <div data-update-pending="stale">
+        <p class="note">${escapeHtml(sent)} The server hasn't applied this update yet. It may be offline.</p>
+        <div class="row-2 mt-2">
+          <button class="secondary" data-update-send-again>Send again</button>
+          <button class="secondary" data-update-forget>Forget it</button>
+        </div>
+      </div>`;
+  }
+  return `
+      <div class="update-pending" data-update-pending="sent" role="status">
+        <span class="update-pending-spinner" aria-hidden="true"></span>
+        <p class="note">${escapeHtml(sent)} The server picks it up within about five minutes, restarts, and goes back on its own if the new version doesn't start.</p>
+      </div>`;
+}

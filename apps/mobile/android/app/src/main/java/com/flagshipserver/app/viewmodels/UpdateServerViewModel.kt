@@ -14,10 +14,18 @@
 // `fromCommit` is ALWAYS the box-reported `currentCommit` from server-detail —
 // never a guess. Without it (old daemon / not a git checkout) the action is
 // disabled.
+//
+// A successful deposit is remembered per server ([PendingUpdateStore]) until
+// the box reports the outcome, so the card and the sheet keep showing "sent"
+// instead of offering a duplicate order.
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.api.LastUpdate
 import com.flagshipserver.app.api.SecretMailboxClient
+import com.flagshipserver.app.core.InMemoryPendingUpdateStore
+import com.flagshipserver.app.core.PendingUpdate
+import com.flagshipserver.app.core.PendingUpdateStore
 import com.flagshipserver.app.core.ServerUpdateDeposit
 import com.flagshipserver.app.keystore.Keystore
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -43,6 +51,7 @@ class UpdateServerViewModel(
     private val orderSigner: suspend (String) -> Ed25519Sign? =
         { reason -> if (Keystore.hasAdminRoot()) Keystore.adminRootKey(reason) else null },
     private val now: () -> Long = { System.currentTimeMillis() },
+    private val pendingStore: PendingUpdateStore = InMemoryPendingUpdateStore(),
 ) {
     sealed interface Phase {
         data object Idle : Phase
@@ -56,6 +65,37 @@ class UpdateServerViewModel(
     val phase: StateFlow<Phase> = _phase.asStateFlow()
 
     private val currentCommit: String? = currentCommit?.lowercase()
+
+    private val _pending = MutableStateFlow(pendingStore.get(serverFqdn))
+    /** The order this device sent that the box hasn't reported on yet. */
+    val pending: StateFlow<PendingUpdate?> = _pending.asStateFlow()
+
+    /** Drop the pending order once the box shows its outcome. Called on every
+     *  server-detail load. Returns true when it cleared one. */
+    fun reconcile(currentCommit: String?, lastUpdate: LastUpdate?): Boolean {
+        val p = _pending.value ?: return false
+        if (!p.isSettled(currentCommit, lastUpdate)) return false
+        forget()
+        return true
+    }
+
+    /** "Forget it": stop tracking the order (the box may still apply it). */
+    fun forget() {
+        _pending.value = null
+        pendingStore.clear(serverFqdn)
+        if (_phase.value is Phase.Done) _phase.value = Phase.Idle
+    }
+
+    /** A fresh look at the sheet doesn't repeat an old failure. */
+    fun clearFailure() {
+        if (_phase.value is Phase.Failed) _phase.value = Phase.Idle
+    }
+
+    /** "Send again": the normal order flow for the pending target. */
+    suspend fun sendAgain(): Boolean {
+        val p = _pending.value ?: return false
+        return update(p.targetCommit, p.targetTag)
+    }
 
     /** True iff the box has reported a usable current commit — without it no
      *  order can be minted (`fromCommit` must be truth, never a guess). */
@@ -85,8 +125,9 @@ class UpdateServerViewModel(
     }
 
     /** Mint + sign + deposit the update order: biometric → sign → deposit.
-     *  Returns true on success. */
-    suspend fun update(targetCommit: String): Boolean {
+     *  Returns true on success, and remembers the order as pending.
+     *  [targetTag] is the release's tag when it was picked from the list. */
+    suspend fun update(targetCommit: String, targetTag: String? = null): Boolean {
         val from = currentCommit
         if (from == null || !ServerUpdateDeposit.isValidCommit(from)) {
             _phase.value = Phase.Failed("This server hasn't reported its current version yet.")
@@ -104,6 +145,7 @@ class UpdateServerViewModel(
 
         _phase.value = Phase.Signing
         return try {
+            val issuedAt = now()
             val reason = "Update $serverFqdn"
             val irk = signer(reason)
             val pub = irkPubHex()
@@ -116,10 +158,18 @@ class UpdateServerViewModel(
                 irk = irk,
                 irkPubHex = pub,
                 orderKey = orderKey,
-                now = now(),
+                now = issuedAt,
             )
             _phase.value = Phase.Posting
             mailbox.depositUpdate(serverFqdn, body)
+            val sent = PendingUpdate(
+                targetCommit = target,
+                targetTag = targetTag?.trim()?.takeIf { it.isNotEmpty() },
+                fromCommit = from,
+                orderedAt = issuedAt,
+            )
+            _pending.value = sent
+            runCatching { pendingStore.set(serverFqdn, sent) }
             _phase.value = Phase.Done
             true
         } catch (t: Throwable) {

@@ -49,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -80,7 +81,13 @@ import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.DeadManReminders
 import com.flagshipserver.app.core.JournalUnits
+import com.flagshipserver.app.core.PendingUpdate
+import com.flagshipserver.app.core.PendingUpdateStore
 import com.flagshipserver.app.core.PowerMode
+import com.flagshipserver.app.core.SharedPrefsPendingUpdateStore
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
 import com.flagshipserver.app.core.ServerHealthVerdict
@@ -249,6 +256,7 @@ fun ServerDetailScreen(
                 serverDomain = d.value.serverFqdn,
                 currentCommit = d.value.currentCommit,
                 lastUpdate = d.value.lastUpdate,
+                onRefresh = { detailVm.load() },
             )
             Spacer(Modifier.height(FS.space.s6))
             TransferCard(serverDomain = d.value.serverFqdn)
@@ -1351,14 +1359,58 @@ private fun shortCommit(sha: String?): String? =
 // order's `fromCommit` must be truth, never a guess. Mirror of iOS
 // UpdateServerCard.
 @Composable
-private fun UpdateServerCard(serverDomain: String, currentCommit: String?, lastUpdate: LastUpdate? = null) {
+internal fun UpdateServerCard(
+    serverDomain: String,
+    currentCommit: String?,
+    lastUpdate: LastUpdate? = null,
+    onRefresh: () -> Unit = {},
+    pendingStore: PendingUpdateStore? = null,
+    clock: () -> Long = { System.currentTimeMillis() },
+) {
     val app = LocalAppState.current
     val mailbox = LocalSecretMailboxClient.current
     val screens = LocalScreensClient.current
+    val toasts = LocalToastCenter.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val username by app.currentUser.collectAsState()
+    val store = pendingStore ?: remember { SharedPrefsPendingUpdateStore.from(context) }
     var showSheet by remember { mutableStateOf(false) }
     var latestTag by remember { mutableStateOf<String?>(null) }
     val reported = shortCommit(currentCommit) != null
+
+    // Keyed on the running commit so the order's `fromCommit` is always the
+    // box's latest report; the pending order survives in the store.
+    val vm = remember(serverDomain, currentCommit, username) {
+        UpdateServerViewModel(
+            username = username ?: "",
+            serverFqdn = serverDomain,
+            currentCommit = currentCommit,
+            mailbox = mailbox,
+            now = clock,
+            pendingStore = store,
+        ).also { it.reconcile(currentCommit, lastUpdate) }
+    }
+    val pending by vm.pending.collectAsState()
+    val phase by vm.phase.collectAsState()
+    var now by remember { mutableStateOf(clock()) }
+
+    LaunchedEffect(vm, lastUpdate) { vm.reconcile(currentCommit, lastUpdate) }
+
+    // While an order is pending and the page is on screen, re-read
+    // server-detail now and then so the card notices the outcome.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val refresh by rememberUpdatedState(onRefresh)
+    LaunchedEffect(pending != null) {
+        if (pending == null) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                now = clock()
+                kotlinx.coroutines.delay(PendingUpdate.REFRESH_EVERY_MS)
+                refresh()
+            }
+        }
+    }
 
     LaunchedEffect(currentCommit) {
         latestTag = runCatching {
@@ -1386,13 +1438,15 @@ private fun UpdateServerCard(serverDomain: String, currentCommit: String?, lastU
                     style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
                 )
             }
-            latestTag?.let { tag ->
-                Text(
-                    "New release available: $tag",
-                    color = FS.colors.primary,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold),
-                    modifier = Modifier.semantics { contentDescription = "sd-update-available" },
-                )
+            if (pending == null) {
+                latestTag?.let { tag ->
+                    Text(
+                        "New release available: $tag",
+                        color = FS.colors.primary,
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold),
+                        modifier = Modifier.semantics { contentDescription = "sd-update-available" },
+                    )
+                }
             }
             lastUpdate?.summary?.let { summary ->
                 Text(
@@ -1402,37 +1456,108 @@ private fun UpdateServerCard(serverDomain: String, currentCommit: String?, lastU
                     modifier = Modifier.semantics { contentDescription = "sd-update-last-outcome" },
                 )
             }
-            FSDangerButton(
-                label = if (latestTag == null) "Update this server" else "Update to latest",
-                onClick = { showSheet = true },
-                block = true,
-                enabled = reported,
-                modifier = Modifier.semantics { contentDescription = "sd-update-server" },
-            )
-            if (!reported) {
-                Text(
-                    "Waiting for this server to report its current version — it can't be updated in place until it does.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            val p = pending
+            if (p != null) {
+                PendingUpdateNotice(
+                    pending = p,
+                    nowMs = maxOf(now, p.orderedAt),
+                    phase = phase,
+                    onSendAgain = { scope.launch { if (vm.sendAgain()) toasts.success("Update ordered") } },
+                    onForget = { vm.forget() },
                 )
+            } else {
+                FSDangerButton(
+                    label = if (latestTag == null) "Update this server" else "Update to latest",
+                    onClick = { vm.clearFailure(); showSheet = true },
+                    block = true,
+                    enabled = reported,
+                    modifier = Modifier.semantics { contentDescription = "sd-update-server" },
+                )
+                if (!reported) {
+                    Text(
+                        "Waiting for this server to report its current version — it can't be updated in place until it does.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    )
+                }
             }
         }
     }
 
     if (showSheet) {
-        val vm = remember(serverDomain) {
-            UpdateServerViewModel(
-                username = username ?: "",
-                serverFqdn = serverDomain,
-                currentCommit = currentCommit,
-                mailbox = mailbox,
-            )
-        }
         Dialog(
             onDismissRequest = { showSheet = false },
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
-            UpdateServerSheet(serverDomain = serverDomain, currentCommit = currentCommit, vm = vm, onDone = { showSheet = false })
+            UpdateServerSheet(
+                serverDomain = serverDomain,
+                currentCommit = currentCommit,
+                vm = vm,
+                onDone = { showSheet = false },
+                nowMs = now,
+            )
+        }
+    }
+}
+
+/** The sent-but-not-yet-applied state, shared by the card and the sheet:
+ *  a progress line until 30 minutes pass, then the stale copy with
+ *  Send again / Forget it. */
+@Composable
+private fun PendingUpdateNotice(
+    pending: PendingUpdate,
+    nowMs: Long,
+    phase: UpdateServerViewModel.Phase,
+    onSendAgain: () -> Unit,
+    onForget: () -> Unit,
+) {
+    val working = phase is UpdateServerViewModel.Phase.Signing ||
+        phase is UpdateServerViewModel.Phase.Posting
+    val stale = pending.isStale(nowMs)
+    Column(
+        verticalArrangement = Arrangement.spacedBy(FS.space.s2),
+        modifier = Modifier.semantics { contentDescription = "sd-update-pending" },
+    ) {
+        Row(
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+        ) {
+            if (!stale) {
+                CircularProgressIndicator(
+                    modifier = Modifier.padding(top = 2.dp).height(14.dp).width(14.dp),
+                    strokeWidth = 2.dp,
+                )
+            }
+            Text(
+                pending.sentLine(nowMs),
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            )
+        }
+        if (stale) {
+            Text(
+                PendingUpdate.STALE_COPY,
+                color = FS.colors.warning,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                modifier = Modifier.semantics { contentDescription = "sd-update-pending-stale" },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                FSSecondaryButton(
+                    label = if (working) "Working…" else "Send again",
+                    onClick = onSendAgain,
+                    enabled = !working,
+                    modifier = Modifier.semantics { contentDescription = "sd-update-send-again" },
+                )
+                FSGhostButton(
+                    label = "Forget it",
+                    onClick = onForget,
+                    enabled = !working,
+                    modifier = Modifier.semantics { contentDescription = "sd-update-forget" },
+                )
+            }
+        }
+        (phase as? UpdateServerViewModel.Phase.Failed)?.let { f ->
+            Text(f.message, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
         }
     }
 }
@@ -1456,17 +1581,19 @@ private fun releaseCheckProblem(t: Throwable): String = when ((t as? ScreensErro
 // a confirmation. Whatever is picked, the signed order names one exact commit.
 // Mirror of iOS UpdateServerSheet.
 @Composable
-private fun UpdateServerSheet(
+internal fun UpdateServerSheet(
     serverDomain: String,
     currentCommit: String?,
     vm: UpdateServerViewModel,
     onDone: () -> Unit,
+    nowMs: Long = System.currentTimeMillis(),
 ) {
     val screens = LocalScreensClient.current
     val mailbox = LocalSecretMailboxClient.current
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
     val phase by vm.phase.collectAsState()
+    val pending by vm.pending.collectAsState()
     var target by remember { mutableStateOf("") }
     var catalog by remember { mutableStateOf<ReleaseCatalogResponse?>(null) }
     var catalogError by remember { mutableStateOf<String?>(null) }
@@ -1489,10 +1616,13 @@ private fun UpdateServerSheet(
         }
     }
 
-    fun order(commit: String) {
+    fun order(commit: String, tag: String? = null) {
         if (working) return
+        val known = tag ?: catalog?.let { c ->
+            (listOfNotNull(c.latest) + c.releases).firstOrNull { it.commit.equals(commit, ignoreCase = true) }?.tag
+        }
         scope.launch {
-            if (vm.update(commit)) toasts.success("Update ordered")
+            if (vm.update(commit, known)) toasts.success("Update ordered")
         }
     }
 
@@ -1535,7 +1665,16 @@ private fun UpdateServerSheet(
             vm.runningShort?.let { short ->
                 Text("Running ${catalog?.currentTag ?: short}", color = FS.colors.text, style = mono)
             }
-            if (phase is UpdateServerViewModel.Phase.Done) {
+            val sent = pending
+            if (sent != null) {
+                PendingUpdateNotice(
+                    pending = sent,
+                    nowMs = maxOf(nowMs, sent.orderedAt),
+                    phase = phase,
+                    onSendAgain = { scope.launch { if (vm.sendAgain()) toasts.success("Update ordered") } },
+                    onForget = { vm.forget() },
+                )
+            } else if (phase is UpdateServerViewModel.Phase.Done) {
                 Text(
                     "Update sent. The server picks it up within about five minutes, checks the maintainers' signature, restarts into the new version, and goes back by itself if that version doesn't start.",
                     color = FS.colors.text,
@@ -1550,7 +1689,7 @@ private fun UpdateServerSheet(
                             Text(latest.tag, color = FS.colors.text, style = mono)
                             FSPrimaryButton(
                                 label = if (working) "Working…" else "Update to latest",
-                                onClick = { order(latest.commit) },
+                                onClick = { order(latest.commit, latest.tag) },
                                 block = true,
                                 enabled = vm.canUpdate && !working,
                                 modifier = Modifier.semantics { contentDescription = "update-latest-btn" },
@@ -1599,7 +1738,7 @@ private fun UpdateServerSheet(
                 val others = catalog?.otherNewer.orEmpty()
                 if (others.isNotEmpty()) {
                     Text("Other new releases", color = FS.colors.textMuted, style = muted)
-                    others.forEach { r -> releaseRow(r, "Update") { order(r.commit) } }
+                    others.forEach { r -> releaseRow(r, "Update") { order(r.commit, r.tag) } }
                 }
 
                 Row(
@@ -1621,7 +1760,7 @@ private fun UpdateServerSheet(
                 if (showAdvanced) {
                     Text(DOWNGRADE_WARNING, color = FS.colors.warning, style = muted)
                     catalog?.older.orEmpty().forEach { r ->
-                        releaseRow(r, "Go back") { order(r.commit) }
+                        releaseRow(r, "Go back") { order(r.commit, r.tag) }
                     }
                     FSField(
                         value = target,

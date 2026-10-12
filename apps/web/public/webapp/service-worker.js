@@ -90,7 +90,10 @@
 //       registration and tells every box to send no alerts, and no access
 //       sheet shows; a generic push's click checks access requests too;
 //       precaches lib/pushSetting.js.
-const SHELL_VERSION = "v49";
+//  v50: a sent server update stays on the update card (and the update
+//       sheet) until the box reports its outcome, with Send again / Forget
+//       it once it's 30 minutes old.
+const SHELL_VERSION = "v50";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

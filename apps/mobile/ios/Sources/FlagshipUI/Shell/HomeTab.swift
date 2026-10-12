@@ -783,6 +783,7 @@ struct ServerDetailContainer: View {
                         async let b: Void = metricsVm.load()
                         _ = await (a, b)
                     },
+                    onRefreshDetail: { await detailVm.load() },
                     onPair: { Task { await pairThenReload(detailVm: detailVm) } },
                     onDeleted: onDeleted
                 )

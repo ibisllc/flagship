@@ -6,7 +6,11 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.api.LastUpdate
 import com.flagshipserver.app.api.MockSecretMailboxClient
+import com.flagshipserver.app.core.InMemoryPendingUpdateStore
+import com.flagshipserver.app.core.PendingUpdate
+import com.flagshipserver.app.core.PendingUpdateStore
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.ServerUpdateOrder
@@ -34,15 +38,19 @@ class UpdateServerViewModelTest {
         currentCommit: String?,
         adminRoot: Boolean = false,
         onSign: () -> Unit = {},
+        store: PendingUpdateStore = InMemoryPendingUpdateStore(),
+        clock: () -> Long = { 1700L },
+        serverFqdn: String = server,
     ) = UpdateServerViewModel(
         username = username,
-        serverFqdn = server,
+        serverFqdn = serverFqdn,
         currentCommit = currentCommit,
         mailbox = mailbox,
         signer = { onSign(); Ed25519Sign(irkKp.privateKey) },
         irkPubHex = { HexUtil.encode(irkKp.publicKey) },
         orderSigner = { if (adminRoot) Ed25519Sign(adminKp.privateKey) else null },
-        now = { 1700L },
+        now = clock,
+        pendingStore = store,
     )
 
     // ── Gating ────────────────────────────────────────────────────────────────
@@ -142,5 +150,131 @@ class UpdateServerViewModelTest {
         assertTrue(m.targetProblem(current) != null)
         assertNull(m.targetProblem(target))
         assertTrue(m.canOrder(" $target "))
+    }
+
+    // ── Pending order (remembered until the box reports) ─────────────────────
+
+    private val minute = 60_000L
+    private val t0 = 1_760_000_000_000L
+
+    @Test
+    fun successStoresPendingWithTagAndFromCommit() = runTest {
+        val store = InMemoryPendingUpdateStore()
+        val m = vm(MockSecretMailboxClient(), currentCommit = current, store = store, clock = { t0 })
+        assertNull(m.pending.value)
+        assertTrue(m.update(target, "v1.2.0"))
+        val p = store.get(server)!!
+        assertEquals(PendingUpdate(target, "v1.2.0", current, t0), p)
+        assertEquals(p, m.pending.value)
+        assertEquals("v1.2.0", p.label)
+        // A fresh VM (sheet closed, page reopened) still knows.
+        assertEquals(p, vm(MockSecretMailboxClient(), currentCommit = current, store = store).pending.value)
+    }
+
+    @Test
+    fun failureStoresNothing() = runTest {
+        val store = InMemoryPendingUpdateStore()
+        val mb = MockSecretMailboxClient().apply { nextUpdateError = HttpException(500, "down") }
+        val m = vm(mb, currentCommit = current, store = store)
+        assertFalse(m.update(target))
+        assertNull(store.get(server))
+        assertNull(m.pending.value)
+        assertFalse(vm(mb, currentCommit = current, store = store).update(current))
+        assertNull(store.get(server))
+    }
+
+    @Test
+    fun labelFallsBackToShortCommit() {
+        assertEquals("9f2c1ab3", PendingUpdate(target, null, current, t0).label)
+        assertEquals("9f2c1ab3", PendingUpdate(target, " ", current, t0).label)
+    }
+
+    @Test
+    fun clearedWhenBoxRunsTheTarget() = runTest {
+        val store = InMemoryPendingUpdateStore()
+        vm(MockSecretMailboxClient(), currentCommit = current, store = store, clock = { t0 }).update(target)
+        val stillOld = vm(MockSecretMailboxClient(), currentCommit = current, store = store)
+        assertFalse(stillOld.reconcile(current, null))
+        assertTrue(stillOld.pending.value != null)
+        val moved = vm(MockSecretMailboxClient(), currentCommit = target, store = store)
+        assertTrue(moved.reconcile(target.uppercase(), null))
+        assertNull(moved.pending.value)
+        assertNull(store.get(server))
+    }
+
+    @Test
+    fun clearedByEachMatchingNewerOutcome() = runTest {
+        for (outcome in listOf("applied", "rolled-back", "refused")) {
+            val store = InMemoryPendingUpdateStore()
+            val m = vm(MockSecretMailboxClient(), currentCommit = current, store = store, clock = { t0 })
+            m.update(target)
+            val last = LastUpdate(outcome = outcome, at = t0 + minute, targetCommit = target, previousCommit = current)
+            assertTrue(outcome, m.reconcile(current, last))
+            assertNull(outcome, store.get(server))
+        }
+    }
+
+    @Test
+    fun notClearedByAnOlderOrDifferentOutcome() = runTest {
+        val store = InMemoryPendingUpdateStore()
+        val m = vm(MockSecretMailboxClient(), currentCommit = current, store = store, clock = { t0 })
+        m.update(target)
+        // The verdict on a previous order for the same commit.
+        assertFalse(m.reconcile(current, LastUpdate("refused", at = t0 - 1, targetCommit = target)))
+        // A newer verdict for a different commit.
+        assertFalse(m.reconcile(current, LastUpdate("applied", at = t0 + minute, targetCommit = "c".repeat(40))))
+        // A refusal names no target, so only one recorded before the order is ignored.
+        assertFalse(m.reconcile(current, LastUpdate("refused", at = t0 - minute)))
+        assertTrue(m.pending.value != null)
+        assertTrue(store.get(server) != null)
+    }
+
+    @Test
+    fun staleAfterThirtyMinutes() {
+        val p = PendingUpdate(target, null, current, t0)
+        assertFalse(p.isStale(t0 + 29 * minute))
+        assertTrue(p.isStale(t0 + 30 * minute))
+        assertTrue(p.sentLine(t0 + 5 * minute).startsWith("Update to 9f2c1ab3 sent 5m ago."))
+    }
+
+    @Test
+    fun sendAgainReordersTheSameTarget() = runTest {
+        val store = InMemoryPendingUpdateStore()
+        var clock = t0
+        val mb = MockSecretMailboxClient()
+        val m = vm(mb, currentCommit = current, store = store, clock = { clock })
+        m.update(target, "v1.2.0")
+        clock = t0 + 31 * minute
+        assertTrue(m.sendAgain())
+        assertEquals(2, mb.updateDeposits.size)
+        assertEquals(target, mb.updateDeposits[1].second.order.targetCommit)
+        assertEquals(current, mb.updateDeposits[1].second.order.fromCommit)
+        assertEquals(PendingUpdate(target, "v1.2.0", current, clock), store.get(server))
+        assertFalse(store.get(server)!!.isStale(clock))
+    }
+
+    @Test
+    fun forgetClearsThePendingOrder() = runTest {
+        val store = InMemoryPendingUpdateStore()
+        val m = vm(MockSecretMailboxClient(), currentCommit = current, store = store)
+        m.update(target)
+        m.forget()
+        assertNull(m.pending.value)
+        assertNull(store.get(server))
+        assertEquals(UpdateServerViewModel.Phase.Idle, m.phase.value)
+        assertFalse(m.sendAgain())
+    }
+
+    @Test
+    fun pendingIsPerServer() = runTest {
+        val store = InMemoryPendingUpdateStore()
+        val other = "work.alice.flagship.services"
+        vm(MockSecretMailboxClient(), currentCommit = current, store = store).update(target)
+        assertNull(store.get(other))
+        val otherVm = vm(MockSecretMailboxClient(), currentCommit = current, store = store, serverFqdn = other)
+        assertNull(otherVm.pending.value)
+        otherVm.update(target)
+        otherVm.forget()
+        assertTrue(store.get(server) != null)
     }
 }

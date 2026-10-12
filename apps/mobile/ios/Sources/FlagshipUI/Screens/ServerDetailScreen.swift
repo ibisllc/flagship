@@ -67,6 +67,9 @@ public struct ServerDetailScreen: View {
     var onOpenSessions: () -> Void = {}
     var onOpenTier: () -> Void = {}
     var onRefresh: () async -> Void = {}
+    /// Reloads server-detail alone (no directory or metrics round-trip), for
+    /// the update card's light poll while an order is pending.
+    var onRefreshDetail: () async -> Void = {}
     /// Run once per tap from the "Pair this server" button. NEVER fired
     /// automatically on appearance — a biometric must be user-initiated.
     var onPair: () -> Void = {}
@@ -95,6 +98,7 @@ public struct ServerDetailScreen: View {
         onOpenSessions: @escaping () -> Void = {},
         onOpenTier: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
+        onRefreshDetail: @escaping () async -> Void = {},
         onPair: @escaping () -> Void = {},
         onDeleted: @escaping () -> Void = {}
     ) {
@@ -117,6 +121,7 @@ public struct ServerDetailScreen: View {
         self.onOpenSessions = onOpenSessions
         self.onOpenTier = onOpenTier
         self.onRefresh = onRefresh
+        self.onRefreshDetail = onRefreshDetail
         self.onPair = onPair
         self.onDeleted = onDeleted
     }
@@ -223,7 +228,7 @@ public struct ServerDetailScreen: View {
                     timeline(d: d, c: c)
                     MigrateServerCard(serverDomain: d.serverFqdn)
                     ReplaceServerCard(serverDomain: d.serverFqdn, onReplaced: onDeleted)
-                    UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate)
+                    UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate, onRefreshDetail: onRefreshDetail)
                     TransferCard(serverDomain: d.serverFqdn)
                 }
                 // Outside the state switch: none of these need the box, so an
@@ -1056,6 +1061,7 @@ struct ReplaceServerCard: View {
 /// order's `fromCommit` must be truth, never a guess.
 struct UpdateServerCard: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.secretMailboxClient) private var mailbox
     @Environment(AppState.self) private var app
 
@@ -1064,12 +1070,33 @@ struct UpdateServerCard: View {
     let currentCommit: String?
     /// The box's verdict on the last update order, or nil.
     var lastUpdate: LastUpdate? = nil
+    /// Reloads server-detail only. Polled every 15 s while an order is pending
+    /// and the page is on screen, so the box's outcome shows up on its own.
+    var onRefreshDetail: () async -> Void = {}
 
     @Environment(\.screensClient) private var client
     @State private var showSheet = false
     @State private var latestTag: String?
+    /// The order this device sent that the box hasn't reported on yet.
+    @State private var pending: PendingUpdateOrder?
+    @State private var resendVm: UpdateServerViewModel?
 
     private var reported: Bool { ServerDetailScreen.shortCommit(currentCommit) != nil }
+
+    private func makeVm() -> UpdateServerViewModel {
+        UpdateServerViewModel(
+            username: app.currentUser ?? "",
+            serverFqdn: serverDomain,
+            currentCommit: currentCommit,
+            mailbox: mailbox
+        )
+    }
+
+    private func reconcile() {
+        pending = PendingUpdateStore().reconcile(
+            serverFqdn: serverDomain, currentCommit: currentCommit, lastUpdate: lastUpdate
+        )
+    }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -1090,7 +1117,7 @@ struct UpdateServerCard: View {
                             Text(short).font(FS.font.mono()).foregroundColor(c.text)
                         }
                     }
-                    if let latestTag {
+                    if let latestTag, pending == nil {
                         Label("New release available: \(latestTag)", systemImage: "arrow.up.circle.fill")
                             .font(FS.font.caption())
                             .foregroundColor(c.primary)
@@ -1102,16 +1129,26 @@ struct UpdateServerCard: View {
                             .foregroundColor(lastUpdate?.outcome == "applied" ? c.textMuted : c.danger)
                             .accessibilityIdentifier("sd-update-last-outcome")
                     }
-                    FSDangerButton(latestTag == nil ? "Update this server" : "Update to latest", block: true) {
-                        showSheet = true
-                    }
-                    .disabled(!reported)
-                    .opacity(reported ? 1 : 0.4)
-                    .accessibilityIdentifier("sd-update-server")
-                    if !reported {
-                        Text("Waiting for this server to report its current version — it can't be updated in place until it does.")
-                            .font(FS.font.caption())
-                            .foregroundColor(c.textMuted)
+                    if let pending {
+                        PendingUpdateNotice(
+                            order: pending,
+                            working: resendVm?.isWorking ?? false,
+                            failure: resendVm?.failureMessage,
+                            onSendAgain: { resend(pending) },
+                            onForget: { forget() }
+                        )
+                    } else {
+                        FSDangerButton(latestTag == nil ? "Update this server" : "Update to latest", block: true) {
+                            showSheet = true
+                        }
+                        .disabled(!reported)
+                        .opacity(reported ? 1 : 0.4)
+                        .accessibilityIdentifier("sd-update-server")
+                        if !reported {
+                            Text("Waiting for this server to report its current version — it can't be updated in place until it does.")
+                                .font(FS.font.caption())
+                                .foregroundColor(c.textMuted)
+                        }
                     }
                 }
             }
@@ -1121,21 +1158,99 @@ struct UpdateServerCard: View {
                 screens: client, mailbox: mailbox, currentCommit: currentCommit, refresh: false
             ))?.latest?.tag
         }
-        .sheet(isPresented: $showSheet) {
+        .onAppear { reconcile() }
+        .onChange(of: currentCommit) { reconcile() }
+        .onChange(of: lastUpdate) { reconcile() }
+        .task(id: PendingPoll(orderedAt: pending?.orderedAt, active: scenePhase == .active)) {
+            guard pending != nil, scenePhase == .active else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                if Task.isCancelled { return }
+                await onRefreshDetail()
+            }
+        }
+        .sheet(isPresented: $showSheet, onDismiss: { reconcile() }) {
             NavigationStack {
                 UpdateServerSheet(
-                    vm: UpdateServerViewModel(
-                        username: app.currentUser ?? "",
-                        serverFqdn: serverDomain,
-                        currentCommit: currentCommit,
-                        mailbox: mailbox
-                    ),
+                    vm: makeVm(),
                     serverFqdn: serverDomain,
-                    currentCommit: currentCommit
+                    currentCommit: currentCommit,
+                    pending: $pending,
+                    lastUpdate: lastUpdate
                 )
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") { showSheet = false }
+                    }
+                }
+            }
+        }
+    }
+
+    private func resend(_ order: PendingUpdateOrder) {
+        guard resendVm?.isWorking != true else { return }
+        let vm = makeVm()
+        resendVm = vm
+        Task {
+            if await vm.resend(order) { resendVm = nil }
+            reconcile()
+        }
+    }
+
+    private func forget() {
+        PendingUpdateStore().clear(serverFqdn: serverDomain)
+        resendVm = nil
+        pending = nil
+    }
+}
+
+private struct PendingPoll: Equatable {
+    let orderedAt: Int64?
+    let active: Bool
+}
+
+/// The post-send state, shared by the update card and its sheet: the order is
+/// on its way, or (30 minutes on, no outcome) Send again / Forget it.
+struct PendingUpdateNotice: View {
+    @Environment(\.colorScheme) private var scheme
+    let order: PendingUpdateOrder
+    var working: Bool = false
+    var failure: String? = nil
+    let onSendAgain: () -> Void
+    let onForget: () -> Void
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        TimelineView(.periodic(from: .now, by: 15)) { context in
+            let now = Int64(context.date.timeIntervalSince1970 * 1000)
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                switch UpdateCardMode(pending: order, now: now) {
+                case .ready:
+                    EmptyView()
+                case .pending(let o):
+                    HStack(alignment: .top, spacing: FS.space.s2) {
+                        ProgressView().controlSize(.small)
+                        Text(o.sentCopy(now: now))
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("sd-update-pending")
+                case .stale:
+                    Text(PendingUpdateOrder.staleCopy)
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.text)
+                        .accessibilityIdentifier("sd-update-stale")
+                    HStack(spacing: FS.space.s2) {
+                        FSPrimaryButton(working ? "Working…" : "Send again", enabled: !working, block: true, action: onSendAgain)
+                            .accessibilityIdentifier("sd-update-send-again")
+                        FSSecondaryButton("Forget it", block: true, action: onForget)
+                            .disabled(working)
+                            .accessibilityIdentifier("sd-update-forget")
+                    }
+                    if let failure {
+                        Text(failure).font(FS.font.caption()).foregroundColor(c.danger)
                     }
                 }
             }
@@ -1156,19 +1271,28 @@ struct UpdateServerSheet: View {
     @State var vm: UpdateServerViewModel
     let serverFqdn: String
     let currentCommit: String?
+    /// The card's pending order for this server: while set, the sheet shows
+    /// the post-send state instead of the release picker.
+    @Binding var pending: PendingUpdateOrder?
+    var lastUpdate: LastUpdate? = nil
 
     @State private var target = ""
     @State private var catalog: ReleaseCatalogResponse?
     @State private var catalogError: String?
     @State private var loadingCatalog = false
     @State private var showAdvanced = false
+    /// Opened on a pending order: stays post-send if the box reports while
+    /// the sheet is open (Forget it returns to the picker).
+    @State private var openedPending = false
 
     static let downgradeWarning = "Older releases don't have the fixes made since, and may not understand changes made to this server after them, such as a rotated admin key. In the worst case the server stops accepting updates and has to be reinstalled. Only go back if a newer release broke something."
 
-    private var working: Bool {
-        if case .signing = vm.phase { return true }
-        if case .posting = vm.phase { return true }
-        return false
+    private var working: Bool { vm.isWorking }
+
+    /// Post-send instead of the picker: an order is pending, or one was sent
+    /// from this sheet (and the box may already have reported on it).
+    static func showsPostSend(phase: UpdateServerViewModel.Phase, pending: PendingUpdateOrder?) -> Bool {
+        pending != nil || phase == .done
     }
 
     private var currentTag: String? {
@@ -1188,9 +1312,23 @@ struct UpdateServerSheet: View {
                         Text(currentTag ?? short).font(FS.font.mono()).foregroundColor(c.text)
                     }
                 }
-                if case .done = vm.phase {
-                    Text("Update sent. The server picks it up within about five minutes, checks the maintainers' signature, restarts into the new version, and goes back by itself if that version doesn't start.")
-                        .font(FS.font.body()).foregroundColor(c.text)
+                if openedPending || Self.showsPostSend(phase: vm.phase, pending: pending) {
+                    if let pending {
+                        PendingUpdateNotice(
+                            order: pending,
+                            working: working,
+                            failure: vm.failureMessage,
+                            onSendAgain: { resend(pending) },
+                            onForget: {
+                                vm.forgetPending()
+                                self.pending = nil
+                                openedPending = false
+                            }
+                        )
+                    } else {
+                        Text(lastUpdate?.summary ?? "The server has picked up the update.")
+                            .font(FS.font.body()).foregroundColor(c.text)
+                    }
                 } else {
                     latestSection(c: c)
                     otherNewer(c: c)
@@ -1205,6 +1343,7 @@ struct UpdateServerSheet: View {
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Update server")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { if pending != nil { openedPending = true } }
         .task { await loadCatalog(refresh: false) }
     }
 
@@ -1303,7 +1442,21 @@ struct UpdateServerSheet: View {
 
     private func order(_ commit: String) {
         guard !working else { return }
-        Task { await vm.update(targetCommit: commit) }
+        let tag = catalog?.releases.first { $0.commit.lowercased() == commit.lowercased() }?.tag
+        Task {
+            if await vm.update(targetCommit: commit, targetTag: tag) {
+                pending = PendingUpdateStore().load(serverFqdn: serverFqdn)
+            }
+        }
+    }
+
+    private func resend(_ order: PendingUpdateOrder) {
+        guard !working else { return }
+        Task {
+            if await vm.resend(order) {
+                pending = PendingUpdateStore().load(serverFqdn: serverFqdn)
+            }
+        }
     }
 
     private func loadCatalog(refresh: Bool) async {
