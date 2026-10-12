@@ -39,6 +39,7 @@ If the user's request is ambiguous on something that materially changes the mani
 - DO NOT listen on any port other than \`runtime.port\`. No second HTTP server, no metrics port, no debug port.
 - DO NOT make outbound network calls to hosts not declared in \`browser.domains\`. The container has no general egress. \`fetch()\` to anything outside the allowlist will hang.
 - DO NOT write outside the unified data layer. The container's filesystem is wiped on every deploy. Persist via \`FLAGSHIP_PG_URL\`, \`FLAGSHIP_S3_*\`, \`FLAGSHIP_REDIS_URL\`. If you write a sqlite file, it dies at the next restart.
+- The container's root filesystem is READ-ONLY; only \`/tmp\` is writable (64 MB scratch, wiped on restart). Every Linux capability is dropped, so nothing can change file ownership or switch user. Put pid/temp/cache files in \`/tmp\`. Stock nginx/httpd/caddy images exit at startup here; for static files use \`nginxinc/nginx-unprivileged:alpine\` (listens on 8080) or busybox \`httpd -f -p 0.0.0.0:$PORT\`.
 - DO NOT define env vars whose names start with \`FLAGSHIP_\`. That prefix is reserved.
 - DO NOT hardcode the username, hostname, or any \`<user>.flagship.services\` URL. Apps move between boxes; hardcoded identities break on transfer. Take everything from the request headers and \`FLAGSHIP_*\` env.
 

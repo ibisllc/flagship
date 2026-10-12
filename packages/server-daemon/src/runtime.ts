@@ -12,6 +12,7 @@ import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
 import {
   AppRunner,
   DEFAULT_DOCKER_BUILD_LIMITS,
+  buildStartCheck,
   ensureDockerNetwork,
   realCommandRunner,
 } from "./serviceRunner.js";
@@ -1176,6 +1177,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       ...(apOpts.hostIrk ? { hostIdentityPub: apOpts.hostIrk.publicKey } : {}),
       swk: apOpts.swk,
       appRunner,
+      startCheck: buildStartCheck(realCommandRunner),
       dataProvisioner,
       appAuthTokens: apOpts.appAuthTokens ?? null,
       domainGate: apOpts.domainGate ?? null,

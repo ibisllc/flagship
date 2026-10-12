@@ -32,7 +32,7 @@ import {
 } from "@flagship/protocol";
 import type { AppEnv } from "./serviceEnvStore.js";
 import type { SwkOps } from "./keyCustodian.js";
-import { AppRunner, type AppSpec } from "./serviceRunner.js";
+import { AppRunner, type AppSpec, type StartCheck } from "./serviceRunner.js";
 import { AppMembership, type AppMembershipSnapshot } from "./membership.js";
 import type { InstalledServicesStore, PersistedService } from "./installedServicesStore.js";
 import { pickPgUrlForApp } from "./runMigration.js";
@@ -97,6 +97,8 @@ export interface ServicePlatformDeps {
    */
   swk: SwkOps;
   appRunner: AppRunner;
+  /** Confirms a started container answers; absent ⇒ a started container counts. */
+  startCheck?: StartCheck;
   dataProvisioner: DataProvisioner | null;
   /**
    * Per-app daemon-API auth tokens. When set, the platform mints a
@@ -358,6 +360,7 @@ export class ServicePlatform {
     try {
       if (!migrated.ok) throw new Error(migrated.reason);
       await this.deps.appRunner.deploy(spec);
+      await this.assertStarted(spec);
     } catch (e) {
       // Roll back the provisioned data so a failed deploy doesn't leak a half-done tenant.
       if (data && this.deps.dataProvisioner) {
@@ -577,6 +580,7 @@ export class ServicePlatform {
     }
     try {
       await this.deps.appRunner.restart(spec);
+      await this.assertStarted(spec);
     } catch (e) {
       const reason = (e as Error).message;
       try {
@@ -633,6 +637,15 @@ export class ServicePlatform {
       this.deps.onLog?.(`[service-platform] ${serviceId}: ran migration ${f.filename}`);
     }
     return { ok: true, applied: done };
+  }
+
+  /** Throw (after removing the container) when a started app never answers. */
+  private async assertStarted(spec: AppSpec): Promise<void> {
+    if (!this.deps.startCheck) return;
+    const r = await this.deps.startCheck(spec);
+    if (r.ok) return;
+    await this.deps.appRunner.stop(spec.serviceId).catch(() => {});
+    throw new Error(r.reason);
   }
 
   private newMembership(serviceId: string): AppMembership {

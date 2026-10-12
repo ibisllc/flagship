@@ -374,6 +374,86 @@ export function dockerBuildFailure(stdout: string, stderr: string): string | nul
   return text.length > 2000 ? `…${text.slice(-2000)}` : text;
 }
 
+export type StartCheck = (spec: AppSpec) => Promise<{ ok: true } | { ok: false; reason: string }>;
+
+/** Any HTTP answer at all (a 404 or a 500 included) means the app is up. */
+async function httpAnswers(port: number, timeoutMs = 2000): Promise<boolean> {
+  const { request } = await import("node:http");
+  return new Promise((resolve) => {
+    const req = request({ host: "127.0.0.1", port, path: "/", method: "GET", timeout: timeoutMs }, (res) => {
+      res.resume();
+      resolve(true);
+    });
+    req.on("timeout", () => req.destroy());
+    req.on("error", () => resolve(false));
+    req.end();
+  });
+}
+
+/**
+ * Wait until a just-started app answers on its port. `docker run -d`
+ * returns as soon as the container exists, so an app that exits at startup
+ * (stock nginx on the read-only root, say) used to install "successfully"
+ * and then 502 forever. Fails with the container's last output when it
+ * stops, or when nothing answers in time.
+ */
+export function buildStartCheck(
+  cmd: CommandRunner,
+  opts: {
+    timeoutMs?: number;
+    intervalMs?: number;
+    containerName?: (serviceId: string) => string;
+    answers?: (port: number) => Promise<boolean>;
+    sleep?: (ms: number) => Promise<void>;
+    now?: () => number;
+  } = {},
+): StartCheck {
+  const timeoutMs = opts.timeoutMs ?? 60_000;
+  const intervalMs = opts.intervalMs ?? 1000;
+  const name = opts.containerName ?? ((id: string) => `flagship-${id}`);
+  const answers = opts.answers ?? ((port: number) => httpAnswers(port));
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const now = opts.now ?? (() => Date.now());
+  return async (spec) => {
+    if (!spec.port || !cmd.capture) return { ok: true };
+    const container = name(spec.serviceId);
+    const lastOutput = async (): Promise<string> => {
+      try {
+        const { stdout, stderr } = await cmd.capture!("docker", ["logs", "--tail", "15", container]);
+        return `${stdout}\n${stderr}`.split("\n").map((l) => l.trimEnd()).filter(Boolean).slice(-15).join("\n");
+      } catch {
+        return "";
+      }
+    };
+    const deadline = now() + timeoutMs;
+    for (;;) {
+      if (await answers(spec.port)) return { ok: true };
+      let state = "";
+      try {
+        state = (await cmd.capture("docker", ["inspect", "-f", "{{.State.Status}} {{.State.ExitCode}}", container])).stdout.trim();
+      } catch {
+        state = "missing";
+      }
+      const [status, code] = state.split(" ");
+      if (status !== "running" && status !== "created" && status !== "restarting") {
+        const out = await lastOutput();
+        const how = status === "missing" ? "it's gone" : `it stopped (exit code ${code ?? "?"})`;
+        return { ok: false, reason: `the app didn't start: ${how}.${out ? ` Its last output:\n${out}` : ""}` };
+      }
+      if (now() >= deadline) {
+        const out = await lastOutput();
+        return {
+          ok: false,
+          reason:
+            `the app is running but nothing answered on its port (${spec.containerPort ?? spec.port}) within ${Math.round(timeoutMs / 1000)} s; ` +
+            `it must listen on 0.0.0.0:$PORT.${out ? ` Its last output:\n${out}` : ""}`,
+        };
+      }
+      await sleep(intervalMs);
+    }
+  };
+}
+
 export class AppRunner {
   private readonly limits: ContainerLimits;
 

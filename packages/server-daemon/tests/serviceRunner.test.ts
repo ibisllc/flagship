@@ -8,6 +8,7 @@ import {
   realCommandRunner,
   runDockerBuild,
   dockerBuildFailure,
+  buildStartCheck,
   type CommandRunner,
   type CommandRunnerOpts,
 } from "../src/serviceRunner.js";
@@ -404,5 +405,51 @@ describe("AppRunner", () => {
     expect(rec.captures[0]!.cmd).toBe("docker");
     expect(rec.captures[0]!.args).toEqual(["logs", "--tail", "50", "flagship-photos"]);
     expect(out.stdout).toContain("log line");
+  });
+});
+
+describe("start check (an installed app must answer, not just exist)", () => {
+  const spec = { serviceId: "svc1", image: "img:1", port: 18080, containerPort: 8080 };
+  function cmdWith(states: string[], logs = "") {
+    const seen: string[][] = [];
+    const cmd: CommandRunner = {
+      run: async () => {},
+      capture: async (_c, args) => {
+        seen.push(args);
+        if (args[0] === "inspect") return { stdout: `${states.shift() ?? "running 0"}\n`, stderr: "" };
+        if (args[0] === "logs") return { stdout: logs, stderr: "" };
+        return { stdout: "", stderr: "" };
+      },
+    };
+    return { cmd, seen };
+  }
+  let t = 0;
+  const clock = { now: () => t, sleep: async (ms: number) => { t += ms; } };
+
+  it("passes as soon as the app answers on its port", async () => {
+    const { cmd } = cmdWith([]);
+    const answers = [false, false, true];
+    const check = buildStartCheck(cmd, { ...clock, answers: async () => answers.shift() ?? true });
+    expect(await check(spec)).toEqual({ ok: true });
+  });
+
+  it("fails with the container's last output when the app exits at startup", async () => {
+    const { cmd, seen } = cmdWith(["exited 1"], "nginx: [emerg] mkdir() \"/var/cache/nginx/client_temp\" failed (30: Read-only file system)\n");
+    const check = buildStartCheck(cmd, { ...clock, answers: async () => false });
+    const r = await check(spec);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toContain("it stopped (exit code 1)");
+    expect(r.reason).toContain("Read-only file system");
+    expect(seen.some((a) => a[0] === "logs" && a.includes("flagship-svc1"))).toBe(true);
+  });
+
+  it("fails when a running app never answers on its port", async () => {
+    t = 0;
+    const { cmd } = cmdWith([]);
+    const check = buildStartCheck(cmd, { ...clock, timeoutMs: 5000, answers: async () => false });
+    const r = await check(spec);
+    expect(r).toMatchObject({ ok: false });
+    if (!r.ok) expect(r.reason).toMatch(/nothing answered on its port \(8080\) within 5 s/);
   });
 });
