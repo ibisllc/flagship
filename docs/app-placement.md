@@ -119,8 +119,10 @@ anything but `running` as "Stopped", so every app looked stopped.
 1. any server says `deploying` or `copying` → **Deploying**
 2. else any says `editing` → **Editing**
 3. else N servers say `running` (or `starting`) → **On 1 server** / **On N servers**
-4. else every server that answered says `stopped` → **Stopped**
-5. else (no server answered) → **Can't reach**
+4. else N servers say `unknown` (an older box that lists the app but can't
+   tell its state) → **On N servers**, even if others say `stopped`
+5. else every server that answered says `stopped` → **Stopped**
+6. else (no server answered) → **Can't reach**
 
 The app's own page shows the same for the server it's opened on (Running,
 Starting, Stopped, Deploying, Copying, Editing), and each Runs-on row shows
