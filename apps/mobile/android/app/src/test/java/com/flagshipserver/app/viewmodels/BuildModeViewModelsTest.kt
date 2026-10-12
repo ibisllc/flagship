@@ -30,6 +30,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -279,21 +280,66 @@ class BuildModeViewModelsTest {
         assertEquals(BuildGitViewModel.GitPhase.Adapted(fileCount = 12), vm.phase.value)
     }
 
-    @Test fun git_sharingIsOnUnlessSwitchedOff() = runTest {
-        val client = MockBuildClient(simulatedLatencyMs = 0)
+    @Test fun git_shareTravelsWithTheAdapt_notTheCheck() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply { gitFitFixture = false }
         val vm = BuildGitViewModel(client, scope = backgroundScope)
         vm.checkRepo("https://github.com/me/random", "").join()
-        assertNull(client.gitImportCalls.last().share)
-        vm.checkRepo("https://github.com/me/random", "", share = false).join()
-        assertEquals(false, client.gitImportCalls.last().share)
+        assertEquals(true, vm.share.value)
+        vm.adapt().join()
+        assertEquals(true, client.adaptStartCalls.last().second.share)
 
-        // On the wire (LiveBuildClient's Json): omitted unless switched off.
+        vm.checkRepo("https://github.com/me/random", "").join()
+        vm.setShare(false)
+        vm.adapt().join()
+        assertEquals(false, client.adaptStartCalls.last().second.share)
+
+        // On the wire (LiveBuildClient's Json): the check never carries it,
+        // the adapt always does.
         val wire = kotlinx.serialization.json.Json { encodeDefaults = true; explicitNulls = false }
-        assertTrue("share" !in wire.encodeToString(BuildGitRequest.serializer(), BuildGitRequest(gitUrl = "u")))
-        assertTrue(
-            wire.encodeToString(BuildGitRequest.serializer(), BuildGitRequest(gitUrl = "u", share = false))
-                .contains("\"share\":false"),
+        assertTrue("share" !in wire.encodeToString(BuildGitRequest.serializer(), client.gitImportCalls.last()))
+        val adaptBody = wire.encodeToString(BuildAdaptRequest.serializer(), client.adaptStartCalls.last().second)
+        assertTrue(adaptBody, adaptBody.contains("\"share\":false"))
+        assertTrue(adaptBody, adaptBody.contains("\"background\":true"))
+    }
+
+    @Test fun git_shareSurvivesAFailedAdapt_andANewCheckTurnsItOn() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply {
+            gitFitFixture = false
+            adaptStartError = ScreensError.Http(500, """{"error":"the AI gave up"}""")
+        }
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        vm.checkRepo("https://github.com/me/random", "").join()
+        vm.setShare(false)
+        vm.adapt().join()
+        assertTrue(vm.phase.value is BuildGitViewModel.GitPhase.Verdict)
+        assertEquals("the AI gave up", vm.adaptError.value)
+        assertEquals(false, vm.share.value)
+
+        vm.checkRepo("https://github.com/me/random", "").join()
+        assertEquals(true, vm.share.value)
+    }
+
+    @Test fun git_checkRepoIsHiddenWhileAVerdictShows() = runTest {
+        val client = MockBuildClient(simulatedLatencyMs = 0).apply { gitFitFixture = false }
+        val vm = BuildGitViewModel(client, scope = backgroundScope)
+        assertTrue(BuildGitViewModel.showsCheckRepo(vm.phase.value))
+        vm.checkRepo("https://github.com/me/random", "").join()
+        assertFalse(BuildGitViewModel.showsCheckRepo(vm.phase.value))
+        assertFalse(BuildGitViewModel.showsCheckRepo(BuildGitViewModel.GitPhase.Verdict(fit = true, reason = "ok", fileCount = 1)))
+        assertTrue(BuildGitViewModel.showsCheckRepo(BuildGitViewModel.GitPhase.Checking))
+        assertTrue(BuildGitViewModel.showsCheckRepo(BuildGitViewModel.GitPhase.Failed("clone failed")))
+        vm.reset()
+        assertTrue(BuildGitViewModel.showsCheckRepo(vm.phase.value))
+    }
+
+    @Test fun git_notReadyCardCopy() {
+        assertEquals("Use AI to prepare repo for Flagship", BuildGitViewModel.ADAPT_BUTTON)
+        assertEquals("Anonymously share your adaptation", BuildGitViewModel.SHARE_LABEL)
+        assertEquals(
+            "Others can then install this repo without AI. Nothing about you or your server is included.",
+            BuildGitViewModel.SHARE_NOTE,
         )
+        assertEquals("Check again", BuildGitViewModel.CHECK_AGAIN)
     }
 
     @Test fun git_aSharedAdaptationThatCrashes_offersTheOwnersAI() = runTest {
@@ -334,7 +380,7 @@ class BuildModeViewModelsTest {
 
     @Test fun git_notReadyCard_saysItPlainly() {
         assertEquals(
-            "This repo has no flagship.app.json and is not yet adapted to run on Flagship.",
+            "This repo is not yet adapted for Flagship.",
             BuildGitViewModel.notReadyText("no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it"),
         )
         val broken = "flagship.app.json present but invalid: name"

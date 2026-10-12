@@ -171,15 +171,55 @@ final class BuildModesViewModelTests: XCTestCase {
         XCTAssertTrue(try String(contentsOf: url, encoding: .utf8).contains("\"adapter\""))
     }
 
-    func test_gitVM_sharingIsOnUnlessSwitchedOff() async {
+    func test_gitVM_shareTravelsWithTheAdapt_notTheCheck() async throws {
         let client = makeClient()
         let vm = BuildGitViewModel(client: client)
+        vm.pollInterval = .milliseconds(1)
         vm.gitUrl = "https://github.com/me/random"
         await vm.checkRepo()
-        XCTAssertNil(client.buildGitCalls.last?.share)
-        vm.share = false
+        XCTAssertTrue(vm.share)
+        await vm.adapt()
+        XCTAssertEqual(client.buildAdaptStartCalls.last?.req.share, true)
+
         await vm.checkRepo()
-        XCTAssertEqual(client.buildGitCalls.last?.share, false)
+        vm.share = false
+        await vm.adapt()
+        XCTAssertEqual(client.buildAdaptStartCalls.last?.req.share, false)
+
+        let body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(XCTUnwrap(client.buildGitCalls.last))) as? [String: Any]
+        XCTAssertNil(body?["share"])
+    }
+
+    func test_gitVM_shareChoice_survivesAFailedAdapt_andResetsOnANewCheck() async {
+        let client = makeClient()
+        client.buildAdaptStatusFixture = BuildAdaptStatus(status: "failed", reason: "adapt model call failed: bad key")
+        let vm = BuildGitViewModel(client: client)
+        vm.pollInterval = .milliseconds(1)
+        vm.gitUrl = "https://github.com/me/random"
+        await vm.checkRepo()
+        vm.share = false
+        await vm.adapt()
+        guard case .verdict = vm.phase else { return XCTFail("expected verdict, got \(vm.phase)") }
+        XCTAssertFalse(vm.share)
+        await vm.adapt()
+        XCTAssertEqual(client.buildAdaptStartCalls.last?.req.share, false)
+        await vm.checkRepo()
+        XCTAssertTrue(vm.share)
+    }
+
+    func test_gitVM_checkRepo_isHiddenWhileAVerdictShows() async {
+        let client = makeClient()
+        let vm = BuildGitViewModel(client: client)
+        vm.gitUrl = "https://github.com/me/flagship-ready"
+        XCTAssertFalse(vm.showsVerdict)
+        await vm.checkRepo()
+        XCTAssertTrue(vm.showsVerdict)
+        vm.gitUrl = "https://github.com/me/random"
+        await vm.checkRepo()
+        XCTAssertTrue(vm.showsVerdict)
+        client.buildGitError = ScreensClientError.http(status: 422, message: #"{"error":"git clone failed"}"#)
+        await vm.checkRepo()
+        XCTAssertFalse(vm.showsVerdict)
     }
 
     func test_gitVM_aSharedAdaptationThatCrashes_offersTheOwnersAI() async {
@@ -210,9 +250,16 @@ final class BuildModesViewModelTests: XCTestCase {
 
     func test_notReadyCard_saysItPlainly() {
         let missing = BuildGitResponse(buildId: "b", fit: false, reason: "no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it", fileCount: 3)
-        XCTAssertEqual(BuildGitScreen.notReadyText(missing), "This repo has no flagship.app.json and is not yet adapted to run on Flagship.")
+        XCTAssertEqual(BuildGitScreen.notReadyText(missing), "This repo is not yet adapted for Flagship.")
         let broken = BuildGitResponse(buildId: "b", fit: false, reason: "flagship.app.json present but invalid: name", fileCount: 3)
         XCTAssertEqual(BuildGitScreen.notReadyText(broken), broken.reason)
+    }
+
+    func test_notReadyCard_copy() {
+        XCTAssertEqual(BuildGitScreen.adaptButton, "Use AI to prepare repo for Flagship")
+        XCTAssertEqual(BuildGitScreen.shareToggle, "Anonymously share your adaptation")
+        XCTAssertEqual(BuildGitScreen.shareNote, "Others can then install this repo without AI. Nothing about you or your server is included.")
+        XCTAssertEqual(BuildGitScreen.checkAgain, "Check again")
     }
 
     func test_journalVM_openBuilds_areSeparateAndDiscardable() async {

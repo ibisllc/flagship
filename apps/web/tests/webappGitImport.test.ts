@@ -154,7 +154,7 @@ describe("git import helpers", () => {
   it("the not-ready card says it plainly", async () => {
     const { notReadyText } = await loadGit();
     expect(notReadyText("no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it")).toBe(
-      "This repo has no flagship.app.json and is not yet adapted to run on Flagship.",
+      "This repo is not yet adapted for Flagship.",
     );
     expect(notReadyText("flagship.app.json present but invalid: name")).toBe("flagship.app.json present but invalid: name");
   });
@@ -296,36 +296,37 @@ describe("git import screen", () => {
     expect(js).toMatch(/setTimeout\(\(\) => void runNameCheck\(slug\), 350\)/);
     expect(js).toContain("currentCheck()?.ok === false");
     expect(js).toContain("showConflict(failure.conflict");
-    expect(js).toContain("background: true");
+    expect(js).toContain("adaptRequestBody(");
   });
 });
 
 describe("share the adaptation, and a shared adaptation that crashes", () => {
-  it("shares unless switched off", async () => {
-    const { gitRequestBody } = await loadGit();
+  it("the check no longer carries the share choice; the adapt does", async () => {
+    const { gitRequestBody, adaptRequestBody } = await loadGit();
     expect(gitRequestBody({ gitUrl: "https://github.com/me/random", ref: "", name: "" })).toEqual({
       gitUrl: "https://github.com/me/random",
     });
-    expect(gitRequestBody({ gitUrl: "https://github.com/me/random", share: true })).not.toHaveProperty("share");
-    expect(gitRequestBody({ gitUrl: "https://github.com/me/random", share: false })).toEqual({
-      gitUrl: "https://github.com/me/random",
+    expect(adaptRequestBody({ credential: null })).toEqual({ background: true, share: true });
+    expect(adaptRequestBody({ credential: { kind: "saved" }, share: false })).toEqual({
+      credential: { kind: "saved" },
+      background: true,
       share: false,
     });
   });
 
-  it("the switch is on by default and says what is published", async () => {
-    const { SHARE_LABEL, SHARE_NOTE } = await loadGit();
-    expect(SHARE_LABEL).toBe("Share the adaptation");
-    expect(SHARE_NOTE).toBe(
-      "If the AI adapts this open-source repo, Flagship publishes the changes so others can install it without AI. Nothing about you or your server is included.",
-    );
+  it("the switch lives on the not-ready card, on by default, which replaces Check repo", async () => {
+    const { SHARE_LABEL, SHARE_NOTE, CHECK_AGAIN } = await loadGit();
+    expect(SHARE_LABEL).toBe("Anonymously share your adaptation");
+    expect(SHARE_NOTE).toBe("Others can then install this repo without AI. Nothing about you or your server is included.");
+    expect(CHECK_AGAIN).toBe("Check again");
     const html = await asset("/webapp/index.html");
     const section = html.slice(html.indexOf('id="view-build-git"'), html.indexOf('id="view-build-mcp"'));
-    expect(section).toMatch(/<input type="checkbox" id="build-git-share"[^>]* checked \/> Share the adaptation/);
-    expect(section).toContain(SHARE_NOTE);
+    expect(section).not.toContain("build-git-share");
     const js = await asset("/webapp/views/build-git.js");
-    expect(js).toContain('share: $("build-git-share").checked');
-    expect(js).toContain('$("build-git-share").checked = true;');
+    expect(js).toContain('id="build-git-share" role="switch"${share ? " checked" : ""}');
+    expect(js).toContain("adaptRequestBody({ credential: adaptCredential, share })");
+    expect(js).toContain('btn.classList.toggle("hidden", verdictShown)');
+    expect(js).toContain('$("build-git-recheck").addEventListener("click", checkRepo)');
   });
 
   it("a failed Install that needs the AI shows the not-ready card with the box's reason", async () => {

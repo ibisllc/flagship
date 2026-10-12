@@ -34,6 +34,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -47,6 +48,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +68,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.BuildCredential
 import com.flagshipserver.app.api.BuildEnvRequest
@@ -355,18 +359,17 @@ fun BuildGitScreen(nav: NavController) {
     // build's own journal (the VM derives it from the buildId), not this
     // server — tapping should open the build, not the box.
     val targetPod = remember(appState) { appState.currentPod ?: appState.leaderPod }
-    val vm = remember {
-        BuildGitViewModel(
-            client = client,
-            operations = operations,
-            serviceLabel = "your repo",
-            serverLabel = targetPod?.name,
-        )
-    }
+    val holder: BuildGitHolder = viewModel()
+    val vm = holder.vm ?: BuildGitViewModel(
+        client = client,
+        operations = operations,
+        serviceLabel = "your repo",
+        serverLabel = targetPod?.name,
+    ).also { holder.vm = it }
     val phase by vm.phase.collectAsState()
 
-    var url by remember { mutableStateOf("") }
-    var ref by remember { mutableStateOf("") }
+    var url by rememberSaveable { mutableStateOf("") }
+    var ref by rememberSaveable { mutableStateOf("") }
 
     // A 503 from adapt means the box has no model wired — bounce to scratch.
     LaunchedEffect(phase) {
@@ -394,10 +397,7 @@ fun BuildGitScreen(nav: NavController) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    var name by remember { mutableStateOf("") }
-    // Share the adaptation with Flagship's public store, so others can
-    // install this repo without AI. On unless the owner says otherwise.
-    var share by remember { mutableStateOf(true) }
+    var name by rememberSaveable { mutableStateOf("") }
     val slug = BuildGitViewModel.slug(name)
     val conflict by vm.conflict.collectAsState()
     val assignedName by vm.assignedName.collectAsState()
@@ -475,38 +475,20 @@ fun BuildGitScreen(nav: NavController) {
         }
         Spacer(Modifier.height(FS.space.s4))
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Share the adaptation",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 15.sp),
-                modifier = Modifier.weight(1f),
+        val checkRepo = { if (url.isBlank()) toasts.error("Paste a repo URL first.") else vm.checkRepo(url, ref, name) }
+        if (BuildGitViewModel.showsCheckRepo(phase)) {
+            val checking = phase is BuildGitViewModel.GitPhase.Checking
+            FSPrimaryButton(
+                label = if (checking) "Cloning…" else "Check repo",
+                onClick = { checkRepo() },
+                enabled = !checking && !nameRefused,
+                block = true,
+                modifier = Modifier.testTag("build-git-check"),
             )
-            Switch(
-                checked = share,
-                onCheckedChange = { share = it },
-                modifier = Modifier.testTag("build-git-share"),
-            )
+            Spacer(Modifier.height(FS.space.s4))
         }
-        Text(
-            SHARE_ADAPTATION_HINT,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-
-        val checking = phase is BuildGitViewModel.GitPhase.Checking
-        FSPrimaryButton(
-            label = if (checking) "Cloning…" else "Check repo",
-            onClick = { if (url.isBlank()) toasts.error("Paste a repo URL first.") else vm.checkRepo(url, ref, name, share) },
-            enabled = !checking && !nameRefused,
-            block = true,
-            modifier = Modifier.testTag("build-git-check"),
-        )
-
-        Spacer(Modifier.height(FS.space.s4))
         when (val p = phase) {
-            is BuildGitViewModel.GitPhase.Verdict -> VerdictCard(p, vm, nav, adaptError)
+            is BuildGitViewModel.GitPhase.Verdict -> VerdictCard(p, vm, nav, adaptError, recheckEnabled = !nameRefused) { checkRepo() }
             is BuildGitViewModel.GitPhase.Adapting -> AdaptingCard(p.progress)
             is BuildGitViewModel.GitPhase.Adapted -> AdaptedCard(p, vm, nav)
             is BuildGitViewModel.GitPhase.Deploying -> InfoCard("Installing…", "Building and deploying to your box.")
@@ -543,9 +525,12 @@ fun BuildGitScreen(nav: NavController) {
     }
 }
 
-internal const val SHARE_ADAPTATION_HINT =
-    "If the AI adapts this open-source repo, Flagship publishes the changes so others can install it without AI. " +
-        "Nothing about you or your server is included."
+/** Keeps the git screen's model on its back-stack entry. The AI-key step
+ *  takes this screen out of composition, and a plain `remember` would come
+ *  back without the checked build (or the share switch) to adapt. */
+internal class BuildGitHolder : ViewModel() {
+    var vm: BuildGitViewModel? = null
+}
 
 @Composable
 private fun FieldLabel(text: String) {
@@ -559,36 +544,78 @@ private fun VerdictCard(
     vm: BuildGitViewModel,
     nav: NavController,
     adaptError: String?,
+    recheckEnabled: Boolean,
+    onCheckAgain: () -> Unit,
 ) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
         if (p.fit) {
-            Text("Flagship-ready ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
+            VerdictHead(recheckEnabled, onCheckAgain) {
+                Text("Flagship-ready ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
+            }
             Spacer(Modifier.height(FS.space.s2))
             Text("${p.reason} — ${p.fileCount} file(s).", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
             Spacer(Modifier.height(FS.space.s4))
             FSPrimaryButton("Install it", onClick = { vm.deploy() }, block = true)
         } else {
-            Text(
-                BuildGitViewModel.notReadyText(p.reason),
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
-            )
-            Spacer(Modifier.height(FS.space.s4))
-            // The box's model rewrites the repo, so confirm an AI key first;
-            // the git screen runs the adapt pass on return with it.
-            FSPrimaryButton(
-                "Use AI to prepare repo for Flagship",
-                onClick = { nav.navigate("build/git/key") },
-                block = true,
-                modifier = Modifier.testTag("build-git-adapt"),
-            )
+            val share by vm.share.collectAsState()
+            VerdictHead(recheckEnabled, onCheckAgain) {
+                Text(
+                    BuildGitViewModel.notReadyText(p.reason),
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
+                )
+            }
             adaptError?.let {
                 Spacer(Modifier.height(FS.space.s3))
                 Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
             }
+            Spacer(Modifier.height(FS.space.s4))
+            // The box's model rewrites the repo, so confirm an AI key first;
+            // the git screen runs the adapt pass on return with it.
+            FSPrimaryButton(
+                BuildGitViewModel.ADAPT_BUTTON,
+                onClick = { nav.navigate("build/git/key") },
+                block = true,
+                modifier = Modifier.testTag("build-git-adapt"),
+            )
+            Spacer(Modifier.height(FS.space.s4))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    BuildGitViewModel.SHARE_LABEL,
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 15.sp),
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = share,
+                    onCheckedChange = { vm.setShare(it) },
+                    modifier = Modifier.testTag("build-git-share"),
+                )
+            }
+            Text(
+                BuildGitViewModel.SHARE_NOTE,
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            )
         }
         Spacer(Modifier.height(FS.space.s2))
         JournalLink(nav, vm.buildId)
+    }
+}
+
+/** A verdict's first line with the small "Check again" control trailing it,
+ *  since the card hides the "Check repo" button. */
+@Composable
+private fun VerdictHead(recheckEnabled: Boolean, onCheckAgain: () -> Unit, content: @Composable () -> Unit) {
+    Row(verticalAlignment = Alignment.Top) {
+        Box(Modifier.weight(1f).padding(top = FS.space.s2)) { content() }
+        IconButton(
+            onClick = onCheckAgain,
+            enabled = recheckEnabled,
+            modifier = Modifier.testTag("build-git-recheck"),
+        ) {
+            Icon(Icons.Default.Refresh, contentDescription = BuildGitViewModel.CHECK_AGAIN, tint = FS.colors.textMuted)
+        }
     }
 }
 

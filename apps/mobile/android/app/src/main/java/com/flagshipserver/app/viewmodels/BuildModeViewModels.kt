@@ -120,18 +120,24 @@ class BuildGitViewModel(
     var buildId: String? = null
         private set
 
+    /** The not-ready card's "Anonymously share your adaptation" switch, sent
+     *  with the adapt. It survives a failed adapt; a new check turns it on. */
+    private val _share = MutableStateFlow(true)
+    val share: StateFlow<Boolean> = _share.asStateFlow()
+
     private var lastVerdict: GitPhase.Verdict? = null
 
     fun dismissConflict() { _conflict.value = null }
 
-    /** [share] false: never share this repo's adaptation with the public
-     *  store (sent as `share: false`; omitted otherwise, which shares it). */
-    fun checkRepo(gitUrl: String, ref: String, name: String = "", share: Boolean = true): Job = scope.launch {
+    fun setShare(on: Boolean) { _share.value = on }
+
+    fun checkRepo(gitUrl: String, ref: String, name: String = ""): Job = scope.launch {
         val wanted = slug(name)
         _conflict.value = null
         _assignedName.value = null
         _adaptError.value = null
         _exportError.value = null
+        _share.value = true
         buildId = null
         _phase.value = GitPhase.Checking
         try {
@@ -140,7 +146,6 @@ class BuildGitViewModel(
                     gitUrl = gitUrl.trim(),
                     ref = ref.trim().ifEmpty { null },
                     name = wanted.ifEmpty { null },
-                    share = if (share) null else false,
                 ),
             )
             buildId = r.buildId
@@ -173,6 +178,7 @@ class BuildGitViewModel(
                 id,
                 com.flagshipserver.app.api.BuildAdaptRequest(
                     instructions = instructions, credential = credential, background = true,
+                    share = _share.value,
                 ),
             )
             if (r.started == true) {
@@ -320,11 +326,21 @@ class BuildGitViewModel(
         _conflict.value = null
         _assignedName.value = null
         _adaptError.value = null
+        _share.value = true
         _phase.value = GitPhase.Idle
     }
 
     companion object {
         const val ADAPTER_FILE_NAME = "flagship.app.json"
+        const val NOT_READY_MISSING = "This repo is not yet adapted for Flagship."
+        const val ADAPT_BUTTON = "Use AI to prepare repo for Flagship"
+        const val SHARE_LABEL = "Anonymously share your adaptation"
+        const val SHARE_NOTE = "Others can then install this repo without AI. Nothing about you or your server is included."
+        const val CHECK_AGAIN = "Check again"
+
+        /** A verdict card takes the "Check repo" button's place; it carries
+         *  its own "Check again". */
+        fun showsCheckRepo(phase: GitPhase): Boolean = phase !is GitPhase.Verdict
 
         /** A deploy refusal that says the repo now needs the owner's AI. */
         fun needsAdapt(t: Throwable): Boolean {
@@ -340,7 +356,7 @@ class BuildGitViewModel(
          *  keeps the box's reason, which says what is wrong with it. */
         fun notReadyText(reason: String): String =
             if (reason.startsWith("no flagship.app.json")) {
-                "This repo has no flagship.app.json and is not yet adapted to run on Flagship."
+                NOT_READY_MISSING
             } else {
                 reason
             }

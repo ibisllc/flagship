@@ -31,9 +31,6 @@ data class BuildGitRequest(
     val ref: String? = null,
     /** The service's name. Null: the box names it from the repo and branch. */
     val name: String? = null,
-    /** False: never share this repo's adaptation with the public store.
-     *  Null (omitted): the box shares it. */
-    val share: Boolean? = null,
 )
 
 /** POST /api/build/git response — the fitness verdict. `fit=true` ⇒
@@ -63,6 +60,9 @@ data class BuildAdaptRequest(
     /** Answer at once and run in the background; poll [BuildClient.state] for
      *  `adapt`. Older boxes ignore it and answer when the AI is done. */
     val background: Boolean? = null,
+    /** Whether the box publishes this adaptation to the public store once it
+     *  deploys. Older boxes ignore it and share by default. */
+    val share: Boolean? = null,
 )
 
 /** POST /api/build/sessions/:id/adapt response. A 409 means the box already

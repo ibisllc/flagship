@@ -272,24 +272,16 @@ public struct BuildGitScreen: View {
                         nameStatus(c: c)
                     }
 
-                    VStack(alignment: .leading, spacing: FS.space.s1) {
-                        Toggle("Share the adaptation", isOn: $vm.share)
-                            .font(FS.font.body())
-                            .tint(c.primary)
-                            .accessibilityIdentifier("build-git-share")
-                        Text("If the AI adapts this open-source repo, Flagship publishes the changes so others can install it without AI. Nothing about you or your server is included.")
-                            .font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                            .fixedSize(horizontal: false, vertical: true)
+                    if !vm.showsVerdict {
+                        FSPrimaryButton(checkLabel, enabled: vm.canCheck && !checking && !nameRefused, block: true) {
+                            Task { await vm.checkRepo() }
+                        }
+                        .accessibilityIdentifier("build-git-check")
                     }
-
-                    FSPrimaryButton(checkLabel, enabled: vm.canCheck && !checking && !nameRefused, block: true) {
-                        Task { await vm.checkRepo() }
-                    }
-                    .accessibilityIdentifier("build-git-check")
 
                     verdict(c: c)
 
-                    if let err = vm.errorMessage {
+                    if let err = vm.errorMessage, !showsNotReadyCard {
                         ErrorCard(message: err)
                     }
                     Spacer().frame(height: FS.space.s8)
@@ -359,9 +351,18 @@ public struct BuildGitScreen: View {
     /// A repo without a manifest gets the plain sentence; a broken manifest
     /// keeps the box's reason, which says what is wrong with it.
     static func notReadyText(_ r: BuildGitResponse) -> String {
-        r.reason.hasPrefix("no flagship.app.json")
-            ? "This repo has no flagship.app.json and is not yet adapted to run on Flagship."
-            : r.reason
+        r.reason.hasPrefix("no flagship.app.json") ? notAdaptedText : r.reason
+    }
+    static let notAdaptedText = "This repo is not yet adapted for Flagship."
+    static let adaptButton = "Use AI to prepare repo for Flagship"
+    static let shareToggle = "Anonymously share your adaptation"
+    static let shareNote = "Others can then install this repo without AI. Nothing about you or your server is included."
+    static let checkAgain = "Check again"
+
+    /// The not-ready card shows an adapt failure inside itself.
+    private var showsNotReadyCard: Bool {
+        if case .verdict(let r) = vm.phase { return !r.fit }
+        return false
     }
 
     private var checking: Bool {
@@ -381,6 +382,8 @@ public struct BuildGitScreen: View {
                     HStack(spacing: FS.space.s2) {
                         Image(systemName: "checkmark.seal.fill").foregroundColor(c.success)
                         Text("Flagship-ready").font(FS.font.h4()).foregroundColor(c.text)
+                        Spacer(minLength: FS.space.s2)
+                        checkAgainButton(c: c)
                     }
                     Text("\(r.reason) — \(r.fileCount) file\(r.fileCount == 1 ? "" : "s").")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)
@@ -390,10 +393,28 @@ public struct BuildGitScreen: View {
                 }
             } else {
                 FSCard {
-                    Text(Self.notReadyText(r)).font(FS.font.body()).foregroundColor(c.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                    FSSecondaryButton("Use AI to prepare repo for Flagship", block: true) { onBuildWithAI() }
+                    HStack(alignment: .top, spacing: FS.space.s2) {
+                        Text(Self.notReadyText(r)).font(FS.font.body()).foregroundColor(c.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: FS.space.s2)
+                        checkAgainButton(c: c)
+                    }
+                    if let err = vm.errorMessage {
+                        Text(err).font(FS.font.bodySm()).foregroundColor(c.danger)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("build-git-adapt-error")
+                    }
+                    FSPrimaryButton(Self.adaptButton, block: true) { onBuildWithAI() }
                         .accessibilityIdentifier("build-git-adapt")
+                    VStack(alignment: .leading, spacing: FS.space.s1) {
+                        Toggle(Self.shareToggle, isOn: $vm.share)
+                            .font(FS.font.body())
+                            .tint(c.primary)
+                            .accessibilityIdentifier("build-git-share")
+                        Text(Self.shareNote)
+                            .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     journalLink(c: c)
                 }
             }
@@ -458,6 +479,24 @@ public struct BuildGitScreen: View {
         Text("Is this your repo? Commit this file at its root and every Flagship server will run it this way.")
             .font(FS.font.bodySm()).foregroundColor(c.textMuted)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Stands in for "Check repo" while a verdict card hides it.
+    private func checkAgainButton(c: FSColors) -> some View {
+        Button {
+            Task { await vm.checkRepo() }
+        } label: {
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundColor(vm.canCheck && !nameRefused ? c.primary : c.textMuted)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!vm.canCheck || nameRefused)
+        .padding(.vertical, -FS.space.s2)
+        .accessibilityLabel(Self.checkAgain)
+        .accessibilityIdentifier("build-git-check-again")
     }
 
     @ViewBuilder

@@ -6,7 +6,7 @@
 import { slugify, conflictFromError } from "./vibeNames.js";
 import { ScreensError, boxReason, buildEntryError } from "./api.js";
 
-export const NOT_READY_MISSING = "This repo has no flagship.app.json and is not yet adapted to run on Flagship.";
+export const NOT_READY_MISSING = "This repo is not yet adapted for Flagship.";
 export const ADAPT_BUTTON = "Use AI to prepare repo for Flagship";
 export const ADAPTING = "The AI is adapting the repo…";
 export const ADAPTING_NOTE = "This can take several minutes. You can leave this screen; Build sessions shows how it went.";
@@ -16,9 +16,9 @@ export const ADAPTER_FILE_NAME = "flagship.app.json";
 export const EXPORT_BUTTON = "Get flagship.app.json";
 export const EXPORT_PREPARING = "Preparing…";
 export const EXPORT_NOTE = "Is this your repo? Commit this file at its root and every Flagship server will run it this way.";
-export const SHARE_LABEL = "Share the adaptation";
-export const SHARE_NOTE =
-  "If the AI adapts this open-source repo, Flagship publishes the changes so others can install it without AI. Nothing about you or your server is included.";
+export const SHARE_LABEL = "Anonymously share your adaptation";
+export const SHARE_NOTE = "Others can then install this repo without AI. Nothing about you or your server is included.";
+export const CHECK_AGAIN = "Check again";
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_LIMIT_MS = 45 * 60 * 1000;
@@ -41,16 +41,19 @@ export function blankNameHint(ref) {
   return `Leave it blank to name it after the repo${String(ref ?? "").trim() ? " and branch" : ""}.`;
 }
 
-/** `share` false: never share this repo's adaptation with the public store
- *  (sent as `share: false`; omitted otherwise, which shares it). */
-export function gitRequestBody({ gitUrl, ref, name, share = true }) {
+export function gitRequestBody({ gitUrl, ref, name }) {
   const body = { gitUrl: String(gitUrl ?? "").trim() };
   const r = String(ref ?? "").trim();
   if (r) body.ref = r;
   const slug = slugify(name);
   if (slug) body.name = slug;
-  if (share === false) body.share = false;
   return body;
+}
+
+/** The background adapt. `share` is the not-ready card's switch: whether the
+ *  box publishes the adaptation to the public store once it deploys. */
+export function adaptRequestBody({ credential, share = true }) {
+  return { ...(credential ? { credential } : {}), background: true, share: share !== false };
 }
 
 /** A failed Install: a shared adaptation that crashed here hands the repo to

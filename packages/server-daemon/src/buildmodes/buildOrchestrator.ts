@@ -481,6 +481,12 @@ export class BuildOrchestrator {
     return true;
   }
 
+  /** Whether a git build's adaptation is shared once it deploys. */
+  setShare(buildId: string, share: boolean): void {
+    const src = this.gitSources.get(buildId);
+    if (src) src.share = share;
+  }
+
   /**
    * Start the adapt pass and return at once; its outcome lands on the
    * build's state (`adapt`), which the phone polls. The pass can run for

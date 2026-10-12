@@ -503,6 +503,18 @@ describe("the store's answer, and fixing what it refused", () => {
     expect(submitted).toEqual([]);
   });
 
+  it("shares nothing when the owner switched sharing off after the check", async () => {
+    const turns = deployingTurns();
+    const { index, submitted } = scripted([]);
+    const { o } = setup({ index, agent: () => turns.shift() ?? { content: "done", model: "m" } });
+    const r = await o.createGit({ gitUrl: REPO });
+    if ("error" in r) throw new Error(r.error);
+    o.setShare(r.buildId, false);
+    await o.adaptGit(r.buildId);
+    await settle();
+    expect(submitted).toEqual([]);
+  });
+
   it("reports a published adapter that fails to build here, and doesn't offer it again", async () => {
     const { createHash } = await import("node:crypto");
     const fileSha = createHash("sha256").update(ADAPTER_FILE).digest("hex");

@@ -21,13 +21,10 @@ public struct BuildGitRequest: Codable, Equatable, Sendable {
     public let ref: String?
     /// The service's name. Nil: the box names it from the repo and branch.
     public let name: String?
-    /// False: never share this repo's adaptation with the public store.
-    public let share: Bool?
-    public init(gitUrl: String, ref: String? = nil, name: String? = nil, share: Bool? = nil) {
+    public init(gitUrl: String, ref: String? = nil, name: String? = nil) {
         self.gitUrl = gitUrl
         self.ref = ref
         self.name = name
-        self.share = share
     }
 }
 
@@ -51,7 +48,7 @@ public struct BuildGitResponse: Codable, Equatable, Sendable {
     }
 }
 
-/// `POST /api/build/sessions/:id/adapt {instructions?, credential?}`
+/// `POST /api/build/sessions/:id/adapt {instructions?, credential?, background?, share?}`
 public struct BuildAdaptRequest: Codable, Equatable, Sendable {
     public let instructions: String?
     /// BYOK provider credential the box uses to drive the AI adapt pass.
@@ -63,10 +60,15 @@ public struct BuildAdaptRequest: Codable, Equatable, Sendable {
     /// Answer at once and run in the background; poll `buildState` for
     /// `adapt`. Older boxes ignore it and answer when the AI is done.
     public let background: Bool?
-    public init(instructions: String? = nil, credential: LlmProviderCredential? = nil, background: Bool? = nil) {
+    /// Whether the box shares this adaptation with the public store, so
+    /// others can install the repo without AI. Nil: the box's default (share).
+    public let share: Bool?
+    public init(instructions: String? = nil, credential: LlmProviderCredential? = nil, background: Bool? = nil,
+                share: Bool? = nil) {
         self.instructions = instructions
         self.credential = credential
         self.background = background
+        self.share = share
     }
 }
 

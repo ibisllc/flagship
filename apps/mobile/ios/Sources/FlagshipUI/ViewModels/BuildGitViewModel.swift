@@ -4,8 +4,8 @@ import FlagshipAPI
 
 /// Backs the git build mode. One option: paste a repo URL → "Check repo"
 /// runs the box's Flagship-fitness check → the verdict card offers either
-/// "Install it" (fit) or "Build with AI instead" (not fit → adapt, with a
-/// 503 fall-back to from-scratch).
+/// "Install it" (fit) or "Use AI to prepare repo for Flagship" (not fit →
+/// adapt, with a 503 fall-back to from-scratch).
 ///
 /// Mirrors the canonical webapp `views/build-git.js`.
 @MainActor
@@ -31,7 +31,8 @@ public final class BuildGitViewModel {
     /// Optional. Blank: the box names it from the repo and branch.
     public var name: String = ""
     /// Share the adaptation with Flagship's public store, so others can
-    /// install this repo without AI. On unless the owner says otherwise.
+    /// install this repo without AI. Chosen on the not-ready card and sent
+    /// with the adapt request; back to on for every new check.
     public var share: Bool = true
     /// Set when "Check repo" was refused because the name is taken; the
     /// screen sends the owner to that build or asks for another name.
@@ -69,6 +70,13 @@ public final class BuildGitViewModel {
         return false
     }
 
+    /// A verdict card is up: it carries its own "Check again", so the form's
+    /// "Check repo" button steps aside until the verdict clears.
+    public var showsVerdict: Bool {
+        if case .verdict = phase { return true }
+        return false
+    }
+
     public func checkRepo() async {
         let url = gitUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !url.isEmpty else { return }
@@ -78,11 +86,12 @@ public final class BuildGitViewModel {
         conflict = nil
         assignedName = nil
         buildId = nil
+        share = true
         phase = .checking
         do {
             let r = try await client.buildGit(
                 BuildGitRequest(gitUrl: url, ref: trimmedRef.isEmpty ? nil : trimmedRef,
-                                name: wanted.isEmpty ? nil : wanted, share: share ? nil : false)
+                                name: wanted.isEmpty ? nil : wanted)
             )
             buildId = r.buildId
             assignedName = r.name ?? (wanted.isEmpty ? nil : wanted)
@@ -117,7 +126,7 @@ public final class BuildGitViewModel {
         do {
             let r = try await client.buildAdaptStart(
                 buildId: buildId,
-                BuildAdaptRequest(credential: credential, background: true)
+                BuildAdaptRequest(credential: credential, background: true, share: share)
             )
             if r.started == true {
                 try await followAdapt(buildId: buildId)

@@ -162,7 +162,7 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
       return jok({ requests: await o.resolvedEnvRequests(buildId) });
     }
 
-    // POST .../adapt { instructions? } → run the AI adapt pass on a
+    // POST .../adapt { instructions?, share? } → run the AI adapt pass on a
     // non-fit git build, merging the rewritten files into the workspace.
     // 503 when no model is configured (the live LLM provider isn't wired
     // into the daemon yet — the same pre-existing gap scratch has); 502
@@ -175,7 +175,7 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
       // server-minted build always has state; anything else 404s here.
       if (!o.state(buildId)) return jerr(404, "build not found");
       const body = parseJson(req.body) as
-        | { instructions?: string; credential?: unknown; background?: boolean }
+        | { instructions?: string; credential?: unknown; background?: boolean; share?: boolean }
         | null;
       // A credential may be delivered here too (e.g. the owner adds an AI
       // key only when the adapt pass is actually needed). Same box-only,
@@ -189,6 +189,9 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
           return jerr(500, "failed to store credential");
         }
       }
+      // The owner chooses whether to share the adaptation on the not-ready
+      // card, so it arrives with the adapt (older apps sent it on create).
+      if (typeof body?.share === "boolean") o.setShare(buildId, body.share);
       const adaptOpts = typeof body?.instructions === "string" ? { instructions: body.instructions } : {};
       // `background`: answer at once; the phone polls GET .../:id for
       // `state.adapt`. Older apps wait on this request instead.

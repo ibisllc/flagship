@@ -69,7 +69,7 @@ describe("webapp build-modes views", () => {
     expect(body).toContain("enterBuildKey");
     // …and the adapt request carries the in-memory credential.
     expect(body).toContain("adaptCredential");
-    expect(body).toContain("{ credential: adaptCredential, background: true }");
+    expect(body).toContain("adaptRequestBody({ credential: adaptCredential, share })");
   });
 
   it("mcp view mints a connection and shows the key + IDE config", async () => {

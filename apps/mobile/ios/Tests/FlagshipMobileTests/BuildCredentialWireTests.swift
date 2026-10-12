@@ -82,6 +82,11 @@ final class BuildCredentialWireTests: XCTestCase {
         XCTAssertNil(obj["credential"])
     }
 
+    func test_buildAdapt_carriesShare_trueOrFalse() throws {
+        XCTAssertEqual(try encodedObject(BuildAdaptRequest(share: true))["share"] as? Bool, true)
+        XCTAssertEqual(try encodedObject(BuildAdaptRequest(share: false))["share"] as? Bool, false)
+    }
+
     // MARK: - needsCredential response signal
 
     func test_startResponse_decodes_needsCredential() throws {

@@ -14,9 +14,13 @@ import {
   ADAPTING,
   ADAPTING_NOTE,
   ADAPT_BUTTON,
+  CHECK_AGAIN,
   EXPORT_BUTTON,
   EXPORT_NOTE,
   EXPORT_PREPARING,
+  SHARE_LABEL,
+  SHARE_NOTE,
+  adaptRequestBody,
   addressLabel,
   blankNameHint,
   checkRepoFailure,
@@ -45,6 +49,10 @@ let nameCheck = null;
 let checkedSlug = "";
 let nameCheckTimer = null;
 let checking = false;
+// The not-ready card's share switch; a new check turns it back on.
+let share = true;
+// A Flagship-ready or not-ready card is up; it takes Check repo's place.
+let verdictShown = false;
 
 export function initBuildGitView() {
   $("build-git-check").addEventListener("click", checkRepo);
@@ -60,12 +68,13 @@ export function enterBuildGit() {
   assignedName = null;
   nameCheck = null;
   checkedSlug = "";
+  share = true;
+  verdictShown = false;
   if (nameCheckTimer) clearTimeout(nameCheckTimer);
   nameCheckTimer = null;
   $("build-git-url").value = "";
   $("build-git-ref").value = "";
   $("build-git-name").value = "";
-  $("build-git-share").checked = true;
   $("build-git-verdict").classList.add("hidden");
   $("build-git-verdict").innerHTML = "";
   renderNameStatus();
@@ -123,6 +132,7 @@ function updateCheckButton() {
   if (!btn) return;
   btn.textContent = checking ? "cloning…" : "Check repo";
   btn.disabled = checking || currentCheck()?.ok === false;
+  btn.classList.toggle("hidden", verdictShown);
 }
 
 async function runNameCheck(slug) {
@@ -147,12 +157,13 @@ async function checkRepo() {
     gitUrl: $("build-git-url").value,
     ref: $("build-git-ref").value,
     name: $("build-git-name").value,
-    share: $("build-git-share").checked,
   });
   if (!body.gitUrl) return toast("Paste a repo URL first", "err");
   buildId = null;
   lastVerdict = null;
   assignedName = null;
+  share = true;
+  verdictShown = false;
   $("build-git-verdict").classList.add("hidden");
   $("build-git-verdict").innerHTML = "";
   checking = true;
@@ -189,13 +200,19 @@ function wireJournalLink() {
   if (j) j.addEventListener("click", (e) => { e.preventDefault(); enterBuildJournal(buildId); });
 }
 
+function checkAgainButton() {
+  return `<button id="build-git-recheck" class="secondary build-git-recheck" aria-label="${escapeHtml(CHECK_AGAIN)}" title="${escapeHtml(CHECK_AGAIN)}">↻</button>`;
+}
+
 function renderVerdict(r, error = null) {
   const box = $("build-git-verdict");
   box.classList.remove("hidden");
+  verdictShown = true;
+  updateCheckButton();
   if (r.fit) {
     box.innerHTML = `
       <div class="card">
-        <p><strong>Flagship-ready ✓</strong></p>
+        <div class="build-git-verdict-head"><p><strong>Flagship-ready ✓</strong></p>${checkAgainButton()}</div>
         <p class="note">${escapeHtml(r.reason)} — ${r.fileCount} file(s).</p>
         <button id="build-git-deploy" class="full-width mt-2">Install it</button>
         ${journalLink()}
@@ -205,11 +222,16 @@ function renderVerdict(r, error = null) {
     lastVerdict = r;
     box.innerHTML = `
       <div class="card">
-        <p>${escapeHtml(notReadyText(r.reason))}</p>
+        <div class="build-git-verdict-head"><p>${escapeHtml(notReadyText(r.reason))}</p>${checkAgainButton()}</div>
         ${error ? `<p class="err-text mt-2">${escapeHtml(error)}</p>` : ""}
         <button id="build-git-adapt" class="full-width mt-2">${escapeHtml(ADAPT_BUTTON)}</button>
+        <label class="inline-check mt-3">
+          <input type="checkbox" id="build-git-share" role="switch"${share ? " checked" : ""} /> ${escapeHtml(SHARE_LABEL)}
+        </label>
+        <p class="faint-sm">${escapeHtml(SHARE_NOTE)}</p>
         ${journalLink()}
       </div>`;
+    $("build-git-share").addEventListener("change", (e) => { share = e.target.checked; });
     // The adapt pass uses the box's model — confirm/provide the AI key first,
     // then run the adapt with that in-memory credential.
     $("build-git-adapt").addEventListener("click", () =>
@@ -224,10 +246,17 @@ function renderVerdict(r, error = null) {
       }),
     );
   }
+  $("build-git-recheck").addEventListener("click", checkRepo);
   wireJournalLink();
 }
 
+function leaveVerdict() {
+  verdictShown = false;
+  updateCheckButton();
+}
+
 function renderAdapting(progress) {
+  leaveVerdict();
   $("build-git-verdict").innerHTML = `
     <div class="card">
       <p class="build-git-adapting"><span class="build-git-spinner" aria-hidden="true"></span>${escapeHtml(ADAPTING)}</p>
@@ -237,6 +266,7 @@ function renderAdapting(progress) {
 }
 
 function renderAdapted(fileCount) {
+  leaveVerdict();
   $("build-git-verdict").innerHTML = `
     <div class="card">
       <p><strong>Adapted ✓</strong></p>
@@ -251,6 +281,7 @@ function renderAdapted(fileCount) {
 }
 
 function renderInstalled(url) {
+  leaveVerdict();
   $("build-git-verdict").innerHTML = `
     <div class="card">
       <p><strong>Installed ✓</strong></p>
@@ -308,7 +339,7 @@ async function adapt() {
   const path = `/api/build/sessions/${encodeURIComponent(id)}`;
   renderAdapting(null);
   try {
-    const body = adaptCredential ? { credential: adaptCredential, background: true } : { background: true };
+    const body = adaptRequestBody({ credential: adaptCredential, share });
     const outcome = await startAndFollowAdapt({
       start: () => screensFetch(`${path}/adapt`, { method: "POST", body: JSON.stringify(body) }),
       follow: () => followAdapt({

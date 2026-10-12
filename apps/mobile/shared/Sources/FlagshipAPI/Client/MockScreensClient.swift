@@ -837,7 +837,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return BuildGitResponse(
             buildId: buildId,
             fit: false,
-            reason: "No top-level flagship.app.json — this repo isn't a Flagship app yet.",
+            reason: "no flagship.app.json — repo isn't a Flagship app yet; the AI can adapt it",
             manifestName: nil,
             fileCount: 23
         )
