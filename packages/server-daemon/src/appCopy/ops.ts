@@ -120,9 +120,15 @@ async function dockerAnswers(): Promise<boolean> {
 }
 
 async function dockerState(): Promise<string> {
-  const active = await exec("systemctl", ["is-active", "docker.service"]).catch((e: Error) => e.message);
-  const log = await exec("journalctl", ["-u", "docker.service", "-n", "3", "--no-pager", "-o", "cat"]).catch(() => "");
-  return [`docker.service is ${active.trim().split("\n").pop() ?? "unknown"}`, log.trim()].filter(Boolean).join("; ");
+  const show = await exec("systemctl", [
+    "show", "docker.service", "-p", "ActiveState,SubState,Result,ExecMainStatus", "--value",
+  ]).catch(() => "");
+  const [active, sub, result, status] = show.trim().split("\n");
+  const log = await exec("journalctl", ["-u", "docker.service", "-n", "5", "--no-pager", "-o", "cat"]).catch(() => "");
+  const unit = active
+    ? `docker.service is ${active}${sub ? `/${sub}` : ""}${result && result !== "success" ? `, result ${result}` : ""}${status && status !== "0" ? `, exit ${status}` : ""}`
+    : "docker.service state unknown";
+  return [unit, log.trim().replace(/\s*\n\s*/g, " | ")].filter(Boolean).join("; ");
 }
 
 /**
@@ -132,7 +138,9 @@ async function dockerState(): Promise<string> {
  */
 export async function ensureDocker(waitMs = 120_000): Promise<void> {
   if (await dockerAnswers()) return;
-  await exec("systemctl", ["start", "docker.socket", "docker.service"]).catch(() => {});
+  // A unit that failed too often is refused until its failure is reset.
+  await exec("systemctl", ["reset-failed", "docker.service", "docker.socket"]).catch(() => {});
+  await exec("systemctl", ["start", "--no-block", "docker.socket", "docker.service"]).catch(() => {});
   const until = Date.now() + waitMs;
   while (Date.now() < until) {
     if (await dockerAnswers()) return;

@@ -357,6 +357,7 @@ export class DataStack {
 
   private async waitForDocker(): Promise<boolean> {
     const deadline = this.now() + (this.opts.dockerWaitMs ?? 120_000);
+    let woken = false;
     for (;;) {
       try {
         if (this.cmd.capture) await this.cmd.capture("docker", ["info", "--format", "{{.ServerVersion}}"], { timeoutMs: 15_000 });
@@ -364,6 +365,13 @@ export class DataStack {
         return true;
       } catch {
         if (this.now() >= deadline) return false;
+        if (!woken) {
+          woken = true;
+          // A dockerd that failed too often is refused until its failure is
+          // reset; nothing else on the box would ever start it again.
+          await this.cmd.run("systemctl", ["reset-failed", "docker.service", "docker.socket"], { timeoutMs: 15_000 }).catch(() => {});
+          await this.cmd.run("systemctl", ["start", "--no-block", "docker.socket", "docker.service"], { timeoutMs: 15_000 }).catch(() => {});
+        }
         await this.sleep(5_000);
       }
     }
