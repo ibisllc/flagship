@@ -4,7 +4,9 @@
 // The key binds the IDE connection to exactly this one build session.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError, buildEntryError } from "../lib/api.js";
+import { ScreensError, buildEntryError, boxClient } from "../lib/api.js";
+import { creationTarget, mountCreationPicker } from "../lib/appPlacement.js";
+import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { ideEditIntro, serviceSlug } from "../lib/editService.js";
@@ -18,6 +20,12 @@ let buildId = null;
 let editServiceId = null;
 let backView = "view-build-source";
 let defaultIntro = null;
+// The box this build runs on: the server picked for a new app
+// (docs/app-placement.md §2), or the current one for an edit (where the
+// service is). Every call goes there.
+let buildBox = null;
+
+const boxFetch = (path, init) => (buildBox ?? boxClient()).fetch(path, init);
 
 export function initBuildMcpView() {
   $("build-mcp-create").addEventListener("click", createConnection);
@@ -36,7 +44,26 @@ export function enterBuildMcp({ editServiceId: editId = null, back = "view-build
   }
   $("build-mcp-conn").classList.add("hidden");
   $("build-mcp-conn").innerHTML = "";
+  const picker = $("build-mcp-runs-on");
   show("view-build-mcp");
+  if (editId) {
+    buildBox = boxClient();
+    if (picker) picker.innerHTML = "";
+    return Promise.resolve();
+  }
+  buildBox = boxClient(creationTarget().fqdn);
+  return mountCreationPicker(picker, {
+    username: getSession()?.username ?? "",
+    onChange: (fqdn) => {
+      // A connection made on the old server stays there; start afresh.
+      buildBox = boxClient(fqdn);
+      buildId = null;
+      $("build-mcp-conn").classList.add("hidden");
+      $("build-mcp-conn").innerHTML = "";
+    },
+  }).then((fqdn) => {
+    if (!buildId) buildBox = boxClient(fqdn);
+  });
 }
 
 async function createConnection() {
@@ -46,7 +73,7 @@ async function createConnection() {
   try {
     const body = { label: "webapp" };
     if (editServiceId) body.editServiceId = editServiceId;
-    const r = await screensFetch("/api/build/mcp", {
+    const r = await boxFetch("/api/build/mcp", {
       method: "POST",
       body: JSON.stringify(body),
     });
@@ -84,7 +111,7 @@ function renderConnection(conn) {
     </div>`;
   $("mcp-copy-cfg").addEventListener("click", () => copy(cfg, "config copied"));
   $("mcp-rotate").addEventListener("click", rotate);
-  $("mcp-journal").addEventListener("click", () => enterBuildJournal(buildId));
+  $("mcp-journal").addEventListener("click", () => enterBuildJournal(buildId, { server: (buildBox ?? boxClient()).fqdn }));
   $("mcp-deploy").addEventListener("click", deploy);
   refreshEnvRequests();
 }
@@ -98,7 +125,7 @@ async function refreshEnvRequests() {
   if (!box) return;
   let requests = [];
   try {
-    const r = await screensFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/env-requests`);
+    const r = await boxFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/env-requests`);
     requests = Array.isArray(r.requests) ? r.requests : [];
   } catch {
     box.innerHTML = "";
@@ -130,7 +157,7 @@ async function refreshEnvRequests() {
 async function rotate() {
   if (!buildId) return;
   try {
-    const conn = await screensFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/mcp/rotate`, { method: "POST", body: JSON.stringify({ label: "webapp" }) });
+    const conn = await boxFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/mcp/rotate`, { method: "POST", body: JSON.stringify({ label: "webapp" }) });
     renderConnection(conn);
     toast("Key regenerated — update your IDE", "ok");
   } catch (e) {
@@ -144,7 +171,7 @@ async function deploy() {
   btn.disabled = true;
   btn.textContent = "deploying…";
   try {
-    const r = await screensFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/deploy`, { method: "POST" });
+    const r = await boxFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/deploy`, { method: "POST" });
     toast(`Deployed → ${r.url}`, "ok");
   } catch (e) {
     toast(e instanceof ScreensError ? e.message : String(e), "err");

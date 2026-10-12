@@ -22,7 +22,8 @@
 // The chat is NOT a secret channel — the composer note says so.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError, getPodBaseUrl, getSessionToken } from "../lib/api.js";
+import { ScreensError, boxClient } from "../lib/api.js";
+import { creationTarget, mountCreationPicker } from "../lib/appPlacement.js";
 import { activeOperations } from "../lib/activeOperations.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -87,6 +88,12 @@ let relayTurnedOff = false;
 // Where Back goes instead of the chooser: an edit session returns to the
 // service it changes.
 let backTo = null;
+// The box this build runs on (docs/app-placement.md §2): the server picked
+// for a new app, or the box holding a reopened session. Every call goes there.
+let box = null;
+
+const client = () => box ?? boxClient();
+const boxFetch = (path, init) => client().fetch(path, init);
 
 function clearPoll() {
   if (pollTimer) {
@@ -101,13 +108,7 @@ function clearPoll() {
  *  DNS label of the paired pod's host (`home.alice.flagship.services` → "home").
  *  Empty when no pod is paired (the sliver then drops the "on …" clause). */
 function pairedServerName() {
-  const base = getPodBaseUrl();
-  if (!base) return null;
-  try {
-    return new URL(base).hostname.split(".")[0] || null;
-  } catch {
-    return null;
-  }
+  return client().fqdn.split(".")[0] || null;
 }
 
 /** A friendly subject from the first prompt — the first few words, so the
@@ -244,7 +245,7 @@ async function send() {
       // Follow-up turn answering the AI's talkToUser question.
       const replyBody = { text, attachments };
       if (buildCredential) replyBody.credential = buildCredential;
-      await screensFetch(
+      await boxFetch(
         `/api/screens/llm/sessions/${encodeURIComponent(activeSessionId)}/reply`,
         { method: "POST", body: JSON.stringify(replyBody) },
       );
@@ -281,13 +282,7 @@ function currentCheck() {
 }
 
 function serverFqdn() {
-  const base = getPodBaseUrl();
-  if (!base) return "";
-  try {
-    return new URL(base).hostname;
-  } catch {
-    return "";
-  }
+  return client().fqdn;
 }
 
 function renderNameStatus() {
@@ -331,7 +326,7 @@ function updateBuildButton() {
 }
 
 async function runNameCheck(slug) {
-  const result = await checkName({ baseUrl: getPodBaseUrl(), token: getSessionToken(), name: slug });
+  const result = await checkName({ baseUrl: client().baseUrl, token: client().token(), name: slug });
   if (slug === currentSlug()) {
     nameCheck = result;
     checkedSlug = slug;
@@ -414,7 +409,7 @@ async function startBuild(text) {
     }
     let r;
     try {
-      r = await screensFetch("/api/screens/vibe-code/start", {
+      r = await boxFetch("/api/screens/vibe-code/start", {
         method: "POST",
         body: JSON.stringify(startBody),
       });
@@ -479,12 +474,12 @@ async function poll() {
   // tool; the older /vibe-code/:id snapshot is the fallback.
   let state;
   try {
-    state = await screensFetch(
+    state = await boxFetch(
       `/api/screens/llm/sessions/${encodeURIComponent(activeSessionId)}`,
     );
   } catch {
     try {
-      const snap = await screensFetch(
+      const snap = await boxFetch(
         `/api/screens/vibe-code/${encodeURIComponent(activeSessionId)}`,
       );
       state = {
@@ -650,8 +645,8 @@ async function relayOff() {
 }
 
 async function postDeploy(sessionId) {
-  const baseUrl = getPodBaseUrl();
-  const tok = getSessionToken();
+  const baseUrl = client().baseUrl;
+  const tok = client().token();
   const r = await fetch(
     `${baseUrl.replace(/\/+$/, "")}/api/llm/sessions/${encodeURIComponent(sessionId)}/deploy`,
     {
@@ -677,7 +672,7 @@ async function postDeploy(sessionId) {
 async function triggerDeploy() {
   if (!activeSessionId) return;
   const id = activeSessionId;
-  if (!getPodBaseUrl() || !getSessionToken()) return toast("Not paired", "err");
+  if (!client().baseUrl || !client().token()) return toast("Not paired", "err");
   const btn = $("vc-deploy-go");
   btn.disabled = true;
   btn.textContent = "deploying…";
@@ -685,7 +680,7 @@ async function triggerDeploy() {
   try {
     const out = await startAndFollowChatDeploy({
       start: () => postDeploy(id),
-      fetchSnapshot: () => screensFetch(`/api/screens/vibe-code/${encodeURIComponent(id)}`),
+      fetchSnapshot: () => boxFetch(`/api/screens/vibe-code/${encodeURIComponent(id)}`),
       onPhase: (phase) => {
         if (activeSessionId === id) $("vc-status").textContent = statusLabel("deploying", phase);
       },
@@ -721,6 +716,7 @@ function reset() {
   deployedUrl = null;
   relayTurnedOff = false;
   backTo = null;
+  box = boxClient(creationTarget().fqdn);
   starting = false;
   nameCheck = null;
   checkedSlug = "";
@@ -772,9 +768,14 @@ export function initVibeCodeView() {
 }
 
 export async function enterVibeCode(opts = {}) {
-  // Building a service needs a server to build and run it. With none
-  // paired, nudge the user to add one rather than opening a dead form.
-  if (!getPodBaseUrl()) {
+  // Building a service needs a server to build and run it: the one picked
+  // for this new app, defaulting to the leader (docs/app-placement.md §2).
+  const fqdn = await mountCreationPicker($("vc-runs-on"), {
+    username: getSession()?.username ?? "",
+    onChange: onServerChosen,
+  });
+  // With none paired, nudge the user to add one rather than opening a dead form.
+  if (!fqdn) {
     toast("Please add your first server.", "err");
     show("view-home");
     return;
@@ -784,6 +785,15 @@ export async function enterVibeCode(opts = {}) {
   // The AI-key step hands the chosen credential in here; reset() clears it,
   // so apply it after.
   if (opts.credential) buildCredential = opts.credential;
+}
+
+// The owner picked another server: names are per server, so check again.
+function onServerChosen() {
+  if (activeSessionId) return;
+  box = boxClient(creationTarget().fqdn);
+  nameCheck = null;
+  checkedSlug = "";
+  onNameInput();
 }
 
 /**
@@ -804,8 +814,9 @@ export async function resumeVibeCode() {
  * open one just started to change a service.
  *   back       — called by Back instead of returning to the chooser
  *   credential — the AI key follow-up replies carry
+ *   server     — the box holding it (default: the current server)
  */
-export async function openVibeCodeSession(sessionId, { back = null, credential = null } = {}) {
+export async function openVibeCodeSession(sessionId, { back = null, credential = null, server = "" } = {}) {
   if (activeSessionId === sessionId) {
     backTo = back;
     return resumeVibeCode();
@@ -813,6 +824,9 @@ export async function openVibeCodeSession(sessionId, { back = null, credential =
   show("view-vibe-code");
   reset();
   backTo = back;
+  // A reopened session lives on the box that listed it (the current server
+  // unless named).
+  box = boxClient(server);
   if (credential) buildCredential = credential;
   activeSessionId = sessionId;
   setFirstTurnVisible(false);

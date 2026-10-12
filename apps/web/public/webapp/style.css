@@ -2122,3 +2122,14 @@ button[data-device-restricted] {
 .sd-api-key-revoke { width: auto; }
 .sd-api-key-secret { color: var(--ink); font-size: 13px; padding: var(--space-2); border: 1px solid var(--border); border-radius: 8px; background: var(--surface-sunken); word-break: break-all; user-select: all; }
 .sd-api-key-usage { word-break: break-all; }
+
+/* Where an app runs (docs/app-placement.md) */
+.runs-on-line { margin: 0 0 8px; }
+.runs-on-line select { width: 100%; }
+.server-app-row { width: 100%; text-align: left; flex-wrap: wrap; gap: 6px 10px; cursor: pointer; }
+.server-app-row:hover { border-color: var(--accent); }
+.server-app-row.is-copying { opacity: 0.55; cursor: default; }
+.server-app-row.is-copying:hover { border-color: inherit; }
+.runs-on-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; }
+.runs-on-row.is-unknown { opacity: 0.7; }
+.runs-on-note { display: block; }

@@ -368,6 +368,6 @@ describe("database — the screens", () => {
     expect(app).toContain("initAppDbView()");
     const sw = await asset("/webapp/service-worker.js");
     for (const p of ['"/lib/appDb.js"', '"/views/app-db.js"']) expect(sw).toContain(p);
-    expect(sw).toContain('SHELL_VERSION = "v55"');
+    expect(sw).toContain('SHELL_VERSION = "v56"');
   });
 });

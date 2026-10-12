@@ -124,7 +124,7 @@ describe("edit-service screens", () => {
     expect(js).toContain("inlineAlert");
 
     const vibe = await asset("/webapp/views/vibe-code.js");
-    expect(vibe).toContain("export async function openVibeCodeSession(sessionId, { back = null, credential = null } = {})");
+    expect(vibe).toContain("export async function openVibeCodeSession(sessionId, { back = null, credential = null, server = \"\" } = {})");
     expect(vibe).toContain("if (backTo) void backTo();");
   });
 
@@ -145,6 +145,6 @@ describe("edit-service screens", () => {
     const sw = await asset("/webapp/service-worker.js");
     expect(sw).toContain('"/views/edit-service.js"');
     expect(sw).toContain('"/lib/editService.js"');
-    expect(sw).toContain('SHELL_VERSION = "v55"');
+    expect(sw).toContain('SHELL_VERSION = "v56"');
   });
 });

@@ -11,12 +11,16 @@
 // wrapper, byte-identical to the SWK/CGK deposits + the @flagship/protocol
 // canonical bytes). This module:
 //   - resolves the selected pod's STK from the directory (the vote payload),
-//   - records the preferred pod locally so the UI flips immediately, and
+//   - records the preferred pod locally so the UI flips immediately,
+//   - makes it the current server too (docs/app-placement.md §1: new apps
+//     follow the current server, so a leader that isn't current kept losing
+//     them to the old box), and
 //   - exposes a thin `setPreferredServer` the view calls.
 
 import { getSession } from "./state.js";
 import { depositSetLeader } from "./bootApproval.js";
 import { controlApex } from "./apex.js";
+import { makeCurrentPod } from "./api.js";
 
 const PREFERRED_KEY = "flagship.preferredServer";
 
@@ -80,10 +84,11 @@ export async function resolvePodStk(serverDomain, deps = {}) {
 /**
  * Set `serverDomain` as the owner's preferred server: resolve its STK from the
  * directory, sign + deposit the owner-IRK set-leader vote (addressed to that
- * pod), and record it locally so the UI flips immediately.
+ * pod), record it locally so the UI flips immediately, and make it the current
+ * server when this device has a session for it.
  *
  * @param {{ serverDomain: string }} args
- * @param {{ fetch?: typeof fetch, comBase?: string, signWithIrk?: Function, now?: () => number, depositSetLeader?: Function, resolvePodStk?: Function }} [deps]
+ * @param {{ fetch?: typeof fetch, comBase?: string, signWithIrk?: Function, now?: () => number, depositSetLeader?: Function, resolvePodStk?: Function, makeCurrentPod?: Function }} [deps]
  */
 export async function setPreferredServer(args, deps = {}) {
   const { serverDomain } = args;
@@ -102,5 +107,6 @@ export async function setPreferredServer(args, deps = {}) {
     deps,
   );
   markPreferredServer(serverDomain);
-  return { ok: true, preferredStkPubHex: stkHex };
+  const current = (deps.makeCurrentPod || makeCurrentPod)(String(serverDomain));
+  return { ok: true, preferredStkPubHex: stkHex, current };
 }

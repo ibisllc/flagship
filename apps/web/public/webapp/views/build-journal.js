@@ -1,11 +1,16 @@
-// Build sessions (webapp). Sessions still open on the box come first and
+// Build sessions (webapp). Sessions still open on a box come first and
 // reopen the vibe-code session; below them, the append-only history of how
-// each service was built, across every mode. Two entry points:
-//   enterBuildJournal()        → open sessions + past builds
-//   enterBuildJournal(buildId) → that build's timeline directly
+// each service was built, across every mode. Every server this device has a
+// session for is asked, so a build started on any of them shows up
+// (docs/app-placement.md). Two entry points:
+//   enterBuildJournal()                    → open sessions + past builds
+//   enterBuildJournal(buildId, { server }) → that build's timeline directly
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError, buildEntryError, getPodBaseUrl, getSessionToken } from "../lib/api.js";
+import { ScreensError, buildEntryError, boxClient } from "../lib/api.js";
+import { loadAccountPods, sessionServers } from "../lib/appPlacement.js";
+import { podShortName } from "../lib/podSwitcher.js";
+import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { formatDateTime } from "../lib/dateFormat.js";
@@ -20,7 +25,7 @@ import {
   discardMessage,
   discardSession,
   endedBuilds,
-  fetchVibeSessions,
+  fetchBuildsOnServers,
   isActiveSession,
   openBuilds,
   pastBuildSubtitle,
@@ -37,30 +42,38 @@ export function initBuildJournalView() {
   $("build-journal-back").addEventListener("click", () => show("view-build-source"));
 }
 
-export async function enterBuildJournal(buildId) {
+export async function enterBuildJournal(buildId, { server = "" } = {}) {
   $("build-journal-detail").classList.add("hidden");
   $("build-journal-list").innerHTML = "";
   show("view-build-journal");
   if (buildId) {
-    await renderDetail(buildId);
+    await renderDetail(buildId, server);
   } else {
     await renderList();
   }
 }
 
+/** A row's server, named when the list spans more than one. */
+function serverPill(row, many) {
+  return many && row.server ? `<span class="pill">${escapeHtml(podShortName(row.server))}</span>` : "";
+}
+
+const clientOf = (server) => boxClient(server || "");
+
 async function renderList() {
-  const sessionsP = fetchVibeSessions({ baseUrl: getPodBaseUrl(), token: getSessionToken() });
-  let builds;
-  try {
-    const r = await screensFetch("/api/build/sessions");
-    builds = r.builds || [];
-  } catch (e) {
-    // The sessions list is a build-platform ENTRY call — a 404 means the box
-    // can't build services (unlike renderDetail's session-scoped 404).
-    toast(buildEntryError(e), "err");
+  const pods = await loadAccountPods(getSession()?.username ?? "");
+  const servers = sessionServers(pods);
+  const all = await fetchBuildsOnServers(servers);
+  // Every server failed: say why. The builds list is a build-platform ENTRY
+  // call — a 404 means the box can't build services (unlike renderDetail's
+  // session-scoped 404).
+  if (servers.length === 0 || all.failed.length === servers.length) {
+    toast(buildEntryError(all.failed[0]?.error ?? new ScreensError("not paired to a server yet", 0)), "err");
     return;
   }
-  const sessions = sortSessionsNewestFirst(await sessionsP);
+  const builds = all.builds;
+  const many = servers.length > 1;
+  const sessions = sortSessionsNewestFirst(all.sessions);
   const ended = endedBuilds(builds, sessions);
   const open = openBuilds(builds, sessions);
   const list = $("build-journal-list");
@@ -70,20 +83,21 @@ async function renderList() {
   }
   let html = "";
   if (sessions.length > 0 || open.length > 0) {
-    html += `<p class="note build-section-caption">Open on your server</p>`;
+    html += `<p class="note build-section-caption">Open on your server${many ? "s" : ""}</p>`;
     html += open
       .map(
         (b) => `
-        <button class="card full-width build-session-row" data-build="${escapeHtml(b.buildId)}">
+        <button class="card full-width build-session-row" data-build="${escapeHtml(b.buildId)}" data-server="${escapeHtml(b.server ?? "")}">
           <span class="build-session-body">
             <strong>${escapeHtml(buildDisplayName(b))}</strong>
             <span class="note">Started ${escapeHtml(formatDateTime(b.startedAt))}</span>
             <span class="build-session-pills">
               <span class="pill">${escapeHtml(buildMethodLabel(b.mode))}</span>
+              ${serverPill(b, many)}
             </span>
           </span>
           <span class="build-session-action">Open</span>
-        </button><div class="build-session-discard"><button class="linklike" data-discard-build="${escapeHtml(b.buildId)}">Discard…</button></div>`,
+        </button><div class="build-session-discard"><button class="linklike" data-discard-build="${escapeHtml(b.buildId)}" data-server="${escapeHtml(b.server ?? "")}">Discard…</button></div>`,
       )
       .join("");
     html += sessions
@@ -91,16 +105,17 @@ async function renderList() {
         const active = isActiveSession(s);
         const pill = sessionPillClass(s.status);
         const discard = canDiscard(s)
-          ? `<div class="build-session-discard"><button class="linklike" data-discard="${escapeHtml(s.sessionId)}">Discard…</button></div>`
+          ? `<div class="build-session-discard"><button class="linklike" data-discard="${escapeHtml(s.sessionId)}" data-server="${escapeHtml(s.server ?? "")}">Discard…</button></div>`
           : "";
         return `
-        <button class="card full-width build-session-row${active ? " is-active" : ""}" data-session="${escapeHtml(s.sessionId)}">
+        <button class="card full-width build-session-row${active ? " is-active" : ""}" data-session="${escapeHtml(s.sessionId)}" data-server="${escapeHtml(s.server ?? "")}">
           <span class="build-session-body">
             <strong>${escapeHtml(sessionTitle(s, builds))}</strong>
             <span class="note">Started ${escapeHtml(formatDateTime(s.startedAt))}</span>
             <span class="build-session-pills">
               <span class="pill${pill ? ` ${pill}` : ""}">${escapeHtml(sessionStatusLabel(s.status))}</span>
               <span class="pill">${escapeHtml(buildMethodLabel("scratch"))}</span>
+              ${serverPill(s, many)}
             </span>
           </span>
           <span class="build-session-action">${active ? "Resume" : "Open"}</span>
@@ -113,28 +128,31 @@ async function renderList() {
     html += ended
       .map(
         (b) => `
-        <button class="card full-width build-tile" data-build="${escapeHtml(b.buildId)}">
+        <button class="card full-width build-tile" data-build="${escapeHtml(b.buildId)}" data-server="${escapeHtml(b.server ?? "")}">
           <strong>${escapeHtml(buildDisplayName(b))}</strong>
           <span class="note">${escapeHtml(pastBuildSubtitle(b, formatDateTime(b.startedAt)))}</span>
           <span class="pill">${escapeHtml(buildMethodLabel(b.mode))}</span>
+          ${serverPill(b, many)}
         </button>`,
       )
       .join("");
   }
   list.innerHTML = html;
+  const on = (el, row) => (row.server ?? "") === (el.getAttribute("data-server") ?? "");
   for (const el of list.querySelectorAll("[data-session]")) {
-    el.addEventListener("click", () => openVibeCodeSession(el.getAttribute("data-session")));
+    el.addEventListener("click", () =>
+      openVibeCodeSession(el.getAttribute("data-session"), { server: el.getAttribute("data-server") || "" }));
   }
   for (const el of list.querySelectorAll("[data-discard]")) {
-    const session = sessions.find((s) => s.sessionId === el.getAttribute("data-discard"));
+    const session = sessions.find((s) => s.sessionId === el.getAttribute("data-discard") && on(el, s));
     if (session) el.addEventListener("click", () => void confirmDiscard(session));
   }
   for (const el of list.querySelectorAll("[data-discard-build]")) {
-    const build = open.find((b) => b.buildId === el.getAttribute("data-discard-build"));
+    const build = open.find((b) => b.buildId === el.getAttribute("data-discard-build") && on(el, b));
     if (build) el.addEventListener("click", () => void confirmDiscardBuild(build));
   }
   for (const el of list.querySelectorAll("[data-build]")) {
-    el.addEventListener("click", () => renderDetail(el.getAttribute("data-build")));
+    el.addEventListener("click", () => renderDetail(el.getAttribute("data-build"), el.getAttribute("data-server") || ""));
   }
 }
 
@@ -147,7 +165,8 @@ async function confirmDiscardBuild(build) {
   });
   if (!ok) return;
   try {
-    await discardBuild({ baseUrl: getPodBaseUrl(), token: getSessionToken(), buildId: build.buildId });
+    const c = clientOf(build.server);
+    await discardBuild({ baseUrl: c.baseUrl, token: c.token(), buildId: build.buildId });
   } catch (e) {
     toast(e.message, "err");
     return;
@@ -164,7 +183,8 @@ async function confirmDiscard(session) {
   });
   if (!ok) return;
   try {
-    await discardSession({ baseUrl: getPodBaseUrl(), token: getSessionToken(), sessionId: session.sessionId });
+    const c = clientOf(session.server);
+    await discardSession({ baseUrl: c.baseUrl, token: c.token(), sessionId: session.sessionId });
   } catch (e) {
     toast(e.message, "err");
     return;
@@ -172,9 +192,9 @@ async function confirmDiscard(session) {
   await renderList();
 }
 
-async function renderDetail(buildId) {
+async function renderDetail(buildId, server = "") {
   try {
-    const r = await screensFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/journal`);
+    const r = await clientOf(server).fetch(`/api/build/sessions/${encodeURIComponent(buildId)}/journal`);
     const entries = r.entries || [];
     const detail = $("build-journal-detail");
     detail.classList.remove("hidden");

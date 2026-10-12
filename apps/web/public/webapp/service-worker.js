@@ -103,7 +103,12 @@
 //       for its owner (remembered from the invite link), and Process URL
 //       reads "Open <app> on <server>" for any private app; a box that is
 //       neither yours nor invited is refused; precaches lib/knockIdentity.js.
-const SHELL_VERSION = "v55";
+//  v56: where an app runs (docs/app-placement.md): making a server leader
+//       makes it current, every new app picks its server ("Runs on",
+//       defaulting to the leader), a server's page lists its apps and
+//       "Create app here", and the app page's Runs on ticks copy the app to a
+//       server (signed) and unticks remove it; precaches lib/appPlacement.js.
+const SHELL_VERSION = "v56";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -169,6 +174,7 @@ const OPTIONAL_SHELL = [
   "/lib/appApiKeys.js",
   "/lib/appDb.js",
   "/lib/knockIdentity.js",
+  "/lib/appPlacement.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",

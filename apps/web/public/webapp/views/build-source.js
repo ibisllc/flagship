@@ -8,16 +8,21 @@
 //   - mcp         → connect Cursor/Cline; build from your editor with your own AI
 
 import { $, registerView, show } from "../lib/router.js";
-import { getPodBaseUrl, getSessionToken } from "../lib/api.js";
 import { escapeHtml } from "../lib/util.js";
 import { countActiveSessions, fetchVibeSessions } from "../lib/vibeSessions.js";
+import { getSession } from "../lib/state.js";
 import { enterVibeCode } from "./vibe-code.js";
 import { enterBuildGit } from "./build-git.js";
 import { enterBuildMcp } from "./build-mcp.js";
 import { enterBuildJournal } from "./build-journal.js";
 import { enterBuildKey } from "./build-key.js";
+import { loadAccountPods, sessionServers, startCreation } from "../lib/appPlacement.js";
 
 registerView("view-build-source");
+
+// Where Back goes: the services list, or the server page a "Create app here"
+// came from.
+let backView = "view-services-list";
 
 const HELP_ITEMS = [
   ["Resume or view past builds",
@@ -46,20 +51,27 @@ export function initBuildSourceView() {
     enterBuildJournal();
   });
   $("build-source-help").addEventListener("click", openBuildHelp);
-  $("build-source-back").addEventListener("click", () => show("view-services-list"));
+  $("build-source-back").addEventListener("click", () => show(backView));
   // Re-counted every time the chooser shows (e.g. Back from a session).
   document.addEventListener("flagship:view-shown", (e) => {
     if (e.detail?.id === "view-build-source") void refreshActiveCount();
   });
 }
 
-export function enterBuildSource() {
+/** Open the chooser. From a server's page `server` fixes where the new app
+ *  runs (docs/app-placement.md §2); otherwise each flow offers the choice. */
+export function enterBuildSource(opts = {}) {
+  const server = typeof opts?.server === "string" ? opts.server : "";
+  startCreation({ server, pinned: !!server });
+  backView = server ? "view-server-detail" : "view-services-list";
   show("view-build-source");
 }
 
 async function refreshActiveCount() {
-  const sessions = await fetchVibeSessions({ baseUrl: getPodBaseUrl(), token: getSessionToken() });
-  const n = countActiveSessions(sessions);
+  // Open sessions on every server this device can ask.
+  const servers = sessionServers(await loadAccountPods(getSession()?.username ?? ""));
+  const lists = await Promise.all(servers.map((s) => fetchVibeSessions({ baseUrl: s.baseUrl, token: s.token })));
+  const n = countActiveSessions(lists.flat());
   const badge = $("build-source-active-count");
   badge.textContent = n > 0 ? String(n) : "";
   badge.setAttribute("aria-label", `${n} active`);

@@ -591,6 +591,7 @@
              the box as you type), then what it should do, then who can open
              it. Hidden once the session has started. -->
         <div class="vc-first-turn" id="vc-first-turn">
+          <div id="vc-runs-on" class="runs-on"></div>
           <label class="field">
             <span class="field-label">Name</span>
             <input id="vc-name" type="text" autocapitalize="none" autocorrect="off"
@@ -719,6 +720,7 @@
       <section id="view-build-git" class="hidden">
         <h2>Git import</h2>
         <div class="card">
+          <div id="build-git-runs-on" class="runs-on"></div>
           <label class="field">
             <span class="field-label">Repository URL</span>
             <input id="build-git-url" type="text" placeholder="https://github.com/you/app" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
@@ -744,6 +746,7 @@
         <h2>Connect your IDE</h2>
         <div class="card">
           <p class="note" id="build-mcp-intro">Build a service from Cursor or Cline using your own AI subscription. Your box runs a small MCP server, scoped to this one build, that exposes only safe build tools (write files, validate, request a secret value-free, deploy).</p>
+          <div id="build-mcp-runs-on" class="runs-on mt-2"></div>
           <button id="build-mcp-create" class="full-width mt-2">Create a connection</button>
         </div>
         <div id="build-mcp-conn" class="hidden mt-2"></div>

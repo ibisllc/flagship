@@ -34,6 +34,7 @@ import { applyCompanionUiRestrictions, installCompanionUiRestrictions } from "./
 import { applyDemoSettingsRestrictions, isDemoProfile } from "./lib/demoAccount.js";
 import { liveSync } from "./lib/liveSync.js";
 import { autoPairFromSnapshot } from "./lib/autoPair.js";
+import { preferLeaderAsCurrent } from "./lib/appPlacement.js";
 import { refreshServerTrust, serverTrust } from "./lib/serverTrust.js";
 import {
   initTrustSliver,
@@ -149,6 +150,9 @@ registerView("view-about", { tab: "settings" });
 // Sub-views inherit a parent tab so the tab bar lights up the right
 // entry when the user drills into a detail screen. Centralised here
 // (instead of per-view) so the IA map lives in one file.
+// Set once the leader has been made the current server this load.
+let leaderMadeCurrent = false;
+
 const SUB_VIEW_TABS = {
   "view-home": "home",
   "view-server-detail": "home",
@@ -694,7 +698,14 @@ async function boot() {
   // BFF session token for each LIVE pod that lacks one (the browser already
   // holds the IRK). Idempotent + race-safe; a locked session no-ops. Manual
   // paste (pod-pair) stays as the fallback for a brand-new pod URL not in /pods.
-  liveSync.subscribe((snap) => { void autoPairFromSnapshot(snap); });
+  liveSync.subscribe((snap) => {
+    void Promise.resolve(autoPairFromSnapshot(snap)).catch(() => {}).then(() => {
+      // docs/app-placement.md §1: the leader is the current server once it's
+      // online and paired here. Once per load, so a server the owner switches
+      // to afterwards stays put.
+      if (!leaderMadeCurrent) leaderMadeCurrent = preferLeaderAsCurrent(snap?.pods ?? []);
+    });
+  });
 
   // ── Per-cert relay-trust aggregation (maintainer-trust Layer 3) ──
   // On every /pods snapshot, re-verify each box's STK-signed box-trust-status

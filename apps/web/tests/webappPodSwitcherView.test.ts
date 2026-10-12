@@ -32,7 +32,7 @@ describe("webapp pod-switcher — Services page", () => {
     const r = await app.inject({ method: "GET", url: "/webapp/views/services-list.js" });
     expect(r.statusCode).toBe(200);
     expect(r.body).toContain("fetchAppsAcrossPods");
-    expect(r.body).toContain("screensFetchFrom");
+    expect(r.body).toContain("boxClient(fqdn)");
   });
 });
 

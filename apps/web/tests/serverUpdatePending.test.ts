@@ -5,10 +5,22 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../public/webapp/lib/api.js", async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  screensFetch: vi.fn(),
-}));
+vi.mock("../public/webapp/lib/api.js", async (importOriginal) => {
+  const screensFetch = vi.fn();
+  return {
+    ...(await importOriginal<Record<string, unknown>>()),
+    screensFetch,
+    // The server page reads the box it shows; route those reads to the mock
+    // and record which box each went to.
+    boxClient: vi.fn((fqdn: string) => ({
+      fqdn,
+      baseUrl: `https://${fqdn}`,
+      token: () => "tok",
+      hasSession: () => true,
+      fetch: (...args: unknown[]) => screensFetch(...args),
+    })),
+  };
+});
 vi.mock("../public/webapp/lib/toast.js", () => ({ toast: vi.fn() }));
 
 import * as api from "../public/webapp/lib/api.js";
@@ -413,6 +425,7 @@ describe("update card and sheet", () => {
     wireUpdate(detail());
     await vi.advanceTimersByTimeAsync(PENDING_UPDATE_POLL_MS);
     expect(screensFetch).toHaveBeenCalledWith("/api/screens/server-detail");
+    expect(api.boxClient).toHaveBeenCalledWith(HOME);
     expect(card().btn.hidden).toBe(true);
     screensFetch.mockResolvedValue(detail({ currentCommit: TARGET }));
     await vi.advanceTimersByTimeAsync(PENDING_UPDATE_POLL_MS);

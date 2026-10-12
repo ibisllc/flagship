@@ -6,7 +6,8 @@
 // Every step is recorded in the build journal.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError, boxReason, getPodBaseUrl, getSessionToken } from "../lib/api.js";
+import { ScreensError, boxReason, boxClient } from "../lib/api.js";
+import { creationTarget, mountCreationPicker } from "../lib/appPlacement.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { checkName, nameWarning, slugify } from "../lib/vibeNames.js";
@@ -65,6 +66,11 @@ let closed = false;
 // The adapt's running phase and latest journal line, for the progress card.
 let adaptPhase = null;
 let adaptProgress = null;
+// The box this import runs on (docs/app-placement.md §2); every call goes there.
+let box = null;
+
+const client = () => box ?? boxClient();
+const boxFetch = (path, init) => client().fetch(path, init);
 
 export function initBuildGitView() {
   $("build-git-check").addEventListener("click", checkRepo);
@@ -90,8 +96,30 @@ export function enterBuildGit() {
   $("build-git-name").value = "";
   $("build-git-verdict").classList.add("hidden");
   $("build-git-verdict").innerHTML = "";
+  box = boxClient(creationTarget().fqdn);
   renderNameStatus();
   show("view-build-git");
+  return mountCreationPicker($("build-git-runs-on"), {
+    username: getSession()?.username ?? "",
+    onChange: onServerChosen,
+  }).then(() => {
+    if (!buildId && !checking) onServerChosen();
+  });
+}
+
+// Another server: a repo checked on the old one doesn't carry over, and names
+// are per server.
+function onServerChosen() {
+  box = boxClient(creationTarget().fqdn);
+  buildId = null;
+  lastVerdict = null;
+  assignedName = null;
+  verdictShown = false;
+  nameCheck = null;
+  checkedSlug = "";
+  $("build-git-verdict").classList.add("hidden");
+  $("build-git-verdict").innerHTML = "";
+  onNameInput();
 }
 
 function currentSlug() {
@@ -103,13 +131,7 @@ function currentCheck() {
 }
 
 function serverFqdn() {
-  const base = getPodBaseUrl();
-  if (!base) return "";
-  try {
-    return new URL(base).hostname;
-  } catch {
-    return "";
-  }
+  return client().fqdn;
 }
 
 function renderNameStatus() {
@@ -149,7 +171,7 @@ function updateCheckButton() {
 }
 
 async function runNameCheck(slug) {
-  const result = await checkName({ baseUrl: getPodBaseUrl(), token: getSessionToken(), name: slug });
+  const result = await checkName({ baseUrl: client().baseUrl, token: client().token(), name: slug });
   if (slug === currentSlug()) {
     nameCheck = result;
     checkedSlug = slug;
@@ -183,7 +205,7 @@ async function checkRepo() {
   checking = true;
   renderNameStatus();
   try {
-    const r = await screensFetch("/api/build/git", { method: "POST", body: JSON.stringify(body) });
+    const r = await boxFetch("/api/build/git", { method: "POST", body: JSON.stringify(body) });
     buildId = r.buildId;
     assignedName = r.name ?? body.name ?? null;
     renderVerdict(r);
@@ -211,7 +233,7 @@ function journalLink() {
 
 function wireJournalLink() {
   const j = $("build-git-journal");
-  if (j) j.addEventListener("click", (e) => { e.preventDefault(); enterBuildJournal(buildId); });
+  if (j) j.addEventListener("click", (e) => { e.preventDefault(); enterBuildJournal(buildId, { server: client().fqdn }); });
 }
 
 function checkAgainButton() {
@@ -345,7 +367,7 @@ function wireAdapterExport() {
     if (!buildId || btn.disabled) return;
     btn.disabled = true;
     btn.textContent = EXPORT_PREPARING;
-    const r = await exportAdapter({ buildId, fetchJson: (path) => screensFetch(path) });
+    const r = await exportAdapter({ buildId, fetchJson: (path) => boxFetch(path) });
     btn.disabled = false;
     btn.textContent = EXPORT_BUTTON;
     if (!r.ok) toast(r.message, "err");
@@ -408,10 +430,10 @@ async function adapt() {
   try {
     const body = adaptRequestBody({ credential: adaptCredential, share });
     const outcome = await startAndFollowAdapt({
-      start: () => screensFetch(`${path}/adapt`, { method: "POST", body: JSON.stringify(body) }),
+      start: () => boxFetch(`${path}/adapt`, { method: "POST", body: JSON.stringify(body) }),
       follow: () => followAdapt({
-        fetchState: () => screensFetch(path),
-        fetchJournal: () => screensFetch(`${path}/journal`),
+        fetchState: () => boxFetch(path),
+        fetchJournal: () => boxFetch(`${path}/journal`),
         onProgress: (p) => {
           if (buildId !== id) return;
           adaptProgress = p;
@@ -453,7 +475,7 @@ async function deploy() {
   btn.disabled = true;
   btn.textContent = "installing…";
   try {
-    const r = await screensFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/deploy`, { method: "POST" });
+    const r = await boxFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/deploy`, { method: "POST" });
     renderInstalled(r.url);
     toast("Deployed", "ok");
   } catch (e) {

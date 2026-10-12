@@ -4,7 +4,17 @@
 // drives the user into views/browser-viewer.js with serviceId pre-set.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError, getPodBaseUrl } from "../lib/api.js";
+import { screensFetch, ScreensError, getPodBaseUrl, currentPodFqdn, makeCurrentPod } from "../lib/api.js";
+import { inlineConfirm } from "../lib/modal.js";
+import {
+  REMOVE_CONFIRM_TITLE,
+  changeRunsOn,
+  fetchRunsOn,
+  loadAccountPods,
+  runsOnHtml,
+  runsOnModel,
+  watchWhileCopying,
+} from "../lib/appPlacement.js";
 import { getSession } from "../lib/state.js";
 import { signWithIrk } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
@@ -164,6 +174,7 @@ export async function renderServiceDetail(serviceId) {
           <span class="label">creator</span><span class="value">${escapeHtml(s.creator)}</span>
         </div>
       </div>
+      <div id="sd-runs-on">${runsOnHtml([], { companion: isCompanionProfile() })}</div>
       ${body.editable === true ? renderEditRow() : ""}
       ${typeof body.adaptedFrom?.repo === "string" ? renderReportRow(body.adaptedFrom.repo) : ""}
       <div id="sd-egress">${renderInternetSection(s)}</div>
@@ -288,6 +299,7 @@ export async function renderServiceDetail(serviceId) {
     else bindEgressHandlers(s);
     void loadApiKeysSection(s);
     void loadDatabaseEntry(s);
+    void loadRunsOn(s);
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
@@ -826,8 +838,107 @@ async function triggerBackup(serviceId) {
   }
 }
 
+// ---------------------------------------------------------------
+// Runs on (docs/app-placement.md §4): every server's own apps list says
+// whether the app is there; tick copies it there, untick removes it.
+// ---------------------------------------------------------------
+
+let runsOn = null;
+
+async function loadRunsOn(app) {
+  runsOn?.stop?.();
+  const state = { app, rows: [], busy: "", error: "", stop: null };
+  runsOn = state;
+  const live = () => runsOn === state && currentServiceId === app.serviceId && !$("view-service-detail")?.classList.contains("hidden");
+  const pods = await loadAccountPods(getSession()?.username ?? "");
+  const load = () => fetchRunsOn({ serviceId: app.serviceId, pods });
+  state.load = load;
+  state.live = live;
+  state.rows = await load();
+  if (!live()) return;
+  paintRunsOn(state);
+  watchRunsOn(state);
+}
+
+function watchRunsOn(state) {
+  if (state.stop || !state.rows.some((r) => r.state === "copying")) return;
+  state.stop = watchWhileCopying({
+    load: state.load,
+    active: state.live,
+    onRows: (rows) => {
+      state.rows = rows;
+      paintRunsOn(state);
+    },
+  });
+}
+
+function paintRunsOn(state) {
+  const slot = $("sd-runs-on");
+  if (!slot || runsOn !== state) return;
+  const companion = isCompanionProfile();
+  slot.innerHTML = runsOnHtml(runsOnModel(state.rows, { companion, busy: state.busy, busyChecked: state.busyChecked }), { companion, error: state.error });
+  slot.querySelectorAll("[data-runs-on-toggle]").forEach((box) => {
+    box.addEventListener("change", () => void toggleRunsOn(state, box.getAttribute("data-runs-on-toggle"), box.checked));
+  });
+}
+
+async function toggleRunsOn(state, fqdn, checked) {
+  if (state.busy) return;
+  const session = getSession();
+  if (!session?.umk) {
+    state.error = "Unlock the webapp first.";
+    return paintRunsOn(state);
+  }
+  const { app } = state;
+  state.busy = fqdn;
+  state.busyChecked = checked;
+  state.error = "";
+  paintRunsOn(state);
+  const out = await changeRunsOn({
+    rows: state.rows,
+    fqdn,
+    checked,
+    app,
+    umk: session.umk,
+    signWithIrk: sensitiveSigner(),
+    confirmRemove: (row) =>
+      inlineConfirm({
+        title: REMOVE_CONFIRM_TITLE,
+        message: `${app.slug} and its data on ${row.name} are deleted. Your other servers keep their copies.`,
+        okLabel: "Remove",
+        danger: true,
+      }),
+  });
+  state.busy = "";
+  state.busyChecked = null;
+  state.rows = out.rows;
+  state.error = out.error ?? "";
+  if (out.message) toast(out.message, "ok");
+  // Removed from the server this page reads: carry on from a server that
+  // still has it.
+  const gone = out.rows.find((r) => r.fqdn === fqdn)?.state === "missing";
+  if (!checked && gone && fqdn === currentPodFqdn()) {
+    const next = out.rows.find((r) => r.state === "has");
+    if (next && makeCurrentPod(next.fqdn)) {
+      await renderServiceDetail(app.serviceId);
+      return;
+    }
+  }
+  paintRunsOn(state);
+  watchRunsOn(state);
+}
+
+// Where Back goes: the services list, or the server page the app was opened from.
+let backToServer = "";
+
 export function initServiceDetailView() {
   $("service-detail-back")?.addEventListener("click", async () => {
+    runsOn?.stop?.();
+    if (backToServer) {
+      const { enterServerDetail } = await import("./server-detail.js");
+      await enterServerDetail(backToServer);
+      return;
+    }
     const { enterServicesList } = await import("./services-list.js");
     await enterServicesList();
   });
@@ -836,7 +947,14 @@ export function initServiceDetailView() {
   });
 }
 
-export async function enterServiceDetail(serviceId) {
+/** Open an app's page. `server` names the box it was picked on (a server's
+ *  page, the all-servers list); the page then reads that box. `from` is
+ *  "server" when Back should return to that server's page. */
+export async function enterServiceDetail(serviceId, { server = "", from = "" } = {}) {
+  const fqdn = typeof server === "string" ? server.toLowerCase() : "";
+  if (fqdn && fqdn !== currentPodFqdn()) makeCurrentPod(fqdn);
+  // A return from one of the page's own screens keeps where Back goes.
+  if (fqdn || from || serviceId !== currentServiceId) backToServer = from === "server" ? fqdn : "";
   show("view-service-detail");
   await renderServiceDetail(serviceId);
 }

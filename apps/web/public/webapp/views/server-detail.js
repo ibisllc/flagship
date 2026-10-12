@@ -3,7 +3,9 @@
 // and the P13 per-server kill-switch danger zone.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError } from "../lib/api.js";
+import { ScreensError, boxClient } from "../lib/api.js";
+import { fetchServerApps, serverAppsHtml, anyCopying, watchWhileCopying } from "../lib/appPlacement.js";
+import { isCompanionProfile } from "../lib/companionGuard.js";
 import {
   enableLongLived,
   listLeases,
@@ -124,6 +126,11 @@ function shortCommit(sha) {
   return typeof sha === "string" && /^[0-9a-f]{40}$/.test(sha) ? sha.slice(0, 8) : "—";
 }
 
+// Every read and order on this page goes to the server it shows, through that
+// box's own session: viewing a server never moves the current one.
+const fetchOn = (fqdn) => (...args) => boxClient(fqdn).fetch(...args);
+const baseOf = (body) => boxClient(body?.serverFqdn ?? "").baseUrl;
+
 /** The host of the active pod base URL, when the page was opened without an
  *  explicit server. */
 function activePodFqdn() {
@@ -220,7 +227,7 @@ export async function renderServerDetail() {
   const podPromise = lookupPod(session?.username, knownFqdn);
   let body;
   try {
-    body = await screensFetch("/api/screens/server-detail");
+    body = await fetchOn(knownFqdn)("/api/screens/server-detail");
   } catch (e) {
     if (!knownFqdn) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(humanError(e))}</p></div>`;
@@ -233,15 +240,14 @@ export async function renderServerDetail() {
       serverFqdn: knownFqdn,
       username,
       revoked,
-      message: e instanceof ScreensError ? e.message : humanError(e),
+      message: e?.status === 0 ? "this device isn't paired with it yet" : e instanceof ScreensError ? e.message : humanError(e),
     });
     wireDangerZone(knownFqdn, username, { revoked, pod });
     return;
   }
   const lookedUp = await podPromise;
   try {
-    // The box answering may not be the one the lookup was for (no explicit
-    // server: the active pod); only trust a matching row.
+    // Only trust a `/pods` row for the box that answered.
     const detailPod = findPod(lookedUp ? [lookedUp] : [], body?.serverFqdn);
     if (!detailFqdn && body?.serverFqdn) startHealthWatch(body.serverFqdn);
     root.innerHTML = `
@@ -262,6 +268,7 @@ export async function renderServerDetail() {
         <div class="row"><span class="label">Apps installed</span><span class="value">${body.serviceCount}</span></div>
         <div class="row"><span class="label">Paired sessions</span><span class="value">${body.pairedSessionCount}</span></div>
       </div>
+      <div id="server-apps">${serverAppsHtml([], { loading: true, canCreate: !isCompanionProfile() })}</div>
       <h2 class="mt-4">Auto-unlock</h2>
       <div class="card" id="auto-unlock-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <p class="note">
@@ -387,7 +394,8 @@ export async function renderServerDetail() {
         <p class="note">
           When several of your boxes run the same service, the highest-clout
           live one leads it. Setting <strong>${escapeHtml(body.serverFqdn)}</strong>
-          as your preferred server makes it lead by default whenever it's online.
+          as your preferred server makes it lead by default whenever it's online,
+          and new apps go to it unless you pick another server.
         </p>
         <div class="row" id="preferred-server-status">
           <span class="label">Status</span>
@@ -465,6 +473,7 @@ export async function renderServerDetail() {
     wireDeadMan(body);
     wireJournal(body);
     wirePreferredServer(body);
+    wireServerApps(body.serverFqdn);
     wireTransfer(body);
     wireReplace(body);
     wireUpdate(body);
@@ -515,6 +524,44 @@ function startHealthWatch(fqdn) {
     paint();
   });
   healthTimer = setInterval(paint, 30_000);
+}
+
+// ---- The server's apps (docs/app-placement.md §3) -------------------------
+
+let appsWatch = null;
+let appsFor = "";
+
+function wireServerApps(serverFqdn) {
+  appsWatch?.();
+  appsWatch = null;
+  const fqdn = String(serverFqdn ?? "").toLowerCase();
+  appsFor = fqdn;
+  if (!$("server-apps") || !fqdn) return;
+  const client = boxClient(fqdn);
+  const canCreate = !isCompanionProfile();
+  const active = () => appsFor === fqdn && !$("view-server-detail")?.classList.contains("hidden");
+  const paint = (rows, opts = {}) => {
+    const slot = $("server-apps");
+    if (!slot || !active()) return;
+    slot.innerHTML = serverAppsHtml(rows, { ...opts, canCreate });
+    slot.querySelectorAll("[data-open-app]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const { enterServiceDetail } = await import("./service-detail.js");
+        await enterServiceDetail(btn.getAttribute("data-open-app"), { server: fqdn, from: "server" });
+      });
+    });
+    $("server-create-app")?.addEventListener("click", async () => {
+      const { enterBuildSource } = await import("./build-source.js");
+      enterBuildSource({ server: fqdn });
+    });
+  };
+  const load = () => fetchServerApps(client.fetch);
+  load()
+    .then((rows) => {
+      paint(rows);
+      if (active() && anyCopying(rows)) appsWatch = watchWhileCopying({ load, onRows: (r) => paint(r), active });
+    })
+    .catch((e) => paint([], { error: humanError(e) }));
 }
 
 function wirePreferredServer(body) {
@@ -638,7 +685,7 @@ function startMetricsPolling(serverFqdn) {
       return;
     }
     try {
-      const m = await screensFetch(
+      const m = await fetchOn(serverFqdn)(
         `/api/screens/server-metrics/${encodeURIComponent(serverFqdn)}`,
       );
       const cpu = $("metrics-cpu");
@@ -671,7 +718,7 @@ function wireFrontPage(body) {
   const status = $("front-page-status");
   if (!select || !save) return;
 
-  const baseUrl = getPodBaseUrl();
+  const baseUrl = baseOf(body);
   if (!baseUrl) return; // not paired — leave the card disabled
 
   let current = "";
@@ -761,7 +808,7 @@ async function runJournalFetch(body, btn) {
     toast("Unlock the webapp first", "err");
     return;
   }
-  const baseUrl = getPodBaseUrl();
+  const baseUrl = baseOf(body);
   if (!baseUrl) {
     toast("Not paired with this server", "err");
     return;
@@ -834,7 +881,7 @@ async function runPowerAction(body, mode, btn, allButtons, status) {
     toast("Unlock the webapp first", "err");
     return;
   }
-  const baseUrl = getPodBaseUrl();
+  const baseUrl = baseOf(body);
   if (!baseUrl) {
     toast("Not paired with this server", "err");
     return;
@@ -987,7 +1034,7 @@ function stopDeadManCountdown() {
 async function applyDeadManPolicy(body, { enabled, preset, lockoutMode }) {
   const session = getSession();
   if (!session.umk) throw Object.assign(new Error("Unlock the webapp first"), { code: "400" });
-  const baseUrl = getPodBaseUrl();
+  const baseUrl = baseOf(body);
   if (!baseUrl) throw Object.assign(new Error("Not paired with this server"), { code: "400" });
   return setDeadManPolicy({
     baseUrl,
@@ -1059,7 +1106,7 @@ function wireDeadMan(body) {
   affirmBtn?.addEventListener("click", async () => {
     const session = getSession();
     if (!session.umk) return toast("Unlock the webapp first", "err");
-    const baseUrl = getPodBaseUrl();
+    const baseUrl = baseOf(body);
     if (!baseUrl) return toast("Not paired with this server", "err");
     affirmBtn.disabled = true;
     affirmBtn.textContent = "Affirming…";
@@ -1494,7 +1541,7 @@ function refreshReleaseNote(card) {
   card.catalogLoaded = true;
   card.catalogFor = commit;
   card.latest = null;
-  loadReleaseCatalog({ fetchBox: (p) => screensFetch(p), currentCommit: commit })
+  loadReleaseCatalog({ fetchBox: fetchOn(card.fqdn), currentCommit: commit })
     .then((catalog) => {
       if (updateCard !== card || card.detail.currentCommit !== commit) return;
       card.latest = groupReleases(catalog).latest;
@@ -1513,7 +1560,7 @@ function ensurePendingUpdatePoll(card) {
     if (document.visibilityState === "hidden" || card.polling) return;
     card.polling = true;
     try {
-      const fresh = await screensFetch("/api/screens/server-detail");
+      const fresh = await fetchOn(card.fqdn)("/api/screens/server-detail");
       if (String(fresh?.serverFqdn || "").toLowerCase() === String(card.fqdn).toLowerCase()) card.detail = fresh;
     } catch {
       // Offline or restarting: keep the last reading; the order stays pending.
@@ -1659,7 +1706,7 @@ export async function openUpdateDialog(body, { sendAgain = false } = {}) {
     const recheck = q("[data-update-recheck]");
     if (recheck) recheck.disabled = true;
     try {
-      catalog = await loadReleaseCatalog({ fetchBox: (p) => screensFetch(p), currentCommit, refresh });
+      catalog = await loadReleaseCatalog({ fetchBox: fetchOn(body.serverFqdn), currentCommit, refresh });
       renderCatalog();
     } catch (e) {
       if (!catalog) {

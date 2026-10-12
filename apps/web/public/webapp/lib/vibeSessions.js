@@ -69,11 +69,15 @@ export function pastBuildSubtitle(build, started) {
   return `Started ${started} · ${n} step${n === 1 ? "" : "s"}`;
 }
 
+// Session and build ids are per box; a row tagged with the server that listed
+// it (`server`, docs/app-placement.md) matches only rows from that server.
+const rowKey = (id, server) => `${server ?? ""}|${id}`;
+
 /** A live session's title: its own name, else its journal build's, else its
  *  service's slug. */
 export function sessionTitle(session, builds) {
   if (session.name) return session.name;
-  const build = (builds || []).find((b) => b.buildId === session.sessionId);
+  const build = (builds || []).find((b) => b.buildId === session.sessionId && (b.server ?? "") === (session.server ?? ""));
   if (build) return buildDisplayName(build);
   return serviceSlug(session.serviceId) || "Unnamed build";
 }
@@ -92,14 +96,14 @@ export function discardMessage(session) {
 
 /** Past builds the box no longer holds a session for. */
 export function endedBuilds(builds, sessions) {
-  const live = new Set((sessions || []).map((s) => s.sessionId));
-  return (builds || []).filter((b) => !live.has(b.buildId) && b.open !== true);
+  const live = new Set((sessions || []).map((s) => rowKey(s.sessionId, s.server)));
+  return (builds || []).filter((b) => !live.has(rowKey(b.buildId, b.server)) && b.open !== true);
 }
 
 /** Git imports and IDE builds the box still holds (and whose names it keeps). */
 export function openBuilds(builds, sessions) {
-  const live = new Set((sessions || []).map((s) => s.sessionId));
-  return (builds || []).filter((b) => b.open === true && !live.has(b.buildId));
+  const live = new Set((sessions || []).map((s) => rowKey(s.sessionId, s.server)));
+  return (builds || []).filter((b) => b.open === true && !live.has(rowKey(b.buildId, b.server)));
 }
 
 export function discardBuildMessage(build) {
@@ -185,4 +189,38 @@ export async function discardSession({ baseUrl, token, sessionId, fetchImpl = gl
     }
     throw new Error(msg);
   }
+}
+
+/**
+ * The live sessions and builds of every server this device can ask, each row
+ * tagged with `server` (its FQDN), so a build started on any server shows up.
+ * `servers` are `{fqdn, baseUrl, token, fetchJson}`. A server whose builds
+ * list fails is left out and named in `failed` (with its error).
+ */
+export async function fetchBuildsOnServers(servers, { fetchImpl = globalThis.fetch } = {}) {
+  const results = await Promise.all(
+    (servers || []).map(async (srv) => {
+      const sessionsP = fetchVibeSessions({ baseUrl: srv.baseUrl, token: srv.token, fetchImpl });
+      let builds = [];
+      let error = null;
+      try {
+        const r = await srv.fetchJson("/api/build/sessions");
+        builds = Array.isArray(r?.builds) ? r.builds : [];
+      } catch (e) {
+        error = e;
+      }
+      const sessions = await sessionsP;
+      return {
+        fqdn: srv.fqdn,
+        error,
+        sessions: sessions.map((x) => ({ ...x, server: srv.fqdn })),
+        builds: builds.map((b) => ({ ...b, server: srv.fqdn })),
+      };
+    }),
+  );
+  return {
+    sessions: results.flatMap((r) => r.sessions),
+    builds: results.flatMap((r) => r.builds),
+    failed: results.filter((r) => r.error).map((r) => ({ fqdn: r.fqdn, error: r.error })),
+  };
 }

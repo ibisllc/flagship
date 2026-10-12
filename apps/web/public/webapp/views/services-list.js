@@ -9,7 +9,7 @@ import { hasPendingEgress } from "../lib/appEgress.js";
 import { ACCESS_DRAFT_BADGE, ACCESS_PENDING_BADGE, hasAccessDraft, hasPendingInternetRequest } from "../lib/appAccess.js";
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
-import { screensFetch, screensFetchFrom, ScreensError, getPodBaseUrl, setPodBaseUrl } from "../lib/api.js";
+import { screensFetch, ScreensError, getPodBaseUrl, setPodBaseUrl, boxClient } from "../lib/api.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
@@ -178,7 +178,7 @@ function appCardHtml(s) {
           </div>
           <div data-url-slot="${escapeHtml(s.serviceId)}">${urlRowHtml(s, null)}</div>
         </div>
-        <button class="secondary" data-action="open" data-id="${escapeHtml(s.serviceId)}">open</button>
+        <button class="secondary" data-action="open" data-id="${escapeHtml(s.serviceId)}" data-server="${escapeHtml(s.listedBy ?? "")}">open</button>
       </div>
     </div>
   `;
@@ -300,16 +300,18 @@ export async function renderServicesList() {
  *  serviceId. Per-pod failures are tolerated (a single offline/erroring pod
  *  shouldn't blank the whole list). */
 async function fetchAppsAcrossPods(pods) {
-  const bases = [...new Set(
+  const fqdns = [...new Set(
     pods
-      .map((p) => String(p?.serverDomain ?? "").trim())
-      .filter(Boolean)
-      .map((d) => `https://${d}`),
+      .map((p) => String(p?.serverDomain ?? "").trim().toLowerCase())
+      .filter(Boolean),
   )];
+  // Each box with this device's own session for it; the app remembers which
+  // server listed it so its page reads that box.
   const lists = await Promise.all(
-    bases.map((base) =>
-      screensFetchFrom(base, "/api/screens/apps-list")
-        .then((b) => b?.apps ?? [])
+    fqdns.map((fqdn) =>
+      boxClient(fqdn)
+        .fetch("/api/screens/apps-list")
+        .then((b) => (b?.apps ?? []).map((a) => ({ ...a, listedBy: fqdn })))
         .catch(() => []),
     ),
   );
@@ -328,7 +330,7 @@ function bindServicesListHandlers() {
   document.querySelectorAll('[data-action="open"]').forEach((b) => {
     b.addEventListener("click", async () => {
       const { enterServiceDetail } = await import("./service-detail.js");
-      await enterServiceDetail(b.getAttribute("data-id"));
+      await enterServiceDetail(b.getAttribute("data-id"), { server: b.getAttribute("data-server") || "" });
     });
   });
   document.querySelectorAll("[data-copy]").forEach((btn) => {

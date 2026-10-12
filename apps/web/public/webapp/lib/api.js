@@ -160,10 +160,14 @@ export async function screensFetch(path, init = {}) {
  * the same paired session across the user's pods, so it authenticates on each.
  */
 export async function screensFetchFrom(base, path, init = {}) {
+  return screensFetchWith(base, getSessionToken(), path, init);
+}
+
+/** A `/api/screens/*` call against `base` with an explicit session `token`. */
+export async function screensFetchWith(base, tok, path, init = {}) {
   if (!base) {
     throw new ScreensError("not paired to a server yet", 0);
   }
-  const tok = getSessionToken();
   if (!tok) {
     throw new ScreensError("no session token; re-pair", 0);
   }
@@ -234,7 +238,63 @@ export async function screensFetchForPod(podFqdn, path, init = {}) {
   }
   if (!r.ok) {
     const msg = body && typeof body === "object" && "error" in body ? body.error : `HTTP ${r.status}`;
-    throw new ScreensError(msg, r.status);
+    throw new ScreensError(msg, r.status, body);
   }
   return body;
+}
+
+// ── One box, named by FQDN (docs/app-placement.md) ──
+
+function hostOf(base) {
+  try {
+    return base ? new URL(base).hostname.toLowerCase() : "";
+  } catch {
+    return "";
+  }
+}
+
+/** The host of the current pod (the active-pod slot), or "". */
+export function currentPodFqdn() {
+  return hostOf(getPodBaseUrl());
+}
+
+/** This device's session token for `podFqdn`: its own per-pod token, else the
+ *  legacy slot's when that slot names the same box. "" when it has none. */
+export function sessionTokenForPod(podFqdn) {
+  const fqdn = String(podFqdn ?? "").trim().toLowerCase();
+  if (!fqdn) return "";
+  const own = getSessionTokenForPod(fqdn);
+  if (own) return own;
+  return currentPodFqdn() === fqdn ? getSessionToken() : "";
+}
+
+/**
+ * A screens client bound to one box: its own base URL and session token, so a
+ * call never follows the current-pod slot. `fqdn` "" binds the current pod.
+ * `fetch(path, init)` resolves to the parsed body like `screensFetch`.
+ */
+export function boxClient(podFqdn = "") {
+  const fqdn = String(podFqdn ?? "").trim().toLowerCase() || currentPodFqdn();
+  const baseUrl = fqdn ? `https://${fqdn}` : getPodBaseUrl();
+  const token = () => (fqdn ? sessionTokenForPod(fqdn) : getSessionToken());
+  return {
+    fqdn,
+    baseUrl,
+    token,
+    hasSession: () => !!token(),
+    fetch: (path, init = {}) => screensFetchWith(baseUrl, token(), path, init),
+  };
+}
+
+/** Point the current-pod slot at `podFqdn` when this device has a session for
+ *  it. Resolves to whether it moved (or already pointed there). */
+export function makeCurrentPod(podFqdn) {
+  const fqdn = String(podFqdn ?? "").trim().toLowerCase();
+  if (!fqdn) return false;
+  if (currentPodFqdn() === fqdn && getSessionToken()) return true;
+  const tok = getSessionTokenForPod(fqdn);
+  if (!tok) return false;
+  setPodBaseUrl(`https://${fqdn}`);
+  setSessionToken(tok);
+  return true;
 }
