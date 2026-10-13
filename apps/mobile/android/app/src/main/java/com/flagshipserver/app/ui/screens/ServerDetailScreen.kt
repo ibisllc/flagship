@@ -69,7 +69,6 @@ import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.api.userFacing
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.style.TextOverflow
-import com.flagshipserver.app.api.ServerMetricsResponse
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.flagshipserver.app.core.LocalAppState
@@ -92,7 +91,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
-import com.flagshipserver.app.core.ServerHealthVerdict
 import com.flagshipserver.app.core.ServerSettingsStore
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
@@ -130,6 +128,7 @@ import com.flagshipserver.app.viewmodels.SetPreferredServerViewModel
 import com.flagshipserver.app.viewmodels.UnrevokeServerPhase
 import com.flagshipserver.app.viewmodels.UnrevokeServerViewModel
 import com.flagshipserver.app.core.FlagshipDateFormat
+import com.flagshipserver.app.core.ServerHealthVerdict
 import java.util.Date
 import java.util.Locale
 
@@ -235,8 +234,6 @@ fun ServerDetailScreen(
             Spacer(Modifier.height(FS.space.s6))
         }
 
-        ServerHealthCard(health = health)
-
         when (val d = detail) {
             is LoadingState.Loaded -> ServerInfoCard(d.value)
             is LoadingState.Failed -> ErrorCard(d.message, onRetry = detailVm?.let { vm -> { vm.load() } })
@@ -258,17 +255,14 @@ fun ServerDetailScreen(
             ServerAppsSection(podId = podId, client = podClient)
         }
 
-        Spacer(Modifier.height(FS.space.s6))
-        Text(
-            "Live metrics",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        when (val m = metrics) {
-            is LoadingState.Loaded -> MetricsSection(m.value)
-            is LoadingState.Failed -> ErrorCard(m.message, onRetry = metricsVm?.let { vm -> { vm.load() } })
-            else -> ServerCardSkeleton()
+        (detail as? LoadingState.Loaded)?.value?.let { d ->
+            Spacer(Modifier.height(FS.space.s6))
+            MonitoringSection(
+                health = health,
+                metrics = metrics,
+                cert = MonitoringCert(notAfter = d.certNotAfter, notBefore = d.certNotBefore, sans = d.certSans.orEmpty()),
+                onRetryMetrics = metricsVm?.let { vm -> { vm.load() } },
+            )
         }
 
         (detail as? LoadingState.Loaded)?.let { d ->
@@ -299,6 +293,13 @@ fun ServerDetailScreen(
             MigrateCard(serverDomain = d.value.serverFqdn)
         }
 
+        // The health report comes from the directory, not the box, so it still
+        // shows when the box's own detail can't load.
+        if (detail !is LoadingState.Loaded && ServerHealthVerdict.evaluate(health, System.currentTimeMillis()) != null) {
+            Spacer(Modifier.height(FS.space.s6))
+            MonitoringSection(health = health, metrics = null, cert = null)
+        }
+
         // Outside the loaded branch: none of these need the box, so an offline,
         // never-online or revoked server can still be revoked or deleted.
         if (pod != null) {
@@ -309,48 +310,6 @@ fun ServerDetailScreen(
         Spacer(Modifier.height(FS.space.s12))
       }
     }
-}
-
-// The box's own health report, relayed on /pods. Re-evaluated every 30 s so a
-// report that stops arriving turns into "No health report for N min" on screen.
-@Composable
-private fun ServerHealthCard(health: com.flagshipserver.app.api.BoxHealthWire?) {
-    if (health == null) return
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(30_000)
-            now = System.currentTimeMillis()
-        }
-    }
-    val verdict = ServerHealthVerdict.evaluate(health, now) ?: return
-    if (verdict.ok) {
-        Text(
-            verdict.lines.first(),
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            modifier = Modifier.testTag("server-health-ok"),
-        )
-    } else {
-        Text(
-            "Server health",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("server-health-issues")) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                verdict.lines.forEach { line ->
-                    Text(
-                        line,
-                        color = FS.colors.warning,
-                        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
-                    )
-                }
-            }
-        }
-    }
-    Spacer(Modifier.height(FS.space.s6))
 }
 
 // Boot-unlock status + kill switch for one server. Reads the per-server choice
@@ -684,112 +643,8 @@ private fun ServerInfoCard(detail: com.flagshipserver.app.api.ServerDetailRespon
                 FSPill("${detail.serviceCount} apps", kind = FSPillKind.Idle)
                 FSPill("${detail.pairedSessionCount} devices", kind = FSPillKind.Idle)
             }
-            val certText = detail.certNotAfter
-                ?.let { "Cert valid until ${FlagshipDateFormat.format(it, includeTime = true)}" }
-                ?: "Cert details unavailable"
-            Text(certText, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
         }
     }
-}
-
-@Composable
-fun MetricsSection(metrics: ServerMetricsResponse) {
-    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-        MetricCard(
-            title = "CPU ${"%.1f".format(metrics.cpuPercent)}%",
-            chart = { MetricLineChart(metrics.cpuHistory.map { it.value }) },
-        )
-        MetricCard(
-            title = "Mem ${humanBytes(metrics.memUsedBytes)} / ${humanBytes(metrics.memTotalBytes)}",
-            chart = { MetricLineChart(metrics.memHistory.map { it.value }) },
-        )
-        MetricCard(
-            title = "Disk I/O ↓ ${humanBytes(metrics.diskIOReadBytesPerSec.toLong())}/s · ↑ ${humanBytes(metrics.diskIOWriteBytesPerSec.toLong())}/s",
-            chart = {
-                MetricDualLineChart(
-                    a = metrics.ioHistory.map { it.read },
-                    b = metrics.ioHistory.map { it.write },
-                )
-            },
-        )
-        MetricCard(
-            title = "Net ↓ ${humanBytes(metrics.netRxBytesPerSec.toLong())}/s · ↑ ${humanBytes(metrics.netTxBytesPerSec.toLong())}/s",
-            chart = {
-                MetricDualLineChart(
-                    a = metrics.netHistory.map { it.read },
-                    b = metrics.netHistory.map { it.write },
-                )
-            },
-        )
-        Text(
-            "Disk ${humanBytes(metrics.diskUsedBytes)} / ${humanBytes(metrics.diskTotalBytes)}",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp),
-        )
-    }
-}
-
-@Composable
-private fun MetricCard(title: String, chart: @Composable () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                title,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-            )
-            chart()
-        }
-    }
-}
-
-@Composable
-private fun MetricLineChart(values: List<Double>) {
-    if (values.isEmpty()) return
-    val entries = values.mapIndexed { i, v ->
-        com.patrykandpatrick.vico.core.entry.entryOf(i.toFloat(), v.toFloat())
-    }
-    val producer = androidx.compose.runtime.remember(values) {
-        com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer(entries)
-    }
-    com.patrykandpatrick.vico.compose.chart.Chart(
-        chart = com.patrykandpatrick.vico.compose.chart.line.lineChart(),
-        chartModelProducer = producer,
-        modifier = androidx.compose.ui.Modifier
-            .fillMaxWidth()
-            .height(96.dp),
-    )
-}
-
-@Composable
-private fun MetricDualLineChart(a: List<Double>, b: List<Double>) {
-    if (a.isEmpty() || b.isEmpty()) return
-    val entriesA = a.mapIndexed { i, v ->
-        com.patrykandpatrick.vico.core.entry.entryOf(i.toFloat(), v.toFloat())
-    }
-    val entriesB = b.mapIndexed { i, v ->
-        com.patrykandpatrick.vico.core.entry.entryOf(i.toFloat(), v.toFloat())
-    }
-    val producer = androidx.compose.runtime.remember(a, b) {
-        com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer(entriesA, entriesB)
-    }
-    com.patrykandpatrick.vico.compose.chart.Chart(
-        chart = com.patrykandpatrick.vico.compose.chart.line.lineChart(),
-        chartModelProducer = producer,
-        modifier = androidx.compose.ui.Modifier
-            .fillMaxWidth()
-            .height(96.dp),
-    )
-}
-
-private fun humanBytes(bytes: Long): String {
-    val k = 1024.0
-    if (bytes < k) return "$bytes B"
-    val units = listOf("KB", "MB", "GB", "TB")
-    var v = bytes / k
-    var i = 0
-    while (v >= k && i < units.lastIndex) { v /= k; i++ }
-    return "%.1f %s".format(v, units[i])
 }
 
 // "Front page" picker: choose which installed app the box's root domain
@@ -2044,11 +1899,6 @@ private fun DangerZoneCard(pod: com.flagshipserver.app.core.PodInfo, onDeleted: 
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             if (!pod.isRevoked) {
-                Text(
-                    REVOKE_EXPLAINER,
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                )
                 FSDangerButton(
                     label = "Revoke server (reversible)",
                     onClick = { showSheet = true },
@@ -2056,16 +1906,9 @@ private fun DangerZoneCard(pod: com.flagshipserver.app.core.PodInfo, onDeleted: 
                     enabled = !deleting,
                     modifier = Modifier.semantics { contentDescription = "sd-revoke-server" },
                 )
-                Spacer(Modifier.height(FS.space.s2))
             }
-            Text(
-                "Deletes ${pod.name} for good. If the box is online it erases its data and powers off; " +
-                    "if it's offline it can never come back online. The name becomes free to reuse.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            )
             FSDangerButton(
-                label = if (deleting) "Deleting…" else "Delete server",
+                label = if (deleting) "Deleting…" else "Delete and wipe this server",
                 onClick = { confirmingDelete = true },
                 block = true,
                 enabled = !deleting,
