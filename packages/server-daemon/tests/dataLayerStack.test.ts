@@ -162,8 +162,8 @@ describe("DataStack at boot", () => {
   it("wakes a dockerd that is down even though `docker info --format` exits 0 without it", async () => {
     const r = rig({ dockerUpAfterPolls: 1 });
     expect(await r.stack.ensure()).toBe("healthy");
-    expect(r.calls).toContainEqual(["systemctl", "reset-failed", "docker.service", "docker.socket"]);
-    expect(r.calls).toContainEqual(["systemctl", "start", "--no-block", "docker.socket", "docker.service"]);
+    expect(r.calls).toContainEqual(["systemctl", "reset-failed", "docker.service", "docker.socket", "containerd.service"]);
+    expect(r.calls).toContainEqual(["systemctl", "start", "--no-block", "containerd.service", "docker.socket", "docker.service"]);
   });
 
   it("is never in the way on a host without the compose stack", async () => {

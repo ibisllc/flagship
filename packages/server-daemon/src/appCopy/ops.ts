@@ -24,6 +24,8 @@ import { dirname } from "node:path";
 import { APP_PG_EXTENSIONS } from "../dataLayer/naming.js";
 import type { PostgresStore } from "../dataLayer/provisioner.js";
 import { filesArchiveDockerArgs } from "../volumeDump.js";
+import { describe, dockerFailure, dockerRepaired, wakeDocker } from "../dockerHealth.js";
+import { realCommandRunner, type CommandRunner } from "../serviceRunner.js";
 
 export interface AppCopyOps {
   saveImage(image: string, outPath: string): Promise<void>;
@@ -110,43 +112,18 @@ async function execToFile(cmd: string, args: string[], outPath: string, env?: Re
   }
 }
 
-/** With a custom format, `docker info` exits 0 when dockerd is down; only a version says it answered. */
-async function dockerAnswers(): Promise<boolean> {
-  try {
-    return (await exec("docker", ["info", "--format", "{{.ServerVersion}}"])).trim() !== "";
-  } catch {
-    return false;
-  }
-}
-
-async function dockerState(): Promise<string> {
-  const show = await exec("systemctl", [
-    "show", "docker.service", "-p", "ActiveState,SubState,Result,ExecMainStatus,NRestarts", "--value",
-  ]).catch(() => "");
-  const [active, sub, result, status, restarts] = show.trim().split("\n");
-  const log = await exec("journalctl", ["-u", "docker.service", "-n", "5", "--no-pager", "-o", "cat"]).catch(() => "");
-  const unit = active
-    ? `docker.service is ${active}${sub ? `/${sub}` : ""}${result && result !== "success" ? `, result ${result}` : ""}${status && status !== "0" ? `, exit ${status}` : ""}${restarts && restarts !== "0" ? `, restarted ${restarts} times` : ""}`
-    : "docker.service state unknown";
-  return [unit, log.trim().replace(/\s*\n\s*/g, " | ")].filter(Boolean).join("; ");
-}
-
 /**
- * A copy can arrive while dockerd is restarting or has stopped; wake it the
- * way systemd would (socket + service) and wait, and say what state it was in
- * when it never answers so the owner sees the box's problem, not ours.
+ * A copy can arrive while dockerd is down or crash-looping; wake (or repair)
+ * it, and say what dockerd itself reported when it won't start, so the owner
+ * sees the box's problem, not ours.
  */
-export async function ensureDocker(waitMs = 120_000): Promise<void> {
-  if (await dockerAnswers()) return;
-  // A unit that failed too often is refused until its failure is reset.
-  await exec("systemctl", ["reset-failed", "docker.service", "docker.socket"]).catch(() => {});
-  await exec("systemctl", ["start", "--no-block", "docker.socket", "docker.service"]).catch(() => {});
-  const until = Date.now() + waitMs;
-  while (Date.now() < until) {
-    if (await dockerAnswers()) return;
-    await new Promise((r) => setTimeout(r, 2_000));
+export async function ensureDocker(waitMs = 60_000): Promise<void> {
+  const h = await wakeDocker({ cmd: realCommandRunner as Required<CommandRunner>, waitMs, log: (m) => console.warn(m) });
+  if (!h.ok) throw new Error(h.reason);
+  if (h.repaired) {
+    dockerRepaired(h.repaired);
+    throw new Error(`${h.repaired}. The server is restarting to finish; try again in a minute`);
   }
-  throw new Error(`Docker isn't running on this server (${await dockerState()})`);
 }
 
 /** Run a docker command, saying what state dockerd is in when it couldn't be reached. */
@@ -156,7 +133,7 @@ async function docker(run: () => Promise<unknown>): Promise<void> {
     await run();
   } catch (e) {
     if (/Cannot connect to the Docker daemon|Is the docker daemon running/i.test((e as Error).message)) {
-      throw new Error(`${(e as Error).message} (${await dockerState()})`);
+      throw new Error(`${(e as Error).message} (${describe(await dockerFailure(realCommandRunner as Required<CommandRunner>))})`);
     }
     throw e;
   }

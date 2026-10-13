@@ -21,6 +21,7 @@ import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
 import { AppRunner, buildStartCheck, realCommandRunner, type CommandRunner } from "./serviceRunner.js";
 import { ensureGvisor } from "./appSandbox/gvisor.js";
 import { keepAppSandbox } from "./appSandbox/state.js";
+import { dockerRepaired, wakeDocker } from "./dockerHealth.js";
 import { FILES_HELPER_IMAGE } from "./volumeDump.js";
 import { ServiceActivity } from "./serviceActivity.js";
 import { ensureContainerLinksUnmanaged } from "./containerLinks.js";
@@ -202,6 +203,11 @@ export interface DaemonRuntimeOptions {
    * production entry turns it on; tools and demos that run the runtime don't.
    */
   appSandbox?: boolean;
+  /**
+   * At boot, wake (or repair) a dockerd that isn't running, in the background
+   * (dockerHealth.ts). The production entry turns it on.
+   */
+  healDocker?: boolean;
   /**
    * Resolve the owner-signed relay TrustExceptions that may cover a failing
    * relay cert-hash, verified against the IRK-anchored device set (never a
@@ -1243,6 +1249,13 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // The sandbox bridges (build, staging, apps) and the egress gateway that
   // fences them (egress/, docs/ai-privacy-and-staging.md §3). Before any
   // container starts, so every app, staging copy and build gets its args.
+  if (opts.healDocker) {
+    void wakeDocker({ cmd: realCommandRunner as Required<CommandRunner>, log: (m) => console.warn(m) }).then((h) => {
+      if (!h.ok) console.warn(`[docker] ${h.reason}`);
+      // Networks and apps were set up against a dead dockerd: start over.
+      else if (h.repaired) dockerRepaired(h.repaired);
+    });
+  }
   if (opts.appSandbox) {
     keepAppSandbox({
       setup: () => ensureGvisor({ cmd: realCommandRunner as Required<CommandRunner>, probeImage: FILES_HELPER_IMAGE, log: (m) => console.log(m) }),

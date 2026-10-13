@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { setDockerRepairedHook } from "./dockerHealth.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { buildModelRedactor } from "./llm/modelPrivacy.js";
@@ -1015,6 +1016,12 @@ async function main(): Promise<void> {
 
   let runtime: DaemonRuntime;
   try {
+    // A Docker repaired after boot took the box's networks with it: restart
+    // (systemd's Restart=always) so they and the apps come up on it again.
+    setDockerRepairedHook((why) => {
+      console.warn(`[docker] ${why}; restarting the daemon to set up again`);
+      setTimeout(() => process.exit(0), 1000);
+    });
     runtime = await startDaemonRuntime({
       serverFqdn: env.serverFqdn!,
       identityPrivKey,
@@ -1034,6 +1041,7 @@ async function main(): Promise<void> {
         : { lanDirect: { port: Number(process.env.FLAGSHIP_LAN_PORT ?? 443) } }),
       // Every app in its own gVisor sandbox (docs/app-runtimes.md §5.1).
       appSandbox: true,
+      healDocker: true,
       // Owner-override resolution for relay-trust: reads the owner-signed
       // relay TrustExceptions from `.com` + verifies them against the box's
       // IRK-anchored roster (anchor = the provisioned owner IRK). ONE

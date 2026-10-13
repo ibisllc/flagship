@@ -26,6 +26,7 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { CommandRunner } from "../serviceRunner.js";
+import { dockerRepaired, wakeDocker } from "../dockerHealth.js";
 
 export const DATA_COMPOSE_FILE = "/opt/flagship/installer/data-services/docker-compose.yml";
 export const DATA_ENV_FILE = "/var/flagship/data-services.env";
@@ -356,28 +357,27 @@ export class DataStack {
   }
 
   private async waitForDocker(): Promise<boolean> {
-    const deadline = this.now() + (this.opts.dockerWaitMs ?? 120_000);
-    let woken = false;
-    for (;;) {
+    if (!this.cmd.capture) {
       try {
-        if (this.cmd.capture) {
-          // With a custom format, `docker info` exits 0 when dockerd is down.
-          const { stdout } = await this.cmd.capture("docker", ["info", "--format", "{{.ServerVersion}}"], { timeoutMs: 15_000 });
-          if (stdout.trim() === "") throw new Error("docker didn't answer");
-        } else await this.cmd.run("docker", ["info"], { timeoutMs: 15_000 });
+        await this.cmd.run("docker", ["info"], { timeoutMs: 15_000 });
         return true;
       } catch {
-        if (this.now() >= deadline) return false;
-        if (!woken) {
-          woken = true;
-          // A dockerd that failed too often is refused until its failure is
-          // reset; nothing else on the box would ever start it again.
-          await this.cmd.run("systemctl", ["reset-failed", "docker.service", "docker.socket"], { timeoutMs: 15_000 }).catch(() => {});
-          await this.cmd.run("systemctl", ["start", "--no-block", "docker.socket", "docker.service"], { timeoutMs: 15_000 }).catch(() => {});
-        }
-        await this.sleep(5_000);
+        return false;
       }
     }
+    const h = await wakeDocker({
+      cmd: this.cmd as Required<CommandRunner>,
+      waitMs: this.opts.dockerWaitMs ?? 120_000,
+      sleep: this.sleep,
+      now: this.now,
+      log: this.log,
+    });
+    if (!h.ok) {
+      this.log(`[data-layer] ${h.reason}`);
+      return false;
+    }
+    if (h.repaired) dockerRepaired(h.repaired);
+    return true;
   }
 
   private async coreHealth(): Promise<Record<(typeof CORE_SERVICES)[number], ContainerHealth>> {
