@@ -354,14 +354,15 @@ async function cmdApplianceFactoryIso(rest: string[]): Promise<void> {
 async function cmdApplianceCloudFactorySeed(rest: string[]): Promise<void> {
   const output = rest[0];
   const gitRef = extractFlagValue(rest, "--git-ref");
+  const gitCommit = extractFlagValue(rest, "--git-commit") || undefined;
   const timeoutScale = Number(extractFlagValue(rest, "--timeout-scale") ?? "1");
   if (!output || !gitRef || !Number.isInteger(timeoutScale) || timeoutScale < 1 || timeoutScale > 50) {
-    console.error("usage: flagship-build appliance-cloud-factory-seed <seed.iso> --git-ref <ref> [--timeout-scale 1-50]");
+    console.error("usage: flagship-build appliance-cloud-factory-seed <seed.iso> --git-ref <ref> [--git-commit <sha>] [--timeout-scale 1-50]");
     process.exit(2);
   }
   await buildNocloudSeedIso({
     outIsoPath: output,
-    userDataYaml: buildDebianCloudApplianceFactoryUserData(gitRef, timeoutScale),
+    userDataYaml: buildDebianCloudApplianceFactoryUserData(gitRef, timeoutScale, gitCommit),
     networkConfigYaml: `version: 2
 ethernets:
   factory:
@@ -553,7 +554,7 @@ usage:
                                                            [--arch amd64|arm64] [--disk-size bytes] [--qemu-img path]
   flagship-build appliance-factory-iso <debian.iso> <factory.iso> --git-ref <ref>
                                                            build the secret-free generalized-base installer
-  flagship-build appliance-cloud-factory-seed <seed.iso> --git-ref <ref> [--timeout-scale 1-50]
+  flagship-build appliance-cloud-factory-seed <seed.iso> --git-ref <ref> [--git-commit <sha>] [--timeout-scale 1-50]
                                                            convert an official Debian cloud disk into the encrypted base
   flagship-build appliance-manifest <base.raw> <manifest.json> --arch <arch> --git-ref <ref>
                                                            hash + describe a completed generalized raw disk

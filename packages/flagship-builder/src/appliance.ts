@@ -144,7 +144,10 @@ systemctl poweroff
 
 export interface AppliancePrepareOptions {
   repoUrl?: string;
+  /** The ref recipes name (`installerGitRef`); the image carries it as its label. */
   gitRef: string;
+  /** The exact commit to install under that label (an endorsed release); absent = the ref's tip. */
+  gitCommit?: string;
 }
 
 /** Runs once in the image factory's installed target. No owner material enters
@@ -155,7 +158,13 @@ export function buildAppliancePrepareScript(opts: AppliancePrepareOptions): stri
   if (!/^[A-Za-z0-9][A-Za-z0-9._\/-]{0,199}$/.test(opts.gitRef) || opts.gitRef.includes("..")) {
     throw new Error("invalid appliance git ref");
   }
+  if (opts.gitCommit !== undefined && !/^[0-9a-f]{40}$/.test(opts.gitCommit)) {
+    throw new Error("invalid appliance git commit");
+  }
   const repo = opts.repoUrl ?? "https://github.com/ibisllc/flagship.git";
+  const clone = opts.gitCommit
+    ? `timeout -k 10 300 git clone --depth 2 --no-checkout '${repo}' /opt/flagship && timeout -k 10 300 git -C /opt/flagship fetch --depth 2 origin '${opts.gitCommit}' && git -C /opt/flagship checkout --detach '${opts.gitCommit}'`
+    : `timeout -k 10 300 git clone --depth 2 --branch '${opts.gitRef}' '${repo}' /opt/flagship || { timeout -k 10 300 git clone --depth 2 '${repo}' /opt/flagship; timeout -k 10 300 git -C /opt/flagship fetch --depth 2 origin '${opts.gitRef}'; git -C /opt/flagship checkout '${opts.gitRef}'; }`;
   if (!/^https:\/\/[A-Za-z0-9._\/-]+(?:\.git)?$/.test(repo) || repo.includes("..")) {
     throw new Error("invalid appliance repository URL");
   }
@@ -185,8 +194,8 @@ fi
 command -v npm >/dev/null 2>&1 || { echo "[appliance-factory] npm unavailable"; exit 1; }
 echo "[appliance-factory] runtime packages ready"
 rm -rf /opt/flagship
-echo "[appliance-factory] cloning Flagship ref=${opts.gitRef}"
-timeout -k 10 300 git clone --depth 2 --branch '${opts.gitRef}' '${repo}' /opt/flagship || { timeout -k 10 300 git clone --depth 2 '${repo}' /opt/flagship; timeout -k 10 300 git -C /opt/flagship fetch --depth 2 origin '${opts.gitRef}'; git -C /opt/flagship checkout '${opts.gitRef}'; }
+echo "[appliance-factory] cloning Flagship ref=${opts.gitRef}${opts.gitCommit ? ` at ${opts.gitCommit}` : ""}"
+${clone}
 cd /opt/flagship
 echo "[appliance-factory] installing pinned workspace dependencies"
 timeout -k 15 600 npm install --no-audit --no-fund ${BOX_NPM_SCOPE}

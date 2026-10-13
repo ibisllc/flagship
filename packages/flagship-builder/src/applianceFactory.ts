@@ -73,9 +73,9 @@ export function scaleFactoryTimeouts(script: string, scale: number): string {
     .replace(/timeout (\d{2,})(?= )/g, (_m, n: string) => `timeout ${Number(n) * scale}`);
 }
 
-export function buildDebianCloudApplianceFactoryUserData(gitRef: string, timeoutScale = 1): string {
+export function buildDebianCloudApplianceFactoryUserData(gitRef: string, timeoutScale = 1, gitCommit?: string): string {
   const prepareB64 = utf8ToBase64(
-    scaleFactoryTimeouts(buildAppliancePrepareScript({ gitRef }), timeoutScale));
+    scaleFactoryTimeouts(buildAppliancePrepareScript({ gitRef, ...(gitCommit ? { gitCommit } : {}) }), timeoutScale));
   const migrate = `#!/bin/bash
 set -euo pipefail
 exec > >(tee -a /var/log/flagship-appliance-cloud-factory.log) 2>&1

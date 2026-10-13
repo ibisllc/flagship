@@ -16,8 +16,11 @@ on:
         options: [amd64, arm64]
         default: amd64
       git_ref:
-        description: "Flagship ref the appliance installs (must match recipes' installerGitRef)"
+        description: "The ref recipes name (installerGitRef); the image carries it as its label"
         default: "main"
+      release:
+        description: "Commit to install: 'latest-endorsed' (the newest release a box would verify), 'tip' (the ref's tip, unsigned), or a 40-hex commit"
+        default: "latest-endorsed"
       debian_build:
         description: "cloud.debian.org trixie build directory"
         default: "20261001-2618"
@@ -36,6 +39,10 @@ jobs:
       ARCH: ${{ inputs.arch }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The endorsement lineage walk needs the full history.
+          fetch-depth: 0
+          ref: ${{ inputs.git_ref }}
 
       - name: Pick the pinned source hash
         run: |
@@ -85,6 +92,18 @@ jobs:
       - run: npm ci
       - run: npx tsc -b
 
+      - name: Pick the release to install
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          case "$RELEASE" in
+            latest-endorsed) commit=$(node scripts/latest-endorsed-release.mjs .) ;;
+            tip) commit="" ;;
+            *) echo "$RELEASE" | grep -Eq '^[0-9a-f]{40}$' || { echo "release must be latest-endorsed, tip or a 40-hex commit"; exit 1; }; commit="$RELEASE" ;;
+          esac
+          echo "GIT_COMMIT=$commit" >> "$GITHUB_ENV"
+          echo "installing ${commit:-the tip of ${{ inputs.git_ref }}}"
+
       - name: Download the pinned Debian cloud image
         run: |
           curl -fsSL -o "$RUNNER_TEMP/debian-source.qcow2" \
@@ -94,7 +113,7 @@ jobs:
         run: |
           bash scripts/build-vm-appliance-cloud-qemu.sh \
             "$RUNNER_TEMP/debian-source.qcow2" "$SOURCE_SHA512" \
-            "$RUNNER_TEMP/base.raw" "$ARCH" "${{ inputs.git_ref }}"
+            "$RUNNER_TEMP/base.raw" "$ARCH" "${{ inputs.git_ref }}" $GIT_COMMIT
           cat "$RUNNER_TEMP/base.raw.json"
 
       - name: Compress, split and write the distribution manifest
@@ -125,6 +144,7 @@ jobs:
                             "sha256": hashlib.sha256(p.read_bytes()).hexdigest()})
           manifest = {
               "version": 1, "arch": os.environ["ARCH"], "installerGitRef": os.environ["GIT_REF"],
+              **({"commit": os.environ["GIT_COMMIT"]} if os.environ.get("GIT_COMMIT") else {}),
               "format": "qcow2", "sha256": os.environ["SHA"], "sizeBytes": int(os.environ["SIZE"]),
               "parts": parts, "rawSha256": os.environ["RAW_SHA"], "rawSizeBytes": int(os.environ["RAW_SIZE"]),
               "source": {"name": f"debian-13-generic-{os.environ['ARCH']}-{os.environ['DEBIAN_BUILD']}.qcow2", "sha512": os.environ["SOURCE_SHA512"]},

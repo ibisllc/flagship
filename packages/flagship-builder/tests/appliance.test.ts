@@ -47,6 +47,16 @@ describe("generalized VM appliance", () => {
     expect(script).toContain("systemctl poweroff");
   });
 
+  it("installs an exact release commit under the ref recipes name", () => {
+    const commit = "57b69edb43bba48e93feef29f18f6e6bd4419652";
+    const script = buildAppliancePrepareScript({ gitRef: "main", gitCommit: commit });
+    expect(script).toContain(`git -C /opt/flagship fetch --depth 2 origin '${commit}' && git -C /opt/flagship checkout --detach '${commit}'`);
+    expect(script).not.toContain("--branch 'main'");
+    // The bootstrap checks the label against the signed recipe's installerGitRef.
+    expect(script).toContain("printf '%s\\n' 'main' > /opt/flagship/.flagship-appliance-ref");
+    expect(() => buildAppliancePrepareScript({ gitRef: "main", gitCommit: "57b69edb" })).toThrow(/invalid appliance git commit/);
+  });
+
   it("prepares a secret-free image and declares the generalization audit", () => {
     const script = buildAppliancePrepareScript({ gitRef: "v-test" });
     expect(script).toContain(".flagship-appliance-ref");
