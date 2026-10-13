@@ -8,8 +8,11 @@ import {
   ed,
   signServerRevokeBySelf,
   verifyRootEntitlement,
+  verifyServerShareGrant,
+  verifyServerShareRevoke,
   type Keypair,
   type ServerRevokeBySelf,
+  type ServerShareRevoke,
 } from "@flagship/protocol";
 import { InMemoryAlertInbox } from "./alertInbox.js";
 import {
@@ -172,6 +175,14 @@ import { claimEntitlementDeposit, fetchEntitlementViaRelay } from "./entitlement
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { appSqlRunner } from "./dataLayer/appSql.js";
 import { DbWriteLedger, buildOwnerDbHttp } from "./dataLayer/ownerDb.js";
+import { ActivityLog, defaultActivityLogPath } from "./shares/activityLog.js";
+import { ShareStore, defaultShareStorePath } from "./shares/shareStore.js";
+import {
+  ShareSessionStore,
+  buildShares,
+  defaultShareSessionPath,
+  startShareEndsPoller,
+} from "./shares/sharesHttp.js";
 import { realAppCopyOps } from "./appCopy/ops.js";
 import { buildAppCopySource } from "./appCopy/source.js";
 import { AppCopyStore } from "./appCopy/store.js";
@@ -2656,8 +2667,55 @@ async function wireRuntimeSurfaces(deps: {
     return target;
   })();
 
+  // Share this server (docs/share-a-server.md): another account's per-share
+  // sessions, gated by level on every screens route, and the activity log.
+  const sharesBundle = await (async () => {
+    if (!cfg || !env.serverFqdn) return null;
+    const authority = {
+      ownerIrkPub: cfg.irkPublicKey,
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+      username: cfg.userId,
+    };
+    const store = new ShareStore(defaultShareStorePath(dataDir), {
+      serverDomain: env.serverFqdn,
+      verifyOwnerGrant: (g, sig) =>
+        authorizeSensitiveOrder({ ...authority, order: g, signature: sig, verify: verifyServerShareGrant }),
+    });
+    const { dropped } = await store.load();
+    if (dropped > 0) console.warn(`[shares] dropped ${dropped} share(s) that no longer verify`);
+    const sessions = new ShareSessionStore(defaultShareSessionPath(dataDir));
+    await sessions.load();
+    const activity = new ActivityLog(defaultActivityLogPath(dataDir));
+    await activity.load();
+    const verifyOwnerRevoke = (r: ServerShareRevoke, sig: Uint8Array) =>
+      authorizeSensitiveOrder({ ...authority, order: r, signature: sig, verify: verifyServerShareRevoke });
+    const shares = buildShares({
+      serverDomain: env.serverFqdn,
+      store,
+      sessions,
+      activity,
+      verifyOwnerRevoke,
+      isCompanion: (req) => pairedSessions.isCompanionRequest(req),
+    });
+    runtime.addHandler(shares.handlePublic);
+    if (env.controlPlaneBaseUrl) {
+      const poller = startShareEndsPoller({
+        serverDomain: env.serverFqdn,
+        controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+        store,
+        shares,
+        verifyOwnerRevoke,
+      });
+      process.once("SIGTERM", () => poller.stop());
+      process.once("SIGINT", () => poller.stop());
+    }
+    console.log(`[shares] ${store.list().length} active share(s)`);
+    return { shares, gate: shares.gate(pairedSessions) };
+  })();
+
   const screensHandle = buildScreensHttp({
-    gate: pairedSessions,
+    gate: sharesBundle?.gate ?? pairedSessions,
+    shares: sharesBundle?.shares ?? null,
     appEgress: runtime.egress.appEgress,
     appCopy: appCopyTarget,
     // The status pill (docs/app-placement.md §6): one `docker ps` for every
@@ -2830,10 +2888,10 @@ async function wireRuntimeSurfaces(deps: {
     // the owner's chosen name, else the manifest's once the AI writes it.
     resolveSessionAppId: (session) => serviceIdForSession(session),
   });
-  runtime.addHandler(screensHandle);
+  runtime.addHandler(sharesBundle ? sharesBundle.shares.withActivity(screensHandle) : screensHandle);
   runtime.addUpgradeHandler(
     buildScreensUpgradeHandler({
-      gate: pairedSessions,
+      gate: sharesBundle?.gate ?? pairedSessions,
       vibeCodeRegistry: deploySession ? vibeRegistry : null,
       browser: browserBundle?.browser ?? null,
       tabRegistry: browserBundle?.tabRegistry ?? null,

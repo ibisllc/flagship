@@ -21,6 +21,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { appDbSqlSha256, parseAppDbWriteGrant, verifyAppDbWriteGrant } from "@flagship/protocol";
+import { shareCallerOf } from "../shares/sharesHttp.js";
 import { authorizeSensitiveOrder } from "../adminAuthorityLocal.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { SensitiveAuthority } from "../egress/approvals.js";
@@ -181,7 +182,15 @@ export function buildOwnerDbHttp(opts: OwnerDbHttpOptions) {
       if (grant.serverDomain !== opts.serverDomain) return err(403, "the order is for a different server");
       if (grant.sqlSha256 !== appDbSqlSha256(sql)) return err(403, "the statement is not the one that was signed");
       if (Math.abs(now() - grant.issuedAt) > DB_WRITE_MAX_SKEW_MS) return err(403, "the order is stale: sign it again");
-      if (!authorizeSensitiveOrder({ ...authority, order: grant, signature: sig, verify: verifyAppDbWriteGrant })) {
+      // Another account changes data only at manage level with the app-data
+      // opt-in, signing with its per-share key (docs/share-a-server.md §5.5).
+      const share = shareCallerOf(req);
+      if (share) {
+        if (share.level !== "manage" || !share.seeAppData) return err(403, "manage-only");
+        if (!verifyAppDbWriteGrant(grant, sig, Uint8Array.from(Buffer.from(share.memberPubHex, "hex")))) {
+          return err(403, "invalid signature");
+        }
+      } else if (!authorizeSensitiveOrder({ ...authority, order: grant, signature: sig, verify: verifyAppDbWriteGrant })) {
         return err(403, "invalid signature");
       }
       if (!(await ledger.claim(`${grant.serviceId}|${grant.store}|${grant.sqlSha256}|${grant.issuedAt}`))) {

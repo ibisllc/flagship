@@ -30,10 +30,12 @@ import {
   parseAccessList,
   parseAppAccessGrant,
   parseAppEgressGrant,
+  parseServerShareGrant,
   type AccessRule,
   type AppAccessGrant,
   type AppEgressGrant,
   type EgressSuggestion,
+  type ServerShareGrant,
 } from "@flagship/protocol";
 import type { SwkOps } from "../keyCustodian.js";
 
@@ -55,13 +57,21 @@ export interface AccessDraft {
   createdAt: number;
 }
 
+/** The owner-signed share that let another account sign a list (docs/share-a-server.md §5.2). */
+export interface ShareSignerChain {
+  grant: ServerShareGrant;
+  signature: string;
+}
+
 export type StoredAccessAuthority =
-  | { v: 2; grant: AppAccessGrant; signature: string }
+  | { v: 2; grant: AppAccessGrant; signature: string; by?: ShareSignerChain }
   | { v: 1; grant: AppEgressGrant; signature: string };
 
 export interface AccessAuthorizer {
   v2(grant: AppAccessGrant, sig: Uint8Array): boolean;
   v1(grant: AppEgressGrant, sig: Uint8Array): boolean;
+  /** A list signed by another account's per-share key, under the owner's manage-level share. */
+  v2ByShare(grant: AppAccessGrant, sig: Uint8Array, by: ShareSignerChain): boolean;
 }
 
 interface Entry {
@@ -157,7 +167,7 @@ export class AppAccessStore {
     this.entries.clear();
     this.apps.clear();
     for (const rawEntry of Array.isArray(parsed.lists) ? parsed.lists : []) {
-      const e = rawEntry as { serviceId?: unknown; list?: unknown; auth?: { v?: unknown; grant?: unknown; signature?: unknown } };
+      const e = rawEntry as { serviceId?: unknown; list?: unknown; auth?: { v?: unknown; grant?: unknown; signature?: unknown; by?: unknown } };
       const entry = typeof e.serviceId === "string" ? this.verifyEntry(e.serviceId, e.list, e.auth, auth, serverDomain) : null;
       if (!entry) {
         dropped++;
@@ -239,7 +249,7 @@ export class AppAccessStore {
   private verifyEntry(
     serviceId: string,
     list: unknown,
-    a: { v?: unknown; grant?: unknown; signature?: unknown } | undefined,
+    a: { v?: unknown; grant?: unknown; signature?: unknown; by?: unknown } | undefined,
     auth: AccessAuthorizer,
     serverDomain: string,
   ): Entry | null {
@@ -251,7 +261,16 @@ export class AppAccessStore {
       if (!g || g.serviceId !== serviceId || g.serverDomain !== serverDomain || typeof list !== "string") return null;
       if (normalizeAccessList(list) !== list || accessListSha256(list) !== g.listSha256) return null;
       const parsed = parseAccessList(list);
-      if (parsed.errors.length > 0 || !auth.v2(g, sig)) return null;
+      if (parsed.errors.length > 0) return null;
+      if (a.by !== undefined) {
+        const b = a.by as { grant?: unknown; signature?: unknown };
+        const share = parseServerShareGrant(b?.grant);
+        if (!share || typeof b.signature !== "string") return null;
+        const by = { grant: share, signature: b.signature };
+        if (!auth.v2ByShare(g, sig, by)) return null;
+        return { list, rules: parsed.rules, auth: { v: 2, grant: g, signature: a.signature, by } };
+      }
+      if (!auth.v2(g, sig)) return null;
       return { list, rules: parsed.rules, auth: { v: 2, grant: g, signature: a.signature } };
     }
     if (a.v === 1) {

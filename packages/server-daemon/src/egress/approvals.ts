@@ -23,9 +23,11 @@ import {
   parseAccessList,
   parseAppAccessGrant,
   parseAppEgressGrant,
+  parseServerShareGrant,
   sortEgressHosts,
   verifyAppAccessGrant,
   verifyAppEgressGrant,
+  verifyServerShareGrant,
   type AccessListError,
   type AdminGrantView,
   type AppAccessGrant,
@@ -33,6 +35,7 @@ import {
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "../adminAuthorityLocal.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
+import { shareCallerOf } from "../shares/sharesHttp.js";
 import {
   coveringRule,
   hexToBytes,
@@ -40,6 +43,7 @@ import {
   type AccessDraft,
   type AccessRequest,
   type AppAccessStore,
+  type ShareSignerChain,
 } from "./accessStore.js";
 
 export interface EgressView {
@@ -124,6 +128,16 @@ export function accessAuthorizer(a: SensitiveAuthority): AccessAuthorizer {
   return {
     v2: (grant: AppAccessGrant, signature: Uint8Array) =>
       authorizeSensitiveOrder({ ...base, order: grant, signature, verify: verifyAppAccessGrant }),
+    // A list another account signed at manage level: its per-share key signed
+    // the list, and the owner's sensitive key signed the share that lets it.
+    v2ByShare: (grant: AppAccessGrant, signature: Uint8Array, by: ShareSignerChain) => {
+      const share = parseServerShareGrant(by.grant);
+      const shareSig = hexToBytes(by.signature);
+      if (!share || !shareSig || shareSig.length !== 64) return false;
+      if (share.level !== "manage" || share.serverDomain !== grant.serverDomain) return false;
+      if (!authorizeSensitiveOrder({ ...base, order: share, signature: shareSig, verify: verifyServerShareGrant })) return false;
+      return verifyAppAccessGrant(grant, signature, hexToBytes(share.memberPubHex)!);
+    },
     v1: (grant: AppEgressGrant, signature: Uint8Array) =>
       authorizeSensitiveOrder({ ...base, order: grant, signature, verify: verifyAppEgressGrant }),
   };
@@ -206,10 +220,17 @@ export function buildAppAccessHttp(opts: AppAccessHttpOptions) {
     if (accessListSha256(list) !== grant.listSha256) return err(403, "the list is not the one that was signed");
     if (grant.serverDomain !== opts.serverDomain) return err(403, "grant is for a different server");
     if (Math.abs(now() - grant.issuedAt) > maxSkew) return err(403, "stale grant");
-    if (!auth.v2(grant, sig)) return err(403, "invalid signature");
+    const share = shareCallerOf(req);
+    const by: ShareSignerChain | undefined = share ? { grant: share.grant, signature: share.grantSignature } : undefined;
+    if (share) {
+      if (share.level !== "manage") return err(403, "manage-only");
+      if (!auth.v2ByShare(grant, sig, by!)) return err(403, "invalid signature");
+    } else if (!auth.v2(grant, sig)) {
+      return err(403, "invalid signature");
+    }
     const held = opts.store.heldIssuedAt(serviceId);
     if (held !== null && grant.issuedAt <= held) return err(409, "a newer access list is already applied");
-    await opts.store.putSigned(serviceId, list, { v: 2, grant, signature: body.signature.toLowerCase() });
+    await opts.store.putSigned(serviceId, list, { v: 2, grant, signature: body.signature.toLowerCase(), ...(by ? { by } : {}) });
     opts.onChange?.(serviceId);
     return json(200, { ok: true, access: accessView(opts.store, serviceId) });
   }

@@ -150,6 +150,8 @@ export interface LineageResolverLike {
 
 export interface ScreensHttpDeps {
   gate: PairedSessionGate;
+  /** Share this server (shares/sharesHttp.ts). */
+  shares?: ScreensSharesLike | null;
   /** Bytes an app's files volume uses (null when unknown); shown on its page. */
   filesBytes?: ((volume: string) => Promise<number | null>) | null;
   /**
@@ -408,6 +410,11 @@ export interface VibeCodeRuntime {
   }) => void;
 }
 
+export interface ScreensSharesLike {
+  /** Owner routes under /api/screens (shares, revoke, activity); null when not one of them. */
+  handleOwner(path: string, method: string, req: HttpRequest): Promise<HttpResponse | null>;
+}
+
 export interface OrdersDispatchLike {
   /** Dispatch an already-verified PhoneOrder envelope. Returns optional response payload. */
   dispatch(args: {
@@ -514,6 +521,13 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (method !== "GET" && isWriteScopedPath(path)) {
       const denied = denyCompanionWrite(deps.pairedSessions ?? null, req);
       if (denied) return denied;
+    }
+
+    // Share this server: the owner's share list, grants, revokes and the
+    // activity log (a share session never gets here: the gate refuses it).
+    if (deps.shares) {
+      const r = await deps.shares.handleOwner(path, method, req);
+      if (r) return r;
     }
 
     if (deps.accessAlerts && path === ACCESS_ALERTS_PATH) {
