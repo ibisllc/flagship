@@ -206,7 +206,6 @@ final class RevokeServerTests: XCTestCase {
         func wipeRestart(username: String, body: WipeRestartRequest, ifMatch: String?) async throws -> WipeRestartResponse { throw error }
         func renameApp(username: String, serviceId: String, body: AppRenameRequest) async throws -> AppRenameResponse { throw error }
         func getAppLinks(username: String, serviceId: String) async throws -> AppLinksResponse { throw error }
-        func setCustomDomain(username: String, serviceId: String, body: SetCustomDomainRequest) async throws -> AppLinksResponse { throw error }
         func getUsernameRecord(username: String) async throws -> UsernameLookupResponse { throw error }
         func totpEnrollBegin(username: String, body: TotpEnrollBeginRequest) async throws -> TotpEnrollBeginResponse { throw error }
         func totpEnrollConfirm(username: String, body: TotpEnrollConfirmRequest) async throws -> TotpEnrollConfirmResponse { throw error }

@@ -59,11 +59,6 @@ public protocol ScreensClient: Sendable {
     // emit, repo create, deploy) for a vibe-code session.
     func vibeCodeStream(sessionId: String) -> AsyncStream<VibeCodeFrame>
 
-    // P1.22 custom-domain verify (extension; daemon-side pending) —
-    // ask the daemon to resolve the _flagship.<fqdn> TXT record and
-    // confirm the user-claimed custom URL is pointing at us.
-    func verifyCustomDomain(_ req: VerifyCustomDomainRequest) async throws -> VerifyCustomDomainResponse
-
     // P1.23 post-recovery status — snapshot of the J.3/J.4 reattach
     // walk so the phone's recovery confirmation screen can render
     // per-app re-anchoring counts + the undo deadline.

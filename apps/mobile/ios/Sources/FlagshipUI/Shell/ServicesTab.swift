@@ -454,12 +454,9 @@ private struct AppRow: View {
     }
 
     /// The short (shareable) URL for the monospaced detail line, falling back
-    /// to a confirmed custom domain, then the daemon's canonical label.
+    /// to the canonical URL, then the daemon's canonical label.
     private var shortUrlText: String? {
-        let confirmedCustom = (links?.customDomainConfirmed == true)
-            ? links?.customDomain.map { "https://\($0)" }
-            : nil
-        let short = confirmedCustom ?? links?.shortUrl ?? links?.canonicalUrl ?? "https://\(app.urlLabel)…"
+        let short = links?.shortUrl ?? links?.canonicalUrl ?? "https://\(app.urlLabel)…"
         return stripScheme(short)
     }
 

@@ -90,18 +90,6 @@ class MockScreensClientTest {
         assertNotEquals(home.cpuHistory.map { it.value }, office.cpuHistory.map { it.value })
     }
 
-    @Test fun verifyCustomDomain_pendingThenVerified() = runTest {
-        val c = makeClient()
-        val first = c.verifyCustomDomain(VerifyCustomDomainRequest("app.mydomain.com"))
-        assertEquals(VerifyCustomDomainResponse.Status.PENDING, first.status)
-        assertNotNull(first.reason)
-
-        val second = c.verifyCustomDomain(VerifyCustomDomainRequest("app.mydomain.com"))
-        assertEquals(VerifyCustomDomainResponse.Status.VERIFIED, second.status)
-        assertEquals(second.expectedTxtRecord, second.observedTxtRecord)
-        assertNull(second.reason)
-    }
-
     @Test fun fetchProvisionStatus_returnsScriptedRecord_orNullWhenAbsent() = runTest {
         // The ONE canonical provisioning channel lives on
         // FlagshipServerClient (flagshipserver.com), NOT the pod-gated

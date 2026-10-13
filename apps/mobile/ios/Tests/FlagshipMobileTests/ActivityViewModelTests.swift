@@ -120,9 +120,6 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
     func vibeCodeStream(sessionId: String) -> AsyncStream<VibeCodeFrame> {
         real.vibeCodeStream(sessionId: sessionId)
     }
-    func verifyCustomDomain(_ req: VerifyCustomDomainRequest) async throws -> VerifyCustomDomainResponse {
-        try await real.verifyCustomDomain(req)
-    }
     func postRecoveryStatus() async throws -> PostRecoveryStatusResponse {
         throw ScreensClientError.http(status: 503, message: "daemon does not implement P1.23")
     }

@@ -268,20 +268,6 @@ public final class ServiceDetailViewModel {
         await runsOn?.load()
     }
 
-    /// Draft in the "Set custom domain" field.
-    public var customDomainDraft: String = ""
-    /// One-at-a-time alert that drives the set-custom-domain flow.
-    public var customDomainPrompt: CustomDomainPrompt?
-    /// Client-side rate limit: after a successful set, the user must
-    /// wait until this instant before changing again. The server also
-    /// enforces it (lastChanged column) — this is just the UX mirror.
-    public var customDomainCooldownUntil: Date?
-    /// Cooldown after a successful custom-domain change.
-    public static let customDomainCooldown: TimeInterval = 300
-    /// The bound external domain, sourced from the links bundle so the
-    /// detail screen and the services list agree. A Replace never clears it.
-    public var customDomain: String? { appLinks.value?.customDomain }
-
     public let serviceId: String
     private let client: any ScreensClient
     /// V2 — flagshipServerClient for service-rename + service-links. Optional
@@ -364,150 +350,6 @@ public final class ServiceDetailViewModel {
         }
     }
 
-    /// One-at-a-time alert for the set-custom-domain flow.
-    public struct CustomDomainPrompt: Identifiable {
-        public let id = UUID()
-        public let title: String
-        public let message: String
-        /// When set, the alert shows this button + a Cancel. When nil,
-        /// the alert is informational (single dismiss button).
-        public let confirmTitle: String?
-        public let destructive: Bool
-        public let onConfirm: (() -> Void)?
-    }
-
-    /// Validates the draft and either raises an explanatory alert or
-    /// issues the binding order. `rootDomain` is the user's stub
-    /// (`<user>.flagship.services`) shown in the CNAME guidance.
-    public func submitCustomDomain(rootDomain: String) async {
-        let fqdn = customDomainDraft
-            .trimmingCharacters(in: .whitespaces)
-            .lowercased()
-            .replacingOccurrences(of: "https://", with: "")
-            .replacingOccurrences(of: "http://", with: "")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard !fqdn.isEmpty else { return }
-
-        // Rate limit (client mirror of the server's lastChanged).
-        if let until = customDomainCooldownUntil, until > Date() {
-            return
-        }
-
-        // (a) Apex / no subdomain — fewer than 3 labels means there's
-        // no subdomain to CNAME (example.com). Offer the www form.
-        // Structural (not a DNS check) so it stays instant + local.
-        if fqdn.split(separator: ".").count < 3 {
-            let suggested = "www.\(fqdn)"
-            customDomainPrompt = CustomDomainPrompt(
-                title: "Subdomains only",
-                message: "This only supports subdomains — an apex like \(fqdn) can't take a CNAME. Use \(suggested)?",
-                confirmTitle: "Use \(suggested)",
-                destructive: false,
-                onConfirm: { [weak self] in
-                    guard let self else { return }
-                    self.customDomainDraft = suggested
-                    Task { await self.submitCustomDomain(rootDomain: rootDomain) }
-                }
-            )
-            return
-        }
-
-        // No phone-side CNAME check: the server re-validates
-        // authoritatively anyway, so the phone takes the claim at
-        // face value and lets the binding POST test it. A failed
-        // CNAME comes back as the POST error below.
-
-        // (b) Replacing an existing binding — confirm first. The swap
-        // is destructive and irreversible: this device drops its memory
-        // of the old domain immediately, even if the new one never
-        // confirms (there's no "forget a domain" affordance otherwise).
-        if let existing = customDomain, existing != fqdn {
-            customDomainPrompt = CustomDomainPrompt(
-                title: "Replace custom domain?",
-                message: "This will permanently replace the current custom domain (\(existing)). It can't be undone, even if the new one fails to verify.",
-                confirmTitle: "Replace",
-                destructive: true,
-                onConfirm: { [weak self] in
-                    Task { await self?.bindCustomDomain(fqdn) }
-                }
-            )
-            return
-        }
-
-        // (c) Clean path — issue the request. Request is DECOUPLED
-        // from confirmation: a 200 only means "recorded, .com will
-        // verify the CNAME out-of-band and push the outcome later".
-        await bindCustomDomain(fqdn)
-    }
-
-    private func bindCustomDomain(_ fqdn: String) async {
-        guard let server, let user = username(), !user.isEmpty else { return }
-        // Slice D — set-custom-domain is a SENSITIVE order. Sign with the admin
-        // master root when this device holds one (else the legacy owner IRK); the
-        // Face ID prompt is the second-factor confirmation, and `.com`'s
-        // authority gate verifies this signature against the admin root (or IRK,
-        // pre-D) before recording the order. Canonical bytes are unchanged.
-        let irk: Curve25519.Signing.PrivateKey
-        do {
-            irk = try await Keystore.sensitiveOrderSigningKey(reason: "Attach a custom domain")
-        } catch {
-            customDomainPrompt = CustomDomainPrompt(
-                title: "Couldn't request custom domain",
-                message: "Couldn't access your account keys: \(error.localizedDescription)",
-                confirmTitle: nil, destructive: false, onConfirm: nil
-            )
-            return
-        }
-        let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
-        let canonical = SetCustomDomainClaim.canonicalBytes(
-            username: user, serviceId: serviceId, fqdn: fqdn, issuedAt: issuedAt,
-        )
-        let signature: Data
-        do {
-            signature = try irk.signature(for: canonical)
-        } catch {
-            customDomainPrompt = CustomDomainPrompt(
-                title: "Couldn't request custom domain",
-                message: "Couldn't sign the request: \(error.localizedDescription)",
-                confirmTitle: nil, destructive: false, onConfirm: nil
-            )
-            return
-        }
-        do {
-            // 200 = recorded (NOT yet confirmed). We optimistically
-            // surface the domain; the set/fail outcome arrives later
-            // as a pushed alert (server backend, task #79). No
-            // pending/unconfirmed state in the UI by design.
-            let r = try await server.setCustomDomain(
-                username: user,
-                serviceId: serviceId,
-                body: SetCustomDomainRequest(
-                    request: .init(
-                        username: user,
-                        serviceId: serviceId,
-                        fqdn: fqdn,
-                        issuedAt: issuedAt,
-                    ),
-                    signature: HexUtil.encode(signature),
-                ),
-            )
-            appLinks = .loaded(r)
-            customDomainDraft = ""
-            recordCustomDomainChangeLocally()
-        } catch {
-            // Non-200 is the ONLY synchronous denial — rate-limit or
-            // server-busy, never a CNAME verdict (that's async). Show
-            // the server's reason verbatim.
-            customDomainPrompt = CustomDomainPrompt(
-                title: "Couldn't request custom domain",
-                message: error.localizedDescription,
-                confirmTitle: nil,
-                destructive: false,
-                onConfirm: nil
-            )
-        }
-    }
-
     /// V2 — fetch the canonical / short / instances triplet from .com.
     /// Called lazily on ServiceDetailScreen first appearance; updated
     /// after each successful Replace.
@@ -522,36 +364,9 @@ public final class ServiceDetailViewModel {
         do {
             let r = try await server.getAppLinks(username: user, serviceId: serviceId)
             appLinks = .loaded(r)
-            // Rebuild the countdown from the on-device timestamp so it
-            // survives an app reload / VM recreation. The server keeps
-            // its own rate-limit timer and is the real backstop (429);
-            // we don't ask it for this simple numeric field.
-            restoreCooldownFromLocal()
         } catch {
             appLinks = .failed(ScreensClientError.userFacing(error))
         }
-    }
-
-    private var cdLastChangedKey: String {
-        "flagship.customDomain.lastChanged.\(serviceId)"
-    }
-
-    /// Persist the request time on-device + start the local cooldown.
-    private func recordCustomDomainChangeLocally() {
-        UserDefaults.standard.set(
-            Date().timeIntervalSince1970, forKey: cdLastChangedKey
-        )
-        customDomainCooldownUntil = Date()
-            .addingTimeInterval(Self.customDomainCooldown)
-    }
-
-    /// Reconstruct the cooldown from the on-device timestamp (no
-    /// network). Lost local state just means the server 429s instead.
-    private func restoreCooldownFromLocal() {
-        let ts = UserDefaults.standard.double(forKey: cdLastChangedKey)
-        guard ts > 0 else { return }
-        let until = Date(timeIntervalSince1970: ts + Self.customDomainCooldown)
-        customDomainCooldownUntil = until > Date() ? until : nil
     }
 
     /// V2 — Replace ceremony. Signs the canonical bytes with the

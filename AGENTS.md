@@ -527,8 +527,9 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
   live D1 run, and owner config (`DIBS_WINDOW_START/END`, $10/$20 vouchers,
   exempt `/dibs` from the coming-soon gate). Migrations 0092–0094 live there.
 - **`feat/custom-domains`** (off marketplace): Pro gate built. `main` refuses new
-  orders with "Custom domains aren't available yet"; keep the branch's Pro
-  wording at launch. Remaining: live e2e, Stripe price ids.
+  orders with "Custom domains aren't available yet" and has no custom-domain
+  UI in any app (removed 2026-10-13; the branch holds it all); keep the
+  branch's Pro wording at launch. Remaining: live e2e, Stripe price ids.
 - **`feat/free-tier-throttle`:** 256 kbit/s over quota instead of a hard stop;
   needs a `.services` deploy once merged.
 - **`feat/phone-usb-burn`:** validate the OTG write on a real phone + stick,

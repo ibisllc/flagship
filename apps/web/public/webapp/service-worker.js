@@ -115,7 +115,9 @@
 //       the app page and its Runs on rows show each server's state.
 //  v60: a server's page ignores a late answer from the server shown before
 //       it, so it never shows another server's detail under its name.
-const SHELL_VERSION = "v61";
+//  v62: an app's page no longer offers a custom domain (a Pro feature that
+//       lives on feat/custom-domains until it launches).
+const SHELL_VERSION = "v62";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

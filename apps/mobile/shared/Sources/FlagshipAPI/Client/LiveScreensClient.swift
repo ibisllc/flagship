@@ -195,11 +195,6 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         }
     }
 
-    public func verifyCustomDomain(_ req: VerifyCustomDomainRequest) async throws -> VerifyCustomDomainResponse {
-        let body = try JSONEncoder().encode(req)
-        return try await request("/api/screens/url-controller/verify", method: "POST", body: body)
-    }
-
     public func postRecoveryStatus() async throws -> PostRecoveryStatusResponse {
         try await request("/api/screens/post-recovery/status")
     }

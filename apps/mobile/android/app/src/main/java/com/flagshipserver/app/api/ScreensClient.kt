@@ -61,9 +61,6 @@ interface ScreensClient {
     // P1.21 server-metrics (extension)
     suspend fun serverMetrics(podId: String): ServerMetricsResponse
 
-    // P1.22 custom-domain verify (extension)
-    suspend fun verifyCustomDomain(req: VerifyCustomDomainRequest): VerifyCustomDomainResponse
-
     // P1.23 post-recovery status — daemon's J.3/J.4 reattach snapshot
     suspend fun postRecoveryStatus(): PostRecoveryStatusResponse
 
