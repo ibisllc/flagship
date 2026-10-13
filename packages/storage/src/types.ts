@@ -8,7 +8,7 @@
  * without depending on Fastify, Workers, or any HTTP framework.
  */
 
-import type { MeterCounter, MeterStore } from "@ibisllc/billing-metering";
+import type { MeterBatchEntry, MeterBatchResult, MeterCounter, MeterStore } from "@ibisllc/billing-metering";
 
 /**
  * v1.2 security cascade — account-type discriminator. See
@@ -2141,7 +2141,8 @@ export interface TierStorage {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Metering core (migration 0069) — one counter per (account, resource, period)
+// Metering core (migration 0069) — one counter per (account, resource, period);
+// 0070 adds the batch ids that make relay reports idempotent
 // ──────────────────────────────────────────────────────────────────────
 
 /** The metering core's counter and store contract, from
@@ -2152,6 +2153,8 @@ export interface TierStorage {
  *  not part of the `Storage` aggregate. */
 export type MeterCounterRecord = MeterCounter;
 export type MeterStorage = MeterStore;
+/** Idempotent relay batches (migration 0070 `meter_batches`). */
+export type { MeterBatchEntry, MeterBatchResult };
 
 // ──────────────────────────────────────────────────────────────────────
 // User-identity mandate store (#71)

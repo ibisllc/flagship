@@ -172,8 +172,9 @@ describe("wipe-all-users SQL table list — in sync with migrations", () => {
     }
   });
 
-  it("includes the metering core's counters (0069)", () => {
+  it("includes the metering core's counters (0069) and batch ids (0070)", () => {
     expect(readFileSync(SQL, "utf8")).toContain("DELETE FROM meter_counters;");
+    expect(readFileSync(SQL, "utf8")).toContain("DELETE FROM meter_batches;");
   });
 
   it("does NOT delete build_tickets (dropped in migration 0033)", () => {

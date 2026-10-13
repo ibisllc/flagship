@@ -214,6 +214,22 @@ class SqliteD1Statement implements D1PreparedStatement {
     };
   }
 
+  /** As D1's batch() runs a statement: rows for a SELECT / RETURNING. */
+  runInBatch(): D1Result {
+    const stmt = this.prepared();
+    const params = this.rewritten.maxIndex > 0 ? [this.paramsObject()] : [];
+    if (/^\s*SELECT\b|\bRETURNING\b/i.test(this.sql)) {
+      const rows = stmt.all(...params);
+      return { success: true, meta: { changes: rows.length }, results: rows };
+    }
+    const r = stmt.run(...params);
+    return {
+      success: true,
+      meta: { changes: Number(r.changes), last_row_id: Number(r.lastInsertRowid) },
+      results: [],
+    };
+  }
+
   async run(): Promise<D1Result> {
     const stmt = this.prepared();
     const r =
@@ -310,11 +326,17 @@ export function createSqliteD1(): SqliteD1 {
       return new SqliteD1Statement(raw, query);
     },
     async batch(stmts: D1PreparedStatement[]) {
-      // src/d1.ts never calls batch(), but satisfy the interface: run
-      // each sequentially (no cross-statement transaction needed for the
-      // adapter's current shape).
+      // Like D1: one transaction (all or nothing), and each statement's
+      // returned rows in `results`.
       const out: D1Result[] = [];
-      for (const s of stmts) out.push(await s.run());
+      raw.exec("BEGIN");
+      try {
+        for (const s of stmts) out.push((s as SqliteD1Statement).runInBatch());
+        raw.exec("COMMIT");
+      } catch (e) {
+        raw.exec("ROLLBACK");
+        throw e;
+      }
       return out;
     },
     async exec(query: string) {

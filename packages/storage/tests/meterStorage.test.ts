@@ -106,3 +106,65 @@ describe("migration 0069 — the billing package's portable schema", () => {
     expect(shape("meter_counters")).toEqual(shape("portable_meter_counters"));
   });
 });
+
+describe.each(adapters)("MeterStorage.addBatch (%s)", (_name, make) => {
+  const e = (account: string, amount: number) => ({ account, resource: "egress", period: "2026-10", amount });
+
+  it("adds every entry once and returns the new totals in order", async () => {
+    const s = make();
+    await s.add("alice", "egress", "2026-10", 5, 1);
+    expect(await s.addBatch!("0123456789abcdef0123456789abcdef", [e("alice", 10), e("bob", 3)], 2, 100)).toEqual({
+      duplicate: false,
+      totals: [15, 3],
+    });
+  });
+
+  it("a retried batch id changes nothing until it expires", async () => {
+    const s = make();
+    const id = "0123456789abcdef0123456789abcdef";
+    await s.addBatch!(id, [e("alice", 10)], 1, 100);
+    expect(await s.addBatch!(id, [e("alice", 10)], 50, 150)).toEqual({ duplicate: true });
+    expect((await s.get("alice", "egress", "2026-10"))?.amount).toBe(10);
+    expect(await s.addBatch!(id, [e("alice", 10)], 101, 200)).toEqual({ duplicate: false, totals: [20] });
+  });
+});
+
+describe("migration 0070 — meter_batches", () => {
+  it("holds only an id, a claim and an expiry, like the billing package's portable schema", () => {
+    const { sqlite } = d1();
+    const portable = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../../../billing/packages/metering/schema/meter_batches.sql"),
+      "utf8",
+    );
+    sqlite.raw.exec(portable.replaceAll("meter_batches", "portable_meter_batches"));
+    const shape = (table: string) =>
+      (sqlite.raw.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string; notnull: number; pk: number }>).map(
+        (c) => [c.name, c.notnull, c.pk],
+      );
+    expect(shape("meter_batches")).toEqual([
+      ["batch_id", 1, 1],
+      ["claim", 1, 0],
+      ["keep_until", 1, 0],
+    ]);
+    expect(shape("meter_batches")).toEqual(shape("portable_meter_batches"));
+  });
+
+  it("prunes expired ids as later batches arrive", async () => {
+    const { store, sqlite } = d1();
+    for (let i = 0; i < 40; i++) {
+      await store.addBatch(`batch-${String(i).padStart(12, "0")}`, [], i, i + 10);
+    }
+    const n = (sqlite.raw.prepare("SELECT COUNT(*) AS n FROM meter_batches").get() as { n: number }).n;
+    expect(n).toBeLessThanOrEqual(11);
+  });
+
+  it("a batch that fails part-way adds nothing (one transaction)", async () => {
+    const { store, sqlite } = d1();
+    sqlite.raw.exec("CREATE TRIGGER boom BEFORE INSERT ON meter_counters WHEN NEW.account = 'bad' BEGIN SELECT RAISE(ABORT, 'boom'); END");
+    await expect(
+      store.addBatch("0123456789abcdef0123456789abcdef", [{ account: "alice", resource: "egress", period: "2026-10", amount: 1 }, { account: "bad", resource: "egress", period: "2026-10", amount: 1 }], 1, 100),
+    ).rejects.toThrow(/boom/);
+    expect(await store.get("alice", "egress", "2026-10")).toBeUndefined();
+    expect((sqlite.raw.prepare("SELECT COUNT(*) AS n FROM meter_batches").get() as { n: number }).n).toBe(0);
+  });
+});

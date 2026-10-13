@@ -33,13 +33,15 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0065", "0066", "0067", "0068",
   // Metering core: one counter per (account, resource, period).
   "0069",
-  // 0070–0079 are deliberately absent: this branch's feature migrations were
+  // Metering: batch ids that make relay usage reports idempotent.
+  "0070",
+  // 0071–0079 are deliberately absent: this branch's feature migrations were
   // parked in a far block (0080+) while main kept allocating organically from
   // 0067 upward (it took 0067 and 0068 before the merge). The prod
   // schema_version ledger stores only the 4-digit prefix, so a shared number
   // would have made the deploy-time drift gate false-pass; the parked numbers
   // stay where prod stamped them, and 0069–0079 were left for main's next
-  // organic allocations (0069 is the first).
+  // organic allocations (0069 and 0070 so far).
   "0080",
   "0081",
   "0082",

@@ -35,7 +35,9 @@
 -- adapter_attempts + adapter_complaints (0086) are PRESERVED too: they carry
 -- no identity and belong to the adapter index, not to any account.
 -- Re-audited 2026-10-13 through 0069: added meter_counters (0069), the
--- metering core's per-account counters (egress bytes, AI tokens).
+-- metering core's per-account counters (egress bytes, AI tokens), and
+-- meter_batches (0070), the relay's recent batch ids (no account in it; wiped
+-- with the counters it guards).
 --
 -- ⚠️ DO NOT run this file via `wrangler d1 execute --file`. Prod D1's schema
 -- DRIFTS from the repo (migrations are applied by hand; e.g. nfc_rendezvous/0040
@@ -123,6 +125,7 @@ DELETE FROM llm_promo_lifetime;
 DELETE FROM llm_promo_usage;
 DELETE FROM usage_counters;
 DELETE FROM meter_counters;
+DELETE FROM meter_batches;
 DELETE FROM vouchers;
 DELETE FROM stripe_events;
 DELETE FROM app_purchases;
