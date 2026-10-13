@@ -2259,7 +2259,13 @@ button[data-device-restricted] {
   background: var(--surface-sunken); color: var(--ink-soft); font-weight: 600; object-fit: cover;
 }
 .sa-avatar svg { width: 18px; height: 18px; }
-@media (max-width: 420px) {
+.sa-member-actions button.sa-remove {
+  height: 36px; padding: 0 12px; margin: 0; width: auto;
+  background: transparent; color: var(--err); border: 1px solid var(--border);
+  font-size: 13px; font-weight: 600; box-shadow: none;
+}
+.sa-member select { height: 36px; padding-top: 0; padding-bottom: 0; font-size: 14px; }
+@media (max-width: 380px) {
   .sa-member { flex-wrap: wrap; }
   .sa-member-actions { width: 100%; justify-content: flex-end; }
 }

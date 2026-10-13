@@ -665,7 +665,7 @@ function peopleRowHtml(i, members, labelOf) {
         </div>
         <div class="sa-member-actions">
           ${picker}
-          <button class="danger small" data-action="sa-remove" data-id="${escapeHtml(i.inviteId)}" data-aid="${escapeHtml(i.boundAID ?? "")}" data-name="${escapeHtml(name)}" data-group="${isGroup ? "1" : "0"}">${removeLabel}</button>
+          <button class="sa-remove" type="button" data-action="sa-remove" data-id="${escapeHtml(i.inviteId)}" data-aid="${escapeHtml(i.boundAID ?? "")}" data-name="${escapeHtml(name)}" data-group="${isGroup ? "1" : "0"}">${removeLabel}</button>
         </div>
       </div>
     </div>`;
