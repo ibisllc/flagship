@@ -36,6 +36,11 @@ describe("userZoneOf", () => {
     expect(userZoneOf("home.alice.gym.flagship.services")).toBe("alice.gym.flagship.services");
   });
 
+  it("takes a username with a dash", () => {
+    expect(userZoneOf("home3.plucky-avocet.flagship.services")).toBe("plucky-avocet.flagship.services");
+    expect(userZoneOf("home3.plucky--avocet.flagship.services")).toBeNull();
+  });
+
   it("returns null on shape mismatch (too few labels)", () => {
     // `<user>.<apex>` (3 labels) and a bare apex have no `<server>.<user>` head.
     expect(userZoneOf("alice.flagship.services")).toBeNull();

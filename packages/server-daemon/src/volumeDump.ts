@@ -9,7 +9,7 @@ import { assertNoHostPathInDockerArgs, filesMountArgs } from "./serviceRunner.js
  * Volume-aware backup: CONSISTENT dumps of the data the box keeps for apps:
  * the Postgres and Forgejo bind mounts under `<dataDir>/data/{postgres,forgejo}`
  * (installer/data-services/docker-compose.yml) and each app's files folder
- * (a Docker named volume, `flagship-files-<creator>-<slug>`).
+ * (a Docker named volume, `flagship-files-<creator>--<slug>`).
  *
  * The peer-backup walker (`dataDirWalker.ts`) is rooted at `<dataDir>/data` and
  * would otherwise DESCEND into the live bind mounts and ship a TORN copy —

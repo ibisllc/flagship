@@ -106,7 +106,7 @@ describe("/data dashboard endpoints", () => {
     const { ctx, files } = makeCtx();
     const http = buildDaemonHttp(ctx);
     await deploy(http);
-    files.volumes.get("flagship-files-harry-habit-tracker")!.bytes = 4096;
+    files.volumes.get("flagship-files-harry--habit-tracker")!.bytes = 4096;
     const r = await http.inject({
       method: "GET",
       url: "/data/files/habit-tracker?sessionToken=phone-token",

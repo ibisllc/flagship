@@ -11,9 +11,11 @@
  *                       pg_database and pg_roles, so a readable name would
  *                       tell AI-written code which other apps the owner
  *                       runs; an opaque one tells it nothing.
- *   Files volume:       `flagship-files-<creator>-<slug>` (prod) or
- *                       `flagship-files-dev--<creator>-<slug>` (dev). Only
+ *   Files volume:       `flagship-files-<creator>--<slug>` (prod) or
+ *                       `flagship-devfiles-<creator>--<slug>` (dev). Only
  *                       the box sees volume names (and the app its own).
+ *                       `--` splits creator from slug, as in service ids:
+ *                       neither may contain one.
  *
  * The names are stable for a box: the same identity and key always give the
  * same name, so the box can recompute a dev store a crashed daemon left. Prod
@@ -21,25 +23,28 @@
  * drops (an app restored onto another box keeps the names it had).
  *
  * The dev dataspace (staging copies) can never collide with prod: a prod
- * database starts `app_`, a dev one `__dev_`; a prod volume's part after
- * `flagship-files-` starts with a dashless creator then one dash and a slug
- * that starts alphanumeric, so it can never start `dev--`.
+ * database starts `app_`, a dev one `__dev_`; a prod volume starts
+ * `flagship-files-`, a dev one `flagship-devfiles-`.
+ *
+ * Volumes made before usernames could hold a dash were
+ * `flagship-files-<dashless creator>-<slug>`; they are still recognized as
+ * prod volumes so those apps keep their files.
  *
  * Validation contract (enforced upstream by services-zone and the manifest):
- *   - creator: [a-z0-9]{1,32}, no dashes
+ *   - creator: [a-z0-9-]{1,32}, no leading/trailing dash, no double dash
+ *              (a username)
  *   - slug:    [a-z0-9-]{1,32}, no leading/trailing dash, no double dash
  *   - storeName: an RFC 1035 label, [a-z0-9-]{1,32} (the manifest's rule)
  */
 
 import { createHmac } from "node:crypto";
 
-const CREATOR_RE = /^[a-z0-9]{1,32}$/;
 const SLUG_RE = /^[a-z0-9](-?[a-z0-9])*$/;
 const STORE_NAME_RE = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/;
 
 function assertCreator(creator: string): void {
-  if (!CREATOR_RE.test(creator)) {
-    throw new Error(`creator ${JSON.stringify(creator)} must match [a-z0-9]{1,32} (no dashes)`);
+  if (creator.length < 1 || creator.length > 32 || !SLUG_RE.test(creator)) {
+    throw new Error(`creator ${JSON.stringify(creator)} must match [a-z0-9-]{1,32} with no leading/trailing/double dash`);
   }
 }
 function assertSlug(slug: string): void {
@@ -133,19 +138,22 @@ export function pgRole(id: AppDataIdentity, nameKey: string): string {
 export function filesVolume(id: AppDataIdentity): string {
   assertCreator(id.creator);
   assertSlug(id.slug);
-  return `flagship-files-${isDev(id) ? "dev--" : ""}${id.creator}-${id.slug}`;
+  return `flagship-${isDev(id) ? "devfiles" : "files"}-${id.creator}--${id.slug}`;
 }
 
-const FILES_VOLUME_RE = /^flagship-files-(dev--)?[a-z0-9]{1,32}-[a-z0-9](-?[a-z0-9]){0,31}$/;
+const LABEL = "[a-z0-9](?:-?[a-z0-9]){0,31}";
+const PROD_FILES_VOLUME_RE = new RegExp(`^flagship-files-${LABEL}--${LABEL}$`);
+const DEV_FILES_VOLUME_RE = new RegExp(`^flagship-devfiles-${LABEL}--${LABEL}$`);
+const LEGACY_FILES_VOLUME_RE = new RegExp(`^flagship-files-[a-z0-9]{1,32}-${LABEL}$`);
 
 /** True for a name `filesVolume` could have made (prod or dev). */
 export function isFilesVolume(name: string): boolean {
-  return FILES_VOLUME_RE.test(name);
+  return isProdFilesVolume(name) || DEV_FILES_VOLUME_RE.test(name);
 }
 
 /** True for a prod files volume (what backups carry; dev ones never are). */
 export function isProdFilesVolume(name: string): boolean {
-  return isFilesVolume(name) && !name.startsWith("flagship-files-dev--");
+  return PROD_FILES_VOLUME_RE.test(name) || LEGACY_FILES_VOLUME_RE.test(name);
 }
 
 /**

@@ -21,10 +21,10 @@ const CREDS: DataServicesCreds = {
 };
 
 const RUNNING: Record<string, string> = {
-  "flagship-files-harry-notes": "c-harry--notes",
-  "flagship-files-bob-pics": "c-bob--pics",
+  "flagship-files-harry--notes": "c-harry--notes",
+  "flagship-files-bob--pics": "c-bob--pics",
 };
-const VOLUMES = ["flagship-files-harry-notes", "flagship-files-dev--harry-notes", "flagship-files-bob-pics", "unrelated"];
+const VOLUMES = ["flagship-files-harry--notes", "flagship-devfiles-harry--notes", "flagship-files-bob--pics", "unrelated"];
 
 interface Rec {
   kind: "run" | "capture" | "runToFile" | "runFromFile";
@@ -137,8 +137,8 @@ describe("dumpDataVolumes", () => {
     await dumpDataVolumes({ dataRoot, runner, creds: CREDS });
     const runs = tarRuns(calls);
     expect(runs.map((r) => r.outPath)).toEqual([
-      join(dataRoot, "_dumps", "files", "flagship-files-bob-pics.tar"),
-      join(dataRoot, "_dumps", "files", "flagship-files-harry-notes.tar"),
+      join(dataRoot, "_dumps", "files", "flagship-files-bob--pics.tar"),
+      join(dataRoot, "_dumps", "files", "flagship-files-harry--notes.tar"),
     ]);
     const args = runs[1]!.args;
     expect(args).toEqual([
@@ -156,7 +156,7 @@ describe("dumpDataVolumes", () => {
       "--user",
       "0:0",
       "--mount",
-      "type=volume,src=flagship-files-harry-notes,dst=/data,readonly",
+      "type=volume,src=flagship-files-harry--notes,dst=/data,readonly",
       "--entrypoint",
       "tar",
       FILES_HELPER_IMAGE,
@@ -180,7 +180,7 @@ describe("dumpDataVolumes", () => {
   });
 
   it("an app that isn't running is archived without a pause or unpause", async () => {
-    const { runner, calls } = recordingRunner({ volumes: ["flagship-files-harry-notes"], running: {} });
+    const { runner, calls } = recordingRunner({ volumes: ["flagship-files-harry--notes"], running: {} });
     const report = await dumpDataVolumes({ dataRoot, runner, creds: CREDS, only: ["files"] });
     expect(report.stores.files).toBe("ok");
     expect(calls.some((c) => c.args[0] === "pause" || c.args[0] === "unpause")).toBe(false);
@@ -189,11 +189,11 @@ describe("dumpDataVolumes", () => {
 
   it("drops the archive of an app that's gone", async () => {
     await mkdir(join(dataRoot, "_dumps", "files"), { recursive: true });
-    await writeFile(join(dataRoot, "_dumps", "files", "flagship-files-gone-app.tar"), "old");
+    await writeFile(join(dataRoot, "_dumps", "files", "flagship-files-gone--app.tar"), "old");
     const { runner } = recordingRunner();
     await dumpDataVolumes({ dataRoot, runner, creds: CREDS, only: ["files"] });
-    expect(await exists(join(dataRoot, "_dumps", "files", "flagship-files-gone-app.tar"))).toBe(false);
-    expect(await exists(join(dataRoot, "_dumps", "files", "flagship-files-harry-notes.tar"))).toBe(true);
+    expect(await exists(join(dataRoot, "_dumps", "files", "flagship-files-gone--app.tar"))).toBe(false);
+    expect(await exists(join(dataRoot, "_dumps", "files", "flagship-files-harry--notes.tar"))).toBe(true);
   });
 
   it("dumps the files folders even without the data-services credentials", async () => {
@@ -209,7 +209,7 @@ describe("dumpDataVolumes", () => {
     await dumpDataVolumes({ dataRoot, runner, creds: CREDS });
     const rels = [
       "_dumps/postgres/all.dump",
-      "_dumps/files/flagship-files-harry-notes.tar",
+      "_dumps/files/flagship-files-harry--notes.tar",
       "_dumps/forgejo/forgejo.db",
       "_dumps/forgejo/repos.tar",
     ];
@@ -235,11 +235,11 @@ describe("dumpDataVolumes", () => {
   });
 
   it("one volume's failure fails the files store but the others are still archived and unpaused", async () => {
-    const { runner, calls } = recordingRunner({ fail: "src=flagship-files-bob-pics" });
+    const { runner, calls } = recordingRunner({ fail: "src=flagship-files-bob--pics" });
     const report = await dumpDataVolumes({ dataRoot, runner, creds: CREDS, only: ["files"] });
     expect(report.stores.files).toBe("error");
-    expect(report.errors[0]!.message).toMatch(/flagship-files-bob-pics/);
-    expect(await exists(join(dataRoot, "_dumps", "files", "flagship-files-harry-notes.tar"))).toBe(true);
+    expect(report.errors[0]!.message).toMatch(/flagship-files-bob--pics/);
+    expect(await exists(join(dataRoot, "_dumps", "files", "flagship-files-harry--notes.tar"))).toBe(true);
     expect(calls.some((c) => c.args[0] === "unpause" && c.args[1] === "c-bob--pics")).toBe(true);
   });
 
@@ -278,10 +278,10 @@ describe("reloadDataVolumes", () => {
     expect(psql?.args).toContain("-i");
 
     // files: each archive goes into a FRESH, labelled volume of its name
-    const v = "flagship-files-harry-notes";
+    const v = "flagship-files-harry--notes";
     const seq = calls.map((c) => c.args.join(" "));
     const rmAt = seq.indexOf(`volume rm -f ${v}`);
-    const createAt = seq.indexOf(`volume create --label flagship.files=prod --label flagship.app=harry-notes ${v}`);
+    const createAt = seq.indexOf(`volume create --label flagship.files=prod --label flagship.app=harry--notes ${v}`);
     const untar = calls.findIndex((c) => c.kind === "runFromFile" && c.args.includes(`type=volume,src=${v},dst=/data`));
     expect(rmAt).toBeGreaterThan(-1);
     expect(createAt).toBeGreaterThan(rmAt);
@@ -305,12 +305,12 @@ describe("reloadDataVolumes", () => {
   it("never replaces a files volume a container still uses", async () => {
     const dump = recordingRunner();
     await dumpDataVolumes({ dataRoot, runner: dump.runner, creds: CREDS, only: ["files"] });
-    const { runner, calls } = recordingRunner({ inUse: ["flagship-files-harry-notes"] });
+    const { runner, calls } = recordingRunner({ inUse: ["flagship-files-harry--notes"] });
     const report = await reloadDataVolumes({ dataRoot, runner, creds: CREDS, only: ["files"] });
     expect(report.stores.files).toBe("error");
-    expect(report.errors[0]!.message).toMatch(/flagship-files-harry-notes: a container still uses it/);
-    expect(calls.some((c) => c.args.join(" ") === "volume rm -f flagship-files-harry-notes")).toBe(false);
-    expect(calls.some((c) => c.args.join(" ") === "volume rm -f flagship-files-bob-pics")).toBe(true);
+    expect(report.errors[0]!.message).toMatch(/flagship-files-harry--notes: a container still uses it/);
+    expect(calls.some((c) => c.args.join(" ") === "volume rm -f flagship-files-harry--notes")).toBe(false);
+    expect(calls.some((c) => c.args.join(" ") === "volume rm -f flagship-files-bob--pics")).toBe(true);
   });
 
   it("reloads the files folders without the data-services credentials", async () => {

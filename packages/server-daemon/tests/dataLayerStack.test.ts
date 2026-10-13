@@ -186,6 +186,6 @@ describe("DataStack at boot", () => {
     await r.stack.ensure();
     const creds = await pending;
     expect(creds.postgres!.default!.database).toBe(pgDatabase({ creator: "harry", slug: "notes" }, key));
-    expect(creds.files!.volume).toBe("flagship-files-harry-notes");
+    expect(creds.files!.volume).toBe("flagship-files-harry--notes");
   });
 });

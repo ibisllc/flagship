@@ -728,8 +728,9 @@ describe("screens HTTP — P1.14 orders/send", () => {
 
 describe("screens HTTP — P1.19 / P1.20 app-backup", () => {
   it("start: parses serviceId, calls AppBackupService.createBackup, returns metadata", async () => {
+    const asked: string[] = [];
     const fakeBackup = {
-      createBackup: async (spec: { creator: string; slug: string }) => ({
+      createBackup: async (spec: { creator: string; slug: string }) => (asked.push(spec.creator, spec.slug), {
         backupId: "abc123",
         fetchPath: "/api/backups/abc123",
         path: "/tmp/abc123.tar.gz",
@@ -749,11 +750,12 @@ describe("screens HTTP — P1.19 / P1.20 app-backup", () => {
       method: "POST",
       path: "/api/screens/app-backup/start",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ serviceId: "alice-habits", includeUserData: false })),
+      body: Buffer.from(JSON.stringify({ serviceId: "plucky-avocet--habit-log", includeUserData: false })),
     }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
     expect(body.backupId).toBe("abc123");
+    expect(asked).toEqual(["plucky-avocet", "habit-log"]);
     expect(body.fetchPath).toBe("/api/backups/abc123");
     expect(body.encrypted).toBe(false);
   });

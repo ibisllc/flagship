@@ -159,7 +159,7 @@ export class DataProvisioner {
         const volume = filesVolume({ creator, slug, space });
         await this.opts.files!.createVolume({
           volume,
-          labels: { "flagship.files": space, "flagship.app": `${creator}-${slug}` },
+          labels: { "flagship.files": space, "flagship.app": `${creator}--${slug}` },
         });
         out.files = { volume };
       }

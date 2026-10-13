@@ -20,7 +20,7 @@ const LONG_CREATOR = "c".repeat(32);
 const LONG_STORE = "s".repeat(14) + "-" + "t".repeat(17); // 32 chars, dashed
 
 const identities: AppDataIdentity[] = [];
-for (const creator of ["harry", "dev", "a", LONG_CREATOR]) {
+for (const creator of ["harry", "dev", "a", "plucky-avocet", LONG_CREATOR]) {
   for (const slug of ["notes", "x", "stg-443ac182b4bc9fe5", `stg-${"f".repeat(28)}`, LONG_SLUG]) {
     for (const storeName of [undefined, "default", "sprites", "main-data", LONG_STORE]) {
       for (const space of ["prod", "dev"] as const) {
@@ -80,7 +80,8 @@ describe("opaque Postgres names", () => {
   it("refuse a missing or short name key, and invalid identities", () => {
     expect(() => pgDatabase({ creator: "harry", slug: "x" }, "")).toThrow(/name key/);
     expect(() => pgDatabase({ creator: "harry", slug: "x" }, "short")).toThrow(/name key/);
-    expect(() => pgDatabase({ creator: "har-ry", slug: "x" }, KEY)).toThrow();
+    expect(() => pgDatabase({ creator: "har--ry", slug: "x" }, KEY)).toThrow();
+    expect(() => pgDatabase({ creator: "-harry", slug: "x" }, KEY)).toThrow();
     expect(() => pgDatabase({ creator: "harry", slug: "-foo" }, KEY)).toThrow();
     expect(() => pgDatabase({ creator: "harry", slug: "foo--bar" }, KEY)).toThrow();
     expect(() => pgDatabase({ creator: "harry", slug: "x", storeName: "Main" }, KEY)).toThrow();
@@ -93,11 +94,28 @@ describe("opaque Postgres names", () => {
 });
 
 describe("files volumes", () => {
-  it("are `flagship-files-<creator>-<slug>`, with `dev--` for the dev dataspace", () => {
-    expect(filesVolume({ creator: "harry", slug: "habit-tracker" })).toBe("flagship-files-harry-habit-tracker");
+  it("are `flagship-files-<creator>--<slug>`, and `flagship-devfiles-…` for the dev dataspace", () => {
+    expect(filesVolume({ creator: "harry", slug: "habit-tracker" })).toBe("flagship-files-harry--habit-tracker");
     expect(filesVolume({ creator: "harry", slug: "habit-tracker", space: "dev" })).toBe(
-      "flagship-files-dev--harry-habit-tracker",
+      "flagship-devfiles-harry--habit-tracker",
     );
+  });
+
+  it("take a username with a dash, and never give two apps one volume", () => {
+    expect(filesVolume({ creator: "plucky-avocet", slug: "notes" })).toBe("flagship-files-plucky-avocet--notes");
+    expect(filesVolume({ creator: "a-b", slug: "c" })).not.toBe(filesVolume({ creator: "a", slug: "b-c" }));
+    const seen = new Map<string, string>();
+    for (const id of identities) {
+      const v = filesVolume(id);
+      const key = JSON.stringify([id.creator, id.slug, id.space]);
+      expect(seen.get(v) ?? key, v).toBe(key);
+      seen.set(v, key);
+    }
+  });
+
+  it("still recognize a prod volume made before usernames could hold a dash", () => {
+    expect(isProdFilesVolume("flagship-files-harry-habit-tracker")).toBe(true);
+    expect(isFilesVolume("flagship-files-harry-habit-tracker")).toBe(true);
   });
 
   it("are recognized by isFilesVolume, and only prod ones by isProdFilesVolume", () => {
@@ -106,14 +124,14 @@ describe("files volumes", () => {
       expect(isFilesVolume(v), v).toBe(true);
       expect(isProdFilesVolume(v), v).toBe(id.space !== "dev");
     }
-    for (const bad of ["flagship-files-", "flagship-files-Harry-x", "flagship-files-harry", "flagship-files-harry-x-", "other", "flagship-postgres", "/var/flagship/data"]) {
+    for (const bad of ["flagship-files-", "flagship-files-Harry-x", "flagship-files-harry", "flagship-files-harry-x-", "flagship-files-harry---x", "flagship-devfiles-harry", "flagship-devfiles-harry-x", "other", "flagship-postgres", "/var/flagship/data"]) {
       expect(isFilesVolume(bad), bad).toBe(false);
     }
   });
 
   it("a prod volume can never look like a dev one, even for a creator named `dev`", () => {
     const v = filesVolume({ creator: "dev", slug: "notes" });
-    expect(v).toBe("flagship-files-dev-notes");
+    expect(v).toBe("flagship-files-dev--notes");
     expect(isProdFilesVolume(v)).toBe(true);
   });
 });

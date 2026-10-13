@@ -276,10 +276,10 @@ describe("daemon HTTP — POST /apps with data.stores", () => {
       payload: { sessionToken: "phone-token", manifest: manifest({ data: { stores: { files: true } } }) },
     });
     expect(r.statusCode).toBe(200);
-    expect(files.volumes.has("flagship-files-harry-habit-tracker")).toBe(true);
+    expect(files.volumes.has("flagship-files-harry--habit-tracker")).toBe(true);
     const runArgs = rec.calls.find((c) => c.args[0] === "run")!.args;
     const i = runArgs.indexOf("--mount");
-    expect(runArgs[i + 1]).toBe("type=volume,src=flagship-files-harry-habit-tracker,dst=/data");
+    expect(runArgs[i + 1]).toBe("type=volume,src=flagship-files-harry--habit-tracker,dst=/data");
     expect(runArgs).toContain("FLAGSHIP_FILES_DIR=/data");
   });
 

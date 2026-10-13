@@ -274,7 +274,7 @@ export interface WipeDockerRunner {
 }
 
 /**
- * Remove every app's files volume (`flagship-files-*`, prod and dev), and
+ * Remove every app's files volume (`flagship-files-*` and the dev `flagship-devfiles-*`), and
  * first every container still using one, since a volume in use can't be
  * removed. `docker volume prune` would miss them: on Docker 23+ it removes
  * only anonymous volumes. Best-effort per volume; returns the ones left.

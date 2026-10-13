@@ -94,11 +94,11 @@ describe("DataProvisioner.provisionApp", () => {
     expect(env.FLAGSHIP_PG_ROLE).toBe(db("harry", "habits"));
     expect(env.FLAGSHIP_FILES_DIR).toBe(FILES_MOUNT);
     expect(FILES_MOUNT).toBe("/data");
-    expect(creds.files).toEqual({ volume: "flagship-files-harry-habits" });
-    expect(filesVolumeOf(creds)).toBe("flagship-files-harry-habits");
-    expect(files.volumes.get("flagship-files-harry-habits")!.labels).toEqual({
+    expect(creds.files).toEqual({ volume: "flagship-files-harry--habits" });
+    expect(filesVolumeOf(creds)).toBe("flagship-files-harry--habits");
+    expect(files.volumes.get("flagship-files-harry--habits")!.labels).toEqual({
       "flagship.files": "prod",
-      "flagship.app": "harry-habits",
+      "flagship.app": "harry--habits",
     });
     for (const k of Object.keys(env)) expect(k).toMatch(/^FLAGSHIP_/);
     // No S3 or Redis env any more.
@@ -110,7 +110,7 @@ describe("DataProvisioner.provisionApp", () => {
     const creds = await prov.provisionApp({ creator: "harry", slug: "old", stores: { objects: true, kv: true } });
     expect(Object.keys(creds.postgres!)).toEqual(["default"]);
     expect(pg.databases.has(db("harry", "old"))).toBe(true);
-    expect(files.volumes.has("flagship-files-harry-old")).toBe(true);
+    expect(files.volumes.has("flagship-files-harry--old")).toBe(true);
   });
 
   it("URL-encodes generated passwords (defense against / # @ ? in secrets)", async () => {
@@ -196,13 +196,13 @@ describe("DataProvisioner.provisionApp", () => {
       },
     });
     const creds = await prov.provisionApp({ creator: "harry", slug: "pics", stores: { files: true } });
-    expect(creds.files!.volume).toBe("flagship-files-harry-pics");
+    expect(creds.files!.volume).toBe("flagship-files-harry--pics");
   });
 
   it("leaves nothing half-made when a later store fails", async () => {
     const pg = new InMemoryPostgresAdmin();
     const files = new InMemoryFilesAdmin();
-    await files.createVolume({ volume: "flagship-files-harry-x" });
+    await files.createVolume({ volume: "flagship-files-harry--x" });
     const prov = new DataProvisioner({ postgres: pg, files, nameKey: KEY, generateSecret: () => "s" });
     await expect(
       prov.provisionApp({ creator: "harry", slug: "x", stores: { postgres: true, files: true } }),
@@ -238,8 +238,8 @@ describe("dev dataspace provisioning", () => {
     const creds = await prov.provisionDevDataspace({ ...app, stores });
     expect(creds.postgres!.default!.database).toBe(db("harry", "notes", undefined, "dev"));
     expect(creds.postgres!.default!.database.startsWith("__dev_")).toBe(true);
-    expect(files.volumes.has("flagship-files-dev--harry-notes")).toBe(true);
-    expect(files.volumes.get("flagship-files-dev--harry-notes")!.labels["flagship.files"]).toBe("dev");
+    expect(files.volumes.has("flagship-devfiles-harry--notes")).toBe(true);
+    expect(files.volumes.get("flagship-devfiles-harry--notes")!.labels["flagship.files"]).toBe("dev");
     expect(pg.databases.has(db("harry", "notes"))).toBe(false);
   });
 
@@ -323,21 +323,21 @@ describe("RealFilesAdmin", () => {
 
   it("creates a labelled named volume and opens its root to the app's uid", async () => {
     const { calls, cmd } = fakeDocker(new Set());
-    await new RealFilesAdmin(cmd).createVolume({ volume: "flagship-files-harry-x", labels: { "flagship.files": "prod" } });
-    expect(calls).toContain("docker volume create --label flagship.files=prod flagship-files-harry-x");
-    expect(calls).toContain("chmod 0777 /var/lib/docker/volumes/flagship-files-harry-x/_data");
+    await new RealFilesAdmin(cmd).createVolume({ volume: "flagship-files-harry--x", labels: { "flagship.files": "prod" } });
+    expect(calls).toContain("docker volume create --label flagship.files=prod flagship-files-harry--x");
+    expect(calls).toContain("chmod 0777 /var/lib/docker/volumes/flagship-files-harry--x/_data");
   });
 
   it("refuses an existing volume and any name that isn't a files volume", async () => {
-    const admin = new RealFilesAdmin(fakeDocker(new Set(["flagship-files-harry-x"])).cmd);
-    await expect(admin.createVolume({ volume: "flagship-files-harry-x" })).rejects.toThrow(/already exists/);
+    const admin = new RealFilesAdmin(fakeDocker(new Set(["flagship-files-harry--x"])).cmd);
+    await expect(admin.createVolume({ volume: "flagship-files-harry--x" })).rejects.toThrow(/already exists/);
     await expect(admin.createVolume({ volume: "/var/flagship/data" })).rejects.toThrow(/not a files volume/);
     await expect(admin.removeVolume("flagship-postgres")).rejects.toThrow(/not a files volume/);
   });
 
   it("reports the volume's size from du", async () => {
-    const admin = new RealFilesAdmin(fakeDocker(new Set(["flagship-files-harry-x"])).cmd);
-    expect(await admin.volumeBytes("flagship-files-harry-x")).toBe(12 * 1024);
-    expect(await admin.volumeBytes("flagship-files-harry-y")).toBeNull();
+    const admin = new RealFilesAdmin(fakeDocker(new Set(["flagship-files-harry--x"])).cmd);
+    expect(await admin.volumeBytes("flagship-files-harry--x")).toBe(12 * 1024);
+    expect(await admin.volumeBytes("flagship-files-harry--y")).toBeNull();
   });
 });

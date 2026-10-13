@@ -34,7 +34,7 @@ import {
   validateAttachments,
 } from "../llm/vibeCodeAttachments.js";
 import type { Attachment, FetchLike } from "@flagship/llm-providers";
-import { verifySetServiceEnv } from "@flagship/protocol";
+import { parseServiceId, verifySetServiceEnv } from "@flagship/protocol";
 import { checkServiceName, type NameHolders, type ServiceNameDeps } from "../llm/serviceName.js";
 import type { EditableService } from "../buildmodes/buildOrchestrator.js";
 import { EDIT_SOURCE_MAX_BYTES } from "../llm/vibeCodeStartStreaming.js";
@@ -999,15 +999,9 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (!body || typeof body.serviceId !== "string" || body.serviceId.length === 0) {
         return jerr(400, "serviceId required");
       }
-      // `<creator>-<slug>`, single dash. Split at the FIRST hyphen —
-      // creator (a username) is hyphen-free, so everything after the
-      // first '-' is the slug (which itself may contain hyphens).
-      const dashIdx = body.serviceId.indexOf("-");
-      const creator = dashIdx > 0 ? body.serviceId.slice(0, dashIdx) : "";
-      const slug = dashIdx > 0 ? body.serviceId.slice(dashIdx + 1) : "";
-      if (!creator || !slug) {
-        return jerr(400, "serviceId must be '<creator>-<slug>'");
-      }
+      const parsed = parseServiceId(body.serviceId);
+      if (!parsed) return jerr(400, "serviceId must be '<creator>--<slug>'");
+      const { creator, slug } = parsed;
       try {
         const record = await deps.appBackup.createBackup({
           creator,

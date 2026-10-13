@@ -236,7 +236,7 @@ describe("StagingRunner", () => {
     void _migration;
     const r = await runner.stage({ buildId: "f1", files: { ...noMigrations, "flagship.app.json": JSON.stringify(manifest) }, slug: "notes" });
     expect(r.ok ? "ok" : (r as { reason?: string }).reason).toBe("ok");
-    const volume = "flagship-files-dev--owner-stg-f1";
+    const volume = "flagship-devfiles-owner--stg-f1";
     expect([...files.volumes.keys()]).toEqual([volume]);
     expect(files.volumes.get(volume)!.labels["flagship.files"]).toBe("dev");
     const run = runArgs(calls);
@@ -516,7 +516,7 @@ describe("StagingRunner: the AI's data tools see only the tested copy's sample d
     const run = calls.find((c) => c.includes("find"))!;
     const flag = (n: string) => run[run.indexOf(n) + 1];
     expect(flag("--network")).toBe("none");
-    expect(flag("--mount")).toBe("type=volume,src=flagship-files-dev--owner-stg-d4,dst=/data,readonly");
+    expect(flag("--mount")).toBe("type=volume,src=flagship-devfiles-owner--stg-d4,dst=/data,readonly");
     expect(run).toEqual(expect.arrayContaining(["--rm", "--read-only", "--cap-drop", "ALL", "no-new-privileges"]));
     expect(run.slice(run.indexOf("find"))).toContain("/data/uploads");
     for (const bad of ["../etc", "uploads/../../x", "-delete", "a\0b", "a;b"]) {

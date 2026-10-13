@@ -215,10 +215,10 @@ describe("redeploy in place", () => {
     expect(r).toMatchObject({ ok: true, addedStores: ["files"] });
     const now = w.platform.byLabel("notes")!;
     expect(now.data!.postgres).toEqual(was.data!.postgres);
-    expect(now.data!.files).toEqual({ volume: "flagship-files-alice-notes" });
+    expect(now.data!.files).toEqual({ volume: "flagship-files-alice--notes" });
     const run = w.calls.filter((c) => c.startsWith("docker run ")).pop()!;
     expect(run).toContain("FLAGSHIP_PG_URL=");
-    expect(run).toContain("--mount type=volume,src=flagship-files-alice-notes,dst=/data");
+    expect(run).toContain("--mount type=volume,src=flagship-files-alice--notes,dst=/data");
     expect(run).toContain("FLAGSHIP_FILES_DIR=/data");
     // An older manifest's kv asks for the Postgres database the app already has.
     expect(await redeploy(manifest({ data: { stores: { postgres: true, kv: true } } }))).toMatchObject({ ok: true, addedStores: [] });

@@ -169,12 +169,10 @@ async function sendEnvVar(state) {
   const session = getSession();
   if (!session?.umk) return toast("Sign in first.", "err");
 
-  // appId = "<creator>-<slug>" single-dash. Creator is hyphen-free,
-  // so the first '-' is the boundary.
-  const dashIdx = state.appId.indexOf("-");
-  if (dashIdx <= 0) return toast("Invalid app id shape", "err");
-  const creator = state.appId.slice(0, dashIdx);
-  const slug = state.appId.slice(dashIdx + 1);
+  // appId = "<creator>--<slug>": neither half may contain "--".
+  const parts = state.appId.split("--");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return toast("Invalid app id shape", "err");
+  const [creator, slug] = parts;
   const name = state.pendingRequest.payload.name;
 
   // Step 1: push the secret VALUE through /env/set (the only path
