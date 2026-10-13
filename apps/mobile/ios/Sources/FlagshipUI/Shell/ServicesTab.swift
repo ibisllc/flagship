@@ -605,6 +605,7 @@ struct VibeCodeSessionContainer: View {
     @Environment(AppState.self) private var app
     @Environment(\.vibeCodeEnvelopeSigner) private var signer
     @Environment(\.screensServerFqdn) private var bound
+    @Environment(\.flagshipServerClient) private var server
     @State private var stream: VibeCodeStreamViewModel?
 
     var body: some View {
@@ -617,6 +618,12 @@ struct VibeCodeSessionContainer: View {
                     signEnvelope: signer,
                     savedCredential: {
                         VibeCodeCredentialSelection.compatible(with: SavedKeyStore().active()?.credential).credential
+                    },
+                    freeAiCredential: { [server, app, bound] in
+                        let fqdn = app.screensFqdn(bound: bound)
+                        return try await FreeAiCreditsService(
+                            client: server, username: { [app] in app.currentUser }
+                        ).mint(serverFqdn: fqdn).credential
                     }
                 )
             } else {
@@ -673,7 +680,8 @@ struct EditDescribeContainer: View {
             name: ServicesTab.slug(of: serviceId),
             onStart: { prompt in
                 do {
-                    let selection = VibeCodeCredentialSelection.compatible(with: holder.credential)
+                    let selection = VibeCodeCredentialSelection.compatible(
+                        with: holder.credential, freeAiModel: holder.model)
                     let resp = try await client.vibeCodeStart(VibeCodeStartRequest(
                         prompt: prompt, model: selection.model, credential: selection.credential,
                         editServiceId: serviceId
@@ -682,6 +690,7 @@ struct EditDescribeContainer: View {
                         path.append(.buildKey(purpose: .edit(serviceId: serviceId)))
                         return nil
                     }
+                    if selection.credential?.isFreeAi == true { FreeAiSessions.mark(resp.sessionId) }
                     path.openEditSession(resp.sessionId, serviceId: serviceId)
                     return nil
                 } catch {
@@ -709,7 +718,8 @@ struct VibeCodeDescribeContainer: View {
                 // AI-key step (kept on the holder so the describe screen
                 // could re-render without losing it). Name + visibility are
                 // the owner's choices on the form (no longer fixed).
-                let selection = VibeCodeCredentialSelection.compatible(with: holder.credential)
+                let selection = VibeCodeCredentialSelection.compatible(
+                    with: holder.credential, freeAiModel: holder.model)
                 let resp = try await client.vibeCodeStart(
                     VibeCodeStartRequest(
                         prompt: prompt, model: selection.model, credential: selection.credential,
@@ -722,6 +732,7 @@ struct VibeCodeDescribeContainer: View {
                     path.append(.buildKey(purpose: .scratch))
                     return nil
                 }
+                if selection.credential?.isFreeAi == true { FreeAiSessions.mark(resp.sessionId) }
                 path.openVibeSession(resp.sessionId)
             } catch {
                 if let taken = VibeCodeNameCheck.conflict(in: error) { return taken }
@@ -852,6 +863,9 @@ struct BuildKeyContainer: View {
     @Binding var path: [AppsRoute]
     let holder: BuildCredentialHolder
     @State private var vm = BuildKeyViewModel()
+    @Environment(\.flagshipServerClient) private var server
+    @Environment(AppState.self) private var app
+    @Environment(\.screensServerFqdn) private var bound
 
     private var contextLabel: String {
         switch purpose {
@@ -862,8 +876,13 @@ struct BuildKeyContainer: View {
     }
 
     var body: some View {
-        BuildKeyScreen(vm: vm, contextLabel: contextLabel) { cred in
+        BuildKeyScreen(
+            vm: vm, contextLabel: contextLabel,
+            freeAiService: FreeAiCreditsService(client: server, username: { [app] in app.currentUser }),
+            serverFqdn: app.screensFqdn(bound: bound)
+        ) { cred in
             holder.credential = cred
+            if cred.isFreeAi { holder.model = vm.chosenModel }
             switch purpose {
             case .scratch:
                 path.append(.vibeCodeDescribe)

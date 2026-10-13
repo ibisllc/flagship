@@ -24,19 +24,29 @@ public struct BuildKeyScreen: View {
     let contextLabel: String
     /// Called with the chosen in-memory credential.
     var onChosen: (LlmProviderCredential) -> Void
+    /// Free AI credits (nil ⇒ the row is not offered).
+    let freeAiService: FreeAiCreditsService?
+    /// The box the build runs on (a free-AI credential is minted for it).
+    let serverFqdn: String
 
     public init(
         vm: BuildKeyViewModel,
         contextLabel: String,
+        freeAiService: FreeAiCreditsService? = nil,
+        serverFqdn: String = "",
         onChosen: @escaping (LlmProviderCredential) -> Void
     ) {
         self.vm = vm
         self.contextLabel = contextLabel
+        self.freeAiService = freeAiService
+        self.serverFqdn = serverFqdn
         self.onChosen = onChosen
     }
 
     @State private var confirmDelete: SavedKeyStore.Entry?
     @State private var deleteError: String?
+    /// Free AI is chosen for an owner with no key at most once per visit.
+    @State private var autoChoseFreeAi = false
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
@@ -44,6 +54,8 @@ public struct BuildKeyScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Spacer().frame(height: FS.space.s6)
+
+                    freeAiRow(c: c)
 
                     if vm.showingForm {
                         AiKeyForm(
@@ -98,7 +110,18 @@ public struct BuildKeyScreen: View {
         }
         .navigationTitle("AI Key")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { vm.reload() }
+        .onAppear {
+            if vm.freeAiService == nil { vm.freeAiService = freeAiService }
+            vm.reload()
+        }
+        .task {
+            if vm.freeAiService == nil { vm.freeAiService = freeAiService }
+            let auto = await vm.loadFreeAi()
+            if auto && !autoChoseFreeAi {
+                autoChoseFreeAi = true
+                await useFreeAi()
+            }
+        }
         .confirmationDialog(
             "Delete this key?",
             isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } }),
@@ -120,6 +143,46 @@ public struct BuildKeyScreen: View {
             vm.delete(e)
         } catch {
             deleteError = "The key wasn't deleted."
+        }
+    }
+
+    private func useFreeAi() async {
+        if let cred = await vm.useFreeAi(serverFqdn: serverFqdn) { onChosen(cred) }
+    }
+
+    /// "Free AI credits": first in the list while the account has some.
+    @ViewBuilder
+    private func freeAiRow(c: FSColors) -> some View {
+        switch vm.freeAi {
+        case .available(let credits):
+            FSCard {
+                HStack(spacing: FS.space.s3) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(FreeAiCopy.title).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+                        Text(FreeAiCopy.left(credits)).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if vm.freeAiBusy {
+                        ProgressView()
+                    } else {
+                        FSPrimaryButton("Use this") { Task { await useFreeAi() } }
+                            .accessibilityIdentifier("build-key-use-free-ai")
+                    }
+                }
+            }
+            .accessibilityIdentifier("build-key-free-ai")
+        case .loading:
+            if vm.saved.isEmpty {
+                ProgressView().frame(maxWidth: .infinity)
+            }
+        case .usedUp:
+            if !vm.showingForm {
+                Text(FreeAiCopy.usedUp).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("build-key-free-ai-used-up")
+            }
+        case .none, .unavailable:
+            EmptyView()
         }
     }
 

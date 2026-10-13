@@ -280,12 +280,20 @@ public struct LlmProviderCredential: Codable, Equatable, Sendable {
     /// Flagship's address, not the box's). Absent ⇒ ON on the box; the app
     /// always sends it for a saved key.
     public let relay: Bool?
-    public init(provider: String, apiKey: String, baseUrl: String? = nil, relay: Bool? = nil) {
+    /// Provenance: "promo" marks a Flagship free-AI token (the box pins its
+    /// calls to the token's own endpoint); absent / "byok" ⇒ the owner's key.
+    public let source: String?
+    public init(provider: String, apiKey: String, baseUrl: String? = nil, relay: Bool? = nil,
+                source: String? = nil) {
         self.provider = provider
         self.apiKey = apiKey
         self.baseUrl = baseUrl
         self.relay = relay
+        self.source = source
     }
+
+    /// A Flagship free-AI credential (minted fresh per send, never saved).
+    public var isFreeAi: Bool { source == "promo" }
 }
 
 /// A box refused an AI call because the key asked for the Flagship relay and

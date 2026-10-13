@@ -47,25 +47,37 @@ public struct VibeCodeSessionScreen: View {
     /// The owner's saved AI key, sent with a reply only when the box says it
     /// has none for this session.
     public let savedCredential: () -> LlmProviderCredential?
+    /// Mints a fresh free-AI credential for this box (nil ⇒ not offered).
+    public let freeAiCredential: (@MainActor () async throws -> LlmProviderCredential)?
 
     public init(
         stream: VibeCodeStreamViewModel,
         serverFqdn: String,
         client: any ScreensClient,
         signEnvelope: @escaping @MainActor (ServiceEnvSetEnvelope) async throws -> String,
-        savedCredential: @escaping () -> LlmProviderCredential? = { nil }
+        savedCredential: @escaping () -> LlmProviderCredential? = { nil },
+        freeAiCredential: (@MainActor () async throws -> LlmProviderCredential)? = nil
     ) {
         self.stream = stream
         self.serverFqdn = serverFqdn
         self.client = client
         self.signEnvelope = signEnvelope
         self.savedCredential = savedCredential
+        self.freeAiCredential = freeAiCredential
     }
 
-    /// A key for the reply when the box lacks one (or its relay setting just
-    /// changed), else nil.
-    private var replyCredential: LlmProviderCredential? {
-        state?.needsCredential == true || relayTurnedOff ? savedCredential() : nil
+    /// The key a reply carries: a fresh free-AI credential when the session
+    /// runs on free AI (tokens expire, so every send re-mints); otherwise a
+    /// saved key only when the box lacks one (or its relay setting just
+    /// changed), falling back to free AI when nothing is saved. Throws
+    /// `FreeAiError.usedUp` so the owner sees why nothing was sent.
+    private func replyCredential() async throws -> LlmProviderCredential? {
+        try await VibeCodeReplyCredential.resolve(
+            sessionId: sessionId,
+            boxNeedsKey: state?.needsCredential == true || relayTurnedOff,
+            saved: savedCredential,
+            freeAi: freeAiCredential
+        )
     }
 
     /// The failure on show is the Flagship relay being unavailable.
@@ -407,8 +419,14 @@ public struct VibeCodeSessionScreen: View {
         deployPhase = nil
         errorMessage = nil
         do {
+            let deployCredential: LlmProviderCredential?
+            if FreeAiSessions.isFreeAi(sessionId), let freeAiCredential {
+                deployCredential = try? await freeAiCredential()
+            } else {
+                deployCredential = savedCredential()
+            }
             let outcome = try await VibeCodeDeployRun.run(client: client, sessionId: sessionId,
-                                                          credential: savedCredential()) { phase in
+                                                          credential: deployCredential) { phase in
                 deployPhase = phase
             }
             switch outcome {
@@ -447,8 +465,9 @@ public struct VibeCodeSessionScreen: View {
         submitting = true
         defer { submitting = false }
         do {
+            let credential = try await replyCredential()
             _ = try await client.vibeCodeSessionReply(
-                sessionId: sessionId, VibeCodeReplyRequest(text: replyDraft, envVarStatus: nil, credential: replyCredential))
+                sessionId: sessionId, VibeCodeReplyRequest(text: replyDraft, envVarStatus: nil, credential: credential))
             replyDraft = ""
             followTail = true
             await reload()
@@ -479,7 +498,7 @@ public struct VibeCodeSessionScreen: View {
                 appId: appId,
                 ServiceEnvSetRequest(name: name, value: envValueDraft, request: envelope, signature: signature))
             _ = try await client.vibeCodeSessionReply(
-                sessionId: sessionId, VibeCodeReplyRequest(text: nil, envVarStatus: "set", credential: replyCredential))
+                sessionId: sessionId, VibeCodeReplyRequest(text: nil, envVarStatus: "set", credential: try await replyCredential()))
             envValueDraft = ""
             await reload()
         } catch {
@@ -492,10 +511,40 @@ public struct VibeCodeSessionScreen: View {
         defer { submitting = false }
         do {
             _ = try await client.vibeCodeSessionReply(
-                sessionId: sessionId, VibeCodeReplyRequest(text: nil, envVarStatus: "declined", credential: replyCredential))
+                sessionId: sessionId, VibeCodeReplyRequest(text: nil, envVarStatus: "declined", credential: try await replyCredential()))
             await reload()
         } catch {
             errorMessage = ScreensClientError.userFacing(error)
         }
+    }
+}
+
+/// Which key a vibe-code reply carries. Separate from the view so it's
+/// testable. MIRRORS the webapp `views/vibe-code.js` reply path.
+@MainActor
+enum VibeCodeReplyCredential {
+    static func resolve(
+        sessionId: String,
+        boxNeedsKey: Bool,
+        saved: () -> LlmProviderCredential?,
+        freeAi: (@MainActor () async throws -> LlmProviderCredential)?
+    ) async throws -> LlmProviderCredential? {
+        if FreeAiSessions.isFreeAi(sessionId), let freeAi {
+            do {
+                return try await freeAi()
+            } catch let e as FreeAiError {
+                if case .usedUp = e { throw e }
+                // Unavailable for now: the box keeps the token it holds.
+                return nil
+            } catch {
+                return nil
+            }
+        }
+        guard boxNeedsKey else { return nil }
+        if let key = saved() { return key }
+        guard let freeAi else { return nil }
+        let fresh = try await freeAi()
+        FreeAiSessions.mark(sessionId)
+        return fresh
     }
 }

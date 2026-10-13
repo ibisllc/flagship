@@ -284,6 +284,23 @@ public protocol FlagshipServerClient: Sendable {
         username: String,
         body: AdminRootRotationRequest
     ) async throws -> AdminRootRotationResponse
+
+    /// Free AI credits — mint a short-lived free-AI credential for one box
+    /// (`POST /api/free-ai/token`). Throws `FreeAiError` on the documented
+    /// 429 (used up) / 503 (unavailable) refusals.
+    func freeAiToken(_ req: FreeAiSignedRequest) async throws -> FreeAiTokenResponse
+    /// Free AI credits — the account's used / remaining tokens
+    /// (`POST /api/free-ai/status`).
+    func freeAiStatus(_ req: FreeAiSignedRequest) async throws -> FreeAiStatusResponse
+}
+
+public extension FlagshipServerClient {
+    func freeAiToken(_ req: FreeAiSignedRequest) async throws -> FreeAiTokenResponse {
+        throw FreeAiError.unavailable(message: FreeAiCopy.unavailable)
+    }
+    func freeAiStatus(_ req: FreeAiSignedRequest) async throws -> FreeAiStatusResponse {
+        FreeAiStatusResponse(available: false, credits: nil)
+    }
 }
 
 public extension FlagshipServerClient {
@@ -2626,6 +2643,34 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return out
     }
 
+    /// Free AI credits the mock hands out (demo mode + previews + tests).
+    public var freeAiCredits = FreeAiCredits(usedTokens: 180_000, allowanceTokens: 1_000_000, remainingTokens: 820_000)
+    public var freeAiAvailable = true
+    public private(set) var freeAiTokenRequests: [FreeAiSignedRequest] = []
+    public private(set) var freeAiStatusRequests: [FreeAiSignedRequest] = []
+
+    public func freeAiToken(_ req: FreeAiSignedRequest) async throws -> FreeAiTokenResponse {
+        try await tick()
+        freeAiTokenRequests.append(req)
+        guard freeAiAvailable else { throw FreeAiError.unavailable(message: FreeAiCopy.unavailable) }
+        guard freeAiCredits.remainingTokens > 0 else {
+            throw FreeAiError.usedUp(message: FreeAiCopy.usedUp, credits: freeAiCredits)
+        }
+        return FreeAiTokenResponse(
+            credential: LlmProviderCredential(
+                provider: "flagship", apiKey: "v1.mock-free-ai-\(freeAiTokenRequests.count).mac",
+                baseUrl: "https://inference.flagshipserver.com", relay: true, source: "promo"),
+            model: "flagship-free",
+            expiresAt: req.request.issuedAt + 12 * 3_600_000,
+            credits: freeAiCredits)
+    }
+
+    public func freeAiStatus(_ req: FreeAiSignedRequest) async throws -> FreeAiStatusResponse {
+        try await tick()
+        freeAiStatusRequests.append(req)
+        return FreeAiStatusResponse(available: freeAiAvailable, credits: freeAiAvailable ? freeAiCredits : nil)
+    }
+
     public func registerPushToken(_ req: PushTokenRegisterRequest) async throws -> PushTokenRegisterResponse {
         try await tick()
         let id = String(format: "tok_%06d", nextPushTokenId); nextPushTokenId += 1
@@ -3521,6 +3566,28 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func registerPushToken(_ req: PushTokenRegisterRequest) async throws -> PushTokenRegisterResponse {
         let body = try JSONEncoder().encode(req)
         return try await postJsonReturning("/api/push/register", body: body)
+    }
+
+    public func freeAiToken(_ req: FreeAiSignedRequest) async throws -> FreeAiTokenResponse {
+        try await postFreeAi("/api/free-ai/token", req)
+    }
+
+    public func freeAiStatus(_ req: FreeAiSignedRequest) async throws -> FreeAiStatusResponse {
+        try await postFreeAi("/api/free-ai/status", req)
+    }
+
+    private func postFreeAi<Resp: Decodable>(_ path: String, _ body: FreeAiSignedRequest) async throws -> Resp {
+        var req = URLRequest(url: baseUrl.appendingPathComponent(path))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await send(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            if let e = FreeAiError.from(status: status, body: data) { throw e }
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        return try JSONDecoder().decode(Resp.self, from: data)
     }
 
     public func revokePushToken(_ req: PushTokenRevokeRequest) async throws {

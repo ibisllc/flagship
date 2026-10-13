@@ -41,15 +41,118 @@ public final class BuildKeyViewModel {
 
     private let store: SavedKeyStore
 
-    public init(store: SavedKeyStore = SavedKeyStore()) {
+    // MARK: Free AI credits
+
+    public enum FreeAiRow: Equatable {
+        /// Not asked yet, or no free AI on this client.
+        case none
+        case loading
+        case available(FreeAiCredits)
+        case usedUp
+        case unavailable
+    }
+
+    /// The "Free AI credits" row at the top of the step.
+    public private(set) var freeAi: FreeAiRow = .none
+    /// A mint is in flight (the row's button shows progress).
+    public private(set) var freeAiBusy = false
+    /// The model the box should ask for with the chosen credential: set when
+    /// free AI is chosen, nil for a saved key.
+    public private(set) var chosenModel: String?
+    /// Wired by the screen (it needs the environment's `.com` client).
+    public var freeAiService: FreeAiCreditsService?
+
+    public init(store: SavedKeyStore = SavedKeyStore(), freeAiService: FreeAiCreditsService? = nil) {
         self.store = store
+        self.freeAiService = freeAiService
     }
 
     /// Reload the saved keys + active pointer. Call on appear.
     public func reload() {
         saved = store.list()
         active = store.active()
-        if saved.isEmpty { showingForm = true }
+        if saved.isEmpty && !freeAiOffered { showingForm = true }
+    }
+
+    private var freeAiChecked = false
+
+    private var freeAiOffered: Bool {
+        switch freeAi {
+        case .loading, .available: return true
+        case .none: return freeAiService != nil && !freeAiChecked
+        default: return false
+        }
+    }
+
+    /// Ask `.com` for the free-AI balance. Returns true when the step should
+    /// use free AI straight away: on by default for an owner with no saved
+    /// key and credits left.
+    @discardableResult
+    public func loadFreeAi() async -> Bool {
+        guard let service = freeAiService else {
+            freeAi = .none
+            freeAiChecked = true
+            if saved.isEmpty { showingForm = true }
+            return false
+        }
+        freeAi = .loading
+        do {
+            let s = try await service.status()
+            if !s.available {
+                freeAi = .unavailable
+            } else if let c = s.credits, c.remainingTokens > 0 {
+                freeAi = .available(c)
+            } else if s.credits != nil {
+                freeAi = .usedUp
+            } else {
+                freeAi = .none
+            }
+        } catch FreeAiError.usedUp {
+            freeAi = .usedUp
+        } catch FreeAiError.unavailable {
+            freeAi = .unavailable
+        } catch {
+            freeAi = .none
+        }
+        freeAiChecked = true
+        if saved.isEmpty {
+            if case .available = freeAi { showingForm = false; return true }
+            showingForm = true
+        }
+        return false
+    }
+
+    /// Use free AI for the box `serverFqdn`: mint a fresh credential. Nil +
+    /// `errorMessage` when refused; used up opens the add-key form.
+    public func useFreeAi(serverFqdn: String) async -> LlmProviderCredential? {
+        guard let service = freeAiService, !freeAiBusy else { return nil }
+        freeAiBusy = true
+        defer { freeAiBusy = false }
+        errorMessage = nil
+        do {
+            let r = try await service.mint(serverFqdn: serverFqdn)
+            chosenModel = r.model
+            if let c = r.credits { freeAi = .available(c) }
+            return r.credential
+        } catch FreeAiError.usedUp(let message, _) {
+            freeAi = .usedUp
+            errorMessage = message
+            resetFormKeepingError()
+            showingForm = true
+        } catch FreeAiError.unavailable(let message) {
+            freeAi = .unavailable
+            errorMessage = message
+            if saved.isEmpty { resetFormKeepingError(); showingForm = true }
+        } catch {
+            errorMessage = "Couldn't get free AI credits. Try again, or add your own AI key."
+        }
+        return nil
+    }
+
+    private func resetFormKeepingError() {
+        let e = errorMessage
+        resetForm()
+        errorMessage = e
     }
 
     /// The saved keys, the last-used one first.
@@ -107,6 +210,7 @@ public final class BuildKeyViewModel {
     /// Recall a saved entry → its in-memory credential. Promotes it to active
     /// so a later visit pre-selects the same key.
     public func credential(for e: SavedKeyStore.Entry) -> LlmProviderCredential {
+        chosenModel = nil
         try? store.setActive(id: e.id)
         return e.credential
     }
@@ -116,6 +220,7 @@ public final class BuildKeyViewModel {
     /// recall). Returns nil + sets `errorMessage` on a bad form.
     public func credentialFromForm() -> LlmProviderCredential? {
         errorMessage = nil
+        chosenModel = nil
         let key = formApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else {
             errorMessage = "Enter an API key."

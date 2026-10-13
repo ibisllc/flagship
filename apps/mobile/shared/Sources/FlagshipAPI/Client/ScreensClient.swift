@@ -295,6 +295,7 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
         if let e = error as? ScreensClientError, let d = e.errorDescription {
             return d
         }
+        if let e = error as? FreeAiError, let d = e.errorDescription { return d }
         return "Couldn't reach the server. Check your connection and try again."
     }
 

@@ -11,7 +11,11 @@ import FlagshipAPI
 @MainActor
 @Observable
 public final class BuildCredentialHolder {
-    public var credential: LlmProviderCredential?
+    public var credential: LlmProviderCredential? {
+        didSet { if credential?.isFreeAi != true { model = nil } }
+    }
+    /// The model a free-AI credential asks the box for (from `.com`).
+    public var model: String?
     public init() {}
 
     /// Take + clear the held credential (single-use handoff).
@@ -27,7 +31,10 @@ struct VibeCodeCredentialSelection: Equatable {
     let credential: LlmProviderCredential?
     let model: String?
 
-    static func compatible(with credential: LlmProviderCredential?) -> Self {
+    static func compatible(with credential: LlmProviderCredential?, freeAiModel: String? = nil) -> Self {
+        if let credential, credential.isFreeAi {
+            return Self(credential: credential, model: freeAiModel)
+        }
         guard let credential, credential.provider == "openrouter" else {
             return Self(credential: credential, model: nil)
         }

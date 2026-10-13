@@ -361,7 +361,10 @@ public struct SettingsTab: View {
                 username: app.currentUser ?? ""
             )
         case .aiKeys:
-            AiKeysScreen(vm: AiKeysViewModel())
+            AiKeysScreen(
+                vm: AiKeysViewModel(),
+                freeAiService: FreeAiCreditsService(client: server, username: { [app] in app.currentUser })
+            )
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
         case .accountSecurity:
