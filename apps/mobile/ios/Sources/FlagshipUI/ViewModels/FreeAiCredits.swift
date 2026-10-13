@@ -79,17 +79,18 @@ public enum FreeAiSessions {
     public static func clear() { defaults.removeObject(forKey: key) }
 }
 
-/// The Settings "Free AI credits" card.
+/// The Settings "Free AI credits" card. MIRRORS the webapp `freeAiCardHtml`.
 @MainActor
 @Observable
 public final class FreeAiCreditsCardModel {
     public enum State: Equatable {
         case loading
-        /// Fetch failed: the card hides.
+        /// Fetch failed, or the promotion has ended: the card hides.
         case hidden
-        case unavailable
+        /// "This week: … · Starter reserve: …" + the note.
         case available(FreeAiCredits)
-        case usedUp(FreeAiCredits?)
+        /// Why free AI can't be used now, and whether to offer your own key.
+        case blocked(message: String, offerOwnKey: Bool)
     }
 
     public private(set) var state: State = .loading
@@ -102,20 +103,23 @@ public final class FreeAiCreditsCardModel {
     public func load() async {
         guard let service else { state = .hidden; return }
         do {
-            let s = try await service.status()
-            state = Self.state(for: s)
-        } catch FreeAiError.unavailable {
-            state = .unavailable
-        } catch FreeAiError.usedUp(_, let credits) {
-            state = .usedUp(credits)
+            state = Self.state(for: try await service.status())
+        } catch let e as FreeAiError {
+            switch e {
+            case .ended: state = .hidden
+            case .noServer(let m): state = .blocked(message: m, offerOwnKey: false)
+            default: state = .blocked(message: e.message, offerOwnKey: true)
+            }
         } catch {
             state = .hidden
         }
     }
 
     static func state(for s: FreeAiStatusResponse) -> State {
-        guard s.available else { return .unavailable }
-        guard let c = s.credits else { return .hidden }
-        return c.remainingTokens > 0 ? .available(c) : .usedUp(c)
+        switch FreeAiDisplay.of(s) {
+        case .hidden: return .hidden
+        case .usable(let c): return .available(c)
+        case .blocked(let m, let offer): return .blocked(message: m, offerOwnKey: offer)
+        }
     }
 }

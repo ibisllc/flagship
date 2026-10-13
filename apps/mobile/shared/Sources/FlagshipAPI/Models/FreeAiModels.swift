@@ -6,15 +6,48 @@ import Foundation
 /// endpoint with it. MIRRORS the webapp `lib/freeAi.js` and Android
 /// `core/FreeAiCredits.kt`.
 
-/// The account's free AI allowance, in tokens.
+/// The account's free AI allowance, in weighted tokens: a weekly top-up
+/// (spent first; resets Monday 00:00 UTC, the rest doesn't carry over) and a
+/// one-time starter reserve. `week` / `starter` are absent from an older
+/// `.com`; the totals are always there.
 public struct FreeAiCredits: Codable, Equatable, Sendable {
+    public struct Week: Codable, Equatable, Sendable {
+        public let used: Int64
+        public let allowance: Int64
+        public let remaining: Int64
+        /// Epoch ms of the next top-up (Monday 00:00 UTC).
+        public let resetsAt: Int64?
+        public init(used: Int64, allowance: Int64, remaining: Int64, resetsAt: Int64? = nil) {
+            self.used = used
+            self.allowance = allowance
+            self.remaining = remaining
+            self.resetsAt = resetsAt
+        }
+    }
+
+    public struct Starter: Codable, Equatable, Sendable {
+        public let used: Int64
+        public let allowance: Int64
+        public let remaining: Int64
+        public init(used: Int64, allowance: Int64, remaining: Int64) {
+            self.used = used
+            self.allowance = allowance
+            self.remaining = remaining
+        }
+    }
+
+    public let week: Week?
+    public let starter: Starter?
     public let usedTokens: Int64
     public let allowanceTokens: Int64
     public let remainingTokens: Int64
-    public init(usedTokens: Int64, allowanceTokens: Int64, remainingTokens: Int64) {
+    public init(usedTokens: Int64, allowanceTokens: Int64, remainingTokens: Int64,
+                week: Week? = nil, starter: Starter? = nil) {
         self.usedTokens = usedTokens
         self.allowanceTokens = allowanceTokens
         self.remainingTokens = remainingTokens
+        self.week = week
+        self.starter = starter
     }
 }
 
@@ -84,17 +117,26 @@ public struct FreeAiTokenResponse: Codable, Equatable, Sendable {
     }
 }
 
-/// `POST /api/free-ai/status` → 200.
+/// `POST /api/free-ai/status` → 200. `ended` (the promotion is over: hide
+/// free AI), `reason` ("no-server" / "busy-today": why it can't be used right
+/// now) and `message` are absent from an older `.com`.
 public struct FreeAiStatusResponse: Codable, Equatable, Sendable {
     public let available: Bool
+    public let ended: Bool?
+    public let reason: String?
+    public let message: String?
     public let credits: FreeAiCredits?
-    public init(available: Bool, credits: FreeAiCredits?) {
+    public init(available: Bool, credits: FreeAiCredits?, ended: Bool? = nil,
+                reason: String? = nil, message: String? = nil) {
         self.available = available
         self.credits = credits
+        self.ended = ended
+        self.reason = reason
+        self.message = message
     }
 }
 
-/// The 429 / 503 body: `{ error, code, credits? }`.
+/// A refusal body: `{ error, code, credits? }`.
 public struct FreeAiErrorBody: Codable, Equatable, Sendable {
     public let error: String?
     public let code: String?
@@ -102,29 +144,74 @@ public struct FreeAiErrorBody: Codable, Equatable, Sendable {
 }
 
 public enum FreeAiError: Error, Equatable, LocalizedError {
-    /// 429 `free-ai-used-up`: nothing left; bring your own key.
+    /// 429 `free-ai-used-up`: this week's top-up and the reserve are spent.
     case usedUp(message: String, credits: FreeAiCredits?)
+    /// 429 `free-ai-busy-today`: every account together hit today's cap.
+    case busyToday(message: String)
+    /// 403 `free-ai-no-server`: no running server on the account.
+    case noServer(message: String)
+    /// 410 `free-ai-ended`: the promotion is over.
+    case ended(message: String)
     /// 503 `free-ai-unavailable` (or not offered by this client).
     case unavailable(message: String)
 
-    public var errorDescription: String? {
+    public var errorDescription: String? { message }
+
+    public var message: String {
         switch self {
-        case .usedUp(let m, _): return m
-        case .unavailable(let m): return m
+        case .usedUp(let m, _), .busyToday(let m), .noServer(let m), .ended(let m), .unavailable(let m): return m
         }
     }
 
-    /// Map a non-2xx answer from `/api/free-ai/*` onto a FreeAiError, or nil
-    /// when it isn't one of the two documented refusals.
+    /// At the start of a build, every refusal but "unavailable" sends the
+    /// owner to add their own key.
+    public var opensAddKey: Bool {
+        if case .unavailable = self { return false }
+        return true
+    }
+
+    /// Map a non-2xx answer from `/api/free-ai/*` onto a FreeAiError by its
+    /// `code` (the status only when there's none), or nil when it isn't a
+    /// documented refusal.
     public static func from(status: Int, body: Data) -> FreeAiError? {
         let parsed = try? JSONDecoder().decode(FreeAiErrorBody.self, from: body)
-        if status == 429 || parsed?.code == "free-ai-used-up" {
-            return .usedUp(message: parsed?.error ?? FreeAiCopy.usedUp, credits: parsed?.credits)
+        switch parsed?.code {
+        case "free-ai-used-up": return .usedUp(message: parsed?.error ?? FreeAiCopy.usedUp, credits: parsed?.credits)
+        case "free-ai-busy-today": return .busyToday(message: parsed?.error ?? FreeAiCopy.busyToday)
+        case "free-ai-no-server": return .noServer(message: parsed?.error ?? FreeAiCopy.noServer)
+        case "free-ai-ended": return .ended(message: parsed?.error ?? FreeAiCopy.ended)
+        case "free-ai-unavailable": return .unavailable(message: parsed?.error ?? FreeAiCopy.unavailable)
+        default: break
         }
-        if status == 503 || parsed?.code == "free-ai-unavailable" {
-            return .unavailable(message: parsed?.error ?? FreeAiCopy.unavailable)
+        switch status {
+        case 429: return .usedUp(message: parsed?.error ?? FreeAiCopy.usedUp, credits: parsed?.credits)
+        case 410: return .ended(message: parsed?.error ?? FreeAiCopy.ended)
+        case 503: return .unavailable(message: parsed?.error ?? FreeAiCopy.unavailable)
+        default: return nil
         }
-        return nil
+    }
+}
+
+/// What free AI shows for a status read. MIRRORS the webapp `freeAiView`.
+public enum FreeAiDisplay: Equatable, Sendable {
+    /// Unreadable, or the promotion has ended: show nothing.
+    case hidden
+    /// Can be used now.
+    case usable(FreeAiCredits)
+    /// Can't be used now: why, and whether to offer "Add your own key".
+    case blocked(message: String, offerOwnKey: Bool)
+
+    public static func of(_ s: FreeAiStatusResponse?) -> FreeAiDisplay {
+        guard let s, s.ended != true else { return .hidden }
+        guard s.available else { return .blocked(message: FreeAiCopy.unavailable, offerOwnKey: true) }
+        switch s.reason {
+        case "no-server": return .blocked(message: FreeAiCopy.noServer, offerOwnKey: false)
+        case "busy-today": return .blocked(message: FreeAiCopy.busyToday, offerOwnKey: true)
+        case let r? where !r.isEmpty: return .blocked(message: s.message ?? FreeAiCopy.unavailable, offerOwnKey: true)
+        default: break
+        }
+        guard let c = s.credits else { return .hidden }
+        return c.remainingTokens > 0 ? .usable(c) : .blocked(message: FreeAiCopy.usedUp, offerOwnKey: true)
     }
 }
 
@@ -133,8 +220,10 @@ public enum FreeAiError: Error, Equatable, LocalizedError {
 public enum FreeAiCopy {
     public static let title = "Free AI credits"
     public static let note = "Used automatically when you build with AI and haven't added your own key."
-    public static let usedUp = "Your free AI credits are used up. Add your own AI key to keep building."
-    public static let usedUpSettings = "You've used your free AI credits. Add your own AI key to keep building."
+    public static let usedUp = "Your free AI credits for this week are used up. More arrive on Monday, or add your own AI key to keep building."
+    public static let busyToday = "Free building is busy today. Try again tomorrow, or use your own AI key."
+    public static let noServer = "Free AI credits start once one of your servers is running."
+    public static let ended = "The free building period has ended — use your own AI key."
     public static let unavailable = "Free AI credits aren't available right now. You can add your own AI key."
     public static let addOwnKey = "Add your own key"
 
@@ -148,11 +237,19 @@ public enum FreeAiCopy {
         return s + "M"
     }
 
-    /// "820k of 1M free AI tokens left".
+    /// "This week: 340k of 500k left · Starter reserve: 1.2M"; from an
+    /// older `.com` without the split, "820k of 1M free AI tokens left".
     public static func balance(_ c: FreeAiCredits) -> String {
-        "\(tokens(c.remainingTokens)) of \(tokens(c.allowanceTokens)) free AI tokens left"
+        guard let w = c.week, let st = c.starter else {
+            return "\(tokens(c.remainingTokens)) of \(tokens(c.allowanceTokens)) free AI tokens left"
+        }
+        return "This week: \(tokens(w.remaining)) of \(tokens(w.allowance)) left · Starter reserve: \(tokens(st.remaining))"
     }
 
-    /// The key-step row's subtitle: "820k left".
-    public static func left(_ c: FreeAiCredits) -> String { "\(tokens(c.remainingTokens)) left" }
+    /// The key-step row's subtitle: "340k left this week · 1.2M reserve"
+    /// ("820k left" from an older `.com`).
+    public static func left(_ c: FreeAiCredits) -> String {
+        guard let w = c.week, let st = c.starter else { return "\(tokens(c.remainingTokens)) left" }
+        return "\(tokens(w.remaining)) left this week · \(tokens(st.remaining)) reserve"
+    }
 }

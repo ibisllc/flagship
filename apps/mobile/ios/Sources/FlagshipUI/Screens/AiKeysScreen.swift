@@ -120,8 +120,9 @@ public struct AiKeysScreen: View {
     }
 }
 
-/// Settings → AI keys: how much of the free AI allowance is left. Hidden when
-/// `.com` can't be asked. MIRRORS the webapp settings card and Android's
+/// Settings → AI keys: this week's free AI top-up and the starter reserve, or
+/// why free AI can't be used now. Hidden when `.com` can't be asked or the
+/// promotion has ended. MIRRORS the webapp settings card and Android's
 /// `FreeAiCreditsCard`.
 struct FreeAiCreditsCard: View {
     @Environment(\.colorScheme) private var scheme
@@ -133,13 +134,6 @@ struct FreeAiCreditsCard: View {
         switch model.state {
         case .loading, .hidden:
             EmptyView()
-        case .unavailable:
-            FSCard {
-                Text(FreeAiCopy.title).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
-                Text(FreeAiCopy.unavailable).font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .accessibilityIdentifier("free-ai-card")
         case .available(let credits):
             FSCard {
                 Text(FreeAiCopy.title).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
@@ -149,13 +143,16 @@ struct FreeAiCreditsCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityIdentifier("free-ai-card")
-        case .usedUp:
+        case .blocked(let message, let offerOwnKey):
             FSCard {
                 Text(FreeAiCopy.title).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
-                Text(FreeAiCopy.usedUpSettings).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                Text(message).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
-                FSPrimaryButton(FreeAiCopy.addOwnKey, block: true, action: onAddKey)
-                    .accessibilityIdentifier("free-ai-add-key")
+                    .accessibilityIdentifier("free-ai-message")
+                if offerOwnKey {
+                    FSPrimaryButton(FreeAiCopy.addOwnKey, block: true, action: onAddKey)
+                        .accessibilityIdentifier("free-ai-add-key")
+                }
             }
             .accessibilityIdentifier("free-ai-card")
         }

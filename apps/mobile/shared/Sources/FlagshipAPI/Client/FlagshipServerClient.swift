@@ -2644,8 +2644,15 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     }
 
     /// Free AI credits the mock hands out (demo mode + previews + tests).
-    public var freeAiCredits = FreeAiCredits(usedTokens: 180_000, allowanceTokens: 1_000_000, remainingTokens: 820_000)
+    public var freeAiCredits = FreeAiCredits(
+        usedTokens: 960_000, allowanceTokens: 2_500_000, remainingTokens: 1_540_000,
+        week: .init(used: 160_000, allowance: 500_000, remaining: 340_000),
+        starter: .init(used: 800_000, allowance: 2_000_000, remaining: 1_200_000))
     public var freeAiAvailable = true
+    /// The promotion is over: status says `ended`, minting refuses.
+    public var freeAiEnded = false
+    /// "no-server" / "busy-today": why free AI can't be used right now.
+    public var freeAiReason: String?
     public private(set) var freeAiTokenRequests: [FreeAiSignedRequest] = []
     public private(set) var freeAiStatusRequests: [FreeAiSignedRequest] = []
 
@@ -2653,6 +2660,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         freeAiTokenRequests.append(req)
         guard freeAiAvailable else { throw FreeAiError.unavailable(message: FreeAiCopy.unavailable) }
+        if freeAiEnded { throw FreeAiError.ended(message: FreeAiCopy.ended) }
+        if freeAiReason == "no-server" { throw FreeAiError.noServer(message: FreeAiCopy.noServer) }
+        if freeAiReason == "busy-today" { throw FreeAiError.busyToday(message: FreeAiCopy.busyToday) }
         guard freeAiCredits.remainingTokens > 0 else {
             throw FreeAiError.usedUp(message: FreeAiCopy.usedUp, credits: freeAiCredits)
         }
@@ -2668,7 +2678,10 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func freeAiStatus(_ req: FreeAiSignedRequest) async throws -> FreeAiStatusResponse {
         try await tick()
         freeAiStatusRequests.append(req)
-        return FreeAiStatusResponse(available: freeAiAvailable, credits: freeAiAvailable ? freeAiCredits : nil)
+        let available = freeAiAvailable && !freeAiEnded
+        return FreeAiStatusResponse(
+            available: available, credits: freeAiAvailable ? freeAiCredits : nil,
+            ended: freeAiEnded, reason: available ? freeAiReason : nil)
     }
 
     public func registerPushToken(_ req: PushTokenRegisterRequest) async throws -> PushTokenRegisterResponse {

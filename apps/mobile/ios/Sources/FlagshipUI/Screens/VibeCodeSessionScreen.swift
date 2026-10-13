@@ -70,7 +70,7 @@ public struct VibeCodeSessionScreen: View {
     /// runs on free AI (tokens expire, so every send re-mints); otherwise a
     /// saved key only when the box lacks one (or its relay setting just
     /// changed), falling back to free AI when nothing is saved. Throws
-    /// `FreeAiError.usedUp` so the owner sees why nothing was sent.
+    /// `FreeAiError` (used up, busy today, …) so the owner sees why nothing was sent.
     private func replyCredential() async throws -> LlmProviderCredential? {
         try await VibeCodeReplyCredential.resolve(
             sessionId: sessionId,
@@ -533,7 +533,8 @@ enum VibeCodeReplyCredential {
             do {
                 return try await freeAi()
             } catch let e as FreeAiError {
-                if case .usedUp = e { throw e }
+                // Used up, busy today, no server, ended: say so, send nothing.
+                if e.opensAddKey { throw e }
                 // Unavailable for now: the box keeps the token it holds.
                 return nil
             } catch {

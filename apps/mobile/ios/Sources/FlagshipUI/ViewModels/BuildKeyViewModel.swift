@@ -44,12 +44,14 @@ public final class BuildKeyViewModel {
     // MARK: Free AI credits
 
     public enum FreeAiRow: Equatable {
-        /// Not asked yet, or no free AI on this client.
+        /// Not asked yet, no free AI on this client, or the promotion has
+        /// ended: no row.
         case none
         case loading
         case available(FreeAiCredits)
-        case usedUp
-        case unavailable
+        /// Can't be used now (used up, busy today, no running server,
+        /// unavailable): the message, no Use button.
+        case blocked(String)
     }
 
     /// The "Free AI credits" row at the top of the step.
@@ -97,20 +99,9 @@ public final class BuildKeyViewModel {
         }
         freeAi = .loading
         do {
-            let s = try await service.status()
-            if !s.available {
-                freeAi = .unavailable
-            } else if let c = s.credits, c.remainingTokens > 0 {
-                freeAi = .available(c)
-            } else if s.credits != nil {
-                freeAi = .usedUp
-            } else {
-                freeAi = .none
-            }
-        } catch FreeAiError.usedUp {
-            freeAi = .usedUp
-        } catch FreeAiError.unavailable {
-            freeAi = .unavailable
+            freeAi = Self.row(for: try await service.status())
+        } catch let e as FreeAiError {
+            if case .ended = e { freeAi = .none } else { freeAi = .blocked(e.message) }
         } catch {
             freeAi = .none
         }
@@ -122,8 +113,18 @@ public final class BuildKeyViewModel {
         return false
     }
 
+    /// The row for a status read. MIRRORS the webapp `freeAiRowState`.
+    static func row(for s: FreeAiStatusResponse) -> FreeAiRow {
+        switch FreeAiDisplay.of(s) {
+        case .hidden: return .none
+        case .usable(let c): return .available(c)
+        case .blocked(let m, _): return .blocked(m)
+        }
+    }
+
     /// Use free AI for the box `serverFqdn`: mint a fresh credential. Nil +
-    /// `errorMessage` when refused; used up opens the add-key form.
+    /// `errorMessage` when refused; every refusal but "unavailable" opens the
+    /// add-key form.
     public func useFreeAi(serverFqdn: String) async -> LlmProviderCredential? {
         guard let service = freeAiService, !freeAiBusy else { return nil }
         freeAiBusy = true
@@ -134,15 +135,10 @@ public final class BuildKeyViewModel {
             chosenModel = r.model
             if let c = r.credits { freeAi = .available(c) }
             return r.credential
-        } catch FreeAiError.usedUp(let message, _) {
-            freeAi = .usedUp
-            errorMessage = message
-            resetFormKeepingError()
-            showingForm = true
-        } catch FreeAiError.unavailable(let message) {
-            freeAi = .unavailable
-            errorMessage = message
-            if saved.isEmpty { resetFormKeepingError(); showingForm = true }
+        } catch let e as FreeAiError {
+            if case .ended = e { freeAi = .none } else { freeAi = .blocked(e.message) }
+            errorMessage = e.message
+            if e.opensAddKey || saved.isEmpty { resetFormKeepingError(); showingForm = true }
         } catch {
             errorMessage = "Couldn't get free AI credits. Try again, or add your own AI key."
         }

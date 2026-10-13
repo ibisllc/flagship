@@ -45,21 +45,58 @@ final class FreeAiCreditsTests: XCTestCase {
         XCTAssertEqual(FreeAiCopy.tokens(1_000_000), "1M")
         XCTAssertEqual(FreeAiCopy.tokens(1_500_000), "1.5M")
         XCTAssertEqual(FreeAiCopy.tokens(-5), "0")
-        let c = FreeAiCredits(usedTokens: 180_000, allowanceTokens: 1_000_000, remainingTokens: 820_000)
-        XCTAssertEqual(FreeAiCopy.balance(c), "820k of 1M free AI tokens left")
-        XCTAssertEqual(FreeAiCopy.left(c), "820k left")
+        let old = FreeAiCredits(usedTokens: 180_000, allowanceTokens: 1_000_000, remainingTokens: 820_000)
+        XCTAssertEqual(FreeAiCopy.balance(old), "820k of 1M free AI tokens left", "an older .com: totals only")
+        XCTAssertEqual(FreeAiCopy.left(old), "820k left")
+        let c = server.freeAiCredits
+        XCTAssertEqual(FreeAiCopy.balance(c), "This week: 340k of 500k left · Starter reserve: 1.2M")
+        XCTAssertEqual(FreeAiCopy.left(c), "340k left this week · 1.2M reserve")
+    }
+
+    func test_statusDecodes_newAndOldShapes() throws {
+        let new = Data(#"{"available":true,"ended":false,"reason":"busy-today","message":"m","credits":{"week":{"used":160000,"allowance":500000,"remaining":340000,"resetsAt":1792022400000},"starter":{"used":800000,"allowance":2000000,"remaining":1200000},"usedTokens":960000,"allowanceTokens":2500000,"remainingTokens":1540000}}"#.utf8)
+        let s = try JSONDecoder().decode(FreeAiStatusResponse.self, from: new)
+        XCTAssertEqual(s.reason, "busy-today")
+        XCTAssertEqual(s.ended, false)
+        XCTAssertEqual(s.credits?.week?.remaining, 340_000)
+        XCTAssertEqual(s.credits?.week?.resetsAt, 1_792_022_400_000)
+        XCTAssertEqual(s.credits?.starter?.remaining, 1_200_000)
+        let old = Data(#"{"available":true,"credits":{"usedTokens":0,"allowanceTokens":1000000,"remainingTokens":1000000}}"#.utf8)
+        let o = try JSONDecoder().decode(FreeAiStatusResponse.self, from: old)
+        XCTAssertNil(o.ended)
+        XCTAssertNil(o.reason)
+        XCTAssertNil(o.credits?.week)
+        XCTAssertEqual(FreeAiDisplay.of(o), .usable(o.credits!))
+    }
+
+    func test_display_states() {
+        let c = server.freeAiCredits
+        let ok = FreeAiStatusResponse(available: true, credits: c, ended: false)
+        XCTAssertEqual(FreeAiDisplay.of(ok), .usable(c))
+        XCTAssertEqual(FreeAiDisplay.of(nil), .hidden)
+        XCTAssertEqual(FreeAiDisplay.of(FreeAiStatusResponse(available: false, credits: c, ended: true)), .hidden)
+        XCTAssertEqual(FreeAiDisplay.of(FreeAiStatusResponse(available: false, credits: nil)),
+                       .blocked(message: FreeAiCopy.unavailable, offerOwnKey: true))
+        XCTAssertEqual(FreeAiDisplay.of(FreeAiStatusResponse(available: true, credits: c, reason: "busy-today")),
+                       .blocked(message: FreeAiCopy.busyToday, offerOwnKey: true))
+        XCTAssertEqual(FreeAiDisplay.of(FreeAiStatusResponse(available: true, credits: c, reason: "no-server")),
+                       .blocked(message: FreeAiCopy.noServer, offerOwnKey: false))
+        let spent = FreeAiCredits(usedTokens: 10, allowanceTokens: 10, remainingTokens: 0)
+        XCTAssertEqual(FreeAiDisplay.of(FreeAiStatusResponse(available: true, credits: spent)),
+                       .blocked(message: FreeAiCopy.usedUp, offerOwnKey: true))
     }
 
     func test_copyNeverSellsAnything() {
-        let all = [FreeAiCopy.title, FreeAiCopy.note, FreeAiCopy.usedUp, FreeAiCopy.usedUpSettings,
-                   FreeAiCopy.unavailable, FreeAiCopy.addOwnKey].joined(separator: " ").lowercased()
+        let all = [FreeAiCopy.title, FreeAiCopy.note, FreeAiCopy.usedUp, FreeAiCopy.busyToday,
+                   FreeAiCopy.noServer, FreeAiCopy.ended, FreeAiCopy.unavailable,
+                   FreeAiCopy.addOwnKey].joined(separator: " ").lowercased()
         for word in ["buy", "upgrade", "purchase", "subscribe", "pay"] {
             XCTAssertFalse(all.contains(word), word)
         }
     }
 
     func test_errorMapping() {
-        let used = Data(#"{"error":"Your free AI credits are used up. Add your own AI key to keep building.","code":"free-ai-used-up","credits":{"usedTokens":5,"allowanceTokens":5,"remainingTokens":0}}"#.utf8)
+        let used = Data(#"{"error":"Your free AI credits for this week are used up. More arrive on Monday, or add your own AI key to keep building.","code":"free-ai-used-up","credits":{"usedTokens":5,"allowanceTokens":5,"remainingTokens":0}}"#.utf8)
         guard case .usedUp(let m, let c)? = FreeAiError.from(status: 429, body: used) else {
             return XCTFail("429 is used up")
         }
@@ -68,6 +105,20 @@ final class FreeAiCreditsTests: XCTestCase {
         XCTAssertEqual(FreeAiError.from(status: 503, body: Data()), .unavailable(message: FreeAiCopy.unavailable))
         XCTAssertNil(FreeAiError.from(status: 403, body: Data(#"{"error":"invalid signature"}"#.utf8)))
         XCTAssertEqual(ScreensClientError.userFacing(FreeAiError.usedUp(message: "x", credits: nil)), "x")
+    }
+
+    func test_errorMapping_byCode() {
+        func body(_ code: String) -> Data { Data(#"{"error":"from .com","code":"\#(code)"}"#.utf8) }
+        XCTAssertEqual(FreeAiError.from(status: 429, body: body("free-ai-busy-today")), .busyToday(message: "from .com"))
+        XCTAssertEqual(FreeAiError.from(status: 403, body: body("free-ai-no-server")), .noServer(message: "from .com"))
+        XCTAssertEqual(FreeAiError.from(status: 410, body: body("free-ai-ended")), .ended(message: "from .com"))
+        XCTAssertEqual(FreeAiError.from(status: 410, body: Data()), .ended(message: FreeAiCopy.ended))
+        XCTAssertEqual(FreeAiError.from(status: 503, body: body("free-ai-unavailable")), .unavailable(message: "from .com"))
+        XCTAssertFalse(FreeAiError.unavailable(message: "").opensAddKey)
+        for e in [FreeAiError.usedUp(message: "", credits: nil), .busyToday(message: ""), .noServer(message: ""),
+                  .ended(message: "")] {
+            XCTAssertTrue(e.opensAddKey, "\(e)")
+        }
     }
 
     func test_credentialSourceRidesTheWire() throws {
@@ -127,7 +178,7 @@ final class FreeAiCreditsTests: XCTestCase {
         let auto = await vm.loadFreeAi()
         XCTAssertFalse(auto)
         guard case .available(let c) = vm.freeAi else { return XCTFail("row offered") }
-        XCTAssertEqual(c.remainingTokens, 820_000)
+        XCTAssertEqual(c.remainingTokens, 1_540_000)
         _ = vm.credential(for: try XCTUnwrap(vm.saved.first))
         XCTAssertNil(vm.chosenModel, "a saved key carries no free-AI model")
     }
@@ -138,7 +189,7 @@ final class FreeAiCreditsTests: XCTestCase {
         vm.reload()
         let auto = await vm.loadFreeAi()
         XCTAssertFalse(auto)
-        XCTAssertEqual(vm.freeAi, .usedUp)
+        XCTAssertEqual(vm.freeAi, .blocked(FreeAiCopy.usedUp))
         XCTAssertTrue(vm.showingForm)
         let cred = await vm.useFreeAi(serverFqdn: "home.harry.flagship.services")
         XCTAssertNil(cred)
@@ -151,8 +202,35 @@ final class FreeAiCreditsTests: XCTestCase {
         let vm = BuildKeyViewModel(store: store, freeAiService: service())
         vm.reload()
         _ = await vm.loadFreeAi()
-        XCTAssertEqual(vm.freeAi, .unavailable)
+        XCTAssertEqual(vm.freeAi, .blocked(FreeAiCopy.unavailable))
         XCTAssertTrue(vm.showingForm)
+    }
+
+    func test_keyStep_blockedReasons_neverAutoChoose_andOpenTheForm() async {
+        for reason in ["busy-today", "no-server"] {
+            server.freeAiReason = reason
+            let vm = BuildKeyViewModel(store: store, freeAiService: service())
+            vm.reload()
+            let auto = await vm.loadFreeAi()
+            XCTAssertFalse(auto, reason)
+            XCTAssertTrue(vm.showingForm, reason)
+            let cred = await vm.useFreeAi(serverFqdn: "home.harry.flagship.services")
+            XCTAssertNil(cred)
+            XCTAssertEqual(vm.errorMessage, reason == "busy-today" ? FreeAiCopy.busyToday : FreeAiCopy.noServer)
+        }
+    }
+
+    func test_keyStep_ended_hidesTheRow_andNeverAutoChooses() async {
+        server.freeAiEnded = true
+        let vm = BuildKeyViewModel(store: store, freeAiService: service())
+        vm.reload()
+        let auto = await vm.loadFreeAi()
+        XCTAssertFalse(auto)
+        XCTAssertEqual(vm.freeAi, .none)
+        XCTAssertTrue(vm.showingForm)
+        _ = await vm.useFreeAi(serverFqdn: "home.harry.flagship.services")
+        XCTAssertEqual(vm.freeAi, .none, "a refused mint after the end keeps the row hidden")
+        XCTAssertEqual(vm.errorMessage, FreeAiCopy.ended)
     }
 
     func test_keyStep_withoutService_keepsTheOldBehaviour() async {
@@ -171,13 +249,27 @@ final class FreeAiCreditsTests: XCTestCase {
         await card.load()
         XCTAssertEqual(card.state, .available(server.freeAiCredits))
 
+        server.freeAiReason = "busy-today"
+        await card.load()
+        XCTAssertEqual(card.state, .blocked(message: FreeAiCopy.busyToday, offerOwnKey: true))
+
+        server.freeAiReason = "no-server"
+        await card.load()
+        XCTAssertEqual(card.state, .blocked(message: FreeAiCopy.noServer, offerOwnKey: false))
+        server.freeAiReason = nil
+
         server.freeAiCredits = FreeAiCredits(usedTokens: 10, allowanceTokens: 10, remainingTokens: 0)
         await card.load()
-        XCTAssertEqual(card.state, .usedUp(server.freeAiCredits))
+        XCTAssertEqual(card.state, .blocked(message: FreeAiCopy.usedUp, offerOwnKey: true))
+
+        server.freeAiEnded = true
+        await card.load()
+        XCTAssertEqual(card.state, .hidden, "an ended promotion hides the card")
+        server.freeAiEnded = false
 
         server.freeAiAvailable = false
         await card.load()
-        XCTAssertEqual(card.state, .unavailable)
+        XCTAssertEqual(card.state, .blocked(message: FreeAiCopy.unavailable, offerOwnKey: true))
 
         server.shouldFail = true
         await card.load()
@@ -215,6 +307,19 @@ final class FreeAiCreditsTests: XCTestCase {
             XCTFail("used up must surface")
         } catch {
             XCTAssertEqual(ScreensClientError.userFacing(error), FreeAiCopy.usedUp)
+        }
+    }
+
+    func test_reply_freeAiSession_busyOrEndedStopsTheSend() async {
+        FreeAiSessions.mark("s1")
+        for e in [FreeAiError.busyToday(message: FreeAiCopy.busyToday), .ended(message: FreeAiCopy.ended)] {
+            do {
+                _ = try await VibeCodeReplyCredential.resolve(
+                    sessionId: "s1", boxNeedsKey: false, saved: { nil }, freeAi: { throw e })
+                XCTFail("\(e) must surface")
+            } catch {
+                XCTAssertEqual(ScreensClientError.userFacing(error), e.message)
+            }
         }
     }
 

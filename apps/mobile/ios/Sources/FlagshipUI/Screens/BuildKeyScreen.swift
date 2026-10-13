@@ -150,7 +150,8 @@ public struct BuildKeyScreen: View {
         if let cred = await vm.useFreeAi(serverFqdn: serverFqdn) { onChosen(cred) }
     }
 
-    /// "Free AI credits": first in the list while the account has some.
+    /// "Free AI credits": first in the list; when they can't be used now, the
+    /// reason instead of a Use button; gone once the promotion has ended.
     @ViewBuilder
     private func freeAiRow(c: FSColors) -> some View {
         switch vm.freeAi {
@@ -175,13 +176,16 @@ public struct BuildKeyScreen: View {
             if vm.saved.isEmpty {
                 ProgressView().frame(maxWidth: .infinity)
             }
-        case .usedUp:
-            if !vm.showingForm {
-                Text(FreeAiCopy.usedUp).font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("build-key-free-ai-used-up")
+        case .blocked(let message):
+            if vm.errorMessage != message {
+                FSCard {
+                    Text(FreeAiCopy.title).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+                    Text(message).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityIdentifier("build-key-free-ai-blocked")
             }
-        case .none, .unavailable:
+        case .none:
             EmptyView()
         }
     }
