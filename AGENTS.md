@@ -156,6 +156,13 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > anything below. Keep this section short: it loads into every agent session.
 > Last updated **2026-10-12**.
 
+### Launch
+
+Scope agreed 2026-10-13 in `docs/launch-mvp.md` (date to be set): free only,
+no payments; free AI credits on by default; free tier slowed, not cut, past
+25 GB; custom domains, name change + dibs, marketplace and payments come
+after. Windows/Linux Studio ship as "preview".
+
 ### Urgent
 
 - **Renew the CA endorsement lease before 2026-11-05.** The production CA's
@@ -533,8 +540,10 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
 
 Free 25 GB; Pro $10/mo (250 GB, 1 custom domain); Pro Max $20/mo (500 GB,
 unlimited domains); overage $0.05/GB; name change $10; dibs claim $20 (`.com`
-holders only, one year from October 2026). Quotas are live on `main`; nothing
-is purchasable yet. Detail: `docs/naming-recovery-and-name-change.md` §16,
+holders only, for one year starting when paid name change ships, not October
+2026: owner, 2026-10-13). Quotas are live on `main`; nothing is purchasable
+yet, and nothing will be at launch (`docs/launch-mvp.md`); payments are the
+first update after it (`docs/anonymous-vouchers.md`, $1 voucher unit). Detail: `docs/naming-recovery-and-name-change.md` §16,
 `docs/monetization-free-tier-first.md`.
 
 ### GA close-out (do NOT do in dev)
@@ -580,6 +589,6 @@ spec in `docs/`, the runbooks in `docs/runbooks/`, or — for architecture —
 - **Install / ISO / builder** — `studio-mac-app-store.md`, `recipe-schema-v2.md`, `installer-tiny.md`, `installer-netboot.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`, `recipe-delivery-and-remote-install.md`
 - **NFC retail box** — `nfc-box-pairing.md`, `v1-operational-tasks.md § N`, `n-cloud-2-design-discussion.md`
 - **CA / maintainers** — `ca-operations.md`, `maintainer-ca-endorsement.md`, `maintainers-checkpoints-spec-v0.1.md`, `maintainers-deployment.md`
-- **Marketplace / apps / monetization** — `app-developer-guide.md`, `manifest.md`, `repo-adapters.md`, `monetization-free-tier-first.md`, `anonymous-vouchers.md`, `multi-device-monetization.md`, `vibe-code-experience.md`
+- **Marketplace / apps / monetization** — `app-developer-guide.md`, `manifest.md`, `repo-adapters.md`, `monetization-free-tier-first.md`, `launch-mvp.md`, `anonymous-vouchers.md`, `multi-device-monetization.md`, `vibe-code-experience.md`
 - **Testing** — `e2e-test-plan.md`, `ui-test-gym.md`
 - **Design / ops** — `design-system.md`, `psl-submission-flagship-services.md`, `main-reconciliation-plan.md`, `runbooks/`, `policy/`
