@@ -218,7 +218,12 @@ export function renderUnreachableDetail({ serverFqdn, username, revoked, message
       ${renderDangerZoneCard({ serverFqdn, username, revoked })}`;
 }
 
+// Bumped on every render: a slow answer from the server shown before must not
+// paint over the one now open.
+let renderSeq = 0;
+
 export async function renderServerDetail() {
+  const seq = ++renderSeq;
   const root = $("server-detail-content");
   root.innerHTML = skeletonCards(2);
   startHealthWatch(detailFqdn);
@@ -231,11 +236,13 @@ export async function renderServerDetail() {
   try {
     body = await fetchOn(knownFqdn)("/api/screens/server-detail");
   } catch (e) {
+    if (seq !== renderSeq) return;
     if (!knownFqdn) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(humanError(e))}</p></div>`;
       return;
     }
     const pod = await podPromise;
+    if (seq !== renderSeq) return;
     const username = session?.username || "";
     const revoked = isRestorableRevokedPod(pod);
     root.innerHTML = renderUnreachableDetail({
@@ -248,6 +255,7 @@ export async function renderServerDetail() {
     return;
   }
   const lookedUp = await podPromise;
+  if (seq !== renderSeq) return;
   try {
     // Only trust a `/pods` row for the box that answered.
     const detailPod = findPod(lookedUp ? [lookedUp] : [], body?.serverFqdn);
@@ -684,9 +692,11 @@ function humanBytes(n) {
 }
 
 let metricsTimer = null;
+let metricsFor = "";
 function startMetricsPolling(serverFqdn) {
   // Cancel any prior poller (back+forward navigation re-enters this).
   if (metricsTimer) { clearInterval(metricsTimer); metricsTimer = null; }
+  metricsFor = serverFqdn;
   const tick = async () => {
     // Stop polling when the user navigates away.
     if ($("view-server-detail")?.classList.contains("hidden")) {
@@ -697,6 +707,7 @@ function startMetricsPolling(serverFqdn) {
       const m = await fetchOn(serverFqdn)(
         `/api/screens/server-metrics/${encodeURIComponent(serverFqdn)}`,
       );
+      if (metricsFor !== serverFqdn) return;
       const cpu = $("metrics-cpu");
       const mem = $("metrics-mem");
       const disk = $("metrics-disk");
@@ -709,6 +720,7 @@ function startMetricsPolling(serverFqdn) {
         `↓ ${humanBytes(m.netRxBytesPerSec)}/s · ↑ ${humanBytes(m.netTxBytesPerSec)}/s`;
       if (at) at.textContent = `Collected ${formatWhen(m.collectedAt)}`;
     } catch (e) {
+      if (metricsFor !== serverFqdn) return;
       const at = $("metrics-collected-at");
       if (at) at.textContent = `Couldn't reach daemon: ${e.message ?? e}`;
     }

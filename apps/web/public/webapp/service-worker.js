@@ -113,7 +113,9 @@
 //       shows each app once with one pill for every server it's on
 //       (Deploying / Editing / On N servers / Stopped / Can't reach), and
 //       the app page and its Runs on rows show each server's state.
-const SHELL_VERSION = "v59";
+//  v60: a server's page ignores a late answer from the server shown before
+//       it, so it never shows another server's detail under its name.
+const SHELL_VERSION = "v60";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
