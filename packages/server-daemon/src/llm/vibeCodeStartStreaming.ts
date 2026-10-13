@@ -157,6 +157,8 @@ export const DEFAULT_MODEL_BY_PROVIDER: Readonly<Record<string, string>> = {
   openai: "gpt-5",
   google: "gemini-3.5-flash",
   openrouter: "openrouter/auto",
+  // Free AI credits: the shim swaps in its upstream's real model id.
+  flagship: "flagship-free",
 };
 
 export function defaultModelsFromEnv(

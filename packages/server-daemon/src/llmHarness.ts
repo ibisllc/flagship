@@ -92,6 +92,24 @@ export function parseRelayFlag(raw: unknown): boolean | undefined | "invalid" {
   return typeof raw === "boolean" ? raw : "invalid";
 }
 
+/**
+ * The free-AI shim answers a refusal (credits used up, pass expired, busy)
+ * as `{"error":{"message","code":"free-ai-…"}}` worded for the owner. Return
+ * that message when `text` is one, so the owner reads it instead of a raw
+ * provider error.
+ */
+export function freeAiMessage(text: string): string | null {
+  try {
+    const b = JSON.parse(text) as { error?: { message?: unknown; code?: unknown } };
+    const code = b?.error?.code;
+    const message = b?.error?.message;
+    if (typeof code === "string" && code.startsWith("free-ai") && typeof message === "string") return message;
+  } catch {
+    // not the shim's JSON
+  }
+  return null;
+}
+
 const LOCAL_SUFFIXES = [".localhost", ".local", ".lan", ".home.arpa", ".internal", ".localdomain"];
 
 /**
@@ -366,7 +384,12 @@ export class LlmHarness {
     await provider.chatStream(
       request,
       cfg,
-      (e: ChatStreamEvent) => {
+      (ev: ChatStreamEvent) => {
+        let e = ev;
+        if (e.kind === "error" && credential.source === "promo") {
+          const friendly = freeAiMessage(e.message);
+          if (friendly) e = { ...e, message: friendly };
+        }
         if (e.kind === "error" && !sawError) sawError = { message: e.message };
         onEvent(e);
       },
@@ -404,9 +427,18 @@ export class LlmHarness {
     if (typeof credential.baseUrl === "string" && credential.baseUrl.length > 0) {
       cfg.baseUrl = credential.baseUrl;
     }
-    return this.registry
-      .get(credential.provider)
-      .chat(request, cfg, this.fetchForCredential(credential));
+    try {
+      return await this.registry
+        .get(credential.provider)
+        .chat(request, cfg, this.fetchForCredential(credential));
+    } catch (e) {
+      const friendly =
+        credential.source === "promo" && e instanceof ProviderError ? freeAiMessage(e.bodyText) : null;
+      if (!friendly || !(e instanceof ProviderError)) throw e;
+      const out = new ProviderError(e.provider, e.status, friendly);
+      out.message = friendly;
+      throw out;
+    }
   }
 
   /**

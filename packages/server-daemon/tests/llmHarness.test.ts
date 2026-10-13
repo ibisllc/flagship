@@ -13,12 +13,13 @@ import {
   type ChatRequest,
   type ChatStreamEvent,
   type FetchLike,
+  ProviderError,
   type LLMProvider,
   type ProviderConfig,
   type StreamingFetchLike,
   type StreamingLLMProvider,
 } from "@flagship/llm-providers";
-import { LlmHarness, type SealedRequest } from "../src/llmHarness.js";
+import { freeAiMessage, LlmHarness, type SealedRequest } from "../src/llmHarness.js";
 import { AppMembership } from "../src/membership.js";
 import { IdentityInjector } from "../src/identityInjector.js";
 import { buildDaemonHttp, type DaemonContext } from "../src/httpApi.js";
@@ -402,6 +403,50 @@ describe("LlmHarness — promo credential host-pin (free-credits)", () => {
       { model: "m", messages: [{ role: "user", content: "x" }] },
     );
     expect(resp.content).toBe("hi");
+  });
+});
+
+describe("LlmHarness — free AI refusals read as the shim words them", () => {
+  const usedUp = JSON.stringify({
+    error: { message: "Your free AI credits are used up. Add your own AI key to keep building.", code: "free-ai-used-up" },
+  });
+  const promo = { provider: "flagship", apiKey: "t", baseUrl: "https://inference.example.com", source: "promo" as const };
+
+  it("parses only the shim's free-ai codes", () => {
+    expect(freeAiMessage(usedUp)).toMatch(/free AI credits are used up/);
+    expect(freeAiMessage(JSON.stringify({ error: { message: "rate limited", code: "rate_limit" } }))).toBeNull();
+    expect(freeAiMessage("not json")).toBeNull();
+  });
+
+  it("chatStream hands the owner the shim's message for a promo credential", async () => {
+    const provider: StreamingLLMProvider = {
+      name: "flagship",
+      async chatStream(_req, _cfg, onEvent) {
+        onEvent({ kind: "error", message: usedUp, status: 429 });
+      },
+    };
+    const harness = new LlmHarness({ swk: swkOps(swk), streamingRegistry: new StreamingProviderRegistry([provider]) });
+    const events: ChatStreamEvent[] = [];
+    const out = await harness.chatStream(promo, { model: "m", messages: [{ role: "user", content: "x" }] }, (e) =>
+      events.push(e),
+    );
+    expect(events[0]).toMatchObject({ kind: "error", status: 429, message: expect.stringMatching(/^Your free AI credits/) });
+    expect(!out.ok && out.message).toMatch(/^Your free AI credits/);
+  });
+
+  it("chatWithCredential throws the shim's message for a promo credential, and leaves BYOK errors alone", async () => {
+    const failing: LLMProvider = {
+      name: "flagship",
+      async chat() {
+        throw new ProviderError("flagship", 429, usedUp);
+      },
+    };
+    const harness = new LlmHarness({ swk: swkOps(swk), registry: new ProviderRegistry([failing]) });
+    const req = { model: "m", messages: [{ role: "user" as const, content: "x" }] };
+    await expect(harness.chatWithCredential(promo, req)).rejects.toThrow(/^Your free AI credits are used up/);
+    await expect(
+      harness.chatWithCredential({ provider: "flagship", apiKey: "k", baseUrl: "https://inference.example.com" }, req),
+    ).rejects.toThrow(/request failed \(429\)/);
   });
 });
 

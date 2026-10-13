@@ -133,6 +133,8 @@ describe("modelForProvider", () => {
     expect(modelForProvider("anthropic", undefined, defaults)).toMatch(/^claude-/);
     expect(modelForProvider("google", undefined, defaults)).toMatch(/^gemini-/);
     expect(modelForProvider("openrouter", undefined, defaults)).toBe("openrouter/auto");
+    // Free AI credits: any id works, the shim pins the upstream's model.
+    expect(modelForProvider("flagship", undefined, defaults)).toBe("flagship-free");
   });
 
   it("keeps an explicit model and asks for one when a provider has no default", () => {
