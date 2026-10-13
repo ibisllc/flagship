@@ -1,3 +1,4 @@
+import { D1ServerShareStorage, type ServerShareStorage } from "./serverShares.js";
 import type {
   AccountType,
   AuditEventRecord,
@@ -4455,6 +4456,7 @@ export class D1Storage implements Storage {
   serviceInvites: ServiceInviteStorage;
   namespace: NamespaceStorage;
   peerBackupManifests: PeerBackupManifestStorage;
+  serverShares: ServerShareStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.schemaVersion = new D1SchemaVersionStorage(db);
@@ -4508,6 +4510,7 @@ export class D1Storage implements Storage {
     this.serviceInvites = new D1ServiceInviteStorage(db);
     this.namespace = new D1NamespaceStorage(db);
     this.peerBackupManifests = new D1PeerBackupManifestStorage(db);
+    this.serverShares = new D1ServerShareStorage(db);
   }
 }
 

@@ -27,6 +27,15 @@ import {
   handleStoreTrustException,
   handleListTrustExceptions,
   handleCreateServiceInvite,
+  handleCreateServerShare,
+  handleListServerShares,
+  handleRevokeServerShare,
+  handleServerShareUnlock,
+  handleGetServerShare,
+  handleAcceptServerShare,
+  handleLeaveServerShare,
+  handleServerShareEnds,
+  handleShareInbox,
   handleFetchServiceInviteCreate,
   handleRedeemServiceInvite,
   handleRevokeServiceInvite,
@@ -521,6 +530,16 @@ const ROUTE_RE = {
   SERVICE_INVITE_CREATE_FETCH: /^\/api\/users\/([^/]+)\/service-invites\/([^/]+)\/create$/,
   SERVICE_INVITES: /^\/api\/users\/([^/]+)\/service-invites$/,
   SERVICE_INVITE_REDEEM: /^\/api\/service-invites\/redeem$/,
+  // Share this server (docs/share-a-server.md §6.2).
+  SERVER_SHARES: /^\/api\/users\/([^/]+)\/server-shares$/,
+  SERVER_SHARES_LIST: /^\/api\/users\/([^/]+)\/server-shares\/list$/,
+  SERVER_SHARE_REVOKE: /^\/api\/users\/([^/]+)\/server-shares\/([0-9a-f]{32})\/revoke$/,
+  SERVER_SHARE_UNLOCK: /^\/api\/users\/([^/]+)\/server-shares\/([0-9a-f]{32})\/unlock$/,
+  SERVER_SHARE: /^\/api\/server-shares\/([0-9a-f]{32})$/,
+  SERVER_SHARE_ACCEPT: /^\/api\/server-shares\/([0-9a-f]{32})\/accept$/,
+  SERVER_SHARE_LEAVE: /^\/api\/server-shares\/([0-9a-f]{32})\/leave$/,
+  SERVER_SHARE_ENDS: /^\/api\/server\/([^/]+)\/share-ends$/,
+  SHARE_INBOX: /^\/api\/share-inbox$/,
   RCK_REGISTER: /^\/api\/routing\/register-rck$/,
   RCK_SET_TARGET: /^\/api\/routing\/set-target$/,
   ROUTING_LOOKUP: /^\/api\/routing\/lookup$/,
@@ -811,6 +830,7 @@ export async function tryBootHost(
     servers: storage.servers,
     usernames: storage.usernames,
     watchDelegates: storage.watchDelegates,
+    serverShares: storage.serverShares,
   });
   const notify = new InProcessNotifyPipe({
     servers: storage.servers,
@@ -1388,6 +1408,47 @@ export async function tryControlPlane(
         },
       ),
     );
+  }
+
+  // Share this server (docs/share-a-server.md §6.2): the owner signs with the
+  // sensitive key; the other account holds only the link token and its
+  // per-share key. `.com` keeps an opaque id, a token hash and ciphertext.
+  {
+    const shareDeps = {
+      shares: storage.serverShares,
+      usernames: storage.usernames,
+      servers: storage.servers,
+      grants: storage.deviceCapabilityGrants,
+    };
+    const shareToken = request.headers.get("x-flagship-share-token");
+    if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_SHARES))) {
+      return finish(await handleCreateServerShare(shareDeps, decodeURIComponent(m[1]!), await readJson(request)));
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_SHARES_LIST))) {
+      return finish(await handleListServerShares(shareDeps, decodeURIComponent(m[1]!), await readJson(request)));
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_SHARE_REVOKE))) {
+      return finish(await handleRevokeServerShare(shareDeps, decodeURIComponent(m[1]!), m[2]!, await readJson(request)));
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_SHARE_UNLOCK))) {
+      return finish(await handleServerShareUnlock(shareDeps, decodeURIComponent(m[1]!), m[2]!, await readJson(request)));
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.SERVER_SHARE))) {
+      return finish(await handleGetServerShare(shareDeps, m[1]!, shareToken));
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_SHARE_ACCEPT))) {
+      return finish(await handleAcceptServerShare(shareDeps, m[1]!, shareToken, await readJson(request)));
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_SHARE_LEAVE))) {
+      return finish(await handleLeaveServerShare(shareDeps, m[1]!, shareToken, await readJson(request)));
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.SERVER_SHARE_ENDS))) {
+      const since = Number(url.searchParams.get("since") ?? "0");
+      return finish(await handleServerShareEnds(shareDeps, decodeURIComponent(m[1]!), since));
+    }
+    if (method === "POST" && ROUTE_RE.SHARE_INBOX.test(path)) {
+      return finish(await handleShareInbox(shareDeps, await readJson(request)));
+    }
   }
 
   if (method === "POST" && ROUTE_RE.RCK_REGISTER.test(path)) {

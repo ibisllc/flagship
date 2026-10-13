@@ -74,6 +74,7 @@ export * from "./outstandingOrders.js";
 export * from "./ctMonitor.js";
 export * from "./serviceBlessing.js";
 export * from "./serviceInvites.js";
+export * from "./serverShares.js";
 export * from "./serverTransfer.js";
 export * from "./serverDecommission.js";
 export * from "./serverMigration.js";

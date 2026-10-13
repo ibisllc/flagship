@@ -53,6 +53,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0085",
   // Repo adapter verdict attempts + install complaints.
   "0086",
+  // Share this server: offers, the second account's boot copy, its inbox.
+  "0087",
 ];
 
 export interface SchemaStatusDeps {

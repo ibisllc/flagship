@@ -1,3 +1,4 @@
+import { InMemoryServerShareStorage } from "./serverShares.js";
 import type {
   SchemaVersionRecord,
   SchemaVersionStorage,
@@ -2166,6 +2167,7 @@ export class InMemoryStorage implements Storage {
   serviceInvites = new InMemoryServiceInviteStorage();
   namespace = new InMemoryNamespaceStorage();
   peerBackupManifests = new InMemoryPeerBackupManifestStorage();
+  serverShares = new InMemoryServerShareStorage();
   demoAccountProvisioning = new InMemoryDemoAccountProvisioningStorage(
     this.usernames,
     this.deviceIdentities,

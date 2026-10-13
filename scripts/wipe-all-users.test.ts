@@ -177,6 +177,13 @@ describe("wipe-all-users SQL table list — in sync with migrations", () => {
     expect(readFileSync(SQL, "utf8")).toContain("DELETE FROM meter_batches;");
   });
 
+  it("includes the server-share tables (0087)", () => {
+    const sql = readFileSync(SQL, "utf8");
+    for (const t of ["server_shares", "server_share_unlocks", "share_inbox"]) {
+      expect(sql).toContain(`DELETE FROM ${t};`);
+    }
+  });
+
   it("does NOT delete build_tickets (dropped in migration 0033)", () => {
     const sql = readFileSync(SQL, "utf8");
     expect(sql).not.toMatch(/DELETE FROM build_tickets;/);

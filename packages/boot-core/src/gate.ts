@@ -45,7 +45,7 @@ export const DEFAULT_MAX_AGE_MS = 5 * 60_000;
 const HEX64 = /^[0-9a-f]{64}$/;
 const HEX128 = /^[0-9a-f]{128}$/;
 
-export type GateRole = "box" | "owner" | "delegate";
+export type GateRole = "box" | "owner" | "delegate" | "share";
 
 /**
  * The signed authorization envelope. Carried in the `Authorization`
@@ -174,7 +174,7 @@ export async function gate(
   if (!parsed) return deny(400, "malformed authorization");
   const e = parsed;
 
-  if (e.role !== "box" && e.role !== "owner" && e.role !== "delegate") {
+  if (e.role !== "box" && e.role !== "owner" && e.role !== "delegate" && e.role !== "share") {
     return deny(400, "unknown role");
   }
   if (typeof e.serverDomain !== "string" || e.serverDomain.length === 0) {
@@ -239,6 +239,15 @@ export async function gate(
     const dirIrk = await deps.directory.ownerIrkForDomain(e.serverDomain);
     if (dirIrk === null) return deny(404, "unknown server");
     if (!equalHex(e.pubKeyHex, dirIrk)) return deny(403, "owner IRK does not own this server");
+  } else if (e.role === "share") {
+    // share — another account's per-share key that the owner, signing with
+    // their sensitive key, gave a sealed copy of the disk key (the
+    // `flagship/server-share-unlock/v1` deposit). Only routes that list
+    // "share" reach here (boot approval + the share's own reads).
+    const lookup = deps.directory.shareUnlockForMember;
+    if (!lookup) return deny(403, "shares can't approve start-up here");
+    const copy = await lookup.call(deps.directory, e.serverDomain, e.pubKeyHex.toLowerCase());
+    if (!copy) return deny(403, "this share can't unlock this server");
   } else {
     // delegate — a watch-delegate key, authorized ONLY for the boot-approval
     // route (routes that don't list "delegate" in their allowed set already

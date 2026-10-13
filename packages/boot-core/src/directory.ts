@@ -63,6 +63,13 @@ export interface DirectoryClient {
    * in-process client resolves it from storage.
    */
   usernameForDomain(serverDomain: string): Promise<string | null>;
+  /**
+   * The boot copy another account holds for `serverDomain` under its per-share
+   * key `memberPubHex` (docs/share-a-server.md §5.4), or null when that share
+   * can't approve start-up (none deposited, withdrawn, or the share ended).
+   * Optional: a directory without shares never authorizes role "share".
+   */
+  shareUnlockForMember?(serverDomain: string, memberPubHex: string): Promise<{ sealedKeyHex: string } | null>;
 }
 
 export interface HttpDirectoryClientOpts {

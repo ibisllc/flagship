@@ -78,6 +78,8 @@ const ROUTE_RE = {
   REQUEST_POST: /^\/api\/boot\/request$/,
   RESPONSE_GET: /^\/api\/boot\/response\/([^/]+)\/([^/]+)$/,
   RESPONSE_POST: /^\/api\/boot\/response$/,
+  SHARE_PENDING: /^\/api\/boot\/share\/pending\/([^/]+)$/,
+  SHARE_KEY: /^\/api\/boot\/share\/key\/([^/]+)$/,
 } as const;
 
 /**
@@ -125,6 +127,12 @@ export async function routeBoot(
   }
   if (m === "POST" && ROUTE_RE.RESPONSE_POST.test(path)) {
     return handlePostResponse(deps, path, authHeader, body);
+  }
+  if (m === "GET" && (g = path.match(ROUTE_RE.SHARE_PENDING))) {
+    return handleSharePending(deps, path, authHeader, decodeURIComponent(g[1]!));
+  }
+  if (m === "GET" && (g = path.match(ROUTE_RE.SHARE_KEY))) {
+    return handleShareKey(deps, path, authHeader, decodeURIComponent(g[1]!));
   }
   return null;
 }
@@ -503,10 +511,14 @@ async function handlePostResponse(
   // (deposit/revoke lease) stays IRK-only — least-destructive scoping.
   const auth = await gate(
     deps.gate,
-    { role: ["owner", "delegate"], serverDomain: resp.serverDomain, method: "POST", path },
+    { role: ["owner", "delegate", "share"], serverDomain: resp.serverDomain, method: "POST", path },
     authHeader,
   );
   if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+  // A share may approve the disk unlock only; the entitlement is the owner's.
+  if (auth.role === "share" && resp.purpose !== "unlock-key") {
+    return { status: 403, body: { error: "a share can only approve the disk unlock" } };
+  }
 
   // The pending row must exist + not be expired + match the purpose.
   const reqRow = await deps.secretMailbox.getRequest(resp.serverDomain, resp.requestNonceHex.toLowerCase());
@@ -535,4 +547,52 @@ async function handlePostResponse(
  *  read on every announce. */
 function usernameOrDomain(serverDomain: string): string {
   return serverDomain.toLowerCase();
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Shares (docs/share-a-server.md §5.4): another account whose per-share key
+// holds a sealed copy of the disk key reads the server's pending start-up
+// requests and its own copy, then answers through POST /api/boot/response.
+// ──────────────────────────────────────────────────────────────────────
+
+async function handleSharePending(
+  deps: BootRouteDeps,
+  path: string,
+  authHeader: string | null,
+  serverDomain: string,
+): Promise<BootResponse> {
+  const now = deps.now ?? (() => Date.now());
+  const auth = await gate(deps.gate, { role: "share", serverDomain, method: "GET", path }, authHeader);
+  if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+  const user = await deps.directory.usernameForDomain(serverDomain);
+  if (!user) return { status: 404, body: { error: "unknown server" } };
+  const rows = await deps.secretMailbox.listPendingForUser(user, now(), 50);
+  const requests = rows
+    .filter((r) => r.serverDomain.toLowerCase() === serverDomain.toLowerCase() && r.purpose === "unlock-key")
+    .map((r) => ({
+      request: {
+        serverDomain: r.serverDomain,
+        stkPub: r.stkPubHex,
+        purpose: r.purpose,
+        nonce: r.requestNonceHex,
+        issuedAt: r.requestIssuedAt,
+      },
+      signature: r.requestSignatureHex,
+      postedAt: r.postedAt,
+      expiresAt: r.expiresAt,
+    }));
+  return { status: 200, body: { requests } };
+}
+
+async function handleShareKey(
+  deps: BootRouteDeps,
+  path: string,
+  authHeader: string | null,
+  serverDomain: string,
+): Promise<BootResponse> {
+  const auth = await gate(deps.gate, { role: "share", serverDomain, method: "GET", path }, authHeader);
+  if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+  const copy = await deps.directory.shareUnlockForMember?.(serverDomain, auth.pubKeyHex);
+  if (!copy) return { status: 404, body: { error: "no copy for this share" } };
+  return { status: 200, body: { sealedKey: copy.sealedKeyHex } };
 }

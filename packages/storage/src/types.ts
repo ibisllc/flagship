@@ -9,6 +9,7 @@
  */
 
 import type { MeterBatchEntry, MeterBatchResult, MeterCounter, MeterStore } from "@ibisllc/billing-metering";
+import type { ServerShareStorage } from "./serverShares.js";
 
 /**
  * v1.2 security cascade — account-type discriminator. See
@@ -1666,6 +1667,7 @@ export interface Storage {
   serviceInvites: ServiceInviteStorage;
   namespace: NamespaceStorage;
   peerBackupManifests: PeerBackupManifestStorage;
+  serverShares: ServerShareStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ import { usernameFromServerDomain } from "@flagship/boot-core";
 import type {
   ServerStorage,
   UsernameStorage,
+  ServerShareStorage,
   WatchDelegateStorage,
 } from "@flagship/storage";
 
@@ -29,6 +30,8 @@ export interface InProcessDirectoryDeps {
   servers: ServerStorage;
   usernames: UsernameStorage;
   watchDelegates: WatchDelegateStorage;
+  /** Shares (docs/share-a-server.md §5.4). Absent ⇒ no share can approve start-up. */
+  serverShares?: ServerShareStorage;
   /** The apex box FQDNs sit under (`<server>.<user>.<apex>`); used only to
    *  derive the account label from a domain. Defaults to flagship.services. */
   apex?: string;
@@ -52,12 +55,14 @@ export class InProcessDirectoryClient implements DirectoryClient {
   private readonly servers: ServerStorage;
   private readonly usernames: UsernameStorage;
   private readonly watchDelegates: WatchDelegateStorage;
+  private readonly serverShares: ServerShareStorage | undefined;
   private readonly apex: string;
 
   constructor(deps: InProcessDirectoryDeps) {
     this.servers = deps.servers;
     this.usernames = deps.usernames;
     this.watchDelegates = deps.watchDelegates;
+    this.serverShares = deps.serverShares;
     this.apex = deps.apex ?? "flagship.services";
   }
 
@@ -104,6 +109,13 @@ export class InProcessDirectoryClient implements DirectoryClient {
       }
     }
     return out;
+  }
+
+  async shareUnlockForMember(serverDomain: string, memberPubHex: string): Promise<{ sealedKeyHex: string } | null> {
+    if (!this.serverShares) return null;
+    if ((await this.boxStkForDomain(serverDomain)) === null) return null;
+    const copy = await this.serverShares.unlockForMember(serverDomain.toLowerCase(), memberPubHex.toLowerCase());
+    return copy ? { sealedKeyHex: copy.sealedKeyHex } : null;
   }
 
   async usernameForDomain(serverDomain: string): Promise<string | null> {
