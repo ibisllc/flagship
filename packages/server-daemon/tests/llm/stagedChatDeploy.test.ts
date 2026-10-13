@@ -119,6 +119,24 @@ describe("a chat's Deploy", () => {
     expect(session.files()["server.js"]).toBe("listen(process.env.PORT)");
   });
 
+  it("hands a manifest that names no runtime to the AI to fix, instead of failing the owner's Deploy", async () => {
+    const fixed = JSON.stringify({ ...JSON.parse(MANIFEST), runtime: { base: "static", port: 8080 } });
+    const s = setup([
+      { content: "", model: "m", toolUses: [tu("1", "write_file", { path: "flagship.app.json", content: fixed }), tu("2", "deploy")] },
+      { content: "", model: "m", toolUses: [tu("3", "finish")] },
+    ]);
+    const noBase = JSON.stringify({ ...JSON.parse(MANIFEST), runtime: { image: "x", port: 8080 } });
+    const session = fill(new VibeCodeSession({ username: "alice", serverFqdn: SERVER }), { ...FILES, "flagship.app.json": noBase });
+    await s.credentials.put(session.meta.sessionId, { provider: "openai", apiKey: "sk-test-key-123456789" });
+    const r = await s.deploy(session, { onPhase: (p) => s.phases.push(p) });
+    expect(r.ok).toBe(true);
+    expect(s.phases).toEqual(["staging", "fixing", "going-live"]);
+    expect(String(s.requests[0]!.messages[1]!.content)).toMatch(/set runtime\.base in flagship\.app\.json to one of node-24, python-3\.13, static/);
+    // Only the AI's fixed copy was ever staged.
+    expect(s.staging.stages).toHaveLength(1);
+    expect(JSON.parse(session.files()["flagship.app.json"]!).runtime.base).toBe("static");
+  });
+
   it("without an AI key, a copy that won't start is just the failure: nothing goes live", async () => {
     const s = setup();
     s.staging.results = [{ ok: false, reason: "docker build failed: npm ERR!" }];

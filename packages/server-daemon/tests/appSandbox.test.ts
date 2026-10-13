@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { GVISOR_RELEASE, GVISOR_SHA512, ensureGvisor, gvisorArch, gvisorUrl } from "../src/appSandbox/gvisor.js";
+import { GVISOR_RELEASE, GVISOR_SHA512, ensureGvisor, gvisorArch, gvisorUrl, probeFailure } from "../src/appSandbox/gvisor.js";
 import { appSandboxRunArgs, appSandboxStatus, keepAppSandbox, resetAppSandbox, startAppSandbox } from "../src/appSandbox/state.js";
 import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 
@@ -85,7 +85,8 @@ describe("installing gVisor", () => {
     expect(probe).toContain("--runtime=runsc");
     expect(probe).toContain("--network=none");
     expect(probe).toContain("--cap-drop=ALL");
-    expect(probe).toContain("--memory 64m");
+    expect(probe).toContain("--memory 512m");
+    expect(probe).toContain("--pids-limit 256");
     expect(await readFile(join(d.base, GVISOR_RELEASE, "gvisor-bin", "gvisor_sentry"), "utf8")).toBe("sentry");
     expect(await readdir(d.base)).toEqual([GVISOR_RELEASE]);
   });
@@ -205,5 +206,19 @@ describe("apps start only in their sandbox", () => {
     expect(tries).toBe(3);
     expect(recovered).toBe(1);
     expect(await appSandboxRunArgs()).toEqual(["--runtime=runsc"]);
+  });
+  it("quotes why gVisor crashed, not its register dump", () => {
+    const out = [
+      'docker: Error response from daemon: failed to create task for container: OCI runtime create failed: creating container: failure executing hook "/proc/1667/exe", err: exit status 2',
+      "stdout: ",
+      "stderr: runtime/cgo: pthread_create failed: Resource temporarily unavailable",
+      "SIGABRT: abort",
+      "PC=0xffff83bf8020 m=0 sigcode=18446744073709551610",
+      "r0      0x0",
+      "sp      0xffffcb26ce10",
+      "pc      0xffffb3408020",
+      "fault   0x0: unknown.",
+    ].join("\n");
+    expect(probeFailure(out)).toMatch(/^docker: Error response from daemon: .* \| stderr: runtime\/cgo: pthread_create failed: Resource temporarily unavailable \| SIGABRT: abort$/);
   });
 });

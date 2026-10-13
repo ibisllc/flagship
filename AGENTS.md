@@ -242,9 +242,14 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   `/usr/local/lib/flagship-gvisor/`, registered in `/etc/docker/daemon.json`,
   proved with an app-shaped test container, retrying `--systemd-cgroup` when
   docker uses the systemd driver); no app starts without it, and the server
-  page says why on all three apps. Never run on a real box yet: the download,
-  `systemctl reload docker`, the cgroup question, and Node/Python/nginx under
-  runsc on the arm64 Studio VMs. Next phases: a COPY-only build with installs in a locked-down
+  page says why on all three apps (Docker's own failure included). On home3
+  (`2d938d49`) the test container crashed gVisor: its `--pids-limit 32`
+  starved runsc (`pthread_create failed`; gVisor's threads count against the
+  container's cgroup). Fixed by testing with an app's own limits (256);
+  drilled on a Debian 13 arm64 VM under Apple's hypervisor: install,
+  register (systemd driver, no `--systemd-cgroup` needed) and test in 11 s,
+  and a Node app read-only as 10001 serving HTTP under runsc (30 pids).
+  Next phases: a COPY-only build with installs in a locked-down
   container, copies that send the app bundle instead of the image, disk
   quotas and Postgres role limits, vetted packages, owner-approved tier-3
   images.

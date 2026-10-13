@@ -294,8 +294,8 @@ export function buildStagedChatDeploy(deps: StagedChatDeployDeps) {
     const ws = new BuildWorkspace(withoutBuildFiles(session.files()));
     const manifestJson = ws.manifestJson();
     if (!manifestJson) return { ok: false, reason: "session has no flagship.app.json" };
+    // A manifest that names no runtime is the AI's to fix, like a copy that won't start.
     const noRuntime = chatRuntimeProblem(manifestJson);
-    if (noRuntime) return { ok: false, reason: noRuntime };
     let slug = session.meta.name ?? "";
     if (!slug) {
       try {
@@ -317,7 +317,7 @@ export function buildStagedChatDeploy(deps: StagedChatDeployDeps) {
 
     let sealed = false;
     opts.onPhase?.("staging");
-    const first = await stage();
+    const first: Awaited<ReturnType<typeof stage>> = noRuntime ? { ok: false, reason: noRuntime } : await stage();
     if (!first.ok && first.environment) {
       // The box is broken, not the app: no AI turn, and the owner is told what to do.
       await note("error", first.environment.ownerReason);

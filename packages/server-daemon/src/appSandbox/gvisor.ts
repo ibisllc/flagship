@@ -183,7 +183,12 @@ async function registerWithDocker(o: EnsureGvisorOptions, runsc: string, runtime
   throw new Error("Docker didn't pick up the gVisor runtime");
 }
 
-/** Run one throwaway container under gVisor, locked down and limited like an app. */
+/**
+ * Run one throwaway container under gVisor, locked down and limited like an
+ * app (DEFAULT_CONTAINER_LIMITS). The limits must be an app's own: gVisor's
+ * kernel runs inside the container's cgroup, so its threads count against
+ * `--pids-limit` (a cap of 32 starves it: `pthread_create failed`).
+ */
 async function probe(o: EnsureGvisorOptions): Promise<void> {
   try {
     await o.cmd.capture(
@@ -197,11 +202,11 @@ async function probe(o: EnsureGvisorOptions): Promise<void> {
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
         "--memory",
-        "64m",
+        "512m",
         "--cpus",
-        "0.5",
+        "1.0",
         "--pids-limit",
-        "32",
+        "256",
         "--tmpfs",
         "/tmp:rw,size=8m",
         "--entrypoint",
@@ -212,9 +217,16 @@ async function probe(o: EnsureGvisorOptions): Promise<void> {
     );
   } catch (e) {
     const err = e as Error & { stderr?: string };
-    const why = (err.stderr ?? err.message).trim().split("\n").slice(-3).join(" ").slice(0, 400);
+    const why = probeFailure(err.stderr ?? err.message);
     throw new Error(`gVisor couldn't run a container on this server: ${why}`);
   }
+}
+
+/** A crash ends in a register dump; the lines that say why come first. */
+export function probeFailure(output: string): string {
+  const lines = output.split("\n").map((l) => l.trim()).filter(Boolean);
+  const telling = lines.filter((l) => /pthread_create failed|fatal error|panic:|^SIG[A-Z]+:|failed to create|OCI runtime|Error response from daemon|error:/i.test(l));
+  return (telling.length > 0 ? telling.slice(0, 3) : lines.slice(-3)).join(" | ").slice(0, 400);
 }
 
 async function pruneOtherReleases(base: string): Promise<void> {
