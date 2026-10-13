@@ -1,43 +1,50 @@
-// Public-egress metering + quota model — feat/metering.
+// Public-egress metering + quota model — the "egress" resource of the
+// metering core (meter.ts).
 //
 // The only cost that scales with usage is public-ingress traffic routed
 // through the `.services` relay (Fly egress, ~$0.02/GB). This module is the
 // `.com`-side accounting: the relay reports per-account egress deltas, and we
 // answer the relay's gating question — "may this account carry MORE public
-// traffic right now?" — plus the user-facing usage status.
+// traffic at full speed right now?" — plus the user-facing usage status.
 //
 // Quota model (see docs/monetization-free-tier-first.md for the locked
 // pricing + cost basis): free is capped (over quota ⇒ `admit:false`, and the
 // relay slows the account to a speed limit rather than refusing it, so an
 // owner can still reach their own box); paid tiers bill overage per GB and are
 // never throttled. Tier comes from the existing TierStorage; a lapsed paid sub
-// (currentPeriodEnd in the past) falls back to free.
+// (currentPeriodEnd in the past) falls back to free. The allowances and the
+// over-quota policy live in meter.ts's METER_RESOURCES.egress.
 
-import type { TierName, TierStorage, UsageStorage } from "@flagship/storage";
+import type { TierName } from "@flagship/storage";
+import {
+  METER_RESOURCES,
+  meterCheck,
+  meterPeriodKey,
+  meterRecord,
+  type MeterDeps,
+  type MeterVerdict,
+} from "./meter.js";
 import { malformed } from "./types.js";
+
+export { effectiveTierOf } from "./meter.js";
 
 const GB = 1024 * 1024 * 1024;
 
-/** Monthly public-egress quota by tier, in bytes. Tune freely — the only hard
- *  constraint is that free-tier worst-case cost = quota × Fly egress
- *  (~$0.02/GB), so 25 GB ⇒ ~$0.50/mo max exposure per free account. */
+/** Monthly public-egress quota by tier, in bytes (METER_RESOURCES.egress). */
 export const MONTHLY_EGRESS_QUOTA_BYTES: Record<TierName, number> = {
-  free: 25 * GB,
-  hobby: 250 * GB,
-  maker: 500 * GB,
+  free: METER_RESOURCES.egress.tiers.free.allowance,
+  hobby: METER_RESOURCES.egress.tiers.hobby.allowance,
+  maker: METER_RESOURCES.egress.tiers.maker.allowance,
 };
 
-/** Overage rate above quota, USD per GB (PAID tiers only — free is hard-capped
+/** Overage rate above quota, USD per GB (PAID tiers only — free is throttled
  *  rather than billed). ~2.5× our ~$0.02/GB Fly cost: covers egress + ops +
  *  margin at the point where a user is genuinely a public service. */
 export const OVERAGE_USD_PER_GB = 0.05;
 
 /** UTC "YYYY-MM" period key for a timestamp (the egress quota resets monthly). */
 export function periodFor(nowMs: number): string {
-  const d = new Date(nowMs);
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
+  return meterPeriodKey("month", nowMs);
 }
 
 export function quotaBytesForTier(tier: TierName): number {
@@ -51,84 +58,45 @@ export interface QuotaStatus {
   quotaBytes: number;
   remainingBytes: number;
   overQuota: boolean;
-  /** May the relay carry MORE public traffic for this account right now?
-   *  Free over-quota ⇒ false (the relay throttles it). Paid ⇒ always true
-   *  (bills overage). */
+  /** May the relay carry MORE public traffic at full speed for this account
+   *  right now? Free over-quota ⇒ false (the relay throttles it). Paid ⇒
+   *  always true (bills overage). */
   admit: boolean;
   /** Overage owed this period (paid tiers only); 0 for free. */
   overageUsd: number;
 }
 
-export interface MeteringDeps {
-  usage: UsageStorage;
-  tiers: TierStorage;
-  now?: () => number;
-}
+export type MeteringDeps = MeterDeps;
 
-function nowMs(deps: MeteringDeps): number {
-  return deps.now ? deps.now() : Date.now();
-}
-
-/** Effective tier for an account: a lapsed paid sub falls back to free. The
- *  one definition of "paid right now" — metering and custom domains share it. */
-export async function effectiveTierOf(
-  tiers: TierStorage,
-  username: string,
-  nowMsValue: number,
-): Promise<TierName> {
-  const rec = await tiers.get(username.toLowerCase());
-  if (!rec || rec.tier === "free") return "free";
-  if (rec.currentPeriodEnd !== undefined && rec.currentPeriodEnd < nowMsValue) {
-    return "free"; // subscription lapsed
-  }
-  return rec.tier;
-}
-
-async function effectiveTier(deps: MeteringDeps, username: string): Promise<TierName> {
-  return effectiveTierOf(deps.tiers, username, nowMs(deps));
-}
-
-function statusFrom(tier: TierName, period: string, usedBytes: number): QuotaStatus {
-  const quotaBytes = quotaBytesForTier(tier);
-  const overQuota = usedBytes > quotaBytes;
-  const overBytes = Math.max(0, usedBytes - quotaBytes);
-  const isFree = tier === "free";
+function statusFrom(v: MeterVerdict): QuotaStatus {
+  const billed = v.policy === "bill";
   return {
-    tier,
-    period,
-    usedBytes,
-    quotaBytes,
-    remainingBytes: Math.max(0, quotaBytes - usedBytes),
-    overQuota,
-    // Free over quota is throttled by the relay; paid is never (it bills overage).
-    admit: isFree ? !overQuota : true,
-    overageUsd: isFree ? 0 : (overBytes / GB) * OVERAGE_USD_PER_GB,
+    tier: v.tier,
+    period: v.period,
+    usedBytes: v.used,
+    quotaBytes: v.allowance,
+    remainingBytes: v.remaining,
+    overQuota: v.over,
+    admit: v.action === "allow",
+    overageUsd: billed ? (Math.max(0, v.used - v.allowance) / GB) * OVERAGE_USD_PER_GB : 0,
   };
 }
 
 /** Record `bytes` of public egress for an account; return the post-add status
- *  (the relay uses `.admit` to decide whether to keep carrying traffic). */
+ *  (the relay uses `.admit` to decide whether to keep full speed). A negative
+ *  delta records nothing. */
 export async function recordEgress(
   deps: MeteringDeps,
   username: string,
   bytes: number,
 ): Promise<QuotaStatus> {
-  const now = nowMs(deps);
-  const period = periodFor(now);
-  const used = await deps.usage.addEgress(username.toLowerCase(), period, bytes, now);
-  const tier = await effectiveTier(deps, username.toLowerCase());
-  return statusFrom(tier, period, used);
+  return statusFrom(await meterRecord(deps, username, "egress", Math.max(0, bytes)));
 }
 
 /** Read current quota status WITHOUT recording usage (dashboard + pre-flight
  *  admit check). */
 export async function quotaStatus(deps: MeteringDeps, username: string): Promise<QuotaStatus> {
-  const now = nowMs(deps);
-  const period = periodFor(now);
-  const u = username.toLowerCase();
-  const rec = await deps.usage.get(u, period);
-  const tier = await effectiveTier(deps, u);
-  return statusFrom(tier, period, rec?.bytesEgress ?? 0);
+  return statusFrom(await meterCheck(deps, username, "egress"));
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -153,7 +121,7 @@ export interface UsageHttpResult {
 
 /** `POST /api/usage/report` — body `{ items: [{ username, bytes }, ...] }`.
  *  The relay batches per-account egress deltas and posts them. Returns each
- *  account's post-update admit/quota status so the relay can immediately drop
+ *  account's post-update admit/quota status so the relay can immediately slow
  *  a free account that just crossed its cap. */
 export async function handleUsageReport(
   deps: MeteringDeps,

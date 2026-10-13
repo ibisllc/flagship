@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TierName, TierSubscriptionRecord, UsageStorage, TierStorage } from "@flagship/storage";
+import { InMemoryMeterStorage, type TierName, type TierSubscriptionRecord, type TierStorage } from "@flagship/storage";
 import {
   recordEgress,
   quotaStatus,
@@ -15,29 +15,12 @@ import {
 const GB = 1024 * 1024 * 1024;
 const NOW = Date.UTC(2026, 5, 14); // 2026-06-14 → period "2026-06"
 
-function fakeUsage(): UsageStorage & { raw: Map<string, number> } {
-  const m = new Map<string, number>();
-  return {
-    raw: m,
-    async addEgress(u, p, bytes, _now) {
-      const k = `${u}|${p}`;
-      const next = (m.get(k) ?? 0) + Math.max(0, Math.floor(bytes));
-      m.set(k, next);
-      return next;
-    },
-    async get(u, p) {
-      const k = `${u}|${p}`;
-      return m.has(k) ? { username: u, period: p, bytesEgress: m.get(k)!, updatedAt: 1 } : undefined;
-    },
-  };
-}
-
 function fakeTiers(rec?: TierSubscriptionRecord): TierStorage {
   return { async get() { return rec; }, async put() {} };
 }
 
 function deps(rec?: TierSubscriptionRecord): MeteringDeps {
-  return { usage: fakeUsage(), tiers: fakeTiers(rec), now: () => NOW };
+  return { meter: new InMemoryMeterStorage(), tiers: fakeTiers(rec), now: () => NOW };
 }
 
 function tier(t: TierName, currentPeriodEnd?: number): TierSubscriptionRecord {
@@ -72,6 +55,19 @@ describe("metering — recordEgress accumulates within the period", () => {
     expect(b.admit).toBe(true);
   });
 
+  it("a negative delta records nothing", async () => {
+    const d = deps();
+    await recordEgress(d, "alice", 3 * GB);
+    const s = await recordEgress(d, "alice", -1 * GB);
+    expect(s.usedBytes).toBe(3 * GB);
+  });
+
+  it("counts as the core's \"egress\" resource", async () => {
+    const d = deps();
+    await recordEgress(d, "alice", 2 * GB);
+    expect((await d.meter.get("alice", "egress", "2026-06"))?.amount).toBe(2 * GB);
+  });
+
   it("lowercases the username key", async () => {
     const d = deps();
     await recordEgress(d, "Alice", 1 * GB);
@@ -80,14 +76,14 @@ describe("metering — recordEgress accumulates within the period", () => {
   });
 });
 
-describe("metering — free tier is a HARD CAP", () => {
-  it("over 50 GB ⇒ overQuota + admit=false + no overage billing", async () => {
+describe("metering — free tier over quota is throttled", () => {
+  it("over 25 GB ⇒ overQuota + admit=false + no overage billing", async () => {
     const d = deps(); // free
-    const s = await recordEgress(d, "alice", 51 * GB);
+    const s = await recordEgress(d, "alice", 26 * GB);
     expect(s.tier).toBe("free");
     expect(s.overQuota).toBe(true);
-    expect(s.admit).toBe(false); // relay stops carrying new public traffic
-    expect(s.overageUsd).toBe(0); // free is capped, not billed
+    expect(s.admit).toBe(false); // the relay slows the account to its speed limit
+    expect(s.overageUsd).toBe(0); // free is throttled, not billed
     expect(s.remainingBytes).toBe(0);
   });
 });
@@ -102,9 +98,9 @@ describe("metering — paid tier bills overage, never throttles", () => {
     expect(s.overageUsd).toBeCloseTo(10 * OVERAGE_USD_PER_GB, 6); // 10 GB over × $0.05
   });
 
-  it("a LAPSED paid sub falls back to free (hard cap)", async () => {
+  it("a LAPSED paid sub falls back to free (throttled over 25 GB)", async () => {
     const d = deps(tier("hobby", NOW - 24 * 3600 * 1000)); // ended yesterday
-    const s = await recordEgress(d, "alice", 51 * GB);
+    const s = await recordEgress(d, "alice", 26 * GB);
     expect(s.tier).toBe("free");
     expect(s.admit).toBe(false);
   });
@@ -119,7 +115,7 @@ describe("metering — HTTP handlers (relay shared-secret auth)", () => {
     expect((await handleUsageReport(d, SECRET, undefined, { items: [] })).status).toBe(503);
 
     const res = await handleUsageReport(d, SECRET, SECRET, {
-      items: [{ username: "alice", bytes: 51 * GB }, { username: "bob", bytes: 1 * GB }],
+      items: [{ username: "alice", bytes: 26 * GB }, { username: "bob", bytes: 1 * GB }],
     });
     expect(res.status).toBe(200);
     const body = res.body as { results: Array<{ username: string; admit: boolean }> };

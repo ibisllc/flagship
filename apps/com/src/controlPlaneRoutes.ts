@@ -198,7 +198,7 @@ import {
   type HandlerResponseWithHeaders,
   type IsoManifest,
 } from "@flagship/control-plane";
-import { D1Storage, D1DemoUsersStorage, D1UsageStorage, type D1Database } from "@flagship/storage";
+import { D1Storage, D1DemoUsersStorage, D1MeterStorage, type D1Database } from "@flagship/storage";
 import {
   routeBoot,
   AUTH_HEADER,
@@ -854,7 +854,7 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.USAGE_REPORT.test(path)) {
     return finishPlain(
       await handleUsageReport(
-        { usage: new D1UsageStorage(env.DB), tiers: storage.tiers },
+        { meter: new D1MeterStorage(env.DB), tiers: storage.tiers },
         request.headers.get("x-usage-secret"),
         env.USAGE_REPORT_SECRET,
         await readJson(request),
@@ -864,7 +864,7 @@ export async function tryControlPlane(
   if (method === "GET" && ROUTE_RE.USAGE_STATUS.test(path)) {
     return finishPlain(
       await handleUsageStatus(
-        { usage: new D1UsageStorage(env.DB), tiers: storage.tiers },
+        { meter: new D1MeterStorage(env.DB), tiers: storage.tiers },
         request.headers.get("x-usage-secret"),
         env.USAGE_REPORT_SECRET,
         url.searchParams.get("username"),

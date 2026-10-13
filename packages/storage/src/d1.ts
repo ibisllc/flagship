@@ -58,8 +58,8 @@ import type {
   Storage,
   TierStorage,
   TierSubscriptionRecord,
-  UsageStorage,
-  UsageCounterRecord,
+  MeterStorage,
+  MeterCounterRecord,
   UserIdentityRecord,
   UserIdentityRecordStorage,
   UsernameRecord,
@@ -3288,34 +3288,34 @@ export class D1TierStorage implements TierStorage {
   }
 }
 
-/** Public-egress metering counter (migration 0051). Standalone — constructed
- *  on demand (like D1NonceStore), not part of the D1Storage aggregate. */
-export class D1UsageStorage implements UsageStorage {
+/** Metering counters (migration 0069). Standalone — constructed on demand
+ *  (like D1NonceStore), not part of the D1Storage aggregate. */
+export class D1MeterStorage implements MeterStorage {
   constructor(private readonly db: D1Database) {}
 
-  async addEgress(username: string, period: string, bytes: number, now: number): Promise<number> {
-    const delta = Math.max(0, Math.floor(bytes));
-    await this.db
+  async add(account: string, resource: string, period: string, amount: number, now: number): Promise<number> {
+    const delta = Math.max(0, Math.floor(amount));
+    const r = await this.db
       .prepare(
-        `INSERT INTO usage_counters (username, period, bytes_egress, updated_at)
-         VALUES (?,?,?,?)
-         ON CONFLICT(username, period) DO UPDATE SET
-           bytes_egress = bytes_egress + excluded.bytes_egress,
-           updated_at   = excluded.updated_at`,
+        `INSERT INTO meter_counters (account, resource, period, amount, updated_at)
+         VALUES (?,?,?,?,?)
+         ON CONFLICT(account, resource, period) DO UPDATE SET
+           amount     = amount + excluded.amount,
+           updated_at = excluded.updated_at
+         RETURNING amount`,
       )
-      .bind(username, period, delta, now)
-      .run();
-    const r = await this.get(username, period);
-    return r?.bytesEgress ?? 0;
+      .bind(account, resource, period, delta, now)
+      .first<{ amount: number }>();
+    return r?.amount ?? 0;
   }
 
-  async get(username: string, period: string): Promise<UsageCounterRecord | undefined> {
+  async get(account: string, resource: string, period: string): Promise<MeterCounterRecord | undefined> {
     const r = await this.db
-      .prepare(`SELECT * FROM usage_counters WHERE username = ? AND period = ?`)
-      .bind(username, period)
-      .first<{ username: string; period: string; bytes_egress: number; updated_at: number }>();
+      .prepare(`SELECT * FROM meter_counters WHERE account = ? AND resource = ? AND period = ?`)
+      .bind(account, resource, period)
+      .first<{ account: string; resource: string; period: string; amount: number; updated_at: number }>();
     return r
-      ? { username: r.username, period: r.period, bytesEgress: r.bytes_egress, updatedAt: r.updated_at }
+      ? { account: r.account, resource: r.resource, period: r.period, amount: r.amount, updatedAt: r.updated_at }
       : undefined;
   }
 }

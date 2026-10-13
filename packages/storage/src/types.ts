@@ -2139,28 +2139,33 @@ export interface TierStorage {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Public-egress metering (migration 0051) — feat/metering
+// Metering core (migration 0069) — one counter per (account, resource, period)
 // ──────────────────────────────────────────────────────────────────────
 
-/** One row per (username, period) holding cumulative public-ingress egress
- *  bytes routed through the `.services` relay. `period` is a UTC "YYYY-MM"
- *  month; the quota resets per period. Monotonic within a period. */
-export interface UsageCounterRecord {
-  username: string;
+/** A cumulative usage counter. Holds an account and a number, never content:
+ *  `resource` names what is counted (control-plane `meter.ts` owns the list,
+ *  e.g. "egress" bytes through the relay, "ai-tokens" served by the in-house
+ *  model) and `period` the window it resets on ("2026-10", "2026-10-13" or
+ *  "all"). Monotonic within a period. */
+export interface MeterCounterRecord {
+  /** Lowercased username. */
+  account: string;
+  resource: string;
   period: string;
-  bytesEgress: number;
+  amount: number;
   updatedAt: number;
 }
 
-/** Standalone store (constructed on demand like D1NonceStore — deliberately
- *  NOT part of the `Storage` aggregate, so the unlaunched metering feature
- *  doesn't thread through every aggregate implementer on `main`). */
-export interface UsageStorage {
-  /** Atomically add `bytes` (a delta) to (username, period), creating the row
-   *  at 0 on first write. Returns the new cumulative total for the period. */
-  addEgress(username: string, period: string, bytes: number, now: number): Promise<number>;
-  /** Read the counter for (username, period). undefined → no usage yet. */
-  get(username: string, period: string): Promise<UsageCounterRecord | undefined>;
+/** Standalone store (constructed on demand like D1NonceStore, not part of the
+ *  `Storage` aggregate). Resource-agnostic: it never interprets `resource` or
+ *  `period`, so a new metered resource needs no schema change. */
+export interface MeterStorage {
+  /** Atomically add `amount` (a non-negative delta; negatives and fractions
+   *  floor to a whole non-negative number) to the counter, creating it at 0.
+   *  Returns the new cumulative total. */
+  add(account: string, resource: string, period: string, amount: number, now: number): Promise<number>;
+  /** Read one counter. undefined → nothing recorded yet. */
+  get(account: string, resource: string, period: string): Promise<MeterCounterRecord | undefined>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
