@@ -12,14 +12,19 @@ const GB = 1024 * 1024 * 1024;
 const SECRET = "relay-secret";
 const RATE = 32_000;
 
-async function relayAgainstCom() {
+async function relayAgainstCom(opts: { loseFirstAnswer?: boolean } = {}) {
   const tiers = new InMemoryTierStorage();
   await tiers.put({ username: "bob", tier: "hobby", updatedAt: 1 });
   const com: MeteringDeps = { meter: new InMemoryMeterStorage(), tiers };
+  let lose = opts.loseFirstAnswer ?? false;
   const fetchImpl = (async (_url: string, init?: RequestInit) => {
     const headers = init?.headers as Record<string, string>;
     const res = await handleUsageReport(com, headers["x-usage-secret"] ?? null, SECRET, JSON.parse(String(init?.body)));
-    return { ok: res.status === 200, json: async () => res.body } as Response;
+    if (lose) {
+      lose = false;
+      throw new Error("connection reset after .com counted the batch");
+    }
+    return { ok: res.status === 200, status: res.status, json: async () => res.body } as Response;
   }) as typeof fetch;
   const relay = new UsageMeter({
     reportUrl: "https://com/api/usage/report",
@@ -58,5 +63,44 @@ describe("egress metering — relay and .com through the metering core", () => {
     await relay.flush();
     expect(relay.admits("bob")).toBe(true);
     expect(relay.throttleDelayMs("bob", RATE * 10)).toBe(0);
+  });
+});
+
+describe("egress metering — leases and idempotent batches end to end", () => {
+  const MiB = 1024 * 1024;
+  const month = () => new Date().toISOString().slice(0, 7);
+
+  it("a batch whose answer was lost is retried and counted once", async () => {
+    const { relay, com } = await relayAgainstCom({ loseFirstAnswer: true });
+    relay.add("alice", 3 * GB);
+    await relay.flush(); // counted, answer lost
+    await relay.flush(); // same batch id again
+    expect((await com.meter.get("alice", "egress", month()))?.amount).toBe(3 * GB);
+  });
+
+  it("a free account is slowed AT the allowance, before its next report", async () => {
+    const { relay, com } = await relayAgainstCom();
+    relay.add("alice", 25 * GB - 100 * MiB);
+    await relay.flush(); // lease: a quarter of the 100 MiB left
+    relay.add("alice", 25 * MiB - 1);
+    expect(relay.admits("alice")).toBe(true);
+    relay.add("alice", 1);
+    expect(relay.admits("alice")).toBe(false); // no report needed
+    await relay.flush();
+    expect((await com.meter.get("alice", "egress", month()))?.amount).toBe(25 * GB - 75 * MiB);
+    expect(relay.admits("alice")).toBe(true); // renewed: 75 MiB still left
+  });
+
+  it("one relay never carries a free account past 25 GB on a lease", async () => {
+    const { relay, com } = await relayAgainstCom();
+    relay.add("alice", 1);
+    await relay.flush();
+    // Carry at full speed whenever admitted; report whenever slowed.
+    for (let i = 0; i < 10_000 && (await com.meter.get("alice", "egress", month()))!.amount < 25 * GB; i++) {
+      while (relay.admits("alice")) relay.add("alice", 4 * MiB);
+      await relay.flush();
+    }
+    expect((await com.meter.get("alice", "egress", month()))?.amount).toBeLessThanOrEqual(25 * GB + 4 * MiB);
+    expect(relay.admits("alice")).toBe(false);
   });
 });

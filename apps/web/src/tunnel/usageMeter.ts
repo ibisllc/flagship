@@ -1,21 +1,36 @@
-// Per-account public-egress accumulator on the `.services` relay.
+// Per-account public-egress metering on the `.services` relay, with budget
+// leases from `.com` (billing/docs/spec/report-and-lease-v1.md,
+// docs/metering.md).
 //
-// Approximate BY DESIGN (see docs/monetization-free-tier-first.md). The hot
-// path is a RAM integer add per buffer; deltas flush to `.com` periodically
-// and are LOST on restart / flush-failure. The slop is always in the tolerable
-// direction — a free account over quota keeps full speed until the next flush
-// flips its over-quota bit (≤ one interval of overage), and a lost delta
-// under-counts ("the user gets a bit more"), never stalls traffic.
+//   relay: add(account, bytes) per buffer → LeaseBook.use (a RAM map update)
+//        → report: POST /api/usage/report { batchId, items:[{username,bytes}] }
+//        ← { duplicate, results:[{ username, admit, lease:{ action,
+//              grantBytes, policy, ttlMs } }] }
+//   relay: enforces each lease locally. An account may carry `grantBytes` at
+//          full speed before the relay must hear back; a throttle lease (or a
+//          spent grant) SLOWS it (throttle.ts), never refuses it, so an owner
+//          over the Free allowance can still reach their own box.
 //
-//   relay: counter[account] += bytes   (in routeToTunnel, per buffer)
-//        → flush every ~20s: POST /api/usage/report { items:[{username,bytes}] }
-//        ← response { results:[{username, admit}] }  → update RAM over-quota set
-//   relay: an over-quota account is SLOWED, never refused (throttle.ts) — so an
-//          owner over the Free allowance can still reach their own box.
+// Reporting is adaptive: every ~500 ms the relay sends the accounts that are
+// due (no lease yet, half the grant spent, or the lease lapsed), and every
+// flushIntervalMs (default 60 s) everyone with unreported usage. A batch keeps
+// its id across retries, so `.com` counts it once.
 //
-// Multiple relay machines each accumulate + flush independently; `.com`'s
-// addEgress is an atomic `+=`, so the totals sum with no coordination.
+// Bounds, per account per relay machine:
+//   overshoot past the allowance ≤ initialGrant (32 MiB) each time the relay
+//     meets the account without a lease (first sight, restart, forgotten
+//     after an hour idle); 0 otherwise. Machines add up: E machines carrying
+//     one account at once ≤ (E − 1) × 256 MiB more.
+//   lost on a relay crash ≤ the current grant (≤ 256 MiB, and a quarter of
+//     what's left near the cap) + the batch in flight.
+// While `.com` is unreachable the relay fails open: a spent grant doesn't
+// slow anyone (explicit throttles stay), usage keeps accumulating, and a batch
+// that can't be delivered within 10 minutes is dropped (under-count).
+//
+// Multiple relay machines each report independently; `.com`'s adds are
+// atomic, so the totals sum with no coordination.
 
+import { LeaseBook, type EdgeBatch, type EdgeLease, type LeaseBookOptions } from "@ibisllc/billing-metering";
 import { AccountThrottle, DEFAULT_THROTTLE_BYTES_PER_SEC } from "./throttle.js";
 
 export interface UsageMeterOptions {
@@ -23,19 +38,30 @@ export interface UsageMeterOptions {
   reportUrl: string;
   /** Shared secret (USAGE_REPORT_SECRET); sent as the `x-usage-secret` header. */
   secret: string;
-  /** Flush cadence. Default 20s. */
+  /** Slow pass: everyone with unreported usage. Default 60 s (USAGE_FLUSH_MS). */
   flushIntervalMs?: number;
+  /** Fast pass for due accounts. Default 500 ms. */
+  dueCheckMs?: number;
   fetchImpl?: typeof fetch;
-  /** Test hook: invoked after each flush attempt. */
+  /** Test hook: invoked after each report attempt. */
   onFlush?: (info: { sent: number; ok: boolean }) => void;
   /** Speed limit for over-quota accounts, bytes/second. Default 32,000 B/s
    *  (256 kbit/s); set on the Fly app via FLAGSHIP_OVER_QUOTA_KBPS. */
   throttleBytesPerSec?: number;
-  /** Test hook: the throttle's clock. */
+  /** Clock for the throttle and the leases. */
   now?: () => number;
+  /** Lease bookkeeping overrides (tests, tuning). */
+  leases?: Partial<LeaseBookOptions>;
 }
 
-const DEFAULT_FLUSH_MS = 20_000;
+const MiB = 1024 * 1024;
+const DEFAULT_FLUSH_MS = 60_000;
+const DEFAULT_DUE_CHECK_MS = 500;
+/** Batches sent back to back in one flush (a retried one, then new ones). */
+const MAX_BATCHES_PER_FLUSH = 4;
+
+/** What a relay may carry for an account before `.com` has answered for it. */
+export const INITIAL_GRANT_BYTES = 32 * MiB;
 
 /** Account (username) from a pod canonical
  *  (`<server>.<user>.flagship.services` or `<user>.flagship.services` → the
@@ -49,48 +75,76 @@ export function accountFromCanonical(podCanonical: string): string | null {
   return labels.length ? labels[labels.length - 1]! : null;
 }
 
+const ACTIONS = new Set(["allow", "throttle", "stop"]);
+
+/** The lease in one result. A `.com` from before leases sends only `admit`;
+ *  that keeps its semantics (no local limit; throttle on admit:false). */
+function leaseFrom(r: Record<string, unknown>, flushIntervalMs: number): EdgeLease | undefined {
+  const l = r.lease as Record<string, unknown> | undefined;
+  if (
+    l &&
+    ACTIONS.has(l.action as string) &&
+    ACTIONS.has(l.policy as string) &&
+    typeof l.grantBytes === "number" &&
+    typeof l.ttlMs === "number"
+  ) {
+    return {
+      action: l.action as EdgeLease["action"],
+      grant: l.grantBytes,
+      policy: l.policy as EdgeLease["policy"],
+      ttlMs: l.ttlMs,
+    };
+  }
+  if (typeof r.admit !== "boolean") return undefined;
+  return r.admit
+    ? { action: "allow", grant: 256 * MiB, policy: "allow", ttlMs: flushIntervalMs }
+    : { action: "throttle", grant: 0, policy: "throttle", ttlMs: flushIntervalMs };
+}
+
 export class UsageMeter {
-  private readonly counters = new Map<string, number>(); // account -> bytesSinceFlush
-  private readonly blocked = new Set<string>(); // free accounts currently over quota
+  private readonly book: LeaseBook;
   private timer: ReturnType<typeof setInterval> | undefined;
+  private flushing: Promise<void> | undefined;
+  private lastFullAt: number;
   private readonly flushIntervalMs: number;
+  private readonly dueCheckMs: number;
   private readonly fetchImpl: typeof fetch;
   private readonly throttle: AccountThrottle;
+  private readonly now: () => number;
 
   constructor(private readonly opts: UsageMeterOptions) {
     this.flushIntervalMs = opts.flushIntervalMs ?? DEFAULT_FLUSH_MS;
+    this.dueCheckMs = opts.dueCheckMs ?? DEFAULT_DUE_CHECK_MS;
     this.fetchImpl = opts.fetchImpl ?? fetch;
-    this.throttle = new AccountThrottle(
-      opts.throttleBytesPerSec ?? DEFAULT_THROTTLE_BYTES_PER_SEC,
-      opts.now,
-    );
+    this.now = opts.now ?? (() => Date.now());
+    this.throttle = new AccountThrottle(opts.throttleBytesPerSec ?? DEFAULT_THROTTLE_BYTES_PER_SEC, this.now);
+    this.book = new LeaseBook({ initialGrant: INITIAL_GRANT_BYTES, unknownPolicy: "throttle", ...opts.leases });
+    this.lastFullAt = this.now();
   }
 
-  /** Hot path — add egress bytes for an account. A RAM map add; no I/O. */
+  /** Hot path — add egress bytes for an account. A RAM map update; no I/O. */
   add(account: string | null, bytes: number): void {
     if (!account || bytes <= 0) return;
-    this.counters.set(account, (this.counters.get(account) ?? 0) + bytes);
+    this.book.use(account, bytes, this.now());
   }
 
-  /** Is this account within quota? Default-yes — only an explicit over-quota
-   *  verdict from `.com` says otherwise (fail-open). */
+  /** May this account carry more at full speed right now? Fail-open: only a
+   *  lease from `.com` (or a spent grant while `.com` is reachable) says no. */
   admits(account: string | null): boolean {
-    return account ? !this.blocked.has(account) : true;
+    return account ? this.book.action(account) === "allow" : true;
   }
 
-  /** Charge carried bytes to an over-quota account's speed limit; returns how
-   *  long the caller should pause its source (0 = keep going). Within-quota
-   *  accounts cost one set lookup and are never slowed. */
+  /** Charge carried bytes to a restricted account's speed limit; returns how
+   *  long the caller should pause its source (0 = keep going). Allowed
+   *  accounts cost one map lookup and are never slowed. */
   throttleDelayMs(account: string | null, bytes: number): number {
-    if (!account || !this.blocked.has(account)) return 0;
+    if (!account || this.book.action(account) === "allow") return 0;
     return this.throttle.charge(account, bytes);
   }
 
   start(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => {
-      void this.flush();
-    }, this.flushIntervalMs);
+    this.timer = setInterval(() => this.tick(), this.dueCheckMs);
     // Never keep the process alive just for metering.
     (this.timer as { unref?: () => void }).unref?.();
   }
@@ -102,43 +156,89 @@ export class UsageMeter {
     }
   }
 
-  /** Snapshot + reset BEFORE the network call (optimistic): a failed flush
-   *  DROPS the deltas (under-count) rather than risking a double-count on the
-   *  next interval. Never throws into the data plane (fail-open). */
-  async flush(): Promise<void> {
-    if (this.counters.size === 0) {
-      this.opts.onFlush?.({ sent: 0, ok: true });
-      return;
+  /** One timer tick: the slow pass when it is time, else the due accounts. */
+  tick(): void {
+    if (this.flushing) return;
+    const now = this.now();
+    if (now - this.lastFullAt >= this.flushIntervalMs) {
+      this.lastFullAt = now;
+      this.book.prune(now);
+      void this.flush("all");
+    } else if (this.book.hasDue(now)) {
+      void this.flush("due");
     }
-    const items = [...this.counters].map(([username, bytes]) => ({ username, bytes }));
-    this.counters.clear();
-    try {
-      const resp = await this.fetchImpl(this.opts.reportUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-usage-secret": this.opts.secret },
-        body: JSON.stringify({ items }),
+  }
+
+  /** Report usage: a failed batch first (same id), then new ones. Never
+   *  throws into the data plane. Concurrent calls share one run. */
+  flush(mode: "due" | "all" = "all"): Promise<void> {
+    if (!this.flushing) {
+      this.flushing = this.run(mode).finally(() => {
+        this.flushing = undefined;
       });
-      if (resp.ok) {
-        const body = (await resp.json().catch(() => null)) as
-          | { results?: Array<{ username: string; admit: boolean }> }
-          | null;
-        for (const r of body?.results ?? []) {
-          if (r.admit) {
-            this.blocked.delete(r.username);
-            this.throttle.forget(r.username);
-          } else this.blocked.add(r.username);
-        }
-      }
-      this.opts.onFlush?.({ sent: items.length, ok: resp.ok });
-    } catch {
-      // Deltas already dropped; keep serving — a metering outage must never
-      // hiccup the data plane.
-      this.opts.onFlush?.({ sent: items.length, ok: false });
     }
+    return this.flushing;
   }
 
   /** Test/diagnostics: number of accounts currently slowed. */
   blockedCount(): number {
-    return this.blocked.size;
+    return this.book.restrictedCount();
+  }
+
+  /** Test/diagnostics: accounts held in memory. */
+  trackedCount(): number {
+    return this.book.size();
+  }
+
+  private async run(mode: "due" | "all"): Promise<void> {
+    let sentAny = false;
+    for (let i = 0; i < MAX_BATCHES_PER_FLUSH; i++) {
+      const batch = this.book.takeBatch(this.now(), mode);
+      if (!batch) break;
+      sentAny = true;
+      if (!(await this.send(batch))) break;
+    }
+    if (!sentAny) this.opts.onFlush?.({ sent: 0, ok: true });
+  }
+
+  private async send(batch: EdgeBatch): Promise<boolean> {
+    const sent = batch.items.length;
+    try {
+      const resp = await this.fetchImpl(this.opts.reportUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-usage-secret": this.opts.secret },
+        body: JSON.stringify({
+          batchId: batch.id,
+          items: batch.items.map((i) => ({ username: i.account, bytes: i.amount })),
+        }),
+      });
+      if (!resp.ok) {
+        // 5xx / 408 / 429: try the same batch again; any other refusal won't
+        // change on a retry, so drop it (an under-count).
+        const retry = resp.status >= 500 || resp.status === 408 || resp.status === 429;
+        this.book.failed(batch, this.now(), retry);
+        this.opts.onFlush?.({ sent, ok: false });
+        return false;
+      }
+      const body = (await resp.json().catch(() => null)) as { results?: unknown } | null;
+      const leases = new Map<string, EdgeLease>();
+      for (const r of Array.isArray(body?.results) ? body.results : []) {
+        const rec = r as Record<string, unknown>;
+        if (typeof rec.username !== "string") continue;
+        const lease = leaseFrom(rec, this.flushIntervalMs);
+        if (lease) leases.set(rec.username, lease);
+      }
+      this.book.settle(batch, leases, this.now());
+      for (const { account } of batch.items) {
+        if (this.book.action(account) === "allow") this.throttle.forget(account);
+      }
+      this.opts.onFlush?.({ sent, ok: true });
+      return true;
+    } catch {
+      // Keep serving: a metering outage must never hiccup the data plane.
+      this.book.failed(batch, this.now(), true);
+      this.opts.onFlush?.({ sent, ok: false });
+      return false;
+    }
   }
 }

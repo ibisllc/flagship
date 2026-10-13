@@ -509,11 +509,13 @@ export async function start(opts: {
     ...(blessingProvider ? { blessingSource: blessingProvider } : {}),
   });
 
-  // Public-egress metering (feat/metering). OFF unless USAGE_REPORT_SECRET is
-  // set — so deploying this code is a no-op until the secret is provisioned.
-  // The meter counts bytes per account in the SNI splice and flushes deltas to
-  // .com; an over-quota free account is slowed to FLAGSHIP_OVER_QUOTA_KBPS
-  // (kbit/s, default 256), never refused.
+  // Public-egress metering. OFF unless USAGE_REPORT_SECRET is set — so
+  // deploying this code is a no-op until the secret is provisioned. The meter
+  // counts bytes per account in the SNI splice and enforces the budget leases
+  // .com answers with (docs/metering.md): accounts near a lease's end report
+  // within ~500 ms, everyone else every USAGE_FLUSH_MS (default 60 s). An
+  // over-quota free account is slowed to FLAGSHIP_OVER_QUOTA_KBPS (kbit/s,
+  // default 256), never refused.
   let meter: UsageMeter | undefined;
   const usageSecret = process.env.USAGE_REPORT_SECRET;
   if (usageSecret) {

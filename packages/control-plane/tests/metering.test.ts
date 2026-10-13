@@ -9,7 +9,10 @@ import {
   OVERAGE_USD_PER_GB,
   handleUsageReport,
   handleUsageStatus,
+  EGRESS_LEASE_POLICY,
+  MAX_USAGE_REPORT_ITEMS,
   type MeteringDeps,
+  type UsageReportResult,
 } from "../src/metering.js";
 
 const GB = 1024 * 1024 * 1024;
@@ -136,5 +139,97 @@ describe("metering — HTTP handlers (relay shared-secret auth)", () => {
     const res = await handleUsageStatus(d, SECRET, SECRET, "alice");
     expect(res.status).toBe(200);
     expect((res.body as { usedBytes: number }).usedBytes).toBe(5 * GB);
+  });
+});
+
+describe("metering — idempotent batches and budget leases", () => {
+  const SECRET = "s3cret";
+  const ID = "0123456789abcdef0123456789abcdef";
+  const MiB = 1024 * 1024;
+  const results = (body: unknown) => (body as { results: UsageReportResult[] }).results;
+
+  it("a retried batch id is counted once and answers duplicate:true with the same totals", async () => {
+    const d = deps();
+    const body = { batchId: ID, items: [{ username: "Alice", bytes: 2 * GB }] };
+    const first = await handleUsageReport(d, SECRET, SECRET, body);
+    const again = await handleUsageReport(d, SECRET, SECRET, body);
+    expect((first.body as { duplicate: boolean }).duplicate).toBe(false);
+    expect((again.body as { duplicate: boolean }).duplicate).toBe(true);
+    expect(results(again.body)[0]!.usedBytes).toBe(2 * GB);
+    expect((await quotaStatus(d, "alice")).usedBytes).toBe(2 * GB);
+  });
+
+  it("the pre-batch-id wire is still accepted (counted every time)", async () => {
+    const d = deps();
+    const body = { items: [{ username: "alice", bytes: 1 * GB }] };
+    await handleUsageReport(d, SECRET, SECRET, body);
+    const r = await handleUsageReport(d, SECRET, SECRET, body);
+    expect(results(r.body)[0]!.usedBytes).toBe(2 * GB);
+    expect(results(r.body)[0]!.admit).toBe(true);
+  });
+
+  it("refuses a malformed batch id and an oversized batch", async () => {
+    const d = deps();
+    for (const batchId of ["short", 7, `${ID}/x`]) {
+      expect((await handleUsageReport(d, SECRET, SECRET, { batchId, items: [] })).status).toBe(400);
+    }
+    const items = Array.from({ length: MAX_USAGE_REPORT_ITEMS + 1 }, (_, i) => ({ username: `u${i}`, bytes: 1 }));
+    expect((await handleUsageReport(d, SECRET, SECRET, { batchId: ID, items })).status).toBe(400);
+  });
+
+  it("free, far from the cap: a maxGrant lease to allow", async () => {
+    const r = await handleUsageReport(deps(), SECRET, SECRET, { batchId: ID, items: [{ username: "alice", bytes: 1 * GB }] });
+    expect(results(r.body)[0]!.lease).toEqual({
+      action: "allow",
+      grantBytes: EGRESS_LEASE_POLICY.maxGrant,
+      policy: "throttle",
+      ttlMs: EGRESS_LEASE_POLICY.ttlMs,
+    });
+  });
+
+  it("free, near the cap: a quarter of what is left, never past it", async () => {
+    const r = await handleUsageReport(deps(), SECRET, SECRET, {
+      batchId: ID,
+      items: [{ username: "alice", bytes: 25 * GB - 100 * MiB }],
+    });
+    expect(results(r.body)[0]!.lease).toMatchObject({ action: "allow", grantBytes: 25 * MiB });
+  });
+
+  it("free, at or over the cap: a throttle lease with no grant", async () => {
+    for (const bytes of [25 * GB, 26 * GB]) {
+      const r = await handleUsageReport(deps(), SECRET, SECRET, { batchId: ID, items: [{ username: "alice", bytes }] });
+      expect(results(r.body)[0]!.lease).toEqual({
+        action: "throttle",
+        grantBytes: 0,
+        policy: "throttle",
+        ttlMs: EGRESS_LEASE_POLICY.overTtlMs,
+      });
+    }
+  });
+
+  it("paid, over its allowance: still allowed, billed, with a maxGrant lease", async () => {
+    const r = await handleUsageReport(deps(tier("hobby")), SECRET, SECRET, {
+      batchId: ID,
+      items: [{ username: "alice", bytes: 300 * GB }],
+    });
+    expect(results(r.body)[0]!).toMatchObject({
+      admit: true,
+      lease: { action: "allow", grantBytes: EGRESS_LEASE_POLICY.maxGrant, policy: "allow" },
+    });
+  });
+
+  it("a lease never outlives the month", async () => {
+    const d = { ...deps(), now: () => Date.UTC(2026, 6, 1) - 5_000 };
+    const r = await handleUsageReport(d, SECRET, SECRET, { batchId: ID, items: [{ username: "alice", bytes: 26 * GB }] });
+    expect(results(r.body)[0]!.lease.ttlMs).toBe(5_000);
+  });
+
+  it("sums repeated usernames into one result", async () => {
+    const r = await handleUsageReport(deps(), SECRET, SECRET, {
+      batchId: ID,
+      items: [{ username: "alice", bytes: 1 }, { username: "ALICE", bytes: 2 }],
+    });
+    expect(results(r.body)).toHaveLength(1);
+    expect(results(r.body)[0]!.usedBytes).toBe(3);
   });
 });

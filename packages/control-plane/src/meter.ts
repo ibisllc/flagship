@@ -26,6 +26,9 @@
 //   meterCheck(deps, account, resource, need = 0) → MeterVerdict
 //       Judge without recording: "would `need` more fit?". Use before handing
 //       out something that consumes the resource.
+//   meterReportBatch(deps, { batchId?, items }) → { duplicate, verdicts }
+//       Record an edge's batch (the relay's egress report) and judge each
+//       account; a batch id is counted at most once (migration 0070).
 //   METER_RESOURCES — the tier table; deps.resources overrides it (tests,
 //       future tuning).
 //   MeterVerdict.action — "allow" | "throttle" | "stop": what the caller must
@@ -39,6 +42,7 @@
 import {
   meterCheck as coreCheck,
   meterRecord as coreRecord,
+  meterReport as coreReport,
   type MeterCatalog,
   type MeterDeps as CoreDeps,
   type MeterVerdict as CoreVerdict,
@@ -164,4 +168,19 @@ export async function meterCheck(
   need = 0,
 ): Promise<MeterVerdict> {
   return withTier(await coreCheck(core(deps), account.toLowerCase(), resource, need));
+}
+
+/** Record a batch of usage reported by an edge (the relay) and judge every
+ *  account in it. With a `batchId` the batch is counted at most once (D1
+ *  `meter_batches`, migration 0070); without one it is counted as it comes,
+ *  for relays that predate batch ids. */
+export async function meterReportBatch(
+  deps: MeterDeps,
+  report: { batchId?: string; items: Array<{ account: string; resource: MeterResource; amount: number }> },
+): Promise<{ duplicate: boolean; verdicts: MeterVerdict[] }> {
+  const r = await coreReport(core(deps), {
+    ...(report.batchId !== undefined ? { batchId: report.batchId } : {}),
+    items: report.items.map((it) => ({ ...it, account: it.account.toLowerCase() })),
+  });
+  return { duplicate: r.duplicate, verdicts: r.verdicts.map(withTier) };
 }

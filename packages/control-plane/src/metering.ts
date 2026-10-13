@@ -14,13 +14,20 @@
 // never throttled. Tier comes from the existing TierStorage; a lapsed paid sub
 // (currentPeriodEnd in the past) falls back to free. The allowances and the
 // over-quota policy live in meter.ts's METER_RESOURCES.egress.
+//
+// Reports carry a batch id (counted at most once) and every answer carries a
+// budget lease per account (EGRESS_LEASE_POLICY), which the relay enforces
+// locally until it reports again: billing/docs/spec/report-and-lease-v1.md,
+// docs/metering.md.
 
 import type { TierName } from "@flagship/storage";
+import { METER_BATCH_ID_RE, meterLease, type MeterLease, type MeterLeasePolicy } from "@ibisllc/billing-metering";
 import {
   METER_RESOURCES,
   meterCheck,
   meterPeriodKey,
   meterRecord,
+  meterReportBatch,
   type MeterDeps,
   type MeterVerdict,
 } from "./meter.js";
@@ -67,6 +74,26 @@ export interface QuotaStatus {
 }
 
 export type MeteringDeps = MeterDeps;
+
+const MiB = 1024 * 1024;
+
+/** How big a budget lease the relay gets per account
+ *  (billing/docs/spec/report-and-lease-v1.md). A quarter of what is left,
+ *  between 1 MiB and 256 MiB: a free account far from 25 GB reports about
+ *  every 128 MiB, one near it every few MiB, and one relay can never carry
+ *  it past the allowance on a lease. 256 MiB also bounds what a relay crash
+ *  loses per account. Throttled leases last a minute, so an upgrade or the
+ *  new month lifts the throttle within about a minute of activity. */
+export const EGRESS_LEASE_POLICY: MeterLeasePolicy = {
+  fraction: 0.25,
+  minGrant: 1 * MiB,
+  maxGrant: 256 * MiB,
+  ttlMs: 10 * 60_000,
+  overTtlMs: 60_000,
+};
+
+/** Most accounts one report may carry (the relay sends at most 500). */
+export const MAX_USAGE_REPORT_ITEMS = 1000;
 
 function statusFrom(v: MeterVerdict): QuotaStatus {
   const billed = v.policy === "allow";
@@ -119,10 +146,34 @@ export interface UsageHttpResult {
   body: unknown;
 }
 
-/** `POST /api/usage/report` — body `{ items: [{ username, bytes }, ...] }`.
- *  The relay batches per-account egress deltas and posts them. Returns each
- *  account's post-update admit/quota status so the relay can immediately slow
- *  a free account that just crossed its cap. */
+/** The lease for one account on the wire (bytes, relative ttl). */
+export interface EgressLeaseWire {
+  action: MeterLease["action"];
+  grantBytes: number;
+  policy: MeterLease["policy"];
+  ttlMs: number;
+}
+
+export interface UsageReportResult {
+  username: string;
+  /** The verdict on the counted total ("may it carry more at full speed?").
+   *  What a relay that predates leases acts on. */
+  admit: boolean;
+  usedBytes: number;
+  quotaBytes: number;
+  lease: EgressLeaseWire;
+}
+
+/** `POST /api/usage/report` — body `{ batchId?, items: [{ username, bytes }] }`.
+ *
+ *  The relay batches per-account egress deltas. With a `batchId` (16–128
+ *  chars of [A-Za-z0-9_-]) the batch is counted at most once, so the relay
+ *  can retry a batch whose answer it lost; `duplicate: true` says it had
+ *  already been counted. Without one (relays from before leases) it is
+ *  counted as it arrives; that path stays until every relay sends ids.
+ *
+ *  Each result carries `admit` (the old wire) and a budget `lease`: what the
+ *  relay may carry for the account at full speed before reporting again. */
 export async function handleUsageReport(
   deps: MeteringDeps,
   presentedSecret: string | null,
@@ -133,18 +184,35 @@ export async function handleUsageReport(
   if (!presentedSecret || !secretsEqual(presentedSecret, expectedSecret)) {
     return { status: 401, body: { error: "unauthorized" } };
   }
-  const items = (body as { items?: unknown })?.items;
+  const b = body as { items?: unknown; batchId?: unknown } | null;
+  const items = b?.items;
   if (!Array.isArray(items)) return malformed("items[] required");
-  const results: Array<{ username: string; admit: boolean; usedBytes: number; quotaBytes: number }> = [];
+  if (items.length > MAX_USAGE_REPORT_ITEMS) return malformed(`at most ${MAX_USAGE_REPORT_ITEMS} items per report`);
+  const batchId = b?.batchId;
+  if (batchId !== undefined && (typeof batchId !== "string" || !METER_BATCH_ID_RE.test(batchId))) {
+    return malformed("batchId must be 16–128 characters of [A-Za-z0-9_-]");
+  }
+  const report: Array<{ account: string; resource: "egress"; amount: number }> = [];
   for (const raw of items) {
     const it = raw as { username?: unknown; bytes?: unknown };
     if (typeof it.username !== "string" || typeof it.bytes !== "number" || !Number.isFinite(it.bytes)) {
       return malformed("each item needs { username: string, bytes: number }");
     }
-    const s = await recordEgress(deps, it.username, it.bytes);
-    results.push({ username: it.username.toLowerCase(), admit: s.admit, usedBytes: s.usedBytes, quotaBytes: s.quotaBytes });
+    report.push({ account: it.username, resource: "egress", amount: Math.max(0, it.bytes) });
   }
-  return { status: 200, body: { ok: true, results } };
+  const r = await meterReportBatch(deps, { ...(batchId !== undefined ? { batchId } : {}), items: report });
+  const now = deps.now ? deps.now() : Date.now();
+  const results: UsageReportResult[] = r.verdicts.map((v) => {
+    const l = meterLease(v, EGRESS_LEASE_POLICY, now);
+    return {
+      username: v.account,
+      admit: v.action === "allow",
+      usedBytes: v.used,
+      quotaBytes: v.allowance,
+      lease: { action: l.action, grantBytes: l.grant, policy: l.policy, ttlMs: l.ttlMs },
+    };
+  });
+  return { status: 200, body: { ok: true, duplicate: r.duplicate, results } };
 }
 
 /** `GET /api/usage/status?username=<u>` — read-only quota status. Same shared
