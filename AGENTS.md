@@ -399,8 +399,9 @@ release, and applies to a VM from its next start).
 ### Desktop Studio
 
 - **Mac:** notarized DMG at `/download/mac` (`scripts/release-studio.sh`;
-  republished 2026-10-12 with graceful VM stop + the appliance cache moved to
-  Application Support). `wrangler` is not a repo dependency: the script's final
+  republished 2026-10-13 with VM disks attached `.cached` + `.full` sync;
+  2026-10-12 brought graceful VM stop + the appliance cache in Application
+  Support). `wrangler` is not a repo dependency: the script's final
   `npm run deploy` needs a wrangler on PATH.
 - **Windows + Linux:** `studio-v0.1.1` on GitHub Releases, built by the
   on-demand `studio-release.yml` (pass `publish=true` to release). Windows is a
