@@ -151,25 +151,35 @@ fun ServerDetailScreen(
     serverFqdn: String? = null,
     health: com.flagshipserver.app.api.BoxHealthWire? = null,
 ) {
-    val allPods by LocalAppState.current.pods.collectAsState()
+    val appState = LocalAppState.current
+    val allPods by appState.pods.collectAsState()
+    val leaderPodId by appState.leaderPodId.collectAsState()
+    val currentPodId by appState.currentPodId.collectAsState()
     val pod = allPods.firstOrNull { it.podId == podId }
     // This server's own client (its base URL + session), so the page shows
-    // this box, not the current one. Without a session here it falls back to
-    // the current server's client, as before.
+    // this box, not the current one. The global client is only this box's
+    // when this box is the current server; for any other it would show the
+    // current server's detail under this one's name.
     val podClients = com.flagshipserver.app.core.LocalPodClients.current
     val globalClient = LocalScreensClient.current
     val podClient = pod?.let { podClients.screens(it) }
-    val client = podClient ?: globalClient
-    val detailVm = remember(podId, client) { HomeViewModel(client) }
-    val metricsVm = remember(podId, client) { ServerMetricsViewModel(podId = podId, client = client) }
-    val detail by detailVm.state.collectAsState()
-    val metrics by metricsVm.state.collectAsState()
+    val isCurrent = remember(allPods, leaderPodId, currentPodId, podId) { appState.currentPod?.podId == podId }
+    val client = podClient ?: globalClient.takeIf { isCurrent }
+    val detailVm = remember(podId, client) { client?.let { HomeViewModel(it) } }
+    val metricsVm = remember(podId, client) { client?.let { ServerMetricsViewModel(podId = podId, client = it) } }
+    val notPaired = remember {
+        kotlinx.coroutines.flow.MutableStateFlow<LoadingState<Nothing>>(
+            LoadingState.Failed("This device isn't paired with this server yet."),
+        )
+    }
+    val detail by (detailVm?.state ?: notPaired).collectAsState()
+    val metrics by (metricsVm?.state ?: notPaired).collectAsState()
 
     LaunchedEffect(podId, client) {
         // Retry until the box answers its BFF — an online box whose daemon
         // raced readiness no longer sticks on the skeleton until manual refresh.
-        detailVm.loadUntilLoaded()
-        metricsVm.load()
+        detailVm?.loadUntilLoaded()
+        metricsVm?.load()
     }
 
     val scroll = rememberScrollState()
@@ -229,7 +239,7 @@ fun ServerDetailScreen(
 
         when (val d = detail) {
             is LoadingState.Loaded -> ServerInfoCard(d.value)
-            is LoadingState.Failed -> ErrorCard(d.message, onRetry = { detailVm.load() })
+            is LoadingState.Failed -> ErrorCard(d.message, onRetry = detailVm?.let { vm -> { vm.load() } })
             else -> ServerCardSkeleton()
         }
 
@@ -257,7 +267,7 @@ fun ServerDetailScreen(
         Spacer(Modifier.height(FS.space.s2))
         when (val m = metrics) {
             is LoadingState.Loaded -> MetricsSection(m.value)
-            is LoadingState.Failed -> ErrorCard(m.message, onRetry = { metricsVm.load() })
+            is LoadingState.Failed -> ErrorCard(m.message, onRetry = metricsVm?.let { vm -> { vm.load() } })
             else -> ServerCardSkeleton()
         }
 
@@ -281,7 +291,7 @@ fun ServerDetailScreen(
                 serverDomain = d.value.serverFqdn,
                 currentCommit = d.value.currentCommit,
                 lastUpdate = d.value.lastUpdate,
-                onRefresh = { detailVm.load() },
+                onRefresh = { detailVm?.load() },
             )
             Spacer(Modifier.height(FS.space.s6))
             TransferCard(serverDomain = d.value.serverFqdn)
