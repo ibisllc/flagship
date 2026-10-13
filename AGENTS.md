@@ -394,11 +394,10 @@ error says why.
   v0.0.1 wasn't signed either). Linux is an x86-64 AppImage that needs Node.js
   20+ and pkexec. Neither has been run on a real Windows PC or Linux desktop:
   see "Validating on Windows and Linux" below.
-- **Mac App Store plan (proposed 2026-10-13):** `docs/studio-mac-app-store.md`.
-  Studio becomes sandboxed and hosting-only (store + the same build on the
-  site, its own App Store Connect record); USB burning moves to a separate
-  direct-download "Flagship USB Writer" with the root helper, opened from Studio
-  by URL with the secret-free recipe. Not started.
+- **Mac App Store plan: deferred** (owner, 2026-10-13, to keep Studio one
+  app). `docs/studio-mac-app-store.md` is saved for a future migration:
+  sandboxed hosting-only Studio in the store, USB burning in a small
+  direct-download USB Writer opened from Studio with the recipe.
 - Studio's VM networking is NAT on every host, so a hosted VM can never be
   reached directly from a phone on the same Wi-Fi (LAN-direct can't help a
   phone there; two VMs on one Mac do reach each other).

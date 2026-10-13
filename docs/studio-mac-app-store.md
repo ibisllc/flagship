@@ -1,6 +1,8 @@
 # Flagship Studio in the Mac App Store
 
-Status: **proposed** (2026-10-13). Nothing here is built yet.
+Status: **deferred** (owner, 2026-10-13). Saved for a future migration: for
+now Studio stays one app (direct download, hosting and USB burning together),
+because the split loses the feel of one app. Nothing here is built.
 
 ## Decision
 
@@ -132,7 +134,15 @@ now), and the root helper.
 - New bundle ID `com.flagshipserver.USBWriter`, and its own helper Mach name.
   The helper pins its caller's code signature to USB Writer's bundle ID
   (`kFlagshipAppBundleID` in `HelperProtocol.swift`) instead of Studio's.
-- It pairs with the phone exactly as Studio does, so it works on its own.
+- It has a small window of its own, because the sandboxed Studio can't list
+  drives, remaster or read progress: pick the drive, confirm the erase,
+  approve the helper (once), progress, done. Studio is the way in: "Burn a USB
+  stick" opens it with the recipe and it goes straight to the drive. Opened on
+  its own, it points to Studio and also accepts a recipe file exported from
+  the phone. It doesn't pair with the phone itself (one pairing place per
+  Mac). A localhost connection between the two would let Studio drive it
+  headless, but any local process could reach it, and it puts the
+  outside-the-store dependency right back in front of review.
 - It is notarized, distributed from `/download/mac-usb`, and updated the same
   way Studio is today (`scripts/release-studio.sh` gains a second product).
 
