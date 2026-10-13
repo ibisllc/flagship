@@ -1,109 +1,83 @@
-# Flagship in-house inference (free-credits backend)
+# Flagship free AI (free-credits backend)
 
-The `flagship` provider posture is a Flagship-hosted, OpenAI-compatible
-coding model. Users claim free credits; `.com` mints a scoped 1-hour token;
-the user's box calls this endpoint directly (never through `.com`). This
-directory is the deployable backend:
+Free AI credits let an owner build apps on their box without their own AI
+key (`docs/build-modes.md` "Free AI credits"). The phone or webapp signs a
+request, `.com` mints a 12-hour pass, the box calls the **meter shim** with
+it through the hub relay, and the shim calls the model.
 
 ```
 infra/inference/
   README.md          ← this runbook
-  vllm/
-    launch.sh        ← the vLLM OpenAI-server launch command (RunPod pod)
-    serverless.md    ← RunPod Serverless (vLLM worker) variant
-  shim/
-    src/meter.ts     ← pure auth/meter core (token verify + usage extract)
-    src/index.ts     ← the Cloudflare Worker entry (proxy + meter)
-    wrangler.toml    ← shim deploy config
-    README.md        ← shim deploy steps
+  shim/              ← the meter shim (Cloudflare Worker): the only front door
+  vllm/              ← self-hosted upstream (later): vLLM launch + Serverless notes
 ```
 
 ## Architecture
 
 ```
-box (daemon)  ──Bearer <scoped .com token>──▶  METER SHIM (Cloudflare Worker)
-                                                  │  1. verify token (HMAC, .com secret)
-                                                  │  2. enforce per-token caps
-                                                  │  3. proxy → vLLM /v1/chat/completions
-                                                  │  4. POST true usage → .com /api/llm-promo/usage
-                                                  ▼
-                                               vLLM (RunPod GPU) — the model
+box ──relay──▶ METER SHIM (Cloudflare Worker, e.g. inference.flagshipserver.com)
+                 1. verify the .com pass (HMAC, shared secret)
+                 2. POST .com /api/free-ai/allowance → stop at 0 left
+                 3. rebuild the request from an allowlist, pin the model,
+                    cap max_tokens; send it with ONLY our upstream key
+                 4. POST .com /api/llm-promo/usage with the true usage
+                 ▼
+               UPSTREAM: any OpenAI-compatible /chat/completions
+               (a hosted model API at launch; our own vLLM later)
 ```
 
-`FLAGSHIP_INFERENCE_ENDPOINT` on `.com` points at the **shim** (its public
-`https` host), NOT vLLM directly — the box's promo credential is host-pinned
-to whatever host `.com` hands back, and only the shim validates tokens /
-meters usage. vLLM is not exposed publicly; the shim reaches it over a
-private URL (`VLLM_UPSTREAM`).
+What the upstream sees: Cloudflare's address, our API key, and a prompt the
+box has already passed through its model redactor. Never the box's address,
+the owner's account name, a `user` field or any box header. Swapping the
+upstream is a shim config change; boxes and apps never notice.
 
-## The model
+## Launch backend: a hosted model API
 
-Use a **Qwen2.5-Coder-Instruct**-class model — it emits OpenAI-style
-`tool_calls`, which the agentic build path needs (read_file → write_file →
-validate → deploy). Verified served shape: with `--enable-auto-tool-choice
---tool-call-parser hermes`, vLLM returns
-`choices[].message.tool_calls[].function.{name,arguments}` and streams
-`delta.tool_calls[]` shards — exactly what `packages/llm-providers`'
-OpenAI adapter (which the `flagship` provider delegates to) parses. See
-`packages/llm-providers/tests/inferenceShimContract.test.ts` for the pinned
-wire contract.
+No GPUs to run, pay per token. Choose a provider whose API:
 
-- **32B** (`Qwen/Qwen2.5-Coder-32B-Instruct`): best quality; needs ~2×A100
-  80GB or 1×H100 80GB (bf16) / 1×A100 with AWQ.
-- **7B** (`Qwen/Qwen2.5-Coder-7B-Instruct`): 1×A10G/L4 24GB; good default
-  for a free tier's cost profile.
+- is OpenAI-compatible and streams **tool calls** (the agentic build needs
+  them) and reports usage with `stream_options.include_usage`;
+- says in its terms that API prompts are **not stored or trained on**;
+- takes **prepaid credit or a hard spend limit**: that balance is the
+  budget's real ceiling, on top of each account's allowance.
 
-Pick per budget; the `model` field in `FLAGSHIP_INFERENCE_ENDPOINT` must
-match the id vLLM serves (`--served-model-name`).
+Serve an open coding model with tool calling (a Qwen-Coder-class model is
+what the build prompts were tuned against). Budget: an app build is roughly
+a few hundred thousand tokens, mostly input; at the default 1,000,000 tokens
+per account, the worst case per account is the provider's price for ~1M
+tokens. Set `FLAGSHIP_FREE_AI_TOKENS` on `.com` to change the allowance.
 
-## Owner deploy steps (you must run these — the agent can't)
+## Owner steps
 
-1. **Stand up vLLM on RunPod.** A GPU pod:
-   ```sh
-   bash infra/inference/vllm/launch.sh          # runs on the pod
-   ```
-   or a Serverless endpoint — see `vllm/serverless.md`. Note the private URL
-   vLLM listens on (pod: `http://<pod-ip>:8000`).
-
-2. **Deploy the meter shim** (Cloudflare Worker) — see `shim/README.md`:
+1. **Upstream:** create the provider account, add prepaid credit, create an
+   API key, note its chat-completions URL and model id.
+2. **Shim** (see `shim/README.md`): set `UPSTREAM_CHAT_URL` and
+   `UPSTREAM_MODEL` in `shim/wrangler.toml`, then
    ```sh
    cd infra/inference/shim
-   wrangler secret put FLAGSHIP_INFERENCE_TOKEN_SECRET   # SAME value as .com
-   wrangler deploy
-   # set VLLM_UPSTREAM + COM_BASE_URL + SERVED_MODEL in wrangler.toml [vars]
+   openssl rand -hex 32                                   # the shared secret
+   npx wrangler secret put FLAGSHIP_INFERENCE_TOKEN_SECRET
+   npx wrangler secret put UPSTREAM_API_KEY
+   npx wrangler deploy
    ```
-   Note the shim's public host, e.g. `https://inference.flagshipserver.com`.
-
-3. **Point `.com` at the shim + set the signing secret.** Both are Worker
-   secrets on `apps/com`:
+   and bind its public host (e.g. `inference.flagshipserver.com`).
+3. **`.com`:**
    ```sh
    cd apps/com
-   wrangler secret put FLAGSHIP_INFERENCE_ENDPOINT
-   #   {"baseUrl":"https://inference.flagshipserver.com","model":"flagship-coder-v1"}
-   wrangler secret put FLAGSHIP_INFERENCE_TOKEN_SECRET   # a strong random; SAME as the shim
+   npx wrangler secret put FLAGSHIP_INFERENCE_TOKEN_SECRET   # SAME value as the shim
+   npx wrangler secret put FLAGSHIP_INFERENCE_ENDPOINT
+   #   {"baseUrl":"https://inference.flagshipserver.com","model":"flagship-free"}
+   cd ../.. && npx tsc -b && (cd apps/com && npm run deploy)
    ```
-   Optionally set `FLAGSHIP_PROMO_IDENTITY_PEPPER` (64-hex) if serving the
-   Fastify `.com` promo surface.
+   `model` here is only a label (the shim pins the real one).
+4. Check: Settings in any app shows "1M of 1M free AI tokens left"; a build
+   with no saved key runs; Settings then shows fewer tokens left.
 
-4. **Redeploy `.com`** (`npx tsc -b && cd apps/com && npm run deploy`). A
-   `flagship` promo issue now mints a scoped token + returns
-   `{apiKey, baseUrl, model}`; the webapp saves it as a `source:"promo"`
-   provider; the box calls the shim; the shim meters back to
-   `POST /api/llm-promo/usage` so `GET /api/llm-promo/status/:user` shows
-   real consumption.
+Pause everyone at once with `PAUSED = "1"` in the shim's vars (redeploy).
+Rotating the secret invalidates outstanding passes (≤ 12 h); set it on both.
 
-## Rotating the endpoint
+## Later: our own model
 
-Change `FLAGSHIP_INFERENCE_ENDPOINT` on `.com` and redeploy — no client
-rebuild, no recipe change. Rotating the token secret invalidates
-outstanding scoped tokens (≤1h blast radius); set the new value on BOTH
-`.com` and the shim.
-
-## Metering model — (b), true usage
-
-We chose model **(b)**: the shim reports TRUE per-request token usage
-(`prompt_tokens`/`completion_tokens` from vLLM) to `.com`, which records it
-without bumping the call counter. Because we OWN the endpoint, this closes
-the integrity gap of the pessimistic issue-time cap estimate used for
-providers we don't proxy (model (a)). Caps are enforced at the shim (fast,
-local to the request) and reflected in `.com` status for the user.
+Run vLLM (`vllm/launch.sh`, or `vllm/serverless.md`), keep it private to the
+shim, and point `UPSTREAM_CHAT_URL` at `http://<pod>:8000/v1/chat/completions`
+(`UPSTREAM_MODEL` = its `--served-model-name`). Nothing else changes.

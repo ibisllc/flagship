@@ -1,18 +1,27 @@
 name = "flagship-inference-shim"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
+# The shim calls .com, another Worker on the same zone: without this flag
+# that fetch fails (error 1042) instead of reaching the .com Worker.
+compatibility_flags = ["global_fetch_strictly_public"]
 
-# Public host the box reaches (put this host — NOT vLLM — in .com's
+# Public host the box reaches (put this host in .com's
 # FLAGSHIP_INFERENCE_ENDPOINT.baseUrl). Bind a custom domain in the
-# dashboard or via a route, e.g. inference.flagshipserver.com.
+# dashboard or uncomment:
 # routes = [{ pattern = "inference.flagshipserver.com", custom_domain = true }]
 
 [vars]
-# Private vLLM base. Pod: "http://<pod-ip>:8000". RunPod Serverless:
-# "https://api.runpod.ai/v2/<ENDPOINT_ID>/openai".
-VLLM_UPSTREAM = "http://REPLACE-ME:8000"
+# Any OpenAI-compatible chat-completions URL: a hosted model API at
+# launch, our own vLLM later ("http://<pod>:8000/v1/chat/completions").
+UPSTREAM_CHAT_URL = "https://REPLACE-ME/v1/chat/completions"
+# The upstream's model id (replaces whatever a box asks for).
+UPSTREAM_MODEL = "REPLACE-ME"
+# Ceiling on output tokens per call.
+MAX_OUTPUT_TOKENS = "8192"
+# "1" pauses free AI for everyone (calls get "isn't available right now").
+PAUSED = "0"
 COM_BASE_URL = "https://flagshipserver.com"
 
 # Secrets (set with `wrangler secret put`, NOT here):
 #   FLAGSHIP_INFERENCE_TOKEN_SECRET  — SAME value as apps/com's secret.
-#   VLLM_UPSTREAM_KEY                 — only for RunPod Serverless (API key).
+#   UPSTREAM_API_KEY                 — the model provider's API key.

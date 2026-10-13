@@ -1,43 +1,47 @@
-# Inference meter shim — deploy
+# Free-AI meter shim — deploy
 
-A standalone Cloudflare Worker (own `wrangler.toml`; NOT part of the repo's
-`tsc -b` build graph). It validates the `.com`-issued scoped token, enforces
-the per-token daily cap, proxies to vLLM, and reports true usage to `.com`.
+A standalone Cloudflare Worker (own `wrangler.toml`; not in the repo's
+`tsc -b` graph; tested by `packages/llm-providers/tests/inferenceShim*.test.ts`).
+It verifies the `.com`-issued pass, checks the account's allowance with
+`.com`, sends an allowlisted request to the upstream with only our key, and
+reports the true usage back to `.com`.
+
+## Config
+
+`wrangler.toml` `[vars]`:
+
+| var | meaning |
+|---|---|
+| `UPSTREAM_CHAT_URL` | full OpenAI-compatible chat-completions URL |
+| `UPSTREAM_MODEL` | the upstream's model id (replaces the box's) |
+| `MAX_OUTPUT_TOKENS` | ceiling on output tokens per call (default 8192) |
+| `PAUSED` | `"1"` refuses every call with "isn't available right now" |
+| `COM_BASE_URL` | `.com` for the allowance check and usage reports |
+
+Secrets: `FLAGSHIP_INFERENCE_TOKEN_SECRET` (the same value as `apps/com`'s)
+and `UPSTREAM_API_KEY`. `VLLM_UPSTREAM` / `VLLM_UPSTREAM_KEY` still work for
+an older config.
 
 ## Deploy
 
 ```sh
 cd infra/inference/shim
-
-# 1. Point at your private vLLM + your .com:
-#    edit wrangler.toml [vars]: VLLM_UPSTREAM, COM_BASE_URL
-
-# 2. The signing secret — MUST equal apps/com's FLAGSHIP_INFERENCE_TOKEN_SECRET:
-wrangler secret put FLAGSHIP_INFERENCE_TOKEN_SECRET
-
-# 3. (RunPod Serverless only) the upstream API key the box never sees:
-wrangler secret put VLLM_UPSTREAM_KEY
-
-# 4. Ship + bind a public host (e.g. inference.flagshipserver.com):
-wrangler deploy
+npx wrangler secret put FLAGSHIP_INFERENCE_TOKEN_SECRET
+npx wrangler secret put UPSTREAM_API_KEY
+npx wrangler deploy
 ```
 
 Then set `.com`'s `FLAGSHIP_INFERENCE_ENDPOINT` to
-`{"baseUrl":"https://<shim-host>","model":"<served-model-name>"}` and
-redeploy `.com`.
+`{"baseUrl":"https://<shim-host>","model":"flagship-free"}` and redeploy `.com`.
 
 ## Contract
 
-The token wire format + the OpenAI request/response shape are pinned by
-`packages/llm-providers/tests/inferenceShimContract.test.ts`. If you change
-`src/meter.ts`'s token verify, keep it in sync with
-`packages/control-plane/src/inferenceToken.ts` — the test fails otherwise.
-
-## Notes
-
+- The pass format must match `packages/control-plane/src/inferenceToken.ts`
+  (`inferenceShimContract.test.ts` fails otherwise).
+- Refusals are OpenAI-shaped `{"error":{"message","code":"free-ai-…"}}`; the
+  box shows `message` to the owner.
+- Usage: the upstream's `usage` (non-streaming body or the `include_usage`
+  stream chunk), else an estimate of 4 characters per token. A report the
+  shim couldn't send under-counts; a `.com` that can't answer the allowance
+  check fails the call closed.
 - Prompts pass through; they are not logged or stored.
-- The per-token cap here is a fast per-isolate gate; the authoritative
-  budget lives in `.com` (`GET /api/llm-promo/status/:user`), fed by the
-  usage webhook this shim calls.
-- The metered path handles the non-streaming JSON response (usage is in the
-  body). A streaming variant would parse the terminal SSE `usage` chunk.

@@ -104,21 +104,126 @@ export function buildUsageReport(token: string, usage: { inputTokens: number; ou
   return { token, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens };
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Request hygiene: what reaches the upstream model API
+// ──────────────────────────────────────────────────────────────────────
+
+/** Top-level chat-completions fields passed upstream; everything else is dropped. */
+const REQUEST_FIELDS = new Set([
+  "messages",
+  "tools",
+  "tool_choice",
+  "parallel_tool_calls",
+  "temperature",
+  "top_p",
+  "max_tokens",
+  "stop",
+  "response_format",
+  "seed",
+  "presence_penalty",
+  "frequency_penalty",
+  "stream",
+]);
+
+/** Per-message fields passed upstream (`name` and any extras are dropped). */
+const MESSAGE_FIELDS = new Set(["role", "content", "tool_calls", "tool_call_id"]);
+
+export interface SanitizeOptions {
+  /** The upstream's model id; replaces whatever the box asked for. */
+  model?: string;
+  /** Ceiling on `max_tokens` for one call. */
+  maxOutputTokens: number;
+}
+
+export type SanitizeResult =
+  | { ok: true; body: Record<string, unknown>; stream: boolean }
+  | { ok: false; error: string };
+
 /**
- * Sum the token deltas the shim has metered for a token id in the current
- * window. A trivial in-memory counter suffices per Worker isolate; the
- * authoritative cap check is against `.com` status, but this fast local
- * gate refuses a request whose token has already spent its per-token
- * daily cap on THIS isolate (defense against a hot loop).
+ * Rebuild a chat-completions request from an allowlist, so nothing that
+ * could identify the box or its owner (`user`, `metadata`, a message
+ * `name`, unknown extras) reaches the upstream provider. The model is
+ * pinned to the upstream's id, the output length is capped, and a
+ * streaming request asks for the final usage chunk the meter reads.
  */
-export class TokenMeter {
-  private spent = new Map<string, number>();
-  add(keyId: string, tokens: number): number {
-    const next = (this.spent.get(keyId) ?? 0) + tokens;
-    this.spent.set(keyId, next);
-    return next;
+export function sanitizeChatRequest(raw: unknown, opts: SanitizeOptions): SanitizeResult {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, error: "body must be a JSON object" };
+  const src = raw as Record<string, unknown>;
+  if (!Array.isArray(src.messages) || src.messages.length === 0) return { ok: false, error: "messages required" };
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(src)) if (REQUEST_FIELDS.has(k)) out[k] = v;
+  out.messages = src.messages.map((m) => {
+    if (!m || typeof m !== "object") return m;
+    const kept: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(m as Record<string, unknown>)) if (MESSAGE_FIELDS.has(k)) kept[k] = v;
+    return kept;
+  });
+  out.model = opts.model ?? (typeof src.model === "string" ? src.model : undefined);
+  const asked = [src.max_tokens, src.max_completion_tokens].find((n) => typeof n === "number" && n > 0) as
+    | number
+    | undefined;
+  out.max_tokens = Math.min(asked ?? opts.maxOutputTokens, opts.maxOutputTokens);
+  const stream = src.stream === true;
+  if (stream) out.stream_options = { include_usage: true };
+  else delete out.stream;
+  return { ok: true, body: out, stream };
+}
+
+/** Rough token count for text when the upstream reports no usage. */
+export function estimateTokens(chars: number): number {
+  return Math.ceil(chars / 4);
+}
+
+/**
+ * Reads an OpenAI-style SSE stream as it passes through: keeps the last
+ * `usage` object it sees (the `include_usage` chunk) and counts generated
+ * characters so a stream without usage can still be charged.
+ */
+export class SseUsageScanner {
+  private buffer = "";
+  private usage: { inputTokens: number; outputTokens: number } | null = null;
+  private generatedChars = 0;
+
+  feed(text: string): void {
+    this.buffer += text;
+    let nl: number;
+    while ((nl = this.buffer.indexOf("\n")) >= 0) {
+      this.line(this.buffer.slice(0, nl));
+      this.buffer = this.buffer.slice(nl + 1);
+    }
   }
-  spentFor(keyId: string): number {
-    return this.spent.get(keyId) ?? 0;
+
+  /** Usage for the whole stream; `requestChars` sizes the prompt if none was reported. */
+  finish(requestChars: number): { inputTokens: number; outputTokens: number } {
+    if (this.buffer) this.line(this.buffer);
+    this.buffer = "";
+    if (this.usage && (this.usage.inputTokens > 0 || this.usage.outputTokens > 0)) return this.usage;
+    return { inputTokens: estimateTokens(requestChars), outputTokens: estimateTokens(this.generatedChars) };
+  }
+
+  private line(raw: string): void {
+    const line = raw.trim();
+    if (!line.startsWith("data:")) return;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === "[DONE]") return;
+    let chunk: {
+      usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
+      choices?: Array<{ delta?: { content?: unknown; tool_calls?: Array<{ function?: { arguments?: unknown } }> } }>;
+    };
+    try {
+      chunk = JSON.parse(payload);
+    } catch {
+      return;
+    }
+    if (chunk.usage) {
+      const u = extractUsage(chunk);
+      if (u.inputTokens > 0 || u.outputTokens > 0) this.usage = u;
+    }
+    for (const c of chunk.choices ?? []) {
+      if (typeof c.delta?.content === "string") this.generatedChars += c.delta.content.length;
+      for (const t of c.delta?.tool_calls ?? []) {
+        if (typeof t.function?.arguments === "string") this.generatedChars += t.function.arguments.length;
+      }
+    }
   }
 }
