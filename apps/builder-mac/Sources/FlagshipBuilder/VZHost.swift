@@ -79,11 +79,10 @@ final class VZHost: NSObject {
         guard FileManager.default.fileExists(atPath: diskURL.path) else {
             throw VZHostError.diskMissing(diskURL.path)
         }
-        let mainDisk = try VZDiskImageStorageDeviceAttachment(url: diskURL, readOnly: false)
+        let mainDisk = try Self.writableDisk(diskURL)
         var storage: [VZStorageDeviceConfiguration] = [VZVirtioBlockDeviceConfiguration(attachment: mainDisk)]
         if let additionalWritableDisk {
-            let attachment = try VZDiskImageStorageDeviceAttachment(
-                url: additionalWritableDisk, readOnly: false)
+            let attachment = try Self.writableDisk(additionalWritableDisk)
             storage.append(VZVirtioBlockDeviceConfiguration(attachment: attachment))
         }
         // A generalized appliance attaches its fixed raw seed as the second
@@ -224,6 +223,15 @@ final class VZHost: NSObject {
 
     /// Create the sparse main disk if it doesn't exist yet (APFS keeps it
     /// thin; the guest grows into it).
+    /// A guest's writable disk. The default caching mode (`.automatic`) has
+    /// left Linux guests with zeroed and corrupt files (home2's ext4 oopses on
+    /// zeroed pages, leticia's zeroed system libraries, both surviving
+    /// reinstalls); `.cached` with full synchronization keeps the host's own
+    /// cache coherent and makes every guest flush reach the host's disk.
+    static func writableDisk(_ url: URL) throws -> VZDiskImageStorageDeviceAttachment {
+        try VZDiskImageStorageDeviceAttachment(url: url, readOnly: false, cachingMode: .cached, synchronizationMode: .full)
+    }
+
     static func ensureMainDisk(config: VMConfig, layout: VMBundleLayout) throws {
         let url = layout.diskImageURL(config.name)
         guard !FileManager.default.fileExists(atPath: url.path) else { return }

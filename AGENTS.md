@@ -388,7 +388,13 @@ fetches each suite's `Release` + `Release.gpg`, verifies them with `sqv` (or
 `gpgv`) against the source's keyring, and checks each `Packages.gz` and .deb
 against the signed SHA-256s. Drilled on a Debian 13 arm64 VM damaged like
 leticia (lists gone, apt and systemctl broken): fixed in ~40 s. Only package
-files are covered (not node_modules or images).
+files are covered (not node_modules or images). On `57b69edb` the reinstall
+ran but libbrotli1 and systemd still failed their checksums afterwards
+(systemctl SIGILL = zeroed arm64 code), so leticia is being recreated.
+Suspected root cause for home2 and leticia: Studio attached VM disks with
+VZ's default `.automatic` caching mode; `VZHost.writableDisk` now uses
+`.cached` + `.full` sync (unverified that it cures it; needs a Studio
+release, and applies to a VM from its next start).
 
 ### Desktop Studio
 

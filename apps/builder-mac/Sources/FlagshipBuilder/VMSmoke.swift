@@ -228,7 +228,7 @@ enum VMSmoke {
                 try h.truncate(atOffset: 24 * 1024 * 1024 * 1024)
                 try h.close()
             }
-            let d = try VZDiskImageStorageDeviceAttachment(url: targetDisk, readOnly: false)
+            let d = try VZHost.writableDisk(targetDisk)
             storage.append(VZVirtioBlockDeviceConfiguration(attachment: d))
         }
         if let iso {
