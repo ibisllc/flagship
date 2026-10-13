@@ -290,7 +290,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 ### Built, waiting on deploys or rebuilds
 
-- **`.com` Worker:** current with `main` as of 2026-10-12 (webapp shell **v47**).
+- **`.com` Worker:** current with `main` as of 2026-10-13 (webapp shell **v60**).
   Always `npx tsc -b` first and apply pending D1 migrations before deploying.
 - **Delete / reversible Revoke / Un-revoke (2026-10-12):** live on `.com` +
   webapp (shell v44); iOS dev build installed on the owner's iPhone; Android
